@@ -15,8 +15,10 @@ venv/
 .idea/
 .DS_Store
 
-# claude code local config
-.claude/
+# claude code local config — only ignore personal/local pieces,
+# agents and shared settings should travel with the repo
+.claude/settings.local.json
+.claude/*.local.json
 
 # PDFs (too large / redundant with extracted markdown under docs/)
 *.pdf
