@@ -1,0 +1,13 @@
+name: "[AI Content] Cluster - Max VM CPU Ready (%)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Maximum CPU ready percent observed across powered-on virtual machines in
+  the cluster. Surfaces worst-case VM scheduling contention that cluster
+  averages hide. Assigned to ClusterComputeResource; depth=2 traverses
+  Cluster -> Host -> VM, filtered to powered-on VMs.
+formula: |
+  max(${adaptertype=VMWARE, objecttype=VirtualMachine,
+       attribute=cpu|readyPct, depth=2,
+       where=(${metric=summary|runtime|powerState}==1)})

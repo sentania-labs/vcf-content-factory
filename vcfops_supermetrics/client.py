@@ -167,6 +167,51 @@ class VCFOpsClient:
             raise VCFOpsError(f"update failed ({r.status_code}): {r.text}")
         return r.json()
 
+    # ---- policies -------------------------------------------------------
+    def get_default_policy_id(self) -> str:
+        r = self._request("GET", "/api/policies")
+        if r.status_code != 200:
+            raise VCFOpsError(f"policy list failed ({r.status_code}): {r.text}")
+        for p in r.json().get("policySummaries") or []:
+            if p.get("defaultPolicy"):
+                return p["id"]
+        raise VCFOpsError("no default policy found in /api/policies response")
+
+    def enable_supermetric_on_default_policy(
+        self,
+        sm_id: str,
+        resource_kinds: list,
+    ) -> None:
+        """Assign a super metric to resource kinds and enable it in the
+        Default Policy via the internal assign endpoint.
+
+        See context/internal_supermetrics_assign.md. This endpoint only
+        accepts the Default Policy id in its policyIds query param —
+        non-default policies return 400 apiErrorCode 1501.
+        """
+        if not resource_kinds:
+            raise VCFOpsError("enable requires at least one resource kind")
+        policy_id = self.get_default_policy_id()
+        body = {
+            "superMetricId": sm_id,
+            "resourceKindKeys": [
+                {
+                    "adapterKind": rk.get("adapterKindKey") or rk.get("adapterKind"),
+                    "resourceKind": rk.get("resourceKindKey") or rk.get("resourceKind"),
+                }
+                for rk in resource_kinds
+            ],
+        }
+        r = self._request(
+            "PUT",
+            "/internal/supermetrics/assign",
+            params=[("policyIds", policy_id)],
+            json=body,
+            headers={"X-Ops-API-use-unsupported": "true"},
+        )
+        if r.status_code != 200:
+            raise VCFOpsError(f"enable failed ({r.status_code}): {r.text}")
+
     def delete_supermetric(self, sm_id: str) -> None:
         r = self._request("DELETE", f"/api/supermetrics/{sm_id}")
         if r.status_code not in (200, 204):

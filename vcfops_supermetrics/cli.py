@@ -67,6 +67,34 @@ def cmd_sync(args) -> int:
     return rc
 
 
+def cmd_enable(args) -> int:
+    try:
+        defs = _collect(args.paths)
+    except SuperMetricValidationError as e:
+        print(f"INVALID: {e}", file=sys.stderr)
+        return 1
+    if not defs:
+        print("nothing to enable", file=sys.stderr)
+        return 1
+    client = VCFOpsClient.from_env()
+    rc = 0
+    for d in defs:
+        existing = client.find_by_name(d.name)
+        if not existing:
+            print(f"FAILED   {d.name}: not installed (run sync first)", file=sys.stderr)
+            rc = 1
+            continue
+        try:
+            client.enable_supermetric_on_default_policy(
+                existing["id"], d.resource_kinds
+            )
+            print(f"enabled  {existing['id']}  {d.name}")
+        except VCFOpsError as e:
+            print(f"FAILED   {d.name}: {e}", file=sys.stderr)
+            rc = 1
+    return rc
+
+
 def cmd_delete(args) -> int:
     client = VCFOpsClient.from_env()
     sm = client.find_by_name(args.name)
@@ -92,6 +120,14 @@ def build_parser() -> argparse.ArgumentParser:
     ps = sub.add_parser("sync", help="create/update super metrics from YAML")
     ps.add_argument("paths", nargs="*")
     ps.set_defaults(func=cmd_sync)
+
+    pe = sub.add_parser(
+        "enable",
+        help="enable super metric(s) on the Default Policy "
+             "(uses unsupported /internal/ endpoint; Default Policy only)",
+    )
+    pe.add_argument("paths", nargs="*")
+    pe.set_defaults(func=cmd_enable)
 
     pd = sub.add_parser("delete", help="delete a super metric by name")
     pd.add_argument("name")

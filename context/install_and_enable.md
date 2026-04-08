@@ -51,22 +51,37 @@ it inside any policy.
 
 Two paths to enable:
 
-1. **`PUT /internal/supermetrics/assign`** (internal) — single call,
-   sets both resource-kind assignment and policy enablement. Takes
-   a body of `{superMetricId, resourceKindKeys:[{adapterKind, resourceKind}]}`
-   and a `policyIds` query parameter (repeatable). Requires header
-   `X-Ops-API-use-unsupported: true`. This is the path the planned
-   `enable` CLI command uses.
+1. **`PUT /internal/supermetrics/assign`** (internal, unsupported) —
+   sets resource-kind assignment and policy enablement in one call.
+   Body `{superMetricId, resourceKindKeys:[{adapterKind, resourceKind}]}`,
+   `policyIds` as a repeatable query parameter, header
+   `X-Ops-API-use-unsupported: true` required. **Empirically verified
+   to accept only the Default Policy id** — any other policy UUID is
+   rejected with 400 apiErrorCode 1501. See
+   `context/internal_supermetrics_assign.md` for the full wire-format
+   findings, readback path, and edge-case table.
+
+   This is the path `vcfops_supermetrics enable` uses:
+
+   ```bash
+   python -m vcfops_supermetrics enable                       # all YAMLs
+   python -m vcfops_supermetrics enable supermetrics/<f>.yaml
+   ```
+
+   The command resolves the Default Policy id at runtime, looks up
+   each super metric on the instance by name, and calls assign. It
+   refuses if the super metric isn't installed yet — run `sync` first.
 
 2. **Policy export/import zip** — `GET /api/policies/export?id=<uuid>`,
    modify the XML to add
    `<SuperMetrics adapterKind=X resourceKind=Y>` with
    `<SuperMetric enabled="true" id="<uuid>"/>` children, re-import
-   via `POST /api/policies/import`. Public but cumbersome; prefer
-   option 1 unless we need bulk edits.
+   via `POST /api/policies/import`. **Required** for any non-default
+   policy (path 1 will 400). Also the only way to *disable* a super
+   metric — no internal unassign endpoint exists. Not yet wired into
+   the CLI.
 
-Neither path is wired into the CLI yet. Until the `enable` command
-lands, instruct the user to:
+For non-default policies, fall back to the manual UI path:
 
 1. Open **Infrastructure Operations → Configuration → Super Metrics**,
    confirm the new metric is assigned to the intended object type.
@@ -80,4 +95,5 @@ install doesn't affect them.
 ```bash
 python -m vcfops_supermetrics list
 python -m vcfops_supermetrics delete "<name>"
+python -m vcfops_supermetrics enable supermetrics/<file>.yaml  # Default policy
 ```
