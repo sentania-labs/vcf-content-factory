@@ -1,0 +1,22 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# editor / os
+.vscode/
+.idea/
+.DS_Store
+
+# claude code local config
+.claude/
+
+# PDFs (too large / redundant with extracted markdown under docs/)
+*.pdf

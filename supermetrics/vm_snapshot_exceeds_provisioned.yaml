@@ -1,0 +1,13 @@
+name: "[AI Content] VM - Snapshot Space Exceeds Provisioned Disk (flag)"
+resource_kinds:
+  - resource_kind_key: VirtualMachine
+    adapter_kind_key: VMWARE
+description: >
+  Flags VMs whose snapshot space consumed (diskspace|snapshot) exceeds the
+  VM's provisioned disk space (diskspace|provisionedSpace). Returns 1 when
+  snapshots have grown larger than the VM's allocated disk, otherwise 0.
+  Assign to the Virtual Machine object type; no depth needed since both
+  metrics live on the VM itself. Useful as a leading indicator that
+  snapshot bloat is consuming more capacity than the VM was sized for.
+formula: |
+  ${this, metric=diskspace|snapshot} > ${this, metric=config|hardware|diskSpace} ? 1 : 0

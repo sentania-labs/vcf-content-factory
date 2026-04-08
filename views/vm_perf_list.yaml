@@ -1,0 +1,30 @@
+name: "[AI Content] VM Performance List"
+description: >
+  List of virtual machines with key CPU and memory performance
+  metrics. Designed to be embedded in a dashboard and filtered by a
+  ResourceList interaction (selecting a vCenter narrows the list to
+  that vCenter's descendants).
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+
+columns:
+  - attribute: cpu|usage_average
+    display_name: "CPU Usage (%)"
+    unit: percent
+  - attribute: cpu|demandPct
+    display_name: "CPU Demand (%)"
+    unit: percent
+  - attribute: cpu|readyPct
+    display_name: "CPU Ready (%)"
+    unit: percent
+  - attribute: cpu|costopPct
+    display_name: "CPU Co-Stop (%)"
+    unit: percent
+  - attribute: mem|usage_average
+    display_name: "Memory Usage (%)"
+    unit: percent
+  - attribute: mem|host_contentionPct
+    display_name: "Memory Contention (%)"
+    unit: percent

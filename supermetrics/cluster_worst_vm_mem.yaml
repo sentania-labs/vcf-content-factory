@@ -1,0 +1,10 @@
+name: "[AI Content] Cluster - Worst VM Memory Contention (%)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Maximum memory contention seen on any VM in the cluster - a leading
+  indicator of memory pressure that cluster-level averages can hide.
+formula: |
+  max(${adaptertype=VMWARE, objecttype=VirtualMachine,
+       attribute=mem|host_contentionPct, depth=2})

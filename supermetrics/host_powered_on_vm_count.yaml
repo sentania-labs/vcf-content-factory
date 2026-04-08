@@ -1,0 +1,11 @@
+name: "[AI Content] Host - Powered-On VM Count"
+resource_kinds:
+  - resource_kind_key: HostSystem
+    adapter_kind_key: VMWARE
+description: >
+  Number of powered-on VMs on this host. Assigned to HostSystem.
+  Uses the where clause to filter on the VM's own powerState property.
+formula: |
+  count(${adaptertype=VMWARE, objecttype=VirtualMachine,
+         attribute=summary|runtime|powerState, depth=1,
+         where=($value==1)})

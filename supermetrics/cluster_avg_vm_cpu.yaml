@@ -1,0 +1,11 @@
+name: "[AI Content] Cluster - Avg Powered-On VM CPU Usage (%)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Average CPU usage across all powered-on virtual machines in the cluster.
+  Assigned to ClusterComputeResource. depth=2 traverses Cluster -> Host -> VM.
+formula: |
+  avg(${adaptertype=VMWARE, objecttype=VirtualMachine,
+       attribute=cpu|usage_average, depth=2,
+       where=(${metric=summary|runtime|powerState}==1)})
