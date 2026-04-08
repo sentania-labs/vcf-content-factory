@@ -1,3 +1,4 @@
+id: dd72604f-f4b6-4bb6-80f4-0f40a77c625d
 name: "[AI Content] Cluster - Worst VM Memory Contention (%)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource

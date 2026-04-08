@@ -1,3 +1,4 @@
+id: 6bae05f5-ec4e-46a3-9392-50499b1742c2
 name: "[AI Content] Allocated vCPUs (Rollup)"
 resource_kinds:
   - resource_kind_key: HostSystem

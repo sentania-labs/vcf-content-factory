@@ -1,0 +1,20 @@
+id: e1aaded4-a38a-4614-a704-e2b0d7ffd6fb
+name: "[AI Content] vCenter - VKS Cores (count)"
+resource_kinds:
+  - resource_kind_key: VMwareAdapter Instance
+    adapter_kind_key: VMWARE
+description: >
+  VKS (Tanzu Kubernetes Service) physical core equivalent consumption for this
+  vCenter: VKS Worker vCPU divided by the Global vCPU-to-pCore Ratio. This is the
+  headline number the PowerCLI VKS core-consumption report produces — the number
+  of physical cores attributable to TKG guest cluster workloads after accounting
+  for the vCenter-wide overcommit ratio.
+  References:
+    - [AI Content] vCenter - VKS Worker vCPU (count)         sm_c51f9bc6-f914-450b-b932-25cba1956d47
+    - [AI Content] vCenter - Global vCPU-to-pCore Ratio      sm_50845fed-0a98-4885-bd57-ac6bc961e48d
+  NOTE: The sm_<uuid> literals are stable only via the content-zip install path.
+  See TOOLSET GAP note. Depends on SM7 and SM8 being installed first.
+formula: |
+  ${this, metric=Super Metric|sm_c51f9bc6-f914-450b-b932-25cba1956d47}
+  /
+  ${this, metric=Super Metric|sm_50845fed-0a98-4885-bd57-ac6bc961e48d}

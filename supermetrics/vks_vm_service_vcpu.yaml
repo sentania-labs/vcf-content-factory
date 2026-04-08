@@ -1,0 +1,16 @@
+id: 98f2a0a5-ea82-4a9d-93a6-29ff58a68889
+name: "[AI Content] vCenter - VM Service vCPU (count)"
+resource_kinds:
+  - resource_kind_key: VMwareAdapter Instance
+    adapter_kind_key: VMWARE
+description: >
+  Sum of provisioned vCPUs for VMs managed by the vSphere VM Service operator
+  (VMOperator) under this vCenter adapter instance. VMOperator provisions VMs for
+  Kubernetes workloads via the VM Service Bindings API in a Supervisor namespace.
+  Selected by summary|config|type = VMOperator, mirroring the membership rule of
+  the [AI Content] VM Service VMs custom group. Property key recon-verified
+  2026-04-08.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+        metric=config|hardware|numCpu, depth=10,
+        where=(${metric=summary|config|type} equals 'VMOperator')})

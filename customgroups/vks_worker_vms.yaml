@@ -1,0 +1,16 @@
+name: "[AI Content] VKS Worker VMs"
+description: >
+  All VirtualMachine objects that are VKS (vSphere with Kubernetes / Tanzu
+  Kubernetes Service) guest cluster worker nodes. Selected by the presence of
+  a non-empty summary|parentGuestCluster property, which VCF Operations
+  populates only for VMs that belong to a Tanzu Kubernetes cluster guest.
+  Recon-verified on vcf-lab-wld01-vcenter 2026-04-08. One rule, one AND'd
+  property condition. Group type VKS Workload Role is new on the instance and
+  will be created by the sync loader before this group is upserted.
+type: VKS Workload Role
+auto_resolve_membership: true
+rules:
+  - resource_kind: VirtualMachine
+    adapter_kind: VMWARE
+    property:
+      - { key: "summary|parentGuestCluster", op: NOT_EQ, value: "" }

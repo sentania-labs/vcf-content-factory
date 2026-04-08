@@ -1,0 +1,18 @@
+id: eaf6679f-0b19-4472-8633-085b240b9d60
+name: "[AI Content] vCenter - Supervisor Control Plane vCPU (count)"
+resource_kinds:
+  - resource_kind_key: VMwareAdapter Instance
+    adapter_kind_key: VMWARE
+description: >
+  Sum of provisioned vCPUs for vSphere Supervisor control-plane nodes under this
+  vCenter adapter instance. Supervisor nodes are identified by
+  summary|config|type = SupervisorControlPlane — the type value vCenter assigns
+  exclusively to Supervisor control-plane VMs. The custom group additionally gates
+  on summary|config|productName = "vSphere Supervisor", but the type condition
+  alone is sufficient as a discriminator; the validator's regex does not support
+  two ${metric=...} references in a single where clause. Property key
+  recon-verified 2026-04-08.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+        metric=config|hardware|numCpu, depth=10,
+        where=(${metric=summary|config|type} equals 'SupervisorControlPlane')})

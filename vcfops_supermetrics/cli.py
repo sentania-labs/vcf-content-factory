@@ -54,17 +54,31 @@ def cmd_sync(args) -> int:
         print("nothing to sync", file=sys.stderr)
         return 1
     client = VCFOpsClient.from_env()
-    rc = 0
+    bundle = [
+        {
+            "id": d.id,
+            "name": d.name,
+            "formula": d.formula,
+            "description": d.description,
+            "unitId": d.unit_id,
+            "resourceKinds": d.resource_kinds,
+        }
+        for d in defs
+    ]
+    try:
+        result = client.import_supermetrics_bundle(bundle)
+    except VCFOpsError as e:
+        print(f"FAILED   bundle import: {e}", file=sys.stderr)
+        return 1
+    state = result.get("state", "?")
+    err = result.get("errorCode") or result.get("error")
+    print(f"imported {len(bundle)} super metric(s) — state={state}")
     for d in defs:
-        try:
-            action, sm = client.upsert(
-                d.name, d.formula, d.description, d.resource_kinds
-            )
-            print(f"{action:8s}  {sm.get('id')}  {d.name}")
-        except VCFOpsError as e:
-            print(f"FAILED   {d.name}: {e}", file=sys.stderr)
-            rc = 1
-    return rc
+        print(f"  {d.id}  {d.name}")
+    if err:
+        print(f"WARNING: errorCode={err}", file=sys.stderr)
+        return 1
+    return 0
 
 
 def cmd_enable(args) -> int:

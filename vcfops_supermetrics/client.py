@@ -6,17 +6,25 @@ last call).
 
 SuperMetric endpoints used:
   GET    /api/supermetrics              list (paged)
-  POST   /api/supermetrics              create
-  PUT    /api/supermetrics              update (id required)
   GET    /api/supermetrics/{id}         fetch one
   DELETE /api/supermetrics/{id}         delete
+  POST   /api/content/operations/import install bundle (UUID-preserving)
+
+Install goes through the content-import zip path, not POST
+/api/supermetrics, because the latter reassigns UUIDs server-side and
+breaks sm_<uuid> cross-references. See import_supermetrics_bundle.
 """
 from __future__ import annotations
 
+import io
+import json
 import os
-from typing import Iterator, Optional
+import zipfile
+from typing import Iterable, Iterator, Optional
 
 import requests
+
+from ._env import load_dotenv
 
 
 class VCFOpsError(RuntimeError):
@@ -46,6 +54,7 @@ class VCFOpsClient:
     # ---- env constructor ------------------------------------------------
     @classmethod
     def from_env(cls) -> "VCFOpsClient":
+        load_dotenv()
         try:
             host = os.environ["VCFOPS_HOST"]
             user = os.environ["VCFOPS_USER"]
@@ -129,44 +138,6 @@ class VCFOpsClient:
         # API rejects newlines / multi-line formulas: collapse all whitespace.
         return " ".join(formula.split())
 
-    def create_supermetric(
-        self,
-        name: str,
-        formula: str,
-        description: str = "",
-        resource_kinds: list | None = None,
-    ) -> dict:
-        body = {
-            "name": name,
-            "formula": self._normalize_formula(formula),
-            "description": description,
-            "resourceKinds": resource_kinds or [],
-        }
-        r = self._request("POST", "/api/supermetrics", json=body)
-        if r.status_code not in (200, 201):
-            raise VCFOpsError(f"create failed ({r.status_code}): {r.text}")
-        return r.json()
-
-    def update_supermetric(
-        self,
-        sm_id: str,
-        name: str,
-        formula: str,
-        description: str = "",
-        resource_kinds: list | None = None,
-    ) -> dict:
-        body = {
-            "id": sm_id,
-            "name": name,
-            "formula": self._normalize_formula(formula),
-            "description": description,
-            "resourceKinds": resource_kinds or [],
-        }
-        r = self._request("PUT", "/api/supermetrics", json=body)
-        if r.status_code != 200:
-            raise VCFOpsError(f"update failed ({r.status_code}): {r.text}")
-        return r.json()
-
     # ---- policies -------------------------------------------------------
     def get_default_policy_id(self) -> str:
         r = self._request("GET", "/api/policies")
@@ -212,24 +183,60 @@ class VCFOpsClient:
         if r.status_code != 200:
             raise VCFOpsError(f"enable failed ({r.status_code}): {r.text}")
 
+    # ---- content-zip import (UUID-preserving) ---------------------------
+    def import_supermetrics_bundle(self, supermetrics: Iterable[dict]) -> dict:
+        """Install super metrics via the content import endpoint, which
+        preserves caller-supplied UUIDs verbatim.
+
+        Each dict must carry: id, name, formula, description, unitId,
+        resourceKinds=[{resourceKindKey, adapterKindKey}, ...]. Unlike
+        POST /api/supermetrics, this path keeps ``sm_<uuid>`` formula
+        cross-references stable across re-installs and across instances.
+
+        Wire format verified by api-explorer against a live instance —
+        see context/wire_formats.md §"Super metrics zip".
+        """
+        # Imported lazily to avoid a hard package dep at import time.
+        from vcfops_dashboards.client import (
+            discover_marker_filename,
+            get_current_user,
+            import_content_zip,
+        )
+
+        sms = list(supermetrics)
+        if not sms:
+            raise VCFOpsError("import_supermetrics_bundle: empty bundle")
+
+        owner = get_current_user(self)["id"]
+        marker = discover_marker_filename(self)
+
+        sm_dict: dict = {}
+        for sm in sms:
+            sm_id = sm.get("id")
+            if not sm_id:
+                raise VCFOpsError(
+                    f"super metric '{sm.get('name')}' has no id — cannot "
+                    f"round-trip via content-zip import"
+                )
+            sm_dict[sm_id] = {
+                "name": sm["name"],
+                "formula": self._normalize_formula(sm["formula"]),
+                "description": sm.get("description", "") or "",
+                "unitId": sm.get("unitId", "") or "",
+                "resourceKinds": sm.get("resourceKinds") or [],
+            }
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr(marker, owner)
+            z.writestr("supermetrics.json", json.dumps(sm_dict, indent=3))
+            z.writestr(
+                "configuration.json",
+                json.dumps({"superMetrics": len(sm_dict), "type": "ALL"}, indent=3),
+            )
+        return import_content_zip(self, buf.getvalue())
+
     def delete_supermetric(self, sm_id: str) -> None:
         r = self._request("DELETE", f"/api/supermetrics/{sm_id}")
         if r.status_code not in (200, 204):
             raise VCFOpsError(f"delete failed ({r.status_code}): {r.text}")
-
-    def upsert(
-        self,
-        name: str,
-        formula: str,
-        description: str = "",
-        resource_kinds: list | None = None,
-    ) -> tuple[str, dict]:
-        """Create or update by name. Returns (action, supermetric)."""
-        existing = self.find_by_name(name)
-        if existing:
-            sm = self.update_supermetric(
-                existing["id"], name, formula, description, resource_kinds
-            )
-            return ("updated", sm)
-        sm = self.create_supermetric(name, formula, description, resource_kinds)
-        return ("created", sm)

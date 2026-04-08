@@ -1,0 +1,37 @@
+name: "[AI Content] VKS Core Consumption by vCenter"
+description: >
+  Per-vCenter breakdown of VKS (vSphere with Kubernetes / Tanzu) core
+  consumption, replicating the output of the per-vCenter PowerCLI VKS
+  core report. One row per VMwareAdapter Instance (vCenter). The
+  headline compliance number is "VKS Cores" — the number of physical
+  cores attributable to VKS workloads for licensing purposes. All
+  other columns show the vCPU breakdown that feeds that calculation:
+  total VM vCPUs, VKS worker vCPUs, Supervisor Control Plane vCPUs,
+  vCLS vCPUs, VM Service vCPUs, regular (non-VKS) VM vCPUs, total
+  physical cores, and the global vCPU-to-pCore ratio. Suitable as a
+  dashboard widget target (no filters applied — shows all vCenters) and
+  as a standalone scheduled report export.
+
+subject:
+  adapter_kind: VMwareAdapter
+  resource_kind: VMwareAdapter Instance
+
+columns:
+  - attribute: "sm_49dacfe5-f4ae-4577-b735-115fed36b045"
+    display_name: "Total VM vCPU (count)"
+  - attribute: "sm_c51f9bc6-f914-450b-b932-25cba1956d47"
+    display_name: "VKS Worker vCPU (count)"
+  - attribute: "sm_eaf6679f-0b19-4472-8633-085b240b9d60"
+    display_name: "Supervisor Control Plane vCPU (count)"
+  - attribute: "sm_b847549b-7d32-4157-95a2-9f9f26036726"
+    display_name: "vCLS vCPU (count)"
+  - attribute: "sm_98f2a0a5-ea82-4a9d-93a6-29ff58a68889"
+    display_name: "VM Service vCPU (count)"
+  - attribute: "sm_e7e1e3be-ac65-4cea-90b2-e4532503ddd6"
+    display_name: "Regular VM vCPU (count)"
+  - attribute: "sm_a01da816-857a-45a0-9d90-928d327a5020"
+    display_name: "Total Physical Cores (count)"
+  - attribute: "sm_50845fed-0a98-4885-bd57-ac6bc961e48d"
+    display_name: "Global vCPU-to-pCore Ratio"
+  - attribute: "sm_e1aaded4-a38a-4614-a704-e2b0d7ffd6fb"
+    display_name: "VKS Cores (count)"

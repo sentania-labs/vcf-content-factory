@@ -1,3 +1,4 @@
+id: c3013649-1ba4-40e4-88bb-89c4ff1495cd
 name: "[AI Content] Cluster - Avg Powered-On VM CPU Usage (%)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource

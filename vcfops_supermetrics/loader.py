@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+import uuid
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
 
@@ -28,6 +29,8 @@ class SuperMetricDef:
     formula: str
     description: str = ""
     resource_kinds: list = None  # list of {"resourceKindKey","adapterKindKey"}
+    id: str = ""
+    unit_id: str = ""
     source_path: Path | None = None
 
     def validate(self) -> None:
@@ -109,12 +112,37 @@ class SuperMetricDef:
             )
 
 
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
+
+
+def _mint_id_into_file(path: Path) -> str:
+    """Generate a uuid4 and prepend `id: <uuid>` to the YAML file.
+
+    Called on first validate when a YAML lacks an `id`. Per
+    `context/uuids_and_cross_references.md`, UUIDs are stable content
+    identifiers — generated once, never changed after.
+    """
+    new_id = str(uuid.uuid4())
+    original = path.read_text()
+    path.write_text(f"id: {new_id}\n{original}")
+    return new_id
+
+
 def load_file(path: str | Path) -> SuperMetricDef:
     path = Path(path)
     with path.open() as f:
         data = yaml.safe_load(f) or {}
     if not isinstance(data, dict):
         raise SuperMetricValidationError(f"{path}: expected a YAML mapping")
+    sm_id = str(data.get("id", "") or "").strip().lower()
+    if not sm_id:
+        sm_id = _mint_id_into_file(path)
+    elif not _UUID_RE.match(sm_id):
+        raise SuperMetricValidationError(
+            f"{path}: id '{sm_id}' is not a valid uuid4"
+        )
     raw_rks = data.get("resource_kinds") or []
     rks: list = []
     for rk in raw_rks:
@@ -135,10 +163,12 @@ def load_file(path: str | Path) -> SuperMetricDef:
             }
         )
     sm = SuperMetricDef(
+        id=sm_id,
         name=str(data.get("name", "")).strip(),
         formula=str(data.get("formula", "")).strip(),
         description=str(data.get("description", "") or "").strip(),
         resource_kinds=rks,
+        unit_id=str(data.get("unit_id", "") or data.get("unitId", "") or "").strip(),
         source_path=path,
     )
     sm.validate()

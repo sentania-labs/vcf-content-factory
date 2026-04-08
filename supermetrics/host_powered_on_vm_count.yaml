@@ -1,3 +1,4 @@
+id: bcf8e651-38eb-46ce-96e1-1d4c7dd13f83
 name: "[AI Content] Host - Powered-On VM Count"
 resource_kinds:
   - resource_kind_key: HostSystem

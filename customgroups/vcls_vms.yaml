@@ -1,0 +1,15 @@
+name: "[AI Content] vCLS VMs"
+description: >
+  All VirtualMachine objects that are vSphere Cluster Services (vCLS) agent
+  VMs. Selected by summary|parentFolder = vCLS, the well-known folder name
+  vCenter uses for all vCLS VMs. Property recon-verified on
+  vcf-lab-wld01-vcenter 2026-04-08. One rule, one AND'd property condition.
+  Group type VKS Workload Role is new on the instance and will be created by
+  the sync loader before this group is upserted.
+type: VKS Workload Role
+auto_resolve_membership: true
+rules:
+  - resource_kind: VirtualMachine
+    adapter_kind: VMWARE
+    property:
+      - { key: "summary|parentFolder", op: EQ, value: "vCLS" }

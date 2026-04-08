@@ -1,0 +1,16 @@
+name: "[AI Content] VM Service VMs"
+description: >
+  All VirtualMachine objects created and managed by the vSphere VM Service
+  operator (VMOperator), which provisions VMs for Kubernetes workloads via
+  the VM Service Bindings API in a Supervisor namespace. Selected by
+  summary|config|type = VMOperator. Property recon-verified on
+  vcf-lab-wld01-vcenter 2026-04-08. One rule, one AND'd property condition.
+  Group type VKS Workload Role is new on the instance and will be created by
+  the sync loader before this group is upserted.
+type: VKS Workload Role
+auto_resolve_membership: true
+rules:
+  - resource_kind: VirtualMachine
+    adapter_kind: VMWARE
+    property:
+      - { key: "summary|config|type", op: EQ, value: "VMOperator" }

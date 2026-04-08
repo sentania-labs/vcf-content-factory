@@ -1,0 +1,17 @@
+id: e7e1e3be-ac65-4cea-90b2-e4532503ddd6
+name: "[AI Content] vCenter - Regular VM vCPU (count)"
+resource_kinds:
+  - resource_kind_key: VMwareAdapter Instance
+    adapter_kind_key: VMWARE
+description: >
+  Sum of provisioned vCPUs for ordinary workload VMs under this vCenter adapter
+  instance — not VKS workers, Supervisor control-plane nodes, vCLS agents, or VM
+  Service VMs. Selected by summary|config|type = default, the value vCenter
+  reports for standard virtual machines. This cleanly excludes all
+  Supervisor-managed VM types without requiring a NOT clause.
+  Mirrors the membership rule of the [AI Content] Regular VMs custom group.
+  Property key recon-verified 2026-04-08.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+        metric=config|hardware|numCpu, depth=10,
+        where=(${metric=summary|config|type} equals 'default')})

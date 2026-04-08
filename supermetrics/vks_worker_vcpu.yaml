@@ -1,0 +1,16 @@
+id: c51f9bc6-f914-450b-b932-25cba1956d47
+name: "[AI Content] vCenter - VKS Worker vCPU (count)"
+resource_kinds:
+  - resource_kind_key: VMwareAdapter Instance
+    adapter_kind_key: VMWARE
+description: >
+  Sum of provisioned vCPUs for VKS (Tanzu Kubernetes Service) guest cluster worker
+  nodes under this vCenter adapter instance. Workers are identified by a non-empty
+  summary|parentGuestCluster property, which VCF Operations populates only for VMs
+  belonging to a TKG guest cluster. This mirrors the membership rule of the
+  [AI Content] VKS Worker VMs custom group. Recon-verified property key. This value
+  feeds the VKS Cores headline metric (VKS Worker vCPU / Global Ratio).
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+        metric=config|hardware|numCpu, depth=10,
+        where=(${metric=summary|parentGuestCluster} !equals '')})

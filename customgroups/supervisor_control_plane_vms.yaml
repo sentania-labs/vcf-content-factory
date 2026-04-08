@@ -1,0 +1,16 @@
+name: "[AI Content] Supervisor Control Plane VMs"
+description: >
+  All VirtualMachine objects that are vSphere Supervisor control-plane nodes.
+  Selected by two AND'd property conditions: summary|config|type = SupervisorControlPlane
+  AND summary|config|productName = vSphere Supervisor. Both properties
+  recon-verified on vcf-lab-wld01-vcenter 2026-04-08. One rule, two AND'd
+  conditions. Group type VKS Workload Role is new on the instance and will be
+  created by the sync loader before this group is upserted.
+type: VKS Workload Role
+auto_resolve_membership: true
+rules:
+  - resource_kind: VirtualMachine
+    adapter_kind: VMWARE
+    property:
+      - { key: "summary|config|type",        op: EQ, value: "SupervisorControlPlane" }
+      - { key: "summary|config|productName", op: EQ, value: "vSphere Supervisor" }

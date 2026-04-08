@@ -1,3 +1,4 @@
+id: 30d2c6e5-34f1-46b1-9d83-45635907111f
 name: "[AI Content] Cluster - Max VM CPU Ready (%)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
