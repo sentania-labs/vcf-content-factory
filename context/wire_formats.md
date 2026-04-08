@@ -72,6 +72,23 @@ level must reference the same owner id.
 
 ### View definition XML
 
+**Instanced metric keys.** `attributeKey` takes the literal `statKey.key`
+string Ops uses internally. For metric families that the adapter
+instances at runtime (most notably `virtualDisk|*` IOPS / latency /
+read-write counts on VirtualMachine, and `datastore|*`, `net:*`,
+`guestfilesystem|*`), the bare key (e.g. `virtualDisk|totalReadLatency_average`)
+is **registered in `/api/adapterkinds/.../statkeys` but has no
+timeseries data** — data lives only under
+`virtualDisk:scsi0:N|<metric>` per disk and a synthetic
+`virtualDisk:Aggregate of all instances|<metric>` rollup. A list view
+that uses the bare key installs cleanly and renders blank columns
+forever. Use the `:Aggregate of all instances|` form unless you
+intentionally want a single-disk pin. Full procedure for telling
+which families are instanced on a given instance:
+`context/recon_metric_keys.md`. The `statkeys` endpoint cannot tell
+you this — only `GET /api/resources/{id}/stats` on a representative
+resource can.
+
 Rooted at `<Content><Views><ViewDef id=…>` with: `Title`,
 `Description`, two `SubjectType` elements (`type=self` and
 `type=descendant`), `Usage` tags (`dashboard report details
@@ -128,3 +145,125 @@ for super metric enablement inside a policy:
 This is the policy import/export channel, not the content
 import/export channel. Useful if you ever need to bulk-edit policy
 enablements on the public API.
+
+## Custom groups (dynamic)
+
+**Not a content-zip format.** Unlike super metrics / dashboards /
+views / policies, custom groups do **not** ride the
+`/api/content/operations/import` path. There is no
+`customgroups.json` or equivalent in any content zip exported by
+Ops, and no `/internal/*/import` endpoint for them. They are
+created directly via REST:
+
+- `POST /suite-api/api/resources/groups` — create, returns `201`
+  with the echoed object including a server-assigned `id` (UUID)
+  and `links[]`.
+- `PUT  /suite-api/api/resources/groups` — update (body includes `id`).
+- `GET  /suite-api/api/resources/groups?pageSize=N` — list under
+  `{"groups":[...], "pageInfo":{...}}`.
+- `GET  /suite-api/api/resources/groups/{id}` — fetch one.
+- `DELETE /suite-api/api/resources/groups/{id}` — remove.
+- `GET  /suite-api/api/resources/groups/{id}/members` — list
+  resolved member resources.
+
+Implications for this repo: a `customgroups/` YAML tree cannot be
+synced via the existing content-zip importer; it needs a dedicated
+loader/client that POSTs/PUTs JSON directly (same style as the
+old super-metric direct-POST path, but — because group
+identity is server-assigned on create — cross-instance portability
+requires matching by `resourceKey.name` on sync, not by UUID).
+
+### JSON shape (dynamic group)
+
+Exact shape returned by `GET /api/resources/groups` and accepted by
+`POST`, verified by round-trip on the lab (create → GET → delete,
+`2026-04-08`). Full specimens in
+`context/specimens/customgroups/`.
+
+```json
+{
+  "id": "<server-assigned UUID, omit on create>",
+  "resourceKey": {
+    "name": "My Group Name",
+    "adapterKindKey": "Container",
+    "resourceKindKey": "Environment",
+    "resourceIdentifiers": []
+  },
+  "autoResolveMembership": true,
+  "membershipDefinition": {
+    "includedResources": [],
+    "excludedResources": [],
+    "custom-group-properties": [],
+    "rules": [
+      {
+        "resourceKindKey": {
+          "resourceKind": "VirtualMachine",
+          "adapterKind": "VMWARE"
+        },
+        "statConditionRules":        [ { "key": "cpu|usage_average", "doubleValue": 80.0, "compareOperator": "GT" } ],
+        "propertyConditionRules":    [ { "key": "config|hardware|numCpu", "doubleValue": 4.0, "compareOperator": "LT" } ],
+        "resourceNameConditionRules":[ { "name": "VSAN", "compareOperator": "NOT_CONTAINS" } ],
+        "relationshipConditionRules":[ { "relation": "CHILD", "name": "SampleStorage", "compareOperator": "CONTAINS", "travesalSpecId": "vSphere Storage-VMWARE-vSphere World" } ],
+        "resourceTagConditionRules": [ { "category": "VMFolder", "compareOperator": "NOT_CONTAINS", "stringValue": "TestVMFolder" } ]
+      }
+    ]
+  }
+}
+```
+
+Gotchas:
+
+1. **`adapterKindKey`/`resourceKindKey` at the top level are the
+   group object's *own* type**, almost always
+   `Container`/`Environment`. The **member selector** kind lives
+   under `membershipDefinition.rules[].resourceKindKey`
+   (`{resourceKind, adapterKind}`, note flipped field names — no
+   `Key` suffix here). Easy to swap by accident.
+2. **All five rule arrays are required**, even when empty. Missing
+   arrays are tolerated on create but come back empty on GET;
+   including them explicitly keeps diffs clean.
+3. **`custom-group-properties` has a literal hyphen** in the JSON
+   key — not camelCase like everything else.
+4. **Multiple entries in `rules[]` are OR'd** (union). Multiple
+   condition rules *inside* one rule group are AND'd. Specimen
+   `03_VCF_Operations_Self_Monitoring.json` has 13 rule groups,
+   one per adapter resource kind — classic OR-of-ANDs pattern.
+5. **`compareOperator` values observed:** `EQ`, `NOT_EQ`, `GT`,
+   `GTE`, `LT`, `LTE`, `CONTAINS`, `NOT_CONTAINS`, `STARTS_WITH`,
+   `ENDS_WITH`, `REGEX`. Per spec example.
+6. **`relationshipConditionRules[].travesalSpecId`** is misspelled
+   in the API (missing `r` — `travesal` not `traversal`). Use the
+   misspelling; Ops expects it.
+7. **`relation` values:** `PARENT`, `CHILD`, `ANCESTOR`,
+   `DESCENDANT`.
+8. **`autoResolveMembership: true`** means Ops periodically
+   re-evaluates rules against the inventory. `false` freezes the
+   initial membership — almost never what you want for a dynamic
+   group.
+9. **Static-only groups** (no `rules`, only `includedResources`)
+   can also be created here, or via
+   `POST /internal/resources/groups/static`. This repo scope is
+   dynamic-only.
+10. **`id` must be omitted on create** (POST). On update (PUT) it
+    must be present and match an existing group.
+11. **On DELETE, a subsequent GET returns 500**, not 404. Normal
+    Ops behavior; the delete itself returns 200 and is
+    authoritative.
+
+## Custom group types
+
+Two-field flat taxonomy that classifies custom group instances.
+JSON object: `{name, key}`. See
+`context/customgroup_authoring.md` §"Group types" for full detail
+including the cross-reference path from instances.
+
+| Verb | Path | Notes |
+|---|---|---|
+| GET | `/api/resources/groups/types` | List, returns `{groupTypes:[{name,key}]}`. Public. |
+| POST | `/api/resources/groups/types` | Create. Body `{"name":"X"}`. Server sets `key=name`. 201, empty body. Public. |
+| DELETE | `/api/resources/groups/types/{key}` | Delete by key. 200, empty body. Public. |
+
+No GET-by-key, no PUT/PATCH, no `/internal/*` equivalent.
+Cross-reference from a group instance:
+`resourceKey.resourceKindKey == <type.key>`,
+`resourceKey.adapterKindKey == "Container"`.

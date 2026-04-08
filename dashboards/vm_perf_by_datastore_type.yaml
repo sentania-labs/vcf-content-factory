@@ -1,0 +1,25 @@
+name: "[AI Content] VM Performance by Datastore Type"
+description: >
+  Pick a datastore-type bucket (vSAN, NFS, Local VMFS, or Shared VMFS) from
+  the resource list on the left. The VM Performance + Storage view on the right
+  narrows to that custom group and surfaces worst-offender VMs across CPU,
+  memory, and virtualDisk IOPS/latency dimensions.
+
+widgets:
+  - id: datastore_type_picker
+    type: ResourceList
+    title: "Select Datastore Type Bucket"
+    coords: {x: 1, y: 1, w: 3, h: 11}
+    resource_kinds:
+      - {adapter_kind: Container, resource_kind: Environment}
+
+  - id: vm_perf_view
+    type: View
+    title: "VM CPU, Memory & Storage — Worst Offenders"
+    coords: {x: 4, y: 1, w: 9, h: 11}
+    view: "[AI Content] VM Performance + Storage"
+
+interactions:
+  - from: datastore_type_picker
+    to: vm_perf_view
+    type: resourceId

@@ -1,0 +1,159 @@
+{
+  "resourceKey": {
+    "name": "VCF Operations Self Monitoring",
+    "adapterKindKey": "Container",
+    "resourceKindKey": "vC-Ops-Self-Monitoring",
+    "resourceIdentifiers": []
+  },
+  "autoResolveMembership": true,
+  "membershipDefinition": {
+    "includedResources": [],
+    "excludedResources": [],
+    "custom-group-properties": [],
+    "rules": [
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-Analytics",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      },
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-CaSA",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      },
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-Cluster",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      },
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-Collector",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      },
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-Controller",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      },
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-DataShard",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      },
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-Fsdb",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      },
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-ManagementPackGroup",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      },
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-Node",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      },
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-Persistence",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      },
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-Product-UI",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      },
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-Suite-API",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      },
+      {
+        "resourceKindKey": {
+          "resourceKind": "vC-Ops-Watchdog",
+          "adapterKind": "vCenter Operations Adapter"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      }
+    ]
+  }
+}

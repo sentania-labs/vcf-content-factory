@@ -1,0 +1,38 @@
+{
+  "resourceKey": {
+    "name": "[Custom] VMs on only Standard PGs",
+    "adapterKindKey": "Container",
+    "resourceKindKey": "Function",
+    "resourceIdentifiers": []
+  },
+  "autoResolveMembership": true,
+  "membershipDefinition": {
+    "includedResources": [],
+    "excludedResources": [],
+    "custom-group-properties": [],
+    "rules": [
+      {
+        "resourceKindKey": {
+          "resourceKind": "VirtualMachine",
+          "adapterKind": "VMWARE"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [
+          {
+            "relation": "DESCENDANT",
+            "name": "[Custom] Standard PGs",
+            "compareOperator": "EQ"
+          },
+          {
+            "relation": "DESCENDANT",
+            "name": "[Custom] NSX PGs",
+            "compareOperator": "NOT_EQ"
+          }
+        ],
+        "resourceTagConditionRules": []
+      }
+    ]
+  }
+}

@@ -53,3 +53,27 @@ rules**. Unlike super metrics, alert definitions have a supported
 public enable/disable endpoint. The whole chain can be authored in
 YAML and installed end-to-end on the supported public surface. No
 internal-API hacks required.
+
+## Custom groups (dynamic)
+
+Public REST, **not** content-zip:
+
+- `GET/POST/PUT /suite-api/api/resources/groups`
+- `GET/DELETE   /suite-api/api/resources/groups/{id}`
+- `GET          /suite-api/api/resources/groups/{id}/members`
+- `GET/POST     /suite-api/api/resources/groups/types`
+
+Internal extras (require `X-Ops-API-use-unsupported: true`,
+unsupported):
+
+- `POST /suite-api/internal/resources/groups/static`
+- `PUT/POST /suite-api/internal/resources/groups/{id}/includedResources`
+- `PUT/POST /suite-api/internal/resources/groups/{id}/excludedResources`
+- `GET/POST/DELETE /suite-api/internal/resources/grouptype[/{name}]`
+
+Custom groups do not ride `/api/content/operations/import`; there
+is no `customgroups.json` in any content-export zip. Sync identity
+is `resourceKey.name`, not UUID — the server assigns `id` on create.
+Wire format and full round-trip notes: `context/wire_formats.md`
+§"Custom groups (dynamic)". Authoring guidance:
+`context/customgroup_authoring.md`.

@@ -80,10 +80,15 @@ class Widget:
     resource_kinds: List[WidgetResourceKindRef] = field(default_factory=list)
     # View only:
     view_name: str = ""
+    # Set by load_dashboard so widget UUIDs are namespaced by dashboard
+    # name — otherwise two dashboards reusing the same local_id (e.g.
+    # "vm_perf_view") generate identical widget UUIDs and their
+    # interaction wiring collides in the rendered bundle.
+    dashboard_name: str = ""
 
     @property
     def widget_id(self) -> str:
-        return stable_id("widget", self.local_id)
+        return stable_id("widget", f"{self.dashboard_name}::{self.local_id}")
 
 
 @dataclass
@@ -195,8 +200,11 @@ def load_dashboard(path: Path) -> Dashboard:
         )
         for ix in (data.get("interactions") or [])
     ]
+    name = str(data.get("name", "")).strip()
+    for w in widgets:
+        w.dashboard_name = name
     return Dashboard(
-        name=str(data.get("name", "")).strip(),
+        name=name,
         description=str(data.get("description", "") or "").strip(),
         widgets=widgets,
         interactions=interactions,

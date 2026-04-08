@@ -1,0 +1,14 @@
+name: "[AI Content] vSAN Datastores"
+description: >
+  All Datastore objects whose summary|type property reports vsan.
+  Adapted from the lab specimen
+  context/specimens/customgroups/02_vSAN_Datastores.json. Useful as
+  the simplest end-to-end test of the customgroups loader: one rule,
+  one property condition, default Environment type.
+type: Environment
+auto_resolve_membership: true
+rules:
+  - resource_kind: Datastore
+    adapter_kind: VMWARE
+    property:
+      - { key: "summary|type", op: EQ, value: "vsan" }

@@ -1,0 +1,15 @@
+name: "[AI Content] VMs on Local VMFS"
+description: >
+  All VirtualMachine objects that have "[AI Content] Local VMFS Datastores"
+  as a CHILD. Depends on "[AI Content] Local VMFS Datastores" existing
+  on the target instance at sync time (defined in
+  customgroups/local_vmfs_datastores.yaml). Used as the member scope
+  for the local VMFS tier of the "VM performance by datastore type"
+  dashboard.
+type: Environment
+auto_resolve_membership: true
+rules:
+  - resource_kind: VirtualMachine
+    adapter_kind: VMWARE
+    relationship:
+      - { relation: CHILD, name: "[AI Content] Local VMFS Datastores", op: EQ }

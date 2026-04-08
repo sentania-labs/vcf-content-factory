@@ -1,0 +1,52 @@
+{
+  "groupTypes": [
+    {
+      "name": "Department",
+      "key": "Department"
+    },
+    {
+      "name": "Environment",
+      "key": "Environment"
+    },
+    {
+      "name": "Function",
+      "key": "Function"
+    },
+    {
+      "name": "Licensing",
+      "key": "Licensing"
+    },
+    {
+      "name": "Location",
+      "key": "Location"
+    },
+    {
+      "name": "Manual Application",
+      "key": "Manual Application"
+    },
+    {
+      "name": "Security Zone",
+      "key": "Security Zone"
+    },
+    {
+      "name": "Service Level Objective",
+      "key": "Service Level Objective"
+    },
+    {
+      "name": "Tags Group",
+      "key": "Feature"
+    },
+    {
+      "name": "Universe",
+      "key": "Universe"
+    },
+    {
+      "name": "VCF Operations Self Monitoring",
+      "key": "vC-Ops-Self-Monitoring"
+    },
+    {
+      "name": "VMware Cloud",
+      "key": "VMware Cloud"
+    }
+  ]
+}

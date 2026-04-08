@@ -1,0 +1,33 @@
+{
+  "resourceKey": {
+    "name": "vSAN Datastores",
+    "adapterKindKey": "Container",
+    "resourceKindKey": "Environment",
+    "resourceIdentifiers": []
+  },
+  "autoResolveMembership": true,
+  "membershipDefinition": {
+    "includedResources": [],
+    "excludedResources": [],
+    "custom-group-properties": [],
+    "rules": [
+      {
+        "resourceKindKey": {
+          "resourceKind": "Datastore",
+          "adapterKind": "VMWARE"
+        },
+        "statConditionRules": [],
+        "propertyConditionRules": [
+          {
+            "key": "summary|type",
+            "stringValue": "vsan",
+            "compareOperator": "EQ"
+          }
+        ],
+        "resourceNameConditionRules": [],
+        "relationshipConditionRules": [],
+        "resourceTagConditionRules": []
+      }
+    ]
+  }
+}

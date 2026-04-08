@@ -1,0 +1,14 @@
+name: "[AI Content] NFS Datastores"
+description: >
+  All Datastore objects whose summary|type property reports NFS.
+  Used as the upstream scope group for "[AI Content] VMs on NFS".
+  Counterpart to the vSAN, Local VMFS, and Shared VMFS datastore
+  groups that together partition the datastore inventory by
+  transport type for the "VM performance by datastore type" dashboard.
+type: Environment
+auto_resolve_membership: true
+rules:
+  - resource_kind: Datastore
+    adapter_kind: VMWARE
+    property:
+      - { key: "summary|type", op: EQ, value: "NFS" }

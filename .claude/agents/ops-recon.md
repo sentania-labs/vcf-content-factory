@@ -54,6 +54,21 @@ Your knowledge base: `CLAUDE.md`, `context/content_api_surface.md`,
   contentTypes (`DASHBOARDS`, `VIEW_DEFINITIONS`), poll, download,
   enumerate. Use the same mechanism the dashboards client already
   has helpers for.
+- **Does a custom group matching a description already exist?**
+  `GET /api/resources/groups?pageSize=1000`. **Filter by
+  `resourceKey.adapterKindKey == "Container"`** — the response also
+  contains built-in container resources like `vSphere World` that
+  are NOT custom groups, and including them pollutes recon results.
+  Match on `resourceKey.name`. Report by id, name, type
+  (`resourceKey.resourceKindKey`), and rule summary if present.
+- **Does the proposed group type already exist?** When the brief
+  involves a custom group with a non-default type (anything other
+  than `Environment`), `GET /api/resources/groups/types` and check
+  whether the requested type key is present. Report
+  `EXISTS`/`MISSING` so `customgroup-author` knows whether to flag
+  a new-type creation in its return report. Built-in types observed
+  on the lab include `Environment`, `Function`, `Department`, etc.;
+  the live list is the source of truth.
 
 ### Metric vocabulary questions
 
@@ -101,7 +116,8 @@ Your knowledge base: `CLAUDE.md`, `context/content_api_surface.md`,
      `docs/vcf9/metrics-properties.md`.
   2. Existing super metric on the instance: `/api/supermetrics` list.
   3. Existing repo-authored YAML that hasn't been synced yet:
-     `supermetrics/*.yaml`, `views/*.yaml`, `dashboards/*.yaml`.
+     `supermetrics/*.yaml`, `customgroups/*.yaml`, `views/*.yaml`,
+     `dashboards/*.yaml`.
   4. **Allowlisted external reference sources.** Read
      `context/reference_sources.md`, then grep every listed local
      clone path for matches. These are working bundles authored by

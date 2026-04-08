@@ -35,13 +35,21 @@ instance via the Suite API / content-import zip.
 4. **Always validate before installing.**
    `python -m vcfops_supermetrics validate <file>`.
 
-5. **UUIDs are part of the contract.** Every content object this
-   repo creates owns a stable UUID stored in its YAML `id` field.
-   Dashboards → views → super metrics reference each other by UUID
-   (as literal `sm_<uuid>` / `viewDefinitionId`), so cross-instance
-   portability depends on those UUIDs not drifting. Generate on
-   first `validate`, never touch after. See
+5. **UUIDs are part of the contract** — for super metrics, views,
+   and dashboards. Every such content object this repo creates owns
+   a stable UUID stored in its YAML `id` field. Dashboards → views
+   → super metrics reference each other by UUID (as literal
+   `sm_<uuid>` / `viewDefinitionId`), so cross-instance portability
+   depends on those UUIDs not drifting. Generate on first
+   `validate`, never touch after. See
    `context/uuids_and_cross_references.md`.
+
+   **Carve-out: custom groups are identified by `name`, not UUID.**
+   The `/api/resources/groups` endpoint assigns the `id` server-side
+   on create, so custom group YAMLs do NOT carry an `id` field and
+   sync matches by `resourceKey.name`. This is the only content
+   type with this exception. See
+   `context/customgroup_authoring.md`.
 
 6. **Grep both OpenAPI specs** when answering "does the API support
    X?". `docs/internal-api.json` contains `/internal/*` endpoints
@@ -55,7 +63,8 @@ instance via the Suite API / content-import zip.
 docs/                        OpenAPI specs + extracted VCF 9 markdown; PDFs gitignored
 vcfops_supermetrics/         Python package: client, loader, CLI (validate/list/sync/delete)
 vcfops_dashboards/           Python package: views + dashboards loader/packager/client
-supermetrics/  views/  dashboards/   YAML source of truth
+vcfops_customgroups/         Python package: dynamic custom groups + group types loader/client/CLI
+supermetrics/  views/  dashboards/  customgroups/   YAML source of truth
 context/                     Topical background — read these before touching code paths
 ```
 
@@ -64,6 +73,7 @@ context/                     Topical background — read these before touching c
 | Topic | File |
 |---|---|
 | Authoring a super metric, DSL rules, style | `context/supermetric_authoring.md` |
+| Authoring a dynamic custom group + group types | `context/customgroup_authoring.md` |
 | UUIDs, cross-references, rename safety | `context/uuids_and_cross_references.md` |
 | API surface map (public + internal + content-zip) | `context/content_api_surface.md` |
 | Content-zip wire formats (super metrics, dashboards, views, policies) | `context/wire_formats.md` |
@@ -93,8 +103,9 @@ holding all the context.
 |---|---|---|---|
 | `ops-recon` | Read-only against live Ops | `context/recon_log.md` only on request | **Before every authoring task.** Answers "does this already exist / is it already enabled / does a built-in metric cover the need?" |
 | `supermetric-author` | Author | `supermetrics/` only | After recon confirms no existing solution. Creates one super metric per invocation. |
-| `view-author` | Author | `views/` only | User wants a list view. May require a super metric to exist first; if so, view-author blocks and you delegate upstream. |
-| `dashboard-author` | Author | `dashboards/` only | User wants a dashboard. May require views (and transitively super metrics) to exist first. |
+| `customgroup-author` | Author | `customgroups/` only | User needs a dynamic custom group (storytelling scope, set selection). Static groups are out of scope. May depend on a super metric; delegate upstream if so. |
+| `view-author` | Author | `views/` only | User wants a list view. May require a super metric or custom group to exist first; if so, view-author blocks and you delegate upstream. |
+| `dashboard-author` | Author | `dashboards/` only | User wants a dashboard. May require views, custom groups, and (transitively) super metrics to exist first. |
 | `api-explorer` | Research | `context/`, `docs/` only | An author agent returns a TOOLSET GAP report, an install fails mysteriously, or the user asks something the surface map doesn't cover. |
 
 ### Delegation protocol
@@ -121,7 +132,7 @@ holding all the context.
    filesystem themselves. Keeping file contents out of your
    context window is how this architecture stays affordable.
 4. **Validate the whole repo after each round.** Run
-   `python -m vcfops_supermetrics validate && python -m vcfops_dashboards validate`
+   `python -m vcfops_supermetrics validate && python -m vcfops_dashboards validate && python -m vcfops_customgroups validate`
    after agents return. Cross-reference breaks surface here.
 5. **Install only on explicit user confirmation.** Show the user
    the file list and a brief summary, ask yes/no, then run the
@@ -188,8 +199,14 @@ first-class, not a sad fallback.
 2. `ops-recon` for each piece. May be one invocation with a
    multi-part brief.
 3. For each missing piece, delegate bottom-up:
-   `supermetric-author` → `view-author` → `dashboard-author`.
-   Each agent reads the previous agent's output from disk.
+   `supermetric-author` → `customgroup-author` → `view-author` →
+   `dashboard-author`. Each agent reads the previous agent's
+   output from disk. Custom groups go above views/dashboards
+   because views and dashboards may target a custom group as their
+   scope; custom groups go below super metrics because a custom
+   group rule can reference a super metric value (and because
+   `customgroup-author` will refuse if a referenced super metric
+   doesn't exist yet).
 4. Validate the whole repo.
 5. Show the user the file list + summary, ask for confirmation.
 6. Install all pieces.
@@ -205,4 +222,9 @@ python -m vcfops_supermetrics sync supermetrics/<f>.yaml
 python -m vcfops_supermetrics delete "<name>"
 python -m vcfops_dashboards validate                  # lint views + dashboards
 python -m vcfops_dashboards sync                      # build + import
+python -m vcfops_customgroups validate                # lint customgroups/*.yaml
+python -m vcfops_customgroups list                    # custom groups on the instance
+python -m vcfops_customgroups list-types              # group types on the instance
+python -m vcfops_customgroups sync                    # ensure types, then upsert groups
+python -m vcfops_customgroups delete "<name>"
 ```
