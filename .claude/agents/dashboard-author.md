@@ -1,7 +1,7 @@
 ---
 name: dashboard-author
 description: Authors dashboard YAML under dashboards/. Assembles widgets (ResourceList pickers, View embeds) and interactions. Resolves view references by name. Does not create views, super metrics, or touch install code.
-model: opus
+model: sonnet
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 

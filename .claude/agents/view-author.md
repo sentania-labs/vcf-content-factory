@@ -1,7 +1,7 @@
 ---
 name: view-author
 description: Authors list view YAML under views/. Resolves supermetric references by name. Does not create super metrics, dashboards, or touch install code. Refuses when it would need to invent content from another domain.
-model: opus
+model: sonnet
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 

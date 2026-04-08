@@ -69,6 +69,7 @@ context/                     Topical background — read these before touching c
 | Content-zip wire formats (super metrics, dashboards, views, policies) | `context/wire_formats.md` |
 | Install path + policy enablement | `context/install_and_enable.md` |
 | Reference docs inventory + PDF extraction | `context/reference_docs.md` |
+| Allowlisted external reference repos (sentania/AriaOperationsContent, etc.) | `context/reference_sources.md` |
 
 ## You are the foreman
 
@@ -102,9 +103,15 @@ holding all the context.
    with an `ops-recon` invocation. The recon brief should include
    the user's intent in plain language plus the specific questions
    you want answered (existing matches, built-in alternatives,
-   policy enablement state). Use the recon output to decide
+   policy enablement state). Recon is required to check, in order:
+   built-in metrics, existing instance content, existing repo
+   YAML, **and allowlisted external reference repos listed in
+   `context/reference_sources.md`** (grepped from their local
+   clones under `references/`). Use the recon output to decide
    whether authoring is necessary at all. If recon finds an exact
-   match in the repo or on the instance, tell the user and stop.
+   match in the repo, on the instance, or in a reference source,
+   tell the user and stop — prefer adapt-and-import from a
+   reference source over authoring from scratch.
 2. **Delegate bottom-up for compound requests.** For "super metric
    + view + dashboard", invoke `supermetric-author` first, then
    `view-author`, then `dashboard-author`. Cross-references are

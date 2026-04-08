@@ -1,7 +1,7 @@
 ---
 name: ops-recon
 description: Read-only reconnaissance against a live VCF Ops instance. Use before any author agent runs. Answers "does this already exist?", "is this metric already collected / enabled?", "which policy is this in?". The gate before creating any new content.
-model: opus
+model: sonnet
 tools: Read, Grep, Glob, Bash
 ---
 
@@ -95,14 +95,24 @@ Your knowledge base: `CLAUDE.md`, `context/content_api_surface.md`,
 ### Comparison against existing content
 
 - **Is this user request already covered by existing content?**
-  Check three places in order:
+  Check **four** places in order:
   1. Built-in metric: is there a native Ops metric that already
      answers the question? Consult the live `/statkeys` output and
      `docs/vcf9/metrics-properties.md`.
   2. Existing super metric on the instance: `/api/supermetrics` list.
   3. Existing repo-authored YAML that hasn't been synced yet:
      `supermetrics/*.yaml`, `views/*.yaml`, `dashboards/*.yaml`.
-  If any of the three matches, say so clearly and name it.
+  4. **Allowlisted external reference sources.** Read
+     `context/reference_sources.md`, then grep every listed local
+     clone path for matches. These are working bundles authored by
+     others — adapting an existing one is almost always cheaper
+     and more correct than authoring from scratch. If a reference
+     source is listed but not present locally, report it as a
+     missing-clone gap and continue with the rest. Do not attempt
+     to clone or fetch.
+  If any of the four matches, say so clearly, name the source and
+  filename, and mark the match as EXACT, PARTIAL, or INSPIRATION
+  (meaning "close enough to adapt, not close enough to drop in").
 
 ## How to invoke the Ops API from this agent
 
@@ -146,6 +156,10 @@ RECON RESULT
   existing super metric (repo):
     - supermetrics/cluster_avg_vm_cpu.yaml (name "[AI Content]
       Cluster - Avg Powered-On VM CPU Usage (%)") — EXACT MATCH
+  reference sources (context/reference_sources.md):
+    - sentania/AriaOperationsContent/TPS Cluster Level Supermetric/
+      supermetric.json — INSPIRATION (same depth=2 pattern on
+      ClusterComputeResource, different metric)
   existing view:
     - none
   existing dashboard:

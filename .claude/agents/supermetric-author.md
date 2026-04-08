@@ -1,7 +1,7 @@
 ---
 name: supermetric-author
 description: Authors super metric YAML under supermetrics/. Knows the VCF Ops super metric DSL cold. Will not run without ops-recon confirming no built-in metric or existing super metric satisfies the need. Does not create views, dashboards, or touch install code.
-model: opus
+model: sonnet
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 

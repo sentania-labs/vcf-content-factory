@@ -22,3 +22,6 @@ venv/
 
 # PDFs (too large / redundant with extracted markdown under docs/)
 *.pdf
+
+# Local clones of external reference sources (see context/reference_sources.md)
+references/
