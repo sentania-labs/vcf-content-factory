@@ -93,6 +93,41 @@ metric to `ClusterComputeResource`). When in doubt, ask.
   outer entry's own value (`where="$value == 1"`) and `isFresh()`
   for freshness (`where="$value.isFresh()"`).
 
+  **CRITICAL: Do NOT use `&&` with string operators.** Compound
+  `&&` works with numeric conditions
+  (`where=($value == 7 && $value.isFresh())`), but **silently
+  fails** when combined with string operators (`equals`,
+  `contains`, etc.). A formula like
+  `where="prop1 equals X && prop2 contains Y"` imports
+  successfully, validates, and produces **zero data** with no
+  error — the most dangerous kind of bug. Discovered 2026-04-09
+  when three VKS super metrics all returned 0 despite correct
+  property values on the target VMs.
+
+  **Subtraction pattern** — the correct way to filter on two
+  string properties simultaneously:
+
+  1. Create single-condition SMs for each dimension:
+     - SM-A: `where="summary|config|type equals VMOperator"` → all VMOperator vCPU
+     - SM-B: `where="summary|config|productName equals vSphere Kubernetes Service Cluster Node Image"` → VKS node image vCPU
+  2. Compute the difference via cross-SM reference:
+     ```
+     ${this, metric=Super Metric|sm_<uuid_A>}
+     -
+     ${this, metric=Super Metric|sm_<uuid_B>}
+     ```
+     Result = VM Service vCPU (VMOperator minus VKS).
+
+  All referenced SMs must be assigned to the same resource kinds
+  and enabled in the same policy. See `vks_vmservice_vcpu.yaml`,
+  `vks_cp_vcpu.yaml` for working examples of this pattern.
+
+  **Also: `summary|runtime|powerState` is a string property**
+  (`"Powered On"`), not a numeric metric. Do not use it in
+  `where=(${metric=...}==1)`. Use `sys|poweredOn` (numeric,
+  1.0 = on) instead. See `cluster_avg_vm_cpu.yaml` for the
+  corrected pattern: `where=(${metric=sys|poweredOn}==1)`.
+
 - **Metric vs property targets**: the `metric=` slot in a resource
   entry can be either a real metric key (`cpu|corecount_provisioned`)
   or a property key (`config|hardware|num_Cpu`,

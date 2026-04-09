@@ -1,0 +1,31 @@
+id: dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4
+name: "[VCF Content Factory] VKS Node Image vCPU (count)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+  - resource_kind_key: Datacenter
+    adapter_kind_key: VMWARE
+  - resource_kind_key: VMwareAdapter Instance
+    adapter_kind_key: VMWARE
+description: >
+  Sum of provisioned vCPUs across ALL VMs built from the VKS node image within
+  the assigned object's scope. This includes both VKS cluster control plane VMs
+  and worker node VMs — anything whose OVF product name is "vSphere Kubernetes
+  Service Cluster Node Image". Expected value in a lab with one two-node cluster:
+  4 (2 control plane + 2 worker).
+
+  This is an intermediate/helper metric used for subtraction-based decomposition.
+  vks_cp_vcpu.yaml subtracts worker vCPU (vks_worker_vcpu.yaml) from this total
+  to derive control plane vCPU without a compound where clause. Similarly,
+  vks_vmservice_vcpu.yaml can subtract this total from VMOperator-typed VM totals
+  to exclude VKS VMs. Compound && where clauses with string operators silently
+  fail in the VCF Ops engine; single-condition SMs composed via arithmetic are
+  the correct workaround.
+
+  Assigned to ClusterComputeResource, Datacenter, and VMwareAdapter Instance
+  so a single formula yields per-cluster, per-DC, and per-vCenter rollups
+  without duplication.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+        metric=config|hardware|num_Cpu, depth=10,
+        where="summary|config|productName equals vSphere Kubernetes Service Cluster Node Image"})

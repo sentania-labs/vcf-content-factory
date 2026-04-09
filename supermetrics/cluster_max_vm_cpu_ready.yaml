@@ -7,8 +7,10 @@ description: >
   Maximum CPU ready percent observed across powered-on virtual machines in
   the cluster. Surfaces worst-case VM scheduling contention that cluster
   averages hide. Assigned to ClusterComputeResource; depth=2 traverses
-  Cluster -> Host -> VM, filtered to powered-on VMs.
+  Cluster -> Host -> VM, filtered to powered-on VMs via sys|poweredOn
+  (numeric stat: 1=on, 0=off) rather than summary|runtime|powerState, which
+  is a string property the SM engine cannot evaluate numerically.
 formula: |
   max(${adaptertype=VMWARE, objecttype=VirtualMachine,
-       attribute=cpu|readyPct, depth=2,
-       where=(${metric=summary|runtime|powerState}==1)})
+       metric=cpu|readyPct, depth=2,
+       where=(${metric=sys|poweredOn}==1)})

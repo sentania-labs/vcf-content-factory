@@ -9,14 +9,21 @@ resource_kinds:
     adapter_kind_key: VMWARE
 description: >
   Sum of provisioned vCPUs across all VKS worker node VMs within the assigned
-  object's scope. Workers are identified by the presence of a non-empty
-  summary|parentGuestCluster property, which is set only on VMs that belong to
-  a VKS guest cluster. The where clause uses !equals with an empty literal to
-  match any VM whose parentGuestCluster property is populated.
+  object's scope. Workers are identified by a single where clause on the VM name:
+  VKS worker node VMs always contain the literal string "node-pool" in their name
+  (e.g. vks-test-cluster-node-pool-1-8lj2v-2b7nw-szrbr), which is structurally
+  guaranteed by the VKS provisioner. Control plane VMs never contain "node-pool"
+  in their name (e.g. vks-test-cluster-wppwd-8sc5q), so the name-pattern filter
+  is sufficient to isolate workers without needing a productName condition.
 
-  Lab caveat: the VKS guest cluster was rebuilding at authoring time so no
-  worker nodes exist yet; this SM will report 0 / no-data until at least one
-  worker node appears. This is expected behaviour — the formula is correct.
+  A compound where clause (productName AND name) was originally attempted but
+  abandoned: compound && conditions with string operators (equals, contains)
+  silently fail in the VCF Ops super metric engine and produce no data. The
+  single-condition name-pattern approach is the correct workaround. Non-VKS VMs
+  will not match "node-pool" in practice, but for belt-and-suspenders exclusion
+  of the productName dimension, see vks_nodeimage_vcpu.yaml (which counts the
+  full node-image population) and vks_cp_vcpu.yaml (which derives CP vCPU by
+  subtracting this metric from vks_nodeimage_vcpu.yaml).
 
   Assigned to ClusterComputeResource, Datacenter, and VMwareAdapter Instance
   so a single formula yields per-cluster, per-DC, and per-vCenter rollups
@@ -24,4 +31,4 @@ description: >
 formula: |
   sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
         metric=config|hardware|num_Cpu, depth=10,
-        where="summary|parentGuestCluster !equals "})
+        where="config|name contains node-pool"})

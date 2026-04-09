@@ -8,14 +8,31 @@ resource_kinds:
   - resource_kind_key: VMwareAdapter Instance
     adapter_kind_key: VMWARE
 description: >
-  Sum of provisioned vCPUs across all VM Service VMs (VMOperator-managed VMs)
-  within the assigned object's scope. VM Service VMs are identified by
-  summary|config|type equals VMOperator. These VMs are provisioned through
-  the vSphere VM Service capability for Kubernetes workloads.
+  Sum of provisioned vCPUs across standalone VM Service VMs (VMOperator-managed
+  VMs that are NOT VKS node image VMs) within the assigned object's scope.
+
+  Derived by cross-SM subtraction rather than a compound where clause.
+  Compound && conditions combining string operators (equals, contains) silently
+  fail in the VCF Ops super metric engine and produce no data. The correct
+  pattern here is: sum ALL VMOperator-typed VMs inline, then subtract the VKS
+  node image population (which is a superset of VKS worker + control plane VMs)
+  to isolate standalone VM Service VMs only.
+
+  Formula: sum(all VMOperator VMs) - VKS Node Image vCPU
+    - Inline sum: all VMs where summary|config|type equals VMOperator
+    - [VCF Content Factory] VKS Node Image vCPU (count)  -> sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4
+
+  VKS cluster VMs (both control plane and worker) are typed VMOperator AND
+  carry the node image productName. Subtracting the node image SM removes them
+  entirely, leaving only standalone VM Service VMs. The referenced SM must be
+  installed and enabled in policy for this SM to produce data.
 
   Assigned to ClusterComputeResource, Datacenter, and VMwareAdapter Instance
-  so a single formula yields per-cluster, per-DC, and per-vCenter rollups.
+  so a single formula yields per-cluster, per-DC, and per-vCenter rollups
+  without duplication.
 formula: |
   sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
         metric=config|hardware|num_Cpu, depth=10,
         where="summary|config|type equals VMOperator"})
+  -
+  ${this, metric=Super Metric|sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4}

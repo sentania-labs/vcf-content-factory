@@ -1,0 +1,37 @@
+id: b3b292ce-7094-46ca-984e-9413e4df67a0
+name: "[VCF Content Factory] VKS Cluster Control Plane vCPU (count)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+  - resource_kind_key: Datacenter
+    adapter_kind_key: VMWARE
+  - resource_kind_key: VMwareAdapter Instance
+    adapter_kind_key: VMWARE
+description: >
+  Provisioned vCPUs across all VKS cluster control plane VMs within the
+  assigned object's scope. These are the control plane VMs of user-provisioned
+  VKS (Tanzu) clusters — distinct from the vSphere Supervisor control plane VMs
+  counted by vks_supervisor_vcpu.yaml.
+
+  Derived by cross-SM subtraction rather than a compound where clause.
+  Compound && conditions combining string operators (equals, contains) silently
+  fail in the VCF Ops super metric engine and produce no data. The correct
+  pattern is: compute the broader set in one SM, compute the subset to exclude
+  in a second SM, then subtract here.
+
+  Formula: VKS Node Image vCPU - VKS Worker vCPU
+    - [VCF Content Factory] VKS Node Image vCPU (count)  -> sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4
+    - [VCF Content Factory] VKS Worker vCPU (count)      -> sm_17f31a23-d7e7-4ff9-ab30-7a50d3e3a584
+
+  Node image vCPU counts ALL VMs built from the VKS node image (control plane +
+  workers). Worker vCPU counts only worker VMs (name contains "node-pool").
+  Subtracting worker from total yields control-plane-only vCPU. Both referenced
+  SMs must be installed and enabled in policy for this SM to produce data.
+
+  Assigned to ClusterComputeResource, Datacenter, and VMwareAdapter Instance
+  so a single formula yields per-cluster, per-DC, and per-vCenter rollups
+  without duplication.
+formula: |
+  ${this, metric=Super Metric|sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4}
+  -
+  ${this, metric=Super Metric|sm_17f31a23-d7e7-4ff9-ab30-7a50d3e3a584}
