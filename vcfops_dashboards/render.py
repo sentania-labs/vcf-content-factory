@@ -80,8 +80,26 @@ def _xml_attribute_item(view: ViewDef, col, idx: int) -> str:
     return "<Item><Value>" + "".join(props) + "</Value></Item>"
 
 
+def _render_summary_infos(view: ViewDef) -> str:
+    """Render the summaryInfos XML block for a view's summary/totals row."""
+    if not view.summary:
+        return ""
+    indexes = view.summary.column_indexes
+    if indexes is None:
+        indexes = list(range(len(view.columns)))
+    idx_items = "".join(f'<Item value="{i}"/>' for i in indexes)
+    return (
+        '<Property name="summaryInfos"><List><Item><Value>'
+        f'{_xml_property("displayName", view.summary.display_name)}'
+        f'{_xml_property("aggregation", view.summary.aggregation)}'
+        f'<Property name="attributeIndexes"><List>{idx_items}</List></Property>'
+        '</Value></Item></List></Property>'
+    )
+
+
 def _render_view_def_fragment(view: ViewDef) -> str:
     items = "".join(_xml_attribute_item(view, c, i) for i, c in enumerate(view.columns))
+    summary = _render_summary_infos(view)
     return (
         f'<ViewDef id="{view.id}">'
         f"<Title>{escape(view.name)}</Title>"
@@ -97,6 +115,7 @@ def _render_view_def_fragment(view: ViewDef) -> str:
         "</Control>"
         '<Control id="attributes-selector_id_1" type="attributes-selector" visible="false">'
         f'<Property name="attributeInfos"><List>{items}</List></Property>'
+        f'{summary}'
         "</Control>"
         '<Control id="pagination-control_id_1" type="pagination-control" visible="true">'
         '<Property name="start" value="0"/>'
@@ -190,12 +209,16 @@ def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int
                 f"{w.pin.adapter_kind!r} — extend _ADAPTER_KIND_PREFIX "
                 f"after harvesting from an exported reference dashboard"
             )
+        # Resource index must be 1-based — Ops does not resolve
+        # resource:id:0 as a valid pinned resource (causes "Please
+        # wait being configured" and internal server error on edit).
+        pin_ref = pin_idx + 1
         resource = {
-            "resourceId": f"resource:id:{pin_idx}_::_",
+            "resourceId": f"resource:id:{pin_ref}_::_",
             "traversalSpecId": "",
             "resourceName": w.pin.resource_kind,
             "resourceKindId": f"{prefix}{w.pin.adapter_kind}{w.pin.resource_kind}",
-            "id": f"Ext.vcops.chrome.model.Resource-{pin_idx}",
+            "id": f"Ext.vcops.chrome.model.Resource-{pin_ref}",
         }
         self_provider_flag = True
         refresh_content = True

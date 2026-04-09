@@ -38,6 +38,15 @@ class ViewColumn:
 
 
 @dataclass
+class SummaryRow:
+    """A footer summary row on a list view (e.g. totals)."""
+    display_name: str = "Summary"
+    aggregation: str = "SUM"  # SUM, AVG, MIN, MAX, COUNT
+    # Column indexes to aggregate. None = all columns.
+    column_indexes: List[int] | None = None
+
+
+@dataclass
 class ViewDef:
     name: str
     description: str
@@ -46,6 +55,7 @@ class ViewDef:
     columns: List[ViewColumn]
     id: str = ""
     source_path: Path | None = None
+    summary: SummaryRow | None = None
 
     def validate(self) -> None:
         if not self.name.strip():
@@ -196,6 +206,17 @@ def load_view(path: Path) -> ViewDef:
         for c in (data.get("columns") or [])
     ]
     subj = data.get("subject") or {}
+    summary_raw = data.get("summary")
+    summary = None
+    if summary_raw is True:
+        summary = SummaryRow()
+    elif isinstance(summary_raw, dict):
+        col_idx = summary_raw.get("columns")
+        summary = SummaryRow(
+            display_name=str(summary_raw.get("display_name", "Summary")).strip(),
+            aggregation=str(summary_raw.get("aggregation", "SUM")).strip().upper(),
+            column_indexes=col_idx,
+        )
     v = ViewDef(
         id=view_id,
         name=str(data.get("name", "")).strip(),
@@ -204,6 +225,7 @@ def load_view(path: Path) -> ViewDef:
         resource_kind=str(subj.get("resource_kind", "")).strip(),
         columns=cols,
         source_path=path,
+        summary=summary,
     )
     v.validate()
     return v

@@ -107,10 +107,12 @@ validate, install, and report.
 **You do not write YAML yourself.** That's the author agents' job.
 **You do not reverse-engineer wire formats yourself.** That's
 api-explorer's job. **You do not query live Ops for reconnaissance
-yourself.** That's ops-recon's job. When you catch yourself doing
-any of these inline, stop and delegate. The failure mode of this
-setup is a capable orchestrator that doesn't delegate and ends up
-holding all the context.
+yourself.** That's ops-recon's job. **You do not edit `vcfops_*/`
+code yourself.** That's the tooling agent's job. **You do not run
+sync/enable/delete yourself.** That's the content-installer's job.
+When you catch yourself doing any of these inline, stop and
+delegate. The failure mode of this setup is a capable orchestrator
+that doesn't delegate and ends up holding all the context.
 
 ### The agent roster
 
@@ -122,6 +124,7 @@ holding all the context.
 | `view-author` | Author | `views/` only | User wants a list view. May require a super metric or custom group to exist first; if so, view-author blocks and you delegate upstream. |
 | `dashboard-author` | Author | `dashboards/` only | User wants a dashboard. May require views, custom groups, and (transitively) super metrics to exist first. |
 | `api-explorer` | Research | `context/`, `docs/` only | An author agent returns a TOOLSET GAP report, an install fails mysteriously, or the user asks something the surface map doesn't cover. |
+| `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer bug, loader gap, new CLI command, client helper. The **only** agent that edits `vcfops_*/` code. |
 | `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. Validates, syncs, enables, verifies. Handles import-task-busy retries. |
 | `content-packager` | Build | `dist/` only | User wants a standalone distributable bundle (bash/pwsh/python install scripts + content-zips + license + README). |
 
@@ -152,16 +155,21 @@ holding all the context.
    `python -m vcfops_supermetrics validate && python -m vcfops_dashboards validate && python -m vcfops_customgroups validate`
    after agents return. Cross-reference breaks surface here.
 5. **Install only on explicit user confirmation.** Show the user
-   the file list and a brief summary, ask yes/no, then run the
-   sync command directly (not via an agent). Install is plumbing,
-   not creative work.
+   the file list and a brief summary, ask yes/no, then delegate
+   to `content-installer`. Install is plumbing, not creative work.
 6. **Never spawn multiple author agents in parallel.** Cross-
    references between their outputs are path-dependent, and
    parallel authoring races for UUIDs and names. Serial.
-7. **ops-recon and api-explorer MAY run in parallel** with each
-   other or with a deferred author, because they don't write to
-   content directories. Use this for speed when investigations
-   are independent.
+7. **ops-recon, api-explorer, and tooling MAY run in parallel**
+   with each other or with a deferred author, because they write
+   to non-content directories (`context/`, `vcfops_*/`). Use
+   this for speed when investigations or fixes are independent.
+8. **Tooling changes go through the `tooling` agent.** When a
+   renderer, loader, client, or CLI needs a fix or feature, spawn
+   `tooling` with the specific gap and any wire format evidence
+   (export diffs, api-explorer findings). Do not edit `vcfops_*/`
+   code yourself — the same discipline that keeps you out of
+   `supermetrics/` keeps you out of `vcfops_*/`.
 
 ### When the toolset is inadequate — who's responsible
 
@@ -179,12 +187,14 @@ your job is to decide among:
    behavior that would unblock the gap. Output goes to `context/`
    or `docs/`. Use this when the gap is "we don't understand the
    format".
-3. **Make the repo change yourself** as the orchestrator — edit
-   `vcfops_*/` loader/packager/client code to add the missing
-   feature, commit, then re-invoke the blocked author. Use this
-   when the fix is small, well-understood, and the user has
-   explicitly or implicitly authorized repo changes as part of
-   the current session.
+3. **Spawn `tooling`** to make the repo change — the tooling agent
+   edits `vcfops_*/` loader/packager/client/renderer code to add
+   the missing feature. Brief it with the specific gap, the
+   working wire format (from an export diff or api-explorer
+   findings), and what the renderer/loader needs to produce. Then
+   re-invoke the blocked author. **The orchestrator does not edit
+   `vcfops_*/` code directly** — that's the tooling agent's job,
+   same way YAML authoring is the author agents' job.
 
 **Never ignore a gap report.** Never ask the user to work around a
 gap that would be faster to fix in the repo. Never silently

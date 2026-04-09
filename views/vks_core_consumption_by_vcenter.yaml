@@ -10,6 +10,8 @@ subject:
   adapter_kind: VMWARE
   resource_kind: VMwareAdapter Instance
 
+summary: true
+
 columns:
   - attribute: cpu|vcpus_allocated_on_all_vms
     display_name: "Total VM vCPU"
