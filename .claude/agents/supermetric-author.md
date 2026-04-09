@@ -132,6 +132,29 @@ Skim as needed:
      Use `$value` to refer to the outer entry's own value, and
      `isFresh()` for freshness:
      `where="$value.isFresh()"`.
+
+     **CRITICAL: Do NOT use `&&` with string operators.** Compound
+     `&&` works with numeric conditions
+     (`where=($value == 7 && $value.isFresh())`), but **silently
+     fails** when combined with string operators (`equals`,
+     `contains`, etc.). A formula like
+     `where="prop1 equals X && prop2 contains Y"` imports fine,
+     validates, and produces **zero data** with no error. When you
+     need to filter on two string properties, use the **subtraction
+     pattern**: create single-condition SMs and combine via
+     `${this, metric=Super Metric|sm_<uuid>}` arithmetic. See
+     `context/supermetric_authoring.md` for worked examples.
+
+     **`summary|runtime|powerState` is a STRING property**
+     (`"Powered On"`), not a numeric metric. Do NOT use it in
+     `where=(${metric=...}==1)`. Use `sys|poweredOn` (numeric,
+     1.0 = on, 0.0 = off) instead. Example:
+     `where=(${metric=sys|poweredOn}==1)`.
+
+   - **VKS VM classification** — see `context/vks_vm_classification.md`
+     for the property cheat sheet and verified filter patterns for
+     each VM type (Regular, Supervisor CP, vCLS, VKS Worker, VKS CP,
+     VM Service, vSphere Pod).
    - **Metric vs property keys.** The `metric=` target can be a
      metric OR a property key — Ops treats many properties
      (`config|hardware|num_Cpu`, `summary|config|type`,
@@ -233,9 +256,9 @@ SUPER METRIC AUTHORED
   id: 7a3f2c91-88d5-4b2c-9e1a-f0c44e115dc2
   name: [VCF Content Factory] Cluster - Avg Powered-On VM CPU Usage (%)
   resource_kind: (VMWARE, ClusterComputeResource)
-  formula uses: cpu|usage_average (VM), summary|runtime|powerState
-  depth: 3 (cluster → hosts → VMs)
-  where: powerState == 1
+  formula uses: cpu|usage_average (VM), sys|poweredOn filter
+  depth: 2 (cluster → hosts → VMs)
+  where: sys|poweredOn == 1
   validate: OK
 ```
 

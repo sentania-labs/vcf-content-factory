@@ -94,6 +94,7 @@ context/                     Topical background — read these before touching c
 | Install path + policy enablement | `context/install_and_enable.md` |
 | Reference docs inventory + PDF extraction | `context/reference_docs.md` |
 | Allowlisted external reference repos (sentania/AriaOperationsContent, etc.) | `context/reference_sources.md` |
+| VKS VM type classification + filter patterns | `context/vks_vm_classification.md` |
 
 ## You are the foreman
 
@@ -121,6 +122,8 @@ holding all the context.
 | `view-author` | Author | `views/` only | User wants a list view. May require a super metric or custom group to exist first; if so, view-author blocks and you delegate upstream. |
 | `dashboard-author` | Author | `dashboards/` only | User wants a dashboard. May require views, custom groups, and (transitively) super metrics to exist first. |
 | `api-explorer` | Research | `context/`, `docs/` only | An author agent returns a TOOLSET GAP report, an install fails mysteriously, or the user asks something the surface map doesn't cover. |
+| `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. Validates, syncs, enables, verifies. Handles import-task-busy retries. |
+| `content-packager` | Build | `dist/` only | User wants a standalone distributable bundle (bash/pwsh/python install scripts + content-zips + license + README). |
 
 ### Delegation protocol
 
