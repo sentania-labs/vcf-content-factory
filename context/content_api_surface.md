@@ -25,8 +25,8 @@ enable a super metric in a policy in a single call.
 | Symptom definitions | `/api/symptomdefinitions` full CRUD | content-zip | realtime toggle via `/internal/symptomdefinitions/{id}/realtimemonitoring/{enable,disable}` |
 | Recommendations | `/api/recommendations` full CRUD | content-zip | linked via alert definitions |
 | Notification rules & templates | `/api/notifications/{rules,templates}` full CRUD | content-zip (`NOTIFICATION_RULES`) | — |
-| Dashboards | **no CRUD** | content-zip (`DASHBOARDS`) — **only path** | — |
-| Views | **no CRUD** | content-zip (`VIEW_DEFINITIONS`) — **only path** | — |
+| Dashboards | **no REST CRUD** — delete via UI Struts action `POST /ui/dashboard.action` (`mainAction=deleteTab`), list via `getDashboardList` | content-zip (`DASHBOARDS`) — **only create/update path** | — |
+| Views | **no REST CRUD** — delete via Ext.Direct RPC `viewServiceController.deleteView` at `/ui/vcops/services/router` | content-zip (`VIEW_DEFINITIONS`) — **only create/update path** | — |
 | Report definitions | read-only | content-zip (`REPORT_DEFINITIONS`) — **only create path** | — |
 | Policies | `/api/policies` full CRUD | `/api/policies/{export,import}` (separate from content ops) | `/assign` is for objects/groups, not for enabling content inside the policy |
 | Actions | read-only (`/api/actiondefinitions`) | — | not authorable — action types are baked in |
@@ -77,3 +77,14 @@ is `resourceKey.name`, not UUID — the server assigns `id` on create.
 Wire format and full round-trip notes: `context/wire_formats.md`
 §"Custom groups (dynamic)". Authoring guidance:
 `context/customgroup_authoring.md`.
+
+## Dashboard + view delete (UI action endpoints)
+
+Neither dashboards nor views have REST DELETE endpoints. Delete
+is only possible via the Struts/Ext.Direct UI action layer that
+backs the web console. This requires a separate authentication
+flow (JSESSIONID + CSRF token from `OPS_SESSION` cookie), not the
+Suite API bearer token.
+
+Full auth flow, endpoint signatures, gotchas, and a working Python
+snippet: **`context/dashboard_delete_api.md`**.

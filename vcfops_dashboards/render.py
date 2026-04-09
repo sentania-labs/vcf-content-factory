@@ -184,7 +184,8 @@ def _resource_list_widget(w: Widget, kind_index: dict[tuple[str, str], int]) -> 
     }
 
 
-def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int]) -> dict:
+def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int],
+                  resource_index: dict[tuple[str, str], int]) -> dict:
     # A self-provider View widget enumerates its own subject set instead
     # of waiting for an incoming interaction. Ops requires the widget to
     # be pinned to a container resource — typically `vSphere World` for
@@ -201,7 +202,6 @@ def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int
     # render at view time with no diagnostic.
     if w.self_provider and w.pin:
         pin_key = (w.pin.adapter_kind, w.pin.resource_kind)
-        pin_idx = kind_index[pin_key]
         prefix = _ADAPTER_KIND_PREFIX.get(w.pin.adapter_kind)
         if prefix is None:
             raise ValueError(
@@ -209,10 +209,12 @@ def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int
                 f"{w.pin.adapter_kind!r} — extend _ADAPTER_KIND_PREFIX "
                 f"after harvesting from an exported reference dashboard"
             )
-        # Resource index must be 1-based — Ops does not resolve
-        # resource:id:0 as a valid pinned resource (causes "Please
-        # wait being configured" and internal server error on edit).
-        pin_ref = pin_idx + 1
+        # Widget config.resource.resourceId is 1-indexed into the
+        # entries.resource table (0-indexed internalIds). Ops does
+        # not resolve resource:id:0 as a valid widget pin — it
+        # causes "Please wait being configured" and ISE on edit.
+        res_idx = resource_index[pin_key]
+        pin_ref = res_idx + 1
         resource = {
             "resourceId": f"resource:id:{pin_ref}_::_",
             "traversalSpecId": "",
@@ -252,6 +254,7 @@ def _build_dashboard_obj(
     dashboard: Dashboard,
     views_by_name: dict[str, ViewDef],
     kind_index: dict[tuple[str, str], int],
+    resource_index: dict[tuple[str, str], int],
     owner_user_id: str,
 ) -> dict:
     widgets_json = []
@@ -259,7 +262,7 @@ def _build_dashboard_obj(
         if w.type == "ResourceList":
             widgets_json.append(_resource_list_widget(w, kind_index))
         elif w.type == "View":
-            widgets_json.append(_view_widget(w, views_by_name[w.view_name], kind_index))
+            widgets_json.append(_view_widget(w, views_by_name[w.view_name], kind_index, resource_index))
 
     widget_id_by_local = {w.local_id: w.widget_id for w in dashboard.widgets}
     interactions_json = [
@@ -334,6 +337,18 @@ def render_dashboards_bundle_json(
                 key = (w.pin.adapter_kind, w.pin.resource_kind)
                 if key not in kind_index:
                     kind_index[key] = len(kind_index)
+    # Build resource index for self-provider pinned widgets. Each
+    # unique (adapter_kind, resource_kind) pin gets a 0-based slot
+    # in entries.resource[]. Widget configs reference these with
+    # 1-based resource:id:<N+1>_::_ values.
+    resource_index: dict[tuple[str, str], int] = {}
+    for d in dashboards:
+        for w in d.widgets:
+            if w.self_provider and w.pin:
+                key = (w.pin.adapter_kind, w.pin.resource_kind)
+                if key not in resource_index:
+                    resource_index[key] = len(resource_index)
+
     entries_resource_kind = [
         {
             "resourceKindKey": rk_kind,
@@ -342,12 +357,25 @@ def render_dashboards_bundle_json(
         }
         for (rk_adapter, rk_kind), idx in kind_index.items()
     ]
+    entries_resource = [
+        {
+            "resourceKindKey": res_kind,
+            "internalId": f"resource:id:{idx}_::_",
+            "adapterKindKey": res_adapter,
+            "identifiers": [],
+            "name": res_kind,
+        }
+        for (res_adapter, res_kind), idx in resource_index.items()
+    ]
+    entries: dict = {"resourceKind": entries_resource_kind}
+    if entries_resource:
+        entries["resource"] = entries_resource
     return json.dumps(
         {
             "uuid": str(uuid.uuid4()),
-            "entries": {"resourceKind": entries_resource_kind},
+            "entries": entries,
             "dashboards": [
-                _build_dashboard_obj(d, views_by_name, kind_index, owner_user_id)
+                _build_dashboard_obj(d, views_by_name, kind_index, resource_index, owner_user_id)
                 for d in dashboards
             ],
         }

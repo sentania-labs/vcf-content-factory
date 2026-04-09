@@ -118,6 +118,19 @@ which must match the view's UUID. In this repo, the dashboard YAML's
 `view:` field names a view by name; the loader resolves it to the
 view YAML's `id` at build time.
 
+**`entries.resource` is required for self-provider pinned widgets.**
+When a View widget has `self_provider: true` with a `pin`, the
+bundle's `entries` must include a `resource` array alongside
+`resourceKind`. Each entry carries `resourceKindKey`,
+`adapterKindKey`, `name` (same as `resourceKindKey`),
+`identifiers` (empty `[]`), and a 0-indexed
+`internalId` (`resource:id:0_::_`, `resource:id:1_::_`, ...).
+The widget's `config.resource.resourceId` references these with a
+**1-indexed** id (`resource:id:1_::_` for the first entry). Without
+`entries.resource`, the widget imports cleanly but renders
+"Please wait being configured" and throws an internal server error
+on edit.
+
 ## Policy export XML
 
 Different zip, same instance. `GET /api/policies/export?id=<uuid>`
