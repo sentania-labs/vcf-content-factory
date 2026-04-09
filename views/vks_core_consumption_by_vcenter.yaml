@@ -1,10 +1,10 @@
 id: 53569330-f96d-479e-a764-6ac127df5a95
 name: "[VCF Content Factory] VKS Core Consumption by vCenter"
 description: >
-  One row per vCenter. VM vCPUs grouped by role (regular, VKS worker, Supervisor
-  CP, vCLS, VM Service), plus physical cores and the computed VKS core equivalent
-  (VKS Worker vCPU / Global Ratio). Replaces the per-vCenter PowerCLI
-  VKS core-consumption script.
+  One row per vCenter. Columns match the PowerShell VKS core consumption script
+  output exactly: Total VM vCPU, VKS vCPU (all node image VMs — CP+Worker),
+  Supervisor vCPU, Pod vCPU, VM Service vCPU, Regular vCPU, vCLS vCPU,
+  Physical Cores, Global Ratio, and Calculated VKS Cores.
 
 subject:
   adapter_kind: VMWARE
@@ -14,27 +14,30 @@ columns:
   - attribute: cpu|vcpus_allocated_on_all_vms
     display_name: "Total VM vCPU"
     unit: ""
-  - attribute: cpu|corecount_provisioned
-    display_name: "Total Physical Cores"
-    unit: ""
-  - attribute: "sm_17f31a23-d7e7-4ff9-ab30-7a50d3e3a584"
-    display_name: "VKS Worker vCPU"
+  - attribute: "sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4"
+    display_name: "VKS vCPU"
     unit: ""
   - attribute: "sm_a2b233be-ab55-46cc-816d-5ca5f10fc477"
-    display_name: "Supervisor Control Plane vCPU"
+    display_name: "Supervisor vCPU"
     unit: ""
-  - attribute: "sm_020cf289-b254-4d8c-9e36-f0925c36e3d8"
-    display_name: "vCLS vCPU"
+  - attribute: "sm_46179895-f760-4472-960c-e368aa869bc7"
+    display_name: "Pod vCPU"
     unit: ""
   - attribute: "sm_2308ba66-91c6-43c8-95e3-33fd2ee51f73"
     display_name: "VM Service vCPU"
     unit: ""
   - attribute: "sm_b16e3bb4-b8aa-4844-af10-d9b30702318a"
-    display_name: "Regular VM vCPU"
+    display_name: "Regular vCPU"
+    unit: ""
+  - attribute: "sm_020cf289-b254-4d8c-9e36-f0925c36e3d8"
+    display_name: "vCLS vCPU"
+    unit: ""
+  - attribute: cpu|corecount_provisioned
+    display_name: "Physical Cores"
     unit: ""
   - attribute: "sm_ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e"
-    display_name: "Global vCPU-to-pCore Ratio"
+    display_name: "Global Ratio"
     unit: ""
   - attribute: "sm_73f9b9d7-1801-4e6d-bdd0-c3f3203d7bcc"
-    display_name: "VKS Cores"
+    display_name: "Calculated VKS Cores"
     unit: ""

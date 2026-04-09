@@ -1,0 +1,24 @@
+id: 46179895-f760-4472-960c-e368aa869bc7
+name: "[VCF Content Factory] Pod vCPU (count)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+  - resource_kind_key: Datacenter
+    adapter_kind_key: VMWARE
+  - resource_kind_key: VMwareAdapter Instance
+    adapter_kind_key: VMWARE
+description: >
+  Sum of provisioned vCPUs across all vSphere native Pods (VMWARE/Pod
+  object kind — crxPod1Guest container runtime, running directly on ESXi
+  in Supervisor namespaces). These are distinct from TKC/guest-cluster
+  workload pods tracked by SupervisorAdapter/KubernetesPod objects.
+
+  No where clause is required because all VMWARE/Pod objects are vSphere
+  native pods by definition — the objecttype filter is sufficient.
+  Expected value on wld01 lab: 12.
+
+  Assigned to ClusterComputeResource, Datacenter, and VMwareAdapter
+  Instance for per-cluster, per-DC, and per-vCenter rollups from a
+  single formula.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=Pod, metric=config|hardware|num_Cpu, depth=10})

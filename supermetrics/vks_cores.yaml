@@ -8,21 +8,21 @@ resource_kinds:
   - resource_kind_key: VMwareAdapter Instance
     adapter_kind_key: VMWARE
 description: >
-  Estimated physical core equivalent consumed by VKS worker node VMs, computed
-  as VKS worker vCPU count divided by the global vCPU-to-pCore ratio. This
-  normalises VKS worker capacity against the actual overcommit level observed
-  at the same scope, giving a more meaningful "cores" figure than raw vCPU
-  count.
+  Estimated physical core equivalent consumed by ALL VKS cluster VM vCPU
+  (control plane + worker nodes), computed as VKS Node Image vCPU divided by
+  the global vCPU-to-pCore ratio. Using the Node Image total (CP + worker)
+  matches the reference calculation and gives the full VKS cluster footprint
+  in normalised core units, not just the worker portion.
 
   References two other SMs in this bundle:
-    - [VCF Content Factory] VKS Worker vCPU (count)     -> sm_17f31a23-d7e7-4ff9-ab30-7a50d3e3a584
-    - [VCF Content Factory] Global vCPU-to-pCore Ratio  -> sm_ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e
+    - [VCF Content Factory] VKS Node Image vCPU (count)  -> sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4
+    - [VCF Content Factory] Global vCPU-to-pCore Ratio   -> sm_ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e
 
   Both referenced SMs must be installed and enabled in policy for this SM to
   produce data. If the ratio SM is zero (no hosts/vCPUs), this formula returns
   no-data rather than divide-by-zero — Ops handles division by zero as
   no-data by default.
 formula: |
-  ${this, metric=Super Metric|sm_17f31a23-d7e7-4ff9-ab30-7a50d3e3a584}
+  ${this, metric=Super Metric|sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4}
   /
   ${this, metric=Super Metric|sm_ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e}
