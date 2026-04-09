@@ -32,8 +32,8 @@ instance via the Suite API / content-import zip.
    optional `VCFOPS_AUTH_SOURCE`, `VCFOPS_VERIFY_SSL`). Not in YAML,
    not in commits, not echoed in shell history.
 
-4. **Always validate before installing.**
-   `python -m vcfops_supermetrics validate <file>`.
+4. **Always validate before installing.** Delegate to
+   `content-installer` which validates before every sync.
 
 5. **Naming convention — `[VCF Content Factory]` prefix on every
    authored content object.** Every super metric, view, dashboard,
@@ -151,9 +151,9 @@ that doesn't delegate and ends up holding all the context.
 3. **Pass filenames, not file contents.** Agents read the
    filesystem themselves. Keeping file contents out of your
    context window is how this architecture stays affordable.
-4. **Validate the whole repo after each round.** Run
-   `python -m vcfops_supermetrics validate && python -m vcfops_dashboards validate && python -m vcfops_customgroups validate`
-   after agents return. Cross-reference breaks surface here.
+4. **Validate the whole repo after each round.** Delegate to
+   `content-installer` or run validate yourself — cross-reference
+   breaks surface here.
 5. **Install only on explicit user confirmation.** Show the user
    the file list and a brief summary, ask yes/no, then delegate
    to `content-installer`. Install is plumbing, not creative work.
@@ -201,57 +201,18 @@ gap that would be faster to fix in the repo. Never silently
 downgrade the user's request without telling them. The gap path is
 first-class, not a sad fallback.
 
-### Per-request workflow for a super metric
+### Workflow patterns
 
-1. Clarify (object type / metric / aggregation / filters / unit)
-   — see `context/supermetric_authoring.md` §1.
-2. Delegate to `ops-recon`. Wait for its structured answer.
-3. If recon says "already exists", tell the user and stop.
-4. If recon says "new super metric needed", delegate to
-   `supermetric-author` with the recon results inline in the
-   brief. The author refuses without them.
-5. Run repo validation.
-6. Show the user the YAML + formula + recon findings, ask for
-   confirmation.
-7. On confirm, run
-   `python -m vcfops_supermetrics sync supermetrics/<file>.yaml`.
-8. Point the user at `context/install_and_enable.md` for policy
-   enablement, or (when the `enable` command lands) offer to run
-   it.
+**Single content object** (e.g. "I need a super metric for X"):
+1. Clarify → recon → author → validate → confirm → install.
 
-### Per-request workflow for a compound bundle
+**Compound bundle** (e.g. "super metric + view + dashboard"):
+1. Clarify → recon → author bottom-up (SM → custom group → view
+   → dashboard, serial) → validate → confirm → install.
 
-1. Clarify the full request: what metric, what view, what
-   dashboard, what object scope.
-2. `ops-recon` for each piece. May be one invocation with a
-   multi-part brief.
-3. For each missing piece, delegate bottom-up:
-   `supermetric-author` → `customgroup-author` → `view-author` →
-   `dashboard-author`. Each agent reads the previous agent's
-   output from disk. Custom groups go above views/dashboards
-   because views and dashboards may target a custom group as their
-   scope; custom groups go below super metrics because a custom
-   group rule can reference a super metric value (and because
-   `customgroup-author` will refuse if a referenced super metric
-   doesn't exist yet).
-4. Validate the whole repo.
-5. Show the user the file list + summary, ask for confirmation.
-6. Install all pieces.
+**Toolset gap** (author returns a gap report):
+1. Decide: punt / api-explorer / tooling → fix → re-invoke author.
 
-## Useful commands
-
-```bash
-python -m vcfops_supermetrics validate                # lint all
-python -m vcfops_supermetrics validate supermetrics/<f>.yaml
-python -m vcfops_supermetrics list                    # what's installed
-python -m vcfops_supermetrics sync                    # push all
-python -m vcfops_supermetrics sync supermetrics/<f>.yaml
-python -m vcfops_supermetrics delete "<name>"
-python -m vcfops_dashboards validate                  # lint views + dashboards
-python -m vcfops_dashboards sync                      # build + import
-python -m vcfops_customgroups validate                # lint customgroups/*.yaml
-python -m vcfops_customgroups list                    # custom groups on the instance
-python -m vcfops_customgroups list-types              # group types on the instance
-python -m vcfops_customgroups sync                    # ensure types, then upsert groups
-python -m vcfops_customgroups delete "<name>"
-```
+**Install**: delegate to `content-installer`. It knows the CLI
+commands, retry logic, and enable workflow. Command references
+live in the agent prompts, not here.
