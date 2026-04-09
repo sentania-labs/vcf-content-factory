@@ -36,6 +36,13 @@ Skim as needed:
 
 ## Hard rules
 
+0. **Name prefix is `[VCF Content Factory]`.** Every custom group
+   this repo authors has its `name:` field (the `resourceKey.name`)
+   prefixed with literal `[VCF Content Factory] ` (brackets
+   included). This is the framework identity tag. Do not invent
+   alternate prefixes; `[AI Content]` is a legacy name and must not
+   be reintroduced.
+
 1. **Refuse without recon.** If the orchestrator did not give you
    explicit recon results saying "no existing custom group on the
    instance, in the repo, or in a reference source matches the
@@ -131,7 +138,7 @@ Compare operators: `EQ`, `NOT_EQ`, `GT`, `GT_EQ`, `LT`, `LT_EQ`,
    `customgroups/vsan_datastores.yaml` example. Schema:
 
    ```yaml
-   name: "[AI Content] <Human Name>"
+   name: "[VCF Content Factory] <Human Name>"
    description: >
      Why this group exists and what it's used for. Note any
      dependencies on upstream groups, traversal specs, or
@@ -207,7 +214,7 @@ Same protocol as the other authors — never silently downgrade.
 ```
 CUSTOM GROUP AUTHORED
   file: customgroups/vms_on_standard_pgs_only.yaml
-  name: [AI Content] VMs on Standard Port Groups Only
+  name: [VCF Content Factory] VMs on Standard Port Groups Only
   type: Environment (exists on instance per recon)
   rules: 1 rule, 2 AND'd relationship conditions (set subtraction
          pattern: DESCENDANT EQ "[Custom] Standard PGs" AND

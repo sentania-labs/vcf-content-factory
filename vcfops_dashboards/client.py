@@ -88,8 +88,23 @@ def import_content_zip(client: VCFOpsClient, zip_bytes: bytes, timeout_s: int = 
     The endpoint is multipart/form-data with a single ``contentFile``
     field. The session's default JSON Content-Type header has to be
     suppressed so requests can set the multipart boundary.
+
+    The POST response's ``id`` is a *stable pipeline id* for the content
+    importer, not a per-operation id — every import on a given instance
+    returns the same id. The GET status endpoint returns the summary of
+    the last import operation. To tell "our" import apart from a prior
+    one, snapshot ``endTime`` before POST and poll until it advances.
     """
     client._ensure_auth()
+
+    # Snapshot the current import state so we can detect when the server
+    # records OUR new run. A fresh instance reports no prior import, in
+    # which case endTime is 0 and any advance means our run finished.
+    pre = client._request("GET", "/api/content/operations/import")
+    prior_end = 0
+    if pre.status_code == 200:
+        prior_end = (pre.json() or {}).get("endTime") or 0
+
     url = f"{client.base}/api/content/operations/import"
     # The session has a default `Content-Type: application/json` header
     # for the JSON endpoints. Override with None so requests can set the
@@ -102,12 +117,8 @@ def import_content_zip(client: VCFOpsClient, zip_bytes: bytes, timeout_s: int = 
     )
     if r.status_code not in (200, 202):
         raise VCFOpsError(f"import failed ({r.status_code}): {r.text}")
-    op_id = (r.json() or {}).get("id")
 
-    # Poll status. The GET endpoint returns the *last* import
-    # operation, so a previously-FINISHED import would satisfy a naive
-    # state-only check. Match on the operation id from the POST to be
-    # sure we're seeing our own run.
+    # Poll until a run that started after our POST shows up as finished.
     deadline = time.monotonic() + timeout_s
     while True:
         s = client._request("GET", "/api/content/operations/import")
@@ -115,8 +126,9 @@ def import_content_zip(client: VCFOpsClient, zip_bytes: bytes, timeout_s: int = 
             raise VCFOpsError(f"import status check failed ({s.status_code}): {s.text}")
         body = s.json()
         state = body.get("state", "")
-        if body.get("id") == op_id and state not in ("RUNNING", "INITIALIZED"):
+        end_time = body.get("endTime") or 0
+        if end_time > prior_end and state not in ("RUNNING", "INITIALIZED"):
             return body
         if time.monotonic() > deadline:
             raise VCFOpsError(f"import did not finish within {timeout_s}s; last state={state}")
-        time.sleep(3)
+        time.sleep(2)

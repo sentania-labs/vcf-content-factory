@@ -1,8 +1,8 @@
-name: "[AI Content] VMs on vSAN"
+name: "[VCF Content Factory] VMs on vSAN"
 description: >
-  All VirtualMachine objects that have "[AI Content] vSAN Datastores"
+  All VirtualMachine objects that have "[VCF Content Factory] vSAN Datastores"
   as a CHILD (i.e. the VM's child datastore belongs to the vSAN
-  datastore group). Depends on "[AI Content] vSAN Datastores" existing
+  datastore group). Depends on "[VCF Content Factory] vSAN Datastores" existing
   on the target instance at sync time (that group is defined in
   customgroups/vsan_datastores.yaml). Used as the member scope for the
   vSAN tier of the "VM performance by datastore type" dashboard.
@@ -12,4 +12,4 @@ rules:
   - resource_kind: VirtualMachine
     adapter_kind: VMWARE
     relationship:
-      - { relation: CHILD, name: "[AI Content] vSAN Datastores", op: EQ }
+      - { relation: CHILD, name: "[VCF Content Factory] vSAN Datastores", op: EQ }

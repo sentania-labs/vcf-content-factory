@@ -70,11 +70,38 @@ metric to `ClusterComputeResource`). When in doubt, ask.
 - **`depth`**: positive = children, negative = parents, **never 0**.
   Cannot cross sibling branches in one super metric (e.g. VM →
   Datastore Cluster requires two chained super metrics; see p.4173).
-- **`where` clause**: filters by another metric **on the same object**;
-  the right operand must be a literal number, not another super
-  metric or variable. Use `$value` to refer to the entry's own value
-  (`where=($value==1)`). Use `isFresh()` for freshness:
-  `where=($value.isFresh())`.
+- **`where` clause**: a **bare quoted string** inside a resource
+  entry. Property keys and literal values appear bare — no nested
+  `${}` around the property key, no single quotes around the
+  literal, no wrapping the whole thing in parens. String operators
+  (`equals`, `contains`, `startsWith`, `endsWith`, and their `!`
+  negations) and numeric operators (`==`, `!=`, `<`, `>`, `<=`,
+  `>=`) are both valid. Canonical example — sum provisioned vCPUs
+  of VM Service VMs:
+
+  ```
+  sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+        metric=config|hardware|num_Cpu, depth=10,
+        where="summary|config|type equals VMOperator"})
+  ```
+
+  **Do NOT write** `where=(${metric=key} equals 'literal')` —
+  nested `${}` inside a where clause and quoted string literals are
+  both wrong and get the whole super metric silently skipped at
+  import time. Comparing to "not empty" is `where="key !equals "`
+  (empty literal after the operator). Use `$value` to refer to the
+  outer entry's own value (`where="$value == 1"`) and `isFresh()`
+  for freshness (`where="$value.isFresh()"`).
+
+- **Metric vs property targets**: the `metric=` slot in a resource
+  entry can be either a real metric key (`cpu|corecount_provisioned`)
+  or a property key (`config|hardware|num_Cpu`,
+  `summary|config|type`, `summary|parentGuestCluster`) — Ops
+  addresses both through the same slot. For "sum provisioned vCPUs"
+  both `cpu|corecount_provisioned` and `config|hardware|num_Cpu`
+  work on VirtualMachine. Watch the **exact spelling**: `num_Cpu`
+  has an underscore and a capital C, not `numCpu`. Misspelled keys
+  are accepted at import time and silently produce no data.
 - **Aliasing**: `${...} as alias` lets you reuse a resource entry.
   Alias is case-insensitive, cannot start with a digit, cannot use
   `()[]+-*/%|&!=<>,.?:$`, and each name can be used at most once.

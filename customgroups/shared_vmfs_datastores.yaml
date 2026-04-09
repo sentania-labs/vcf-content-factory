@@ -1,11 +1,11 @@
-name: "[AI Content] Shared VMFS Datastores"
+name: "[VCF Content Factory] Shared VMFS Datastores"
 description: >
   All Datastore objects whose summary|type is VMFS and whose
   summary|isLocal property is "false". Covers shared VMFS volumes
   presented over iSCSI or Fibre Channel (both protocols are bucketed
   together here — recon confirmed no property distinguishes FC from
   iSCSI at the Datastore level). Used as the upstream scope group for
-  "[AI Content] VMs on Shared VMFS". Part of the "VM performance by
+  "[VCF Content Factory] VMs on Shared VMFS". Part of the "VM performance by
   datastore type" dashboard datastore partition.
 type: Environment
 auto_resolve_membership: true

@@ -1,16 +1,27 @@
-id: c51f9bc6-f914-450b-b932-25cba1956d47
-name: "[AI Content] vCenter - VKS Worker vCPU (count)"
+id: 17f31a23-d7e7-4ff9-ab30-7a50d3e3a584
+name: "[VCF Content Factory] VKS Worker vCPU (count)"
 resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+  - resource_kind_key: Datacenter
+    adapter_kind_key: VMWARE
   - resource_kind_key: VMwareAdapter Instance
     adapter_kind_key: VMWARE
 description: >
-  Sum of provisioned vCPUs for VKS (Tanzu Kubernetes Service) guest cluster worker
-  nodes under this vCenter adapter instance. Workers are identified by a non-empty
-  summary|parentGuestCluster property, which VCF Operations populates only for VMs
-  belonging to a TKG guest cluster. This mirrors the membership rule of the
-  [AI Content] VKS Worker VMs custom group. Recon-verified property key. This value
-  feeds the VKS Cores headline metric (VKS Worker vCPU / Global Ratio).
+  Sum of provisioned vCPUs across all VKS worker node VMs within the assigned
+  object's scope. Workers are identified by the presence of a non-empty
+  summary|parentGuestCluster property, which is set only on VMs that belong to
+  a VKS guest cluster. The where clause uses !equals with an empty literal to
+  match any VM whose parentGuestCluster property is populated.
+
+  Lab caveat: the VKS guest cluster was rebuilding at authoring time so no
+  worker nodes exist yet; this SM will report 0 / no-data until at least one
+  worker node appears. This is expected behaviour — the formula is correct.
+
+  Assigned to ClusterComputeResource, Datacenter, and VMwareAdapter Instance
+  so a single formula yields per-cluster, per-DC, and per-vCenter rollups
+  without duplication.
 formula: |
   sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
-        metric=config|hardware|numCpu, depth=10,
-        where=(${metric=summary|parentGuestCluster} !equals '')})
+        metric=config|hardware|num_Cpu, depth=10,
+        where="summary|parentGuestCluster !equals "})

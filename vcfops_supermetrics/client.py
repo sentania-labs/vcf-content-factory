@@ -50,6 +50,10 @@ class VCFOpsClient:
             {"Accept": "application/json", "Content-Type": "application/json"}
         )
         self._token: Optional[str] = None
+        # Cached per-instance content marker filename (discovered via a
+        # throwaway export). Re-probing it triggers export<->import task
+        # contention, so discover once per client lifetime.
+        self._marker_filename: Optional[str] = None
 
     # ---- env constructor ------------------------------------------------
     @classmethod
@@ -208,7 +212,9 @@ class VCFOpsClient:
             raise VCFOpsError("import_supermetrics_bundle: empty bundle")
 
         owner = get_current_user(self)["id"]
-        marker = discover_marker_filename(self)
+        if self._marker_filename is None:
+            self._marker_filename = discover_marker_filename(self)
+        marker = self._marker_filename
 
         sm_dict: dict = {}
         for sm in sms:

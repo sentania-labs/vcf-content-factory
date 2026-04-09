@@ -1,37 +1,40 @@
-name: "[AI Content] VKS Core Consumption by vCenter"
+id: 53569330-f96d-479e-a764-6ac127df5a95
+name: "[VCF Content Factory] VKS Core Consumption by vCenter"
 description: >
-  Per-vCenter breakdown of VKS (vSphere with Kubernetes / Tanzu) core
-  consumption, replicating the output of the per-vCenter PowerCLI VKS
-  core report. One row per VMwareAdapter Instance (vCenter). The
-  headline compliance number is "VKS Cores" — the number of physical
-  cores attributable to VKS workloads for licensing purposes. All
-  other columns show the vCPU breakdown that feeds that calculation:
-  total VM vCPUs, VKS worker vCPUs, Supervisor Control Plane vCPUs,
-  vCLS vCPUs, VM Service vCPUs, regular (non-VKS) VM vCPUs, total
-  physical cores, and the global vCPU-to-pCore ratio. Suitable as a
-  dashboard widget target (no filters applied — shows all vCenters) and
-  as a standalone scheduled report export.
+  One row per vCenter. VM vCPUs grouped by role (regular, VKS worker, Supervisor
+  CP, vCLS, VM Service), plus physical cores and the computed VKS core equivalent
+  (VKS Worker vCPU / Global Ratio). Replaces the per-vCenter PowerCLI
+  VKS core-consumption script.
 
 subject:
-  adapter_kind: VMwareAdapter
+  adapter_kind: VMWARE
   resource_kind: VMwareAdapter Instance
 
 columns:
-  - attribute: "sm_49dacfe5-f4ae-4577-b735-115fed36b045"
-    display_name: "Total VM vCPU (count)"
-  - attribute: "sm_c51f9bc6-f914-450b-b932-25cba1956d47"
-    display_name: "VKS Worker vCPU (count)"
-  - attribute: "sm_eaf6679f-0b19-4472-8633-085b240b9d60"
-    display_name: "Supervisor Control Plane vCPU (count)"
-  - attribute: "sm_b847549b-7d32-4157-95a2-9f9f26036726"
-    display_name: "vCLS vCPU (count)"
-  - attribute: "sm_98f2a0a5-ea82-4a9d-93a6-29ff58a68889"
-    display_name: "VM Service vCPU (count)"
-  - attribute: "sm_e7e1e3be-ac65-4cea-90b2-e4532503ddd6"
-    display_name: "Regular VM vCPU (count)"
-  - attribute: "sm_a01da816-857a-45a0-9d90-928d327a5020"
-    display_name: "Total Physical Cores (count)"
-  - attribute: "sm_50845fed-0a98-4885-bd57-ac6bc961e48d"
+  - attribute: cpu|vcpus_allocated_on_all_vms
+    display_name: "Total VM vCPU"
+    unit: ""
+  - attribute: cpu|corecount_provisioned
+    display_name: "Total Physical Cores"
+    unit: ""
+  - attribute: "sm_17f31a23-d7e7-4ff9-ab30-7a50d3e3a584"
+    display_name: "VKS Worker vCPU"
+    unit: ""
+  - attribute: "sm_a2b233be-ab55-46cc-816d-5ca5f10fc477"
+    display_name: "Supervisor Control Plane vCPU"
+    unit: ""
+  - attribute: "sm_020cf289-b254-4d8c-9e36-f0925c36e3d8"
+    display_name: "vCLS vCPU"
+    unit: ""
+  - attribute: "sm_2308ba66-91c6-43c8-95e3-33fd2ee51f73"
+    display_name: "VM Service vCPU"
+    unit: ""
+  - attribute: "sm_b16e3bb4-b8aa-4844-af10-d9b30702318a"
+    display_name: "Regular VM vCPU"
+    unit: ""
+  - attribute: "sm_ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e"
     display_name: "Global vCPU-to-pCore Ratio"
-  - attribute: "sm_e1aaded4-a38a-4614-a704-e2b0d7ffd6fb"
-    display_name: "VKS Cores (count)"
+    unit: ""
+  - attribute: "sm_73f9b9d7-1801-4e6d-bdd0-c3f3203d7bcc"
+    display_name: "VKS Cores"
+    unit: ""

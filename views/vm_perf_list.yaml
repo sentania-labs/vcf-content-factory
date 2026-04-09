@@ -1,4 +1,5 @@
-name: "[AI Content] VM Performance List"
+id: 63325182-17b8-45c3-ba99-52f7b4a61fce
+name: "[VCF Content Factory] VM Performance List"
 description: >
   List of virtual machines with key CPU and memory performance
   metrics. Designed to be embedded in a dashboard and filtered by a

@@ -20,6 +20,8 @@ from typing import Iterator, List, Optional
 
 import requests
 
+from vcfops_supermetrics._env import load_dotenv
+
 
 class VCFOpsCustomGroupError(RuntimeError):
     pass
@@ -48,6 +50,7 @@ class VCFOpsCustomGroupClient:
     # ---- env constructor ----------------------------------------
     @classmethod
     def from_env(cls) -> "VCFOpsCustomGroupClient":
+        load_dotenv()
         try:
             host = os.environ["VCFOPS_HOST"]
             user = os.environ["VCFOPS_USER"]

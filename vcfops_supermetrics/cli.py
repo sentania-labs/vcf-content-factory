@@ -70,13 +70,29 @@ def cmd_sync(args) -> int:
     except VCFOpsError as e:
         print(f"FAILED   bundle import: {e}", file=sys.stderr)
         return 1
-    state = result.get("state", "?")
-    err = result.get("errorCode") or result.get("error")
-    print(f"imported {len(bundle)} super metric(s) — state={state}")
+    # The content importer reports per-contentType summaries. Per-op
+    # `errorCode: NONE` is the success sentinel, not an error. Per-
+    # contentType `state=FAILED` signals partial-or-zero import.
+    summaries = result.get("operationSummaries") or []
+    imported = skipped = failed = 0
+    for s in summaries:
+        imported += int(s.get("imported") or 0)
+        skipped += int(s.get("skipped") or 0)
+        failed += int(s.get("failed") or 0)
+    print(
+        f"super metric import: imported={imported} skipped={skipped} "
+        f"failed={failed} (bundle={len(bundle)})"
+    )
     for d in defs:
         print(f"  {d.id}  {d.name}")
-    if err:
-        print(f"WARNING: errorCode={err}", file=sys.stderr)
+    if imported == 0 and (skipped or failed):
+        print(
+            "WARNING: nothing imported — all entries skipped/failed. "
+            "Check name/UUID collisions with existing super metrics.",
+            file=sys.stderr,
+        )
+        return 1
+    if failed:
         return 1
     return 0
 

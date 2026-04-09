@@ -1,0 +1,24 @@
+id: a2b233be-ab55-46cc-816d-5ca5f10fc477
+name: "[VCF Content Factory] Supervisor Control Plane vCPU (count)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+  - resource_kind_key: Datacenter
+    adapter_kind_key: VMWARE
+  - resource_kind_key: VMwareAdapter Instance
+    adapter_kind_key: VMWARE
+description: >
+  Sum of provisioned vCPUs across all Supervisor control plane VMs within the
+  assigned object's scope. Filter uses summary|config|productName equals
+  "vSphere Supervisor" rather than summary|config|type equals
+  SupervisorControlPlane, because on this lab vCLS VMs also carry
+  type=SupervisorControlPlane but have no productName value. Only genuine
+  Supervisor control plane VMs carry productName="vSphere Supervisor" —
+  verified live. This avoids double-counting vCLS vCPU here.
+
+  Assigned to ClusterComputeResource, Datacenter, and VMwareAdapter Instance
+  so a single formula yields per-cluster, per-DC, and per-vCenter rollups.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+        metric=config|hardware|num_Cpu, depth=10,
+        where="summary|config|productName equals vSphere Supervisor"})

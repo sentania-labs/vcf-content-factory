@@ -1,5 +1,5 @@
-id: 020cf289-b254-4d8c-9e36-f0925c36e3d8
-name: "[VCF Content Factory] vCLS vCPU (count)"
+id: 2308ba66-91c6-43c8-95e3-33fd2ee51f73
+name: "[VCF Content Factory] VM Service vCPU (count)"
 resource_kinds:
   - resource_kind_key: ClusterComputeResource
     adapter_kind_key: VMWARE
@@ -8,14 +8,14 @@ resource_kinds:
   - resource_kind_key: VMwareAdapter Instance
     adapter_kind_key: VMWARE
 description: >
-  Sum of provisioned vCPUs across all vSphere Clustering Service (vCLS) VMs
-  within the assigned object's scope. vCLS VMs reside in a folder named "vCLS"
-  and are identified by summary|parentFolder equals vCLS. These VMs are
-  VMware-managed and consume cluster capacity independent of workloads.
+  Sum of provisioned vCPUs across all VM Service VMs (VMOperator-managed VMs)
+  within the assigned object's scope. VM Service VMs are identified by
+  summary|config|type equals VMOperator. These VMs are provisioned through
+  the vSphere VM Service capability for Kubernetes workloads.
 
   Assigned to ClusterComputeResource, Datacenter, and VMwareAdapter Instance
   so a single formula yields per-cluster, per-DC, and per-vCenter rollups.
 formula: |
   sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
         metric=config|hardware|num_Cpu, depth=10,
-        where="summary|parentFolder equals vCLS"})
+        where="summary|config|type equals VMOperator"})

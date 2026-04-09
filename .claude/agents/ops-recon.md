@@ -144,8 +144,9 @@ r = c._request('GET', '/api/supermetrics')
 For GET requests not covered by the client's convenience methods,
 use `c._request('GET', '<path>', params={...})`. The client handles
 authentication, token refresh, and SSL verification from env vars.
-The `.claude/settings.local.json` PreToolUse hook sources `.env`
-before every Bash call, so `VCFOPS_*` will already be set.
+`from_env()` auto-loads `.env` from the repo root via
+`vcfops_supermetrics/_env.py`, so you never need to source `.env`
+in your shell before running Python.
 
 For content export (dashboards, views, report defs), use the
 dashboards client's polling helpers:
@@ -170,7 +171,7 @@ RECON RESULT
   existing super metric (instance):
     - none matching this filter
   existing super metric (repo):
-    - supermetrics/cluster_avg_vm_cpu.yaml (name "[AI Content]
+    - supermetrics/cluster_avg_vm_cpu.yaml (name "[VCF Content Factory]
       Cluster - Avg Powered-On VM CPU Usage (%)") — EXACT MATCH
   reference sources (context/reference_sources.md):
     - sentania/AriaOperationsContent/TPS Cluster Level Supermetric/

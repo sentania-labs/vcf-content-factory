@@ -1,4 +1,5 @@
-name: "[AI Content] VM Performance by Datastore Type"
+id: c809c168-ef95-4cb0-905a-3cf200dd99d4
+name: "[VCF Content Factory] VM Performance by Datastore Type"
 description: >
   Pick a datastore-type bucket (vSAN, NFS, Local VMFS, or Shared VMFS) from
   the resource list on the left. The VM Performance + Storage view on the right
@@ -17,7 +18,7 @@ widgets:
     type: View
     title: "VM CPU, Memory & Storage — Worst Offenders"
     coords: {x: 4, y: 1, w: 9, h: 11}
-    view: "[AI Content] VM Performance + Storage"
+    view: "[VCF Content Factory] VM Performance + Storage"
 
 interactions:
   - from: datastore_type_picker

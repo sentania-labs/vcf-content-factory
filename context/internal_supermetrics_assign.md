@@ -1,7 +1,7 @@
 # `PUT /internal/supermetrics/assign` — verified wire format
 
 Empirically verified against lab VCF Ops on 2026-04-08 using super metric
-`[AI Content] Cluster - Max VM CPU Ready (%)`
+`[VCF Content Factory] Cluster - Max VM CPU Ready (%)`
 (`035e2f37-703d-42f3-aeae-f9a87d38f491`) against the Default Policy
 (`e74c28bf-44f8-4cd1-a8d9-2ee5c6b6c2fd`). See also the sibling endpoint
 `PUT /internal/supermetrics/assign/default` which has the same body and

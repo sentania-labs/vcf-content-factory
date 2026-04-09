@@ -1,9 +1,9 @@
-name: "[AI Content] VMs on Shared VMFS"
+name: "[VCF Content Factory] VMs on Shared VMFS"
 description: >
-  All VirtualMachine objects that have "[AI Content] Shared VMFS Datastores"
+  All VirtualMachine objects that have "[VCF Content Factory] Shared VMFS Datastores"
   as a CHILD. Covers VMs whose datastores are shared VMFS volumes
   (iSCSI or FC, not distinguished at the Datastore level). Depends on
-  "[AI Content] Shared VMFS Datastores" existing on the target instance
+  "[VCF Content Factory] Shared VMFS Datastores" existing on the target instance
   at sync time (defined in customgroups/shared_vmfs_datastores.yaml).
   Used as the member scope for the shared VMFS tier of the "VM
   performance by datastore type" dashboard.
@@ -13,4 +13,4 @@ rules:
   - resource_kind: VirtualMachine
     adapter_kind: VMWARE
     relationship:
-      - { relation: CHILD, name: "[AI Content] Shared VMFS Datastores", op: EQ }
+      - { relation: CHILD, name: "[VCF Content Factory] Shared VMFS Datastores", op: EQ }

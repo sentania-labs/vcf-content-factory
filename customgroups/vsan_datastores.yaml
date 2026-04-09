@@ -1,4 +1,4 @@
-name: "[AI Content] vSAN Datastores"
+name: "[VCF Content Factory] vSAN Datastores"
 description: >
   All Datastore objects whose summary|type property reports vsan.
   Adapted from the lab specimen

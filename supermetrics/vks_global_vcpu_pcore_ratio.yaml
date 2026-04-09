@@ -1,22 +1,25 @@
-id: 50845fed-0a98-4885-bd57-ac6bc961e48d
-name: "[AI Content] vCenter - Global vCPU-to-pCore Ratio"
+id: ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e
+name: "[VCF Content Factory] Global vCPU-to-pCore Ratio"
 resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+  - resource_kind_key: Datacenter
+    adapter_kind_key: VMWARE
   - resource_kind_key: VMwareAdapter Instance
     adapter_kind_key: VMWARE
 description: >
-  Global vCPU-to-physical-core ratio for this vCenter: Total VM vCPU divided by
-  Total Physical Cores (bare-metal hosts only). This is the vCenter-wide
-  overcommit multiplier used by the PowerCLI VKS core-consumption report to
-  convert a vCPU bucket count into an equivalent physical core count.
-  References:
-    - [AI Content] vCenter - Total VM vCPU (count)       sm_49dacfe5-f4ae-4577-b735-115fed36b045
-    - [AI Content] vCenter - Total Physical Cores (count) sm_a01da816-857a-45a0-9d90-928d327a5020
-  NOTE: The sm_<uuid> literals in this formula are stable only when super metrics
-  are installed via the content-zip import path (which preserves the YAML id field).
-  The current sync CLI uses POST /api/supermetrics, which assigns a new UUID
-  server-side. Install these super metrics via the content-zip path to preserve
-  cross-reference stability; see TOOLSET GAP note in the orchestrator's report.
+  Ratio of total allocated vCPUs to total physical cores at the assigned
+  object's scope, using native built-in stats that are already aggregated at
+  Cluster, Datacenter, and VMwareAdapter Instance level. No child-object
+  iteration is needed: cpu|vcpus_allocated_on_all_vms gives the numerator and
+  cpu|corecount_provisioned gives the denominator, both sourced directly from
+  the same object the SM evaluates (this). Recon confirmed both stats are live
+  on the lab at all three resource kinds.
+
+  A value of 4.0 means four vCPUs are allocated per physical core. This is the
+  global (all-VM-type) ratio; see [VCF Content Factory] VKS Cores (count) for the
+  VKS-specific core-equivalent calculation.
 formula: |
-  ${this, metric=Super Metric|sm_49dacfe5-f4ae-4577-b735-115fed36b045}
+  ${this, metric=cpu|vcpus_allocated_on_all_vms}
   /
-  ${this, metric=Super Metric|sm_a01da816-857a-45a0-9d90-928d327a5020}
+  ${this, metric=cpu|corecount_provisioned}

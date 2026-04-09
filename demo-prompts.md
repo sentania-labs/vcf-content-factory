@@ -89,9 +89,9 @@ permission to run the dedicated tools should reproduce the demo.
 ## Phase 5 — Demo polish
 
 11. **"please push our supermetrics to vcf operations - but I'd like
-    them all to be slightly renamed `[AI Content] <…>` to make them
+    them all to be slightly renamed `[VCF Content Factory] <…>` to make them
     easily identifiable for demo"**
-    - Prefixed all 5 YAML names with `[AI Content] `.
+    - Prefixed all 5 YAML names with `[VCF Content Factory] `.
     - Discovered the API rejects multi-line formulas
       (`"must match .+"`); added `_normalize_formula` in `client.py`
       to collapse whitespace before sending.

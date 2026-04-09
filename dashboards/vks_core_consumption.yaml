@@ -1,44 +1,19 @@
-name: "[AI Content] VKS Core Consumption"
+id: 62652554-b2a7-46ef-a7cd-8163ab3b59f1
+name: "[VCF Content Factory] VKS Core Consumption"
 description: >
-  Per-vCenter breakdown of VM vCPU by role (VKS workers, Supervisor CP, vCLS,
-  VM Service, Regular) plus computed VKS cores. Replaces the per-vCenter
-  PowerCLI VKS core-consumption script. Select a vCenter from the resource list
-  on the left to drill into a single vCenter; leave nothing selected to see all
-  vCenters in the full-width table on the right.
-
-# TOOLSET GAP (scoreboard/KPI strip widget):
-#   The brief requested a fleet-wide KPI strip showing sums of Total VM vCPU,
-#   VKS Worker vCPU, and VKS Cores across all VMwareAdapter Instances. This
-#   repo's loader supports only two widget types: ResourceList and View. There
-#   is no Scoreboard, KPI, or Metric Chart widget type available. A KPI strip
-#   would require:
-#     - what: Scoreboard (or Metric Chart) widget type
-#     - needed to satisfy: fleet-wide sums of three super metrics across all
-#         VMwareAdapter Instances shown at top of dashboard
-#     - suggested fix: extend vcfops_dashboards loader/packager to support the
-#         Scoreboard widget type (config: list of {resourceKind, metricKey,
-#         aggregation}) and add it to the packager's widget-type dispatch table.
-#     - wire-format investigation needed?: yes — api-explorer should export a
-#         real Scoreboard widget from Ops to document the exact JSON shape inside
-#         dashboard.json before implementing.
-#   The full-width View widget below already surfaces per-row values for every
-#   vCenter, so the fleet-wide totals are available as column sums in the table.
+  Per-vCenter breakdown of VM vCPU by role (VKS Worker, Supervisor CP, vCLS,
+  VM Service, Regular) plus physical cores, vCPU:pCore ratio, and the computed
+  VKS core equivalent. One row per vCenter — no scoping widget, this is a
+  read-at-a-glance report. Replaces the per-vCenter PowerCLI VKS core-
+  consumption script.
 
 widgets:
-  - id: vcenter_picker
-    type: ResourceList
-    title: "Select a vCenter"
-    coords: {x: 1, y: 1, w: 3, h: 11}
-    resource_kinds:
-      - {adapter_kind: VMwareAdapter, resource_kind: VMwareAdapter Instance}
-
-  - id: vks_cores_view
+  - id: vks_core_view
     type: View
     title: "VKS Core Consumption by vCenter"
-    coords: {x: 4, y: 1, w: 9, h: 11}
-    view: "[AI Content] VKS Core Consumption by vCenter"
-
-interactions:
-  - from: vcenter_picker
-    to: vks_cores_view
-    type: resourceId
+    coords: {x: 1, y: 1, w: 12, h: 11}
+    view: "[VCF Content Factory] VKS Core Consumption by vCenter"
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World

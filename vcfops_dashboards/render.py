@@ -21,6 +21,22 @@ from xml.sax.saxutils import escape
 from .loader import Dashboard, Interaction, ViewDef, Widget
 
 
+# Stable per-adapter-kind prefix used in `resourceKindId` fields inside
+# dashboard widget configs. Harvested from reference bundles under
+# `references/` — the value is the same on every Ops instance for a
+# given adapter. Extend as new adapter kinds get pinned; there is no
+# API to derive these at runtime (checked /api/adapterkinds and
+# /api/adapterkinds/*/resourcekinds; no numeric id is exposed).
+_ADAPTER_KIND_PREFIX = {
+    "VMWARE": "002006",
+    "Container": "002009",
+    "CASAdapter": "002010",
+    "NSXTAdapter": "002011",
+    "KubernetesAdapter": "002017",
+    "VMWARE_INFRA_HEALTH": "002019",
+}
+
+
 # ---------------- View definition (XML) ----------------
 
 def _xml_property(name: str, value: str) -> str:
@@ -28,9 +44,24 @@ def _xml_property(name: str, value: str) -> str:
 
 
 def _xml_attribute_item(view: ViewDef, col, idx: int) -> str:
+    # Super metric columns live in their own namespace and need the
+    # "Super Metric|sm_<uuid>" attributeKey form — bare "sm_<uuid>"
+    # renders as a blank column in the UI. Reference: exported views
+    # from the sentania/AriaOperationsContent VCF License Consumption
+    # bundle. Super metric columns also use rollUpType=NONE, not AVG.
+    raw = col.attribute
+    if raw.startswith("sm_"):
+        attribute_key = f"Super Metric|{raw}"
+        roll_up_type = "NONE"
+    elif raw.startswith("Super Metric|"):
+        attribute_key = raw
+        roll_up_type = "NONE"
+    else:
+        attribute_key = raw
+        roll_up_type = "AVG"
     props = [
         _xml_property("objectType", "RESOURCE"),
-        _xml_property("attributeKey", col.attribute),
+        _xml_property("attributeKey", attribute_key),
     ]
     if col.unit:
         props.append(_xml_property("preferredUnitId", col.unit))
@@ -38,7 +69,7 @@ def _xml_attribute_item(view: ViewDef, col, idx: int) -> str:
         _xml_property("isStringAttribute", "false"),
         _xml_property("adapterKind", view.adapter_kind),
         _xml_property("resourceKind", view.resource_kind),
-        _xml_property("rollUpType", "AVG"),
+        _xml_property("rollUpType", roll_up_type),
         _xml_property("rollUpCount", "1"),
         '<Property name="transformations"><List><Item value="CURRENT"/></List></Property>',
         _xml_property("isProperty", "false"),
@@ -134,7 +165,44 @@ def _resource_list_widget(w: Widget, kind_index: dict[tuple[str, str], int]) -> 
     }
 
 
-def _view_widget(w: Widget, view: ViewDef) -> dict:
+def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int]) -> dict:
+    # A self-provider View widget enumerates its own subject set instead
+    # of waiting for an incoming interaction. Ops requires the widget to
+    # be pinned to a container resource — typically `vSphere World` for
+    # VMWARE subjects — whose descendants the view walks.
+    #
+    # The `resourceKindId` field format is `<6-digit prefix><adapterKey>
+    # <resourceKey>`. The 6-digit prefix is **per adapter kind**, not
+    # dashboard-local — it's a stable Ops-internal identifier that is
+    # the same across every instance and every dashboard. Harvested
+    # empirically from the reference bundles (brockpeterson +
+    # AriaOperationsContent + tkopton) by grepping every dashboard.json
+    # for `resourceKindId` values. A dashboard that emits a wrong
+    # prefix (e.g. `000000`) installs cleanly but the widget fails to
+    # render at view time with no diagnostic.
+    if w.self_provider and w.pin:
+        pin_key = (w.pin.adapter_kind, w.pin.resource_kind)
+        pin_idx = kind_index[pin_key]
+        prefix = _ADAPTER_KIND_PREFIX.get(w.pin.adapter_kind)
+        if prefix is None:
+            raise ValueError(
+                f"no known resourceKindId prefix for adapter kind "
+                f"{w.pin.adapter_kind!r} — extend _ADAPTER_KIND_PREFIX "
+                f"after harvesting from an exported reference dashboard"
+            )
+        resource = {
+            "resourceId": f"resource:id:{pin_idx}_::_",
+            "traversalSpecId": "",
+            "resourceName": w.pin.resource_kind,
+            "resourceKindId": f"{prefix}{w.pin.adapter_kind}{w.pin.resource_kind}",
+            "id": f"Ext.vcops.chrome.model.Resource-{pin_idx}",
+        }
+        self_provider_flag = True
+        refresh_content = True
+    else:
+        resource = None
+        self_provider_flag = False
+        refresh_content = False
     return {
         "collapsed": False,
         "id": w.widget_id,
@@ -143,13 +211,13 @@ def _view_widget(w: Widget, view: ViewDef) -> dict:
         "title": w.title,
         "config": {
             "refreshInterval": 300,
-            "resource": None,
-            "traversalSpecId": "",
-            "refreshContent": {"refreshContent": False},
+            "resource": resource,
+            "traversalSpecId": None,
+            "refreshContent": {"refreshContent": refresh_content},
             "isUpdatedView": True,
             "chartViewItems": [],
             "selectFirstRow": {"selectFirstRow": True},
-            "selfProvider": {"selfProvider": False},
+            "selfProvider": {"selfProvider": self_provider_flag},
             "title": w.title,
             "viewDefinitionId": view.id,
         },
@@ -168,7 +236,7 @@ def _build_dashboard_obj(
         if w.type == "ResourceList":
             widgets_json.append(_resource_list_widget(w, kind_index))
         elif w.type == "View":
-            widgets_json.append(_view_widget(w, views_by_name[w.view_name]))
+            widgets_json.append(_view_widget(w, views_by_name[w.view_name], kind_index))
 
     widget_id_by_local = {w.local_id: w.widget_id for w in dashboard.widgets}
     interactions_json = [
@@ -182,7 +250,12 @@ def _build_dashboard_obj(
 
     now_ms = int(time.time() * 1000)
     return {
-        "shared": False,
+        # Default dashboards to shared so other Ops users can see them.
+        # The framework's audience is "an average vSphere admin needs
+        # to find and use this" — private-to-author dashboards defeat
+        # the point. Can be overridden per-dashboard via the YAML's
+        # `shared:` field.
+        "shared": dashboard.shared,
         "temporary": False,
         "hidden": False,
         "creationTime": now_ms,
@@ -196,7 +269,15 @@ def _build_dashboard_obj(
         "userId": owner_user_id,
         "states": [],
         "homeTab": False,
-        "name": dashboard.name,
+        # Ops folders: the dashboard's `name` field carries a leading
+        # "<folder>/" segment, and `namePath` mirrors the folder. This
+        # matches the pattern in the vROpsTOP + Troubleshooting VMs +
+        # tkopton reference bundles. Ops renders the dashboard in the
+        # sidebar under the folder, showing only the portion after the
+        # slash as the visible name. `namePath` alone (without the
+        # slash in `name`) does NOT place the dashboard in a folder.
+        "name": f"{dashboard.name_path}/{dashboard.name}" if dashboard.name_path else dashboard.name,
+        "namePath": dashboard.name_path,
         "gridsterMaxColumns": 12,
         "rank": 0,
         "disabled": False,
@@ -224,6 +305,10 @@ def render_dashboards_bundle_json(
         for w in d.widgets:
             for rk in w.resource_kinds:
                 key = (rk.adapter_kind, rk.resource_kind)
+                if key not in kind_index:
+                    kind_index[key] = len(kind_index)
+            if w.pin:
+                key = (w.pin.adapter_kind, w.pin.resource_kind)
                 if key not in kind_index:
                     kind_index[key] = len(kind_index)
     entries_resource_kind = [

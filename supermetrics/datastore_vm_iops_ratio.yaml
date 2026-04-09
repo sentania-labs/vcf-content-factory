@@ -1,5 +1,5 @@
 id: 8b434aa5-a5ec-4b8a-95a2-0655bd6880a7
-name: "[AI Content] Datastore - VM IOPS Skew (max/avg)"
+name: "[VCF Content Factory] Datastore - VM IOPS Skew (max/avg)"
 resource_kinds:
   - resource_kind_key: Datastore
     adapter_kind_key: VMWARE

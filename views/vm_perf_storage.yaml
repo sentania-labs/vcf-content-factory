@@ -1,4 +1,5 @@
-name: "[AI Content] VM Performance + Storage"
+id: 6e50b99f-0852-4c94-84bf-b877c6871fa0
+name: "[VCF Content Factory] VM Performance + Storage"
 description: >
   Virtual machine CPU, memory, and virtual disk performance metrics.
   Designed for a "VM performance by datastore type" dashboard. Intended

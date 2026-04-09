@@ -1,9 +1,9 @@
-name: "[AI Content] Local VMFS Datastores"
+name: "[VCF Content Factory] Local VMFS Datastores"
 description: >
   All Datastore objects whose summary|type is VMFS and whose
   summary|isLocal property is "true". Covers locally attached VMFS
   volumes (direct-attach, not shared over a SAN/iSCSI fabric).
-  Used as the upstream scope group for "[AI Content] VMs on Local VMFS".
+  Used as the upstream scope group for "[VCF Content Factory] VMs on Local VMFS".
   Part of the "VM performance by datastore type" dashboard datastore
   partition alongside the NFS, Shared VMFS, and vSAN groups.
 type: Environment

@@ -1,8 +1,8 @@
-name: "[AI Content] VMs on NFS"
+name: "[VCF Content Factory] VMs on NFS"
 description: >
-  All VirtualMachine objects that have "[AI Content] NFS Datastores"
+  All VirtualMachine objects that have "[VCF Content Factory] NFS Datastores"
   as a CHILD (i.e. the VM's child datastore belongs to the NFS
-  datastore group). Depends on "[AI Content] NFS Datastores" existing
+  datastore group). Depends on "[VCF Content Factory] NFS Datastores" existing
   on the target instance at sync time (defined in
   customgroups/nfs_datastores.yaml). Used as the member scope for the
   NFS tier of the "VM performance by datastore type" dashboard.
@@ -12,4 +12,4 @@ rules:
   - resource_kind: VirtualMachine
     adapter_kind: VMWARE
     relationship:
-      - { relation: CHILD, name: "[AI Content] NFS Datastores", op: EQ }
+      - { relation: CHILD, name: "[VCF Content Factory] NFS Datastores", op: EQ }

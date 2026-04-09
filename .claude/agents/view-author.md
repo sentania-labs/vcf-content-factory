@@ -30,6 +30,12 @@ Skim:
 
 ## Hard rules
 
+0. **Name prefix is `[VCF Content Factory]`.** Every view this
+   repo authors has its `name:` field prefixed with literal
+   `[VCF Content Factory] ` (brackets included). This is the
+   framework identity tag. Do not invent alternate prefixes;
+   `[AI Content]` is a legacy name and must not be reintroduced.
+
 1. **Never create a super metric.** If the view needs a super
    metric that does not exist, stop and tell the orchestrator:
    "need super metric X for column Y, please delegate to

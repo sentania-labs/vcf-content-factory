@@ -1,4 +1,5 @@
-name: "[AI Content] VM Performance by vCenter"
+id: d3740126-15c2-4e4d-8fa1-0728399a68d7
+name: "[VCF Content Factory] VM Performance by vCenter"
 description: >
   Pick a vCenter from the list on the left to see its virtual machines
   with key CPU and memory performance metrics. Demonstrates the
@@ -16,7 +17,7 @@ widgets:
     type: View
     title: "VM CPU & Memory Performance"
     coords: {x: 5, y: 1, w: 8, h: 11}
-    view: "[AI Content] VM Performance List"
+    view: "[VCF Content Factory] VM Performance List"
 
 interactions:
   - from: vcenter_picker

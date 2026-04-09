@@ -35,7 +35,21 @@ instance via the Suite API / content-import zip.
 4. **Always validate before installing.**
    `python -m vcfops_supermetrics validate <file>`.
 
-5. **UUIDs are part of the contract** — for super metrics, views,
+5. **Naming convention — `[VCF Content Factory]` prefix on every
+   authored content object.** Every super metric, view, dashboard,
+   and custom group this repo creates has its display name prefixed
+   with `[VCF Content Factory]` (literal, brackets included). This
+   is how operators distinguish repo-owned content from built-in
+   content and from content authored by other means in the same
+   Ops instance. Dashboards additionally live under the
+   `VCF Content Factory` folder (the dashboard YAML's `name_path`
+   field defaults to this; the loader applies it automatically).
+   Do not invent alternate prefixes ("[AI Content]" is a legacy name
+   from an earlier iteration and must not be reintroduced). Do not
+   skip the prefix "just this once" for brevity — the identity tag
+   is the whole point of the framework.
+
+6. **UUIDs are part of the contract** — for super metrics, views,
    and dashboards. Every such content object this repo creates owns
    a stable UUID stored in its YAML `id` field. Dashboards → views
    → super metrics reference each other by UUID (as literal
@@ -51,7 +65,7 @@ instance via the Suite API / content-import zip.
    type with this exception. See
    `context/customgroup_authoring.md`.
 
-6. **Grep both OpenAPI specs** when answering "does the API support
+7. **Grep both OpenAPI specs** when answering "does the API support
    X?". `docs/internal-api.json` contains `/internal/*` endpoints
    (unsupported, require `X-Ops-API-use-unsupported: true`) that
    often do things the public surface can't. See

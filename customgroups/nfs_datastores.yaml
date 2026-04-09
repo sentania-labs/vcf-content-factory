@@ -1,7 +1,7 @@
-name: "[AI Content] NFS Datastores"
+name: "[VCF Content Factory] NFS Datastores"
 description: >
   All Datastore objects whose summary|type property reports NFS.
-  Used as the upstream scope group for "[AI Content] VMs on NFS".
+  Used as the upstream scope group for "[VCF Content Factory] VMs on NFS".
   Counterpart to the vSAN, Local VMFS, and Shared VMFS datastore
   groups that together partition the datastore inventory by
   transport type for the "VM performance by datastore type" dashboard.

@@ -27,6 +27,16 @@ Skim as needed:
 
 ## Hard rules
 
+0. **Name prefix is `[VCF Content Factory]`.** Every super metric
+   this repo authors has its `name:` field prefixed with literal
+   `[VCF Content Factory] ` (brackets included, one space after).
+   Example: `[VCF Content Factory] Cluster - Avg Powered-On VM CPU
+   Usage (%)`. This is the framework identity tag and is how
+   operators distinguish repo-owned super metrics from built-in
+   metrics and other content on the same Ops instance. Do not
+   invent alternate prefixes; `[AI Content]` is a legacy name and
+   must not be reintroduced. Do not skip the prefix for brevity.
+
 1. **Refuse without recon.** If the orchestrator did not give you
    explicit recon results saying "no built-in metric satisfies this
    need and no existing super metric matches", stop and tell the
@@ -98,8 +108,40 @@ Skim as needed:
    - Looping vs single functions.
    - `depth`: positive = children, negative = parents, never 0, no
      cross-sibling traversal.
-   - `where` clause: right operand must be a literal number; use
-     `$value` for the entry's own value; `isFresh()` for freshness.
+   - **`where` clause syntax — memorize this shape, do not improvise.**
+     The clause is a **bare quoted string** inside the resource
+     entry, not another `${metric=...}` wrapper. Property keys and
+     literal values appear bare (no inner `${}`, no quotes around
+     the literal). String operators (`equals`, `contains`,
+     `startsWith`, `endsWith`, and their `!` negations) are valid
+     against property/metric values; numeric operators
+     (`==`, `!=`, `>`, `>=`, `<`, `<=`) work against numeric values.
+     Canonical example — sum provisioned vCPUs of VM Service VMs:
+
+     ```
+     sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+          metric=config|hardware|num_Cpu, depth=10,
+          where="summary|config|type equals VMOperator"})
+     ```
+
+     **Do NOT write** `where=(${metric=summary|config|type} equals 'VMOperator')`
+     or `where=(${metric=prop} !equals '')`. The RHS of a where
+     clause is a bare literal — no single quotes around strings, no
+     nested `${}`. Comparing against "not empty" is
+     `where="key !equals "` (empty literal trailing the operator).
+     Use `$value` to refer to the outer entry's own value, and
+     `isFresh()` for freshness:
+     `where="$value.isFresh()"`.
+   - **Metric vs property keys.** The `metric=` target can be a
+     metric OR a property key — Ops treats many properties
+     (`config|hardware|num_Cpu`, `summary|config|type`,
+     `summary|parentGuestCluster`, etc.) as addressable through the
+     same `metric=` slot. Aggregating `config|hardware|num_Cpu` to
+     get total vCPUs is valid and common. Watch the **exact spelling**:
+     `num_Cpu` (underscore, capital C), not `numCpu` — the key is
+     case/underscore-sensitive and wrong spelling silently no-datas.
+     `cpu|corecount_provisioned` is also valid and aggregates the
+     same logical quantity on VirtualMachine.
    - Aliasing: `${...} as alias`, case-insensitive, no special
      characters.
    - Ternary: `cond ? a : b`.
@@ -108,6 +150,26 @@ Skim as needed:
      validate time (if the loader doesn't yet support this, write
      the literal `${this, metric=Super Metric|sm_<id>}` form and
      flag this to the orchestrator so the feature gets built).
+
+5. **Groups vs super metrics — pick the right tool.** When the
+   requirement is "sum metric X across objects matching property
+   Y=Z," the answer is **one super metric** with a `where` clause,
+   assigned to the container kinds you want rollups at
+   (`HostSystem`, `ClusterComputeResource`, `Datacenter`,
+   `VMwareAdapter Instance` are the usual suspects for VMWARE).
+   Ops evaluates the SM on every container of every assigned kind
+   and produces per-host, per-cluster, per-datacenter, and
+   per-vCenter rollups from a single formula — this is the
+   `allocated_vcpus_rollup.yaml` pattern, and it's the idiomatic
+   shape for "fleet accounting by role" reports. A list view of
+   VMwareAdapter Instance rows with those SM columns IS the
+   per-vCenter report — do not build per-vCenter custom groups to
+   replicate it. Custom groups are for *naming sets humans care
+   about* (browsable in the UI, targetable by alerts, scope for
+   views), not for filtering math inside a super metric formula.
+   If you catch yourself proposing N custom groups just to get
+   filtered rollups, stop and rewrite as a single SM with a
+   `where` clause.
 5. **Run validate.** Fix any errors. Re-run until clean.
 6. **Return to the orchestrator.** Report: filename, assigned UUID
    (read from the YAML after validate populated it), resource kind,
@@ -169,7 +231,7 @@ the loader's current parser. In that case:
 SUPER METRIC AUTHORED
   file: supermetrics/cluster_avg_powered_on_vm_cpu.yaml
   id: 7a3f2c91-88d5-4b2c-9e1a-f0c44e115dc2
-  name: [AI Content] Cluster - Avg Powered-On VM CPU Usage (%)
+  name: [VCF Content Factory] Cluster - Avg Powered-On VM CPU Usage (%)
   resource_kind: (VMWARE, ClusterComputeResource)
   formula uses: cpu|usage_average (VM), summary|runtime|powerState
   depth: 3 (cluster → hosts → VMs)

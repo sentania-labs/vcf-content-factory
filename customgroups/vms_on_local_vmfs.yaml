@@ -1,7 +1,7 @@
-name: "[AI Content] VMs on Local VMFS"
+name: "[VCF Content Factory] VMs on Local VMFS"
 description: >
-  All VirtualMachine objects that have "[AI Content] Local VMFS Datastores"
-  as a CHILD. Depends on "[AI Content] Local VMFS Datastores" existing
+  All VirtualMachine objects that have "[VCF Content Factory] Local VMFS Datastores"
+  as a CHILD. Depends on "[VCF Content Factory] Local VMFS Datastores" existing
   on the target instance at sync time (defined in
   customgroups/local_vmfs_datastores.yaml). Used as the member scope
   for the local VMFS tier of the "VM performance by datastore type"
@@ -12,4 +12,4 @@ rules:
   - resource_kind: VirtualMachine
     adapter_kind: VMWARE
     relationship:
-      - { relation: CHILD, name: "[AI Content] Local VMFS Datastores", op: EQ }
+      - { relation: CHILD, name: "[VCF Content Factory] Local VMFS Datastores", op: EQ }

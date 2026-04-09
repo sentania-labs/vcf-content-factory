@@ -1,20 +1,28 @@
-id: e1aaded4-a38a-4614-a704-e2b0d7ffd6fb
-name: "[AI Content] vCenter - VKS Cores (count)"
+id: 73f9b9d7-1801-4e6d-bdd0-c3f3203d7bcc
+name: "[VCF Content Factory] VKS Cores (count)"
 resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+  - resource_kind_key: Datacenter
+    adapter_kind_key: VMWARE
   - resource_kind_key: VMwareAdapter Instance
     adapter_kind_key: VMWARE
 description: >
-  VKS (Tanzu Kubernetes Service) physical core equivalent consumption for this
-  vCenter: VKS Worker vCPU divided by the Global vCPU-to-pCore Ratio. This is the
-  headline number the PowerCLI VKS core-consumption report produces — the number
-  of physical cores attributable to TKG guest cluster workloads after accounting
-  for the vCenter-wide overcommit ratio.
-  References:
-    - [AI Content] vCenter - VKS Worker vCPU (count)         sm_c51f9bc6-f914-450b-b932-25cba1956d47
-    - [AI Content] vCenter - Global vCPU-to-pCore Ratio      sm_50845fed-0a98-4885-bd57-ac6bc961e48d
-  NOTE: The sm_<uuid> literals are stable only via the content-zip install path.
-  See TOOLSET GAP note. Depends on SM7 and SM8 being installed first.
+  Estimated physical core equivalent consumed by VKS worker node VMs, computed
+  as VKS worker vCPU count divided by the global vCPU-to-pCore ratio. This
+  normalises VKS worker capacity against the actual overcommit level observed
+  at the same scope, giving a more meaningful "cores" figure than raw vCPU
+  count.
+
+  References two other SMs in this bundle:
+    - [VCF Content Factory] VKS Worker vCPU (count)     -> sm_17f31a23-d7e7-4ff9-ab30-7a50d3e3a584
+    - [VCF Content Factory] Global vCPU-to-pCore Ratio  -> sm_ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e
+
+  Both referenced SMs must be installed and enabled in policy for this SM to
+  produce data. If the ratio SM is zero (no hosts/vCPUs), this formula returns
+  no-data rather than divide-by-zero — Ops handles division by zero as
+  no-data by default.
 formula: |
-  ${this, metric=Super Metric|sm_c51f9bc6-f914-450b-b932-25cba1956d47}
+  ${this, metric=Super Metric|sm_17f31a23-d7e7-4ff9-ab30-7a50d3e3a584}
   /
-  ${this, metric=Super Metric|sm_50845fed-0a98-4885-bd57-ac6bc961e48d}
+  ${this, metric=Super Metric|sm_ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e}

@@ -23,6 +23,16 @@ On every invocation, re-read:
 
 ## Hard rules
 
+0. **Name prefix `[VCF Content Factory]` and folder `VCF Content
+   Factory`.** Every dashboard this repo authors has its `name:`
+   field prefixed with literal `[VCF Content Factory] ` (brackets
+   included). Dashboards additionally live under the Ops folder
+   `VCF Content Factory` — this is the YAML's `name_path:` field
+   which defaults to `VCF Content Factory` if not set. Don't
+   override `name_path` unless the user explicitly asks for a
+   different folder. Do not invent alternate prefixes; `[AI
+   Content]` is a legacy name and must not be reintroduced.
+
 1. **Never create a view.** If the dashboard needs a view that does
    not exist, stop and tell the orchestrator: "need view X for
    widget Y, please delegate to `view-author`". Do not imply that

@@ -1,7 +1,7 @@
 # Custom group `relationshipConditionRules` — relation semantics
 
 Empirical findings from the 2026-04-08 lab investigation into why
-`[AI Content] VMs on NFS` (and its vSAN/VMFS siblings) installed but
+`[VCF Content Factory] VMs on NFS` (and its vSAN/VMFS siblings) installed but
 returned zero members.
 
 ## TL;DR
@@ -45,12 +45,12 @@ Rule:
 ```
 Full JSON: `context/specimens/vm_by_portgroup_group.json`.
 
-### Our broken group — `[AI Content] VMs on NFS` (0 members)
+### Our broken group — `[VCF Content Factory] VMs on NFS` (0 members)
 
 Rule as emitted by the customgroup loader:
 ```json
 "relationshipConditionRules":[
-  {"relation":"CHILD","name":"[AI Content] NFS Datastores","compareOperator":"EQ"}]
+  {"relation":"CHILD","name":"[VCF Content Factory] NFS Datastores","compareOperator":"EQ"}]
 ```
 Full JSON: `context/specimens/vm_by_datastore_group_BROKEN.json`.
 
@@ -65,7 +65,7 @@ Target `[Custom] Standard PGs` (port group group):
 | ANCESTOR    | 0       |
 | DESCENDANT  | **26**  |
 
-Target `[AI Content] NFS Datastores` (datastore group):
+Target `[VCF Content Factory] NFS Datastores` (datastore group):
 
 | relation    | members |
 |-------------|---------|
@@ -76,10 +76,10 @@ Target `[AI Content] NFS Datastores` (datastore group):
 
 Host pivot (VirtualMachine→HostSystem→Datastore) attempted via
 `HostSystem` scoped rules with `PARENT` and `ANCESTOR` targeting
-`[AI Content] NFS Datastores`: both 0. The canonical tree does not
+`[VCF Content Factory] NFS Datastores`: both 0. The canonical tree does not
 carry the Host↔Datastore edge either.
 
-Self-reference sanity: `Datastore DESCENDANT EQ [AI Content] NFS
+Self-reference sanity: `Datastore DESCENDANT EQ [VCF Content Factory] NFS
 Datastores` returned **3** — exactly the NFS datastores. This
 confirms `DESCENDANT` means "candidate is at-or-below the group node
 in the canonical tree", and that datastores sit cleanly in their

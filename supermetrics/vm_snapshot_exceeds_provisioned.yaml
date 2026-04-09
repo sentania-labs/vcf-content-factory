@@ -1,5 +1,5 @@
 id: d7c6d2d3-8dde-4970-b3f9-9e5121deb8b7
-name: "[AI Content] VM - Snapshot Space Exceeds Provisioned Disk (flag)"
+name: "[VCF Content Factory] VM - Snapshot Space Exceeds Provisioned Disk (flag)"
 resource_kinds:
   - resource_kind_key: VirtualMachine
     adapter_kind_key: VMWARE
