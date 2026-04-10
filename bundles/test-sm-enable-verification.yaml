@@ -1,0 +1,16 @@
+name: test-sm-enable-verification
+sync: true
+description: >
+  Test distribution package for verifying super metric enable and policy
+  assignment through the content-zip path. Includes a cluster average VM
+  memory usage super metric, the VM Performance List view (built-in
+  metrics only), and a dashboard that combines a cluster picker, an
+  embedded view widget, and a scoreboard widget driven by the SM.
+  Safe to delete after testing.
+supermetrics:
+  - supermetrics/test_sm_enable_check.yaml
+views:
+  - views/vm_perf_list.yaml
+dashboards:
+  - dashboards/test_sm_enable_verification.yaml
+customgroups: []
