@@ -1,0 +1,67 @@
+name: "[VCF Content Factory] VM CPU Utilization Alert"
+description: >
+  Alerts when a virtual machine's CPU utilization exceeds safe operating
+  thresholds for a sustained period. Uses a tiered severity model: WARNING
+  triggers at >50% utilization, IMMEDIATE at >75%, and CRITICAL at >95%.
+  Each threshold is evaluated independently so that the most severe triggered
+  symptom determines the alert criticality (SYMPTOM_BASED). Fires when any
+  one of the three tiered symptoms is triggered; the highest active severity
+  is surfaced to the operator. Investigate runaway processes, CPU limits, or
+  host over-commitment when this alert appears.
+adapter_kind: VMWARE
+resource_kind: VirtualMachine
+
+type: 15              # Application
+sub_type: 20          # Workload
+wait_cycles: 1
+cancel_cycles: 1
+criticality: SYMPTOM_BASED
+
+impact:
+  badge: HEALTH
+
+# Three symptoms, each in its own set, combined with ANY (OR).
+# This mirrors the reference pattern from brockpeterson "VM CPU Utilization
+# Alert" (type=15, subType=20, SymptomSets operator="or") and ensures that
+# the highest triggered severity drives criticality when multiple thresholds
+# are simultaneously breached.
+symptom_sets:
+  operator: ANY
+  sets:
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] VM CPU Usage Warning"
+
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] VM CPU Usage Immediate"
+
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] VM CPU Usage Critical"
+
+recommendations:
+  - description: >
+      Check for runaway processes or applications consuming excessive CPU
+      inside the guest OS. Use the VM's performance charts and guest tools
+      to identify the offending process and terminate or throttle it.
+
+  - description: >
+      Consider right-sizing the VM. If CPU demand consistently exceeds safe
+      thresholds, add vCPUs or redistribute workload to another VM to bring
+      utilization within acceptable bounds.
+
+  - description: >
+      Verify that no CPU limit (MHz cap) is configured on the VM. A CPU
+      limit can cause artificial CPU-ready queuing even when the host has
+      spare capacity. Remove or raise the limit if it is constraining
+      performance.
+
+  - description: >
+      Check whether the host is over-committed on CPU. High ready time
+      across multiple VMs on the same host indicates contention at the
+      cluster level. Use vMotion to redistribute VMs across hosts with
+      available CPU headroom.

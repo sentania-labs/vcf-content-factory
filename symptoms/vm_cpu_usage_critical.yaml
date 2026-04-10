@@ -1,0 +1,23 @@
+name: "[VCF Content Factory] VM CPU Usage Critical"
+adapter_kind: VMWARE
+resource_kind: VirtualMachine
+severity: CRITICAL
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: metric_static
+  key: cpu|usage_average
+  operator: GT
+  value: 95
+  instanced: false
+
+description: >
+  Triggers when a virtual machine's average CPU utilization exceeds 95% for
+  3 consecutive collection cycles (approximately 15 minutes at the default
+  5-minute interval). CRITICAL severity indicates near-total CPU saturation;
+  the VM is almost certainly CPU-ready queuing and experiencing severe
+  performance degradation. Intended to feed into a tiered VM CPU utilization
+  alert alongside the WARNING (>50%) and IMMEDIATE (>75%) counterparts.
+  Cancel requires 3 consecutive cycles below threshold to reduce flapping on
+  workloads with brief spikes.

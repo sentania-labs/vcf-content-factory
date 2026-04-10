@@ -1,0 +1,20 @@
+name: vm-performance
+description: >
+  VM Performance package for VCF Operations. Surfaces cluster-level VM
+  performance indicators — average VM CPU usage, worst-case CPU ready,
+  worst-case memory contention, powered-on VM count, and allocated vCPU
+  rollup — plus a snapshot health metric that flags VMs whose snapshots
+  exceed their provisioned disk size. Includes a per-vCenter list view
+  and a performance dashboard for capacity and performance operations.
+supermetrics:
+  - supermetrics/host_powered_on_vm_count.yaml
+  - supermetrics/cluster_avg_vm_cpu.yaml
+  - supermetrics/cluster_max_vm_cpu_ready.yaml
+  - supermetrics/cluster_worst_vm_mem.yaml
+  - supermetrics/allocated_vcpus_rollup.yaml
+  - supermetrics/vm_snapshot_exceeds_provisioned.yaml
+views:
+  - views/vm_perf_list.yaml
+dashboards:
+  - dashboards/vm_perf_by_vcenter.yaml
+customgroups: []

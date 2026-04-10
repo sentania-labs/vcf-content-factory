@@ -1,0 +1,22 @@
+name: "[VCF Content Factory] VM CPU Usage Immediate"
+adapter_kind: VMWARE
+resource_kind: VirtualMachine
+severity: IMMEDIATE
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: metric_static
+  key: cpu|usage_average
+  operator: GT
+  value: 75
+  instanced: false
+
+description: >
+  Triggers when a virtual machine's average CPU utilization exceeds 75% for
+  3 consecutive collection cycles (approximately 15 minutes at the default
+  5-minute interval). IMMEDIATE severity indicates a near-saturation condition
+  that requires prompt action to prevent user-visible performance degradation.
+  Intended to feed into a tiered VM CPU utilization alert alongside the WARNING
+  (>50%) and CRITICAL (>95%) counterparts. Cancel requires 3 consecutive cycles
+  below threshold to reduce flapping on workloads with brief spikes.

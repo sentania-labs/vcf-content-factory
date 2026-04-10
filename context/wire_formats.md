@@ -131,6 +131,39 @@ The widget's `config.resource.resourceId` references these with a
 "Please wait being configured" and throws an internal server error
 on edit.
 
+## Super metric enable endpoint
+
+**Use `PUT /internal/supermetrics/assign/default`, NOT
+`PUT /internal/supermetrics/assign?policyIds=<id>`.**
+
+The spec lists two internal endpoints for enabling super metrics on
+the Default Policy:
+
+- `/internal/supermetrics/assign?policyIds=<id>` — general assign;
+  accepts any policy UUID via query param. In practice the server
+  returns HTTP 200 even when the policy resolution silently fails,
+  so callers that look up the default policy ID and pass it here may
+  see "OK" responses with no actual enablement.
+- `/internal/supermetrics/assign/default` — targets the Default
+  Policy directly, no `policyIds` lookup needed. This is the
+  reliable path.
+
+Both endpoints require `X-Ops-API-use-unsupported: true` header.
+Request body (JSON):
+```json
+{
+  "superMetricId": "<uuid>",
+  "resourceKindKeys": [
+    { "adapterKind": "VMWARE", "resourceKind": "VirtualMachine" }
+  ]
+}
+```
+Note: the body uses `adapterKind` / `resourceKind` (not the
+`adapterKindKey` / `resourceKindKey` keys that the loader's
+`resource_kinds` list stores). Both `vcfops_supermetrics/client.py`
+and `vcfops_packaging/templates/install.py` translate the loader
+keys to the API keys in the dict comprehension that builds the body.
+
 ## Policy export XML
 
 Different zip, same instance. `GET /api/policies/export?id=<uuid>`

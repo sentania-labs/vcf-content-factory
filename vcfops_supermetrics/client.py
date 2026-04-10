@@ -158,15 +158,16 @@ class VCFOpsClient:
         resource_kinds: list,
     ) -> None:
         """Assign a super metric to resource kinds and enable it in the
-        Default Policy via the internal assign endpoint.
+        Default Policy via the internal assign/default endpoint.
 
-        See context/internal_supermetrics_assign.md. This endpoint only
-        accepts the Default Policy id in its policyIds query param —
-        non-default policies return 400 apiErrorCode 1501.
+        Uses PUT /internal/supermetrics/assign/default rather than
+        /internal/supermetrics/assign?policyIds=... to avoid a silent-success
+        failure mode where the policy ID resolves but the assignment is not
+        applied. The /assign/default endpoint requires no policy lookup and
+        always targets the default policy.
         """
         if not resource_kinds:
             raise VCFOpsError("enable requires at least one resource kind")
-        policy_id = self.get_default_policy_id()
         body = {
             "superMetricId": sm_id,
             "resourceKindKeys": [
@@ -179,8 +180,7 @@ class VCFOpsClient:
         }
         r = self._request(
             "PUT",
-            "/internal/supermetrics/assign",
-            params=[("policyIds", policy_id)],
+            "/internal/supermetrics/assign/default",
             json=body,
             headers={"X-Ops-API-use-unsupported": "true"},
         )

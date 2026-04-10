@@ -3,12 +3,34 @@
 A bundle manifest lists the YAML files that make up a distributable
 package. The loader validates all referenced files exist, then loads each
 content object using the existing per-type loaders.
+
+Schema
+------
+name:         str  (required)
+description:  str  (optional)
+sync:         bool (optional, default true)
+              When false, ``sync --all`` skips this bundle.
+supermetrics: list[path]   (optional)
+customgroups: list[path]   (optional)
+views:        list[path]   (optional)
+dashboards:   list[path]   (optional)
+symptoms:     list[path]   (optional) -- requires vcfops_symptoms package
+alerts:       list[path]   (optional) -- requires vcfops_alerts package
+reports:      list[path]   (optional) -- requires vcfops_reports package
+
+All content-type keys are optional.  A bundle may contain only super
+metrics, only dashboards, or any subset of the supported types.
+
+For content types whose tooling package does not yet exist (symptoms,
+alerts, reports), the loader still validates that the referenced files
+exist on disk but does not attempt to parse them.  The sync orchestrator
+will emit a WARN and skip those types if no handler is available.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import yaml
 
@@ -25,11 +47,17 @@ class BundleValidationError(ValueError):
 class Bundle:
     name: str
     description: str
+    sync_enabled: bool                           # False means skip in --all
     supermetrics: List[SuperMetricDef]
     views: List[ViewDef]
     dashboards: List[Dashboard]
     customgroups: List[CustomGroupDef]
-    source_path: Path | None = None
+    # Paths for content types whose packages may not be installed yet.
+    # The orchestrator checks for a handler before attempting to sync these.
+    symptom_paths: List[Path] = field(default_factory=list)
+    alert_paths: List[Path] = field(default_factory=list)
+    report_paths: List[Path] = field(default_factory=list)
+    source_path: Optional[Path] = None
 
 
 def load_bundle(path: str | Path) -> Bundle:
@@ -37,6 +65,10 @@ def load_bundle(path: str | Path) -> Bundle:
 
     Validates that all referenced files exist and loads each using the
     appropriate per-type loader (which also validates the content).
+
+    For content types whose tooling package is not yet installed (symptoms,
+    alerts), the files are verified to exist on disk but are not parsed —
+    parsing is deferred to the handler at sync time.
 
     Args:
         path: Path to a bundles/*.yaml manifest file.
@@ -61,6 +93,14 @@ def load_bundle(path: str | Path) -> Bundle:
         raise BundleValidationError(f"{path}: 'name' is required")
 
     description = str(data.get("description", "") or "").strip()
+
+    # sync: default true; explicit false means skip in --all
+    sync_raw = data.get("sync", True)
+    if not isinstance(sync_raw, bool):
+        raise BundleValidationError(
+            f"{path}: 'sync' must be a boolean (true/false), got {sync_raw!r}"
+        )
+    sync_enabled = bool(sync_raw)
 
     # Resolve all file references relative to the manifest's directory if
     # paths are not absolute. Manifests in bundles/ use repo-relative paths
@@ -88,6 +128,10 @@ def load_bundle(path: str | Path) -> Bundle:
     view_paths = [_resolve(r) for r in (data.get("views") or [])]
     dash_paths = [_resolve(r) for r in (data.get("dashboards") or [])]
     cg_paths = [_resolve(r) for r in (data.get("customgroups") or [])]
+    # symptoms, alerts, and reports: resolve paths (existence check) but defer parsing
+    symptom_paths = [_resolve(r) for r in (data.get("symptoms") or [])]
+    alert_paths = [_resolve(r) for r in (data.get("alerts") or [])]
+    report_paths = [_resolve(r) for r in (data.get("reports") or [])]
 
     # Load and validate each content object
     try:
@@ -123,10 +167,14 @@ def load_bundle(path: str | Path) -> Bundle:
     return Bundle(
         name=name,
         description=description,
+        sync_enabled=sync_enabled,
         supermetrics=supermetrics,
         views=views,
         dashboards=dashboards,
         customgroups=customgroups,
+        symptom_paths=symptom_paths,
+        alert_paths=alert_paths,
+        report_paths=report_paths,
         source_path=path,
     )
 

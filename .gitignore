@@ -23,5 +23,8 @@ venv/
 # PDFs (too large / redundant with extracted markdown under docs/)
 *.pdf
 
+# Build artifacts
+dist/
+
 # Local clones of external reference sources (see context/reference_sources.md)
 references/

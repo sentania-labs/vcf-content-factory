@@ -1,4 +1,5 @@
 name: test-host-vm-summary
+sync: false
 description: >
   Test distribution package for the VCF Content Factory framework.
   Includes host VM count and CPU super metrics, a list view, a self-provider

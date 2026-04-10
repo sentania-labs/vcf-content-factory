@@ -1,0 +1,22 @@
+name: "[VCF Content Factory] VM CPU Usage Warning"
+adapter_kind: VMWARE
+resource_kind: VirtualMachine
+severity: WARNING
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: metric_static
+  key: cpu|usage_average
+  operator: GT
+  value: 50
+  instanced: false
+
+description: >
+  Triggers when a virtual machine's average CPU utilization exceeds 50% for
+  3 consecutive collection cycles (approximately 15 minutes at the default
+  5-minute interval). WARNING severity indicates elevated usage that warrants
+  attention but is not yet business-impacting. Intended to feed into a tiered
+  VM CPU utilization alert alongside the IMMEDIATE (>75%) and CRITICAL (>95%)
+  counterparts. Cancel requires 3 consecutive cycles below threshold to reduce
+  flapping on workloads with brief spikes.

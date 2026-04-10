@@ -41,6 +41,21 @@ def _stamp_template(template_name: str, vars: dict) -> str:
     return text
 
 
+def _build_content_manifest(bundle: Bundle) -> str:
+    """Build the CONTENT_MANIFEST JSON string for uninstall templates.
+
+    The manifest records the display names of every content object in the
+    bundle so the uninstall script can look them up by name at runtime.
+    """
+    manifest = {
+        "dashboards": [d.name for d in bundle.dashboards],
+        "views": [v.name for v in bundle.views],
+        "supermetrics": [sm.name for sm in bundle.supermetrics],
+        "customgroups": [cg.name for cg in bundle.customgroups],
+    }
+    return json.dumps(manifest, indent=2)
+
+
 def _render_supermetrics_dict(bundle: Bundle) -> dict:
     """Render super metrics as a dict keyed by UUID (wire format).
 
@@ -137,6 +152,33 @@ def _generate_readme(bundle: Bundle) -> str:
         "Both scripts support interactive prompts, CLI flags, and environment variables.",
         "Run with `--help` (Python) or `-?` (PowerShell) for usage details.",
         "",
+        "## Uninstallation",
+        "",
+        "To remove all content installed by this package, pass `--uninstall`",
+        "to the same install script:",
+        "",
+        "**Python:**",
+        "```",
+        "python3 install.py --uninstall",
+        "```",
+        "",
+        "**PowerShell:**",
+        "```powershell",
+        ".\\install.ps1 -Uninstall",
+        "```",
+        "",
+        "To skip dependency checks and delete everything unconditionally:",
+        "",
+        "```",
+        "python3 install.py --uninstall --force",
+        "```",
+        "```powershell",
+        ".\\install.ps1 -Uninstall -Force",
+        "```",
+        "",
+        "Deletion order: dashboards → views → super metrics → custom groups.",
+        "Items not present on the target instance are skipped (not an error).",
+        "",
         "## Requirements",
         "",
         "- Python 3.8+ or PowerShell 5.1+",
@@ -170,10 +212,12 @@ def build_bundle(
     out_path = output_dir / f"{bundle.name}.zip"
 
     # Stamp template variables
+    content_manifest_json = _build_content_manifest(bundle)
     template_vars = {
         "PACKAGE_NAME": bundle.name,
         "PACKAGE_DESCRIPTION": bundle.description or bundle.name,
         "DASHBOARD_UUID": bundle.dashboards[0].id if bundle.dashboards else "",
+        "CONTENT_MANIFEST": content_manifest_json,
     }
 
     install_py = _stamp_template("install.py", template_vars)

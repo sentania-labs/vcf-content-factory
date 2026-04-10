@@ -18,7 +18,13 @@ import time
 import uuid
 from xml.sax.saxutils import escape
 
-from .loader import Dashboard, Interaction, ViewDef, Widget
+from .loader import (
+    Dashboard, Interaction, MetricSpec, ViewDef, Widget,
+    MetricChartConfig, ScoreboardConfig, TextDisplayConfig,
+    HealthChartConfig, ParetoAnalysisConfig,
+    AlertListConfig, ProblemAlertsListConfig,
+    HeatmapConfig, HeatmapTab, HeatmapColorThreshold,
+)
 
 
 # Stable per-adapter-kind prefix used in `resourceKindId` fields inside
@@ -41,6 +47,49 @@ _ADAPTER_KIND_PREFIX = {
 
 def _xml_property(name: str, value: str) -> str:
     return f'<Property name="{escape(name)}" value="{escape(value)}"/>'
+
+
+def _xml_buckets_control(view: ViewDef) -> str:
+    """Emit the buckets-control XML element for distribution views."""
+    from .loader import BucketsConfig
+    b = view.buckets or BucketsConfig()
+    if b.is_dynamic:
+        return (
+            '<Control id="buckets-control_id_1" type="buckets-control" visible="false">'
+            '<Property name="isDynamic" value="true"/>'
+            f'<Property name="dynamicCalcFunction" value="{escape(b.calc_function)}"/>'
+            "</Control>"
+        )
+    else:
+        return (
+            '<Control id="buckets-control_id_1" type="buckets-control" visible="false">'
+            '<Property name="isDynamic" value="false"/>'
+            f'<Property name="minValue" value="{b.min_value}"/>'
+            f'<Property name="maxValue" value="{b.max_value}"/>'
+            f'<Property name="bucketCount" value="{b.count}"/>'
+            "</Control>"
+        )
+
+
+def _xml_transformations_block(view: ViewDef) -> str:
+    """Build the <Property name="transformations"> XML block.
+
+    List views use CURRENT. Trend views use NONE + TREND, and optionally
+    FORECAST when forecast_days > 0. Authors may also supply an explicit
+    transformations list via the YAML.
+    """
+    if view.transformations:
+        items = "".join(f'<Item value="{t}"/>' for t in view.transformations)
+        return f'<Property name="transformations"><List>{items}</List></Property>'
+    if view.data_type == "trend":
+        # NONE = raw data points; TREND = trend line; FORECAST = projection
+        transforms = ["NONE", "TREND"]
+        if view.forecast_days and view.forecast_days > 0:
+            transforms.append("FORECAST")
+        items = "".join(f'<Item value="{t}"/>' for t in transforms)
+        return f'<Property name="transformations"><List>{items}</List></Property>'
+    # Default: CURRENT (list and distribution views)
+    return '<Property name="transformations"><List><Item value="CURRENT"/></List></Property>'
 
 
 def _xml_attribute_item(view: ViewDef, col, idx: int) -> str:
@@ -71,12 +120,15 @@ def _xml_attribute_item(view: ViewDef, col, idx: int) -> str:
         _xml_property("resourceKind", view.resource_kind),
         _xml_property("rollUpType", roll_up_type),
         _xml_property("rollUpCount", "1"),
-        '<Property name="transformations"><List><Item value="CURRENT"/></List></Property>',
+        _xml_transformations_block(view),
         _xml_property("isProperty", "false"),
         _xml_property("displayName", col.display_name),
         _xml_property("addTimestampAsColumn", "false"),
         _xml_property("isShowRelativeTimestamp", "false"),
     ]
+    # Trend views additionally carry a forecastDays attribute on each metric
+    if view.data_type == "trend" and view.forecast_days and view.forecast_days > 0:
+        props.append(_xml_property("forecastDays", str(view.forecast_days)))
     return "<Item><Value>" + "".join(props) + "</Value></Item>"
 
 
@@ -99,39 +151,119 @@ def _render_summary_infos(view: ViewDef) -> str:
 
 def _render_view_def_fragment(view: ViewDef) -> str:
     items = "".join(_xml_attribute_item(view, c, i) for i, c in enumerate(view.columns))
-    summary = _render_summary_infos(view)
-    return (
+
+    # Shared header elements
+    header = (
         f'<ViewDef id="{view.id}">'
         f"<Title>{escape(view.name)}</Title>"
         f"<Description>{escape(view.description)}</Description>"
         f'<SubjectType adapterKind="{escape(view.adapter_kind)}" resourceKind="{escape(view.resource_kind)}" type="descendant"/>'
         f'<SubjectType adapterKind="{escape(view.adapter_kind)}" resourceKind="{escape(view.resource_kind)}" type="self"/>'
         "<Usage>dashboard</Usage><Usage>report</Usage><Usage>details</Usage><Usage>content</Usage>"
-        "<Controls>"
+    )
+
+    # Time-interval control appears in all view types
+    time_control = (
         '<Control id="time-interval-selector_id_1" type="time-interval-selector" visible="false">'
         '<Property name="advancedTimeMode" value="false"/>'
         '<Property name="unit" value="HOURS"/>'
         '<Property name="count" value="24"/>'
         "</Control>"
+    )
+
+    # Attributes-selector is common to all view types
+    attr_control = (
         '<Control id="attributes-selector_id_1" type="attributes-selector" visible="false">'
         f'<Property name="attributeInfos"><List>{items}</List></Property>'
-        f'{summary}'
         "</Control>"
-        '<Control id="pagination-control_id_1" type="pagination-control" visible="true">'
-        '<Property name="start" value="0"/>'
-        '<Property name="size" value="500"/>'
-        "</Control>"
-        '<Control id="metadata_id_1" type="metadata" visible="false">'
-        '<Property name="maxPointsCount" value="5000"/>'
-        '<Property name="hideObjectNameColumn" value="false"/>'
-        '<Property name="listTopResultSize" value="-1"/>'
-        '<Property name="includeResourceCreationTime" value="false"/>'
-        "</Control>"
-        "</Controls>"
-        '<DataProviders><DataProvider dataType="list-view" id="list-view_id_1"/></DataProviders>'
-        '<Presentation type="list"/>'
-        "</ViewDef>"
     )
+
+    if view.data_type == "distribution":
+        # Distribution view: buckets-control instead of pagination/summary
+        buckets_ctrl = _xml_buckets_control(view)
+        metadata_ctrl = (
+            '<Control id="metadata_id_1" type="metadata" visible="false">'
+            '<Property name="maxPointsCount" value="5000"/>'
+            '<Property name="hideObjectNameColumn" value="false"/>'
+            '<Property name="listTopResultSize" value="-1"/>'
+            '<Property name="includeResourceCreationTime" value="false"/>'
+            "</Control>"
+        )
+        controls = (
+            "<Controls>"
+            + time_control
+            + attr_control
+            + buckets_ctrl
+            + metadata_ctrl
+            + "</Controls>"
+        )
+        data_provider = '<DataProviders><DataProvider dataType="distribution-view" id="distribution-view_id_1"/></DataProviders>'
+        presentation = f'<Presentation type="{escape(view.presentation)}"/>'
+
+    elif view.data_type == "trend":
+        # Trend view: pagination-control (same as list), no summary
+        pagination_ctrl = (
+            '<Control id="pagination-control_id_1" type="pagination-control" visible="true">'
+            '<Property name="start" value="0"/>'
+            '<Property name="size" value="500"/>'
+            "</Control>"
+        )
+        metadata_ctrl = (
+            '<Control id="metadata_id_1" type="metadata" visible="false">'
+            '<Property name="maxPointsCount" value="5000"/>'
+            '<Property name="hideObjectNameColumn" value="false"/>'
+            '<Property name="listTopResultSize" value="-1"/>'
+            '<Property name="includeResourceCreationTime" value="false"/>'
+            "</Control>"
+        )
+        controls = (
+            "<Controls>"
+            + time_control
+            + attr_control
+            + pagination_ctrl
+            + metadata_ctrl
+            + "</Controls>"
+        )
+        data_provider = '<DataProviders><DataProvider dataType="trend-view" id="trend-view_id_1"/></DataProviders>'
+        presentation = f'<Presentation type="{escape(view.presentation)}"/>'
+
+    else:
+        # List view (default): pagination-control + optional summary row
+        summary = _render_summary_infos(view)
+        # Re-render attr_control with summary inline (summary belongs inside
+        # attributes-selector for list views per the wire format)
+        attr_control = (
+            '<Control id="attributes-selector_id_1" type="attributes-selector" visible="false">'
+            f'<Property name="attributeInfos"><List>{items}</List></Property>'
+            f'{summary}'
+            "</Control>"
+        )
+        pagination_ctrl = (
+            '<Control id="pagination-control_id_1" type="pagination-control" visible="true">'
+            '<Property name="start" value="0"/>'
+            '<Property name="size" value="500"/>'
+            "</Control>"
+        )
+        metadata_ctrl = (
+            '<Control id="metadata_id_1" type="metadata" visible="false">'
+            '<Property name="maxPointsCount" value="5000"/>'
+            '<Property name="hideObjectNameColumn" value="false"/>'
+            '<Property name="listTopResultSize" value="-1"/>'
+            '<Property name="includeResourceCreationTime" value="false"/>'
+            "</Control>"
+        )
+        controls = (
+            "<Controls>"
+            + time_control
+            + attr_control
+            + pagination_ctrl
+            + metadata_ctrl
+            + "</Controls>"
+        )
+        data_provider = '<DataProviders><DataProvider dataType="list-view" id="list-view_id_1"/></DataProviders>'
+        presentation = f'<Presentation type="{escape(view.presentation)}"/>'
+
+    return header + controls + data_provider + presentation + "</ViewDef>"
 
 
 def render_views_xml(views: list[ViewDef]) -> str:
@@ -249,6 +381,553 @@ def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int
     }
 
 
+def _render_metric_spec(
+    specs: list[MetricSpec],
+    kind_index: dict[tuple[str, str], int],
+    widget_id: str,
+) -> dict:
+    """Build the ``metric`` object shared by Scoreboard and MetricChart widgets.
+
+    Each MetricSpec entry is mapped to one ``resourceKindMetrics[]`` entry.
+    The ``resourceKindId`` references the kind_index table that is stored in
+    ``entries.resourceKind[]`` in the dashboard bundle JSON.
+
+    The ``id`` field within each entry must be unique per widget; we use
+    ``extModel<hash>-<seq>`` where <hash> is a short numeric hash of the
+    widget_id so that IDs remain stable across renders for the same content.
+    """
+    rk_metrics = []
+    for seq, spec in enumerate(specs, start=1):
+        key = (spec.adapter_kind, spec.resource_kind)
+        rk_id = f"resourceKind:id:{kind_index[key]}_::_"
+        entry: dict = {
+            "metricKey": spec.metric_key,
+            "metricName": spec.metric_name,
+            "isStringMetric": False,
+            "resourceKindId": rk_id,
+            "resourceKindName": spec.resource_kind,
+            "colorMethod": spec.color_method,
+            "handleOldColoring": False,
+            # Stable per-widget, per-sequence ID.
+            "id": f"extModel{abs(hash(widget_id)) % 100000}-{seq}",
+            "label": spec.label,
+            "link": "",
+            "maxValue": "",
+        }
+        if spec.unit_id:
+            entry["metricUnitId"] = spec.unit_id
+        else:
+            entry["metricUnitId"] = None
+        if spec.unit:
+            entry["unit"] = spec.unit
+        else:
+            entry["unit"] = None
+        if spec.color_method == 0:
+            entry["yellowBound"] = spec.yellow_bound
+            entry["orangeBound"] = spec.orange_bound
+            entry["redBound"] = spec.red_bound
+        else:
+            entry["yellowBound"] = None
+            entry["orangeBound"] = None
+            entry["redBound"] = None
+        rk_metrics.append(entry)
+    return {
+        "mode": "resourceKind",
+        "resourceMetrics": [],
+        "resourceKindMetrics": rk_metrics,
+        "subMode": "resourceKindAll",
+    }
+
+
+def _text_display_widget(w: Widget) -> dict:
+    """Render a TextDisplay (static HTML) widget."""
+    cfg = w.text_display_config
+    assert cfg is not None
+    return {
+        "collapsed": False,
+        "id": w.widget_id,
+        "gridsterCoords": {
+            "x": w.coords["x"], "y": w.coords["y"],
+            "w": w.coords["w"], "h": w.coords["h"],
+        },
+        "type": "TextDisplay",
+        "title": w.title,
+        "config": {
+            "editorData": cfg.html,
+            "locationFile": "",
+            "locationUrl": "",
+            "refreshInterval": 300,
+            "refreshContent": {"refreshContent": False},
+            "title": w.title,
+            "viewModeHTML": True,
+        },
+        "height": 600,
+    }
+
+
+def _scoreboard_widget(
+    w: Widget,
+    kind_index: dict[tuple[str, str], int],
+) -> dict:
+    """Render a Scoreboard (KPI tiles) widget."""
+    cfg = w.scoreboard_config
+    assert cfg is not None
+    metric_obj = _render_metric_spec(cfg.metrics, kind_index, w.widget_id)
+    self_provider_flag = w.self_provider
+    return {
+        "collapsed": False,
+        "id": w.widget_id,
+        "gridsterCoords": {
+            "x": w.coords["x"], "y": w.coords["y"],
+            "w": w.coords["w"], "h": w.coords["h"],
+        },
+        "type": "Scoreboard",
+        "title": w.title,
+        "config": {
+            "refreshInterval": 300,
+            "metric": metric_obj,
+            "resource": [],
+            "refreshContent": {"refreshContent": True},
+            "relationshipMode": {"relationshipMode": 0},
+            "customFilter": {
+                "filter": [], "excludedResources": None, "includedResources": None,
+            },
+            "selfProvider": {"selfProvider": self_provider_flag},
+            "title": w.title,
+            "depth": 1,
+            "resInteractionMode": None,
+            "visualTheme": cfg.visual_theme,
+            "mode": {"layoutMode": "fixedView"},
+            "showResourceName": {"showResourceName": cfg.show_resource_name},
+            "showMetricName": {"showMetricName": cfg.show_metric_name},
+            "showMetricUnit": {"showMetricUnit": cfg.show_metric_unit},
+            "showDT": {"showDT": False},
+            "showSparkline": {"showSparkline": cfg.show_sparkline},
+            "periodLength": cfg.period_length,
+            "maxCellCount": cfg.max_cell_count,
+            "oldMetricValues": True,
+            "roundDecimals": cfg.round_decimals,
+            "valueSize": cfg.value_size,
+            "labelSize": cfg.label_size,
+            "boxHeight": cfg.box_height,
+            "boxColumns": cfg.box_columns,
+        },
+        "height": 600,
+    }
+
+
+def _metric_chart_widget(
+    w: Widget,
+    kind_index: dict[tuple[str, str], int],
+) -> dict:
+    """Render a MetricChart (time-series line chart) widget."""
+    cfg = w.metric_chart_config
+    assert cfg is not None
+    metric_obj = _render_metric_spec(cfg.metrics, kind_index, w.widget_id)
+    self_provider_flag = w.self_provider
+    return {
+        "collapsed": False,
+        "id": w.widget_id,
+        "gridsterCoords": {
+            "x": w.coords["x"], "y": w.coords["y"],
+            "w": w.coords["w"], "h": w.coords["h"],
+        },
+        "type": "MetricChart",
+        "title": w.title,
+        "config": {
+            "refreshInterval": 300,
+            "metric": metric_obj,
+            "resource": [],
+            "refreshContent": {"refreshContent": True},
+            "relationshipMode": {"relationshipMode": 0},
+            "customFilter": {
+                "filter": [], "excludedResources": None, "includedResources": None,
+            },
+            "selfProvider": {"selfProvider": self_provider_flag},
+            "title": w.title,
+            "depth": 1,
+            "resInteractionMode": None,
+        },
+        "height": 600,
+    }
+
+
+def _health_chart_widget(
+    w: Widget,
+    kind_index: dict[tuple[str, str], int],
+) -> dict:
+    """Render a HealthChart (ranked health-bar) widget.
+
+    Uses a FLAT metric spec — metricKey and resourceKindId are top-level
+    config fields, NOT inside a metric.resourceKindMetrics[] array. This
+    is the key structural difference from Scoreboard and MetricChart.
+
+    Wire format reference: context/chart_widget_formats.md §HealthChart.
+    """
+    cfg = w.health_chart_config
+    assert cfg is not None
+    key = (cfg.adapter_kind, cfg.resource_kind)
+    rk_id = f"resourceKind:id:{kind_index[key]}_::_"
+    return {
+        "collapsed": False,
+        "id": w.widget_id,
+        "gridsterCoords": {
+            "x": w.coords["x"], "y": w.coords["y"],
+            "w": w.coords["w"], "h": w.coords["h"],
+        },
+        "type": "HealthChart",
+        "title": w.title,
+        "config": {
+            "refreshInterval": 300,
+            "resource": [],
+            "refreshContent": {"refreshContent": False},
+            "relationshipMode": {"relationshipMode": 0},
+            "selfProvider": {"selfProvider": w.self_provider},
+            "title": w.title,
+            "mode": cfg.mode,
+            "filterMode": "tagPicker",
+            "tagFilter": None,
+            "depth": cfg.depth,
+            "customFilter": {
+                "filter": [], "excludedResources": None, "includedResources": None,
+            },
+            # Flat metric spec — these are direct config fields, not nested
+            "metricKey": cfg.metric_key,
+            "metricName": cfg.metric_name,
+            "metricFullName": cfg.metric_full_name or cfg.metric_name,
+            "resourceKindId": rk_id,
+            "metricUnit": {"metricUnitId": -1, "metricUnitName": "Default Unit"},
+            "metricType": {"metricType": "custom"},
+            "chartHeight": cfg.chart_height,
+            "yellowBound": cfg.yellow_bound,
+            "orangeBound": cfg.orange_bound,
+            "redBound": cfg.red_bound,
+            "sortBy": "metricValue",
+            "sortByDir": {"orderByDir": cfg.sort_by_dir},
+            "paginationNumber": cfg.pagination_number,
+            "showResourceName": {"showResourceName": cfg.show_resource_name},
+            "showMetricLabel": {"showMetricLabel": False},
+            "metricLabel": "",
+            "selectFirstRow": {"selectFirstRow": False},
+        },
+        "height": 600,
+    }
+
+
+def _pareto_analysis_widget(
+    w: Widget,
+    kind_index: dict[tuple[str, str], int],
+) -> dict:
+    """Render a ParetoAnalysis (Top-N bar chart) widget — Shape 1 only.
+
+    Shape 1 covers mode=all and mode=resource. It uses a flat
+    ``metric: {metricKey, name}`` field and a ``resourceKind: [{id}]``
+    array referencing entries.resourceKind[]. This is structurally
+    different from MetricChart's metric.resourceKindMetrics[] pattern.
+
+    Shape 2 (mode=metric, metricOption/tagOption) requires live-instance
+    metric-picker interaction and is not supported for static authoring.
+
+    Wire format reference: context/chart_widget_formats.md §ParetoAnalysis.
+    """
+    cfg = w.pareto_analysis_config
+    assert cfg is not None
+    key = (cfg.adapter_kind, cfg.resource_kind)
+    rk_id = f"resourceKind:id:{kind_index[key]}_::_"
+    bars_count = cfg.bottom_n if cfg.bottom_n > 0 else cfg.top_n
+    return {
+        "collapsed": False,
+        "id": w.widget_id,
+        "gridsterCoords": {
+            "x": w.coords["x"], "y": w.coords["y"],
+            "w": w.coords["w"], "h": w.coords["h"],
+        },
+        "type": "ParetoAnalysis",
+        "title": w.title,
+        "config": {
+            "refreshInterval": 300,
+            "resource": [],
+            "refreshContent": {"refreshContent": True},
+            "relationshipMode": {"relationshipMode": [-1, 0]},
+            "selfProvider": {"selfProvider": w.self_provider},
+            "title": w.title,
+            "mode": cfg.mode,
+            "filterMode": "tagPicker",
+            "tagFilter": None,
+            "depth": cfg.depth,
+            "customFilter": {
+                "filter": [], "excludedResources": None, "includedResources": None,
+            },
+            "filterOldMetrics": {"filterOldMetrics": False},
+            "topOption": cfg.top_option,
+            "barsCount": bars_count,
+            "roundDecimals": cfg.round_decimals,
+            "regenerationTime": cfg.regeneration_time,
+            "percentileValue": None,
+            "metricName": cfg.metric_name,
+            "metricUnit": {"metricUnitId": -1, "metricUnitName": "Auto"},
+            "additionalColumns": [],
+            # Flat metric spec — {metricKey, name} NOT the array pattern
+            "metric": {
+                "metricKey": cfg.metric_key,
+                "name": cfg.metric_name,
+            },
+            "resourceKind": [{"id": rk_id}],
+        },
+        "height": 600,
+    }
+
+
+def _alert_list_widget(w: Widget) -> dict:
+    """Render an AlertList (alert grid) widget.
+
+    Typically interaction-driven — receives a resource selection from another
+    widget (e.g. ResourceList or View) and shows that resource's alerts.
+    Can also be self-provider when self_provider=True is set on the widget.
+
+    The ``type`` field in the config is the alert type codes array and is
+    distinct from the top-level widget type field. To avoid naming collision
+    the loader stores it as ``alert_types``.
+
+    Wire format reference: context/chart_widget_formats.md §AlertList.
+    """
+    cfg = w.alert_list_config
+    assert cfg is not None
+    return {
+        "collapsed": False,
+        "id": w.widget_id,
+        "gridsterCoords": {
+            "x": w.coords["x"], "y": w.coords["y"],
+            "w": w.coords["w"], "h": w.coords["h"],
+        },
+        "type": "AlertList",
+        "title": w.title,
+        "config": {
+            "refreshInterval": 300,
+            "resource": [],
+            "refreshContent": {"refreshContent": False},
+            "relationshipMode": {"relationshipMode": [-1, 0]},
+            "selfProvider": {"selfProvider": w.self_provider},
+            "title": w.title,
+            "mode": cfg.mode,
+            "filterMode": "tagPicker",
+            "tagFilter": None,
+            "depth": cfg.depth,
+            "customFilter": {
+                "filter": [], "excludedResources": None, "includedResources": None,
+            },
+            "criticalityLevel": cfg.criticality,
+            "type": cfg.alert_types,
+            "status": cfg.status,
+            "state": cfg.state,
+            "alertImpact": cfg.alert_impact,
+            "alertAction": cfg.alert_action,
+        },
+        "height": 600,
+    }
+
+
+def _problem_alerts_list_widget(
+    w: Widget,
+    resource_index: dict[tuple[str, str], int],
+) -> dict:
+    """Render a ProblemAlertsList (top problem alerts badge summary) widget.
+
+    Usually self-provider, pinned to a container resource (e.g. vSphere World)
+    whose descendants Ops evaluates for badge impact. Non-self-provider mode
+    is interaction-driven: resource=null and selfProvider=false.
+
+    Wire format reference: context/chart_widget_formats.md §ProblemAlertsList.
+    """
+    cfg = w.problems_alerts_list_config
+    assert cfg is not None
+
+    if w.self_provider and w.pin:
+        pin_key = (w.pin.adapter_kind, w.pin.resource_kind)
+        prefix = _ADAPTER_KIND_PREFIX.get(w.pin.adapter_kind)
+        if prefix is None:
+            raise ValueError(
+                f"no known resourceKindId prefix for adapter kind "
+                f"{w.pin.adapter_kind!r} — extend _ADAPTER_KIND_PREFIX "
+                f"after harvesting from an exported reference dashboard"
+            )
+        res_idx = resource_index[pin_key]
+        resource_obj = {
+            "resourceId": f"resource:id:{res_idx}_::_",
+            "resourceName": w.pin.resource_kind,
+        }
+        self_provider_flag = True
+        refresh_content = True
+    else:
+        resource_obj = None
+        self_provider_flag = False
+        refresh_content = True
+
+    config: dict = {
+        "refreshInterval": 300,
+        "resource": resource_obj,
+        "refreshContent": {"refreshContent": refresh_content},
+        "selfProvider": {"selfProvider": self_provider_flag},
+        "title": w.title,
+        "impactedBadge": cfg.impacted_badge,
+        "triggeredObject": {"triggeredObject": cfg.triggered_object},
+    }
+    if cfg.top_issues_limit > 0:
+        config["topIssuesDisplayLimit"] = cfg.top_issues_limit
+
+    return {
+        "collapsed": False,
+        "id": w.widget_id,
+        "gridsterCoords": {
+            "x": w.coords["x"], "y": w.coords["y"],
+            "w": w.coords["w"], "h": w.coords["h"],
+        },
+        "type": "ProblemAlertsList",
+        "title": w.title,
+        "config": config,
+        "height": 600,
+    }
+
+
+def _heatmap_widget(
+    w: Widget,
+    kind_index: dict[tuple[str, str], int],
+) -> dict:
+    """Render a Heatmap (treemap) widget.
+
+    Structural notes from wire format analysis (context/chart_widget_formats.md):
+
+    1. ``configs[]`` holds one entry per tab. Each tab defines a subject
+       resource kind (``resourceKind``), a colorBy metric, an optional sizeBy
+       metric (null key = uniform sizing), and a groupBy parent resource kind.
+
+    2. ``configs[].resourceKind`` uses ``resourceKind:id:N_::_`` referencing
+       the shared ``entries.resourceKind[]`` table (same kind_index as other
+       widgets). The subject kind and the groupBy kind each get their own slot.
+
+    3. ``groupBy.id`` format is ``004null<6-digit-prefix><adapterKind><resourceKind>``.
+       The ``004null`` prefix is fixed. The 6-digit numeric prefix is the same
+       per-adapter-kind constant used in other widget types (see
+       ``_ADAPTER_KIND_PREFIX``). Example: ``004null002006VMWAREClusterComputeResource``.
+
+    4. ``groupBy.typeId`` uses ``resourceKind:id:N_::_`` and MUST appear in
+       ``entries.resourceKind[]`` — the kind_index pass adds it automatically.
+
+    5. When ``group_by_kind`` is empty, ``groupBy`` is emitted as an empty
+       object ``{}`` (Ops ignores it — no grouping applied).
+
+    6. ``value`` (selected tab index) is always 0; authors control default
+       tab by ordering configs[].
+
+    7. ``relationshipMode`` uses the array form ``[1, -1, 0]`` (observed in
+       65/70 live Heatmap instances; consistent with AlertList and ParetoAnalysis).
+
+    Wire format reference: context/chart_widget_formats.md §Heatmap.
+    """
+    cfg = w.heatmap_config
+    assert cfg is not None
+
+    configs_json = []
+    for tab in cfg.tabs:
+        subj_key = (tab.adapter_kind, tab.resource_kind)
+        subj_rk_id = f"resourceKind:id:{kind_index[subj_key]}_::_"
+
+        # colorBy — always present
+        color_by: dict = {
+            "metricKey": tab.color_by_key,
+            "value": tab.color_by_label or tab.color_by_key,
+        }
+
+        # sizeBy — None key means uniform cell sizing (no size metric)
+        size_by: dict = {
+            "metricKey": tab.size_by_key,
+            "value": tab.size_by_label if tab.size_by_key is not None else "",
+        }
+
+        # groupBy — empty object when no grouping kind is specified
+        if tab.group_by_kind:
+            gb_adapter = tab.group_by_adapter or tab.adapter_kind
+            gb_prefix = _ADAPTER_KIND_PREFIX.get(gb_adapter)
+            if gb_prefix is None:
+                raise ValueError(
+                    f"Heatmap groupBy: no known resourceKindId prefix for adapter kind "
+                    f"{gb_adapter!r} — extend _ADAPTER_KIND_PREFIX after harvesting "
+                    f"from an exported reference dashboard"
+                )
+            gb_key = (gb_adapter, tab.group_by_kind)
+            gb_rk_id = f"resourceKind:id:{kind_index[gb_key]}_::_"
+            # groupBy.id format: 004null + 6-digit adapter prefix + adapterKind + resourceKind
+            # This is a stable Ops-internal composite ID; the format is documented in
+            # context/chart_widget_formats.md §Heatmap / §Gotchas #7.
+            gb_id = f"004null{gb_prefix}{gb_adapter}{tab.group_by_kind}"
+            group_by: dict = {
+                "resourceKind": tab.group_by_kind,
+                "adapterKind": gb_adapter,
+                "typeId": gb_rk_id,
+                "type": "resourceKind",
+                "text": tab.group_by_text or tab.group_by_kind,
+                "originalText": tab.group_by_text or tab.group_by_kind,
+                "id": gb_id,
+                "parentText": gb_adapter,
+                "parentId": gb_adapter,
+            }
+        else:
+            group_by = {}
+
+        color_obj = {
+            "minValue": tab.color.min_value,
+            "maxValue": tab.color.max_value,
+            "thresholds": {
+                "values": tab.color.values,
+                "colors": tab.color.colors,
+            },
+        }
+
+        configs_json.append({
+            "name": tab.name,
+            "resourceKind": subj_rk_id,
+            "colorBy": color_by,
+            "sizeBy": size_by,
+            "groupBy": group_by,
+            "thenBy": None,
+            "color": color_obj,
+            "focusOnGroups": tab.focus_on_groups,
+            "relationalGrouping": False,
+            "solidColoring": tab.solid_coloring,
+            "mode": {"mode": False},
+            "attributeKind": {"value": ""},
+            "filterMode": "tagPicker",
+            "tagFilter": None,
+            "customFilter": {
+                "filter": [], "excludedResources": None, "includedResources": None,
+            },
+        })
+
+    return {
+        "collapsed": False,
+        "id": w.widget_id,
+        "gridsterCoords": {
+            "x": w.coords["x"], "y": w.coords["y"],
+            "w": w.coords["w"], "h": w.coords["h"],
+        },
+        "type": "Heatmap",
+        "title": w.title,
+        "config": {
+            "mode": cfg.mode,
+            "depth": cfg.depth,
+            "selfProvider": {"selfProvider": w.self_provider},
+            "refreshInterval": 300,
+            "refreshContent": {"refreshContent": False},
+            "resource": [],
+            "relationshipMode": {"relationshipMode": [1, -1, 0]},
+            "title": w.title,
+            "configs": configs_json,
+            "value": 0,
+        },
+        "height": 600,
+    }
+
+
 def _build_dashboard_obj(
     dashboard: Dashboard,
     views_by_name: dict[str, ViewDef],
@@ -262,6 +941,22 @@ def _build_dashboard_obj(
             widgets_json.append(_resource_list_widget(w, kind_index))
         elif w.type == "View":
             widgets_json.append(_view_widget(w, views_by_name[w.view_name], kind_index, resource_index))
+        elif w.type == "TextDisplay":
+            widgets_json.append(_text_display_widget(w))
+        elif w.type == "Scoreboard":
+            widgets_json.append(_scoreboard_widget(w, kind_index))
+        elif w.type == "MetricChart":
+            widgets_json.append(_metric_chart_widget(w, kind_index))
+        elif w.type == "HealthChart":
+            widgets_json.append(_health_chart_widget(w, kind_index))
+        elif w.type == "ParetoAnalysis":
+            widgets_json.append(_pareto_analysis_widget(w, kind_index))
+        elif w.type == "AlertList":
+            widgets_json.append(_alert_list_widget(w))
+        elif w.type == "ProblemAlertsList":
+            widgets_json.append(_problem_alerts_list_widget(w, resource_index))
+        elif w.type == "Heatmap":
+            widgets_json.append(_heatmap_widget(w, kind_index))
 
     widget_id_by_local = {w.local_id: w.widget_id for w in dashboard.widgets}
     interactions_json = [
@@ -328,10 +1023,45 @@ def render_dashboards_bundle_json(
     kind_index: dict[tuple[str, str], int] = {}
     for d in dashboards:
         for w in d.widgets:
+            # ResourceList widgets contribute their explicit resource_kinds
             for rk in w.resource_kinds:
                 key = (rk.adapter_kind, rk.resource_kind)
                 if key not in kind_index:
                     kind_index[key] = len(kind_index)
+            # Scoreboard and MetricChart widgets contribute kinds via metric specs
+            if w.type == "Scoreboard" and w.scoreboard_config:
+                for spec in w.scoreboard_config.metrics:
+                    key = (spec.adapter_kind, spec.resource_kind)
+                    if key not in kind_index:
+                        kind_index[key] = len(kind_index)
+            elif w.type == "MetricChart" and w.metric_chart_config:
+                for spec in w.metric_chart_config.metrics:
+                    key = (spec.adapter_kind, spec.resource_kind)
+                    if key not in kind_index:
+                        kind_index[key] = len(kind_index)
+            # HealthChart and ParetoAnalysis use a flat single metric spec —
+            # one (adapter_kind, resource_kind) pair per widget
+            elif w.type == "HealthChart" and w.health_chart_config:
+                key = (w.health_chart_config.adapter_kind, w.health_chart_config.resource_kind)
+                if key not in kind_index:
+                    kind_index[key] = len(kind_index)
+            elif w.type == "ParetoAnalysis" and w.pareto_analysis_config:
+                key = (w.pareto_analysis_config.adapter_kind, w.pareto_analysis_config.resource_kind)
+                if key not in kind_index:
+                    kind_index[key] = len(kind_index)
+            elif w.type == "Heatmap" and w.heatmap_config:
+                # Each tab contributes two kinds: the subject resource kind and
+                # the groupBy resource kind. Both must appear in entries.resourceKind[]
+                # so configs[].resourceKind and groupBy.typeId resolve correctly.
+                for tab in w.heatmap_config.tabs:
+                    subj_key = (tab.adapter_kind, tab.resource_kind)
+                    if subj_key not in kind_index:
+                        kind_index[subj_key] = len(kind_index)
+                    if tab.group_by_kind:
+                        gb_adapter = tab.group_by_adapter or tab.adapter_kind
+                        gb_key = (gb_adapter, tab.group_by_kind)
+                        if gb_key not in kind_index:
+                            kind_index[gb_key] = len(kind_index)
     # Build resource index for self-provider pinned widgets. Each
     # unique (adapter_kind, resource_kind) pin gets a 0-based slot
     # in entries.resource[]. Widget configs reference these with
