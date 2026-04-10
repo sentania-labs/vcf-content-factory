@@ -369,7 +369,10 @@ function Import-ContentZip {
     $success = $false
     for ($attempt = 1; $attempt -le $Retries; $attempt++) {
         $handler = New-Object System.Net.Http.HttpClientHandler
-        if ($SkipSslVerify) {
+        if ($SkipSslVerify -and $PSVersionTable.PSVersion.Major -ge 6) {
+            # PS 7+ / .NET Core: set the callback directly on the handler.
+            # PS 5.1 / .NET Framework: ServicePointManager (set at script startup)
+            # covers HttpClient too, so no per-handler callback is needed.
             $handler.ServerCertificateCustomValidationCallback = { $true }
         }
         $httpClient = New-Object System.Net.Http.HttpClient($handler)
@@ -384,6 +387,9 @@ function Import-ContentZip {
 
         try {
             $response = $httpClient.PostAsync($importUri, $content).Result
+            # $response.StatusCode is System.Net.HttpStatusCode (enum); cast to int.
+            # Guard against null in case the task returned without a response.
+            if ($null -eq $response) { Write-Fail "Import POST for $Label returned null response" }
             $statusCode = [int]$response.StatusCode
             if ($statusCode -eq 403) {
                 $wait = [Math]::Pow(2, $attempt)
@@ -489,7 +495,21 @@ function Upsert-CustomGroup {
     if ($existingId) {
         $r = Invoke-Api -Method PUT -Path "/api/resources/groups/$existingId" -Body $Payload
         $sc = Get-StatusCode $r
-        if ($sc -ne 200 -and $sc -ne 201 -and $sc -ne 204) { Write-Fail "Custom group PUT failed ($sc)" }
+        if ($sc -eq 500) {
+            # The custom group PUT endpoint sometimes returns 500 even when the
+            # update was applied (server-side race condition). Verify via GET
+            # before treating as fatal.
+            $chk = Invoke-Api -Method GET -Path "/api/resources/groups" -Query @{ name = $name; pageSize = "100" }
+            $stillExists = $false
+            foreach ($g in $chk.groups) { if ($g.resourceKey.name -eq $name) { $stillExists = $true; break } }
+            if ($stillExists) {
+                Write-Warn "Custom group PUT returned 500 but group exists -- treating as success: $name"
+            } else {
+                Write-Fail "Custom group PUT failed ($sc)"
+            }
+        } elseif ($sc -ne 200 -and $sc -ne 201 -and $sc -ne 204) {
+            Write-Fail "Custom group PUT failed ($sc)"
+        }
     } else {
         $r = Invoke-Api -Method POST -Path "/api/resources/groups" -Body $Payload
         $sc = Get-StatusCode $r

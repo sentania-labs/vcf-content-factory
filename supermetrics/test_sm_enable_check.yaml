@@ -1,0 +1,15 @@
+id: 627cda62-e3bb-4106-8e33-980bc9dfe1d1
+name: "[VCF Content Factory] Test - Cluster Avg VM Memory Usage (%)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Throwaway test super metric for verifying SM enable/policy-assignment works end-to-end.
+  Computes the average memory usage (%) across all powered-on VMs in the cluster.
+  Assigned to ClusterComputeResource; depth=2 traverses Cluster -> Host -> VM.
+  Uses sys|poweredOn (numeric, 1=on) to filter powered-on VMs only.
+  Safe to delete once enable verification is complete.
+formula: |
+  avg(${adaptertype=VMWARE, objecttype=VirtualMachine,
+       metric=mem|usage_average, depth=2,
+       where=(${metric=sys|poweredOn}==1)})

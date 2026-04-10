@@ -348,7 +348,21 @@ class Client:
                 break
         if existing_id:
             r = self._req("PUT", f"/api/resources/groups/{existing_id}", json=payload)
-            if r.status_code not in (200, 201, 204):
+            if r.status_code == 500:
+                # The custom group PUT endpoint sometimes returns 500 even when
+                # the update was applied. Verify by fetching the group before
+                # treating it as fatal.
+                chk = self._req("GET", "/api/resources/groups",
+                                params={"name": name, "pageSize": 100})
+                found = any(
+                    (g.get("resourceKey") or {}).get("name") == name
+                    for g in (chk.json().get("groups") or [])
+                ) if chk.status_code == 200 else False
+                if found:
+                    _warn(f"Custom group PUT returned 500 but group exists — treating as success: {name}")
+                else:
+                    _die(f"Custom group PUT failed ({r.status_code}): {r.text}")
+            elif r.status_code not in (200, 201, 204):
                 _die(f"Custom group PUT failed ({r.status_code}): {r.text}")
         else:
             r = self._req("POST", "/api/resources/groups", json=payload)
@@ -537,7 +551,10 @@ class UIClient:
             _die(f"View list failed: {result[0].get('message')}")
         grouped = result[0].get("result") or []
         views: List[Dict[str, Any]] = []
-        for group in grouped:
+        # The API returns either a dict keyed by view type (IMAGE, LIST, etc.)
+        # or a list of group objects. Handle both forms.
+        group_items = grouped.values() if isinstance(grouped, dict) else grouped
+        for group in group_items:
             views.extend(group.get("views") or [])
         return views
 
