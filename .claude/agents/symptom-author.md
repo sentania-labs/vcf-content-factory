@@ -187,21 +187,20 @@ description: >
 
 ## If the toolset is inadequate
 
-The `vcfops_symptoms` package may not exist yet. This is expected
-for the first invocations. Return a TOOLSET GAP report:
+If the `vcfops_symptoms` loader rejects valid YAML, lacks a field
+you need, or can't express the user's requested condition type,
+return a TOOLSET GAP report:
 
 ```
 TOOLSET GAP
-- what: vcfops_symptoms package does not exist — no loader or CLI
-- minimum repro: n/a (package missing entirely)
-- needed to satisfy: symptom validation and sync
-- suggested fix: create vcfops_symptoms/ with loader.py (YAML
-  schema → API JSON), cli.py (validate/list/sync/delete), and
-  client.py (REST client for /api/symptomdefinitions)
+- what: <missing loader feature / schema field / condition type>
+- minimum repro: <smallest YAML that exposes the gap>
+- loader error: <exact error message>
+- needed to satisfy: <the user's original request>
+- suggested fix: <loader change that would unblock this>
 ```
 
-The YAML is still valid and useful — it defines the intent. The
-orchestrator will spawn `tooling` to build the package.
+The orchestrator will spawn `tooling` to fix the gap.
 
 ## What a good output looks like
 

@@ -17,7 +17,8 @@ instance via the Suite API / content-import zip.
    references under `docs/vcf9/`, the OpenAPI specs at
    `docs/operations-api.json` and `docs/internal-api.json`, the
    whitepapers under `docs/`, and existing YAML under `supermetrics/`,
-   `views/`, `dashboards/`. Anything under `docs/` is fair game.
+   `views/`, `dashboards/`, `customgroups/`, `symptoms/`, `alerts/`,
+   `reports/`. Anything under `docs/` is fair game.
    Do **not** invent functions, operators, metric keys, or API
    endpoints. When unsure, re-read the relevant `docs/vcf9/*.md`
    section. See `context/reference_docs.md`.
@@ -37,7 +38,7 @@ instance via the Suite API / content-import zip.
 
 5. **Naming convention — `[VCF Content Factory]` prefix on every
    authored content object.** Every super metric, view, dashboard,
-   custom group, symptom, and alert this repo creates has its
+   custom group, symptom, alert, and report this repo creates has its
    display name prefixed with `[VCF Content Factory]` (literal,
    brackets included). This
    is how operators distinguish repo-owned content from built-in
@@ -51,7 +52,7 @@ instance via the Suite API / content-import zip.
    is the whole point of the framework.
 
 6. **UUIDs are part of the contract** — for super metrics, views,
-   and dashboards. Every such content object this repo creates owns
+   dashboards, and reports. Every such content object this repo creates owns
    a stable UUID stored in its YAML `id` field. Dashboards → views
    → super metrics reference each other by UUID (as literal
    `sm_<uuid>` / `viewDefinitionId`), so cross-instance portability
@@ -77,9 +78,12 @@ docs/                        OpenAPI specs + extracted VCF 9 markdown; PDFs giti
 vcfops_supermetrics/         Python package: client, loader, CLI (validate/list/sync/delete)
 vcfops_dashboards/           Python package: views + dashboards loader/packager/client
 vcfops_customgroups/         Python package: dynamic custom groups + group types loader/client/CLI
+vcfops_symptoms/             Python package: symptom definitions loader/client/CLI
+vcfops_alerts/               Python package: alert definitions loader/client/CLI
+vcfops_reports/              Python package: report definitions loader/packager/client/CLI
 vcfops_packaging/            Python package: bundle manifest loader, builder, install script templates
 supermetrics/  views/  dashboards/  customgroups/   YAML source of truth
-symptoms/  alerts/           YAML source of truth (tooling packages bootstrapped on demand)
+symptoms/  alerts/  reports/                        YAML source of truth
 context/                     Topical background — read these before touching code paths
 scripts/                     Utility scripts (bootstrap_references.sh, etc.)
 ```
@@ -90,10 +94,17 @@ scripts/                     Utility scripts (bootstrap_references.sh, etc.)
 |---|---|
 | Authoring a super metric, DSL rules, style | `context/supermetric_authoring.md` |
 | Authoring a dynamic custom group + group types | `context/customgroup_authoring.md` |
+| Custom group relationship grammar | `context/customgroup_relationship_grammar.md` |
 | UUIDs, cross-references, rename safety | `context/uuids_and_cross_references.md` |
 | API surface map (public + internal + content-zip) | `context/content_api_surface.md` |
 | Content-zip wire formats (super metrics, dashboards, views, policies) | `context/wire_formats.md` |
+| Chart widget wire formats (MetricChart, Scoreboard, etc.) | `context/chart_widget_formats.md` |
+| Reports API surface + wire format | `context/reports_api_surface.md` |
 | Install path + policy enablement | `context/install_and_enable.md` |
+| Internal supermetrics assign endpoint details | `context/internal_supermetrics_assign.md` |
+| Dashboard delete API (UI session auth, Struts/Ext.Direct) | `context/dashboard_delete_api.md` |
+| Widget types survey (supported + unsupported) | `context/widget_types_survey.md` |
+| Recon metric key patterns | `context/recon_metric_keys.md` |
 | Reference docs inventory + PDF extraction | `context/reference_docs.md` |
 | Allowlisted external reference repos (sentania/AriaOperationsContent, etc.) | `context/reference_sources.md` |
 | VKS VM type classification + filter patterns | `context/vks_vm_classification.md` |
@@ -129,8 +140,10 @@ that doesn't delegate and ends up holding all the context.
 | `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer bug, loader gap, new CLI command, client helper, **or bootstrapping a new `vcfops_*` package** when an author agent reports TOOLSET GAP for a missing package. The **only** agent that edits `vcfops_*/` code. |
 | `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. Validates, syncs, enables, verifies. Handles import-task-busy retries. |
 | `content-packager` | Build | `dist/` only | User wants a standalone distributable bundle (bash/pwsh/python install scripts + content-zips + license + README). |
-| `symptom-author` | Author | `symptoms/` only | After recon confirms no existing symptom satisfies the need. Feeds into alert definitions. Will report TOOLSET GAP if `vcfops_symptoms` package doesn't exist yet — orchestrator routes to `tooling` to bootstrap it. |
-| `alert-author` | Author | `alerts/` only | After recon confirms no existing alert satisfies the need, **and** required symptoms already exist. Will report TOOLSET GAP if `vcfops_alerts` package doesn't exist yet. |
+| `symptom-author` | Author | `symptoms/` only | After recon confirms no existing symptom satisfies the need. Feeds into alert definitions. |
+| `alert-author` | Author | `alerts/` only | After recon confirms no existing alert satisfies the need, **and** required symptoms already exist. |
+| `report-author` | Author | `reports/` only | User wants a report definition. May require views (and transitively super metrics) to exist first; if so, report-author blocks and you delegate upstream. |
+| `qa-tester` | Testing | `/tmp/` only (read-only against repo) | User wants to acceptance-test a built distribution package. Runs install → verify → uninstall → verify cycle against a live instance. Spawn after `content-packager` builds a zip. |
 
 ### Delegation protocol
 
@@ -151,9 +164,12 @@ that doesn't delegate and ends up holding all the context.
    + view + dashboard", invoke `supermetric-author` first, then
    `view-author`, then `dashboard-author`. For "symptom + alert",
    invoke `symptom-author` first, then `alert-author` (alerts
-   reference symptoms by name). Cross-references are
-   resolved at author time by reading the YAML the previous agent
-   wrote, so order matters.
+   reference symptoms by name). For requests that include reports,
+   author all required views (and their upstream SMs) first, then
+   invoke `report-author` last — reports reference views and
+   dashboards by name. Cross-references are resolved at author
+   time by reading the YAML the previous agent wrote, so order
+   matters.
 3. **Pass filenames, not file contents.** Agents read the
    filesystem themselves. Keeping file contents out of your
    context window is how this architecture stays affordable.
@@ -161,7 +177,10 @@ that doesn't delegate and ends up holding all the context.
    one CLI action the orchestrator may run directly — it's read-only
    and fast. Run `python3 -m vcfops_supermetrics validate &&
    python3 -m vcfops_dashboards validate &&
-   python3 -m vcfops_customgroups validate`. All other CLI
+   python3 -m vcfops_customgroups validate &&
+   python3 -m vcfops_symptoms validate &&
+   python3 -m vcfops_alerts validate &&
+   python3 -m vcfops_reports validate`. All other CLI
    operations (sync, enable, delete, list) go through
    `content-installer`.
 5. **Install only on explicit user confirmation.** Show the user
@@ -220,6 +239,18 @@ first-class, not a sad fallback.
 1. Clarify → recon → author bottom-up (SM → custom group → view
    → dashboard, serial) → validate → confirm → install.
 
+**Symptom + alert** (e.g. "alert me when VM CPU is critical"):
+1. Clarify → recon → `symptom-author` (one per symptom) →
+   `alert-author` → validate → confirm → install.
+
+**Report** (e.g. "I need a VM performance report"):
+1. Clarify → recon → author upstream views (and their SMs) first
+   → `report-author` → validate → confirm → install.
+
+**Package + QA** (e.g. "build a distributable bundle and test it"):
+1. Author all content → `content-packager` → `qa-tester` →
+   report results.
+
 **Toolset gap** (author returns a gap report):
 1. Decide: punt / api-explorer / tooling → fix → re-invoke author.
 
@@ -246,15 +277,23 @@ communicate to users early, rather than discovering mid-workflow:
    sync content but cannot enable super metrics via the CLI —
    policy export/import XML manipulation is not yet wired up.
 
-3. **Symptom/alert tooling.** The `vcfops_symptoms` and
-   `vcfops_alerts` Python packages do not exist yet. When a
-   symptom or alert authoring request first arrives, the author
-   agent will report TOOLSET GAP. Route the gap to `tooling`,
-   which has guidance on bootstrapping new packages. The YAML
-   definitions are still valid as intent capture even before the
-   packages exist.
+3. **Report tooling.** The `vcfops_reports` package exists but
+   may have incomplete sync/import support. Report definitions
+   import via content-zip (`reports.zip` containing `content.xml`),
+   not REST API — there is no POST/PUT on `/api/reportdefinitions`.
+   If the report loader or packager can't express what the user
+   needs, the author agent will report TOOLSET GAP.
 
-4. **Reference source clones.** Recon checks allowlisted external
+4. **Bundle packaging for newer content types.** The
+   `content-packager` manifest schema and build pipeline currently
+   support super metrics, views, dashboards, and custom groups.
+   Symptoms, alerts, and reports are not yet included in bundle
+   manifests or distribution zips. If a user wants a distributable
+   package that includes these types, expect a TOOLSET GAP from
+   `content-packager` — route to `tooling` to extend the packaging
+   pipeline.
+
+5. **Reference source clones.** Recon checks allowlisted external
    repos under `references/` (gitignored). Fresh setups won't have
    these clones. Run `scripts/bootstrap_references.sh` to populate
    them, or expect recon to report missing-clone gaps.
@@ -270,3 +309,5 @@ each content type resolves names to UUIDs at validate/sync time:
 | View column → SM | `supermetric:"<name>"` in `attribute:` | Dashboard loader at validate (→ `sm_<uuid>`) |
 | Dashboard widget → View | `view: "<view name>"` | Dashboard loader at validate (→ view UUID) |
 | Alert → Symptom | `name: "<symptom name>"` in symptom set | Alert loader/installer at sync (→ symptom ID) |
+| Report section → View | `view: "<view name>"` in section config | Report loader at validate (→ view UUID) |
+| Report section → Dashboard | `dashboard: "<dashboard name>"` in section config | Report loader at validate (→ dashboard UUID) |
