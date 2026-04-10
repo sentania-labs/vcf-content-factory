@@ -144,6 +144,111 @@ Other useful Ext.Direct methods on `viewServiceController`:
 `getView` (params: resourceRef, viewDefinitionId, controls, isAsc,
 columnIndex).
 
+## Dashboard lock and delete behavior (empirically verified 2026-04-10)
+
+### deleteTab vs lock state
+
+- `deleteTab` on a **locked** dashboard is a **silent no-op**: HTTP 200,
+  returns the full dashboard config, dashboard not deleted.
+- `deleteTab` on an **unlocked** dashboard owned by the calling user
+  succeeds (confirmed with clone-created dashboards).
+- There is **no unlockTab, setDashboardLock, or equivalent
+  mainAction** in the Struts layer. Tested: `setDashboardLock`,
+  `lockTab`, `unlockTab`, `manageTab`, `editTab`, `modifyTab`,
+  `updateTab`, `shareTab` — all return error pages (invalid action).
+
+### saveDashboardConfig cannot unlock
+
+`mainAction=saveDashboardConfig` with `isLocked: false` in the
+config JSON returns an HTML error page (not JSON). The Struts layer
+rejects the full-config save. `mainAction=saveTab` accepts the
+request (returns `{}`) but does not change lock state.
+
+### Ext.Direct has no dashboardServiceController
+
+`dashboardServiceController.unlockDashboard`,
+`dashboardServiceController.deleteDashboard`, etc. all return
+`{"type":"exception"}` — the controller does not exist.
+
+### cloneDashboard creates unlocked, caller-owned copies
+
+```
+mainAction=cloneDashboard
+tabId=<dashboard-uuid>
+```
+
+Returns JSON: `{"tabId":"<new-uuid>","tabName":"<name> 1"}`.
+The clone is **unlocked** and **owned by the calling user**, regardless
+of the original's lock/owner state. The clone can be deleted via
+`deleteTab`. The original is unaffected.
+
+### Content-zip import always assigns owner=admin
+
+Tested: reimporting dashboards via `POST /api/content/operations/import`
+with `usermappings.json` mapping to `userName: "claude"` — the
+imported dashboards still show `owner: "admin"` in `getDashboardList`.
+The content operations importer **ignores usermappings.json for
+ownership assignment on UPDATE** and always assigns to admin.
+
+This contradicts the earlier hypothesis in `wire_formats.md` that
+`usermappings.json` controls ownership. It may control ownership only
+for **new** dashboards (not tested), or it may be entirely ignored by
+the content operations import path (which differs from the internal
+content management import path the old Flash UI used).
+
+### Content-zip import always forces locked=true
+
+Confirmed: even when the dashboard.json payload contains
+`"locked": false`, the server sets `locked: true` after import.
+This is consistent across both new and updated dashboards.
+
+### getDashboardList response fields
+
+Each dashboard entry includes:
+- `id`, `name`, `description`
+- `locked` (bool) — server-enforced, always true after import
+- `owner` (string) — username of owner, always "admin" after import
+- `editable` (bool) — false if caller is not the owner
+- `shared`, `sharedPublicly` (bools)
+- `reportUsageCount` (int)
+- `autoswitchEnabled`, `autoswitchDelay` (scheduling)
+
+### getDashboardConfig tab fields
+
+Per-tab (dashboard) config includes `isLocked`, `isShared`,
+`name`, `nameOriginal`, `id`, `columnCount`, `columnProportion`,
+`description`, `widgets[]`. Does **not** include `owner` or
+`userId` — ownership is only visible in `getDashboardList`.
+
+### No delete path for admin-owned locked dashboards from non-admin user
+
+**Confirmed dead end.** A non-admin user (even with Administrator
+role) cannot delete dashboards that are `locked: true` and
+`owner: admin`. All attempted paths fail:
+
+1. `deleteTab` — silent no-op (lock blocks it)
+2. `saveDashboardConfig` / `saveTab` — cannot change lock state
+3. Content reimport with modified usermappings — ownership not reassigned
+4. No Ext.Direct unlock/delete controller exists
+5. No REST API delete endpoint exists (public or internal)
+
+**Only viable paths:**
+- Login as the `admin` account (requires admin password)
+- Use the VCF Operations web console as admin to manually unlock/delete
+- Accept that imported dashboards are permanent until admin intervenes
+
+### Implication for the content factory
+
+The packager's `usermappings.json` with `userName: "admin"` is not
+the root cause of the ownership problem — the importer assigns
+admin ownership regardless. However, the `[VCF Content Factory]`
+prefix on dashboard names makes them identifiable for manual cleanup.
+
+Future work: if the framework needs autonomous delete, it must
+either (a) use admin credentials for the import, (b) find an
+alternate import path that respects usermappings, or (c) implement
+a pre-delete step that logs in as admin via the UI.
+
 ## Gotchas
 
 1. **Two session systems.** The Suite API (`/suite-api/`) uses bearer
@@ -167,6 +272,17 @@ columnIndex).
 
 5. **Logout.** `GET /ui/login.action?mainAction=logout` invalidates
    the session. Returns 302.
+
+6. **Content operations import vs raw `requests.post`.** The import
+   endpoint requires `Content-Type: None` override (let requests
+   set multipart boundary) and the form field name `contentFile`
+   (not `file`). The `VCFOpsClient.import_content_zip` handles
+   this correctly; raw requests calls need the override explicitly.
+
+7. **Export/import are not symmetric.** `GET /api/content/operations/
+   export/zip` produces a zip that `POST /api/content/operations/import`
+   accepts, but only when using `contentFile` as the form field name
+   and `force=true`. Using `file` as the field name returns 500.
 
 6. **No view list action endpoint.** There is no Struts action for
    listing views. Use either the Ext.Direct
@@ -261,6 +377,50 @@ def logout(s, host):
     s.get(f"https://{host}/ui/login.action", params={"mainAction": "logout"},
           allow_redirects=False)
 ```
+
+## Stranded test artifacts
+
+The investigation on 2026-04-10 created one dashboard that cannot be
+deleted by the `claude` service account:
+
+- `15b78a67-29f0-4066-bdb4-8a89d14c3c9b` — `__test_dash__`
+  (locked=true, owner=admin). Requires admin login to delete.
+- Test view `__test_view__` was successfully cleaned up via
+  `viewServiceController.deleteView`.
+
+## View delete limitation (VCF Ops 9.0.2 server bug)
+
+Views imported via the content-zip path (`POST /api/content/operations/import`)
+cannot be deleted programmatically. Both `viewServiceController.deleteView`
+(Ext.Direct) and `DELETE /internal/viewdefinitions/{uuid}` return HTTP 500
+"Internal server error."
+
+**Root cause:** The content-zip importer stores duplicate entries in the
+view's internal `subjects` list. The view XML correctly contains two
+`<SubjectType>` elements (`type="descendant"` and `type="self"`) per the
+documented wire format — this matches real VCF Ops exports. But the server
+flattens both into the same subjects list as duplicates
+(e.g. `["HostSystem", "HostSystem"]`), and the delete path hits a
+constraint violation on the duplicate.
+
+- Views created through the web console UI do **not** have this problem.
+- Only content-zip-imported views are affected.
+- Confirmed on both HostSystem and ClusterComputeResource resource kinds.
+- Tested across QA iterations 10–12 with consistent results.
+
+**Workaround:** Delete views manually via the VCF Operations web console
+(Environment → Views, find the view, right-click → Delete). The UI's
+delete code path handles the duplicate subjects correctly.
+
+**Impact on install scripts:** The uninstall phase reports a WARN for
+each view that cannot be deleted and exits with code 2 (partial failure).
+SM and dashboard deletion still succeed. The install scripts document
+this limitation in their output.
+
+**Impact on CLI sync:** The `vcfops_dashboards` sync handler imports
+views via the same content-zip path. Views synced this way will also
+be undeletable via the API. Manual cleanup through the web console is
+required when removing synced views.
 
 ## Supportability caveat
 

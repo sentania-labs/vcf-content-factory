@@ -11,6 +11,8 @@ Usage (uninstall):
     python3 install.py --uninstall
     python3 install.py --uninstall --force   # skip dependency checks
 
+Note: Uninstall requires the 'admin' account for dashboard/view cleanup.
+
 Usage (explicit flags):
     python3 install.py --host ops.example.com --user admin --password secret
     python3 install.py --uninstall --host ops.example.com --user admin --password secret
@@ -106,6 +108,17 @@ def _ok(msg: str) -> None:
 
 def _warn(msg: str) -> None:
     print(f"  WARN  {msg}")
+
+
+def _verify_supermetrics_enabled(policy_xml: str, sm_ids: list) -> dict:
+    """Check which SM IDs appear as enabled in policy XML."""
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(policy_xml)
+    enabled_ids = set()
+    for elem in root.iter("SuperMetric"):
+        if elem.get("enabled", "").lower() == "true":
+            enabled_ids.add(elem.get("id", ""))
+    return {sm_id: sm_id in enabled_ids for sm_id in sm_ids}
 
 
 def _step(n: int, total: int, msg: str) -> None:
@@ -335,6 +348,22 @@ class Client:
         if r.status_code != 200:
             raise RuntimeError(f"Enable SM '{sm_name}' failed ({r.status_code}): {r.text}")
 
+    def export_default_policy_xml(self, policy_id: str) -> str:
+        """Export a policy and return the raw XML from the ZIP."""
+        r = self._req(
+            "GET", "/api/policies/export",
+            params={"id": policy_id},
+            headers={"Accept": "application/zip"},
+        )
+        if r.status_code != 200:
+            raise RuntimeError(
+                f"Policy export failed ({r.status_code}): {r.text}")
+        with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+            for name in zf.namelist():
+                if name.endswith(".xml"):
+                    return zf.read(name).decode("utf-8")
+        raise RuntimeError("Policy export ZIP contained no XML file")
+
     def upsert_custom_group(self, payload: dict) -> None:
         name = payload["resourceKey"]["name"]
         r = self._req("GET", "/api/resources/groups",
@@ -539,7 +568,7 @@ class UIClient:
             json=[{
                 "action": "viewServiceController",
                 "method": "getGroupedViewDefinitionThumbnails",
-                "data": [],
+                "data": [{"start": 0, "limit": 500}],
                 "type": "rpc",
                 "tid": tid,
             }],
@@ -549,13 +578,17 @@ class UIClient:
         result = resp.json()
         if result[0].get("type") == "exception":
             _die(f"View list failed: {result[0].get('message')}")
-        grouped = result[0].get("result") or []
+        grouped = result[0].get("result") or {}
         views: List[Dict[str, Any]] = []
-        # The API returns either a dict keyed by view type (IMAGE, LIST, etc.)
-        # or a list of group objects. Handle both forms.
-        group_items = grouped.values() if isinstance(grouped, dict) else grouped
-        for group in group_items:
-            views.extend(group.get("views") or [])
+        # API returns a dict keyed by view type (LIST, IMAGE, etc.),
+        # each value is a dict keyed by subject name (HostSystem, etc.),
+        # each subject value is a list of view objects.
+        if isinstance(grouped, dict):
+            for view_type_group in grouped.values():
+                if isinstance(view_type_group, dict):
+                    for subject_views in view_type_group.values():
+                        if isinstance(subject_views, list):
+                            views.extend(subject_views)
         return views
 
     def delete_view(self, view_uuid: str) -> None:
@@ -617,7 +650,7 @@ def _build_dashboard_inner_zip(dashboard_json: str) -> bytes:
 
 
 def _build_dashboard_zip(views_xml: str, dashboard_json: str,
-                         marker: str, owner_id: str,
+                         marker: str, owner_id: str, username: str,
                          n_views: int, n_dashboards: int,
                          dashboard_ids: list) -> bytes:
     """Build combined views+dashboard content-zip with correct wire format."""
@@ -653,7 +686,7 @@ def _build_dashboard_zip(views_xml: str, dashboard_json: str,
                 "usermappings.json",
                 json.dumps({
                     "sources": [],
-                    "users": [{"userName": "admin", "userId": owner_id}],
+                    "users": [{"userName": username, "userId": owner_id}],
                 }, indent=2),
             )
             config["dashboards"] = n_dashboards
@@ -774,7 +807,7 @@ def _install_dashboards(ctx: Dict) -> None:
     dash_ids = _extract_dashboard_ids(dash_json.replace("PLACEHOLDER_USER_ID", owner_id))
     n_views = 1 if views_xml else 0
     dash_zip = _build_dashboard_zip(
-        views_xml, dash_json, ctx["marker"], owner_id,
+        views_xml, dash_json, ctx["marker"], owner_id, ctx["username"],
         n_views=n_views, n_dashboards=1, dashboard_ids=dash_ids,
     )
     ctx["client"].import_content_zip(dash_zip, "dashboard + view")
@@ -786,8 +819,10 @@ def _install_sm_enable(ctx: Dict) -> None:
     if args.skip_enable:
         print("  (--skip-enable set: skipping)")
         return
-    sm_meta = _load_json("sm_metadata.json")
-    names = [sm["name"] for sm in sm_meta]
+    sm_dict = _load_json("supermetrics.json")
+    # sm_dict is keyed by UUID: {uuid: {name, formula, description, unitId, resourceKinds}}
+    sm_entries = list(sm_dict.values())
+    names = [sm["name"] for sm in sm_entries]
     SM_RESOLVE_ATTEMPTS = 3
     SM_RESOLVE_DELAY = 5
     server_ids: Dict[str, str] = {}
@@ -801,7 +836,10 @@ def _install_sm_enable(ctx: Dict) -> None:
                   f"{len(missing)} SM(s) not queryable yet, "
                   f"waiting {SM_RESOLVE_DELAY}s...")
             time.sleep(SM_RESOLVE_DELAY)
-    for sm in sm_meta:
+
+    # Build unverified map: {server_id: (name, resource_kinds)}
+    unverified = {}
+    for sm in sm_entries:
         name = sm["name"]
         sm_id = server_ids.get(name)
         if not sm_id:
@@ -809,13 +847,62 @@ def _install_sm_enable(ctx: Dict) -> None:
             _warn(warn)
             ctx["warnings"].append(warn)
             continue
+        unverified[sm_id] = (name, sm["resourceKinds"])
+
+    if not unverified:
+        return
+
+    SM_ENABLE_ATTEMPTS = 3
+    SM_ENABLE_VERIFY_DELAY = 2
+    policy_id = ctx["client"].get_default_policy_id()
+
+    for attempt in range(1, SM_ENABLE_ATTEMPTS + 1):
+        assign_errors = {}
+        for sm_id, (name, rk) in list(unverified.items()):
+            try:
+                ctx["client"].enable_sm_on_default_policy(sm_id, name, rk)
+            except RuntimeError as exc:
+                assign_errors[sm_id] = str(exc)
+
+        time.sleep(SM_ENABLE_VERIFY_DELAY)
+
         try:
-            ctx["client"].enable_sm_on_default_policy(sm_id, name, sm["resourceKinds"])
-            _ok(f"Enabled: {name}")
+            policy_xml = ctx["client"].export_default_policy_xml(policy_id)
+            status = _verify_supermetrics_enabled(
+                policy_xml, list(unverified.keys()))
         except RuntimeError as exc:
-            warn = str(exc)
-            _warn(warn)
-            ctx["warnings"].append(warn)
+            _warn(f"Policy export failed on attempt {attempt}: {exc}")
+            if attempt < SM_ENABLE_ATTEMPTS:
+                continue
+            for sm_id, (name, _) in unverified.items():
+                warn = f"Enable FAILED for '{name}': could not verify"
+                _warn(warn)
+                ctx["warnings"].append(warn)
+            break
+
+        still_pending = {}
+        for sm_id, (name, rk) in list(unverified.items()):
+            if sm_id in assign_errors:
+                warn = assign_errors[sm_id]
+                _warn(warn)
+                ctx["warnings"].append(warn)
+            elif status.get(sm_id):
+                _ok(f"Enabled: {name}")
+            else:
+                if attempt < SM_ENABLE_ATTEMPTS:
+                    still_pending[sm_id] = (name, rk)
+                else:
+                    warn = (f"Enable FAILED for '{name}': assign returned 200 "
+                            f"but SM not in Default Policy after "
+                            f"{SM_ENABLE_ATTEMPTS} attempts")
+                    _warn(warn)
+                    ctx["warnings"].append(warn)
+
+        unverified = still_pending
+        if not unverified:
+            break
+        print(f"    [enable-verify {attempt}/{SM_ENABLE_ATTEMPTS}] "
+              f"{len(unverified)} SM(s) not verified, retrying...")
 
 
 def _install_customgroups(ctx: Dict) -> None:
@@ -860,8 +947,9 @@ def _uninstall_views(ctx: Dict) -> None:
     warnings = ctx["warnings"]
     all_views = ui_client.list_views()
     view_by_name: Dict[str, str] = {
-        v.get("name", ""): v.get("id", "") for v in all_views
-        if v.get("name") and v.get("id")
+        v.get("name", ""): v.get("viewDefinitionKey", v.get("id", ""))
+        for v in all_views
+        if v.get("name") and (v.get("viewDefinitionKey") or v.get("id"))
     }
     for name in names:
         view_id = view_by_name.get(name)
@@ -948,8 +1036,8 @@ _CONTENT_REGISTRY: List[Dict] = [
         "needs_ui": False,
     },
     {
-        "content_type": "sm_enable",  # synthetic key: uses sm_metadata.json
-        "install_file": "sm_metadata.json",
+        "content_type": "sm_enable",  # synthetic key: triggered by supermetrics.json presence
+        "install_file": "supermetrics.json",
         "install_label": "Enabling super metrics on Default Policy...",
         "install_fn": _install_sm_enable,
         "install_order": 3,
@@ -1039,6 +1127,7 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
         "ui_client": None,
         "marker": marker,
         "owner_id": owner_id,
+        "username": client._user,
         "args": args,
         "warnings": warnings,
         "content_dir": content_dir,
@@ -1085,6 +1174,19 @@ def _run_uninstall(args: argparse.Namespace, host: str, user: str,
 
     needs_ui = any(e["needs_ui"] for e in active_uninstall)
     needs_suite = any(not e["needs_ui"] for e in active_uninstall)
+
+    # Dashboard and view deletion goes through the UI layer which is locked to
+    # the admin account.  Catch this early — before spending time authenticating
+    # — so the operator can re-run with the right credentials.
+    if needs_ui and user != "admin":
+        print(
+            "ERROR: Dashboard and view uninstall requires the 'admin' account.\n"
+            "       VCF Ops locks imported dashboards to admin ownership. Only the\n"
+            "       admin user's UI session can delete them.\n"
+            "       Re-run with --user admin (or set VCFOPS_USER=admin).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     # Count steps: auth + [ui_auth] + content steps + [ui_logout]
     n_steps = 1 + len(active_uninstall)
@@ -1174,7 +1276,8 @@ def main() -> None:
     ap = argparse.ArgumentParser(
         description=f"Install or uninstall VCF Content Factory {PACKAGE_NAME} package.\n"
                     "Run with no arguments for interactive install prompts.\n"
-                    "Use --uninstall to remove all content this package installed.")
+                    "Use --uninstall to remove all content this package installed.\n"
+                    "Note: Uninstall requires the 'admin' account for dashboard/view cleanup.")
     ap.add_argument("--install", action="store_true",
                     help="Install mode (default when no mode flag is given)")
     ap.add_argument("--uninstall", action="store_true",

@@ -47,6 +47,7 @@
 
 .PARAMETER Uninstall
     Uninstall mode: delete all content in this bundle from the instance.
+    Note: Uninstall requires the 'admin' account for dashboard/view cleanup.
 
 .PARAMETER Force
     With -Uninstall: skip dependency checks and delete unconditionally.
@@ -373,7 +374,7 @@ function Import-ContentZip {
             # PS 7+ / .NET Core: set the callback directly on the handler.
             # PS 5.1 / .NET Framework: ServicePointManager (set at script startup)
             # covers HttpClient too, so no per-handler callback is needed.
-            $handler.ServerCertificateCustomValidationCallback = { $true }
+            $handler.ServerCertificateCustomValidationCallback = [System.Net.Http.HttpClientHandler]::DangerousAcceptAnyServerCertificateValidator
         }
         $httpClient = New-Object System.Net.Http.HttpClient($handler)
         if ($script:Token) {
@@ -484,6 +485,59 @@ function Enable-SupermetricOnDefaultPolicy {
     }
 }
 
+function Export-DefaultPolicyXml {
+    param([string]$PolicyId)
+    $uri = "$script:BaseUrl/api/policies/export?id=$([uri]::EscapeDataString($PolicyId))"
+    $headers = @{
+        "Authorization" = "vRealizeOpsToken $script:Token"
+        "Accept"        = "application/zip"
+    }
+    $params = @{
+        Method  = "GET"
+        Uri     = $uri
+        Headers = $headers
+    }
+    if ($SkipSslVerify -and $PSVersionTable.PSVersion.Major -ge 6) { $params["SkipCertificateCheck"] = $true }
+    $tmpZip = [System.IO.Path]::GetTempFileName() + ".zip"
+    try {
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            Invoke-WebRequest @params -OutFile $tmpZip | Out-Null
+        } else {
+            # PS 5.1: Invoke-WebRequest needs custom cert callback
+            Invoke-WebRequest @params -OutFile $tmpZip -UseBasicParsing | Out-Null
+        }
+        $zip = [System.IO.Compression.ZipFile]::OpenRead($tmpZip)
+        try {
+            foreach ($entry in $zip.Entries) {
+                if ($entry.Name -like "*.xml") {
+                    $reader = New-Object System.IO.StreamReader($entry.Open())
+                    try { return $reader.ReadToEnd() }
+                    finally { $reader.Dispose() }
+                }
+            }
+            throw "Policy export ZIP contained no XML file"
+        } finally { $zip.Dispose() }
+    } finally {
+        if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue }
+    }
+}
+
+function Test-SupermetricsEnabled {
+    param([string]$PolicyXml, [string[]]$SmIds)
+    [xml]$doc = $PolicyXml
+    $enabledIds = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($node in $doc.GetElementsByTagName("SuperMetric")) {
+        if ($node.GetAttribute("enabled").ToLower() -eq "true") {
+            [void]$enabledIds.Add($node.GetAttribute("id"))
+        }
+    }
+    $result = @{}
+    foreach ($id in $SmIds) {
+        $result[$id] = $enabledIds.Contains($id)
+    }
+    return $result
+}
+
 function Upsert-CustomGroup {
     param($Payload)
     $name = $Payload.resourceKey.name
@@ -583,7 +637,7 @@ function New-SmZip {
     $entries = @{
         $Marker              = $OwnerId
         "supermetrics.json"  = ($SmDict | ConvertTo-Json -Depth 20)
-        "configuration.json" = (@{ superMetrics = ($SmDict.PSObject.Properties.Name.Count); type = "ALL" } | ConvertTo-Json -Compress)
+        "configuration.json" = (@{ superMetrics = (@($SmDict.PSObject.Properties.Name).Count); type = "ALL" } | ConvertTo-Json -Compress)
     }
     return New-ZipBytes $entries
 }
@@ -619,7 +673,7 @@ function New-DashboardZip {
 
     $userMappings = @{
         sources = @()
-        users   = @(@{ userName = "admin"; userId = $OwnerId })
+        users   = @(@{ userName = $script:User; userId = $OwnerId })
     }
 
     $config = @{ type = "CUSTOM" }
@@ -735,9 +789,15 @@ function Start-UISession {
         if ($c.Name -eq "OPS_SESSION") { $opsCookie = $c.Value; break }
     }
     if (-not $opsCookie) {
-        if ($indexResp -and $indexResp.Headers -and $indexResp.Headers["Set-Cookie"]) {
-            $setCookie = $indexResp.Headers["Set-Cookie"]
-            if ($setCookie -match "OPS_SESSION=([^;]+)") {
+        if ($indexResp -and $indexResp.Headers) {
+            # $indexResp may be HttpResponseMessage (from catch) whose Headers
+            # is HttpResponseHeaders — not indexable with []. Use GetValues().
+            $setCookie = $null
+            try { $setCookie = $indexResp.Headers.GetValues("Set-Cookie") } catch {}
+            if (-not $setCookie) {
+                try { $setCookie = $indexResp.Headers["Set-Cookie"] } catch {}
+            }
+            if ($setCookie -and ("$setCookie" -match "OPS_SESSION=([^;]+)")) {
                 $opsCookie = $Matches[1]
             }
         }
@@ -848,7 +908,7 @@ function Get-AllViews {
     $result = Invoke-ExtDirect -Calls @(@{
         action = "viewServiceController"
         method = "getGroupedViewDefinitionThumbnails"
-        data   = @()
+        data   = @(@{ start = 0; limit = 500 })
         type   = "rpc"
         tid    = $tid
     })
@@ -856,8 +916,22 @@ function Get-AllViews {
         Write-Fail "View list failed: $($result[0].message)"
     }
     $allViews = [System.Collections.Generic.List[object]]::new()
-    foreach ($group in $result[0].result) {
-        foreach ($v in $group.views) { $allViews.Add($v) }
+    $grouped = $result[0].result
+    # API returns a dict keyed by view type (LIST, IMAGE, etc.),
+    # each value is a dict keyed by subject name (HostSystem, etc.),
+    # each subject value is a list of view objects.
+    if ($grouped -is [PSCustomObject]) {
+        foreach ($typeProp in $grouped.PSObject.Properties) {
+            $subjectMap = $typeProp.Value
+            if ($subjectMap -is [PSCustomObject]) {
+                foreach ($subjectProp in $subjectMap.PSObject.Properties) {
+                    $viewList = $subjectProp.Value
+                    if ($viewList -is [System.Array]) {
+                        foreach ($v in $viewList) { $allViews.Add($v) }
+                    }
+                }
+            }
+        }
     }
     return $allViews
 }
@@ -921,7 +995,7 @@ $script:ContentRegistry = @(
     },
     @{
         ContentType    = "sm_enable"
-        InstallFile    = "sm_metadata.json"
+        InstallFile    = "supermetrics.json"
         InstallLabel   = "Enabling super metrics on Default Policy..."
         InstallFn      = "Install-SmEnable"
         InstallOrder   = 3
@@ -974,7 +1048,7 @@ function Install-Supermetrics($Ctx) {
     $smDict = Load-Json "supermetrics.json"
     $smZip = New-SmZip -SmDict $smDict -Marker $Ctx.Marker -OwnerId $Ctx.OwnerId
     Import-ContentZip -ZipBytes $smZip -Label "super metrics"
-    $smCount = ($smDict.PSObject.Properties.Name).Count
+    $smCount = @($smDict.PSObject.Properties.Name).Count
     Write-Ok "Imported $smCount super metric(s)"
 }
 
@@ -995,8 +1069,9 @@ function Install-SmEnable($Ctx) {
         Write-Host "  (-SkipEnable set: skipping)"
         return
     }
-    $smMeta = Load-Json "sm_metadata.json"
-    if ($smMeta -isnot [System.Array]) { $smMeta = @($smMeta) }
+    $smDict = Load-Json "supermetrics.json"
+    # smDict is keyed by UUID: {uuid: {name, formula, description, unitId, resourceKinds}}
+    $smMeta = @($smDict.PSObject.Properties | ForEach-Object { $_.Value })
     $names = @($smMeta | ForEach-Object { $_.name })
     $smResolveAttempts = 3; $smResolveDelay = 5
     $serverIds = @{}
@@ -1009,6 +1084,8 @@ function Install-SmEnable($Ctx) {
             Start-Sleep -Seconds $smResolveDelay
         }
     }
+    # Build unverified map: {server_id -> @{Name; ResourceKinds}}
+    $unverified = @{}
     foreach ($sm in $smMeta) {
         $smName = $sm.name
         $smId = $serverIds[$smName]
@@ -1018,14 +1095,70 @@ function Install-SmEnable($Ctx) {
             $Ctx.Warnings.Add($warn)
             continue
         }
-        try {
-            Enable-SupermetricOnDefaultPolicy -SmId $smId -SmName $smName -ResourceKinds $sm.resourceKinds
-            Write-Ok "Enabled: $smName"
-        } catch {
-            $warn = $_.ToString()
-            Write-Warn $warn
-            $Ctx.Warnings.Add($warn)
+        $unverified[$smId] = @{ Name = $smName; ResourceKinds = $sm.resourceKinds }
+    }
+
+    if ($unverified.Count -eq 0) { return }
+
+    $smEnableAttempts = 3
+    $smEnableVerifyDelay = 2
+    $policyId = Get-DefaultPolicyId
+
+    for ($attempt = 1; $attempt -le $smEnableAttempts; $attempt++) {
+        # Assign all unverified
+        $assignErrors = @{}
+        foreach ($smId in @($unverified.Keys)) {
+            $entry = $unverified[$smId]
+            try {
+                Enable-SupermetricOnDefaultPolicy -SmId $smId -SmName $entry.Name -ResourceKinds $entry.ResourceKinds
+            } catch {
+                $assignErrors[$smId] = $_.ToString()
+            }
         }
+
+        Start-Sleep -Seconds $smEnableVerifyDelay
+
+        # Export + verify
+        $verifyFailed = $false
+        try {
+            $policyXml = Export-DefaultPolicyXml -PolicyId $policyId
+            $status = Test-SupermetricsEnabled -PolicyXml $policyXml -SmIds @($unverified.Keys)
+        } catch {
+            Write-Warn "Policy export failed on attempt ${attempt}: $_"
+            if ($attempt -lt $smEnableAttempts) { continue }
+            foreach ($smId in @($unverified.Keys)) {
+                $warn = "Enable FAILED for '$($unverified[$smId].Name)': could not verify"
+                Write-Warn $warn
+                $Ctx.Warnings.Add($warn)
+            }
+            $verifyFailed = $true
+            break
+        }
+
+        # Partition results
+        $stillPending = @{}
+        foreach ($smId in @($unverified.Keys)) {
+            $entry = $unverified[$smId]
+            if ($assignErrors.ContainsKey($smId)) {
+                $warn = $assignErrors[$smId]
+                Write-Warn $warn
+                $Ctx.Warnings.Add($warn)
+            } elseif ($status[$smId]) {
+                Write-Ok "Enabled: $($entry.Name)"
+            } else {
+                if ($attempt -lt $smEnableAttempts) {
+                    $stillPending[$smId] = $entry
+                } else {
+                    $warn = "Enable FAILED for '$($entry.Name)': assign returned 200 but SM not in Default Policy after $smEnableAttempts attempts"
+                    Write-Warn $warn
+                    $Ctx.Warnings.Add($warn)
+                }
+            }
+        }
+
+        $unverified = $stillPending
+        if ($unverified.Count -eq 0) { break }
+        Write-Host "    [enable-verify $attempt/$smEnableAttempts] $($unverified.Count) SM(s) not verified, retrying..."
     }
 }
 
@@ -1076,7 +1209,8 @@ function Uninstall-Views($Ctx) {
     $allViews = Get-AllViews
     $viewByName = @{}
     foreach ($v in $allViews) {
-        if ($v.name -and $v.id) { $viewByName[$v.name] = $v.id }
+        $vid = if ($v.viewDefinitionKey) { $v.viewDefinitionKey } else { $v.id }
+        if ($v.name -and $vid) { $viewByName[$v.name] = $vid }
     }
     foreach ($name in $names) {
         $viewId = $viewByName[$name]
@@ -1211,8 +1345,19 @@ function Invoke-Uninstall {
         (@($ContentManifest.($_.ContentType) | Where-Object { $_ }).Count -gt 0)
     } | Sort-Object { $_.UninstallOrder })
 
-    $needUi    = ($activeUninstall | Where-Object { $_.NeedsUi }).Count -gt 0
-    $needSuite = ($activeUninstall | Where-Object { -not $_.NeedsUi }).Count -gt 0
+    $needUi    = @($activeUninstall | Where-Object { $_.NeedsUi }).Count -gt 0
+    $needSuite = @($activeUninstall | Where-Object { -not $_.NeedsUi }).Count -gt 0
+
+    # Dashboard and view deletion goes through the UI layer which is locked to
+    # the admin account.  Catch this early — before spending time authenticating
+    # — so the operator can re-run with the right credentials.
+    if ($needUi -and $script:User -ne "admin") {
+        Write-Error ("ERROR: Dashboard and view uninstall requires the 'admin' account.`n" +
+                     "       VCF Ops locks imported dashboards to admin ownership. Only the`n" +
+                     "       admin user's UI session can delete them.`n" +
+                     "       Re-run with -User admin (or set `$env:VCFOPS_USER='admin').")
+        exit 1
+    }
 
     $TOTAL = 1 + $activeUninstall.Count
     if ($needUi) { $TOTAL += 2 }   # ui_auth + ui_logout

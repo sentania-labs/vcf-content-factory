@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 from typing import List
 
@@ -10,6 +11,8 @@ from .client import VCFOpsClient, VCFOpsError
 from .loader import SuperMetricDef, SuperMetricValidationError, load_dir, load_file
 
 DEFAULT_DIR = "supermetrics"
+SM_ENABLE_ATTEMPTS = 3
+SM_ENABLE_VERIFY_DELAY = 2
 
 
 def _collect(paths: List[str]) -> List[SuperMetricDef]:
@@ -108,20 +111,72 @@ def cmd_enable(args) -> int:
         return 1
     client = VCFOpsClient.from_env()
     rc = 0
+
+    # Phase 1: resolve all SM names to server IDs
+    unverified = {}  # {sm_id: (def, name)}
     for d in defs:
         existing = client.find_by_name(d.name)
         if not existing:
-            print(f"FAILED   {d.name}: not installed (run sync first)", file=sys.stderr)
+            print(f"FAILED   {d.name}: not installed (run sync first)",
+                  file=sys.stderr)
             rc = 1
             continue
+        unverified[existing["id"]] = (d, d.name)
+
+    if not unverified:
+        return rc
+
+    # Phase 2: assign + verify with retries
+    for attempt in range(1, SM_ENABLE_ATTEMPTS + 1):
+        assign_errors = {}
+        for sm_id, (d, name) in list(unverified.items()):
+            try:
+                client.enable_supermetric_on_default_policy(
+                    sm_id, d.resource_kinds)
+            except VCFOpsError as e:
+                assign_errors[sm_id] = str(e)
+
+        time.sleep(SM_ENABLE_VERIFY_DELAY)
+
         try:
-            client.enable_supermetric_on_default_policy(
-                existing["id"], d.resource_kinds
-            )
-            print(f"enabled  {existing['id']}  {d.name}")
+            policy_xml = client.export_default_policy_xml()
+            status = client.verify_supermetrics_enabled(
+                policy_xml, list(unverified.keys()))
         except VCFOpsError as e:
-            print(f"FAILED   {d.name}: {e}", file=sys.stderr)
+            print(f"WARN  policy export failed on attempt {attempt}: {e}",
+                  file=sys.stderr)
+            if attempt < SM_ENABLE_ATTEMPTS:
+                continue
+            for sm_id, (d, name) in unverified.items():
+                print(f"FAILED   {name}: could not verify (export error)",
+                      file=sys.stderr)
             rc = 1
+            break
+
+        still_pending = {}
+        for sm_id, (d, name) in list(unverified.items()):
+            if sm_id in assign_errors:
+                print(f"FAILED   {name}: {assign_errors[sm_id]}",
+                      file=sys.stderr)
+                rc = 1
+            elif status.get(sm_id):
+                print(f"enabled  {sm_id}  {name}")
+            else:
+                if attempt < SM_ENABLE_ATTEMPTS:
+                    still_pending[sm_id] = (d, name)
+                else:
+                    print(
+                        f"FAILED   {name}: not confirmed in Default Policy "
+                        f"after {SM_ENABLE_ATTEMPTS} attempts",
+                        file=sys.stderr)
+                    rc = 1
+
+        unverified = still_pending
+        if not unverified:
+            break
+        print(f"  [{attempt}/{SM_ENABLE_ATTEMPTS}] {len(unverified)} SM(s) "
+              f"not verified, retrying in {SM_ENABLE_VERIFY_DELAY}s...")
+
     return rc
 
 

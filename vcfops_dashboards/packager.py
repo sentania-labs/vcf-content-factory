@@ -79,6 +79,7 @@ def build_import_zip(
     views: Iterable[ViewDef],
     dashboards: Iterable[Dashboard],
     owner_user_id: str = DEFAULT_OWNER_USER_ID,
+    owner_username: str = "admin",
     marker_filename: str | None = None,
 ) -> bytes:
     views = list(views)
@@ -133,7 +134,7 @@ def build_import_zip(
                         "sources": [],
                         "users": [
                             {
-                                "userName": "admin",
+                                "userName": owner_username,
                                 "userId": owner_user_id,
                             }
                         ],

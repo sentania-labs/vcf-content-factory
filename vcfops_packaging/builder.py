@@ -5,11 +5,10 @@ A built package is a zip at dist/<bundle-name>.zip containing:
     install.py              -- Python installer (stamped template)
     install.ps1             -- PowerShell installer (stamped template)
     content/
-        supermetrics.json   -- SM dict keyed by UUID (wire format)
+        supermetrics.json   -- SM dict keyed by UUID (wire format); also used by enable step
         views_content.xml   -- View XML (if any views)
         dashboard.json      -- Dashboard JSON with PLACEHOLDER_USER_ID
         customgroup.json    -- Custom group wire payload(s)
-        sm_metadata.json    -- SM name/resourceKinds for enable step
     README.md               -- Generated from bundle metadata
     LICENSE                 -- Copied from repo root (if present)
 """
@@ -32,11 +31,22 @@ PLACEHOLDER_USER_ID = "PLACEHOLDER_USER_ID"
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
+_ESCAPE_VARS = {"PACKAGE_NAME", "PACKAGE_DESCRIPTION", "DASHBOARD_UUID"}
+
+
 def _stamp_template(template_name: str, vars: dict) -> str:
-    """Read a template file and replace {{VAR}} placeholders with values."""
+    """Read a template file and replace {{VAR}} placeholders with values.
+
+    Variables listed in _ESCAPE_VARS are escaped for embedding in
+    string literals (double quotes and backslashes). Others (e.g.
+    CONTENT_MANIFEST) are substituted raw since they appear as bare
+    expressions, not inside quoted strings.
+    """
     template_path = _TEMPLATES_DIR / template_name
     text = template_path.read_text(encoding="utf-8")
     for key, value in vars.items():
+        if key in _ESCAPE_VARS:
+            value = value.replace("\\", "\\\\").replace('"', '\\"')
         text = text.replace("{{" + key + "}}", value)
     return text
 
@@ -74,21 +84,6 @@ def _render_supermetrics_dict(bundle: Bundle) -> dict:
             "resourceKinds": sm.resource_kinds,
         }
     return result
-
-
-def _render_sm_metadata(bundle: Bundle) -> list:
-    """Render SM metadata list for the enable step.
-
-    Contains name and resourceKinds (not id) because the install script
-    resolves the server-assigned ID by name after import.
-    """
-    return [
-        {
-            "name": sm.name,
-            "resourceKinds": sm.resource_kinds,
-        }
-        for sm in bundle.supermetrics
-    ]
 
 
 def _render_customgroup_payload(bundle: Bundle):
@@ -179,6 +174,12 @@ def _generate_readme(bundle: Bundle) -> str:
         "Deletion order: dashboards → views → super metrics → custom groups.",
         "Items not present on the target instance are skipped (not an error).",
         "",
+        "> **Note:** If this package includes dashboards or views, uninstall must be run",
+        "> as the `admin` user. VCF Ops locks imported dashboards to admin ownership;",
+        "> only the admin user's UI session can delete them. Re-run with `--user admin`",
+        "> (Python) or `-User admin` (PowerShell), or set `VCFOPS_USER=admin` in your",
+        "> environment.",
+        "",
         "## Requirements",
         "",
         "- Python 3.8+ or PowerShell 5.1+",
@@ -225,7 +226,6 @@ def build_bundle(
 
     # Render content payloads
     sm_dict = _render_supermetrics_dict(bundle) if bundle.supermetrics else {}
-    sm_meta = _render_sm_metadata(bundle) if bundle.supermetrics else []
 
     views_xml = render_views_xml(bundle.views) if bundle.views else ""
 
@@ -259,8 +259,6 @@ def build_bundle(
             z.writestr("content/dashboard.json", dashboard_json)
         if cg_payload is not None:
             z.writestr("content/customgroup.json", json.dumps(cg_payload, indent=2))
-        if sm_meta:
-            z.writestr("content/sm_metadata.json", json.dumps(sm_meta, indent=2))
 
         z.writestr("README.md", readme_text)
         if license_text is not None:

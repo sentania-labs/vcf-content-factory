@@ -152,6 +152,37 @@ class VCFOpsClient:
                 return p["id"]
         raise VCFOpsError("no default policy found in /api/policies response")
 
+    def export_default_policy_xml(self) -> str:
+        """Export the Default Policy and return the raw XML content."""
+        policy_id = self.get_default_policy_id()
+        r = self._request(
+            "GET", "/api/policies/export",
+            params={"id": policy_id},
+            headers={"Accept": "application/zip"},
+        )
+        if r.status_code != 200:
+            raise VCFOpsError(
+                f"policy export failed ({r.status_code}): {r.text}"
+            )
+        with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
+            for name in zf.namelist():
+                if name.endswith(".xml"):
+                    return zf.read(name).decode("utf-8")
+        raise VCFOpsError("policy export ZIP contained no XML file")
+
+    @staticmethod
+    def verify_supermetrics_enabled(
+        policy_xml: str, sm_ids: list,
+    ) -> dict:
+        """Check which SM IDs appear as enabled in the policy XML."""
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(policy_xml)
+        enabled_ids = set()
+        for elem in root.iter("SuperMetric"):
+            if elem.get("enabled", "").lower() == "true":
+                enabled_ids.add(elem.get("id", ""))
+        return {sm_id: sm_id in enabled_ids for sm_id in sm_ids}
+
     def enable_supermetric_on_default_policy(
         self,
         sm_id: str,

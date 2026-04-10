@@ -118,6 +118,42 @@ which must match the view's UUID. In this repo, the dashboard YAML's
 `view:` field names a view by name; the loader resolves it to the
 view YAML's `id` at build time.
 
+#### Dashboard import lock and ownership behavior
+
+The content-zip importer **always sets `locked: true` on imported
+dashboards**, regardless of the `locked` field value in the
+dashboard.json payload. This is server-side behavior — the importer
+ignores the `locked: false` we send.
+
+**Ownership** is governed by `usermappings.json`, not by `userId`
+inside the dashboard object. The importer maps the `userId` in each
+dashboard entry to a local account via `usermappings.json`'s
+`users[].userName`. If `userName` is `"admin"`, the dashboard is
+owned by admin regardless of whose API token performed the import.
+To have dashboards owned by the importing user, `userName` must match
+that user's account name.
+
+**Consequences for delete:** The `deleteTab` Struts action silently
+refuses to delete dashboards that are `locked: true` (HTTP 200, no
+error, dashboard not deleted). There is no `unlockTab` or equivalent
+mainAction in the Struts layer, no `/api/dashboards/{id}` REST
+endpoint, and no lock/unlock endpoint in either the public or
+internal OpenAPI specs.
+
+**No unlock path exists (verified 2026-04-10).** `saveDashboardConfig`
+with `isLocked: false` returns an HTML error page; `saveTab` accepts
+but doesn't change lock state. There is no `unlockTab` or equivalent
+mainAction. Re-importing with modified `usermappings.json` does not
+reassign ownership. See `context/dashboard_delete_api.md` for full
+empirical findings.
+
+**Root cause in the packager:** `usermappings.json` hardcodes
+`"userName": "admin"` (packager.py line 136). This causes all
+imported dashboards to be owned by admin even when the import is
+performed by a different user. Fix: pass the actual importing
+user's `userName` (available from `GET /api/auth/currentuser`) into
+`build_import_zip` and use it in `usermappings.json`.
+
 **`entries.resource` is required for self-provider pinned widgets.**
 When a View widget has `self_provider: true` with a `pin`, the
 bundle's `entries` must include a `resource` array alongside

@@ -14,6 +14,7 @@ property is omitted, defaulted, or left empty.
 from __future__ import annotations
 
 import json
+import re
 import time
 import uuid
 from xml.sax.saxutils import escape
@@ -92,14 +93,30 @@ def _xml_transformations_block(view: ViewDef) -> str:
     return '<Property name="transformations"><List><Item value="CURRENT"/></List></Property>'
 
 
-def _xml_attribute_item(view: ViewDef, col, idx: int) -> str:
+def _xml_attribute_item(view: ViewDef, col, idx: int, sm_map: dict[str, str] | None = None) -> str:
     # Super metric columns live in their own namespace and need the
     # "Super Metric|sm_<uuid>" attributeKey form — bare "sm_<uuid>"
     # renders as a blank column in the UI. Reference: exported views
     # from the sentania/AriaOperationsContent VCF License Consumption
     # bundle. Super metric columns also use rollUpType=NONE, not AVG.
     raw = col.attribute
-    if raw.startswith("sm_"):
+    if raw.startswith('supermetric:"') or raw.startswith("supermetric:'"):
+        # Author wrote supermetric:"<name>" — resolve to sm_<uuid> using
+        # the SM name map built from supermetrics/ YAML at render time.
+        m = re.match(r'''supermetric:["'](.+?)["']$''', raw)
+        if m:
+            sm_name = m.group(1)
+            sm_id = (sm_map or {}).get(sm_name)
+            if sm_id:
+                attribute_key = f"Super Metric|sm_{sm_id}"
+            else:
+                # SM not found in map — emit the raw token so the error
+                # is visible in the XML rather than silently blank.
+                attribute_key = raw
+        else:
+            attribute_key = raw
+        roll_up_type = "NONE"
+    elif raw.startswith("sm_"):
         attribute_key = f"Super Metric|{raw}"
         roll_up_type = "NONE"
     elif raw.startswith("Super Metric|"):
@@ -149,8 +166,8 @@ def _render_summary_infos(view: ViewDef) -> str:
     )
 
 
-def _render_view_def_fragment(view: ViewDef) -> str:
-    items = "".join(_xml_attribute_item(view, c, i) for i, c in enumerate(view.columns))
+def _render_view_def_fragment(view: ViewDef, sm_map: dict[str, str] | None = None) -> str:
+    items = "".join(_xml_attribute_item(view, c, i, sm_map) for i, c in enumerate(view.columns))
 
     # Shared header elements
     header = (
@@ -269,7 +286,18 @@ def _render_view_def_fragment(view: ViewDef) -> str:
 def render_views_xml(views: list[ViewDef]) -> str:
     """Render one or more ViewDefs into the single content.xml the
     VCF Ops content importer expects inside views.zip."""
-    fragments = "".join(_render_view_def_fragment(v) for v in views)
+    # Build SM name->uuid map from supermetrics/ YAML so that view column
+    # attributes written as supermetric:"<name>" resolve to SuperMetric|sm_<uuid>.
+    sm_map: dict[str, str] = {}
+    try:
+        from vcfops_supermetrics.loader import load_dir as _sm_load_dir
+        for sm in _sm_load_dir():
+            sm_map[sm.name] = sm.id
+    except Exception:
+        # If supermetrics package or directory is unavailable, fall through
+        # with an empty map; unresolved tokens remain visible in the XML.
+        pass
+    fragments = "".join(_render_view_def_fragment(v, sm_map) for v in views)
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f"<Content><Views>{fragments}</Views></Content>"

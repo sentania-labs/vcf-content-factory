@@ -72,7 +72,10 @@ class ViewsHandler(ContentHandler):
             marker = discover_marker_filename(session)
             # Import views-only (no dashboards)
             blob = build_import_zip(
-                views, [], owner_user_id=user["id"], marker_filename=marker
+                views, [],
+                owner_user_id=user["id"],
+                owner_username=user.get("userName", "admin"),
+                marker_filename=marker,
             )
             api_result = import_content_zip(session, blob)
         except VCFOpsError as exc:
@@ -238,6 +241,7 @@ class DashboardsHandler(ContentHandler):
                 list(views_by_name.values()),
                 dashboards,
                 owner_user_id=user["id"],
+                owner_username=user.get("userName", "admin"),
                 marker_filename=marker,
             )
             api_result = import_content_zip(session, blob)

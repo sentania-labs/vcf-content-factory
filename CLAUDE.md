@@ -298,6 +298,24 @@ communicate to users early, rather than discovering mid-workflow:
    these clones. Run `scripts/bootstrap_references.sh` to populate
    them, or expect recon to report missing-clone gaps.
 
+6. **View delete (VCF Ops 9.0.2 server bug).** Views imported via
+   the content-zip path cannot be deleted programmatically. Both
+   `viewServiceController.deleteView` (Ext.Direct) and
+   `DELETE /internal/viewdefinitions/{uuid}` return HTTP 500. The
+   server stores duplicate `subjects` entries for content-zip-imported
+   views, and the delete path hits a constraint violation. This
+   affects both distribution package uninstall and CLI sync cleanup.
+   **Workaround:** delete views manually via the VCF Ops web console.
+   See `context/dashboard_delete_api.md` §"View delete limitation".
+
+7. **Dashboard uninstall requires `admin` account.** The content-zip
+   importer assigns dashboard ownership to the `admin` account
+   regardless of who authenticates the import. Only the `admin`
+   user's UI session can delete these dashboards. Install scripts
+   enforce this: uninstall of bundles containing dashboards or views
+   aborts with a clear error if the user is not `admin`. Install
+   (import) works with any admin-privileged account.
+
 ## Cross-reference syntax
 
 How content types reference each other in YAML — the loader for
