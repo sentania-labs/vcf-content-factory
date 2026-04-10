@@ -1,0 +1,16 @@
+id: a8496c63-ab34-4e11-9478-7a47d3584fbb
+name: "[VCF Content Factory] Test - Host VM Summary"
+description: >
+  Test dashboard for distribution package validation. Self-provider
+  view of host VM counts and CPU. Safe to delete after testing.
+
+widgets:
+  - id: test_view
+    type: View
+    title: "Host VM Summary"
+    coords: {x: 1, y: 1, w: 12, h: 11}
+    view: "[VCF Content Factory] Test - Host VM Summary"
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World

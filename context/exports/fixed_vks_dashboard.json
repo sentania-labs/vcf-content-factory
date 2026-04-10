@@ -1,0 +1,67 @@
+{
+   "entries": {"resource": [{
+      "resourceKindKey": "vSphere World",
+      "internalId": "resource:id:0_::_",
+      "adapterKindKey": "VMWARE",
+      "identifiers": [],
+      "name": "vSphere World"
+   }]},
+   "dashboards": [{
+      "shared": true,
+      "temporary": false,
+      "hidden": false,
+      "creationTime": 1775771079555,
+      "autoswitchEnabled": false,
+      "importAttempts": 0,
+      "columnProportion": "1",
+      "importComplete": true,
+      "description": "Per-vCenter breakdown of VM vCPU by role (VKS Worker, Supervisor CP, vCLS, VM Service, Regular) plus physical cores, vCPU:pCore ratio, and the computed VKS core equivalent. One row per vCenter \u2014 no scoping widget, this is a read-at-a-glance report. Replaces the per-vCenter PowerCLI VKS core- consumption script.",
+      "widgets": [{
+         "collapsed": false,
+         "id": "57988d9b-274a-5758-b96a-91acb4e21e8c",
+         "gridsterCoords": {
+            "w": 12,
+            "x": 1,
+            "h": 11,
+            "y": 1
+         },
+         "type": "View",
+         "title": "VKS Core Consumption by vCenter",
+         "config": {
+            "refreshInterval": 300,
+            "resource": {
+               "resourceId": "resource:id:0_::_",
+               "traversalSpecId": "",
+               "resourceName": "vSphere World",
+               "resourceKindId": "002006VMWAREvSphere World",
+               "id": "Ext.vcops.chrome.model.Resource-4"
+            },
+            "traversalSpecId": null,
+            "refreshContent": {"refreshContent": true},
+            "isUpdatedView": true,
+            "chartViewItems": [],
+            "selectFirstRow": {"selectFirstRow": true},
+            "selfProvider": {"selfProvider": true},
+            "title": "VKS Core Consumption by vCenter",
+            "viewDefinitionId": "53569330-f96d-479e-a764-6ac127df5a95"
+         },
+         "height": 600
+      }],
+      "states": [],
+      "homeTab": false,
+      "rank": 0,
+      "disabled": false,
+      "id": "62652554-b2a7-46ef-a7cd-8163ab3b59f1",
+      "locked": false,
+      "dashboardNavigations": {},
+      "widgetInteractions": [],
+      "namePath": "VCF Content Factory",
+      "lastUpdateUserId": "0c44e115-dc21-4ea5-8a56-01c22f18325b",
+      "columnCount": 1,
+      "userId": "0c44e115-dc21-4ea5-8a56-01c22f18325b",
+      "name": "VCF Content Factory/[VCF Content Factory] VKS Core Consumption",
+      "gridsterMaxColumns": 12,
+      "lastUpdateTime": 1775772114613
+   }],
+   "uuid": "d240d724-36e1-4f45-b02c-46348ed4293e"
+}

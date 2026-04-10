@@ -127,6 +127,8 @@ that doesn't delegate and ends up holding all the context.
 | `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer bug, loader gap, new CLI command, client helper. The **only** agent that edits `vcfops_*/` code. |
 | `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. Validates, syncs, enables, verifies. Handles import-task-busy retries. |
 | `content-packager` | Build | `dist/` only | User wants a standalone distributable bundle (bash/pwsh/python install scripts + content-zips + license + README). |
+| `symptom-author` | Author | `symptoms/` only | User needs a symptom definition (metric/property threshold, event-based). Feeds into alert definitions. No tooling package yet — will report TOOLSET GAP for validation. |
+| `alert-author` | Author | `alerts/` only | User needs an alert definition. Combines symptom sets + impact + recommendations. Requires symptoms to exist first. No tooling package yet — will report TOOLSET GAP for validation. |
 
 ### Delegation protocol
 
@@ -145,7 +147,9 @@ that doesn't delegate and ends up holding all the context.
    reference source over authoring from scratch.
 2. **Delegate bottom-up for compound requests.** For "super metric
    + view + dashboard", invoke `supermetric-author` first, then
-   `view-author`, then `dashboard-author`. Cross-references are
+   `view-author`, then `dashboard-author`. For "symptom + alert",
+   invoke `symptom-author` first, then `alert-author` (alerts
+   reference symptoms by name). Cross-references are
    resolved at author time by reading the YAML the previous agent
    wrote, so order matters.
 3. **Pass filenames, not file contents.** Agents read the

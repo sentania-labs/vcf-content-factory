@@ -1,0 +1,71 @@
+{
+  "shared": true,
+  "temporary": false,
+  "hidden": false,
+  "creationTime": 1775764819355,
+  "autoswitchEnabled": false,
+  "importAttempts": 0,
+  "columnProportion": "1",
+  "importComplete": true,
+  "description": "Per-vCenter breakdown of VM vCPU by role (VKS Worker, Supervisor CP, vCLS, VM Service, Regular) plus physical cores, vCPU:pCore ratio, and the computed VKS core equivalent. One row per vCenter \u2014 no scoping widget, this is a read-at-a-glance report. Replaces the per-vCenter PowerCLI VKS core- consumption script.",
+  "widgets": [
+    {
+      "collapsed": false,
+      "id": "57988d9b-274a-5758-b96a-91acb4e21e8c",
+      "gridsterCoords": {
+        "w": 12,
+        "x": 1,
+        "h": 11,
+        "y": 1
+      },
+      "type": "View",
+      "title": "VKS Core Consumption by vCenter",
+      "config": {
+        "refreshInterval": 300,
+        "resource": {
+          "resourceId": "resource:id:1_::_",
+          "traversalSpecId": "",
+          "resourceName": "vSphere World",
+          "resourceKindId": "002006VMWAREvSphere World",
+          "id": "Ext.vcops.chrome.model.Resource-25"
+        },
+        "traversalSpecId": null,
+        "refreshContent": {
+          "refreshContent": true
+        },
+        "isUpdatedView": true,
+        "chartViewItems": [],
+        "selectFirstRow": {
+          "selectFirstRow": true
+        },
+        "selfProvider": {
+          "selfProvider": true
+        },
+        "title": "VKS Core Consumption by vCenter",
+        "viewDefinitionId": "53569330-f96d-479e-a764-6ac127df5a95"
+      },
+      "height": 600,
+      "states": [
+        {
+          "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_62652554-b2a7-46ef-a7cd-8163ab3b59f1_57988d9b-274a-5758-b96a-91acb4e21e8c-column-0%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A252%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_62652554-b2a7-46ef-a7cd-8163ab3b59f1_57988d9b-274a-5758-b96a-91acb4e21e8c-column-cpu%2525257Cvcpus_allocated_on_all_vms1%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A87%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_62652554-b2a7-46ef-a7cd-8163ab3b59f1_57988d9b-274a-5758-b96a-91acb4e21e8c-column-Super%25252520Metric%2525257Csm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd42%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A110%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_62652554-b2a7-46ef-a7cd-8163ab3b59f1_57988d9b-274a-5758-b96a-91acb4e21e8c-column-Super%25252520Metric%2525257Csm_a2b233be-ab55-46cc-816d-5ca5f10fc4773%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_62652554-b2a7-46ef-a7cd-8163ab3b59f1_57988d9b-274a-5758-b96a-91acb4e21e8c-column-Super%25252520Metric%2525257Csm_46179895-f760-4472-960c-e368aa869bc74%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_62652554-b2a7-46ef-a7cd-8163ab3b59f1_57988d9b-274a-5758-b96a-91acb4e21e8c-column-Super%25252520Metric%2525257Csm_2308ba66-91c6-43c8-95e3-33fd2ee51f735%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_62652554-b2a7-46ef-a7cd-8163ab3b59f1_57988d9b-274a-5758-b96a-91acb4e21e8c-column-Super%25252520Metric%2525257Csm_b16e3bb4-b8aa-4844-af10-d9b30702318a6%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_62652554-b2a7-46ef-a7cd-8163ab3b59f1_57988d9b-274a-5758-b96a-91acb4e21e8c-column-Super%25252520Metric%2525257Csm_020cf289-b254-4d8c-9e36-f0925c36e3d87%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_62652554-b2a7-46ef-a7cd-8163ab3b59f1_57988d9b-274a-5758-b96a-91acb4e21e8c-column-cpu%2525257Ccorecount_provisioned8%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_62652554-b2a7-46ef-a7cd-8163ab3b59f1_57988d9b-274a-5758-b96a-91acb4e21e8c-column-Super%25252520Metric%2525257Csm_ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e9%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_62652554-b2a7-46ef-a7cd-8163ab3b59f1_57988d9b-274a-5758-b96a-91acb4e21e8c-column-Super%25252520Metric%2525257Csm_73f9b9d7-1801-4e6d-bdd0-c3f3203d7bcc10%25255Ehidden%25253Db%2525253A0",
+          "key": "permTableView_widget_62652554-b2a7-46ef-a7cd-8163ab3b59f1_57988d9b-274a-5758-b96a-91acb4e21e8c"
+        }
+      ]
+    }
+  ],
+  "states": [],
+  "homeTab": false,
+  "rank": 0,
+  "disabled": false,
+  "id": "62652554-b2a7-46ef-a7cd-8163ab3b59f1",
+  "locked": false,
+  "dashboardNavigations": {},
+  "widgetInteractions": [],
+  "namePath": "VCF Content Factory",
+  "lastUpdateUserId": "0c44e115-dc21-4ea5-8a56-01c22f18325b",
+  "columnCount": 1,
+  "userId": "0c44e115-dc21-4ea5-8a56-01c22f18325b",
+  "name": "VCF Content Factory/[VCF Content Factory] VKS Core Consumption",
+  "gridsterMaxColumns": 12,
+  "lastUpdateTime": 1775765922447
+}

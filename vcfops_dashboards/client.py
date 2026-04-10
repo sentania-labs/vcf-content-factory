@@ -37,7 +37,13 @@ def discover_marker_filename(client: VCFOpsClient, timeout_s: int = 120) -> str:
 
     There is no dedicated "cluster fingerprint" endpoint (checked
     /api/versions, /api/deployment/*, /api/cluster*) so a throwaway
-    export is the cheapest reliable source."""
+    export is the cheapest reliable source.
+
+    startTime is snapshotted before the POST so the completion poll
+    can distinguish the new export from a prior already-FINISHED one.
+    Without this, a stale FINISHED state from a previous run causes the
+    poll to exit immediately and the zip download returns 400 because
+    the prior zip was already consumed."""
     client._ensure_auth()
     # Wait for any export already in flight; only one may run at a time.
     deadline = time.monotonic() + timeout_s
@@ -51,12 +57,20 @@ def discover_marker_filename(client: VCFOpsClient, timeout_s: int = 120) -> str:
             raise VCFOpsError("timed out waiting for prior export to finish")
         time.sleep(2)
 
+    # Snapshot startTime of any prior export so the poll loop can
+    # require start_time > prior_start_time, preventing a stale
+    # FINISHED state from a previous run from being mistaken for ours.
+    prior_start_time = 0
+    g = client._request("GET", "/api/content/operations/export")
+    if g.status_code == 200:
+        prior_start_time = (g.json() or {}).get("startTime") or 0
+
     r = client._request(
         "POST",
         "/api/content/operations/export",
         json={"scope": "CUSTOM", "contentTypes": ["SUPER_METRICS"]},
     )
-    if r.status_code != 202:
+    if r.status_code not in (200, 202):
         raise VCFOpsError(f"marker-probe export failed ({r.status_code}): {r.text}")
 
     deadline = time.monotonic() + timeout_s
@@ -64,8 +78,12 @@ def discover_marker_filename(client: VCFOpsClient, timeout_s: int = 120) -> str:
         g = client._request("GET", "/api/content/operations/export")
         if g.status_code != 200:
             raise VCFOpsError(f"export status failed ({g.status_code}): {g.text}")
-        st = (g.json() or {}).get("state", "")
-        if st.startswith("FINI"):
+        body = g.json() or {}
+        st = body.get("state", "")
+        start_time = body.get("startTime") or 0
+        # Require both a fresh startTime and a finished state so we
+        # do not mistake the prior export's FINISHED state for ours.
+        if start_time > prior_start_time and st.startswith("FINI"):
             break
         if time.monotonic() > deadline:
             raise VCFOpsError(f"marker-probe export timed out; state={st}")

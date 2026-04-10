@@ -209,18 +209,17 @@ def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int
                 f"{w.pin.adapter_kind!r} — extend _ADAPTER_KIND_PREFIX "
                 f"after harvesting from an exported reference dashboard"
             )
-        # Widget config.resource.resourceId is 1-indexed into the
-        # entries.resource table (0-indexed internalIds). Ops does
-        # not resolve resource:id:0 as a valid widget pin — it
-        # causes "Please wait being configured" and ISE on edit.
+        # Widget config.resource.resourceId is 0-indexed, matching the
+        # entries.resource[].internalId values (resource:id:0_::_, etc.).
+        # The Ext.vcops.chrome.model.Resource-N id is 1-based in exports
+        # but Ops reassigns it on import — any positive integer works.
         res_idx = resource_index[pin_key]
-        pin_ref = res_idx + 1
         resource = {
-            "resourceId": f"resource:id:{pin_ref}_::_",
+            "resourceId": f"resource:id:{res_idx}_::_",
             "traversalSpecId": "",
             "resourceName": w.pin.resource_kind,
             "resourceKindId": f"{prefix}{w.pin.adapter_kind}{w.pin.resource_kind}",
-            "id": f"Ext.vcops.chrome.model.Resource-{pin_ref}",
+            "id": f"Ext.vcops.chrome.model.Resource-{res_idx + 1}",
         }
         self_provider_flag = True
         refresh_content = True
@@ -333,14 +332,13 @@ def render_dashboards_bundle_json(
                 key = (rk.adapter_kind, rk.resource_kind)
                 if key not in kind_index:
                     kind_index[key] = len(kind_index)
-            if w.pin:
-                key = (w.pin.adapter_kind, w.pin.resource_kind)
-                if key not in kind_index:
-                    kind_index[key] = len(kind_index)
     # Build resource index for self-provider pinned widgets. Each
     # unique (adapter_kind, resource_kind) pin gets a 0-based slot
     # in entries.resource[]. Widget configs reference these with
-    # 1-based resource:id:<N+1>_::_ values.
+    # resource:id:<N>_::_ values (0-based, matching internalId).
+    # Pin kinds must NOT be added to kind_index — that table is for
+    # ResourceList filter widgets only. Self-provider dashboards have
+    # no entries.resourceKind for the pinned kind.
     resource_index: dict[tuple[str, str], int] = {}
     for d in dashboards:
         for w in d.widgets:

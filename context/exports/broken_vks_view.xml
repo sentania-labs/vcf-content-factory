@@ -1,0 +1,945 @@
+<ViewDef id="53569330-f96d-479e-a764-6ac127df5a95">
+  
+                        
+            
+  <Title>[VCF Content Factory] VKS Core Consumption by vCenter</Title>
+  
+                        
+            
+  <Description>One row per vCenter. Columns match the PowerShell VKS core consumption script output exactly: Total VM vCPU, VKS vCPU (all node image VMs — CP+Worker), Supervisor vCPU, Pod vCPU, VM Service vCPU, Regular vCPU, vCLS vCPU, Physical Cores, Global Ratio, and Calculated VKS Cores.</Description>
+  
+                        
+            
+  <SubjectType adapterKind="VMWARE" resourceKind="VMwareAdapter Instance" type="descendant"/>
+  
+                        
+            
+  <SubjectType adapterKind="VMWARE" resourceKind="VMwareAdapter Instance" type="self"/>
+  
+                        
+            
+  <Usage>dashboard</Usage>
+  
+                        
+            
+  <Usage>report</Usage>
+  
+                        
+            
+  <Usage>details</Usage>
+  
+                        
+            
+  <Usage>content</Usage>
+  
+                        
+            
+  <Controls>
+    
+                                
+                
+    <Control id="time-interval-selector_id_1" type="time-interval-selector" visible="false">
+      
+                                        
+                    
+      <Property name="advancedTimeMode" value="false"/>
+      
+                                        
+                    
+      <Property name="unit" value="HOURS"/>
+      
+                                        
+                    
+      <Property name="count" value="24"/>
+      
+                                    
+                
+    </Control>
+    
+                                
+                
+    <Control id="attributes-selector_id_1" type="attributes-selector" visible="false">
+      
+                                        
+                    
+      <Property name="attributeInfos">
+        
+                                                
+                        
+        <List>
+          
+                                                        
+                            
+          <Item>
+            
+                                
+                                
+            <Value>
+              
+                                        
+                                    
+              <Property name="objectType" value="RESOURCE"/>
+              
+                                        
+                                    
+              <Property name="attributeKey" value="cpu|vcpus_allocated_on_all_vms"/>
+              
+                                        
+                                    
+              <Property name="isStringAttribute" value="false"/>
+              
+                                        
+                                    
+              <Property name="adapterKind" value="VMWARE"/>
+              
+                                        
+                                    
+              <Property name="resourceKind" value="VMwareAdapter Instance"/>
+              
+                                        
+                                    
+              <Property name="rollUpType" value="AVG"/>
+              
+                                        
+                                    
+              <Property name="rollUpCount" value="1"/>
+              
+                                        
+                                    
+              <Property name="transformations">
+                
+                                                
+                                        
+                <List>
+                  
+                                                        
+                                            
+                  <Item value="CURRENT"/>
+                  
+                                                    
+                                        
+                </List>
+                
+                                            
+                                    
+              </Property>
+              
+                                        
+                                    
+              <Property name="isProperty" value="false"/>
+              
+                                        
+                                    
+              <Property name="displayName" value="Total VM vCPU"/>
+              
+                                        
+                                    
+              <Property name="addTimestampAsColumn" value="false"/>
+              
+                                        
+                                    
+              <Property name="isShowRelativeTimestamp" value="false"/>
+              
+                                    
+                                
+            </Value>
+            
+                                                            
+                            
+          </Item>
+          
+                                                        
+                            
+          <Item>
+            
+                                
+                                
+            <Value>
+              
+                                        
+                                    
+              <Property name="objectType" value="RESOURCE"/>
+              
+                                        
+                                    
+              <Property name="attributeKey" value="Super Metric|sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4"/>
+              
+                                        
+                                    
+              <Property name="isStringAttribute" value="false"/>
+              
+                                        
+                                    
+              <Property name="adapterKind" value="VMWARE"/>
+              
+                                        
+                                    
+              <Property name="resourceKind" value="VMwareAdapter Instance"/>
+              
+                                        
+                                    
+              <Property name="rollUpType" value="NONE"/>
+              
+                                        
+                                    
+              <Property name="rollUpCount" value="1"/>
+              
+                                        
+                                    
+              <Property name="transformations">
+                
+                                                
+                                        
+                <List>
+                  
+                                                        
+                                            
+                  <Item value="CURRENT"/>
+                  
+                                                    
+                                        
+                </List>
+                
+                                            
+                                    
+              </Property>
+              
+                                        
+                                    
+              <Property name="isProperty" value="false"/>
+              
+                                        
+                                    
+              <Property name="displayName" value="VKS vCPU"/>
+              
+                                        
+                                    
+              <Property name="addTimestampAsColumn" value="false"/>
+              
+                                        
+                                    
+              <Property name="isShowRelativeTimestamp" value="false"/>
+              
+                                    
+                                
+            </Value>
+            
+                                                            
+                            
+          </Item>
+          
+                                                        
+                            
+          <Item>
+            
+                                
+                                
+            <Value>
+              
+                                        
+                                    
+              <Property name="objectType" value="RESOURCE"/>
+              
+                                        
+                                    
+              <Property name="attributeKey" value="Super Metric|sm_a2b233be-ab55-46cc-816d-5ca5f10fc477"/>
+              
+                                        
+                                    
+              <Property name="isStringAttribute" value="false"/>
+              
+                                        
+                                    
+              <Property name="adapterKind" value="VMWARE"/>
+              
+                                        
+                                    
+              <Property name="resourceKind" value="VMwareAdapter Instance"/>
+              
+                                        
+                                    
+              <Property name="rollUpType" value="NONE"/>
+              
+                                        
+                                    
+              <Property name="rollUpCount" value="1"/>
+              
+                                        
+                                    
+              <Property name="transformations">
+                
+                                                
+                                        
+                <List>
+                  
+                                                        
+                                            
+                  <Item value="CURRENT"/>
+                  
+                                                    
+                                        
+                </List>
+                
+                                            
+                                    
+              </Property>
+              
+                                        
+                                    
+              <Property name="isProperty" value="false"/>
+              
+                                        
+                                    
+              <Property name="displayName" value="Supervisor vCPU"/>
+              
+                                        
+                                    
+              <Property name="addTimestampAsColumn" value="false"/>
+              
+                                        
+                                    
+              <Property name="isShowRelativeTimestamp" value="false"/>
+              
+                                    
+                                
+            </Value>
+            
+                                                            
+                            
+          </Item>
+          
+                                                        
+                            
+          <Item>
+            
+                                
+                                
+            <Value>
+              
+                                        
+                                    
+              <Property name="objectType" value="RESOURCE"/>
+              
+                                        
+                                    
+              <Property name="attributeKey" value="Super Metric|sm_46179895-f760-4472-960c-e368aa869bc7"/>
+              
+                                        
+                                    
+              <Property name="isStringAttribute" value="false"/>
+              
+                                        
+                                    
+              <Property name="adapterKind" value="VMWARE"/>
+              
+                                        
+                                    
+              <Property name="resourceKind" value="VMwareAdapter Instance"/>
+              
+                                        
+                                    
+              <Property name="rollUpType" value="NONE"/>
+              
+                                        
+                                    
+              <Property name="rollUpCount" value="1"/>
+              
+                                        
+                                    
+              <Property name="transformations">
+                
+                                                
+                                        
+                <List>
+                  
+                                                        
+                                            
+                  <Item value="CURRENT"/>
+                  
+                                                    
+                                        
+                </List>
+                
+                                            
+                                    
+              </Property>
+              
+                                        
+                                    
+              <Property name="isProperty" value="false"/>
+              
+                                        
+                                    
+              <Property name="displayName" value="Pod vCPU"/>
+              
+                                        
+                                    
+              <Property name="addTimestampAsColumn" value="false"/>
+              
+                                        
+                                    
+              <Property name="isShowRelativeTimestamp" value="false"/>
+              
+                                    
+                                
+            </Value>
+            
+                                                            
+                            
+          </Item>
+          
+                                                        
+                            
+          <Item>
+            
+                                
+                                
+            <Value>
+              
+                                        
+                                    
+              <Property name="objectType" value="RESOURCE"/>
+              
+                                        
+                                    
+              <Property name="attributeKey" value="Super Metric|sm_2308ba66-91c6-43c8-95e3-33fd2ee51f73"/>
+              
+                                        
+                                    
+              <Property name="isStringAttribute" value="false"/>
+              
+                                        
+                                    
+              <Property name="adapterKind" value="VMWARE"/>
+              
+                                        
+                                    
+              <Property name="resourceKind" value="VMwareAdapter Instance"/>
+              
+                                        
+                                    
+              <Property name="rollUpType" value="NONE"/>
+              
+                                        
+                                    
+              <Property name="rollUpCount" value="1"/>
+              
+                                        
+                                    
+              <Property name="transformations">
+                
+                                                
+                                        
+                <List>
+                  
+                                                        
+                                            
+                  <Item value="CURRENT"/>
+                  
+                                                    
+                                        
+                </List>
+                
+                                            
+                                    
+              </Property>
+              
+                                        
+                                    
+              <Property name="isProperty" value="false"/>
+              
+                                        
+                                    
+              <Property name="displayName" value="VM Service vCPU"/>
+              
+                                        
+                                    
+              <Property name="addTimestampAsColumn" value="false"/>
+              
+                                        
+                                    
+              <Property name="isShowRelativeTimestamp" value="false"/>
+              
+                                    
+                                
+            </Value>
+            
+                                                            
+                            
+          </Item>
+          
+                                                        
+                            
+          <Item>
+            
+                                
+                                
+            <Value>
+              
+                                        
+                                    
+              <Property name="objectType" value="RESOURCE"/>
+              
+                                        
+                                    
+              <Property name="attributeKey" value="Super Metric|sm_b16e3bb4-b8aa-4844-af10-d9b30702318a"/>
+              
+                                        
+                                    
+              <Property name="isStringAttribute" value="false"/>
+              
+                                        
+                                    
+              <Property name="adapterKind" value="VMWARE"/>
+              
+                                        
+                                    
+              <Property name="resourceKind" value="VMwareAdapter Instance"/>
+              
+                                        
+                                    
+              <Property name="rollUpType" value="NONE"/>
+              
+                                        
+                                    
+              <Property name="rollUpCount" value="1"/>
+              
+                                        
+                                    
+              <Property name="transformations">
+                
+                                                
+                                        
+                <List>
+                  
+                                                        
+                                            
+                  <Item value="CURRENT"/>
+                  
+                                                    
+                                        
+                </List>
+                
+                                            
+                                    
+              </Property>
+              
+                                        
+                                    
+              <Property name="isProperty" value="false"/>
+              
+                                        
+                                    
+              <Property name="displayName" value="Regular vCPU"/>
+              
+                                        
+                                    
+              <Property name="addTimestampAsColumn" value="false"/>
+              
+                                        
+                                    
+              <Property name="isShowRelativeTimestamp" value="false"/>
+              
+                                    
+                                
+            </Value>
+            
+                                                            
+                            
+          </Item>
+          
+                                                        
+                            
+          <Item>
+            
+                                
+                                
+            <Value>
+              
+                                        
+                                    
+              <Property name="objectType" value="RESOURCE"/>
+              
+                                        
+                                    
+              <Property name="attributeKey" value="Super Metric|sm_020cf289-b254-4d8c-9e36-f0925c36e3d8"/>
+              
+                                        
+                                    
+              <Property name="isStringAttribute" value="false"/>
+              
+                                        
+                                    
+              <Property name="adapterKind" value="VMWARE"/>
+              
+                                        
+                                    
+              <Property name="resourceKind" value="VMwareAdapter Instance"/>
+              
+                                        
+                                    
+              <Property name="rollUpType" value="NONE"/>
+              
+                                        
+                                    
+              <Property name="rollUpCount" value="1"/>
+              
+                                        
+                                    
+              <Property name="transformations">
+                
+                                                
+                                        
+                <List>
+                  
+                                                        
+                                            
+                  <Item value="CURRENT"/>
+                  
+                                                    
+                                        
+                </List>
+                
+                                            
+                                    
+              </Property>
+              
+                                        
+                                    
+              <Property name="isProperty" value="false"/>
+              
+                                        
+                                    
+              <Property name="displayName" value="vCLS vCPU"/>
+              
+                                        
+                                    
+              <Property name="addTimestampAsColumn" value="false"/>
+              
+                                        
+                                    
+              <Property name="isShowRelativeTimestamp" value="false"/>
+              
+                                    
+                                
+            </Value>
+            
+                                                            
+                            
+          </Item>
+          
+                                                        
+                            
+          <Item>
+            
+                                
+                                
+            <Value>
+              
+                                        
+                                    
+              <Property name="objectType" value="RESOURCE"/>
+              
+                                        
+                                    
+              <Property name="attributeKey" value="cpu|corecount_provisioned"/>
+              
+                                        
+                                    
+              <Property name="isStringAttribute" value="false"/>
+              
+                                        
+                                    
+              <Property name="adapterKind" value="VMWARE"/>
+              
+                                        
+                                    
+              <Property name="resourceKind" value="VMwareAdapter Instance"/>
+              
+                                        
+                                    
+              <Property name="rollUpType" value="AVG"/>
+              
+                                        
+                                    
+              <Property name="rollUpCount" value="1"/>
+              
+                                        
+                                    
+              <Property name="transformations">
+                
+                                                
+                                        
+                <List>
+                  
+                                                        
+                                            
+                  <Item value="CURRENT"/>
+                  
+                                                    
+                                        
+                </List>
+                
+                                            
+                                    
+              </Property>
+              
+                                        
+                                    
+              <Property name="isProperty" value="false"/>
+              
+                                        
+                                    
+              <Property name="displayName" value="Physical Cores"/>
+              
+                                        
+                                    
+              <Property name="addTimestampAsColumn" value="false"/>
+              
+                                        
+                                    
+              <Property name="isShowRelativeTimestamp" value="false"/>
+              
+                                    
+                                
+            </Value>
+            
+                                                            
+                            
+          </Item>
+          
+                                                        
+                            
+          <Item>
+            
+                                
+                                
+            <Value>
+              
+                                        
+                                    
+              <Property name="objectType" value="RESOURCE"/>
+              
+                                        
+                                    
+              <Property name="attributeKey" value="Super Metric|sm_ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e"/>
+              
+                                        
+                                    
+              <Property name="isStringAttribute" value="false"/>
+              
+                                        
+                                    
+              <Property name="adapterKind" value="VMWARE"/>
+              
+                                        
+                                    
+              <Property name="resourceKind" value="VMwareAdapter Instance"/>
+              
+                                        
+                                    
+              <Property name="rollUpType" value="NONE"/>
+              
+                                        
+                                    
+              <Property name="rollUpCount" value="1"/>
+              
+                                        
+                                    
+              <Property name="transformations">
+                
+                                                
+                                        
+                <List>
+                  
+                                                        
+                                            
+                  <Item value="CURRENT"/>
+                  
+                                                    
+                                        
+                </List>
+                
+                                            
+                                    
+              </Property>
+              
+                                        
+                                    
+              <Property name="isProperty" value="false"/>
+              
+                                        
+                                    
+              <Property name="displayName" value="Global Ratio"/>
+              
+                                        
+                                    
+              <Property name="addTimestampAsColumn" value="false"/>
+              
+                                        
+                                    
+              <Property name="isShowRelativeTimestamp" value="false"/>
+              
+                                    
+                                
+            </Value>
+            
+                                                            
+                            
+          </Item>
+          
+                                                        
+                            
+          <Item>
+            
+                                
+                                
+            <Value>
+              
+                                        
+                                    
+              <Property name="objectType" value="RESOURCE"/>
+              
+                                        
+                                    
+              <Property name="attributeKey" value="Super Metric|sm_73f9b9d7-1801-4e6d-bdd0-c3f3203d7bcc"/>
+              
+                                        
+                                    
+              <Property name="isStringAttribute" value="false"/>
+              
+                                        
+                                    
+              <Property name="adapterKind" value="VMWARE"/>
+              
+                                        
+                                    
+              <Property name="resourceKind" value="VMwareAdapter Instance"/>
+              
+                                        
+                                    
+              <Property name="rollUpType" value="NONE"/>
+              
+                                        
+                                    
+              <Property name="rollUpCount" value="1"/>
+              
+                                        
+                                    
+              <Property name="transformations">
+                
+                                                
+                                        
+                <List>
+                  
+                                                        
+                                            
+                  <Item value="CURRENT"/>
+                  
+                                                    
+                                        
+                </List>
+                
+                                            
+                                    
+              </Property>
+              
+                                        
+                                    
+              <Property name="isProperty" value="false"/>
+              
+                                        
+                                    
+              <Property name="displayName" value="Calculated VKS Cores"/>
+              
+                                        
+                                    
+              <Property name="addTimestampAsColumn" value="false"/>
+              
+                                        
+                                    
+              <Property name="isShowRelativeTimestamp" value="false"/>
+              
+                                    
+                                
+            </Value>
+            
+                                                            
+                            
+          </Item>
+          
+                                                    
+                        
+        </List>
+        
+                                            
+                    
+      </Property>
+      
+                                    
+                
+    </Control>
+    
+                                
+                
+    <Control id="pagination-control_id_1" type="pagination-control" visible="true">
+      
+                                        
+                    
+      <Property name="start" value="0"/>
+      
+                                        
+                    
+      <Property name="size" value="500"/>
+      
+                                    
+                
+    </Control>
+    
+                                
+                
+    <Control id="metadata_id_1" type="metadata" visible="false">
+      
+                                        
+                    
+      <Property name="maxPointsCount" value="5000"/>
+      
+                                        
+                    
+      <Property name="hideObjectNameColumn" value="false"/>
+      
+                                        
+                    
+      <Property name="listTopResultSize" value="-1"/>
+      
+                                        
+                    
+      <Property name="includeResourceCreationTime" value="false"/>
+      
+                                    
+                
+    </Control>
+    
+                            
+            
+  </Controls>
+  
+                        
+            
+  <DataProviders>
+    
+                                
+                
+    <DataProvider dataType="list-view" id="list-view_id_1"/>
+    
+                            
+            
+  </DataProviders>
+  
+                        
+            
+  <Presentation type="list"/>
+  
+                    
+        
+</ViewDef>

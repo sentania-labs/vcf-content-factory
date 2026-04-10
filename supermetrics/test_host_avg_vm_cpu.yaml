@@ -1,0 +1,10 @@
+id: e45818d0-d59f-4f6a-9179-77ff5686fa30
+name: "[VCF Content Factory] Test - Host Avg VM CPU Usage (%)"
+resource_kinds:
+  - resource_kind_key: HostSystem
+    adapter_kind_key: VMWARE
+description: >
+  Test super metric for distribution package validation. Average
+  CPU usage across powered-on VMs on a host. Safe to delete after testing.
+formula: |
+  avg(${adaptertype=VMWARE, objecttype=VirtualMachine, metric=cpu|usage_average, depth=1, where=($value.isFresh())})
