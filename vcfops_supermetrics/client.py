@@ -240,7 +240,28 @@ class VCFOpsClient:
                 "configuration.json",
                 json.dumps({"superMetrics": len(sm_dict), "type": "ALL"}, indent=3),
             )
-        return import_content_zip(self, buf.getvalue())
+        zip_bytes = buf.getvalue()
+        result = import_content_zip(self, zip_bytes)
+
+        # Ghost-state recovery: the content-zip importer will "skip" an SM
+        # that already exists in the DB but failed to fully register in the
+        # internal SM catalog (e.g. from a previous partial import). The SM
+        # is queryable by GET /{id} but absent from the list API and invisible
+        # to the assign endpoint, so enable returns 404.  A second import of
+        # the same bundle re-registers the SM fully and the importer then
+        # reports it as "imported".  Detect the all-skipped signal and retry
+        # once automatically.
+        summaries = result.get("operationSummaries") or []
+        sm_summaries = [s for s in summaries if s.get("contentType") == "SUPER_METRICS"]
+        if sm_summaries:
+            total_imported = sum(int(s.get("imported") or 0) for s in sm_summaries)
+            total_skipped = sum(int(s.get("skipped") or 0) for s in sm_summaries)
+            if total_imported == 0 and total_skipped > 0:
+                # All entries were skipped — likely ghost-state SMs.  Re-import
+                # once to force catalog re-registration.
+                result = import_content_zip(self, zip_bytes)
+
+        return result
 
     def delete_supermetric(self, sm_id: str) -> None:
         r = self._request("DELETE", f"/api/supermetrics/{sm_id}")

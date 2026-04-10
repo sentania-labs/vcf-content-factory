@@ -164,6 +164,36 @@ Note: the body uses `adapterKind` / `resourceKind` (not the
 and `vcfops_packaging/templates/install.py` translate the loader
 keys to the API keys in the dict comprehension that builds the body.
 
+### SM ghost state — assign returns 404 despite GET /{id} succeeding
+
+**Symptom:** `PUT /internal/supermetrics/assign/default` returns
+`404 "No such superMetricId"` for an SM whose UUID is returned by
+`GET /api/supermetrics/{id}`. The SM also does NOT appear in
+`GET /api/supermetrics` list pages. No data points are computed.
+
+**Root cause:** The content-zip importer maintains two separate tables:
+the SM object store (queryable by GET-by-id) and an internal SM catalog
+used by the assign endpoint and the list API. When an SM was previously
+imported but its registration in the internal catalog failed (e.g. a
+prior partial import), the importer treats it as "already exists" and
+returns `skipped=1` without updating the catalog. The SM sits in ghost
+state: readable by ID, invisible to the list and to assign.
+
+**Detection:** After `POST /api/content/operations/import`, poll the
+status and check `operationSummaries[contentType=SUPER_METRICS]`. If
+`imported == 0` and `skipped > 0`, the SMs are in ghost state.
+
+**Fix:** Re-import the same ZIP a second time. The second import finds
+the SM in ghost state, fully re-registers it, and reports `imported=N`.
+After re-import the SM appears in the list and assign/default returns
+200. Both `vcfops_supermetrics/client.py:import_supermetrics_bundle`
+and `vcfops_packaging/templates/install.py:_install_supermetrics` detect
+the all-skipped signal and retry automatically.
+
+**Note:** `GET /api/supermetrics` returning a result does NOT guarantee
+the SM is registered in the internal catalog. Always validate
+post-import by checking the `operationSummaries` imported count.
+
 ## Policy export XML
 
 Different zip, same instance. `GET /api/policies/export?id=<uuid>`

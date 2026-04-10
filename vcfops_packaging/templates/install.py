@@ -267,10 +267,11 @@ class Client:
             if end_time > prior_end and state not in ("RUNNING", "INITIALIZED"):
                 if "FAIL" in state.upper():
                     _die(f"Import of {label} finished with state={state}")
-                return
+                return body
             if time.monotonic() > deadline:
                 _die(f"Import of {label} did not finish in {timeout_s}s; state={state}")
             time.sleep(2)
+        return {}  # unreachable; satisfies type checkers
 
     def get_default_policy_id(self) -> str:
         r = self._req("GET", "/api/policies")
@@ -723,7 +724,24 @@ def _prompt_credentials(args: argparse.Namespace, mode: str) -> tuple:
 def _install_supermetrics(ctx: Dict) -> None:
     sm_dict = _load_json("supermetrics.json")
     sm_zip = _build_sm_zip(sm_dict, ctx["marker"], ctx["owner_id"])
-    ctx["client"].import_content_zip(sm_zip, "super metrics")
+    result = ctx["client"].import_content_zip(sm_zip, "super metrics") or {}
+
+    # Ghost-state recovery: the content-zip importer will "skip" an SM that
+    # already exists in the DB but failed to fully register in the internal SM
+    # catalog (e.g. from a previous partial import).  Such SMs are queryable by
+    # GET /{id} but absent from the list API and invisible to the assign endpoint,
+    # so a subsequent enable call returns 404.  A second import re-registers the
+    # SM fully.  Detect the all-skipped signal and retry once automatically.
+    summaries = result.get("operationSummaries") or []
+    sm_summaries = [s for s in summaries if s.get("contentType") == "SUPER_METRICS"]
+    if sm_summaries:
+        total_imported = sum(int(s.get("imported") or 0) for s in sm_summaries)
+        total_skipped = sum(int(s.get("skipped") or 0) for s in sm_summaries)
+        if total_imported == 0 and total_skipped > 0:
+            print(f"    [ghost-state recovery] all {total_skipped} SM(s) skipped on first "
+                  f"import — retrying to re-register in SM catalog...")
+            ctx["client"].import_content_zip(sm_zip, "super metrics (retry)")
+
     _ok(f"Imported {len(sm_dict)} super metric(s)")
 
 
