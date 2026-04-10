@@ -69,6 +69,26 @@ name at load time without round-tripping to the server:
   rewrites to `sm_<id>` at validation time. Validation fails loudly
   if the referenced name doesn't resolve.
 
+## Cross-reference syntax quick reference
+
+Every content type uses name-based references in YAML. The loader
+for each type resolves names to UUIDs (or server-assigned IDs) at
+validate or sync time.
+
+| From → To | YAML syntax | Loader output | When resolved |
+|---|---|---|---|
+| SM formula → other SM | `@supermetric:"<exact name>"` | `sm_<uuid>` | `validate` (SM loader) |
+| View column → SM | `supermetric:"<exact name>"` in `attribute:` | `sm_<uuid>` in `attributeKey` | `validate` (dashboard loader) |
+| Dashboard widget → View | `view: "<exact view name>"` | view UUID in widget config | `validate` (dashboard loader) |
+| Alert → Symptom | `name: "<exact symptom name>"` in symptom set | symptom definition ID | `sync` (alert installer, via `GET /api/symptomdefinitions`) |
+
+**Rules:**
+- Names must match exactly (case-sensitive, prefix included).
+- SM/view/dashboard references resolve at validate time from local
+  YAML — the referenced object must exist in the repo.
+- Alert → symptom references resolve at sync time from the live
+  instance — symptoms must be synced before alerts.
+
 ## Orphan and rename handling
 
 Under the new scheme renaming a YAML keeps the same `id`, so the

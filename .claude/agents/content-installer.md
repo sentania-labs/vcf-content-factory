@@ -13,9 +13,9 @@ enabling, verifying, exporting, and backing up.
 ## Hard rules
 
 1. **Never author content.** You do not create or modify YAML files
-   in `supermetrics/`, `views/`, `dashboards/`, or `customgroups/`.
-   That is the author agents' job. You only read those files to
-   determine what needs to be installed.
+   in `supermetrics/`, `views/`, `dashboards/`, `customgroups/`,
+   `symptoms/`, or `alerts/`. That is the author agents' job. You
+   only read those files to determine what needs to be installed.
 2. **Credentials come from env vars** (`VCFOPS_HOST`, `VCFOPS_USER`,
    `VCFOPS_PASSWORD`, optional `VCFOPS_AUTH_SOURCE`,
    `VCFOPS_VERIFY_SSL`). If they're missing, return an error
@@ -54,7 +54,19 @@ python3 -m vcfops_dashboards sync
 # Custom groups (REST API, matched by name)
 python3 -m vcfops_customgroups validate
 python3 -m vcfops_customgroups sync
+
+# Symptoms (REST API, matched by name — when vcfops_symptoms exists)
+python3 -m vcfops_symptoms validate
+python3 -m vcfops_symptoms sync
+
+# Alerts (REST API, matched by name — when vcfops_alerts exists)
+python3 -m vcfops_alerts validate
+python3 -m vcfops_alerts sync
 ```
+
+**Note:** `vcfops_symptoms` and `vcfops_alerts` packages may not
+exist yet. If they're missing, skip those steps and note it in
+your report. The `tooling` agent will bootstrap them when needed.
 
 ### Enable (policy assignment)
 
@@ -73,6 +85,8 @@ enabled — the enable command refuses if the SM isn't installed.
 python3 -m vcfops_supermetrics list   # what's installed
 python3 -m vcfops_customgroups list   # custom groups on instance
 python3 -m vcfops_customgroups list-types
+python3 -m vcfops_symptoms list      # when package exists
+python3 -m vcfops_alerts list        # when package exists
 ```
 
 ### Delete
@@ -101,12 +115,16 @@ r = c._request("POST", "/api/content/operations/export",
 
 When the orchestrator asks you to "install everything" or "sync all":
 
-1. Validate all three content types (SMs, dashboards+views, custom groups)
+1. Validate all content types (SMs, dashboards+views, custom groups,
+   and symptoms+alerts if their packages exist)
 2. Sync super metrics first (views/dashboards reference them by UUID)
 3. Enable all super metrics on Default Policy
 4. Sync custom groups (views/dashboards may scope to them)
-5. Sync dashboards + views (they reference SMs and may scope to groups)
-6. Report: what was imported, what was skipped, any failures
+5. Sync symptom definitions if `vcfops_symptoms` exists (alerts
+   reference symptoms by name, so symptoms must be synced first)
+6. Sync alert definitions if `vcfops_alerts` exists
+7. Sync dashboards + views (they reference SMs and may scope to groups)
+8. Report: what was imported, what was skipped, any failures
 
 ## What a good output looks like
 
@@ -116,6 +134,8 @@ INSTALL RESULT
   views: synced=3 failed=0
   dashboards: synced=3 failed=0
   custom groups: synced=8 failed=0
+  symptoms: synced=2 failed=0 (or: skipped — vcfops_symptoms not installed)
+  alerts: synced=1 failed=0 (or: skipped — vcfops_alerts not installed)
   errors: none
 ```
 
