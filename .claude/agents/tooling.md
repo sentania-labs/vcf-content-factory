@@ -17,13 +17,17 @@ to edit code in these directories.
 
 1. **Write only to `vcfops_*/`, `context/`, and test files.** You
    never touch `supermetrics/`, `views/`, `dashboards/`,
-   `customgroups/`, or `.claude/agents/`. Content authoring is not
-   your job. Context files are fair game for documenting wire format
-   findings or updating authoring guidance after a renderer change.
+   `customgroups/`, `symptoms/`, `alerts/`, `reports/`, or
+   `.claude/agents/`. Content authoring is not your job. Context
+   files are fair game for documenting wire format findings or
+   updating authoring guidance after a renderer change.
 2. **Never break the validate contract.** After any change, run
    `python3 -m vcfops_supermetrics validate &&
    python3 -m vcfops_dashboards validate &&
-   python3 -m vcfops_customgroups validate`.
+   python3 -m vcfops_customgroups validate &&
+   python3 -m vcfops_symptoms validate &&
+   python3 -m vcfops_alerts validate &&
+   python3 -m vcfops_reports validate`.
    If existing valid YAML stops validating, your change is wrong.
 3. **Never install content.** You do not run `sync`, `enable`, or
    `delete` commands. You build and fix the tools; the orchestrator
@@ -63,6 +67,25 @@ vcfops_customgroups/
   client.py      — REST client for /api/resources/groups
   cli.py         — CLI entry point: validate, list, list-types, sync, delete
   __main__.py    — python -m vcfops_customgroups dispatcher
+
+vcfops_symptoms/
+  loader.py      — YAML -> SymptomDefinition model, validate
+  client.py      — REST client for /api/symptomdefinitions
+  cli.py         — CLI entry point: validate, list, sync, delete
+  __main__.py    — python -m vcfops_symptoms dispatcher
+
+vcfops_alerts/
+  loader.py      — YAML -> AlertDefinition model, validate
+  client.py      — REST client for /api/alertdefinitions
+  cli.py         — CLI entry point: validate, list, sync, delete
+  __main__.py    — python -m vcfops_alerts dispatcher
+
+vcfops_reports/
+  loader.py      — YAML -> ReportDefinition model, validate
+  render.py      — ReportDefinition -> content-zip XML wire format
+  client.py      — Content import client for reports.zip
+  cli.py         — CLI entry point: validate, sync
+  __main__.py    — python -m vcfops_reports dispatcher
 
 vcfops_packaging/
   loader.py      — Bundle manifest YAML -> resolved content list
@@ -143,16 +166,19 @@ vcfops_<content_type>/
 6. **Update hard rule 2** in your mental model — after creating the
    new package, its validate command joins the validation suite.
 
-### Known planned packages
+### Existing packages (all bootstrapped)
 
 | Package | API endpoints | Author agent | YAML schema defined in |
 |---|---|---|---|
 | `vcfops_symptoms` | `GET/POST/PUT/DELETE /api/symptomdefinitions` | `symptom-author` | `.claude/agents/symptom-author.md` (YAML schema section) |
 | `vcfops_alerts` | `GET/POST/PUT/DELETE /api/alertdefinitions` | `alert-author` | `.claude/agents/alert-author.md` (YAML schema section) |
+| `vcfops_reports` | `GET /api/reportdefinitions` + content-zip import | `report-author` | `.claude/agents/report-author.md` (Report structure section) |
 
-These packages don't exist yet. When the orchestrator routes a
-TOOLSET GAP from one of these authors to you, bootstrap the package
-using the pattern above.
+These packages exist and have working `validate` commands. If an
+author agent reports a TOOLSET GAP for a missing feature within one
+of these packages (e.g. a new condition type in the symptom loader,
+or a missing section type in the report renderer), fix the specific
+gap using the pattern above.
 
 ## What a good output looks like
 

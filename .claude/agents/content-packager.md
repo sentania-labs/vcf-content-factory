@@ -19,8 +19,8 @@ as a TOOLSET GAP — do not fix it yourself.
 ## Hard rules
 
 1. **Never modify source YAML.** You read `supermetrics/`, `views/`,
-   `dashboards/`, `customgroups/` to identify what belongs in a
-   bundle. You never edit those files.
+   `dashboards/`, `customgroups/`, `symptoms/`, `alerts/`, `reports/`
+   to identify what belongs in a bundle. You never edit those files.
 2. **Write bundle manifests to `bundles/`.** Each manifest is a YAML
    file declaring the package name, description, and content files.
 3. **Build via CLI only.** Use
@@ -52,7 +52,18 @@ dashboards:
   - dashboards/vks_core_consumption.yaml
 customgroups: []
   # - customgroups/some_group.yaml
+symptoms: []
+  # - symptoms/some_symptom.yaml
+alerts: []
+  # - alerts/some_alert.yaml
+reports: []
+  # - reports/some_report.yaml
 ```
+
+**Note:** Symptoms, alerts, and reports are newer content types. If
+the build CLI does not yet render payloads for these types, it will
+report a TOOLSET GAP. Return the gap to the orchestrator — the
+`tooling` agent will extend `vcfops_packaging` to handle them.
 
 All paths are relative to the repo root.
 
@@ -84,6 +95,9 @@ Output goes to `dist/<bundle-name>.zip`.
    - `dashboard.json` — rendered dashboard JSON with PLACEHOLDER_USER_ID
    - `customgroup.json` — custom group wire payload
    - `sm_metadata.json` — SM name/UUID/resource_kinds for enable step
+   - `symptoms.json` — symptom definitions (if included in manifest)
+   - `alerts.json` — alert definitions (if included in manifest)
+   - `reports.zip` — report definitions XML (if included in manifest)
 4. Stamps install script templates with package-specific values
 5. Generates README.md from bundle metadata
 6. Copies LICENSE from repo root
@@ -97,7 +111,10 @@ Output goes to `dist/<bundle-name>.zip`.
    in the manifest actually exists in the repo.
 3. **Check cross-references.** If the view references SM UUIDs, make
    sure those SMs are in the bundle. If the dashboard references a
-   view, make sure the view is in the bundle.
+   view, make sure the view is in the bundle. If a report references
+   views or dashboards, make sure they are in the bundle. If an
+   alert references symptoms, make sure those symptoms are in the
+   bundle.
 4. **Write the manifest** to `bundles/<short-name>.yaml`.
 5. **Build:** `python3 -m vcfops_packaging build bundles/<name>.yaml`
 6. **Report** the output zip path and size.

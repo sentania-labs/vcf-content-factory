@@ -224,21 +224,20 @@ recommendations:
 
 ## If the toolset is inadequate
 
-The `vcfops_alerts` package may not exist yet. Return a TOOLSET GAP:
+If the `vcfops_alerts` loader rejects valid YAML, lacks a field
+you need, or can't express the user's requested alert structure,
+return a TOOLSET GAP report:
 
 ```
 TOOLSET GAP
-- what: vcfops_alerts package does not exist — no loader or CLI
-- minimum repro: n/a (package missing entirely)
-- needed to satisfy: alert definition validation and sync
-- suggested fix: create vcfops_alerts/ with loader.py (YAML schema →
-  API JSON for POST /api/alertdefinitions), cli.py (validate/list/
-  sync/delete), and client.py (REST client). Must also resolve
-  symptom names to IDs via GET /api/symptomdefinitions at sync time.
+- what: <missing loader feature / schema field / symptom set structure>
+- minimum repro: <smallest YAML that exposes the gap>
+- loader error: <exact error message>
+- needed to satisfy: <the user's original request>
+- suggested fix: <loader change that would unblock this>
 ```
 
-The YAML still captures the user's intent and the orchestrator can
-spawn `tooling` to build the package.
+The orchestrator will spawn `tooling` to fix the gap.
 
 ## What a good output looks like
 

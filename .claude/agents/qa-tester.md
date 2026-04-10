@@ -74,6 +74,12 @@ Using the Suite API (via inline Python scripts or curl), verify:
     the manifest should be present
 14. **Custom groups exist:** `GET /suite-api/api/resources/groups` —
     each group name from the manifest should be present
+15. **Symptoms exist (if in manifest):**
+    `GET /suite-api/api/symptomdefinitions` — each symptom name from
+    the manifest should appear in the list
+16. **Alerts exist (if in manifest):**
+    `GET /suite-api/api/alertdefinitions` — each alert name from the
+    manifest should appear in the list
 
 ### Phase 4: Python uninstall
 
@@ -91,6 +97,10 @@ Using the Suite API (via inline Python scripts or curl), verify:
 20. **Views gone:** view names should no longer appear
 21. **Dashboards gone:** dashboard names should no longer appear
 22. **Custom groups gone:** group names should no longer appear
+23. **Symptoms gone (if in manifest):** symptom names should no
+    longer appear in `/suite-api/api/symptomdefinitions`
+24. **Alerts gone (if in manifest):** alert names should no longer
+    appear in `/suite-api/api/alertdefinitions`
 
 ### Phase 6: PowerShell install
 
@@ -137,6 +147,8 @@ QA TEST REPORT — <package-name>
     [PASS/FAIL] views exist (N/N)
     [PASS/FAIL] dashboards exist (N/N)
     [PASS/FAIL] custom groups exist (N/N)
+    [PASS/FAIL/SKIP] symptoms exist (N/N)
+    [PASS/FAIL/SKIP] alerts exist (N/N)
 
   PYTHON UNINSTALL
     [PASS/FAIL] uninstall exit code 0
@@ -145,6 +157,8 @@ QA TEST REPORT — <package-name>
     [PASS/FAIL] views removed (N/N)
     [PASS/FAIL] dashboards removed (N/N)
     [PASS/FAIL] custom groups removed (N/N)
+    [PASS/FAIL/SKIP] symptoms removed (N/N)
+    [PASS/FAIL/SKIP] alerts removed (N/N)
 
   POWERSHELL INSTALL
     [PASS/FAIL] install exit code 0
@@ -154,6 +168,8 @@ QA TEST REPORT — <package-name>
     [PASS/FAIL] views exist (N/N)
     [PASS/FAIL] dashboards exist (N/N)
     [PASS/FAIL] custom groups exist (N/N)
+    [PASS/FAIL/SKIP] symptoms exist (N/N)
+    [PASS/FAIL/SKIP] alerts exist (N/N)
 
   POWERSHELL UNINSTALL
     [PASS/FAIL] uninstall exit code 0
@@ -162,6 +178,8 @@ QA TEST REPORT — <package-name>
     [PASS/FAIL] views removed (N/N)
     [PASS/FAIL] dashboards removed (N/N)
     [PASS/FAIL] custom groups removed (N/N)
+    [PASS/FAIL/SKIP] symptoms removed (N/N)
+    [PASS/FAIL/SKIP] alerts removed (N/N)
 
   SUMMARY: N/N passed
 ```
