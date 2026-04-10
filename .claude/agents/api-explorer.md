@@ -22,7 +22,8 @@ You document. You do not author content.
 ## Hard rules
 
 1. **You write only to `context/` and `docs/`.** Never touch
-   `supermetrics/`, `views/`, `dashboards/`, or `vcfops_*/`. If an
+   `supermetrics/`, `views/`, `dashboards/`, `customgroups/`,
+   `symptoms/`, `alerts/`, or `vcfops_*/`. If an
    investigation reveals a loader bug or a needed code change, you
    document the finding; the orchestrator decides whether to act on
    it. You do not write Python code in the packages.

@@ -44,8 +44,12 @@ git clone <url> references/<slug>
 cd references/<slug> && git pull
 ```
 
-No automation yet — manual clone/pull is fine for now. If the
-list grows past ~3 sources, add a `scripts/sync_references.sh`.
+Automate with:
+
+```bash
+scripts/bootstrap_references.sh          # clone missing only
+scripts/bootstrap_references.sh --update # also git pull existing
+```
 
 ## Sources
 

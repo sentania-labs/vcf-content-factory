@@ -37,8 +37,9 @@ instance via the Suite API / content-import zip.
 
 5. **Naming convention — `[VCF Content Factory]` prefix on every
    authored content object.** Every super metric, view, dashboard,
-   and custom group this repo creates has its display name prefixed
-   with `[VCF Content Factory]` (literal, brackets included). This
+   custom group, symptom, and alert this repo creates has its
+   display name prefixed with `[VCF Content Factory]` (literal,
+   brackets included). This
    is how operators distinguish repo-owned content from built-in
    content and from content authored by other means in the same
    Ops instance. Dashboards additionally live under the
@@ -58,12 +59,10 @@ instance via the Suite API / content-import zip.
    `validate`, never touch after. See
    `context/uuids_and_cross_references.md`.
 
-   **Carve-out: custom groups are identified by `name`, not UUID.**
-   The `/api/resources/groups` endpoint assigns the `id` server-side
-   on create, so custom group YAMLs do NOT carry an `id` field and
-   sync matches by `resourceKey.name`. This is the only content
-   type with this exception. See
-   `context/customgroup_authoring.md`.
+   **Carve-out: custom groups, symptoms, and alerts are identified
+   by `name`, not UUID.** Their respective APIs assign the `id`
+   server-side on create, so these YAMLs do NOT carry an `id` field
+   and sync matches by name. See `context/customgroup_authoring.md`.
 
 7. **Grep both OpenAPI specs** when answering "does the API support
    X?". `docs/internal-api.json` contains `/internal/*` endpoints
@@ -78,8 +77,11 @@ docs/                        OpenAPI specs + extracted VCF 9 markdown; PDFs giti
 vcfops_supermetrics/         Python package: client, loader, CLI (validate/list/sync/delete)
 vcfops_dashboards/           Python package: views + dashboards loader/packager/client
 vcfops_customgroups/         Python package: dynamic custom groups + group types loader/client/CLI
+vcfops_packaging/            Python package: bundle manifest loader, builder, install script templates
 supermetrics/  views/  dashboards/  customgroups/   YAML source of truth
+symptoms/  alerts/           YAML source of truth (tooling packages bootstrapped on demand)
 context/                     Topical background — read these before touching code paths
+scripts/                     Utility scripts (bootstrap_references.sh, etc.)
 ```
 
 ## Context files (read on demand)
@@ -124,11 +126,11 @@ that doesn't delegate and ends up holding all the context.
 | `view-author` | Author | `views/` only | User wants a list view. May require a super metric or custom group to exist first; if so, view-author blocks and you delegate upstream. |
 | `dashboard-author` | Author | `dashboards/` only | User wants a dashboard. May require views, custom groups, and (transitively) super metrics to exist first. |
 | `api-explorer` | Research | `context/`, `docs/` only | An author agent returns a TOOLSET GAP report, an install fails mysteriously, or the user asks something the surface map doesn't cover. |
-| `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer bug, loader gap, new CLI command, client helper. The **only** agent that edits `vcfops_*/` code. |
+| `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer bug, loader gap, new CLI command, client helper, **or bootstrapping a new `vcfops_*` package** when an author agent reports TOOLSET GAP for a missing package. The **only** agent that edits `vcfops_*/` code. |
 | `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. Validates, syncs, enables, verifies. Handles import-task-busy retries. |
 | `content-packager` | Build | `dist/` only | User wants a standalone distributable bundle (bash/pwsh/python install scripts + content-zips + license + README). |
-| `symptom-author` | Author | `symptoms/` only | User needs a symptom definition (metric/property threshold, event-based). Feeds into alert definitions. No tooling package yet — will report TOOLSET GAP for validation. |
-| `alert-author` | Author | `alerts/` only | User needs an alert definition. Combines symptom sets + impact + recommendations. Requires symptoms to exist first. No tooling package yet — will report TOOLSET GAP for validation. |
+| `symptom-author` | Author | `symptoms/` only | After recon confirms no existing symptom satisfies the need. Feeds into alert definitions. Will report TOOLSET GAP if `vcfops_symptoms` package doesn't exist yet — orchestrator routes to `tooling` to bootstrap it. |
+| `alert-author` | Author | `alerts/` only | After recon confirms no existing alert satisfies the need, **and** required symptoms already exist. Will report TOOLSET GAP if `vcfops_alerts` package doesn't exist yet. |
 
 ### Delegation protocol
 
@@ -155,9 +157,13 @@ that doesn't delegate and ends up holding all the context.
 3. **Pass filenames, not file contents.** Agents read the
    filesystem themselves. Keeping file contents out of your
    context window is how this architecture stays affordable.
-4. **Validate the whole repo after each round.** Delegate to
-   `content-installer` or run validate yourself — cross-reference
-   breaks surface here.
+4. **Validate the whole repo after each round.** Validation is the
+   one CLI action the orchestrator may run directly — it's read-only
+   and fast. Run `python3 -m vcfops_supermetrics validate &&
+   python3 -m vcfops_dashboards validate &&
+   python3 -m vcfops_customgroups validate`. All other CLI
+   operations (sync, enable, delete, list) go through
+   `content-installer`.
 5. **Install only on explicit user confirmation.** Show the user
    the file list and a brief summary, ask yes/no, then delegate
    to `content-installer`. Install is plumbing, not creative work.
@@ -220,3 +226,47 @@ first-class, not a sad fallback.
 **Install**: delegate to `content-installer`. It knows the CLI
 commands, retry logic, and enable workflow. Command references
 live in the agent prompts, not here.
+
+## Known limitations
+
+These are current capability boundaries the orchestrator should
+communicate to users early, rather than discovering mid-workflow:
+
+1. **Dashboard widget types.** Dashboard authoring currently supports
+   `ResourceList` and `View` widget types only. Scoreboard,
+   HealthChart, MetricChart, Heatmap, and other types require
+   renderer expansion via `tooling` (and potentially `api-explorer`
+   to document the wire format first). If a user requests a
+   dashboard with unsupported widget types, set expectations before
+   delegating.
+
+2. **Policy enablement.** The `enable` CLI command works for the
+   **Default Policy only** (`PUT /internal/supermetrics/assign`
+   rejects any other policy UUID). Users with custom policies can
+   sync content but cannot enable super metrics via the CLI —
+   policy export/import XML manipulation is not yet wired up.
+
+3. **Symptom/alert tooling.** The `vcfops_symptoms` and
+   `vcfops_alerts` Python packages do not exist yet. When a
+   symptom or alert authoring request first arrives, the author
+   agent will report TOOLSET GAP. Route the gap to `tooling`,
+   which has guidance on bootstrapping new packages. The YAML
+   definitions are still valid as intent capture even before the
+   packages exist.
+
+4. **Reference source clones.** Recon checks allowlisted external
+   repos under `references/` (gitignored). Fresh setups won't have
+   these clones. Run `scripts/bootstrap_references.sh` to populate
+   them, or expect recon to report missing-clone gaps.
+
+## Cross-reference syntax
+
+How content types reference each other in YAML — the loader for
+each content type resolves names to UUIDs at validate/sync time:
+
+| From → To | Syntax in YAML | Resolved by |
+|---|---|---|
+| SM formula → other SM | `@supermetric:"<name>"` | SM loader at validate (→ `sm_<uuid>`) |
+| View column → SM | `supermetric:"<name>"` in `attribute:` | Dashboard loader at validate (→ `sm_<uuid>`) |
+| Dashboard widget → View | `view: "<view name>"` | Dashboard loader at validate (→ view UUID) |
+| Alert → Symptom | `name: "<symptom name>"` in symptom set | Alert loader/installer at sync (→ symptom ID) |
