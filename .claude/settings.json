@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "scripts/bootstrap_references.sh 2>/dev/null || true",
+            "timeout": 60000
+          }
+        ]
+      }
+    ]
+  }
+}
