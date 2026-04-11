@@ -337,16 +337,29 @@ content management import path the old Flash UI used).
 
 ### Content-zip import always forces locked=true
 
-Confirmed: even when the dashboard.json payload contains
-`"locked": false`, the server sets `locked: true` after import.
-This is consistent across both new and updated dashboards.
+Confirmed at the time of the original investigation: even when the
+dashboard.json payload contains `"locked": false`, the server sets
+`locked: true` after import. This was consistent across both new and
+updated dashboards in earlier builds.
+
+**2026-04-11 update:** During qa-tester acceptance of the multi-bundle
+refactor, a dashboard imported via content-zip was observed with
+`locked: false` in the post-install `getDashboardList` response —
+contradicting the above. Delete succeeded regardless (via the
+corrected `deleteTab` shape in the 2026-04-11 correction). The
+`locked` state may vary by VCF Ops build, by import envelope details,
+or by whether the calling user matches the stamped owner UUID.
+**Do not trust `locked` as an absolute signal for troubleshooting** —
+check empirically. The admin-user guard for UI-session delete still
+applies as a safety baseline regardless of the observed lock state.
 
 ### getDashboardList response fields
 
 Each dashboard entry includes:
 - `id`, `name`, `description`
-- `locked` (bool) — server-enforced, always true after import
-- `owner` (string) — username of owner, always "admin" after import
+- `locked` (bool) — historically server-enforced true after content-zip
+  import, but see 2026-04-11 note above — may be false in newer builds
+- `owner` (string) — username of owner, typically "admin" after import
 - `editable` (bool) — false if caller is not the owner
 - `shared`, `sharedPublicly` (bools)
 - `reportUsageCount` (int)

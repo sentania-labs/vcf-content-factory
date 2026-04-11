@@ -1273,17 +1273,82 @@ function Get-AllViews {
 }
 
 function Remove-View {
-    param([string]$ViewId)
+    param([string]$ViewId, [string]$ViewName)
     $tid = Get-NextTid
+    # data shape: array containing one dict; viewDefIds is a JSON-stringified
+    # array of {id, name} objects. Sending a bare UUID (old shape) crashes the
+    # server handler and returns type:exception "Internal server error."
+    # See context/dashboard_delete_api.md §2026-04-11 update.
+    $innerJson = ConvertTo-Json @(@{ id = $ViewId; name = $ViewName }) -Compress
     $result = Invoke-ExtDirect -Calls @(@{
         action = "viewServiceController"
         method = "deleteView"
-        data   = @($ViewId)
+        data   = @(@{ viewDefIds = $innerJson })
         type   = "rpc"
         tid    = $tid
     })
     if ($result[0].type -eq "exception") {
         throw "deleteView $ViewId failed: $($result[0].message)"
+    }
+}
+
+function Get-AllReports {
+    $tid = Get-NextTid
+    $result = Invoke-ExtDirect -Calls @(@{
+        action = "reportServiceController"
+        method = "getReportDefinitionThumbnails"
+        data   = @(@{
+            contentFilter   = @{ isTenant = $false }
+            resourceContext = $null
+            page            = 1
+            start           = 0
+            limit           = 50
+            sort            = @(@{ property = "creationTime"; direction = "DESC" })
+        })
+        type   = "rpc"
+        tid    = $tid
+    })
+    if ($result[0].type -eq "exception") {
+        Write-Fail "Report list failed: $($result[0].message)"
+    }
+    $raw = $result[0].result
+    # getReportDefinitionThumbnails returns:
+    #   {"records":[...], "total":N, "metaData":{...}, "success":true}
+    if ($raw -is [System.Array]) { return $raw }
+    foreach ($key in @("records","data","items","reportDefinitions","reports")) {
+        $val = $raw.$key
+        if ($null -ne $val -and $val -is [System.Array]) { return $val }
+    }
+    # Fallback: flatten any array properties one level deep
+    $items = [System.Collections.Generic.List[object]]::new()
+    if ($raw -is [PSCustomObject]) {
+        foreach ($prop in $raw.PSObject.Properties) {
+            if ($prop.Value -is [System.Array]) {
+                foreach ($item in $prop.Value) { $items.Add($item) }
+            }
+        }
+    }
+    return $items
+}
+
+function Remove-Reports {
+    param([object[]]$Reports)
+    $tid = Get-NextTid
+    # data shape: BARE DICT (not array), reportDefIds is a JSON-stringified
+    # array of {id, name} objects. This differs from deleteView which wraps
+    # data in an array. See context/dashboard_delete_api.md §2026-04-11 update.
+    $innerJson = ConvertTo-Json @($Reports | ForEach-Object {
+        @{ id = $_.Uuid; name = $_.Name }
+    }) -Compress
+    $result = Invoke-ExtDirect -Calls @(@{
+        action = "reportServiceController"
+        method = "deleteReportDefinitions"
+        data   = @{ reportDefIds = $innerJson }
+        type   = "rpc"
+        tid    = $tid
+    })
+    if ($result[0].type -eq "exception") {
+        throw "deleteReportDefinitions failed: $($result[0].message)"
     }
 }
 
@@ -1361,6 +1426,7 @@ $script:ContentRegistry = @(
         UninstallFn    = $null
         UninstallOrder = $null
         NeedsUi        = $false
+        # Uninstall handled by the uninstall-only "reports" entry below.
     },
     @{
         ContentType    = "symptoms"
@@ -1384,7 +1450,9 @@ $script:ContentRegistry = @(
         UninstallOrder = 35
         NeedsUi        = $false
     },
-    # Uninstall-only entries for dashboards and views
+    # Uninstall-only entries for dashboards, reports, and views.
+    # Order: dashboards first (10), then reports (15, since reports reference views),
+    # then views (20). All require the admin UI session via SPA Ext.Direct.
     @{
         ContentType    = "dashboards"
         ManifestKey    = $null
@@ -1394,6 +1462,17 @@ $script:ContentRegistry = @(
         UninstallLabel = "Deleting dashboard(s)..."
         UninstallFn    = "Uninstall-Dashboards"
         UninstallOrder = 10
+        NeedsUi        = $true
+    },
+    @{
+        ContentType    = "reports"
+        ManifestKey    = $null
+        InstallLabel   = $null
+        InstallFn      = $null
+        InstallOrder   = $null
+        UninstallLabel = "Deleting report definition(s)..."
+        UninstallFn    = "Uninstall-Reports"
+        UninstallOrder = 15
         NeedsUi        = $true
     },
     @{
@@ -1558,8 +1637,8 @@ function Install-Reports($Ctx) {
     Import-ContentZip -ZipBytes $reportsZip -Label "reports"
     $nReports = ([regex]::Matches($reportsXml, "<ReportDef ")).Count
     Write-Ok "Imported $nReports report definition(s)"
-    Write-Warn "Note: report definitions cannot be removed via the API. To uninstall, use the Ops UI: Administration > Content > Reports."
-    $Ctx.Warnings.Add("Report definitions must be removed manually via the Ops UI (Administration > Content > Reports).")
+    # Note: report uninstall (like dashboard and view uninstall) requires the
+    # admin UI session via the SPA Ext.Direct path. Run --uninstall as admin.
 }
 
 function Install-Symptoms($Ctx) {
@@ -1768,23 +1847,54 @@ function Uninstall-Dashboards($Ctx) {
 function Uninstall-Views($Ctx) {
     $names = $Ctx.Names
     $allViews = Get-AllViews
+    # Build name -> {Id, Name} map (keep Name for the delete shape).
     $viewByName = @{}
     foreach ($v in $allViews) {
         $vid = if ($v.viewDefinitionKey) { $v.viewDefinitionKey } else { $v.id }
-        if ($v.name -and $vid) { $viewByName[$v.name] = $vid }
+        if ($v.name -and $vid) { $viewByName[$v.name] = @{ Id = $vid; Name = $v.name } }
     }
     foreach ($name in $names) {
-        $viewId = $viewByName[$name]
-        if (-not $viewId) {
+        $entry = $viewByName[$name]
+        if (-not $entry) {
             Write-Warn "View not found (already removed?): $name"
             $Ctx.Warnings.Add("View not found: $name")
             continue
         }
         try {
-            Remove-View -ViewId $viewId
+            Remove-View -ViewId $entry.Id -ViewName $entry.Name
             Write-Ok "Deleted: $name"
         } catch {
             $warn = "View delete failed for '$name': $_"
+            Write-Warn $warn
+            $Ctx.Warnings.Add($warn)
+        }
+    }
+}
+
+function Uninstall-Reports($Ctx) {
+    $names = $Ctx.Names
+    $allReports = Get-AllReports
+    $reportByName = @{}
+    foreach ($r in $allReports) {
+        $rname = $r.name
+        $rid   = $r.id
+        if ($rname -and $rid) { $reportByName[$rname] = $rid }
+    }
+    $toDelete = [System.Collections.Generic.List[object]]::new()
+    foreach ($name in $names) {
+        if ($reportByName.ContainsKey($name)) {
+            $toDelete.Add(@{ Uuid = $reportByName[$name]; Name = $name })
+        } else {
+            Write-Warn "Report not found (already removed?): $name"
+            $Ctx.Warnings.Add("Report not found: $name")
+        }
+    }
+    if ($toDelete.Count -gt 0) {
+        try {
+            Remove-Reports -Reports $toDelete
+            foreach ($r in $toDelete) { Write-Ok "Deleted: $($r.Name)" }
+        } catch {
+            $warn = "Report batch delete failed: $_"
             Write-Warn $warn
             $Ctx.Warnings.Add($warn)
         }
@@ -1983,11 +2093,13 @@ function Invoke-Uninstall {
         if ($needUi) { break }
     }
 
-    # Dashboard and view deletion goes through the UI layer which is locked to
-    # the admin account. Catch this early before spending time authenticating.
+    # Dashboard, view, and report deletion goes through the UI layer which is
+    # locked to the admin account.  The early guard in the entry point catches
+    # this when the user is already known; this guard covers the interactive
+    # case where the user was entered at the Get-Credentials prompt.
     if ($needUi -and $script:User -ne "admin") {
-        Write-Error ("ERROR: Dashboard and view uninstall requires the 'admin' account.`n" +
-                     "       VCF Ops locks imported dashboards to admin ownership. Only the`n" +
+        Write-Error ("ERROR: Dashboard, view, and report uninstall requires the 'admin' account.`n" +
+                     "       VCF Ops locks imported content to admin ownership. Only the`n" +
                      "       admin user's UI session can delete them.`n" +
                      "       Re-run with -User admin (or set `$env:VCFOPS_USER='admin').")
         exit 1
@@ -2103,6 +2215,33 @@ if ($allBundles.Count -eq 0) {
 $modeLabel = if ($Uninstall) { "uninstall" } else { "install" }
 $selected = Select-Bundles -Bundles $allBundles -Mode $modeLabel
 Show-SelectionSummary -SelectedBundles $selected -Mode $modeLabel
+
+# Early admin-guard: if any selected bundle requires the UI session
+# (dashboards/views/reports uninstall), check the user before prompting for
+# credentials or printing any further output.  When the user is already known
+# from -User / VCFOPS_USER, this fires immediately after bundle selection.
+# When the user is not yet known (interactive), Invoke-Uninstall enforces it
+# a second time after Get-Credentials resolves the interactive value.
+if ($Uninstall) {
+    $_uiNeeded = $false
+    foreach ($_b in $selected) {
+        foreach ($_e in $script:ContentRegistry) {
+            if ($_e.NeedsUi -and $_e.UninstallFn -ne $null) {
+                if ((Get-BundleUninstallNames -Bundle $_b -ContentType $_e.ContentType).Count -gt 0) {
+                    $_uiNeeded = $true; break
+                }
+            }
+        }
+        if ($_uiNeeded) { break }
+    }
+    if ($_uiNeeded -and $script:User -and $script:User -ne "admin") {
+        Write-Error ("ERROR: Dashboard, view, and report uninstall requires the 'admin' account.`n" +
+                     "       VCF Ops locks imported content to admin ownership. Only the`n" +
+                     "       admin user's UI session can delete them.`n" +
+                     "       Re-run with -User admin (or set `$env:VCFOPS_USER='admin').")
+        exit 1
+    }
+}
 
 $credMode = if ($Uninstall) { "uninstaller" } else { "installer" }
 Get-Credentials -Mode $credMode

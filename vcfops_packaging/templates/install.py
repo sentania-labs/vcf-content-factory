@@ -550,11 +550,13 @@ class Client:
         root = ET.fromstring(raw_xml)
 
         # Locate <PackageSettings>.
-        pkg_settings = (
-            root.find(".//{*}PackageSettings") or root.find(".//PackageSettings")
-        )
+        pkg_settings = root.find(".//{*}PackageSettings")
         if pkg_settings is None:
-            policy_elem = root.find(".//{*}Policy") or root.find(".//Policy")
+            pkg_settings = root.find(".//PackageSettings")
+        if pkg_settings is None:
+            policy_elem = root.find(".//{*}Policy")
+            if policy_elem is None:
+                policy_elem = root.find(".//Policy")
             if policy_elem is None:
                 raise RuntimeError(
                     f"Policy XML has no <Policy> element — cannot inject SM '{sm_name}'"
@@ -2035,26 +2037,16 @@ def _run_uninstall(args: argparse.Namespace, host: str, user: str,
                    selected_bundles: List[Dict]) -> None:
     force = args.force
 
-    # Check if any bundle needs UI (dashboards/views) across all selected.
-    needs_ui = False
-    for bundle in selected_bundles:
-        for e in _CONTENT_REGISTRY:
-            if e["needs_ui"] and e["uninstall_fn"] is not None:
-                if _bundle_uninstall_names(bundle, e["content_type"]):
-                    needs_ui = True
-                    break
+    # Determine if any bundle needs UI session (dashboards/views/reports).
+    needs_ui = any(
+        e["needs_ui"] and e["uninstall_fn"] is not None
+        and _bundle_uninstall_names(bundle, e["content_type"])
+        for bundle in selected_bundles
+        for e in _CONTENT_REGISTRY
+    )
 
-    # Dashboard and view deletion goes through the UI layer which is locked to
-    # the admin account. Catch this early before spending time authenticating.
-    if needs_ui and user != "admin":
-        print(
-            "ERROR: Dashboard, view, and report uninstall requires the 'admin' account.\n"
-            "       VCF Ops locks imported content to admin ownership. Only the\n"
-            "       admin user's UI session can delete them.\n"
-            "       Re-run with --user admin (or set VCFOPS_USER=admin).",
-            file=sys.stderr,
-        )
-        sys.exit(1)
+    # Admin guard is enforced in main() before credentials are prompted.
+    # _run_uninstall trusts that user=="admin" when needs_ui is True.
 
     # Count total uninstall steps
     total_content_steps = 0
@@ -2195,8 +2187,46 @@ def main() -> None:
     selected = _select_bundles(bundles, mode)
     _print_selection_summary(selected, mode)
 
+    # Early admin-guard: if any selected bundle requires the UI session
+    # (dashboards/views/reports), check the user before prompting for
+    # credentials or printing any further output.  When the user is already
+    # known from --user / VCFOPS_USER, this fires immediately after bundle
+    # selection so the operator sees the error before any credential prompts.
+    # When the user is not yet known (interactive), the check is deferred to
+    # after _prompt_credentials below.
+    if args.uninstall:
+        _ui_needed = any(
+            e["needs_ui"] and e["uninstall_fn"] is not None
+            and _bundle_uninstall_names(bundle, e["content_type"])
+            for bundle in selected
+            for e in _CONTENT_REGISTRY
+        )
+        if _ui_needed and args.user and args.user != "admin":
+            print(
+                "ERROR: Dashboard, view, and report uninstall requires the 'admin' account.\n"
+                "       VCF Ops locks imported content to admin ownership. Only the\n"
+                "       admin user's UI session can delete them.\n"
+                "       Re-run with --user admin (or set VCFOPS_USER=admin).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+    else:
+        _ui_needed = False
+
     cred_mode = "uninstaller" if args.uninstall else "installer"
     host, user, auth_source, password = _prompt_credentials(args, cred_mode)
+
+    # Post-credentials admin guard: covers the interactive case where user
+    # was not set via --user / VCFOPS_USER and was entered at the prompt.
+    if args.uninstall and _ui_needed and user != "admin":
+        print(
+            "ERROR: Dashboard, view, and report uninstall requires the 'admin' account.\n"
+            "       VCF Ops locks imported content to admin ownership. Only the\n"
+            "       admin user's UI session can delete them.\n"
+            "       Re-run with --user admin (or set VCFOPS_USER=admin).",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
     if args.skip_ssl_verify:
         print("WARNING: TLS certificate verification disabled.")
