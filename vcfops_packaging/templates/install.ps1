@@ -223,7 +223,7 @@ function Get-BundleDisplayName {
 
 function Select-Bundles {
     param(
-        [System.Collections.Generic.List[hashtable]]$Bundles,
+        [object[]]$Bundles,
         [string]$Mode = "install"
     )
 
@@ -325,7 +325,10 @@ function Test-BundleHasKey {
     if (-not $ManifestKey) { return $false }
     $content = $Bundle.Manifest.content
     if (-not $content) { return $false }
-    $section = $content.$ManifestKey
+    # PSObject.Properties probe is StrictMode-safe; dot-notation throws on missing key.
+    $prop = $content.PSObject.Properties[$ManifestKey]
+    if (-not $prop) { return $false }
+    $section = $prop.Value
     if (-not $section) { return $false }
     $rel = $section.file
     if (-not $rel) { return $false }
@@ -336,7 +339,10 @@ function Get-BundleUninstallNames {
     param($Bundle, [string]$ContentType)
     $content = $Bundle.Manifest.content
     if (-not $content) { return @() }
-    $section = $content.$ContentType
+    # PSObject.Properties probe is StrictMode-safe; dot-notation throws on missing key.
+    $prop = $content.PSObject.Properties[$ContentType]
+    if (-not $prop) { return @() }
+    $section = $prop.Value
     if (-not $section -or -not $section.items) { return @() }
     return @($section.items | Where-Object { $_.name } | ForEach-Object { $_.name })
 }
@@ -1331,8 +1337,12 @@ function Get-AllReports {
     #   {"records":[...], "total":N, "metaData":{...}, "success":true}
     if ($raw -is [System.Array]) { return $raw }
     foreach ($key in @("records","data","items","reportDefinitions","reports")) {
-        $val = $raw.$key
-        if ($null -ne $val -and $val -is [System.Array]) { return $val }
+        # PSObject.Properties probe is StrictMode-safe; dot-notation throws on missing key.
+        $keyProp = $raw.PSObject.Properties[$key]
+        if ($keyProp) {
+            $val = $keyProp.Value
+            if ($null -ne $val -and $val -is [System.Array]) { return $val }
+        }
     }
     # Fallback: flatten any array properties one level deep
     $items = [System.Collections.Generic.List[object]]::new()
@@ -1521,8 +1531,9 @@ function Install-Dashboard($Ctx) {
     $dashJson = Load-RawTextFile $dashFile
 
     $viewsXml = ""
-    if ($Ctx.Manifest.content.views) {
-        $viewsFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.views.file
+    $viewsProp = $Ctx.Manifest.content.PSObject.Properties["views"]
+    if ($viewsProp -and $viewsProp.Value) {
+        $viewsFile = Join-Path $Ctx.BundleDir $viewsProp.Value.file
         if (Test-Path $viewsFile) { $viewsXml = Load-RawTextFile $viewsFile }
     }
 
@@ -2001,7 +2012,7 @@ function Invoke-UninstallBundle {
 
     $active = @($script:ContentRegistry | Where-Object {
         $_.UninstallFn -ne $null -and $_.UninstallOrder -ne $null -and
-        ((Get-BundleUninstallNames -Bundle $Bundle -ContentType $_.ContentType).Count -gt 0)
+        (@(Get-BundleUninstallNames -Bundle $Bundle -ContentType $_.ContentType).Count -gt 0)
     } | Sort-Object { $_.UninstallOrder })
 
     $warnings = [System.Collections.Generic.List[string]]::new()
@@ -2014,7 +2025,7 @@ function Invoke-UninstallBundle {
     }
 
     foreach ($entry in $active) {
-        $names = Get-BundleUninstallNames -Bundle $Bundle -ContentType $entry.ContentType
+        $names = @(Get-BundleUninstallNames -Bundle $Bundle -ContentType $entry.ContentType)
         if ($names.Count -eq 0) { continue }
         $Step.Value++
         $label = $entry.UninstallLabel -replace '\.\.\.', " ($($names.Count))..."
@@ -2100,7 +2111,7 @@ function Invoke-Uninstall {
     foreach ($b in $SelectedBundles) {
         foreach ($e in $script:ContentRegistry) {
             if ($e.NeedsUi -and $e.UninstallFn -ne $null) {
-                if ((Get-BundleUninstallNames -Bundle $b -ContentType $e.ContentType).Count -gt 0) {
+                if (@(Get-BundleUninstallNames -Bundle $b -ContentType $e.ContentType).Count -gt 0) {
                     $needUi = $true; break
                 }
             }
@@ -2125,7 +2136,7 @@ function Invoke-Uninstall {
     foreach ($b in $SelectedBundles) {
         $totalContentSteps += @($script:ContentRegistry | Where-Object {
             $_.UninstallFn -ne $null -and $_.UninstallOrder -ne $null -and
-            ((Get-BundleUninstallNames -Bundle $b -ContentType $_.ContentType).Count -gt 0)
+            (@(Get-BundleUninstallNames -Bundle $b -ContentType $_.ContentType).Count -gt 0)
         }).Count
     }
 
@@ -2141,7 +2152,7 @@ function Invoke-Uninstall {
         Write-Host "  Bundle: $bname"
         foreach ($e in $script:ContentRegistry) {
             if ($e.UninstallFn -ne $null -and $e.UninstallOrder -ne $null) {
-                $names = Get-BundleUninstallNames -Bundle $b -ContentType $e.ContentType
+                $names = @(Get-BundleUninstallNames -Bundle $b -ContentType $e.ContentType)
                 if ($names.Count -gt 0) {
                     Write-Host "    $($e.ContentType.Substring(0,1).ToUpper() + $e.ContentType.Substring(1)) ($($names.Count)): $($names -join ', ')"
                 }
@@ -2152,7 +2163,7 @@ function Invoke-Uninstall {
     $hasAnything = $false
     foreach ($b in $SelectedBundles) {
         foreach ($e in $script:ContentRegistry) {
-            if ($e.UninstallFn -ne $null -and (Get-BundleUninstallNames -Bundle $b -ContentType $e.ContentType).Count -gt 0) {
+            if ($e.UninstallFn -ne $null -and @(Get-BundleUninstallNames -Bundle $b -ContentType $e.ContentType).Count -gt 0) {
                 $hasAnything = $true; break
             }
         }
@@ -2221,14 +2232,14 @@ $script:User     = $User
 $script:Password = $Password
 $script:AuthSource = $AuthSource
 
-$allBundles = Get-Bundles
+$allBundles = @(Get-Bundles)
 if ($allBundles.Count -eq 0) {
     Write-Error "ERROR: No bundles found. Expected bundles\<slug>\bundle.json or a legacy content\ directory."
     exit 1
 }
 
 $modeLabel = if ($Uninstall) { "uninstall" } else { "install" }
-$selected = Select-Bundles -Bundles $allBundles -Mode $modeLabel
+$selected = @(Select-Bundles -Bundles $allBundles -Mode $modeLabel)
 Show-SelectionSummary -SelectedBundles $selected -Mode $modeLabel
 
 # Early admin-guard: if any selected bundle requires the UI session
@@ -2242,7 +2253,7 @@ if ($Uninstall) {
     foreach ($_b in $selected) {
         foreach ($_e in $script:ContentRegistry) {
             if ($_e.NeedsUi -and $_e.UninstallFn -ne $null) {
-                if ((Get-BundleUninstallNames -Bundle $_b -ContentType $_e.ContentType).Count -gt 0) {
+                if (@(Get-BundleUninstallNames -Bundle $_b -ContentType $_e.ContentType).Count -gt 0) {
                     $_uiNeeded = $true; break
                 }
             }
