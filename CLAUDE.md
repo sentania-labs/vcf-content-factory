@@ -271,58 +271,74 @@ with old templates is how false-positive bugs escape to users.
 These are current capability boundaries the orchestrator should
 communicate to users early, rather than discovering mid-workflow:
 
-1. **Dashboard widget types.** Dashboard authoring currently supports
-   `ResourceList` and `View` widget types only. Scoreboard,
-   HealthChart, MetricChart, Heatmap, and other types require
-   renderer expansion via `tooling` (and potentially `api-explorer`
-   to document the wire format first). If a user requests a
-   dashboard with unsupported widget types, set expectations before
-   delegating.
+1. **Dashboard widget types.** Dashboard authoring supports 10 widget
+   types covering ~94% of observed usage: `ResourceList`, `View`,
+   `TextDisplay`, `Scoreboard`, `MetricChart`, `HealthChart`,
+   `ParetoAnalysis`, `Heatmap`, `AlertList`, `ProblemAlertsList`.
+   `PropertyList` (47 uses on the survey instance) is the highest-
+   value remaining gap. Other unsupported types (~14 uncommon
+   variants, ~91 total observed uses) require renderer expansion
+   via `tooling` with api-explorer to document the wire format.
+   If a user requests a dashboard with unsupported widget types,
+   set expectations before delegating.
 
 2. **Policy enablement.** The `enable` CLI command works for the
    **Default Policy only** (`PUT /internal/supermetrics/assign`
-   rejects any other policy UUID). Users with custom policies can
-   sync content but cannot enable super metrics via the CLI —
-   policy export/import XML manipulation is not yet wired up.
+   rejects any other policy UUID). The install script's policy
+   export → edit XML → re-import path for SM enablement is coded
+   against the Default Policy specifically. Users with custom
+   policies can sync content but cannot enable super metrics via
+   the CLI — generalizing to arbitrary policies is a follow-up.
 
-3. **Report tooling.** The `vcfops_reports` package exists but
-   may have incomplete sync/import support. Report definitions
-   import via content-zip (`reports.zip` containing `content.xml`),
-   not REST API — there is no POST/PUT on `/api/reportdefinitions`.
-   If the report loader or packager can't express what the user
-   needs, the author agent will report TOOLSET GAP.
+3. **Recommendations authoring.** Recommendations exist as a
+   rendering target (`vcfops_alerts/render.py::render_alert_content_xml`
+   emits `<Recommendations>` blocks when passed objects, and the
+   bundle loader reserves a `recommendations:` key) but there is
+   no authoring path yet — no YAML schema under `recommendations/`,
+   no author agent support. Alerts that reference recommendations
+   cannot be fully expressed until this lands. See
+   `feedback_powershell_idioms.md` and the packaging plan for the
+   planned design.
 
-4. **Bundle packaging for newer content types.** The
-   `content-packager` manifest schema and build pipeline currently
-   support super metrics, views, dashboards, and custom groups.
-   Symptoms, alerts, and reports are not yet included in bundle
-   manifests or distribution zips. If a user wants a distributable
-   package that includes these types, expect a TOOLSET GAP from
-   `content-packager` — route to `tooling` to extend the packaging
-   pipeline.
-
-5. **Reference source clones.** Recon checks allowlisted external
+4. **Reference source clones.** Recon checks allowlisted external
    repos under `references/` (gitignored). Fresh setups won't have
    these clones. Run `scripts/bootstrap_references.sh` to populate
    them, or expect recon to report missing-clone gaps.
 
-6. **View delete (VCF Ops 9.0.2 server bug).** Views imported via
-   the content-zip path cannot be deleted programmatically. Both
-   `viewServiceController.deleteView` (Ext.Direct) and
-   `DELETE /internal/viewdefinitions/{uuid}` return HTTP 500. The
-   server stores duplicate `subjects` entries for content-zip-imported
-   views, and the delete path hits a constraint violation. This
-   affects both distribution package uninstall and CLI sync cleanup.
-   **Workaround:** delete views manually via the VCF Ops web console.
-   See `context/dashboard_delete_api.md` §"View delete limitation".
+5. **View and report delete (2026-04-11 correction — previously
+   documented as a VCF Ops 9.0.2 server bug).** Both operations
+   work correctly via `viewServiceController.deleteView` and
+   `reportServiceController.deleteReportDefinitions` on the legacy
+   `/ui/vcops/services/router` Ext.Direct endpoint, **with the
+   correct nested-JSON-string data shape**. The 500s observed in
+   earlier investigations were the server-side POJO deserializer
+   crashing on malformed client payloads (bare UUID strings), not
+   a broken handler. See `context/dashboard_delete_api.md`
+   §"2026-04-11 correction" for the authoritative wire format and
+   working Python/PowerShell call shapes. Install scripts have
+   been updated; view and report uninstall are both supported.
 
-7. **Dashboard uninstall requires `admin` account.** The content-zip
+6. **UI-session uninstall requires `admin` account.** The content-zip
    importer assigns dashboard ownership to the `admin` account
    regardless of who authenticates the import. Only the `admin`
-   user's UI session can delete these dashboards. Install scripts
-   enforce this: uninstall of bundles containing dashboards or views
-   aborts with a clear error if the user is not `admin`. Install
-   (import) works with any admin-privileged account.
+   user's UI session can delete imported dashboards, views, and
+   reports. Install scripts enforce this: uninstall of bundles
+   containing any of these three content types aborts with a clear
+   early error if the user is not `admin`. Install (import) works
+   with any admin-privileged account.
+
+7. **No per-object UI import endpoints in VCF Ops 9.0.2.** Every
+   legacy `/ui/*.action` upload mainAction and every Ext.Direct
+   upload RPC is either unregistered, a dead stub, or wired-but-
+   throwing. The new SPA UI wraps drag-dropped files client-side
+   into a bulk content-zip envelope and POSTs to
+   `/api/content/operations/import` — the same endpoint `install.py`
+   already uses. Consequences: (a) our distribution package drop-in
+   artifacts (`supermetric.json`, `Dashboard.zip`, `Views.zip`,
+   `Reports.zip`, `AlertContent.xml`) work for admins hand-dragging
+   into the UI because the SPA does the envelope wrap, but (b)
+   qa-tester cannot automate that drag-drop path headlessly — it's
+   human-in-the-loop only. See `memory/project_vcf_ops_902_ui_deadends.md`.
 
 ## Cross-reference syntax
 
