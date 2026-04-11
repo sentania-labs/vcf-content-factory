@@ -1326,7 +1326,7 @@ function Get-AllReports {
             resourceContext = $null
             page            = 1
             start           = 0
-            limit           = 50
+            limit           = 500
             sort            = @(@{ property = "creationTime"; direction = "DESC" })
         })
         type   = "rpc"
