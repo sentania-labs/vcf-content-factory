@@ -154,7 +154,21 @@ class VCFOpsClient:
 
     def export_default_policy_xml(self) -> str:
         """Export the Default Policy and return the raw XML content."""
+        zip_bytes, _xml_name = self._export_default_policy_zip()
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            for name in zf.namelist():
+                if name.endswith(".xml"):
+                    return zf.read(name).decode("utf-8")
+        raise VCFOpsError("policy export ZIP contained no XML file")
+
+    def _export_default_policy_zip(self) -> tuple:
+        """Export the Default Policy ZIP.  Returns (zip_bytes, xml_filename).
+
+        Unlike export_default_policy_xml, this preserves the raw ZIP bytes
+        so the caller can edit the XML and re-import the whole archive.
+        """
         policy_id = self.get_default_policy_id()
+        # Must override the session-level Accept header for this one call.
         r = self._request(
             "GET", "/api/policies/export",
             params={"id": policy_id},
@@ -164,11 +178,46 @@ class VCFOpsClient:
             raise VCFOpsError(
                 f"policy export failed ({r.status_code}): {r.text}"
             )
-        with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
-            for name in zf.namelist():
-                if name.endswith(".xml"):
-                    return zf.read(name).decode("utf-8")
-        raise VCFOpsError("policy export ZIP contained no XML file")
+        zip_bytes = r.content
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            xml_names = [n for n in zf.namelist() if n.endswith(".xml")]
+        if not xml_names:
+            raise VCFOpsError("policy export ZIP contained no XML file")
+        return zip_bytes, xml_names[0]
+
+    def _import_policy_zip(self, zip_bytes: bytes) -> None:
+        """Re-import a (possibly edited) policy ZIP.
+
+        Uses POST /api/policies/import?forceImport=true — a PUBLIC endpoint
+        that does not require X-Ops-API-use-unsupported.
+
+        The endpoint expects multipart/form-data with a 'policy' field
+        carrying the ZIP bytes (spec: requestBody schema has required field
+        'policy' of type string/binary inside multipart/form-data).
+
+        The session-level 'Content-Type: application/json' header must be
+        absent for multipart uploads — if present it overrides the
+        multipart boundary header that requests generates for the files=
+        argument, causing a server-side 500. We remove it temporarily and
+        restore it after the call.
+        """
+        self._ensure_auth()
+        # Temporarily remove session-level Content-Type so requests can set
+        # the multipart/form-data boundary correctly.
+        saved_ct = self._session.headers.pop("Content-Type", None)
+        try:
+            r = self._session.post(
+                f"{self.base}/api/policies/import",
+                params={"forceImport": "true"},
+                files={"policy": ("exportedPolicies.zip", zip_bytes, "application/zip")},
+            )
+        finally:
+            if saved_ct is not None:
+                self._session.headers["Content-Type"] = saved_ct
+        if r.status_code not in (200, 201, 204):
+            raise VCFOpsError(
+                f"policy import failed ({r.status_code}): {r.text}"
+            )
 
     @staticmethod
     def verify_supermetrics_enabled(
@@ -189,34 +238,154 @@ class VCFOpsClient:
         resource_kinds: list,
     ) -> None:
         """Assign a super metric to resource kinds and enable it in the
-        Default Policy via the internal assign/default endpoint.
+        Default Policy.
 
-        Uses PUT /internal/supermetrics/assign/default rather than
-        /internal/supermetrics/assign?policyIds=... to avoid a silent-success
-        failure mode where the policy ID resolves but the assignment is not
-        applied. The /assign/default endpoint requires no policy lookup and
-        always targets the default policy.
+        Two-step approach required for content-zip-imported SMs:
+
+        Step 1 — resource-kind assignment via PUT /internal/supermetrics/assign
+          (no policyIds param).  This wires the SM to the adapter/resource kind
+          so it can appear in views and dashboards.  NOTE: the policyIds variant
+          returns 200 but does NOT enable content-zip-imported SMs on any policy
+          — it only works for SMs created via POST /api/supermetrics.
+
+        Step 2 — policy enablement via policy export → edit XML → re-import.
+          Export the Default Policy ZIP, inject
+          <SuperMetric enabled="true" id="<sm_id>"/> under each
+          <SuperMetrics adapterKind="X" resourceKind="Y"> block, then POST
+          the modified ZIP back via POST /api/policies/import?forceImport=true.
+
+        See context/internal_supermetrics_assign.md for the full investigation.
         """
+        import xml.etree.ElementTree as ET
+
         if not resource_kinds:
             raise VCFOpsError("enable requires at least one resource kind")
+
+        # Normalise resource kind dicts — accept both key name styles.
+        normalised_rks = [
+            {
+                "adapterKind": rk.get("adapterKindKey") or rk.get("adapterKind"),
+                "resourceKind": rk.get("resourceKindKey") or rk.get("resourceKind"),
+            }
+            for rk in resource_kinds
+        ]
+
+        # --- Step 1: resource-kind assignment --------------------------------
+        # policyIds is intentionally omitted — it does nothing for content-zip
+        # SMs and would only add noise.
         body = {
             "superMetricId": sm_id,
-            "resourceKindKeys": [
-                {
-                    "adapterKind": rk.get("adapterKindKey") or rk.get("adapterKind"),
-                    "resourceKind": rk.get("resourceKindKey") or rk.get("resourceKind"),
-                }
-                for rk in resource_kinds
-            ],
+            "resourceKindKeys": normalised_rks,
         }
         r = self._request(
             "PUT",
-            "/internal/supermetrics/assign/default",
+            "/internal/supermetrics/assign",
             json=body,
             headers={"X-Ops-API-use-unsupported": "true"},
         )
         if r.status_code != 200:
-            raise VCFOpsError(f"enable failed ({r.status_code}): {r.text}")
+            raise VCFOpsError(
+                f"resource-kind assignment failed ({r.status_code}): {r.text}"
+            )
+
+        # --- Step 2: policy enablement via export/edit/import ----------------
+        zip_bytes, xml_name = self._export_default_policy_zip()
+
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            raw_xml = zf.read(xml_name)
+            other_files = {
+                n: zf.read(n) for n in zf.namelist() if n != xml_name
+            }
+
+        # Parse — preserve namespace declarations by registering any xmlns
+        # found in the raw bytes, then round-trip through ET.
+        # ET.register_namespace keeps the prefix intact on serialise.
+        ns_map: dict = {}
+        import re as _re
+        for prefix, uri in _re.findall(
+            r'xmlns(?::([A-Za-z_][A-Za-z0-9_.-]*))?=["\']([^"\']+)["\']',
+            raw_xml.decode("utf-8"),
+        ):
+            ns_map[prefix if prefix else ""] = uri
+            ET.register_namespace(prefix if prefix else "", uri)
+
+        root = ET.fromstring(raw_xml)
+
+        # Locate <PackageSettings> inside the first (default) <Policy>.
+        # Structure: PolicyContent/Policies/Policy/PackageSettings
+        pkg_settings = root.find(".//{*}PackageSettings") or root.find(
+            ".//PackageSettings"
+        )
+        if pkg_settings is None:
+            # Fallback: walk to Policy element and create PackageSettings.
+            policy_elem = root.find(".//{*}Policy") or root.find(".//Policy")
+            if policy_elem is None:
+                raise VCFOpsError(
+                    "policy XML has no <Policy> element — cannot inject SM"
+                )
+            pkg_settings = ET.SubElement(policy_elem, "PackageSettings")
+
+        # Before adding fresh entries, purge any stale <SuperMetric id="sm_id">
+        # from ALL <SuperMetrics> blocks in PackageSettings.  A stale entry
+        # (e.g. from a prior broken /assign call) causes the policy import to
+        # be a no-op — the server sees no change and silently skips enablement.
+        # Removing first guarantees the import reflects a real state change.
+        all_sm_blocks = (
+            pkg_settings.findall("{*}SuperMetrics")
+            or pkg_settings.findall("SuperMetrics")
+        )
+        for block in all_sm_blocks:
+            for entry in list(block):
+                entry_tag = entry.tag.split("}")[-1] if "}" in entry.tag else entry.tag
+                if entry_tag == "SuperMetric" and entry.get("id") == sm_id:
+                    block.remove(entry)
+
+        for rk in normalised_rks:
+            adapter_kind = rk["adapterKind"]
+            resource_kind = rk["resourceKind"]
+
+            # Find existing <SuperMetrics> block or create one.
+            sm_block = None
+            for candidate in (
+                pkg_settings.findall("{*}SuperMetrics")
+                or pkg_settings.findall("SuperMetrics")
+            ):
+                if (
+                    candidate.get("adapterKind") == adapter_kind
+                    and candidate.get("resourceKind") == resource_kind
+                ):
+                    sm_block = candidate
+                    break
+
+            if sm_block is None:
+                sm_block = ET.SubElement(
+                    pkg_settings,
+                    "SuperMetrics",
+                    {"adapterKind": adapter_kind, "resourceKind": resource_kind},
+                )
+
+            # Always add a fresh entry — any stale copy was removed above.
+            ET.SubElement(
+                sm_block,
+                "SuperMetric",
+                {"enabled": "true", "id": sm_id},
+            )
+
+        # Serialise back to bytes — ET.tostring produces ASCII-safe XML.
+        edited_xml = ET.tostring(root, encoding="unicode", xml_declaration=False)
+        # Prepend the XML declaration that ET strips by default.
+        if not edited_xml.startswith("<?xml"):
+            edited_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + edited_xml
+        edited_xml_bytes = edited_xml.encode("utf-8")
+
+        # Rebuild ZIP with edited XML in place.
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(xml_name, edited_xml_bytes)
+            for name, data in other_files.items():
+                zf.writestr(name, data)
+
+        self._import_policy_zip(buf.getvalue())
 
     # ---- content-zip import (UUID-preserving) ---------------------------
     def import_supermetrics_bundle(self, supermetrics: Iterable[dict]) -> dict:

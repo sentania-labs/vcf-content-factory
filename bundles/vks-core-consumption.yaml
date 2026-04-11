@@ -21,3 +21,5 @@ views:
 dashboards:
   - dashboards/vks_core_consumption.yaml
 customgroups: []
+reports:
+  - reports/vks_core_consumption_report.yaml

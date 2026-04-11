@@ -142,8 +142,7 @@ that was a bug in earlier notes).
    `/internal/supermetrics/assign/default` (no query param) are
    functionally equivalent. **To enable a super metric in a non-default
    policy, this endpoint is not sufficient** — must use the policy
-   export / edit XML / re-import path instead. Flag this as a gap for
-   the planned `enable` CLI.
+   export / edit XML / re-import path instead.
 
 2. **`X-Ops-API-use-unsupported` header is required, not optional.**
    Spec marks it `required: false` but omitting it yields
@@ -169,21 +168,92 @@ that was a bug in earlier notes).
    endpoint family. Disabling requires the policy export-edit-import
    round trip. Cleanup after a bad `enable` is therefore expensive.
 
+8. **`/assign` (all variants) does NOT enable content-zip-imported SMs
+   on any policy.** Both `/assign` with `policyIds=<defaultId>` and
+   `/assign/default` (no query param) return 200 but the super metric
+   does NOT appear as enabled in the policy when read back via the
+   policy export XML. This is silently broken — the 200 response gives
+   no indication of failure. Empirically confirmed 2026-04-10: only SMs
+   created via `POST /api/supermetrics` (which reassigns UUIDs) can be
+   enabled via `/assign`. SMs imported via `POST
+   /api/content/operations/import` (content-zip, the UUID-preserving
+   path) require the **policy export → edit XML → re-import** approach
+   for enablement. See "Policy export/edit/import path for enablement"
+   below.
+
+## Policy export/edit/import path for enablement
+
+This is the only working enablement path for content-zip-imported SMs.
+
+### Step 1 — export policy ZIP
+
+```
+GET /suite-api/api/policies/export?id=<defaultPolicyId>
+Accept: application/zip
+```
+
+Returns a ZIP (not a raw XML response). The ZIP contains
+`exportedPolicies.xml` (name may vary; find the `.xml` entry).
+
+### Step 2 — edit XML
+
+Parse `exportedPolicies.xml`. The relevant structure:
+
+```xml
+<PolicyContent>
+  <Policies>
+    <Policy key="<uuid>" name="Default Policy">
+      <PackageSettings>
+        <SuperMetrics adapterKind="VMWARE" resourceKind="ClusterComputeResource">
+          <SuperMetric enabled="true" id="<sm-uuid>"/>
+        </SuperMetrics>
+        <SuperMetrics adapterKind="VMWARE" resourceKind="HostSystem">
+          <SuperMetric enabled="true" id="<sm-uuid>"/>
+        </SuperMetrics>
+        ...
+      </PackageSettings>
+    </Policy>
+  </Policies>
+  ...
+</PolicyContent>
+```
+
+For each resource kind the SM should be active on:
+- Find or create `<SuperMetrics adapterKind="X" resourceKind="Y">` under
+  `<PackageSettings>`.
+- Add or update `<SuperMetric enabled="true" id="<sm-uuid>"/>` within it.
+
+### Step 3 — re-import ZIP
+
+```
+POST /suite-api/api/policies/import?forceImport=true
+Content-Type: application/zip
+```
+
+Body is the rebuilt ZIP with the edited XML in place. This is a **public
+API endpoint** — no `X-Ops-API-use-unsupported` header required. The
+`forceImport=true` parameter is required to overwrite the existing policy
+without interactive confirmation.
+
+### Implementation in client.py
+
+`enable_supermetric_on_default_policy()` now uses this two-step
+approach: (a) call `/assign` without `policyIds` for resource-kind wiring,
+then (b) export/edit/import for actual policy enablement.
+`_export_default_policy_zip()` and `_import_policy_zip()` are the two
+new helper methods.
+
 ## Recommended CLI wiring
 
-For an `enable` command targeting the Default Policy (the only policy
-this endpoint can actually write to):
+For an `enable` command targeting the Default Policy:
 
-1. Resolve Default Policy id via `GET /api/policies`, filter
-   `policySummaries` for `defaultPolicy: true`. Cache per session.
-2. Resolve super metric by YAML id (already known in the YAML file —
-   no lookup needed).
-3. PUT with body `{superMetricId, resourceKindKeys:[...]}` and
-   `policyIds=<default>` as a single repeatable query param.
-4. Treat 200 as success (no body parsing).
-5. For non-default policies: raise `NotImplementedError` pointing the
-   user at the policy export/import path, OR implement that path as a
-   second code route. Do not silently downgrade to "default only".
+1. Call `enable_supermetric_on_default_policy(sm_id, resource_kinds)`.
+   The method handles both the `/assign` call and the policy
+   export/edit/import internally.
+2. Verify with `export_default_policy_xml()` + `verify_supermetrics_enabled()`.
+3. For non-default policies: the policy export/edit/import path supports
+   any policy id — pass it to `_export_default_policy_zip` (adjusted to
+   accept a policy_id param) if needed.
 
 ## Supportability caveat
 

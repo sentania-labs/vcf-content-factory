@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import List
 
 from vcfops_dashboards.render import render_views_xml, render_dashboards_bundle_json
+from vcfops_reports.render import render_report_xml
 from .loader import Bundle, load_bundle
 
 # The builder stamps PLACEHOLDER_USER_ID into the rendered dashboard JSON.
@@ -51,6 +52,87 @@ def _stamp_template(template_name: str, vars: dict) -> str:
     return text
 
 
+def _build_bundle_json(bundle: Bundle) -> str:
+    """Build the bundle.json metadata manifest embedded in distribution zips.
+
+    This manifest lets install scripts verify which content files belong to
+    this specific bundle, so users who extract multiple bundles into the same
+    directory can tell them apart and choose the right one to install.
+
+    Shape (mirrors the spec in the feature request):
+      {
+        "name": "...",
+        "description": "...",
+        "content": {
+          "supermetrics": {"file": "content/supermetrics.json", "items": [...]},
+          "views":        {"file": "content/views_content.xml", "items": [...]},
+          "dashboards":   {"file": "content/dashboard.json",    "items": [...]},
+          "customgroups": {"file": "content/customgroup.json",  "items": [...]}
+        }
+      }
+    Each item has "uuid" and "name" for super metrics / views / dashboards.
+    Custom groups have "name" only (their API assigns IDs server-side).
+    """
+    def _sm_items():
+        return [{"uuid": sm.id, "name": sm.name} for sm in bundle.supermetrics]
+
+    def _view_items():
+        return [{"uuid": v.id, "name": v.name} for v in bundle.views]
+
+    def _dashboard_items():
+        return [{"uuid": d.id, "name": d.name} for d in bundle.dashboards]
+
+    def _cg_items():
+        return [{"name": cg.name} for cg in bundle.customgroups]
+
+    def _report_items():
+        return [{"uuid": rd.id, "name": rd.name} for rd in bundle.reports]
+
+    content: dict = {}
+    if bundle.supermetrics:
+        content["supermetrics"] = {
+            "file": "content/supermetrics.json",
+            "items": _sm_items(),
+        }
+    if bundle.views:
+        content["views"] = {
+            "file": "content/views_content.xml",
+            "items": _view_items(),
+        }
+    if bundle.dashboards:
+        content["dashboards"] = {
+            "file": "content/dashboard.json",
+            "items": _dashboard_items(),
+        }
+    if bundle.customgroups:
+        content["customgroups"] = {
+            "file": "content/customgroup.json",
+            "items": _cg_items(),
+        }
+    if bundle.reports:
+        content["reports"] = {
+            "file": "content/reports_content.xml",
+            "items": _report_items(),
+        }
+    if bundle.symptoms:
+        content["symptoms"] = {
+            "file": "content/symptoms.json",
+            "items": [{"name": s.name} for s in bundle.symptoms],
+        }
+    if bundle.alerts:
+        content["alerts"] = {
+            "file": "content/alerts.json",
+            "items": [{"name": a.name} for a in bundle.alerts],
+        }
+
+    manifest = {
+        "name": bundle.name,
+        "description": bundle.description or "",
+        "content": content,
+    }
+    return json.dumps(manifest, indent=2)
+
+
 def _build_content_manifest(bundle: Bundle) -> str:
     """Build the CONTENT_MANIFEST JSON string for uninstall templates.
 
@@ -62,6 +144,9 @@ def _build_content_manifest(bundle: Bundle) -> str:
         "views": [v.name for v in bundle.views],
         "supermetrics": [sm.name for sm in bundle.supermetrics],
         "customgroups": [cg.name for cg in bundle.customgroups],
+        "reports": [rd.name for rd in bundle.reports],
+        "symptoms": [s.name for s in bundle.symptoms],
+        "alerts": [a.name for a in bundle.alerts],
     }
     return json.dumps(manifest, indent=2)
 
@@ -130,6 +215,24 @@ def _generate_readme(bundle: Bundle) -> str:
         lines.append("")
         for cg in bundle.customgroups:
             lines.append(f"- {cg.name}")
+        lines.append("")
+    if bundle.reports:
+        lines.append(f"**Reports ({len(bundle.reports)}):**")
+        lines.append("")
+        for rd in bundle.reports:
+            lines.append(f"- {rd.name}")
+        lines.append("")
+    if bundle.symptoms:
+        lines.append(f"**Symptoms ({len(bundle.symptoms)}):**")
+        lines.append("")
+        for s in bundle.symptoms:
+            lines.append(f"- {s.name}")
+        lines.append("")
+    if bundle.alerts:
+        lines.append(f"**Alerts ({len(bundle.alerts)}):**")
+        lines.append("")
+        for a in bundle.alerts:
+            lines.append(f"- {a.name}")
         lines.append("")
     lines += [
         "## Installation",
@@ -238,7 +341,33 @@ def build_bundle(
 
     cg_payload = _render_customgroup_payload(bundle)
 
+    reports_xml = render_report_xml(bundle.reports) if bundle.reports else ""
+
+    # Symptoms serialize to wire format at build time (no server-side dependencies).
+    # Alerts need symptom name→id resolution at install time, so we store the
+    # YAML-equivalent dict (name, description, adapter/resource kind, symptom_sets,
+    # etc.) and let the install script call to_wire() with the live symptom map.
+    symptoms_payload = [s.to_wire() for s in bundle.symptoms] if bundle.symptoms else []
+    alerts_payload = []
+    for a in bundle.alerts:
+        alerts_payload.append({
+            "name": a.name,
+            "description": a.description,
+            "adapter_kind": a.adapter_kind,
+            "resource_kind": a.resource_kind,
+            "type": a.type,
+            "sub_type": a.sub_type,
+            "wait_cycles": a.wait_cycles,
+            "cancel_cycles": a.cancel_cycles,
+            "criticality": a.criticality,
+            "impact_badge": a.impact_badge,
+            "symptom_sets": a.symptom_sets,
+            "recommendations": a.recommendations,
+        })
+
     readme_text = _generate_readme(bundle)
+
+    bundle_json = _build_bundle_json(bundle)
 
     # Find repo root LICENSE
     repo_root = Path(__file__).parent.parent
@@ -259,7 +388,14 @@ def build_bundle(
             z.writestr("content/dashboard.json", dashboard_json)
         if cg_payload is not None:
             z.writestr("content/customgroup.json", json.dumps(cg_payload, indent=2))
+        if reports_xml:
+            z.writestr("content/reports_content.xml", reports_xml)
+        if symptoms_payload:
+            z.writestr("content/symptoms.json", json.dumps(symptoms_payload, indent=2))
+        if alerts_payload:
+            z.writestr("content/alerts.json", json.dumps(alerts_payload, indent=2))
 
+        z.writestr("bundle.json", bundle_json)
         z.writestr("README.md", readme_text)
         if license_text is not None:
             z.writestr("LICENSE", license_text)

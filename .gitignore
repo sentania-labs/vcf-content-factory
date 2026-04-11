@@ -28,3 +28,7 @@ dist/
 
 # Local clones of external reference sources (see context/reference_sources.md)
 references/
+
+# Session scratchpads — workspace files, not part of the repo
+tmp/
+status.md

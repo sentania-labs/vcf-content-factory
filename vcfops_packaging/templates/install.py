@@ -97,6 +97,101 @@ def _load_json(name: str) -> Any:
     return json.loads((SCRIPT_DIR / "content" / name).read_text())
 
 
+# ---------------------------------------------------------------------------
+# Bundle manifest discovery
+# ---------------------------------------------------------------------------
+def _load_bundle_manifest() -> Optional[Dict]:
+    """Locate and load bundle.json (or prompt if multiple bundles coexist).
+
+    Looks for bundle.json (or bundle_*.json files) in SCRIPT_DIR.  Returns
+    the loaded manifest dict, or None when no manifest is found (legacy
+    behaviour: content/ files are used directly without a manifest check).
+
+    If multiple manifest files are found the user is prompted to pick one.
+    """
+    import glob as _glob
+
+    candidates: List[Path] = []
+
+    # Primary name written by the builder
+    primary = SCRIPT_DIR / "bundle.json"
+    if primary.exists():
+        candidates.append(primary)
+
+    # Also look for bundle_*.json siblings (users who extracted several bundles
+    # into one directory and renamed the manifests to avoid collisions)
+    for p in sorted(SCRIPT_DIR.glob("bundle_*.json")):
+        if p not in candidates:
+            candidates.append(p)
+
+    if not candidates:
+        print("  WARN  No bundle.json found in script directory -- "
+              "content files will be read directly from content/ "
+              "(install still proceeds, but bundle identity is unverified)")
+        return None
+
+    if len(candidates) == 1:
+        chosen = candidates[0]
+    else:
+        print()
+        print("Multiple bundle manifests found in this directory.")
+        print("Please choose which bundle to install:")
+        print()
+        loaded: List[Dict] = []
+        for i, p in enumerate(candidates, 1):
+            try:
+                m = json.loads(p.read_text())
+            except Exception:
+                m = {}
+            loaded.append(m)
+            name = m.get("name", p.name)
+            desc = m.get("description", "")
+            print(f"  [{i}] {name}" + (f" -- {desc}" if desc else ""))
+        print()
+        while True:
+            raw = input(f"Enter choice [1-{len(candidates)}]: ").strip()
+            if raw.isdigit() and 1 <= int(raw) <= len(candidates):
+                chosen = candidates[int(raw) - 1]
+                break
+            print(f"  Invalid choice. Enter a number between 1 and {len(candidates)}.")
+
+    try:
+        manifest = json.loads(chosen.read_text())
+    except Exception as exc:
+        print(f"  WARN  Could not parse {chosen.name}: {exc} -- proceeding without manifest")
+        return None
+
+    return manifest
+
+
+def _print_bundle_header(manifest: Optional[Dict]) -> None:
+    """Print bundle name and item counts from the manifest (install preamble)."""
+    if not manifest:
+        return
+    name = manifest.get("name", PACKAGE_NAME)
+    desc = manifest.get("description", "")
+    content = manifest.get("content", {})
+
+    # Validate that the expected content files exist
+    missing = []
+    for section in content.values():
+        rel = section.get("file", "")
+        if rel and not (SCRIPT_DIR / rel).exists():
+            missing.append(rel)
+    if missing:
+        print(f"  WARN  Bundle manifest references files not found: {', '.join(missing)}")
+
+    # Build a compact summary line
+    parts: List[str] = []
+    for key, section in content.items():
+        count = len(section.get("items", []))
+        if count:
+            parts.append(f"{count} {key}")
+    summary = ", ".join(parts) if parts else "no items"
+    print(f"  Bundle: {name}" + (f" -- {desc}" if desc else ""))
+    print(f"  Contents: {summary}")
+
+
 def _die(msg: str) -> None:
     print(f"ERROR: {msg}", file=sys.stderr)
     sys.exit(1)
@@ -326,27 +421,158 @@ class Client:
 
     def enable_sm_on_default_policy(self, sm_id: str, sm_name: str,
                                     resource_kinds: list) -> None:
+        """Assign a super metric to resource kinds and enable it in the
+        Default Policy.
+
+        Two-step approach required for content-zip-imported SMs:
+
+        Step 1 — resource-kind assignment via PUT /internal/supermetrics/assign
+          (without policyIds).  Wires the SM to adapter/resource kind so it
+          appears in views.  The policyIds variant does NOT enable content-zip
+          SMs on any policy — it is a no-op for this import path.
+
+        Step 2 — policy enablement via policy export -> edit XML -> re-import.
+          Stale entries for this SM are removed from ALL <SuperMetrics> blocks
+          before injecting fresh ones, making this call idempotent/self-healing.
+        """
+        import xml.etree.ElementTree as ET
+        import re as _re
+
+        policy_id = self.get_default_policy_id()
+
+        # Step 1: resource-kind assignment (no policyIds).
+        normalised_rks = [
+            {
+                "adapterKind": rk.get("adapterKindKey") or rk.get("adapterKind"),
+                "resourceKind": rk.get("resourceKindKey") or rk.get("resourceKind"),
+            }
+            for rk in resource_kinds
+        ]
         body = {
             "superMetricId": sm_id,
-            "resourceKindKeys": [
-                {
-                    "adapterKind": rk.get("adapterKindKey") or rk.get("adapterKind"),
-                    "resourceKind": rk.get("resourceKindKey") or rk.get("resourceKind"),
-                }
-                for rk in resource_kinds
-            ],
+            "resourceKindKeys": normalised_rks,
         }
-        # Use /assign/default (no policyIds lookup needed) rather than
-        # /assign?policyIds=... to avoid a silent-success failure mode where
-        # the policy ID resolves but the assignment is not actually applied.
         r = self._req(
             "PUT",
-            "/internal/supermetrics/assign/default",
+            "/internal/supermetrics/assign",
             json=body,
             headers={"X-Ops-API-use-unsupported": "true"},
         )
         if r.status_code != 200:
-            raise RuntimeError(f"Enable SM '{sm_name}' failed ({r.status_code}): {r.text}")
+            raise RuntimeError(
+                f"Resource-kind assignment for SM '{sm_name}' failed "
+                f"({r.status_code}): {r.text}"
+            )
+
+        # Step 2: policy export -> edit XML -> re-import.
+        r = self._req(
+            "GET", "/api/policies/export",
+            params={"id": policy_id},
+            headers={"Accept": "application/zip"},
+        )
+        if r.status_code != 200:
+            raise RuntimeError(
+                f"Policy export failed ({r.status_code}): {r.text}"
+            )
+
+        zip_bytes = r.content
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            xml_names = [n for n in zf.namelist() if n.endswith(".xml")]
+            if not xml_names:
+                raise RuntimeError("Policy export ZIP contained no XML file")
+            xml_name = xml_names[0]
+            raw_xml = zf.read(xml_name)
+            other_files = {n: zf.read(n) for n in zf.namelist() if n != xml_name}
+
+        # Register namespaces so round-trip preserves prefixes.
+        for prefix, uri in _re.findall(
+            r'xmlns(?::([A-Za-z_][A-Za-z0-9_.-]*))?=["\']([^"\']+)["\']',
+            raw_xml.decode("utf-8"),
+        ):
+            ET.register_namespace(prefix if prefix else "", uri)
+
+        root = ET.fromstring(raw_xml)
+
+        # Locate <PackageSettings>.
+        pkg_settings = (
+            root.find(".//{*}PackageSettings") or root.find(".//PackageSettings")
+        )
+        if pkg_settings is None:
+            policy_elem = root.find(".//{*}Policy") or root.find(".//Policy")
+            if policy_elem is None:
+                raise RuntimeError(
+                    f"Policy XML has no <Policy> element — cannot inject SM '{sm_name}'"
+                )
+            pkg_settings = ET.SubElement(policy_elem, "PackageSettings")
+
+        # Purge stale entries for this SM from ALL SuperMetrics blocks.
+        all_sm_blocks = (
+            pkg_settings.findall("{*}SuperMetrics")
+            or pkg_settings.findall("SuperMetrics")
+        )
+        for block in all_sm_blocks:
+            for entry in list(block):
+                entry_tag = (
+                    entry.tag.split("}")[-1] if "}" in entry.tag else entry.tag
+                )
+                if entry_tag == "SuperMetric" and entry.get("id") == sm_id:
+                    block.remove(entry)
+
+        # Inject fresh enabled entries for each resource kind.
+        for rk in normalised_rks:
+            adapter_kind = rk["adapterKind"]
+            resource_kind = rk["resourceKind"]
+
+            sm_block = None
+            for candidate in (
+                pkg_settings.findall("{*}SuperMetrics")
+                or pkg_settings.findall("SuperMetrics")
+            ):
+                if (
+                    candidate.get("adapterKind") == adapter_kind
+                    and candidate.get("resourceKind") == resource_kind
+                ):
+                    sm_block = candidate
+                    break
+
+            if sm_block is None:
+                sm_block = ET.SubElement(
+                    pkg_settings,
+                    "SuperMetrics",
+                    {"adapterKind": adapter_kind, "resourceKind": resource_kind},
+                )
+
+            ET.SubElement(sm_block, "SuperMetric", {"enabled": "true", "id": sm_id})
+
+        # Serialise and rebuild ZIP.
+        edited_xml = ET.tostring(root, encoding="unicode", xml_declaration=False)
+        if not edited_xml.startswith("<?xml"):
+            edited_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + edited_xml
+        edited_xml_bytes = edited_xml.encode("utf-8")
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(xml_name, edited_xml_bytes)
+            for name, data in other_files.items():
+                zf.writestr(name, data)
+        zip_out = buf.getvalue()
+
+        # POST the rebuilt ZIP to /api/policies/import?forceImport=true.
+        # Must not send Content-Type: application/json for multipart uploads.
+        saved_ct = self._session.headers.pop("Content-Type", None)
+        try:
+            r = self._session.post(
+                f"{self.base}/api/policies/import",
+                params={"forceImport": "true"},
+                files={"policy": ("exportedPolicies.zip", zip_out, "application/zip")},
+            )
+        finally:
+            if saved_ct is not None:
+                self._session.headers["Content-Type"] = saved_ct
+        if r.status_code not in (200, 201, 204):
+            raise RuntimeError(
+                f"Policy import failed for SM '{sm_name}' ({r.status_code}): {r.text}"
+            )
 
     def export_default_policy_xml(self, policy_id: str) -> str:
         """Export a policy and return the raw XML from the ZIP."""
@@ -915,6 +1141,299 @@ def _install_customgroups(ctx: Dict) -> None:
         _ok(f"Upserted: {cg_name}")
 
 
+def _install_symptoms(ctx: Dict) -> None:
+    symptoms = _load_json("symptoms.json")
+    for payload in symptoms:
+        name = payload.get("name", "unknown")
+        existing = None
+        # Search by name
+        page, page_size = 0, 1000
+        while True:
+            r = ctx["client"]._req("GET", "/api/symptomdefinitions",
+                                   params={"page": page, "pageSize": page_size})
+            if r.status_code != 200:
+                _warn(f"Symptom list failed ({r.status_code})")
+                break
+            body = r.json()
+            for sd in body.get("symptomDefinitions") or []:
+                if sd.get("name") == name:
+                    existing = sd
+                    break
+            if existing:
+                break
+            info = body.get("pageInfo") or {}
+            total = info.get("totalCount", 0)
+            if (page + 1) * page_size >= total:
+                break
+            page += 1
+
+        if existing:
+            payload["id"] = existing["id"]
+            r = ctx["client"]._req("PUT", "/api/symptomdefinitions", json=payload)
+            if r.status_code != 200:
+                warn = f"Symptom update failed for '{name}' ({r.status_code}): {r.text}"
+                _warn(warn)
+                ctx["warnings"].append(warn)
+                continue
+            _ok(f"Updated: {name}")
+        else:
+            r = ctx["client"]._req("POST", "/api/symptomdefinitions", json=payload)
+            if r.status_code not in (200, 201):
+                warn = f"Symptom create failed for '{name}' ({r.status_code}): {r.text}"
+                _warn(warn)
+                ctx["warnings"].append(warn)
+                continue
+            _ok(f"Created: {name}")
+
+
+def _install_alerts(ctx: Dict) -> None:
+    alerts = _load_json("alerts.json")
+
+    # Resolve symptom name → server ID map
+    symptom_map: Dict[str, str] = {}
+    page, page_size = 0, 1000
+    while True:
+        r = ctx["client"]._req("GET", "/api/symptomdefinitions",
+                               params={"page": page, "pageSize": page_size})
+        if r.status_code != 200:
+            _warn(f"Symptom list for alert resolution failed ({r.status_code})")
+            break
+        body = r.json()
+        for sd in body.get("symptomDefinitions") or []:
+            if sd.get("name") and sd.get("id"):
+                symptom_map[sd["name"]] = sd["id"]
+        info = body.get("pageInfo") or {}
+        total = info.get("totalCount", 0)
+        if (page + 1) * page_size >= total:
+            break
+        page += 1
+
+    for alert_data in alerts:
+        name = alert_data.get("name", "unknown")
+
+        # Build wire format with resolved symptom IDs
+        try:
+            wire = _alert_to_wire(alert_data, symptom_map)
+        except Exception as exc:
+            warn = f"Alert '{name}' wire conversion failed: {exc}"
+            _warn(warn)
+            ctx["warnings"].append(warn)
+            continue
+
+        # Upsert by name
+        existing = None
+        page = 0
+        while True:
+            r = ctx["client"]._req("GET", "/api/alertdefinitions",
+                                   params={"page": page, "pageSize": 1000})
+            if r.status_code != 200:
+                break
+            body = r.json()
+            for ad in body.get("alertDefinitions") or []:
+                if ad.get("name") == name:
+                    existing = ad
+                    break
+            if existing:
+                break
+            info = body.get("pageInfo") or {}
+            total = info.get("totalCount", 0)
+            if (page + 1) * 1000 >= total:
+                break
+            page += 1
+
+        if existing:
+            wire["id"] = existing["id"]
+            r = ctx["client"]._req("PUT", "/api/alertdefinitions", json=wire)
+            if r.status_code != 200:
+                warn = f"Alert update failed for '{name}' ({r.status_code}): {r.text}"
+                _warn(warn)
+                ctx["warnings"].append(warn)
+                continue
+            _ok(f"Updated: {name}")
+        else:
+            r = ctx["client"]._req("POST", "/api/alertdefinitions", json=wire)
+            if r.status_code not in (200, 201):
+                warn = f"Alert create failed for '{name}' ({r.status_code}): {r.text}"
+                _warn(warn)
+                ctx["warnings"].append(warn)
+                continue
+            _ok(f"Created: {name}")
+
+
+def _alert_to_wire(alert_data: dict, symptom_map: Dict[str, str]) -> dict:
+    """Convert the stored alert payload to API wire format with resolved symptom IDs."""
+    ss = alert_data.get("symptom_sets") or {}
+    top_op = (ss.get("operator") or "ALL").upper()
+    sets = ss.get("sets") or []
+
+    wire_sets = []
+    for s in sets:
+        defined_on = (s.get("defined_on") or "SELF").upper()
+        op = (s.get("operator") or "ALL").upper()
+        symptom_ids = []
+        for sym in s.get("symptoms") or []:
+            sym_name = sym.get("name", "")
+            sid = symptom_map.get(sym_name)
+            if not sid:
+                raise RuntimeError(f"symptom '{sym_name}' not found on instance")
+            symptom_ids.append(sid)
+        wire_set: dict = {
+            "type": "SYMPTOM_SET",
+            "relation": defined_on,
+            "symptomSetOperator": "AND" if op == "ALL" else "OR",
+            "symptomDefinitionIds": symptom_ids,
+        }
+        tt = s.get("threshold_type")
+        tv = s.get("threshold_value")
+        if defined_on != "SELF" and tt:
+            wire_set["aggregation"] = tt
+            if tv is not None:
+                wire_set["value"] = float(tv)
+        wire_sets.append(wire_set)
+
+    if len(wire_sets) == 1:
+        base_ss = wire_sets[0]
+    else:
+        base_ss = {
+            "type": "SYMPTOM_SET_COMPOSITE",
+            "operator": "AND" if top_op == "ALL" else "OR",
+            "symptom-sets": wire_sets,
+        }
+
+    state = {
+        "severity": alert_data.get("criticality", "AUTO"),
+        "base-symptom-set": base_ss,
+        "impact": {
+            "impactType": "BADGE",
+            "detail": alert_data.get("impact_badge", "HEALTH"),
+        },
+    }
+
+    return {
+        "name": alert_data["name"],
+        "description": alert_data.get("description", ""),
+        "adapterKindKey": alert_data.get("adapter_kind", ""),
+        "resourceKindKey": alert_data.get("resource_kind", ""),
+        "waitCycles": alert_data.get("wait_cycles", 1),
+        "cancelCycles": alert_data.get("cancel_cycles", 1),
+        "type": alert_data.get("type", 16),
+        "subType": alert_data.get("sub_type", 3),
+        "states": [state],
+    }
+
+
+def _uninstall_symptoms(ctx: Dict) -> None:
+    names: List[str] = ctx["names"]
+    warnings = ctx["warnings"]
+    # Build name→id map
+    sym_ids: Dict[str, str] = {}
+    page, page_size = 0, 1000
+    while True:
+        r = ctx["client"]._req("GET", "/api/symptomdefinitions",
+                               params={"page": page, "pageSize": page_size})
+        if r.status_code != 200:
+            break
+        body = r.json()
+        for sd in body.get("symptomDefinitions") or []:
+            if sd.get("name") in names and sd.get("id"):
+                sym_ids[sd["name"]] = sd["id"]
+        info = body.get("pageInfo") or {}
+        total = info.get("totalCount", 0)
+        if (page + 1) * page_size >= total:
+            break
+        page += 1
+    for name in names:
+        sid = sym_ids.get(name)
+        if not sid:
+            _warn(f"Symptom not found (already removed?): {name}")
+            warnings.append(f"Symptom not found: {name}")
+            continue
+        r = ctx["client"]._req("DELETE", f"/api/symptomdefinitions/{sid}")
+        if r.status_code in (200, 204):
+            _ok(f"Deleted: {name}")
+        else:
+            warn = f"Symptom delete failed for '{name}' ({r.status_code})"
+            _warn(warn)
+            warnings.append(warn)
+
+
+def _uninstall_alerts(ctx: Dict) -> None:
+    names: List[str] = ctx["names"]
+    warnings = ctx["warnings"]
+    alert_ids: Dict[str, str] = {}
+    page = 0
+    while True:
+        r = ctx["client"]._req("GET", "/api/alertdefinitions",
+                               params={"page": page, "pageSize": 1000})
+        if r.status_code != 200:
+            break
+        body = r.json()
+        for ad in body.get("alertDefinitions") or []:
+            if ad.get("name") in names and ad.get("id"):
+                alert_ids[ad["name"]] = ad["id"]
+        info = body.get("pageInfo") or {}
+        total = info.get("totalCount", 0)
+        if (page + 1) * 1000 >= total:
+            break
+        page += 1
+    for name in names:
+        aid = alert_ids.get(name)
+        if not aid:
+            _warn(f"Alert not found (already removed?): {name}")
+            warnings.append(f"Alert not found: {name}")
+            continue
+        r = ctx["client"]._req("DELETE", f"/api/alertdefinitions/{aid}")
+        if r.status_code in (200, 204):
+            _ok(f"Deleted: {name}")
+        else:
+            warn = f"Alert delete failed for '{name}' ({r.status_code})"
+            _warn(warn)
+            warnings.append(warn)
+
+
+def _build_reports_zip(reports_xml: str, marker: str, owner_id: str) -> bytes:
+    """Build a reports content-zip from the reports XML string.
+
+    Structure (matches vcfops_reports/render.py build_import_zip):
+        <marker>      -- owner user UUID
+        reports.zip   -- inner zip containing content.xml
+        configuration.json
+    """
+    # Build inner reports.zip
+    inner_buf = io.BytesIO()
+    with zipfile.ZipFile(inner_buf, "w", zipfile.ZIP_DEFLATED) as inner:
+        inner.writestr("content.xml", reports_xml)
+    inner_bytes = inner_buf.getvalue()
+
+    # Count ReportDef elements by counting <ReportDef occurrences
+    n_reports = reports_xml.count("<ReportDef ")
+
+    outer_buf = io.BytesIO()
+    with zipfile.ZipFile(outer_buf, "w", zipfile.ZIP_DEFLATED) as outer:
+        outer.writestr(marker, owner_id)
+        outer.writestr("reports.zip", inner_bytes)
+        outer.writestr(
+            "configuration.json",
+            json.dumps({"reports": n_reports, "type": "CUSTOM"}, indent=2),
+        )
+    return outer_buf.getvalue()
+
+
+def _install_reports(ctx: Dict) -> None:
+    content_dir = ctx["content_dir"]
+    reports_xml = (content_dir / "reports_content.xml").read_text(encoding="utf-8")
+    reports_zip = _build_reports_zip(reports_xml, ctx["marker"], ctx["owner_id"])
+    ctx["client"].import_content_zip(reports_zip, "reports")
+    n_reports = reports_xml.count("<ReportDef ")
+    _ok(f"Imported {n_reports} report definition(s)")
+    _warn("Note: report definitions cannot be removed via the API. "
+          "To uninstall, use the Ops UI: Administration > Content > Reports.")
+    ctx["warnings"].append(
+        "Report definitions must be removed manually via the Ops UI "
+        "(Administration > Content > Reports)."
+    )
+
+
 def _uninstall_dashboards(ctx: Dict) -> None:
     ui_client = ctx["ui_client"]
     names: List[str] = ctx["names"]
@@ -1055,6 +1574,41 @@ _CONTENT_REGISTRY: List[Dict] = [
         "uninstall_label": "Deleting custom group(s)...",
         "uninstall_fn": _uninstall_customgroups,
         "uninstall_order": 50,
+        "needs_ui": False,
+    },
+    {
+        "content_type": "reports",
+        "install_file": "reports_content.xml",
+        "install_label": "Importing report definition(s)...",
+        "install_fn": _install_reports,
+        "install_order": 5,
+        # No uninstall path: the VCF Operations API has no DELETE for report
+        # definitions. The install function emits a manual-removal notice.
+        "uninstall_label": None,
+        "uninstall_fn": None,
+        "uninstall_order": None,
+        "needs_ui": False,
+    },
+    {
+        "content_type": "symptoms",
+        "install_file": "symptoms.json",
+        "install_label": "Upserting symptom definition(s)...",
+        "install_fn": _install_symptoms,
+        "install_order": 6,
+        "uninstall_label": "Deleting symptom definition(s)...",
+        "uninstall_fn": _uninstall_symptoms,
+        "uninstall_order": 55,   # after alerts (which reference symptoms)
+        "needs_ui": False,
+    },
+    {
+        "content_type": "alerts",
+        "install_file": "alerts.json",
+        "install_label": "Upserting alert definition(s)...",
+        "install_fn": _install_alerts,
+        "install_order": 7,      # after symptoms (alerts reference symptoms by name)
+        "uninstall_label": "Deleting alert definition(s)...",
+        "uninstall_fn": _uninstall_alerts,
+        "uninstall_order": 35,   # before symptoms (reverse dependency)
         "needs_ui": False,
     },
     # Uninstall-only entries for dashboards and views (reverse of install):
@@ -1308,6 +1862,10 @@ def main() -> None:
         _die("--install and --uninstall are mutually exclusive.")
     if args.force and not args.uninstall:
         _die("--force is only valid with --uninstall.")
+
+    # Discover and validate bundle manifest before prompting for credentials.
+    bundle_manifest = _load_bundle_manifest()
+    _print_bundle_header(bundle_manifest)
 
     mode = "uninstaller" if args.uninstall else "installer"
     host, user, auth_source, password = _prompt_credentials(args, mode)

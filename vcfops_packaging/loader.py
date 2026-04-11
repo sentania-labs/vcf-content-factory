@@ -21,10 +21,8 @@ reports:      list[path]   (optional) -- requires vcfops_reports package
 All content-type keys are optional.  A bundle may contain only super
 metrics, only dashboards, or any subset of the supported types.
 
-For content types whose tooling package does not yet exist (symptoms,
-alerts, reports), the loader still validates that the referenced files
-exist on disk but does not attempt to parse them.  The sync orchestrator
-will emit a WARN and skip those types if no handler is available.
+All content types listed in the manifest are fully parsed and validated
+at load time.  Missing files or invalid YAML raise BundleValidationError.
 """
 from __future__ import annotations
 
@@ -37,6 +35,9 @@ import yaml
 from vcfops_supermetrics.loader import SuperMetricDef, load_file as load_sm
 from vcfops_dashboards.loader import ViewDef, Dashboard, load_view, load_dashboard
 from vcfops_customgroups.loader import CustomGroupDef, load_file as load_cg
+from vcfops_reports.loader import ReportDef, load_file as load_report
+from vcfops_symptoms.loader import SymptomDef, load_file as load_symptom
+from vcfops_alerts.loader import AlertDef, load_file as load_alert
 
 
 class BundleValidationError(ValueError):
@@ -52,11 +53,9 @@ class Bundle:
     views: List[ViewDef]
     dashboards: List[Dashboard]
     customgroups: List[CustomGroupDef]
-    # Paths for content types whose packages may not be installed yet.
-    # The orchestrator checks for a handler before attempting to sync these.
-    symptom_paths: List[Path] = field(default_factory=list)
-    alert_paths: List[Path] = field(default_factory=list)
-    report_paths: List[Path] = field(default_factory=list)
+    reports: List[ReportDef] = field(default_factory=list)
+    symptoms: List[SymptomDef] = field(default_factory=list)
+    alerts: List[AlertDef] = field(default_factory=list)
     source_path: Optional[Path] = None
 
 
@@ -128,10 +127,9 @@ def load_bundle(path: str | Path) -> Bundle:
     view_paths = [_resolve(r) for r in (data.get("views") or [])]
     dash_paths = [_resolve(r) for r in (data.get("dashboards") or [])]
     cg_paths = [_resolve(r) for r in (data.get("customgroups") or [])]
-    # symptoms, alerts, and reports: resolve paths (existence check) but defer parsing
+    report_paths = [_resolve(r) for r in (data.get("reports") or [])]
     symptom_paths = [_resolve(r) for r in (data.get("symptoms") or [])]
     alert_paths = [_resolve(r) for r in (data.get("alerts") or [])]
-    report_paths = [_resolve(r) for r in (data.get("reports") or [])]
 
     # Load and validate each content object
     try:
@@ -164,6 +162,21 @@ def load_bundle(path: str | Path) -> Bundle:
     except Exception as e:
         raise BundleValidationError(f"{path}: custom group error: {e}") from e
 
+    try:
+        reports = [load_report(p) for p in report_paths]
+    except Exception as e:
+        raise BundleValidationError(f"{path}: report error: {e}") from e
+
+    try:
+        symptoms = [load_symptom(p) for p in symptom_paths]
+    except Exception as e:
+        raise BundleValidationError(f"{path}: symptom error: {e}") from e
+
+    try:
+        alerts = [load_alert(p) for p in alert_paths]
+    except Exception as e:
+        raise BundleValidationError(f"{path}: alert error: {e}") from e
+
     return Bundle(
         name=name,
         description=description,
@@ -172,9 +185,9 @@ def load_bundle(path: str | Path) -> Bundle:
         views=views,
         dashboards=dashboards,
         customgroups=customgroups,
-        symptom_paths=symptom_paths,
-        alert_paths=alert_paths,
-        report_paths=report_paths,
+        reports=reports,
+        symptoms=symptoms,
+        alerts=alerts,
         source_path=path,
     )
 

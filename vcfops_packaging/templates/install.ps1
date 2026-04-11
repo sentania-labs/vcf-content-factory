@@ -164,6 +164,107 @@ function Load-RawText($name) {
 }
 
 # ---------------------------------------------------------------------------
+# Bundle manifest discovery
+# ---------------------------------------------------------------------------
+function Get-BundleManifest {
+    <#
+    .SYNOPSIS
+        Locate and load bundle.json (or prompt if multiple bundles coexist).
+
+    Looks for bundle.json (or bundle_*.json) in $ScriptDir.  Returns the
+    parsed manifest object, or $null when none is found (legacy fallback:
+    content files are read directly without a manifest check).
+
+    If multiple manifests exist the user is prompted to pick one.
+    #>
+    $candidates = [System.Collections.Generic.List[string]]::new()
+
+    # Primary name written by the builder
+    $primary = Join-Path $ScriptDir "bundle.json"
+    if (Test-Path $primary) {
+        $candidates.Add($primary)
+    }
+
+    # Also pick up bundle_*.json siblings
+    $extras = Get-ChildItem -Path $ScriptDir -Filter "bundle_*.json" -ErrorAction SilentlyContinue
+    foreach ($f in ($extras | Sort-Object Name)) {
+        if ($f.FullName -ne $primary) {
+            $candidates.Add($f.FullName)
+        }
+    }
+
+    if ($candidates.Count -eq 0) {
+        Write-Host "  WARN  No bundle.json found in script directory -- content files will be read directly from content/ (install still proceeds, but bundle identity is unverified)"
+        return $null
+    }
+
+    if ($candidates.Count -eq 1) {
+        $chosenPath = $candidates[0]
+    } else {
+        Write-Host ""
+        Write-Host "Multiple bundle manifests found in this directory."
+        Write-Host "Please choose which bundle to install:"
+        Write-Host ""
+        $loaded = @()
+        for ($i = 0; $i -lt $candidates.Count; $i++) {
+            try   { $m = Get-Content -Raw $candidates[$i] | ConvertFrom-Json }
+            catch { $m = $null }
+            $loaded += $m
+            $bname = if ($m -and $m.name) { $m.name } else { [System.IO.Path]::GetFileName($candidates[$i]) }
+            $bdesc = if ($m -and $m.description) { " -- $($m.description)" } else { "" }
+            Write-Host "  [$($i+1)] $bname$bdesc"
+        }
+        Write-Host ""
+        do {
+            $raw = Read-Host "Enter choice [1-$($candidates.Count)]"
+            $ok  = $raw -match '^\d+$' -and [int]$raw -ge 1 -and [int]$raw -le $candidates.Count
+            if (-not $ok) { Write-Host "  Invalid choice. Enter a number between 1 and $($candidates.Count)." }
+        } while (-not $ok)
+        $chosenPath = $candidates[[int]$raw - 1]
+    }
+
+    try {
+        return Get-Content -Raw $chosenPath | ConvertFrom-Json
+    } catch {
+        Write-Host "  WARN  Could not parse $(Split-Path -Leaf $chosenPath): $_ -- proceeding without manifest"
+        return $null
+    }
+}
+
+function Show-BundleHeader($Manifest) {
+    if (-not $Manifest) { return }
+    $bname = if ($Manifest.name) { $Manifest.name } else { $PackageName }
+    $bdesc = if ($Manifest.description) { " -- $($Manifest.description)" } else { "" }
+    $content = $Manifest.content
+    if (-not $content) {
+        Write-Host "  Bundle: $bname$bdesc"
+        return
+    }
+    # Validate expected content files exist
+    $missing = @()
+    foreach ($prop in $content.PSObject.Properties) {
+        $rel = $prop.Value.file
+        if ($rel) {
+            $full = Join-Path $ScriptDir $rel
+            if (-not (Test-Path $full)) { $missing += $rel }
+        }
+    }
+    if ($missing.Count -gt 0) {
+        Write-Host "  WARN  Bundle manifest references files not found: $($missing -join ', ')"
+    }
+    # Summary of item counts
+    $parts = @()
+    foreach ($prop in $content.PSObject.Properties) {
+        $items = $prop.Value.items
+        $count = if ($items) { @($items).Count } else { 0 }
+        if ($count -gt 0) { $parts += "$count $($prop.Name)" }
+    }
+    $summary = if ($parts.Count -gt 0) { $parts -join ', ' } else { 'no items' }
+    Write-Host "  Bundle: $bname$bdesc"
+    Write-Host "  Contents: $summary"
+}
+
+# ---------------------------------------------------------------------------
 # Interactive credential prompts (shared by install and uninstall)
 # ---------------------------------------------------------------------------
 function Get-Credentials {
@@ -452,10 +553,47 @@ function Get-SupermetricsByName {
     return $found
 }
 
+function Import-PolicyZip {
+    param([byte[]]$ZipBytes)
+    # POST /api/policies/import?forceImport=true as multipart/form-data.
+    # The session-level Content-Type header must NOT be application/json for
+    # multipart uploads — we use Invoke-RestMethod with -Form which sets the
+    # correct boundary automatically.
+    $uri = "$script:BaseUrl/api/policies/import?forceImport=true"
+    Add-Type -AssemblyName System.Net.Http
+    $content = New-Object System.Net.Http.MultipartFormDataContent
+    $byteArray = New-Object System.Net.Http.ByteArrayContent(,$ZipBytes)
+    $byteArray.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse("application/zip")
+    $content.Add($byteArray, "policy", "exportedPolicies.zip")
+
+    $handler = New-Object System.Net.Http.HttpClientHandler
+    if ($SkipSslVerify) {
+        $handler.ServerCertificateCustomValidationCallback = { $true }
+    }
+    $httpClient = New-Object System.Net.Http.HttpClient($handler)
+    $httpClient.DefaultRequestHeaders.Add("Authorization", "vRealizeOpsToken $script:Token")
+    $httpClient.DefaultRequestHeaders.Add("Accept", "application/json")
+
+    try {
+        $response = $httpClient.PostAsync($uri, $content).GetAwaiter().GetResult()
+        $statusCode = [int]$response.StatusCode
+        if ($statusCode -notin @(200, 201, 204)) {
+            $body = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
+            throw "Policy import failed ($statusCode): $body"
+        }
+    } finally {
+        $httpClient.Dispose()
+        $handler.Dispose()
+    }
+}
+
 function Enable-SupermetricOnDefaultPolicy {
-    param($SmId, $SmName, $ResourceKinds)
-    $policyId = Get-DefaultPolicyId
-    $body = @{
+    param($SmId, $SmName, $ResourceKinds, $PolicyId)
+
+    # Step 1: resource-kind assignment via PUT /internal/supermetrics/assign
+    # (without policyIds — that variant does not enable content-zip SMs).
+    # This wires the SM to the adapter/resource kind so it appears in views.
+    $assignBody = @{
         superMetricId    = $SmId
         resourceKindKeys = @($ResourceKinds | ForEach-Object {
             @{
@@ -464,24 +602,142 @@ function Enable-SupermetricOnDefaultPolicy {
             }
         })
     }
-    $uri = "$script:BaseUrl/internal/supermetrics/assign?policyIds=$([uri]::EscapeDataString($policyId))"
-    $allHeaders = @{
+    $assignUri = "$script:BaseUrl/internal/supermetrics/assign"
+    $assignHeaders = @{
         "Accept"                    = "application/json"
         "Content-Type"              = "application/json"
         "Authorization"             = "vRealizeOpsToken $script:Token"
         "X-Ops-API-use-unsupported" = "true"
     }
-    $params = @{
+    $assignParams = @{
         Method  = "PUT"
-        Uri     = $uri
-        Headers = $allHeaders
-        Body    = ($body | ConvertTo-Json -Depth 10 -Compress)
+        Uri     = $assignUri
+        Headers = $assignHeaders
+        Body    = ($assignBody | ConvertTo-Json -Depth 10 -Compress)
     }
-    if ($SkipSslVerify -and $PSVersionTable.PSVersion.Major -ge 6) { $params["SkipCertificateCheck"] = $true }
+    if ($SkipSslVerify -and $PSVersionTable.PSVersion.Major -ge 6) { $assignParams["SkipCertificateCheck"] = $true }
     try {
-        Invoke-RestMethod @params | Out-Null
+        Invoke-RestMethod @assignParams | Out-Null
     } catch {
-        throw "Enable SM '$SmName' failed: $_"
+        throw "Resource-kind assignment for SM '$SmName' failed: $_"
+    }
+
+    # Step 2: policy enablement via export -> edit XML -> import.
+    # Export the Default Policy ZIP, remove any stale entry for this SM from
+    # ALL <SuperMetrics> blocks (makes the method idempotent/self-healing),
+    # then inject a fresh <SuperMetric enabled="true" id="..."/> under each
+    # matching <SuperMetrics adapterKind="X" resourceKind="Y"> block, and
+    # re-import the modified ZIP.
+    $policyXml = Export-DefaultPolicyXml -PolicyId $PolicyId
+
+    [xml]$doc = $policyXml
+
+    # Purge stale entries for this SM from all SuperMetrics blocks.
+    $staleNodes = @($doc.GetElementsByTagName("SuperMetric") |
+        Where-Object { $_.GetAttribute("id") -eq $SmId })
+    foreach ($node in $staleNodes) {
+        $node.ParentNode.RemoveChild($node) | Out-Null
+    }
+
+    # Locate or create the correct <SuperMetrics adapterKind resourceKind> block
+    # for each resource kind and inject a fresh enabled entry.
+    $pkgSettings = $doc.GetElementsByTagName("PackageSettings") | Select-Object -First 1
+    if (-not $pkgSettings) {
+        $policyElem = $doc.GetElementsByTagName("Policy") | Select-Object -First 1
+        if (-not $policyElem) { throw "Policy XML has no <Policy> element — cannot inject SM '$SmName'" }
+        $pkgSettings = $doc.CreateElement("PackageSettings")
+        $policyElem.AppendChild($pkgSettings) | Out-Null
+    }
+
+    foreach ($rk in $ResourceKinds) {
+        $ak = if ($rk.adapterKindKey) { $rk.adapterKindKey } else { $rk.adapterKind }
+        $rkKey = if ($rk.resourceKindKey) { $rk.resourceKindKey } else { $rk.resourceKind }
+
+        $smBlock = $null
+        foreach ($candidate in @($pkgSettings.GetElementsByTagName("SuperMetrics"))) {
+            if ($candidate.GetAttribute("adapterKind") -eq $ak -and
+                $candidate.GetAttribute("resourceKind") -eq $rkKey) {
+                $smBlock = $candidate
+                break
+            }
+        }
+        if (-not $smBlock) {
+            $smBlock = $doc.CreateElement("SuperMetrics")
+            $smBlock.SetAttribute("adapterKind", $ak)
+            $smBlock.SetAttribute("resourceKind", $rkKey)
+            $pkgSettings.AppendChild($smBlock) | Out-Null
+        }
+
+        $newEntry = $doc.CreateElement("SuperMetric")
+        $newEntry.SetAttribute("enabled", "true")
+        $newEntry.SetAttribute("id", $SmId)
+        $smBlock.AppendChild($newEntry) | Out-Null
+    }
+
+    # Rebuild the policy ZIP with the edited XML and re-import.
+    $editedXml = $doc.OuterXml
+    if (-not $editedXml.StartsWith("<?xml")) {
+        $editedXml = '<?xml version="1.0" encoding="UTF-8"?>' + "`n" + $editedXml
+    }
+    $editedXmlBytes = [System.Text.Encoding]::UTF8.GetBytes($editedXml)
+
+    # Re-export raw ZIP to get the original filename (and any other entries).
+    $tmpZip = [System.IO.Path]::GetTempFileName() + ".zip"
+    try {
+        $exportUri = "$script:BaseUrl/api/policies/export?id=$([uri]::EscapeDataString($PolicyId))"
+        $exportHeaders = @{
+            "Authorization" = "vRealizeOpsToken $script:Token"
+            "Accept"        = "application/zip"
+        }
+        $exportParams = @{
+            Method  = "GET"
+            Uri     = $exportUri
+            Headers = $exportHeaders
+        }
+        if ($SkipSslVerify -and $PSVersionTable.PSVersion.Major -ge 6) { $exportParams["SkipCertificateCheck"] = $true }
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            Invoke-WebRequest @exportParams -OutFile $tmpZip | Out-Null
+        } else {
+            Invoke-WebRequest @exportParams -OutFile $tmpZip -UseBasicParsing | Out-Null
+        }
+
+        # Read original ZIP to discover the XML filename and other entries.
+        $ms = New-Object System.IO.MemoryStream
+        $origZip = [System.IO.Compression.ZipFile]::OpenRead($tmpZip)
+        try {
+            $xmlEntryName = $null
+            $otherEntries = @{}
+            foreach ($entry in $origZip.Entries) {
+                if ($entry.Name -like "*.xml") {
+                    $xmlEntryName = $entry.FullName
+                } else {
+                    $reader = New-Object System.IO.BinaryReader($entry.Open())
+                    try { $otherEntries[$entry.FullName] = $reader.ReadBytes([int]$entry.Length) }
+                    finally { $reader.Dispose() }
+                }
+            }
+            if (-not $xmlEntryName) { throw "Policy export ZIP contained no XML file" }
+        } finally { $origZip.Dispose() }
+
+        # Build new ZIP with edited XML.
+        $outZip = New-Object System.IO.Compression.ZipArchive($ms, [System.IO.Compression.ZipArchiveMode]::Create, $true)
+        try {
+            $xmlEntry = $outZip.CreateEntry($xmlEntryName, [System.IO.Compression.CompressionLevel]::Optimal)
+            $xmlStream = $xmlEntry.Open()
+            $xmlStream.Write($editedXmlBytes, 0, $editedXmlBytes.Length)
+            $xmlStream.Dispose()
+            foreach ($name in $otherEntries.Keys) {
+                $e = $outZip.CreateEntry($name, [System.IO.Compression.CompressionLevel]::Optimal)
+                $s = $e.Open()
+                $s.Write($otherEntries[$name], 0, $otherEntries[$name].Length)
+                $s.Dispose()
+            }
+        } finally { $outZip.Dispose() }
+
+        Import-PolicyZip -ZipBytes $ms.ToArray()
+    } finally {
+        $ms.Dispose()
+        if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue }
     }
 }
 
@@ -1015,6 +1271,39 @@ $script:ContentRegistry = @(
         UninstallOrder = 50
         NeedsUi        = $false
     },
+    @{
+        ContentType    = "reports"
+        InstallFile    = "reports_content.xml"
+        InstallLabel   = "Importing report definition(s)..."
+        InstallFn      = "Install-Reports"
+        InstallOrder   = 5
+        UninstallLabel = $null
+        UninstallFn    = $null
+        UninstallOrder = $null
+        NeedsUi        = $false
+    },
+    @{
+        ContentType    = "symptoms"
+        InstallFile    = "symptoms.json"
+        InstallLabel   = "Upserting symptom definition(s)..."
+        InstallFn      = "Install-Symptoms"
+        InstallOrder   = 6
+        UninstallLabel = "Deleting symptom definition(s)..."
+        UninstallFn    = "Uninstall-Symptoms"
+        UninstallOrder = 55
+        NeedsUi        = $false
+    },
+    @{
+        ContentType    = "alerts"
+        InstallFile    = "alerts.json"
+        InstallLabel   = "Upserting alert definition(s)..."
+        InstallFn      = "Install-Alerts"
+        InstallOrder   = 7
+        UninstallLabel = "Deleting alert definition(s)..."
+        UninstallFn    = "Uninstall-Alerts"
+        UninstallOrder = 35
+        NeedsUi        = $false
+    },
     # Uninstall-only entries for dashboards and views
     @{
         ContentType    = "dashboards"
@@ -1110,7 +1399,8 @@ function Install-SmEnable($Ctx) {
         foreach ($smId in @($unverified.Keys)) {
             $entry = $unverified[$smId]
             try {
-                Enable-SupermetricOnDefaultPolicy -SmId $smId -SmName $entry.Name -ResourceKinds $entry.ResourceKinds
+                Enable-SupermetricOnDefaultPolicy -SmId $smId -SmName $entry.Name `
+                    -ResourceKinds $entry.ResourceKinds -PolicyId $policyId
             } catch {
                 $assignErrors[$smId] = $_.ToString()
             }
@@ -1169,6 +1459,203 @@ function Install-CustomGroups($Ctx) {
         $cgName = $cg.resourceKey.name
         Upsert-CustomGroup -Payload $cg
         Write-Ok "Upserted: $cgName"
+    }
+}
+
+function New-ReportsZip {
+    param([string]$ReportsXml, [string]$Marker, [string]$OwnerId)
+    # Build inner reports.zip containing content.xml
+    $innerEntries = @{ "content.xml" = $ReportsXml }
+    $innerBytes = New-ZipBytes $innerEntries
+
+    # Count ReportDef elements
+    $nReports = ([regex]::Matches($ReportsXml, "<ReportDef ")).Count
+    $config = @{ reports = $nReports; type = "CUSTOM" } | ConvertTo-Json -Compress
+
+    $outerEntries = @{
+        $Marker              = $OwnerId
+        "reports.zip"        = $innerBytes
+        "configuration.json" = $config
+    }
+    return New-ZipBytes $outerEntries
+}
+
+function Install-Reports($Ctx) {
+    $reportsXml = Load-RawText "reports_content.xml"
+    $reportsZip = New-ReportsZip -ReportsXml $reportsXml -Marker $Ctx.Marker -OwnerId $Ctx.OwnerId
+    Import-ContentZip -ZipBytes $reportsZip -Label "reports"
+    $nReports = ([regex]::Matches($reportsXml, "<ReportDef ")).Count
+    Write-Ok "Imported $nReports report definition(s)"
+    Write-Warn "Note: report definitions cannot be removed via the API. To uninstall, use the Ops UI: Administration > Content > Reports."
+    $Ctx.Warnings.Add("Report definitions must be removed manually via the Ops UI (Administration > Content > Reports).")
+}
+
+function Install-Symptoms($Ctx) {
+    $symptoms = Load-Json "symptoms.json"
+    foreach ($payload in $symptoms) {
+        $name = $payload.name
+        # Find existing by name
+        $existing = $null
+        $page = 0; $pageSize = 1000
+        :outer do {
+            $r = Invoke-Api -Method GET -Path "/api/symptomdefinitions" -Query @{ page = "$page"; pageSize = "$pageSize" }
+            foreach ($sd in $r.symptomDefinitions) {
+                if ($sd.name -eq $name) { $existing = $sd; break outer }
+            }
+            $total = if ($r.pageInfo) { $r.pageInfo.totalCount } else { 0 }
+            $page++
+        } while (($page * $pageSize) -lt $total)
+
+        if ($existing) {
+            $payload | Add-Member -NotePropertyName "id" -NotePropertyValue $existing.id -Force
+            $r = Invoke-Api -Method PUT -Path "/api/symptomdefinitions" -Body $payload
+            Write-Ok "Updated: $name"
+        } else {
+            $r = Invoke-Api -Method POST -Path "/api/symptomdefinitions" -Body $payload
+            Write-Ok "Created: $name"
+        }
+    }
+}
+
+function Install-Alerts($Ctx) {
+    $alerts = Load-Json "alerts.json"
+
+    # Build symptom name -> id map
+    $symptomMap = @{}
+    $page = 0; $pageSize = 1000
+    do {
+        $r = Invoke-Api -Method GET -Path "/api/symptomdefinitions" -Query @{ page = "$page"; pageSize = "$pageSize" }
+        foreach ($sd in $r.symptomDefinitions) {
+            if ($sd.name -and $sd.id) { $symptomMap[$sd.name] = $sd.id }
+        }
+        $total = if ($r.pageInfo) { $r.pageInfo.totalCount } else { 0 }
+        $page++
+    } while (($page * $pageSize) -lt $total)
+
+    foreach ($alertData in $alerts) {
+        $name = $alertData.name
+        # Build wire format with resolved symptom IDs
+        $wire = ConvertTo-AlertWire -AlertData $alertData -SymptomMap $symptomMap
+        if (-not $wire) {
+            Write-Warn "Alert '$name': could not resolve symptom references"
+            $Ctx.Warnings.Add("Alert '$name': symptom resolution failed")
+            continue
+        }
+
+        # Upsert by name
+        $existing = $null
+        $page = 0
+        :outer2 do {
+            $r = Invoke-Api -Method GET -Path "/api/alertdefinitions" -Query @{ page = "$page"; pageSize = "1000" }
+            foreach ($ad in $r.alertDefinitions) {
+                if ($ad.name -eq $name) { $existing = $ad; break outer2 }
+            }
+            $total = if ($r.pageInfo) { $r.pageInfo.totalCount } else { 0 }
+            $page++
+        } while (($page * 1000) -lt $total)
+
+        if ($existing) {
+            $wire | Add-Member -NotePropertyName "id" -NotePropertyValue $existing.id -Force
+            $r = Invoke-Api -Method PUT -Path "/api/alertdefinitions" -Body $wire
+            Write-Ok "Updated: $name"
+        } else {
+            $r = Invoke-Api -Method POST -Path "/api/alertdefinitions" -Body $wire
+            Write-Ok "Created: $name"
+        }
+    }
+}
+
+function ConvertTo-AlertWire {
+    param($AlertData, [hashtable]$SymptomMap)
+    $ss = $AlertData.symptom_sets
+    $topOp = if ($ss.operator) { $ss.operator.ToUpper() } else { "ALL" }
+    $wireSets = @()
+    foreach ($s in $ss.sets) {
+        $definedOn = if ($s.defined_on) { $s.defined_on.ToUpper() } else { "SELF" }
+        $op = if ($s.operator) { $s.operator.ToUpper() } else { "ALL" }
+        $symptomIds = @()
+        foreach ($sym in $s.symptoms) {
+            $sid = $SymptomMap[$sym.name]
+            if (-not $sid) { return $null }
+            $symptomIds += $sid
+        }
+        $wireSet = @{
+            type = "SYMPTOM_SET"
+            relation = $definedOn
+            symptomSetOperator = if ($op -eq "ALL") { "AND" } else { "OR" }
+            symptomDefinitionIds = $symptomIds
+        }
+        if ($definedOn -ne "SELF" -and $s.threshold_type) {
+            $wireSet["aggregation"] = $s.threshold_type
+            if ($null -ne $s.threshold_value) { $wireSet["value"] = [double]$s.threshold_value }
+        }
+        $wireSets += $wireSet
+    }
+    $baseSS = if ($wireSets.Count -eq 1) { $wireSets[0] }
+              else { @{ type = "SYMPTOM_SET_COMPOSITE"; operator = if ($topOp -eq "ALL") { "AND" } else { "OR" }; "symptom-sets" = $wireSets } }
+    $state = @{
+        severity = if ($AlertData.criticality) { $AlertData.criticality } else { "AUTO" }
+        "base-symptom-set" = $baseSS
+        impact = @{ impactType = "BADGE"; detail = if ($AlertData.impact_badge) { $AlertData.impact_badge } else { "HEALTH" } }
+    }
+    return @{
+        name = $AlertData.name
+        description = if ($AlertData.description) { $AlertData.description } else { "" }
+        adapterKindKey = $AlertData.adapter_kind
+        resourceKindKey = $AlertData.resource_kind
+        waitCycles = if ($AlertData.wait_cycles) { $AlertData.wait_cycles } else { 1 }
+        cancelCycles = if ($AlertData.cancel_cycles) { $AlertData.cancel_cycles } else { 1 }
+        type = if ($AlertData.type) { $AlertData.type } else { 16 }
+        subType = if ($AlertData.sub_type) { $AlertData.sub_type } else { 3 }
+        states = @($state)
+    }
+}
+
+function Uninstall-Symptoms($Ctx) {
+    $names = $Ctx.Names
+    $symIds = @{}
+    $page = 0; $pageSize = 1000
+    do {
+        $r = Invoke-Api -Method GET -Path "/api/symptomdefinitions" -Query @{ page = "$page"; pageSize = "$pageSize" }
+        foreach ($sd in $r.symptomDefinitions) {
+            if ($sd.name -and $sd.id -and ($names -contains $sd.name)) { $symIds[$sd.name] = $sd.id }
+        }
+        $total = if ($r.pageInfo) { $r.pageInfo.totalCount } else { 0 }
+        $page++
+    } while (($page * $pageSize) -lt $total)
+    foreach ($name in $names) {
+        $sid = $symIds[$name]
+        if (-not $sid) {
+            Write-Warn "Symptom not found (already removed?): $name"
+            $Ctx.Warnings.Add("Symptom not found: $name")
+            continue
+        }
+        $r = Invoke-Api -Method DELETE -Path "/api/symptomdefinitions/$sid"
+        Write-Ok "Deleted: $name"
+    }
+}
+
+function Uninstall-Alerts($Ctx) {
+    $names = $Ctx.Names
+    $alertIds = @{}
+    $page = 0
+    do {
+        $r = Invoke-Api -Method GET -Path "/api/alertdefinitions" -Query @{ page = "$page"; pageSize = "1000" }
+        foreach ($ad in $r.alertDefinitions) {
+            if ($ad.name -and $ad.id -and ($names -contains $ad.name)) { $alertIds[$ad.name] = $ad.id }
+        }
+        $total = if ($r.pageInfo) { $r.pageInfo.totalCount } else { 0 }
+        $page++
+    } while (($page * 1000) -lt $total)
+    foreach ($name in $names) {
+        $aid = $alertIds[$name]
+        if (-not $aid) {
+            Write-Warn "Alert not found (already removed?): $name"
+            $Ctx.Warnings.Add("Alert not found: $name")
+            continue
+        }
+        $r = Invoke-Api -Method DELETE -Path "/api/alertdefinitions/$aid"
+        Write-Ok "Deleted: $name"
     }
 }
 
@@ -1437,6 +1924,11 @@ function Invoke-Uninstall {
 # ---------------------------------------------------------------------------
 # Entry point: resolve credentials then fork on mode
 # ---------------------------------------------------------------------------
+
+# Discover and validate bundle manifest before prompting for credentials.
+$script:BundleManifest = Get-BundleManifest
+Show-BundleHeader -Manifest $script:BundleManifest
+
 $modeLabel = if ($Uninstall) { "uninstaller" } else { "installer" }
 Get-Credentials -Mode $modeLabel
 

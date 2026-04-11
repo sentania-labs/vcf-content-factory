@@ -1,0 +1,27 @@
+id: 4dc83a79-5686-4a01-98b8-a19ae4ac08b2
+name: "[VCF Content Factory] VKS Core Consumption Report"
+description: >
+  Printable/exportable summary of VKS vCPU consumption across a VCF environment.
+  Intended for capacity planning reviews and chargeback reporting.
+  Includes a per-vCenter breakdown of vCPU consumption by VM classification
+  (worker, CP, vCLS, supervisor, pod, VM Service, regular) plus the global
+  vCPU-to-pCore ratio and calculated VKS core count.
+
+subject_types:
+  - adapter_kind: VMWARE
+    resource_kind: VMwareAdapter Instance
+    type: self
+
+sections:
+  - type: CoverPage
+  - type: TableOfContents
+  - type: View
+    view: "[VCF Content Factory] VKS Core Consumption by vCenter"
+    orientation: Landscape
+    colorize: true
+
+settings:
+  show_page_footer: true
+  output_formats:
+    - pdf
+    - csv

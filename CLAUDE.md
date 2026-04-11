@@ -139,7 +139,7 @@ that doesn't delegate and ends up holding all the context.
 | `api-explorer` | Research | `context/`, `docs/` only | An author agent returns a TOOLSET GAP report, an install fails mysteriously, or the user asks something the surface map doesn't cover. |
 | `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer bug, loader gap, new CLI command, client helper, **or bootstrapping a new `vcfops_*` package** when an author agent reports TOOLSET GAP for a missing package. The **only** agent that edits `vcfops_*/` code. |
 | `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. Validates, syncs, enables, verifies. Handles import-task-busy retries. |
-| `content-packager` | Build | `dist/` only | User wants a standalone distributable bundle (bash/pwsh/python install scripts + content-zips + license + README). |
+| `content-packager` | Build | `dist/` only | User wants a standalone distributable bundle, **or** tooling changed templates/builder/renderer code (rebuild all bundles to pick up fixes). |
 | `symptom-author` | Author | `symptoms/` only | After recon confirms no existing symptom satisfies the need. Feeds into alert definitions. |
 | `alert-author` | Author | `alerts/` only | After recon confirms no existing alert satisfies the need, **and** required symptoms already exist. |
 | `report-author` | Author | `reports/` only | User wants a report definition. May require views (and transitively super metrics) to exist first; if so, report-author blocks and you delegate upstream. |
@@ -257,6 +257,14 @@ first-class, not a sad fallback.
 **Install**: delegate to `content-installer`. It knows the CLI
 commands, retry logic, and enable workflow. Command references
 live in the agent prompts, not here.
+
+**After tooling changes**: when `tooling` modifies anything in
+`vcfops_packaging/templates/`, `vcfops_packaging/builder.py`, or
+`vcfops_dashboards/render.py`, **all distribution zips are stale**.
+Delegate to `content-packager` to rebuild all bundles:
+`python3 -m vcfops_packaging build bundles/<name>.yaml` for every
+manifest in `bundles/`. This is not optional — shipping stale zips
+with old templates is how false-positive bugs escape to users.
 
 ## Known limitations
 
