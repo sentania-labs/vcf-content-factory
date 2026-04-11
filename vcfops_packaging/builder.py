@@ -390,6 +390,12 @@ def build_bundle(
     if bundle.alerts:
         alerts_payload = []
         for a in bundle.alerts:
+            # Serialize RecommendationRef objects as plain dicts so
+            # json.dumps can handle them.
+            rec_refs_serialized = [
+                {"name": r.name, "priority": r.priority}
+                for r in a.recommendations
+            ]
             alerts_payload.append({
                 "name": a.name,
                 "description": a.description,
@@ -402,15 +408,17 @@ def build_bundle(
                 "criticality": a.criticality,
                 "impact_badge": a.impact_badge,
                 "symptom_sets": a.symptom_sets,
-                "recommendations": a.recommendations,
+                "recommendations": rec_refs_serialized,
             })
         alerts_json = json.dumps(alerts_payload, indent=2)
     else:
         alerts_json = None
 
-    # AlertContent.xml — synthesised when the bundle has symptoms or alerts.
+    # AlertContent.xml — synthesised when the bundle has symptoms, alerts,
+    # or recommendations.  A bundle with only recommendations (unusual but
+    # valid) still emits AlertContent.xml so the recommendations are importable.
     alert_content_xml = None
-    if bundle.symptoms or bundle.alerts:
+    if bundle.symptoms or bundle.alerts or bundle.recommendations:
         alert_content_xml = render_alert_content_xml(
             bundle.symptoms,
             bundle.alerts,

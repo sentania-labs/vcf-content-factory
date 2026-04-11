@@ -63,10 +63,11 @@ from typing import List, Optional
 # so this module can be tested in isolation.
 try:
     from vcfops_symptoms.loader import SymptomDef
-    from vcfops_alerts.loader import AlertDef
+    from vcfops_alerts.loader import AlertDef, Recommendation
 except ImportError:  # pragma: no cover — allows isolated testing
     SymptomDef = None  # type: ignore[assignment,misc]
     AlertDef = None    # type: ignore[assignment,misc]
+    Recommendation = None  # type: ignore[assignment,misc]
 
 
 # ---------------------------------------------------------------------------
@@ -169,7 +170,7 @@ def _render_alert_definition(
     parent: ET.Element,
     alert,
     symptom_objs: list,
-    recommendations: Optional[List[dict]] = None,
+    recommendation_map: Optional[dict] = None,
 ) -> None:
     """Append an <AlertDefinition> element to *parent*.
 
@@ -179,6 +180,16 @@ def _render_alert_definition(
       - An optional <Recommendations> block if the alert has recommendations.
 
     Cross-references to SymptomDefinitions use the deterministic id scheme.
+    Cross-references to Recommendations use the Recommendation.id property
+    to guarantee the ref= attribute matches the key= attribute in the
+    top-level <Recommendations> block.
+
+    Args:
+        parent:           Parent XML element (<AlertDefinitions>).
+        alert:            AlertDef object.
+        symptom_objs:     List of SymptomDef objects for adapter_kind lookup.
+        recommendation_map: Dict mapping recommendation name -> Recommendation
+            object.  Used to resolve RecommendationRef objects on the alert.
     """
     adapter_kind = alert.adapter_kind
     resource_kind = alert.resource_kind
@@ -231,14 +242,23 @@ def _render_alert_definition(
     })
 
     # Recommendations block (inside <State>).
-    recs = recommendations or []
-    if recs:
+    # alert.recommendations is a list of RecommendationRef objects.
+    rec_refs = getattr(alert, "recommendations", None) or []
+    rmap = recommendation_map or {}
+    resolved_recs = []
+    for ref in rec_refs:
+        rec_name = ref.name if hasattr(ref, "name") else ref.get("name", "")
+        rec_priority = ref.priority if hasattr(ref, "priority") else ref.get("priority", 1)
+        rec_obj = rmap.get(rec_name)
+        if rec_obj is not None:
+            resolved_recs.append((rec_priority, rec_obj.id))
+        # Unresolved recommendations are silently skipped in render
+        # (validation already caught missing [VCF Content Factory] refs)
+    if resolved_recs:
         recs_elem = ET.SubElement(state_elem, "Recommendations")
-        for i, rec in enumerate(recs, 1):
-            rec_name = rec.get("name") or rec.get("description", f"Recommendation {i}")
-            rec_key = _rec_key(adapter_kind, rec_name)
+        for priority, rec_key in sorted(resolved_recs, key=lambda t: t[0]):
             ET.SubElement(recs_elem, "Recommendation", {
-                "priority": str(i),
+                "priority": str(priority),
                 "ref": rec_key,
             })
 
@@ -250,16 +270,18 @@ def _render_alert_definition(
 def render_alert_content_xml(
     symptoms: list,
     alerts: list,
-    recommendations: Optional[List[dict]] = None,
+    recommendations: Optional[list] = None,
 ) -> str:
     """Produce a single ``<alertContent>`` XML string for UI drag-drop import.
 
     Args:
-        symptoms: List of SymptomDef objects (from vcfops_symptoms.loader).
-        alerts:   List of AlertDef objects (from vcfops_alerts.loader).
-        recommendations: Optional list of recommendation dicts with at least
-            ``name`` (or ``description``) and ``description`` keys.  These
-            correspond to the top-level ``<Recommendations>`` block.
+        symptoms:        List of SymptomDef objects (from vcfops_symptoms.loader).
+        alerts:          List of AlertDef objects (from vcfops_alerts.loader).
+        recommendations: Optional list of Recommendation objects
+            (from vcfops_alerts.loader).  These populate the top-level
+            ``<Recommendations>`` block.  The Recommendation.id property
+            is used for the ``key=`` attribute, which guarantees it matches
+            the ``ref=`` attributes emitted inside each ``<AlertDefinition>``.
 
     Returns:
         A UTF-8 XML string with a ``<?xml version="1.0" encoding="UTF-8"?>``
@@ -267,16 +289,25 @@ def render_alert_content_xml(
     """
     recommendations = recommendations or []
 
+    # Build a name -> Recommendation map for O(1) lookups in alert rendering.
+    rec_map: dict = {}
+    for rec in recommendations:
+        if hasattr(rec, "name"):
+            rec_map[rec.name] = rec
+
+    # Also collect recommendations referenced by alerts but not in the explicit
+    # list — this handles the case where the caller passes alert-level inline
+    # dicts (legacy path).  In the new path all recs come from recommendations/.
+    # We keep this guard so existing bundle builder calls with recommendations=[]
+    # still work correctly.
+
     root = ET.Element("alertContent")
 
     # --- AlertDefinitions ---
     if alerts:
         alert_defs_elem = ET.SubElement(root, "AlertDefinitions")
         for alert in alerts:
-            # Gather per-alert recommendations: from the alert's own
-            # recommendations list (if any).
-            alert_recs = getattr(alert, "recommendations", None) or []
-            _render_alert_definition(alert_defs_elem, alert, symptoms, alert_recs)
+            _render_alert_definition(alert_defs_elem, alert, symptoms, rec_map)
 
     # --- SymptomDefinitions ---
     if symptoms:
@@ -286,21 +317,16 @@ def render_alert_content_xml(
             _render_symptom_definition(symptom_defs_elem, sym, all_sym_names)
 
     # --- Top-level Recommendations ---
-    # Collect from alert-level recommendations too.
-    all_recs: List[dict] = list(recommendations)
-    for alert in alerts:
-        alert_recs = getattr(alert, "recommendations", None) or []
-        all_recs.extend(alert_recs)
-
-    if all_recs:
+    # Include all Recommendation objects that were passed in.  The Recommendation.id
+    # property generates the key= attribute; the description goes into <Description>.
+    if rec_map:
         recs_elem = ET.SubElement(root, "Recommendations")
-        for rec in all_recs:
-            adapter_kind = rec.get("adapter_kind", "")
-            rec_name = rec.get("name") or rec.get("description", "")
-            rec_key = _rec_key(adapter_kind, rec_name)
-            rec_elem = ET.SubElement(recs_elem, "Recommendation", {"key": rec_key})
+        for rec in recommendations:
+            if not hasattr(rec, "id"):
+                continue  # skip non-Recommendation objects (safety guard)
+            rec_elem = ET.SubElement(recs_elem, "Recommendation", {"key": rec.id})
             desc_elem = ET.SubElement(rec_elem, "Description")
-            desc_elem.text = rec.get("description", "")
+            desc_elem.text = rec.description or ""
 
     # Serialize with indentation for human readability.
     _indent(root)

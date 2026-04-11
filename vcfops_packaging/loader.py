@@ -17,9 +17,9 @@ dashboards:   list[path]   (optional)
 symptoms:         list[path]   (optional) -- requires vcfops_symptoms package
 alerts:           list[path]   (optional) -- requires vcfops_alerts package
 reports:          list[path]   (optional) -- requires vcfops_reports package
-recommendations:  list[path]   (optional, reserved) -- scaffolding for future
-                               recommendations content type; no authored content
-                               uses this yet.  Loading accepts empty/missing value.
+recommendations:  list[path]   (optional) -- recommendation definitions under
+                               recommendations/*.yaml.  Loaded and validated
+                               at bundle load time; included in AlertContent.xml.
 
 All content-type keys are optional.  A bundle may contain only super
 metrics, only dashboards, or any subset of the supported types.
@@ -40,7 +40,10 @@ from vcfops_dashboards.loader import ViewDef, Dashboard, load_view, load_dashboa
 from vcfops_customgroups.loader import CustomGroupDef, load_file as load_cg
 from vcfops_reports.loader import ReportDef, load_file as load_report
 from vcfops_symptoms.loader import SymptomDef, load_file as load_symptom
-from vcfops_alerts.loader import AlertDef, load_file as load_alert
+from vcfops_alerts.loader import (
+    AlertDef, load_file as load_alert,
+    Recommendation, load_recommendation_file,
+)
 
 
 class BundleValidationError(ValueError):
@@ -59,9 +62,7 @@ class Bundle:
     reports: List[ReportDef] = field(default_factory=list)
     symptoms: List[SymptomDef] = field(default_factory=list)
     alerts: List[AlertDef] = field(default_factory=list)
-    # recommendations: reserved for future vcfops_recommendations content type.
-    # Accepted as an empty/missing value; no loader or content type yet.
-    recommendations: List[dict] = field(default_factory=list)
+    recommendations: List[Recommendation] = field(default_factory=list)
     source_path: Optional[Path] = None
 
 
@@ -136,14 +137,7 @@ def load_bundle(path: str | Path) -> Bundle:
     report_paths = [_resolve(r) for r in (data.get("reports") or [])]
     symptom_paths = [_resolve(r) for r in (data.get("symptoms") or [])]
     alert_paths = [_resolve(r) for r in (data.get("alerts") or [])]
-
-    # recommendations: reserved key — no loader yet; accept empty/missing value.
-    raw_recommendations = data.get("recommendations") or []
-    if raw_recommendations and not isinstance(raw_recommendations, list):
-        raise BundleValidationError(
-            f"{path}: 'recommendations' must be a list (reserved key; "
-            f"no content expected yet)"
-        )
+    recommendation_paths = [_resolve(r) for r in (data.get("recommendations") or [])]
 
     # Load and validate each content object
     try:
@@ -191,6 +185,11 @@ def load_bundle(path: str | Path) -> Bundle:
     except Exception as e:
         raise BundleValidationError(f"{path}: alert error: {e}") from e
 
+    try:
+        recommendations = [load_recommendation_file(p) for p in recommendation_paths]
+    except Exception as e:
+        raise BundleValidationError(f"{path}: recommendation error: {e}") from e
+
     return Bundle(
         name=name,
         description=description,
@@ -202,7 +201,7 @@ def load_bundle(path: str | Path) -> Bundle:
         reports=reports,
         symptoms=symptoms,
         alerts=alerts,
-        recommendations=list(raw_recommendations),
+        recommendations=recommendations,
         source_path=path,
     )
 

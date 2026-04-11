@@ -33,8 +33,8 @@ YAML schema (see .claude/agents/alert-author.md for the full spec):
           # threshold_value: 3
 
     recommendations:
-      - description: >
-          Investigate VM CPU usage. Check for CPU-intensive processes.
+      - name: "[VCF Content Factory] VM CPU Remediation"
+        priority: 1
 
 The alert loader validates:
   1. Required fields are present and non-empty.
@@ -43,12 +43,16 @@ The alert loader validates:
   3. Operators and criticality values are in the accepted sets.
   4. Symptom name uniqueness within a set (duplicate references are
      allowed by the API but are almost always a YAML authoring mistake).
+  5. Recommendation references are grounded — all names with the
+     [VCF Content Factory] prefix must exist in the local
+     recommendations/ directory.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import yaml
 
@@ -87,6 +91,53 @@ VALID_TYPES = None   # any positive int accepted
 VALID_SUBTYPES = None  # any positive int accepted
 
 
+# ---------------------------------------------------------------------------
+# Recommendation dataclass
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Recommendation:
+    """A standalone recommendation definition loaded from recommendations/*.yaml.
+
+    YAML schema:
+        name: "[VCF Content Factory] VM CPU Remediation"
+        description: |
+          Investigate the VM's CPU workload...
+        adapter_kind: VMWARE
+    """
+    name: str
+    description: str
+    adapter_kind: str
+    source_file: Optional[Path] = None
+
+    @property
+    def id(self) -> str:
+        """Deterministic ID matching AlertContent.xml ref= convention.
+
+        Pattern: Recommendation-df-<adapter_kind>-<slug>
+        where <slug> is the name with [VCF Content Factory] stripped
+        and spaces/special chars replaced with underscores.
+        """
+        # Strip the [VCF Content Factory] prefix
+        stripped = re.sub(r"^\[VCF Content Factory\]\s*", "", self.name)
+        # Replace characters outside [A-Za-z0-9_-] with underscore
+        slug = re.sub(r"[^\w\-]", "_", stripped)
+        # Collapse consecutive underscores
+        slug = re.sub(r"_+", "_", slug).strip("_")
+        return f"Recommendation-df-{self.adapter_kind}-{slug}"
+
+
+@dataclass
+class RecommendationRef:
+    """A reference from an alert to a recommendation by name + priority."""
+    name: str
+    priority: int
+
+
+# ---------------------------------------------------------------------------
+# Alert dataclass
+# ---------------------------------------------------------------------------
+
 @dataclass
 class AlertDef:
     name: str
@@ -100,7 +151,7 @@ class AlertDef:
     wait_cycles: int = 1
     cancel_cycles: int = 1
     description: str = ""
-    recommendations: List[dict] = field(default_factory=list)
+    recommendations: List[RecommendationRef] = field(default_factory=list)
     source_path: Optional[Path] = None
 
     def validate(self) -> None:
@@ -214,6 +265,28 @@ class AlertDef:
                             f"Sync the symptom first, or check the name."
                         )
 
+    def validate_recommendation_refs(
+        self, recommendation_map: Dict[str, "Recommendation"]
+    ) -> None:
+        """Validate that all recommendation references resolve.
+
+        Only references with the [VCF Content Factory] prefix are checked —
+        built-in recommendation names are exempt (cannot enumerate without
+        a live instance).
+
+        Raises AlertValidationError with the source file path and missing
+        recommendation name on failure.
+        """
+        for ref in self.recommendations:
+            if ref.name.startswith("[VCF Content Factory]"):
+                if ref.name not in recommendation_map:
+                    src = f" ({self.source_path})" if self.source_path else ""
+                    raise AlertValidationError(
+                        f"{self.name}{src}: references recommendation "
+                        f"{ref.name!r} which is not in recommendations/. "
+                        f"Create the recommendation file first."
+                    )
+
     def to_wire(self, symptom_name_to_id: dict[str, str]) -> dict:
         """Serialize to the JSON body for POST /api/alertdefinitions.
 
@@ -238,18 +311,11 @@ class AlertDef:
                 "symptom-sets": wire_sets,
             }
 
-        # Build the recommendationPriorityMap if we have recommendations.
-        rec_priority_map: dict[str, int] = {}
-        wire_recs: List[dict] = []
-        # Recommendations are posted separately via /api/recommendations,
-        # but the alert definition POST accepts them inline in the
-        # recommendationPriorityMap.  For the initial version we embed the
-        # description text in the state's recommendationPriorityMap
-        # referencing temporary placeholder ids.  The sync client resolves
-        # these by creating recommendations first.
-        # We keep this simple: if recommendations are present the caller
-        # (sync client) handles the creation and passes back the ids.
-        # Here we just serialise the state without recommendations.
+        # Recommendations are passed via AlertContent.xml (content-zip path),
+        # not via the REST POST path.  The to_wire() method is used for
+        # direct REST sync; recommendation references are omitted here.
+        # The sync client resolves recommendations at AlertContent.xml build
+        # time, not at REST time.
 
         state: dict = {
             "severity": self.criticality,
@@ -309,6 +375,95 @@ def _set_to_wire(s: dict, symptom_name_to_id: dict[str, str], alert_name: str) -
     return wire
 
 
+# ---------------------------------------------------------------------------
+# Recommendation loading
+# ---------------------------------------------------------------------------
+
+def load_recommendation_file(path: str | Path) -> Recommendation:
+    """Load a single recommendation YAML file."""
+    path = Path(path)
+    with path.open() as f:
+        data = yaml.safe_load(f) or {}
+    if not isinstance(data, dict):
+        raise AlertValidationError(f"{path}: expected a YAML mapping")
+
+    name = str(data.get("name", "")).strip()
+    if not name:
+        raise AlertValidationError(f"{path}: 'name' is required")
+    description = str(data.get("description", "") or "").strip()
+    if not description:
+        raise AlertValidationError(f"{path}: 'description' is required")
+    adapter_kind = str(data.get("adapter_kind", "") or "").strip()
+    if not adapter_kind:
+        raise AlertValidationError(f"{path}: 'adapter_kind' is required")
+
+    return Recommendation(
+        name=name,
+        description=description,
+        adapter_kind=adapter_kind,
+        source_file=path,
+    )
+
+
+def load_recommendations(directory: str | Path = "recommendations") -> List[Recommendation]:
+    """Load all recommendation YAML files from a directory.
+
+    Following the pattern of load_symptoms() / load_alerts():
+    - Skips non-YAML files (e.g. .gitkeep)
+    - Raises on duplicate names
+    - Returns an empty list if the directory does not exist
+    """
+    directory = Path(directory)
+    if not directory.exists():
+        return []
+    out: List[Recommendation] = []
+    seen: Dict[str, Path] = {}
+    for p in sorted(directory.rglob("*.y*ml")):
+        rec = load_recommendation_file(p)
+        if rec.name in seen:
+            raise AlertValidationError(
+                f"duplicate recommendation name '{rec.name}' "
+                f"in {p} and {seen[rec.name]}"
+            )
+        seen[rec.name] = p
+        out.append(rec)
+    return out
+
+
+def resolve_alert_recommendations(
+    alert: AlertDef,
+    recommendation_map: Dict[str, Recommendation],
+) -> List[Tuple[int, Recommendation]]:
+    """Resolve an alert's recommendation refs to (priority, Recommendation) pairs.
+
+    Called at validate/render time.  Raises AlertValidationError for any
+    [VCF Content Factory] recommendation name that is not in the map.
+
+    Returns:
+        List of (priority, Recommendation) tuples, sorted by priority.
+    """
+    result: List[Tuple[int, Recommendation]] = []
+    for ref in alert.recommendations:
+        rec = recommendation_map.get(ref.name)
+        if rec is None:
+            if ref.name.startswith("[VCF Content Factory]"):
+                src = f" ({alert.source_path})" if alert.source_path else ""
+                raise AlertValidationError(
+                    f"{alert.name}{src}: references recommendation "
+                    f"{ref.name!r} which is not in recommendations/. "
+                    f"Create the recommendation file first."
+                )
+            # Non-VCF prefix: treat as built-in, skip resolution
+            continue
+        result.append((ref.priority, rec))
+    result.sort(key=lambda t: t[0])
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Alert file / dir loading
+# ---------------------------------------------------------------------------
+
 def load_file(path: str | Path) -> AlertDef:
     path = Path(path)
     with path.open() as f:
@@ -323,9 +478,36 @@ def load_file(path: str | Path) -> AlertDef:
         (data.get("impact") or {}).get("badge", "") or ""
     ).strip().upper()
 
-    recs = data.get("recommendations") or []
-    if not isinstance(recs, list):
+    # Parse recommendations as list of RecommendationRef objects.
+    # Supports two forms:
+    #   New form: {name: "...", priority: 1}  — references a standalone
+    #       recommendations/*.yaml by name; validated at cross-ref time.
+    #   Legacy form: {description: "..."}  — inline text from old alert YAML.
+    #       These are accepted but produce no RecommendationRef; the inline
+    #       text is silently dropped at render time.  Existing alert YAMLs
+    #       with this form will still validate without error.
+    raw_recs = data.get("recommendations") or []
+    if not isinstance(raw_recs, list):
         raise AlertValidationError(f"{path}: recommendations must be a list")
+
+    rec_refs: List[RecommendationRef] = []
+    for i, r in enumerate(raw_recs):
+        if not isinstance(r, dict):
+            raise AlertValidationError(
+                f"{path}: recommendations[{i}] must be a mapping"
+            )
+        rec_name = str(r.get("name", "") or "").strip()
+        if not rec_name:
+            # Legacy inline-description form — skip silently (no cross-ref).
+            continue
+        rec_priority = r.get("priority", 1)
+        try:
+            rec_priority = int(rec_priority)
+        except (TypeError, ValueError):
+            raise AlertValidationError(
+                f"{path}: recommendations[{i}]: 'priority' must be an integer"
+            )
+        rec_refs.append(RecommendationRef(name=rec_name, priority=rec_priority))
 
     ad = AlertDef(
         name=str(data.get("name", "")).strip(),
@@ -339,7 +521,7 @@ def load_file(path: str | Path) -> AlertDef:
         criticality=wire_criticality,
         impact_badge=raw_badge,
         symptom_sets=dict(data.get("symptom_sets") or {}),
-        recommendations=list(recs),
+        recommendations=rec_refs,
         source_path=path,
     )
     ad.validate()
