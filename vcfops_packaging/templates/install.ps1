@@ -206,6 +206,21 @@ function Get-Bundles {
     return $entries
 }
 
+function Get-BundleDisplayName {
+    <#
+    .SYNOPSIS
+        Return the human-readable display name for a bundle.
+
+    Reads Manifest.display_name when present (set by builder at package time).
+    Falls back to Manifest.name for legacy zips built before the display_name
+    field was introduced.
+    #>
+    param($Bundle)
+    if ($Bundle.Manifest.display_name) { return $Bundle.Manifest.display_name }
+    if ($Bundle.Manifest.name)         { return $Bundle.Manifest.name }
+    return $Bundle.Slug
+}
+
 function Select-Bundles {
     param(
         [System.Collections.Generic.List[hashtable]]$Bundles,
@@ -214,7 +229,7 @@ function Select-Bundles {
 
     if ($Bundles.Count -eq 1) {
         $b = $Bundles[0]
-        $bname = if ($b.Manifest.name) { $b.Manifest.name } else { $b.Slug }
+        $bname = Get-BundleDisplayName $b
         $bdesc = if ($b.Manifest.description) { " -- $($b.Manifest.description)" } else { "" }
         Write-Host ""
         Write-Host "  Bundle: $bname$bdesc"
@@ -234,7 +249,7 @@ function Select-Bundles {
         for ($i = 0; $i -lt $Bundles.Count; $i++) {
             $b     = $Bundles[$i]
             $mark  = if ($selected[$i]) { "*" } else { " " }
-            $bname = if ($b.Manifest.name) { $b.Manifest.name } else { $b.Slug }
+            $bname = Get-BundleDisplayName $b
             $bdesc = if ($b.Manifest.description) { " -- $($b.Manifest.description)" } else { "" }
             $nItems = 0
             if ($b.Manifest.content) {
@@ -286,7 +301,7 @@ function Show-SelectionSummary {
     Write-Host ""
     Write-Host "Will $Mode $($SelectedBundles.Count) bundle(s):"
     foreach ($b in $SelectedBundles) {
-        $bname = if ($b.Manifest.name) { $b.Manifest.name } else { $b.Slug }
+        $bname = Get-BundleDisplayName $b
         $bdesc = if ($b.Manifest.description) { " -- $($b.Manifest.description)" } else { "" }
         $parts = @()
         if ($b.Manifest.content) {
@@ -1954,7 +1969,7 @@ function Uninstall-CustomGroups($Ctx) {
 function Invoke-InstallBundle {
     param($Bundle, $GlobalCtx, [ref]$Step, $TotalSteps)
     $manifest = $Bundle.Manifest
-    $bname = if ($manifest.name) { $manifest.name } else { $Bundle.Slug }
+    $bname = Get-BundleDisplayName $Bundle
 
     $active = @($script:ContentRegistry | Where-Object {
         $_.InstallFn -ne $null -and $_.ManifestKey -ne $null -and
@@ -1982,7 +1997,7 @@ function Invoke-InstallBundle {
 function Invoke-UninstallBundle {
     param($Bundle, $GlobalCtx, [ref]$Step, $TotalSteps)
     $manifest = $Bundle.Manifest
-    $bname = if ($manifest.name) { $manifest.name } else { $Bundle.Slug }
+    $bname = Get-BundleDisplayName $Bundle
 
     $active = @($script:ContentRegistry | Where-Object {
         $_.UninstallFn -ne $null -and $_.UninstallOrder -ne $null -and
@@ -2122,7 +2137,7 @@ function Invoke-Uninstall {
     if ($Force) { Write-Host "(-Force: skipping dependency checks)" }
     Write-Host "Content to remove:"
     foreach ($b in $SelectedBundles) {
-        $bname = if ($b.Manifest.name) { $b.Manifest.name } else { $b.Slug }
+        $bname = Get-BundleDisplayName $b
         Write-Host "  Bundle: $bname"
         foreach ($e in $script:ContentRegistry) {
             if ($e.UninstallFn -ne $null -and $e.UninstallOrder -ne $null) {

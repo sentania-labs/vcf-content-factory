@@ -43,6 +43,31 @@ from vcfops_reports.render import render_report_xml
 from vcfops_alerts.render import render_alert_content_xml
 from .loader import Bundle, load_bundle
 
+# ---------------------------------------------------------------------------
+# Display-name derivation
+# ---------------------------------------------------------------------------
+_ACRONYMS = frozenset({
+    "vks", "vm", "vms", "sm", "sms", "vcf", "cpu", "gpu",
+    "ram", "mem", "ha", "drs", "nsx", "esxi", "vcsa",
+})
+
+
+def _slug_to_display_name(slug: str) -> str:
+    """Transform a bundle slug like 'vks-core-consumption' into a display
+    name like 'VKS Core Consumption'. Known acronyms are uppercased;
+    everything else is Title Cased."""
+    parts = slug.replace("_", "-").split("-")
+    result = []
+    for part in parts:
+        if not part:
+            continue
+        if part.lower() in _ACRONYMS:
+            result.append(part.upper())
+        else:
+            result.append(part.capitalize())
+    return " ".join(result)
+
+
 # The builder stamps PLACEHOLDER_USER_ID into the rendered dashboard JSON.
 # The install script replaces this at install time with the real user UUID.
 PLACEHOLDER_USER_ID = "PLACEHOLDER_USER_ID"
@@ -61,7 +86,7 @@ DASHBOARD_DROPIN_USER_ID = str(uuid.uuid5(uuid.NAMESPACE_DNS, "vcf-content-facto
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
 
 
-def _build_bundle_json(bundle: Bundle) -> str:
+def _build_bundle_json(bundle: Bundle, display_name: str) -> str:
     """Build the bundle.json metadata manifest embedded in distribution zips.
 
     Paths in ``file:`` are relative to the bundle's own subdirectory
@@ -125,6 +150,7 @@ def _build_bundle_json(bundle: Bundle) -> str:
 
     manifest = {
         "name": bundle.name,
+        "display_name": display_name,
         "description": bundle.description or "",
         "content": content,
     }
@@ -189,10 +215,10 @@ def _build_reports_dropin_zip(reports_xml: str) -> bytes:
     return buf.getvalue()
 
 
-def _generate_bundle_readme(bundle: Bundle) -> str:
+def _generate_bundle_readme(bundle: Bundle, display_name: str) -> str:
     """Generate the bundle-specific README.md (references ../../install.py)."""
     lines = [
-        f"# {bundle.name}",
+        f"# {display_name}",
         "",
         bundle.description or "_No description provided._",
         "",
@@ -323,8 +349,9 @@ def build_bundle(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    out_path = output_dir / f"{bundle.name}.zip"
     slug = bundle.name  # bundle slug = manifest name
+    display_name = _slug_to_display_name(slug)
+    out_path = output_dir / f"[VCF Content Factory] {display_name}.zip"
     bundle_prefix = f"bundles/{slug}/"
     content_prefix = f"bundles/{slug}/content/"
 
@@ -391,10 +418,10 @@ def build_bundle(
         )
 
     # --- bundle.json ---
-    bundle_json = _build_bundle_json(bundle)
+    bundle_json = _build_bundle_json(bundle, display_name)
 
     # --- Bundle-specific README ---
-    bundle_readme = _generate_bundle_readme(bundle)
+    bundle_readme = _generate_bundle_readme(bundle, display_name)
 
     # --- Drag-drop zip artifacts ---
     views_zip_bytes = _build_views_inner_zip(views_xml) if views_xml else None

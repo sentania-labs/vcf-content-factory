@@ -90,6 +90,17 @@ def _load_json_from_path(p: Path) -> Any:
     return json.loads(p.read_text())
 
 
+def _bundle_display_name(bundle: Dict) -> str:
+    """Return the human-readable display name for a bundle.
+
+    Reads manifest["display_name"] when present (set by builder at package
+    time).  Falls back to manifest["name"] for legacy zips built before the
+    display_name field was introduced.
+    """
+    manifest = bundle["manifest"]
+    return manifest.get("display_name") or manifest.get("name") or bundle["slug"]
+
+
 # ---------------------------------------------------------------------------
 # Bundle discovery and selection
 # ---------------------------------------------------------------------------
@@ -179,7 +190,7 @@ def _select_bundles(bundles: List[Dict], mode: str) -> List[Dict]:
     """
     if len(bundles) == 1:
         b = bundles[0]
-        name = b["manifest"].get("name", b["slug"])
+        name = _bundle_display_name(b)
         desc = b["manifest"].get("description", "")
         print(f"\n  Bundle: {name}" + (f" -- {desc}" if desc else ""))
         return bundles
@@ -194,7 +205,7 @@ def _select_bundles(bundles: List[Dict], mode: str) -> List[Dict]:
     while True:
         for i, b in enumerate(bundles, 1):
             mark = "*" if selected[i - 1] else " "
-            name = b["manifest"].get("name", b["slug"])
+            name = _bundle_display_name(b)
             desc = b["manifest"].get("description", "")
             n_items = sum(
                 len(s.get("items", []))
@@ -235,7 +246,7 @@ def _print_selection_summary(bundles: List[Dict], mode: str) -> None:
     """Print a summary of selected bundles before install/uninstall."""
     print(f"\nWill {mode} {len(bundles)} bundle(s):")
     for b in bundles:
-        name = b["manifest"].get("name", b["slug"])
+        name = _bundle_display_name(b)
         desc = b["manifest"].get("description", "")
         content = b["manifest"].get("content", {})
         parts: List[str] = []
@@ -1895,7 +1906,7 @@ def _install_one_bundle(bundle: Dict, global_ctx: Dict, step_base: int,
     """Install one bundle.  Returns (steps_used, warnings)."""
     manifest = bundle["manifest"]
     bundle_dir = bundle["dir"]
-    name = manifest.get("name", bundle["slug"])
+    name = _bundle_display_name(bundle)
 
     active = [
         e for e in _CONTENT_REGISTRY
@@ -1927,7 +1938,7 @@ def _uninstall_one_bundle(bundle: Dict, global_ctx: Dict, step_base: int,
                           total_steps: int) -> Tuple[int, List[str]]:
     """Uninstall one bundle.  Returns (steps_used, warnings)."""
     manifest = bundle["manifest"]
-    name = manifest.get("name", bundle["slug"])
+    name = _bundle_display_name(bundle)
 
     active = [
         e for e in _CONTENT_REGISTRY
@@ -2065,7 +2076,7 @@ def _run_uninstall(args: argparse.Namespace, host: str, user: str,
         print("(--force: skipping dependency checks)")
     print("Content to remove:")
     for bundle in selected_bundles:
-        bname = bundle["manifest"].get("name", bundle["slug"])
+        bname = _bundle_display_name(bundle)
         print(f"  Bundle: {bname}")
         for e in _CONTENT_REGISTRY:
             if e["uninstall_fn"] is not None and e["uninstall_order"] is not None:
