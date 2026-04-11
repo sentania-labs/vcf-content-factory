@@ -650,8 +650,11 @@ function Import-PolicyZip {
     $content.Add($byteArray, "policy", "exportedPolicies.zip")
 
     $handler = New-Object System.Net.Http.HttpClientHandler
-    if ($SkipSslVerify) {
-        $handler.ServerCertificateCustomValidationCallback = { $true }
+    if ($SkipSslVerify -and $PSVersionTable.PSVersion.Major -ge 6) {
+        # PS 7+ / .NET Core: set the callback directly on the handler.
+        # PS 5.1 / .NET Framework: ServicePointManager (set at script startup)
+        # covers HttpClient too, so no per-handler callback is needed.
+        $handler.ServerCertificateCustomValidationCallback = [System.Net.Http.HttpClientHandler]::DangerousAcceptAnyServerCertificateValidator
     }
     $httpClient = New-Object System.Net.Http.HttpClient($handler)
     $httpClient.DefaultRequestHeaders.Add("Authorization", "vRealizeOpsToken $script:Token")
