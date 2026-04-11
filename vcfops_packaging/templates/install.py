@@ -841,12 +841,28 @@ class UIClient:
         )
         resp.raise_for_status()
 
+    def _ext_direct_url(self) -> str:
+        """Return the Ext.Direct router URL.
+
+        Empirically verified 2026-04-11: /ui/vcops/services/router is the
+        correct working URL. The SPA context at
+        /vcf-operations/plug/ops/vcops/services/router returns HTTP 400
+        because the session JSESSIONID cookie is scoped to /ui, not to the
+        /vcf-operations/ path.
+
+        The real fix for the prior "everything returns 500" bug was the
+        data shape for deleteView: the old code sent a bare UUID string;
+        the correct shape uses viewDefIds with a JSON-stringified [{id,name}]
+        array. See context/dashboard_delete_api.md §2026-04-11 update.
+        """
+        return f"https://{self._host}/ui/vcops/services/router"
+
     def list_views(self) -> List[Dict[str, Any]]:
         """List all view definitions via Ext.Direct RPC."""
         assert self._session and self._csrf_token
         tid = self._next_tid()
         resp = self._session.post(
-            f"https://{self._host}/ui/vcops/services/router",
+            self._ext_direct_url(),
             json=[{
                 "action": "viewServiceController",
                 "method": "getGroupedViewDefinitionThumbnails",
@@ -873,16 +889,25 @@ class UIClient:
                             views.extend(subject_views)
         return views
 
-    def delete_view(self, view_uuid: str) -> None:
-        """Delete a view by UUID via Ext.Direct RPC."""
+    def delete_view(self, view_uuid: str, view_name: str) -> None:
+        """Delete a view by UUID + name via Ext.Direct RPC.
+
+        The data shape for deleteView is an array containing one dict whose
+        'viewDefIds' value is a JSON-stringified array of {id, name} objects:
+            "data": [{"viewDefIds": "[{\"id\":\"...\",\"name\":\"...\"}]"}]
+        Both id and name are required. Sending a bare UUID (old shape) causes
+        the handler to return type:exception "Internal server error."
+        See context/dashboard_delete_api.md §2026-04-11 update.
+        """
         assert self._session and self._csrf_token
         tid = self._next_tid()
+        json_payload = json.dumps([{"id": view_uuid, "name": view_name}])
         resp = self._session.post(
-            f"https://{self._host}/ui/vcops/services/router",
+            self._ext_direct_url(),
             json=[{
                 "action": "viewServiceController",
                 "method": "deleteView",
-                "data": [view_uuid],
+                "data": [{"viewDefIds": json_payload}],
                 "type": "rpc",
                 "tid": tid,
             }],
@@ -892,6 +917,86 @@ class UIClient:
         result = resp.json()
         if result[0].get("type") == "exception":
             raise RuntimeError(f"deleteView {view_uuid!r} failed: {result[0].get('message')}")
+
+    def list_reports(self) -> List[Dict[str, Any]]:
+        """List all report definitions via Ext.Direct RPC.
+
+        Uses getReportDefinitionThumbnails. Returns a flat list of report
+        dicts, each containing at least 'id' and 'name'. Response structure
+        is {"records": [...], "total": N, ...} inside the result field.
+        """
+        assert self._session and self._csrf_token
+        tid = self._next_tid()
+        resp = self._session.post(
+            self._ext_direct_url(),
+            json=[{
+                "action": "reportServiceController",
+                "method": "getReportDefinitionThumbnails",
+                "data": [{
+                    "contentFilter": {"isTenant": False},
+                    "resourceContext": None,
+                    "page": 1,
+                    "start": 0,
+                    "limit": 500,
+                    "sort": [{"property": "creationTime", "direction": "DESC"}],
+                }],
+                "type": "rpc",
+                "tid": tid,
+            }],
+            headers={"secureToken": self._csrf_token},
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        if result[0].get("type") == "exception":
+            _die(f"Report list failed: {result[0].get('message')}")
+        raw = result[0].get("result") or {}
+        # getReportDefinitionThumbnails returns:
+        #   {"records": [...], "total": N, "metaData": {...}, "success": true}
+        # Walk common shapes in priority order.
+        if isinstance(raw, list):
+            return raw
+        for key in ("records", "data", "items", "reportDefinitions", "reports"):
+            if isinstance(raw.get(key), list):
+                return raw[key]
+        # Fallback: flatten any lists found one level deep
+        report_items: List[Dict[str, Any]] = []
+        if isinstance(raw, dict):
+            for v in raw.values():
+                if isinstance(v, list):
+                    report_items.extend(v)
+        return report_items
+
+    def delete_reports(self, reports: List[Tuple[str, str]]) -> None:
+        """Delete report definitions by (uuid, name) tuples via Ext.Direct RPC.
+
+        The data shape for deleteReportDefinitions is a BARE DICT (not an
+        array) whose 'reportDefIds' value is a JSON-stringified array of
+        {id, name} objects:
+            "data": {"reportDefIds": "[{\"id\":\"...\",\"name\":\"...\"}]"}
+        This differs from deleteView which wraps data in an array of one dict.
+        Success response is {"type":"rpc"} with no "result" key.
+        See context/dashboard_delete_api.md §2026-04-11 update.
+        """
+        assert self._session and self._csrf_token
+        tid = self._next_tid()
+        json_payload = json.dumps([{"id": uid, "name": name} for uid, name in reports])
+        resp = self._session.post(
+            self._ext_direct_url(),
+            json=[{
+                "action": "reportServiceController",
+                "method": "deleteReportDefinitions",
+                "data": {"reportDefIds": json_payload},  # BARE DICT, not array
+                "type": "rpc",
+                "tid": tid,
+            }],
+            headers={"secureToken": self._csrf_token},
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        if result[0].get("type") == "exception":
+            raise RuntimeError(
+                f"deleteReportDefinitions failed: {result[0].get('message')}"
+            )
 
     def _next_tid(self) -> int:
         tid = self._tid
@@ -1503,12 +1608,8 @@ def _install_reports(ctx: Dict) -> None:
     ctx["client"].import_content_zip(reports_zip, "reports")
     n_reports = reports_xml.count("<ReportDef ")
     _ok(f"Imported {n_reports} report definition(s)")
-    _warn("Note: report definitions cannot be removed via the API. "
-          "To uninstall, use the Ops UI: Administration > Content > Reports.")
-    ctx["warnings"].append(
-        "Report definitions must be removed manually via the Ops UI "
-        "(Administration > Content > Reports)."
-    )
+    # Note: report uninstall (like view and dashboard uninstall) requires the
+    # admin UI session via the SPA Ext.Direct path. Run --uninstall as admin.
 
 
 def _uninstall_dashboards(ctx: Dict) -> None:
@@ -1554,10 +1655,44 @@ def _uninstall_views(ctx: Dict) -> None:
             warnings.append(f"View not found: {name}")
             continue
         try:
-            ui_client.delete_view(view_id)
+            ui_client.delete_view(view_id, name)
             _ok(f"Deleted: {name}")
         except RuntimeError as exc:
             warn = f"View delete failed for '{name}': {exc}"
+            _warn(warn)
+            warnings.append(warn)
+
+
+def _uninstall_reports(ctx: Dict) -> None:
+    """Delete report definitions via the UI session (SPA Ext.Direct path).
+
+    Report delete requires admin UI session (same constraint as dashboards
+    and views -- the needs_ui guard in the registry enforces this).
+    """
+    ui_client = ctx["ui_client"]
+    names: List[str] = ctx["names"]
+    warnings = ctx["warnings"]
+    all_reports = ui_client.list_reports()
+    report_by_name: Dict[str, str] = {
+        r.get("name", ""): r.get("id", "")
+        for r in all_reports
+        if r.get("name") and r.get("id")
+    }
+    to_delete: List[Tuple[str, str]] = []
+    for name in names:
+        report_id = report_by_name.get(name)
+        if not report_id:
+            _warn(f"Report not found (already removed?): {name}")
+            warnings.append(f"Report not found: {name}")
+            continue
+        to_delete.append((report_id, name))
+    if to_delete:
+        try:
+            ui_client.delete_reports(to_delete)
+            for _, name in to_delete:
+                _ok(f"Deleted: {name}")
+        except RuntimeError as exc:
+            warn = f"Report batch delete failed: {exc}"
             _warn(warn)
             warnings.append(warn)
 
@@ -1686,6 +1821,7 @@ _CONTENT_REGISTRY: List[Dict] = [
         "uninstall_fn": None,
         "uninstall_order": None,
         "needs_ui": False,
+        # Uninstall is handled by a separate uninstall-only registry entry below.
     },
     {
         "content_type": "symptoms",
@@ -1709,7 +1845,9 @@ _CONTENT_REGISTRY: List[Dict] = [
         "uninstall_order": 35,
         "needs_ui": False,
     },
-    # Uninstall-only entries for dashboards and views (reverse of install):
+    # Uninstall-only entries for dashboards, reports, and views (reverse of install):
+    # Order: dashboards first (10), then reports (15, since reports reference views),
+    # then views (20). All require the admin UI session via SPA Ext.Direct.
     {
         "content_type": "dashboards",
         "manifest_key": None,    # uninstall-only; no install predicate
@@ -1719,6 +1857,17 @@ _CONTENT_REGISTRY: List[Dict] = [
         "uninstall_label": "Deleting dashboard(s)...",
         "uninstall_fn": _uninstall_dashboards,
         "uninstall_order": 10,
+        "needs_ui": True,
+    },
+    {
+        "content_type": "reports",
+        "manifest_key": None,    # uninstall-only; install is handled above
+        "install_label": None,
+        "install_fn": None,
+        "install_order": None,
+        "uninstall_label": "Deleting report definition(s)...",
+        "uninstall_fn": _uninstall_reports,
+        "uninstall_order": 15,
         "needs_ui": True,
     },
     {
@@ -1899,8 +2048,8 @@ def _run_uninstall(args: argparse.Namespace, host: str, user: str,
     # the admin account. Catch this early before spending time authenticating.
     if needs_ui and user != "admin":
         print(
-            "ERROR: Dashboard and view uninstall requires the 'admin' account.\n"
-            "       VCF Ops locks imported dashboards to admin ownership. Only the\n"
+            "ERROR: Dashboard, view, and report uninstall requires the 'admin' account.\n"
+            "       VCF Ops locks imported content to admin ownership. Only the\n"
             "       admin user's UI session can delete them.\n"
             "       Re-run with --user admin (or set VCFOPS_USER=admin).",
             file=sys.stderr,
@@ -1956,7 +2105,7 @@ def _run_uninstall(args: argparse.Namespace, host: str, user: str,
 
     if needs_ui:
         step += 1
-        _step(step, n_steps, "Starting UI session (for dashboard/view delete)...")
+        _step(step, n_steps, "Starting UI session (for dashboard/view/report delete)...")
         ui_client.login()
         _ok("UI session established")
 

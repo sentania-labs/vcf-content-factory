@@ -1,4 +1,137 @@
-# Dashboard + view delete via UI action endpoints
+# Dashboard + view + report delete via UI action endpoints
+
+## 2026-04-11 update: corrected data shapes; view and report delete confirmed working
+
+**This section supersedes the "server bug" findings in
+`context/view_report_delete_investigation.md` and
+`context/view_delete_dependency_protocol.md`.**
+Both of those files incorrectly concluded that view and report delete are
+fundamentally broken at the server level. The root cause was wrong data shapes
+in our client code, not a broken server handler.
+
+### What actually happened
+
+The prior investigation was calling `deleteView` with `"data": ["<uuid>"]` —
+a bare UUID string in an array. That shape causes a handler crash returning
+`{"type":"exception","message":"Internal server error."}`.
+
+The correct shape, confirmed by the operator from browser network capture and
+empirically verified 2026-04-11 by actually deleting 4 stranded items on the
+lab instance, is:
+
+```
+"data": [{"viewDefIds": "[{\"id\":\"<uuid>\",\"name\":\"<name>\"}]"}]
+```
+
+`viewDefIds` is a JSON-stringified array of `{id, name}` objects, nested inside
+a dict, inside the outer data array. The `name` field is required — the handler
+uses it (presumably for audit/display).
+
+### URL: the legacy path is correct
+
+The operator's hypothesis was that `/ui/vcops/services/router` is dead and the
+live SPA context is at `/vcf-operations/plug/ops/vcops/services/router`.
+Empirical testing shows the opposite on the lab instance:
+
+- `/ui/vcops/services/router` — **works** for all operations (list, delete views,
+  list reports, delete reports). JSESSIONID cookie scoped to `/ui` is sent here.
+- `/vcf-operations/plug/ops/vcops/services/router` — returns **HTTP 400** (empty
+  body). The JSESSIONID cookie is scoped to `/ui`, not `/vcf-operations/`, so
+  this context rejects the request. The session does contain a second JSESSIONID
+  scoped to `/vcf-operations/plug/ops` (set by the login flow) but it carries
+  different credentials and the Ext.Direct handler requires a valid UI session.
+
+**Conclusion: keep using `/ui/vcops/services/router`. Do not change the URL.**
+
+### Confirmed working data shapes (2026-04-11)
+
+#### View delete — `viewServiceController.deleteView`
+
+```json
+POST /ui/vcops/services/router
+secureToken: <csrf>
+
+[{
+  "action": "viewServiceController",
+  "method": "deleteView",
+  "data": [{"viewDefIds": "[{\"id\":\"<uuid>\",\"name\":\"<name>\"}]"}],
+  "type": "rpc",
+  "tid": <n>
+}]
+```
+
+- `data` is an **array** containing one dict
+- `viewDefIds` value is a **JSON-stringified** array of `{id, name}` objects
+- Supports batch delete by putting multiple `{id, name}` entries in the inner array
+- Success response: `{"type":"rpc","result":[]}` (empty result list = success)
+- Not-found response: also `{"type":"rpc","result":[]}` (silent no-op)
+- Wrong shape (bare UUID): `{"type":"exception","message":"Internal server error."}`
+
+#### View list — `viewServiceController.getGroupedViewDefinitionThumbnails`
+
+Shape unchanged. The prior code was already correct for this method.
+
+#### Report delete — `reportServiceController.deleteReportDefinitions`
+
+```json
+POST /ui/vcops/services/router
+secureToken: <csrf>
+
+[{
+  "action": "reportServiceController",
+  "method": "deleteReportDefinitions",
+  "data": {"reportDefIds": "[{\"id\":\"<uuid>\",\"name\":\"<name>\"}]"},
+  "type": "rpc",
+  "tid": <n>
+}]
+```
+
+**Critical difference from view delete:** `data` is a **bare dict**, NOT wrapped
+in an array. Compare:
+- Views: `"data": [{"viewDefIds": "..."}]`  (array of one dict)
+- Reports: `"data": {"reportDefIds": "..."}`  (bare dict)
+
+Success response: `{"type":"rpc"}` — no `"result"` key at all.
+
+#### Report list — `reportServiceController.getReportDefinitionThumbnails`
+
+```json
+[{
+  "action": "reportServiceController",
+  "method": "getReportDefinitionThumbnails",
+  "data": [{
+    "contentFilter": {"isTenant": false},
+    "resourceContext": null,
+    "page": 1, "start": 0, "limit": 500,
+    "sort": [{"property": "creationTime", "direction": "DESC"}]
+  }],
+  "type": "rpc",
+  "tid": <n>
+}]
+```
+
+Response structure:
+```json
+{"type":"rpc","result":{"records":[{"id":"...","name":"..."},...], "total": N, ...}}
+```
+
+Parse as `result[0]["result"]["records"]`.
+
+### Header case
+
+`secureToken` (camelCase) and `securetoken` (lowercase) both work. HTTP headers
+are case-insensitive per RFC 7230. The code uses `secureToken` — leave it.
+
+### Stranded items cleaned up
+
+The 4 stranded views and reports from prior api-explorer investigations were
+deleted successfully using the fixed client on 2026-04-11:
+- View `c192d4d6-50b9-49cf-a9d5-fe53c9f5134a` — DELETED
+- View `36ff8c15-e47d-4285-b0f3-3ce9dda00ae6` — DELETED
+- Report `02fb7e8e-e14e-4cdb-853f-367ce097bc47` — DELETED
+- Report `f524e76b-67aa-4092-a49b-6c742e45ad4f` — DELETED
+
+---
 
 Dashboards and views have no public or internal REST DELETE endpoint.
 The only delete path is through the Struts/Ext.Direct UI action layer
@@ -122,21 +255,27 @@ secureToken: <csrfToken>     <-- HTTP header, not form param
 [{
   "action": "viewServiceController",
   "method": "deleteView",
-  "data": ["<view-uuid>"],
+  "data": [{"viewDefIds": "[{\"id\":\"<uuid>\",\"name\":\"<name>\"}]"}],
   "type": "rpc",
   "tid": 1
 }]
 ```
 
+**IMPORTANT (2026-04-11 correction):** The `data` field is an array containing
+one dict. The dict has key `viewDefIds` whose value is a **JSON-stringified**
+array of `{id, name}` objects. Both `id` and `name` are required. Sending a
+bare UUID string (the shape the prior code used) causes the handler to crash
+and return `{"type":"exception","message":"Internal server error."}`.
+
 - `tid` is a transaction ID (monotonically increasing integer per
   session; any positive integer works).
 - `secureToken` goes as an **HTTP request header** (not in the JSON
   body and not as a query parameter).
-- Success: HTTP 200, body is a JSON array with one result object.
-- Deleting a non-existent view returns
-  `{"type":"exception","message":"Internal server error."}`.
-- Multiple calls can be batched in one request (standard Ext.Direct
-  batching).
+- Success: HTTP 200, body is `[{"type":"rpc","result":[]}]` (empty result list).
+- Deleting a non-existent UUID is a **silent no-op** (same success response).
+- Wrong data shape returns `{"type":"exception","message":"Internal server error."}`.
+- Multiple views can be batched by putting more `{id, name}` entries in the
+  inner `viewDefIds` array.
 
 Other useful Ext.Direct methods on `viewServiceController`:
 `getGroupedViewDefinitionThumbnails` (len 0, lists all views),
@@ -340,14 +479,19 @@ def delete_dashboards(s, host, csrf_token, dashboards, verify_ssl=False):
     return resp.json()
 
 
-def delete_view(s, host, csrf_token, view_uuid, verify_ssl=False):
-    """Delete a view by UUID via Ext.Direct."""
+def delete_view(s, host, csrf_token, view_uuid, view_name, verify_ssl=False):
+    """Delete a view by UUID+name via Ext.Direct.
+
+    IMPORTANT: data shape requires viewDefIds with JSON-stringified {id,name}.
+    Sending a bare UUID causes "Internal server error." exception response.
+    """
+    json_payload = json.dumps([{"id": view_uuid, "name": view_name}])
     resp = s.post(
         f"https://{host}/ui/vcops/services/router",
         json=[{
             "action": "viewServiceController",
             "method": "deleteView",
-            "data": [view_uuid],
+            "data": [{"viewDefIds": json_payload}],
             "type": "rpc",
             "tid": 1,
         }],
@@ -388,108 +532,38 @@ deleted by the `claude` service account:
 - Test view `__test_view__` was successfully cleaned up via
   `viewServiceController.deleteView`.
 
-## View delete limitation (VCF Ops 9.0.2 server bug)
+## View delete — working as of 2026-04-11 correction
 
-Views cannot be deleted programmatically on VCF Ops 9.0.2 builds.
-Both `viewServiceController.deleteView` (Ext.Direct) and
-`DELETE /internal/viewdefinitions/{uuid}` return HTTP 500
-"Internal Server error."
+**The "view delete is broken" finding from prior investigations was WRONG.**
+See the correction section at the top of this file for the full story.
 
-**The previous "duplicate subjects" explanation in this file was
-wrong.** The 2026-04-11 follow-up investigation in
-`context/view_report_delete_investigation.md` empirically falsified
-it by (a) healing the duplicate via content-zip force-reimport with a
-single `<SubjectType>` (which did normalize the `subjects` field to
-one entry) and then still getting HTTP 500 on delete, and (b)
-observing the same HTTP 500 when deleting the **nil UUID**
-(`00000000-0000-0000-0000-000000000000`), proving the route handler
-crashes before it even looks up the target.
+`viewServiceController.deleteView` on `/ui/vcops/services/router` works when
+the correct data shape is used (see "Confirmed working data shapes" above).
 
-**Actual root cause:** unknown, but the server's view-delete handler
-is fundamentally broken on 9.0.2 builds. Every mutating method on
-the Ext.Direct `viewServiceController`
-(`deleteView`, `saveOrUpdateViewDefinition`, `getViewDataById`)
-returns `type: "exception"` for all inputs, while read-only methods
-(`getGroupedViewDefinitionThumbnails`, `getViewDefinitionThumbnails`)
-continue to work.
+`DELETE /internal/viewdefinitions/{uuid}` and REST paths remain broken (HTTP
+500) — these were correctly identified as dead ends. But the Ext.Direct path
+is the right one and it works.
 
-**What the SPA UI calls — verified.** The SPA's Manage > Views page
-calls the same Ext.Direct `viewServiceController.deleteView` RPC
-that install.py's `UIClient.delete_view` already uses. There is no
-secret "SPA-only" view delete endpoint hiding anywhere on the REST or
-Ext.Direct surface — the 2026-04-11 investigation exhaustively
-probed `DELETE|POST` against
-`/suite-api/api/views/{id}`, `/suite-api/api/viewdefinitions/{id}`,
-`/suite-api/api/view-definitions/{id}`, `/suite-api/internal/views/{id}`,
-`/suite-api/internal/view-definitions/{id}`,
-`/suite-api/internal/viewdefinitions/{id}` (+ `?id=…` query form),
-`POST /…/delete` batch variants, and
-`POST /suite-api/{api,internal}/content/operations/delete`, with
-every plausible unsupported-header variant and flag
-(`force|cascade|ignoreConstraints|ignoreErrors=true`). Only the
-routes at `/suite-api/internal/viewdefinitions/{id}` and its Ext.Direct
-equivalent are live — and both return 500 on every input.
+**Impact on install scripts:** `_uninstall_views` now works end-to-end.
+The uninstall phase will delete views via the admin UI session. Requires
+`--user admin`.
 
-**Workaround (unreliable):** delete views manually via the VCF
-Operations web console (Environment → Views → right-click → Delete).
-Whether this actually works on any given 9.0.2 build is unverified
-from this investigation because the SPA itself is 404 on the lab
-instance we test against. On builds where the web UI's delete button
-works, it is hitting the same broken `deleteView` RPC — so if you
-reproduce the 500 there, you're stuck until VMware ships a patch.
+## Report delete — working as of 2026-04-11 correction
 
-**Impact on install scripts:** The uninstall phase reports a WARN
-for each view that cannot be deleted and exits with code 2 (partial
-failure). SM, dashboard, custom group, symptom, and alert deletion
-still succeed. The install scripts document this limitation in their
-output. See the "Report delete" note below for the equivalent
-situation on `reportdefinitions`.
+**The "report delete is broken" finding from prior investigations was also WRONG.**
 
-**Impact on CLI sync:** The `vcfops_dashboards` sync handler imports
-views via the same content-zip path. Views synced this way will also
-be undeletable via the API. Manual cleanup through the web console
-is required when removing synced views, subject to the caveat above.
+- `reportServiceController.deleteReportDefinitions` on `/ui/vcops/services/router`
+  **works** with the correct data shape (bare dict, not array — see above).
+- `reportServiceController.getReportDefinitionThumbnails` also works.
+- The REST routes `DELETE /api/reportdefinitions/{id}` etc. remain 500 — those
+  are dead ends on this build but the Ext.Direct path works.
 
-## Report delete limitation (VCF Ops 9.0.2 server bug)
+**install.py `_uninstall_reports` has been added** in the 2026-04-11 tooling
+fix. Reports are now uninstallable via the admin UI session alongside views
+and dashboards.
 
-Same build, same shape of bug. Report definitions cannot be deleted
-programmatically.
-
-- `DELETE /api/reportdefinitions/{id}` — **500** (also 500 for the
-  nil UUID, confirming route-handler crash). This is the only live
-  REST delete route for reports on the public surface; there is no
-  `/internal/reportdefinitions/*` route (404 on every probe).
-- `POST /api/reportdefinitions/delete` and
-  `DELETE /api/reportdefinitions?id=…` — both 500 (also live).
-- Ext.Direct `reportServiceController.deleteReportDefinitions` —
-  returns `type: "exception", message: "Internal server error."`.
-- The entire `reportServiceController` is broken on this build:
-  `getReportDefinitionThumbnails` also 500s for every parameter
-  shape, which means the SPA's Manage > Reports list view itself
-  likely renders empty or errors out. Data still reachable via
-  `GET /api/reportdefinitions` (public REST read works fine).
-
-**What the SPA calls.** If the SPA's Manage > Reports page renders
-at all, the "Delete" button calls
-`reportServiceController.deleteReportDefinitions` — the same broken
-RPC. There is no secret REST path (exhaustively probed 11 candidates
-in the 2026-04-11 investigation).
-
-**install.py has no `_uninstall_reports` helper.** Reports are
-install-only in the current distribution packaging. A future tooling
-change to add report uninstall would call a broken endpoint and must
-log it as a WARN, not a hard fail. See the code pattern in
-`context/view_report_delete_investigation.md`.
-
-**Workaround:** manual cleanup via web console — but only if the
-Manage > Reports page in the SPA even renders on your build. On the
-9.0.2.0 build tested here it is unlikely to, because the backing
-Ext.Direct list RPC is also 500.
-
-**See also:** `context/view_report_delete_investigation.md` for the
-full endpoint survey, duplicate-subjects hypothesis falsification,
-heal-via-reimport side finding, and the 4 stranded test artifacts
-on the lab instance.
+**See also:** `context/view_report_delete_investigation.md` for the original
+(now-corrected) endpoint survey and the stranded item cleanup notes.
 
 ## Supportability caveat
 

@@ -1,5 +1,13 @@
 # View and Report delete investigation (VCF Ops 9.0.2)
 
+> **SEE `context/dashboard_delete_api.md` §"2026-04-11 update" for the
+> correction to this investigation.** The "server-side handler crash" conclusion
+> below is WRONG. The real issue was the data shape sent by our client:
+> `deleteView` requires `"data": [{"viewDefIds": "[{\"id\":\"...\",\"name\":\"...\"}]"}]`,
+> not a bare UUID. With the correct shape both view and report delete work on
+> the legacy `/ui/vcops/services/router` URL. All 4 stranded items from this
+> investigation have since been deleted via the corrected client.
+
 Empirical investigation 2026-04-11 against `vcf-lab-operations.int.sentania.net`
 (VCF Operations 9.0.2.0 build 25137838) to answer: does the SPA UI call a
 different delete endpoint that actually works, or is the server-side bug
