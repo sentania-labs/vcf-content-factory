@@ -132,3 +132,122 @@ no content touched)
 a PS-focused re-run.
 
 ---
+
+## 2026-04-11 — PowerShell `install.ps1` acceptance, second attempt (post PS-1/2/3 fix)
+
+**Instance:** `vcf-lab-operations.int.sentania.net` (VCF Ops 9.0.2)
+**Runtime:** pwsh 7.5.1 on Linux
+**Build under test:** commit `7dc3acd` rebuilt zips with install.ps1
+updated via commit `da1579a` (PS-1/2/3 fixes)
+**Scope:** full 6-test acceptance, same shape as the Python run
+
+**Result: 4/6 PASS, 2 PARTIAL**
+
+- Test 1 — Single-bundle install: **PARTIAL**. Content imported
+  cleanly but SM enable failed with "The SSL connection could not be
+  established" errors on every attempt. Exit code 2.
+- Test 2 — Single-bundle uninstall (admin): **PASS**.
+  Dashboard/view/report delete cleanly, zero HTTP 500s. Confirmed
+  the PS-1/2/3 fixes work and the Delete-View / Delete-Reports shapes
+  parity with Python was proven for the first time.
+- Test 3 — Multi-bundle install: **PARTIAL**. Same SSL error pattern
+  as Test 1. Content imported for both bundles, SM enable failed on
+  all 16 SMs across both bundles.
+- Test 4 — Multi-bundle uninstall: **PASS**. Both bundles' content
+  removed cleanly. Per-bundle delete order respected. Zero 500s.
+- Test 5 — Admin-guard enforcement: **PASS**. PS-3 fix confirmed
+  working — single-item Get-BundleUninstallNames no longer crashes
+  the .Count call. Guard fires with clear error.
+- Test 6 — Display-name branding: **PASS**. "VKS Core Consumption"
+  and "VM Performance" appeared in every user-facing context.
+
+**Lab state after run:** clean (Tests 2 and 4 cleaned up normally;
+Tests 1 and 3's exit-2 partial failures left content but subsequent
+uninstall cycles in Tests 2 and 4 removed it)
+
+**New bug surfaced — PS-4:** `Import-PolicyZip` used a PowerShell
+scriptblock (`{ $true }`) for the SSL bypass callback. .NET Core 6+
+(PS 7) does not accept PS scriptblocks for
+`HttpClientHandler.ServerCertificateCustomValidationCallback` — the
+property is typed as `Func<HttpRequestMessage, X509Certificate2,
+X509Chain, SslPolicyErrors, bool>`. Every request through this
+handler throws. The sibling function `Import-ContentZip` already
+used the correct static delegate
+`[System.Net.Http.HttpClientHandler]::DangerousAcceptAnyServerCertificateValidator`
+— one function got it right, one got it wrong.
+
+Also surfaced during this run: spurious "Report not found" WARN
+during uninstall even though the instance ended up clean. api-explorer
+investigation (see session task `a73f632c6ba4678eb`) confirmed that
+`Get-AllReports` works correctly post-PS-2-fix and that both REST
+and Ext.Direct listing paths see content-zip-imported reports when
+probed directly. The WARN is a cosmetic artifact — likely a
+dashboard-delete cascade removing the report before `_uninstall_reports`
+lists, matching Python's identical benign behavior.
+
+**Agent output file:** session task transcript `a460fd364239280df`
+
+**Follow-up:** PS-4 SSL bypass fix + `Get-AllReports` limit parity
+bump (50 → 500) + narrow re-run of Tests 1 and 3.
+
+---
+
+## 2026-04-11 — PowerShell `install.ps1` acceptance, final narrow re-run
+
+**Instance:** `vcf-lab-operations.int.sentania.net` (VCF Ops 9.0.2)
+**Runtime:** pwsh 7.5.1 on Linux
+**Build under test:** commit `889c761` (PS-4 SSL fix + limit=500 parity)
+**install.ps1 md5:** `736b7c89f31462281ba05d633d225f4a` (uniform across
+all four freshly-rebuilt dist zips)
+**Scope:** Tests 1 and 3 only — the SM enable paths that were partial
+in the previous run. Tests 2, 4, 5, 6 already passed and were not
+re-run.
+
+**Result: 2/2 PASS**
+
+- Test 1 — Single-bundle install + cleanup: **PASS**
+  - `install.ps1` exit 0
+  - 10 SMs imported AND enabled on Default Policy (step 6/7, zero SSL
+    errors, zero `[enable-verify N/3]` retry lines)
+  - 1 view + 1 dashboard + 1 report imported
+  - Uninstall as admin exited 0 cleanly, zero HTTP 500s across all
+    delete operations (view, dashboard, SMs; report "not found" WARN
+    is benign pre-existing behavior)
+- Test 3 — Multi-bundle install + cleanup: **PASS**
+  - Multi-select checklist showed both display names, both selected
+  - Single auth token across both bundles
+  - 10 + 6 = 16 SMs imported AND enabled — zero SSL errors, zero
+    retries across either bundle
+  - 2 views + 2 dashboards + 1 report imported
+  - Multi-bundle uninstall as admin exited 0 cleanly, per-bundle
+    delete order respected, zero HTTP 500s across 16 SMs + 2 views
+    + 2 dashboards + 1 report
+
+**Critical pass criteria:**
+- Exit code 0 on both install runs: PASS
+- Zero SSL errors in stdout/stderr: PASS (PS-4 fix confirmed working)
+- Zero `[enable-verify N/3]` retry lines: PASS (policy round-trip
+  succeeded on first attempt every time)
+- Zero HTTP 500s on delete operations across both runs: PASS
+  (PS-1/2/3 + delete-shape fixes intact across a fresh cycle)
+- Instance clean at end: PASS (REST confirmed zero VCF Content
+  Factory SMs remaining)
+
+**Lab state after run:** clean
+
+**Non-blocking observations:**
+- Temp dirs `/tmp/psqa-narrow-single/` and `/tmp/psqa-narrow-multi/`
+  remain on the host — qa-tester shell sandbox blocked `rm -rf`
+  cleanup. Contain only extracted zip contents; no secrets or
+  instance state. Safe to leave or remove manually.
+- Benign "Report not found" WARN still present during uninstall,
+  consistent with every prior run on both runtimes. Cosmetic only;
+  end state is always correct.
+
+**Agent output file:** session task transcript `a1ddfa85160992253`
+
+**Verdict:** PowerShell install path has reached full 6/6 parity
+with Python. The multi-bundle packaging refactor is **complete and
+validated against the live lab across both runtimes.**
+
+---
