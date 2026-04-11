@@ -1,15 +1,15 @@
 <#
 .SYNOPSIS
-    VCF Operations content installer/uninstaller -- {{PACKAGE_NAME}}
+    VCF Operations content installer/uninstaller.
 
 .DESCRIPTION
-    {{PACKAGE_DESCRIPTION}}
-
-    Installs or uninstalls super metrics, views, dashboards, and custom groups
-    on a VCF Operations instance.
+    Installs or uninstalls one or more content bundles found in the bundles\
+    subdirectory (or a legacy top-level content\ directory).  When multiple
+    bundles are present, an interactive checklist is shown so the operator can
+    select which bundles to install or uninstall.
 
     Run without -Uninstall (or with -Install) to install content.
-    Run with -Uninstall to remove all content this package installed.
+    Run with -Uninstall to remove all content these bundles installed.
 
     Supports interactive prompts, CLI parameters, and environment variables.
     Parameters take precedence over environment variables; both take
@@ -46,7 +46,7 @@
     Install mode (default).
 
 .PARAMETER Uninstall
-    Uninstall mode: delete all content in this bundle from the instance.
+    Uninstall mode: delete all content in selected bundles from the instance.
     Note: Uninstall requires the 'admin' account for dashboard/view cleanup.
 
 .PARAMETER Force
@@ -92,17 +92,7 @@ if ($Force -and -not $Uninstall) {
     exit 1
 }
 
-# Template variables (replaced by builder at build time):
-$PackageName        = "{{PACKAGE_NAME}}"
-$PackageDescription = "{{PACKAGE_DESCRIPTION}}"
-$DashboardUuid      = "{{DASHBOARD_UUID}}"  # empty string if no dashboard
-
-# Content manifest (replaced by builder at build time -- JSON object):
-$ContentManifestJson = '{{CONTENT_MANIFEST}}'
-$ContentManifest     = $ContentManifestJson | ConvertFrom-Json
-
-$ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$ContentDir = Join-Path $ScriptDir "content"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # ---------------------------------------------------------------------------
 # SSL: disable verification if requested (lab use only)
@@ -151,126 +141,198 @@ function Resolve-AuthSource($raw) {
     return $raw.Trim()
 }
 
-function Load-Json($name) {
-    $path = Join-Path $ContentDir $name
-    if (-not (Test-Path $path)) { return $null }
-    return Get-Content -Raw $path | ConvertFrom-Json
+function Load-JsonFile($Path) {
+    if (-not (Test-Path $Path)) { return $null }
+    return Get-Content -Raw $Path | ConvertFrom-Json
 }
 
-function Load-RawText($name) {
-    $path = Join-Path $ContentDir $name
-    if (-not (Test-Path $path)) { return $null }
-    return [System.IO.File]::ReadAllText($path)
+function Load-RawTextFile($Path) {
+    if (-not (Test-Path $Path)) { return $null }
+    return [System.IO.File]::ReadAllText($Path)
 }
 
 # ---------------------------------------------------------------------------
-# Bundle manifest discovery
+# Bundle discovery and selection
 # ---------------------------------------------------------------------------
-function Get-BundleManifest {
+function Get-Bundles {
     <#
     .SYNOPSIS
-        Locate and load bundle.json (or prompt if multiple bundles coexist).
+        Discover bundle entries from the bundles\ subtree.
 
-    Looks for bundle.json (or bundle_*.json) in $ScriptDir.  Returns the
-    parsed manifest object, or $null when none is found (legacy fallback:
-    content files are read directly without a manifest check).
+    Returns a list of hashtables: {Slug, Dir, Manifest}.
 
-    If multiple manifests exist the user is prompted to pick one.
+    Fallback: if no bundles\ subtree exists but a legacy top-level bundle.json
+    + content\ exist, synthesise a single in-memory entry for backwards
+    compatibility (one-release transition; removable later).
     #>
-    $candidates = [System.Collections.Generic.List[string]]::new()
+    $entries = [System.Collections.Generic.List[hashtable]]::new()
+    $bundlesRoot = Join-Path $ScriptDir "bundles"
 
-    # Primary name written by the builder
-    $primary = Join-Path $ScriptDir "bundle.json"
-    if (Test-Path $primary) {
-        $candidates.Add($primary)
-    }
-
-    # Also pick up bundle_*.json siblings
-    $extras = Get-ChildItem -Path $ScriptDir -Filter "bundle_*.json" -ErrorAction SilentlyContinue
-    foreach ($f in ($extras | Sort-Object Name)) {
-        if ($f.FullName -ne $primary) {
-            $candidates.Add($f.FullName)
+    if (Test-Path $bundlesRoot) {
+        $bundleJsonFiles = Get-ChildItem -Path $bundlesRoot -Filter "bundle.json" -Recurse -ErrorAction SilentlyContinue |
+            Sort-Object FullName
+        foreach ($f in $bundleJsonFiles) {
+            # Only direct children: bundles/<slug>/bundle.json
+            if ($f.Directory.Parent.FullName -ne $bundlesRoot) { continue }
+            $slug = $f.Directory.Name
+            try {
+                $manifest = Get-Content -Raw $f.FullName | ConvertFrom-Json
+            } catch {
+                Write-Host "  WARN  Could not parse $($f.FullName): $_ -- skipping"
+                continue
+            }
+            $entries.Add(@{ Slug = $slug; Dir = $f.Directory.FullName; Manifest = $manifest })
         }
     }
 
-    if ($candidates.Count -eq 0) {
-        Write-Host "  WARN  No bundle.json found in script directory -- content files will be read directly from content/ (install still proceeds, but bundle identity is unverified)"
-        return $null
-    }
-
-    if ($candidates.Count -eq 1) {
-        $chosenPath = $candidates[0]
-    } else {
-        Write-Host ""
-        Write-Host "Multiple bundle manifests found in this directory."
-        Write-Host "Please choose which bundle to install:"
-        Write-Host ""
-        $loaded = @()
-        for ($i = 0; $i -lt $candidates.Count; $i++) {
-            try   { $m = Get-Content -Raw $candidates[$i] | ConvertFrom-Json }
-            catch { $m = $null }
-            $loaded += $m
-            $bname = if ($m -and $m.name) { $m.name } else { [System.IO.Path]::GetFileName($candidates[$i]) }
-            $bdesc = if ($m -and $m.description) { " -- $($m.description)" } else { "" }
-            Write-Host "  [$($i+1)] $bname$bdesc"
+    if ($entries.Count -eq 0) {
+        # Legacy fallback: flat content\ layout with top-level bundle.json
+        $legacyManifest = Join-Path $ScriptDir "bundle.json"
+        $legacyContent  = Join-Path $ScriptDir "content"
+        if ((Test-Path $legacyManifest) -and (Test-Path $legacyContent)) {
+            try   { $manifest = Get-Content -Raw $legacyManifest | ConvertFrom-Json }
+            catch { $manifest = [PSCustomObject]@{ name = "bundle"; description = ""; content = [PSCustomObject]@{} } }
+            $entries.Add(@{ Slug = $manifest.name; Dir = $ScriptDir; Manifest = $manifest })
+        } elseif (Test-Path $legacyContent) {
+            $manifest = [PSCustomObject]@{
+                name        = "bundle"
+                description = ""
+                content     = [PSCustomObject]@{}
+            }
+            $entries.Add(@{ Slug = "bundle"; Dir = $ScriptDir; Manifest = $manifest })
         }
-        Write-Host ""
-        do {
-            $raw = Read-Host "Enter choice [1-$($candidates.Count)]"
-            $ok  = $raw -match '^\d+$' -and [int]$raw -ge 1 -and [int]$raw -le $candidates.Count
-            if (-not $ok) { Write-Host "  Invalid choice. Enter a number between 1 and $($candidates.Count)." }
-        } while (-not $ok)
-        $chosenPath = $candidates[[int]$raw - 1]
     }
 
-    try {
-        return Get-Content -Raw $chosenPath | ConvertFrom-Json
-    } catch {
-        Write-Host "  WARN  Could not parse $(Split-Path -Leaf $chosenPath): $_ -- proceeding without manifest"
-        return $null
-    }
+    return $entries
 }
 
-function Show-BundleHeader($Manifest) {
-    if (-not $Manifest) { return }
-    $bname = if ($Manifest.name) { $Manifest.name } else { $PackageName }
-    $bdesc = if ($Manifest.description) { " -- $($Manifest.description)" } else { "" }
-    $content = $Manifest.content
-    if (-not $content) {
+function Select-Bundles {
+    param(
+        [System.Collections.Generic.List[hashtable]]$Bundles,
+        [string]$Mode = "install"
+    )
+
+    if ($Bundles.Count -eq 1) {
+        $b = $Bundles[0]
+        $bname = if ($b.Manifest.name) { $b.Manifest.name } else { $b.Slug }
+        $bdesc = if ($b.Manifest.description) { " -- $($b.Manifest.description)" } else { "" }
+        Write-Host ""
         Write-Host "  Bundle: $bname$bdesc"
-        return
+        return $Bundles
     }
-    # Validate expected content files exist
-    $missing = @()
-    foreach ($prop in $content.PSObject.Properties) {
-        $rel = $prop.Value.file
-        if ($rel) {
-            $full = Join-Path $ScriptDir $rel
-            if (-not (Test-Path $full)) { $missing += $rel }
+
+    Write-Host ""
+    Write-Host "Select bundles to $Mode (all selected by default):"
+    Write-Host "  Toggle: enter comma-separated numbers (e.g. '2' or '1,3')"
+    Write-Host "  Commands: 'all' to select all, 'none' to deselect all, Enter to proceed"
+
+    $selected = @($true) * $Bundles.Count
+    for ($i = 0; $i -lt $Bundles.Count; $i++) { $selected[$i] = $true }
+
+    while ($true) {
+        Write-Host ""
+        for ($i = 0; $i -lt $Bundles.Count; $i++) {
+            $b     = $Bundles[$i]
+            $mark  = if ($selected[$i]) { "*" } else { " " }
+            $bname = if ($b.Manifest.name) { $b.Manifest.name } else { $b.Slug }
+            $bdesc = if ($b.Manifest.description) { " -- $($b.Manifest.description)" } else { "" }
+            $nItems = 0
+            if ($b.Manifest.content) {
+                foreach ($prop in $b.Manifest.content.PSObject.Properties) {
+                    $items = $prop.Value.items
+                    if ($items) { $nItems += @($items).Count }
+                }
+            }
+            $detail = if ($nItems -gt 0) { "($nItems items)" } else { "(no items)" }
+            Write-Host "  [$mark] $($i+1). $bname $detail$bdesc"
+        }
+
+        $raw = Read-Host "`nToggle [1..N / all / none / Enter to proceed]"
+        $raw = $raw.Trim().ToLower()
+
+        if ($raw -eq "") { break }
+        elseif ($raw -eq "all")  { for ($i = 0; $i -lt $Bundles.Count; $i++) { $selected[$i] = $true  } }
+        elseif ($raw -eq "none") { for ($i = 0; $i -lt $Bundles.Count; $i++) { $selected[$i] = $false } }
+        else {
+            foreach ($tok in ($raw -split ",")) {
+                $tok = $tok.Trim()
+                if ($tok -match '^\d+$') {
+                    $idx = [int]$tok - 1
+                    if ($idx -ge 0 -and $idx -lt $Bundles.Count) {
+                        $selected[$idx] = -not $selected[$idx]
+                    } else {
+                        Write-Host "  (ignoring out-of-range index $tok)"
+                    }
+                } elseif ($tok -ne "") {
+                    Write-Host "  (unrecognised token '$tok' -- ignored)"
+                }
+            }
         }
     }
-    if ($missing.Count -gt 0) {
-        Write-Host "  WARN  Bundle manifest references files not found: $($missing -join ', ')"
+
+    $chosen = [System.Collections.Generic.List[hashtable]]::new()
+    for ($i = 0; $i -lt $Bundles.Count; $i++) {
+        if ($selected[$i]) { $chosen.Add($Bundles[$i]) }
     }
-    # Summary of item counts
-    $parts = @()
-    foreach ($prop in $content.PSObject.Properties) {
-        $items = $prop.Value.items
-        $count = if ($items) { @($items).Count } else { 0 }
-        if ($count -gt 0) { $parts += "$count $($prop.Name)" }
+    if ($chosen.Count -eq 0) {
+        Write-Host "  No bundles selected. Exiting."
+        exit 0
     }
-    $summary = if ($parts.Count -gt 0) { $parts -join ', ' } else { 'no items' }
-    Write-Host "  Bundle: $bname$bdesc"
-    Write-Host "  Contents: $summary"
+    return $chosen
+}
+
+function Show-SelectionSummary {
+    param($SelectedBundles, [string]$Mode)
+    Write-Host ""
+    Write-Host "Will $Mode $($SelectedBundles.Count) bundle(s):"
+    foreach ($b in $SelectedBundles) {
+        $bname = if ($b.Manifest.name) { $b.Manifest.name } else { $b.Slug }
+        $bdesc = if ($b.Manifest.description) { " -- $($b.Manifest.description)" } else { "" }
+        $parts = @()
+        if ($b.Manifest.content) {
+            foreach ($prop in $b.Manifest.content.PSObject.Properties) {
+                $items = $prop.Value.items
+                $count = if ($items) { @($items).Count } else { 0 }
+                if ($count -gt 0) { $parts += "$count $($prop.Name)" }
+            }
+        }
+        $summary = if ($parts.Count -gt 0) { $parts -join ", " } else { "no items" }
+        Write-Host "  - $bname$bdesc"
+        Write-Host "    Contents: $summary"
+    }
 }
 
 # ---------------------------------------------------------------------------
-# Interactive credential prompts (shared by install and uninstall)
+# Registry helpers
+# ---------------------------------------------------------------------------
+function Test-BundleHasKey {
+    param($Bundle, [string]$ManifestKey)
+    if (-not $ManifestKey) { return $false }
+    $content = $Bundle.Manifest.content
+    if (-not $content) { return $false }
+    $section = $content.$ManifestKey
+    if (-not $section) { return $false }
+    $rel = $section.file
+    if (-not $rel) { return $false }
+    return Test-Path (Join-Path $Bundle.Dir $rel)
+}
+
+function Get-BundleUninstallNames {
+    param($Bundle, [string]$ContentType)
+    $content = $Bundle.Manifest.content
+    if (-not $content) { return @() }
+    $section = $content.$ContentType
+    if (-not $section -or -not $section.items) { return @() }
+    return @($section.items | Where-Object { $_.name } | ForEach-Object { $_.name })
+}
+
+# ---------------------------------------------------------------------------
+# Interactive credential prompts
 # ---------------------------------------------------------------------------
 function Get-Credentials {
     param([string]$Mode = "installer")
     Write-Host ""
-    Write-Host "VCF Content Factory -- $PackageName $Mode"
+    Write-Host "VCF Content Factory -- $Mode"
     Write-Host "Press Enter to accept [defaults] shown in brackets."
     Write-Host ""
 
@@ -982,6 +1044,24 @@ function Get-DashboardIds {
     return @($data.dashboards | Where-Object { $_.id } | ForEach-Object { $_.id })
 }
 
+function New-ReportsZip {
+    param([string]$ReportsXml, [string]$Marker, [string]$OwnerId)
+    # Build inner reports.zip containing content.xml
+    $innerEntries = @{ "content.xml" = $ReportsXml }
+    $innerBytes = New-ZipBytes $innerEntries
+
+    # Count ReportDef elements
+    $nReports = ([regex]::Matches($ReportsXml, "<ReportDef ")).Count
+    $config = @{ reports = $nReports; type = "CUSTOM" } | ConvertTo-Json -Compress
+
+    $outerEntries = @{
+        $Marker              = $OwnerId
+        "reports.zip"        = $innerBytes
+        "configuration.json" = $config
+    }
+    return New-ZipBytes $outerEntries
+}
+
 # ---------------------------------------------------------------------------
 # UI session helpers (uninstall mode: dashboard + view delete)
 # ---------------------------------------------------------------------------
@@ -1215,8 +1295,8 @@ function Remove-View {
 # To add a new content type, add an entry here.  No other changes required.
 #
 # Entry keys:
-#   ContentType     string   key in $ContentManifest (for uninstall names)
-#   InstallFile     string   filename under $ContentDir (presence = active for install)
+#   ContentType     string   key in manifest content map (for uninstall names)
+#   ManifestKey     string   key in manifest.content (for install detection; $null = uninstall-only)
 #   InstallLabel    string   human-readable step description for install
 #   InstallFn       string   name of a function to call for install (or $null)
 #   InstallOrder    int      lower runs first during install
@@ -1229,7 +1309,7 @@ function Remove-View {
 $script:ContentRegistry = @(
     @{
         ContentType    = "supermetrics"
-        InstallFile    = "supermetrics.json"
+        ManifestKey    = "supermetrics"
         InstallLabel   = "Importing super metrics..."
         InstallFn      = "Install-Supermetrics"
         InstallOrder   = 1
@@ -1240,7 +1320,7 @@ $script:ContentRegistry = @(
     },
     @{
         ContentType    = "views_and_dashboards"
-        InstallFile    = "dashboard.json"
+        ManifestKey    = "dashboards"
         InstallLabel   = "Importing view + dashboard..."
         InstallFn      = "Install-Dashboard"
         InstallOrder   = 2
@@ -1251,7 +1331,7 @@ $script:ContentRegistry = @(
     },
     @{
         ContentType    = "sm_enable"
-        InstallFile    = "supermetrics.json"
+        ManifestKey    = "supermetrics"
         InstallLabel   = "Enabling super metrics on Default Policy..."
         InstallFn      = "Install-SmEnable"
         InstallOrder   = 3
@@ -1262,7 +1342,7 @@ $script:ContentRegistry = @(
     },
     @{
         ContentType    = "customgroups"
-        InstallFile    = "customgroup.json"
+        ManifestKey    = "customgroups"
         InstallLabel   = "Upserting custom group(s)..."
         InstallFn      = "Install-CustomGroups"
         InstallOrder   = 4
@@ -1273,7 +1353,7 @@ $script:ContentRegistry = @(
     },
     @{
         ContentType    = "reports"
-        InstallFile    = "reports_content.xml"
+        ManifestKey    = "reports"
         InstallLabel   = "Importing report definition(s)..."
         InstallFn      = "Install-Reports"
         InstallOrder   = 5
@@ -1284,7 +1364,7 @@ $script:ContentRegistry = @(
     },
     @{
         ContentType    = "symptoms"
-        InstallFile    = "symptoms.json"
+        ManifestKey    = "symptoms"
         InstallLabel   = "Upserting symptom definition(s)..."
         InstallFn      = "Install-Symptoms"
         InstallOrder   = 6
@@ -1295,7 +1375,7 @@ $script:ContentRegistry = @(
     },
     @{
         ContentType    = "alerts"
-        InstallFile    = "alerts.json"
+        ManifestKey    = "alerts"
         InstallLabel   = "Upserting alert definition(s)..."
         InstallFn      = "Install-Alerts"
         InstallOrder   = 7
@@ -1307,7 +1387,7 @@ $script:ContentRegistry = @(
     # Uninstall-only entries for dashboards and views
     @{
         ContentType    = "dashboards"
-        InstallFile    = $null
+        ManifestKey    = $null
         InstallLabel   = $null
         InstallFn      = $null
         InstallOrder   = $null
@@ -1318,7 +1398,7 @@ $script:ContentRegistry = @(
     },
     @{
         ContentType    = "views"
-        InstallFile    = $null
+        ManifestKey    = $null
         InstallLabel   = $null
         InstallFn      = $null
         InstallOrder   = $null
@@ -1334,7 +1414,8 @@ $script:ContentRegistry = @(
 # ---------------------------------------------------------------------------
 
 function Install-Supermetrics($Ctx) {
-    $smDict = Load-Json "supermetrics.json"
+    $smFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.supermetrics.file
+    $smDict = Load-JsonFile $smFile
     $smZip = New-SmZip -SmDict $smDict -Marker $Ctx.Marker -OwnerId $Ctx.OwnerId
     Import-ContentZip -ZipBytes $smZip -Label "super metrics"
     $smCount = @($smDict.PSObject.Properties.Name).Count
@@ -1342,11 +1423,17 @@ function Install-Supermetrics($Ctx) {
 }
 
 function Install-Dashboard($Ctx) {
-    $hasViewsXml = Test-Path (Join-Path $ContentDir "views_content.xml")
-    $dashJson = Load-RawText "dashboard.json"
-    $viewsXml = if ($hasViewsXml) { Load-RawText "views_content.xml" } else { "" }
+    $dashFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.dashboards.file
+    $dashJson = Load-RawTextFile $dashFile
+
+    $viewsXml = ""
+    if ($Ctx.Manifest.content.views) {
+        $viewsFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.views.file
+        if (Test-Path $viewsFile) { $viewsXml = Load-RawTextFile $viewsFile }
+    }
+
     $dashIds = Get-DashboardIds -DashJson $dashJson -OwnerId $Ctx.OwnerId
-    $nViews = if ($hasViewsXml) { 1 } else { 0 }
+    $nViews = if ($viewsXml) { 1 } else { 0 }
     $dashZip = New-DashboardZip -ViewsXml $viewsXml -DashJson $dashJson -Marker $Ctx.Marker `
         -OwnerId $Ctx.OwnerId -NViews $nViews -NDashboards 1 -DashboardIds $dashIds
     Import-ContentZip -ZipBytes $dashZip -Label "dashboard + view"
@@ -1358,7 +1445,8 @@ function Install-SmEnable($Ctx) {
         Write-Host "  (-SkipEnable set: skipping)"
         return
     }
-    $smDict = Load-Json "supermetrics.json"
+    $smFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.supermetrics.file
+    $smDict = Load-JsonFile $smFile
     # smDict is keyed by UUID: {uuid: {name, formula, description, unitId, resourceKinds}}
     $smMeta = @($smDict.PSObject.Properties | ForEach-Object { $_.Value })
     $names = @($smMeta | ForEach-Object { $_.name })
@@ -1453,7 +1541,8 @@ function Install-SmEnable($Ctx) {
 }
 
 function Install-CustomGroups($Ctx) {
-    $cgData = Load-Json "customgroup.json"
+    $cgFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.customgroups.file
+    $cgData = Load-JsonFile $cgFile
     if ($cgData -isnot [System.Array]) { $cgData = @($cgData) }
     foreach ($cg in $cgData) {
         $cgName = $cg.resourceKey.name
@@ -1462,26 +1551,9 @@ function Install-CustomGroups($Ctx) {
     }
 }
 
-function New-ReportsZip {
-    param([string]$ReportsXml, [string]$Marker, [string]$OwnerId)
-    # Build inner reports.zip containing content.xml
-    $innerEntries = @{ "content.xml" = $ReportsXml }
-    $innerBytes = New-ZipBytes $innerEntries
-
-    # Count ReportDef elements
-    $nReports = ([regex]::Matches($ReportsXml, "<ReportDef ")).Count
-    $config = @{ reports = $nReports; type = "CUSTOM" } | ConvertTo-Json -Compress
-
-    $outerEntries = @{
-        $Marker              = $OwnerId
-        "reports.zip"        = $innerBytes
-        "configuration.json" = $config
-    }
-    return New-ZipBytes $outerEntries
-}
-
 function Install-Reports($Ctx) {
-    $reportsXml = Load-RawText "reports_content.xml"
+    $reportsFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.reports.file
+    $reportsXml = Load-RawTextFile $reportsFile
     $reportsZip = New-ReportsZip -ReportsXml $reportsXml -Marker $Ctx.Marker -OwnerId $Ctx.OwnerId
     Import-ContentZip -ZipBytes $reportsZip -Label "reports"
     $nReports = ([regex]::Matches($reportsXml, "<ReportDef ")).Count
@@ -1491,7 +1563,8 @@ function Install-Reports($Ctx) {
 }
 
 function Install-Symptoms($Ctx) {
-    $symptoms = Load-Json "symptoms.json"
+    $symFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.symptoms.file
+    $symptoms = Load-JsonFile $symFile
     foreach ($payload in $symptoms) {
         $name = $payload.name
         # Find existing by name
@@ -1518,7 +1591,8 @@ function Install-Symptoms($Ctx) {
 }
 
 function Install-Alerts($Ctx) {
-    $alerts = Load-Json "alerts.json"
+    $alertFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.alerts.file
+    $alerts = Load-JsonFile $alertFile
 
     # Build symptom name -> id map
     $symptomMap = @{}
@@ -1764,20 +1838,88 @@ function Uninstall-CustomGroups($Ctx) {
 }
 
 # ---------------------------------------------------------------------------
-# Install flow (registry-driven)
+# Per-bundle install / uninstall helpers
 # ---------------------------------------------------------------------------
-function Invoke-Install {
-    # Determine which registry entries are active for this bundle
+
+function Invoke-InstallBundle {
+    param($Bundle, $GlobalCtx, [ref]$Step, $TotalSteps)
+    $manifest = $Bundle.Manifest
+    $bname = if ($manifest.name) { $manifest.name } else { $Bundle.Slug }
+
     $active = @($script:ContentRegistry | Where-Object {
-        $_.InstallFn -ne $null -and $_.InstallFile -ne $null -and
-        (Test-Path (Join-Path $ContentDir $_.InstallFile))
+        $_.InstallFn -ne $null -and $_.ManifestKey -ne $null -and
+        (Test-BundleHasKey -Bundle $Bundle -ManifestKey $_.ManifestKey)
     } | Sort-Object { $_.InstallOrder })
 
-    $TOTAL = 3 + $active.Count   # auth + marker + owner + content steps
-    $step = 0
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $ctx = @{
+        BundleDir = $Bundle.Dir
+        Manifest  = $manifest
+        Marker    = $GlobalCtx.Marker
+        OwnerId   = $GlobalCtx.OwnerId
+        Warnings  = $warnings
+        Names     = @()
+    }
+
+    foreach ($entry in $active) {
+        $Step.Value++
+        Write-Step $Step.Value $TotalSteps "[$bname] $($entry.InstallLabel)"
+        & $entry.InstallFn $ctx
+    }
+    return $warnings
+}
+
+function Invoke-UninstallBundle {
+    param($Bundle, $GlobalCtx, [ref]$Step, $TotalSteps)
+    $manifest = $Bundle.Manifest
+    $bname = if ($manifest.name) { $manifest.name } else { $Bundle.Slug }
+
+    $active = @($script:ContentRegistry | Where-Object {
+        $_.UninstallFn -ne $null -and $_.UninstallOrder -ne $null -and
+        ((Get-BundleUninstallNames -Bundle $Bundle -ContentType $_.ContentType).Count -gt 0)
+    } | Sort-Object { $_.UninstallOrder })
+
+    $warnings = [System.Collections.Generic.List[string]]::new()
+    $ctx = @{
+        BundleDir = $Bundle.Dir
+        Manifest  = $manifest
+        Warnings  = $warnings
+        Force     = $Force
+        Names     = @()
+    }
+
+    foreach ($entry in $active) {
+        $names = Get-BundleUninstallNames -Bundle $Bundle -ContentType $entry.ContentType
+        if ($names.Count -eq 0) { continue }
+        $Step.Value++
+        $label = $entry.UninstallLabel -replace '\.\.\.', " ($($names.Count))..."
+        Write-Step $Step.Value $TotalSteps "[$bname] $label"
+        $ctx.Names = $names
+        & $entry.UninstallFn $ctx
+    }
+    return $warnings
+}
+
+# ---------------------------------------------------------------------------
+# Install flow
+# ---------------------------------------------------------------------------
+function Invoke-Install {
+    param($SelectedBundles)
+
+    # Count total steps
+    $totalContentSteps = 0
+    foreach ($b in $SelectedBundles) {
+        $totalContentSteps += @($script:ContentRegistry | Where-Object {
+            $_.InstallFn -ne $null -and $_.ManifestKey -ne $null -and
+            (Test-BundleHasKey -Bundle $b -ManifestKey $_.ManifestKey)
+        }).Count
+    }
+    $TOTAL = 3 + $totalContentSteps
 
     Write-Host ""
-    Write-Host "Installing $PackageName onto $($script:OpsHost)..."
+    Write-Host "Installing $($SelectedBundles.Count) bundle(s) onto $($script:OpsHost)..."
+
+    $step = 0
 
     $step++
     Write-Step $step $TOTAL "Authenticating as $($script:User)@$($script:OpsHost) (auth: $($script:AuthSource)) ..."
@@ -1795,24 +1937,24 @@ function Invoke-Install {
     $ownerId = $currentUser.id
     Write-Ok "Owner user ID: $ownerId"
 
-    $warnings = [System.Collections.Generic.List[string]]::new()
-    $ctx = @{
+    $globalCtx = @{
         Marker  = $marker
         OwnerId = $ownerId
-        Warnings = $warnings
     }
 
-    foreach ($entry in $active) {
-        $step++
-        Write-Step $step $TOTAL $entry.InstallLabel
-        & $entry.InstallFn $ctx
+    $allWarnings = [System.Collections.Generic.List[string]]::new()
+    $stepRef = [ref]$step
+    foreach ($b in $SelectedBundles) {
+        $warnings = Invoke-InstallBundle -Bundle $b -GlobalCtx $globalCtx -Step $stepRef -TotalSteps $TOTAL
+        $step = $stepRef.Value
+        foreach ($w in $warnings) { $allWarnings.Add($w) }
     }
 
     Write-Host ""
-    if ($warnings.Count -gt 0) {
-        Write-Host "Done with $($warnings.Count) warning(s):"
-        foreach ($w in $warnings) { Write-Host "  WARN  $w" }
-        $enableWarns = @($warnings | Where-Object { $_ -like "*enable*" -or $_ -like "*resolve*" })
+    if ($allWarnings.Count -gt 0) {
+        Write-Host "Done with $($allWarnings.Count) warning(s):"
+        foreach ($w in $allWarnings) { Write-Host "  WARN  $w" }
+        $enableWarns = @($allWarnings | Where-Object { $_ -like "*enable*" -or $_ -like "*resolve*" })
         if ($enableWarns.Count -gt 0) {
             Write-Host "Content was imported but one or more super metrics could not be enabled."
         }
@@ -1823,21 +1965,26 @@ function Invoke-Install {
 }
 
 # ---------------------------------------------------------------------------
-# Uninstall flow (registry-driven)
+# Uninstall flow
 # ---------------------------------------------------------------------------
 function Invoke-Uninstall {
-    # Determine which registry entries are active for uninstall
-    $activeUninstall = @($script:ContentRegistry | Where-Object {
-        $_.UninstallFn -ne $null -and $_.UninstallOrder -ne $null -and
-        (@($ContentManifest.($_.ContentType) | Where-Object { $_ }).Count -gt 0)
-    } | Sort-Object { $_.UninstallOrder })
+    param($SelectedBundles)
 
-    $needUi    = @($activeUninstall | Where-Object { $_.NeedsUi }).Count -gt 0
-    $needSuite = @($activeUninstall | Where-Object { -not $_.NeedsUi }).Count -gt 0
+    # Check if any bundle needs UI (dashboards/views) across all selected.
+    $needUi = $false
+    foreach ($b in $SelectedBundles) {
+        foreach ($e in $script:ContentRegistry) {
+            if ($e.NeedsUi -and $e.UninstallFn -ne $null) {
+                if ((Get-BundleUninstallNames -Bundle $b -ContentType $e.ContentType).Count -gt 0) {
+                    $needUi = $true; break
+                }
+            }
+        }
+        if ($needUi) { break }
+    }
 
     # Dashboard and view deletion goes through the UI layer which is locked to
-    # the admin account.  Catch this early — before spending time authenticating
-    # — so the operator can re-run with the right credentials.
+    # the admin account. Catch this early before spending time authenticating.
     if ($needUi -and $script:User -ne "admin") {
         Write-Error ("ERROR: Dashboard and view uninstall requires the 'admin' account.`n" +
                      "       VCF Ops locks imported dashboards to admin ownership. Only the`n" +
@@ -1846,30 +1993,55 @@ function Invoke-Uninstall {
         exit 1
     }
 
-    $TOTAL = 1 + $activeUninstall.Count
-    if ($needUi) { $TOTAL += 2 }   # ui_auth + ui_logout
-    $step = 0
+    # Count total steps
+    $totalContentSteps = 0
+    foreach ($b in $SelectedBundles) {
+        $totalContentSteps += @($script:ContentRegistry | Where-Object {
+            $_.UninstallFn -ne $null -and $_.UninstallOrder -ne $null -and
+            ((Get-BundleUninstallNames -Bundle $b -ContentType $_.ContentType).Count -gt 0)
+        }).Count
+    }
+
+    $TOTAL = 1 + $totalContentSteps
+    if ($needUi) { $TOTAL += 2 }
 
     Write-Host ""
-    Write-Host "Uninstalling $PackageName from $($script:OpsHost)..."
+    Write-Host "Uninstalling $($SelectedBundles.Count) bundle(s) from $($script:OpsHost)..."
     if ($Force) { Write-Host "(-Force: skipping dependency checks)" }
     Write-Host "Content to remove:"
-    foreach ($entry in $activeUninstall) {
-        $names = @($ContentManifest.($entry.ContentType) | Where-Object { $_ })
-        if ($names.Count -gt 0) {
-            Write-Host "  $($entry.ContentType.Substring(0,1).ToUpper() + $entry.ContentType.Substring(1)) ($($names.Count)): $($names -join ', ')"
+    foreach ($b in $SelectedBundles) {
+        $bname = if ($b.Manifest.name) { $b.Manifest.name } else { $b.Slug }
+        Write-Host "  Bundle: $bname"
+        foreach ($e in $script:ContentRegistry) {
+            if ($e.UninstallFn -ne $null -and $e.UninstallOrder -ne $null) {
+                $names = Get-BundleUninstallNames -Bundle $b -ContentType $e.ContentType
+                if ($names.Count -gt 0) {
+                    Write-Host "    $($e.ContentType.Substring(0,1).ToUpper() + $e.ContentType.Substring(1)) ($($names.Count)): $($names -join ', ')"
+                }
+            }
         }
     }
-    if ($activeUninstall.Count -eq 0) {
-        Write-Host "  (nothing to remove -- bundle contains no content)"
+
+    $hasAnything = $false
+    foreach ($b in $SelectedBundles) {
+        foreach ($e in $script:ContentRegistry) {
+            if ($e.UninstallFn -ne $null -and (Get-BundleUninstallNames -Bundle $b -ContentType $e.ContentType).Count -gt 0) {
+                $hasAnything = $true; break
+            }
+        }
+        if ($hasAnything) { break }
+    }
+    if (-not $hasAnything) {
+        Write-Host "  (nothing to remove -- bundles contain no removable content)"
         exit 0
     }
 
-    $warnings = [System.Collections.Generic.List[string]]::new()
+    $allWarnings = [System.Collections.Generic.List[string]]::new()
+    $step = 0
 
     $step++
     Write-Step $step $TOTAL "Authenticating as $($script:User)@$($script:OpsHost) (auth: $($script:AuthSource)) ..."
-    if ($needSuite) { Authenticate }
+    Authenticate
     Write-Ok "Authenticated"
 
     if ($needUi) {
@@ -1879,20 +2051,12 @@ function Invoke-Uninstall {
         Write-Ok "UI session established"
     }
 
-    $ctx = @{
-        Warnings = $warnings
-        Force    = $Force
-        Names    = @()
-    }
-
-    foreach ($entry in $activeUninstall) {
-        $names = @($ContentManifest.($entry.ContentType) | Where-Object { $_ })
-        if ($names.Count -eq 0) { continue }
-        $step++
-        $label = $entry.UninstallLabel -replace '\.\.\.', " ($($names.Count))..."
-        Write-Step $step $TOTAL $label
-        $ctx.Names = $names
-        & $entry.UninstallFn $ctx
+    $globalCtx = @{ Force = $Force }
+    $stepRef = [ref]$step
+    foreach ($b in $SelectedBundles) {
+        $warnings = Invoke-UninstallBundle -Bundle $b -GlobalCtx $globalCtx -Step $stepRef -TotalSteps $TOTAL
+        $step = $stepRef.Value
+        foreach ($w in $warnings) { $allWarnings.Add($w) }
     }
 
     if ($needUi) {
@@ -1903,9 +2067,9 @@ function Invoke-Uninstall {
     }
 
     Write-Host ""
-    if ($warnings.Count -gt 0) {
-        $notFound     = @($warnings | Where-Object { $_ -like "*not found*" })
-        $realFailures = @($warnings | Where-Object { $_ -notlike "*not found*" })
+    if ($allWarnings.Count -gt 0) {
+        $notFound     = @($allWarnings | Where-Object { $_ -like "*not found*" })
+        $realFailures = @($allWarnings | Where-Object { $_ -notlike "*not found*" })
         if ($realFailures.Count -gt 0) {
             Write-Host "Done with errors ($($realFailures.Count) delete failure(s)):"
             foreach ($w in $realFailures) { Write-Host "  WARN  $w" }
@@ -1922,20 +2086,31 @@ function Invoke-Uninstall {
 }
 
 # ---------------------------------------------------------------------------
-# Entry point: resolve credentials then fork on mode
+# Entry point: discover bundles, select, resolve credentials, fork on mode
 # ---------------------------------------------------------------------------
 
-# Discover and validate bundle manifest before prompting for credentials.
-$script:BundleManifest = Get-BundleManifest
-Show-BundleHeader -Manifest $script:BundleManifest
+$script:OpsHost  = $OpsHost
+$script:User     = $User
+$script:Password = $Password
+$script:AuthSource = $AuthSource
 
-$modeLabel = if ($Uninstall) { "uninstaller" } else { "installer" }
-Get-Credentials -Mode $modeLabel
+$allBundles = Get-Bundles
+if ($allBundles.Count -eq 0) {
+    Write-Error "ERROR: No bundles found. Expected bundles\<slug>\bundle.json or a legacy content\ directory."
+    exit 1
+}
+
+$modeLabel = if ($Uninstall) { "uninstall" } else { "install" }
+$selected = Select-Bundles -Bundles $allBundles -Mode $modeLabel
+Show-SelectionSummary -SelectedBundles $selected -Mode $modeLabel
+
+$credMode = if ($Uninstall) { "uninstaller" } else { "installer" }
+Get-Credentials -Mode $credMode
 
 $script:BaseUrl = "https://$($script:OpsHost)/suite-api"
 
 if ($Uninstall) {
-    Invoke-Uninstall
+    Invoke-Uninstall -SelectedBundles $selected
 } else {
-    Invoke-Install
+    Invoke-Install -SelectedBundles $selected
 }

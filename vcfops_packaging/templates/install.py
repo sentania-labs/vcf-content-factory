@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""VCF Operations content installer/uninstaller -- {{PACKAGE_NAME}}.
+"""VCF Operations content installer/uninstaller.
 
-{{PACKAGE_DESCRIPTION}}
+Installs or uninstalls one or more content bundles found in the bundles/
+subdirectory (or a legacy top-level content/ directory).  When multiple
+bundles are present, an interactive checklist is shown so the operator can
+select which bundles to install or uninstall.
 
 Usage (install, fully interactive -- prompts for all credentials):
     python3 install.py
@@ -82,114 +85,167 @@ import urllib3   # noqa: E402
 # ---------------------------------------------------------------------------
 SCRIPT_DIR = Path(__file__).parent
 
-# Template variables (replaced by builder at build time):
-PACKAGE_NAME = "{{PACKAGE_NAME}}"
-PACKAGE_DESCRIPTION = "{{PACKAGE_DESCRIPTION}}"
-DASHBOARD_UUID = "{{DASHBOARD_UUID}}"  # empty string if no dashboard in bundle
 
-# Content manifest: all names to uninstall, keyed by type.
-# Built by the packager; never edited by hand.
-# Shape: {"dashboards": [...], "views": [...], "supermetrics": [...], "customgroups": [...]}
-CONTENT_MANIFEST: Dict[str, List[str]] = {{CONTENT_MANIFEST}}
-
-
-def _load_json(name: str) -> Any:
-    return json.loads((SCRIPT_DIR / "content" / name).read_text())
+def _load_json_from_path(p: Path) -> Any:
+    return json.loads(p.read_text())
 
 
 # ---------------------------------------------------------------------------
-# Bundle manifest discovery
+# Bundle discovery and selection
 # ---------------------------------------------------------------------------
-def _load_bundle_manifest() -> Optional[Dict]:
-    """Locate and load bundle.json (or prompt if multiple bundles coexist).
+def _discover_bundles() -> List[Dict]:
+    """Discover bundle entries from the bundles/ subtree.
 
-    Looks for bundle.json (or bundle_*.json files) in SCRIPT_DIR.  Returns
-    the loaded manifest dict, or None when no manifest is found (legacy
-    behaviour: content/ files are used directly without a manifest check).
+    Returns a list of dicts:
+        {"slug": str, "dir": Path, "manifest": dict}
 
-    If multiple manifest files are found the user is prompted to pick one.
+    Fallback: if no bundles/ subtree exists but a legacy top-level bundle.json
+    + content/ exist, synthesise a single in-memory entry for backwards
+    compatibility (one-release transition; removable later).
     """
-    import glob as _glob
+    bundles_root = SCRIPT_DIR / "bundles"
+    entries: List[Dict] = []
 
-    candidates: List[Path] = []
-
-    # Primary name written by the builder
-    primary = SCRIPT_DIR / "bundle.json"
-    if primary.exists():
-        candidates.append(primary)
-
-    # Also look for bundle_*.json siblings (users who extracted several bundles
-    # into one directory and renamed the manifests to avoid collisions)
-    for p in sorted(SCRIPT_DIR.glob("bundle_*.json")):
-        if p not in candidates:
-            candidates.append(p)
-
-    if not candidates:
-        print("  WARN  No bundle.json found in script directory -- "
-              "content files will be read directly from content/ "
-              "(install still proceeds, but bundle identity is unverified)")
-        return None
-
-    if len(candidates) == 1:
-        chosen = candidates[0]
-    else:
-        print()
-        print("Multiple bundle manifests found in this directory.")
-        print("Please choose which bundle to install:")
-        print()
-        loaded: List[Dict] = []
-        for i, p in enumerate(candidates, 1):
+    if bundles_root.exists():
+        for bundle_json_path in sorted(bundles_root.glob("*/bundle.json")):
+            slug = bundle_json_path.parent.name
             try:
-                m = json.loads(p.read_text())
+                manifest = json.loads(bundle_json_path.read_text())
+            except Exception as exc:
+                print(f"  WARN  Could not parse {bundle_json_path}: {exc} -- skipping")
+                continue
+            entries.append({
+                "slug": slug,
+                "dir": bundle_json_path.parent,
+                "manifest": manifest,
+            })
+
+    if not entries:
+        # Legacy fallback: flat content/ layout with top-level bundle.json.
+        legacy_manifest_path = SCRIPT_DIR / "bundle.json"
+        legacy_content_dir = SCRIPT_DIR / "content"
+        if legacy_manifest_path.exists() and legacy_content_dir.exists():
+            try:
+                manifest = json.loads(legacy_manifest_path.read_text())
             except Exception:
-                m = {}
-            loaded.append(m)
-            name = m.get("name", p.name)
-            desc = m.get("description", "")
-            print(f"  [{i}] {name}" + (f" -- {desc}" if desc else ""))
+                manifest = {"name": "bundle", "description": "", "content": {}}
+            # Synthesise a content map pointing to the legacy content/ directory.
+            # Rewrite file paths to be relative to SCRIPT_DIR so the install
+            # handlers can resolve them via bundle_dir / file.
+            content = manifest.get("content") or {}
+            for key, section in content.items():
+                rel = section.get("file", "")
+                if rel and not rel.startswith("content/"):
+                    section["file"] = f"content/{rel}"
+            entries.append({
+                "slug": manifest.get("name", "bundle"),
+                "dir": SCRIPT_DIR,
+                "manifest": manifest,
+            })
+        elif legacy_content_dir.exists():
+            # Minimal fallback with no manifest at all — synthesise from files.
+            manifest = {"name": "bundle", "description": "", "content": {}}
+            legacy_files = {
+                "supermetrics": "supermetrics.json",
+                "views": "views_content.xml",
+                "dashboards": "dashboard.json",
+                "customgroups": "customgroup.json",
+                "symptoms": "symptoms.json",
+                "alerts": "alerts.json",
+                "reports": "reports_content.xml",
+            }
+            content: dict = {}
+            for key, fname in legacy_files.items():
+                if (legacy_content_dir / fname).exists():
+                    content[key] = {"file": f"content/{fname}", "items": []}
+            manifest["content"] = content
+            entries.append({
+                "slug": "bundle",
+                "dir": SCRIPT_DIR,
+                "manifest": manifest,
+            })
+
+    return entries
+
+
+def _select_bundles(bundles: List[Dict], mode: str) -> List[Dict]:
+    """Interactive multi-select checklist for bundles.
+
+    Single bundle: auto-select and return it without prompting.
+    Multiple bundles: print checklist (all checked by default),
+    accept comma-separated toggle indices, 'all', 'none', or empty to proceed.
+
+    Returns the list of selected bundle dicts.
+    """
+    if len(bundles) == 1:
+        b = bundles[0]
+        name = b["manifest"].get("name", b["slug"])
+        desc = b["manifest"].get("description", "")
+        print(f"\n  Bundle: {name}" + (f" -- {desc}" if desc else ""))
+        return bundles
+
+    print(f"\nSelect bundles to {mode} (all selected by default):")
+    print("  Toggle: enter comma-separated numbers (e.g. '2' or '1,3')")
+    print("  Commands: 'all' to select all, 'none' to deselect all, Enter to proceed")
+    print()
+
+    selected = [True] * len(bundles)
+
+    while True:
+        for i, b in enumerate(bundles, 1):
+            mark = "*" if selected[i - 1] else " "
+            name = b["manifest"].get("name", b["slug"])
+            desc = b["manifest"].get("description", "")
+            n_items = sum(
+                len(s.get("items", []))
+                for s in b["manifest"].get("content", {}).values()
+            )
+            detail = f"{n_items} items" if n_items else "no items"
+            suffix = f" ({detail})" + (f" -- {desc}" if desc else "")
+            print(f"  [{mark}] {i}. {name}{suffix}")
+
+        raw = input("\nToggle [1..N / all / none / Enter to proceed]: ").strip().lower()
+        if raw == "":
+            break
+        elif raw == "all":
+            selected = [True] * len(bundles)
+        elif raw == "none":
+            selected = [False] * len(bundles)
+        else:
+            for tok in raw.split(","):
+                tok = tok.strip()
+                if tok.isdigit():
+                    idx = int(tok) - 1
+                    if 0 <= idx < len(bundles):
+                        selected[idx] = not selected[idx]
+                    else:
+                        print(f"  (ignoring out-of-range index {tok})")
+                elif tok:
+                    print(f"  (unrecognised token {tok!r} -- ignored)")
         print()
-        while True:
-            raw = input(f"Enter choice [1-{len(candidates)}]: ").strip()
-            if raw.isdigit() and 1 <= int(raw) <= len(candidates):
-                chosen = candidates[int(raw) - 1]
-                break
-            print(f"  Invalid choice. Enter a number between 1 and {len(candidates)}.")
 
-    try:
-        manifest = json.loads(chosen.read_text())
-    except Exception as exc:
-        print(f"  WARN  Could not parse {chosen.name}: {exc} -- proceeding without manifest")
-        return None
-
-    return manifest
+    chosen = [b for b, s in zip(bundles, selected) if s]
+    if not chosen:
+        print("  No bundles selected. Exiting.")
+        sys.exit(0)
+    return chosen
 
 
-def _print_bundle_header(manifest: Optional[Dict]) -> None:
-    """Print bundle name and item counts from the manifest (install preamble)."""
-    if not manifest:
-        return
-    name = manifest.get("name", PACKAGE_NAME)
-    desc = manifest.get("description", "")
-    content = manifest.get("content", {})
-
-    # Validate that the expected content files exist
-    missing = []
-    for section in content.values():
-        rel = section.get("file", "")
-        if rel and not (SCRIPT_DIR / rel).exists():
-            missing.append(rel)
-    if missing:
-        print(f"  WARN  Bundle manifest references files not found: {', '.join(missing)}")
-
-    # Build a compact summary line
-    parts: List[str] = []
-    for key, section in content.items():
-        count = len(section.get("items", []))
-        if count:
-            parts.append(f"{count} {key}")
-    summary = ", ".join(parts) if parts else "no items"
-    print(f"  Bundle: {name}" + (f" -- {desc}" if desc else ""))
-    print(f"  Contents: {summary}")
+def _print_selection_summary(bundles: List[Dict], mode: str) -> None:
+    """Print a summary of selected bundles before install/uninstall."""
+    print(f"\nWill {mode} {len(bundles)} bundle(s):")
+    for b in bundles:
+        name = b["manifest"].get("name", b["slug"])
+        desc = b["manifest"].get("description", "")
+        content = b["manifest"].get("content", {})
+        parts: List[str] = []
+        for key, section in content.items():
+            count = len(section.get("items", []))
+            if count:
+                parts.append(f"{count} {key}")
+        summary = ", ".join(parts) if parts else "no items"
+        print(f"  - {name}" + (f" -- {desc}" if desc else ""))
+        print(f"    Contents: {summary}")
 
 
 def _die(msg: str) -> None:
@@ -938,7 +994,7 @@ def _prompt_credentials(args: argparse.Namespace, mode: str) -> tuple:
     Returns (host, user, auth_source, password) as plain strings.
     """
     print()
-    print(f"VCF Content Factory -- {PACKAGE_NAME} {mode}")
+    print(f"VCF Content Factory -- {mode}")
     print("Press Enter to accept [defaults] shown in brackets.")
     print()
 
@@ -978,14 +1034,20 @@ def _prompt_credentials(args: argparse.Namespace, mode: str) -> tuple:
 # here — the install/uninstall loops below require no changes.
 #
 # Registry entry keys:
-#   content_type  str   key in CONTENT_MANIFEST (used for uninstall names)
-#   install_file  str   filename under content/ that signals this type is present
-#   install_fn    callable(ctx) -> None   runs the install step
-#   uninstall_fn  callable(ctx) -> None  runs the uninstall step
-#   install_label str   human-readable step label for install
-#   uninstall_label str human-readable step label for uninstall
-#   install_order int   lower runs first (install)
-#   uninstall_order int lower runs first (uninstall = reverse install order)
+#   content_type   str   key in bundle.json content map (e.g. "supermetrics")
+#   manifest_key   str   same as content_type; key in manifest["content"]
+#   install_fn     callable(ctx) -> None   runs the install step
+#   uninstall_fn   callable(ctx) -> None  runs the uninstall step
+#   install_label  str   human-readable step label for install
+#   uninstall_label str  human-readable step label for uninstall
+#   install_order  int   lower runs first (install)
+#   uninstall_order int  lower runs first (uninstall = reverse install order)
+#   needs_ui       bool  True if this type requires UIClient
+#
+# Detection predicate (install): manifest["content"].get(manifest_key) exists
+#   AND its file resolves on disk under bundle_dir.
+# Detection predicate (uninstall): manifest["content"].get(content_type) has
+#   items with names.
 #
 # The "ctx" object passed to each function is a plain dict with:
 #   client        Client            authenticated Suite API client
@@ -994,11 +1056,15 @@ def _prompt_credentials(args: argparse.Namespace, mode: str) -> tuple:
 #   owner_id      str               current user UUID
 #   args          argparse.Namespace
 #   warnings      List[str]         accumulate WARN strings here
-#   content_dir   Path
+#   bundle_dir    Path              resolved bundle directory
+#   manifest      dict              the bundle's manifest (bundle.json)
 # ---------------------------------------------------------------------------
 
 def _install_supermetrics(ctx: Dict) -> None:
-    sm_dict = _load_json("supermetrics.json")
+    bundle_dir = ctx["bundle_dir"]
+    manifest = ctx["manifest"]
+    sm_file = bundle_dir / manifest["content"]["supermetrics"]["file"]
+    sm_dict = _load_json_from_path(sm_file)
     sm_zip = _build_sm_zip(sm_dict, ctx["marker"], ctx["owner_id"])
     result = ctx["client"].import_content_zip(sm_zip, "super metrics") or {}
 
@@ -1022,13 +1088,18 @@ def _install_supermetrics(ctx: Dict) -> None:
 
 
 def _install_dashboards(ctx: Dict) -> None:
-    content_dir = ctx["content_dir"]
-    views_xml = (
-        (content_dir / "views_content.xml").read_text()
-        if (content_dir / "views_content.xml").exists()
-        else ""
-    )
-    dash_json = (content_dir / "dashboard.json").read_text()
+    bundle_dir = ctx["bundle_dir"]
+    manifest = ctx["manifest"]
+    dash_file = bundle_dir / manifest["content"]["dashboards"]["file"]
+    dash_json = dash_file.read_text()
+
+    # Views XML (in same bundle content dir, via views manifest key if present)
+    views_xml = ""
+    if "views" in manifest.get("content", {}):
+        views_file = bundle_dir / manifest["content"]["views"]["file"]
+        if views_file.exists():
+            views_xml = views_file.read_text()
+
     owner_id = ctx["owner_id"]
     dash_ids = _extract_dashboard_ids(dash_json.replace("PLACEHOLDER_USER_ID", owner_id))
     n_views = 1 if views_xml else 0
@@ -1045,7 +1116,10 @@ def _install_sm_enable(ctx: Dict) -> None:
     if args.skip_enable:
         print("  (--skip-enable set: skipping)")
         return
-    sm_dict = _load_json("supermetrics.json")
+    bundle_dir = ctx["bundle_dir"]
+    manifest = ctx["manifest"]
+    sm_file = bundle_dir / manifest["content"]["supermetrics"]["file"]
+    sm_dict = _load_json_from_path(sm_file)
     # sm_dict is keyed by UUID: {uuid: {name, formula, description, unitId, resourceKinds}}
     sm_entries = list(sm_dict.values())
     names = [sm["name"] for sm in sm_entries]
@@ -1132,7 +1206,10 @@ def _install_sm_enable(ctx: Dict) -> None:
 
 
 def _install_customgroups(ctx: Dict) -> None:
-    cg_data = _load_json("customgroup.json")
+    bundle_dir = ctx["bundle_dir"]
+    manifest = ctx["manifest"]
+    cg_file = bundle_dir / manifest["content"]["customgroups"]["file"]
+    cg_data = _load_json_from_path(cg_file)
     if isinstance(cg_data, dict):
         cg_data = [cg_data]
     for cg_payload in cg_data:
@@ -1142,7 +1219,10 @@ def _install_customgroups(ctx: Dict) -> None:
 
 
 def _install_symptoms(ctx: Dict) -> None:
-    symptoms = _load_json("symptoms.json")
+    bundle_dir = ctx["bundle_dir"]
+    manifest = ctx["manifest"]
+    sym_file = bundle_dir / manifest["content"]["symptoms"]["file"]
+    symptoms = _load_json_from_path(sym_file)
     for payload in symptoms:
         name = payload.get("name", "unknown")
         existing = None
@@ -1187,7 +1267,10 @@ def _install_symptoms(ctx: Dict) -> None:
 
 
 def _install_alerts(ctx: Dict) -> None:
-    alerts = _load_json("alerts.json")
+    bundle_dir = ctx["bundle_dir"]
+    manifest = ctx["manifest"]
+    alert_file = bundle_dir / manifest["content"]["alerts"]["file"]
+    alerts = _load_json_from_path(alert_file)
 
     # Resolve symptom name → server ID map
     symptom_map: Dict[str, str] = {}
@@ -1392,20 +1475,12 @@ def _uninstall_alerts(ctx: Dict) -> None:
 
 
 def _build_reports_zip(reports_xml: str, marker: str, owner_id: str) -> bytes:
-    """Build a reports content-zip from the reports XML string.
-
-    Structure (matches vcfops_reports/render.py build_import_zip):
-        <marker>      -- owner user UUID
-        reports.zip   -- inner zip containing content.xml
-        configuration.json
-    """
-    # Build inner reports.zip
+    """Build a reports content-zip from the reports XML string."""
     inner_buf = io.BytesIO()
     with zipfile.ZipFile(inner_buf, "w", zipfile.ZIP_DEFLATED) as inner:
         inner.writestr("content.xml", reports_xml)
     inner_bytes = inner_buf.getvalue()
 
-    # Count ReportDef elements by counting <ReportDef occurrences
     n_reports = reports_xml.count("<ReportDef ")
 
     outer_buf = io.BytesIO()
@@ -1420,8 +1495,10 @@ def _build_reports_zip(reports_xml: str, marker: str, owner_id: str) -> bytes:
 
 
 def _install_reports(ctx: Dict) -> None:
-    content_dir = ctx["content_dir"]
-    reports_xml = (content_dir / "reports_content.xml").read_text(encoding="utf-8")
+    bundle_dir = ctx["bundle_dir"]
+    manifest = ctx["manifest"]
+    reports_file = bundle_dir / manifest["content"]["reports"]["file"]
+    reports_xml = reports_file.read_text(encoding="utf-8")
     reports_zip = _build_reports_zip(reports_xml, ctx["marker"], ctx["owner_id"])
     ctx["client"].import_content_zip(reports_zip, "reports")
     n_reports = reports_xml.count("<ReportDef ")
@@ -1528,35 +1605,58 @@ def _uninstall_customgroups(ctx: Dict) -> None:
             warnings.append(warn)
 
 
+# ---------------------------------------------------------------------------
+# Registry helpers: detection predicates using the new manifest_key pattern
+# ---------------------------------------------------------------------------
+
+def _bundle_has_key(bundle: Dict, manifest_key: str) -> bool:
+    """True if the bundle manifest has the given content key AND its file exists."""
+    manifest = bundle["manifest"]
+    content = manifest.get("content") or {}
+    section = content.get(manifest_key)
+    if not section:
+        return False
+    rel = section.get("file", "")
+    if not rel:
+        return False
+    return (bundle["dir"] / rel).exists()
+
+
+def _bundle_uninstall_names(bundle: Dict, content_type: str) -> List[str]:
+    """Return the list of names to uninstall for a given content type."""
+    content = bundle["manifest"].get("content") or {}
+    section = content.get(content_type) or {}
+    return [item["name"] for item in (section.get("items") or []) if item.get("name")]
+
+
 # Registry: ordered by install_order.
 # To add a new content type, append an entry here.  No other changes needed.
 _CONTENT_REGISTRY: List[Dict] = [
     {
         "content_type": "supermetrics",
-        "install_file": "supermetrics.json",
+        "manifest_key": "supermetrics",
         "install_label": "Importing super metrics...",
         "install_fn": _install_supermetrics,
         "install_order": 1,
-        # uninstall handled via ui=False entry below
         "uninstall_label": "Deleting super metric(s)...",
         "uninstall_fn": _uninstall_supermetrics,
-        "uninstall_order": 40,   # after views (which depend on SMs)
+        "uninstall_order": 40,
         "needs_ui": False,
     },
     {
-        "content_type": "views_and_dashboards",  # synthetic key: install file = dashboard.json
-        "install_file": "dashboard.json",
+        "content_type": "views_and_dashboards",  # synthetic: triggered by dashboards key
+        "manifest_key": "dashboards",
         "install_label": "Importing view + dashboard...",
         "install_fn": _install_dashboards,
         "install_order": 2,
-        "uninstall_label": None,  # handled separately via dashboards/views entries
+        "uninstall_label": None,
         "uninstall_fn": None,
         "uninstall_order": None,
         "needs_ui": False,
     },
     {
-        "content_type": "sm_enable",  # synthetic key: triggered by supermetrics.json presence
-        "install_file": "supermetrics.json",
+        "content_type": "sm_enable",  # synthetic: triggered by supermetrics key
+        "manifest_key": "supermetrics",
         "install_label": "Enabling super metrics on Default Policy...",
         "install_fn": _install_sm_enable,
         "install_order": 3,
@@ -1567,7 +1667,7 @@ _CONTENT_REGISTRY: List[Dict] = [
     },
     {
         "content_type": "customgroups",
-        "install_file": "customgroup.json",
+        "manifest_key": "customgroups",
         "install_label": "Upserting custom group(s)...",
         "install_fn": _install_customgroups,
         "install_order": 4,
@@ -1578,12 +1678,10 @@ _CONTENT_REGISTRY: List[Dict] = [
     },
     {
         "content_type": "reports",
-        "install_file": "reports_content.xml",
+        "manifest_key": "reports",
         "install_label": "Importing report definition(s)...",
         "install_fn": _install_reports,
         "install_order": 5,
-        # No uninstall path: the VCF Operations API has no DELETE for report
-        # definitions. The install function emits a manual-removal notice.
         "uninstall_label": None,
         "uninstall_fn": None,
         "uninstall_order": None,
@@ -1591,77 +1689,151 @@ _CONTENT_REGISTRY: List[Dict] = [
     },
     {
         "content_type": "symptoms",
-        "install_file": "symptoms.json",
+        "manifest_key": "symptoms",
         "install_label": "Upserting symptom definition(s)...",
         "install_fn": _install_symptoms,
         "install_order": 6,
         "uninstall_label": "Deleting symptom definition(s)...",
         "uninstall_fn": _uninstall_symptoms,
-        "uninstall_order": 55,   # after alerts (which reference symptoms)
+        "uninstall_order": 55,
         "needs_ui": False,
     },
     {
         "content_type": "alerts",
-        "install_file": "alerts.json",
+        "manifest_key": "alerts",
         "install_label": "Upserting alert definition(s)...",
         "install_fn": _install_alerts,
-        "install_order": 7,      # after symptoms (alerts reference symptoms by name)
+        "install_order": 7,
         "uninstall_label": "Deleting alert definition(s)...",
         "uninstall_fn": _uninstall_alerts,
-        "uninstall_order": 35,   # before symptoms (reverse dependency)
+        "uninstall_order": 35,
         "needs_ui": False,
     },
     # Uninstall-only entries for dashboards and views (reverse of install):
     {
         "content_type": "dashboards",
-        "install_file": None,    # not used for install (handled by views_and_dashboards)
+        "manifest_key": None,    # uninstall-only; no install predicate
         "install_label": None,
         "install_fn": None,
         "install_order": None,
         "uninstall_label": "Deleting dashboard(s)...",
         "uninstall_fn": _uninstall_dashboards,
-        "uninstall_order": 10,   # first: dashboards depend on views
+        "uninstall_order": 10,
         "needs_ui": True,
     },
     {
         "content_type": "views",
-        "install_file": None,
+        "manifest_key": None,
         "install_label": None,
         "install_fn": None,
         "install_order": None,
         "uninstall_label": "Deleting view(s)...",
         "uninstall_fn": _uninstall_views,
-        "uninstall_order": 20,   # after dashboards are gone
+        "uninstall_order": 20,
         "needs_ui": True,
     },
 ]
 
 
 # ---------------------------------------------------------------------------
-# Install flow (registry-driven)
+# Per-bundle install / uninstall
 # ---------------------------------------------------------------------------
-def _run_install(args: argparse.Namespace, host: str, user: str,
-                 auth_source: str, password: str, verify_ssl: bool) -> None:
-    content_dir = SCRIPT_DIR / "content"
 
-    # Determine which registry entries are active for this bundle
+def _install_one_bundle(bundle: Dict, global_ctx: Dict, step_base: int,
+                        total_steps: int) -> Tuple[int, List[str]]:
+    """Install one bundle.  Returns (steps_used, warnings)."""
+    manifest = bundle["manifest"]
+    bundle_dir = bundle["dir"]
+    name = manifest.get("name", bundle["slug"])
+
     active = [
         e for e in _CONTENT_REGISTRY
         if e["install_fn"] is not None
-        and e["install_file"] is not None
-        and (content_dir / e["install_file"]).exists()
+        and e["manifest_key"] is not None
+        and _bundle_has_key(bundle, e["manifest_key"])
     ]
     active.sort(key=lambda e: e["install_order"])
 
-    TOTAL_STEPS = 3 + len(active)   # auth + marker + owner + content steps
-    print(f"\nInstalling {PACKAGE_NAME} onto {host}...")
+    warnings: List[str] = []
+    ctx: Dict = {
+        **global_ctx,
+        "bundle_dir": bundle_dir,
+        "manifest": manifest,
+        "warnings": warnings,
+        "names": [],
+    }
+
+    step = step_base
+    for entry in active:
+        step += 1
+        _step(step, total_steps, f"[{name}] {entry['install_label']}")
+        entry["install_fn"](ctx)
+
+    return step - step_base, warnings
+
+
+def _uninstall_one_bundle(bundle: Dict, global_ctx: Dict, step_base: int,
+                          total_steps: int) -> Tuple[int, List[str]]:
+    """Uninstall one bundle.  Returns (steps_used, warnings)."""
+    manifest = bundle["manifest"]
+    name = manifest.get("name", bundle["slug"])
+
+    active = [
+        e for e in _CONTENT_REGISTRY
+        if e["uninstall_fn"] is not None
+        and e["uninstall_order"] is not None
+        and _bundle_uninstall_names(bundle, e["content_type"])
+    ]
+    active.sort(key=lambda e: e["uninstall_order"])
+
+    warnings: List[str] = []
+    ctx: Dict = {
+        **global_ctx,
+        "bundle_dir": bundle["dir"],
+        "manifest": manifest,
+        "warnings": warnings,
+        "names": [],
+    }
+
+    step = step_base
+    for entry in active:
+        names = _bundle_uninstall_names(bundle, entry["content_type"])
+        if not names:
+            continue
+        step += 1
+        label = entry["uninstall_label"].replace("...", f" ({len(names)})...")
+        _step(step, total_steps, f"[{name}] {label}")
+        ctx["names"] = names
+        entry["uninstall_fn"](ctx)
+
+    return step - step_base, warnings
+
+
+# ---------------------------------------------------------------------------
+# Install flow
+# ---------------------------------------------------------------------------
+def _run_install(args: argparse.Namespace, host: str, user: str,
+                 auth_source: str, password: str, verify_ssl: bool,
+                 selected_bundles: List[Dict]) -> None:
+
+    # Count active entries per bundle for total step count
+    total_content_steps = 0
+    for bundle in selected_bundles:
+        total_content_steps += sum(
+            1 for e in _CONTENT_REGISTRY
+            if e["install_fn"] is not None
+            and e["manifest_key"] is not None
+            and _bundle_has_key(bundle, e["manifest_key"])
+        )
+
+    TOTAL_STEPS = 3 + total_content_steps   # auth + marker + owner + content
+    print(f"\nInstalling {len(selected_bundles)} bundle(s) onto {host}...")
 
     client = Client(host, user, password, auth_source, verify_ssl)
     step = 0
 
     step += 1
-    _step(step, TOTAL_STEPS,
-          f"Authenticating as {user}@{host} (auth: {auth_source}) ...")
+    _step(step, TOTAL_STEPS, f"Authenticating as {user}@{host} (auth: {auth_source}) ...")
     client.authenticate()
     _ok("Authenticated")
 
@@ -1675,29 +1847,25 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
     owner_id = client.get_current_user()["id"]
     _ok(f"Owner user ID: {owner_id}")
 
-    warnings: List[str] = []
-    ctx: Dict = {
+    global_ctx: Dict = {
         "client": client,
         "ui_client": None,
         "marker": marker,
         "owner_id": owner_id,
         "username": client._user,
         "args": args,
-        "warnings": warnings,
-        "content_dir": content_dir,
         "force": False,
-        "names": [],
     }
 
-    for entry in active:
-        step += 1
-        _step(step, TOTAL_STEPS, entry["install_label"])
-        entry["install_fn"](ctx)
+    all_warnings: List[str] = []
+    for bundle in selected_bundles:
+        used, warnings = _install_one_bundle(bundle, global_ctx, step, TOTAL_STEPS)
+        step += used
+        all_warnings.extend(warnings)
 
     print()
-    # Separate SM-enable warnings from other failures for UX clarity
-    enable_warnings = [w for w in warnings if "enable" in w.lower() or "resolve" in w.lower()]
-    other_warnings = [w for w in warnings if w not in enable_warnings]
+    enable_warnings = [w for w in all_warnings if "enable" in w.lower() or "resolve" in w.lower()]
+    other_warnings = [w for w in all_warnings if w not in enable_warnings]
     if enable_warnings or other_warnings:
         total = len(enable_warnings) + len(other_warnings)
         print(f"Done with {total} warning(s):")
@@ -1711,27 +1879,24 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
 
 
 # ---------------------------------------------------------------------------
-# Uninstall flow (registry-driven)
+# Uninstall flow
 # ---------------------------------------------------------------------------
 def _run_uninstall(args: argparse.Namespace, host: str, user: str,
-                   auth_source: str, password: str, verify_ssl: bool) -> None:
+                   auth_source: str, password: str, verify_ssl: bool,
+                   selected_bundles: List[Dict]) -> None:
     force = args.force
 
-    # Determine which registry entries are active for this bundle's uninstall
-    active_uninstall = [
-        e for e in _CONTENT_REGISTRY
-        if e["uninstall_fn"] is not None
-        and e["uninstall_order"] is not None
-        and (CONTENT_MANIFEST.get(e["content_type"]) or [])
-    ]
-    active_uninstall.sort(key=lambda e: e["uninstall_order"])
-
-    needs_ui = any(e["needs_ui"] for e in active_uninstall)
-    needs_suite = any(not e["needs_ui"] for e in active_uninstall)
+    # Check if any bundle needs UI (dashboards/views) across all selected.
+    needs_ui = False
+    for bundle in selected_bundles:
+        for e in _CONTENT_REGISTRY:
+            if e["needs_ui"] and e["uninstall_fn"] is not None:
+                if _bundle_uninstall_names(bundle, e["content_type"]):
+                    needs_ui = True
+                    break
 
     # Dashboard and view deletion goes through the UI layer which is locked to
-    # the admin account.  Catch this early — before spending time authenticating
-    # — so the operator can re-run with the right credentials.
+    # the admin account. Catch this early before spending time authenticating.
     if needs_ui and user != "admin":
         print(
             "ERROR: Dashboard and view uninstall requires the 'admin' account.\n"
@@ -1742,74 +1907,83 @@ def _run_uninstall(args: argparse.Namespace, host: str, user: str,
         )
         sys.exit(1)
 
-    # Count steps: auth + [ui_auth] + content steps + [ui_logout]
-    n_steps = 1 + len(active_uninstall)
+    # Count total uninstall steps
+    total_content_steps = 0
+    for bundle in selected_bundles:
+        for e in _CONTENT_REGISTRY:
+            if e["uninstall_fn"] is not None and e["uninstall_order"] is not None:
+                if _bundle_uninstall_names(bundle, e["content_type"]):
+                    total_content_steps += 1
+
+    n_steps = 1 + total_content_steps
     if needs_ui:
         n_steps += 2  # ui_auth + ui_logout
 
-    print(f"\nUninstalling {PACKAGE_NAME} from {host}...")
+    print(f"\nUninstalling {len(selected_bundles)} bundle(s) from {host}...")
     if force:
         print("(--force: skipping dependency checks)")
     print("Content to remove:")
-    for e in active_uninstall:
-        names = CONTENT_MANIFEST.get(e["content_type"]) or []
-        if names:
-            print(f"  {e['content_type'].capitalize()} ({len(names)}): {', '.join(names)}")
-    if not active_uninstall:
-        print("  (nothing to remove -- bundle contains no content)")
+    for bundle in selected_bundles:
+        bname = bundle["manifest"].get("name", bundle["slug"])
+        print(f"  Bundle: {bname}")
+        for e in _CONTENT_REGISTRY:
+            if e["uninstall_fn"] is not None and e["uninstall_order"] is not None:
+                names = _bundle_uninstall_names(bundle, e["content_type"])
+                if names:
+                    print(f"    {e['content_type'].capitalize()} ({len(names)}): {', '.join(names)}")
+
+    # Check that any bundle has something to remove
+    has_anything = any(
+        _bundle_uninstall_names(bundle, e["content_type"])
+        for bundle in selected_bundles
+        for e in _CONTENT_REGISTRY
+        if e["uninstall_fn"] is not None
+    )
+    if not has_anything:
+        print("  (nothing to remove -- bundles contain no removable content)")
         sys.exit(0)
 
-    warnings: List[str] = []
+    warnings_all: List[str] = []
     step = 0
-    TOTAL_STEPS = n_steps
 
     suite_client = Client(host, user, password, auth_source, verify_ssl)
     ui_client = UIClient(host, user, password, auth_source, verify_ssl)
 
     step += 1
-    _step(step, TOTAL_STEPS, f"Authenticating as {user}@{host} (auth: {auth_source}) ...")
-    if needs_suite:
-        suite_client.authenticate()
+    _step(step, n_steps, f"Authenticating as {user}@{host} (auth: {auth_source}) ...")
+    suite_client.authenticate()
     _ok("Authenticated")
 
     if needs_ui:
         step += 1
-        _step(step, TOTAL_STEPS, "Starting UI session (for dashboard/view delete)...")
+        _step(step, n_steps, "Starting UI session (for dashboard/view delete)...")
         ui_client.login()
         _ok("UI session established")
 
-    ctx: Dict = {
+    global_ctx: Dict = {
         "client": suite_client,
         "ui_client": ui_client if needs_ui else None,
         "marker": None,
         "owner_id": None,
         "args": args,
-        "warnings": warnings,
-        "content_dir": SCRIPT_DIR / "content",
         "force": force,
-        "names": [],
     }
 
-    for entry in active_uninstall:
-        names = list(CONTENT_MANIFEST.get(entry["content_type"]) or [])
-        if not names:
-            continue
-        step += 1
-        label = entry["uninstall_label"].replace("...", f" ({len(names)})...")
-        _step(step, TOTAL_STEPS, label)
-        ctx["names"] = names
-        entry["uninstall_fn"](ctx)
+    for bundle in selected_bundles:
+        used, warnings = _uninstall_one_bundle(bundle, global_ctx, step, n_steps)
+        step += used
+        warnings_all.extend(warnings)
 
     if needs_ui:
         step += 1
-        _step(step, TOTAL_STEPS, "Closing UI session...")
+        _step(step, n_steps, "Closing UI session...")
         ui_client.logout()
         _ok("UI session closed")
 
     print()
-    if warnings:
-        not_found = [w for w in warnings if "not found" in w]
-        real_failures = [w for w in warnings if "not found" not in w]
+    if warnings_all:
+        not_found = [w for w in warnings_all if "not found" in w]
+        real_failures = [w for w in warnings_all if "not found" not in w]
         if real_failures:
             print(f"Done with errors ({len(real_failures)} delete failure(s)):")
             for w in real_failures:
@@ -1828,14 +2002,14 @@ def _run_uninstall(args: argparse.Namespace, host: str, user: str,
 # ---------------------------------------------------------------------------
 def main() -> None:
     ap = argparse.ArgumentParser(
-        description=f"Install or uninstall VCF Content Factory {PACKAGE_NAME} package.\n"
+        description="Install or uninstall VCF Content Factory bundles.\n"
                     "Run with no arguments for interactive install prompts.\n"
-                    "Use --uninstall to remove all content this package installed.\n"
+                    "Use --uninstall to remove all content these bundles installed.\n"
                     "Note: Uninstall requires the 'admin' account for dashboard/view cleanup.")
     ap.add_argument("--install", action="store_true",
                     help="Install mode (default when no mode flag is given)")
     ap.add_argument("--uninstall", action="store_true",
-                    help="Uninstall mode: delete all content in this bundle from the instance")
+                    help="Uninstall mode: delete all content in selected bundles from the instance")
     ap.add_argument("--force", action="store_true",
                     help="With --uninstall: skip dependency checks and delete unconditionally")
     ap.add_argument("--host",
@@ -1863,12 +2037,17 @@ def main() -> None:
     if args.force and not args.uninstall:
         _die("--force is only valid with --uninstall.")
 
-    # Discover and validate bundle manifest before prompting for credentials.
-    bundle_manifest = _load_bundle_manifest()
-    _print_bundle_header(bundle_manifest)
+    # Discover bundles before prompting for credentials.
+    bundles = _discover_bundles()
+    if not bundles:
+        _die("No bundles found. Expected bundles/<slug>/bundle.json or a legacy content/ directory.")
 
-    mode = "uninstaller" if args.uninstall else "installer"
-    host, user, auth_source, password = _prompt_credentials(args, mode)
+    mode = "uninstall" if args.uninstall else "install"
+    selected = _select_bundles(bundles, mode)
+    _print_selection_summary(selected, mode)
+
+    cred_mode = "uninstaller" if args.uninstall else "installer"
+    host, user, auth_source, password = _prompt_credentials(args, cred_mode)
 
     if args.skip_ssl_verify:
         print("WARNING: TLS certificate verification disabled.")
@@ -1877,9 +2056,9 @@ def main() -> None:
     verify_ssl = not args.skip_ssl_verify
 
     if args.uninstall:
-        _run_uninstall(args, host, user, auth_source, password, verify_ssl)
+        _run_uninstall(args, host, user, auth_source, password, verify_ssl, selected)
     else:
-        _run_install(args, host, user, auth_source, password, verify_ssl)
+        _run_install(args, host, user, auth_source, password, verify_ssl, selected)
 
 
 if __name__ == "__main__":

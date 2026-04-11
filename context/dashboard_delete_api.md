@@ -390,37 +390,106 @@ deleted by the `claude` service account:
 
 ## View delete limitation (VCF Ops 9.0.2 server bug)
 
-Views imported via the content-zip path (`POST /api/content/operations/import`)
-cannot be deleted programmatically. Both `viewServiceController.deleteView`
-(Ext.Direct) and `DELETE /internal/viewdefinitions/{uuid}` return HTTP 500
-"Internal server error."
+Views cannot be deleted programmatically on VCF Ops 9.0.2 builds.
+Both `viewServiceController.deleteView` (Ext.Direct) and
+`DELETE /internal/viewdefinitions/{uuid}` return HTTP 500
+"Internal Server error."
 
-**Root cause:** The content-zip importer stores duplicate entries in the
-view's internal `subjects` list. The view XML correctly contains two
-`<SubjectType>` elements (`type="descendant"` and `type="self"`) per the
-documented wire format — this matches real VCF Ops exports. But the server
-flattens both into the same subjects list as duplicates
-(e.g. `["HostSystem", "HostSystem"]`), and the delete path hits a
-constraint violation on the duplicate.
+**The previous "duplicate subjects" explanation in this file was
+wrong.** The 2026-04-11 follow-up investigation in
+`context/view_report_delete_investigation.md` empirically falsified
+it by (a) healing the duplicate via content-zip force-reimport with a
+single `<SubjectType>` (which did normalize the `subjects` field to
+one entry) and then still getting HTTP 500 on delete, and (b)
+observing the same HTTP 500 when deleting the **nil UUID**
+(`00000000-0000-0000-0000-000000000000`), proving the route handler
+crashes before it even looks up the target.
 
-- Views created through the web console UI do **not** have this problem.
-- Only content-zip-imported views are affected.
-- Confirmed on both HostSystem and ClusterComputeResource resource kinds.
-- Tested across QA iterations 10–12 with consistent results.
+**Actual root cause:** unknown, but the server's view-delete handler
+is fundamentally broken on 9.0.2 builds. Every mutating method on
+the Ext.Direct `viewServiceController`
+(`deleteView`, `saveOrUpdateViewDefinition`, `getViewDataById`)
+returns `type: "exception"` for all inputs, while read-only methods
+(`getGroupedViewDefinitionThumbnails`, `getViewDefinitionThumbnails`)
+continue to work.
 
-**Workaround:** Delete views manually via the VCF Operations web console
-(Environment → Views, find the view, right-click → Delete). The UI's
-delete code path handles the duplicate subjects correctly.
+**What the SPA UI calls — verified.** The SPA's Manage > Views page
+calls the same Ext.Direct `viewServiceController.deleteView` RPC
+that install.py's `UIClient.delete_view` already uses. There is no
+secret "SPA-only" view delete endpoint hiding anywhere on the REST or
+Ext.Direct surface — the 2026-04-11 investigation exhaustively
+probed `DELETE|POST` against
+`/suite-api/api/views/{id}`, `/suite-api/api/viewdefinitions/{id}`,
+`/suite-api/api/view-definitions/{id}`, `/suite-api/internal/views/{id}`,
+`/suite-api/internal/view-definitions/{id}`,
+`/suite-api/internal/viewdefinitions/{id}` (+ `?id=…` query form),
+`POST /…/delete` batch variants, and
+`POST /suite-api/{api,internal}/content/operations/delete`, with
+every plausible unsupported-header variant and flag
+(`force|cascade|ignoreConstraints|ignoreErrors=true`). Only the
+routes at `/suite-api/internal/viewdefinitions/{id}` and its Ext.Direct
+equivalent are live — and both return 500 on every input.
 
-**Impact on install scripts:** The uninstall phase reports a WARN for
-each view that cannot be deleted and exits with code 2 (partial failure).
-SM and dashboard deletion still succeed. The install scripts document
-this limitation in their output.
+**Workaround (unreliable):** delete views manually via the VCF
+Operations web console (Environment → Views → right-click → Delete).
+Whether this actually works on any given 9.0.2 build is unverified
+from this investigation because the SPA itself is 404 on the lab
+instance we test against. On builds where the web UI's delete button
+works, it is hitting the same broken `deleteView` RPC — so if you
+reproduce the 500 there, you're stuck until VMware ships a patch.
+
+**Impact on install scripts:** The uninstall phase reports a WARN
+for each view that cannot be deleted and exits with code 2 (partial
+failure). SM, dashboard, custom group, symptom, and alert deletion
+still succeed. The install scripts document this limitation in their
+output. See the "Report delete" note below for the equivalent
+situation on `reportdefinitions`.
 
 **Impact on CLI sync:** The `vcfops_dashboards` sync handler imports
 views via the same content-zip path. Views synced this way will also
-be undeletable via the API. Manual cleanup through the web console is
-required when removing synced views.
+be undeletable via the API. Manual cleanup through the web console
+is required when removing synced views, subject to the caveat above.
+
+## Report delete limitation (VCF Ops 9.0.2 server bug)
+
+Same build, same shape of bug. Report definitions cannot be deleted
+programmatically.
+
+- `DELETE /api/reportdefinitions/{id}` — **500** (also 500 for the
+  nil UUID, confirming route-handler crash). This is the only live
+  REST delete route for reports on the public surface; there is no
+  `/internal/reportdefinitions/*` route (404 on every probe).
+- `POST /api/reportdefinitions/delete` and
+  `DELETE /api/reportdefinitions?id=…` — both 500 (also live).
+- Ext.Direct `reportServiceController.deleteReportDefinitions` —
+  returns `type: "exception", message: "Internal server error."`.
+- The entire `reportServiceController` is broken on this build:
+  `getReportDefinitionThumbnails` also 500s for every parameter
+  shape, which means the SPA's Manage > Reports list view itself
+  likely renders empty or errors out. Data still reachable via
+  `GET /api/reportdefinitions` (public REST read works fine).
+
+**What the SPA calls.** If the SPA's Manage > Reports page renders
+at all, the "Delete" button calls
+`reportServiceController.deleteReportDefinitions` — the same broken
+RPC. There is no secret REST path (exhaustively probed 11 candidates
+in the 2026-04-11 investigation).
+
+**install.py has no `_uninstall_reports` helper.** Reports are
+install-only in the current distribution packaging. A future tooling
+change to add report uninstall would call a broken endpoint and must
+log it as a WARN, not a hard fail. See the code pattern in
+`context/view_report_delete_investigation.md`.
+
+**Workaround:** manual cleanup via web console — but only if the
+Manage > Reports page in the SPA even renders on your build. On the
+9.0.2.0 build tested here it is unlikely to, because the backing
+Ext.Direct list RPC is also 500.
+
+**See also:** `context/view_report_delete_investigation.md` for the
+full endpoint survey, duplicate-subjects hypothesis falsification,
+heal-via-reimport side finding, and the 4 stranded test artifacts
+on the lab instance.
 
 ## Supportability caveat
 

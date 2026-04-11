@@ -14,9 +14,12 @@ supermetrics: list[path]   (optional)
 customgroups: list[path]   (optional)
 views:        list[path]   (optional)
 dashboards:   list[path]   (optional)
-symptoms:     list[path]   (optional) -- requires vcfops_symptoms package
-alerts:       list[path]   (optional) -- requires vcfops_alerts package
-reports:      list[path]   (optional) -- requires vcfops_reports package
+symptoms:         list[path]   (optional) -- requires vcfops_symptoms package
+alerts:           list[path]   (optional) -- requires vcfops_alerts package
+reports:          list[path]   (optional) -- requires vcfops_reports package
+recommendations:  list[path]   (optional, reserved) -- scaffolding for future
+                               recommendations content type; no authored content
+                               uses this yet.  Loading accepts empty/missing value.
 
 All content-type keys are optional.  A bundle may contain only super
 metrics, only dashboards, or any subset of the supported types.
@@ -56,6 +59,9 @@ class Bundle:
     reports: List[ReportDef] = field(default_factory=list)
     symptoms: List[SymptomDef] = field(default_factory=list)
     alerts: List[AlertDef] = field(default_factory=list)
+    # recommendations: reserved for future vcfops_recommendations content type.
+    # Accepted as an empty/missing value; no loader or content type yet.
+    recommendations: List[dict] = field(default_factory=list)
     source_path: Optional[Path] = None
 
 
@@ -131,6 +137,14 @@ def load_bundle(path: str | Path) -> Bundle:
     symptom_paths = [_resolve(r) for r in (data.get("symptoms") or [])]
     alert_paths = [_resolve(r) for r in (data.get("alerts") or [])]
 
+    # recommendations: reserved key — no loader yet; accept empty/missing value.
+    raw_recommendations = data.get("recommendations") or []
+    if raw_recommendations and not isinstance(raw_recommendations, list):
+        raise BundleValidationError(
+            f"{path}: 'recommendations' must be a list (reserved key; "
+            f"no content expected yet)"
+        )
+
     # Load and validate each content object
     try:
         supermetrics = [load_sm(p) for p in sm_paths]
@@ -188,6 +202,7 @@ def load_bundle(path: str | Path) -> Bundle:
         reports=reports,
         symptoms=symptoms,
         alerts=alerts,
+        recommendations=list(raw_recommendations),
         source_path=path,
     )
 
