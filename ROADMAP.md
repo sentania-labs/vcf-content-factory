@@ -5,57 +5,154 @@ what's on the horizon. Updated as capabilities land.
 
 ## Done
 
-- [x] **Super metric pipeline** — author → validate → sync → enable
-      on Default Policy → delete. 16 SMs on lab instance.
-- [x] **Custom group pipeline** — author → validate → sync. Dynamic
-      groups with property/stat/tag/relationship rules.
-- [x] **View pipeline (list type)** — author → validate → sync →
-      delete. Summary rows, SM column auto-prefix.
-- [x] **Dashboard pipeline** — author → validate → sync → delete.
-      View + ResourceList widgets, self-provider pin, widget
-      interactions, folder placement, shared by default.
-- [x] **Delete capability** — dashboards (Struts action) and views
-      (Ext.Direct RPC) via UI session client. CLI commands
-      `delete-dashboard` and `delete-view`.
-- [x] **Ops recon** — pre-authoring check against live instance,
-      repo YAML, and external reference repos.
-- [x] **Reference source integration** — allowlisted repos
-      (sentania/AriaOperationsContent, etc.) checked before authoring.
+### Content types — full pipeline (author → validate → install → uninstall)
+
+- [x] **Super metrics** — author → validate → content-zip sync →
+      enable on Default Policy → delete. 19+ authored to date.
+      UUID-stable cross-instance.
+- [x] **Dynamic custom groups** — author → validate → REST sync →
+      delete. Property / stat / tag / relationship rules.
+- [x] **List views** — author → validate → content-zip sync →
+      delete. Summary rows, SM column auto-prefix, bar/pie/donut/trend
+      view modes, self-provider widget support.
+- [x] **Dashboards** — author → validate → content-zip sync →
+      delete. 10 widget types supported (ResourceList, View,
+      TextDisplay, Scoreboard, MetricChart, HealthChart,
+      ParetoAnalysis, Heatmap, AlertList, ProblemAlertsList) covering
+      ~94% of observed live usage. Widget interactions, self-provider
+      pin, folder placement, shared-by-default.
+- [x] **Symptoms** — author → validate → REST sync → delete.
+      Metric (static + dynamic) and event-based conditions.
+- [x] **Alert definitions** — author → validate → REST sync →
+      delete. Tiered severity via symptom sets, impact badges,
+      `SYMPTOM_BASED` criticality.
+- [x] **Report definitions** — author → validate → content-zip
+      sync → delete (via Ext.Direct `reportServiceController.deleteReportDefinitions`
+      with the corrected bare-dict data shape).
+- [x] **Recommendations** — authoring infrastructure complete
+      (loader, dataclass, render, CLI, bundle schema). Standalone
+      YAML under `recommendations/`, referenced by alerts via
+      `{name, priority}`. Awaiting first authored content.
+
+### Framework infrastructure
+
+- [x] **Ops recon** — pre-authoring read-only check against live
+      instance, repo YAML, and external reference repos.
+- [x] **Reference source integration** — allowlisted community repos
+      (sentania/AriaOperationsContent, brockpeterson, tkopton,
+      dalehassinger, johnddias) checked before authoring.
 - [x] **Content-zip import path** — UUID-preserving import for SMs,
-      views, dashboards. Marker discovery, sharing config, i18n
-      bundles.
+      views, dashboards, reports. Marker discovery, sharing config,
+      i18n bundles, admin-owner stamping, ghost-state retry.
+- [x] **Delete pipeline** — dashboards via Struts `deleteTab`, views
+      + reports via Ext.Direct RPC with the corrected nested-JSON-
+      string data shape documented in `context/dashboard_delete_api.md`.
+      Super metrics and custom groups via REST DELETE. Zero 500s
+      across the QA acceptance cycle on both Python and PowerShell.
+- [x] **Bundle manifest system** — declarative `bundles/*.yaml` files
+      declare which content objects belong to a distribution package.
+      Packager reads the manifest, resolves cross-references,
+      renders all wire formats, and produces a distributable zip.
+      Four bundles currently ship: vks-core-consumption, vm-performance,
+      test-host-vm-summary, test-sm-enable-verification.
+- [x] **Multi-bundle distribution packaging** — extract any number of
+      bundle zips into the same directory, run `install.py` once,
+      get a multi-select checklist (all pre-checked), single
+      credential prompt, per-bundle loop. No content file collisions.
+- [x] **Community-native drag-drop artifacts** — each bundle ships
+      with `supermetric.json`, `customgroup.json`, `Views.zip`,
+      `Dashboard.zip`, `Reports.zip`, `AlertContent.xml` at the
+      bundle root in the filenames community admins recognize from
+      reference packages. Admins who don't trust the installer can
+      drag these directly into the VCF Ops UI import dialogs.
+- [x] **Branded zip filenames** — `[VCF Content Factory] <Display Name>.zip`
+      auto-derived from the bundle slug via title-case + acronym set.
+      Matches the `[VCF Content Factory]` content-naming convention
+      applied inside the zip.
+- [x] **Python `install.py` installer** — bootstrap venv for
+      `requests`, discover instance marker, authenticate, import
+      content via content-zip or REST per content type, enable SMs
+      via policy export/edit/re-import round-trip, verify enablement,
+      uninstall via admin UI session. **6/6 QA acceptance against
+      the live lab.**
+- [x] **PowerShell `install.ps1` installer** — full parity with
+      `install.py`. Supports PS 5.1 and PS 7+. Four PS-specific
+      bugs found and fixed during acceptance (see `memory/
+      feedback_powershell_idioms.md`). **6/6 QA acceptance on
+      PS 7.5.1.**
+- [x] **QA framework** — `qa-tester` agent runs end-to-end
+      install / uninstall / multi-bundle / admin-guard /
+      SM-enable-verification cycles against a live instance with
+      a clean teardown. Acceptance log lives in
+      `context/qa_log.md` with per-run commit hashes.
+
+### Hard-won wire format knowledge (documented, authoritative)
+
+- [x] **View / report delete data shape** — the 9.0.2 "server is
+      broken" narrative was wrong. Server expects a nested-JSON-
+      string shape: `"data": [{"viewDefIds": "[{\"id\":\"...\",\"name\":\"...\"}]"}]`
+      for views, `"data": {"reportDefIds": "..."}` (bare dict, not
+      array) for reports. See `context/dashboard_delete_api.md`
+      §"2026-04-11 correction".
+- [x] **VCF Ops 9.0.2 UI dead-end catalog** — no per-object UI import
+      endpoints exist in 9.0.2; the SPA client-side-wraps drag-drops
+      into the bulk content-zip envelope. Several legacy Struts
+      actions are silent traps (`customGroup.action?saveCustomGroup`
+      returns `{result: "ok"}` without persisting). See
+      `context/struts_exploration_backlog.md`.
+- [x] **Dashboard user ID stamping** — server rewrites
+      `userId`/`lastUpdateUserId` on content-zip import regardless
+      of input value; any syntactically valid UUID works for the
+      drag-drop variant. Framework stamps a deterministic UUID5
+      (`b58a71ee-e909-5b40-a355-9e199e6f0f53`) so it's grep-able.
 
 ## In Progress
 
-- [ ] **Distributable packaging** — standalone install bundles with
-      Python + PowerShell scripts (bash dropped — couldn't do zip
-      assembly natively). VKS Core Consumption is the first package.
-      Standard pattern established, install scripts proven against lab.
-- [ ] **Bundle manifests** — declarative YAML files under `bundles/`
-      that declare which SMs, views, dashboards, and custom groups
-      belong to a distribution package. Turns packaging into a CLI
-      command (`python3 -m vcfops_packaging build bundles/<name>.yaml`)
-      instead of an agent task. Enables deterministic CI builds.
-      The packager agent's role shifts from building packages to
-      authoring bundle manifests + install script templates.
-- [ ] **Alert & symptom agents** — agent prompts written
-      (`symptom-author`, `alert-author`). No `vcfops_alerts/` or
-      `vcfops_symptoms/` tooling packages yet.
+Nothing currently in flight. Previous "In Progress" items
+(distributable packaging, bundle manifests, alert/symptom agents)
+all landed during the 2026-04-11 session.
 
 ## Next Up
 
-### Chart widgets
-Dashboard renderer only supports View and ResourceList widget types.
-Chart widgets (line, bar, sparkline, topN) are the biggest visual
-gap — they'd unlock trend dashboards and capacity views. Requires
-reverse-engineering the chart widget config shape from an exported
-dashboard.
+### Recommendation authoring exercise
+Infrastructure is in place but no recommendations have been authored
+yet. The next session to author an alert with a recommendation will
+be the first end-to-end exercise of the loader, the renderer bug fix,
+the bundle schema, and the updated `alert-author` agent brief.
 
-### Alerts & symptoms tooling
-The REST API (`/api/symptomdefinitions`, `/api/alertdefinitions`) has
-full CRUD — much cleaner than the dashboard/view situation. Need
-`vcfops_symptoms/` and `vcfops_alerts/` packages with loader, CLI,
-and client. Agent prompts are ready to go.
+### PropertyList dashboard widget
+Highest-value remaining widget gap. 47 live observed uses on the
+survey instance. Structurally reuses Scoreboard's `MetricSpec`
+machinery + adds `is_string_metric: bool` to the metric spec dataclass.
+Full scoping in `context/widget_renderer_scope.md`. Lifts renderer
+coverage from ~94% to ~95.5%. Estimated ~120 lines across
+`vcfops_dashboards/loader.py` and `render.py`.
+
+### ResourceRelationshipAdvanced + SparklineChart widgets
+Follow-on to PropertyList per the widget scoping doc. Both are
+cheap: ResourceRelationshipAdvanced is a config-dict builder with
+no metric references (~60 lines), SparklineChart is essentially
+free once PropertyList adds `is_string_metric` to MetricSpec.
+Together with PropertyList: three-widget batch that lifts coverage
+~2 percentage points and covers the most common detail-page
+dashboard patterns.
+
+### Recommendation REST install path
+Known gap: `install.py::_install_alerts` uses `POST /api/alertdefinitions`
+which doesn't carry recommendation references in the alert wire body.
+Recommendations render correctly in `AlertContent.xml` (drag-drop
+path) and would install correctly via a bulk content-zip envelope,
+but the current REST-per-object path silently drops them. Fix
+requires either api-explorer verification of a `POST /api/recommendations`
+endpoint, or switching `_install_alerts` to the content-zip envelope
+(matching how reports are installed).
+
+### Non-Default Policy enablement
+The install script's SM enable path (`enable_sm_on_default_policy`)
+does policy export → edit XML → re-import, but it's hard-coded to
+look up the Default Policy. Generalizing it to a user-specified
+target policy is mostly string-threading work — the underlying
+logic already handles arbitrary policy XML.
 
 ### Sync dry-run & orphan cleanup
 - `sync --dry-run` — show what would change on the instance without
@@ -64,13 +161,24 @@ and client. Agent prompts are ready to go.
   `[VCF Content Factory]` prefix that has no corresponding YAML in
   the repo. Helps catch stale content after renames or deletions.
 
-### Non-Default Policy enablement
-`PUT /internal/supermetrics/assign` only works on Default Policy
-(API returns 400 for any other policy UUID). Enabling SMs on custom
-policies requires the policy export/import XML path
-(`GET /api/policies/export` → modify XML → `POST /api/policies/import`).
-
 ## Future
+
+### IntSummary + Skittles widget batch
+8 IntSummary variants + Skittles (summary-page widget types). Can
+be implemented together as one ~120-line batch once there's a
+concrete user request that needs them. See `widget_renderer_scope.md`
+appendix for the breakdown.
+
+### Deferred widget types
+`LogAnalysis`, `MetricPicker`, `TagPicker` all have portability or
+downstream-widget complications per the scoping survey. Document as
+limitations rather than targeting implementation.
+
+### Won't-do widget types
+`ResourceRelationship` (legacy, superseded by Advanced),
+`TopologyGraph` (NSX-only), `MashupChart` (UI-state-only config),
+`Geo` (geo-adapter dependency), `ContainerOverview`/`ContainerDetails`
+(vRNI-only). Document as permanent limitations.
 
 ### Notification rules
 Natural companion to alerts. API has full CRUD
@@ -82,10 +190,10 @@ Zero automated tests today. Priority areas:
 - Renderer output (XML/JSON) against known-good exports
 - Loader YAML parsing edge cases
 - Content-zip assembly (marker, structure, sharing)
-- CI pipeline: run `validate` on all content per commit/PR
+- `AlertContent.xml` serializer against ground-truth exports
+- CI pipeline: run `validate` chain on all content per commit/PR
 - CI package builds: on tag, read bundle manifests, render + assemble
-  zips, publish as release assets to a distribution repo
-  (e.g. `sentania/vcf-content-factory`)
+  zips, publish as release assets
 
 ### Multi-instance deploy
 Currently one instance via env vars. Needs:
@@ -95,7 +203,8 @@ Currently one instance via env vars. Needs:
 
 ### Content versioning & changelog
 No version tracking per content object. Ideas:
-- Semantic version field in YAML (informational)
+- Semantic version field in bundle YAML (currently deferred per
+  the display-name rename session decision)
 - Auto-generated changelog from git history
 - "What changed since last deploy" diff report
 
@@ -104,20 +213,11 @@ All current content targets the VMWARE adapter. Untouched adapters
 with content potential:
 - NSXTAdapter — network visibility
 - KubernetesAdapter — workload monitoring
-- Container adapter — container-level metrics
 - CASAdapter — cloud automation
-
-### Additional widget types
-Beyond View and ResourceList:
-- Scorecards / health charts
-- Heat maps
-- Topology widgets
-- Text/image/iframe widgets
-
-### Reports
-Views can feed scheduled PDF/CSV reports. No tooling for report
-definition authoring or scheduling.
+- VMWARE_INFRA_HEALTH — license / capacity reporting
 
 ### Automation actions
 Runnable remediation actions triggered by alerts. Requires
-understanding the action adapter framework.
+understanding the action adapter framework. Companion to
+recommendations — where recommendations tell an operator what to
+do, actions let them click a button to have Ops do it.

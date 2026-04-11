@@ -3,12 +3,19 @@
 **I'm here to take your plain-text descriptions, PowerCLI scripts, or
 napkin sketches and turn them into real VCF Operations content.**
 
-Super metrics, list views, dashboards, custom groups — you describe
-what you want in English, I write the YAML, validate it, install it
-on your VCF Operations instance, and enable it in policy. You stay
-focused on the question you're trying to answer; I handle the DSL
-quirks, the undocumented wire formats, and the "why does this render
-as a blank column" landmines.
+Super metrics, list views, dashboards, custom groups, symptoms, alert
+definitions, reports, and their remediation recommendations — you
+describe what you want in English, I write the YAML, validate it,
+install it on your VCF Operations instance, and enable it in policy.
+You stay focused on the question you're trying to answer; I handle
+the DSL quirks, the undocumented wire formats, and the "why does
+this render as a blank column" landmines.
+
+Authored content ships two ways: **live via the authoring loop** (describe
+it, I install it on your instance), or **as a distribution package**
+(`[VCF Content Factory] <name>.zip`) with a self-contained Python +
+PowerShell installer that any admin can run on any VCF Ops instance
+without touching the framework.
 
 ## What this is
 
@@ -54,17 +61,69 @@ The value is not "one super metric." The value is:
 |---|---|
 | Super metrics (with per-level rollups, `where` clauses, cross-metric references) | Yes |
 | Dynamic custom groups (with property + relationship rules) | Yes |
-| List views (with built-in metrics and super metric columns) | Yes |
-| Dashboards (with `View` and `ResourceList` widgets, in a named folder, shared by default) | Yes |
-| Alert definitions | Not yet |
-| Report definitions | Not yet |
+| List views (with built-in metrics and super metric columns; list/bar/pie/donut/trend modes) | Yes |
+| Dashboards (10 widget types, named folder placement, shared by default, self-provider pins) | Yes |
+| Symptom definitions (metric/property/event conditions, static + dynamic thresholds) | Yes |
+| Alert definitions (tiered severity, symptom sets, impact badges) | Yes |
+| Report definitions (cover page, TOC, view + dashboard sections) | Yes |
+| Remediation recommendations (reusable, alert-referenced) | Infrastructure ready; awaiting first content |
 
-All content is installed via the Ops content-import path, so UUIDs
-are preserved — cross-references between super metrics, views, and
-dashboards survive cross-instance installs without any manual
-re-stitching.
+**Dashboard widget types supported**: `ResourceList`, `View`,
+`TextDisplay`, `Scoreboard`, `MetricChart`, `HealthChart`,
+`ParetoAnalysis`, `Heatmap`, `AlertList`, `ProblemAlertsList`. This
+covers ~94% of observed widget usage on a typical instance. The
+scoping doc for the next renderer expansion (PropertyList +
+ResourceRelationshipAdvanced + SparklineChart, targeting ~96%) lives
+at `context/widget_renderer_scope.md`.
+
+All content is installed via the Ops content-import path where
+appropriate (super metrics, views, dashboards, reports) so UUIDs
+are preserved — cross-references between super metrics, views,
+dashboards, and reports survive cross-instance installs without
+any manual re-stitching. Custom groups, symptoms, and alerts install
+via the direct REST API because they're identified by name, not UUID.
 
 ## Getting started
+
+There are two ways to use this: **as a content consumer** (install a
+distribution package someone else built on your VCF Ops instance) or
+**as a content author** (describe new content in the Claude Code
+authoring loop).
+
+### I just want to install a distribution package
+
+You received (or downloaded) a file named like
+`[VCF Content Factory] <Name>.zip` and you want to install what's
+inside it.
+
+1. Extract the zip anywhere. You'll see `install.py`, `install.ps1`,
+   a `README.md`, and one or more `bundles/<slug>/` subdirectories.
+2. **Python** (works on Linux / macOS / Windows):
+   ```bash
+   python3 install.py
+   ```
+   Or **PowerShell** (Windows / PS 5.1 or PS 7+):
+   ```powershell
+   .\install.ps1
+   ```
+3. Answer the prompts (host, username, password, auth source). The
+   installer authenticates, imports all content types in dependency
+   order, enables super metrics on the Default Policy, and verifies.
+   Uninstall with `--uninstall` (Python) or `-Uninstall` (PowerShell);
+   **uninstall requires the `admin` account** for dashboards/views/
+   reports due to content-zip ownership semantics.
+4. If you have multiple distribution packages, extract all of them
+   into the same directory. The installer will show a multi-select
+   checklist of every bundle it finds and install the ones you pick
+   under a single credential prompt.
+
+You can also drag individual files from inside `bundles/<slug>/`
+directly into the VCF Ops UI import dialogs — the filenames
+(`supermetric.json`, `Views.zip`, `Dashboard.zip`, `customgroup.json`,
+`Reports.zip`, `AlertContent.xml`) match the conventions admins
+recognize from community content packages.
+
+### I want to author new content
 
 1. Put your VCF Operations credentials in a `.env` file at the repo
    root:
@@ -75,6 +134,8 @@ re-stitching.
    VCFOPS_PASSWORD=...
    VCFOPS_AUTH_SOURCE=Local        # optional
    VCFOPS_VERIFY_SSL=false         # optional, for self-signed
+   VCFOPS_ADMIN_USER=admin         # optional; for QA uninstall cycles
+   VCFOPS_ADMIN_PASSWORD=...       # optional
    ```
 
 2. Install Python dependencies:
@@ -83,7 +144,15 @@ re-stitching.
    pip install -r requirements.txt
    ```
 
-3. Tell the framework what you want. Open Claude Code in this
+3. Populate the reference content clones (optional but highly
+   recommended — it's what the framework checks before authoring to
+   avoid reinventing community-authored patterns):
+
+   ```bash
+   ./scripts/bootstrap_references.sh
+   ```
+
+4. Tell the framework what you want. Open Claude Code in this
    directory and describe the content you need. Examples:
 
    > "I want a super metric that sums provisioned vCPUs for all
@@ -95,10 +164,26 @@ re-stitching.
    > "Create a custom group for VMs on NFS datastores so I can
    > scope alerts to them."
 
-4. Approve the YAML the framework shows you, and it installs +
-   enables the content. Everything authored lands in the
+   > "Alert me on sustained VM CPU utilization above 90%, with a
+   > recommendation pointing operators at the usual root causes."
+
+5. Approve the YAML the framework shows you. It installs + enables
+   the content live on your instance. Everything lands in the
    `VCF Content Factory` folder in the Ops dashboards sidebar,
    prefixed `[VCF Content Factory]` for easy identification.
+
+6. When the content is stable, **build it into a distribution
+   package** for sharing with other admins:
+
+   ```bash
+   # author a bundle manifest at bundles/my-package.yaml listing
+   # the content files you want in the package, then:
+   python3 -m vcfops_packaging build bundles/my-package.yaml
+   ```
+
+   The output lands in `dist/[VCF Content Factory] My Package.zip`
+   and anyone can install it on their own VCF Ops instance via the
+   "content consumer" path above.
 
 ## Where to go next
 

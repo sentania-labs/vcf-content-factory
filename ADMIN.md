@@ -11,9 +11,11 @@ button is doing.
 ## 1. What VCF Operations content actually is
 
 Before the framework can help you, it's worth being clear about the
-four building blocks we're producing. Each one is a first-class
-object in VCF Operations with its own API, its own lifecycle, and
-its own wire format.
+building blocks we're producing. Each one is a first-class object
+in VCF Operations with its own API, its own lifecycle, and its own
+wire format. The framework supports eight content types today:
+super metrics, custom groups, list views, dashboards, symptoms,
+alert definitions, report definitions, and recommendations.
 
 ### Super metrics
 
@@ -81,16 +83,109 @@ view widget configuration issues, not view problems.
 ### Dashboards
 
 A **dashboard** is a layout of widgets with interactions between
-them. In this framework's scope today, we build dashboards from two
-widget types: `ResourceList` (an object picker) and `View` (a
-saved view embed). Dashboards can live in **folders** in the Ops
-sidebar, can be **shared** with other users, and carry per-widget
-state like pinned resources.
+them. The framework supports 10 widget types covering ~94% of
+observed live usage:
+
+| Widget type | Purpose |
+|---|---|
+| `View` | Embedded saved view — the workhorse |
+| `ResourceList` | Object picker that feeds other widgets via interaction |
+| `TextDisplay` | Static markdown panel (titles, instructions, links) |
+| `Scoreboard` | Single-value metric callout with thresholds |
+| `MetricChart` | Time-series line / area chart for metrics |
+| `HealthChart` | Health-state over time |
+| `ParetoAnalysis` | Ranked bar chart for top-N analysis |
+| `Heatmap` | Colored grid for at-a-glance correlation |
+| `AlertList` | Currently-active alerts for a resource set |
+| `ProblemAlertsList` | Filtered alerts view (problem badges only) |
+
+`PropertyList` is the highest-value remaining gap — see
+`context/widget_renderer_scope.md` for the next implementation
+wave. Dashboards can live in **folders** in the Ops sidebar, can be
+**shared** with other users, and carry per-widget state like
+pinned resources.
 
 Dashboards are stored inside Ops grouped by their owning user —
 every user has a single "dashboards/<ownerUserId>" bundle
 containing all their dashboards, not one file per dashboard. That
-quirk matters when you think about install semantics.
+quirk matters when you think about install semantics. It also
+means content-zip-imported dashboards are owned by the `admin`
+account regardless of who ran the import, and only the `admin`
+UI session can delete them later.
+
+### Symptoms
+
+A **symptom** is a single condition evaluated against a resource —
+"CPU utilization > 90%", "a specific event type was logged",
+"property X changed to value Y". Symptoms don't fire anything on
+their own; they're the building blocks for alerts.
+
+Symptom conditions come in a few flavors:
+
+- **Metric (static threshold)**: `metric >= value`, where `value`
+  is a fixed number. Comparison operator is one of `>`, `>=`, `<`,
+  `<=`, `=`, `!=`.
+- **Metric (dynamic threshold)**: value is derived from the metric's
+  own historical behavior (baseline deviation).
+- **Property**: exact-match comparison on a resource property.
+- **Event**: filter on message-event severity/category/message
+  regex, used for alerts that fire on specific log events.
+
+Each symptom has a severity (`INFORMATION`, `WARNING`, `IMMEDIATE`,
+`CRITICAL`) and a `waitCycle` / `cancelCycle` pair that controls how
+long the condition must hold before the symptom triggers and how
+long it must clear before the symptom resets. Symptoms are
+identified by **name**, not UUID — their server IDs are assigned
+at create time via the REST API.
+
+### Alert definitions
+
+An **alert definition** combines one or more symptoms into a
+triggering rule, decorates it with an impact badge (`HEALTH`,
+`RISK`, `EFFICIENCY`), and optionally attaches remediation
+recommendations. The symptom set structure supports nested
+AND/OR composition — "fire if (symptom A AND symptom B) OR
+symptom C".
+
+Criticality can be static (`WARNING`, `IMMEDIATE`, `CRITICAL`,
+`AUTO`) or `SYMPTOM_BASED`, where the highest active symptom's
+severity drives the alert's criticality. The latter is the right
+choice when you want tiered severity from a single alert — e.g. a
+"VM CPU Utilization" alert with three symptoms at 50%/75%/95%
+thresholds that surfaces whichever bucket is currently triggered.
+
+Alerts install via REST (`POST /api/alertdefinitions`) and are
+identified by name. Recommendations are referenced by name +
+priority; the framework's loader resolves them at validate time
+and the content-zip `AlertContent.xml` bundle carries the
+relationship on disk.
+
+### Report definitions
+
+A **report definition** is a scheduled PDF/CSV export structured
+as a series of pages. Each page can be a cover page, a table of
+contents, an embedded view, or an embedded dashboard. The
+framework's `report-author` agent renders the full XML wire
+format; the importer round-trips report UUIDs via content-zip
+like dashboards do. Delete is via Ext.Direct
+`reportServiceController.deleteReportDefinitions` with the same
+nested-JSON-string data shape as view delete (see
+`context/dashboard_delete_api.md`).
+
+### Recommendations
+
+A **recommendation** is a reusable remediation-instruction block
+that alerts reference by name. One recommendation can be attached
+to multiple alerts (e.g. a "check host CPU contention" block that
+applies to several VM and host CPU alerts). The description text
+appears in the VCF Ops UI's alert-detail "Recommendations" panel.
+
+Recommendations live as standalone YAML under `recommendations/`
+and get deterministic IDs derived from the name + `adapter_kind`
+(`Recommendation-df-<adapter>-<slug>`). The framework's
+`alert-author` agent handles both authoring new recommendations
+and referencing existing ones — the "reuse first, author only
+if nothing fits" pattern.
 
 ## 2. How content gets installed
 
@@ -100,7 +195,7 @@ specific reasons.
 
 ### The content-import ZIP path
 
-Used for **super metrics, views, and dashboards**.
+Used for **super metrics, views, dashboards, and reports**.
 
 You build a ZIP with a specific layout:
 
@@ -128,30 +223,56 @@ portable across dev/test/prod.
 
 ### The direct REST path
 
-Used for **custom groups**.
+Used for **custom groups, symptoms, and alert definitions**.
 
-Custom groups go through `POST /api/resources/groups` (and `PUT`
-for updates). They don't ride the content-import ZIP — there's no
-`customgroups.json` inside any content ZIP exported by Ops, and
-no internal endpoint wires custom groups into that path. The
-framework's `vcfops_customgroups` package talks to the REST API
-directly.
+- Custom groups: `POST /api/resources/groups` (and `PUT` for
+  updates). `vcfops_customgroups` package.
+- Symptoms: `POST /api/symptomdefinitions` (and `PUT` for updates).
+  `vcfops_symptoms` package.
+- Alerts: `POST /api/alertdefinitions` (and `PUT` for updates).
+  `vcfops_alerts` package. Alerts reference symptoms by
+  server-assigned symptom IDs, so the installer resolves symptom
+  names → IDs at install time.
 
-The implication: custom groups are identified by **name**, not by
-UUID. Ops assigns the ID server-side at create time. Rename a
-custom group and you create a new one; the old one lingers until
-you delete it. The framework treats this as a hard carve-out from
-the "UUID in YAML" rule that governs everything else.
+None of these ride the content-import ZIP — their content types
+aren't wired into the content-zip importer's resolvers. The
+framework's install scripts use the REST endpoints directly.
+
+The implication: these three types are identified by **name**, not
+UUID. Ops assigns the ID server-side at create time. Rename one
+and you create a new one; the old one lingers until you delete it.
+The framework treats this as a hard carve-out from the "UUID in
+YAML" rule that governs the content-zip-path content types.
+
+### Known gap: recommendations via REST
+
+Recommendations are a fully-authored content type in the framework,
+and they serialize correctly into the `AlertContent.xml` drag-drop
+drop-in file. However, the `_install_alerts` REST path
+(`POST /api/alertdefinitions`) doesn't include recommendation
+references in the alert wire body. Recommendations render
+correctly in the drag-drop path (admins hand-importing
+`AlertContent.xml` into the UI) but the REST install path silently
+drops them.
+
+Fix path: either verify a `POST /api/recommendations` endpoint
+exists (api-explorer task) and wire it into `_install_alerts`
+before the alert POST, or switch alerts to content-zip envelope
+install matching how reports work. Deferred to a follow-up
+session; see `context/qa_log.md` for the session history.
 
 ### What that means in practice
 
-- You can bundle super metrics + views + dashboards into a single
-  content-import zip and install them atomically.
-- Custom groups have to be installed first, separately, by their
-  own CLI.
+- You can bundle super metrics + views + dashboards + reports into
+  a single content-import zip and install them atomically with
+  UUIDs preserved.
+- Custom groups, symptoms, and alerts are installed via per-object
+  REST calls in dependency order (symptoms before alerts, since
+  alerts reference symptoms by name → ID lookup).
 - For a cross-instance bundle (dev → prod), super metrics, views,
-  and dashboards round-trip with their UUIDs intact. Custom groups
-  get re-created on the destination under the same name.
+  dashboards, and reports round-trip with their UUIDs intact.
+  Custom groups, symptoms, and alerts get re-created on the
+  destination under the same name.
 
 ## 3. The UUID contract
 
@@ -412,54 +533,91 @@ Once you've got the concepts, the repo is short enough to read end
 to end:
 
 ```
-supermetrics/              Super metric YAML source of truth
-customgroups/              Custom group YAML source of truth
-views/                     List view YAML source of truth
-dashboards/                Dashboard YAML source of truth
+# --- authored content (source of truth, version-controlled) ---
+supermetrics/              Super metric YAML
+customgroups/              Custom group YAML
+views/                     List view YAML
+dashboards/                Dashboard YAML
+symptoms/                  Symptom definition YAML
+alerts/                    Alert definition YAML
+recommendations/           Remediation recommendation YAML
+reports/                   Report definition YAML
 
-vcfops_supermetrics/       Super metric Python package
-  loader.py                YAML → model, uuid4 mint, DSL lint
-  client.py                Suite API client, content-zip import
-  cli.py                   `python -m vcfops_supermetrics ...`
+# --- distribution bundles (manifest + build outputs) ---
+bundles/                   Bundle manifest YAML (declares what's in each dist package)
+dist/                      Built distribution zips (gitignored; produced by vcfops_packaging)
 
-vcfops_dashboards/         Views + dashboards Python package
-  loader.py                YAML → models, uuid4 mint
-  render.py                Models → view XML + dashboard JSON
-  client.py                Content-zip import (shared helpers)
-  cli.py                   `python -m vcfops_dashboards ...`
+# --- Python packages (one per content type + packaging layer) ---
+vcfops_supermetrics/       loader, client, CLI, content-zip import
+vcfops_dashboards/         views + dashboards loader, render, client, CLI
+vcfops_customgroups/       loader, REST client, CLI
+vcfops_symptoms/           loader, REST client, CLI
+vcfops_alerts/             loader, REST client, render (AlertContent.xml), CLI
+vcfops_reports/            loader, render (report XML), client, CLI
+vcfops_packaging/          bundle loader, builder (zip assembly), sync CLI
+  templates/
+    install.py             Python installer (goes inside every dist zip)
+    install.ps1            PowerShell installer (goes inside every dist zip)
+    README_framework.md    Framework README (goes inside every dist zip)
 
-vcfops_customgroups/       Custom groups Python package
-  loader.py                YAML → models
-  client.py                /api/resources/groups REST client
-  cli.py                   `python -m vcfops_customgroups ...`
-
-context/                   Topical background the agents read on demand
-  supermetric_authoring.md DSL reference, idioms, anti-patterns
-  wire_formats.md          Content-zip wire formats for each type
+# --- topical background the agents read on demand ---
+context/
+  supermetric_authoring.md       DSL reference, idioms, anti-patterns
+  wire_formats.md                Content-zip wire formats for each type
   uuids_and_cross_references.md  The UUID contract
   internal_supermetrics_assign.md  Default Policy enable endpoint
-  customgroup_authoring.md DSL + rule grammar
+  customgroup_authoring.md       Custom group rule grammar
   customgroup_relationship_grammar.md  ANCESTOR/DESCENDANT rules
-  content_api_surface.md   Public + internal + content-zip API map
-  install_and_enable.md    Install flow + policy enablement
-  reference_sources.md     Allowlisted external reference repos
-  reference_docs.md        PDF extraction + VCF 9 doc inventory
+  content_api_surface.md         Public + internal + content-zip API map
+  install_and_enable.md          Install flow + policy enablement
+  reference_sources.md           Allowlisted external reference repos
+  reference_docs.md              PDF extraction + VCF 9 doc inventory
+  dashboard_delete_api.md        Ext.Direct delete wire formats (authoritative)
+  chart_widget_formats.md        Widget wire formats for the 10 supported types
+  widget_types_survey.md         Live instance widget usage survey
+  widget_renderer_scope.md       Next renderer expansion plan (PropertyList+)
+  reports_api_surface.md         Report definition wire format + API
+  ui_import_formats.md           SPA UI import behavior + drag-drop paths
+  struts_exploration_backlog.md  Legacy Struts/Ext.Direct endpoint reference
+  struts_import_endpoints.md     Full Ext.Direct controller catalog
+  vks_vm_classification.md       VKS VM type filter patterns
+  qa_log.md                      Acceptance run audit trail
 
-.claude/agents/            Subagent prompts
-  ops-recon.md             Read-only reconnaissance
-  supermetric-author.md    Super metric authoring rules
-  customgroup-author.md    Custom group authoring rules
-  view-author.md           View authoring rules
-  dashboard-author.md      Dashboard authoring rules
-  api-explorer.md          Undocumented wire format investigator
+# --- subagent prompts ---
+.claude/agents/
+  ops-recon.md             Read-only reconnaissance (runs before every author)
+  supermetric-author.md    Super metric authoring
+  customgroup-author.md    Custom group authoring
+  view-author.md           List view authoring
+  dashboard-author.md      Dashboard authoring
+  symptom-author.md        Symptom definition authoring
+  alert-author.md          Alert + recommendation authoring (tight coupling)
+  report-author.md         Report definition authoring
+  api-explorer.md          Undocumented wire format investigation
+  tooling.md               Python package maintenance (the only agent that edits vcfops_*/)
+  content-installer.md     Sync, enable, verify against live instance
+  content-packager.md      Bundle manifest + zip build pipeline
+  qa-tester.md             End-to-end acceptance testing of distribution packages
 
-docs/                      Source material the framework trusts
+# --- framework skills (loaded on demand by agents) ---
+.claude/skills/
+  vcfops-project-conventions/  Naming, validation, delegation protocol
+  vcfops-content-model/        Content type relationships + cross-references
+  vcfops-supermetric-dsl/      SM formula DSL reference
+  vcfops-api/                  Suite API surface + content-zip + auth
+
+# --- source material the framework trusts ---
+docs/
   vcf9/                    Extracted VCF 9 documentation markdown
   operations-api.json      Public Suite API OpenAPI spec
   internal-api.json        Internal (unsupported) API OpenAPI spec
 
-references/                Allowlisted external reference content (clones)
-CLAUDE.md                  Hard rules every agent obeys
+references/                Allowlisted external reference content clones
+                           (gitignored; populate via scripts/bootstrap_references.sh)
+
+CLAUDE.md                  Hard rules every agent obeys (orchestration + delegation)
+README.md                  High-level overview (you are in ADMIN.md)
+ROADMAP.md                 What's done, in progress, next, and future
 ```
 
 Every YAML file is readable. Every Python module is under ~300
@@ -475,25 +633,59 @@ for recovery.
 
 ```bash
 # --- super metrics ---
-python -m vcfops_supermetrics validate
-python -m vcfops_supermetrics validate supermetrics/vks_cores.yaml
-python -m vcfops_supermetrics list
-python -m vcfops_supermetrics sync
-python -m vcfops_supermetrics sync supermetrics/vks_cores.yaml
-python -m vcfops_supermetrics enable supermetrics/vks_cores.yaml
-python -m vcfops_supermetrics delete "[VCF Content Factory] VKS Cores (count)"
+python3 -m vcfops_supermetrics validate
+python3 -m vcfops_supermetrics validate supermetrics/vks_cores.yaml
+python3 -m vcfops_supermetrics list
+python3 -m vcfops_supermetrics sync
+python3 -m vcfops_supermetrics sync supermetrics/vks_cores.yaml
+python3 -m vcfops_supermetrics enable supermetrics/vks_cores.yaml
+python3 -m vcfops_supermetrics delete "[VCF Content Factory] VKS Cores (count)"
 
 # --- views + dashboards ---
-python -m vcfops_dashboards validate
-python -m vcfops_dashboards sync
+python3 -m vcfops_dashboards validate
+python3 -m vcfops_dashboards sync
 
 # --- custom groups ---
-python -m vcfops_customgroups validate
-python -m vcfops_customgroups list
-python -m vcfops_customgroups list-types
-python -m vcfops_customgroups sync
-python -m vcfops_customgroups delete "[VCF Content Factory] VMs on NFS"
+python3 -m vcfops_customgroups validate
+python3 -m vcfops_customgroups list
+python3 -m vcfops_customgroups list-types
+python3 -m vcfops_customgroups sync
+python3 -m vcfops_customgroups delete "[VCF Content Factory] VMs on NFS"
+
+# --- symptoms ---
+python3 -m vcfops_symptoms validate
+python3 -m vcfops_symptoms sync
+python3 -m vcfops_symptoms delete "[VCF Content Factory] VM CPU Usage Critical"
+
+# --- alerts + recommendations (tightly coupled; loaded together) ---
+python3 -m vcfops_alerts validate          # loads symptoms, alerts, AND recommendations
+python3 -m vcfops_alerts sync
+python3 -m vcfops_alerts delete "[VCF Content Factory] VM CPU Utilization Alert"
+
+# --- reports ---
+python3 -m vcfops_reports validate
+python3 -m vcfops_reports sync
+
+# --- distribution packaging ---
+python3 -m vcfops_packaging validate                            # validate all bundle manifests
+python3 -m vcfops_packaging build bundles/vks-core-consumption.yaml   # build one zip
+python3 -m vcfops_packaging sync bundles/<name>.yaml             # sync a whole bundle to the instance
 ```
+
+The **validate chain** is the fast health check run before any
+sync or build:
+
+```bash
+python3 -m vcfops_supermetrics validate && \
+python3 -m vcfops_dashboards validate && \
+python3 -m vcfops_customgroups validate && \
+python3 -m vcfops_symptoms validate && \
+python3 -m vcfops_alerts validate && \
+python3 -m vcfops_reports validate
+```
+
+If any of those six fail, something is wrong with a source YAML;
+fix it before installing.
 
 Credentials are read from a `.env` file at the repo root. The
 Python clients auto-load it, so you never need to shell-source
@@ -523,10 +715,13 @@ The framework is overkill when:
 
 - You're doing a one-off exploration in the GUI to answer a
   question once.
-- You need something the framework doesn't support yet (alert
-  definitions, report definitions — see the README's scope table).
+- You need a widget type the renderer doesn't support yet — see
+  `context/widget_renderer_scope.md` for the current coverage and
+  the next expansion queue (`PropertyList` is the biggest gap).
 - You already have a working bundle and just need to tweak a single
   threshold in the Default Policy — do that in the GUI.
+- You're authoring a one-off dashboard that won't outlive the
+  current investigation.
 
 ## 9. Now you can open the GUI
 
@@ -553,6 +748,21 @@ debugging surface for content the framework authored:
 - **Environment → Custom Groups**: find the group. Click into it.
   Does the member list look right? If not, the rule isn't matching
   the resources you expected — fix the YAML and re-sync.
+- **Alerts → Definitions**: find the alert by name. Verify its
+  symptom set, impact badge, and recommendation list. Attached
+  recommendations render in the detail panel — if one is missing,
+  check whether `install.py` actually carried it (the REST path
+  currently has a known gap around recommendation attachment; the
+  drag-drop `AlertContent.xml` path is the reliable one).
+- **Alerts → Symptom Definitions**: find each symptom the alert
+  references. Check the metric key, threshold, and wait/cancel
+  cycles.
+- **Administration → Reports**: find the report by name. Verify
+  the pages ordered correctly and the embedded views resolve.
+- **Alert-author panel on any resource**: one of the clearest ways
+  to see whether an alert is actually firing on the right target
+  kind is to navigate to an instance of that kind and look for
+  the alert in the resource's detail panel.
 
 Treat the GUI as **read-only** for content the framework authored.
 Edits you make in the GUI will be overwritten by the next `sync`,
