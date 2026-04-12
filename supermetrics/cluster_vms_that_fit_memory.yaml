@@ -1,0 +1,18 @@
+id: d79cbd0b-ba28-4268-8919-74e14a14b3b4
+name: "[VCF Content Factory] Cluster - VMs That Fit (Memory, allocation-based)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Conservative estimate of how many additional VMs could be deployed on this
+  cluster before memory allocation saturates the post-HA capacity, based on the
+  current average VM's memory allocation. Allocation-based (not demand-based)
+  because memory overcommit is significantly more dangerous than CPU overcommit
+  — a cluster that runs out of memory-to-allocate will refuse new VMs via
+  admission control regardless of whether existing VMs are actively using that
+  memory. Formula: (free memory after HA) / (average VM memory allocation).
+  Returns 0 or negative when the cluster is memory-bound. Pair with SM #3
+  (VMs That Fit - CPU) for the full capacity story — the lower of the two is
+  the real answer.
+formula: |
+  (${this, metric=mem|haTotalCapacity_average} - ${this, metric=mem|memory_allocated_on_all_powered_on_vms}) / (${this, metric=mem|memory_allocated_on_all_powered_on_vms} / ${this, metric=summary|number_running_vms})

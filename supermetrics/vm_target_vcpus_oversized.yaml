@@ -1,0 +1,16 @@
+id: 6dfea6a6-e633-4b32-b438-8975e3dc06fa
+name: "[VCF Content Factory] VM - Target vCPUs (oversized)"
+resource_kinds:
+  - resource_kind_key: VirtualMachine
+    adapter_kind_key: VMWARE
+description: >
+  The recommended (target) vCPU count for an oversized VM, computed as current
+  vCPUs minus the reclaimable delta VCF Ops's capacity engine has flagged. For a
+  VM flagged as summary|oversized == 1 with summary|oversized|vcpus = 8 on a
+  16-vCPU VM, this returns 8 — the resize target. For VMs not flagged as
+  oversized, summary|oversized|vcpus is zero, so the SM returns the current vCPU
+  count unchanged (which reads correctly in the view as 'no change recommended for
+  this VM'). Pair with the companion VM - Target vCPUs (undersized) SM: one
+  handles the shrink case, the other handles the grow case.
+formula: |
+  ${this, metric=cpu|corecount_provisioned} - ${this, metric=summary|oversized|vcpus}

@@ -1,0 +1,221 @@
+id: 46f75705-4da9-4fb9-b2d6-9569ce628790
+name: "[VCF Content Factory] Capacity Assessment & Right-Sizing"
+description: >
+  Single-dashboard capacity review for a VCF Ops admin. Top section shows
+  environment-wide capacity headroom at cluster granularity with post-HA
+  adjustments, days-until-runout projections from VCF Ops capacity analytics,
+  and 'how many more VMs fit' counts. Bottom section identifies right-sizing
+  opportunities — VMs VCF Ops's capacity engine has flagged as oversized,
+  undersized, or idle, with 95th-percentile demand justification columns and
+  explicit current-to-target resize recommendations. Colors follow the standard
+  three-band stoplight throughout. Use for quarterly capacity reviews and before
+  any cluster-scale VM deployment.
+
+widgets:
+
+  # ── SECTION 1: Capacity ──────────────────────────────────────────────────
+
+  - id: capacity_header
+    type: TextDisplay
+    title: "Capacity Assessment"
+    coords: {x: 1, y: 1, w: 12, h: 2}
+    html: >
+      <p>This section answers three questions about your vSphere environment
+      using <strong>post-HA adjusted figures</strong> — the capacity vSphere
+      will actually admit, not raw totals. First: how many more VMs fit before
+      a cluster reaches its post-HA limit? Second: how fast is headroom
+      shrinking — days until runout? Third: which clusters are already tight
+      and should be prioritised for expansion or workload migration? Cells
+      color <span style="color:#74B43B">green</span> (healthy),
+      <span style="color:#ECC33E">yellow</span> (watch),
+      <span style="color:#E07720">orange</span> (warning), or
+      <span style="color:#DE3F30">red</span> (critical) to highlight at-risk
+      clusters at a glance.</p>
+
+  - id: env_kpis
+    type: Scoreboard
+    title: "Environment capacity KPIs"
+    coords: {x: 1, y: 3, w: 12, h: 3}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    visual_theme: 8
+    box_columns: 4
+    metrics:
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: "summary|number_running_vms"
+        metric_name: "Powered-On VMs"
+        color_method: 1
+        label: "Powered-On VMs"
+
+      - adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        metric_key: "Super Metric|sm_43cf883b-12e4-4ecf-b1a8-bf36f20f093e"
+        metric_name: "Avg Cluster CPU Free % (post-HA)"
+        color_method: 0
+        yellow_bound: 50
+        orange_bound: 30
+        red_bound: 15
+        label: "Avg CPU Free % (post-HA)"
+
+      - adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        metric_key: "Super Metric|sm_66cfa55c-dd8c-4cb4-a10c-ee2b4d2fb16e"
+        metric_name: "Avg Cluster Mem Free % (post-HA)"
+        color_method: 0
+        yellow_bound: 50
+        orange_bound: 30
+        red_bound: 15
+        label: "Avg Mem Free % (post-HA)"
+
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: "summary|number_running_hosts"
+        metric_name: "Running Hosts (env total)"
+        color_method: 1
+        label: "Running Hosts"
+
+  - id: cluster_heatmap
+    type: Heatmap
+    title: "Cluster capacity (post-HA CPU free)"
+    coords: {x: 1, y: 6, w: 12, h: 7}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    mode: all
+    depth: 10
+    configs:
+      - name: "CPU Free % After HA"
+        adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        color_by:
+          metric_key: "Super Metric|sm_43cf883b-12e4-4ecf-b1a8-bf36f20f093e"
+          label: "CPU Free % After HA"
+        size_by:
+          metric_key: "summary|number_running_vms"
+          label: "Running VMs"
+        group_by:
+          adapter_kind: VMWARE
+          resource_kind: Datacenter
+          text: "Datacenter"
+        color:
+          min_value: 0
+          max_value: 100
+          thresholds:
+            values: [0, 15, 30, 50]
+            colors: ["#DE3F30", "#E07720", "#ECC33E", "#74B43B"]
+        solid_coloring: false
+        focus_on_groups: true
+
+  - id: cluster_capacity_view
+    type: View
+    title: "Cluster capacity overview"
+    coords: {x: 1, y: 13, w: 12, h: 9}
+    view: "[VCF Content Factory] Cluster Capacity Overview"
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+
+  # ── SECTION 2: Right-Sizing ───────────────────────────────────────────────
+
+  - id: rightsizing_header
+    type: TextDisplay
+    title: "Right-Sizing Opportunities"
+    coords: {x: 1, y: 22, w: 12, h: 2}
+    html: >
+      <p>VCF Ops capacity engine flags every VM into one of three categories:
+      <strong>Oversized</strong> — allocated resources consistently exceed
+      demand, reclaim vCPUs and memory to free capacity;
+      <strong>Undersized</strong> — demand regularly exceeds allocation,
+      a performance risk requiring additional resources; or
+      <strong>Idle</strong> — negligible activity sustained over the analysis
+      window, a candidate for retirement or consolidation. The table below
+      lists all flagged VMs with flag columns colored red when triggered and
+      95th-percentile demand justification columns colored on the same
+      green/yellow/orange/red three-band scheme used in the capacity section
+      above.</p>
+
+  - id: rightsizing_kpis
+    type: Scoreboard
+    title: "Right-sizing KPIs"
+    coords: {x: 1, y: 24, w: 12, h: 3}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    visual_theme: 8
+    box_columns: 4
+    metrics:
+      - adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        metric_key: "Super Metric|sm_3bd0cb85-1422-428d-80d0-52533e84431c"
+        metric_name: "Oversized VMs"
+        color_method: 1
+        label: "Oversized VMs"
+
+      - adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        metric_key: "Super Metric|sm_d463820e-403e-488e-974e-27b292a6a701"
+        metric_name: "Undersized VMs"
+        color_method: 1
+        label: "Undersized VMs"
+
+      - adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        metric_key: "Super Metric|sm_3110b13c-d3c8-4bda-bedc-e6064510c0cf"
+        metric_name: "Idle VMs"
+        color_method: 1
+        label: "Idle VMs"
+
+      - adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        metric_key: "summary|oversized|vcpus"
+        metric_name: "Reclaimable vCPUs"
+        color_method: 1
+        label: "Reclaimable vCPUs"
+
+  - id: top15_vcpus
+    type: ParetoAnalysis
+    title: "Top 15 VMs by reclaimable vCPUs"
+    coords: {x: 1, y: 27, w: 6, h: 7}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    adapter_kind: VMWARE
+    resource_kind: VirtualMachine
+    metric_key: "summary|oversized|vcpus"
+    metric_name: "Reclaimable vCPUs"
+    mode: all
+    top_n: 15
+    depth: 10
+
+  - id: top15_memory
+    type: ParetoAnalysis
+    title: "Top 15 VMs by reclaimable memory (GB)"
+    coords: {x: 7, y: 27, w: 6, h: 7}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    adapter_kind: VMWARE
+    resource_kind: VirtualMachine
+    metric_key: "summary|oversized|memory"
+    metric_name: "Reclaimable Memory (KB)"
+    mode: all
+    top_n: 15
+    depth: 10
+
+  - id: vm_rightsizing_view
+    type: View
+    title: "VM right-sizing candidates"
+    coords: {x: 1, y: 34, w: 12, h: 12}
+    view: "[VCF Content Factory] VM Right-Sizing Candidates"
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World

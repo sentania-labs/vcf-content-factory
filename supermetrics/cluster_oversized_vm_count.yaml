@@ -1,0 +1,17 @@
+id: 3bd0cb85-1422-428d-80d0-52533e84431c
+name: "[VCF Content Factory] Cluster - Oversized VM Count"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Count of VMs under this cluster that VCF Ops's capacity engine has flagged as
+  oversized (summary|oversized == 1). Use as the cluster-level rollup for the
+  right-sizing opportunities scoreboard. A high count indicates reclamation
+  opportunity — each flagged VM has reclaimable vCPUs and memory per the
+  companion summary|oversized|vcpus and summary|oversized|memory metrics.
+  depth=2 walks from ClusterComputeResource down through HostSystem to
+  VirtualMachine.
+formula: |
+  count(${adaptertype=VMWARE, objecttype=VirtualMachine,
+         metric=summary|oversized, depth=2,
+         where=($value==1)})

@@ -1,0 +1,67 @@
+id: fc6504b8-138d-4786-8f8c-d33b7368ad06
+name: "[VCF Content Factory] Cluster Capacity Overview"
+description: >
+  Per-cluster capacity assessment — shows post-HA free capacity percentages,
+  days-until-runout projections from VCF Ops capacity analytics, and 'how many
+  more VMs fit' counts for both CPU and memory. Drives the capacity assessment
+  section of the Capacity Assessment & Right-Sizing dashboard. Use the color
+  thresholds to scan for at-risk clusters before reading numbers.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: ClusterComputeResource
+
+summary: true
+
+columns:
+  - attribute: summary|name
+    display_name: "Cluster"
+    unit: ""
+  - attribute: summary|total_number_hosts
+    display_name: "Hosts"
+    unit: ""
+  - attribute: summary|number_running_vms
+    display_name: "VMs (running)"
+    unit: ""
+  - attribute: "sm_43cf883b-12e4-4ecf-b1a8-bf36f20f093e"
+    display_name: "CPU Free % post-HA"
+    unit: ""
+    yellow_bound: 50.0
+    orange_bound: 30.0
+    red_bound: 15.0
+    ascending_range: true
+  - attribute: "sm_66cfa55c-dd8c-4cb4-a10c-ee2b4d2fb16e"
+    display_name: "Mem Free % post-HA"
+    unit: ""
+    yellow_bound: 50.0
+    orange_bound: 30.0
+    red_bound: 15.0
+    ascending_range: true
+  - attribute: "sm_8d6ca90f-9710-4f5d-b180-cb46a483d65e"
+    display_name: "VMs Fit (CPU)"
+    unit: ""
+    yellow_bound: 30.0
+    orange_bound: 15.0
+    red_bound: 5.0
+    ascending_range: true
+  - attribute: "sm_d79cbd0b-ba28-4268-8919-74e14a14b3b4"
+    display_name: "VMs Fit (Mem)"
+    unit: ""
+    yellow_bound: 30.0
+    orange_bound: 15.0
+    red_bound: 5.0
+    ascending_range: true
+  - attribute: "OnlineCapacityAnalytics|cpu|demand|timeRemaining"
+    display_name: "CPU Days Remaining"
+    unit: ""
+    yellow_bound: 180.0
+    orange_bound: 90.0
+    red_bound: 30.0
+    ascending_range: true
+  - attribute: "OnlineCapacityAnalytics|mem|demand|timeRemaining"
+    display_name: "Mem Days Remaining"
+    unit: ""
+    yellow_bound: 180.0
+    orange_bound: 90.0
+    red_bound: 30.0
+    ascending_range: true

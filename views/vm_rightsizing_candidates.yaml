@@ -1,0 +1,101 @@
+id: 2bc368ff-5e1b-4aaf-be31-39d0054c7917
+name: "[VCF Content Factory] VM Right-Sizing Candidates"
+description: >
+  Per-VM right-sizing candidate list — shows VCF Ops's oversized/undersized/idle
+  flags, current vCPU + memory allocations, recommended target sizes (from
+  companion target-size super metrics), and 95th-percentile demand-based
+  justification columns for the resize decision. Oversized/undersized/idle flags
+  are colored red when set (value=1). CPU Demand P95 and Mem Usage P95 are
+  colored green <50% / yellow 50-60% / orange 60-90% / red >90%, using a
+  1-month lookback window. Use with the '[VCF Content Factory] VMs - Right-Sizing
+  Candidates' dynamic custom group as the widget scope to filter down to flagged
+  VMs only. Drives the right-sizing section of the Capacity Assessment &
+  Right-Sizing dashboard.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+
+summary: false
+
+time_window:
+  unit: MONTHS
+  count: 1
+
+columns:
+  - attribute: summary|name
+    display_name: "VM Name"
+    unit: ""
+
+  - attribute: summary|parentCluster
+    display_name: "Parent Cluster"
+    unit: ""
+
+  - attribute: summary|oversized
+    display_name: "Oversized"
+    unit: ""
+    red_bound: 1.0
+    ascending_range: false
+
+  - attribute: summary|undersized
+    display_name: "Undersized"
+    unit: ""
+    red_bound: 1.0
+    ascending_range: false
+
+  - attribute: summary|idle
+    display_name: "Idle"
+    unit: ""
+    red_bound: 1.0
+    ascending_range: false
+
+  - attribute: cpu|corecount_provisioned
+    display_name: "Current vCPUs"
+    unit: ""
+
+  # SM #8 — target vCPUs for oversized VMs (returns current size for non-oversized)
+  - attribute: "sm_6dfea6a6-e633-4b32-b438-8975e3dc06fa"
+    display_name: "Target vCPUs (if oversized)"
+    unit: ""
+
+  # SM #10 — target vCPUs for undersized VMs (returns current size for non-undersized)
+  - attribute: "sm_c89674b9-85c6-4eb2-a69f-f003563fb541"
+    display_name: "Target vCPUs (if undersized)"
+    unit: ""
+
+  # CPU justification — 95th percentile over 1-month window
+  - attribute: cpu|demandPct
+    display_name: "CPU Demand P95"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 50.0
+    orange_bound: 60.0
+    red_bound: 90.0
+    ascending_range: false
+
+  # Current memory — preferredUnitId="gb" causes server to convert KB→GB natively
+  - attribute: config|hardware|memoryKB
+    display_name: "Current Memory"
+    unit: "gb"
+
+  # SM #9 — target memory GB for oversized VMs (formula divides by 1024*1024, emits GB)
+  - attribute: "sm_bc4ac034-0b17-4c82-a573-bb2c1400b09f"
+    display_name: "Target Memory GB (if oversized)"
+    unit: ""
+
+  # SM #11 — target memory GB for undersized VMs (formula divides by 1024*1024, emits GB)
+  - attribute: "sm_0cb204a2-4c73-44e3-b398-7b63d2239abc"
+    display_name: "Target Memory GB (if undersized)"
+    unit: ""
+
+  # Memory justification — 95th percentile over 1-month window
+  - attribute: mem|usage_average
+    display_name: "Mem Usage P95"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 50.0
+    orange_bound: 60.0
+    red_bound: 90.0
+    ascending_range: false

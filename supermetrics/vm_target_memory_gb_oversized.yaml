@@ -1,0 +1,15 @@
+id: bc4ac034-0b17-4c82-a573-bb2c1400b09f
+name: "[VCF Content Factory] VM - Target Memory GB (oversized)"
+resource_kinds:
+  - resource_kind_key: VirtualMachine
+    adapter_kind_key: VMWARE
+description: >
+  The recommended (target) memory size in GB for an oversized VM, computed as
+  current memory minus the reclaimable delta VCF Ops's capacity engine has
+  flagged, converted from KB to GB. For a VM flagged as summary|oversized == 1
+  with 128 GB current memory and 64 GB reclaimable, this returns 64 — the
+  resize target. For VMs not flagged as oversized, summary|oversized|memory is
+  zero, so the SM returns the current memory unchanged. Pair with the companion
+  VM - Target Memory GB (undersized) SM for the grow case.
+formula: |
+  (${this, metric=config|hardware|memoryKB} - ${this, metric=summary|oversized|memory}) / 1024 / 1024

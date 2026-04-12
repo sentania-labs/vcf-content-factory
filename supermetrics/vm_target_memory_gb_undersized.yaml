@@ -1,0 +1,18 @@
+id: 0cb204a2-4c73-44e3-b398-7b63d2239abc
+name: "[VCF Content Factory] VM - Target Memory GB (undersized)"
+resource_kinds:
+  - resource_kind_key: VirtualMachine
+    adapter_kind_key: VMWARE
+description: >
+  The recommended (target) memory size in GB for an undersized VM, computed as
+  current memory plus the additional memory VCF Ops's capacity engine has
+  recommended adding, converted from KB to GB. For a VM flagged as
+  summary|undersized == 1 with 16 GB current and 16 GB needed, this returns 32
+  — the resize target. For VMs not flagged as undersized,
+  summary|undersized|memory is zero, so the SM returns the current memory
+  unchanged. Companion to VM - Target Memory GB (oversized) (SM #9) — one
+  handles shrink, the other grow. The four target-size SMs (#8, #9, #10, #11)
+  together populate the 'current to target' columns of the VM Right-Sizing
+  Candidates view.
+formula: |
+  (${this, metric=config|hardware|memoryKB} + ${this, metric=summary|undersized|memory}) / 1024 / 1024

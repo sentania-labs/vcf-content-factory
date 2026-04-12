@@ -1,0 +1,12 @@
+id: 43cf883b-12e4-4ecf-b1a8-bf36f20f093e
+name: "[VCF Content Factory] Cluster - CPU Free % After HA"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Percentage of cluster CPU capacity free after subtracting vSphere HA slot
+  reservations. 0% = fully saturated, 100% = idle. Use as the authoritative
+  headroom figure for capacity planning decisions on a cluster — raw capacity
+  ignores HA and overstates real headroom.
+formula: |
+  ((${this, metric=cpu|haTotalCapacity_average} - ${this, metric=cpu|usagemhz_average}) / ${this, metric=cpu|haTotalCapacity_average}) * 100

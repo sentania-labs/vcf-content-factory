@@ -1,0 +1,14 @@
+id: 66cfa55c-dd8c-4cb4-a10c-ee2b4d2fb16e
+name: "[VCF Content Factory] Cluster - Memory Free % After HA"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Percentage of cluster memory capacity free after subtracting vSphere HA slot
+  reservations. 0% = fully saturated, 100% = idle. Use as the authoritative
+  memory headroom figure for capacity planning — raw capacity ignores HA and
+  overstates real headroom. Demand-based (uses mem|host_demand) rather than
+  allocation-based because memory demand is what determines actual pressure on
+  the hypervisor.
+formula: |
+  ((${this, metric=mem|haTotalCapacity_average} - ${this, metric=mem|host_demand}) / ${this, metric=mem|haTotalCapacity_average}) * 100

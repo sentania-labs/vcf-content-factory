@@ -1,0 +1,15 @@
+id: 3110b13c-d3c8-4bda-bedc-e6064510c0cf
+name: "[VCF Content Factory] Cluster - Idle VM Count"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Count of VMs under this cluster that VCF Ops's capacity engine has flagged as
+  idle (summary|idle == 1). Idle VMs are consuming allocated capacity without doing
+  meaningful work — they are candidates to retire (rather than resize). A high idle
+  count suggests stale workloads or test VMs left running. depth=2 walks from
+  ClusterComputeResource through HostSystem to VirtualMachine.
+formula: |
+  count(${adaptertype=VMWARE, objecttype=VirtualMachine,
+         metric=summary|idle, depth=2,
+         where=($value==1)})

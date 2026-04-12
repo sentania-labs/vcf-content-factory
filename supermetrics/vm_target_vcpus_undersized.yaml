@@ -1,0 +1,15 @@
+id: c89674b9-85c6-4eb2-a69f-f003563fb541
+name: "[VCF Content Factory] VM - Target vCPUs (undersized)"
+resource_kinds:
+  - resource_kind_key: VirtualMachine
+    adapter_kind_key: VMWARE
+description: >
+  The recommended (target) vCPU count for an undersized VM, computed as current
+  vCPUs plus the additional vCPUs VCF Ops's capacity engine has recommended
+  adding. For a VM flagged as summary|undersized == 1 with
+  summary|undersized|vcpus = 4 on a 4-vCPU VM, this returns 8 — the resize
+  target. For VMs not flagged as undersized, summary|undersized|vcpus is zero,
+  so the SM returns the current vCPU count unchanged. Companion to
+  VM - Target vCPUs (oversized) — one handles shrink, the other grow.
+formula: |
+  ${this, metric=cpu|corecount_provisioned} + ${this, metric=summary|undersized|vcpus}

@@ -1,0 +1,15 @@
+id: 8d6ca90f-9710-4f5d-b180-cb46a483d65e
+name: "[VCF Content Factory] Cluster - VMs That Fit (CPU, demand-based)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Conservative estimate of how many additional VMs could be deployed on this
+  cluster before CPU demand saturates the post-HA capacity, based on the
+  current average VM's demand. Demand-based (not allocation-based) because VMs
+  rarely use 100% of their allocated vCPUs. Formula: (free CPU MHz after HA) /
+  (average VM demand in MHz). Returns 0 or negative when the cluster is already
+  CPU-bound. Pair with SM #4 (VMs That Fit - Memory) for the full capacity
+  story — the lower of the two is the real answer.
+formula: |
+  (${this, metric=cpu|haTotalCapacity_average} - ${this, metric=cpu|demandmhz}) / (${this, metric=cpu|demandmhz} / ${this, metric=summary|number_running_vms})

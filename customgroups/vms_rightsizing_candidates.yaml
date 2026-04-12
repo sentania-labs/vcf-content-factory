@@ -1,0 +1,23 @@
+name: "[VCF Content Factory] VMs - Right-Sizing Candidates"
+description: >
+  Dynamic group targeting virtual machines flagged by the VCF Ops capacity
+  engine as right-sizing candidates. Membership is the OR of three capacity
+  flags: oversized (over-provisioned relative to utilisation), undersized
+  (under-provisioned, posing a performance risk), or idle (unused, candidate
+  to retire). Used as the scoped member set for the VM Right-Sizing Candidates
+  view in the capacity/right-sizing dashboard.
+type: Environment
+auto_resolve_membership: true
+rules:
+  - resource_kind: VirtualMachine
+    adapter_kind: VMWARE
+    property:
+      - { key: "summary|oversized", op: EQ, value: 1 }
+  - resource_kind: VirtualMachine
+    adapter_kind: VMWARE
+    property:
+      - { key: "summary|undersized", op: EQ, value: 1 }
+  - resource_kind: VirtualMachine
+    adapter_kind: VMWARE
+    property:
+      - { key: "summary|idle", op: EQ, value: 1 }
