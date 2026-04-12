@@ -13,7 +13,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import List, Optional, Union
 
 import yaml
 
@@ -30,11 +30,59 @@ def stable_id(kind: str, name: str) -> str:
     return str(uuid.uuid5(NS, f"{kind}::{name}"))
 
 
+# Transformation enum whitelist — verified against real exported view XML.
+# See context/view_column_wire_format.md §Per-column transformations.
+_VALID_TRANSFORMATIONS: set[str] = {
+    "CURRENT", "NONE", "AVG", "MAX",
+    "PERCENTILE", "TREND", "FORECAST", "TRANSFORM_EXPRESSION",
+}
+
+# Time-interval-selector unit whitelist.
+_VALID_TIME_WINDOW_UNITS: set[str] = {
+    "MONTHS", "WEEKS", "DAYS", "HOURS", "MINUTES", "YEARS",
+}
+
+
+@dataclass
+class ViewTimeWindow:
+    """View-wide aggregation time window, rendered as a time-interval-selector
+    Control at the top of the Controls block.
+
+    ``unit`` must be one of MONTHS, WEEKS, DAYS, HOURS, MINUTES, YEARS.
+    ``count`` is a positive integer.
+
+    This window applies to ALL aggregating columns in the view (AVG, MAX,
+    PERCENTILE, TRANSFORM_EXPRESSION). Per-column time windows are not
+    supported by VCF Ops — one view, one window.
+    See context/view_column_wire_format.md §Limitations.
+    """
+    unit: str   # MONTHS|WEEKS|DAYS|HOURS|MINUTES|YEARS
+    count: int  # positive integer
+    advanced_time_mode: bool = False
+
+
 @dataclass
 class ViewColumn:
     attribute: str
     display_name: str
     unit: str = ""  # preferredUnitId, optional
+    # Per-column metric transformation.
+    # One of: CURRENT NONE AVG MAX PERCENTILE TREND FORECAST TRANSFORM_EXPRESSION
+    # Default CURRENT matches the list-view default for existing views.
+    transformation: Optional[str] = None
+    # Required when transformation == "PERCENTILE". Range 1..99.
+    percentile: Optional[int] = None
+    # Required when transformation == "TRANSFORM_EXPRESSION".
+    # Arbitrary arithmetic formula; only `avg` is bound as a symbol.
+    transform_expression: Optional[str] = None
+    # Per-column color thresholds. See context/view_column_wire_format.md.
+    yellow_bound: Optional[Union[float, str]] = None
+    orange_bound: Optional[Union[float, str]] = None
+    # red_bound accepts float for numeric, str for property-match (e.g. "Powered Off")
+    red_bound: Optional[Union[float, str]] = None
+    # Required when all three numeric bounds are set.
+    # False = higher is worse (red=high). True = lower is worse (red=low).
+    ascending_range: Optional[bool] = None
 
 
 @dataclass
@@ -91,8 +139,12 @@ class ViewDef:
     # Metric transformations for trend views. May include "TREND", "FORECAST".
     # "NONE" and "CURRENT" are the list-view defaults.
     transformations: List[str] | None = None
+    # View-wide aggregation time window. Applies to all aggregating columns.
+    # Rendered as a time-interval-selector Control replacing the default 24h window.
+    time_window: Optional[ViewTimeWindow] = None
 
     def validate(self) -> None:
+        import warnings
         if not self.name.strip():
             raise DashboardValidationError("view: name is required")
         if not self.adapter_kind or not self.resource_kind:
@@ -108,6 +160,7 @@ class ViewDef:
                 raise DashboardValidationError(
                     f"view {self.name}: column requires attribute and display_name"
                 )
+            self._validate_column(c)
         if self.data_type not in _VALID_PRESENTATIONS:
             raise DashboardValidationError(
                 f"view {self.name}: data_type must be one of "
@@ -119,6 +172,141 @@ class ViewDef:
                 f"view {self.name}: presentation {self.presentation!r} is not "
                 f"valid for data_type {self.data_type!r}; allowed: {sorted(allowed)}"
             )
+        # Time window validation
+        if self.time_window is not None:
+            tw = self.time_window
+            if tw.unit not in _VALID_TIME_WINDOW_UNITS:
+                raise DashboardValidationError(
+                    f"view {self.name}: time_window.unit {tw.unit!r} is not valid; "
+                    f"must be one of {sorted(_VALID_TIME_WINDOW_UNITS)}"
+                )
+            if tw.count <= 0:
+                raise DashboardValidationError(
+                    f"view {self.name}: time_window.count must be a positive integer, "
+                    f"got {tw.count!r}"
+                )
+        # Warn if aggregating columns present but no time_window set
+        _AGGREGATING = {"AVG", "MAX", "PERCENTILE", "TRANSFORM_EXPRESSION"}
+        needs_window = any(
+            (c.transformation or "CURRENT").upper() in _AGGREGATING
+            for c in self.columns
+        )
+        if needs_window and self.time_window is None:
+            warnings.warn(
+                f"view {self.name!r}: one or more columns use an aggregating "
+                "transformation (AVG/MAX/PERCENTILE/TRANSFORM_EXPRESSION) but "
+                "no time_window is set. Columns will aggregate over the view's "
+                "default window (typically 24 hours). Set time_window: "
+                "{{unit: MONTHS, count: 6}} to make the window explicit.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+    def _validate_column(self, c: "ViewColumn") -> None:  # noqa: F821
+        """Per-column validation for transformation and threshold fields."""
+        import warnings
+        name_ctx = f"view {self.name!r} column {c.display_name!r}"
+
+        # Transformation whitelist
+        transform = (c.transformation or "CURRENT").upper()
+        if transform not in _VALID_TRANSFORMATIONS:
+            raise DashboardValidationError(
+                f"{name_ctx}: transformation {c.transformation!r} is not valid. "
+                f"Must be one of {sorted(_VALID_TRANSFORMATIONS)}. "
+                "See context/view_column_wire_format.md."
+            )
+
+        # PERCENTILE cross-validation
+        if transform == "PERCENTILE":
+            if c.percentile is None:
+                raise DashboardValidationError(
+                    f"{name_ctx}: transformation PERCENTILE requires percentile "
+                    "field (integer 1..99)."
+                )
+            if not (1 <= c.percentile <= 99):
+                raise DashboardValidationError(
+                    f"{name_ctx}: percentile {c.percentile!r} out of range; "
+                    "must be 1..99."
+                )
+        elif c.percentile is not None:
+            raise DashboardValidationError(
+                f"{name_ctx}: percentile field is only valid when "
+                f"transformation == 'PERCENTILE', got {c.transformation!r}."
+            )
+
+        # TRANSFORM_EXPRESSION cross-validation
+        if transform == "TRANSFORM_EXPRESSION":
+            if not c.transform_expression:
+                raise DashboardValidationError(
+                    f"{name_ctx}: transformation TRANSFORM_EXPRESSION requires "
+                    "transform_expression field (formula string using 'avg' symbol)."
+                )
+        elif c.transform_expression is not None:
+            raise DashboardValidationError(
+                f"{name_ctx}: transform_expression field is only valid when "
+                f"transformation == 'TRANSFORM_EXPRESSION', got {c.transformation!r}."
+            )
+
+        # Color threshold validation
+        # Determine which bounds are numeric vs string
+        def _is_numeric(v) -> bool:
+            if v is None:
+                return False
+            try:
+                float(str(v))
+                return True
+            except (ValueError, TypeError):
+                return False
+
+        has_yellow = c.yellow_bound is not None
+        has_orange = c.orange_bound is not None
+        has_red = c.red_bound is not None
+        red_is_string = has_red and not _is_numeric(c.red_bound)
+
+        # String-only red_bound case: ascending_range must NOT be set
+        if red_is_string and not has_yellow and not has_orange:
+            if c.ascending_range is not None:
+                raise DashboardValidationError(
+                    f"{name_ctx}: ascending_range must not be set when only "
+                    "red_bound is specified as a string (property-match coloring)."
+                )
+        elif has_yellow or has_orange or (has_red and not red_is_string):
+            # Numeric bound case: require ascending_range when all three are set
+            all_numeric_set = has_yellow and has_orange and has_red and not red_is_string
+            if all_numeric_set and c.ascending_range is None:
+                raise DashboardValidationError(
+                    f"{name_ctx}: ascending_range is required when all three "
+                    "numeric color bounds (yellow_bound, orange_bound, red_bound) "
+                    "are set. Use False for higher-is-worse (CPU %, latency), "
+                    "True for lower-is-worse (free capacity %, headroom)."
+                )
+            # Warn on inverted band ordering
+            if (all_numeric_set and c.ascending_range is not None
+                    and _is_numeric(c.yellow_bound) and _is_numeric(c.orange_bound)
+                    and _is_numeric(c.red_bound)):
+                y = float(str(c.yellow_bound))
+                o = float(str(c.orange_bound))
+                r = float(str(c.red_bound))
+                if not c.ascending_range:
+                    # Higher-is-worse: yellow < orange < red
+                    if y >= o or o >= r:
+                        warnings.warn(
+                            f"{name_ctx}: ascending_range=False (higher-is-worse) "
+                            f"expects yellow < orange < red, got "
+                            f"yellow={y}, orange={o}, red={r}.",
+                            UserWarning,
+                            stacklevel=3,
+                        )
+                else:
+                    # Lower-is-worse: yellow > orange > red
+                    if y <= o or o <= r:
+                        warnings.warn(
+                            f"{name_ctx}: ascending_range=True (lower-is-worse) "
+                            f"expects yellow > orange > red, got "
+                            f"yellow={y}, orange={o}, red={r}.",
+                            UserWarning,
+                            stacklevel=3,
+                        )
 
 
 @dataclass
@@ -560,14 +748,54 @@ def load_view(path: Path) -> ViewDef:
         raise DashboardValidationError(
             f"{path}: id '{view_id}' is not a valid uuid4"
         )
-    cols = [
-        ViewColumn(
+    def _load_column(c: dict) -> "ViewColumn":
+        transform_raw = c.get("transformation")
+        transform_expr = c.get("transform_expression")
+        # Convenience: if transform_expression is set but transformation isn't,
+        # auto-set transformation to TRANSFORM_EXPRESSION.
+        if transform_expr and not transform_raw:
+            transform_raw = "TRANSFORM_EXPRESSION"
+        transformation = str(transform_raw).strip().upper() if transform_raw else None
+
+        percentile_raw = c.get("percentile")
+        percentile = int(percentile_raw) if percentile_raw is not None else None
+
+        def _maybe_float(v):
+            """Return float if numeric string/number, else return as-is string."""
+            if v is None:
+                return None
+            if isinstance(v, (int, float)):
+                return float(v)
+            s = str(v).strip()
+            try:
+                return float(s)
+            except ValueError:
+                return s  # string-match bound (e.g. "Powered Off")
+
+        yellow = _maybe_float(c.get("yellow_bound"))
+        orange = _maybe_float(c.get("orange_bound"))
+        red = _maybe_float(c.get("red_bound")) if c.get("red_bound") is not None else None
+        # For string red_bound, _maybe_float returns the string itself
+        if "red_bound" in c and isinstance(c["red_bound"], str):
+            red = c["red_bound"].strip()
+
+        ascending_raw = c.get("ascending_range")
+        ascending = bool(ascending_raw) if ascending_raw is not None else None
+
+        return ViewColumn(
             attribute=str(c["attribute"]).strip(),
             display_name=str(c["display_name"]).strip(),
             unit=str(c.get("unit", "") or "").strip(),
+            transformation=transformation,
+            percentile=percentile,
+            transform_expression=str(transform_expr).strip() if transform_expr else None,
+            yellow_bound=yellow,
+            orange_bound=orange,
+            red_bound=red,
+            ascending_range=ascending,
         )
-        for c in (data.get("columns") or [])
-    ]
+
+    cols = [_load_column(c) for c in (data.get("columns") or [])]
     subj = data.get("subject") or {}
     summary_raw = data.get("summary")
     summary = None
@@ -618,6 +846,15 @@ def load_view(path: Path) -> ViewDef:
     if transformations_raw is not None:
         transformations = [str(t).strip().upper() for t in (transformations_raw or [])]
 
+    # View-level time window (time-interval-selector)
+    time_window = None
+    tw_raw = data.get("time_window")
+    if tw_raw is not None and isinstance(tw_raw, dict):
+        tw_unit = str(tw_raw.get("unit", "")).strip().upper()
+        tw_count = int(tw_raw.get("count", 0))
+        tw_adv = bool(tw_raw.get("advanced_time_mode", False))
+        time_window = ViewTimeWindow(unit=tw_unit, count=tw_count, advanced_time_mode=tw_adv)
+
     v = ViewDef(
         id=view_id,
         name=str(data.get("name", "")).strip(),
@@ -632,6 +869,7 @@ def load_view(path: Path) -> ViewDef:
         buckets=buckets,
         forecast_days=forecast_days,
         transformations=transformations,
+        time_window=time_window,
     )
     v.validate()
     return v

@@ -20,7 +20,7 @@ import uuid
 from xml.sax.saxutils import escape
 
 from .loader import (
-    Dashboard, Interaction, MetricSpec, ViewDef, Widget,
+    Dashboard, Interaction, MetricSpec, ViewDef, ViewColumn, ViewTimeWindow, Widget,
     MetricChartConfig, ScoreboardConfig, TextDisplayConfig,
     HealthChartConfig, ParetoAnalysisConfig,
     AlertListConfig, ProblemAlertsListConfig,
@@ -70,6 +70,33 @@ def _xml_buckets_control(view: ViewDef) -> str:
             f'<Property name="bucketCount" value="{b.count}"/>'
             "</Control>"
         )
+
+
+def _xml_time_interval_selector(view: ViewDef, control_id: str = "time-interval-selector_id_1") -> str:
+    """Emit the time-interval-selector Control.
+
+    When ``view.time_window`` is set the control uses those values.
+    Otherwise falls back to the prior default (HOURS/24).
+
+    The control always sits at the top of the <Controls> block.
+    See context/view_column_wire_format.md §Per-column transformations.
+    """
+    if view.time_window is not None:
+        tw = view.time_window
+        adv = "true" if tw.advanced_time_mode else "false"
+        unit = escape(tw.unit)
+        count = str(tw.count)
+    else:
+        adv = "false"
+        unit = "HOURS"
+        count = "24"
+    return (
+        f'<Control id="{control_id}" type="time-interval-selector" visible="false">'
+        f'<Property name="advancedTimeMode" value="{adv}"/>'
+        f'<Property name="unit" value="{unit}"/>'
+        f'<Property name="count" value="{count}"/>'
+        f'</Control>'
+    )
 
 
 def _xml_transformations_block(view: ViewDef) -> str:
@@ -137,9 +164,66 @@ def _xml_attribute_item(view: ViewDef, col, idx: int, sm_map: dict[str, str] | N
         _xml_property("resourceKind", view.resource_kind),
         _xml_property("rollUpType", roll_up_type),
         _xml_property("rollUpCount", "1"),
-        _xml_transformations_block(view),
-        _xml_property("isProperty", "false"),
-        _xml_property("displayName", col.display_name),
+    ]
+    # Per-column transformation block.
+    # Trend views retain the view-level stacked list (NONE/TREND/FORECAST);
+    # all other view types get a per-column single-item transformations block.
+    if view.data_type == "trend":
+        props.append(_xml_transformations_block(view))
+    else:
+        # Emit percentile or transformExpression BEFORE the transformations block
+        # (matches exported order: context/view_column_wire_format.md).
+        transform = (col.transformation or "CURRENT").upper()
+        if transform == "PERCENTILE" and col.percentile is not None:
+            props.append(_xml_property("percentile", str(col.percentile)))
+        if transform == "TRANSFORM_EXPRESSION" and col.transform_expression:
+            props.append(_xml_property("transformExpression", col.transform_expression))
+        props.append(
+            f'<Property name="transformations">'
+            f'<List><Item value="{escape(transform)}"/></List>'
+            f'</Property>'
+        )
+    props.append(_xml_property("isProperty", "false"))
+    # Color bound Properties — emitted between isProperty and displayName
+    # in order: yellow, orange, red, ascendingRange.
+    # See context/view_column_wire_format.md §Per-column color thresholds.
+    def _bound_str(v) -> str:
+        """Coerce a bound value to its wire-format string representation."""
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, float):
+            # Preserve sub-integer notation as observed in real exports (e.g. ".1")
+            return str(v)
+        return str(v)
+
+    def _is_numeric_bound(v) -> bool:
+        if v is None:
+            return False
+        if isinstance(v, (int, float)):
+            return True
+        try:
+            float(str(v))
+            return True
+        except (ValueError, TypeError):
+            return False
+
+    has_yellow = col.yellow_bound is not None
+    has_orange = col.orange_bound is not None
+    has_red = col.red_bound is not None
+    red_is_string = has_red and not _is_numeric_bound(col.red_bound)
+
+    if has_yellow:
+        props.append(_xml_property("yellowBound", _bound_str(col.yellow_bound)))
+    if has_orange:
+        props.append(_xml_property("orangeBound", _bound_str(col.orange_bound)))
+    if has_red:
+        props.append(_xml_property("redBound", _bound_str(col.red_bound)))
+    # ascendingRange: emit for numeric bounds; suppress for string-only red_bound
+    if col.ascending_range is not None and not (red_is_string and not has_yellow and not has_orange):
+        props.append(_xml_property("ascendingRange", "true" if col.ascending_range else "false"))
+
+    props.append(_xml_property("displayName", col.display_name))
+    props += [
         _xml_property("addTimestampAsColumn", "false"),
         _xml_property("isShowRelativeTimestamp", "false"),
     ]
@@ -179,14 +263,9 @@ def _render_view_def_fragment(view: ViewDef, sm_map: dict[str, str] | None = Non
         "<Usage>dashboard</Usage><Usage>report</Usage><Usage>details</Usage><Usage>content</Usage>"
     )
 
-    # Time-interval control appears in all view types
-    time_control = (
-        '<Control id="time-interval-selector_id_1" type="time-interval-selector" visible="false">'
-        '<Property name="advancedTimeMode" value="false"/>'
-        '<Property name="unit" value="HOURS"/>'
-        '<Property name="count" value="24"/>'
-        "</Control>"
-    )
+    # Time-interval control appears in all view types.
+    # Uses view.time_window when set, otherwise defaults to HOURS/24.
+    time_control = _xml_time_interval_selector(view)
 
     # Attributes-selector is common to all view types
     attr_control = (
