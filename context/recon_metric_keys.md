@@ -3,7 +3,7 @@
 Findings from investigating why
 `views/vm_perf_storage.yaml` (UUID `590b5c28-d38d-55c5-a51f-d447f68b4975`)
 installed cleanly but rendered every column blank in the UI on
-`vcf-lab-operations.int.sentania.net`, 2026-04-08.
+`vcfops.example.com`, 2026-04-08.
 
 ## TL;DR
 

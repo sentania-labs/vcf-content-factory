@@ -2,7 +2,7 @@
 
 Reconnaissance log for the distribution-package drop-in artifacts
 (`Dashboard.zip`, `Reports.zip`, `AlertContent.xml`). Investigated
-2026-04-11 against `vcf-lab-operations.int.sentania.net` (VCF Ops
+2026-04-11 against `vcfops.example.com` (VCF Ops
 9.0.2.0). All findings below were empirically verified by building
 test envelopes, POSTing them, and reading back the resulting state.
 

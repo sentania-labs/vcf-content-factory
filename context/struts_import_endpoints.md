@@ -6,7 +6,7 @@ Metric, View, Custom Group, and Report drop-ins, with the goal that
 `qa-tester` could drive the same endpoints a real admin's browser
 would hit. This file is the empirical survey of the
 `/ui/*.action` Struts layer and the `/ui/vcops/services/router`
-Ext.Direct layer on `vcf-lab-operations.int.sentania.net` (VCF Ops
+Ext.Direct layer on `vcfops.example.com` (VCF Ops
 9.0.2.0 build 25137838) run 2026-04-11.
 
 **The headline finding** also appears in `context/ui_import_formats.md`

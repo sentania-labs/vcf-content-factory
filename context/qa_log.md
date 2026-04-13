@@ -14,7 +14,7 @@ pass/fail verdict with the commit hash the test was run against.
 
 ## 2026-04-11 — Python `install.py` acceptance (multi-bundle refactor)
 
-**Instance:** `vcf-lab-operations.int.sentania.net` (VCF Ops 9.0.2)
+**Instance:** `vcfops.example.com` (VCF Ops 9.0.2)
 **Runtime:** Python 3 + stdlib + `requests` (bootstrapped)
 **Build under test:** commit `131f3ce` — "Fix view/report delete: correct
 Ext.Direct data shape + add report uninstall"
@@ -75,7 +75,7 @@ admin-guard enforcement, SM enable verification
 
 ## 2026-04-11 — PowerShell `install.ps1` acceptance (multi-bundle refactor)
 
-**Instance:** `vcf-lab-operations.int.sentania.net` (VCF Ops 9.0.2)
+**Instance:** `vcfops.example.com` (VCF Ops 9.0.2)
 **Runtime:** pwsh 7.5.1 on Linux (PS 5.1 compatibility guards present
 but not exercised on this host)
 **Build under test:** commit `7dc3acd` — "Auto-derive display name for
@@ -135,7 +135,7 @@ a PS-focused re-run.
 
 ## 2026-04-11 — PowerShell `install.ps1` acceptance, second attempt (post PS-1/2/3 fix)
 
-**Instance:** `vcf-lab-operations.int.sentania.net` (VCF Ops 9.0.2)
+**Instance:** `vcfops.example.com` (VCF Ops 9.0.2)
 **Runtime:** pwsh 7.5.1 on Linux
 **Build under test:** commit `7dc3acd` rebuilt zips with install.ps1
 updated via commit `da1579a` (PS-1/2/3 fixes)
@@ -194,7 +194,7 @@ bump (50 → 500) + narrow re-run of Tests 1 and 3.
 
 ## 2026-04-11 — PowerShell `install.ps1` acceptance, final narrow re-run
 
-**Instance:** `vcf-lab-operations.int.sentania.net` (VCF Ops 9.0.2)
+**Instance:** `vcfops.example.com` (VCF Ops 9.0.2)
 **Runtime:** pwsh 7.5.1 on Linux
 **Build under test:** commit `889c761` (PS-4 SSL fix + limit=500 parity)
 **install.ps1 md5:** `736b7c89f31462281ba05d633d225f4a` (uniform across

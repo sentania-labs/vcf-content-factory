@@ -1,6 +1,6 @@
 # Adapter describe API exploration
 
-Captured 2026-04-10 against vcf-lab-operations.int.sentania.net
+Captured 2026-04-10 against vcfops.example.com
 (VCF Operations 9.0.2).
 
 ## Endpoints

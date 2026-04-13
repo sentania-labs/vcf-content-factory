@@ -32,7 +32,7 @@
     VCF Operations password. Env: VCFOPS_PASSWORD.
 
 .PARAMETER AuthSource
-    Auth source: 'local' or a domain name like 'int.sentania.net'.
+    Auth source: 'local' or a domain name like 'corp.example.com'.
     Env: VCFOPS_AUTH_SOURCE. Default: Local.
 
 .PARAMETER SkipSslVerify
@@ -383,7 +383,7 @@ function Get-Credentials {
     }
 
     if (-not $script:AuthSource) {
-        $inp = Read-Host "Auth source (local, or domain like int.sentania.net) [local]"
+        $inp = Read-Host "Auth source (local, or domain like corp.example.com) [local]"
         $script:AuthSource = $inp
     }
     $script:AuthSource = Resolve-AuthSource $script:AuthSource

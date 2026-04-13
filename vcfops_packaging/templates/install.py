@@ -291,7 +291,7 @@ def _resolve_auth_source(raw: str) -> str:
     """Normalise the user-supplied auth source string.
 
     'local' (case-insensitive) or empty -> 'Local' (Suite API canonical value).
-    Anything else (e.g. 'int.sentania.net') -> returned as-is.
+    Anything else (e.g. 'corp.example.com') -> returned as-is.
 
     Each client is responsible for translating 'Local' to the value its own
     API endpoint expects:
@@ -1152,7 +1152,7 @@ def _prompt_credentials(args: argparse.Namespace, mode: str) -> tuple:
     auth_source_raw = args.auth_source
     if not auth_source_raw:
         auth_source_raw = input(
-            "Auth source (local, or domain like int.sentania.net) [local]: "
+            "Auth source (local, or domain like corp.example.com) [local]: "
         ).strip()
     auth_source = _resolve_auth_source(auth_source_raw)
 
@@ -2198,7 +2198,7 @@ def main() -> None:
                     help="VCF Ops password (env: VCFOPS_PASSWORD)")
     ap.add_argument("--auth-source",
                     default=os.environ.get("VCFOPS_AUTH_SOURCE", ""),
-                    help="Auth source: 'local' or a domain name like int.sentania.net "
+                    help="Auth source: 'local' or a domain name like corp.example.com "
                          "(env: VCFOPS_AUTH_SOURCE, default: Local)")
     ap.add_argument("--skip-ssl-verify", action="store_true",
                     default=(os.environ.get("VCFOPS_VERIFY_SSL", "true").lower() == "false"),
