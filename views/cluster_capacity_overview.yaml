@@ -14,9 +14,6 @@ subject:
 summary: true
 
 columns:
-  - attribute: summary|name
-    display_name: "Cluster"
-    unit: ""
   - attribute: summary|total_number_hosts
     display_name: "Hosts"
     unit: ""

@@ -237,7 +237,7 @@ def cmd_delete_view(args) -> int:
         failed = 0
         for uid, name in targets:
             try:
-                ui.delete_view(uid)
+                ui.delete_view(uid, name)
                 print(f"  deleted {uid}  {name}")
             except UIClientError as e:
                 print(f"  FAILED {uid}  {name}: {e}", file=sys.stderr)

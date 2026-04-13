@@ -56,6 +56,34 @@ COMPARE_OPS = {
 }
 RELATIONS = {"PARENT", "CHILD", "ANCESTOR", "DESCENDANT"}
 
+# Mapping from REST compareOperator values to UI ruleStringOperator values.
+# Used by CustomGroupDef.to_ui_wire().
+_UI_STRING_OP_MAP: dict = {
+    "EQ":           "EQUALS",
+    "NOT_EQ":       "NOT_EQUALS",
+    "CONTAINS":     "CONTAINS",
+    "NOT_CONTAINS": "NOT_CONTAINS",
+    "STARTS_WITH":  "STARTS_WITH",
+    "ENDS_WITH":    "ENDS_WITH",
+    "REGEX":        "REGEX",
+    # Numeric ops that may appear on property rules with string values
+    "GT":    "GREATER_THAN",
+    "GT_EQ": "GREATER_THAN_OR_EQUALS",
+    "LT":    "LESS_THAN",
+    "LT_EQ": "LESS_THAN_OR_EQUALS",
+}
+
+# Mapping from REST compareOperator values to UI ruleOperator values
+# (used for NumericMetricPropertyRule / stat rules).
+_UI_NUMERIC_OP_MAP: dict = {
+    "GT":     "GREATER_THAN",
+    "GT_EQ":  "GREATER_THAN_OR_EQUALS",
+    "LT":     "LESS_THAN",
+    "LT_EQ":  "LESS_THAN_OR_EQUALS",
+    "EQ":     "EQUALS",
+    "NOT_EQ": "NOT_EQUALS",
+}
+
 
 @dataclass
 class CustomGroupDef:
@@ -148,6 +176,123 @@ class CustomGroupDef:
             )
 
     # ---- wire format ----------------------------------------------
+
+    def to_ui_wire(self) -> dict:
+        """Expand the terse YAML into the UI import JSON format.
+
+        The UI import dialog (Environment > Custom Groups > Import) expects a
+        different JSON shape from the REST API POST /api/resources/groups. This
+        method produces the UI envelope shape, suitable for drag-drop import and
+        for the community-native customgroup.json artifact in distribution zips.
+
+        The REST API shape is produced by to_wire().  Both methods must remain
+        in sync — this one is for distribution packages, to_wire() is for the
+        install-script REST path.
+
+        Top-level envelope: {"customGroups": [...], "customGroupTypes": [...]}
+        See context/customgroup_import_format.md for the full format reference.
+        """
+        group = {
+            "name": self.name,
+            "description": self.description,
+            "resourceKind": self.type_key,
+            "adapterKind": "Container",
+            "autoResolveMembership": self.auto_resolve_membership,
+            "started": True,
+            "membershipDefinition": {
+                "ruleGroups": [self._rule_to_ui_wire(r) for r in self.rules],
+            },
+        }
+        group_type = {
+            "resourceKind": self.type_key,
+            "localization": [
+                {"resourceKindName": self.type_key, "locale": "en"},
+            ],
+        }
+        return {"customGroups": [group], "customGroupTypes": [group_type]}
+
+    def _rule_to_ui_wire(self, rule: dict) -> dict:
+        """Convert one YAML rule entry into a UI ruleGroup dict."""
+        ui_rules = []
+
+        # name conditions → ResourceNameRule
+        for c in rule.get("name") or []:
+            ui_rules.append({
+                "ruleType": "ResourceNameRule",
+                "ruleStringOperator": _UI_STRING_OP_MAP.get(c["op"], c["op"]),
+                "ruleStringValue": c["value"],
+            })
+
+        # property conditions → StringMetricPropertyRule or
+        # NumericMetricPropertyRule depending on the value type.
+        for c in rule.get("property") or []:
+            val = c["value"]
+            if isinstance(val, bool):
+                ui_rules.append({
+                    "ruleType": "StringMetricPropertyRule",
+                    "ruleMetricKey": c["key"],
+                    "isProperty": True,
+                    "ruleStringOperator": _UI_STRING_OP_MAP.get(c["op"], c["op"]),
+                    "ruleStringValue": "true" if val else "false",
+                })
+            elif isinstance(val, (int, float)):
+                ui_rules.append({
+                    "ruleType": "NumericMetricPropertyRule",
+                    "ruleMetricKey": c["key"],
+                    "isProperty": True,
+                    "ruleOperator": _UI_NUMERIC_OP_MAP.get(c["op"], c["op"]),
+                    "ruleValue": float(val),
+                })
+            else:
+                ui_rules.append({
+                    "ruleType": "StringMetricPropertyRule",
+                    "ruleMetricKey": c["key"],
+                    "isProperty": True,
+                    "ruleStringOperator": _UI_STRING_OP_MAP.get(c["op"], c["op"]),
+                    "ruleStringValue": str(val),
+                })
+
+        # stat conditions → NumericMetricPropertyRule (isProperty: false)
+        for c in rule.get("stat") or []:
+            ui_rules.append({
+                "ruleType": "NumericMetricPropertyRule",
+                "ruleMetricKey": c["key"],
+                "isProperty": False,
+                "ruleOperator": _UI_NUMERIC_OP_MAP.get(c["op"], c["op"]),
+                "ruleValue": float(c["value"]),
+            })
+
+        # relationship conditions → RelationshipRule
+        for c in rule.get("relationship") or []:
+            ui_rules.append({
+                "ruleType": "RelationshipRule",
+                "ruleRelationshipType": c["relation"],
+                "ruleStringOperator": _UI_STRING_OP_MAP.get(c["op"], c["op"]),
+                "ruleStringValue": c["name"],
+            })
+
+        # tag conditions — no UI ruleType known from reference specimens.
+        # Emit StringMetricPropertyRule as the closest approximation and log
+        # a comment field so callers can detect the gap.
+        for c in rule.get("tag") or []:
+            ui_rules.append({
+                "ruleType": "StringMetricPropertyRule",
+                "_tag_gap": (
+                    "Tag rules have no confirmed UI ruleType. "
+                    "This is approximated as StringMetricPropertyRule."
+                ),
+                "ruleMetricKey": c["category"],
+                "isProperty": True,
+                "ruleStringOperator": _UI_STRING_OP_MAP.get(c["op"], c["op"]),
+                "ruleStringValue": str(c["value"]),
+            })
+
+        return {
+            "resourceKind": rule["resource_kind"],
+            "adapterKind": rule["adapter_kind"],
+            "rules": ui_rules,
+        }
+
     def to_wire(self) -> dict:
         """Expand the terse YAML into the verbose JSON body the
         `/api/resources/groups` POST endpoint expects.

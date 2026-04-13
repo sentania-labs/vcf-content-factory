@@ -640,7 +640,7 @@ function Import-PolicyZip {
     param([byte[]]$ZipBytes)
     # POST /api/policies/import?forceImport=true as multipart/form-data.
     # The session-level Content-Type header must NOT be application/json for
-    # multipart uploads — we use Invoke-RestMethod with -Form which sets the
+    # multipart uploads -- we use Invoke-RestMethod with -Form which sets the
     # correct boundary automatically.
     $uri = "$script:BaseUrl/api/policies/import?forceImport=true"
     Add-Type -AssemblyName System.Net.Http
@@ -677,7 +677,7 @@ function Enable-SupermetricOnDefaultPolicy {
     param($SmId, $SmName, $ResourceKinds, $PolicyId)
 
     # Step 1: resource-kind assignment via PUT /internal/supermetrics/assign
-    # (without policyIds — that variant does not enable content-zip SMs).
+    # (without policyIds -- that variant does not enable content-zip SMs).
     # This wires the SM to the adapter/resource kind so it appears in views.
     $assignBody = @{
         superMetricId    = $SmId
@@ -730,7 +730,7 @@ function Enable-SupermetricOnDefaultPolicy {
     $pkgSettings = $doc.GetElementsByTagName("PackageSettings") | Select-Object -First 1
     if (-not $pkgSettings) {
         $policyElem = $doc.GetElementsByTagName("Policy") | Select-Object -First 1
-        if (-not $policyElem) { throw "Policy XML has no <Policy> element — cannot inject SM '$SmName'" }
+        if (-not $policyElem) { throw "Policy XML has no <Policy> element -- cannot inject SM '$SmName'" }
         $pkgSettings = $doc.CreateElement("PackageSettings")
         $policyElem.AppendChild($pkgSettings) | Out-Null
     }
@@ -1112,15 +1112,15 @@ function Start-UISession {
     # Step 2: login
     # The UI form expects 'localItem' for local accounts; translate from canonical 'Local'.
     $uiAuthSource = if ($script:AuthSource -eq 'Local') { 'localItem' } else { $script:AuthSource }
-    $loginBody = "mainAction=login" +
-        "&userName=$([uri]::EscapeDataString($script:User))" +
-        "&password=$([uri]::EscapeDataString($script:Password))" +
-        "&authSourceId=$([uri]::EscapeDataString($uiAuthSource))" +
+    $loginBody = ("mainAction=login" +
+        ("&userName="     + [uri]::EscapeDataString($script:User)) +
+        ("&password="     + [uri]::EscapeDataString($script:Password)) +
+        ("&authSourceId=" + [uri]::EscapeDataString($uiAuthSource)) +
         "&authSourceName=Local+Account" +
         "&authSourceType=" +
         "&forceLogin=false" +
         "&timezone=0" +
-        "&languageCode=us"
+        "&languageCode=us")
 
     $loginResp = Invoke-WebRequest @iwrParams `
         -Uri "https://$($script:OpsHost)/ui/login.action" `
@@ -1151,7 +1151,7 @@ function Start-UISession {
     if (-not $opsCookie) {
         if ($indexResp -and $indexResp.Headers) {
             # $indexResp may be HttpResponseMessage (from catch) whose Headers
-            # is HttpResponseHeaders — not indexable with []. Use GetValues().
+            # is HttpResponseHeaders -- not indexable with []. Use GetValues().
             $setCookie = $null
             try { $setCookie = $indexResp.Headers.GetValues("Set-Cookie") } catch {}
             if (-not $setCookie) {
@@ -1302,7 +1302,7 @@ function Remove-View {
     # data shape: array containing one dict; viewDefIds is a JSON-stringified
     # array of {id, name} objects. Sending a bare UUID (old shape) crashes the
     # server handler and returns type:exception "Internal server error."
-    # See context/dashboard_delete_api.md §2026-04-11 update.
+    # See context/dashboard_delete_api.md section 2026-04-11 update.
     $innerJson = ConvertTo-Json @(@{ id = $ViewId; name = $ViewName }) -Compress
     $result = Invoke-ExtDirect -Calls @(@{
         action = "viewServiceController"
@@ -1364,7 +1364,7 @@ function Remove-Reports {
     $tid = Get-NextTid
     # data shape: BARE DICT (not array), reportDefIds is a JSON-stringified
     # array of {id, name} objects. This differs from deleteView which wraps
-    # data in an array. See context/dashboard_delete_api.md §2026-04-11 update.
+    # data in an array. See context/dashboard_delete_api.md section 2026-04-11 update.
     $innerJson = ConvertTo-Json @($Reports | ForEach-Object {
         @{ id = $_.Uuid; name = $_.Name }
     }) -Compress

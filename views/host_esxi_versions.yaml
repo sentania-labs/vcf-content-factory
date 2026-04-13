@@ -1,0 +1,35 @@
+id: 544f6a7c-1186-4905-8a43-241597b396fd
+name: "[VCF Content Factory] Host ESXi Versions"
+description: >
+  Per-host ESXi version and build inventory. Shows the ESXi product string,
+  build number, and short version for every host, grouped by parent cluster
+  and vCenter. Use to identify patch drift — all hosts in a cluster should
+  show the same build number. Drives the ESXi version section of the
+  Environment Configuration Status dashboard.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: HostSystem
+
+summary: true
+
+columns:
+  - attribute: summary|parentCluster
+    display_name: "Cluster"
+    unit: ""
+
+  - attribute: summary|parentVcenter
+    display_name: "vCenter"
+    unit: ""
+
+  - attribute: sys|productString
+    display_name: "ESXi Product String"
+    unit: ""
+
+  - attribute: summary|version
+    display_name: "Version"
+    unit: ""
+
+  - attribute: sys|build
+    display_name: "Build Number"
+    unit: ""

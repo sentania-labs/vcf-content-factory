@@ -145,7 +145,7 @@ class ViewsHandler(ContentHandler):
                     )
                     continue
                 try:
-                    ui.delete_view(view_id)
+                    ui.delete_view(view_id, name)
                     result.items.append(ItemResult(name=name, status="ok"))
                 except (UIClientError, Exception) as exc:
                     result.items.append(

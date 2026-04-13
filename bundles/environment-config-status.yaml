@@ -1,0 +1,24 @@
+name: environment-config-status
+description: >
+  VP-level environment configuration and capacity status dashboard. Three
+  sections: capacity headroom overview with post-HA adjusted KPIs and
+  cluster-level detail; ESXi patch and version consistency across the host
+  fleet; hardware and BIOS firmware configuration inventory. Reuses existing
+  capacity super metrics — no new super metrics needed for the configuration
+  views (they use native HostSystem properties). Install this bundle on any
+  VCF Ops 9+ instance for executive environment reviews.
+supermetrics:
+  - supermetrics/cluster_cpu_free_pct_after_ha.yaml
+  - supermetrics/cluster_memory_free_pct_after_ha.yaml
+  - supermetrics/cluster_vms_that_fit_cpu.yaml
+  - supermetrics/cluster_vms_that_fit_memory.yaml
+views:
+  - views/cluster_capacity_overview.yaml
+  - views/host_esxi_versions.yaml
+  - views/host_hardware_config.yaml
+dashboards:
+  - dashboards/environment_config_status.yaml
+customgroups: []
+symptoms: []
+alerts: []
+reports: []

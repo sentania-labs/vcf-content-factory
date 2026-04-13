@@ -23,10 +23,6 @@ time_window:
   count: 1
 
 columns:
-  - attribute: summary|name
-    display_name: "VM Name"
-    unit: ""
-
   - attribute: summary|parentCluster
     display_name: "Parent Cluster"
     unit: ""

@@ -172,12 +172,44 @@ def _render_supermetrics_dict(bundle: Bundle) -> dict:
     return result
 
 
-def _render_customgroup_payload(bundle: Bundle):
-    """Render custom group wire payloads."""
+def _render_customgroup_rest_payload(bundle: Bundle):
+    """Render custom group REST API wire payloads (for content/customgroup.json).
+
+    Returns a single dict if there is one group, a list if there are multiple.
+    The install script's _install_customgroups() reads this file and calls
+    upsert_custom_group() which POSTs/PUTs to /api/resources/groups.
+    """
     if not bundle.customgroups:
         return None
     wire = [cg.to_wire() for cg in bundle.customgroups]
     return wire[0] if len(wire) == 1 else wire
+
+
+def _render_customgroup_ui_payload(bundle: Bundle) -> dict | None:
+    """Render custom group UI import payload (for drag-drop customgroup.json).
+
+    Produces the envelope format expected by the VCF Ops UI custom group import
+    dialog: {"customGroups": [...], "customGroupTypes": [...]}.  All groups in
+    the bundle are merged into a single envelope.  Duplicate customGroupTypes
+    (same resourceKind) are deduplicated, keeping the first occurrence.
+
+    See context/customgroup_import_format.md for the format specification.
+    """
+    if not bundle.customgroups:
+        return None
+    all_groups = []
+    seen_type_keys: dict = {}  # resourceKind -> first localization seen
+    for cg in bundle.customgroups:
+        ui = cg.to_ui_wire()
+        all_groups.extend(ui["customGroups"])
+        for gt in ui["customGroupTypes"]:
+            rk = gt["resourceKind"]
+            if rk not in seen_type_keys:
+                seen_type_keys[rk] = gt
+    return {
+        "customGroups": all_groups,
+        "customGroupTypes": list(seen_type_keys.values()),
+    }
 
 
 def _build_views_inner_zip(xml_text: str) -> bytes:
@@ -376,8 +408,12 @@ def build_bundle(
             bundle.dashboards, views_by_name, PLACEHOLDER_USER_ID
         )
 
-    cg_payload = _render_customgroup_payload(bundle)
-    cg_json = json.dumps(cg_payload, indent=2) if cg_payload is not None else None
+    # REST-format payload for install-script REST API path (content/customgroup.json)
+    cg_rest_payload = _render_customgroup_rest_payload(bundle)
+    cg_rest_json = json.dumps(cg_rest_payload, indent=2) if cg_rest_payload is not None else None
+    # UI-format payload for drag-drop import (bundles/<slug>/customgroup.json)
+    cg_ui_payload = _render_customgroup_ui_payload(bundle)
+    cg_ui_json = json.dumps(cg_ui_payload, indent=2) if cg_ui_payload is not None else None
 
     reports_xml = render_report_xml(bundle.reports) if bundle.reports else None
 
@@ -462,8 +498,8 @@ def build_bundle(
         # Drag-drop artifacts at bundle root (community-native filenames)
         if sm_json:
             z.writestr(bundle_prefix + "supermetric.json", sm_json)
-        if cg_json:
-            z.writestr(bundle_prefix + "customgroup.json", cg_json)
+        if cg_ui_json:
+            z.writestr(bundle_prefix + "customgroup.json", cg_ui_json)
         if views_zip_bytes:
             z.writestr(bundle_prefix + "Views.zip", views_zip_bytes)
         if dashboard_zip_bytes:
@@ -481,8 +517,8 @@ def build_bundle(
         if dashboard_json:
             # content/ copy retains PLACEHOLDER_USER_ID for runtime stamping
             z.writestr(content_prefix + "dashboard.json", dashboard_json)
-        if cg_json:
-            z.writestr(content_prefix + "customgroup.json", cg_json)
+        if cg_rest_json:
+            z.writestr(content_prefix + "customgroup.json", cg_rest_json)
         if reports_xml:
             z.writestr(content_prefix + "reports_content.xml", reports_xml)
         if symptoms_json:

@@ -1,0 +1,39 @@
+id: fd101f78-ee73-4253-a68a-34772c8f35f5
+name: "[VCF Content Factory] Host Hardware Configuration"
+description: >
+  Per-host hardware fleet overview — vendor, CPU model, BIOS version, and
+  service tag for every ESXi host, grouped by parent cluster. Use to assess
+  hardware homogeneity and BIOS firmware currency across the fleet. Drives
+  the hardware configuration section of the Environment Configuration Status
+  dashboard.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: HostSystem
+
+summary: true
+
+columns:
+  - attribute: summary|parentCluster
+    display_name: "Cluster"
+    unit: ""
+
+  - attribute: hardware|vendor
+    display_name: "Hardware Vendor"
+    unit: ""
+
+  - attribute: hardware|vendorModel
+    display_name: "Model"
+    unit: ""
+
+  - attribute: cpu|cpuModel
+    display_name: "CPU Model"
+    unit: ""
+
+  - attribute: hardware|biosVersion
+    display_name: "BIOS Version"
+    unit: ""
+
+  - attribute: hardware|serviceTag
+    display_name: "Service Tag"
+    unit: ""

@@ -281,8 +281,8 @@ class VCFOpsUIClient:
             )
         return result[0].get("result") or []
 
-    def delete_view(self, view_uuid: str) -> None:
-        """Delete a single view by UUID via Ext.Direct RPC.
+    def delete_view(self, view_uuid: str, view_name: str) -> None:
+        """Delete a single view by UUID+name via Ext.Direct RPC.
 
         Unlike dashboard delete, non-existent view UUIDs return an exception
         response (HTTP 200 with type=exception in body). This method raises
@@ -291,10 +291,17 @@ class VCFOpsUIClient:
         NOTE: secureToken is sent as an HTTP *header* for Ext.Direct
         endpoints, NOT as a form/body param (unlike Struts .action endpoints).
 
+        WIRE FORMAT: data must be an array containing one dict whose
+        ``viewDefIds`` value is a JSON-stringified array of {id, name} objects.
+        Sending a bare UUID string (the old shape) causes the handler to crash
+        and return {"type":"exception","message":"Internal server error."}.
+        See context/dashboard_delete_api.md "2026-04-11 correction".
+
         WARNING: unsupported internal endpoint; may change between releases.
 
         Args:
             view_uuid: the UUID of the view definition to delete.
+            view_name: the display name of the view (required by the handler).
 
         Raises:
             UIClientError: if the server returns an exception (e.g. view does
@@ -302,12 +309,13 @@ class VCFOpsUIClient:
         """
         s, csrf = self._require_auth()
         tid = self._next_tid()
+        view_def_ids = json.dumps([{"id": view_uuid, "name": view_name}])
         resp = s.post(
             f"https://{self._host}/ui/vcops/services/router",
             json=[{
                 "action": "viewServiceController",
                 "method": "deleteView",
-                "data": [view_uuid],
+                "data": [{"viewDefIds": view_def_ids}],
                 "type": "rpc",
                 "tid": tid,
             }],
