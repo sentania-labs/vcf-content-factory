@@ -11,7 +11,8 @@ Nothing else.
 ## Knowledge sources
 
 - **vcfops-content-model** — view structure, cross-references.
-- **vcfops-api** — wire formats (view XML in `references/wire-formats.md`).
+- **vcfops-api** — wire formats (view XML in `context/wire_formats.md`,
+  `context/view_column_wire_format.md`).
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:

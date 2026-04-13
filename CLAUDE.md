@@ -83,7 +83,8 @@ vcfops_alerts/               Python package: alert definitions loader/client/CLI
 vcfops_reports/              Python package: report definitions loader/packager/client/CLI
 vcfops_packaging/            Python package: bundle manifest loader, builder, install script templates
 supermetrics/  views/  dashboards/  customgroups/   YAML source of truth
-symptoms/  alerts/  reports/                        YAML source of truth
+symptoms/  alerts/  reports/  recommendations/      YAML source of truth
+bundles/                     Bundle manifests (input to vcfops_packaging build)
 context/                     Topical background — read these before touching code paths
 scripts/                     Utility scripts (bootstrap_references.sh, etc.)
 ```
@@ -108,6 +109,10 @@ scripts/                     Utility scripts (bootstrap_references.sh, etc.)
 | Reference docs inventory + PDF extraction | `context/reference_docs.md` |
 | Allowlisted external reference repos (sentania/AriaOperationsContent, etc.) | `context/reference_sources.md` |
 | VKS VM type classification + filter patterns | `context/vks_vm_classification.md` |
+| View column wire format (XML attribute encoding) | `context/view_column_wire_format.md` |
+| Custom group UI import envelope format | `context/customgroup_import_format.md` |
+| Widget renderer scoping (next expansion targets) | `context/widget_renderer_scope.md` |
+| UI import format investigation (Struts/SPA) | `context/ui_import_formats.md` |
 
 ## You are the foreman
 
@@ -290,15 +295,18 @@ communicate to users early, rather than discovering mid-workflow:
    policies can sync content but cannot enable super metrics via
    the CLI — generalizing to arbitrary policies is a follow-up.
 
-3. **Recommendations authoring.** Recommendations exist as a
-   rendering target (`vcfops_alerts/render.py::render_alert_content_xml`
-   emits `<Recommendations>` blocks when passed objects, and the
-   bundle loader reserves a `recommendations:` key) but there is
-   no authoring path yet — no YAML schema under `recommendations/`,
-   no author agent support. Alerts that reference recommendations
-   cannot be fully expressed until this lands. See
-   `feedback_powershell_idioms.md` and the packaging plan for the
-   planned design.
+3. **Recommendations — authoring works, REST sync does not.**
+   Recommendation YAML authoring under `recommendations/` is fully
+   supported: `alert-author` writes recommendation files, alerts
+   reference them by name, and the validator resolves all cross-
+   references. Recommendations are included in `AlertContent.xml`
+   in distribution packages and import correctly via content-zip.
+   **However, `python3 -m vcfops_alerts sync` (the live REST path)
+   omits recommendations** because `POST /api/alertdefinitions`
+   has no recommendations field — recommendations only travel via
+   the AlertContent.xml import path. Users who sync alerts via the
+   authoring loop will get alerts without recommendations until
+   they re-import via a distribution package or content-zip.
 
 4. **Reference source clones.** Recon checks allowlisted external
    repos under `references/` (gitignored). Fresh setups won't have

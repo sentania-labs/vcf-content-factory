@@ -442,6 +442,20 @@ class Client:
             if end_time > prior_end and state not in ("RUNNING", "INITIALIZED"):
                 if "FAIL" in state.upper():
                     _die(f"Import of {label} finished with state={state}")
+                # Check per-content-type summaries for partial failures even
+                # when the top-level state is FINISHED.
+                for os_entry in body.get("operationSummaries") or []:
+                    os_state = os_entry.get("state", "")
+                    os_failed = os_entry.get("failed", 0) or 0
+                    os_skipped = os_entry.get("skipped", 0) or 0
+                    os_imported = os_entry.get("imported", 0) or 0
+                    ct = os_entry.get("contentType", "?")
+                    if os_state not in ("FINISHED", "") or os_failed > 0 or os_skipped > 0:
+                        print(
+                            f"WARN: content type {ct}: "
+                            f"imported={os_imported} skipped={os_skipped} "
+                            f"failed={os_failed} state={os_state}"
+                        )
                 return body
             if time.monotonic() > deadline:
                 _die(f"Import of {label} did not finish in {timeout_s}s; state={state}")

@@ -210,7 +210,7 @@ the OpenAPI specs, and an allowlisted library of reference content
 from the community — nothing is invented from thin air.
 
 The framework's author maintains
-[sentania/AriaOperationsContent](https://github.com/sentania/AriaOperationsContent)
+[sentania-labs/AriaOperationsContent](https://github.com/sentania-labs/AriaOperationsContent)
 and uses it as the proving ground for new VCF Operations content
 patterns; several of the design decisions in this framework (UUID
 stability, content-zip install, `[VCF Content Factory]` naming

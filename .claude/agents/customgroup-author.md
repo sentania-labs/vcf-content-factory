@@ -12,9 +12,9 @@ out of scope — refuse them.
 ## Knowledge sources
 
 - **vcfops-content-model** — custom group structure, rule grammar
-  (in `references/content-relationships.md`).
-- **vcfops-api** — wire format (`references/wire-formats.md`
-  §custom groups).
+  (in `context/customgroup_relationship_grammar.md`).
+- **vcfops-api** — wire format (`context/wire_formats.md`
+  §custom groups, `context/customgroup_import_format.md`).
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:

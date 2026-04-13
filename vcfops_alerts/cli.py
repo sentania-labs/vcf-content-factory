@@ -45,7 +45,10 @@ def _collect_repo_symptom_names() -> set:
     try:
         from vcfops_symptoms.loader import load_dir as load_symptoms
         return {sd.name for sd in load_symptoms(symptom_dir)}
-    except Exception:
+    except ImportError:
+        return set()
+    except Exception as e:
+        print(f"WARN: failed to load symptoms from {symptom_dir}: {e}", file=sys.stderr)
         return set()
 
 
@@ -54,7 +57,10 @@ def _collect_repo_recommendations() -> List[Recommendation]:
     rec_dir = Path(DEFAULT_RECOMMENDATION_DIR)
     try:
         return load_recommendations(rec_dir)
-    except Exception:
+    except Exception as e:
+        if not rec_dir.exists():
+            return []
+        print(f"WARN: failed to load recommendations from {rec_dir}: {e}", file=sys.stderr)
         return []
 
 

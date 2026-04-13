@@ -619,6 +619,19 @@ function Import-ContentZip {
         $endTime = if ($s.endTime) { [long]$s.endTime } else { 0 }
         if ($endTime -gt $priorEnd -and $state -ne "RUNNING" -and $state -ne "INITIALIZED") {
             if ($state.ToUpper() -like "*FAIL*") { Write-Fail "Import of $Label finished with state=$state" }
+            # Check per-content-type summaries for partial failures even when
+            # the top-level state is FINISHED.
+            if ($s.operationSummaries) {
+                foreach ($os in $s.operationSummaries) {
+                    $osState = if ($os.state) { $os.state } else { "" }
+                    $osFailed = if ($os.failed) { [int]$os.failed } else { 0 }
+                    $osSkipped = if ($os.skipped) { [int]$os.skipped } else { 0 }
+                    if ($osState -ne "FINISHED" -and $osState -ne "" -or $osFailed -gt 0 -or $osSkipped -gt 0) {
+                        Write-Host ("WARN: content type $($os.contentType): " +
+                            "imported=$($os.imported) skipped=$osSkipped failed=$osFailed state=$osState")
+                    }
+                }
+            }
             return
         }
         if ([System.DateTime]::UtcNow -gt $deadline) { Write-Fail "Import of $Label timed out; state=$state" }
@@ -986,7 +999,7 @@ function New-ZipBytes {
         $stream.Close()
     }
     $zip.Dispose()
-    return $ms.ToArray()
+    return ,$ms.ToArray()
 }
 
 function New-SmZip {
@@ -1073,7 +1086,7 @@ function New-DashboardZip {
     $s = $e.Open(); $s.Write($cfgJson, 0, $cfgJson.Length); $s.Close()
 
     $outerZip.Dispose()
-    return $ms.ToArray()
+    return ,$ms.ToArray()
 }
 
 function Get-DashboardIds {

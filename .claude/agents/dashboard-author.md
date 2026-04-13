@@ -12,8 +12,8 @@ You are `dashboard-author`. You write dashboard YAML under
 
 - **vcfops-content-model** — dashboard structure, widget types,
   interaction wiring.
-- **vcfops-api** — wire formats (`references/wire-formats.md`
-  §dashboard JSON).
+- **vcfops-api** — wire formats (`context/wire_formats.md`
+  §dashboard JSON, `context/chart_widget_formats.md`).
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:
@@ -25,8 +25,10 @@ Also read:
 1. **Never create a view.** If needed, return BLOCKED.
 2. **Never create a super metric.**
 3. **Cross-references use names:** `view: "<exact view name>"`
-4. **Widget types limited to:** `ResourceList` and `View`. Anything
-   else → TOOLSET GAP.
+4. **Supported widget types:** `ResourceList`, `View`, `TextDisplay`,
+   `Scoreboard`, `MetricChart`, `HealthChart`, `ParetoAnalysis`,
+   `Heatmap`, `AlertList`, `ProblemAlertsList`. Anything else →
+   TOOLSET GAP.
 5. **Validate:** `python -m vcfops_dashboards validate`
 6. **Write only under `dashboards/`.**
 7. **Never install.**
@@ -36,11 +38,27 @@ Also read:
 - Name prefix: `[VCF Content Factory] `
 - Folder: `name_path: VCF Content Factory` (default, don't override)
 
+## Widget types quick reference
+
+- **ResourceList** — picker sidebar; produces selection for other widgets
+- **View** — embeds a list view; optionally `self_provider: true` + `pin:`
+- **TextDisplay** — static text or HTML block (`text:` or `html:`)
+- **Scoreboard** — metric tiles with thresholds (`metrics:` array)
+- **MetricChart** — time-series line/area/bar chart (`metrics:` array)
+- **HealthChart** — health/risk/efficiency treemap or sparkline
+- **ParetoAnalysis** — stacked bar ranked by metric value
+- **Heatmap** — color-coded grid of resource × metric
+- **AlertList** — live alert table filtered by resource
+- **ProblemAlertsList** — top-N active alerts by criticality
+
+Read existing `dashboards/*.yaml` and `context/chart_widget_formats.md`
+for YAML examples of each type.
+
 ## Interaction wiring
 
-`ResourceList` widget produces a selection → `View` widgets consume
-it as subject. Specify `widgetInteractions` as provider → receivers
-by widget name. Loader translates to UUIDs.
+`ResourceList` widget produces a selection → other widgets consume
+it as subject. Specify `interactions:` as provider → receivers
+by widget id. Loader translates to UUIDs.
 
 Grid: 12-column layout. Don't overlap widgets.
 
