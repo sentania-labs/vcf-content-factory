@@ -142,12 +142,12 @@ function Resolve-AuthSource($raw) {
 }
 
 function Load-JsonFile($Path) {
-    if (-not (Test-Path $Path)) { return $null }
-    return Get-Content -Raw $Path | ConvertFrom-Json
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
+    return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
 }
 
 function Load-RawTextFile($Path) {
-    if (-not (Test-Path $Path)) { return $null }
+    if (-not (Test-Path -LiteralPath $Path)) { return $null }
     return [System.IO.File]::ReadAllText($Path)
 }
 
@@ -168,15 +168,15 @@ function Get-Bundles {
     $entries = [System.Collections.Generic.List[hashtable]]::new()
     $bundlesRoot = Join-Path $ScriptDir "bundles"
 
-    if (Test-Path $bundlesRoot) {
-        $bundleJsonFiles = Get-ChildItem -Path $bundlesRoot -Filter "bundle.json" -Recurse -ErrorAction SilentlyContinue |
+    if (Test-Path -LiteralPath $bundlesRoot) {
+        $bundleJsonFiles = Get-ChildItem -LiteralPath $bundlesRoot -Filter "bundle.json" -Recurse -ErrorAction SilentlyContinue |
             Sort-Object FullName
         foreach ($f in $bundleJsonFiles) {
             # Only direct children: bundles/<slug>/bundle.json
             if ($f.Directory.Parent.FullName -ne $bundlesRoot) { continue }
             $slug = $f.Directory.Name
             try {
-                $manifest = Get-Content -Raw $f.FullName | ConvertFrom-Json
+                $manifest = Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json
             } catch {
                 Write-Host "  WARN  Could not parse $($f.FullName): $_ -- skipping"
                 continue
@@ -189,11 +189,11 @@ function Get-Bundles {
         # Legacy fallback: flat content\ layout with top-level bundle.json
         $legacyManifest = Join-Path $ScriptDir "bundle.json"
         $legacyContent  = Join-Path $ScriptDir "content"
-        if ((Test-Path $legacyManifest) -and (Test-Path $legacyContent)) {
-            try   { $manifest = Get-Content -Raw $legacyManifest | ConvertFrom-Json }
+        if ((Test-Path -LiteralPath $legacyManifest) -and (Test-Path -LiteralPath $legacyContent)) {
+            try   { $manifest = Get-Content -LiteralPath $legacyManifest -Raw | ConvertFrom-Json }
             catch { $manifest = [PSCustomObject]@{ name = "bundle"; description = ""; content = [PSCustomObject]@{} } }
             $entries.Add(@{ Slug = $manifest.name; Dir = $ScriptDir; Manifest = $manifest })
-        } elseif (Test-Path $legacyContent) {
+        } elseif (Test-Path -LiteralPath $legacyContent) {
             $manifest = [PSCustomObject]@{
                 name        = "bundle"
                 description = ""
@@ -332,7 +332,7 @@ function Test-BundleHasKey {
     if (-not $section) { return $false }
     $rel = $section.file
     if (-not $rel) { return $false }
-    return Test-Path (Join-Path $Bundle.Dir $rel)
+    return Test-Path -LiteralPath (Join-Path $Bundle.Dir $rel)
 }
 
 function Get-BundleUninstallNames {
@@ -527,7 +527,7 @@ function Get-MarkerFilename {
         if ($entry.FullName.EndsWith("L.v1")) { $marker = $entry.FullName; break }
     }
     $zip.Dispose()
-    Remove-Item $tmpZip -Force
+    Remove-Item -LiteralPath $tmpZip -Force
 
     if (-not $marker) { Write-Fail "Export zip did not contain a *L.v1 marker file" }
     return $marker
@@ -823,7 +823,7 @@ function Enable-SupermetricOnDefaultPolicy {
         Import-PolicyZip -ZipBytes $ms.ToArray()
     } finally {
         $ms.Dispose()
-        if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue }
+        if (Test-Path -LiteralPath $tmpZip) { Remove-Item -LiteralPath $tmpZip -Force -ErrorAction SilentlyContinue }
     }
 }
 
@@ -860,7 +860,7 @@ function Export-DefaultPolicyXml {
             throw "Policy export ZIP contained no XML file"
         } finally { $zip.Dispose() }
     } finally {
-        if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue }
+        if (Test-Path -LiteralPath $tmpZip) { Remove-Item -LiteralPath $tmpZip -Force -ErrorAction SilentlyContinue }
     }
 }
 
@@ -1537,7 +1537,7 @@ function Install-Dashboard($Ctx) {
     $viewsProp = $Ctx.Manifest.content.PSObject.Properties["views"]
     if ($viewsProp -and $viewsProp.Value) {
         $viewsFile = Join-Path $Ctx.BundleDir $viewsProp.Value.file
-        if (Test-Path $viewsFile) { $viewsXml = Load-RawTextFile $viewsFile }
+        if (Test-Path -LiteralPath $viewsFile) { $viewsXml = Load-RawTextFile $viewsFile }
     }
 
     $dashIds = Get-DashboardIds -DashJson $dashJson -OwnerId $Ctx.OwnerId
