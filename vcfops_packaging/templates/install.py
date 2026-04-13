@@ -1106,10 +1106,10 @@ def _extract_dashboard_ids(dashboard_json: str) -> list:
 # Interactive credential prompts (shared by install and uninstall)
 # ---------------------------------------------------------------------------
 def _prompt_credentials(args: argparse.Namespace, mode: str) -> tuple:
-    """Resolve host, user, auth_source, and password.
+    """Resolve host, user, auth_source, password, and skip_ssl.
 
     Priority order: CLI arg > env var > interactive prompt.
-    Returns (host, user, auth_source, password) as plain strings.
+    Returns (host, user, auth_source, password, skip_ssl) as plain strings/bool.
     """
     print()
     print(f"VCF Content Factory -- {mode}")
@@ -1121,6 +1121,15 @@ def _prompt_credentials(args: argparse.Namespace, mode: str) -> tuple:
         host = input("VCF Operations host: ").strip()
         if not host:
             _die("Host is required.")
+
+    # Prompt for SSL verification only when neither --skip-ssl-verify nor
+    # VCFOPS_VERIFY_SSL=false was supplied (args.skip_ssl_verify already
+    # merges both sources, so False here means neither was set).
+    skip_ssl = args.skip_ssl_verify
+    if not skip_ssl:
+        ssl_ans = input("Verify SSL certificate? [Y/n]: ").strip()
+        if ssl_ans.lower() in ("n", "no"):
+            skip_ssl = True
 
     user = args.user
     if not user:
@@ -1139,7 +1148,7 @@ def _prompt_credentials(args: argparse.Namespace, mode: str) -> tuple:
         if not password:
             _die("Password is required.")
 
-    return host, user, auth_source, password
+    return host, user, auth_source, password, skip_ssl
 
 
 # ---------------------------------------------------------------------------
@@ -2225,7 +2234,7 @@ def main() -> None:
         _ui_needed = False
 
     cred_mode = "uninstaller" if args.uninstall else "installer"
-    host, user, auth_source, password = _prompt_credentials(args, cred_mode)
+    host, user, auth_source, password, skip_ssl = _prompt_credentials(args, cred_mode)
 
     # Post-credentials admin guard: covers the interactive case where user
     # was not set via --user / VCFOPS_USER and was entered at the prompt.
@@ -2239,11 +2248,11 @@ def main() -> None:
         )
         sys.exit(1)
 
-    if args.skip_ssl_verify:
+    if skip_ssl:
         print("WARNING: TLS certificate verification disabled.")
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-    verify_ssl = not args.skip_ssl_verify
+    verify_ssl = not skip_ssl
 
     if args.uninstall:
         _run_uninstall(args, host, user, auth_source, password, verify_ssl, selected)

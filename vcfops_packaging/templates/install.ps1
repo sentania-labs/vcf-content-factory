@@ -94,6 +94,11 @@ if ($Force -and -not $Uninstall) {
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+# Tracks whether the interactive SSL prompt (in Get-Credentials) chose to
+# disable verification.  Initialized to $false; Get-Credentials sets it to
+# $true if the user answers 'n'.
+$script:SkipSslVerify = $false
+
 # ---------------------------------------------------------------------------
 # SSL: disable verification if requested (lab use only)
 # ---------------------------------------------------------------------------
@@ -360,6 +365,16 @@ function Get-Credentials {
     if (-not $script:OpsHost) {
         $script:OpsHost = Read-Host "VCF Operations host"
         if (-not $script:OpsHost) { Write-Fail "Host is required." }
+    }
+
+    # Prompt for SSL verification only when neither -SkipSslVerify nor
+    # VCFOPS_VERIFY_SSL=false was supplied.  $SkipSslVerify already merges
+    # both sources, so $false here means neither was set by the caller.
+    if (-not $SkipSslVerify) {
+        $sslAns = Read-Host "Verify SSL certificate? [Y/n]"
+        if ($sslAns -eq 'n' -or $sslAns -eq 'no' -or $sslAns -eq 'N' -or $sslAns -eq 'No') {
+            $script:SkipSslVerify = $true
+        }
     }
 
     if (-not $script:User) {
@@ -2274,6 +2289,25 @@ if ($Uninstall) {
 
 $credMode = if ($Uninstall) { "uninstaller" } else { "installer" }
 Get-Credentials -Mode $credMode
+
+# If the interactive SSL prompt in Get-Credentials set $script:SkipSslVerify,
+# apply the same bypass logic that ran earlier for the -SkipSslVerify flag.
+if ($script:SkipSslVerify -and -not $SkipSslVerify) {
+    Set-Variable -Name SkipSslVerify -Value ([switch]$true) -Scope Script
+    Write-Warning "TLS certificate verification disabled."
+    if ($PSVersionTable.PSVersion.Major -lt 6) {
+        Add-Type @"
+using System.Net;
+using System.Security.Cryptography.X509Certificates;
+public class TrustAllCertsVcf2 : ICertificatePolicy {
+    public bool CheckValidationResult(ServicePoint sp, X509Certificate cert,
+        WebRequest req, int problem) { return true; }
+}
+"@
+        [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsVcf2
+        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+    }
+}
 
 $script:BaseUrl = "https://$($script:OpsHost)/suite-api"
 
