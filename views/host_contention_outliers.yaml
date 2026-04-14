@@ -1,0 +1,93 @@
+id: 6460fcfc-faed-4a0b-90d8-1c1fee71de48
+name: "[VCF Content Factory] Host Contention Outliers"
+description: >
+  Per-host CPU and memory contention outlier view for demand-driven capacity
+  planning dashboards. Subject is HostSystem; intended to receive a
+  ClusterComputeResource resourceId interaction from an upstream cluster overview
+  widget (the consuming dashboard wires that interaction so rows are scoped to
+  the selected cluster's descendant hosts). Columns surface the signals that
+  identify which hosts are outliers — where VMs are starving for CPU or memory
+  is contended compared to cluster peers — over a 24-hour window.
+  Purely built-in VMWARE adapter metrics; no super metric columns.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: HostSystem
+
+summary: false
+
+time_window:
+  unit: HOURS
+  count: 24
+
+columns:
+  # --- CPU contention block ---
+
+  # VMs Facing CPU Ready (Avg): fraction of VMs on this host experiencing CPU
+  # Ready, averaged over 24h. Higher values identify the host as a contention
+  # outlier within the cluster. Yellow at 10% (notable), orange at 25%
+  # (significant share of VMs affected), red at 50% (majority suffering).
+  - attribute: cpu|percentage_of_vms_facing_cpu_ready
+    display_name: "VMs Facing CPU Ready (Avg, 24h)"
+    unit: percent
+    transformation: AVG
+    yellow_bound: 10.0
+    orange_bound: 25.0
+    red_bound: 50.0
+    ascending_range: false
+
+  # VMs Facing CPU Ready (P95): catches bursty spikes that the average softens.
+  # Tighter thresholds than Avg because a sustained P95 at these levels means
+  # the host is a chronic offender, not just an occasional blip.
+  - attribute: cpu|percentage_of_vms_facing_cpu_ready
+    display_name: "VMs Facing CPU Ready (P95, 24h)"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 15.0
+    orange_bound: 35.0
+    red_bound: 60.0
+    ascending_range: false
+
+  # Max VM CPU Ready (P95): highest per-VM CPU Ready observed on this host,
+  # at the 95th percentile. Raw milliseconds — site-dependent scale, no bounds.
+  # A high value here means at least one VM on the host is badly starved even
+  # if the host-aggregate percentage looks modest.
+  - attribute: cpu|max_cpu_ready
+    display_name: "Max VM CPU Ready (P95, 24h)"
+    unit: ms
+    transformation: PERCENTILE
+    percentile: 95
+
+  # --- Memory contention block ---
+
+  # Mem Contention Avg: host-reported memory contention percentage, averaged
+  # over 24h. Low thresholds — any measurable contention is notable.
+  - attribute: mem|host_contentionPct
+    display_name: "Mem Contention Avg (24h)"
+    unit: percent
+    transformation: AVG
+    yellow_bound: 2.0
+    orange_bound: 5.0
+    red_bound: 10.0
+    ascending_range: false
+
+  # Mem Contention P95: P95 of host memory contention. Catches sustained
+  # contention episodes that average would smooth away.
+  - attribute: mem|host_contentionPct
+    display_name: "Mem Contention P95 (24h)"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 5.0
+    orange_bound: 10.0
+    red_bound: 20.0
+    ascending_range: false
+
+# Sort note: the consuming dashboard widget should sort by
+# "VMs Facing CPU Ready (P95, 24h)" descending (worst-offender host at top).
+# View-level default sort is not a loader-supported field; apply this in the
+# dashboard widget referencing this view (sort_by_dir: desc,
+# sort_by_column: "VMs Facing CPU Ready (P95, 24h)").
+# Precedent: cluster_demand_overview.yaml and vm_contention_pain.yaml use
+# the same widget-sort pattern.

@@ -1,0 +1,102 @@
+id: e55eeb29-9585-4d55-af4f-64b55d759648
+name: "[VCF Content Factory] VM Contention Pain"
+description: >
+  Per-VM CPU and memory contention detail view for demand-driven capacity planning
+  dashboards. Subject is VirtualMachine; intended to receive a ClusterComputeResource
+  resourceId interaction from an upstream cluster overview widget (the consuming
+  dashboard wires that interaction so rows are scoped to the selected cluster's
+  descendant VMs). Columns show the primary contention pain signals — CPU Ready,
+  Co-Stop, memory contention, balloon, and swap — over a 24-hour window so operators
+  can identify which VMs are suffering right now on the cluster they clicked.
+  Purely built-in VMWARE adapter metrics; no super metric columns.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+
+summary: false
+
+time_window:
+  unit: HOURS
+  count: 24
+
+columns:
+  # --- CPU contention block ---
+
+  # CPU Ready Avg: non-zero Ready means vCPUs waiting for a physical core.
+  # Yellow at 5% (noticeable), orange at 10% (significant), red at 20% (severe).
+  - attribute: cpu|readyPct
+    display_name: "CPU Ready Avg (24h)"
+    unit: percent
+    transformation: AVG
+    yellow_bound: 5.0
+    orange_bound: 10.0
+    red_bound: 20.0
+    ascending_range: false
+
+  # CPU Ready P95: catches bursty ready spikes that the average softens.
+  # Same thresholds — a P95 ≥ 20% means at least 5% of samples are severe.
+  - attribute: cpu|readyPct
+    display_name: "CPU Ready P95 (24h)"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 5.0
+    orange_bound: 10.0
+    red_bound: 20.0
+    ascending_range: false
+
+  # Co-Stop P95: co-scheduling penalty; only meaningful for multi-vCPU VMs.
+  # Lower thresholds than Ready because Co-Stop is inherently more severe.
+  - attribute: cpu|costopPct
+    display_name: "Co-Stop P95 (24h)"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 3.0
+    orange_bound: 5.0
+    red_bound: 10.0
+    ascending_range: false
+
+  # --- Memory contention block ---
+
+  # Memory contention (host-reported): hypervisor-level balloon/swap pressure
+  # expressed as a percentage. Low thresholds — any measurable contention is notable.
+  - attribute: mem|host_contentionPct
+    display_name: "Mem Contention Avg (24h)"
+    unit: percent
+    transformation: AVG
+    yellow_bound: 2.0
+    orange_bound: 5.0
+    red_bound: 10.0
+    ascending_range: false
+
+  # Balloon Current: active balloon driver inflation in KB. Any non-zero value
+  # means the hypervisor is reclaiming memory from this VM co-operatively.
+  # Yellow at 1 KB (non-zero = pressure present), orange at 100 MB, red at 1 GB.
+  - attribute: mem|vmmemctl_average
+    display_name: "Balloon Current (KB)"
+    unit: kb
+    transformation: CURRENT
+    yellow_bound: 1.0
+    orange_bound: 100000.0
+    red_bound: 1000000.0
+    ascending_range: false
+
+  # Swapped Current: active swap usage in KB. Swap is the hypervisor's last resort;
+  # any swap is a red flag. Same scale thresholds as Balloon.
+  - attribute: mem|swapped_average
+    display_name: "Swapped Current (KB)"
+    unit: kb
+    transformation: CURRENT
+    yellow_bound: 1.0
+    orange_bound: 100000.0
+    red_bound: 1000000.0
+    ascending_range: false
+
+# Sort note: the consuming dashboard widget should sort by "CPU Ready P95 (24h)"
+# descending (worst-first) so the most-suffering VMs surface at the top.
+# View-level default sort is not a loader-supported field; apply this in the
+# dashboard widget referencing this view (sort_by_dir: desc,
+# sort_by_column: "CPU Ready P95 (24h)").
+# Precedent: cluster_demand_overview.yaml uses the same widget-sort pattern.

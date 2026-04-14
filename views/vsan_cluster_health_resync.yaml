@@ -1,0 +1,80 @@
+id: 2e58f142-5a21-44c6-899f-a66f09fd3ad3
+name: "[VCF Content Factory] vSAN Cluster Health & Resync"
+description: >
+  vSAN cluster health and resync state detail view for demand-driven capacity
+  planning dashboards. Shows 24-hour average and current health scores,
+  current resync backlog (bytes and object count), and raw used/total disk
+  space. Subject is VirtualSANDCCluster (VirtualAndPhysicalSANAdapter),
+  identical to vsan_cluster_performance.yaml. Intended as a detail-pane view
+  driven by an upstream cluster picker; one or a few rows are expected in
+  normal use.
+
+subject:
+  adapter_kind: VirtualAndPhysicalSANAdapter
+  resource_kind: VirtualSANDCCluster
+
+summary: false
+
+time_window:
+  unit: DAYS
+  count: 1
+
+# Dashboard widget note: sort this view by "Health Score Current" ascending
+# (sort_by_column: "Health Score Current", sort_by_dir: asc) to surface the
+# clusters with the worst health at the top of the detail pane.
+
+columns:
+  # --- Health block ---
+  - attribute: vsan|health|score
+    display_name: "Health Score Avg (24h)"
+    unit: percent
+    transformation: AVG
+    yellow_bound: 95.0
+    orange_bound: 80.0
+    red_bound: 50.0
+    ascending_range: true
+
+  - attribute: vsan|health|score
+    display_name: "Health Score Current"
+    unit: percent
+    transformation: CURRENT
+    yellow_bound: 95.0
+    orange_bound: 80.0
+    red_bound: 50.0
+    ascending_range: true
+
+  # --- Resync block ---
+  # bytesLeftToResync uses unit: "" (auto) because "bytes" is not a confirmed
+  # preferredUnitId in the VCF Ops unit registry; auto-scaling follows the
+  # same pattern used for IOPS columns in vsan_cluster_performance.yaml.
+  - attribute: vsan|resync|bytesLeftToResync
+    display_name: "Resync Backlog (bytes)"
+    unit: ""
+    transformation: CURRENT
+    yellow_bound: 1.0
+    orange_bound: 1073741824.0
+    red_bound: 10737418240.0
+    ascending_range: false
+
+  - attribute: vsan|resync|resyncingObjects
+    display_name: "Resyncing Objects Current"
+    unit: ""
+    transformation: CURRENT
+    yellow_bound: 1.0
+    orange_bound: 10.0
+    red_bound: 50.0
+    ascending_range: false
+
+  # --- Capacity block ---
+  # Raw byte values; unit: "" (auto) lets the server scale to GiB/TiB as
+  # appropriate. No color bounds — absolute capacity pressure is tracked
+  # elsewhere in the capacity planning dashboard.
+  - attribute: vsan|diskSpace|usedDiskSpace
+    display_name: "vSAN Space Used (bytes)"
+    unit: ""
+    transformation: CURRENT
+
+  - attribute: vsan|diskSpace|totalDiskSpace
+    display_name: "vSAN Space Total (bytes)"
+    unit: ""
+    transformation: CURRENT

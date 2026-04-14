@@ -1,0 +1,74 @@
+id: 4ff4bcf1-4e4a-4bae-b5f4-3a3e4bd8d7dc
+name: "[VCF Content Factory] vSAN Cluster Performance"
+description: >
+  Front-end vSAN performance detail view for demand-driven capacity planning dashboards.
+  Shows 24-hour average IOPS (read, write, total), P95 read and write latency, and
+  average congestion for the selected VirtualSANDCCluster object. Intended as a
+  detail-pane view fed by an upstream ClusterComputeResource picker via a resourceId
+  widget interaction; the dashboard author is responsible for kind-bridging between
+  ClusterComputeResource and VirtualSANDCCluster (shared cluster name) at the widget
+  level. One or a few rows are expected in normal use.
+
+subject:
+  adapter_kind: VirtualAndPhysicalSANAdapter
+  resource_kind: VirtualSANDCCluster
+
+summary: false
+
+time_window:
+  unit: DAYS
+  count: 1
+
+# Dashboard widget note: sort this view by "Write Latency P95 (24h)" descending
+# (sort_by_column: "Write Latency P95 (24h)", sort_by_dir: desc) to surface the
+# worst-latency vSAN clusters at the top of the detail pane.
+
+columns:
+  # --- IOPS block ---
+  # IOPS columns use unit: "" (auto) because "iops" is not a known preferredUnitId
+  # in the VCF Ops unit registry. The server will label the raw value appropriately.
+  - attribute: vsan|performance|iopsRead
+    display_name: "Read IOPS Avg (24h)"
+    unit: ""
+    transformation: AVG
+
+  - attribute: vsan|performance|iopsWrite
+    display_name: "Write IOPS Avg (24h)"
+    unit: ""
+    transformation: AVG
+
+  - attribute: vsan|performance|total_iops
+    display_name: "Total IOPS Avg (24h)"
+    unit: ""
+    transformation: AVG
+
+  # --- Latency block ---
+  - attribute: vsan|performance|latencyAvgRead
+    display_name: "Read Latency P95 (24h)"
+    unit: ms
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 5.0
+    orange_bound: 10.0
+    red_bound: 30.0
+    ascending_range: false
+
+  - attribute: vsan|performance|latencyAvgWrite
+    display_name: "Write Latency P95 (24h)"
+    unit: ms
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 5.0
+    orange_bound: 15.0
+    red_bound: 50.0
+    ascending_range: false
+
+  # --- Congestion block ---
+  - attribute: vsan|performance|congestion
+    display_name: "Congestion Avg (24h)"
+    unit: ""
+    transformation: AVG
+    yellow_bound: 1.0
+    orange_bound: 10.0
+    red_bound: 100.0
+    ascending_range: false

@@ -1,0 +1,78 @@
+id: e39d5114-8bcf-40a2-98bd-f868c112bd8e
+name: "[VCF Content Factory] Per-Host vSAN Contribution"
+description: >
+  Per-host vSAN client-side performance detail view for demand-driven capacity
+  planning dashboards. Subject is HostSystem (VMWARE adapter); metrics come from
+  the vSAN DOM client telemetry path (vsan|performance|domClient|*), which
+  measures front-end read/write IOPS, latency, and congestion as seen by each
+  host acting as a vSAN client. Use alongside cluster-level vSAN views to
+  identify hosts that are outliers in latency or IOPS compared to cluster peers.
+  Purely built-in VMWARE adapter metrics; no super metric columns.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: HostSystem
+
+summary: false
+
+time_window:
+  unit: HOURS
+  count: 24
+
+# Dashboard widget note: sort this view by "vSAN Write Latency P95 (24h)"
+# descending (sort_by_column: "vSAN Write Latency P95 (24h)", sort_by_dir: desc)
+# to surface the worst-latency hosts at the top of the detail pane.
+
+columns:
+  # --- IOPS block ---
+  # IOPS columns use unit: "" (auto) because "iops" is not a known preferredUnitId
+  # in the VCF Ops unit registry. The server will label the raw value appropriately.
+  - attribute: vsan|performance|domClient|iopsRead
+    display_name: "vSAN Read IOPS Avg (24h)"
+    unit: ""
+    transformation: AVG
+
+  - attribute: vsan|performance|domClient|iopsWrite
+    display_name: "vSAN Write IOPS Avg (24h)"
+    unit: ""
+    transformation: AVG
+
+  # --- Latency block ---
+  - attribute: vsan|performance|domClient|latencyAvgRead
+    display_name: "vSAN Read Latency P95 (24h)"
+    unit: ms
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 5.0
+    orange_bound: 10.0
+    red_bound: 30.0
+    ascending_range: false
+
+  - attribute: vsan|performance|domClient|latencyAvgWrite
+    display_name: "vSAN Write Latency P95 (24h)"
+    unit: ms
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 5.0
+    orange_bound: 15.0
+    red_bound: 50.0
+    ascending_range: false
+
+  # --- Congestion block ---
+  - attribute: vsan|performance|domClient|readCongestion
+    display_name: "vSAN Read Congestion Avg (24h)"
+    unit: ""
+    transformation: AVG
+    yellow_bound: 1.0
+    orange_bound: 10.0
+    red_bound: 100.0
+    ascending_range: false
+
+  - attribute: vsan|performance|domClient|writeCongestion
+    display_name: "vSAN Write Congestion Avg (24h)"
+    unit: ""
+    transformation: AVG
+    yellow_bound: 1.0
+    orange_bound: 10.0
+    red_bound: 100.0
+    ascending_range: false
