@@ -41,6 +41,33 @@ from pathlib import Path
 from typing import Any, List
 
 import yaml
+import yaml.constructor
+import yaml.resolver
+
+
+def _strict_load(stream):
+    """yaml.safe_load replacement that raises on duplicate mapping keys."""
+    class _StrictKeyLoader(yaml.SafeLoader):
+        pass
+
+    def _no_duplicates(loader, node, deep=False):
+        mapping = {}
+        for key_node, value_node in node.value:
+            key = loader.construct_object(key_node, deep=deep)
+            if key in mapping:
+                raise yaml.constructor.ConstructorError(
+                    None, None,
+                    f"duplicate key '{key}' found at {key_node.start_mark}",
+                    key_node.start_mark,
+                )
+            mapping[key] = loader.construct_object(value_node, deep=deep)
+        return mapping
+
+    _StrictKeyLoader.add_constructor(
+        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
+        _no_duplicates,
+    )
+    return yaml.load(stream, Loader=_StrictKeyLoader)
 
 
 class CustomGroupValidationError(ValueError):
@@ -384,8 +411,10 @@ def _relationship_condition_to_wire(c: dict) -> dict:
 
 def load_file(path: str | Path) -> CustomGroupDef:
     path = Path(path)
-    with path.open() as f:
-        data = yaml.safe_load(f) or {}
+    try:
+        data = _strict_load(path.read_text()) or {}
+    except yaml.constructor.ConstructorError as exc:
+        raise CustomGroupValidationError(f"{path}: {exc}") from exc
     if not isinstance(data, dict):
         raise CustomGroupValidationError(
             f"{path}: expected a YAML mapping"

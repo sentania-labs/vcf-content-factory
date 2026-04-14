@@ -35,6 +35,11 @@ Also read:
 - Name prefix: `[VCF Content Factory] `
 - SM column reference: `attribute: supermetric:"<exact name>"`
 - UUID v4 in `id` field (loader generates on first validate)
+- **Never write an `id:` line yourself.** The loader mints it on
+  first validate and prepends it to the file. If the file already
+  has an `id:` line (line 1 of any existing view YAML), preserve
+  it exactly — do not prepend another one. Duplicate `id:` keys
+  cause the loader to raise a validation error.
 
 ## Blocking on missing SM
 

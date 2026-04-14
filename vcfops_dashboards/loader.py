@@ -17,6 +17,8 @@ from typing import List, Optional, Union
 
 import yaml
 
+from vcfops_dashboards.yaml_utils import strict_load as _strict_load
+
 # Stable namespace for derived UUIDs. Do NOT change once content has
 # been deployed — every dashboard/view id is derived from this.
 NS = uuid.UUID("4b8d2c10-1f9e-4f4f-9b90-0e8f6a8e2a12")
@@ -740,7 +742,12 @@ def _mint_id_into_file(path: Path) -> str:
 
 
 def load_view(path: Path) -> ViewDef:
-    data = yaml.safe_load(path.read_text()) or {}
+    try:
+        data = _strict_load(path.read_text()) or {}
+    except yaml.constructor.ConstructorError as exc:
+        raise DashboardValidationError(
+            f"{path}: {exc}"
+        ) from exc
     view_id = str(data.get("id", "") or "").strip().lower()
     if not view_id:
         view_id = _mint_id_into_file(path)
@@ -876,7 +883,12 @@ def load_view(path: Path) -> ViewDef:
 
 
 def load_dashboard(path: Path) -> Dashboard:
-    data = yaml.safe_load(path.read_text()) or {}
+    try:
+        data = _strict_load(path.read_text()) or {}
+    except yaml.constructor.ConstructorError as exc:
+        raise DashboardValidationError(
+            f"{path}: {exc}"
+        ) from exc
     dash_id = str(data.get("id", "") or "").strip().lower()
     if not dash_id:
         dash_id = _mint_id_into_file(path)
