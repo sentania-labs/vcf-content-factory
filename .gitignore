@@ -32,3 +32,6 @@ references/
 # Session scratchpads — workspace files, not part of the repo
 tmp/
 status.md
+
+# Local PKA comm zone (not shared)
+.pka/
