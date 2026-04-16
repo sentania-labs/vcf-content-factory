@@ -12,39 +12,58 @@ description: >
 source:
   port: 5001
   ssl: NO_VERIFY
-  base_path: "/webapi/entry.cgi"
+  # base_path is relative (no leading slash) — MPB baseApiPath field.
+  # Per-request paths are relative to this (e.g. "entry.cgi", "auth.cgi").
+  base_path: "webapi"
   timeout: 30
   max_retries: 2
   max_concurrent: 15
   auth:
-    type: SESSION
+    # CUSTOM credentialType — cookie-based session matching Scott's build-8 MP
+    # and the Postman collection (context/mp_schema_vs_existing_mp.md §2b, §3e).
+    type: CUSTOM
     session:
-      login:
+      login_request:
         method: GET
-        path: "/webapi/entry.cgi"
+        path: "auth.cgi"
+        # Params as ordered list of {key, value} — MPB wire format (not dict).
+        # account / passwd reference the CUSTOM credential field labels below;
+        # labels are load-bearing: label "username" → ${authentication.credentials.username}.
         params:
-          api: "SYNO.API.Auth"
-          version: "7"
-          method: "login"
-          session: "VCFOpsMP"
-          format: "sid"
-      logout:
-        method: GET
-        path: "/webapi/entry.cgi"
+          - {key: api,     value: "SYNO.API.Auth"}
+          - {key: version, value: "3"}
+          - {key: method,  value: "login"}
+          - {key: account, value: "${authentication.credentials.username}"}
+          - {key: passwd,  value: "${authentication.credentials.passwd}"}
+          - {key: session, value: "FileStation"}
+          - {key: format,  value: "cookie"}
+        headers:
+          - {key: Content-Type, type: REQUIRED, value: "application/json"}
+      logout_request:
+        method: DELETE
+        path: "auth.cgi"
+        # Logout uses DELETE (not GET) per Scott's build-8. No session param —
+        # the cookie header alone identifies the session to release.
         params:
-          api: "SYNO.API.Auth"
-          version: "7"
-          method: "logout"
-          session: "VCFOpsMP"
-      session_token_key: "data.sid"
-      token_param: "_sid"
+          - {key: method,  value: "logout"}
+          - {key: version, value: "3"}
+          - {key: api,     value: "SYNO.API.Auth"}
+      # Session token extracted from HTTP response header "Set-Cookie" (not JSON body).
+      # Runtime reference: ${authentication.session.set_cookie}.
+      cookie_binding: "set_cookie"
+      # Token injected as header "id" (not "Cookie", not "_sid" query param).
+      # This is the wire-correct mechanism for DSM format=cookie sessions.
+      # Reference MP globalHeaders: [{key: "Content-Type", ...}, {key: "id", type: CUSTOM, value: ${...}}]
+      header_injection:
+        - {key: "Content-Type", value: "application/json"}
+        - {key: "id",           value: "${authentication.session.set_cookie}"}
   test_request:
     method: GET
-    path: "/webapi/entry.cgi"
+    path: "entry.cgi"
     params:
-      api: "SYNO.DSM.Info"
-      version: "2"
-      method: "getinfo"
+      - {key: api,     value: "SYNO.DSM.Info"}
+      - {key: version, value: "2"}
+      - {key: method,  value: "getinfo"}
 
 object_types:
 
@@ -58,12 +77,14 @@ object_types:
     is_world: true
     identifiers:
       - serial
-    name_expression: "${model} (${hostname})"
+    # Single-metric passthrough per design artifact §"Name expressions".
+    # Composite "${model} (${hostname})" deferred to v2 (unverified wire format).
+    name_expression: model
 
     requests:
       - name: "dsm_info"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.DSM.Info"
           version: "2"
@@ -72,7 +93,7 @@ object_types:
 
       - name: "core_system"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Core.System"
           version: "3"
@@ -81,7 +102,7 @@ object_types:
 
       - name: "utilization"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Core.System.Utilization"
           version: "1"
@@ -90,7 +111,7 @@ object_types:
 
       - name: "fan_speed"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Core.Hardware.FanSpeed"
           version: "1"
@@ -99,7 +120,7 @@ object_types:
 
       - name: "network_interface"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Core.Network.Interface"
           version: "1"
@@ -108,12 +129,52 @@ object_types:
 
       - name: "system_status"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Core.System.Status"
           version: "1"
           method: "get"
         response_path: "data"
+
+      # --- Event source requests ---
+      # syslog_list: primary event feed for scrubbing, security, system events.
+      # No server-side time filter (datefrom is accepted but silently ignored by DSM).
+      # MP runtime must use client-side time watermarking. See context/api-maps/synology-events.md.
+      - name: "syslog_list"
+        method: GET
+        path: "entry.cgi"
+        params:
+          api: "SYNO.Core.SyslogClient.Log"
+          version: "1"
+          method: "list"
+          start: "0"
+          limit: "200"
+          logtype: "system"
+        response_path: "data.items"
+
+      # upgrade_check: state-derived event (emit once on version change or false→true).
+      # Poll every 30 min; version string change triggers emission.
+      - name: "upgrade_check"
+        method: GET
+        path: "entry.cgi"
+        params:
+          api: "SYNO.Core.Upgrade.Server"
+          version: "4"
+          method: "check"
+        response_path: "data"
+
+      # security_list: Security Advisor login anomaly feed.
+      # Watermark on create_time (second resolution, cumulative list).
+      - name: "security_list"
+        method: GET
+        path: "entry.cgi"
+        params:
+          api: "SYNO.SecurityAdvisor.LoginActivity"
+          version: "1"
+          method: "list"
+          start: "0"
+          limit: "20"
+        response_path: "data.items"
 
     metrics:
       # --- Identifiers / key properties (from dsm_info) ---
@@ -380,21 +441,8 @@ object_types:
         type: STRING
         source: "request:system_status.upgrade_ready"
 
-    events:
-      - name: "High Temperature"
-        severity: CRITICAL
-        condition: "sys_temp > 70"
-        message: "System temperature is critically high (${sys_temp}C). Check airflow and ambient temperature."
-
-      - name: "Elevated Temperature"
-        severity: WARNING
-        condition: "sys_temp > 60"
-        message: "System temperature is elevated (${sys_temp}C). Monitor for further increase."
-
-      - name: "Fan Failure"
-        severity: CRITICAL
-        condition: "fan_status = failed"
-        message: "Fan failure detected. System cooling is compromised."
+    # Threshold events for this object type are authored as factory symptoms + alerts
+    # (task 4.1.9) — not in-MP events. See designs/synology-mp-v1.md §Events Tier 1.
 
   # -------------------------------------------------------------------------
   # 2. Storage Pool
@@ -407,12 +455,14 @@ object_types:
     identifiers:
       - pool_id
       - pool_path
-    name_expression: "Pool ${num_id} (${device_type})"
+    # Single-metric passthrough per design artifact §"Name expressions".
+    # Composite "Pool ${num_id} (${device_type})" deferred to v2.
+    name_expression: pool_path
 
     requests:
       - name: "storage_load_info"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Storage.CGI.Storage"
           version: "1"
@@ -486,16 +536,7 @@ object_types:
         kpi: true
         # Note: usage_pct = size.used / size.total * 100. MPB calculates this ratio.
 
-    events:
-      - name: "RAID Degraded"
-        severity: CRITICAL
-        condition: "status = degraded"
-        message: "Storage pool is degraded. Data redundancy is at risk. Check disk health immediately."
-
-      - name: "RAID Crashed"
-        severity: CRITICAL
-        condition: "status = crashed"
-        message: "Storage pool has crashed. Data may be inaccessible. Immediate action required."
+    # Threshold events migrated to factory symptoms + alerts (task 4.1.9).
 
   # -------------------------------------------------------------------------
   # 3. Volume
@@ -508,12 +549,13 @@ object_types:
     identifiers:
       - volume_id
       - volume_path
-    name_expression: "${display_name}"
+    # Single-metric passthrough per design artifact. Matches Scott's build-8.
+    name_expression: display_name
 
     requests:
       - name: "storage_load_info"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Storage.CGI.Storage"
           version: "1"
@@ -522,7 +564,7 @@ object_types:
 
       - name: "utilization"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Core.System.Utilization"
           version: "1"
@@ -623,16 +665,7 @@ object_types:
         source: "request:utilization.write_access"
         unit: "IOPS"
 
-    events:
-      - name: "Volume Critical"
-        severity: CRITICAL
-        condition: "usage_pct > 95"
-        message: "Volume ${display_name} is critically full (${usage_pct}%). Free up space immediately to prevent data loss."
-
-      - name: "Volume Low"
-        severity: WARNING
-        condition: "usage_pct > 85"
-        message: "Volume ${display_name} is running low on space (${usage_pct}%). Consider freeing space or expanding storage."
+    # Threshold events migrated to factory symptoms + alerts (task 4.1.9).
 
   # -------------------------------------------------------------------------
   # 4. Disk
@@ -644,12 +677,13 @@ object_types:
     is_world: false
     identifiers:
       - disk_id
-    name_expression: "${name}"
+    # Single-metric passthrough. Matches Scott's build-8 ("Drive 1", etc.)
+    name_expression: name
 
     requests:
       - name: "storage_load_info"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Storage.CGI.Storage"
           version: "1"
@@ -658,7 +692,7 @@ object_types:
 
       - name: "utilization"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Core.System.Utilization"
           version: "1"
@@ -733,6 +767,7 @@ object_types:
         usage: PROPERTY
         type: STRING
         source: "request:storage_load_info.used_by"
+        # join key for Storage Pool → Disk relationship (used_by == pool_id)
 
       - key: wcache_force_off
         label: "Write Cache Forced Off"
@@ -789,21 +824,7 @@ object_types:
         source: "request:utilization.utilization"
         unit: "%"
 
-    events:
-      - name: "Disk Failure"
-        severity: CRITICAL
-        condition: "smart_status = failing"
-        message: "Disk ${name} (${model}) is reporting SMART failure. Replace the disk immediately to prevent data loss."
-
-      - name: "Disk UNC Sectors"
-        severity: WARNING
-        condition: "unc_sectors > 0"
-        message: "Disk ${name} (${model}) has uncorrectable sectors (count: ${unc_sectors}). Backup data and consider replacement."
-
-      - name: "SSD Life Low"
-        severity: WARNING
-        condition: "remain_life < 20"
-        message: "Disk ${name} (${model}) SSD remaining life is low (${remain_life}%). Plan for replacement."
+    # Threshold events migrated to factory symptoms + alerts (task 4.1.9).
 
   # -------------------------------------------------------------------------
   # 5. iSCSI LUN
@@ -815,12 +836,13 @@ object_types:
     is_world: false
     identifiers:
       - lun_uuid
-    name_expression: "${name}"
+    # Single-metric passthrough. e.g. "vcf-lab-wld01-cl01".
+    name_expression: name
 
     requests:
       - name: "iscsi_lun_list"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Core.ISCSI.LUN"
           version: "1"
@@ -829,7 +851,7 @@ object_types:
 
       - name: "iscsi_target_list"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Core.ISCSI.Target"
           version: "1"
@@ -838,7 +860,7 @@ object_types:
 
       - name: "utilization"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Core.System.Utilization"
           version: "1"
@@ -863,6 +885,9 @@ object_types:
         usage: PROPERTY
         type: STRING
         source: "request:iscsi_lun_list.location"
+        # join key for Volume → iSCSI LUN relationship (location == volume_path)
+        # Both sides carry a leading slash in v1; direct equality.
+        # See design artifact §Relationships row 3 for normalization caveat.
 
       - key: type_str
         label: "LUN Type"
@@ -956,12 +981,13 @@ object_types:
     is_world: false
     identifiers:
       - container_name
-    name_expression: "${name}"
+    # Single-metric passthrough. container_name is both identifier and display key.
+    name_expression: container_name
 
     requests:
       - name: "docker_container_list"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Docker.Container"
           version: "1"
@@ -973,7 +999,7 @@ object_types:
 
       - name: "docker_container_resource"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Docker.Container.Resource"
           version: "1"
@@ -984,12 +1010,6 @@ object_types:
     metrics:
       - key: container_name
         label: "Container Name"
-        usage: PROPERTY
-        type: STRING
-        source: "request:docker_container_list.name"
-
-      - key: name
-        label: "Name"
         usage: PROPERTY
         type: STRING
         source: "request:docker_container_list.name"
@@ -1050,12 +1070,15 @@ object_types:
     is_world: false
     identifiers:
       - model_name
-    name_expression: "${model_name}"
+    # UPS identifier and display name are both model_name (wire reality).
+    # Design artifact says "model" — but the API map returns "model_name" as the
+    # field key, which is what this YAML binds. model_name is authoritative.
+    name_expression: model_name
 
     requests:
       - name: "ups_get"
         method: GET
-        path: null
+        path: "entry.cgi"
         params:
           api: "SYNO.Core.ExternalDevice.UPS"
           version: "1"
@@ -1099,35 +1122,380 @@ object_types:
         unit: "minutes"
         # Note: UPS load (%) is not available via REST API — requires SNMP
 
-    events:
-      - name: "UPS On Battery"
-        severity: CRITICAL
-        condition: "status = OB"
-        message: "UPS ${model_name} is running on battery power. Check mains power supply immediately."
+    # Threshold events migrated to factory symptoms + alerts (task 4.1.9).
 
 
 relationships:
+
+  # Relationship #1: Diskstation → Storage Pool
+  # adapter-instance-trivial — renderer handles via world-object-implicit pattern
+  # All pools belong to the one NAS; no explicit join field between child and parent.
+  # Open question (design artifact §Relationships): confirm whether MPB supports
+  # a degenerate always-match predicate; Option B (synthesize a shared property)
+  # is the fallback. Set null here; tooling agent resolves before renderer build.
   - parent: synology_diskstation
     child: storage_pool
+    child_expression: null
+    parent_expression: null
 
+  # Relationship #2: Storage Pool → Volume
+  # Join: Volume.pool_path == Storage Pool.pool_path
+  # Direct string equality, no transformation needed.
+  # Evidence: synology-storage.md §"Identifier Chains".
   - parent: storage_pool
     child: volume
+    child_expression: pool_path
+    parent_expression: pool_path
 
+  # Relationship #3: Volume → iSCSI LUN
+  # Join: iSCSI LUN.location == Volume.volume_path (vol_path)
+  # Both sides carry a leading slash ("/volume1" == "/volume1").
+  # Normalization note: if a DSM firmware revision returns location without the
+  # leading slash, tooling should add a regex strip on child_expression rather
+  # than silently mismatching. Flag for renderer.
   - parent: volume
     child: iscsi_lun
+    child_expression: location
+    parent_expression: volume_path
 
+  # Relationship #4: Storage Pool → Disk
+  # Join: Disk.used_by == Storage Pool.pool_id
+  # used_by carries the pool ID (e.g. "reuse_1"); pool_id = the pool's "id" field.
+  # Evidence: synology-storage.md Disk field table + §"Identifier Chains".
   - parent: storage_pool
     child: disk
+    child_expression: used_by
+    parent_expression: pool_id
 
+  # Relationship #5: Diskstation → Disk (dual-parent alongside #4)
+  # adapter-instance-trivial — renderer handles via world-object-implicit pattern
+  # All disks are direct children of the Diskstation. No disk field references
+  # the NAS serial. Same open question as #1. Dual-parent is supported per
+  # Rubrik MP reference (context/mp_schema_vs_existing_mp.md §5c).
   - parent: synology_diskstation
     child: disk
+    child_expression: null
+    parent_expression: null
 
+  # Relationship #6: Diskstation → Docker Container
+  # adapter-instance-trivial — renderer handles via world-object-implicit pattern
+  # All containers are direct children of the Diskstation.
+  # Evidence: synology-docker.md §"Identifier Chains".
   - parent: synology_diskstation
     child: docker_container
+    child_expression: null
+    parent_expression: null
 
+  # Relationship #7: Diskstation → UPS
+  # adapter-instance-trivial — renderer handles via world-object-implicit pattern
+  # 0:1 relationship; UPS object only instantiated when usb_ups_connect: true.
+  # Evidence: synology-ups.md §"Identifier Chains".
   - parent: synology_diskstation
     child: ups
+    child_expression: null
+    parent_expression: null
+
 
 content:
   dashboards: []
   views: []
+
+
+# =============================================================================
+# MPB EVENTS — API-pull model (Phase 4.1.10)
+# =============================================================================
+#
+# Wire format reference: context/mp_schema_vs_existing_mp.md §6c (Rubrik event
+# shape) and context/api-maps/synology-events.md (endpoint research).
+#
+# Source request names (all defined on synology_diskstation object type):
+#   syslog_list    — SYNO.Core.SyslogClient.Log v1 list; response_path data.items
+#   upgrade_check  — SYNO.Core.Upgrade.Server v4 check; response_path data
+#   security_list  — SYNO.SecurityAdvisor.LoginActivity v1 list; response_path data.items
+#
+# Severity map for SyslogClient.Log items:
+#   level=info → INFO, level=warn → WARNING, level=err → CRITICAL
+#   Note: API uses "err" (3 chars), not "error" — intentional DSM misspelling.
+#
+# Object binding fallback: if descr parse fails, attach event to Diskstation.
+#
+# RENDERER NOTE: SyslogClient.Log has no server-side time filter.
+# Client-side watermarking on the (time, level, logtype, descr, who) tuple is
+# required. See context/api-maps/synology-events.md §Collection frequency guidance.
+
+mpb_events:
+
+  # ---------------------------------------------------------------------------
+  # Event 1 — Data / filesystem scrubbing started
+  # ---------------------------------------------------------------------------
+  # Evidence: "System starts data scrubbing on [/dev/vg1]."
+  #           "System starts filesystem scrubbing on [Volume 1]."
+  # NEEDS-RENDERER-WORK: start messages use raw device path (/dev/vg1) while
+  #   finish messages use the friendly name (Storage Pool 1). The renderer must
+  #   handle both forms when looking up the storage_pool object. If /dev/vg*
+  #   form is seen, the renderer resolves to the pool whose pool_path matches;
+  #   if "Storage Pool N" form is seen, match on the display name.
+  #   match_normalizer: strip_leading_slash is a placeholder — actual resolution
+  #   requires a pool lookup table. Mark the event binding as NEEDS-RENDERER-WORK.
+  - name: "DSM Scrubbing Started"
+    severity: INFO
+    source_request: syslog_list
+    response_path: "data.items"
+    match_rules:
+      - field: descr
+        operator: MATCHES_REGEX
+        value: "^System starts (data|filesystem) scrubbing on \\[(.+?)\\]\\.$"
+    object_binding:
+      object_type: storage_pool
+      match_field: descr
+      # NEEDS-RENDERER-WORK: match_normalizer must handle both /dev/vg<N> (raw
+      # device path, start messages) and "Storage Pool <N>" (friendly name,
+      # finish messages). The renderer needs a lookup table from Storage.load_info
+      # to resolve either form to pool_path. Placeholder value below.
+      match_normalizer: "extract_pool_from_descr"
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [time, level, logtype, descr, who]
+      # RENDERER NOTE: SyslogClient.Log has no server-side time filter.
+      # Client-side watermarking required on every poll cycle.
+    message_template: "${descr}"
+    description: >
+      Emitted when DSM starts a scheduled data or filesystem scrub on a storage
+      pool or volume. Severity is INFO; the start event is informational only.
+
+  # ---------------------------------------------------------------------------
+  # Event 2 — Data / filesystem scrubbing finished
+  # ---------------------------------------------------------------------------
+  # Evidence: "System successfully finished filesystem scrubbing on [Volume 1]."
+  #           "System successfully finished data scrubbing on [Storage Pool 1]."
+  # NEEDS-RENDERER-WORK: same pool/volume resolution as Event 1. Finish messages
+  #   use friendly names ("Storage Pool 1", "Volume 1") not raw device paths,
+  #   so this binding is more reliable than Event 1 — but the lookup table is
+  #   still needed to find the right object by display_name.
+  - name: "DSM Scrubbing Finished"
+    severity: INFO
+    source_request: syslog_list
+    response_path: "data.items"
+    match_rules:
+      - field: descr
+        operator: MATCHES_REGEX
+        value: "^System successfully finished (data|filesystem) scrubbing on \\[(.+?)\\]\\.$"
+    object_binding:
+      object_type: storage_pool
+      match_field: descr
+      # NEEDS-RENDERER-WORK: see Event 1. Finish messages carry friendly pool/volume
+      # names. Renderer resolves "Storage Pool N" to pool_path, "Volume N" to
+      # volume display_name; falls back to Diskstation if parse fails.
+      match_normalizer: "extract_pool_from_descr"
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [time, level, logtype, descr, who]
+      # RENDERER NOTE: SyslogClient.Log has no server-side time filter.
+      # Client-side watermarking required on every poll cycle.
+    message_template: "${descr}"
+    description: >
+      Emitted when DSM completes a scheduled data or filesystem scrub. Paired
+      with DSM Scrubbing Started; both bind to the same Storage Pool object.
+
+  # ---------------------------------------------------------------------------
+  # Event 3 — Active Backup for Business package lifecycle
+  # ---------------------------------------------------------------------------
+  # Evidence: "System successfully stopped [Active Backup for Business]."
+  #           "Package [Active Backup for Business] has been successfully updated."
+  #           "System failed to start [Active Backup for Business]."  (level=err)
+  # Severity is driven by the syslog level field: info→INFO, err→CRITICAL.
+  # The severity field below is the default; the renderer should override from
+  # the item's level field using the standard DSM severity map.
+  - name: "Active Backup Package Transition"
+    severity: INFO
+    source_request: syslog_list
+    response_path: "data.items"
+    match_rules:
+      - field: descr
+        operator: CONTAINS
+        value: "Active Backup for Business"
+    object_binding:
+      object_type: synology_diskstation
+      # ABB tasks are not modeled as MP objects; always binds to world object.
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [time, level, logtype, descr, who]
+      # RENDERER NOTE: SyslogClient.Log has no server-side time filter.
+      # Client-side watermarking required on every poll cycle.
+    message_template: "${descr}"
+    description: >
+      Emitted on Active Backup for Business package state transitions: start,
+      stop, update, failure. Severity follows the DSM syslog level (info→INFO,
+      err→CRITICAL). Does not capture per-task completion — only package lifecycle.
+
+  # ---------------------------------------------------------------------------
+  # Event 4 — DSM update available (state-derived, not a log row)
+  # ---------------------------------------------------------------------------
+  # Source: SYNO.Core.Upgrade.Server v4 check. Response path: data.
+  # Gate: only emit when data.update.available == true AND version string differs
+  # from the previously cached value. The renderer must implement emit-on-change
+  # logic; this is not a list endpoint — it returns a scalar state object.
+  # Severity: WARNING if data.update.version_details.isSecurityVersion == true,
+  #           else INFO.
+  # NEEDS-RENDERER-WORK: severity is state-derived from isSecurityVersion field,
+  #   not a fixed value. The renderer must map true→WARNING, false→INFO. The
+  #   severity field below is the fallback default only.
+  - name: "DSM Update Available"
+    severity: WARNING
+    source_request: upgrade_check
+    response_path: "data"
+    match_rules:
+      - field: update.available
+        operator: EQUALS
+        value: "true"
+    object_binding:
+      object_type: synology_diskstation
+    collection_strategy:
+      interval_seconds: 1800
+      # State-derived event: emit once per version string change, not per poll.
+      # NEEDS-RENDERER-WORK: dedup_strategy FIELD_ID implies a stable unique ID
+      # per event record; for a scalar state object, use the version string itself
+      # as the dedup key. Renderer must implement emit-on-change via cached
+      # last-seen version rather than traditional row dedup.
+      dedup_strategy: FIELD_ID
+      dedup_fields: [update.version]
+    message_template: "DSM update available: ${update.version}"
+    description: >
+      Emitted once when a DSM software update becomes available (data.update.available
+      transitions to true or the version string changes). Severity is WARNING for
+      security updates (isSecurityVersion=true), INFO otherwise. Source: SYNO.Core.Upgrade.Server.
+
+  # ---------------------------------------------------------------------------
+  # Event 5 — Security advisory (brute-force, login anomaly, etc.)
+  # ---------------------------------------------------------------------------
+  # Source: SYNO.SecurityAdvisor.LoginActivity v1 list. Response path: data.items.
+  # Severity mapped from item.severity field: low→INFO, medium→WARNING, high→CRITICAL.
+  # Watermark on create_time (second resolution; cumulative list).
+  # NEEDS-RENDERER-WORK: severity is driven by the item's "severity" string field
+  #   (low/medium/high), not a fixed value. Renderer must apply the severity map.
+  - name: "DSM Security Advisory"
+    severity: WARNING
+    source_request: security_list
+    response_path: "data.items"
+    match_rules: []
+    # Empty match_rules: all items from SecurityAdvisor.LoginActivity are events.
+    object_binding:
+      object_type: synology_diskstation
+      # user field does not resolve to a modeled object; carry as event metadata.
+    collection_strategy:
+      interval_seconds: 900
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [create_time, str_id, user]
+    message_template: "${str_id} — user: ${user}, source IPs: ${str_args.src_ip_list}"
+    description: >
+      Emitted for each new Security Advisor login anomaly (brute-force attack,
+      improper privilege, local login anomaly, untrusted IP). Severity is mapped
+      from item.severity field: low→INFO, medium→WARNING, high→CRITICAL. Source:
+      SYNO.SecurityAdvisor.LoginActivity. Does not duplicate the SyslogClient
+      auto-block events (Event 6) — the advisor groups multiple blocks by IP.
+
+  # ---------------------------------------------------------------------------
+  # Event 6 — Host auto-blocked by AutoBlock / fail2ban
+  # ---------------------------------------------------------------------------
+  # Evidence: "Host [172.27.8.62] was blocked via [SSH]."
+  # Always level=warn in DSM syslog; severity is fixed WARNING.
+  - name: "DSM Host Auto-Blocked"
+    severity: WARNING
+    source_request: syslog_list
+    response_path: "data.items"
+    match_rules:
+      - field: descr
+        operator: MATCHES_REGEX
+        value: "^Host \\[(.+?)\\] was blocked via \\[(.+?)\\]\\.$"
+    object_binding:
+      object_type: synology_diskstation
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [time, level, logtype, descr, who]
+      # RENDERER NOTE: SyslogClient.Log has no server-side time filter.
+      # Client-side watermarking required on every poll cycle.
+    message_template: "${descr}"
+    description: >
+      Emitted when DSM's AutoBlock feature blocks a remote host after repeated
+      failed sign-in attempts. Always WARNING severity. The Security Advisory
+      event (Event 5) provides aggregated brute-force context; this event covers
+      the individual block action from syslog. Do not emit both for the same
+      incident to avoid double-reporting.
+
+  # ---------------------------------------------------------------------------
+  # Event 7 — System booted from improper shutdown
+  # ---------------------------------------------------------------------------
+  # Evidence: "System booted up from an improper shutdown."
+  # Always level=warn in DSM syslog. Bind to Diskstation world object.
+  - name: "DSM Improper Shutdown"
+    severity: WARNING
+    source_request: syslog_list
+    response_path: "data.items"
+    match_rules:
+      - field: descr
+        operator: EQUALS
+        value: "System booted up from an improper shutdown."
+    object_binding:
+      object_type: synology_diskstation
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [time, level, logtype, descr, who]
+      # RENDERER NOTE: SyslogClient.Log has no server-side time filter.
+      # Client-side watermarking required on every poll cycle.
+    message_template: "${descr}"
+    description: >
+      Emitted when DSM detects it was restarted after an unexpected power loss
+      or hard reset. Indicates potential data integrity risk on non-Btrfs volumes.
+
+  # ---------------------------------------------------------------------------
+  # Event 8 — Disk overheat
+  # ---------------------------------------------------------------------------
+  # Evidence: "Disk overheat: Disk [Cache device 2], serial [S59ANM0T103531T], had reached 70°C, shutdown system now."
+  # orginalLogType note: DSM's API returns "orginalLogType" (missing 'i') — verbatim
+  # misspelling from the live API. Use it exactly as returned. See synology-events.md.
+  # Object binding: match disk by serial number (group 2 in regex) or name (group 1).
+  # match_field descr: the renderer extracts the serial from the regex match group.
+  - name: "DSM Disk Overheat"
+    severity: CRITICAL
+    source_request: syslog_list
+    response_path: "data.items"
+    match_rules:
+      - field: descr
+        operator: MATCHES_REGEX
+        value: "^Disk overheat: Disk \\[(.+?)\\], serial \\[(.+?)\\]"
+    object_binding:
+      object_type: disk
+      match_field: descr
+      # NEEDS-RENDERER-WORK: the renderer must extract the serial number (regex group 2)
+      # or disk name (group 1) from the descr field and match it against the disk
+      # object's serial or name property. Fallback: bind to Diskstation world object
+      # if neither group resolves to a known disk identifier.
+      match_normalizer: "extract_disk_serial_from_descr"
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [time, level, logtype, descr, who]
+      # RENDERER NOTE: SyslogClient.Log has no server-side time filter.
+      # Client-side watermarking required on every poll cycle.
+    # Note: "orginalLogType" (no 'i') is the literal DSM API field name —
+    # preserve the misspelling verbatim in any renderer field routing.
+    message_template: "${descr}"
+    description: >
+      Emitted when DSM detects a disk has exceeded its thermal threshold. CRITICAL
+      severity. The renderer must bind to the Disk object by extracting the serial
+      number or name from the descr field. Fallback to Diskstation world object if
+      the disk cannot be identified.
+
+
+# NOTE on adapter-instance-trivial relationship predicates (relationships #1, #5, #6, #7):
+# The MPB wire format requires non-null childExpression / parentExpression on every
+# relationship. The four "trivial match" relationships above have null both sides.
+# Resolution before renderer build (designs/synology-mp-v1.md §Relationships open question):
+#   Option A — synthetic @@@adapterInstance identifier (needs MPB support verification)
+#   Option B — synthesize a shared PROPERTY (e.g. diskstation_serial) on each child
+# Tooling agent must pick one before Phase 4.2 renderer work begins.

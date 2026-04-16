@@ -21,6 +21,7 @@
 | `synology-iscsi.md` | iSCSI LUN object: metadata, IO metrics, target IQN |
 | `synology-docker.md` | Docker Container object: status, resource usage |
 | `synology-ups.md` | UPS object: status, battery, load |
+| `synology-events.md` | DSM notifications / events: SyslogClient.Log, Upgrade.Server.check, SecurityAdvisor.LoginActivity -- for MPB events section |
 
 ## Endpoint Inventory
 
