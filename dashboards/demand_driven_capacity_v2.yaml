@@ -1,0 +1,137 @@
+id: be78532e-5cde-4cb9-8eb3-6b9e16b18c73
+name: "[VCF Content Factory] Demand-Driven Capacity Planning v2"
+description: >
+  Demand-driven capacity planning v2. Combines percentage-first cluster metrics,
+  usable-vs-provisioned CPU comparison, contention heatmaps for visual scanning,
+  and detailed host outlier + vSAN contribution tables from v1. Narrow scope
+  picker (w=2) with wide cluster overview beside it. Select a cluster row to
+  drill into VM contention, host outliers, and per-host vSAN performance.
+  Two interaction tiers: broad visual scanning (heatmaps) at DC level, then
+  drill-down detail (tables) at cluster level.
+
+widgets:
+
+  # ── Row 1: Scope picker + Cluster overview (side by side) ────────────────
+  # Tier-1 interactions originate from scope_picker.
+  # scope_picker → cluster_overview, vm_heatmap, host_heatmap
+
+  - id: scope_picker
+    type: ResourceList
+    title: "Select vCenter or Datacenter"
+    coords: {x: 1, y: 1, w: 2, h: 8}
+    resource_kinds:
+      - {adapter_kind: VMWARE, resource_kind: VMwareAdapter Instance}
+      - {adapter_kind: VMWARE, resource_kind: Datacenter}
+      - {adapter_kind: VMWARE, resource_kind: vSphere World}
+
+  # Receives scope from scope_picker (resourceId).
+  # Row-selection on this widget drives the three detail widgets in rows 2–3.
+  - id: cluster_overview
+    type: View
+    title: "Cluster Demand & Capacity Overview"
+    coords: {x: 3, y: 1, w: 10, h: 8}
+    view: "[VCF Content Factory] Cluster Demand & Capacity Overview v2"
+
+  # ── Row 2: Heatmaps + Host outliers (3 across) ───────────────────────────
+  # vm_heatmap and host_heatmap receive scope from scope_picker (resourceId).
+  # host_outliers receives cluster selection from cluster_overview (resourceId).
+
+  - id: vm_heatmap
+    type: Heatmap
+    title: "VM Contention"
+    coords: {x: 1, y: 9, w: 4, h: 6}
+    mode: all
+    depth: 10
+    configs:
+      - name: "VM CPU Contention"
+        adapter_kind: VMWARE
+        resource_kind: VirtualMachine
+        color_by:
+          metric_key: "cpu|capacity_contentionPct"
+          label: "CPU Contention %"
+        size_by:
+          metric_key: "cpu|demandPct"
+          label: "CPU Demand %"
+        group_by:
+          adapter_kind: VMWARE
+          resource_kind: HostSystem
+          text: "Host System"
+        color:
+          min_value: 0
+          thresholds:
+            values: [0, 5, 10, 20]
+            colors: ["#74B43B", "#ECC33E", "#F5A623", "#DE3F30"]
+        solid_coloring: false
+        focus_on_groups: true
+
+  - id: host_heatmap
+    type: Heatmap
+    title: "Host Contention"
+    coords: {x: 5, y: 9, w: 4, h: 6}
+    mode: all
+    depth: 10
+    configs:
+      - name: "Host CPU Contention"
+        adapter_kind: VMWARE
+        resource_kind: HostSystem
+        color_by:
+          metric_key: "cpu|capacity_contentionPct"
+          label: "CPU Contention %"
+        size_by:
+          metric_key: "cpu|demandPct"
+          label: "CPU Demand %"
+        group_by:
+          adapter_kind: VMWARE
+          resource_kind: ClusterComputeResource
+          text: "Cluster Compute Resource"
+        color:
+          min_value: 0
+          thresholds:
+            values: [0, 5, 10, 20]
+            colors: ["#74B43B", "#ECC33E", "#F5A623", "#DE3F30"]
+        solid_coloring: false
+        focus_on_groups: true
+
+  # Receives cluster row selection from cluster_overview (resourceId).
+  - id: host_outliers
+    type: View
+    title: "Host Contention Outliers"
+    coords: {x: 9, y: 9, w: 4, h: 6}
+    view: "[VCF Content Factory] Host Contention Outliers"
+
+  # ── Row 3: VM detail + vSAN detail (2 across) ────────────────────────────
+  # Both receive cluster row selection from cluster_overview (resourceId).
+
+  - id: vm_contention
+    type: View
+    title: "VM Contention"
+    coords: {x: 1, y: 15, w: 6, h: 7}
+    view: "[VCF Content Factory] VM Contention v2"
+
+  - id: host_vsan
+    type: View
+    title: "Per-Host vSAN Contribution"
+    coords: {x: 7, y: 15, w: 6, h: 7}
+    view: "[VCF Content Factory] Per-Host vSAN Contribution"
+
+interactions:
+  # Tier 1 — scope picker drives heatmaps and cluster overview
+  - from: scope_picker
+    to: cluster_overview
+    type: resourceId
+  - from: scope_picker
+    to: vm_heatmap
+    type: resourceId
+  - from: scope_picker
+    to: host_heatmap
+    type: resourceId
+  # Tier 2 — cluster row selection drives detail views
+  - from: cluster_overview
+    to: host_outliers
+    type: resourceId
+  - from: cluster_overview
+    to: vm_contention
+    type: resourceId
+  - from: cluster_overview
+    to: host_vsan
+    type: resourceId

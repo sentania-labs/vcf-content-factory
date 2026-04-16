@@ -1,0 +1,98 @@
+id: 3a30b682-068e-423e-aadb-bebf6a9be4fe
+name: "[VCF Content Factory] Cluster Demand & Capacity Overview v2"
+description: >
+  Per-cluster demand and capacity overview for v2 demand-driven capacity planning
+  dashboard. Percentages first (demand %, contention % avg and P95), then
+  usable-vs-provisioned CPU comparison in GHz, then memory demand and capacity in
+  auto-units. Drives row selection to downstream VM contention, host outlier, and
+  vSAN detail views. Default sort: CPU Contention P95 descending (worst first).
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: ClusterComputeResource
+
+summary: false
+
+time_window:
+  unit: DAYS
+  count: 7
+
+columns:
+  # --- CPU demand % block ---
+  - attribute: cpu|demandPct
+    display_name: "CPU Demand Avg"
+    unit: percent
+    transformation: AVG
+    yellow_bound: 50.0
+    orange_bound: 70.0
+    red_bound: 85.0
+    ascending_range: false
+
+  - attribute: cpu|demandPct
+    display_name: "CPU Demand P95"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 60.0
+    orange_bound: 80.0
+    red_bound: 90.0
+    ascending_range: false
+
+  # --- CPU contention % block ---
+  - attribute: cpu|capacity_contentionPct
+    display_name: "CPU Contention Avg"
+    unit: percent
+    transformation: AVG
+    yellow_bound: 5.0
+    orange_bound: 10.0
+    red_bound: 20.0
+    ascending_range: false
+
+  - attribute: cpu|capacity_contentionPct
+    display_name: "CPU Contention P95"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 7.0
+    orange_bound: 15.0
+    red_bound: 25.0
+    ascending_range: false
+
+  # --- CPU capacity block (usable vs provisioned, GHz) ---
+  - attribute: cpu|haTotalCapacity_average
+    display_name: "Usable CPU (GHz)"
+    unit: ghz
+    transformation: CURRENT
+
+  - attribute: cpu|vm_capacity_provisioned
+    display_name: "Provisioned CPU (GHz)"
+    unit: ghz
+    transformation: CURRENT
+
+  # --- Memory demand block ---
+  - attribute: mem|host_demand
+    display_name: "Mem Demand Avg"
+    unit: gb
+    transformation: AVG
+
+  - attribute: mem|host_demand
+    display_name: "Mem Demand P95"
+    unit: gb
+    transformation: PERCENTILE
+    percentile: 95
+
+  # --- Memory capacity block ---
+  - attribute: mem|haTotalCapacity_average
+    display_name: "Usable Memory"
+    unit: gb
+    transformation: CURRENT
+
+  - attribute: mem|memory_allocated_on_all_powered_on_vms
+    display_name: "Allocated Memory"
+    unit: gb
+    transformation: CURRENT
+
+# Sort note: default sort is CPU Contention P95 descending (worst first).
+# View-level default sort is not a loader-supported field; apply this sort
+# in the dashboard widget that references this view (sort_by_dir: desc,
+# sort_by_column: "CPU Contention P95").

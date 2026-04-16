@@ -151,8 +151,15 @@ scripts/bootstrap_references.sh --update # also git pull existing
   PowerShell-PowerCLI, Aria Automation, Aria Ops Logs, Tiered-Memory,
   VMware Explore session material) — out of scope.
 - **What to grep for:** super metric JSON exports, dashboard/view
-  bundles. Restrict greps to
+  bundles, **and MPB JSON design files** under `Management-Packs/`.
+  Restrict greps to
   `references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/`.
+- **MPB designs:** `Management-Packs/` contains complete MPB JSON
+  design files for GitHub, Security Advisories, FastAPI, ServiceNow,
+  and vCommunity management packs. These are ground-truth examples
+  of the MPB JSON schema — object types, metric/property definitions,
+  request mappings, relationships, and bundled content. Reference
+  these when authoring new management packs.
 - **Attribution:** cite
   `dalehassinger/unlocking-the-potential/VMware-Aria-Operations/<path>`.
 
@@ -168,5 +175,42 @@ scripts/bootstrap_references.sh --update # also git pull existing
   host-relationship traversal patterns.
 - **Attribution:** cite
   `johnddias/vrops-super-metric-numa-optimize/NUMA Optimization.json`.
+
+### sentania/Aria-Operations-DSM-Management-Pack
+
+- **URL:** https://github.com/sentania/Aria-Operations-DSM-Management-Pack
+- **Local path:** `references/sentania_aria_operations_dsm_mp/`
+- **Owner:** user (sentania). Public repo.
+- **Scope:** Synology DSM management pack for VCF Operations — MPB
+  JSON design, Postman collection, and API exploration notes for the
+  Synology DSM REST API. This is the **starting point** for the
+  factory's Synology MP capability build. Current state: 4 object
+  types (Diskstation, Volume, Disks, Storage Pool), 9 requests,
+  1 relationship (Pool→Volume). Session auth is working via CUSTOM
+  credential type. Missing: parent→child wiring for Diskstation→Pool
+  and Diskstation→Disk, iSCSI/network object types, IO metrics,
+  events, bundled content.
+- **What to grep for:** MPB JSON design
+  (`Management Pack JSON/Synology DSM MP.json`), Postman collection
+  (`API Exploration/Synology.postman_collection.json`), API response
+  samples (`.lib` files under `API Exploration/`).
+- **Attribution:** cite
+  `sentania/Aria-Operations-DSM-Management-Pack/<path>`.
+
+### brockpeterson/operations_management_packs
+
+- **URL:** https://github.com/brockpeterson/operations_management_packs
+- **Local path:** `references/brockpeterson_operations_management_packs/`
+- **Owner:** Brock Peterson (Broadcom/VCF field). Public repo.
+- **Scope:** VCF Operations management packs — `.pak` files and/or
+  MPB JSON designs for third-party integrations (Rubrik, etc.).
+  Ground-truth examples of production management packs built by the
+  most prolific community contributor.
+- **What to grep for:** MPB JSON design files, `.pak` bundles,
+  describe.xml schemas, bundled dashboard/view/super metric content
+  within management packs. Cross-reference adapter kind keys and
+  object type definitions when building new management packs.
+- **Attribution:** cite
+  `brockpeterson/operations_management_packs/<file>`.
 
 <!-- Add new sources below. Keep entries in the same shape. -->

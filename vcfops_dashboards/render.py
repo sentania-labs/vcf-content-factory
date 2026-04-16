@@ -981,14 +981,15 @@ def _heatmap_widget(
         else:
             group_by = {}
 
-        color_obj = {
+        color_obj: dict = {
             "minValue": tab.color.min_value,
-            "maxValue": tab.color.max_value,
             "thresholds": {
                 "values": tab.color.values,
                 "colors": tab.color.colors,
             },
         }
+        if tab.color.max_value is not None:
+            color_obj["maxValue"] = tab.color.max_value
 
         configs_json.append({
             "name": tab.name,

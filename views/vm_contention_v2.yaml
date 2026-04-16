@@ -1,0 +1,94 @@
+id: 8de65b84-2ead-4068-969c-97ab09837ffd
+name: "[VCF Content Factory] VM Contention v2"
+description: >
+  Per-VM CPU and memory contention with storage latency for v2 demand-driven
+  capacity planning dashboard. Replaces v1's balloon/swap columns with read/write
+  latency. Receives ClusterComputeResource resourceId from upstream cluster overview
+  widget. CPU contention (Ready avg + P95, Co-Stop P95), memory contention avg, and
+  storage latency (read + write avg). Default sort: CPU Ready P95 descending
+  (worst first). Purely built-in VMWARE adapter metrics; no super metric columns.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+
+summary: false
+
+time_window:
+  unit: HOURS
+  count: 24
+
+columns:
+  # --- CPU contention block ---
+
+  # CPU Ready Avg: non-zero Ready means vCPUs waiting for a physical core.
+  # Yellow at 5% (noticeable), orange at 10% (significant), red at 20% (severe).
+  - attribute: cpu|readyPct
+    display_name: "CPU Ready Avg (24h)"
+    unit: percent
+    transformation: AVG
+    yellow_bound: 5.0
+    orange_bound: 10.0
+    red_bound: 20.0
+    ascending_range: false
+
+  # CPU Ready P95: catches bursty ready spikes that the average softens.
+  # Same thresholds — a P95 ≥ 20% means at least 5% of samples are severe.
+  # Primary sort column for the consuming dashboard widget (worst-first).
+  - attribute: cpu|readyPct
+    display_name: "CPU Ready P95 (24h)"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 5.0
+    orange_bound: 10.0
+    red_bound: 20.0
+    ascending_range: false
+
+  # Co-Stop P95: co-scheduling penalty; only meaningful for multi-vCPU VMs.
+  # Lower thresholds than Ready because Co-Stop is inherently more severe.
+  - attribute: cpu|costopPct
+    display_name: "Co-Stop P95 (24h)"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 3.0
+    orange_bound: 5.0
+    red_bound: 10.0
+    ascending_range: false
+
+  # --- Memory contention block ---
+
+  # Memory contention (host-reported): hypervisor-level pressure expressed as
+  # a percentage. Low thresholds — any measurable contention is notable.
+  - attribute: mem|host_contentionPct
+    display_name: "Mem Contention Avg (24h)"
+    unit: percent
+    transformation: AVG
+    yellow_bound: 2.0
+    orange_bound: 5.0
+    red_bound: 10.0
+    ascending_range: false
+
+  # --- Storage latency block ---
+
+  # Read Latency Avg: average datastore read latency seen by the VM guest over
+  # the 24-hour window. No thresholds — surface the raw value; operators apply
+  # judgment based on storage tier (flash vs. spinning).
+  - attribute: storage|totalReadLatency_average
+    display_name: "Read Latency Avg (24h)"
+    transformation: AVG
+
+  # Write Latency Avg: average datastore write latency seen by the VM guest.
+  # Same rationale as read latency — no thresholds, tier-dependent judgment.
+  - attribute: storage|totalWriteLatency_average
+    display_name: "Write Latency Avg (24h)"
+    transformation: AVG
+
+# Sort note: the consuming dashboard widget should sort by "CPU Ready P95 (24h)"
+# descending (worst-first) so the most-suffering VMs surface at the top.
+# View-level default sort is not a loader-supported field; apply this in the
+# dashboard widget referencing this view (sort_by_dir: desc,
+# sort_by_column: "CPU Ready P95 (24h)").
+# Precedent: vm_contention_pain.yaml and cluster_demand_overview.yaml use the
+# same widget-sort pattern.

@@ -495,7 +495,7 @@ class HeatmapColorThreshold:
     length enforced by Ops — the UI sets them together.
     """
     min_value: float = 0
-    max_value: float = 100
+    max_value: Optional[float] = None
     values: List[float] = field(default_factory=lambda: [0, 50, 100])
     colors: List[str] = field(default_factory=lambda: ["#74B43B", "#ECC33E", "#DE3F30"])
 
@@ -1042,7 +1042,11 @@ def load_dashboard(path: Path) -> Dashboard:
                 raw_thresholds = raw_color.get("thresholds") or {}
                 color = HeatmapColorThreshold(
                     min_value=float(raw_color.get("min_value", raw_color.get("minValue", 0))),
-                    max_value=float(raw_color.get("max_value", raw_color.get("maxValue", 100))),
+                    max_value=(
+                        float(_mv)
+                        if (_mv := raw_color.get("max_value", raw_color.get("maxValue"))) is not None
+                        else None
+                    ),
                     values=list(raw_thresholds.get("values", [0, 50, 100])),
                     colors=list(raw_thresholds.get("colors", ["#74B43B", "#ECC33E", "#DE3F30"])),
                 )
