@@ -491,3 +491,15 @@ URL-encode as `vCenter%20Operations%20Adapter`).
 9. **Adapter key casing matters.** `VMWARE` is all-caps,
    `VcfAdapter` is mixed-case, `vCenter Operations Adapter` has
    spaces. URL-encode adapter keys with special characters.
+
+10. **SM formula instanced key form vs. describe cache base form.**
+    The super metric DSL allows referencing instanced stat keys with
+    the syntax `group:instance_spec|stat` (e.g.
+    `net:Aggregate of all instances|packetsPerSec`).  This tells the
+    SM engine to aggregate across all instances of that NIC/device
+    group.  However, the describe cache `/statkeys` endpoint only
+    stores the base key form `net|packetsPerSec` — there is no
+    `net:Aggregate of all instances|packetsPerSec` entry.  The
+    dependency auditor normalizes instanced keys by stripping the
+    `:instance_spec` portion before performing cache lookups.
+    Pattern: `^([^|:]+):[^|]+\|(.+)$` → `\1|\2`.
