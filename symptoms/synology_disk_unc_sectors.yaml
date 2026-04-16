@@ -1,0 +1,21 @@
+name: "[VCF Content Factory] Synology Disk Uncorrectable Sectors"
+# TODO: verify resource kind prefix at install-verification time
+# (MPB may expose this as mpb_synology_dsm_disk rather than disk)
+adapter_kind: mpb_synology_dsm
+resource_kind: disk
+severity: WARNING
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: metric_static
+  key: unc_sectors
+  operator: GT
+  value: 0
+  instanced: false
+
+description: >
+  Triggers when a disk has any uncorrectable sector count above zero. Any
+  non-zero value indicates media errors that could not be recovered and is
+  a strong predictor of impending disk failure. Schedule disk replacement.
+  Sourced from SYNO.Storage.CGI.Storage disks[].unc field.

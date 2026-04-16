@@ -1,0 +1,21 @@
+name: "[VCF Content Factory] Synology System Temperature Elevated"
+# TODO: verify resource kind prefix at install-verification time
+# (MPB may expose this as mpb_synology_dsm_synology_diskstation rather than synology_diskstation)
+adapter_kind: mpb_synology_dsm
+resource_kind: synology_diskstation
+severity: WARNING
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: metric_static
+  key: sys_temp
+  operator: GT
+  value: 60
+  instanced: false
+
+description: >
+  Triggers when the DiskStation system temperature exceeds 60 degrees Celsius.
+  Elevated temperature warrants investigation of airflow and ambient conditions
+  before the situation becomes critical. Sourced from SYNO.DSM.Info temperature
+  field (unit: C). Companion to the CRITICAL symptom at 70C.

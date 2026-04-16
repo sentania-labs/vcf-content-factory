@@ -1,0 +1,35 @@
+name: "[VCF Content Factory] Synology Fan Failure Alert"
+description: >
+  Alerts when the DiskStation system fan is not confirmed to be spinning
+  normally (fan_status not equal to "yes"). Fan failure rapidly leads to
+  thermal damage. This alert fires on any non-"yes" fan_status value,
+  which includes the literal "no" (fan stopped) as well as any transient
+  null or missing value during a collection gap. Before dispatching for
+  hardware inspection, confirm the alert persists across multiple
+  collection cycles and check whether a concurrent System Temperature
+  alert is also active. A brief single-cycle alert that self-clears is
+  likely a collection gap, not a hardware failure.
+
+  Adapter kind: mpb_synology_dsm
+adapter_kind: mpb_synology_dsm
+resource_kind: synology_diskstation
+type: 17              # Hardware
+sub_type: 1           # Availability
+wait_cycles: 1
+cancel_cycles: 1
+criticality: CRITICAL
+
+impact:
+  badge: HEALTH
+
+symptom_sets:
+  operator: ANY
+  sets:
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Synology Fan Failure"
+
+recommendations:
+  - name: "[VCF Content Factory] Synology Fan Failure Remediation"
+    priority: 1

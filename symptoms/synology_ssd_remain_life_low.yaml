@@ -1,0 +1,22 @@
+name: "[VCF Content Factory] Synology SSD Remaining Life Low"
+# TODO: verify resource kind prefix at install-verification time
+# (MPB may expose this as mpb_synology_dsm_disk rather than disk)
+adapter_kind: mpb_synology_dsm
+resource_kind: disk
+severity: WARNING
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: metric_static
+  key: remain_life
+  operator: LT
+  value: 20
+  instanced: false
+
+description: >
+  Triggers when an SSD or NVMe disk's remaining life falls below 20%.
+  Plan for replacement before the drive is fully worn. Note: the
+  remain_life metric returns -1 for HDDs (not applicable); this symptom
+  will only fire meaningfully on SSD/NVMe disk objects. Sourced from
+  SYNO.Storage.CGI.Storage disks[].remain_life field (unit: %).

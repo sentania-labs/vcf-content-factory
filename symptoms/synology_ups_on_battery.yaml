@@ -1,0 +1,21 @@
+name: "[VCF Content Factory] Synology UPS On Battery"
+# TODO: verify resource kind prefix at install-verification time
+# (MPB may expose this as mpb_synology_dsm_ups rather than ups)
+adapter_kind: mpb_synology_dsm
+resource_kind: ups
+severity: CRITICAL
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: property
+  key: status
+  operator: EQ
+  value: "OB"
+
+description: >
+  Triggers when the UPS NUT status equals "OB" (on battery), meaning mains
+  power has been lost and the NAS is running on battery. Begin graceful
+  shutdown procedures if power is not restored promptly. Sourced from
+  SYNO.Core.ExternalDevice.UPS status field (NUT status codes: OL=online,
+  OB=on battery, LB=low battery).

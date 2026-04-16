@@ -1,0 +1,32 @@
+name: "[VCF Content Factory] Synology Volume Space Remediation"
+description: |
+  Free space on the volume immediately. At the CRITICAL threshold (above
+  95% usage), data writes are likely to begin failing and services
+  depending on the volume will be impacted.
+
+  Actions in priority order:
+
+  1. Delete snapshots older than 30 days via Snapshot Replication manager.
+     Snapshots are the most common source of hidden space consumption.
+
+  2. Empty recycle bins for all shared folders. Open each share's recycle
+     bin and purge. Large media or backup shares accumulate gigabytes in
+     the recycle bin.
+
+  3. Identify and relocate large shares. Use Storage Analyzer (available
+     as a package) to find the largest directories and files. Consider
+     moving infrequently accessed data to another volume or external
+     storage.
+
+  4. Expand the volume. If the pool has unallocated space, expand the
+     volume in Storage Manager. If the pool is also full, add a disk and
+     expand the pool first.
+
+  5. For iSCSI LUN volumes: if the LUN is thick-provisioned, the volume
+     usage reflects the full LUN size. Consider converting to thin
+     provisioning or reclaiming freed space from the guest OS.
+
+  For the WARNING threshold (above 85%): take action before the critical
+  threshold is reached. Steps 1-3 above apply; the urgency is lower but
+  capacity planning should begin immediately.
+adapter_kind: mpb_synology_dsm

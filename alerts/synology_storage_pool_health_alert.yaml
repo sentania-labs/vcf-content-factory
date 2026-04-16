@@ -1,0 +1,37 @@
+name: "[VCF Content Factory] Synology Storage Pool Health Alert"
+description: >
+  Alerts when a Synology storage pool is in a degraded or crashed state.
+  Both conditions are CRITICAL severity. A degraded pool has lost redundancy
+  (one disk failed) and a second failure will cause data loss. A crashed pool
+  is non-functional and data is inaccessible. Either condition requires
+  immediate operator response. The two symptoms are combined under ANY so
+  that either condition independently raises the alert.
+
+  Adapter kind: mpb_synology_dsm
+adapter_kind: mpb_synology_dsm
+resource_kind: storage_pool
+type: 18              # Storage
+sub_type: 1           # Availability
+wait_cycles: 1
+cancel_cycles: 1
+criticality: CRITICAL
+
+impact:
+  badge: HEALTH
+
+symptom_sets:
+  operator: ANY
+  sets:
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Synology Storage Pool Degraded"
+
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Synology Storage Pool Crashed"
+
+recommendations:
+  - name: "[VCF Content Factory] Synology Storage Pool Health Remediation"
+    priority: 1

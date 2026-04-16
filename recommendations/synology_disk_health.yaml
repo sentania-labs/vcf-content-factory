@@ -1,0 +1,27 @@
+name: "[VCF Content Factory] Synology Disk Health Remediation"
+description: |
+  A SMART failure (smart_status = "failing") indicates imminent hardware
+  failure and requires immediate action. Replace the failing disk before
+  data loss occurs.
+
+  If the disk is part of a redundant pool (SHR, RAID 5, RAID 6), the pool
+  continues operating in a degraded state. A second disk failure at this
+  point will cause data loss. Do not delay replacement.
+
+  Steps: (1) Identify the physical disk from the Synology Storage Manager
+  disk list — note the bay number and model. (2) Verify the replacement
+  disk on the Synology compatibility list at synology.com/compatibility.
+  (3) If the pool supports hot-swap, replace the disk while the NAS is
+  running. (4) After replacement, initiate pool repair from Storage Manager
+  and monitor repair progress until complete.
+
+  For uncorrectable sector alerts (non-zero unc_sectors without SMART
+  failure): the disk has media errors that could not be recovered. This is
+  a strong predictor of impending failure. Schedule replacement during the
+  next maintenance window and back up data now if not already current.
+
+  For SSD remaining life alerts (remain_life below 20%): begin procurement
+  of a replacement SSD. At this wear level the drive may last weeks to
+  months; plan the swap before it reaches 0%. Back up all data on the
+  volume before performing the replacement.
+adapter_kind: mpb_synology_dsm

@@ -1,0 +1,27 @@
+name: "[VCF Content Factory] Synology Fan Failure Remediation"
+description: |
+  Cooling is compromised. The system fan is not confirmed spinning normally
+  (fan_status is not "yes"). Without adequate airflow, the NAS will
+  overheat within minutes to hours depending on ambient temperature and
+  disk load.
+
+  Note: the fan_status symptom uses a NOT_EQ condition and will briefly
+  fire during collection gaps when fan_status is temporarily unavailable.
+  Before dispatching for hardware inspection, verify the alert persists
+  across two or more collection cycles and check system temperature for
+  a concurrent rise. If temperature is normal and the alert clears on
+  its own, a transient collection gap was likely the cause.
+
+  If the alert is sustained: (1) Physically inspect the fan. Listen for
+  unusual noise (grinding, rattling, absence of sound). Check for
+  obstruction by a cable or debris. (2) If the fan is not spinning and
+  no obstruction is present, the fan bearing has failed. Order a
+  replacement fan matching the NAS model from Synology or a compatible
+  supplier. (3) Until the fan is replaced, reduce disk and CPU load and
+  ensure the NAS is in the coolest available location. Monitor system
+  temperature closely via the System Temperature alert.
+
+  If the system temperature is already elevated, shut down the NAS to
+  prevent hardware damage and replace the fan before bringing it back
+  online.
+adapter_kind: mpb_synology_dsm

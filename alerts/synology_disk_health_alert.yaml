@@ -1,0 +1,48 @@
+name: "[VCF Content Factory] Synology Disk Health Alert"
+description: >
+  Alerts when one or more disks in a Synology DiskStation NAS show signs of
+  hardware failure or accelerated wear. Combines three severity tiers into a
+  single alert: SMART Failure (disk imminent failure, CRITICAL), Uncorrectable
+  Sectors (media errors, WARNING), and SSD Remaining Life Low (SSD wear below
+  20%, WARNING). The highest-severity triggered symptom drives the alert
+  criticality (SYMPTOM_BASED). Any one of the three conditions firing is
+  sufficient to raise this alert.
+
+  Resource kind note: these symptoms target the "disk" resource kind as
+  authored. The MPB generator may prefix resource kinds with the adapter kind
+  at install time (e.g. "mpb_synology_dsm_disk"). Verify resource kind
+  assignment during initial install-verification of the Synology MP.
+
+  Adapter kind: mpb_synology_dsm
+adapter_kind: mpb_synology_dsm
+resource_kind: disk
+type: 17              # Hardware
+sub_type: 1           # Availability
+wait_cycles: 1
+cancel_cycles: 1
+criticality: SYMPTOM_BASED
+
+impact:
+  badge: HEALTH
+
+symptom_sets:
+  operator: ANY
+  sets:
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Synology Disk SMART Failure"
+
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Synology Disk Uncorrectable Sectors"
+
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Synology SSD Remaining Life Low"
+
+recommendations:
+  - name: "[VCF Content Factory] Synology Disk Health Remediation"
+    priority: 1

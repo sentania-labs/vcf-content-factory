@@ -1,0 +1,38 @@
+name: "[VCF Content Factory] Synology System Temperature Alert"
+description: >
+  Alerts when the DiskStation system temperature is elevated or critical.
+  Uses a two-tier model: Temperature Elevated fires above 60C (WARNING)
+  indicating degraded thermal headroom; Temperature Critical fires above 70C
+  (CRITICAL) where thermal throttling is likely active and hardware damage
+  is possible. The alert fires when either threshold is crossed; criticality
+  follows the triggered symptom (SYMPTOM_BASED). Check ambient temperature,
+  fan operation, and airflow when this alert fires.
+
+  Adapter kind: mpb_synology_dsm
+adapter_kind: mpb_synology_dsm
+resource_kind: synology_diskstation
+type: 17              # Hardware
+sub_type: 3           # Performance
+wait_cycles: 1
+cancel_cycles: 1
+criticality: SYMPTOM_BASED
+
+impact:
+  badge: HEALTH
+
+symptom_sets:
+  operator: ANY
+  sets:
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Synology System Temperature Elevated"
+
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Synology System Temperature Critical"
+
+recommendations:
+  - name: "[VCF Content Factory] Synology System Temperature Remediation"
+    priority: 1

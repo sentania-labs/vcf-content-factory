@@ -1,0 +1,20 @@
+name: "[VCF Content Factory] Synology Storage Pool Crashed"
+# TODO: verify resource kind prefix at install-verification time
+# (MPB may expose this as mpb_synology_dsm_storage_pool rather than storage_pool)
+adapter_kind: mpb_synology_dsm
+resource_kind: storage_pool
+severity: CRITICAL
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: property
+  key: status
+  operator: EQ
+  value: "crashed"
+
+description: >
+  Triggers when a storage pool status equals "crashed". A crashed pool
+  has suffered catastrophic failure and data is inaccessible. Requires
+  immediate recovery action. Sourced from SYNO.Storage.CGI.Storage
+  storagePools[].status field.

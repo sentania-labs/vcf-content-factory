@@ -1,0 +1,25 @@
+name: "[VCF Content Factory] Synology UPS On Battery Remediation"
+description: |
+  The NAS is running on UPS battery (NUT status OB). Mains power has been
+  lost or is unstable. The NAS will continue operating until battery is
+  exhausted; if battery runs out without a graceful shutdown, an unclean
+  filesystem shutdown may cause data loss or corruption.
+
+  Immediate steps: (1) Verify utility power at the circuit breaker and
+  UPS display. Determine whether this is a brief flicker or a sustained
+  outage. (2) If the outage appears sustained and battery runtime is
+  limited, initiate graceful shutdown from DSM Control Panel > Hardware
+  > UPS > Shutdown immediately, or configure DSM's UPS safe shutdown
+  threshold (typically at 30% battery remaining).
+
+  Recovery steps after power restoration: (1) Confirm the NAS restarted
+  cleanly and all volumes returned to Normal status. (2) Check Storage
+  Manager for any filesystem inconsistency flags. Run a data scrub if
+  the shutdown was unclean.
+
+  Maintenance steps: (1) Check UPS battery age. Lead-acid UPS batteries
+  typically need replacement every 3 years regardless of cycle count.
+  A battery that is past its service life may deliver far less runtime
+  than rated. (2) Verify UPS-to-NAS USB or network communication is
+  functioning so that automated safe-shutdown works correctly.
+adapter_kind: mpb_synology_dsm

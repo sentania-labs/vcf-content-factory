@@ -1,0 +1,20 @@
+name: "[VCF Content Factory] Synology Fan Failure"
+# TODO: verify resource kind prefix at install-verification time
+# (MPB may expose this as mpb_synology_dsm_synology_diskstation rather than synology_diskstation)
+adapter_kind: mpb_synology_dsm
+resource_kind: synology_diskstation
+severity: CRITICAL
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: property
+  key: fan_status
+  operator: NOT_EQ
+  value: "yes"
+
+description: >
+  Triggers when the system fan status is not "yes" (cooling active). The
+  SYNO.Core.Hardware.FanSpeed API returns "yes" when the fan is spinning
+  normally and "no" when it has failed or stalled. A fan failure will rapidly
+  lead to thermal damage. Sourced from fan_speed.cool_fan field.

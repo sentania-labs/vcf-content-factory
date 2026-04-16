@@ -1,0 +1,21 @@
+name: "[VCF Content Factory] Synology Volume Critical"
+# TODO: verify resource kind prefix at install-verification time
+# (MPB may expose this as mpb_synology_dsm_volume rather than volume)
+adapter_kind: mpb_synology_dsm
+resource_kind: volume
+severity: CRITICAL
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: metric_static
+  key: usage_pct
+  operator: GT
+  value: 95
+  instanced: false
+
+description: >
+  Triggers when a volume's usage percentage exceeds 95%. At this level the
+  volume is critically full; writes may fail and services depending on the
+  volume will be impacted. Sourced from SYNO.Storage.CGI.Storage
+  volumes[].size (used/total ratio). Companion to the WARNING symptom at 85%.

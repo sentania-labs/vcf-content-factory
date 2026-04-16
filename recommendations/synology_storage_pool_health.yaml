@@ -1,0 +1,28 @@
+name: "[VCF Content Factory] Synology Storage Pool Health Remediation"
+description: |
+  For a DEGRADED pool: the pool has lost redundancy — at least one member
+  disk has failed. The pool is still accessible but a second disk failure
+  will cause data loss.
+
+  Steps for degraded pool: (1) Identify the failed disk in Storage Manager.
+  (2) Replace the failed disk promptly — refer to the disk health
+  recommendation for replacement procedure. (3) After replacement, initiate
+  pool repair from Storage Manager and monitor until repair completes and
+  the pool returns to Normal status. Do not add significant write load
+  during repair as it stresses remaining disks.
+
+  For a CRASHED pool: the pool has suffered catastrophic failure and data
+  is inaccessible. This severity requires immediate escalation.
+
+  Steps for crashed pool: (1) Do not attempt further operations on the pool
+  — avoid running scrub, repair, or format commands that could overwrite
+  recoverable data. (2) Collect a support log bundle from DSM Control Panel
+  > Info Center > Export Log. (3) Contact Synology Technical Support and
+  open a priority ticket with the log bundle attached. (4) If you have a
+  current Hyper Backup or rsync backup, begin assessing recovery options
+  while awaiting support guidance.
+
+  Note: resource kind prefixes are verified at install time — the pool
+  status values "degraded" and "crashed" are sourced from
+  SYNO.Storage.CGI.Storage storagePools[].status.
+adapter_kind: mpb_synology_dsm

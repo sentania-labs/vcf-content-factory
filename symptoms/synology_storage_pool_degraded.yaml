@@ -1,0 +1,21 @@
+name: "[VCF Content Factory] Synology Storage Pool Degraded"
+# TODO: verify resource kind prefix at install-verification time
+# (MPB may expose this as mpb_synology_dsm_storage_pool rather than storage_pool)
+adapter_kind: mpb_synology_dsm
+resource_kind: storage_pool
+severity: CRITICAL
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: property
+  key: status
+  operator: EQ
+  value: "degraded"
+
+description: >
+  Triggers when a storage pool status equals "degraded". A degraded pool
+  has lost redundancy (typically one disk has failed) and is at elevated
+  risk of data loss if any remaining disk fails. Requires immediate
+  attention to restore RAID redundancy. Sourced from SYNO.Storage.CGI.Storage
+  storagePools[].status field.

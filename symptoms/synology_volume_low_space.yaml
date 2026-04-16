@@ -1,0 +1,21 @@
+name: "[VCF Content Factory] Synology Volume Low Space"
+# TODO: verify resource kind prefix at install-verification time
+# (MPB may expose this as mpb_synology_dsm_volume rather than volume)
+adapter_kind: mpb_synology_dsm
+resource_kind: volume
+severity: WARNING
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: metric_static
+  key: usage_pct
+  operator: GT
+  value: 85
+  instanced: false
+
+description: >
+  Triggers when a volume's usage percentage exceeds 85%. Provides early
+  warning to allow capacity expansion before the critical threshold is
+  reached. Sourced from SYNO.Storage.CGI.Storage volumes[].size
+  (used/total ratio). Companion to the CRITICAL symptom at 95%.

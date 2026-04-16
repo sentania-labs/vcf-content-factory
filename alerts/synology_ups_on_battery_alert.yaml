@@ -1,0 +1,33 @@
+name: "[VCF Content Factory] Synology UPS On Battery Alert"
+description: >
+  Alerts when the NAS UPS transitions to battery power (NUT status "OB"),
+  indicating a loss of mains power. This is a CRITICAL condition: if power
+  is not restored before battery is exhausted, the NAS will shut down
+  uncleanly, risking data loss or filesystem corruption. Initiate graceful
+  shutdown procedures if the outage is expected to extend beyond UPS
+  runtime. Verify UPS battery age (replace every 3 years) to ensure rated
+  runtime is available.
+
+  Adapter kind: mpb_synology_dsm
+adapter_kind: mpb_synology_dsm
+resource_kind: ups
+type: 17              # Hardware
+sub_type: 1           # Availability
+wait_cycles: 1
+cancel_cycles: 1
+criticality: CRITICAL
+
+impact:
+  badge: HEALTH
+
+symptom_sets:
+  operator: ANY
+  sets:
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Synology UPS On Battery"
+
+recommendations:
+  - name: "[VCF Content Factory] Synology UPS On Battery Remediation"
+    priority: 1

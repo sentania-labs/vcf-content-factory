@@ -1,0 +1,38 @@
+name: "[VCF Content Factory] Synology Volume Space Alert"
+description: >
+  Alerts when a Synology volume is running low on space. Uses a two-tier
+  model: Volume Low Space fires at above 85% usage (WARNING) providing
+  early warning; Volume Critical fires at above 95% usage (CRITICAL)
+  indicating imminent write failure. The alert fires when either threshold
+  is crossed; criticality follows the triggered symptom (SYMPTOM_BASED).
+  Investigate and free space or expand capacity before the critical
+  threshold is reached.
+
+  Adapter kind: mpb_synology_dsm
+adapter_kind: mpb_synology_dsm
+resource_kind: volume
+type: 18              # Storage
+sub_type: 2           # Capacity
+wait_cycles: 1
+cancel_cycles: 1
+criticality: SYMPTOM_BASED
+
+impact:
+  badge: RISK
+
+symptom_sets:
+  operator: ANY
+  sets:
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Synology Volume Low Space"
+
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Synology Volume Critical"
+
+recommendations:
+  - name: "[VCF Content Factory] Synology Volume Space Remediation"
+    priority: 1

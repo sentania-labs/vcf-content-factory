@@ -1,0 +1,29 @@
+name: "[VCF Content Factory] Synology System Temperature Remediation"
+description: |
+  Elevated or critical system temperature indicates inadequate cooling.
+  Prolonged high temperature causes hardware damage and shortened component
+  lifespan. At the CRITICAL threshold (above 70C) thermal throttling is
+  likely active.
+
+  Steps: (1) Check the NAS ambient temperature. NAS units are rated for
+  operation up to approximately 40C ambient. If the room or rack is hot,
+  improve ventilation or add supplemental cooling. Summer heat plus high
+  disk activity is a common trigger.
+
+  (2) Verify fan operation from DSM Control Panel > Hardware > Fan Speed
+  Monitor. A failed or slow fan will cause temperature to rise even in a
+  cool environment. If a fan failure alert is also active, address that
+  first.
+
+  (3) Confirm that intake and exhaust vents are clear of obstruction.
+  Cables, dust buildup, and adjacent equipment can block airflow even
+  when fans are running.
+
+  (4) If ambient temperature is below 25C and fans are confirmed
+  operational, the temperature rise may indicate thermal paste degradation
+  on the CPU. This is uncommon before 5 years of operation but possible
+  on older units. Contact Synology support for guidance on re-application.
+
+  (5) Consider reducing NAS load temporarily. Suspend scheduled tasks
+  (scrubs, Hyper Backup jobs, transcoding) until temperature normalises.
+adapter_kind: mpb_synology_dsm

@@ -1,0 +1,19 @@
+name: "[VCF Content Factory] Synology Disk SMART Failure"
+# TODO: verify resource kind prefix at install-verification time
+# (MPB may expose this as mpb_synology_dsm_disk rather than disk)
+adapter_kind: mpb_synology_dsm
+resource_kind: disk
+severity: CRITICAL
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: property
+  key: smart_status
+  operator: EQ
+  value: "failing"
+
+description: >
+  Triggers when a disk's SMART status equals "failing". A SMART failure
+  indicates imminent hardware failure. Replace the disk immediately to
+  avoid data loss. Sourced from SYNO.Storage.CGI.Storage smart_status field.
