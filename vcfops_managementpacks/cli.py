@@ -1,4 +1,4 @@
-"""CLI: validate / list / render / build management pack definitions."""
+"""CLI: validate / list / render / build / install / uninstall management packs."""
 from __future__ import annotations
 
 import argparse
@@ -128,6 +128,58 @@ def cmd_build(args) -> int:
     return 0
 
 
+def cmd_install(args) -> int:
+    """Install a .pak file onto a live VCF Ops instance.
+
+    Follows the 11-step admin SPA flow documented in
+    context/pak_install_api_exploration.md.
+
+    Credentials are read from env vars (VCFOPS_HOST, VCFOPS_ADMIN,
+    VCFOPS_ADMINPASSWORD) or from CLI flags.  Interactive prompts are
+    NOT used — this is a scripted path.
+    """
+    from .installer import install_pak
+
+    # installer.install_pak calls sys.exit() on fatal errors; return code
+    # from this function is only reached on success.
+    install_pak(
+        pak_path=args.pak_path,
+        host=args.host,
+        admin_user=args.admin_user,
+        admin_password=args.admin_password,
+        skip_ssl_verify=args.skip_ssl_verify,
+        wait=args.wait,
+    )
+    return 0
+
+
+def cmd_uninstall(args) -> int:
+    """Uninstall a management pack from a live VCF Ops instance.
+
+    Follows the recommended uninstall flow documented in
+    context/pak_uninstall_api_exploration.md.
+
+    The isUnremovable guard is mandatory and defaults to on.
+    Built-in paks (vSAN, vCenter, NSX, etc.) will be refused unless
+    --allow-builtin is explicitly passed.
+
+    Credentials are read from env vars (VCFOPS_HOST, VCFOPS_ADMIN,
+    VCFOPS_ADMINPASSWORD) or from CLI flags.
+    """
+    from .installer import uninstall_pak
+
+    uninstall_pak(
+        adapter_kind_or_pak_name=args.name,
+        host=args.host,
+        admin_user=args.admin_user,
+        admin_password=args.admin_password,
+        skip_ssl_verify=args.skip_ssl_verify,
+        wait=args.wait,
+        allow_builtin=args.allow_builtin,
+    )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="vcfops_managementpacks")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -175,6 +227,122 @@ def build_parser() -> argparse.ArgumentParser:
         help="strategy for adapter-instance-trivial relationships (default: test_all)",
     )
     pb.set_defaults(func=cmd_build)
+
+    # ------------------------------------------------------------------
+    # install subcommand
+    # ------------------------------------------------------------------
+    _creds_help = (
+        "Credentials resolve order: CLI flag > env var > (no prompt). "
+        "All three of --host / VCFOPS_HOST, --admin-user / VCFOPS_ADMIN, "
+        "and --admin-password / VCFOPS_ADMINPASSWORD must be available."
+    )
+    pi = sub.add_parser(
+        "install",
+        help="install a .pak file onto a VCF Ops instance (admin session required)",
+    )
+    pi.add_argument(
+        "pak_path",
+        metavar="PAK_PATH",
+        help="path to the .pak file to install",
+    )
+    pi.add_argument(
+        "--host",
+        default=None,
+        help="VCF Ops hostname or IP (overrides VCFOPS_HOST env var)",
+    )
+    pi.add_argument(
+        "--admin-user",
+        default=None,
+        dest="admin_user",
+        help="admin username (overrides VCFOPS_ADMIN env var)",
+    )
+    pi.add_argument(
+        "--admin-password",
+        default=None,
+        dest="admin_password",
+        help="admin password (overrides VCFOPS_ADMINPASSWORD env var)",
+    )
+    pi.add_argument(
+        "--skip-ssl-verify",
+        action="store_true",
+        dest="skip_ssl_verify",
+        default=False,
+        help="disable SSL certificate verification (for lab/self-signed certs)",
+    )
+    pi.add_argument(
+        "--no-wait",
+        action="store_false",
+        dest="wait",
+        default=True,
+        help="trigger install and return immediately without polling for completion",
+    )
+    pi.epilog = _creds_help
+    pi.set_defaults(func=cmd_install)
+
+    # ------------------------------------------------------------------
+    # uninstall subcommand
+    # ------------------------------------------------------------------
+    pu = sub.add_parser(
+        "uninstall",
+        help=(
+            "uninstall a management pack from a VCF Ops instance. "
+            "Built-in paks (isUnremovable=true) are refused unless "
+            "--allow-builtin is passed."
+        ),
+    )
+    pu.add_argument(
+        "name",
+        metavar="NAME_OR_ADAPTER_KIND",
+        help=(
+            "display name, UI pakId, or adapter_kind of the pak to remove "
+            "(e.g. 'Broadcom Security Advisories' or 'mpb_broadcom_security_advisories')"
+        ),
+    )
+    pu.add_argument(
+        "--host",
+        default=None,
+        help="VCF Ops hostname or IP (overrides VCFOPS_HOST env var)",
+    )
+    pu.add_argument(
+        "--admin-user",
+        default=None,
+        dest="admin_user",
+        help="admin username (overrides VCFOPS_ADMIN env var)",
+    )
+    pu.add_argument(
+        "--admin-password",
+        default=None,
+        dest="admin_password",
+        help="admin password (overrides VCFOPS_ADMINPASSWORD env var)",
+    )
+    pu.add_argument(
+        "--skip-ssl-verify",
+        action="store_true",
+        dest="skip_ssl_verify",
+        default=False,
+        help="disable SSL certificate verification (for lab/self-signed certs)",
+    )
+    pu.add_argument(
+        "--no-wait",
+        action="store_false",
+        dest="wait",
+        default=True,
+        help="trigger remove and return immediately without polling for completion",
+    )
+    pu.add_argument(
+        "--allow-builtin",
+        action="store_true",
+        dest="allow_builtin",
+        default=False,
+        help=(
+            "DANGER: override the isUnremovable guard and uninstall a built-in pak. "
+            "Only use after a known-good snapshot when you need to reinstall a "
+            "built-in. The server will not protect you — a stuck instance requires "
+            "manual recovery."
+        ),
+    )
+    pu.epilog = _creds_help
+    pu.set_defaults(func=cmd_uninstall)
 
     return p
 
