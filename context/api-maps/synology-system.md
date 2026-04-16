@@ -185,12 +185,17 @@
 
 #### Response Schema
 
+**CONFIRMED 2026-04-16 via live API call.**
+
 ```json
 {
   "success": true,
   "data": {
-    "fan_status": "normal",
-    "fan_type": "internal"
+    "all_disk_temp_fail": "no",
+    "cool_fan": "yes",
+    "dual_fan_speed": "coolfan",
+    "fan_support_adjust_by_ext_nic": "no",
+    "fan_type": 11
   }
 }
 ```
@@ -199,9 +204,13 @@
 
 | Response Field | Object Type | MP Key | Usage | Type | Unit | Notes |
 |---|---|---|---|---|---|---|
-| `data.fan_status` | Diskstation | fan_status | PROPERTY | STRING | | "normal" or "failed" |
+| `data.cool_fan` | Diskstation | fan_status | PROPERTY | STRING | | "yes" = fan running normally; likely "no" = failed. Maps to fan_status "normal"/"failed" in the design. |
+| `data.dual_fan_speed` | Diskstation | fan_speed_mode | PROPERTY | STRING | | Fan speed mode: "coolfan" (cool mode), possibly "fullfan" (full speed), "quietfan" (quiet mode). This is the speed POLICY, not an RPM reading. |
+| `data.fan_type` | Diskstation | fan_type | PROPERTY | NUMBER | | Numeric fan type code (11 observed on DS1520+). Meaning not documented. |
+| `data.all_disk_temp_fail` | Diskstation | disk_temp_fail | PROPERTY | STRING | | "no" = all disk temps OK; "yes" = thermal warning. String "yes"/"no", not boolean. |
+| `data.fan_support_adjust_by_ext_nic` | Diskstation | fan_adjust_ext_nic | PROPERTY | STRING | | "no" on this model. Whether fan speed adjusts based on expansion NIC temperature. |
 
-**Note**: The exact response field names for fan speed/status need confirmation via live testing. The live brief confirmed this API works but did not capture the full response schema. The SNMP MIB distinguishes system fan from CPU fan -- the REST API may return a simpler structure.
+**Note**: This API does NOT return a numeric RPM value. The response contains fan policy/mode information only: whether the fan is running (`cool_fan`), what speed mode it's in (`dual_fan_speed`), and disk thermal status. For actual RPM readings, SNMP (`synoDiskFanSpeed` / `synoCPUFanSpeed` OIDs) would be needed. The REST API is limited to status/mode reporting.
 
 ---
 

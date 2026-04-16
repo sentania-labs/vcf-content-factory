@@ -9,46 +9,87 @@
 - **Params**: `api=SYNO.Core.ExternalDevice.UPS&version=1&method=get&_sid=<session>`
 - **Auth**: Session ID required (admin)
 
-#### Response Schema (UPS connected)
+#### Response Schema (No UPS connected -- confirmed 2026-04-16)
+
+**CONFIRMED 2026-04-16 via live API call.** No UPS is connected to this NAS. The API returns the full configuration structure even when no UPS is present.
 
 ```json
 {
   "success": true,
   "data": {
-    "model": "APC Back-UPS 1500",
+    "ACL_enable": false,
+    "ACL_list": [],
+    "charge": 0,
+    "delay_time": -1,
+    "enable": false,
+    "manufacture": "",
+    "mode": "SLAVE",
+    "model": "",
+    "net_server_ip": "",
+    "runtime": 0,
+    "shutdown_device": false,
+    "snmp_auth": false,
+    "snmp_auth_key": false,
+    "snmp_auth_type": "",
+    "snmp_community": "",
+    "snmp_mib": "",
+    "snmp_privacy": false,
+    "snmp_privacy_key": false,
+    "snmp_privacy_type": "",
+    "snmp_server_ip": "",
+    "snmp_user": "",
+    "snmp_version": "",
+    "status": "usb_ups_status_unknown",
+    "usb_ups_connect": false
+  }
+}
+```
+
+#### Response Schema (UPS connected -- inferred from no-UPS response)
+
+When a UPS is connected, the same fields are expected to be populated:
+```json
+{
+  "success": true,
+  "data": {
+    "charge": 100,
+    "runtime": 3600,
+    "enable": true,
+    "manufacture": "APC",
+    "model": "Back-UPS 1500",
+    "mode": "MASTER",
     "status": "OL",
-    "battery_charge": 100,
-    "battery_runtime": 3600,
-    "ups_load": 25,
-    "vendor": "APC",
-    "firmware": "..."
+    "usb_ups_connect": true,
+    "delay_time": 300,
+    "shutdown_device": true
   }
 }
 ```
 
-#### Response Schema (No UPS connected -- current state of this NAS)
-
-```json
-{
-  "success": true,
-  "data": {
-    "enabled": false
-  }
-}
-```
-
-**Note**: The exact response schema for a connected UPS is based on the design artifact and SNMP MIB field patterns. The live brief confirms `SYNO.Core.ExternalDevice.UPS` `get` works but notes "not connected on this NAS", so the connected-state response fields are NOT CONFIRMED from live testing. The UPS status values are derived from NUT (Network UPS Tools) conventions used by Synology: "OL" (online), "OB" (on battery), "LB" (low battery), "OB LB" (on battery + low battery).
+**Note**: The no-UPS response reveals the actual field names. Key corrections from the original assumptions:
+- `battery_charge` is actually `charge` (NUMBER, %)
+- `battery_runtime` is actually `runtime` (NUMBER, seconds)
+- `ups_load` does NOT appear in the response -- no load field observed. Load may require SNMP or may only appear when a UPS is actually connected.
+- `vendor` is actually `manufacture` (STRING)
+- `status` uses NUT-style codes but the no-UPS value is `"usb_ups_status_unknown"` (not empty or null)
+- `usb_ups_connect` (BOOLEAN) is the definitive "is a UPS present" flag
+- `enable` (BOOLEAN) indicates whether UPS support is enabled in DSM settings
+- `mode` (STRING) indicates MASTER (USB-connected) or SLAVE (network UPS) mode
 
 #### Field -> Object Mapping
 
 | Response Field | MP Key | Usage | Type | Unit | Notes |
 |---|---|---|---|---|---|
-| `model` | model | IDENTIFIER / PROPERTY | STRING | | Primary key; also display name |
-| `status` | status | PROPERTY | STRING | | NUT status codes: "OL", "OB", "LB", "OB LB" |
-| `battery_charge` | battery_charge | METRIC | NUMBER | % | SOURCE: NOT CONFIRMED -- field name assumed from SNMP MIB pattern |
-| `battery_runtime` | runtime | METRIC | NUMBER | seconds | SOURCE: NOT CONFIRMED -- field name assumed |
-| `ups_load` | load | METRIC | NUMBER | % | SOURCE: NOT CONFIRMED -- field name assumed |
-| `vendor` | vendor | PROPERTY | STRING | | SOURCE: NOT CONFIRMED |
+| `model` | model | IDENTIFIER / PROPERTY | STRING | | Primary key; also display name. Empty string when no UPS connected. |
+| `manufacture` | vendor | PROPERTY | STRING | | UPS manufacturer (was assumed to be `vendor`) |
+| `status` | status | PROPERTY | STRING | | NUT status codes when connected: "OL", "OB", "LB", "OB LB"; "usb_ups_status_unknown" when not connected |
+| `charge` | battery_charge | METRIC | NUMBER | % | Battery charge level (was assumed to be `battery_charge`). Returns 0 when no UPS connected. |
+| `runtime` | runtime | METRIC | NUMBER | seconds | Estimated battery runtime (confirmed field name). Returns 0 when no UPS connected. |
+| `enable` | ups_enabled | PROPERTY | BOOLEAN | | Whether UPS support is enabled in DSM |
+| `usb_ups_connect` | ups_connected | PROPERTY | BOOLEAN | | Whether a UPS is physically detected |
+| `mode` | ups_mode | PROPERTY | STRING | | "MASTER" (USB) or "SLAVE" (network UPS server) |
+| `delay_time` | delay_time | PROPERTY | NUMBER | seconds | Shutdown delay after power loss; -1 when not configured |
+| `shutdown_device` | shutdown_device | PROPERTY | BOOLEAN | | Whether NAS should shut down on UPS low battery |
 
 ---
 
@@ -75,9 +116,10 @@
   - Status values follow NUT conventions, not plain English ("OL" not "Online")
   - Battery runtime is estimated, not guaranteed
 
-## Gaps
+## Gaps (partially closed 2026-04-16)
 
-- **All metric field names**: SOURCE: NOT CONFIRMED. No live testing was possible because no UPS is connected to this NAS. Field names are inferred from SNMP MIB patterns and NUT conventions.
-- **Response structure when UPS is connected**: Needs live verification on a NAS with UPS attached.
-- **UPS model as identifier**: The design artifact uses `model` as the identifier. If multiple UPS devices could be connected (e.g., via USB + network), the identifier strategy may need revision. This is unlikely for most home/SMB NAS deployments.
-- **Status value enumeration**: Full set of NUT status codes that Synology passes through needs verification. Common values: OL (online/AC power), OB (on battery), LB (low battery), RB (replace battery), CHRG (charging), DISCHRG (discharging), BYPASS, CAL (calibrating), OFF, OVER (overloaded), TRIM, BOOST.
+- **Field names**: CONFIRMED from no-UPS response. `charge` (not `battery_charge`), `runtime` (confirmed), `manufacture` (not `vendor`). No `ups_load` field observed -- load percentage may only appear when a UPS is actually connected, or may not be exposed by this API at all.
+- **Response structure when UPS is connected**: Partially confirmed. The no-UPS response reveals the complete field set. The connected-UPS response is expected to populate the same fields but cannot be verified without a connected UPS. The inferred connected-state schema above is based on the observed field names + logical values.
+- **UPS model as identifier**: Still valid design choice. The `model` field exists (empty string when no UPS). Only one UPS can be connected per NAS (USB or network, controlled by `mode`).
+- **Load metric**: NOT AVAILABLE in the observed response. No `load`, `ups_load`, or similar field. This may be a limitation of the REST API vs. SNMP, or it may only appear with a connected UPS. Flagged as remaining gap.
+- **Status value enumeration**: The no-UPS value is `"usb_ups_status_unknown"` (not a NUT code). Connected-state values are still assumed to follow NUT conventions but cannot be verified without a UPS.

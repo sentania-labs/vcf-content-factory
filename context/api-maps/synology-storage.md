@@ -144,12 +144,44 @@ Volume-level IO comes from the Utilization endpoint, not from load_info.
 
 **Source**: `data.space.volume[]` in the Utilization response.
 
+**CONFIRMED 2026-04-16 via live API call.**
+
+Sample entry from `data.space.volume[]`:
+```json
+{
+  "device": "dm-4",
+  "display_name": "volume1",
+  "read_access": 0,
+  "read_byte": 1260,
+  "utilization": 0,
+  "write_access": 0,
+  "write_byte": 945
+}
+```
+
+Aggregate entry at `data.space.total`:
+```json
+{
+  "device": "total",
+  "read_access": 0,
+  "read_byte": 1260,
+  "utilization": 0,
+  "write_access": 0,
+  "write_byte": 945
+}
+```
+
 | Response Field | MP Key | Usage | Type | Unit | Notes |
 |---|---|---|---|---|---|
-| `data.space.volume[].read_iops` | io_read_iops | METRIC | NUMBER | IOPS | SOURCE: NOT CONFIRMED -- exact field names in `space.volume[]` need live verification |
-| `data.space.volume[].write_iops` | io_write_iops | METRIC | NUMBER | IOPS | SOURCE: NOT CONFIRMED |
+| `device` | (internal key) | | STRING | | Kernel device mapper name (e.g., "dm-4") -- NOT the volume ID |
+| `display_name` | (join key) | | STRING | | Volume mount name (e.g., "volume1") -- matches `volumes[].vol_path` stripped of leading "/" |
+| `read_byte` | io_read_bytes | METRIC | NUMBER | bytes/s | Read throughput (confirmed field name) |
+| `write_byte` | io_write_bytes | METRIC | NUMBER | bytes/s | Write throughput (confirmed field name) |
+| `read_access` | io_read_access | METRIC | NUMBER | IOPS | Read access count (IOPS equivalent) |
+| `write_access` | io_write_access | METRIC | NUMBER | IOPS | Write access count (IOPS equivalent) |
+| `utilization` | utilization | METRIC | NUMBER | % | Volume IO utilization percentage |
 
-**Note**: The live brief mentions `space.volume[]` in the Utilization response but does not provide the detailed field list. The exact field names for per-volume IO need live API exploration to confirm.
+**Note**: The field schema is identical to the per-disk IO schema. The join key from Utilization to Storage is `display_name` (e.g., "volume1") which maps to `volumes[].vol_path` (e.g., "/volume1") -- strip the leading "/" from `vol_path` to match. The original assumption of `read_iops`/`write_iops` field names was incorrect; the actual fields are `read_access`/`write_access` (IOPS) and `read_byte`/`write_byte` (throughput).
 
 ---
 
@@ -182,16 +214,48 @@ Volume-level IO comes from the Utilization endpoint, not from load_info.
 
 Per-disk IO comes from the Utilization endpoint.
 
-**Source**: `data.disk[]` in the Utilization response.
+**Source**: `data.disk.disk[]` in the Utilization response (note: the `disk` key at the top level contains both a `disk` array and a `total` object).
+
+**CONFIRMED 2026-04-16 via live API call.**
+
+Sample entry from `data.disk.disk[]`:
+```json
+{
+  "device": "sata1",
+  "display_name": "Drive 4",
+  "read_access": 0,
+  "read_byte": 630,
+  "type": "internal",
+  "utilization": 3,
+  "write_access": 4,
+  "write_byte": 36076
+}
+```
+
+Aggregate entry at `data.disk.total`:
+```json
+{
+  "device": "total",
+  "read_access": 0,
+  "read_byte": 42534,
+  "utilization": 1,
+  "write_access": 20,
+  "write_byte": 180065
+}
+```
 
 | Response Field | MP Key | Usage | Type | Unit | Notes |
 |---|---|---|---|---|---|
-| `data.disk[].device` | (join key) | | STRING | | Disk device name -- matches `disks[].id` |
-| `data.disk[].read_byte` | io_read | METRIC | NUMBER | bytes/s | SOURCE: NOT CONFIRMED -- exact field names need live verification |
-| `data.disk[].write_byte` | io_write | METRIC | NUMBER | bytes/s | SOURCE: NOT CONFIRMED |
-| `data.disk[].utilization` | utilization | METRIC | NUMBER | % | SOURCE: NOT CONFIRMED |
+| `device` | (join key) | | STRING | | Disk device name -- matches `disks[].id` (e.g., "sata1", "nvme0n1") |
+| `display_name` | (display) | | STRING | | Human-readable name (e.g., "Drive 4", "Cache device 1") |
+| `read_byte` | io_read_bytes | METRIC | NUMBER | bytes/s | Read throughput (confirmed field name) |
+| `write_byte` | io_write_bytes | METRIC | NUMBER | bytes/s | Write throughput (confirmed field name) |
+| `read_access` | io_read_access | METRIC | NUMBER | IOPS | Read access count (IOPS equivalent) |
+| `write_access` | io_write_access | METRIC | NUMBER | IOPS | Write access count (IOPS equivalent) |
+| `utilization` | utilization | METRIC | NUMBER | % | Disk utilization percentage (confirmed field name) |
+| `type` | disk_io_type | PROPERTY | STRING | | "internal" for all observed disks |
 
-**Note**: The live brief confirms per-disk IO exists in the Utilization response but does not provide the exact field names. The community Prometheus exporter mentions per-disk utilization percentages. Exact field names need live API exploration.
+**Note**: The `data.disk` response is an object with two keys: `disk` (array of per-disk entries) and `total` (aggregate across all disks). The `total` entry provides system-wide disk IO and can be mapped to the Diskstation object. Both HDD (sata*) and NVMe cache disks appear in this array.
 
 ---
 

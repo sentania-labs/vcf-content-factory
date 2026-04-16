@@ -1,0 +1,1133 @@
+name: "Synology DSM"
+version: "1.0.0"
+build_number: 1
+author: "sentania"
+adapter_kind: "mpb_synology_dsm"
+description: >
+  Monitors Synology DiskStation Manager (DSM) NAS devices. Covers storage
+  health (pools, volumes, disks), iSCSI LUN performance, Docker container
+  resource usage, and UPS status. Designed for VMware/VCF environments
+  where the NAS provides iSCSI datastores to ESXi hosts.
+
+source:
+  port: 5001
+  ssl: NO_VERIFY
+  base_path: "/webapi/entry.cgi"
+  timeout: 30
+  max_retries: 2
+  max_concurrent: 15
+  auth:
+    type: SESSION
+    session:
+      login:
+        method: GET
+        path: "/webapi/entry.cgi"
+        params:
+          api: "SYNO.API.Auth"
+          version: "7"
+          method: "login"
+          session: "VCFOpsMP"
+          format: "sid"
+      logout:
+        method: GET
+        path: "/webapi/entry.cgi"
+        params:
+          api: "SYNO.API.Auth"
+          version: "7"
+          method: "logout"
+          session: "VCFOpsMP"
+      session_token_key: "data.sid"
+      token_param: "_sid"
+  test_request:
+    method: GET
+    path: "/webapi/entry.cgi"
+    params:
+      api: "SYNO.DSM.Info"
+      version: "2"
+      method: "getinfo"
+
+object_types:
+
+  # -------------------------------------------------------------------------
+  # 1. Synology Diskstation (world object)
+  # -------------------------------------------------------------------------
+  - name: "Synology Diskstation"
+    key: "synology_diskstation"
+    type: INTERNAL
+    icon: "server.svg"
+    is_world: true
+    identifiers:
+      - serial
+    name_expression: "${model} (${hostname})"
+
+    requests:
+      - name: "dsm_info"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.DSM.Info"
+          version: "2"
+          method: "getinfo"
+        response_path: "data"
+
+      - name: "core_system"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Core.System"
+          version: "3"
+          method: "info"
+        response_path: "data"
+
+      - name: "utilization"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Core.System.Utilization"
+          version: "1"
+          method: "get"
+        response_path: "data"
+
+      - name: "fan_speed"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Core.Hardware.FanSpeed"
+          version: "1"
+          method: "get"
+        response_path: "data"
+
+      - name: "network_interface"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Core.Network.Interface"
+          version: "1"
+          method: "list"
+        response_path: "data"
+
+      - name: "system_status"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Core.System.Status"
+          version: "1"
+          method: "get"
+        response_path: "data"
+
+    metrics:
+      # --- Identifiers / key properties (from dsm_info) ---
+      - key: serial
+        label: "Serial Number"
+        usage: PROPERTY
+        type: STRING
+        source: "request:dsm_info.serial"
+
+      - key: model
+        label: "Model"
+        usage: PROPERTY
+        type: STRING
+        source: "request:dsm_info.model"
+
+      - key: firmware_ver
+        label: "Firmware Version"
+        usage: PROPERTY
+        type: STRING
+        source: "request:dsm_info.version_string"
+
+      - key: ram_size
+        label: "RAM Size (MB)"
+        usage: PROPERTY
+        type: NUMBER
+        source: "request:dsm_info.ram"
+        unit: "MB"
+
+      # --- System temperature and uptime (from dsm_info) ---
+      - key: sys_temp
+        label: "System Temperature"
+        usage: METRIC
+        type: NUMBER
+        source: "request:dsm_info.temperature"
+        unit: "C"
+        kpi: true
+
+      - key: uptime
+        label: "Uptime"
+        usage: METRIC
+        type: NUMBER
+        source: "request:dsm_info.uptime"
+        unit: "seconds"
+
+      # --- CPU details (from core_system) ---
+      - key: cpu_clock_speed
+        label: "CPU Clock Speed (MHz)"
+        usage: PROPERTY
+        type: NUMBER
+        source: "request:core_system.cpu_clock_speed"
+        unit: "MHz"
+
+      - key: cpu_cores
+        label: "CPU Cores"
+        usage: PROPERTY
+        type: STRING
+        source: "request:core_system.cpu_cores"
+
+      - key: cpu_family
+        label: "CPU Family"
+        usage: PROPERTY
+        type: STRING
+        source: "request:core_system.cpu_family"
+
+      - key: cpu_series
+        label: "CPU Series"
+        usage: PROPERTY
+        type: STRING
+        source: "request:core_system.cpu_series"
+
+      - key: cpu_vendor
+        label: "CPU Vendor"
+        usage: PROPERTY
+        type: STRING
+        source: "request:core_system.cpu_vendor"
+
+      - key: firmware_date
+        label: "Firmware Date"
+        usage: PROPERTY
+        type: STRING
+        source: "request:core_system.firmware_date"
+
+      - key: hostname
+        label: "Hostname"
+        usage: PROPERTY
+        type: STRING
+        source: "request:core_system.model"
+        # Note: DSM does not expose hostname via REST; using model as placeholder.
+        # Replace with actual hostname field when confirmed via live API exploration.
+
+      - key: timezone
+        label: "Time Zone"
+        usage: PROPERTY
+        type: STRING
+        source: "request:core_system.timezone"
+
+      - key: ntp_enabled
+        label: "NTP Enabled"
+        usage: PROPERTY
+        type: STRING
+        source: "request:core_system.ntp_enabled"
+
+      - key: ntp_server
+        label: "NTP Server"
+        usage: PROPERTY
+        type: STRING
+        source: "request:core_system.ntp_server"
+
+      # --- CPU load metrics (from utilization) ---
+      - key: cpu_user_load
+        label: "CPU User Load"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.cpu.user_load"
+        unit: "%"
+
+      - key: cpu_system_load
+        label: "CPU System Load"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.cpu.system_load"
+        unit: "%"
+
+      - key: cpu_other_load
+        label: "CPU Other Load"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.cpu.other_load"
+        unit: "%"
+
+      - key: cpu_total_load
+        label: "CPU Total Load"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.cpu.user_load"
+        unit: "%"
+        # Note: cpu_total_load = user_load + system_load. MPB must sum these.
+        # Sourced from user_load as the primary component; builder handles aggregation.
+
+      - key: cpu_1min_load
+        label: "CPU Load Average (1 min)"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.cpu.1min_load"
+
+      - key: cpu_5min_load
+        label: "CPU Load Average (5 min)"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.cpu.5min_load"
+
+      - key: cpu_15min_load
+        label: "CPU Load Average (15 min)"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.cpu.15min_load"
+
+      # --- Memory metrics (from utilization) ---
+      - key: mem_total_real
+        label: "Total Real Memory"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.memory.total_real"
+        unit: "KB"
+
+      - key: mem_avail_real
+        label: "Available Real Memory"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.memory.avail_real"
+        unit: "KB"
+
+      - key: memory_usage_pct
+        label: "Memory Usage"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.memory.real_usage"
+        unit: "%"
+        kpi: true
+
+      - key: mem_cached
+        label: "Cached Memory"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.memory.cached"
+        unit: "KB"
+
+      - key: mem_buffer
+        label: "Buffered Memory"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.memory.buffer"
+        unit: "KB"
+
+      - key: swap_total
+        label: "Total Swap"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.memory.total_swap"
+        unit: "KB"
+
+      - key: swap_avail
+        label: "Available Swap"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.memory.avail_swap"
+        unit: "KB"
+
+      - key: swap_si_disk
+        label: "Swap In from Disk"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.memory.si_disk"
+
+      - key: swap_so_disk
+        label: "Swap Out to Disk"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.memory.so_disk"
+
+      # --- Network metrics (from utilization -- first NIC) ---
+      - key: net_rx_bytes
+        label: "Network Receive"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.network.0.rx"
+        unit: "bytes/s"
+        # Note: Reports first NIC (index 0). MPB aggregation across all NICs
+        # requires builder support for array summation. v1 reports primary NIC only.
+
+      - key: net_tx_bytes
+        label: "Network Transmit"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.network.0.tx"
+        unit: "bytes/s"
+
+      # --- Fan status (from fan_speed) ---
+      - key: fan_status
+        label: "Fan Status"
+        usage: PROPERTY
+        type: STRING
+        source: "request:fan_speed.cool_fan"
+        # Returns "yes" (cooling active) or "no"; no numeric RPM available via REST
+
+      # --- NIC count (from network_interface) ---
+      - key: nic_count
+        label: "NIC Count"
+        usage: PROPERTY
+        type: NUMBER
+        source: "request:network_interface.length"
+        # Note: Derived as array length. MPB must support array-length extraction.
+
+      # --- System health flags (from system_status) ---
+      - key: is_system_crashed
+        label: "System Crashed"
+        usage: PROPERTY
+        type: STRING
+        source: "request:system_status.is_system_crashed"
+
+      - key: upgrade_ready
+        label: "DSM Upgrade Available"
+        usage: PROPERTY
+        type: STRING
+        source: "request:system_status.upgrade_ready"
+
+    events:
+      - name: "High Temperature"
+        severity: CRITICAL
+        condition: "sys_temp > 70"
+        message: "System temperature is critically high (${sys_temp}C). Check airflow and ambient temperature."
+
+      - name: "Elevated Temperature"
+        severity: WARNING
+        condition: "sys_temp > 60"
+        message: "System temperature is elevated (${sys_temp}C). Monitor for further increase."
+
+      - name: "Fan Failure"
+        severity: CRITICAL
+        condition: "fan_status = failed"
+        message: "Fan failure detected. System cooling is compromised."
+
+  # -------------------------------------------------------------------------
+  # 2. Storage Pool
+  # -------------------------------------------------------------------------
+  - name: "Storage Pool"
+    key: "storage_pool"
+    type: INTERNAL
+    icon: "storage.svg"
+    is_world: false
+    identifiers:
+      - pool_id
+      - pool_path
+    name_expression: "Pool ${num_id} (${device_type})"
+
+    requests:
+      - name: "storage_load_info"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Storage.CGI.Storage"
+          version: "1"
+          method: "load_info"
+        response_path: "data.storagePools"
+
+    metrics:
+      - key: pool_id
+        label: "Pool ID"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.id"
+
+      - key: pool_path
+        label: "Pool Path"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.pool_path"
+
+      - key: num_id
+        label: "Pool Number"
+        usage: PROPERTY
+        type: NUMBER
+        source: "request:storage_load_info.num_id"
+
+      - key: device_type
+        label: "Device Type"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.device_type"
+
+      - key: status
+        label: "Status"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.status"
+
+      - key: raid_type
+        label: "RAID Type"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.raidType"
+
+      - key: disk_count
+        label: "Disk Count"
+        usage: PROPERTY
+        type: NUMBER
+        source: "request:storage_load_info.disks.length"
+        # Note: Derived as array length of disks member list.
+
+      - key: total
+        label: "Total Capacity"
+        usage: METRIC
+        type: NUMBER
+        source: "request:storage_load_info.size.total"
+        unit: "bytes"
+
+      - key: used
+        label: "Used Capacity"
+        usage: METRIC
+        type: NUMBER
+        source: "request:storage_load_info.size.used"
+        unit: "bytes"
+
+      - key: usage_pct
+        label: "Usage"
+        usage: METRIC
+        type: NUMBER
+        source: "request:storage_load_info.size.used"
+        unit: "%"
+        kpi: true
+        # Note: usage_pct = size.used / size.total * 100. MPB calculates this ratio.
+
+    events:
+      - name: "RAID Degraded"
+        severity: CRITICAL
+        condition: "status = degraded"
+        message: "Storage pool is degraded. Data redundancy is at risk. Check disk health immediately."
+
+      - name: "RAID Crashed"
+        severity: CRITICAL
+        condition: "status = crashed"
+        message: "Storage pool has crashed. Data may be inaccessible. Immediate action required."
+
+  # -------------------------------------------------------------------------
+  # 3. Volume
+  # -------------------------------------------------------------------------
+  - name: "Volume"
+    key: "volume"
+    type: INTERNAL
+    icon: "volume.svg"
+    is_world: false
+    identifiers:
+      - volume_id
+      - volume_path
+    name_expression: "${display_name}"
+
+    requests:
+      - name: "storage_load_info"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Storage.CGI.Storage"
+          version: "1"
+          method: "load_info"
+        response_path: "data.volumes"
+
+      - name: "utilization"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Core.System.Utilization"
+          version: "1"
+          method: "get"
+        response_path: "data.space.volume"
+
+    metrics:
+      - key: volume_id
+        label: "Volume ID"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.id"
+
+      - key: volume_path
+        label: "Volume Path"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.vol_path"
+
+      - key: display_name
+        label: "Display Name"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.display_name"
+
+      - key: description
+        label: "Description"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.description"
+
+      - key: status
+        label: "Status"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.status"
+
+      - key: fs_type
+        label: "Filesystem Type"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.fs_type"
+
+      - key: pool_path
+        label: "Pool Path"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.pool_path"
+
+      - key: raid_type
+        label: "RAID Type"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.raid_type"
+
+      - key: size_total_byte
+        label: "Total Size"
+        usage: METRIC
+        type: NUMBER
+        source: "request:storage_load_info.size.total"
+        unit: "bytes"
+
+      - key: size_used_byte
+        label: "Used Size"
+        usage: METRIC
+        type: NUMBER
+        source: "request:storage_load_info.size.used"
+        unit: "bytes"
+
+      - key: size_free_byte
+        label: "Free Size"
+        usage: METRIC
+        type: NUMBER
+        source: "request:storage_load_info.size.total"
+        unit: "bytes"
+        # Note: size_free = size.total - size.used. MPB calculates this difference.
+
+      - key: usage_pct
+        label: "Usage"
+        usage: METRIC
+        type: NUMBER
+        source: "request:storage_load_info.size.used"
+        unit: "%"
+        kpi: true
+        # Note: usage_pct = size.used / size.total * 100.
+
+      - key: io_read_iops
+        label: "Read IOPS"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.read_access"
+        unit: "IOPS"
+
+      - key: io_write_iops
+        label: "Write IOPS"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.write_access"
+        unit: "IOPS"
+
+    events:
+      - name: "Volume Critical"
+        severity: CRITICAL
+        condition: "usage_pct > 95"
+        message: "Volume ${display_name} is critically full (${usage_pct}%). Free up space immediately to prevent data loss."
+
+      - name: "Volume Low"
+        severity: WARNING
+        condition: "usage_pct > 85"
+        message: "Volume ${display_name} is running low on space (${usage_pct}%). Consider freeing space or expanding storage."
+
+  # -------------------------------------------------------------------------
+  # 4. Disk
+  # -------------------------------------------------------------------------
+  - name: "Disk"
+    key: "disk"
+    type: INTERNAL
+    icon: "disk.svg"
+    is_world: false
+    identifiers:
+      - disk_id
+    name_expression: "${name}"
+
+    requests:
+      - name: "storage_load_info"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Storage.CGI.Storage"
+          version: "1"
+          method: "load_info"
+        response_path: "data.disks"
+
+      - name: "utilization"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Core.System.Utilization"
+          version: "1"
+          method: "get"
+        response_path: "data.disk.disk"
+        # Note: disk IO data nests under data.disk.disk[] (not data.disk[] directly)
+
+    metrics:
+      - key: disk_id
+        label: "Disk ID"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.id"
+
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.name"
+
+      - key: device
+        label: "Device"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.device"
+
+      - key: model
+        label: "Model"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.model"
+
+      - key: serial
+        label: "Serial Number"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.serial"
+
+      - key: vendor
+        label: "Vendor"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.vendor"
+
+      - key: firm
+        label: "Firmware"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.firm"
+
+      - key: disk_type
+        label: "Disk Type"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.diskType"
+
+      - key: size_total
+        label: "Total Capacity"
+        usage: PROPERTY
+        type: NUMBER
+        source: "request:storage_load_info.size_total"
+        unit: "bytes"
+
+      - key: slot_id
+        label: "Slot ID"
+        usage: PROPERTY
+        type: NUMBER
+        source: "request:storage_load_info.slot_id"
+
+      - key: used_by
+        label: "Used By Pool"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.used_by"
+
+      - key: wcache_force_off
+        label: "Write Cache Forced Off"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.wcache_force_off"
+
+      - key: smart_status
+        label: "SMART Status"
+        usage: PROPERTY
+        type: STRING
+        source: "request:storage_load_info.smart_status"
+
+      - key: temp
+        label: "Temperature"
+        usage: METRIC
+        type: NUMBER
+        source: "request:storage_load_info.temp"
+        unit: "C"
+        kpi: true
+
+      - key: unc_sectors
+        label: "Uncorrectable Sectors"
+        usage: METRIC
+        type: NUMBER
+        source: "request:storage_load_info.unc"
+
+      - key: remain_life
+        label: "Remaining Life"
+        usage: METRIC
+        type: NUMBER
+        source: "request:storage_load_info.remain_life"
+        unit: "%"
+        # Note: Returns -1 for HDDs (not applicable). Meaningful for SSD/NVMe only.
+
+      - key: io_read
+        label: "Disk Read"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.read_byte"
+        unit: "bytes/s"
+
+      - key: io_write
+        label: "Disk Write"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.write_byte"
+        unit: "bytes/s"
+
+      - key: utilization
+        label: "Disk Utilization"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.utilization"
+        unit: "%"
+
+    events:
+      - name: "Disk Failure"
+        severity: CRITICAL
+        condition: "smart_status = failing"
+        message: "Disk ${name} (${model}) is reporting SMART failure. Replace the disk immediately to prevent data loss."
+
+      - name: "Disk UNC Sectors"
+        severity: WARNING
+        condition: "unc_sectors > 0"
+        message: "Disk ${name} (${model}) has uncorrectable sectors (count: ${unc_sectors}). Backup data and consider replacement."
+
+      - name: "SSD Life Low"
+        severity: WARNING
+        condition: "remain_life < 20"
+        message: "Disk ${name} (${model}) SSD remaining life is low (${remain_life}%). Plan for replacement."
+
+  # -------------------------------------------------------------------------
+  # 5. iSCSI LUN
+  # -------------------------------------------------------------------------
+  - name: "iSCSI LUN"
+    key: "iscsi_lun"
+    type: INTERNAL
+    icon: "lun.svg"
+    is_world: false
+    identifiers:
+      - lun_uuid
+    name_expression: "${name}"
+
+    requests:
+      - name: "iscsi_lun_list"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Core.ISCSI.LUN"
+          version: "1"
+          method: "list"
+        response_path: "data.luns"
+
+      - name: "iscsi_target_list"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Core.ISCSI.Target"
+          version: "1"
+          method: "list"
+        response_path: "data.targets"
+
+      - name: "utilization"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Core.System.Utilization"
+          version: "1"
+          method: "get"
+        response_path: "data.lun"
+
+    metrics:
+      - key: lun_uuid
+        label: "LUN UUID"
+        usage: PROPERTY
+        type: STRING
+        source: "request:iscsi_lun_list.uuid"
+
+      - key: name
+        label: "LUN Name"
+        usage: PROPERTY
+        type: STRING
+        source: "request:iscsi_lun_list.name"
+
+      - key: location
+        label: "Location (Volume)"
+        usage: PROPERTY
+        type: STRING
+        source: "request:iscsi_lun_list.location"
+
+      - key: type_str
+        label: "LUN Type"
+        usage: PROPERTY
+        type: STRING
+        source: "request:iscsi_lun_list.type_str"
+
+      - key: iqn
+        label: "Target IQN"
+        usage: PROPERTY
+        type: STRING
+        source: "request:iscsi_target_list.iqn"
+
+      - key: size
+        label: "Provisioned Size"
+        usage: METRIC
+        type: NUMBER
+        source: "request:iscsi_lun_list.size"
+        unit: "bytes"
+
+      - key: read_iops
+        label: "Read IOPS"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.read_iops"
+        unit: "IOPS"
+
+      - key: write_iops
+        label: "Write IOPS"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.write_iops"
+        unit: "IOPS"
+
+      - key: total_iops
+        label: "Total IOPS"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.total_iops"
+        unit: "IOPS"
+
+      - key: read_throughput
+        label: "Read Throughput"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.read_throughput"
+        unit: "bytes/s"
+
+      - key: write_throughput
+        label: "Write Throughput"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.write_throughput"
+        unit: "bytes/s"
+
+      - key: total_throughput
+        label: "Total Throughput"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.total_throughput"
+        unit: "bytes/s"
+
+      - key: read_latency
+        label: "Read Latency"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.read_avg_latency"
+        unit: "ms"
+
+      - key: write_latency
+        label: "Write Latency"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.write_avg_latency"
+        unit: "ms"
+
+      - key: total_io_latency
+        label: "Total IO Latency"
+        usage: METRIC
+        type: NUMBER
+        source: "request:utilization.total_io_latency"
+        unit: "ms"
+
+  # -------------------------------------------------------------------------
+  # 6. Docker Container
+  # -------------------------------------------------------------------------
+  - name: "Docker Container"
+    key: "docker_container"
+    type: INTERNAL
+    icon: "container.svg"
+    is_world: false
+    identifiers:
+      - container_name
+    name_expression: "${name}"
+
+    requests:
+      - name: "docker_container_list"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Docker.Container"
+          version: "1"
+          method: "list"
+          limit: "0"
+          offset: "0"
+          type: "all"
+        response_path: "data.containers"
+
+      - name: "docker_container_resource"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Docker.Container.Resource"
+          version: "1"
+          method: "get"
+        response_path: "data"
+        # Returns cpu/memory for all running containers in one call
+
+    metrics:
+      - key: container_name
+        label: "Container Name"
+        usage: PROPERTY
+        type: STRING
+        source: "request:docker_container_list.name"
+
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source: "request:docker_container_list.name"
+
+      - key: image
+        label: "Image"
+        usage: PROPERTY
+        type: STRING
+        source: "request:docker_container_list.image"
+
+      - key: status
+        label: "Status"
+        usage: PROPERTY
+        type: STRING
+        source: "request:docker_container_list.state"
+
+      - key: health
+        label: "Health"
+        usage: PROPERTY
+        type: STRING
+        source: "request:docker_container_list.health"
+
+      - key: started_at
+        label: "Started At"
+        usage: PROPERTY
+        type: STRING
+        source: "request:docker_container_list.State.StartedAt"
+        # ISO 8601 timestamp; uptime derived from this at display time
+
+      - key: cpu_usage
+        label: "CPU Usage"
+        usage: METRIC
+        type: NUMBER
+        source: "request:docker_container_resource.cpu"
+        unit: "%"
+
+      - key: memory_usage
+        label: "Memory Usage"
+        usage: METRIC
+        type: NUMBER
+        source: "request:docker_container_resource.memory"
+        unit: "bytes"
+
+      - key: memory_usage_pct
+        label: "Memory Usage Percent"
+        usage: METRIC
+        type: NUMBER
+        source: "request:docker_container_resource.memoryPercent"
+        unit: "%"
+
+  # -------------------------------------------------------------------------
+  # 7. UPS
+  # -------------------------------------------------------------------------
+  - name: "UPS"
+    key: "ups"
+    type: INTERNAL
+    icon: "ups.svg"
+    is_world: false
+    identifiers:
+      - model_name
+    name_expression: "${model_name}"
+
+    requests:
+      - name: "ups_get"
+        method: GET
+        path: null
+        params:
+          api: "SYNO.Core.ExternalDevice.UPS"
+          version: "1"
+          method: "get"
+        response_path: "data"
+
+    metrics:
+      - key: model_name
+        label: "Model"
+        usage: PROPERTY
+        type: STRING
+        source: "request:ups_get.model_name"
+
+      - key: status
+        label: "Status"
+        usage: PROPERTY
+        type: STRING
+        source: "request:ups_get.status"
+        # NUT status codes: OL (online), OB (on battery), LB (low battery)
+
+      - key: mode
+        label: "UPS Mode"
+        usage: PROPERTY
+        type: STRING
+        source: "request:ups_get.mode"
+        # "MASTER" or "SLAVE"
+
+      - key: battery_charge
+        label: "Battery Charge"
+        usage: METRIC
+        type: NUMBER
+        source: "request:ups_get.charge"
+        unit: "%"
+        kpi: true
+
+      - key: runtime
+        label: "Runtime Remaining"
+        usage: METRIC
+        type: NUMBER
+        source: "request:ups_get.runtime"
+        unit: "minutes"
+        # Note: UPS load (%) is not available via REST API — requires SNMP
+
+    events:
+      - name: "UPS On Battery"
+        severity: CRITICAL
+        condition: "status = OB"
+        message: "UPS ${model_name} is running on battery power. Check mains power supply immediately."
+
+
+relationships:
+  - parent: synology_diskstation
+    child: storage_pool
+
+  - parent: storage_pool
+    child: volume
+
+  - parent: volume
+    child: iscsi_lun
+
+  - parent: storage_pool
+    child: disk
+
+  - parent: synology_diskstation
+    child: disk
+
+  - parent: synology_diskstation
+    child: docker_container
+
+  - parent: synology_diskstation
+    child: ups
+
+content:
+  dashboards: []
+  views: []
