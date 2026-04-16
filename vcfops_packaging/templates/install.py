@@ -657,6 +657,158 @@ class Client:
                 f"Policy import failed for SM '{sm_name}' ({r.status_code}): {r.text}"
             )
 
+    def enable_builtin_metrics_on_default_policy(
+        self,
+        entries: list,
+    ) -> dict:
+        """Enable built-in object-type metrics on the Default Policy.
+
+        Injects <Metrics adapterKind=... resourceKind=...><Metric enabled="true"
+        id=.../>...</Metrics> blocks into exportedPolicies.xml under
+        <PackageSettings>, then re-imports the ZIP.  Idempotent: stale <Metric>
+        entries for keys being injected are purged before fresh entries are
+        written.  Entries for keys NOT being touched are preserved.
+
+        Args:
+            entries: list of dicts with keys adapter_kind, resource_kind,
+                     metric_key (all str).
+
+        Returns:
+            dict mapping metric_key -> bool (True = was already enabled before
+            this call).
+        """
+        import xml.etree.ElementTree as ET
+        import re as _re
+        from collections import defaultdict
+
+        if not entries:
+            return {}
+
+        grouped: dict = defaultdict(list)
+        for e in entries:
+            grouped[(e["adapter_kind"], e["resource_kind"])].append(e["metric_key"])
+
+        all_keys = {e["metric_key"] for e in entries}
+        policy_id = self.get_default_policy_id()
+
+        # Export ZIP.
+        r = self._req(
+            "GET", "/api/policies/export",
+            params={"id": policy_id},
+            headers={"Accept": "application/zip"},
+        )
+        if r.status_code != 200:
+            raise RuntimeError(
+                f"Policy export failed ({r.status_code}): {r.text}"
+            )
+
+        zip_bytes = r.content
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            xml_names = [n for n in zf.namelist() if n.endswith(".xml")]
+            if not xml_names:
+                raise RuntimeError("Policy export ZIP contained no XML file")
+            xml_name = xml_names[0]
+            raw_xml = zf.read(xml_name)
+            other_files = {n: zf.read(n) for n in zf.namelist() if n != xml_name}
+
+        for prefix, uri in _re.findall(
+            r'xmlns(?::([A-Za-z_][A-Za-z0-9_.-]*))?=["\']([^"\']+)["\']',
+            raw_xml.decode("utf-8"),
+        ):
+            ET.register_namespace(prefix if prefix else "", uri)
+
+        root = ET.fromstring(raw_xml)
+
+        pkg_settings = root.find(".//{*}PackageSettings")
+        if pkg_settings is None:
+            pkg_settings = root.find(".//PackageSettings")
+        if pkg_settings is None:
+            policy_elem = root.find(".//{*}Policy")
+            if policy_elem is None:
+                policy_elem = root.find(".//Policy")
+            if policy_elem is None:
+                raise RuntimeError(
+                    "Policy XML has no <Policy> element -- cannot inject built-in metrics"
+                )
+            pkg_settings = ET.SubElement(policy_elem, "PackageSettings")
+
+        # Check which keys were already enabled before our edit.
+        already_enabled: set = set()
+        for block in (
+            pkg_settings.findall("{*}Metrics") or pkg_settings.findall("Metrics")
+        ):
+            for elem in list(block):
+                tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+                if tag == "Metric":
+                    mid = elem.get("id", "")
+                    if mid in all_keys and elem.get("enabled", "").lower() == "true":
+                        already_enabled.add(mid)
+
+        # Purge stale <Metric> entries for keys being injected.
+        for block in (
+            pkg_settings.findall("{*}Metrics") or pkg_settings.findall("Metrics")
+        ):
+            for elem in list(block):
+                tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+                if tag == "Metric" and elem.get("id", "") in all_keys:
+                    block.remove(elem)
+
+        # Inject fresh entries grouped by (adapter_kind, resource_kind).
+        for (adapter_kind, resource_kind), metric_keys in grouped.items():
+            metrics_block = None
+            for candidate in (
+                pkg_settings.findall("{*}Metrics") or pkg_settings.findall("Metrics")
+            ):
+                if (
+                    candidate.get("adapterKind") == adapter_kind
+                    and candidate.get("resourceKind") == resource_kind
+                ):
+                    metrics_block = candidate
+                    break
+            if metrics_block is None:
+                metrics_block = ET.SubElement(
+                    pkg_settings,
+                    "Metrics",
+                    {"adapterKind": adapter_kind, "resourceKind": resource_kind},
+                )
+            for metric_key in metric_keys:
+                ET.SubElement(
+                    metrics_block,
+                    "Metric",
+                    {"enabled": "true", "id": metric_key},
+                )
+
+        # Serialise and rebuild ZIP.
+        edited_xml = ET.tostring(root, encoding="unicode", xml_declaration=False)
+        if not edited_xml.startswith("<?xml"):
+            edited_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + edited_xml
+        edited_xml_bytes = edited_xml.encode("utf-8")
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(xml_name, edited_xml_bytes)
+            for name, data in other_files.items():
+                zf.writestr(name, data)
+        zip_out = buf.getvalue()
+
+        # POST rebuilt ZIP.
+        saved_ct = self._session.headers.pop("Content-Type", None)
+        try:
+            r = self._session.post(
+                f"{self.base}/api/policies/import",
+                params={"forceImport": "true"},
+                files={"policy": ("exportedPolicies.zip", zip_out, "application/zip")},
+            )
+        finally:
+            if saved_ct is not None:
+                self._session.headers["Content-Type"] = saved_ct
+        if r.status_code not in (200, 201, 204):
+            raise RuntimeError(
+                f"Policy import for built-in metrics failed ({r.status_code}): {r.text}"
+            )
+
+        return {key: key in already_enabled for key in all_keys}
+
     def export_default_policy_xml(self, policy_id: str) -> str:
         """Export a policy and return the raw XML from the ZIP."""
         r = self._req(
@@ -1346,6 +1498,61 @@ def _install_sm_enable(ctx: Dict) -> None:
               f"{len(unverified)} SM(s) not verified, retrying...")
 
 
+def _install_builtin_metric_enables(ctx: Dict) -> None:
+    """Enable built-in object-type metrics on the Default Policy.
+
+    Reads manifest["content"]["builtin_metric_enables"]["items"] — a list of
+    dicts with adapter_kind, resource_kind, metric_key.  No-ops cleanly when
+    the section is absent (most bundles won't have it).
+    """
+    args = ctx["args"]
+    if args.skip_enable:
+        print("  (--skip-enable set: skipping)")
+        return
+
+    manifest = ctx["manifest"]
+    content = manifest.get("content") or {}
+    bme_section = content.get("builtin_metric_enables")
+    if not bme_section:
+        return
+
+    items = bme_section.get("items") or []
+    if not items:
+        return
+
+    # Build entries list for the client method.
+    entries = []
+    for item in items:
+        ak = item.get("adapter_kind", "")
+        rk = item.get("resource_kind", "")
+        mk = item.get("metric_key", "")
+        if not (ak and rk and mk):
+            _warn(f"Skipping malformed builtin_metric_enables entry: {item!r}")
+            continue
+        entries.append({"adapter_kind": ak, "resource_kind": rk, "metric_key": mk})
+
+    if not entries:
+        return
+
+    try:
+        result = ctx["client"].enable_builtin_metrics_on_default_policy(entries)
+    except RuntimeError as exc:
+        warn = f"Built-in metric enable failed: {exc}"
+        _warn(warn)
+        ctx["warnings"].append(warn)
+        return
+
+    for item in entries:
+        mk = item["metric_key"]
+        ak = item["adapter_kind"]
+        rk = item["resource_kind"]
+        was_already = result.get(mk, False)
+        if was_already:
+            _ok(f"Already enabled: {ak}/{rk} {mk}")
+        else:
+            _ok(f"Enabled: {ak}/{rk} {mk}")
+
+
 def _install_customgroups(ctx: Dict) -> None:
     bundle_dir = ctx["bundle_dir"]
     manifest = ctx["manifest"]
@@ -1757,6 +1964,34 @@ def _uninstall_supermetrics(ctx: Dict) -> None:
             warnings.append(warn)
 
 
+def _uninstall_builtin_metric_enables_note(ctx: Dict) -> None:
+    """Print a note listing built-in metrics this bundle enabled.
+
+    Built-in metric enables are intentionally NOT reversed on uninstall:
+    the Default Policy is shared state and other bundles or the operator
+    may depend on the same metric being active.  This function prints a
+    human-readable reminder so operators can make an informed decision.
+    """
+    manifest = ctx["manifest"]
+    content = manifest.get("content") or {}
+    bme_section = content.get("builtin_metric_enables")
+    if not bme_section:
+        return
+    items = bme_section.get("items") or []
+    if not items:
+        return
+    print("  NOTE: the following built-in metrics were enabled by this bundle and")
+    print("  remain enabled in the Default Policy (policy is shared state):")
+    for item in items:
+        ak = item.get("adapter_kind", "?")
+        rk = item.get("resource_kind", "?")
+        mk = item.get("metric_key", "?")
+        reason = item.get("reason", "")
+        suffix = f"  # {reason}" if reason else ""
+        print(f"    {ak}/{rk} {mk}{suffix}")
+    print("  To disable, edit the Default Policy in the VCF Ops UI.")
+
+
 def _uninstall_customgroups(ctx: Dict) -> None:
     names: List[str] = ctx["names"]
     warnings = ctx["warnings"]
@@ -1834,6 +2069,21 @@ _CONTENT_REGISTRY: List[Dict] = [
         "uninstall_label": None,
         "uninstall_fn": None,
         "uninstall_order": None,
+        "needs_ui": False,
+    },
+    {
+        "content_type": "builtin_metric_enables",
+        "manifest_key": "builtin_metric_enables",
+        "install_label": "Enabling built-in metric(s) on Default Policy...",
+        "install_fn": _install_builtin_metric_enables,
+        "install_order": 3.5,  # between sm_enable (3) and customgroups (4)
+        # Uninstall prints a console note but does NOT disable built-in metrics:
+        # Default Policy is shared state; other bundles or the operator may rely
+        # on the same metric.  A future --revert-metric-enables flag can add the
+        # disable path if explicitly requested.
+        "uninstall_label": "Noting built-in metric(s) enabled by this bundle...",
+        "uninstall_fn": _uninstall_builtin_metric_enables_note,
+        "uninstall_order": 45,  # after SM uninstall (40) and custom group uninstall (50)
         "needs_ui": False,
     },
     {

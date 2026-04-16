@@ -855,6 +855,147 @@ function Enable-SupermetricOnDefaultPolicy {
     }
 }
 
+function Enable-BuiltinMetricsOnDefaultPolicy {
+    param(
+        [object[]]$Entries,   # each: @{adapter_kind; resource_kind; metric_key}
+        [string]$PolicyId
+    )
+    # Group entries by (adapter_kind, resource_kind).
+    $grouped = @{}
+    foreach ($e in $Entries) {
+        $gkey = "$($e.adapter_kind)|$($e.resource_kind)"
+        if (-not $grouped.ContainsKey($gkey)) {
+            $grouped[$gkey] = @{ AdapterKind = $e.adapter_kind; ResourceKind = $e.resource_kind; Keys = [System.Collections.Generic.List[string]]::new() }
+        }
+        $grouped[$gkey].Keys.Add($e.metric_key)
+    }
+    $allKeys = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($e in $Entries) { [void]$allKeys.Add($e.metric_key) }
+
+    # Export policy and parse XML.
+    $policyXml = Export-DefaultPolicyXml -PolicyId $PolicyId
+    [xml]$doc = $policyXml
+
+    # Record which keys were already enabled before our edit.
+    $alreadyEnabled = [System.Collections.Generic.HashSet[string]]::new()
+    foreach ($node in @($doc.GetElementsByTagName("Metric"))) {
+        $mid = $node.GetAttribute("id")
+        if ($allKeys.Contains($mid) -and $node.GetAttribute("enabled").ToLower() -eq "true") {
+            [void]$alreadyEnabled.Add($mid)
+        }
+    }
+
+    # Purge any existing <Metric id=...> entries for keys being injected.
+    $staleNodes = @($doc.GetElementsByTagName("Metric") |
+        Where-Object { $allKeys.Contains($_.GetAttribute("id")) })
+    foreach ($node in $staleNodes) {
+        $node.ParentNode.RemoveChild($node) | Out-Null
+    }
+
+    # Locate or create PackageSettings.
+    $pkgSettings = $doc.GetElementsByTagName("PackageSettings") | Select-Object -First 1
+    if (-not $pkgSettings) {
+        $policyElem = $doc.GetElementsByTagName("Policy") | Select-Object -First 1
+        if (-not $policyElem) { throw "Policy XML has no <Policy> element -- cannot inject built-in metrics" }
+        $pkgSettings = $doc.CreateElement("PackageSettings")
+        $policyElem.AppendChild($pkgSettings) | Out-Null
+    }
+
+    # Inject fresh <Metrics> blocks with <Metric> entries.
+    foreach ($gkey in $grouped.Keys) {
+        $g = $grouped[$gkey]
+        $ak = $g.AdapterKind
+        $rkKey = $g.ResourceKind
+
+        $metricsBlock = $null
+        foreach ($candidate in @($pkgSettings.GetElementsByTagName("Metrics"))) {
+            if ($candidate.GetAttribute("adapterKind") -eq $ak -and
+                $candidate.GetAttribute("resourceKind") -eq $rkKey) {
+                $metricsBlock = $candidate
+                break
+            }
+        }
+        if (-not $metricsBlock) {
+            $metricsBlock = $doc.CreateElement("Metrics")
+            $metricsBlock.SetAttribute("adapterKind", $ak)
+            $metricsBlock.SetAttribute("resourceKind", $rkKey)
+            $pkgSettings.AppendChild($metricsBlock) | Out-Null
+        }
+
+        foreach ($mk in $g.Keys) {
+            $newEntry = $doc.CreateElement("Metric")
+            $newEntry.SetAttribute("enabled", "true")
+            $newEntry.SetAttribute("id", $mk)
+            $metricsBlock.AppendChild($newEntry) | Out-Null
+        }
+    }
+
+    # Rebuild ZIP and re-import.
+    $editedXml = $doc.OuterXml
+    if (-not $editedXml.StartsWith("<?xml")) {
+        $editedXml = '<?xml version="1.0" encoding="UTF-8"?>' + "`n" + $editedXml
+    }
+    $editedXmlBytes = [System.Text.Encoding]::UTF8.GetBytes($editedXml)
+
+    $tmpZip = [System.IO.Path]::GetTempFileName() + ".zip"
+    $ms = New-Object System.IO.MemoryStream
+    try {
+        $exportUri = "$script:BaseUrl/api/policies/export?id=$([uri]::EscapeDataString($PolicyId))"
+        $exportHeaders = @{
+            "Authorization" = "vRealizeOpsToken $script:Token"
+            "Accept"        = "application/zip"
+        }
+        $exportParams = @{
+            Method  = "GET"
+            Uri     = $exportUri
+            Headers = $exportHeaders
+        }
+        if ($SkipSslVerify -and $PSVersionTable.PSVersion.Major -ge 6) { $exportParams["SkipCertificateCheck"] = $true }
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            Invoke-WebRequest @exportParams -OutFile $tmpZip | Out-Null
+        } else {
+            Invoke-WebRequest @exportParams -OutFile $tmpZip -UseBasicParsing | Out-Null
+        }
+
+        $origZip = [System.IO.Compression.ZipFile]::OpenRead($tmpZip)
+        $xmlEntryName = $null
+        $otherEntries = @{}
+        try {
+            foreach ($entry in $origZip.Entries) {
+                if ($entry.Name -like "*.xml") {
+                    $xmlEntryName = $entry.FullName
+                } else {
+                    $reader = New-Object System.IO.BinaryReader($entry.Open())
+                    try { $otherEntries[$entry.FullName] = $reader.ReadBytes([int]$entry.Length) }
+                    finally { $reader.Dispose() }
+                }
+            }
+            if (-not $xmlEntryName) { throw "Policy export ZIP contained no XML file" }
+        } finally { $origZip.Dispose() }
+
+        $outZip = New-Object System.IO.Compression.ZipArchive($ms, [System.IO.Compression.ZipArchiveMode]::Create, $true)
+        try {
+            $xmlEntry = $outZip.CreateEntry($xmlEntryName, [System.IO.Compression.CompressionLevel]::Optimal)
+            $xmlStream = $xmlEntry.Open()
+            $xmlStream.Write($editedXmlBytes, 0, $editedXmlBytes.Length)
+            $xmlStream.Dispose()
+            foreach ($ename in $otherEntries.Keys) {
+                $e = $outZip.CreateEntry($ename, [System.IO.Compression.CompressionLevel]::Optimal)
+                $s = $e.Open()
+                $s.Write($otherEntries[$ename], 0, $otherEntries[$ename].Length)
+                $s.Dispose()
+            }
+        } finally { $outZip.Dispose() }
+
+        Import-PolicyZip -ZipBytes $ms.ToArray()
+    } finally {
+        $ms.Dispose()
+        if (Test-Path -LiteralPath $tmpZip) { Remove-Item -LiteralPath $tmpZip -Force -ErrorAction SilentlyContinue }
+    }
+
+    return $alreadyEnabled
+}
+
 function Export-DefaultPolicyXml {
     param([string]$PolicyId)
     $uri = "$script:BaseUrl/api/policies/export?id=$([uri]::EscapeDataString($PolicyId))"
@@ -1462,6 +1603,19 @@ $script:ContentRegistry = @(
         NeedsUi        = $false
     },
     @{
+        ContentType    = "builtin_metric_enables"
+        ManifestKey    = "builtin_metric_enables"
+        InstallLabel   = "Enabling built-in metric(s) on Default Policy..."
+        InstallFn      = "Install-BuiltinMetricEnables"
+        InstallOrder   = 3.5
+        # Uninstall does NOT disable built-in metrics (Default Policy is shared state).
+        # The note function prints a reminder without modifying the policy.
+        UninstallLabel = "Noting built-in metric(s) enabled by this bundle..."
+        UninstallFn    = "Uninstall-BuiltinMetricEnablesNote"
+        UninstallOrder = 45
+        NeedsUi        = $false
+    },
+    @{
         ContentType    = "customgroups"
         ManifestKey    = "customgroups"
         InstallLabel   = "Upserting custom group(s)..."
@@ -1674,6 +1828,76 @@ function Install-SmEnable($Ctx) {
         if ($unverified.Count -eq 0) { break }
         Write-Host "    [enable-verify $attempt/$smEnableAttempts] $($unverified.Count) SM(s) not verified, retrying..."
     }
+}
+
+function Install-BuiltinMetricEnables($Ctx) {
+    if ($SkipEnable) {
+        Write-Host "  (-SkipEnable set: skipping)"
+        return
+    }
+    $bmeProp = $Ctx.Manifest.content.PSObject.Properties["builtin_metric_enables"]
+    if (-not $bmeProp) { return }
+    $bmeSection = $bmeProp.Value
+    if (-not $bmeSection -or -not $bmeSection.items) { return }
+    $items = @($bmeSection.items)
+    if ($items.Count -eq 0) { return }
+
+    $entries = [System.Collections.Generic.List[object]]::new()
+    foreach ($item in $items) {
+        $ak = $item.adapter_kind
+        $rk = $item.resource_kind
+        $mk = $item.metric_key
+        if (-not $ak -or -not $rk -or -not $mk) {
+            Write-Warn "Skipping malformed builtin_metric_enables entry: $($item | ConvertTo-Json -Compress)"
+            continue
+        }
+        $entries.Add(@{ adapter_kind = $ak; resource_kind = $rk; metric_key = $mk })
+    }
+    if ($entries.Count -eq 0) { return }
+
+    $policyId = Get-DefaultPolicyId
+    try {
+        $alreadyEnabled = Enable-BuiltinMetricsOnDefaultPolicy -Entries @($entries) -PolicyId $policyId
+    } catch {
+        $warn = "Built-in metric enable failed: $_"
+        Write-Warn $warn
+        $Ctx.Warnings.Add($warn)
+        return
+    }
+
+    foreach ($entry in $entries) {
+        $mk = $entry.metric_key
+        $ak = $entry.adapter_kind
+        $rk = $entry.resource_kind
+        if ($alreadyEnabled.Contains($mk)) {
+            Write-Ok "Already enabled: $ak/$rk $mk"
+        } else {
+            Write-Ok "Enabled: $ak/$rk $mk"
+        }
+    }
+}
+
+function Uninstall-BuiltinMetricEnablesNote($Ctx) {
+    # Built-in metric enables are NOT reversed on uninstall (Default Policy is
+    # shared state).  This function prints a note so operators can decide if
+    # they want to disable the metrics manually via the UI.
+    $bmeProp = $Ctx.Manifest.content.PSObject.Properties["builtin_metric_enables"]
+    if (-not $bmeProp) { return }
+    $bmeSection = $bmeProp.Value
+    if (-not $bmeSection -or -not $bmeSection.items) { return }
+    $items = @($bmeSection.items)
+    if ($items.Count -eq 0) { return }
+    Write-Host "  NOTE: the following built-in metrics were enabled by this bundle and"
+    Write-Host "  remain enabled in the Default Policy (policy is shared state):"
+    foreach ($item in $items) {
+        $ak = $item.adapter_kind
+        $rk = $item.resource_kind
+        $mk = $item.metric_key
+        $reason = $item.reason
+        $suffix = if ($reason) { "  # $reason" } else { "" }
+        Write-Host "    $ak/$rk $mk$suffix"
+    }
+    Write-Host "  To disable, edit the Default Policy in the VCF Ops UI."
 }
 
 function Install-CustomGroups($Ctx) {

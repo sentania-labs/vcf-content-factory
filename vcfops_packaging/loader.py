@@ -20,6 +20,12 @@ reports:          list[path]   (optional) -- requires vcfops_reports package
 recommendations:  list[path]   (optional) -- recommendation definitions under
                                recommendations/*.yaml.  Loaded and validated
                                at bundle load time; included in AlertContent.xml.
+builtin_metric_enables: list (optional) -- built-in metrics to enable on the
+                               Default Policy at install time.  Each entry:
+                               adapter_kind: str (required) -- e.g. "VMWARE"
+                               resource_kind: str (required) -- e.g. "VirtualMachine"
+                               metric_key: str (required) -- e.g. "net|packetsPerSec"
+                               reason: str (optional) -- human-readable explanation
 
 All content-type keys are optional.  A bundle may contain only super
 metrics, only dashboards, or any subset of the supported types.
@@ -51,6 +57,15 @@ class BundleValidationError(ValueError):
 
 
 @dataclass
+class BuiltinMetricEnable:
+    """A single built-in metric enablement declaration."""
+    adapter_kind: str
+    resource_kind: str
+    metric_key: str
+    reason: str = ""
+
+
+@dataclass
 class Bundle:
     name: str
     description: str
@@ -63,6 +78,7 @@ class Bundle:
     symptoms: List[SymptomDef] = field(default_factory=list)
     alerts: List[AlertDef] = field(default_factory=list)
     recommendations: List[Recommendation] = field(default_factory=list)
+    builtin_metric_enables: List[BuiltinMetricEnable] = field(default_factory=list)
     source_path: Optional[Path] = None
 
 
@@ -129,6 +145,38 @@ def load_bundle(path: str | Path) -> Bundle:
             f"{path}: referenced file not found: {ref!r} "
             f"(tried {candidate} and {candidate2})"
         )
+
+    # Validate and load builtin_metric_enables (inline list, not file paths).
+    raw_bme = data.get("builtin_metric_enables") or []
+    if not isinstance(raw_bme, list):
+        raise BundleValidationError(
+            f"{path}: 'builtin_metric_enables' must be a list, got {type(raw_bme).__name__}"
+        )
+    builtin_metric_enables = []
+    for i, entry in enumerate(raw_bme):
+        if not isinstance(entry, dict):
+            raise BundleValidationError(
+                f"{path}: builtin_metric_enables[{i}] must be a mapping, "
+                f"got {type(entry).__name__}"
+            )
+        for required_field in ("adapter_kind", "resource_kind", "metric_key"):
+            val = entry.get(required_field)
+            if not val or not isinstance(val, str) or not val.strip():
+                raise BundleValidationError(
+                    f"{path}: builtin_metric_enables[{i}].{required_field} "
+                    f"is required and must be a non-empty string"
+                )
+        reason = entry.get("reason", "") or ""
+        if not isinstance(reason, str):
+            raise BundleValidationError(
+                f"{path}: builtin_metric_enables[{i}].reason must be a string"
+            )
+        builtin_metric_enables.append(BuiltinMetricEnable(
+            adapter_kind=entry["adapter_kind"].strip(),
+            resource_kind=entry["resource_kind"].strip(),
+            metric_key=entry["metric_key"].strip(),
+            reason=reason.strip(),
+        ))
 
     sm_paths = [_resolve(r) for r in (data.get("supermetrics") or [])]
     view_paths = [_resolve(r) for r in (data.get("views") or [])]
@@ -202,6 +250,7 @@ def load_bundle(path: str | Path) -> Bundle:
         symptoms=symptoms,
         alerts=alerts,
         recommendations=recommendations,
+        builtin_metric_enables=builtin_metric_enables,
         source_path=path,
     )
 

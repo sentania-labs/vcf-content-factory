@@ -387,6 +387,139 @@ class VCFOpsClient:
 
         self._import_policy_zip(buf.getvalue())
 
+    def enable_builtin_metrics_on_default_policy(
+        self,
+        entries: list,
+    ) -> dict:
+        """Enable built-in (non-super-metric) object-type metrics on the Default Policy.
+
+        Injects <Metrics adapterKind=... resourceKind=...><Metric enabled="true"
+        id=.../>...</Metrics> blocks into exportedPolicies.xml under
+        <PackageSettings>, then re-imports the ZIP.  Idempotent: any existing
+        <Metric> entry whose id matches one being injected is purged before the
+        fresh entry is written (same purge-and-re-inject pattern as the SM enable
+        path).  Existing <Metric> entries for keys NOT being touched are preserved.
+
+        Args:
+            entries: list of dicts, each with keys:
+                adapter_kind  (str) -- e.g. "VMWARE"
+                resource_kind (str) -- e.g. "VirtualMachine"
+                metric_key    (str) -- stat-key string, e.g. "net|packetsPerSec"
+
+        Returns:
+            dict mapping metric_key -> bool (True = was already enabled before
+            this call, False = was absent or disabled and has now been injected).
+        """
+        import xml.etree.ElementTree as ET
+        import re as _re
+
+        if not entries:
+            return {}
+
+        # Group entries by (adapter_kind, resource_kind).
+        from collections import defaultdict
+        grouped: dict = defaultdict(list)
+        for e in entries:
+            key = (e["adapter_kind"], e["resource_kind"])
+            grouped[key].append(e["metric_key"])
+
+        # Export ZIP and parse XML.
+        zip_bytes, xml_name = self._export_default_policy_zip()
+
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            raw_xml = zf.read(xml_name)
+            other_files = {
+                n: zf.read(n) for n in zf.namelist() if n != xml_name
+            }
+
+        for prefix, uri in _re.findall(
+            r'xmlns(?::([A-Za-z_][A-Za-z0-9_.-]*))?=["\']([^"\']+)["\']',
+            raw_xml.decode("utf-8"),
+        ):
+            ET.register_namespace(prefix if prefix else "", uri)
+
+        root = ET.fromstring(raw_xml)
+
+        pkg_settings = root.find(".//{*}PackageSettings") or root.find(
+            ".//PackageSettings"
+        )
+        if pkg_settings is None:
+            policy_elem = root.find(".//{*}Policy") or root.find(".//Policy")
+            if policy_elem is None:
+                raise VCFOpsError(
+                    "policy XML has no <Policy> element — cannot inject built-in metrics"
+                )
+            pkg_settings = ET.SubElement(policy_elem, "PackageSettings")
+
+        # Build set of all metric_keys being injected (for "was_already_enabled" check).
+        all_keys = {e["metric_key"] for e in entries}
+
+        # Record which keys were already present and enabled BEFORE our edit.
+        already_enabled: set = set()
+        for block in (
+            pkg_settings.findall("{*}Metrics") or pkg_settings.findall("Metrics")
+        ):
+            for elem in list(block):
+                tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+                if tag == "Metric":
+                    mid = elem.get("id", "")
+                    if mid in all_keys and elem.get("enabled", "").lower() == "true":
+                        already_enabled.add(mid)
+
+        # Purge any existing <Metric id=...> entries that match keys being injected,
+        # across ALL <Metrics> blocks in PackageSettings.
+        for block in (
+            pkg_settings.findall("{*}Metrics") or pkg_settings.findall("Metrics")
+        ):
+            for elem in list(block):
+                tag = elem.tag.split("}")[-1] if "}" in elem.tag else elem.tag
+                if tag == "Metric" and elem.get("id", "") in all_keys:
+                    block.remove(elem)
+
+        # Inject fresh entries grouped by (adapter_kind, resource_kind).
+        for (adapter_kind, resource_kind), metric_keys in grouped.items():
+            # Find existing <Metrics adapterKind=... resourceKind=...> block or create one.
+            metrics_block = None
+            for candidate in (
+                pkg_settings.findall("{*}Metrics") or pkg_settings.findall("Metrics")
+            ):
+                if (
+                    candidate.get("adapterKind") == adapter_kind
+                    and candidate.get("resourceKind") == resource_kind
+                ):
+                    metrics_block = candidate
+                    break
+
+            if metrics_block is None:
+                metrics_block = ET.SubElement(
+                    pkg_settings,
+                    "Metrics",
+                    {"adapterKind": adapter_kind, "resourceKind": resource_kind},
+                )
+
+            for metric_key in metric_keys:
+                ET.SubElement(
+                    metrics_block,
+                    "Metric",
+                    {"enabled": "true", "id": metric_key},
+                )
+
+        # Serialise and rebuild ZIP.
+        edited_xml = ET.tostring(root, encoding="unicode", xml_declaration=False)
+        if not edited_xml.startswith("<?xml"):
+            edited_xml = '<?xml version="1.0" encoding="UTF-8"?>\n' + edited_xml
+        edited_xml_bytes = edited_xml.encode("utf-8")
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(xml_name, edited_xml_bytes)
+            for name, data in other_files.items():
+                zf.writestr(name, data)
+
+        self._import_policy_zip(buf.getvalue())
+
+        return {key: key in already_enabled for key in all_keys}
+
     # ---- content-zip import (UUID-preserving) ---------------------------
     def import_supermetrics_bundle(self, supermetrics: Iterable[dict]) -> dict:
         """Install super metrics via the content import endpoint, which

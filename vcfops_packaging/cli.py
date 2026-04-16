@@ -9,6 +9,8 @@ Commands:
     sync --all                   Sync all bundles where sync != false
     sync --uninstall bundles/..  Uninstall one bundle from the instance
     sync --uninstall --force ..  Force-uninstall (skip sharing checks)
+    refresh-describe             Refresh adapter describe-surface cache
+    analyze  <bundle-dir>        Analyze a staged bundle directory for deps
 """
 from __future__ import annotations
 
@@ -24,6 +26,9 @@ DEFAULT_OUTPUT_DIR = "dist"
 
 
 def cmd_build(args) -> int:
+    from .audit import AuditError
+    from .describe import DescribeCacheError
+
     if args.all:
         bundles_dir = Path(DEFAULT_BUNDLES_DIR)
         manifests = sorted(bundles_dir.rglob("*.y*ml")) if bundles_dir.exists() else []
@@ -36,11 +41,28 @@ def cmd_build(args) -> int:
         print("Specify a manifest file or --all", file=sys.stderr)
         return 1
 
+    # Resolve audit mode from flags.
+    audit_mode = "auto"
+    if getattr(args, "strict_deps", False):
+        audit_mode = "strict"
+    elif getattr(args, "lax_deps", False):
+        audit_mode = "lax"
+
+    live_describe = not getattr(args, "no_live_describe", False)
+
     rc = 0
     for manifest in manifests:
         try:
-            out = build_bundle(manifest, output_dir=DEFAULT_OUTPUT_DIR)
+            out = build_bundle(
+                manifest,
+                output_dir=DEFAULT_OUTPUT_DIR,
+                audit_mode=audit_mode,
+                live_describe=live_describe,
+            )
             print(f"built  {out}")
+        except (AuditError, DescribeCacheError) as e:
+            print(f"AUDIT FAILED  {manifest}:\n{e}", file=sys.stderr)
+            rc = 1
         except BundleValidationError as e:
             print(f"INVALID  {manifest}: {e}", file=sys.stderr)
             rc = 1
@@ -70,10 +92,10 @@ def cmd_validate(args) -> int:
                 parts.append(f"{len(bundle.dashboards)} dashboard(s)")
             if bundle.customgroups:
                 parts.append(f"{len(bundle.customgroups)} custom group(s)")
-            if bundle.symptom_paths:
-                parts.append(f"{len(bundle.symptom_paths)} symptom(s)")
-            if bundle.alert_paths:
-                parts.append(f"{len(bundle.alert_paths)} alert(s)")
+            if bundle.symptoms:
+                parts.append(f"{len(bundle.symptoms)} symptom(s)")
+            if bundle.alerts:
+                parts.append(f"{len(bundle.alerts)} alert(s)")
             print(f"    {', '.join(parts) if parts else '(empty bundle)'}")
         except BundleValidationError as e:
             print(f"INVALID  {p}: {e}", file=sys.stderr)
@@ -107,10 +129,10 @@ def cmd_list(args) -> int:
                 parts.append(f"dashboards:{len(bundle.dashboards)}")
             if bundle.customgroups:
                 parts.append(f"groups:{len(bundle.customgroups)}")
-            if bundle.symptom_paths:
-                parts.append(f"symptoms:{len(bundle.symptom_paths)}")
-            if bundle.alert_paths:
-                parts.append(f"alerts:{len(bundle.alert_paths)}")
+            if bundle.symptoms:
+                parts.append(f"symptoms:{len(bundle.symptoms)}")
+            if bundle.alerts:
+                parts.append(f"alerts:{len(bundle.alerts)}")
             print(f"  {', '.join(parts) if parts else '(empty)'}")
             if bundle.description:
                 desc = bundle.description.strip().splitlines()[0]
@@ -118,6 +140,94 @@ def cmd_list(args) -> int:
         except BundleValidationError as e:
             print(f"  [INVALID: {e}]")
     return 0
+
+
+def cmd_refresh_describe(args) -> int:
+    """Refresh the adapter describe-surface cache against the live instance."""
+    from .describe import make_cache, DescribeCacheError
+
+    kinds_arg = getattr(args, "kind", None) or []
+    kinds: list[tuple[str, str]] | None = None
+    if kinds_arg:
+        kinds = []
+        for kv in kinds_arg:
+            if ":" not in kv:
+                print(f"--kind must be in ADAPTER:RESOURCE format, got {kv!r}", file=sys.stderr)
+                return 1
+            ak, _, rk = kv.partition(":")
+            kinds.append((ak.strip(), rk.strip()))
+
+    cache = make_cache(live=True)
+    if cache._client is None:
+        print(
+            "ERROR: VCFOPS_HOST, VCFOPS_USER, and VCFOPS_PASSWORD env vars are required "
+            "for refresh-describe.",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        cache.refresh_all(kinds=kinds)
+    except DescribeCacheError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_analyze(args) -> int:
+    """Analyze a staged bundle directory for metric dependencies."""
+    import json as _json
+    from .audit import analyze_staged_bundle, AuditError, print_audit_summary
+    from .describe import make_cache, DescribeCacheError
+
+    bundle_dir = Path(args.bundle_dir)
+    if not bundle_dir.exists():
+        print(f"ERROR: bundle directory not found: {bundle_dir}", file=sys.stderr)
+        return 1
+
+    live_describe = not getattr(args, "no_live_describe", False)
+    cache = make_cache(live=live_describe)
+
+    # Auto-refresh relevant pairs if live mode.
+    if live_describe and cache._client is not None:
+        content_dir = bundle_dir / "content"
+        # Parse supermetrics.json to discover kind pairs needed
+        sm_path = content_dir / "supermetrics.json"
+        pairs: set[tuple[str, str]] = set()
+        if sm_path.exists():
+            from .deps import _refs_from_formula
+            sm_data: dict = _json.loads(sm_path.read_text(encoding="utf-8"))
+            for sm_obj in sm_data.values():
+                for ref in _refs_from_formula(sm_obj.get("formula", ""), ""):
+                    pairs.add((ref.adapter_kind, ref.resource_kind))
+        for ak, rk in sorted(pairs):
+            try:
+                cache.refresh(ak, rk)
+            except DescribeCacheError as exc:
+                print(f"  WARN: {exc}", file=sys.stderr)
+
+    try:
+        result = analyze_staged_bundle(bundle_dir, cache)
+    except (AuditError, DescribeCacheError) as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    # Print human-readable summary to stderr.
+    print_audit_summary(result, "analyze")
+
+    # Emit JSON to stdout — shaped as builtin_metric_enables items list.
+    output_items = []
+    for r in result.needs_enable:
+        output_items.append({
+            "adapter_kind": r.adapter_kind,
+            "resource_kind": r.resource_kind,
+            "metric_key": r.metric_key,
+            "reason": f"Auto-detected: referenced by {r.source_desc}, defaultMonitored=false",
+        })
+
+    print(_json.dumps(output_items, indent=2))
+
+    return 0 if not result.unknown else 1
 
 
 def cmd_sync(args) -> int:
@@ -175,6 +285,19 @@ def build_parser() -> argparse.ArgumentParser:
                     help="path(s) to bundle manifest YAML files")
     pb.add_argument("--all", action="store_true",
                     help=f"build all manifests in {DEFAULT_BUNDLES_DIR}/")
+    _dep_group = pb.add_mutually_exclusive_group()
+    _dep_group.add_argument(
+        "--strict-deps", action="store_true",
+        help="fail build if any defaultMonitored=false metric is not declared in manifest",
+    )
+    _dep_group.add_argument(
+        "--lax-deps", action="store_true",
+        help="log defaultMonitored=false metrics but do not fail or auto-add",
+    )
+    pb.add_argument(
+        "--no-live-describe", action="store_true",
+        help="use describe cache only; do not refresh against live instance",
+    )
     pb.set_defaults(func=cmd_build)
 
     pv = sub.add_parser("validate", help="validate bundle manifest(s) without building")
@@ -184,6 +307,33 @@ def build_parser() -> argparse.ArgumentParser:
 
     pl = sub.add_parser("list", help="list available bundle manifests")
     pl.set_defaults(func=cmd_list)
+
+    prd = sub.add_parser(
+        "refresh-describe",
+        help="refresh adapter describe-surface cache from live VCF Ops instance",
+    )
+    prd.add_argument(
+        "--kind",
+        action="append",
+        metavar="ADAPTER:RESOURCE",
+        help="refresh a specific adapter/resource-kind pair (repeatable); "
+             "default: refresh all cached pairs",
+    )
+    prd.set_defaults(func=cmd_refresh_describe)
+
+    pa = sub.add_parser(
+        "analyze",
+        help="analyze a staged bundle directory for metric dependencies",
+    )
+    pa.add_argument(
+        "bundle_dir",
+        help="path to a staged bundle directory (containing content/ subdirectory)",
+    )
+    pa.add_argument(
+        "--no-live-describe", action="store_true",
+        help="use describe cache only; do not refresh against live instance",
+    )
+    pa.set_defaults(func=cmd_analyze)
 
     ps = sub.add_parser(
         "sync",

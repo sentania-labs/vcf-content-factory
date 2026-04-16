@@ -147,6 +147,22 @@ def _build_bundle_json(bundle: Bundle, display_name: str) -> str:
             "file": "content/reports_content.xml",
             "items": [{"uuid": rd.id, "name": rd.name} for rd in bundle.reports],
         }
+    if bundle.builtin_metric_enables:
+        content["builtin_metric_enables"] = {
+            "file": "content/builtin_metric_enables.json",
+            # Each item carries a "name" field (= metric_key) so the uninstall
+            # registry predicate (which reads item["name"]) can detect the section.
+            "items": [
+                {
+                    "name": bme.metric_key,       # uninstall-name contract
+                    "adapter_kind": bme.adapter_kind,
+                    "resource_kind": bme.resource_kind,
+                    "metric_key": bme.metric_key,
+                    **( {"reason": bme.reason} if bme.reason else {} ),
+                }
+                for bme in bundle.builtin_metric_enables
+            ],
+        }
 
     manifest = {
         "name": bundle.name,
@@ -366,6 +382,9 @@ def _generate_bundle_readme(bundle: Bundle, display_name: str) -> str:
 def build_bundle(
     bundle_path: str | Path,
     output_dir: str | Path = "dist",
+    *,
+    audit_mode: str = "auto",
+    live_describe: bool = True,
 ) -> Path:
     """Build a distributable zip for the given bundle manifest.
 
@@ -373,13 +392,48 @@ def build_bundle(
         bundle_path: Path to a bundles/*.yaml manifest.
         output_dir: Directory where the output zip is written.
             Defaults to 'dist/'.
+        audit_mode: Dependency audit mode — "auto" (default), "strict", or
+            "lax".  See vcfops_packaging/audit.py for semantics.
+        live_describe: If True (default) and VCFOPS_HOST/USER/PASSWORD are in
+            the environment, refresh the describe cache for all adapter/resource
+            kind pairs referenced by this bundle before auditing.  If False,
+            use the cache as-is (cache-only mode).
 
     Returns:
         Path to the built zip file.
     """
+    from .audit import audit_bundle_dependencies, print_audit_summary
+    from .describe import make_cache, DescribeCacheError
+
     bundle = load_bundle(bundle_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    # --- Dependency audit ---
+    describe_cache = make_cache(live=live_describe)
+
+    # If live mode and client is attached, refresh relevant kind pairs first.
+    if live_describe and describe_cache._client is not None:
+        from .deps import extract_metric_references
+        refs = extract_metric_references(bundle)
+        pairs_needed: set[tuple[str, str]] = {
+            (r.adapter_kind, r.resource_kind) for r in refs
+        }
+        for ak, rk in sorted(pairs_needed):
+            try:
+                describe_cache.refresh(ak, rk)
+            except DescribeCacheError as exc:
+                print(f"  WARN: could not refresh describe cache for {ak}/{rk}: {exc}",
+                      file=__import__("sys").stderr)
+
+    audit_result = audit_bundle_dependencies(
+        bundle, describe_cache, mode=audit_mode
+    )
+
+    # In auto mode, merge auto-added entries into the bundle's list before
+    # bundle.json serialization.
+    if audit_result.auto_added:
+        bundle.builtin_metric_enables = list(bundle.builtin_metric_enables) + audit_result.auto_added
 
     slug = bundle.name  # bundle slug = manifest name
     display_name = _slug_to_display_name(slug)
@@ -525,6 +579,25 @@ def build_bundle(
             z.writestr(content_prefix + "symptoms.json", symptoms_json)
         if alerts_json:
             z.writestr(content_prefix + "alerts.json", alerts_json)
+        if bundle.builtin_metric_enables:
+            bme_items = [
+                {
+                    "name": bme.metric_key,
+                    "adapter_kind": bme.adapter_kind,
+                    "resource_kind": bme.resource_kind,
+                    "metric_key": bme.metric_key,
+                    **( {"reason": bme.reason} if bme.reason else {} ),
+                }
+                for bme in bundle.builtin_metric_enables
+            ]
+            z.writestr(
+                content_prefix + "builtin_metric_enables.json",
+                json.dumps(bme_items, indent=2),
+            )
 
     out_path.write_bytes(buf.getvalue())
+
+    # Print audit summary after successful build.
+    print_audit_summary(audit_result, audit_mode)
+
     return out_path
