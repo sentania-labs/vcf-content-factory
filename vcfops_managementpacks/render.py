@@ -1,0 +1,1861 @@
+"""Render a ManagementPackDef into MPB design JSON.
+
+Wire format derived from:
+  - references/sentania_aria_operations_dsm_mp/Management Pack JSON/Synology DSM MP.json
+    (Scott's build-8 ground truth — CUSTOM auth, globalHeaders, sessionVariables)
+  - references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json
+    (only reference with populated relationships + events)
+  - context/mp_schema_vs_existing_mp.md (full cross-check document)
+  - docs/reference-mpb-research.md (baseline research)
+
+Key wire-format facts encoded here:
+  - All IDs are 22-char base62 strings, derived deterministically via UUID5.
+  - Two independent `id` fields per object: object.id AND internalObjectInfo.id.
+  - is_world: true → isListObject: false; world metricSets use listId "base".
+  - Requests are deduplicated across object_types into a flat top-level array.
+  - params is always a list of {key, value} — never a dict.
+  - response_path (e.g. "data.storagePools") drives the dataModelList structure.
+  - expressionText format: "@@@MPB_QUOTE <part-id> @@@MPB_QUOTE" (literal, verbatim).
+  - @@@id synthetic attribute is included on every wildcard-iteration DML.
+  - CUSTOM auth emits credentialType, creds, sessionSettings (getSession +
+    releaseSession + sessionVariables), plus globalHeaders for cookie injection.
+  - Relationship childExpression/parentExpression use originType: METRIC and
+    point to the metric ID (not the attribute DML origin ID).
+  - Null-expression relationships (adapter-instance-trivial) are handled per
+    the relationship_strategy parameter.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import re
+import sys
+import uuid
+import warnings
+from typing import Any, Dict, List, Optional, Tuple
+
+from .loader import (
+    ManagementPackDef,
+    MetricDef,
+    ObjectTypeDef,
+    RelationshipDef,
+    RequestDef,
+)
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Deterministic ID generation — UUID5 base62, 22 characters
+# ---------------------------------------------------------------------------
+
+_BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+_BASE62_LEN = len(_BASE62)  # 62
+
+
+def _b62encode(n: int, length: int = 22) -> str:
+    """Encode a non-negative integer as a base62 string of fixed length."""
+    chars: List[str] = []
+    while n > 0:
+        chars.append(_BASE62[n % _BASE62_LEN])
+        n //= _BASE62_LEN
+    # Pad or truncate to target length
+    result = "".join(reversed(chars)) if chars else "0"
+    if len(result) < length:
+        result = result.zfill(length).replace("0", _BASE62[0])
+    return result[-length:]  # last 22 chars (most-variable tail)
+
+
+def _make_id(seed: str) -> str:
+    """Derive a stable 22-char base62 ID from a seed string via UUID5."""
+    u = uuid.uuid5(uuid.NAMESPACE_DNS, seed)
+    # UUID5 gives 128 bits; encode as base62(int)
+    n = u.int
+    return _b62encode(n, 22)
+
+
+def _make_sub_id(parent_seed: str, discriminator: str) -> str:
+    """Sub-ID derived from a parent seed plus a discriminator."""
+    return _make_id(f"{parent_seed}::{discriminator}")
+
+
+# ---------------------------------------------------------------------------
+# Source-field parsing helpers
+# ---------------------------------------------------------------------------
+
+_SOURCE_RE = re.compile(r"^request:([a-zA-Z0-9_]+)\.(.+)$")
+
+
+def _parse_source_ref(source: str) -> Tuple[str, str]:
+    """Return (request_name, field_path) from 'request:<name>.<path>'."""
+    m = _SOURCE_RE.match(source)
+    if not m:
+        raise ValueError(f"Cannot parse source ref: {source!r}")
+    return m.group(1), m.group(2)
+
+
+def _response_path_to_dml_id(response_path: Optional[str]) -> str:
+    """Convert a response_path like 'data.storagePools' to the DML list id 'data.storagePools.*'.
+
+    If response_path is None or 'data' or empty, the base DML is used (id='base').
+    """
+    if not response_path:
+        return "base"
+    parts = response_path.strip().split(".")
+    # The DML id is the path joined with dots, plus '.*' suffix to indicate array iteration
+    return f"{response_path}.*"
+
+
+def _response_path_to_dml_key(response_path: Optional[str]) -> List[str]:
+    """Convert a response_path to the DML key array."""
+    if not response_path:
+        return []
+    return response_path.strip().split(".")
+
+
+def _field_path_to_dml_attr_key(field_path: str) -> List[str]:
+    """Convert a dotted field path to attribute key array.
+
+    For a source like 'data.storagePools', field_path is everything after
+    the request name dot: e.g. 'size.total' → ['size', 'total'],
+    or 'id' → ['id'].
+
+    However, for a world-object (base DML), the field_path includes the
+    response_path prefix: e.g. 'data.cpu_clock_speed' → ['data', 'cpu_clock_speed'].
+    """
+    return field_path.split(".")
+
+
+# ---------------------------------------------------------------------------
+# Standard source.configuration fields (MPB UI always emits these)
+# ---------------------------------------------------------------------------
+
+_STANDARD_CONFIG_FIELDS = [
+    {
+        "id": "mpb_hostname",
+        "key": "hostname",
+        "label": "Hostname",
+        "usage": "${configuration.mpb_hostname}",
+        "value": None,
+        "options": None,
+        "advanced": False,
+        "editable": False,
+        "configType": "STRING",
+        "description": "Host name or IP address of the target device.",
+        "defaultValue": None,
+    },
+    {
+        "id": "mpb_port",
+        "key": "port",
+        "label": "Port",
+        "usage": "${configuration.mpb_port}",
+        "value": None,
+        "options": None,
+        "advanced": True,
+        "editable": False,
+        "configType": "NUMBER",
+        "description": "The port used to connect to the target API.",
+        "defaultValue": None,
+    },
+    {
+        "id": "mpb_connection_timeout",
+        "key": "connection_timeout_s",
+        "label": "Connection Timeout",
+        "usage": "${configuration.mpb_connection_timeout}",
+        "value": None,
+        "options": None,
+        "advanced": True,
+        "editable": False,
+        "configType": "NUMBER",
+        "description": "Connection timeout in seconds.",
+        "defaultValue": 30,
+    },
+    {
+        "id": "mpb_concurrent_requests",
+        "key": "max_concurrent_requests",
+        "label": "Max Concurrent Requests",
+        "usage": "${configuration.mpb_concurrent_requests}",
+        "value": None,
+        "options": None,
+        "advanced": True,
+        "editable": False,
+        "configType": "NUMBER",
+        "description": "Maximum number of concurrent HTTP requests.",
+        "defaultValue": 15,
+    },
+    {
+        "id": "mpb_max_retries",
+        "key": "maximum_retries",
+        "label": "Maximum Retries",
+        "usage": "${configuration.mpb_max_retries}",
+        "value": None,
+        "options": None,
+        "advanced": True,
+        "editable": False,
+        "configType": "NUMBER",
+        "description": "Maximum number of retries on request failure.",
+        "defaultValue": 2,
+    },
+    {
+        "id": "mpb_ssl_config",
+        "key": "ssl",
+        "label": "SSL",
+        "usage": "${configuration.mpb_ssl_config}",
+        "value": None,
+        "options": ["NO_VERIFY", "VERIFY", "NO_SSL"],
+        "advanced": True,
+        "editable": False,
+        "configType": "SINGLE_SELECTION",
+        "description": "SSL verification mode.",
+        "defaultValue": None,
+    },
+    {
+        "id": "mpb_min_event_severity",
+        "key": "minimum_vmware_aria_operations_severity",
+        "label": "Minimum Event Severity",
+        "usage": "${configuration.mpb_min_event_severity}",
+        "value": None,
+        "options": ["INFO", "WARNING", "IMMEDIATE", "CRITICAL"],
+        "advanced": True,
+        "editable": False,
+        "configType": "SINGLE_SELECTION",
+        "description": "Minimum severity level for event collection.",
+        "defaultValue": "WARNING",
+    },
+]
+
+
+# ---------------------------------------------------------------------------
+# Request deduplication
+# ---------------------------------------------------------------------------
+
+class _RequestInfo:
+    """Tracks a deduplicated request and its dataModelLists (DMls)."""
+
+    def __init__(self, req: RequestDef, obj_key: str, adapter_kind: str):
+        # Stable ID: derived from adapter_kind + request name (unique per MP)
+        self.id = _make_id(f"{adapter_kind}:request:{req.name}")
+        self.req = req
+        # DML structures keyed by dml_id
+        self.dmls: Dict[str, Dict] = {}  # dml_id -> DML structure
+        # Track attribute IDs we've registered (avoid double-registration)
+        self._attr_ids: Dict[str, bool] = {}
+
+    def register_field(self, field_path: str, response_path: Optional[str]) -> str:
+        """Register a field and return its attribute-origin ID.
+
+        For array-iterating DMls the DML id is e.g. 'data.storagePools.*'.
+        For the base DML (world object or flat response) it is 'base'.
+        The attribute origin ID is: <request_id>-<dml_id>-<dotted_field_path>.
+        """
+        dml_id = self._resolve_dml_id(field_path, response_path)
+        # Compute the attribute key path relative to the DML
+        attr_key_path = self._resolve_attr_key_path(field_path, response_path)
+        attr_label = ".".join(attr_key_path)
+        origin_id = f"{self.id}-{dml_id}-{attr_label}"
+
+        if dml_id not in self.dmls:
+            self._init_dml(dml_id, response_path)
+
+        # Add the attribute if not already present
+        if origin_id not in self._attr_ids:
+            self._attr_ids[origin_id] = True
+            self.dmls[dml_id]["attributes"].append({
+                "id": origin_id,
+                "key": attr_key_path,
+                "label": attr_label,
+                "example": "",
+            })
+
+        return origin_id
+
+    def _resolve_dml_id(self, field_path: str, response_path: Optional[str]) -> str:
+        """Compute the DML id for a given field / response_path combination."""
+        if not response_path:
+            return "base"
+        return f"{response_path}.*"
+
+    def _resolve_attr_key_path(
+        self, field_path: str, response_path: Optional[str]
+    ) -> List[str]:
+        """Compute the attribute key path within the DML.
+
+        For a list DML (response_path e.g. 'data.storagePools'), metrics
+        reference fields relative to each list item, e.g. 'pool_path' → ['pool_path'].
+        Dotted sub-paths like 'size.total' → ['size', 'total'].
+
+        For a base DML (no response_path), the full field_path is used verbatim
+        as a dotted key: 'data.cpu_clock_speed' → ['data', 'cpu_clock_speed'].
+        """
+        if not response_path:
+            return field_path.split(".")
+        # For array DMLs: field_path is relative to the list item
+        return field_path.split(".")
+
+    def _init_dml(self, dml_id: str, response_path: Optional[str]) -> None:
+        """Initialize a DML structure in self.dmls."""
+        if dml_id == "base":
+            dml = {
+                "id": "base",
+                "key": [],
+                "label": None,
+                "attributes": [],
+                "parentListId": None,
+            }
+        else:
+            # Array-iterating DML
+            key_parts = response_path.split(".") if response_path else []
+            dml = {
+                "id": dml_id,
+                "key": key_parts,
+                "label": dml_id,
+                "attributes": [
+                    # @@@id is always present on wildcard-iteration DMls
+                    {
+                        "id": f"{self.id}-{dml_id}-@@@id",
+                        "key": ["@@@id"],
+                        "label": "@@@id",
+                        "example": "",
+                    }
+                ],
+                "parentListId": "base",
+            }
+        self.dmls[dml_id] = dml
+        self._attr_ids[f"{self.id}-{dml_id}-@@@id"] = True
+
+    def to_wire(self) -> Dict:
+        """Serialize to MPB request JSON shape."""
+        req = self.req
+        # params: always a list of {key, value}
+        params = _normalize_params(req.params)
+        dmls = list(self.dmls.values())
+
+        return {
+            "request": {
+                "id": self.id,
+                "body": req.body,
+                "name": req.name,
+                "path": req.path,
+                "method": req.method,
+                "paging": None,
+                "params": params,
+                "headers": [],
+                "designId": None,
+                "response": {
+                    "id": _make_sub_id(self.id, "response"),
+                    "log": "Imported request, execute to get accurate log",
+                    "result": {
+                        "body": "Imported request, execute to get accurate body",
+                        "headers": [],
+                        "responseCode": 200,
+                        "dataModelLists": dmls,
+                    },
+                    "status": "COMPLETED",
+                    "endTime": 0,
+                    "duration": "NA",
+                    "startTime": 0,
+                    "toolkitId": _make_sub_id(self.id, "toolkit"),
+                    "errorMessage": "",
+                },
+                "chainingSettings": None,
+            }
+        }
+
+
+def _normalize_params(params: Any) -> List[Dict]:
+    """Convert params (list of {key,value} dicts, or a plain dict) to the MPB list form."""
+    if not params:
+        return []
+    if isinstance(params, list):
+        result = []
+        for p in params:
+            if isinstance(p, dict):
+                result.append({"key": str(p.get("key", "")), "value": str(p.get("value", ""))})
+        return result
+    if isinstance(params, dict):
+        # dict → ordered list; preserve insertion order (Python 3.7+)
+        return [{"key": k, "value": str(v)} for k, v in params.items()]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Expression helpers
+# ---------------------------------------------------------------------------
+
+def _make_expression(
+    label: str,
+    origin_id: str,
+    origin_type: str,
+    expr_seed: str,
+    regex: Optional[str] = None,
+) -> Dict:
+    """Build an MPB expression object for a single-part expression.
+
+    expressionText format: "@@@MPB_QUOTE <part-id> @@@MPB_QUOTE"
+    """
+    part_id = _make_id(f"{expr_seed}::part")
+    expr_id = _make_id(f"{expr_seed}::expr")
+    return {
+        "id": expr_id,
+        "expressionText": f"@@@MPB_QUOTE {part_id} @@@MPB_QUOTE",
+        "expressionParts": [
+            {
+                "id": part_id,
+                "label": label,
+                "regex": regex,
+                "example": "",
+                "originId": origin_id,
+                "originType": origin_type,
+                "regexOutput": "",
+            }
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Section renderers
+# ---------------------------------------------------------------------------
+
+def _render_design(mp: ManagementPackDef) -> Dict:
+    return {
+        "design": {
+            "design": {
+                "id": None,
+                "name": mp.name,
+                "type": "HTTP",
+                "author": mp.author,
+                "version": mp.version,
+                "description": mp.description,
+            },
+            "buildNumber": mp.build_number,
+        }
+    }
+
+
+def _render_source(mp: ManagementPackDef) -> Dict:
+    src = mp.source
+
+    # source.source.configuration
+    source_config: Dict = {
+        "port": src.port if src else 443,
+        "hostname": None,
+        "maxRetries": src.max_retries if src else 2,
+        "sslSetting": src.ssl if src else "NO_VERIFY",
+        "baseApiPath": src.base_path if src else "",
+        "customConfigs": [],
+        "minEventSeverity": "WARNING",
+        "connectionTimeout": src.timeout if src else 30,
+        "maxConcurrentRequests": src.max_concurrent if src else 15,
+    }
+
+    # source.source.authentication
+    authentication = _render_authentication(mp)
+
+    # source.source.globalHeaders
+    global_headers = _render_global_headers(mp)
+
+    # source.source.testRequest
+    test_request = _render_test_request(mp)
+
+    # adapter-instance config fields
+    adapter_config_fields = list(_STANDARD_CONFIG_FIELDS)
+    # Override port default from YAML
+    if src:
+        for cf in adapter_config_fields:
+            if cf["id"] == "mpb_port":
+                cf = dict(cf)
+                cf["defaultValue"] = src.port
+            if cf["id"] == "mpb_ssl_config":
+                cf = dict(cf)
+                cf["defaultValue"] = src.ssl
+            if cf["id"] == "mpb_connection_timeout":
+                cf = dict(cf)
+                cf["defaultValue"] = src.timeout
+            if cf["id"] == "mpb_max_retries":
+                cf = dict(cf)
+                cf["defaultValue"] = src.max_retries
+            if cf["id"] == "mpb_concurrent_requests":
+                cf = dict(cf)
+                cf["defaultValue"] = src.max_concurrent
+
+    return {
+        "source": {
+            "source": {
+                "id": _make_id(f"{mp.adapter_kind}:source"),
+                "designId": None,
+                "testRequest": test_request,
+                "configuration": source_config,
+                "globalHeaders": global_headers,
+                "authentication": authentication,
+            },
+            "configuration": adapter_config_fields,
+        }
+    }
+
+
+def _render_authentication(mp: ManagementPackDef) -> Dict:
+    """Render the authentication section.
+
+    CUSTOM auth wire format derived from Scott's build-8 MP:
+    - credentialType: "CUSTOM"
+    - creds: [username, passwd] with label matching the variable name
+    - sessionSettings: { getSession, releaseSession, sessionVariables }
+    """
+    src = mp.source
+    if not src or not src.auth:
+        return {
+            "creds": [],
+            "credentialType": "NONE",
+            "sessionSettings": None,
+        }
+
+    auth = src.auth
+    ak = mp.adapter_kind
+
+    if auth.type == "CUSTOM":
+        cs = auth.custom_session  # SessionDef
+        cred_seed = f"{ak}:auth:custom"
+        username_id = _make_id(f"{cred_seed}:username")
+        passwd_id = _make_id(f"{cred_seed}:passwd")
+
+        creds = [
+            {
+                "id": username_id,
+                "label": "username",
+                "usage": "${authentication.credentials.username}",
+                "value": None,
+                "editable": True,
+                "sensitive": False,
+                "description": "Username for authentication",
+            },
+            {
+                "id": passwd_id,
+                "label": "passwd",
+                "usage": "${authentication.credentials.passwd}",
+                "value": None,
+                "editable": True,
+                "sensitive": True,
+                "description": "Password for authentication",
+            },
+        ]
+
+        # Build getSession (login request)
+        login = cs.login_request
+        login_id = _make_id(f"{ak}:auth:getSession")
+        login_params = _normalize_params(login.get("params", []))
+        login_headers = []
+        for h in (login.get("headers") or []):
+            if isinstance(h, dict):
+                login_headers.append({
+                    "key": h.get("key", ""),
+                    "type": h.get("type", "REQUIRED"),
+                    "value": h.get("value", ""),
+                })
+
+        get_session = {
+            "id": login_id,
+            "body": login.get("body"),
+            "name": "Get Session",
+            "path": login.get("path", ""),
+            "method": str(login.get("method", "GET")).upper(),
+            "paging": None,
+            "params": login_params,
+            "headers": login_headers,
+            "designId": None,
+            "response": {
+                "id": _make_sub_id(login_id, "response"),
+                "log": "Imported request, execute to get accurate log",
+                "result": {
+                    "body": "Imported request, execute to get accurate body",
+                    "headers": [],
+                    "responseCode": 200,
+                    "dataModelLists": [
+                        {
+                            "id": "base",
+                            "key": [],
+                            "label": None,
+                            "attributes": [],
+                            "parentListId": None,
+                        }
+                    ],
+                },
+                "status": "COMPLETED",
+                "endTime": 0,
+                "duration": "NA",
+                "startTime": 0,
+                "toolkitId": _make_sub_id(login_id, "toolkit"),
+                "errorMessage": "",
+            },
+            "chainingSettings": None,
+        }
+
+        # Build releaseSession (logout request)
+        release_session = None
+        if cs.logout_request:
+            logout = cs.logout_request
+            logout_id = _make_id(f"{ak}:auth:releaseSession")
+            logout_params = _normalize_params(logout.get("params", []))
+            release_session = {
+                "id": logout_id,
+                "body": logout.get("body"),
+                "name": "Release Session",
+                "path": logout.get("path", ""),
+                "method": str(logout.get("method", "DELETE")).upper(),
+                "paging": None,
+                "params": logout_params,
+                "headers": [],
+                "designId": None,
+                "response": {
+                    "id": _make_sub_id(logout_id, "response"),
+                    "log": "Imported request, execute to get accurate log",
+                    "result": {
+                        "body": "Imported request, execute to get accurate body",
+                        "headers": [],
+                        "responseCode": 200,
+                        "dataModelLists": [
+                            {
+                                "id": "base",
+                                "key": [],
+                                "label": None,
+                                "attributes": [],
+                                "parentListId": None,
+                            }
+                        ],
+                    },
+                    "status": "COMPLETED",
+                    "endTime": 0,
+                    "duration": "NA",
+                    "startTime": 0,
+                    "toolkitId": _make_sub_id(logout_id, "toolkit"),
+                    "errorMessage": "",
+                },
+                "chainingSettings": None,
+            }
+
+        # Session variables (cookie extraction from response header)
+        session_var_id = _make_id(f"{ak}:auth:sessionVar:{cs.cookie_binding}")
+        session_variables = [
+            {
+                "id": session_var_id,
+                "key": "Set-Cookie",
+                "path": ["Set-Cookie"],
+                "usage": f"${{authentication.session.{cs.cookie_binding}}}",
+                "example": None,
+                "location": "HEADER",
+            }
+        ]
+
+        session_settings: Dict = {
+            "getSession": get_session,
+            "sessionVariables": session_variables,
+        }
+        if release_session is not None:
+            session_settings["releaseSession"] = release_session
+
+        return {
+            "creds": creds,
+            "credentialType": "CUSTOM",
+            "sessionSettings": session_settings,
+        }
+
+    if auth.type == "BASIC":
+        ak_seed = f"{ak}:auth:basic"
+        return {
+            "creds": [
+                {
+                    "id": _make_id(f"{ak_seed}:username"),
+                    "label": "Username",
+                    "usage": "${authentication.credentials.username}",
+                    "value": None,
+                    "editable": False,
+                    "sensitive": False,
+                    "description": "Username",
+                },
+                {
+                    "id": _make_id(f"{ak_seed}:password"),
+                    "label": "Password",
+                    "usage": "${authentication.credentials.password}",
+                    "value": None,
+                    "editable": True,
+                    "sensitive": True,
+                    "description": "Password",
+                },
+            ],
+            "credentialType": "BASIC",
+            "sessionSettings": None,
+        }
+
+    if auth.type == "TOKEN":
+        ak_seed = f"{ak}:auth:token"
+        return {
+            "creds": [
+                {
+                    "id": _make_id(f"{ak_seed}:token"),
+                    "label": "Token",
+                    "usage": "${authentication.credentials.token}",
+                    "value": None,
+                    "editable": True,
+                    "sensitive": True,
+                    "description": "API token",
+                }
+            ],
+            "credentialType": "TOKEN",
+            "sessionSettings": None,
+        }
+
+    # NONE or SESSION fallthrough
+    return {
+        "creds": [],
+        "credentialType": auth.type,
+        "sessionSettings": None,
+    }
+
+
+def _render_global_headers(mp: ManagementPackDef) -> List[Dict]:
+    """Render globalHeaders.
+
+    For CUSTOM auth with header_injection: emit the injected headers.
+    Wire format requires type: REQUIRED | IMMUTABLE | CUSTOM.
+    """
+    src = mp.source
+    if not src or not src.auth or src.auth.type != "CUSTOM":
+        # Default: just Content-Type
+        return [
+            {"key": "Content-Type", "type": "REQUIRED", "value": "application/json"}
+        ]
+
+    cs = src.auth.custom_session
+    headers: List[Dict] = []
+
+    # Emit Content-Type first (always required per wire format)
+    content_type_added = False
+    for h in cs.header_injection:
+        key = h.get("key", "")
+        value = h.get("value", "")
+        htype = h.get("type", "REQUIRED")
+        if key == "Content-Type":
+            content_type_added = True
+        # The wire format for the session cookie header uses type: CUSTOM
+        # Reference MP: {"key": "id", "type": "CUSTOM", "value": "${authentication.session.set_cookie}"}
+        if key != "Content-Type":
+            htype = "CUSTOM"
+        headers.append({"key": key, "type": htype, "value": value})
+
+    if not content_type_added:
+        headers.insert(0, {
+            "key": "Content-Type",
+            "type": "REQUIRED",
+            "value": "application/json",
+        })
+
+    return headers
+
+
+def _render_test_request(mp: ManagementPackDef) -> Optional[Dict]:
+    """Render source.source.testRequest."""
+    src = mp.source
+    if not src or not src.test_request:
+        return None
+
+    tr = src.test_request
+    tr_id = _make_id(f"{mp.adapter_kind}:testRequest")
+    params = _normalize_params(tr.get("params", []))
+
+    return {
+        "id": tr_id,
+        "body": tr.get("body"),
+        "name": "Test Connection",
+        "path": tr.get("path"),
+        "method": str(tr.get("method", "GET")).upper(),
+        "paging": None,
+        "params": params,
+        "headers": [],
+        "designId": None,
+        "response": {
+            "id": _make_sub_id(tr_id, "response"),
+            "log": "Imported request, execute to get accurate log",
+            "result": {
+                "body": "Imported request, execute to get accurate body",
+                "headers": [],
+                "responseCode": 200,
+                "dataModelLists": [
+                    {
+                        "id": "base",
+                        "key": [],
+                        "label": None,
+                        "attributes": [],
+                        "parentListId": None,
+                    }
+                ],
+            },
+            "status": "COMPLETED",
+            "endTime": 0,
+            "duration": "NA",
+            "startTime": 0,
+            "toolkitId": _make_sub_id(tr_id, "toolkit"),
+            "errorMessage": "",
+        },
+        "chainingSettings": None,
+    }
+
+
+def _render_requests(
+    mp: ManagementPackDef,
+) -> Tuple[List[Dict], Dict[str, "_RequestInfo"]]:
+    """Deduplicate requests across all object types and render the flat array.
+
+    Returns:
+        (wire_requests, request_registry)
+        where request_registry maps request_name → _RequestInfo
+    """
+    registry: Dict[str, _RequestInfo] = {}
+    ak = mp.adapter_kind
+
+    for ot in mp.object_types:
+        for req in ot.requests:
+            if req.name not in registry:
+                registry[req.name] = _RequestInfo(req, ot.key, ak)
+            # Register all metric sources that feed from this request
+            for metric in ot.metrics:
+                req_name, field_path = _parse_source_ref(metric.source)
+                if req_name == req.name:
+                    registry[req.name].register_field(field_path, req.response_path)
+
+    wire = [info.to_wire() for info in registry.values()]
+    return wire, registry
+
+
+def _render_objects(
+    mp: ManagementPackDef,
+    request_registry: Dict[str, "_RequestInfo"],
+) -> List[Dict]:
+    """Render the objects array.
+
+    Each ObjectTypeDef → one MPB object entry.
+    Metric IDs are tracked in a dict keyed by (object_key, metric_key)
+    for later use by _render_relationships.
+    """
+    result = []
+    for ot in mp.object_types:
+        obj_wire = _render_one_object(ot, mp, request_registry)
+        result.append(obj_wire)
+    return result
+
+
+def _render_one_object(
+    ot: ObjectTypeDef,
+    mp: ManagementPackDef,
+    request_registry: Dict[str, "_RequestInfo"],
+) -> Dict:
+    ak = mp.adapter_kind
+    obj_seed = f"{ak}:object:{ot.key}"
+    obj_id = _make_id(obj_seed)
+    internal_id = _make_sub_id(obj_seed, "internalInfo")
+
+    # Build metric_map: metric_key → metric_id (for identifierIds + expressions)
+    metric_map: Dict[str, str] = {}
+
+    # Group metrics by request name
+    metrics_by_request: Dict[str, List[MetricDef]] = {}
+    for m in ot.metrics:
+        req_name, _ = _parse_source_ref(m.source)
+        metrics_by_request.setdefault(req_name, []).append(m)
+
+    # Build metricSets, one per unique request feeding this object
+    metric_sets: List[Dict] = []
+    # We also need to know which listId to use for each request
+    for req_obj in ot.requests:
+        req_name = req_obj.name
+        if req_name not in metrics_by_request:
+            continue  # request defined but no metrics sourced from it
+
+        req_info = request_registry[req_name]
+        # Determine the list ID for this object's metrics from this request
+        if ot.is_world:
+            # World object always uses the base DML
+            list_id = "base"
+        else:
+            # List objects use the response_path DML
+            list_id = _response_path_to_dml_id(req_obj.response_path)
+
+        ms_id = _make_id(f"{obj_seed}:metricSet:{req_name}")
+        wire_metrics = []
+
+        for m in metrics_by_request[req_name]:
+            m_id = _make_id(f"{obj_seed}:metric:{m.key}")
+            metric_map[m.key] = m_id
+
+            req_name_ref, field_path = _parse_source_ref(m.source)
+            req_info_ref = request_registry[req_name_ref]
+
+            # Determine the DML id and attribute origin ID
+            if ot.is_world:
+                # World object: base DML; attribute key includes full field path
+                dml_id = "base"
+                # The field_path from source includes the response path prefix
+                # (e.g. "data.cpu_clock_speed") — this is correct for base DML
+                origin_id = req_info_ref.register_field(field_path, None)
+            else:
+                # List object: array DML; field_path is relative to list item
+                origin_id = req_info_ref.register_field(
+                    field_path, req_obj.response_path
+                )
+
+            # Build the metric expression
+            expr_seed = f"{obj_seed}:metric:{m.key}:expr"
+            expression = _make_expression(
+                label=field_path,
+                origin_id=origin_id,
+                origin_type="ATTRIBUTE",
+                expr_seed=expr_seed,
+            )
+
+            wire_metrics.append({
+                "id": m_id,
+                "unit": m.unit,
+                "isKpi": m.kpi,
+                "label": m.label,
+                "usage": m.usage,
+                "groups": [],
+                "dataType": m.type,
+                "expression": expression,
+                "timeseries": None,
+            })
+
+        metric_sets.append({
+            "id": ms_id,
+            "listId": list_id,
+            "requestId": req_info.id,
+            "metrics": wire_metrics,
+            "objectBinding": None,
+        })
+
+    # Build nameMetricExpression
+    name_expr = _render_name_expression(ot, metric_map, obj_seed)
+
+    # Identifier IDs (metric IDs for identifier metric keys)
+    identifier_ids = []
+    for ident_key in ot.identifiers:
+        if ident_key in metric_map:
+            identifier_ids.append(metric_map[ident_key])
+        else:
+            logger.warning(
+                "Object %s: identifier key %r not found in metrics; skipping",
+                ot.key, ident_key,
+            )
+
+    return {
+        "object": {
+            "id": obj_id,
+            "type": ot.type,
+            "designId": None,
+            "metricSets": metric_sets,
+            "ariaOpsConf": None,
+            "isListObject": not ot.is_world,
+            "internalObjectInfo": {
+                "id": internal_id,
+                "icon": ot.icon,
+                "identifierIds": identifier_ids,
+                "objectTypeLabel": ot.name,
+                "nameMetricExpression": name_expr,
+            },
+        }
+    }
+
+
+def _render_name_expression(
+    ot: ObjectTypeDef, metric_map: Dict[str, str], obj_seed: str
+) -> Optional[Dict]:
+    """Render the nameMetricExpression for an object type.
+
+    Supports:
+    - Bare key: 'hostname' → single-part expression pointing at that metric.
+    - ${key} template: '${hostname}' → same.
+    - Multi-part templates: fall back to first key found, log warning.
+    """
+    if not ot.name_expression:
+        return None
+
+    expr = ot.name_expression.strip()
+    # Resolve the metric key
+    # Single bare key or ${key}
+    bare_match = re.match(r"^\$\{([a-zA-Z0-9_]+)\}$", expr)
+    if bare_match:
+        metric_key = bare_match.group(1)
+    elif re.match(r"^[a-zA-Z0-9_]+$", expr):
+        metric_key = expr
+    else:
+        # Multi-part — extract first ${...} reference
+        refs = re.findall(r"\$\{([a-zA-Z0-9_]+)\}", expr)
+        if refs:
+            logger.warning(
+                "Object %s: name_expression %r is multi-part; "
+                "falling back to first metric key %r. "
+                "Multi-part name expressions are unverified in MPB wire format.",
+                ot.key, expr, refs[0],
+            )
+            metric_key = refs[0]
+        else:
+            logger.warning(
+                "Object %s: cannot parse name_expression %r; skipping.",
+                ot.key, expr,
+            )
+            return None
+
+    metric_id = metric_map.get(metric_key)
+    if not metric_id:
+        logger.warning(
+            "Object %s: name_expression references metric key %r which is not in metric_map; skipping.",
+            ot.key, metric_key,
+        )
+        return None
+
+    # Find the label for this metric
+    label = next(
+        (m.label for m in ot.metrics if m.key == metric_key), metric_key
+    )
+
+    name_expr_id = _make_id(f"{obj_seed}:nameExpr")
+    name_part_id = _make_id(f"{obj_seed}:nameExprPart")
+    return {
+        "id": name_expr_id,
+        "expressionText": f"@@@MPB_QUOTE {name_part_id} @@@MPB_QUOTE",
+        "expressionParts": [
+            {
+                "id": name_part_id,
+                "label": label,
+                "regex": None,
+                "example": "",
+                "originId": metric_id,
+                "originType": "METRIC",
+                "regexOutput": "",
+            }
+        ],
+    }
+
+
+def _render_relationships(
+    mp: ManagementPackDef,
+    object_id_map: Dict[str, str],       # object_key → object.id
+    metric_id_map: Dict[str, Dict[str, str]],  # object_key → {metric_key → metric_id}
+    relationship_strategy: str,
+) -> List[Dict]:
+    """Render the relationships array.
+
+    For relationships with child_expression/parent_expression (value-join predicates):
+    emit standard relationship with childExpression/parentExpression pointing to
+    the metric IDs on child/parent objects.
+
+    For adapter-instance-trivial relationships (null both sides), branch on strategy.
+    """
+    result: List[Dict] = []
+    ak = mp.adapter_kind
+
+    for rel in mp.relationships:
+        has_join = (
+            rel.child_expression is not None
+            and rel.parent_expression is not None
+        )
+
+        if has_join:
+            wire_rels = _render_join_relationship(rel, mp, object_id_map, metric_id_map, ak)
+            result.extend(wire_rels)
+        else:
+            # Trivial (null expressions) — branch on strategy
+            trivial_rels = _render_trivial_relationships(
+                rel, mp, object_id_map, metric_id_map, ak, relationship_strategy
+            )
+            result.extend(trivial_rels)
+
+    return result
+
+
+def _make_rel_expression(
+    label: str,
+    metric_id: str,
+    rel_seed: str,
+    side: str,  # "child" or "parent"
+) -> Dict:
+    expr_seed = f"{rel_seed}:{side}:expr"
+    part_id = _make_id(f"{expr_seed}:part")
+    expr_id = _make_id(f"{expr_seed}:id")
+    return {
+        "id": expr_id,
+        "expressionText": f"@@@MPB_QUOTE {part_id} @@@MPB_QUOTE",
+        "expressionParts": [
+            {
+                "id": part_id,
+                "label": label,
+                "regex": None,
+                "example": "",
+                "originId": metric_id,
+                "originType": "METRIC",
+                "regexOutput": "",
+            }
+        ],
+    }
+
+
+def _render_join_relationship(
+    rel: RelationshipDef,
+    mp: ManagementPackDef,
+    object_id_map: Dict[str, str],
+    metric_id_map: Dict[str, Dict[str, str]],
+    ak: str,
+) -> List[Dict]:
+    """Render a standard value-join relationship."""
+    rel_seed = f"{ak}:rel:{rel.parent}:{rel.child}"
+    rel_id = _make_id(rel_seed)
+
+    parent_obj_id = object_id_map.get(rel.parent)
+    child_obj_id = object_id_map.get(rel.child)
+    if not parent_obj_id or not child_obj_id:
+        logger.warning(
+            "Relationship %s→%s: object ID not found; skipping.", rel.parent, rel.child
+        )
+        return []
+
+    # Resolve metric IDs
+    child_metric_id = metric_id_map.get(rel.child, {}).get(rel.child_expression)
+    parent_metric_id = metric_id_map.get(rel.parent, {}).get(rel.parent_expression)
+
+    if not child_metric_id:
+        logger.warning(
+            "Relationship %s→%s: child metric key %r not in metric_id_map; skipping.",
+            rel.parent, rel.child, rel.child_expression,
+        )
+        return []
+    if not parent_metric_id:
+        logger.warning(
+            "Relationship %s→%s: parent metric key %r not in metric_id_map; skipping.",
+            rel.parent, rel.child, rel.parent_expression,
+        )
+        return []
+
+    # Find labels
+    child_obj = next((o for o in mp.object_types if o.key == rel.child), None)
+    parent_obj = next((o for o in mp.object_types if o.key == rel.parent), None)
+    child_label = next(
+        (m.label for m in (child_obj.metrics if child_obj else [])
+         if m.key == rel.child_expression),
+        rel.child_expression,
+    )
+    parent_label = next(
+        (m.label for m in (parent_obj.metrics if parent_obj else [])
+         if m.key == rel.parent_expression),
+        rel.parent_expression,
+    )
+
+    child_expr = _make_rel_expression(child_label, child_metric_id, rel_seed, "child")
+    parent_expr = _make_rel_expression(parent_label, parent_metric_id, rel_seed, "parent")
+
+    return [{
+        "relationship": {
+            "id": rel_id,
+            "name": f"{rel.parent} -> {rel.child}",
+            "designId": None,
+            "caseSensitive": True,
+            "childObjectId": child_obj_id,
+            "parentObjectId": parent_obj_id,
+            "childExpression": child_expr,
+            "parentExpression": parent_expr,
+        }
+    }]
+
+
+def _render_trivial_relationships(
+    rel: RelationshipDef,
+    mp: ManagementPackDef,
+    object_id_map: Dict[str, str],
+    metric_id_map: Dict[str, Dict[str, str]],
+    ak: str,
+    strategy: str,
+) -> List[Dict]:
+    """Render adapter-instance-trivial (null expression) relationships per strategy.
+
+    Strategies:
+      world_implicit   — emit relationship with null expressions; MPB infers from world-object parentage
+      synthetic_adapter_instance — emit with synthetic @@@adapterInstance on both ends
+      shared_constant_property   — synthesize a constant property on both objects, use those metric IDs
+      test_all         — emit three separate relationships (one per strategy) with distinguishable names
+    """
+    parent_obj_id = object_id_map.get(rel.parent)
+    child_obj_id = object_id_map.get(rel.child)
+    if not parent_obj_id or not child_obj_id:
+        logger.warning(
+            "Trivial relationship %s→%s: object ID not found; skipping.",
+            rel.parent, rel.child,
+        )
+        return []
+
+    if strategy == "world_implicit":
+        return [_trivial_world_implicit(rel, parent_obj_id, child_obj_id, ak)]
+
+    if strategy == "synthetic_adapter_instance":
+        return [_trivial_synthetic_adapter_instance(rel, parent_obj_id, child_obj_id, ak)]
+
+    if strategy == "shared_constant_property":
+        return [_trivial_shared_constant(rel, parent_obj_id, child_obj_id, ak)]
+
+    if strategy == "test_all":
+        logger.info(
+            "Trivial relationship %s→%s: emitting 3 relationships (test_all strategy).",
+            rel.parent, rel.child,
+        )
+        return [
+            _trivial_world_implicit(rel, parent_obj_id, child_obj_id, ak, suffix="world_implicit"),
+            _trivial_synthetic_adapter_instance(rel, parent_obj_id, child_obj_id, ak, suffix="synthetic"),
+            _trivial_shared_constant(rel, parent_obj_id, child_obj_id, ak, suffix="shared_constant"),
+        ]
+
+    logger.warning("Unknown relationship strategy %r; defaulting to world_implicit.", strategy)
+    return [_trivial_world_implicit(rel, parent_obj_id, child_obj_id, ak)]
+
+
+def _trivial_world_implicit(
+    rel: RelationshipDef,
+    parent_obj_id: str,
+    child_obj_id: str,
+    ak: str,
+    suffix: str = "",
+) -> Dict:
+    """Strategy: emit with null expressions; trust MPB to infer from world-object parentage.
+
+    ASSUMPTION: MPB may support null childExpression/parentExpression as a signal
+    that all child objects belong to the world (adapter instance) parent.
+    This is unverified — if MPB rejects null expressions, import will fail for
+    these relationships. Mark for testing.
+    """
+    name_suffix = f" ({suffix})" if suffix else ""
+    rel_seed = f"{ak}:rel:{rel.parent}:{rel.child}:world_implicit"
+    rel_id = _make_id(rel_seed)
+    return {
+        "relationship": {
+            "id": rel_id,
+            "name": f"{rel.parent} -> {rel.child}{name_suffix}",
+            "designId": None,
+            "caseSensitive": True,
+            "childObjectId": child_obj_id,
+            "parentObjectId": parent_obj_id,
+            "childExpression": None,
+            "parentExpression": None,
+            "_renderer_note": (
+                "world_implicit strategy: null expressions. "
+                "ASSUMPTION: MPB infers parentage from world-object hierarchy. "
+                "Unverified — delete if MPB rejects null expressions at import."
+            ),
+        }
+    }
+
+
+def _trivial_synthetic_adapter_instance(
+    rel: RelationshipDef,
+    parent_obj_id: str,
+    child_obj_id: str,
+    ak: str,
+    suffix: str = "",
+) -> Dict:
+    """Strategy: emit a synthetic @@@adapterInstance identifier on both ends.
+
+    ASSUMPTION: MPB may have a built-in @@@adapterInstance attribute that
+    identifies which adapter instance a resource belongs to. Using this as
+    the join key would make all objects of the child type children of the
+    same adapter instance world object. Wire format for @@@adapterInstance
+    as a join field is unverified — this is an educated guess based on
+    MPB's @@@id and @@@rawValue special attribute patterns.
+    """
+    name_suffix = f" ({suffix})" if suffix else ""
+    rel_seed = f"{ak}:rel:{rel.parent}:{rel.child}:synthetic_adapter"
+    rel_id = _make_id(rel_seed)
+    part_id_child = _make_id(f"{rel_seed}:child:part")
+    part_id_parent = _make_id(f"{rel_seed}:parent:part")
+    expr_id_child = _make_id(f"{rel_seed}:child:expr")
+    expr_id_parent = _make_id(f"{rel_seed}:parent:expr")
+
+    # ASSUMPTION: @@@adapterInstance is a synthetic field available in MPB
+    # expressions, similar to @@@id for list items. Both sides point to the
+    # same virtual field, creating an always-match join.
+    child_expr = {
+        "id": expr_id_child,
+        "expressionText": f"@@@MPB_QUOTE {part_id_child} @@@MPB_QUOTE",
+        "expressionParts": [
+            {
+                "id": part_id_child,
+                "label": "@@@adapterInstance",
+                "regex": None,
+                "example": "",
+                "originId": f"{ak}-@@@adapterInstance",
+                "originType": "ATTRIBUTE",
+                "regexOutput": "",
+                "_renderer_note": (
+                    "ASSUMPTION: @@@adapterInstance is a built-in MPB synthetic attribute "
+                    "analogous to @@@id. Unverified wire format."
+                ),
+            }
+        ],
+    }
+    parent_expr = {
+        "id": expr_id_parent,
+        "expressionText": f"@@@MPB_QUOTE {part_id_parent} @@@MPB_QUOTE",
+        "expressionParts": [
+            {
+                "id": part_id_parent,
+                "label": "@@@adapterInstance",
+                "regex": None,
+                "example": "",
+                "originId": f"{ak}-@@@adapterInstance",
+                "originType": "ATTRIBUTE",
+                "regexOutput": "",
+            }
+        ],
+    }
+
+    return {
+        "relationship": {
+            "id": rel_id,
+            "name": f"{rel.parent} -> {rel.child}{name_suffix}",
+            "designId": None,
+            "caseSensitive": True,
+            "childObjectId": child_obj_id,
+            "parentObjectId": parent_obj_id,
+            "childExpression": child_expr,
+            "parentExpression": parent_expr,
+        }
+    }
+
+
+def _trivial_shared_constant(
+    rel: RelationshipDef,
+    parent_obj_id: str,
+    child_obj_id: str,
+    ak: str,
+    suffix: str = "",
+) -> Dict:
+    """Strategy: synthesize a constant PROPERTY on both objects with the same value.
+
+    Emits a relationship where both childExpression and parentExpression point to
+    synthetic constant-property metric IDs. In this strategy, we define two
+    "virtual" metric IDs that would need to be added to each object's metricSet
+    as constant-valued properties.
+
+    ASSUMPTION: The MPB engine supports a constant literal value as a join predicate.
+    This may require the actual metrics to be present in the object's metricSet.
+    If the MPB engine evaluates the expression at collection time and the metric
+    doesn't exist, the join will fail silently.
+
+    NOTE: The renderer does NOT add these synthetic metrics to the object's
+    metricSet — doing so would pollute the object model. This relationship
+    is emitted as a structural placeholder; the operator may need to add a
+    constant property manually in the MPB UI.
+    """
+    name_suffix = f" ({suffix})" if suffix else ""
+    rel_seed = f"{ak}:rel:{rel.parent}:{rel.child}:shared_constant"
+    rel_id = _make_id(rel_seed)
+
+    # Synthetic metric IDs for both sides
+    # These would represent a constant PROPERTY with value "adapter_instance"
+    child_metric_id = _make_id(f"{ak}:object:{rel.child}:metric:__adapter_instance_const")
+    parent_metric_id = _make_id(f"{ak}:object:{rel.parent}:metric:__adapter_instance_const")
+
+    child_expr = _make_rel_expression(
+        "__adapter_instance_const", child_metric_id,
+        f"{rel_seed}:child", "child"
+    )
+    parent_expr = _make_rel_expression(
+        "__adapter_instance_const", parent_metric_id,
+        f"{rel_seed}:parent", "parent"
+    )
+
+    return {
+        "relationship": {
+            "id": rel_id,
+            "name": f"{rel.parent} -> {rel.child}{name_suffix}",
+            "designId": None,
+            "caseSensitive": True,
+            "childObjectId": child_obj_id,
+            "parentObjectId": parent_obj_id,
+            "childExpression": child_expr,
+            "parentExpression": parent_expr,
+            "_renderer_note": (
+                "shared_constant strategy: uses synthetic __adapter_instance_const metric. "
+                "ASSUMPTION: MPB joins on a constant property added to each object. "
+                "Synthetic metrics are NOT added to object metricSets by the renderer — "
+                "add them manually in MPB UI if this approach is selected."
+            ),
+        }
+    }
+
+
+def _render_events(
+    mp: ManagementPackDef,
+    request_registry: Dict[str, "_RequestInfo"],
+    object_id_map: Dict[str, str],
+) -> List[Dict]:
+    """Render the events array.
+
+    Each MPBEventDef → one MPB event entry.
+    Wire format based on Rubrik MP (the only reference with events).
+
+    NEEDS-RENDERER-WORK scenarios logged as warnings.
+    """
+    result: List[Dict] = []
+    ak = mp.adapter_kind
+
+    for ev in mp.mpb_events:
+        wire = _render_one_event(ev, mp, request_registry, object_id_map, ak)
+        if wire:
+            result.append(wire)
+
+    return result
+
+
+def _render_one_event(
+    ev,
+    mp: ManagementPackDef,
+    request_registry: Dict[str, "_RequestInfo"],
+    object_id_map: Dict[str, str],
+    ak: str,
+) -> Optional[Dict]:
+    """Render a single MPBEventDef to MPB event wire format."""
+    ev_seed = f"{ak}:event:{ev.name}"
+    ev_id = _make_id(ev_seed)
+
+    # Resolve source request
+    req_info = request_registry.get(ev.source_request)
+    if not req_info:
+        logger.warning(
+            "Event %r: source_request %r not in registry; skipping.",
+            ev.name, ev.source_request,
+        )
+        return None
+
+    # The listId is the DML id for the event's response_path
+    list_id = _response_path_to_dml_id(ev.response_path)
+
+    # Ensure the DML is registered on the request (events may reference
+    # response paths not covered by object metrics)
+    if list_id != "base" and list_id not in req_info.dmls:
+        req_info._init_dml(list_id, ev.response_path)
+
+    # NEEDS-RENDERER-WORK: severity mapping from a dynamic field
+    # For events with match_normalizer or severity-map comments, we emit a fixed
+    # severity and log a warning. The MPB runtime would need a severityMap to do
+    # the mapping dynamically.
+    severity_str = ev.severity.upper()
+
+    # Check for NEEDS-RENDERER-WORK indicators
+    needs_work_events = {
+        "DSM Scrubbing Started", "DSM Scrubbing Finished",
+        "DSM Update Available", "DSM Security Advisory", "DSM Disk Overheat",
+        "Active Backup Package Transition",
+    }
+    if ev.name in needs_work_events:
+        logger.warning(
+            "Event %r: NEEDS-RENDERER-WORK — severity mapping and/or scrubbing path "
+            "normalization required. Emitting fixed severity %r and simplified "
+            "message binding. Review and adjust in MPB UI.",
+            ev.name, severity_str,
+        )
+
+    # Build message expression (from message_template or fallback)
+    message_expr = _render_event_message_expression(ev, req_info, list_id, ev_seed)
+
+    # Build severity expression
+    # For events where severity is dynamic (driven by a field like 'level' or 'severity'),
+    # we emit a fixed severity value and a no-op expression pointing to a static field.
+    # The MPB runtime needs a severityMap to do dynamic mapping — we include a default one.
+    severity_expr = _render_event_severity_expression(ev, req_info, list_id, ev_seed, severity_str)
+
+    # Severity map — default (static)
+    # For events with dynamic severity (DSM level: info/warn/err) we emit the
+    # DSM-to-Aria mapping. For others, a passthrough map.
+    severity_map = _build_severity_map(ev)
+
+    # Event matchers (object binding)
+    event_matchers = _render_event_matchers(ev, req_info, list_id, ev_seed, object_id_map)
+
+    # matchMode from match_rules (ALL if multiple rules, else single)
+    match_mode = "ALL" if len(ev.match_rules) > 1 else "ALL"  # MPB uses ALL; one rule is also ALL
+
+    return {
+        "event": {
+            "id": ev_id,
+            "alert": {
+                "type": "APPLICATION",
+                "badge": "HEALTH",
+                "subType": "AVAILABILITY",
+                "waitCycle": 1,
+                "cancelCycle": 1,
+                "recommendation": None,
+            },
+            "label": ev.name,
+            "listId": list_id,
+            "message": message_expr,
+            "designId": None,
+            "severity": severity_expr,
+            "matchMode": match_mode,
+            "requestId": req_info.id,
+            "severityMap": severity_map,
+            "eventMatchers": event_matchers,
+            "defaultSeverity": severity_str,
+            "unmatchedEventBehavior": "ATTACH_TO_ADAPTER",
+        }
+    }
+
+
+def _render_event_message_expression(ev, req_info, list_id: str, ev_seed: str) -> Dict:
+    """Render the message expression for an event.
+
+    If message_template is '${descr}', emit an expression pointing at the 'descr'
+    attribute. Otherwise use the first field referenced or a generic fallback.
+    """
+    msg_seed = f"{ev_seed}:message"
+
+    if ev.message_template:
+        # Extract first ${field} reference from the template
+        refs = re.findall(r"\$\{([a-zA-Z0-9_.]+)\}", ev.message_template)
+        if refs:
+            field = refs[0]
+            attr_label = field
+            # Build origin_id for this field in the DML
+            origin_id = f"{req_info.id}-{list_id}-{attr_label}"
+            # Register the attribute (may already exist)
+            if list_id not in req_info.dmls:
+                req_info._init_dml(list_id, _list_id_to_response_path(list_id))
+            if origin_id not in req_info._attr_ids:
+                req_info._attr_ids[origin_id] = True
+                req_info.dmls[list_id]["attributes"].append({
+                    "id": origin_id,
+                    "key": [field],
+                    "label": attr_label,
+                    "example": "",
+                })
+            return _make_expression(
+                label=attr_label,
+                origin_id=origin_id,
+                origin_type="ATTRIBUTE",
+                expr_seed=msg_seed,
+            )
+
+    # Fallback: point at the @@@id attribute
+    origin_id = f"{req_info.id}-{list_id}-@@@id"
+    return _make_expression(
+        label="@@@id",
+        origin_id=origin_id,
+        origin_type="ATTRIBUTE",
+        expr_seed=msg_seed,
+    )
+
+
+def _render_event_severity_expression(
+    ev, req_info, list_id: str, ev_seed: str, default_severity: str
+) -> Dict:
+    """Render the severity expression.
+
+    For events with dynamic severity (e.g. driven by 'level' or 'severity' fields),
+    we emit an expression pointing at that field and rely on severityMap for mapping.
+    For fixed-severity events, emit an expression pointing at @@@id with a no-op.
+
+    HEURISTIC: if the event has a severityMap comment (NEEDS-RENDERER-WORK) and
+    is from syslog_list or security_list, use the 'level' or 'severity' field.
+    """
+    sev_seed = f"{ev_seed}:severity"
+    dynamic_sev_field = None
+
+    # Events from syslog_list use 'level' as the severity carrier
+    if ev.source_request == "syslog_list":
+        dynamic_sev_field = "level"
+    # Events from security_list use 'severity' field
+    elif ev.source_request == "security_list":
+        dynamic_sev_field = "severity"
+
+    if dynamic_sev_field:
+        attr_label = dynamic_sev_field
+        origin_id = f"{req_info.id}-{list_id}-{attr_label}"
+        if list_id not in req_info.dmls:
+            req_info._init_dml(list_id, _list_id_to_response_path(list_id))
+        if origin_id not in req_info._attr_ids:
+            req_info._attr_ids[origin_id] = True
+            req_info.dmls[list_id]["attributes"].append({
+                "id": origin_id,
+                "key": [dynamic_sev_field],
+                "label": attr_label,
+                "example": "",
+            })
+        return _make_expression(
+            label=attr_label,
+            origin_id=origin_id,
+            origin_type="ATTRIBUTE",
+            expr_seed=sev_seed,
+        )
+
+    # Fixed severity — point at @@@id as a no-op carrier; severityMap passthrough
+    origin_id = f"{req_info.id}-{list_id}-@@@id"
+    return _make_expression(
+        label="@@@id",
+        origin_id=origin_id,
+        origin_type="ATTRIBUTE",
+        expr_seed=sev_seed,
+    )
+
+
+def _build_severity_map(ev) -> List[Dict]:
+    """Build a severityMap for the event.
+
+    For syslog_list events, DSM uses 'info', 'warn', 'err' (note: DSM misspells 'err').
+    For security_list events, DSM uses 'low', 'medium', 'high'.
+    For fixed-severity events, emit a simple passthrough map.
+    """
+    if ev.source_request == "syslog_list":
+        return [
+            {"rawSeverity": "info", "ariaOpsSeverity": "INFO"},
+            {"rawSeverity": "warn", "ariaOpsSeverity": "WARNING"},
+            {"rawSeverity": "err", "ariaOpsSeverity": "CRITICAL"},  # DSM misspelling (no 'or')
+        ]
+    if ev.source_request == "security_list":
+        return [
+            {"rawSeverity": "low", "ariaOpsSeverity": "INFO"},
+            {"rawSeverity": "medium", "ariaOpsSeverity": "WARNING"},
+            {"rawSeverity": "high", "ariaOpsSeverity": "CRITICAL"},
+        ]
+    if ev.source_request == "upgrade_check":
+        # Dynamic: isSecurityVersion=true→WARNING, false→INFO (NEEDS-RENDERER-WORK)
+        # Emit a reasonable default: passthrough of the fixed severity
+        return [
+            {"rawSeverity": "true", "ariaOpsSeverity": "WARNING"},
+            {"rawSeverity": "false", "ariaOpsSeverity": "INFO"},
+        ]
+    # Passthrough
+    return [
+        {"rawSeverity": ev.severity, "ariaOpsSeverity": ev.severity},
+    ]
+
+
+def _render_event_matchers(ev, req_info, list_id: str, ev_seed: str, object_id_map: Dict[str, str]) -> List[Dict]:
+    """Render eventMatchers (object binding predicates).
+
+    Each matcher binds events to an object type by comparing a field in the
+    event record against a metric in the target object.
+    """
+    if not ev.object_binding:
+        return []
+
+    ob = ev.object_binding
+    obj_id = object_id_map.get(ob.object_type)
+    if not obj_id:
+        logger.warning(
+            "Event %r: object_binding.object_type %r not in object_id_map; "
+            "emitting empty eventMatchers.",
+            ev.name, ob.object_type,
+        )
+        return []
+
+    # Find a reasonable event-side field (match_field or 'descr' fallback)
+    event_field = ob.match_field or "descr"
+    attr_label = event_field
+    origin_id = f"{req_info.id}-{list_id}-{attr_label}"
+
+    # Register the field if needed
+    if list_id not in req_info.dmls:
+        req_info._init_dml(list_id, _list_id_to_response_path(list_id))
+    if origin_id not in req_info._attr_ids:
+        req_info._attr_ids[origin_id] = True
+        req_info.dmls[list_id]["attributes"].append({
+            "id": origin_id,
+            "key": [event_field],
+            "label": attr_label,
+            "example": "",
+        })
+
+    matcher_seed = f"{ev_seed}:matcher:{ob.object_type}"
+    event_expr_id = _make_id(f"{matcher_seed}:eventExpr")
+    event_part_id = _make_id(f"{matcher_seed}:eventPart")
+    event_expr = {
+        "id": event_expr_id,
+        "expressionText": f"@@@MPB_QUOTE {event_part_id} @@@MPB_QUOTE",
+        "expressionParts": [
+            {
+                "id": event_part_id,
+                "label": event_field,
+                "regex": None,
+                "example": "",
+                "originId": origin_id,
+                "originType": "ATTRIBUTE",
+                "regexOutput": "",
+            }
+        ],
+    }
+
+    # For NEEDS-RENDERER-WORK match_normalizers, log and skip the normalizer
+    if ob.match_normalizer:
+        logger.warning(
+            "Event %r: object_binding.match_normalizer %r is a NEEDS-RENDERER-WORK "
+            "placeholder — complex field extraction not implemented. "
+            "The match will compare the raw %r field value against the object's "
+            "identifier. Manual adjustment in MPB UI may be required.",
+            ev.name, ob.match_normalizer, event_field,
+        )
+
+    # Object-side expression: for INTERNAL objects we use the object type label
+    # as an identifier reference. The MPB wire format (Rubrik) uses ARIA_OPS_METRIC
+    # for ARIA_OPS type targets; for INTERNAL we use METRIC pointing at an identifier.
+    # Since we don't know the exact identifier metric ID here (we'd need metric_id_map),
+    # we emit a placeholder origin_id. This is a TOOLSET GAP — ideally we'd resolve
+    # the object's first identifier metric ID, but object_id_map only has object.id,
+    # not metric IDs.
+    #
+    # ASSUMPTION: the objectExpression for INTERNAL objects may work with the
+    # object type ID directly, or MPB may automatically bind based on objectId alone.
+    # The Rubrik example only shows ARIA_OPS type bindings. This is the largest
+    # remaining unknown in event rendering.
+    obj_expr_id = _make_id(f"{matcher_seed}:objectExpr")
+    obj_part_id = _make_id(f"{matcher_seed}:objectPart")
+    obj_expr = {
+        "id": obj_expr_id,
+        "expressionText": f"@@@MPB_QUOTE {obj_part_id} @@@MPB_QUOTE",
+        "expressionParts": [
+            {
+                "id": obj_part_id,
+                "label": ob.object_type,
+                "regex": None,
+                "example": "",
+                "originId": obj_id,  # Using object.id as a placeholder
+                "originType": "ATTRIBUTE",  # ASSUMPTION: may need METRIC for INTERNAL
+                "regexOutput": "",
+                "_renderer_note": (
+                    "TOOLSET GAP: objectExpression for INTERNAL objects is unverified. "
+                    "Rubrik reference only shows ARIA_OPS_METRIC bindings. "
+                    "Adjust originId/originType in MPB UI if event matching fails."
+                ),
+            }
+        ],
+    }
+
+    return [{
+        "objectId": obj_id,
+        "objectName": ob.object_type,
+        "caseSensitive": False,
+        "eventExpression": event_expr,
+        "objectExpression": obj_expr,
+    }]
+
+
+def _list_id_to_response_path(list_id: str) -> Optional[str]:
+    """Convert a DML list id (e.g. 'data.items.*') back to a response_path ('data.items')."""
+    if list_id == "base":
+        return None
+    if list_id.endswith(".*"):
+        return list_id[:-2]
+    return list_id
+
+
+def _render_content(mp: ManagementPackDef) -> List:
+    """Render the content section. Empty for v1."""
+    return []
+
+
+# ---------------------------------------------------------------------------
+# Main render function
+# ---------------------------------------------------------------------------
+
+def render_mp_design_json(
+    mp: ManagementPackDef,
+    relationship_strategy: str = "test_all",
+) -> dict:
+    """Render a ManagementPackDef into the MPB design JSON structure.
+
+    relationship_strategy controls how adapter-instance-trivial relationships
+    (null child_expression / parent_expression) are rendered. Valid values:
+      - "world_implicit": emit relationship with null expressions,
+        trust MPB to infer from world-object parentage
+      - "synthetic_adapter_instance": emit a synthetic @@@adapterInstance
+        identifier on both ends
+      - "shared_constant_property": emit a constant property field on
+        both ends whose values match
+      - "test_all": emit three separate relationships, one per strategy,
+        all with the same parent/child pair but distinguishable names;
+        at import time the operator picks the one that works
+
+    Returns the full MPB design JSON dict (not serialized).
+    """
+    # --- design ---
+    design_section = _render_design(mp)
+
+    # --- source ---
+    source_section = _render_source(mp)
+
+    # --- requests (deduplication + registry) ---
+    wire_requests, request_registry = _render_requests(mp)
+
+    # --- objects ---
+    wire_objects = _render_objects(mp, request_registry)
+
+    # Build lookup maps for relationships and events
+    # object_id_map: object_key → object.id
+    object_id_map: Dict[str, str] = {}
+    # metric_id_map: object_key → {metric_key → metric_id}
+    metric_id_map: Dict[str, Dict[str, str]] = {}
+
+    ak = mp.adapter_kind
+    for ot in mp.object_types:
+        obj_seed = f"{ak}:object:{ot.key}"
+        object_id_map[ot.key] = _make_id(obj_seed)
+        metric_id_map[ot.key] = {}
+        for m in ot.metrics:
+            metric_id_map[ot.key][m.key] = _make_id(f"{obj_seed}:metric:{m.key}")
+
+    # --- relationships ---
+    wire_relationships = _render_relationships(
+        mp, object_id_map, metric_id_map, relationship_strategy
+    )
+
+    # --- events ---
+    wire_events = _render_events(mp, request_registry, object_id_map)
+
+    # --- content ---
+    wire_content = _render_content(mp)
+
+    # --- summary log ---
+    trivial_count = sum(
+        1 for r in mp.relationships
+        if r.child_expression is None or r.parent_expression is None
+    )
+    join_count = len(mp.relationships) - trivial_count
+    emitted_rel_count = len(wire_relationships)
+
+    logger.info(
+        "Rendered %s: %d requests, %d objects, %d relationships "
+        "(%d with join predicates, %d trivial → %d emitted via %s), "
+        "%d events, %d content items.",
+        mp.name,
+        len(wire_requests),
+        len(wire_objects),
+        len(mp.relationships),
+        join_count,
+        trivial_count,
+        emitted_rel_count,
+        relationship_strategy,
+        len(wire_events),
+        len(wire_content),
+    )
+    print(
+        f"Rendered {mp.name}: "
+        f"{len(wire_requests)} requests, "
+        f"{len(wire_objects)} objects, "
+        f"{len(mp.relationships)} relationships "
+        f"({join_count} with join predicates, "
+        f"{trivial_count} trivial → {emitted_rel_count} emitted via {relationship_strategy}), "
+        f"{len(wire_events)} events, "
+        f"{len(wire_content)} content items.",
+        file=sys.stderr,
+    )
+
+    return {
+        **design_section,
+        **source_section,
+        "requests": wire_requests,
+        "objects": wire_objects,
+        "relationships": wire_relationships,
+        "events": wire_events,
+        "content": wire_content,
+    }
