@@ -1,0 +1,65 @@
+id: 7740019a-a664-4d58-9e26-344b47364dcc
+name: IDPS Planner Host Metrics
+subject:
+  adapter_kind: VMWARE
+  resource_kind: HostSystem
+columns:
+- attribute: sm_f4acf93a-06b8-4450-8237-92cee270bc65
+  display_name: Peak VM Net Usage
+  unit: mbitsps
+  transformation: MAX
+  yellow_bound: 7000.0
+  orange_bound: 8000.0
+  red_bound: 9000.0
+  ascending_range: false
+- attribute: sm_f4acf93a-06b8-4450-8237-92cee270bc65
+  display_name: VM Net Usage 95%
+  unit: auto
+  transformation: PERCENTILE
+  percentile: 95
+  yellow_bound: 7000.0
+  orange_bound: 8000.0
+  red_bound: 9000.0
+  ascending_range: false
+- attribute: sm_f4acf93a-06b8-4450-8237-92cee270bc65
+  display_name: Net VM Usage
+  unit: auto
+  yellow_bound: 7000.0
+  orange_bound: 8000.0
+  red_bound: 9000.0
+  ascending_range: false
+- attribute: sm_c458582f-b63f-4085-8465-fa32cb718271
+  display_name: VM Net Receive
+  unit: mbitsps
+  yellow_bound: 7000.0
+  orange_bound: 8000.0
+  red_bound: 9000.0
+  ascending_range: false
+- attribute: sm_57be077d-f61e-4d25-ae05-ae27eed15229
+  display_name: VM Net Transmit
+  unit: mbitsps
+  yellow_bound: 7000.0
+  orange_bound: 8000.0
+  red_bound: 9000.0
+  ascending_range: false
+- attribute: sm_c6816ee1-2b94-43ae-baf3-180f95b0e94c
+  display_name: Peak VM PPS
+  transformation: MAX
+  yellow_bound: 120000.0
+  orange_bound: 130000.0
+  red_bound: 140000.0
+  ascending_range: false
+- attribute: sm_c6816ee1-2b94-43ae-baf3-180f95b0e94c
+  display_name: Peak VM PPS 95%
+  transformation: PERCENTILE
+  percentile: 95
+  yellow_bound: 120000.0
+  orange_bound: 130000.0
+  red_bound: 140000.0
+  ascending_range: false
+- attribute: sm_c6816ee1-2b94-43ae-baf3-180f95b0e94c
+  display_name: Peak PPS (Last 5 min)
+  yellow_bound: 120000.0
+  orange_bound: 130000.0
+  red_bound: 140000.0
+  ascending_range: false

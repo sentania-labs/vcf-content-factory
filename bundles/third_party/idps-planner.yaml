@@ -1,0 +1,54 @@
+name: idps-planner
+display_name: IDPS Planner
+description: '# IDPS Planner
+
+
+  > **PLACEHOLDER** — hand-edit before redistribution. The authors will supply
+
+  > the real long-form description after validation.
+
+
+  IDPS Planner is a VCF Operations dashboard for vSphere IDPS (Intrusion
+
+  Detection and Prevention System) analysis and planning.
+
+
+  ## Authors
+
+
+  Jointly authored by:
+
+
+  - Ryan Pletka
+
+  - Brock Peterson
+
+  - Scott Bowe
+
+  - Geoff Shukin
+
+  - Joe Tietz
+
+
+  ## Provenance
+
+
+  Extracted from a live VCF Operations lab via the VCF Content Factory extractor.'
+factory_native: false
+author: Ryan Pletka, Brock Peterson, Scott Bowe, Geoff Shukin, Joe Tietz
+license: Apache-2.0
+source:
+  captured_at: '2026-04-17'
+supermetrics:
+- idps-planner/supermetrics/IDPS Peak PPS within cycle All VMs.yaml
+- idps-planner/supermetrics/IDPS Net Transmit All VMs.yaml
+- idps-planner/supermetrics/IDPS Net Usage All VMs.yaml
+- idps-planner/supermetrics/IDPS Net Receive All VMs.yaml
+views:
+- idps-planner/views/IDPS Planner Host Metrics.yaml
+- idps-planner/views/IDPS IDPS Planner VM Metrics.yaml
+- idps-planner/views/IDPS Planner - vCenter Selection.yaml
+- idps-planner/views/IDPS Planner - Datacenter Selection.yaml
+- idps-planner/views/IDPS Planner - Cluster Selection.yaml
+dashboards:
+- idps-planner/dashboards/IDPS Planner.yaml

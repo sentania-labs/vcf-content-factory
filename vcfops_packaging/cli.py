@@ -49,6 +49,7 @@ def cmd_build(args) -> int:
         audit_mode = "lax"
 
     live_describe = not getattr(args, "no_live_describe", False)
+    skip_audit = getattr(args, "skip_audit", False)
 
     rc = 0
     for manifest in manifests:
@@ -58,6 +59,7 @@ def cmd_build(args) -> int:
                 output_dir=DEFAULT_OUTPUT_DIR,
                 audit_mode=audit_mode,
                 live_describe=live_describe,
+                skip_audit=skip_audit,
             )
             print(f"built  {out}")
         except (AuditError, DescribeCacheError) as e:
@@ -297,6 +299,11 @@ def build_parser() -> argparse.ArgumentParser:
     pb.add_argument(
         "--no-live-describe", action="store_true",
         help="use describe cache only; do not refresh against live instance",
+    )
+    pb.add_argument(
+        "--skip-audit", action="store_true",
+        help="skip dependency audit entirely; metric references are NOT validated. "
+             "Use only when describe cache cannot be refreshed and content is known correct.",
     )
     pb.set_defaults(func=cmd_build)
 

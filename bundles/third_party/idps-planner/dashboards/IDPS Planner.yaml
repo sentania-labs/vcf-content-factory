@@ -1,0 +1,311 @@
+id: 2311a526-598e-47bc-95e1-0ffa76d22a96
+name: IDPS Planner
+shared: true
+widgets:
+- id: 4e417358-ccd1-4ee6-908b-57796aa87a87
+  type: View
+  title: IDPS Host Metrics
+  coords:
+    x: 1
+    y: 7
+    w: 7
+    h: 6
+  view: IDPS Planner Host Metrics
+- id: 81ca9c8a-24d6-4c24-99a6-520ebbc4213b
+  type: View
+  title: IDPS Planner VM Metrics
+  coords:
+    x: 1
+    y: 17
+    w: 7
+    h: 7
+  view: '[IDPS] IDPS Planner VM Metrics'
+- id: 85c05c6b-e60d-4b2c-a6c0-af2fe2ec472e
+  type: Scoreboard
+  title: Selected VM Historical Metrics
+  coords:
+    x: 1
+    y: 24
+    w: 11
+    h: 4
+  metrics:
+  - adapter_kind: VMWARE
+    resource_kind: VirtualMachine
+    metric_key: net|20_sec_peak_usage_average
+    metric_name: Network|Peak Usage Rate within collection cycle
+    unit_id: mbitsps
+    unit: Mbps
+    color_method: 0
+    yellow_bound: 7000.0
+    orange_bound: 8000.0
+    red_bound: 9000.0
+    label: Peak Net Usage within cycle
+  - adapter_kind: VMWARE
+    resource_kind: VirtualMachine
+    metric_key: net|usage_average
+    metric_name: Network|Usage Rate
+    unit_id: mbitsps
+    unit: Mbps
+    color_method: 0
+    yellow_bound: 7000.0
+    orange_bound: 8000.0
+    red_bound: 9000.0
+    label: Net Usage
+  - adapter_kind: VMWARE
+    resource_kind: VirtualMachine
+    metric_key: net|received_average
+    metric_name: Network|Data Receive Rate
+    unit_id: mbitsps
+    unit: Mbps
+    color_method: 0
+    yellow_bound: 7000.0
+    orange_bound: 8000.0
+    red_bound: 9000.0
+    label: Net Receive
+  - adapter_kind: VMWARE
+    resource_kind: VirtualMachine
+    metric_key: net|transmitted_average
+    metric_name: Network|Data Transmit Rate
+    unit_id: mbitsps
+    unit: Mbps
+    color_method: 0
+    yellow_bound: 7000.0
+    orange_bound: 8000.0
+    red_bound: 9000.0
+    label: Net Transmit
+  - adapter_kind: VMWARE
+    resource_kind: VirtualMachine
+    metric_key: net|20_sec_peak_packetsPerSec
+    metric_name: Network|Peak Network Packet per second within collection cycle
+    color_method: 0
+    yellow_bound: 120000.0
+    orange_bound: 130000.0
+    red_bound: 140000.0
+    label: Peak Net PPS within cycle
+  - adapter_kind: VMWARE
+    resource_kind: VirtualMachine
+    metric_key: net:Aggregate of all instances|packetsPerSec
+    metric_name: Network:Aggregate of all instances|Packets per second
+    color_method: 0
+    yellow_bound: 120000.0
+    orange_bound: 130000.0
+    red_bound: 140000.0
+    label: Packets Per Second
+  visual_theme: 6
+  show_sparkline: true
+  period_length: dashboardTime
+  show_resource_name: false
+  show_metric_name: true
+  show_metric_unit: true
+  box_columns: 6
+  value_size: 24
+  label_size: 16
+  round_decimals: 1.0
+  max_cell_count: 100
+- id: 9f39473b-c662-4735-8699-cfff3218fe80
+  type: Scoreboard
+  title: Selected Host Historical Metrics
+  coords:
+    x: 1
+    y: 13
+    w: 11
+    h: 4
+  metrics:
+  - adapter_kind: VMWARE
+    resource_kind: HostSystem
+    metric_key: net|usage_average
+    metric_name: Network|Usage Rate
+    unit_id: mbitsps
+    unit: Mbps
+    color_method: 0
+    yellow_bound: 7000.0
+    orange_bound: 8000.0
+    red_bound: 9000.0
+    label: Net Usage
+  - adapter_kind: VMWARE
+    resource_kind: HostSystem
+    metric_key: net|received_average
+    metric_name: Network|Data Receive Rate
+    unit_id: mbitsps
+    unit: Mbps
+    color_method: 0
+    yellow_bound: 7000.0
+    orange_bound: 8000.0
+    red_bound: 9000.0
+    label: Net Receive
+  - adapter_kind: VMWARE
+    resource_kind: HostSystem
+    metric_key: net|transmitted_average
+    metric_name: Network|Data Transmit Rate
+    unit_id: mbitsps
+    unit: Mbps
+    color_method: 0
+    yellow_bound: 7000.0
+    orange_bound: 8000.0
+    red_bound: 9000.0
+    label: Net Transmit
+  - adapter_kind: VMWARE
+    resource_kind: HostSystem
+    metric_key: Super Metric|sm_c6816ee1-2b94-43ae-baf3-180f95b0e94c
+    metric_name: Super Metrics|[IDPS] Peak PPS within cycle (All VMs)
+    color_method: 0
+    yellow_bound: 120000.0
+    orange_bound: 130000.0
+    red_bound: 140000.0
+    label: Peak PPS
+  - adapter_kind: VMWARE
+    resource_kind: HostSystem
+    metric_key: Super Metric|sm_a5ada313-49da-4feb-b6de-86c49646c3fc
+    metric_name: Super Metrics|[IDPS] Packets per second (All VMs)
+    color_method: 0
+    yellow_bound: 120000.0
+    orange_bound: 130000.0
+    red_bound: 140000.0
+    label: PPS
+  visual_theme: 6
+  show_sparkline: true
+  period_length: dashboardTime
+  show_resource_name: false
+  show_metric_name: true
+  show_metric_unit: true
+  box_columns: 5
+  value_size: 24
+  label_size: 16
+  round_decimals: 1.0
+  max_cell_count: 100
+- id: 8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3
+  type: View
+  title: vCenter Selection
+  coords:
+    x: 1
+    y: 1
+    w: 4
+    h: 6
+  self_provider: true
+  view: IDPS Planner - vCenter Selection
+- id: 3079a0a7-1d9c-49ce-a0ed-3c593d4f5162
+  type: View
+  title: Datacenter Selection
+  coords:
+    x: 5
+    y: 1
+    w: 3
+    h: 6
+  self_provider: true
+  view: IDPS Planner - Datacenter Selection
+- id: fac590ee-77cd-4887-8b0f-dd0dac060203
+  type: View
+  title: Cluster Selection
+  coords:
+    x: 8
+    y: 1
+    w: 4
+    h: 6
+  self_provider: true
+  view: IDPS Planner - Cluster Selection
+- id: 24f9f7d0-cad0-4f59-8531-a8df679f96ef
+  type: Heatmap
+  title: Cluster Host Heatmap
+  coords:
+    x: 8
+    y: 7
+    w: 4
+    h: 6
+  mode: all
+  depth: 10
+  configs:
+  - name: Host Net usage vs PPS
+    adapter_kind: VMWARE
+    resource_kind: HostSystem
+    color_by:
+      metric_key: Super Metric|sm_c6816ee1-2b94-43ae-baf3-180f95b0e94c
+      label: Super Metrics|[IDPS] Peak PPS within cycle (All VMs)
+    size_by:
+      metric_key: Super Metric|sm_f4acf93a-06b8-4450-8237-92cee270bc65
+      label: Super Metrics|[IDPS] Net Usage (All VMs) (KBps)
+    group_by:
+      adapter_kind: VMWARE
+      resource_kind: ClusterComputeResource
+      text: Cluster Compute Resource
+    color:
+      min_value: 0.0
+      thresholds:
+        values:
+        - 0
+        - 50
+        - 100
+        colors:
+        - '#74B43B'
+        - '#ECC33E'
+        - '#DE3F30'
+      max_value: 140000.0
+- id: 1a5088d3-957f-4ab9-82fc-589072915622
+  type: Heatmap
+  title: VM by Host PPS
+  coords:
+    x: 8
+    y: 17
+    w: 4
+    h: 7
+  mode: all
+  depth: 10
+  configs:
+  - name: VM by Host PPS
+    adapter_kind: VMWARE
+    resource_kind: VirtualMachine
+    color_by:
+      metric_key: net|20_sec_peak_packetsPerSec
+      label: Network|Peak Network Packet per second within collection cycle
+    size_by:
+      metric_key: net|usage_average
+      label: Network|Usage Rate (KBps)
+    group_by:
+      adapter_kind: VMWARE
+      resource_kind: HostSystem
+      text: Host System
+    color:
+      min_value: 0.0
+      thresholds:
+        values:
+        - 0
+        - 50
+        - 100
+        colors:
+        - '#74B43B'
+        - '#ECC33E'
+        - '#DE3F30'
+      max_value: 14000.0
+interactions:
+- from: 4e417358-ccd1-4ee6-908b-57796aa87a87
+  to: 81ca9c8a-24d6-4c24-99a6-520ebbc4213b
+  type: resourceId
+- from: 81ca9c8a-24d6-4c24-99a6-520ebbc4213b
+  to: 85c05c6b-e60d-4b2c-a6c0-af2fe2ec472e
+  type: resourceId
+- from: 4e417358-ccd1-4ee6-908b-57796aa87a87
+  to: 9f39473b-c662-4735-8699-cfff3218fe80
+  type: resourceId
+- from: 8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3
+  to: 4e417358-ccd1-4ee6-908b-57796aa87a87
+  type: resourceId
+- from: 3079a0a7-1d9c-49ce-a0ed-3c593d4f5162
+  to: 4e417358-ccd1-4ee6-908b-57796aa87a87
+  type: resourceId
+- from: fac590ee-77cd-4887-8b0f-dd0dac060203
+  to: 4e417358-ccd1-4ee6-908b-57796aa87a87
+  type: resourceId
+- from: 8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3
+  to: 3079a0a7-1d9c-49ce-a0ed-3c593d4f5162
+  type: resourceId
+- from: 3079a0a7-1d9c-49ce-a0ed-3c593d4f5162
+  to: fac590ee-77cd-4887-8b0f-dd0dac060203
+  type: resourceId
+- from: 8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3
+  to: 24f9f7d0-cad0-4f59-8531-a8df679f96ef
+  type: resourceId
+- from: 3079a0a7-1d9c-49ce-a0ed-3c593d4f5162
+  to: 24f9f7d0-cad0-4f59-8531-a8df679f96ef
+  type: resourceId
+- from: fac590ee-77cd-4887-8b0f-dd0dac060203
+  to: 24f9f7d0-cad0-4f59-8531-a8df679f96ef
+  type: resourceId

@@ -1,0 +1,1088 @@
+{
+  "adapter_kind": "VMWARE",
+  "fetched_at": "2026-04-17T16:35:16Z",
+  "metrics": {
+    "Compliance|Critical|totalCount": {
+      "default_monitored": true,
+      "name": "Compliance|Critical|Total Count"
+    },
+    "Compliance|Immediate|totalCount": {
+      "default_monitored": true,
+      "name": "Compliance|Immediate|Total Count"
+    },
+    "Compliance|Normal|totalCount": {
+      "default_monitored": true,
+      "name": "Compliance|Normal|Total Count"
+    },
+    "Compliance|Unknown|totalCount": {
+      "default_monitored": true,
+      "name": "Compliance|Unknown|Total Count"
+    },
+    "Compliance|Warning|totalCount": {
+      "default_monitored": true,
+      "name": "Compliance|Warning|Total Count"
+    },
+    "Efficiency|Critical|totalCount": {
+      "default_monitored": true,
+      "name": "Efficiency|Critical|Total Count"
+    },
+    "Efficiency|Immediate|totalCount": {
+      "default_monitored": true,
+      "name": "Efficiency|Immediate|Total Count"
+    },
+    "Efficiency|Normal|totalCount": {
+      "default_monitored": true,
+      "name": "Efficiency|Normal|Total Count"
+    },
+    "Efficiency|Unknown|totalCount": {
+      "default_monitored": true,
+      "name": "Efficiency|Unknown|Total Count"
+    },
+    "Efficiency|Warning|totalCount": {
+      "default_monitored": true,
+      "name": "Efficiency|Warning|Total Count"
+    },
+    "Efficiency|populationAverage": {
+      "default_monitored": true,
+      "name": "Efficiency|Average Score Of All Group Members"
+    },
+    "Health|Critical|totalCount": {
+      "default_monitored": true,
+      "name": "Health|Critical|Total Count"
+    },
+    "Health|Immediate|totalCount": {
+      "default_monitored": true,
+      "name": "Health|Immediate|Total Count"
+    },
+    "Health|Normal|totalCount": {
+      "default_monitored": true,
+      "name": "Health|Normal|Total Count"
+    },
+    "Health|Unknown|totalCount": {
+      "default_monitored": true,
+      "name": "Health|Unknown|Total Count"
+    },
+    "Health|Warning|totalCount": {
+      "default_monitored": true,
+      "name": "Health|Warning|Total Count"
+    },
+    "Health|populationAverage": {
+      "default_monitored": true,
+      "name": "Health|Average Score Of All Group Members"
+    },
+    "ObjectCountMetricGroup|count": {
+      "default_monitored": true,
+      "name": "Object Count|count"
+    },
+    "Risk|Critical|totalCount": {
+      "default_monitored": true,
+      "name": "Risk|Critical|Total Count"
+    },
+    "Risk|Immediate|totalCount": {
+      "default_monitored": true,
+      "name": "Risk|Immediate|Total Count"
+    },
+    "Risk|Normal|totalCount": {
+      "default_monitored": true,
+      "name": "Risk|Normal|Total Count"
+    },
+    "Risk|Unknown|totalCount": {
+      "default_monitored": true,
+      "name": "Risk|Unknown|Total Count"
+    },
+    "Risk|Warning|totalCount": {
+      "default_monitored": true,
+      "name": "Risk|Warning|Total Count"
+    },
+    "Risk|populationAverage": {
+      "default_monitored": true,
+      "name": "Risk|Average Score Of All Group Members"
+    },
+    "Super Metric|sm_0c648c9c-cede-4403-b8fe-500067629bf0": {
+      "default_monitored": true,
+      "name": "Super Metrics|Total Network Configuration Issues"
+    },
+    "Super Metric|sm_1d4d0a06-4955-4110-acfe-bddea257b6f0": {
+      "default_monitored": true,
+      "name": "Super Metrics|[Custom] Non-local Datastore Capacity"
+    },
+    "Super Metric|sm_3d21df83-083e-46b6-a6c0-5f7f2ae776c5": {
+      "default_monitored": true,
+      "name": "Super Metrics|Total Network Speed Degradation"
+    },
+    "Super Metric|sm_400106ec-879f-46d7-a03b-d3781072cfa2": {
+      "default_monitored": true,
+      "name": "Super Metrics|Unavailable ESXi Host"
+    },
+    "Super Metric|sm_98997eae-62ba-4614-a622-11082c48ff00": {
+      "default_monitored": true,
+      "name": "Super Metrics|ESXi Hosts Average Availability"
+    },
+    "Super Metric|sm_a693e187-797b-4cb5-9fe0-3dd273088e88": {
+      "default_monitored": true,
+      "name": "Super Metrics|Clusters Availability"
+    },
+    "Super Metric|sm_acb5239f-0d39-4c46-8d45-75b4105868bc": {
+      "default_monitored": true,
+      "name": "Super Metrics|[Custom] Sum of Powered off vCPUs"
+    },
+    "Super Metric|sm_dda97f70-65e0-4c5a-b6f0-7acec936a0bd": {
+      "default_monitored": true,
+      "name": "Super Metrics|vSphere Clusters not Green"
+    },
+    "Super Metric|sm_eb874adf-1884-4576-91fd-0cc0fb54e58b": {
+      "default_monitored": true,
+      "name": "Super Metrics|vSphere Clusters Performance"
+    },
+    "System Attributes|active_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Self - Active Anomaly Count"
+    },
+    "System Attributes|active_ki_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Self - Active KPI Breach Count"
+    },
+    "System Attributes|alert_count_critical": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Alert Count Critical"
+    },
+    "System Attributes|alert_count_immediate": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Alert Count Immediate"
+    },
+    "System Attributes|alert_count_info": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Alert Count Info"
+    },
+    "System Attributes|alert_count_warning": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Alert Count Warning"
+    },
+    "System Attributes|all_metrics": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Self - Metric Count"
+    },
+    "System Attributes|availability": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Availability"
+    },
+    "System Attributes|change_index": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Self - Change Index"
+    },
+    "System Attributes|child_active_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Full Set - Active Anomaly Count"
+    },
+    "System Attributes|child_active_ki_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Full Set - Active KPI Breach Count"
+    },
+    "System Attributes|child_all_metrics": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Full Set - Metric Count"
+    },
+    "System Attributes|child_ki_metrics": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Full Set - KPI Count"
+    },
+    "System Attributes|child_new_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Full Set - New Anomaly Count"
+    },
+    "System Attributes|child_new_ki_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Full Set - New KPI Breach Count"
+    },
+    "System Attributes|health": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Self - Health Score"
+    },
+    "System Attributes|ki_metrics": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Self - KPI Count"
+    },
+    "System Attributes|new_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Self - New Anomaly Count"
+    },
+    "System Attributes|new_ki_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Self - New KPI Breach Count"
+    },
+    "System Attributes|self_alert_count": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Self - Alert Count"
+    },
+    "System Attributes|total_alarms": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Total Anomalies"
+    },
+    "System Attributes|total_alert_count": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Total Alert Count"
+    },
+    "TimeRemainingCapIQ|Critical|totalCount": {
+      "default_monitored": true,
+      "name": "Time Remaining|Critical|Total Count"
+    },
+    "TimeRemainingCapIQ|Immediate|totalCount": {
+      "default_monitored": true,
+      "name": "Time Remaining|Immediate|Total Count"
+    },
+    "TimeRemainingCapIQ|Normal|totalCount": {
+      "default_monitored": true,
+      "name": "Time Remaining|Normal|Total Count"
+    },
+    "TimeRemainingCapIQ|Unknown|totalCount": {
+      "default_monitored": true,
+      "name": "Time Remaining|Unknown|Total Count"
+    },
+    "TimeRemainingCapIQ|Warning|totalCount": {
+      "default_monitored": true,
+      "name": "Time Remaining|Warning|Total Count"
+    },
+    "Workload|Critical|totalCount": {
+      "default_monitored": true,
+      "name": "Workload|Critical|Total Count"
+    },
+    "Workload|Immediate|totalCount": {
+      "default_monitored": true,
+      "name": "Workload|Immediate|Total Count"
+    },
+    "Workload|Normal|totalCount": {
+      "default_monitored": true,
+      "name": "Workload|Normal|Total Count"
+    },
+    "Workload|Unknown|totalCount": {
+      "default_monitored": true,
+      "name": "Workload|Unknown|Total Count"
+    },
+    "Workload|Warning|totalCount": {
+      "default_monitored": true,
+      "name": "Workload|Warning|Total Count"
+    },
+    "badge|alert_count_critical": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Critical"
+    },
+    "badge|alert_count_immediate": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Immediate"
+    },
+    "badge|alert_count_info": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Info"
+    },
+    "badge|alert_count_warning": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Warning"
+    },
+    "badge|anomaly": {
+      "default_monitored": false,
+      "name": "Badge|Anomaly"
+    },
+    "badge|capacityRemaining": {
+      "default_monitored": false,
+      "name": "Badge|Capacity Remaining"
+    },
+    "badge|capacityRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Capacity Remaining with committed projects"
+    },
+    "badge|compliance": {
+      "default_monitored": true,
+      "name": "Badge|Compliance"
+    },
+    "badge|density": {
+      "default_monitored": false,
+      "name": "Badge|Density"
+    },
+    "badge|density_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Density with committed projects"
+    },
+    "badge|efficiency": {
+      "default_monitored": true,
+      "name": "Badge|Efficiency"
+    },
+    "badge|efficiency_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Efficiency"
+    },
+    "badge|efficiency_state": {
+      "default_monitored": false,
+      "name": "Badge|Efficiency State"
+    },
+    "badge|fault": {
+      "default_monitored": false,
+      "name": "Badge|Faults"
+    },
+    "badge|health": {
+      "default_monitored": true,
+      "name": "Badge|Health"
+    },
+    "badge|health_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Health"
+    },
+    "badge|health_state": {
+      "default_monitored": false,
+      "name": "Badge|Health State"
+    },
+    "badge|risk": {
+      "default_monitored": true,
+      "name": "Badge|Risk"
+    },
+    "badge|risk_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Risk"
+    },
+    "badge|risk_state": {
+      "default_monitored": false,
+      "name": "Badge|Risk State"
+    },
+    "badge|stress": {
+      "default_monitored": false,
+      "name": "Badge|Stress"
+    },
+    "badge|stress_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Stress with committed projects"
+    },
+    "badge|timeRemaining": {
+      "default_monitored": false,
+      "name": "Badge|Time Remaining"
+    },
+    "badge|timeRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Time Remaining with committed projects"
+    },
+    "badge|waste": {
+      "default_monitored": false,
+      "name": "Badge|Waste"
+    },
+    "badge|workload": {
+      "default_monitored": true,
+      "name": "Badge|Workload"
+    },
+    "compute_increase|undersized|potential_cpu_usage_increase": {
+      "default_monitored": true,
+      "name": "Compute Increase|Undersized|Potential CPU Usage"
+    },
+    "compute_increase|undersized|potential_mem_consumed_increase": {
+      "default_monitored": true,
+      "name": "Compute Increase|Undersized|Potential Memory"
+    },
+    "compute_increase|undersized|undersized_memory_tobeadded": {
+      "default_monitored": true,
+      "name": "Compute Increase|Undersized|Memory"
+    },
+    "compute_increase|undersized|undersized_vcpus_tobeadded": {
+      "default_monitored": true,
+      "name": "Compute Increase|Undersized|vCPU(s)"
+    },
+    "compute_realized|realized_idle_mem": {
+      "default_monitored": true,
+      "name": "Compute Realized|Memory from Idle VMs"
+    },
+    "compute_realized|realized_idle_vcpus": {
+      "default_monitored": true,
+      "name": "Compute Realized|vCPUs from Idle VMs"
+    },
+    "compute_realized|realized_oversized_mem": {
+      "default_monitored": true,
+      "name": "Compute Realized|Memory from Oversized VMs"
+    },
+    "compute_realized|realized_oversized_vcpus": {
+      "default_monitored": true,
+      "name": "Compute Realized|vCPUs from Oversized VMs"
+    },
+    "compute_reclaimable|idle|reclaimable_mem_from_idle_vms": {
+      "default_monitored": true,
+      "name": "Compute Reclaimable|Idle|Memory"
+    },
+    "compute_reclaimable|idle|reclaimable_vcpus_from_idle_vms": {
+      "default_monitored": true,
+      "name": "Compute Reclaimable|Idle|vCPU(s)"
+    },
+    "compute_reclaimable|oversized|oversized_memory_toberemoved": {
+      "default_monitored": true,
+      "name": "Compute Reclaimable|Oversized|Memory"
+    },
+    "compute_reclaimable|oversized|oversized_vcpus_toberemoved": {
+      "default_monitored": true,
+      "name": "Compute Reclaimable|Oversized|vCPU(s)"
+    },
+    "compute_reclaimable|oversized|potential_mem_consumed": {
+      "default_monitored": true,
+      "name": "Compute Reclaimable|Oversized|Potential Memory"
+    },
+    "cost|accumulated_depreciation": {
+      "default_monitored": true,
+      "name": "Cost|Accumulated Depreciation"
+    },
+    "cost|capacity_remaining|compute": {
+      "default_monitored": true,
+      "name": "Cost|Capacity Remaining|Compute Cost"
+    },
+    "cost|capacity_remaining|storage": {
+      "default_monitored": true,
+      "name": "Cost|Capacity Remaining|Storage Cost"
+    },
+    "cost|capacity_used|compute": {
+      "default_monitored": true,
+      "name": "Cost|Capacity Used|Compute Cost"
+    },
+    "cost|capacity_used|storage": {
+      "default_monitored": true,
+      "name": "Cost|Capacity Used|Storage Cost"
+    },
+    "cost|current_cost_per_vm": {
+      "default_monitored": true,
+      "name": "Cost|Current Cost Per VM"
+    },
+    "cost|potential_cost_per_vm": {
+      "default_monitored": true,
+      "name": "Cost|Potential Cost Per VM"
+    },
+    "cost|potential_increase|undersized_vms": {
+      "default_monitored": true,
+      "name": "Cost|Potential Increase|Undersized VMs Cost"
+    },
+    "cost|potential_savings|cost_optimization_opportunities": {
+      "default_monitored": true,
+      "name": "Cost|Potential Savings|Cost Optimization Opportunities"
+    },
+    "cost|potential_savings|idle_vms": {
+      "default_monitored": true,
+      "name": "Cost|Potential Savings|Idle VMs Cost"
+    },
+    "cost|potential_savings|orphaned_disks": {
+      "default_monitored": true,
+      "name": "Cost|Potential Savings|Orphaned Disks Cost"
+    },
+    "cost|potential_savings|oversized_vms": {
+      "default_monitored": true,
+      "name": "Cost|Potential Savings|Oversized VMs Cost"
+    },
+    "cost|potential_savings|poweredOff_vms": {
+      "default_monitored": true,
+      "name": "Cost|Potential Savings|Powered Off VMs Cost"
+    },
+    "cost|potential_savings|total_cost_of_ownership": {
+      "default_monitored": true,
+      "name": "Cost|Potential Savings|Total Cost of Ownership"
+    },
+    "cost|potential_savings|total_reclaimable_host_cost": {
+      "default_monitored": true,
+      "name": "Cost|Potential Savings|Reclaimable Host Cost"
+    },
+    "cost|potential_savings|vm_snapshots": {
+      "default_monitored": true,
+      "name": "Cost|Potential Savings|VM Snapshots Cost"
+    },
+    "cost|realized_savings|realized_idle_savings": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Idle Savings"
+    },
+    "cost|realized_savings|realized_orphanedDiskSpace_savings": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Orphaned Disk Space Savings"
+    },
+    "cost|realized_savings|realized_oversized_savings": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Oversized Savings"
+    },
+    "cost|realized_savings|realized_poweredOff_savings": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Powered Off Savings"
+    },
+    "cost|realized_savings|realized_reclaimableHost_savings": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Reclaimable Host Savings"
+    },
+    "cost|realized_savings|realized_snapshotSpace_savings": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Snapshot Space Savings"
+    },
+    "cost|realized_savings|total_realized_savings": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Total Realized Savings"
+    },
+    "cost|remaining_depreciation": {
+      "default_monitored": true,
+      "name": "Cost|Remaining Depreciation"
+    },
+    "cost|server_purchase_cost": {
+      "default_monitored": true,
+      "name": "Cost|Server Purchase Cost"
+    },
+    "cost|total_additional_cost": {
+      "default_monitored": true,
+      "name": "Cost|Additional Cost"
+    },
+    "cost|total_aggregated_cost": {
+      "default_monitored": true,
+      "name": "Cost|Total Aggregated Cost"
+    },
+    "cost|total_facilities_cost": {
+      "default_monitored": true,
+      "name": "Cost|Facilities Cost"
+    },
+    "cost|total_hostOsl_cost": {
+      "default_monitored": true,
+      "name": "Cost|Host OS License Cost"
+    },
+    "cost|total_maintenance_cost": {
+      "default_monitored": true,
+      "name": "Cost|Maintenance Cost"
+    },
+    "cost|total_network_cost": {
+      "default_monitored": true,
+      "name": "Cost|Network Cost"
+    },
+    "cost|total_reclaimable_cost": {
+      "default_monitored": true,
+      "name": "Cost|Total Reclaimable Cost"
+    },
+    "cost|total_serverHardware_leased_cost": {
+      "default_monitored": true,
+      "name": "Cost|Server Hardware(Leased) Cost"
+    },
+    "cost|total_serverHardware_owned_cost": {
+      "default_monitored": true,
+      "name": "Cost|Server Hardware(Owned) Cost"
+    },
+    "cost|total_serverLabor_cost": {
+      "default_monitored": true,
+      "name": "Cost|Server Labor Cost"
+    },
+    "cost|total_storage_cost": {
+      "default_monitored": true,
+      "name": "Cost|Storage Cost"
+    },
+    "cost|total_vm_direct_cost": {
+      "default_monitored": true,
+      "name": "Cost|VM Direct Cost"
+    },
+    "cpu|capacity_contention": {
+      "default_monitored": true,
+      "name": "CPU|Overall CPU Contention"
+    },
+    "cpu|capacity_contentionPct": {
+      "default_monitored": true,
+      "name": "CPU|Contention"
+    },
+    "cpu|capacity_provisioned": {
+      "default_monitored": true,
+      "name": "CPU|Total Capacity"
+    },
+    "cpu|capacity_usagepct_average": {
+      "default_monitored": true,
+      "name": "CPU|Capacity Usage"
+    },
+    "cpu|corecount_provisioned": {
+      "default_monitored": true,
+      "name": "CPU|Number of physical CPUs"
+    },
+    "cpu|demandPct": {
+      "default_monitored": true,
+      "name": "CPU|Demand"
+    },
+    "cpu|demandmhz": {
+      "default_monitored": true,
+      "name": "CPU|Demand"
+    },
+    "cpu|iowait": {
+      "default_monitored": true,
+      "name": "CPU|Other Wait"
+    },
+    "cpu|numpackages": {
+      "default_monitored": true,
+      "name": "CPU|Number of CPU Sockets"
+    },
+    "cpu|reservedCapacity_average": {
+      "default_monitored": true,
+      "name": "CPU|Reserved Capacity"
+    },
+    "cpu|usagemhz_average": {
+      "default_monitored": true,
+      "name": "CPU|Usage"
+    },
+    "cpu|vcpus_allocated_on_all_powered_on_vms": {
+      "default_monitored": true,
+      "name": "CPU|vCPUs Allocated on all Powered On Consumers"
+    },
+    "cpu|vcpus_allocated_on_all_vms": {
+      "default_monitored": true,
+      "name": "CPU|vCPUs Allocated on all Consumers"
+    },
+    "cpu|vcpus_to_cores_allocation_ratio": {
+      "default_monitored": true,
+      "name": "CPU|Current Overcommit Ratio"
+    },
+    "cpu|vm_capacity_provisioned": {
+      "default_monitored": true,
+      "name": "CPU|Provisioned Capacity"
+    },
+    "cpu|wait": {
+      "default_monitored": true,
+      "name": "CPU|Total Wait"
+    },
+    "cpu|workload": {
+      "default_monitored": true,
+      "name": "CPU|Workload"
+    },
+    "diskspace-waste|reclaimable_diskspace_from_idle_vms": {
+      "default_monitored": true,
+      "name": "Disk Space Reclaimable|Idle VMs"
+    },
+    "diskspace-waste|reclaimable_diskspace_from_orphaned_disks": {
+      "default_monitored": true,
+      "name": "Disk Space Reclaimable|Orphaned Disks"
+    },
+    "diskspace-waste|reclaimable_diskspace_from_poweredOff_vms": {
+      "default_monitored": true,
+      "name": "Disk Space Reclaimable|Powered Off VMs"
+    },
+    "diskspace-waste|reclaimable_diskspace_from_vm_snapshots": {
+      "default_monitored": true,
+      "name": "Disk Space Reclaimable|VM Snapshots"
+    },
+    "diskspace-waste|wasteValue": {
+      "default_monitored": true,
+      "name": "Disk Space Reclaimable|Reclaimable Capacity"
+    },
+    "diskspace|total_capacity": {
+      "default_monitored": true,
+      "name": "Disk Space|Total Capacity"
+    },
+    "disk|commandsAveraged_average": {
+      "default_monitored": true,
+      "name": "Disk|Commands per second"
+    },
+    "disk|usage_average": {
+      "default_monitored": true,
+      "name": "Disk|Usage Rate"
+    },
+    "disk|workload": {
+      "default_monitored": true,
+      "name": "Disk|Workload"
+    },
+    "gpu|mem.usage_average": {
+      "default_monitored": true,
+      "name": "GPU|Memory Usage"
+    },
+    "gpu|numberOfGPUs": {
+      "default_monitored": true,
+      "name": "GPU|Number of GPUs"
+    },
+    "gpu|numberOfHostsWithGpu": {
+      "default_monitored": true,
+      "name": "GPU|Number of hosts with GPU"
+    },
+    "gpu|numberOfVGpuConfiguredVms": {
+      "default_monitored": true,
+      "name": "GPU|Number of vGPU Configured VM-s"
+    },
+    "gpu|utilization_average": {
+      "default_monitored": true,
+      "name": "GPU|Compute Utilization"
+    },
+    "mem|host_contentionPct": {
+      "default_monitored": true,
+      "name": "Memory|Contention"
+    },
+    "mem|host_demand": {
+      "default_monitored": true,
+      "name": "Memory|Machine Demand"
+    },
+    "mem|host_provisioned": {
+      "default_monitored": true,
+      "name": "Memory|Total Capacity"
+    },
+    "mem|host_usable": {
+      "default_monitored": true,
+      "name": "Memory|Usable Memory"
+    },
+    "mem|host_usage": {
+      "default_monitored": true,
+      "name": "Memory|Host Usage"
+    },
+    "mem|host_usagePct": {
+      "default_monitored": true,
+      "name": "Memory|Usage / Usable"
+    },
+    "mem|memory_allocated_on_all_powered_on_vms": {
+      "default_monitored": true,
+      "name": "Memory|Memory Allocated on all Powered On Consumers"
+    },
+    "mem|memory_allocated_on_all_vms": {
+      "default_monitored": true,
+      "name": "Memory|Memory Allocated on all Consumers"
+    },
+    "mem|reservedCapacity_average": {
+      "default_monitored": true,
+      "name": "Memory|Reserved Capacity"
+    },
+    "mem|virtual_to_physical_memory_allocation_ratio": {
+      "default_monitored": true,
+      "name": "Memory|Current Overcommit Ratio"
+    },
+    "mem|workload": {
+      "default_monitored": true,
+      "name": "Memory|Workload"
+    },
+    "net|droppedPct": {
+      "default_monitored": true,
+      "name": "Network|Packets Dropped"
+    },
+    "net|usage_average": {
+      "default_monitored": true,
+      "name": "Network|Usage Rate"
+    },
+    "net|workload": {
+      "default_monitored": true,
+      "name": "Network|Workload"
+    },
+    "performance|cluster_performance": {
+      "default_monitored": true,
+      "name": "Performance|Clusters Performance"
+    },
+    "storage_realized|realized_idle_diskSpace": {
+      "default_monitored": true,
+      "name": "Disk Space Realized|Idle VMs"
+    },
+    "storage_realized|realized_orphaned_diskSpace": {
+      "default_monitored": true,
+      "name": "Disk Space Realized|Orphaned Disks"
+    },
+    "storage_realized|realized_poweredOff_diskSpace": {
+      "default_monitored": true,
+      "name": "Disk Space Realized|Powered Off VMs"
+    },
+    "storage_realized|realized_snapshotSpace": {
+      "default_monitored": true,
+      "name": "Disk Space Realized|VM Snapshots"
+    },
+    "summary|avg_vm_density": {
+      "default_monitored": true,
+      "name": "Summary|Average Running VM Count per Running Host"
+    },
+    "summary|dc_cluster_overall_alert_count": {
+      "default_monitored": true,
+      "name": "Summary|Self alert count of Datacenters and Clusters"
+    },
+    "summary|drs_happy_vms": {
+      "default_monitored": true,
+      "name": "Summary|DRS Happy VMs"
+    },
+    "summary|drs_initiated_moves": {
+      "default_monitored": true,
+      "name": "Summary|DRS Initiated Moves"
+    },
+    "summary|drs_unhappy_vms": {
+      "default_monitored": true,
+      "name": "Summary|DRS Unhappy VMs"
+    },
+    "summary|nonDrs_initiated_moves": {
+      "default_monitored": true,
+      "name": "Summary|Non-DRS Initiated Moves"
+    },
+    "summary|numberDeveloperManagedVMs": {
+      "default_monitored": true,
+      "name": "Summary|Number of Developer Managed VMs"
+    },
+    "summary|numberKubernetesClusters": {
+      "default_monitored": true,
+      "name": "Summary|Number of Kubernetes clusters"
+    },
+    "summary|numberNamespaces": {
+      "default_monitored": true,
+      "name": "Summary|Number of Namespaces"
+    },
+    "summary|numberSupervisorClusters": {
+      "default_monitored": true,
+      "name": "Summary|Number of Supervisor Clusters"
+    },
+    "summary|numberSupervisorHosts": {
+      "default_monitored": true,
+      "name": "Summary|Number of Supervisor Hosts"
+    },
+    "summary|number_fully_depreciated_servers": {
+      "default_monitored": true,
+      "name": "Summary|Number of Fully Depreciated Servers"
+    },
+    "summary|number_inventory_changes": {
+      "default_monitored": true,
+      "name": "Summary|VM Inventory Changes"
+    },
+    "summary|number_poweredOff_vms": {
+      "default_monitored": true,
+      "name": "Summary|Number of Powered Off VMs"
+    },
+    "summary|number_running_hosts": {
+      "default_monitored": true,
+      "name": "Summary|Number of Running Hosts"
+    },
+    "summary|number_running_vcpus": {
+      "default_monitored": true,
+      "name": "Summary|Number of vCPUs on Powered On VMs"
+    },
+    "summary|number_running_vms": {
+      "default_monitored": true,
+      "name": "Summary|Number of Running VMs"
+    },
+    "summary|number_vm_location_changes": {
+      "default_monitored": true,
+      "name": "Summary|VM Location Changes"
+    },
+    "summary|number_vm_state_changes": {
+      "default_monitored": true,
+      "name": "Summary|VM State Changes"
+    },
+    "summary|number_vm_templates": {
+      "default_monitored": true,
+      "name": "Summary|Number of VM Templates"
+    },
+    "summary|total_number_clusters": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of Clusters"
+    },
+    "summary|total_number_datacenters": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of Datacenters"
+    },
+    "summary|total_number_datastores": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of Datastores"
+    },
+    "summary|total_number_hosts": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of Hosts"
+    },
+    "summary|total_number_pods": {
+      "default_monitored": true,
+      "name": "Summary|Number of Pods"
+    },
+    "summary|total_number_private_vcenters": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of Private vCenter(s)"
+    },
+    "summary|total_number_public_vcenters": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of Public vCenter(s)"
+    },
+    "summary|total_number_reclaimable_hosts": {
+      "default_monitored": true,
+      "name": "Summary|Number of Reclaimable Hosts"
+    },
+    "summary|total_number_unavailable_hosts": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of Unresponsive Hosts"
+    },
+    "summary|total_number_vcenters": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of vCenter(s)"
+    },
+    "summary|total_number_vms": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of VMs"
+    },
+    "summary|vm_count_per_host": {
+      "default_monitored": true,
+      "name": "Summary|VM Count per Host"
+    },
+    "summary|vms_remaining_on_avg_vm_profile": {
+      "default_monitored": true,
+      "name": "Summary|VMs Remaining based on Average VM Profile"
+    },
+    "sustainability|co2_emission": {
+      "default_monitored": true,
+      "name": "Green Score|CO2 Emission"
+    },
+    "sustainability|co2_emission_avoided": {
+      "default_monitored": true,
+      "name": "Green Score|CO2 Emission Avoided"
+    },
+    "sustainability|co2_emission_before_virtualization": {
+      "default_monitored": true,
+      "name": "Green Score|CO2 Emission before Virtualization"
+    },
+    "sustainability|electricity_cost_savings": {
+      "default_monitored": true,
+      "name": "Green Score|Electricity Cost Savings"
+    },
+    "sustainability|power_savings_with_virtualization": {
+      "default_monitored": true,
+      "name": "Green Score|Power Savings with Virtualization"
+    },
+    "sustainability|power_usage": {
+      "default_monitored": true,
+      "name": "Green Score|Power usage"
+    },
+    "sustainability|power_usage_before_virtualization": {
+      "default_monitored": true,
+      "name": "Green Score|Power usage Before Virtualization"
+    },
+    "sustainability|power_wasted_by_idle_vms": {
+      "default_monitored": true,
+      "name": "Green Score|Power Wasted by Idle VMs"
+    },
+    "vmop|inventoryChange|numClone_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Clone"
+    },
+    "vmop|inventoryChange|numCreate_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Create"
+    },
+    "vmop|inventoryChange|numDeploy_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Template Deploy"
+    },
+    "vmop|inventoryChange|numDestroy_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Delete"
+    },
+    "vmop|inventoryChange|numReconfigure_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Reconfigure"
+    },
+    "vmop|inventoryChange|numRegister_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Register"
+    },
+    "vmop|inventoryChange|numUnregister_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Unregister"
+    },
+    "vmop|locationChange|numChangeDS_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Location|VM Datastore Change (powered-off VMs)"
+    },
+    "vmop|locationChange|numChangeHostDS_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Location|VM Host and Datastore Change (powered-off VMs)"
+    },
+    "vmop|locationChange|numChangeHost_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Location|VM Host Change (powered-off VMs)"
+    },
+    "vmop|locationChange|numSVMotion_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Location|Storage vMotion"
+    },
+    "vmop|locationChange|numVMotion_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Location|vMotion"
+    },
+    "vmop|locationChange|numXVMotion_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Location|VM Host and Datastore Change (powered-on VMs)"
+    },
+    "vmop|provisioning|create_failure_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Failed Create Operations"
+    },
+    "vmop|provisioning|create_success_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Successful Create Operations"
+    },
+    "vmop|provisioning|delete_failure_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Failed Delete Operations"
+    },
+    "vmop|provisioning|delete_success_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Successful Delete Operations"
+    },
+    "vmop|provisioning|power_failure_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Failed Power Operations"
+    },
+    "vmop|provisioning|power_success_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Successful Power Operations"
+    },
+    "vmop|provisioning|provisioning_failures": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Failed Workload Operations"
+    },
+    "vmop|provisioning|provisions": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Successful Workload Operations"
+    },
+    "vmop|provisioning|reconfigure_failure_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Failed Reconfigure Operations"
+    },
+    "vmop|provisioning|reconfigure_success_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Successful Reconfigure Operations"
+    },
+    "vmop|snapshots|long_running_snapshot_consolidation_events": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Snapshots|Long Running Snapshot Consolidation Events"
+    },
+    "vmop|snapshots|snapshot_events_less_than_FourHrs": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Snapshots|Snapshots Events (completed less than or equal to specified time)"
+    },
+    "vmop|snapshots|snapshot_events_more_than_FourHrs": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Snapshots|Snapshots Events (completed more than specified time)"
+    },
+    "vmop|snapshots|snapshot_failures": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Snapshots|Snapshot Failures"
+    },
+    "vmop|snapshots|snapshot_in_progress_events_more_than_FourHrs": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Snapshots|Long Running Snapshot Events"
+    },
+    "vmop|snapshots|snapshots": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Snapshots|Snapshots"
+    },
+    "vmop|stateChange|numPoweroff_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Power Off"
+    },
+    "vmop|stateChange|numPoweron_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Power On"
+    },
+    "vmop|stateChange|numRebootGuest_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Guest Reboot"
+    },
+    "vmop|stateChange|numReset_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Reset"
+    },
+    "vmop|stateChange|numShutdownGuest_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Guest Shutdown"
+    },
+    "vmop|stateChange|numStandbyGuest_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Standby Guest"
+    },
+    "vmop|stateChange|numSuspend_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Suspend"
+    },
+    "vmop|vmotion|total_failures": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|vMotion|vMotion Failures"
+    },
+    "vmop|vmotion|total_successes": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|vMotion|Total Successful vMotions Events"
+    }
+  },
+  "resource_kind": "vSphere World",
+  "source": "https://vcf-lab-operations.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys"
+}

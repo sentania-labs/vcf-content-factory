@@ -1,0 +1,7 @@
+id: c458582f-b63f-4085-8465-fa32cb718271
+name: '[IDPS] Net Receive (All VMs)'
+formula: Sum(${adaptertype=VMWARE, objecttype=VirtualMachine, metric=net|received_average,
+  depth=1})
+resource_kinds:
+- adapter_kind_key: VMWARE
+  resource_kind_key: VirtualMachine

@@ -179,17 +179,10 @@ def _refs_from_view(view) -> list[MetricReference]:
         attr = col.attribute.strip()
         if _is_sm_ref(attr):
             continue
-        # "Super Metric|sm_..." already filtered above, but also skip
-        # any other non-stat-key attributes (e.g. property: strings)
-        # by checking for the pipe separator which stat keys always have.
-        # Properties like "summary|runtime|powerState" also have pipes —
-        # include them; the describe cache will classify them as unknown
-        # (which is correct, since property keys don't appear in statkeys).
-        # However, we must NOT skip them silently — unknown keys cause an
-        # audit error, which is the correct signal (the author should either
-        # declare them as properties-not-metrics or the cache needs updating).
-        # For now, extract all non-SM attribute references and let the audit
-        # decide.
+        # Normalize instanced metric key form (e.g.
+        # "net:Aggregate of all instances|packetsPerSec" -> "net|packetsPerSec").
+        # The describe cache only stores the base group|stat form.
+        attr = _normalize_metric_key(attr)
         refs.append(MetricReference(
             adapter_kind=ak,
             resource_kind=rk,
@@ -230,7 +223,7 @@ def _refs_from_widgets(dashboard) -> list[MetricReference]:
                     refs.append(MetricReference(
                         adapter_kind=ms.adapter_kind,
                         resource_kind=ms.resource_kind,
-                        metric_key=ms.metric_key,
+                        metric_key=_normalize_metric_key(ms.metric_key),
                         source_desc=wsrc,
                     ))
 
@@ -240,7 +233,7 @@ def _refs_from_widgets(dashboard) -> list[MetricReference]:
                     refs.append(MetricReference(
                         adapter_kind=ms.adapter_kind,
                         resource_kind=ms.resource_kind,
-                        metric_key=ms.metric_key,
+                        metric_key=_normalize_metric_key(ms.metric_key),
                         source_desc=wsrc,
                     ))
 
@@ -250,7 +243,7 @@ def _refs_from_widgets(dashboard) -> list[MetricReference]:
                 refs.append(MetricReference(
                     adapter_kind=hc.adapter_kind,
                     resource_kind=hc.resource_kind,
-                    metric_key=hc.metric_key,
+                    metric_key=_normalize_metric_key(hc.metric_key),
                     source_desc=wsrc,
                 ))
 
@@ -260,7 +253,7 @@ def _refs_from_widgets(dashboard) -> list[MetricReference]:
                 refs.append(MetricReference(
                     adapter_kind=pa.adapter_kind,
                     resource_kind=pa.resource_kind,
-                    metric_key=pa.metric_key,
+                    metric_key=_normalize_metric_key(pa.metric_key),
                     source_desc=wsrc,
                 ))
 
@@ -270,14 +263,14 @@ def _refs_from_widgets(dashboard) -> list[MetricReference]:
                     refs.append(MetricReference(
                         adapter_kind=tab.adapter_kind,
                         resource_kind=tab.resource_kind,
-                        metric_key=tab.color_by_key,
+                        metric_key=_normalize_metric_key(tab.color_by_key),
                         source_desc=f"{wsrc} tab {tab.name!r} colorBy",
                     ))
                 if tab.size_by_key and not _is_sm_ref(tab.size_by_key):
                     refs.append(MetricReference(
                         adapter_kind=tab.adapter_kind,
                         resource_kind=tab.resource_kind,
-                        metric_key=tab.size_by_key,
+                        metric_key=_normalize_metric_key(tab.size_by_key),
                         source_desc=f"{wsrc} tab {tab.name!r} sizeBy",
                     ))
         # ResourceList, View, TextDisplay, AlertList, ProblemAlertsList:

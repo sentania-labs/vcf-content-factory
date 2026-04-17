@@ -27,6 +27,21 @@ builtin_metric_enables: list (optional) -- built-in metrics to enable on the
                                metric_key: str (required) -- e.g. "net|packetsPerSec"
                                reason: str (optional) -- human-readable explanation
 
+Attribution and provenance (all optional; for extracted/third-party bundles):
+author:         str  (optional) -- attribution line, e.g. "Scott Bowe"
+license:        str  (optional) -- SPDX id or free-form, e.g. "MIT", "Proprietary"
+source:         dict (optional) -- provenance block:
+                               url: str           -- source URL
+                               version: str       -- version string
+                               captured_at: str   -- ISO date of extraction
+                               captured_from_host: str -- source instance hostname
+factory_native: bool (optional, default true)
+                               False = extracted/third-party content; skips
+                               [VCF Content Factory] prefix enforcement and
+                               uses display_name for the zip filename.
+display_name:   str  (optional) -- explicit display name for README and zip
+                               filename when factory_native is False.
+
 All content-type keys are optional.  A bundle may contain only super
 metrics, only dashboards, or any subset of the supported types.
 
@@ -80,6 +95,13 @@ class Bundle:
     recommendations: List[Recommendation] = field(default_factory=list)
     builtin_metric_enables: List[BuiltinMetricEnable] = field(default_factory=list)
     source_path: Optional[Path] = None
+    # Attribution and provenance fields (all optional; default to empty/True
+    # so existing factory-native manifests load unchanged).
+    author: str = ""
+    license: str = ""
+    source: dict = field(default_factory=dict)
+    factory_native: bool = True
+    display_name: str = ""
 
 
 def load_bundle(path: str | Path) -> Bundle:
@@ -238,6 +260,27 @@ def load_bundle(path: str | Path) -> Bundle:
     except Exception as e:
         raise BundleValidationError(f"{path}: recommendation error: {e}") from e
 
+    # --- Attribution and provenance fields (all optional) ---
+    author = str(data.get("author", "") or "").strip()
+    license_field = str(data.get("license", "") or "").strip()
+
+    source_raw = data.get("source")
+    if source_raw is not None and not isinstance(source_raw, dict):
+        raise BundleValidationError(
+            f"{path}: 'source' must be a mapping, got {type(source_raw).__name__}"
+        )
+    source = dict(source_raw) if source_raw else {}
+
+    factory_native_raw = data.get("factory_native", True)
+    if not isinstance(factory_native_raw, bool):
+        raise BundleValidationError(
+            f"{path}: 'factory_native' must be a boolean (true/false), "
+            f"got {factory_native_raw!r}"
+        )
+    factory_native = bool(factory_native_raw)
+
+    display_name = str(data.get("display_name", "") or "").strip()
+
     return Bundle(
         name=name,
         description=description,
@@ -252,6 +295,11 @@ def load_bundle(path: str | Path) -> Bundle:
         recommendations=recommendations,
         builtin_metric_enables=builtin_metric_enables,
         source_path=path,
+        author=author,
+        license=license_field,
+        source=source,
+        factory_native=factory_native,
+        display_name=display_name,
     )
 
 

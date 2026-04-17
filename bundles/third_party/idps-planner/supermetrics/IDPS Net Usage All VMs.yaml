@@ -1,0 +1,7 @@
+id: f4acf93a-06b8-4450-8237-92cee270bc65
+name: '[IDPS] Net Usage (All VMs)'
+formula: sum(${adaptertype=VMWARE, objecttype=VirtualMachine, metric=net|usage_average,
+  depth=1})
+resource_kinds:
+- adapter_kind_key: VMWARE
+  resource_kind_key: VirtualMachine

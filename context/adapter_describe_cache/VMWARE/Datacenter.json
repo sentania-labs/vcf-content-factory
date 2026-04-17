@@ -1,0 +1,2561 @@
+{
+  "adapter_kind": "VMWARE",
+  "fetched_at": "2026-04-17T21:25:34Z",
+  "metrics": {
+    "OnlineCapacityAnalytics|capacityRemainingPercentage": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Capacity Remaining Percentage"
+    },
+    "OnlineCapacityAnalytics|capacityRemainingProfile": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Capacity Remaining (Profile)"
+    },
+    "OnlineCapacityAnalytics|cpu|demand|capacityRemaining": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|CPU|Demand|Capacity Remaining"
+    },
+    "OnlineCapacityAnalytics|cpu|demand|capacityRemainingPercentage": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|CPU|Demand|Capacity Remaining Percentage"
+    },
+    "OnlineCapacityAnalytics|cpu|demand|recommendedSize": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|CPU|Demand|Recommended Size"
+    },
+    "OnlineCapacityAnalytics|cpu|demand|recommendedSizeWithCommit": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|CPU|Demand|Recommended Size With Commit"
+    },
+    "OnlineCapacityAnalytics|cpu|demand|recommendedTotalSize": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|CPU|Demand|Recommended Total Capacity"
+    },
+    "OnlineCapacityAnalytics|cpu|demand|recommendedTotalSizeWithCommit": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|CPU|Demand|Recommended Total Capacity With Commit"
+    },
+    "OnlineCapacityAnalytics|cpu|demand|timeRemaining": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|CPU|Demand|Time Remaining"
+    },
+    "OnlineCapacityAnalytics|cpu|demand|timeRemainingWithCommit": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|CPU|Demand|Time Remaining With Commit"
+    },
+    "OnlineCapacityAnalytics|diskspace|demand|capacityRemaining": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Disk Space|Demand|Capacity Remaining"
+    },
+    "OnlineCapacityAnalytics|diskspace|demand|capacityRemainingPercentage": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Disk Space|Demand|Capacity Remaining Percentage"
+    },
+    "OnlineCapacityAnalytics|diskspace|demand|recommendedSize": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Disk Space|Demand|Recommended Size"
+    },
+    "OnlineCapacityAnalytics|diskspace|demand|recommendedSizeWithCommit": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Disk Space|Demand|Recommended Size With Commit"
+    },
+    "OnlineCapacityAnalytics|diskspace|demand|recommendedTotalSize": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Disk Space|Demand|Recommended Total Capacity"
+    },
+    "OnlineCapacityAnalytics|diskspace|demand|recommendedTotalSizeWithCommit": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Disk Space|Demand|Recommended Total Capacity With Commit"
+    },
+    "OnlineCapacityAnalytics|diskspace|demand|timeRemaining": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Disk Space|Demand|Time Remaining"
+    },
+    "OnlineCapacityAnalytics|diskspace|demand|timeRemainingWithCommit": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Disk Space|Demand|Time Remaining With Commit"
+    },
+    "OnlineCapacityAnalytics|mem|demand|capacityRemaining": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Memory|Demand|Capacity Remaining"
+    },
+    "OnlineCapacityAnalytics|mem|demand|capacityRemainingPercentage": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Memory|Demand|Capacity Remaining Percentage"
+    },
+    "OnlineCapacityAnalytics|mem|demand|recommendedSize": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Memory|Demand|Recommended Size"
+    },
+    "OnlineCapacityAnalytics|mem|demand|recommendedSizeWithCommit": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Memory|Demand|Recommended Size With Commit"
+    },
+    "OnlineCapacityAnalytics|mem|demand|recommendedTotalSize": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Memory|Demand|Recommended Total Capacity"
+    },
+    "OnlineCapacityAnalytics|mem|demand|recommendedTotalSizeWithCommit": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Memory|Demand|Recommended Total Capacity With Commit"
+    },
+    "OnlineCapacityAnalytics|mem|demand|timeRemaining": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Memory|Demand|Time Remaining"
+    },
+    "OnlineCapacityAnalytics|mem|demand|timeRemainingWithCommit": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Memory|Demand|Time Remaining With Commit"
+    },
+    "OnlineCapacityAnalytics|timeRemaining": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Time Remaining"
+    },
+    "OnlineCapacityAnalytics|timeRemainingWithCommit": {
+      "default_monitored": true,
+      "name": "Capacity Analytics Generated|Time Remaining With Commit"
+    },
+    "Super Metric|sm_020cf289-b254-4d8c-9e36-f0925c36e3d8": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] vCLS vCPU (count)"
+    },
+    "Super Metric|sm_0c648c9c-cede-4403-b8fe-500067629bf0": {
+      "default_monitored": true,
+      "name": "Super Metrics|Total Network Configuration Issues"
+    },
+    "Super Metric|sm_17f31a23-d7e7-4ff9-ab30-7a50d3e3a584": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] VKS Worker vCPU (count)"
+    },
+    "Super Metric|sm_1d4d0a06-4955-4110-acfe-bddea257b6f0": {
+      "default_monitored": true,
+      "name": "Super Metrics|[Custom] Non-local Datastore Capacity"
+    },
+    "Super Metric|sm_2308ba66-91c6-43c8-95e3-33fd2ee51f73": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] VM Service vCPU (count)"
+    },
+    "Super Metric|sm_3d21df83-083e-46b6-a6c0-5f7f2ae776c5": {
+      "default_monitored": true,
+      "name": "Super Metrics|Total Network Speed Degradation"
+    },
+    "Super Metric|sm_46179895-f760-4472-960c-e368aa869bc7": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Pod vCPU (count)"
+    },
+    "Super Metric|sm_73f9b9d7-1801-4e6d-bdd0-c3f3203d7bcc": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] VKS Cores (count)"
+    },
+    "Super Metric|sm_98997eae-62ba-4614-a622-11082c48ff00": {
+      "default_monitored": true,
+      "name": "Super Metrics|ESXi Hosts Average Availability"
+    },
+    "Super Metric|sm_a2b233be-ab55-46cc-816d-5ca5f10fc477": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Supervisor Control Plane vCPU (count)"
+    },
+    "Super Metric|sm_b16e3bb4-b8aa-4844-af10-d9b30702318a": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Regular VM vCPU (count)"
+    },
+    "Super Metric|sm_b3b292ce-7094-46ca-984e-9413e4df67a0": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] VKS Cluster Control Plane vCPU (count)"
+    },
+    "Super Metric|sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] VKS Node Image vCPU (count)"
+    },
+    "Super Metric|sm_ff235a3b-ed97-46b6-8f9d-7b52e55c9e6e": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Global vCPU-to-pCore Ratio"
+    },
+    "System Attributes|active_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Self - Active Anomaly Count"
+    },
+    "System Attributes|active_ki_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Self - Active KPI Breach Count"
+    },
+    "System Attributes|alert_count_critical": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Alert Count Critical"
+    },
+    "System Attributes|alert_count_immediate": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Alert Count Immediate"
+    },
+    "System Attributes|alert_count_info": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Alert Count Info"
+    },
+    "System Attributes|alert_count_warning": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Alert Count Warning"
+    },
+    "System Attributes|all_metrics": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Self - Metric Count"
+    },
+    "System Attributes|availability": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Availability"
+    },
+    "System Attributes|change_index": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Self - Change Index"
+    },
+    "System Attributes|child_active_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Full Set - Active Anomaly Count"
+    },
+    "System Attributes|child_active_ki_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Full Set - Active KPI Breach Count"
+    },
+    "System Attributes|child_all_metrics": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Full Set - Metric Count"
+    },
+    "System Attributes|child_ki_metrics": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Full Set - KPI Count"
+    },
+    "System Attributes|child_new_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Full Set - New Anomaly Count"
+    },
+    "System Attributes|child_new_ki_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Full Set - New KPI Breach Count"
+    },
+    "System Attributes|health": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Self - Health Score"
+    },
+    "System Attributes|ki_metrics": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Self - KPI Count"
+    },
+    "System Attributes|new_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Self - New Anomaly Count"
+    },
+    "System Attributes|new_ki_alarms": {
+      "default_monitored": false,
+      "name": "VCF Operations Generated|Self - New KPI Breach Count"
+    },
+    "System Attributes|self_alert_count": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Self - Alert Count"
+    },
+    "System Attributes|total_alarms": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Total Anomalies"
+    },
+    "System Attributes|total_alert_count": {
+      "default_monitored": true,
+      "name": "VCF Operations Generated|Total Alert Count"
+    },
+    "badge|alert_count_critical": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Critical"
+    },
+    "badge|alert_count_immediate": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Immediate"
+    },
+    "badge|alert_count_info": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Info"
+    },
+    "badge|alert_count_warning": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Warning"
+    },
+    "badge|anomaly": {
+      "default_monitored": false,
+      "name": "Badge|Anomaly"
+    },
+    "badge|capacityRemaining": {
+      "default_monitored": false,
+      "name": "Badge|Capacity Remaining"
+    },
+    "badge|capacityRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Capacity Remaining with committed projects"
+    },
+    "badge|compliance": {
+      "default_monitored": true,
+      "name": "Badge|Compliance"
+    },
+    "badge|density": {
+      "default_monitored": false,
+      "name": "Badge|Density"
+    },
+    "badge|density_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Density with committed projects"
+    },
+    "badge|efficiency": {
+      "default_monitored": true,
+      "name": "Badge|Efficiency"
+    },
+    "badge|efficiency_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Efficiency"
+    },
+    "badge|efficiency_state": {
+      "default_monitored": false,
+      "name": "Badge|Efficiency State"
+    },
+    "badge|fault": {
+      "default_monitored": false,
+      "name": "Badge|Faults"
+    },
+    "badge|health": {
+      "default_monitored": true,
+      "name": "Badge|Health"
+    },
+    "badge|health_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Health"
+    },
+    "badge|health_state": {
+      "default_monitored": false,
+      "name": "Badge|Health State"
+    },
+    "badge|risk": {
+      "default_monitored": true,
+      "name": "Badge|Risk"
+    },
+    "badge|risk_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Risk"
+    },
+    "badge|risk_state": {
+      "default_monitored": false,
+      "name": "Badge|Risk State"
+    },
+    "badge|stress": {
+      "default_monitored": false,
+      "name": "Badge|Stress"
+    },
+    "badge|stress_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Stress with committed projects"
+    },
+    "badge|timeRemaining": {
+      "default_monitored": false,
+      "name": "Badge|Time Remaining"
+    },
+    "badge|timeRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Time Remaining with committed projects"
+    },
+    "badge|waste": {
+      "default_monitored": false,
+      "name": "Badge|Waste"
+    },
+    "badge|workload": {
+      "default_monitored": true,
+      "name": "Badge|Workload"
+    },
+    "compute_realized|realizedIdleMem": {
+      "default_monitored": true,
+      "name": "Compute Realized|Memory from Idle VMs"
+    },
+    "compute_realized|realizedIdleVCpus": {
+      "default_monitored": true,
+      "name": "Compute Realized|vCPUs from Idle VMs"
+    },
+    "compute_realized|realizedOversizedMem": {
+      "default_monitored": true,
+      "name": "Compute Realized|Memory from Oversized VMs"
+    },
+    "compute_realized|realizedOversizedVCpus": {
+      "default_monitored": true,
+      "name": "Compute Realized|vCPUs from Oversized VMs"
+    },
+    "cost|aggrDataStoreAllocatedCost": {
+      "default_monitored": false,
+      "name": "Cost|Monthly Datastore Aggregated Allocated Cost"
+    },
+    "cost|aggrDataStoreUnallocatedCost": {
+      "default_monitored": false,
+      "name": "Cost|Monthly Datastore Aggregated Unallocated Cost"
+    },
+    "cost|aggrTotalCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly Aggregated Total Cost"
+    },
+    "cost|aggregatedDailyTotalCost": {
+      "default_monitored": true,
+      "name": "Cost|Aggregated Daily Total Cost"
+    },
+    "cost|aggregatedDeletedVmDailyTotalCost": {
+      "default_monitored": true,
+      "name": "Cost|Aggregated Deleted VM Daily Total Cost"
+    },
+    "cost|allocatedCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly Cluster Allocated Cost"
+    },
+    "cost|allocation|allocationBasedClusterAllocatedCost": {
+      "default_monitored": true,
+      "name": "Cost|Allocation|Monthly Cluster Aggregated Allocated Cost"
+    },
+    "cost|allocation|allocationBasedClusterUnallocatedCost": {
+      "default_monitored": true,
+      "name": "Cost|Allocation|Monthly Cluster Aggregated Unallocated Cost"
+    },
+    "cost|allocation|allocationBasedDatastoreAllocatedCost": {
+      "default_monitored": true,
+      "name": "Cost|Allocation|Monthly Datastore Aggregated Allocated Cost"
+    },
+    "cost|allocation|allocationBasedDatastoreUnallocatedCost": {
+      "default_monitored": true,
+      "name": "Cost|Allocation|Monthly Datastore Aggregated Unallocated Cost"
+    },
+    "cost|clusterAllocatedCost": {
+      "default_monitored": false,
+      "name": "Cost|Monthly Cluster Aggregated Allocated Cost"
+    },
+    "cost|clusterCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly Cluster Aggregated Cost"
+    },
+    "cost|clusterUnAllocatedCost": {
+      "default_monitored": false,
+      "name": "Cost|Monthly Cluster Aggregated Unallocated Cost"
+    },
+    "cost|cpuActualUtilizationGHz": {
+      "default_monitored": true,
+      "name": "Cost|MTD Cluster CPU Utilization"
+    },
+    "cost|cpuBaseRate": {
+      "default_monitored": true,
+      "name": "Cost|Cluster CPU Base Rate"
+    },
+    "cost|cpuExpectedUtilizationPct": {
+      "default_monitored": true,
+      "name": "Cost|Cluster CPU Expected Utilization"
+    },
+    "cost|dataStoreCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly Datastore Total Cost"
+    },
+    "cost|effectiveClusterAllocatedCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly Cluster Effective Aggregated Allocated Cost"
+    },
+    "cost|effectiveClusterUnallocatedCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly Cluster Effective Aggregated Unallocated Cost"
+    },
+    "cost|effectiveDatastoreAllocatedCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly Datastore Effective Aggregated Allocated Cost"
+    },
+    "cost|effectiveDatastoreUnallocatedCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly Datastore Effective Aggregated Unallocated Cost"
+    },
+    "cost|memoryActualUtilizationGB": {
+      "default_monitored": true,
+      "name": "Cost|MTD Cluster Memory Utilization"
+    },
+    "cost|memoryBaseRate": {
+      "default_monitored": true,
+      "name": "Cost|Cluster Memory Base Rate"
+    },
+    "cost|memoryExpectedUtilizationPct": {
+      "default_monitored": true,
+      "name": "Cost|Cluster Memory Expected Utilization"
+    },
+    "cost|realized_savings|realizedIdleCost": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Idle Cost"
+    },
+    "cost|realized_savings|realizedOrphanedDiskSpaceCost": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Orphaned Disk Space Cost"
+    },
+    "cost|realized_savings|realizedOversizedCost": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Oversized Cost"
+    },
+    "cost|realized_savings|realizedPoweredOffCost": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|PoweredOff Cost"
+    },
+    "cost|realized_savings|realizedReclaimableHostCost": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Reclaimable Host Cost"
+    },
+    "cost|realized_savings|realizedSnapshotSpaceCost": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Snapshot Space Cost"
+    },
+    "cost|realized_savings|realizedTotalCost": {
+      "default_monitored": true,
+      "name": "Cost|Realized Savings|Total Realized Cost"
+    },
+    "cost|status|costCalculationStatus": {
+      "default_monitored": true,
+      "name": "Cost|Calculation Execution Status|Cost Engine Execution Status"
+    },
+    "cost|status|reclaimableCostCalculationStatus": {
+      "default_monitored": true,
+      "name": "Cost|Calculation Execution Status|Reclaimable Cost Engine Execution Status"
+    },
+    "cost|totalCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly Cluster Total Cost"
+    },
+    "cost|totalCpuCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly Cluster Total CPU Cost"
+    },
+    "cost|totalMemoryCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly Cluster Total Memory Cost"
+    },
+    "cost|unAllocatedCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly Cluster Unallocated Cost"
+    },
+    "cost|vmDirectCost": {
+      "default_monitored": true,
+      "name": "Cost|Monthly VM Aggregated Direct Cost"
+    },
+    "cpu|1_to_1_overcommitPct": {
+      "default_monitored": false,
+      "name": "CPU|vCPU Allocation % for 1 vCPU per Core"
+    },
+    "cpu|actual.capacity": {
+      "default_monitored": false,
+      "name": "CPU|Current Size"
+    },
+    "cpu|actual.capacity.normalized": {
+      "default_monitored": false,
+      "name": "CPU|Total Capacity"
+    },
+    "cpu|actual.capacity.normalized_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Total Capacity with committed projects"
+    },
+    "cpu|actual.capacity_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Current Size with committed projects"
+    },
+    "cpu|capacity.provider.count": {
+      "default_monitored": false,
+      "name": "CPU|Number of Capacity providers"
+    },
+    "cpu|capacity.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Number of Capacity providers with committed projects"
+    },
+    "cpu|capacityRemaining": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining"
+    },
+    "cpu|capacityRemainingUsingConsumers": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining using profile"
+    },
+    "cpu|capacityRemainingUsingConsumers_average": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining (Average consumer profile)"
+    },
+    "cpu|capacityRemainingUsingConsumers_average_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining with committed projects (Average consumer profile)"
+    },
+    "cpu|capacityRemainingUsingConsumers_large": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining (Large consumer profile)"
+    },
+    "cpu|capacityRemainingUsingConsumers_medium": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining (Medium consumer profile)"
+    },
+    "cpu|capacityRemainingUsingConsumers_small": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining (Small consumer profile)"
+    },
+    "cpu|capacityRemainingUsingConsumers_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining using profile with committed projects"
+    },
+    "cpu|capacityRemainingValue": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining Value"
+    },
+    "cpu|capacityRemainingValue_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining Value with committed projects"
+    },
+    "cpu|capacityRemaining_min": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining (Based on instantaneous peak)"
+    },
+    "cpu|capacityRemaining_min_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining with committed projects (Based on instantaneous peak)"
+    },
+    "cpu|capacityRemaining_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Capacity Remaining with committed projects"
+    },
+    "cpu|capacity_contention": {
+      "default_monitored": false,
+      "name": "CPU|Overall CPU Contention"
+    },
+    "cpu|capacity_contentionPct": {
+      "default_monitored": true,
+      "name": "CPU|Contention"
+    },
+    "cpu|capacity_provisioned": {
+      "default_monitored": true,
+      "name": "CPU|Total Capacity"
+    },
+    "cpu|capacity_usagepct_average": {
+      "default_monitored": true,
+      "name": "CPU|Capacity Usage"
+    },
+    "cpu|computed_demand": {
+      "default_monitored": true,
+      "name": "CPU|System Computed Demand"
+    },
+    "cpu|computed_demand_whatif": {
+      "default_monitored": false,
+      "name": "CPU|System Computed Demand with committed projects"
+    },
+    "cpu|consumer.count": {
+      "default_monitored": false,
+      "name": "CPU|Number of Capacity consumers"
+    },
+    "cpu|consumer.count.per.provider.count": {
+      "default_monitored": false,
+      "name": "CPU|Consumer Provider ratio"
+    },
+    "cpu|consumer.count.per.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Consumer Provider ratio with committed projects"
+    },
+    "cpu|consumer.count_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Number of Capacity consumers with committed projects"
+    },
+    "cpu|corecount_provisioned": {
+      "default_monitored": true,
+      "name": "CPU|Number of physical CPUs"
+    },
+    "cpu|demandPct": {
+      "default_monitored": true,
+      "name": "CPU|Demand"
+    },
+    "cpu|demand_without_overhead": {
+      "default_monitored": true,
+      "name": "CPU|Demand without overhead"
+    },
+    "cpu|demandmhz": {
+      "default_monitored": true,
+      "name": "CPU|Demand"
+    },
+    "cpu|demand|actual.capacity": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Current Size"
+    },
+    "cpu|demand|actual.capacity.normalized": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Total Capacity"
+    },
+    "cpu|demand|actual.capacity.normalized_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Total Capacity with committed projects"
+    },
+    "cpu|demand|actual.capacity_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Current Size with committed projects"
+    },
+    "cpu|demand|capacity.provider.count": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Number of Capacity providers"
+    },
+    "cpu|demand|capacity.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Number of Capacity providers with committed projects"
+    },
+    "cpu|demand|capacityRemaining": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining"
+    },
+    "cpu|demand|capacityRemainingUsingConsumers": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining using profile"
+    },
+    "cpu|demand|capacityRemainingUsingConsumers_average": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining (Average consumer profile)"
+    },
+    "cpu|demand|capacityRemainingUsingConsumers_average_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining with committed projects (Average consumer profile)"
+    },
+    "cpu|demand|capacityRemainingUsingConsumers_large": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining (Large consumer profile)"
+    },
+    "cpu|demand|capacityRemainingUsingConsumers_medium": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining (Medium consumer profile)"
+    },
+    "cpu|demand|capacityRemainingUsingConsumers_small": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining (Small consumer profile)"
+    },
+    "cpu|demand|capacityRemainingUsingConsumers_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining using profile with committed projects"
+    },
+    "cpu|demand|capacityRemainingValue": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining Value"
+    },
+    "cpu|demand|capacityRemainingValue_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining Value with committed projects"
+    },
+    "cpu|demand|capacityRemaining_min": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining (Based on instantaneous peak)"
+    },
+    "cpu|demand|capacityRemaining_min_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining with committed projects (Based on instantaneous peak)"
+    },
+    "cpu|demand|capacityRemaining_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Capacity Remaining with committed projects"
+    },
+    "cpu|demand|computed_demand": {
+      "default_monitored": true,
+      "name": "CPU|Demand|System Computed Demand"
+    },
+    "cpu|demand|computed_demand_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|System Computed Demand with committed projects"
+    },
+    "cpu|demand|consumer.count": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Number of Capacity consumers"
+    },
+    "cpu|demand|consumer.count.per.provider.count": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Consumer Provider ratio"
+    },
+    "cpu|demand|consumer.count.per.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Consumer Provider ratio with committed projects"
+    },
+    "cpu|demand|consumer.count_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Number of Capacity consumers with committed projects"
+    },
+    "cpu|demand|density": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Density"
+    },
+    "cpu|demand|density_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Density with committed projects"
+    },
+    "cpu|demand|idle": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Is Idle"
+    },
+    "cpu|demand|idle_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Is Idle with committed projects"
+    },
+    "cpu|demand|isStress": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Is Stressed"
+    },
+    "cpu|demand|isStress_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Is Stressed with committed projects"
+    },
+    "cpu|demand|isWaste": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Has Reclaimable Capacity"
+    },
+    "cpu|demand|max_provider_workload": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Highest Provider Workload"
+    },
+    "cpu|demand|object.demand.with.size.recommendation": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Effective Demand (With peak usage)"
+    },
+    "cpu|demand|optimal.consumer.per.provider": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Optimal Consumer Provider ratio"
+    },
+    "cpu|demand|optimal.consumer.per.provider_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Optimal Consumer Provider ratio with committed projects"
+    },
+    "cpu|demand|oversized": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Is Oversized"
+    },
+    "cpu|demand|oversized_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Is Oversized with committed projects"
+    },
+    "cpu|demand|poweredOff": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Powered Off"
+    },
+    "cpu|demand|poweredOffTimePercent": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Powered Off Time Percent"
+    },
+    "cpu|demand|poweredOffTimePercent_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Powered Off Time Percent with committed projects"
+    },
+    "cpu|demand|poweredOff_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Powered Off with committed projects"
+    },
+    "cpu|demand|provider_workload_difference": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Provider Workload Max-Min Difference"
+    },
+    "cpu|demand|reason.for.waste": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Reason for Reclaimable Capacity"
+    },
+    "cpu|demand|size.recommendation": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Recommended Size"
+    },
+    "cpu|demand|size.recommendation_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Recommended Size with committed projects"
+    },
+    "cpu|demand|stress": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Stress"
+    },
+    "cpu|demand|stress_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Stress with committed projects"
+    },
+    "cpu|demand|timeRemaining": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Time Remaining"
+    },
+    "cpu|demand|timeRemaining_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Time Remaining with committed projects"
+    },
+    "cpu|demand|usableCapacity": {
+      "default_monitored": true,
+      "name": "CPU|Demand|Usable Capacity after HA and Buffer"
+    },
+    "cpu|demand|utilization.range": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Utilization Range"
+    },
+    "cpu|demand|waste": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Waste"
+    },
+    "cpu|demand|workload": {
+      "default_monitored": true,
+      "name": "CPU|Demand|Workload"
+    },
+    "cpu|demand|workload_balance_factor": {
+      "default_monitored": false,
+      "name": "CPU|Demand|Workload Balance Factor"
+    },
+    "cpu|density": {
+      "default_monitored": false,
+      "name": "CPU|Density"
+    },
+    "cpu|density_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Density with committed projects"
+    },
+    "cpu|haCorecount_provisioned": {
+      "default_monitored": true,
+      "name": "CPU|Number of usable CPUs"
+    },
+    "cpu|haTotalCapacity_average": {
+      "default_monitored": true,
+      "name": "CPU|Usable Capacity"
+    },
+    "cpu|idle": {
+      "default_monitored": false,
+      "name": "CPU|Is Idle"
+    },
+    "cpu|idle_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Is Idle with committed projects"
+    },
+    "cpu|iowait": {
+      "default_monitored": true,
+      "name": "CPU|Other Wait"
+    },
+    "cpu|isStress": {
+      "default_monitored": false,
+      "name": "CPU|Is Stressed"
+    },
+    "cpu|isStress_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Is Stressed with committed projects"
+    },
+    "cpu|isWaste": {
+      "default_monitored": false,
+      "name": "CPU|Has Reclaimable Capacity"
+    },
+    "cpu|numpackages": {
+      "default_monitored": false,
+      "name": "CPU|Number of CPU Sockets"
+    },
+    "cpu|object.demand.with.size.recommendation": {
+      "default_monitored": false,
+      "name": "CPU|Effective Demand (With peak usage)"
+    },
+    "cpu|optimal.consumer.per.provider": {
+      "default_monitored": false,
+      "name": "CPU|Optimal Consumer Provider ratio"
+    },
+    "cpu|optimal.consumer.per.provider_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Optimal Consumer Provider ratio with committed projects"
+    },
+    "cpu|overhead_average": {
+      "default_monitored": true,
+      "name": "CPU|Overhead"
+    },
+    "cpu|oversized": {
+      "default_monitored": false,
+      "name": "CPU|Is Oversized"
+    },
+    "cpu|oversized_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Is Oversized with committed projects"
+    },
+    "cpu|poweredOff": {
+      "default_monitored": false,
+      "name": "CPU|Powered Off"
+    },
+    "cpu|poweredOffTimePercent": {
+      "default_monitored": false,
+      "name": "CPU|Powered Off Time Percent"
+    },
+    "cpu|poweredOffTimePercent_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Powered Off Time Percent with committed projects"
+    },
+    "cpu|poweredOff_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Powered Off with committed projects"
+    },
+    "cpu|reason.for.waste": {
+      "default_monitored": false,
+      "name": "CPU|Reason for Reclaimable Capacity"
+    },
+    "cpu|reservedCapacity_average": {
+      "default_monitored": true,
+      "name": "CPU|Reserved Capacity"
+    },
+    "cpu|size.recommendation": {
+      "default_monitored": false,
+      "name": "CPU|Recommended Size"
+    },
+    "cpu|size.recommendation_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Recommended Size with committed projects"
+    },
+    "cpu|stress": {
+      "default_monitored": false,
+      "name": "CPU|Stress"
+    },
+    "cpu|stress_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Stress with committed projects"
+    },
+    "cpu|timeRemaining": {
+      "default_monitored": false,
+      "name": "CPU|Time Remaining"
+    },
+    "cpu|timeRemaining_whatif": {
+      "default_monitored": false,
+      "name": "CPU|Time Remaining with committed projects"
+    },
+    "cpu|usagemhz_average": {
+      "default_monitored": true,
+      "name": "CPU|Usage"
+    },
+    "cpu|utilization.range": {
+      "default_monitored": false,
+      "name": "CPU|Utilization Range"
+    },
+    "cpu|vcpus_allocated_on_all_powered_on_vms": {
+      "default_monitored": true,
+      "name": "CPU|vCPUs Allocated on all Powered On Consumers"
+    },
+    "cpu|vcpus_allocated_on_all_vms": {
+      "default_monitored": true,
+      "name": "CPU|vCPUs Allocated on all Consumers"
+    },
+    "cpu|vcpus_to_cores_allocation_ratio": {
+      "default_monitored": true,
+      "name": "CPU|Current Overcommit Ratio"
+    },
+    "cpu|vm_capacity_provisioned": {
+      "default_monitored": true,
+      "name": "CPU|Provisioned Capacity"
+    },
+    "cpu|vm_usagemhz_average": {
+      "default_monitored": true,
+      "name": "CPU|VM CPU usage"
+    },
+    "cpu|wait": {
+      "default_monitored": true,
+      "name": "CPU|Total Wait"
+    },
+    "cpu|waste": {
+      "default_monitored": false,
+      "name": "CPU|Waste"
+    },
+    "cpu|workload": {
+      "default_monitored": true,
+      "name": "CPU|Workload"
+    },
+    "datastore|demand_oio": {
+      "default_monitored": true,
+      "name": "Datastore|Outstanding IO requests"
+    },
+    "datastore|maxObserved_NumberRead": {
+      "default_monitored": false,
+      "name": "Datastore|(DEP) Max Observed Reads per second"
+    },
+    "datastore|maxObserved_NumberWrite": {
+      "default_monitored": false,
+      "name": "Datastore|(DEP) Max Observed Writes per second"
+    },
+    "datastore|maxObserved_OIO": {
+      "default_monitored": false,
+      "name": "Datastore|(DEP) Max Observed Number of Outstanding IO Operations"
+    },
+    "datastore|maxObserved_Read": {
+      "default_monitored": false,
+      "name": "Datastore|(DEP) Max Observed Read Rate"
+    },
+    "datastore|maxObserved_Write": {
+      "default_monitored": false,
+      "name": "Datastore|(DEP) Max Observed Write Rate"
+    },
+    "datastore|numberReadAveraged_average": {
+      "default_monitored": true,
+      "name": "Datastore|Read IOPS"
+    },
+    "datastore|numberWriteAveraged_average": {
+      "default_monitored": true,
+      "name": "Datastore|Write IOPS"
+    },
+    "datastore|read_average": {
+      "default_monitored": true,
+      "name": "Datastore|Read Throughput"
+    },
+    "datastore|write_average": {
+      "default_monitored": true,
+      "name": "Datastore|Write Throughput"
+    },
+    "diskspace|actual.capacity": {
+      "default_monitored": false,
+      "name": "Disk Space|Current Size"
+    },
+    "diskspace|actual.capacity.normalized": {
+      "default_monitored": false,
+      "name": "Disk Space|Total Capacity"
+    },
+    "diskspace|actual.capacity.normalized_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Total Capacity with committed projects"
+    },
+    "diskspace|actual.capacity_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Current Size with committed projects"
+    },
+    "diskspace|capacity.provider.count": {
+      "default_monitored": false,
+      "name": "Disk Space|Number of Capacity providers"
+    },
+    "diskspace|capacity.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Number of Capacity providers with committed projects"
+    },
+    "diskspace|capacityRemaining": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining"
+    },
+    "diskspace|capacityRemainingUsingConsumers": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining using profile"
+    },
+    "diskspace|capacityRemainingUsingConsumers_average": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining (Average consumer profile)"
+    },
+    "diskspace|capacityRemainingUsingConsumers_average_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining with committed projects (Average consumer profile)"
+    },
+    "diskspace|capacityRemainingUsingConsumers_large": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining (Large consumer profile)"
+    },
+    "diskspace|capacityRemainingUsingConsumers_medium": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining (Medium consumer profile)"
+    },
+    "diskspace|capacityRemainingUsingConsumers_small": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining (Small consumer profile)"
+    },
+    "diskspace|capacityRemainingUsingConsumers_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining using profile with committed projects"
+    },
+    "diskspace|capacityRemainingValue": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining Value"
+    },
+    "diskspace|capacityRemainingValue_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining Value with committed projects"
+    },
+    "diskspace|capacityRemaining_min": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining (Based on instantaneous peak)"
+    },
+    "diskspace|capacityRemaining_min_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining with committed projects (Based on instantaneous peak)"
+    },
+    "diskspace|capacityRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Capacity Remaining with committed projects"
+    },
+    "diskspace|computed_demand": {
+      "default_monitored": true,
+      "name": "Disk Space|System Computed Demand"
+    },
+    "diskspace|computed_demand_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|System Computed Demand with committed projects"
+    },
+    "diskspace|consumer.count": {
+      "default_monitored": false,
+      "name": "Disk Space|Number of Capacity consumers"
+    },
+    "diskspace|consumer.count.per.provider.count": {
+      "default_monitored": false,
+      "name": "Disk Space|Consumer Provider ratio"
+    },
+    "diskspace|consumer.count.per.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Consumer Provider ratio with committed projects"
+    },
+    "diskspace|consumer.count_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Number of Capacity consumers with committed projects"
+    },
+    "diskspace|demand|actual.capacity": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Current Size"
+    },
+    "diskspace|demand|actual.capacity.normalized": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Total Capacity"
+    },
+    "diskspace|demand|actual.capacity.normalized_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Total Capacity with committed projects"
+    },
+    "diskspace|demand|actual.capacity_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Current Size with committed projects"
+    },
+    "diskspace|demand|capacity.provider.count": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Number of Capacity providers"
+    },
+    "diskspace|demand|capacity.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Number of Capacity providers with committed projects"
+    },
+    "diskspace|demand|capacityRemaining": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining"
+    },
+    "diskspace|demand|capacityRemainingUsingConsumers": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining using profile"
+    },
+    "diskspace|demand|capacityRemainingUsingConsumers_average": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining (Average consumer profile)"
+    },
+    "diskspace|demand|capacityRemainingUsingConsumers_average_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining with committed projects (Average consumer profile)"
+    },
+    "diskspace|demand|capacityRemainingUsingConsumers_large": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining (Large consumer profile)"
+    },
+    "diskspace|demand|capacityRemainingUsingConsumers_medium": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining (Medium consumer profile)"
+    },
+    "diskspace|demand|capacityRemainingUsingConsumers_small": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining (Small consumer profile)"
+    },
+    "diskspace|demand|capacityRemainingUsingConsumers_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining using profile with committed projects"
+    },
+    "diskspace|demand|capacityRemainingValue": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining Value"
+    },
+    "diskspace|demand|capacityRemainingValue_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining Value with committed projects"
+    },
+    "diskspace|demand|capacityRemaining_min": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining (Based on instantaneous peak)"
+    },
+    "diskspace|demand|capacityRemaining_min_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining with committed projects (Based on instantaneous peak)"
+    },
+    "diskspace|demand|capacityRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Capacity Remaining with committed projects"
+    },
+    "diskspace|demand|computed_demand": {
+      "default_monitored": true,
+      "name": "Disk Space|Demand|System Computed Demand"
+    },
+    "diskspace|demand|computed_demand_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|System Computed Demand with committed projects"
+    },
+    "diskspace|demand|consumer.count": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Number of Capacity consumers"
+    },
+    "diskspace|demand|consumer.count.per.provider.count": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Consumer Provider ratio"
+    },
+    "diskspace|demand|consumer.count.per.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Consumer Provider ratio with committed projects"
+    },
+    "diskspace|demand|consumer.count_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Number of Capacity consumers with committed projects"
+    },
+    "diskspace|demand|density": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Density"
+    },
+    "diskspace|demand|density_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Density with committed projects"
+    },
+    "diskspace|demand|idle": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Is Idle"
+    },
+    "diskspace|demand|idle_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Is Idle with committed projects"
+    },
+    "diskspace|demand|isStress": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Is Stressed"
+    },
+    "diskspace|demand|isStress_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Is Stressed with committed projects"
+    },
+    "diskspace|demand|isWaste": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Has Reclaimable Capacity"
+    },
+    "diskspace|demand|object.demand.with.size.recommendation": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Effective Demand (With peak usage)"
+    },
+    "diskspace|demand|optimal.consumer.per.provider": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Optimal Consumer Provider ratio"
+    },
+    "diskspace|demand|optimal.consumer.per.provider_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Optimal Consumer Provider ratio with committed projects"
+    },
+    "diskspace|demand|oversized": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Is Oversized"
+    },
+    "diskspace|demand|oversized_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Is Oversized with committed projects"
+    },
+    "diskspace|demand|poweredOff": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Powered Off"
+    },
+    "diskspace|demand|poweredOffTimePercent": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Powered Off Time Percent"
+    },
+    "diskspace|demand|poweredOffTimePercent_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Powered Off Time Percent with committed projects"
+    },
+    "diskspace|demand|poweredOff_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Powered Off with committed projects"
+    },
+    "diskspace|demand|reason.for.waste": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Reason for Reclaimable Capacity"
+    },
+    "diskspace|demand|size.recommendation": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Recommended Size"
+    },
+    "diskspace|demand|size.recommendation_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Recommended Size with committed projects"
+    },
+    "diskspace|demand|stress": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Stress"
+    },
+    "diskspace|demand|stress_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Stress with committed projects"
+    },
+    "diskspace|demand|timeRemaining": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Time Remaining"
+    },
+    "diskspace|demand|timeRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Time Remaining with committed projects"
+    },
+    "diskspace|demand|usableCapacity": {
+      "default_monitored": true,
+      "name": "Disk Space|Demand|Usable Capacity after HA and Buffer"
+    },
+    "diskspace|demand|utilization.range": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Utilization Range"
+    },
+    "diskspace|demand|waste": {
+      "default_monitored": false,
+      "name": "Disk Space|Demand|Waste"
+    },
+    "diskspace|demand|workload": {
+      "default_monitored": true,
+      "name": "Disk Space|Demand|Workload"
+    },
+    "diskspace|density": {
+      "default_monitored": false,
+      "name": "Disk Space|Density"
+    },
+    "diskspace|density_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Density with committed projects"
+    },
+    "diskspace|diskused": {
+      "default_monitored": true,
+      "name": "Disk Space|Virtual Disk Used"
+    },
+    "diskspace|idle": {
+      "default_monitored": false,
+      "name": "Disk Space|Is Idle"
+    },
+    "diskspace|idle_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Is Idle with committed projects"
+    },
+    "diskspace|isStress": {
+      "default_monitored": false,
+      "name": "Disk Space|Is Stressed"
+    },
+    "diskspace|isStress_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Is Stressed with committed projects"
+    },
+    "diskspace|isWaste": {
+      "default_monitored": false,
+      "name": "Disk Space|Has Reclaimable Capacity"
+    },
+    "diskspace|object.demand.with.size.recommendation": {
+      "default_monitored": false,
+      "name": "Disk Space|Effective Demand (With peak usage)"
+    },
+    "diskspace|optimal.consumer.per.provider": {
+      "default_monitored": false,
+      "name": "Disk Space|Optimal Consumer Provider ratio"
+    },
+    "diskspace|optimal.consumer.per.provider_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Optimal Consumer Provider ratio with committed projects"
+    },
+    "diskspace|oversized": {
+      "default_monitored": false,
+      "name": "Disk Space|Is Oversized"
+    },
+    "diskspace|oversized_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Is Oversized with committed projects"
+    },
+    "diskspace|poweredOff": {
+      "default_monitored": false,
+      "name": "Disk Space|Powered Off"
+    },
+    "diskspace|poweredOffTimePercent": {
+      "default_monitored": false,
+      "name": "Disk Space|Powered Off Time Percent"
+    },
+    "diskspace|poweredOffTimePercent_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Powered Off Time Percent with committed projects"
+    },
+    "diskspace|poweredOff_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Powered Off with committed projects"
+    },
+    "diskspace|reason.for.waste": {
+      "default_monitored": false,
+      "name": "Disk Space|Reason for Reclaimable Capacity"
+    },
+    "diskspace|size.recommendation": {
+      "default_monitored": false,
+      "name": "Disk Space|Recommended Size"
+    },
+    "diskspace|size.recommendation_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Recommended Size with committed projects"
+    },
+    "diskspace|snapshot": {
+      "default_monitored": true,
+      "name": "Disk Space|Snapshot Space"
+    },
+    "diskspace|stress": {
+      "default_monitored": false,
+      "name": "Disk Space|Stress"
+    },
+    "diskspace|stress_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Stress with committed projects"
+    },
+    "diskspace|timeRemaining": {
+      "default_monitored": false,
+      "name": "Disk Space|Time Remaining"
+    },
+    "diskspace|timeRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Disk Space|Time Remaining with committed projects"
+    },
+    "diskspace|total_capacity": {
+      "default_monitored": true,
+      "name": "Disk Space|Total Capacity"
+    },
+    "diskspace|total_provisioned": {
+      "default_monitored": true,
+      "name": "Disk Space|Total Provisioned Disk Space"
+    },
+    "diskspace|total_provisionedPct": {
+      "default_monitored": true,
+      "name": "Disk Space|Provisioned disk space percentage"
+    },
+    "diskspace|total_usage": {
+      "default_monitored": true,
+      "name": "Disk Space|Utilization"
+    },
+    "diskspace|total_usagePct": {
+      "default_monitored": true,
+      "name": "Disk Space|Disk space used percentage"
+    },
+    "diskspace|usable_capacity": {
+      "default_monitored": true,
+      "name": "Disk Space|Usable Capacity"
+    },
+    "diskspace|used": {
+      "default_monitored": true,
+      "name": "Disk Space|Virtual Machine used"
+    },
+    "diskspace|utilization.range": {
+      "default_monitored": false,
+      "name": "Disk Space|Utilization Range"
+    },
+    "diskspace|waste": {
+      "default_monitored": false,
+      "name": "Disk Space|Waste"
+    },
+    "diskspace|workload": {
+      "default_monitored": true,
+      "name": "Disk Space|Workload"
+    },
+    "disk|commandsAveraged_average": {
+      "default_monitored": true,
+      "name": "Disk|Total IOPS"
+    },
+    "disk|max_observed": {
+      "default_monitored": false,
+      "name": "Disk|(DEP) Max Observed OIO"
+    },
+    "disk|sum_queued_oio": {
+      "default_monitored": false,
+      "name": "Disk|Total Queued Outstanding operations"
+    },
+    "disk|totalLatency_average": {
+      "default_monitored": true,
+      "name": "Disk|Total Latency"
+    },
+    "disk|usage_average": {
+      "default_monitored": true,
+      "name": "Disk|Total Throughput"
+    },
+    "mem|1_to_1_overcommitPct": {
+      "default_monitored": false,
+      "name": "Memory|vMem Allocation % for No Overcommit per GB"
+    },
+    "mem|actual.capacity": {
+      "default_monitored": false,
+      "name": "Memory|Current Size"
+    },
+    "mem|actual.capacity.normalized": {
+      "default_monitored": false,
+      "name": "Memory|Total Capacity"
+    },
+    "mem|actual.capacity.normalized_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Total Capacity with committed projects"
+    },
+    "mem|actual.capacity_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Current Size with committed projects"
+    },
+    "mem|capacity.provider.count": {
+      "default_monitored": false,
+      "name": "Memory|Number of Capacity providers"
+    },
+    "mem|capacity.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Number of Capacity providers with committed projects"
+    },
+    "mem|capacityRemaining": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining"
+    },
+    "mem|capacityRemainingUsingConsumers": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining using profile"
+    },
+    "mem|capacityRemainingUsingConsumers_average": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining (Average consumer profile)"
+    },
+    "mem|capacityRemainingUsingConsumers_average_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining with committed projects (Average consumer profile)"
+    },
+    "mem|capacityRemainingUsingConsumers_large": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining (Large consumer profile)"
+    },
+    "mem|capacityRemainingUsingConsumers_medium": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining (Medium consumer profile)"
+    },
+    "mem|capacityRemainingUsingConsumers_small": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining (Small consumer profile)"
+    },
+    "mem|capacityRemainingUsingConsumers_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining using profile with committed projects"
+    },
+    "mem|capacityRemainingValue": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining Value"
+    },
+    "mem|capacityRemainingValue_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining Value with committed projects"
+    },
+    "mem|capacityRemaining_min": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining (Based on instantaneous peak)"
+    },
+    "mem|capacityRemaining_min_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining with committed projects (Based on instantaneous peak)"
+    },
+    "mem|capacityRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Capacity Remaining with committed projects"
+    },
+    "mem|computed_demand": {
+      "default_monitored": true,
+      "name": "Memory|System Computed Demand"
+    },
+    "mem|computed_demand_whatif": {
+      "default_monitored": false,
+      "name": "Memory|System Computed Demand with committed projects"
+    },
+    "mem|consumer.count": {
+      "default_monitored": false,
+      "name": "Memory|Number of Capacity consumers"
+    },
+    "mem|consumer.count.per.provider.count": {
+      "default_monitored": false,
+      "name": "Memory|Consumer Provider ratio"
+    },
+    "mem|consumer.count.per.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Consumer Provider ratio with committed projects"
+    },
+    "mem|consumer.count_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Number of Capacity consumers with committed projects"
+    },
+    "mem|demand|actual.capacity": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Current Size"
+    },
+    "mem|demand|actual.capacity.normalized": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Total Capacity"
+    },
+    "mem|demand|actual.capacity.normalized_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Total Capacity with committed projects"
+    },
+    "mem|demand|actual.capacity_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Current Size with committed projects"
+    },
+    "mem|demand|capacity.provider.count": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Number of Capacity providers"
+    },
+    "mem|demand|capacity.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Number of Capacity providers with committed projects"
+    },
+    "mem|demand|capacityRemaining": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining"
+    },
+    "mem|demand|capacityRemainingUsingConsumers": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining using profile"
+    },
+    "mem|demand|capacityRemainingUsingConsumers_average": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining (Average consumer profile)"
+    },
+    "mem|demand|capacityRemainingUsingConsumers_average_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining with committed projects (Average consumer profile)"
+    },
+    "mem|demand|capacityRemainingUsingConsumers_large": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining (Large consumer profile)"
+    },
+    "mem|demand|capacityRemainingUsingConsumers_medium": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining (Medium consumer profile)"
+    },
+    "mem|demand|capacityRemainingUsingConsumers_small": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining (Small consumer profile)"
+    },
+    "mem|demand|capacityRemainingUsingConsumers_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining using profile with committed projects"
+    },
+    "mem|demand|capacityRemainingValue": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining Value"
+    },
+    "mem|demand|capacityRemainingValue_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining Value with committed projects"
+    },
+    "mem|demand|capacityRemaining_min": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining (Based on instantaneous peak)"
+    },
+    "mem|demand|capacityRemaining_min_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining with committed projects (Based on instantaneous peak)"
+    },
+    "mem|demand|capacityRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Capacity Remaining with committed projects"
+    },
+    "mem|demand|computed_demand": {
+      "default_monitored": true,
+      "name": "Memory|Demand|System Computed Demand"
+    },
+    "mem|demand|computed_demand_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|System Computed Demand with committed projects"
+    },
+    "mem|demand|consumer.count": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Number of Capacity consumers"
+    },
+    "mem|demand|consumer.count.per.provider.count": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Consumer Provider ratio"
+    },
+    "mem|demand|consumer.count.per.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Consumer Provider ratio with committed projects"
+    },
+    "mem|demand|consumer.count_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Number of Capacity consumers with committed projects"
+    },
+    "mem|demand|density": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Density"
+    },
+    "mem|demand|density_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Density with committed projects"
+    },
+    "mem|demand|idle": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Is Idle"
+    },
+    "mem|demand|idle_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Is Idle with committed projects"
+    },
+    "mem|demand|isStress": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Is Stressed"
+    },
+    "mem|demand|isStress_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Is Stressed with committed projects"
+    },
+    "mem|demand|isWaste": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Has Reclaimable Capacity"
+    },
+    "mem|demand|max_provider_workload": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Highest Provider Workload"
+    },
+    "mem|demand|object.demand.with.size.recommendation": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Effective Demand (With peak usage)"
+    },
+    "mem|demand|optimal.consumer.per.provider": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Optimal Consumer Provider ratio"
+    },
+    "mem|demand|optimal.consumer.per.provider_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Optimal Consumer Provider ratio with committed projects"
+    },
+    "mem|demand|oversized": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Is Oversized"
+    },
+    "mem|demand|oversized_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Is Oversized with committed projects"
+    },
+    "mem|demand|poweredOff": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Powered Off"
+    },
+    "mem|demand|poweredOffTimePercent": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Powered Off Time Percent"
+    },
+    "mem|demand|poweredOffTimePercent_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Powered Off Time Percent with committed projects"
+    },
+    "mem|demand|poweredOff_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Powered Off with committed projects"
+    },
+    "mem|demand|provider_workload_difference": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Provider Workload Max-Min Difference"
+    },
+    "mem|demand|reason.for.waste": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Reason for Reclaimable Capacity"
+    },
+    "mem|demand|size.recommendation": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Recommended Size"
+    },
+    "mem|demand|size.recommendation_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Recommended Size with committed projects"
+    },
+    "mem|demand|stress": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Stress"
+    },
+    "mem|demand|stress_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Stress with committed projects"
+    },
+    "mem|demand|timeRemaining": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Time Remaining"
+    },
+    "mem|demand|timeRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Time Remaining with committed projects"
+    },
+    "mem|demand|usableCapacity": {
+      "default_monitored": true,
+      "name": "Memory|Demand|Usable Capacity after HA and Buffer"
+    },
+    "mem|demand|utilization.range": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Utilization Range"
+    },
+    "mem|demand|waste": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Waste"
+    },
+    "mem|demand|workload": {
+      "default_monitored": true,
+      "name": "Memory|Demand|Workload"
+    },
+    "mem|demand|workload_balance_factor": {
+      "default_monitored": false,
+      "name": "Memory|Demand|Workload Balance Factor"
+    },
+    "mem|density": {
+      "default_monitored": false,
+      "name": "Memory|Density"
+    },
+    "mem|density_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Density with committed projects"
+    },
+    "mem|haTotalCapacity_average": {
+      "default_monitored": true,
+      "name": "Memory|Usable Capacity"
+    },
+    "mem|host_contentionPct": {
+      "default_monitored": true,
+      "name": "Memory|Contention"
+    },
+    "mem|host_demand": {
+      "default_monitored": true,
+      "name": "Memory|Machine Demand"
+    },
+    "mem|host_provisioned": {
+      "default_monitored": true,
+      "name": "Memory|Total Capacity"
+    },
+    "mem|host_systemUsage": {
+      "default_monitored": true,
+      "name": "Memory|ESX System Usage"
+    },
+    "mem|host_usable": {
+      "default_monitored": true,
+      "name": "Memory|Usable Memory"
+    },
+    "mem|host_usage": {
+      "default_monitored": true,
+      "name": "Memory|Host Usage"
+    },
+    "mem|host_usagePct": {
+      "default_monitored": true,
+      "name": "Memory|Usage / Usable"
+    },
+    "mem|idle": {
+      "default_monitored": false,
+      "name": "Memory|Is Idle"
+    },
+    "mem|idle_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Is Idle with committed projects"
+    },
+    "mem|isStress": {
+      "default_monitored": false,
+      "name": "Memory|Is Stressed"
+    },
+    "mem|isStress_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Is Stressed with committed projects"
+    },
+    "mem|isWaste": {
+      "default_monitored": false,
+      "name": "Memory|Has Reclaimable Capacity"
+    },
+    "mem|memory_allocated_on_all_powered_on_vms": {
+      "default_monitored": true,
+      "name": "Memory|Memory Allocated on all Powered On Consumers"
+    },
+    "mem|memory_allocated_on_all_vms": {
+      "default_monitored": true,
+      "name": "Memory|Memory Allocated on all Consumers"
+    },
+    "mem|object.demand.with.size.recommendation": {
+      "default_monitored": false,
+      "name": "Memory|Effective Demand (With peak usage)"
+    },
+    "mem|optimal.consumer.per.provider": {
+      "default_monitored": false,
+      "name": "Memory|Optimal Consumer Provider ratio"
+    },
+    "mem|optimal.consumer.per.provider_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Optimal Consumer Provider ratio with committed projects"
+    },
+    "mem|overhead_average": {
+      "default_monitored": true,
+      "name": "Memory|VM Overhead"
+    },
+    "mem|oversized": {
+      "default_monitored": false,
+      "name": "Memory|Is Oversized"
+    },
+    "mem|oversized_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Is Oversized with committed projects"
+    },
+    "mem|poweredOff": {
+      "default_monitored": false,
+      "name": "Memory|Powered Off"
+    },
+    "mem|poweredOffTimePercent": {
+      "default_monitored": false,
+      "name": "Memory|Powered Off Time Percent"
+    },
+    "mem|poweredOffTimePercent_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Powered Off Time Percent with committed projects"
+    },
+    "mem|poweredOff_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Powered Off with committed projects"
+    },
+    "mem|reason.for.waste": {
+      "default_monitored": false,
+      "name": "Memory|Reason for Reclaimable Capacity"
+    },
+    "mem|reservedCapacity_average": {
+      "default_monitored": true,
+      "name": "Memory|Reserved Capacity"
+    },
+    "mem|size.recommendation": {
+      "default_monitored": false,
+      "name": "Memory|Recommended Size"
+    },
+    "mem|size.recommendation_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Recommended Size with committed projects"
+    },
+    "mem|stress": {
+      "default_monitored": false,
+      "name": "Memory|Stress"
+    },
+    "mem|stress_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Stress with committed projects"
+    },
+    "mem|timeRemaining": {
+      "default_monitored": false,
+      "name": "Memory|Time Remaining"
+    },
+    "mem|timeRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Memory|Time Remaining with committed projects"
+    },
+    "mem|total_need": {
+      "default_monitored": true,
+      "name": "Memory|Utilization"
+    },
+    "mem|utilization.range": {
+      "default_monitored": false,
+      "name": "Memory|Utilization Range"
+    },
+    "mem|virtual_to_physical_memory_allocation_ratio": {
+      "default_monitored": true,
+      "name": "Memory|Current Overcommit Ratio"
+    },
+    "mem|waste": {
+      "default_monitored": false,
+      "name": "Memory|Waste"
+    },
+    "mem|workload": {
+      "default_monitored": true,
+      "name": "Memory|Workload"
+    },
+    "net|droppedPct": {
+      "default_monitored": true,
+      "name": "Network|Packets Dropped"
+    },
+    "net|maxObserved_KBps": {
+      "default_monitored": false,
+      "name": "Network|(DEP) Max Observed Throughput"
+    },
+    "net|maxObserved_Rx_KBps": {
+      "default_monitored": false,
+      "name": "Network|(DEP) Max Observed Received Throughput"
+    },
+    "net|maxObserved_Tx_KBps": {
+      "default_monitored": false,
+      "name": "Network|(DEP) Max Observed Transmitted Throughput"
+    },
+    "net|received_average": {
+      "default_monitored": true,
+      "name": "Network|Data Receive Rate"
+    },
+    "net|transmitted_average": {
+      "default_monitored": true,
+      "name": "Network|Data Transmit Rate"
+    },
+    "net|usage_average": {
+      "default_monitored": true,
+      "name": "Network|Usage Rate"
+    },
+    "reclaimable|cost": {
+      "default_monitored": true,
+      "name": "Reclaimable|Potential Savings"
+    },
+    "reclaimable|cpu": {
+      "default_monitored": true,
+      "name": "Reclaimable|CPU"
+    },
+    "reclaimable|diskspace": {
+      "default_monitored": true,
+      "name": "Reclaimable|Disk Space"
+    },
+    "reclaimable|idle_vms|cost": {
+      "default_monitored": true,
+      "name": "Reclaimable|Idle VMs|Potential Savings"
+    },
+    "reclaimable|idle_vms|vm_count": {
+      "default_monitored": true,
+      "name": "Reclaimable|Idle VMs|Virtual Machines"
+    },
+    "reclaimable|mem": {
+      "default_monitored": true,
+      "name": "Reclaimable|Memory"
+    },
+    "reclaimable|orphaned_disk_count": {
+      "default_monitored": true,
+      "name": "Reclaimable|Number of Orphaned Disks"
+    },
+    "reclaimable|orphaned_disk|cost": {
+      "default_monitored": true,
+      "name": "Reclaimable|Orphaned Disks|Potential Savings"
+    },
+    "reclaimable|oversized_vms|cost": {
+      "default_monitored": true,
+      "name": "Reclaimable|Oversized VMs|Potential Savings"
+    },
+    "reclaimable|poweredOff_vms|cost": {
+      "default_monitored": true,
+      "name": "Reclaimable|Powered Off VMs|Potential Savings"
+    },
+    "reclaimable|poweredOff_vms|vm_count": {
+      "default_monitored": true,
+      "name": "Reclaimable|Powered Off VMs|Virtual Machines"
+    },
+    "reclaimable|reclaimable_host_cost": {
+      "default_monitored": true,
+      "name": "Reclaimable|Reclaimable Host Cost"
+    },
+    "reclaimable|vm_count": {
+      "default_monitored": true,
+      "name": "Reclaimable|Virtual Machines"
+    },
+    "reclaimable|vm_snapshots|cost": {
+      "default_monitored": true,
+      "name": "Reclaimable|VM Snapshots|Potential Savings"
+    },
+    "reclaimable|vm_snapshots|vm_count": {
+      "default_monitored": true,
+      "name": "Reclaimable|VM Snapshots|Virtual Machines"
+    },
+    "reclaimable|vm_templates|cost": {
+      "default_monitored": true,
+      "name": "Reclaimable|VM Templates|Potential Savings"
+    },
+    "reclamation|scheduled|cost": {
+      "default_monitored": true,
+      "name": "Reclamation|Scheduled|Cost Savings"
+    },
+    "reclamation|scheduled|cpu": {
+      "default_monitored": true,
+      "name": "Reclamation|Scheduled|CPU"
+    },
+    "reclamation|scheduled|diskspace": {
+      "default_monitored": true,
+      "name": "Reclamation|Scheduled|Disk Space"
+    },
+    "reclamation|scheduled|mem": {
+      "default_monitored": true,
+      "name": "Reclamation|Scheduled|Memory"
+    },
+    "rightsizing|scheduled|cpu_decreased": {
+      "default_monitored": true,
+      "name": "Rightsizing|Scheduled|CPU Decreased"
+    },
+    "rightsizing|scheduled|cpu_increased": {
+      "default_monitored": true,
+      "name": "Rightsizing|Scheduled|CPU Increased"
+    },
+    "rightsizing|scheduled|mem_decreased": {
+      "default_monitored": true,
+      "name": "Rightsizing|Scheduled|Memory Decreased"
+    },
+    "rightsizing|scheduled|mem_increased": {
+      "default_monitored": true,
+      "name": "Rightsizing|Scheduled|Memory Increased"
+    },
+    "storage_realized|realizedIdleDiskSpace": {
+      "default_monitored": true,
+      "name": "Disk Space Realized|Idle VMs"
+    },
+    "storage_realized|realizedOrphanedDiskSpace": {
+      "default_monitored": true,
+      "name": "Disk Space Realized|Orphaned Disks"
+    },
+    "storage_realized|realizedPoweredOffDiskSpace": {
+      "default_monitored": true,
+      "name": "Disk Space Realized|Powered Off VMs"
+    },
+    "storage_realized|realizedSnapshotSpace": {
+      "default_monitored": true,
+      "name": "Disk Space Realized|VM Snapshots"
+    },
+    "storage|usage_average": {
+      "default_monitored": true,
+      "name": "Storage|Total Throughput"
+    },
+    "summary|WLP|VMotionViaWLP_FailCount": {
+      "default_monitored": false,
+      "name": "Summary|WLP|Fail Count"
+    },
+    "summary|WLP|VMotionViaWLP_NumberOfRuns": {
+      "default_monitored": false,
+      "name": "Summary|WLP|Number of runs"
+    },
+    "summary|WLP|VMotionViaWLP_SuccessCount": {
+      "default_monitored": false,
+      "name": "Summary|WLP|Success Count"
+    },
+    "summary|avg_cluster_availability": {
+      "default_monitored": true,
+      "name": "Summary|Average Cluster Availability"
+    },
+    "summary|avg_vm_density": {
+      "default_monitored": true,
+      "name": "Summary|Average Running VM Count per Running Host"
+    },
+    "summary|capacity.provider.count": {
+      "default_monitored": false,
+      "name": "Summary|Number of Capacity providers"
+    },
+    "summary|capacity.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Number of Capacity providers with committed projects"
+    },
+    "summary|capacityRemainingUsingConsumers": {
+      "default_monitored": false,
+      "name": "Summary|Capacity Remaining using profile"
+    },
+    "summary|capacityRemainingUsingConsumers_average": {
+      "default_monitored": false,
+      "name": "Summary|Capacity Remaining (Average consumer profile)"
+    },
+    "summary|capacityRemainingUsingConsumers_average_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Capacity Remaining with committed projects (Average consumer profile)"
+    },
+    "summary|capacityRemainingUsingConsumers_large": {
+      "default_monitored": false,
+      "name": "Summary|Capacity Remaining (Large consumer profile)"
+    },
+    "summary|capacityRemainingUsingConsumers_medium": {
+      "default_monitored": false,
+      "name": "Summary|Capacity Remaining (Medium consumer profile)"
+    },
+    "summary|capacityRemainingUsingConsumers_small": {
+      "default_monitored": false,
+      "name": "Summary|Capacity Remaining (Small consumer profile)"
+    },
+    "summary|capacityRemainingUsingConsumers_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Capacity Remaining using profile with committed projects"
+    },
+    "summary|capacityRemainingValue": {
+      "default_monitored": false,
+      "name": "Summary|Capacity Remaining Value"
+    },
+    "summary|capacityRemainingValue_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Capacity Remaining Value with committed projects"
+    },
+    "summary|capacityRemaining_min": {
+      "default_monitored": false,
+      "name": "Summary|Capacity Remaining (Based on instantaneous peak)"
+    },
+    "summary|capacityRemaining_min_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Capacity Remaining with committed projects (Based on instantaneous peak)"
+    },
+    "summary|consumer.count": {
+      "default_monitored": false,
+      "name": "Summary|Number of Capacity consumers"
+    },
+    "summary|consumer.count.per.provider.count": {
+      "default_monitored": false,
+      "name": "Summary|Consumer Provider ratio"
+    },
+    "summary|consumer.count.per.provider.count_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Consumer Provider ratio with committed projects"
+    },
+    "summary|consumer.count_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Number of Capacity consumers with committed projects"
+    },
+    "summary|idle": {
+      "default_monitored": false,
+      "name": "Summary|Is Idle"
+    },
+    "summary|idle_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Is Idle with committed projects"
+    },
+    "summary|isStress": {
+      "default_monitored": false,
+      "name": "Summary|Is Stressed"
+    },
+    "summary|isStress_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Is Stressed with committed projects"
+    },
+    "summary|isWaste": {
+      "default_monitored": false,
+      "name": "Summary|Has Reclaimable Capacity"
+    },
+    "summary|max_number_vms": {
+      "default_monitored": true,
+      "name": "Summary|Maximum Supported VMs (deprecated)"
+    },
+    "summary|numberDeveloperManagedVMs": {
+      "default_monitored": true,
+      "name": "Summary|Number of Developer Managed VMs"
+    },
+    "summary|numberKubernetesClusters": {
+      "default_monitored": true,
+      "name": "Summary|Number of Kubernetes clusters"
+    },
+    "summary|numberNamespaces": {
+      "default_monitored": true,
+      "name": "Summary|Number of Namespaces"
+    },
+    "summary|numberSupervisorClusters": {
+      "default_monitored": true,
+      "name": "Summary|Number of Supervisor Clusters"
+    },
+    "summary|numberSupervisorHosts": {
+      "default_monitored": true,
+      "name": "Summary|Number of Supervisor Hosts"
+    },
+    "summary|number_poweredOff_vms": {
+      "default_monitored": true,
+      "name": "Summary|Number of Powered Off VMs"
+    },
+    "summary|number_running_hosts": {
+      "default_monitored": true,
+      "name": "Summary|Number of Running Hosts"
+    },
+    "summary|number_running_vcpus": {
+      "default_monitored": true,
+      "name": "Summary|Number of vCPUs on Powered On VMs"
+    },
+    "summary|number_running_vms": {
+      "default_monitored": true,
+      "name": "Summary|Number of Running VMs"
+    },
+    "summary|number_vm_templates": {
+      "default_monitored": true,
+      "name": "Summary|Number of VM Templates"
+    },
+    "summary|number_vmotion": {
+      "default_monitored": true,
+      "name": "Summary|Number of vMotions"
+    },
+    "summary|optimal.consumer.per.provider": {
+      "default_monitored": false,
+      "name": "Summary|Optimal Consumer Provider ratio"
+    },
+    "summary|optimal.consumer.per.provider_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Optimal Consumer Provider ratio with committed projects"
+    },
+    "summary|oversized": {
+      "default_monitored": false,
+      "name": "Summary|Is Oversized"
+    },
+    "summary|oversized_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Is Oversized with committed projects"
+    },
+    "summary|poweredOff": {
+      "default_monitored": false,
+      "name": "Summary|Powered Off"
+    },
+    "summary|poweredOffTimePercent": {
+      "default_monitored": false,
+      "name": "Summary|Powered Off Time Percent"
+    },
+    "summary|poweredOffTimePercent_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Powered Off Time Percent with committed projects"
+    },
+    "summary|poweredOff_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Powered Off with committed projects"
+    },
+    "summary|rebalance_recommended": {
+      "default_monitored": true,
+      "name": "Summary|Rebalance Recommended"
+    },
+    "summary|timeRemaining": {
+      "default_monitored": false,
+      "name": "Summary|Time Remaining"
+    },
+    "summary|timeRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Summary|Time Remaining with committed projects"
+    },
+    "summary|total_number_clusters": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of Clusters"
+    },
+    "summary|total_number_datastores": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of Datastores"
+    },
+    "summary|total_number_hosts": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of Hosts"
+    },
+    "summary|total_number_pods": {
+      "default_monitored": true,
+      "name": "Summary|Number of Pods"
+    },
+    "summary|total_number_vms": {
+      "default_monitored": true,
+      "name": "Summary|Total Number of VMs"
+    },
+    "summary|utilization.range": {
+      "default_monitored": false,
+      "name": "Summary|Utilization Range"
+    },
+    "summary|vm_count_per_host": {
+      "default_monitored": true,
+      "name": "Summary|VM Count per Host"
+    },
+    "summary|workload_indicator": {
+      "default_monitored": false,
+      "name": "Summary|(DEP) Workload Indicator"
+    },
+    "vmop|inventoryChange|numClone_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Clone"
+    },
+    "vmop|inventoryChange|numCreate_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Create"
+    },
+    "vmop|inventoryChange|numDeploy_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Template Deploy"
+    },
+    "vmop|inventoryChange|numDestroy_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Delete"
+    },
+    "vmop|inventoryChange|numReconfigure_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Reconfigure"
+    },
+    "vmop|inventoryChange|numRegister_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Register"
+    },
+    "vmop|inventoryChange|numUnregister_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Inventory|VM Unregister"
+    },
+    "vmop|locationChange|numChangeDS_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Location|VM Datastore Change (powered-off VMs)"
+    },
+    "vmop|locationChange|numChangeHostDS_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Location|VM Host and Datastore Change (powered-off VMs)"
+    },
+    "vmop|locationChange|numChangeHost_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Location|VM Host Change (powered-off VMs)"
+    },
+    "vmop|locationChange|numSVMotion_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Location|Storage vMotion"
+    },
+    "vmop|locationChange|numVMotion_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Location|vMotion"
+    },
+    "vmop|locationChange|numXVMotion_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Location|VM Host and Datastore Change (powered-on VMs)"
+    },
+    "vmop|stateChange|numPoweroff_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Power Off"
+    },
+    "vmop|stateChange|numPoweron_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Power On"
+    },
+    "vmop|stateChange|numRebootGuest_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Guest Reboot"
+    },
+    "vmop|stateChange|numReset_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Reset"
+    },
+    "vmop|stateChange|numShutdownGuest_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Guest Shutdown"
+    },
+    "vmop|stateChange|numStandbyGuest_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Standby Guest"
+    },
+    "vmop|stateChange|numSuspend_latest": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|State|VM Suspend"
+    }
+  },
+  "properties": {
+    "System Properties|businessHours": {
+      "name": "VCF Operations Generated Properties|Business Hours"
+    },
+    "System Properties|host_collector_id": {
+      "name": "VCF Operations Generated Properties|Current Collector ID"
+    },
+    "System Properties|resource_kind_subtype": {
+      "name": "VCF Operations Generated Properties|Object Type Subclassification"
+    },
+    "System Properties|resource_kind_type": {
+      "name": "VCF Operations Generated Properties|Object Type Classification"
+    },
+    "config|name": {
+      "name": "Configuration|Name"
+    },
+    "summary|customTag|customTagValue": {
+      "name": "Summary|Custom Tag|Value"
+    },
+    "summary|folder": {
+      "name": "Summary|vSphere Folder"
+    },
+    "summary|max_number_vms_property": {
+      "name": "Summary|Maximum Supported VMs"
+    },
+    "summary|parentVcenter": {
+      "name": "Summary|Parent vCenter"
+    },
+    "summary|tag": {
+      "name": "Summary|vSphere Tag"
+    },
+    "summary|tagJson": {
+      "name": "Summary|vSphere Tag Json"
+    },
+    "vcm|compscoreupdated": {
+      "name": "VCM|Compliance score updated"
+    },
+    "vcm|template|active": {
+      "name": "VCM|Template|Active"
+    },
+    "vcm|template|checktime": {
+      "name": "VCM|Template|Checktime"
+    },
+    "vcm|template|failedchecks": {
+      "name": "VCM|Template|Failed Checks"
+    },
+    "vcm|template|lastevaluated": {
+      "name": "VCM|Template|Last data collection"
+    },
+    "vcm|template|link": {
+      "name": "VCM|Template|Link"
+    },
+    "vcm|template|mappingname": {
+      "name": "VCM|Template|Mapping name"
+    },
+    "vcm|template|score": {
+      "name": "VCM|Template|Score"
+    },
+    "vcm|template|templatename": {
+      "name": "VCM|Template|Template name"
+    },
+    "vcm|template|totalchecks": {
+      "name": "VCM|Template|Total checks"
+    }
+  },
+  "resource_kind": "Datacenter",
+  "source": "https://vcf-lab-operations.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/Datacenter/statkeys"
+}

@@ -1,0 +1,79 @@
+id: 4d393353-02fe-474a-932f-be0d9f0e6327
+name: '[IDPS] IDPS Planner VM Metrics'
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+columns:
+- attribute: net|20_sec_peak_usage_average
+  display_name: Peak Usage within cycle
+  unit: mbitsps
+  transformation: MAX
+  yellow_bound: 7000.0
+  orange_bound: 8000.0
+  red_bound: 9000.0
+  ascending_range: false
+- attribute: net|usage_average
+  display_name: Peak Net Usage
+  unit: mbitsps
+  transformation: MAX
+  yellow_bound: 7000.0
+  orange_bound: 8000.0
+  red_bound: 9000.0
+  ascending_range: false
+- attribute: net|usage_average
+  display_name: Net Usage 95%
+  unit: auto
+  transformation: PERCENTILE
+  percentile: 95
+- attribute: net|received_average
+  display_name: Peak Net Receive
+  unit: mbitsps
+  transformation: MAX
+  yellow_bound: 7000.0
+  orange_bound: 8000.0
+  red_bound: 9000.0
+  ascending_range: false
+- attribute: net|received_average
+  display_name: Net Receive 95%
+  unit: auto
+  transformation: PERCENTILE
+  percentile: 95
+- attribute: net|transmitted_average
+  display_name: Peak Net Transmit
+  unit: mbitsps
+  transformation: MAX
+  yellow_bound: 7000.0
+  orange_bound: 8000.0
+  red_bound: 9000.0
+  ascending_range: false
+- attribute: net|transmitted_average
+  display_name: Net Transmit 95%
+  unit: auto
+  transformation: PERCENTILE
+  percentile: 95
+- attribute: net|20_sec_peak_packetsPerSec
+  display_name: Peak PPS
+  transformation: MAX
+  yellow_bound: 120000.0
+  orange_bound: 130000.0
+  red_bound: 140000.0
+  ascending_range: false
+- attribute: net|20_sec_peak_packetsPerSec
+  display_name: Peak PPS (95%)
+  transformation: PERCENTILE
+  percentile: 95
+  yellow_bound: 120000.0
+  orange_bound: 130000.0
+  red_bound: 140000.0
+  ascending_range: false
+- attribute: net|20_sec_peak_packetsPerSec
+  display_name: VM PPS
+  yellow_bound: 120000.0
+  orange_bound: 130000.0
+  red_bound: 140000.0
+  ascending_range: false
+- attribute: summary|guest|toolsVersion
+  display_name: VM Tools Version
+- attribute: summary|guest|toolsRunningStatus
+  display_name: VM Tools Running ?
+  red_bound: Guest Tools Not Running

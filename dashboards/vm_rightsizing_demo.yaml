@@ -1,0 +1,55 @@
+id: a3f2c817-8e14-4b5e-9d06-fc1e7b2d3a90
+name: "[VCF Content Factory] VM Rightsizing Demo"
+description: >
+  Single-screen demo dashboard for VM rightsizing analysis across the entire
+  environment. Opens to a sortable VM list with 30-day 95th-percentile CPU and
+  memory demand columns alongside configured sizing. Sort any column to surface
+  oversized (low demand, high configured), undersized (high demand + ready time),
+  or idle VM candidates without any filter or picker interaction.
+
+widgets:
+
+  - id: intro_text
+    type: TextDisplay
+    title: "About this dashboard"
+    coords: {x: 1, y: 1, w: 12, h: 2}
+    html: >
+      <p><em>Environment-wide VM rightsizing snapshot.</em> Sort columns to find
+      <strong>oversized</strong> (high configured, low demand),
+      <strong>undersized</strong> (low configured, high demand + ready time),
+      or <strong>idle</strong> VMs.</p>
+
+  - id: env_kpis
+    type: Scoreboard
+    title: "Environment totals"
+    coords: {x: 1, y: 3, w: 12, h: 3}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    visual_theme: 8
+    box_columns: 4
+    metrics:
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: "summary|number_running_vms"
+        metric_name: "Powered-On VMs"
+        color_method: 1
+        label: "Powered-On VMs"
+
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: "summary|number_running_vcpus"
+        metric_name: "vCPUs on Powered-On VMs"
+        color_method: 1
+        label: "Configured vCPUs (powered-on)"
+
+  - id: vm_rightsizing_scan
+    type: View
+    title: "VM Rightsizing — Environment Scan"
+    coords: {x: 1, y: 6, w: 12, h: 14}
+    view: "[VCF Content Factory] VM Rightsizing — Environment Scan"
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World

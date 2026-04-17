@@ -1,0 +1,7 @@
+id: 57be077d-f61e-4d25-ae05-ae27eed15229
+name: '[IDPS] Net Transmit (All VMs)'
+formula: Sum(${adaptertype=VMWARE, objecttype=VirtualMachine, metric=net|transmitted_average,
+  depth=1})
+resource_kinds:
+- adapter_kind_key: VMWARE
+  resource_kind_key: VirtualMachine

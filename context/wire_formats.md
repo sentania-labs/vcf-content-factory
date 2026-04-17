@@ -118,6 +118,23 @@ which must match the view's UUID. In this repo, the dashboard YAML's
 `view:` field names a view by name; the loader resolves it to the
 view YAML's `id` at build time.
 
+#### getDashboardConfig vs. content-zip export (extractor note)
+
+`/ui/dashboard.action?mainAction=getDashboardConfig` returns an entirely
+different format than the content-zip export: the response is
+`{"interactionTypes": {...}, "dashboardConfig": {"tabConfigs": [...], "widgetInteractions": {...}}}`.
+`tabConfigs[]` contains ALL dashboards on the instance (one entry per
+dashboard, keyed by dashboard UUID in `tabConfigs[N].id`). Each entry has
+`name`, `id`, `widgets[]` — but the `widgets[]` here are **shells only**:
+they have `key` (not `type`), `gridsterX/Y/W/H` (flat, not nested
+`gridsterCoords`), and **no `config` block**. Widget config
+(viewDefinitionId, metric specs, etc.) is NOT available from this endpoint.
+
+**The content-zip export is the only reliable source of full widget config
+for extraction.** `vcfops_extractor` uses `POST /api/content/operations/export`
+with `contentTypes: ["DASHBOARDS"]` to get the same `dashboard/dashboard.json`
+format the importer and `parse_dashboard_json()` were built for.
+
 #### Dashboard import lock and ownership behavior
 
 The content-zip importer **always sets `locked: true` on imported

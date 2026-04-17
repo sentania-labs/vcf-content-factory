@@ -1,0 +1,60 @@
+id: 587c951c-5d5d-43aa-a1c1-af809db409db
+name: "[VCF Content Factory] VM Rightsizing — Environment Scan"
+description: >
+  Environment-wide VM rightsizing snapshot. Each row is one VM.
+  Sort columns to surface rightsizing candidates:
+  - Low P95 CPU Demand + Low P95 Memory Usage → oversized (right-size down).
+  - High P95 CPU Demand + high CPU Ready → undersized or co-scheduling pressure.
+  - Very low P95 CPU + very low P95 Memory → idle (decommission candidate).
+  Percentile columns aggregate over the last 30 days.
+  No default sort — sort interactively to focus on the category you need.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+
+summary: false
+
+time_window:
+  unit: DAYS
+  count: 30
+
+columns:
+  # Identity / placement
+  - attribute: summary|parentCluster
+    display_name: "Parent Cluster"
+    unit: ""
+
+  - attribute: summary|runtime|powerState
+    display_name: "Power State"
+    unit: ""
+
+  # Configured sizing
+  - attribute: config|hardware|num_Cpu
+    display_name: "vCPUs (configured)"
+    unit: ""
+
+  # CPU demand — 95th percentile over 30-day window
+  - attribute: cpu|demandPct
+    display_name: "CPU Demand P95 (%)"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+
+  # Configured memory — server converts KB → GB via preferredUnitId
+  - attribute: config|hardware|memoryKB
+    display_name: "Memory (configured GB)"
+    unit: "gb"
+
+  # Memory usage — 95th percentile over 30-day window
+  - attribute: mem|usage_average
+    display_name: "Memory Usage P95 (%)"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+
+  # CPU ready — average over the 30-day window
+  - attribute: cpu|readyPct
+    display_name: "CPU Ready % (avg)"
+    unit: percent
+    transformation: AVG

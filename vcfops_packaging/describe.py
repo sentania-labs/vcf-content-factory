@@ -24,8 +24,18 @@ Cache file layout::
           "name": "Network|Packets per second",
           "default_monitored": false
         }
+      },
+      "properties": {
+        "summary|guest|toolsVersion": {
+          "name": "Guest OS|Tools Version"
+        }
       }
     }
+
+The ``properties`` section is optional — existing cache files without it are
+valid; properties will not be checked until the cache is refreshed.  Run
+``python3 -m vcfops_packaging refresh-describe`` with a live instance to
+populate the properties section.
 """
 from __future__ import annotations
 
@@ -83,6 +93,10 @@ class DescribeCache:
         self._client = client
         # In-memory layer: (adapter_kind, resource_kind) -> dict[key, MetricInfo]
         self._cache: dict[tuple[str, str], dict[str, MetricInfo]] = {}
+        # Properties layer: (adapter_kind, resource_kind) -> set of property key strings.
+        # Populated from the "properties" section of each cache JSON file.
+        # When empty/absent, property lookups are skipped (no false positives).
+        self._props: dict[tuple[str, str], set[str]] = {}
 
     # ------------------------------------------------------------------ load
 
@@ -110,6 +124,11 @@ class DescribeCache:
                 resource_kind=resource_kind,
             )
         self._cache[(adapter_kind, resource_kind)] = metrics
+
+        # Load properties section (optional — older cache files omit it)
+        props_raw = raw.get("properties") or {}
+        self._props[(adapter_kind, resource_kind)] = set(props_raw.keys())
+
         return True
 
     # ----------------------------------------------------------------- query
@@ -136,7 +155,22 @@ class DescribeCache:
             if not found:
                 # No cache file — return sentinel None; caller decides severity.
                 self._cache[pair] = {}  # mark as "attempted but missing"
-        return self._cache.get(pair, {}).get(metric_key)
+        result = self._cache.get(pair, {}).get(metric_key)
+        if result is not None:
+            return result
+        # Not found in metrics cache.  Check the properties cache — if this key
+        # is a known property (e.g. summary|guest|toolsVersion) return a synthetic
+        # MetricInfo so the audit treats it as resolved (defaultMonitored=true,
+        # since properties are always collected and need no enablement).
+        if metric_key in self._props.get(pair, set()):
+            return MetricInfo(
+                key=metric_key,
+                name=metric_key,
+                default_monitored=True,
+                adapter_kind=adapter_kind,
+                resource_kind=resource_kind,
+            )
+        return None
 
     def has_cache_file(self, adapter_kind: str, resource_kind: str) -> bool:
         """Return True if a cache file exists for this kind pair."""
@@ -216,6 +250,34 @@ class DescribeCache:
             if hasattr(self._client, "base")
             else "unknown"
         )
+
+        # Also fetch properties via /api/adapterkinds/{ak}/resourcekinds/{rk}/properties
+        props_url_path = (
+            f"/api/adapterkinds/{adapter_kind}/resourcekinds/{resource_kind}/properties"
+        )
+        properties: dict[str, dict] = {}
+        try:
+            props_resp = self._client._request("GET", props_url_path)
+            if props_resp.status_code == 200:
+                props_body = props_resp.json()
+                # Observed response key: "resourceTypeAttributes" (same as statkeys)
+                # or "resourceTypeProperty" / "property" depending on the endpoint.
+                prop_list = (
+                    props_body.get("resourceTypeAttributes")
+                    or props_body.get("resourceTypeProperty")
+                    or props_body.get("property")
+                    or []
+                )
+                for entry in prop_list:
+                    key = entry.get("key") or entry.get("statKeyId") or ""
+                    if not key:
+                        continue
+                    name = entry.get("name") or entry.get("displayName") or key
+                    properties[key] = {"name": name}
+        except Exception:
+            # Properties fetch is best-effort; don't abort the statkeys refresh.
+            pass
+
         cache_doc = {
             "adapter_kind": adapter_kind,
             "resource_kind": resource_kind,
@@ -224,6 +286,7 @@ class DescribeCache:
                 f"{source_host}/suite-api{url_path}"
             ),
             "metrics": metrics,
+            "properties": properties,
         }
 
         cache_path = self._cache_path(adapter_kind, resource_kind)
@@ -233,12 +296,13 @@ class DescribeCache:
             encoding="utf-8",
         )
 
-        # Invalidate in-memory layer so the next resolve_metric reloads.
+        # Invalidate in-memory layers so the next resolve_metric reloads.
         self._cache.pop((adapter_kind, resource_kind), None)
+        self._props.pop((adapter_kind, resource_kind), None)
 
         print(
             f"  refreshed describe cache: {adapter_kind}/{resource_kind} "
-            f"({len(metrics)} keys)"
+            f"({len(metrics)} metric keys, {len(properties)} property keys)"
         )
 
     def refresh_all(

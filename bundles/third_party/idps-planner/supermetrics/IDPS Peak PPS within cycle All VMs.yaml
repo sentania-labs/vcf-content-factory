@@ -1,0 +1,7 @@
+id: c6816ee1-2b94-43ae-baf3-180f95b0e94c
+name: '[IDPS] Peak PPS within cycle (All VMs)'
+formula: Sum(${adaptertype=VMWARE, objecttype=VirtualMachine, metric=net|20_sec_peak_packetsPerSec,
+  depth=1})
+resource_kinds:
+- adapter_kind_key: VMWARE
+  resource_kind_key: VirtualMachine

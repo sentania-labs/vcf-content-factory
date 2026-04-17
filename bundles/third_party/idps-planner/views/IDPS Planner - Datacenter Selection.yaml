@@ -1,0 +1,12 @@
+id: 7ac44bb2-923c-4aa5-ae84-585a743a72f2
+name: IDPS Planner - Datacenter Selection
+subject:
+  adapter_kind: VMWARE
+  resource_kind: Datacenter
+columns:
+- attribute: summary|total_number_clusters
+  display_name: Clusters
+- attribute: summary|total_number_hosts
+  display_name: Hosts
+- attribute: summary|total_number_vms
+  display_name: VMs

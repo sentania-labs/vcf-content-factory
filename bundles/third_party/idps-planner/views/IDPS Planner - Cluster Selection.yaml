@@ -1,0 +1,16 @@
+id: e50bcb18-05e9-4530-8482-2882f675c82b
+name: IDPS Planner - Cluster Selection
+subject:
+  adapter_kind: VMWARE
+  resource_kind: ClusterComputeResource
+columns:
+- attribute: summary|total_number_hosts
+  display_name: Hosts
+- attribute: summary|total_number_vms
+  display_name: VMs
+- attribute: cpu|capacity_contentionPct
+  display_name: cpu|capacity_contentionPct
+  unit: percent
+- attribute: mem|host_contentionPct
+  display_name: mem|host_contentionPct
+  unit: percent

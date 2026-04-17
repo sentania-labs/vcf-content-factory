@@ -164,12 +164,21 @@ def _build_bundle_json(bundle: Bundle, display_name: str) -> str:
             ],
         }
 
-    manifest = {
+    manifest: dict = {
         "name": bundle.name,
         "display_name": display_name,
         "description": bundle.description or "",
         "content": content,
     }
+    # Include provenance fields when present
+    if not bundle.factory_native:
+        manifest["factory_native"] = False
+    if bundle.author:
+        manifest["author"] = bundle.author
+    if bundle.license:
+        manifest["license"] = bundle.license
+    if bundle.source:
+        manifest["source"] = bundle.source
     return json.dumps(manifest, indent=2)
 
 
@@ -270,6 +279,51 @@ def _generate_bundle_readme(bundle: Bundle, display_name: str) -> str:
         "",
         bundle.description or "_No description provided._",
         "",
+    ]
+
+    # Provenance section: rendered when factory_native is False OR any
+    # attribution field is set.  Placement: after lead description, before
+    # ## Contents.
+    has_provenance = (
+        not bundle.factory_native
+        or bool(bundle.author)
+        or bool(bundle.license)
+        or bool(bundle.source)
+    )
+    if has_provenance:
+        lines += [
+            "## Provenance",
+            "",
+        ]
+        source = bundle.source or {}
+        if source.get("url"):
+            captured_at = source.get("captured_at", "")
+            captured_from = source.get("captured_from_host", "")
+            source_line = f"**Source:** {source['url']}"
+            if captured_at:
+                source_line += f" (captured {captured_at}"
+                if captured_from:
+                    source_line += f" from {captured_from}"
+                source_line += ")"
+            lines.append(source_line)
+            lines.append("")
+        if source.get("version"):
+            lines.append(f"**Version:** {source['version']}")
+            lines.append("")
+        if bundle.author:
+            lines.append(f"**Author:** {bundle.author}")
+            lines.append("")
+        if bundle.license:
+            lines.append(f"**License:** {bundle.license}")
+            lines.append("")
+        # NOTE: no auto-injected boilerplate prose here.  When factory_native is
+        # False, bundle.description is the DESCRIPTION.md the user authored —
+        # it already provides the narrative (origin, context, usage notes).
+        # The ## Provenance block above supplies the structured metadata
+        # (source URL, captured date, version, author, license).
+        # Duplicating extraction-origin language here creates double provenance.
+
+    lines += [
         "## Contents",
         "",
     ]
@@ -385,6 +439,7 @@ def build_bundle(
     *,
     audit_mode: str = "auto",
     live_describe: bool = True,
+    skip_audit: bool = False,
 ) -> Path:
     """Build a distributable zip for the given bundle manifest.
 
@@ -398,6 +453,10 @@ def build_bundle(
             the environment, refresh the describe cache for all adapter/resource
             kind pairs referenced by this bundle before auditing.  If False,
             use the cache as-is (cache-only mode).
+        skip_audit: If True, skip the dependency audit entirely.  Metric
+            references are NOT validated.  Use only when the describe cache
+            cannot be refreshed (e.g. no lab access) and the content is known
+            to be correct.  Emits a WARN to stderr.
 
     Returns:
         Path to the built zip file.
@@ -410,34 +469,53 @@ def build_bundle(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # --- Dependency audit ---
-    describe_cache = make_cache(live=live_describe)
+    if skip_audit:
+        import sys as _sys
+        print(
+            f"  WARN: --skip-audit is set; dependency audit skipped for {bundle_path}. "
+            "Metric references will NOT be validated.",
+            file=_sys.stderr,
+        )
+        audit_result = None
+    else:
+        describe_cache = make_cache(live=live_describe)
 
-    # If live mode and client is attached, refresh relevant kind pairs first.
-    if live_describe and describe_cache._client is not None:
-        from .deps import extract_metric_references
-        refs = extract_metric_references(bundle)
-        pairs_needed: set[tuple[str, str]] = {
-            (r.adapter_kind, r.resource_kind) for r in refs
-        }
-        for ak, rk in sorted(pairs_needed):
-            try:
-                describe_cache.refresh(ak, rk)
-            except DescribeCacheError as exc:
-                print(f"  WARN: could not refresh describe cache for {ak}/{rk}: {exc}",
-                      file=__import__("sys").stderr)
+        # If live mode and client is attached, refresh relevant kind pairs first.
+        if live_describe and describe_cache._client is not None:
+            from .deps import extract_metric_references
+            refs = extract_metric_references(bundle)
+            pairs_needed: set[tuple[str, str]] = {
+                (r.adapter_kind, r.resource_kind) for r in refs
+            }
+            for ak, rk in sorted(pairs_needed):
+                try:
+                    describe_cache.refresh(ak, rk)
+                except DescribeCacheError as exc:
+                    print(f"  WARN: could not refresh describe cache for {ak}/{rk}: {exc}",
+                          file=__import__("sys").stderr)
 
-    audit_result = audit_bundle_dependencies(
-        bundle, describe_cache, mode=audit_mode
-    )
+        audit_result = audit_bundle_dependencies(
+            bundle, describe_cache, mode=audit_mode
+        )
 
-    # In auto mode, merge auto-added entries into the bundle's list before
-    # bundle.json serialization.
-    if audit_result.auto_added:
-        bundle.builtin_metric_enables = list(bundle.builtin_metric_enables) + audit_result.auto_added
+        # In auto mode, merge auto-added entries into the bundle's list before
+        # bundle.json serialization.
+        if audit_result.auto_added:
+            bundle.builtin_metric_enables = list(bundle.builtin_metric_enables) + audit_result.auto_added
 
     slug = bundle.name  # bundle slug = manifest name
-    display_name = _slug_to_display_name(slug)
-    out_path = output_dir / f"[VCF Content Factory] {display_name}.zip"
+    # Derive the display name: prefer manifest's explicit display_name, else
+    # derive from slug.
+    if bundle.display_name:
+        display_name = bundle.display_name
+    else:
+        display_name = _slug_to_display_name(slug)
+    # Zip filename: factory-native bundles use [VCF Content Factory] prefix;
+    # non-factory-native bundles with a display_name use it directly.
+    if not bundle.factory_native and bundle.display_name:
+        out_path = output_dir / f"{display_name}.zip"
+    else:
+        out_path = output_dir / f"[VCF Content Factory] {display_name}.zip"
     bundle_prefix = f"bundles/{slug}/"
     content_prefix = f"bundles/{slug}/content/"
 
@@ -598,6 +676,7 @@ def build_bundle(
     out_path.write_bytes(buf.getvalue())
 
     # Print audit summary after successful build.
-    print_audit_summary(audit_result, audit_mode)
+    if audit_result is not None:
+        print_audit_summary(audit_result, audit_mode)
 
     return out_path
