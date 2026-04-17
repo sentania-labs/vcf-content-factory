@@ -1779,6 +1779,132 @@ def extract_dashboard(
     dash_file_paths.append(f"dashboards/{dash_filename}")
     _info(f"wrote {dash_path}")
 
+    # -----------------------------------------------------------------------
+    # Enablement walk: collect all metric refs and check defaultMonitored
+    # -----------------------------------------------------------------------
+    # Import deps helpers inline to avoid circular-import at module level.
+    from vcfops_packaging.deps import (
+        MetricReference,
+        _refs_from_formula,
+        _normalize_metric_key,
+        _is_sm_ref,
+    )
+    from vcfops_packaging.describe import DescribeCache
+
+    all_metric_refs: dict[tuple[str, str, str], MetricReference] = {}
+
+    def _add_ref(ref: MetricReference) -> None:
+        k = (ref.adapter_kind, ref.resource_kind, ref.metric_key)
+        if k not in all_metric_refs:
+            all_metric_refs[k] = ref
+
+    # Super metric formula refs
+    for suuid, sm_data in sm_results.items():
+        formula = sm_formulas.get(sm_data.get("id", suuid), sm_data.get("formula", ""))
+        sm_name = sm_data.get("name", suuid)
+        for ref in _refs_from_formula(formula, sm_name):
+            _add_ref(ref)
+
+    # View column refs (raw dict form — mirrors deps._refs_from_view logic)
+    for vuuid, view_data in view_results.items():
+        ak = view_data.get("adapter_kind", "")
+        rk = view_data.get("resource_kind", "")
+        view_name = view_data.get("name", vuuid)
+        if ak and rk:
+            for col in view_data.get("columns", []):
+                attr = (col.get("attribute") or "").strip()
+                if not attr or _is_sm_ref(attr):
+                    continue
+                attr = _normalize_metric_key(attr)
+                _add_ref(MetricReference(
+                    adapter_kind=ak,
+                    resource_kind=rk,
+                    metric_key=attr,
+                    source_desc=f"view {view_name!r}",
+                ))
+
+    # Dashboard widget refs via parse_dashboard_json
+    try:
+        from vcfops_dashboards.reverse import parse_dashboard_json
+        from vcfops_dashboards.loader import ViewDef as _ViewDef
+        _views_by_id: dict = {}
+        for vuuid, vdata in view_results.items():
+            vid = vdata.get("id") or vuuid
+            vname = vdata.get("name") or vuuid
+            _views_by_id[vid.lower()] = _ViewDef(
+                id=vid, name=vname, description="",
+                adapter_kind=vdata.get("adapter_kind", ""),
+                resource_kind=vdata.get("resource_kind", ""),
+                columns=[],
+            )
+        _dash_copy = dict(dash_data)
+        _dash_copy["id"] = dashboard_id
+        _parsed_dash = parse_dashboard_json(_dash_copy, _views_by_id)
+        if _parsed_dash:
+            for w in _parsed_dash.widgets:
+                wsrc = f"dashboard {display_name!r} widget {w.local_id!r} ({w.type})"
+                wt = w.type
+                if wt == "Scoreboard" and w.scoreboard_config is not None:
+                    for ms in w.scoreboard_config.metrics:
+                        if ms.metric_key and not _is_sm_ref(ms.metric_key):
+                            _add_ref(MetricReference(
+                                adapter_kind=ms.adapter_kind,
+                                resource_kind=ms.resource_kind,
+                                metric_key=_normalize_metric_key(ms.metric_key),
+                                source_desc=wsrc,
+                            ))
+                elif wt == "MetricChart" and w.metric_chart_config is not None:
+                    for ms in w.metric_chart_config.metrics:
+                        if ms.metric_key and not _is_sm_ref(ms.metric_key):
+                            _add_ref(MetricReference(
+                                adapter_kind=ms.adapter_kind,
+                                resource_kind=ms.resource_kind,
+                                metric_key=_normalize_metric_key(ms.metric_key),
+                                source_desc=wsrc,
+                            ))
+                elif wt == "HealthChart" and w.health_chart_config is not None:
+                    hc = w.health_chart_config
+                    if hc.metric_key and not _is_sm_ref(hc.metric_key):
+                        _add_ref(MetricReference(
+                            adapter_kind=hc.adapter_kind,
+                            resource_kind=hc.resource_kind,
+                            metric_key=_normalize_metric_key(hc.metric_key),
+                            source_desc=wsrc,
+                        ))
+                elif wt == "ParetoAnalysis" and w.pareto_analysis_config is not None:
+                    pa = w.pareto_analysis_config
+                    if pa.metric_key and not _is_sm_ref(pa.metric_key):
+                        _add_ref(MetricReference(
+                            adapter_kind=pa.adapter_kind,
+                            resource_kind=pa.resource_kind,
+                            metric_key=_normalize_metric_key(pa.metric_key),
+                            source_desc=wsrc,
+                        ))
+                elif wt == "Heatmap" and w.heatmap_config is not None:
+                    for tab in w.heatmap_config.tabs:
+                        if tab.color_by_key and not _is_sm_ref(tab.color_by_key):
+                            _add_ref(MetricReference(
+                                adapter_kind=tab.adapter_kind,
+                                resource_kind=tab.resource_kind,
+                                metric_key=_normalize_metric_key(tab.color_by_key),
+                                source_desc=f"{wsrc} tab {tab.name!r} colorBy",
+                            ))
+                        if tab.size_by_key and not _is_sm_ref(tab.size_by_key):
+                            _add_ref(MetricReference(
+                                adapter_kind=tab.adapter_kind,
+                                resource_kind=tab.resource_kind,
+                                metric_key=_normalize_metric_key(tab.size_by_key),
+                                source_desc=f"{wsrc} tab {tab.name!r} sizeBy",
+                            ))
+    except Exception as e:
+        _warn(f"dashboard widget metric-ref walk failed ({e}); widget refs omitted from enablement walk")
+
+    # Resolve against offline describe cache (no live call — user refreshes describe separately)
+    offline_cache = DescribeCache()
+    bme_list = _collect_enablement_entries(list(all_metric_refs.values()), offline_cache)
+    if not bme_list:
+        _info("enablement walk: all referenced metrics are defaultMonitored=true (or cache miss); no builtin_metric_enables entries needed")
+
     # Bundle manifest
     manifest_path = output_path / f"{bundle_slug}.yaml"
     _write_manifest(
@@ -1794,6 +1920,7 @@ def extract_dashboard(
         view_paths=view_file_paths,
         dashboard_paths=dash_file_paths,
         output_dir=output_path,
+        builtin_metric_enables=bme_list if bme_list else None,
     )
     _info(f"wrote manifest: {manifest_path}")
 

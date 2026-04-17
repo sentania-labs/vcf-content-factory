@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-04-17T21:25:34Z",
+  "fetched_at": "2026-04-17T22:04:40Z",
   "metrics": {
     "NTP|DRIFT_IN_MILLS": {
       "default_monitored": true,
