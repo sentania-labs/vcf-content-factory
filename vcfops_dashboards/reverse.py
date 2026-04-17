@@ -71,6 +71,71 @@ def _warn(msg: str) -> None:
 # ---------------------------------------------------------------------------
 
 _SYNTHETIC_RK_RE = re.compile(r"^resourceKind:id:(\d+)_::_$")
+_SYNTHETIC_RES_RE = re.compile(r"^resource:id:(\d+)_::_$")
+
+
+def _build_resource_lookup(dashboard_json: dict) -> dict[int, dict]:
+    """Build an index → {adapter_kind, resource_kind} map from entries.resource[].
+
+    The forward renderer (render.py) populates entries.resource[] with entries
+    shaped as::
+
+        {
+            "resourceKindKey": "<ResourceKindName>",
+            "internalId": "resource:id:<N>_::_",
+            "adapterKindKey": "<AdapterKindName>",
+            "name": "<ResourceKindName>",
+            "identifiers": [],
+        }
+
+    Self-provider View and ProblemAlertsList widget configs reference their
+    pinned container resource via ``config.resource.resourceId`` using the same
+    ``resource:id:N_::_`` synthetic form.  This function inverts the table so
+    reverse parsers can recover the real adapter/resource kind from a synthetic
+    ref.
+
+    Returns an empty dict if the entries block is absent or malformed.
+    """
+    lookup: dict[int, dict] = {}
+    entries = dashboard_json.get("entries") or {}
+    res_entries = entries.get("resource") or []
+    for entry in res_entries:
+        internal_id = str(entry.get("internalId") or "")
+        m = _SYNTHETIC_RES_RE.match(internal_id)
+        if not m:
+            continue
+        idx = int(m.group(1))
+        lookup[idx] = {
+            "adapter_kind": str(entry.get("adapterKindKey") or "").strip(),
+            "resource_kind": str(entry.get("resourceKindKey") or entry.get("name") or "").strip(),
+        }
+    return lookup
+
+
+def _resolve_res_id(
+    res_id: str,
+    resource_lookup: dict[int, dict],
+    context: str,
+) -> "tuple[Optional[str], Optional[str]]":
+    """Resolve a synthetic ``resource:id:N_::_`` string to (adapter_kind, resource_kind).
+
+    Returns ``(adapter_kind, resource_kind)`` when resolved, or ``(None, None)``
+    when the input is not a synthetic ref.  Emits WARN only when the ref IS
+    synthetic but the index is not present in resource_lookup.
+    """
+    res_id = res_id.strip()
+    m = _SYNTHETIC_RES_RE.match(res_id)
+    if not m:
+        return None, None
+    idx = int(m.group(1))
+    entry = resource_lookup.get(idx)
+    if entry is None:
+        _warn(
+            f"{context}: synthetic ref {res_id!r} points to index {idx} which is "
+            "not present in entries.resource[]; pin will not be emitted"
+        )
+        return "", ""
+    return entry["adapter_kind"], entry["resource_kind"]
 
 
 def _build_kind_lookup(dashboard_json: dict) -> dict[int, dict]:
@@ -761,9 +826,14 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
     description = str(dash_json.get("description") or "").strip()
     shared = bool(dash_json.get("shared", True))
 
-    # Build lookup table from entries.resourceKind[] so widget parsers can resolve
-    # synthetic "resourceKind:id:N_::_" refs to real adapter/resource kind strings.
+    # Build lookup tables from entries so widget parsers can resolve synthetic refs.
+    # kind_lookup: entries.resourceKind[] — resolves "resourceKind:id:N_::_" refs
+    #   used by ResourceList, Heatmap, Scoreboard, MetricChart, HealthChart,
+    #   ParetoAnalysis widget configs.
+    # resource_lookup: entries.resource[] — resolves "resource:id:N_::_" refs
+    #   used by self-provider View and ProblemAlertsList pin configs.
     kind_lookup = _build_kind_lookup(dash_json)
+    resource_lookup = _build_resource_lookup(dash_json)
 
     # Interactions
     interactions: list[Interaction] = []
@@ -826,6 +896,35 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
                     "view_name will be empty"
                 )
                 view_name = view_def_id  # preserve UUID as best effort
+            # Self-provider View widgets carry a pinned container resource in
+            # config.resource.resourceId (a synthetic "resource:id:N_::_" ref).
+            # Resolve it against entries.resource[] to recover adapter_kind +
+            # resource_kind and emit a pin: block in the YAML.
+            if self_provider:
+                res_cfg = cfg.get("resource") or {}
+                res_id_raw = str(res_cfg.get("resourceId") or "").strip() if isinstance(res_cfg, dict) else ""
+                if res_id_raw:
+                    context = f"dashboard '{display_name}': View widget '{local_id}'"
+                    ak, rk = _resolve_res_id(res_id_raw, resource_lookup, context)
+                    if ak is not None and ak and rk:
+                        pin = WidgetResourceKindRef(adapter_kind=ak, resource_kind=rk)
+                    elif ak is None:
+                        # Not a synthetic ref — try to recover from resourceKindId or resourceName
+                        # in the config.resource block (live-instance export may embed real values).
+                        rk_from_cfg = str(res_cfg.get("resourceName") or "").strip()
+                        if rk_from_cfg:
+                            pin = WidgetResourceKindRef(adapter_kind="VMWARE", resource_kind=rk_from_cfg)
+                        else:
+                            _warn(
+                                f"dashboard '{display_name}': self-provider View widget '{local_id}' "
+                                f"has config.resource.resourceId={res_id_raw!r} which is not a "
+                                "synthetic ref and has no resourceName fallback; pin will be omitted"
+                            )
+                else:
+                    _warn(
+                        f"dashboard '{display_name}': self-provider View widget '{local_id}' "
+                        "has no config.resource.resourceId; pin will be omitted"
+                    )
 
         elif wtype == "ResourceList":
             # Extract resource kinds from tagFilter.value.kind[].
@@ -894,6 +993,20 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
 
         elif wtype == "ProblemAlertsList":
             problems_alerts_list_config = _parse_problem_alerts_list_config(cfg, display_name, local_id)
+            # ProblemAlertsList can also be self-provider with a pinned container resource.
+            # Extract pin from config.resource.resourceId the same way as View widgets.
+            if self_provider and pin is None:
+                res_cfg = cfg.get("resource") or {}
+                res_id_raw = str(res_cfg.get("resourceId") or "").strip() if isinstance(res_cfg, dict) else ""
+                if res_id_raw:
+                    context = f"dashboard '{display_name}': ProblemAlertsList widget '{local_id}'"
+                    ak, rk = _resolve_res_id(res_id_raw, resource_lookup, context)
+                    if ak is not None and ak and rk:
+                        pin = WidgetResourceKindRef(adapter_kind=ak, resource_kind=rk)
+                    elif ak is None:
+                        rk_from_cfg = str(res_cfg.get("resourceName") or "").strip()
+                        if rk_from_cfg:
+                            pin = WidgetResourceKindRef(adapter_kind="VMWARE", resource_kind=rk_from_cfg)
 
         elif wtype == "Heatmap":
             heatmap_config = _parse_heatmap_config(cfg, display_name, local_id, kind_lookup)
