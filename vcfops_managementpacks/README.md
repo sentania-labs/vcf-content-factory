@@ -24,9 +24,46 @@ python3 -m vcfops_managementpacks build managementpacks/synology_dsm.yaml \
   [--relationship-strategy ...]
 ```
 
-Install and uninstall subcommands (for pushing `.pak` files to a live
-VCF Ops instance) are planned under task 18 (`context/pak_install_api_exploration.md`
-+ `context/pak_uninstall_api_exploration.md`).
+```bash
+# Install a .pak onto a live VCF Ops instance
+# Credentials: VCFOPS_HOST, VCFOPS_USER, VCFOPS_PASSWORD (or --host/--user/--password flags)
+# Any admin-privileged account works — no separate admin account required.
+python3 -m vcfops_managementpacks install dist/mpb_synology_dsm.1.0.0.1.pak
+
+# Uninstall by display name, UI pakId, or adapter_kind
+python3 -m vcfops_managementpacks uninstall "Synology DSM"
+python3 -m vcfops_managementpacks uninstall mpb_synology_dsm
+
+# Fire-and-forget (no completion polling)
+python3 -m vcfops_managementpacks install dist/mpb_synology_dsm.1.0.0.1.pak --no-wait
+python3 -m vcfops_managementpacks uninstall "Synology DSM" --no-wait
+```
+
+Both install and uninstall run through a single `/ui/` SPA session —
+no `/admin/` session or separate admin credentials required.  See
+`context/pak_ui_upload_investigation.md` §"Live-source findings" for
+the wire format, and `context/pak_uninstall_api_exploration.md` for
+the `isUnremovable` safety guard (mandatory; built-in paks are refused
+unless `--allow-builtin` is passed).
+
+**Subprocess timeout note**: the `install` command's internal completion
+poller defaults to 300 seconds (`POLL_TIMEOUT`).  If you invoke
+`python3 -m vcfops_managementpacks install` from a script or test harness
+via `subprocess`, set your subprocess timeout to at least 400 seconds —
+a subprocess timeout of 300s or less will race the internal poller and
+kill the process while an install is still in progress on the server.
+
+**Credential env vars** (matches the rest of the factory):
+
+| Env var | Purpose |
+|---|---|
+| `VCFOPS_HOST` | Hostname or IP of the VCF Ops instance |
+| `VCFOPS_USER` | Admin-privileged username |
+| `VCFOPS_PASSWORD` | Password |
+
+The legacy `VCFOPS_ADMIN` / `VCFOPS_ADMINPASSWORD` names are accepted
+as fallbacks with a deprecation warning.  Rename to the primary names
+at your earliest convenience.
 
 ## Bootstrap: populating `adapter_runtime/`
 

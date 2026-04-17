@@ -90,6 +90,29 @@ stubs. Of those six, only `dashboard.action` has a non-trivial set
 of working mainActions (the ones documented in
 `context/dashboard_delete_api.md`).
 
+**2026-04-17 correction — the original probe methodology missed at least two
+live handlers:** `/ui/solution.action` and `/ui/utility.action`.  These were not
+in the candidate list probed in the 2026-04-11 run because the assumption at the
+time was that solution management lived entirely on `/admin/`.  They are both
+live:
+
+- `/ui/solution.action` — full pak lifecycle mainAction surface (`install`,
+  `remove`, `getIntegrations`, `getLatestInstalledSolutionStatuses`, `enable`,
+  `disable`, `reinstall`, `resetSolutionUninstallState`, `cancel`, `finishStage`,
+  and more).  Proven live by the 2026-04-16 uninstall investigation
+  (`context/pak_uninstall_api_exploration.md`) and confirmed by SPA bundle grep
+  (`context/pak_ui_upload_investigation.md` §"Live-source findings").
+- `/ui/utility.action` — supports at minimum `mainAction=prepareFileUpload`,
+  which the SPA calls immediately before the multipart upload
+  (`context/pak_ui_upload_investigation.md` §"prepareFileUpload precursor").
+  Proven from JS source; not yet exercised live.
+
+The probe methodology in §"Struts action registration probe" should be re-run
+with a broader candidate list that includes at minimum: `solution`, `utility`,
+`integration`, `marketplace`, `repository`, `pak`, `managementPack`,
+`softwareUpdate`, `upgrade`.  Other live slugs may still be missing from the
+2026-04-11 enumeration.
+
 ## Dashboard action working-mainAction inventory
 
 Based on the probes run here and the earlier results in

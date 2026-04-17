@@ -41,6 +41,18 @@ endpoints an admin's browser hits.
 | Report list | `/ui/vcops/services/router` | Ext.Direct RPC `reportServiceController.getReportDefinitionThumbnails` with pagination filter |
 | Report delete | `/ui/vcops/services/router` | Ext.Direct RPC `reportServiceController.deleteReportDefinitions`, **`data: {"reportDefIds": "[{\"id\":\"...\",\"name\":\"...\"}]"}`** (BARE DICT, not array — opposite of view delete) |
 | Ext.Direct controller catalog (live session probe) | `/ui/vcops/services/api.js` | JS declaration of all controllers; 6 present in 9.0.2 |
+| Pak lifecycle — install, uninstall, status polling | `/ui/solution.action` | Full mainAction surface (verified live 2026-04-16 uninstall + SPA bundle grep): `install`, `remove`, `getIntegrations`, `getLatestInstalledSolutionStatuses`, `enable`, `disable`, `reinstall`, `resetSolutionUninstallState`, `cancel`, `finishStage`, `installingPakDetail`, `getLicenseAgreement`, `getReleaseInfo`, `getSolutionVersion`, `getInstallStatus`, `getSolutionInfo`, `getSolutionPakId`, `loadSolution`, `getPakDownloadStatus`, `getDetectedAdapterKinds`, `getAdapterTypes`, `checkSolutionAdapterInstancesExist`, and more. CSRF via `secureToken` form param (OPS_SESSION cookie source). See `context/pak_uninstall_api_exploration.md` and `context/pak_ui_upload_investigation.md`. **Note:** `getLatestInstalledSolutionStatuses` is proven live for uninstall polling; install-side polling from `/ui/` is implied by shared wizard code but not independently end-to-end verified — awaiting live install test. |
+| Pak upload (multipart) | `POST /ui/admin/services/solution/upload?uploadId=<epoch_ms>&ignoreSignatureChecking=<bool>` | Form fields: `solution=@<file>.pak`, `forceUpload`, `forceContent`, `secureToken`. `ignoreSignatureChecking` on QUERY STRING (not form body — differs from `/admin/` path). Response: `{pakId, solutionName, solutionVersion, ...}`. Proven via SPA bundle grep (`app.part4.min.js` offset 487784). Not yet exercised live from `/ui/` side; proven-same Java handler as `/admin/admin/services/solution/upload`. See `context/pak_ui_upload_investigation.md` §"Wire format". |
+| Pak upload prepare slot | `POST /ui/utility.action` `mainAction=prepareFileUpload` | Must be called immediately before multipart upload. `{"success":true}` on success. Proven from SPA bundle JS (`app.part4.min.js` offset 487584). Not yet exercised live; registered action confirmed by JS. See `context/pak_ui_upload_investigation.md` §"prepareFileUpload precursor". |
+
+**2026-04-17 note on the original probe methodology:** The 2026-04-11 enumeration in
+`context/struts_import_endpoints.md` probed only six `/ui/*.action` slugs and missed
+both `solution.action` and `utility.action` entirely.  The candidate list used at the
+time did not include `solution` or `utility` because solution management was assumed to
+live on `/admin/` only.  This assumption was wrong.  Re-run the probe methodology with
+a broader candidate list (`solution`, `utility`, `integration`, `marketplace`,
+`repository`, `pak`, `managementPack`, `softwareUpdate`, `upgrade`) when doing any
+future `/ui/` Struts enumeration work.
 
 ## Dead / trap endpoints (do not use)
 

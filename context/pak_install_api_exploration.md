@@ -90,17 +90,46 @@ admin SPA bundles we have access to do NOT call these endpoints for
 pak install — so they appear to be vestigial or used by a different
 internal service. **Not a recommended automation path.**
 
-### `/ui/*` Struts (`/ui/solution.action`) — dead stub
+### `/ui/*` Struts (`/ui/solution.action`) — CORRECTION: live handler, not a dead stub
 
-`/ui/solution.action` returns HTTP 200 with **zero-byte body** for
-every `mainAction` tried (real ones like `getSolutions`, fake ones
-like `FAKE_BOGUS_NAME`). This is the Struts default for an unregistered
-action — confirmed by comparison with `/ui/dashboard.action` which
-returns the Ext.JS skeleton HTML for bogus `mainAction` values and
-real JSON for known ones. The pak-install Struts handler lives at
-`/admin/solution.action`, not `/ui/solution.action`. This matches the
-pattern observed in `memory/project_vcf_ops_902_ui_deadends.md` —
-several legacy `/ui/*.action` paths are silent traps in 9.0.2.
+**2026-04-17 correction.** The claim below — that `/ui/solution.action` is a
+dead stub — was WRONG.  It was never actually tested against `solution.action`
+specifically; it was extrapolated from the general pattern that many `/ui/*.action`
+paths are silent in 9.0.2.  Subsequent live work disproved it:
+
+- **2026-04-16 uninstall investigation** (`context/pak_uninstall_api_exploration.md`)
+  proved `/ui/solution.action` is a live Struts handler with a rich mainAction
+  surface (`remove`, `getIntegrations`, `getLatestInstalledSolutionStatuses`,
+  `install`, `enable`, `disable`, `reinstall`, `resetSolutionUninstallState`,
+  `cancel`, `finishStage`, etc.).
+- **2026-04-16 static-asset investigation** (`context/pak_ui_upload_investigation.md`
+  §"Live-source findings") confirmed the `/ui/` SPA bundles contain the full
+  install wizard (`Ext.vcops.initialConfiguration.solutions.{ConfigurationWizard,
+  Select,Eula,Install,...}`) and proved the upload endpoint is
+  `/ui/admin/services/solution/upload` (relative-URL POST that resolves under
+  the `/ui/` servlet context, backed by the same Java handler as the `/admin/`
+  side).
+- The 2026-04-11 `/ui/*.action` enumeration in `context/struts_import_endpoints.md`
+  did not probe `solution.action` at all; the "dead stub" conclusion was
+  extrapolated without evidence.
+
+**Current state as of 2026-04-17:**  `vcfops_managementpacks/installer.py` uses
+`/ui/solution.action` for the full pak lifecycle (install + uninstall + status
+polling).  `/admin/solution.action` is no longer used by this codebase.
+
+**Original (wrong) note preserved for search history:**
+
+> `/ui/solution.action` returns HTTP 200 with zero-byte body for every
+> `mainAction` tried (real ones like `getSolutions`, fake ones like
+> `FAKE_BOGUS_NAME`). This is the Struts default for an unregistered
+> action — confirmed by comparison with `/ui/dashboard.action`.  The
+> pak-install Struts handler lives at `/admin/solution.action`, not
+> `/ui/solution.action`.
+
+This was incorrect.  The mainActions tried in the original probe did not include
+any of the valid solution lifecycle actions (`getIntegrations`, `remove`, etc.),
+so the empty-200 responses were "unknown mainAction" fallthrough, not "unregistered
+action" — two different Struts behaviors that look identical on the wire.
 
 ### `/ui/vcops/services/router` Ext.Direct — no solution controller
 
@@ -408,8 +437,12 @@ From the original task brief, each hypothesis and its verdict:
    `describe`/`describeupload` exist under `/internal/adapterkinds/`.
 
 4. **`/admin/*` or `/ui/*` Struts-style endpoints** — **confirmed for
-   `/admin/`.** `/ui/solution.action` is a dead stub (empty-200 for
-   every input). `/admin/solution.action` is the real handler.
+   both `/admin/` and `/ui/`.** See correction block above: the original
+   "dead stub" conclusion about `/ui/solution.action` was wrong.
+   Both `/admin/solution.action` and `/ui/solution.action` are live
+   handlers; they are backed by the same Java code and share the same
+   mainAction surface.  The `/ui/` path is now the preferred path in
+   this codebase (single session for full lifecycle).
 
 5. **`/suite-api/api/pak/*`** — ruled out. All variants 404.
 

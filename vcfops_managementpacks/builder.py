@@ -553,6 +553,56 @@ def _generate_manifest(mp: ManagementPackDef) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Adapter JAR KINDKEY rewrite (Option A of ADAPTER_JAR_GAP fix)
+# ---------------------------------------------------------------------------
+
+def _rewrite_adapter_properties(jar_bytes: bytes, adapter_kind: str) -> bytes:
+    """Rewrite adapter.properties inside the adapter JAR so KINDKEY matches
+    the factory's declared adapter_kind.
+
+    Root cause documented in .pka/updates/2026-04-17-0809-adapter-jar-gap-root-cause.md:
+    The bootstrapped reference JAR (GitHub adapter) embeds adapter.properties
+    with KINDKEY=mpb_github. VCF Ops reads KINDKEY to bind the loaded adapter
+    class to the correct adapter_kind registry slot. When KINDKEY doesn't match
+    the pak's declared adapter_kind, the registration silently fails and the pak
+    installs with no adapter ever appearing in getIntegrations.
+
+    ENTRYCLASS is left unchanged: it names a real Kotlin class
+    (com.vmware.mpb.mpbgithub.MPBGitHubAdapter) that must match an actual .class
+    file inside the JAR. Only KINDKEY is a registration label that can be freely
+    set without requiring a matching class path.
+
+    The JAR is a ZIP; we open it in-memory, rewrite the one line, and reconstruct
+    a new ZIP preserving every other member verbatim.
+    """
+    src_buf = io.BytesIO(jar_bytes)
+    dst_buf = io.BytesIO()
+
+    with zipfile.ZipFile(src_buf, "r") as src_zf:
+        with zipfile.ZipFile(dst_buf, "w", compression=zipfile.ZIP_DEFLATED) as dst_zf:
+            for item in src_zf.infolist():
+                data = src_zf.read(item.filename)
+                if item.filename == "adapter.properties":
+                    # Parse key=value lines, rewrite KINDKEY only.
+                    lines = data.decode("utf-8").splitlines()
+                    new_lines = []
+                    for line in lines:
+                        if line.startswith("KINDKEY="):
+                            new_lines.append(f"KINDKEY={adapter_kind}")
+                        else:
+                            new_lines.append(line)
+                    # Preserve trailing newline if original had one
+                    separator = "\n"
+                    new_content = separator.join(new_lines)
+                    if data.endswith(b"\n"):
+                        new_content += "\n"
+                    data = new_content.encode("utf-8")
+                dst_zf.writestr(item, data)
+
+    return dst_buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
 # adapters.zip assembly
 # ---------------------------------------------------------------------------
 
@@ -598,6 +648,13 @@ def _build_adapters_zip(
                 b"# Copy the MPB-generated adapter JAR to "
                 b"vcfops_managementpacks/adapter_runtime/mpb_adapter3.jar\n"
             )
+        # Rewrite KINDKEY in adapter.properties so VCF Ops registers this
+        # adapter under the correct adapter_kind (not the reference pak's
+        # mpb_github).  ENTRYCLASS is left unchanged.  See
+        # _rewrite_adapter_properties() and the root-cause note in
+        # .pka/updates/2026-04-17-0809-adapter-jar-gap-root-cause.md.
+        if jar_bytes and not jar_bytes.startswith(b"# ADAPTER_JAR_GAP"):
+            jar_bytes = _rewrite_adapter_properties(jar_bytes, ak)
         zf.writestr(f"{adapter_dir}.jar", jar_bytes)
 
         # --- adapter directory structure ---

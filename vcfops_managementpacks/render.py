@@ -324,41 +324,43 @@ class _RequestInfo:
         self._attr_ids[f"{self.id}-{dml_id}-@@@id"] = True
 
     def to_wire(self) -> Dict:
-        """Serialize to MPB request JSON shape."""
+        """Serialize to MPB request JSON shape (flat — no {"request": ...} wrapper).
+
+        Wire format reference: mpb_rubrik_adapter3/conf/design.json §source.requests.
+        Rubrik's source.requests is a dict of flat request objects, not wrapped dicts.
+        """
         req = self.req
         # params: always a list of {key, value}
         params = _normalize_params(req.params)
         dmls = list(self.dmls.values())
 
         return {
-            "request": {
-                "id": self.id,
-                "body": req.body,
-                "name": req.name,
-                "path": req.path,
-                "method": req.method,
-                "paging": None,
-                "params": params,
-                "headers": [],
-                "designId": None,
-                "response": {
-                    "id": _make_sub_id(self.id, "response"),
-                    "log": "Imported request, execute to get accurate log",
-                    "result": {
-                        "body": "Imported request, execute to get accurate body",
-                        "headers": [],
-                        "responseCode": 200,
-                        "dataModelLists": dmls,
-                    },
-                    "status": "COMPLETED",
-                    "endTime": 0,
-                    "duration": "NA",
-                    "startTime": 0,
-                    "toolkitId": _make_sub_id(self.id, "toolkit"),
-                    "errorMessage": "",
+            "id": self.id,
+            "body": req.body,
+            "name": req.name,
+            "path": req.path,
+            "method": req.method,
+            "paging": None,
+            "params": params,
+            "headers": [],
+            "designId": None,
+            "response": {
+                "id": _make_sub_id(self.id, "response"),
+                "log": "Imported request, execute to get accurate log",
+                "result": {
+                    "body": "Imported request, execute to get accurate body",
+                    "headers": [],
+                    "responseCode": 200,
+                    "dataModelLists": dmls,
                 },
-                "chainingSettings": None,
-            }
+                "status": "COMPLETED",
+                "endTime": 0,
+                "duration": "NA",
+                "startTime": 0,
+                "toolkitId": _make_sub_id(self.id, "toolkit"),
+                "errorMessage": "",
+            },
+            "chainingSettings": None,
         }
 
 
@@ -416,50 +418,52 @@ def _make_expression(
 # Section renderers
 # ---------------------------------------------------------------------------
 
-def _render_design(mp: ManagementPackDef) -> Dict:
+def _render_pak_settings(mp: ManagementPackDef) -> Dict:
+    """Render the flat pakSettings block (Rubrik wire format).
+
+    Wire format reference: mpb_rubrik_adapter3/conf/design.json §pakSettings.
+    Corresponds to what was previously the doubly-nested design.design block.
+    """
     return {
-        "design": {
-            "design": {
-                "id": None,
-                "name": mp.name,
-                "type": "HTTP",
-                "author": mp.author,
-                "version": mp.version,
-                "description": mp.description,
-            },
-            "buildNumber": mp.build_number,
-        }
+        "adapterKind": mp.adapter_kind,
+        "author": mp.author,
+        "name": mp.name,
+        "version": mp.version,
+        "description": mp.description,
+        "icon": "default.png",
     }
 
 
-def _render_source(mp: ManagementPackDef) -> Dict:
+def _render_source(
+    mp: ManagementPackDef,
+    wire_requests: List[Dict],
+    wire_objects: List[Dict],
+    wire_events: List[Dict],
+) -> Dict:
+    """Render the flat source block (Rubrik wire format).
+
+    Wire format reference: mpb_rubrik_adapter3/conf/design.json §source.
+    The Rubrik source block contains:
+      type, basePath, testRequestId, authentication, configuration,
+      requests (dict keyed by id), resources (array), externalResources (array),
+      events (array).
+
+    Previously the factory emitted source.source (doubly-nested) with requests,
+    objects, and events at the top level separately.  Rubrik's working wire
+    format has them all inside source, and uses flat objects (no {"request": ...}
+    / {"object": ...} / {"event": ...} wrappers).
+
+    requests is a dict (id → request object); resources and events are arrays.
+    externalResources is always [] — the factory does not model cross-adapter
+    resource bindings.
+    """
     src = mp.source
 
-    # source.source.configuration
-    source_config: Dict = {
-        "port": src.port if src else 443,
-        "hostname": None,
-        "maxRetries": src.max_retries if src else 2,
-        "sslSetting": src.ssl if src else "NO_VERIFY",
-        "baseApiPath": src.base_path if src else "",
-        "customConfigs": [],
-        "minEventSeverity": "WARNING",
-        "connectionTimeout": src.timeout if src else 30,
-        "maxConcurrentRequests": src.max_concurrent if src else 15,
-    }
-
-    # source.source.authentication
+    # authentication block
     authentication = _render_authentication(mp)
 
-    # source.source.globalHeaders
-    global_headers = _render_global_headers(mp)
-
-    # source.source.testRequest
-    test_request = _render_test_request(mp)
-
-    # adapter-instance config fields
+    # adapter-instance configuration fields (Rubrik calls this "configuration")
     adapter_config_fields = list(_STANDARD_CONFIG_FIELDS)
-    # Override port default from YAML
     if src:
         for cf in adapter_config_fields:
             if cf["id"] == "mpb_port":
@@ -478,18 +482,32 @@ def _render_source(mp: ManagementPackDef) -> Dict:
                 cf = dict(cf)
                 cf["defaultValue"] = src.max_concurrent
 
+    # testRequestId: the ID of the test-connection request (if any)
+    test_request = _render_test_request(mp)
+    test_request_id = test_request["id"] if test_request else None
+
+    # Build requests dict (id → request object).
+    # wire_requests is a list of already-flattened request objects (no wrapper).
+    requests_dict: Dict[str, Dict] = {}
+    for req in wire_requests:
+        requests_dict[req["id"]] = req
+
+    # If there is a testRequest, add it to the requests dict so it is reachable
+    # by testRequestId (mirrors Rubrik's design.json where the test request also
+    # appears in source.requests).
+    if test_request and test_request["id"] not in requests_dict:
+        requests_dict[test_request["id"]] = test_request
+
     return {
-        "source": {
-            "source": {
-                "id": _make_id(f"{mp.adapter_kind}:source"),
-                "designId": None,
-                "testRequest": test_request,
-                "configuration": source_config,
-                "globalHeaders": global_headers,
-                "authentication": authentication,
-            },
-            "configuration": adapter_config_fields,
-        }
+        "type": "HTTP",
+        "basePath": src.base_path if src else "",
+        "testRequestId": test_request_id,
+        "authentication": authentication,
+        "configuration": adapter_config_fields,
+        "requests": requests_dict,
+        "resources": wire_objects,          # flat array (no {"object": ...} wrapper)
+        "externalResources": [],            # factory does not model cross-adapter bindings
+        "events": wire_events,              # flat array (no {"event": ...} wrapper)
     }
 
 
@@ -944,22 +962,22 @@ def _render_one_object(
                 ot.key, ident_key,
             )
 
+    # Return flat object (no {"object": ...} wrapper).
+    # Wire format reference: mpb_rubrik_adapter3/conf/design.json §source.resources.
     return {
-        "object": {
-            "id": obj_id,
-            "type": ot.type,
-            "designId": None,
-            "metricSets": metric_sets,
-            "ariaOpsConf": None,
-            "isListObject": not ot.is_world,
-            "internalObjectInfo": {
-                "id": internal_id,
-                "icon": ot.icon,
-                "identifierIds": identifier_ids,
-                "objectTypeLabel": ot.name,
-                "nameMetricExpression": name_expr,
-            },
-        }
+        "id": obj_id,
+        "type": ot.type,
+        "designId": None,
+        "metricSets": metric_sets,
+        "ariaOpsConf": None,
+        "isListObject": not ot.is_world,
+        "internalObjectInfo": {
+            "id": internal_id,
+            "icon": ot.icon,
+            "identifierIds": identifier_ids,
+            "objectTypeLabel": ot.name,
+            "nameMetricExpression": name_expr,
+        },
     }
 
 
@@ -1149,17 +1167,17 @@ def _render_join_relationship(
     child_expr = _make_rel_expression(child_label, child_metric_id, rel_seed, "child")
     parent_expr = _make_rel_expression(parent_label, parent_metric_id, rel_seed, "parent")
 
+    # Return flat relationship (no {"relationship": ...} wrapper).
+    # Wire format reference: mpb_rubrik_adapter3/conf/design.json §relationships.
     return [{
-        "relationship": {
-            "id": rel_id,
-            "name": f"{rel.parent} -> {rel.child}",
-            "designId": None,
-            "caseSensitive": True,
-            "childObjectId": child_obj_id,
-            "parentObjectId": parent_obj_id,
-            "childExpression": child_expr,
-            "parentExpression": parent_expr,
-        }
+        "id": rel_id,
+        "name": f"{rel.parent} -> {rel.child}",
+        "designId": None,
+        "caseSensitive": True,
+        "childObjectId": child_obj_id,
+        "parentObjectId": parent_obj_id,
+        "childExpression": child_expr,
+        "parentExpression": parent_expr,
     }]
 
 
@@ -1230,21 +1248,19 @@ def _trivial_world_implicit(
     rel_seed = f"{ak}:rel:{rel.parent}:{rel.child}:world_implicit"
     rel_id = _make_id(rel_seed)
     return {
-        "relationship": {
-            "id": rel_id,
-            "name": f"{rel.parent} -> {rel.child}{name_suffix}",
-            "designId": None,
-            "caseSensitive": True,
-            "childObjectId": child_obj_id,
-            "parentObjectId": parent_obj_id,
-            "childExpression": None,
-            "parentExpression": None,
-            "_renderer_note": (
-                "world_implicit strategy: null expressions. "
-                "ASSUMPTION: MPB infers parentage from world-object hierarchy. "
-                "Unverified — delete if MPB rejects null expressions at import."
-            ),
-        }
+        "id": rel_id,
+        "name": f"{rel.parent} -> {rel.child}{name_suffix}",
+        "designId": None,
+        "caseSensitive": True,
+        "childObjectId": child_obj_id,
+        "parentObjectId": parent_obj_id,
+        "childExpression": None,
+        "parentExpression": None,
+        "_renderer_note": (
+            "world_implicit strategy: null expressions. "
+            "ASSUMPTION: MPB infers parentage from world-object hierarchy. "
+            "Unverified — delete if MPB rejects null expressions at import."
+        ),
     }
 
 
@@ -1311,16 +1327,14 @@ def _trivial_synthetic_adapter_instance(
     }
 
     return {
-        "relationship": {
-            "id": rel_id,
-            "name": f"{rel.parent} -> {rel.child}{name_suffix}",
-            "designId": None,
-            "caseSensitive": True,
-            "childObjectId": child_obj_id,
-            "parentObjectId": parent_obj_id,
-            "childExpression": child_expr,
-            "parentExpression": parent_expr,
-        }
+        "id": rel_id,
+        "name": f"{rel.parent} -> {rel.child}{name_suffix}",
+        "designId": None,
+        "caseSensitive": True,
+        "childObjectId": child_obj_id,
+        "parentObjectId": parent_obj_id,
+        "childExpression": child_expr,
+        "parentExpression": parent_expr,
     }
 
 
@@ -1367,22 +1381,20 @@ def _trivial_shared_constant(
     )
 
     return {
-        "relationship": {
-            "id": rel_id,
-            "name": f"{rel.parent} -> {rel.child}{name_suffix}",
-            "designId": None,
-            "caseSensitive": True,
-            "childObjectId": child_obj_id,
-            "parentObjectId": parent_obj_id,
-            "childExpression": child_expr,
-            "parentExpression": parent_expr,
-            "_renderer_note": (
-                "shared_constant strategy: uses synthetic __adapter_instance_const metric. "
-                "ASSUMPTION: MPB joins on a constant property added to each object. "
-                "Synthetic metrics are NOT added to object metricSets by the renderer — "
-                "add them manually in MPB UI if this approach is selected."
-            ),
-        }
+        "id": rel_id,
+        "name": f"{rel.parent} -> {rel.child}{name_suffix}",
+        "designId": None,
+        "caseSensitive": True,
+        "childObjectId": child_obj_id,
+        "parentObjectId": parent_obj_id,
+        "childExpression": child_expr,
+        "parentExpression": parent_expr,
+        "_renderer_note": (
+            "shared_constant strategy: uses synthetic __adapter_instance_const metric. "
+            "ASSUMPTION: MPB joins on a constant property added to each object. "
+            "Synthetic metrics are NOT added to object metricSets by the renderer — "
+            "add them manually in MPB UI if this approach is selected."
+        ),
     }
 
 
@@ -1477,29 +1489,29 @@ def _render_one_event(
     # matchMode from match_rules (ALL if multiple rules, else single)
     match_mode = "ALL" if len(ev.match_rules) > 1 else "ALL"  # MPB uses ALL; one rule is also ALL
 
+    # Return flat event (no {"event": ...} wrapper).
+    # Wire format reference: mpb_rubrik_adapter3/conf/design.json §source.events.
     return {
-        "event": {
-            "id": ev_id,
-            "alert": {
-                "type": "APPLICATION",
-                "badge": "HEALTH",
-                "subType": "AVAILABILITY",
-                "waitCycle": 1,
-                "cancelCycle": 1,
-                "recommendation": None,
-            },
-            "label": ev.name,
-            "listId": list_id,
-            "message": message_expr,
-            "designId": None,
-            "severity": severity_expr,
-            "matchMode": match_mode,
-            "requestId": req_info.id,
-            "severityMap": severity_map,
-            "eventMatchers": event_matchers,
-            "defaultSeverity": severity_str,
-            "unmatchedEventBehavior": "ATTACH_TO_ADAPTER",
-        }
+        "id": ev_id,
+        "alert": {
+            "type": "APPLICATION",
+            "badge": "HEALTH",
+            "subType": "AVAILABILITY",
+            "waitCycle": 1,
+            "cancelCycle": 1,
+            "recommendation": None,
+        },
+        "label": ev.name,
+        "listId": list_id,
+        "message": message_expr,
+        "designId": None,
+        "severity": severity_expr,
+        "matchMode": match_mode,
+        "requestId": req_info.id,
+        "severityMap": severity_map,
+        "eventMatchers": event_matchers,
+        "defaultSeverity": severity_str,
+        "unmatchedEventBehavior": "ATTACH_TO_ADAPTER",
     }
 
 
@@ -1764,6 +1776,35 @@ def render_mp_design_json(
 ) -> dict:
     """Render a ManagementPackDef into the MPB design JSON structure.
 
+    Output shape follows the flat Rubrik wire format
+    (mpb_rubrik_adapter3/conf/design.json, confirmed working on VCF Ops 9.0.2):
+
+      {
+        "version": 1,
+        "id": "<stable-id>",
+        "name": "<adapter display name>",
+        "pakSettings": { "adapterKind", "author", "name", "version", ... },
+        "source": {
+          "type": "HTTP",
+          "basePath": "",
+          "testRequestId": "<id or null>",
+          "authentication": { ... },
+          "configuration": [ ... ],       <- adapter connection fields
+          "requests": { "<id>": { ... } },  <- dict, not array
+          "resources": [ ... ],            <- flat objects (no {"object"} wrapper)
+          "externalResources": [],
+          "events": [ ... ]               <- flat events (no {"event"} wrapper)
+        },
+        "constants": [],
+        "relationships": [ ... ]           <- flat (no {"relationship"} wrapper)
+      }
+
+    Previously the factory emitted a doubly-nested structure:
+      { "design": {"design": {...}}, "source": {"source": {...}},
+        "requests": [...], "objects": [...], ... }
+    which caused the MPB runtime to silently fail adapter registration on
+    VCF Ops 9.0.2 (~25s parse-fail-and-abort, not actual install time).
+
     relationship_strategy controls how adapter-instance-trivial relationships
     (null child_expression / parent_expression) are rendered. Valid values:
       - "world_implicit": emit relationship with null expressions,
@@ -1778,16 +1819,13 @@ def render_mp_design_json(
 
     Returns the full MPB design JSON dict (not serialized).
     """
-    # --- design ---
-    design_section = _render_design(mp)
-
-    # --- source ---
-    source_section = _render_source(mp)
+    # --- pakSettings ---
+    pak_settings = _render_pak_settings(mp)
 
     # --- requests (deduplication + registry) ---
     wire_requests, request_registry = _render_requests(mp)
 
-    # --- objects ---
+    # --- objects (resources in Rubrik terminology) ---
     wire_objects = _render_objects(mp, request_registry)
 
     # Build lookup maps for relationships and events
@@ -1804,16 +1842,16 @@ def render_mp_design_json(
         for m in ot.metrics:
             metric_id_map[ot.key][m.key] = _make_id(f"{obj_seed}:metric:{m.key}")
 
-    # --- relationships ---
+    # --- relationships (flat, no wrapper) ---
     wire_relationships = _render_relationships(
         mp, object_id_map, metric_id_map, relationship_strategy
     )
 
-    # --- events ---
+    # --- events (flat, no wrapper) ---
     wire_events = _render_events(mp, request_registry, object_id_map)
 
-    # --- content ---
-    wire_content = _render_content(mp)
+    # --- source (contains requests, resources, events) ---
+    source_section = _render_source(mp, wire_requests, wire_objects, wire_events)
 
     # --- summary log ---
     trivial_count = sum(
@@ -1825,8 +1863,8 @@ def render_mp_design_json(
 
     logger.info(
         "Rendered %s: %d requests, %d objects, %d relationships "
-        "(%d with join predicates, %d trivial → %d emitted via %s), "
-        "%d events, %d content items.",
+        "(%d with join predicates, %d trivial -> %d emitted via %s), "
+        "%d events.",
         mp.name,
         len(wire_requests),
         len(wire_objects),
@@ -1836,7 +1874,6 @@ def render_mp_design_json(
         emitted_rel_count,
         relationship_strategy,
         len(wire_events),
-        len(wire_content),
     )
     print(
         f"Rendered {mp.name}: "
@@ -1844,18 +1881,17 @@ def render_mp_design_json(
         f"{len(wire_objects)} objects, "
         f"{len(mp.relationships)} relationships "
         f"({join_count} with join predicates, "
-        f"{trivial_count} trivial → {emitted_rel_count} emitted via {relationship_strategy}), "
-        f"{len(wire_events)} events, "
-        f"{len(wire_content)} content items.",
+        f"{trivial_count} trivial -> {emitted_rel_count} emitted via {relationship_strategy}), "
+        f"{len(wire_events)} events.",
         file=sys.stderr,
     )
 
     return {
-        **design_section,
-        **source_section,
-        "requests": wire_requests,
-        "objects": wire_objects,
+        "version": 1,
+        "id": _make_id(f"{mp.adapter_kind}:design"),
+        "name": mp.name,
+        "pakSettings": pak_settings,
+        "source": source_section,
+        "constants": [],
         "relationships": wire_relationships,
-        "events": wire_events,
-        "content": wire_content,
     }

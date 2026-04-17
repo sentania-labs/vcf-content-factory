@@ -131,12 +131,14 @@ def cmd_build(args) -> int:
 def cmd_install(args) -> int:
     """Install a .pak file onto a live VCF Ops instance.
 
-    Follows the 11-step admin SPA flow documented in
-    context/pak_install_api_exploration.md.
+    Uses the /ui/ SPA Struts layer for the full install lifecycle —
+    no /admin/ session required.  Documented in
+    context/pak_ui_upload_investigation.md §"Live-source findings".
 
-    Credentials are read from env vars (VCFOPS_HOST, VCFOPS_ADMIN,
-    VCFOPS_ADMINPASSWORD) or from CLI flags.  Interactive prompts are
-    NOT used — this is a scripted path.
+    Credentials are read from env vars (VCFOPS_HOST, VCFOPS_USER,
+    VCFOPS_PASSWORD) or from CLI flags.  The legacy VCFOPS_ADMIN /
+    VCFOPS_ADMINPASSWORD env var names are accepted as fallbacks
+    (with a deprecation warning).  Interactive prompts are NOT used.
     """
     from .installer import install_pak
 
@@ -145,8 +147,8 @@ def cmd_install(args) -> int:
     install_pak(
         pak_path=args.pak_path,
         host=args.host,
-        admin_user=args.admin_user,
-        admin_password=args.admin_password,
+        user=args.user,
+        password=args.password,
         skip_ssl_verify=args.skip_ssl_verify,
         wait=args.wait,
     )
@@ -163,16 +165,18 @@ def cmd_uninstall(args) -> int:
     Built-in paks (vSAN, vCenter, NSX, etc.) will be refused unless
     --allow-builtin is explicitly passed.
 
-    Credentials are read from env vars (VCFOPS_HOST, VCFOPS_ADMIN,
-    VCFOPS_ADMINPASSWORD) or from CLI flags.
+    Credentials are read from env vars (VCFOPS_HOST, VCFOPS_USER,
+    VCFOPS_PASSWORD) or from CLI flags.  The legacy VCFOPS_ADMIN /
+    VCFOPS_ADMINPASSWORD env var names are accepted as fallbacks
+    (with a deprecation warning).
     """
     from .installer import uninstall_pak
 
     uninstall_pak(
         adapter_kind_or_pak_name=args.name,
         host=args.host,
-        admin_user=args.admin_user,
-        admin_password=args.admin_password,
+        user=args.user,
+        password=args.password,
         skip_ssl_verify=args.skip_ssl_verify,
         wait=args.wait,
         allow_builtin=args.allow_builtin,
@@ -233,12 +237,13 @@ def build_parser() -> argparse.ArgumentParser:
     # ------------------------------------------------------------------
     _creds_help = (
         "Credentials resolve order: CLI flag > env var > (no prompt). "
-        "All three of --host / VCFOPS_HOST, --admin-user / VCFOPS_ADMIN, "
-        "and --admin-password / VCFOPS_ADMINPASSWORD must be available."
+        "Required: --host / VCFOPS_HOST, --user / VCFOPS_USER (or deprecated "
+        "VCFOPS_ADMIN), --password / VCFOPS_PASSWORD (or deprecated "
+        "VCFOPS_ADMINPASSWORD)."
     )
     pi = sub.add_parser(
         "install",
-        help="install a .pak file onto a VCF Ops instance (admin session required)",
+        help="install a .pak file onto a VCF Ops instance (admin-privileged user required)",
     )
     pi.add_argument(
         "pak_path",
@@ -250,17 +255,31 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="VCF Ops hostname or IP (overrides VCFOPS_HOST env var)",
     )
+    # Primary credential flags
+    pi.add_argument(
+        "--user",
+        default=None,
+        dest="user",
+        help="admin-privileged username (overrides VCFOPS_USER env var)",
+    )
+    pi.add_argument(
+        "--password",
+        default=None,
+        dest="password",
+        help="password (overrides VCFOPS_PASSWORD env var)",
+    )
+    # Backward-compat aliases — kept so existing scripts don't break
     pi.add_argument(
         "--admin-user",
         default=None,
-        dest="admin_user",
-        help="admin username (overrides VCFOPS_ADMIN env var)",
+        dest="user",
+        help=argparse.SUPPRESS,  # hidden; use --user instead
     )
     pi.add_argument(
         "--admin-password",
         default=None,
-        dest="admin_password",
-        help="admin password (overrides VCFOPS_ADMINPASSWORD env var)",
+        dest="admin_password_compat",
+        help=argparse.SUPPRESS,  # hidden; use --password instead
     )
     pi.add_argument(
         "--skip-ssl-verify",
@@ -303,17 +322,31 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="VCF Ops hostname or IP (overrides VCFOPS_HOST env var)",
     )
+    # Primary credential flags
+    pu.add_argument(
+        "--user",
+        default=None,
+        dest="user",
+        help="admin-privileged username (overrides VCFOPS_USER env var)",
+    )
+    pu.add_argument(
+        "--password",
+        default=None,
+        dest="password",
+        help="password (overrides VCFOPS_PASSWORD env var)",
+    )
+    # Backward-compat aliases
     pu.add_argument(
         "--admin-user",
         default=None,
-        dest="admin_user",
-        help="admin username (overrides VCFOPS_ADMIN env var)",
+        dest="user",
+        help=argparse.SUPPRESS,  # hidden; use --user instead
     )
     pu.add_argument(
         "--admin-password",
         default=None,
-        dest="admin_password",
-        help="admin password (overrides VCFOPS_ADMINPASSWORD env var)",
+        dest="admin_password_compat",
+        help=argparse.SUPPRESS,  # hidden; use --password instead
     )
     pu.add_argument(
         "--skip-ssl-verify",
@@ -349,4 +382,15 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv=None) -> int:
     args = build_parser().parse_args(argv)
+    # Handle the hidden --admin-password compat alias: if set and --password
+    # was not set, copy it across.  argparse can't share dest between flags
+    # that have different actions, so we do it manually here.
+    if hasattr(args, "admin_password_compat") and args.admin_password_compat:
+        if not args.password:
+            import sys as _sys
+            print(
+                "WARN: --admin-password is deprecated; use --password instead.",
+                file=_sys.stderr,
+            )
+            args.password = args.admin_password_compat
     return args.func(args)
