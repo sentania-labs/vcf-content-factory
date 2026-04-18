@@ -9,7 +9,7 @@ YAML; sync matches by name.
 
 YAML schema (terse, expanded to wire JSON by `to_wire()`):
 
-    name: "[AI Content] vSAN Datastores"
+    name: "[VCF Content Factory] vSAN Datastores"
     description: >
       Optional human description.
     type: Environment        # group type key, defaults to Environment

@@ -287,13 +287,27 @@ communicate to users early, rather than discovering mid-workflow:
    If a user requests a dashboard with unsupported widget types,
    set expectations before delegating.
 
-2. **Policy enablement.** The `enable` CLI command works for the
-   **Default Policy only** (`PUT /internal/supermetrics/assign`
-   rejects any other policy UUID). The install script's policy
-   export → edit XML → re-import path for SM enablement is coded
-   against the Default Policy specifically. Users with custom
+2. **Policy enablement — CLI targets Default Policy only (code gap,
+   not a server constraint).** The `enable` CLI command hard-codes
+   the Default Policy: `get_default_policy_id` refuses to return any
+   other policy, the `enable` command takes no `--policy` flag, and
+   the XML-injection helper hunts the first `<Policy>` element in
+   the exported ZIP (implicitly the default). Users with custom
    policies can sync content but cannot enable super metrics via
-   the CLI — generalizing to arbitrary policies is a follow-up.
+   the CLI today.
+
+   The *server* constraint is narrower: `PUT /internal/supermetrics/assign`
+   with `policyIds` is a no-op for content-zip-imported SMs (real
+   server behavior, documented in `vcfops_supermetrics/client.py:287-292`).
+   But the policy-export → edit-XML → re-import path used for actual
+   enablement is policy-agnostic — it already operates on whatever
+   ZIP the server returns. The Default-only behavior is a framework
+   code shortcut, not a platform limit. Remediation is scoped in
+   `context/framework_review_2026_04_18.md` §2.3: add `--policy`
+   flag, iterate to "find the policy whose `<id>` matches target"
+   in the XML editor, keep Step 1 (the `/internal/assign` call)
+   Default-scoped because that's about resource-kind assignment,
+   not enablement. Deferred until a user asks.
 
 3. **Recommendations — authoring works, REST sync does not.**
    Recommendation YAML authoring under `recommendations/` is fully
