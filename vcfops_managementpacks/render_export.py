@@ -269,8 +269,13 @@ def _transform_configuration(
 def _strip_request(req: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a flat request object to exchange format.
 
-    Removes fields that appear in the flat format but not in exchange:
-      paging, chainingSettings, designId
+    Removes fields that appear in the flat format but NOT in the exchange format:
+      paging, designId
+
+    chainingSettings IS present in exchange format exports (confirmed from
+    context/mpb_chaining_wire_format.md §2.1 cross-validation against both the
+    Synology DSM MP.json capture and the Rubrik reference).  It must NOT be
+    stripped — dropping it would silently break chain wiring in imported designs.
 
     Collapses response: keeps only result.{responseCode, dataModelLists}.
     params.id is absent in our flat format already (render.py strips it).
@@ -284,6 +289,9 @@ def _strip_request(req: Dict[str, Any]) -> Dict[str, Any]:
         "headers": req.get("headers") or [],
         "params": req.get("params") or [],
     }
+
+    # Preserve chainingSettings (present in exchange format; null means no chain)
+    r["chainingSettings"] = req.get("chainingSettings")
 
     # Collapse response: keep only result.{responseCode, dataModelLists}
     resp = req.get("response")

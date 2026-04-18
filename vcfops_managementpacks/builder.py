@@ -336,7 +336,7 @@ def _append_traversal_spec_kinds(
 def _append_credential_kinds(lines: list, mp: ManagementPackDef, ak: str) -> None:
     """Append CredentialKinds XML block."""
     src = mp.source
-    if not src or not src.auth or src.auth.type == "NONE":
+    if not src or not src.auth or src.auth.preset == "none":
         lines.append("  <CredentialKinds>")
         lines.append("  </CredentialKinds>")
         return
@@ -347,23 +347,22 @@ def _append_credential_kinds(lines: list, mp: ManagementPackDef, ak: str) -> Non
         f'    <CredentialKind key="{ak}_credentials" nameKey="2">'
     )
 
-    if auth.type in ("BASIC", "CUSTOM"):
-        lines.append(
-            '      <CredentialField required="true" dispOrder="1" enum="false"'
-            ' key="username" nameKey="3" password="false" type="string">'
-            "</CredentialField>"
-        )
-        lines.append(
-            '      <CredentialField required="true" dispOrder="2" enum="false"'
-            ' key="password" nameKey="4" password="true" type="string">'
-            "</CredentialField>"
-        )
-    elif auth.type == "TOKEN":
-        lines.append(
-            '      <CredentialField required="true" dispOrder="1" enum="false"'
-            ' key="token" nameKey="3" password="true" type="string">'
-            "</CredentialField>"
-        )
+    if auth.preset in ("basic_auth", "cookie_session"):
+        # Emit credential fields from the declared credentials list
+        for i, cred in enumerate(auth.credentials, start=1):
+            password_attr = 'true' if cred.sensitive else 'false'
+            lines.append(
+                f'      <CredentialField required="true" dispOrder="{i}" enum="false"'
+                f' key="{cred.key}" nameKey="{2 + i}" password="{password_attr}" type="string">'
+                "</CredentialField>"
+            )
+    elif auth.preset == "bearer_token":
+        for i, cred in enumerate(auth.credentials, start=1):
+            lines.append(
+                '      <CredentialField required="true" dispOrder="1" enum="false"'
+                f' key="{cred.key}" nameKey="3" password="true" type="string">'
+                "</CredentialField>"
+            )
 
     lines.append("    </CredentialKind>")
     lines.append("  </CredentialKinds>")
@@ -392,7 +391,7 @@ def _append_adapter_instance_kind(
 
     rk_key = f"{ak}_{ot.key}" if not ot.key.startswith(ak) else ot.key
     cred_attr = ""
-    if src and src.auth and src.auth.type != "NONE":
+    if src and src.auth and src.auth.preset != "none":
         cred_attr = f' credentialKind="{ak}_credentials"'
     lines.append(
         f'    <ResourceKind key="{rk_key}" nameKey="{nk}"'
@@ -526,7 +525,7 @@ def _append_bare_adapter_instance_kind(
     nk = name_key_counter[0]
     name_key_counter[0] += 20
     cred_attr = ""
-    if src and src.auth and src.auth.type != "NONE":
+    if src and src.auth and src.auth.preset != "none":
         cred_attr = f' credentialKind="{ak}_credentials"'
     lines.append(
         f'    <ResourceKind key="{ak}" nameKey="{nk}"'

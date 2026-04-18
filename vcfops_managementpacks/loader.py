@@ -4,7 +4,7 @@ Management packs are identified by name.  Each YAML file in managementpacks/
 defines one MP.  There is no UUID — the adapter kind key is derived from the
 name if not supplied explicitly.
 
-YAML schema (condensed):
+YAML schema — Option C grammar (Tier 3.3, 2026-04-18):
 
     name: "Synology DSM"
     description: "Synology DiskStation Manager monitoring"
@@ -21,82 +21,126 @@ YAML schema (condensed):
       max_retries: 2
       max_concurrent: 15
       auth:
-        # --- Option A: cookie-based session (CUSTOM) ---
-        type: CUSTOM
-        session:
-          login_request:
-            method: GET
-            path: "auth.cgi"
-            params:
-              - {key: api,     value: "SYNO.API.Auth"}
-              - {key: version, value: "3"}
-              - {key: method,  value: "login"}
-              - {key: account, value: "${authentication.credentials.username}"}
-              - {key: passwd,  value: "${authentication.credentials.passwd}"}
-              - {key: session, value: "FileStation"}
-              - {key: format,  value: "cookie"}
-            headers:
-              - {key: Content-Type, type: REQUIRED, value: "application/json"}
-          logout_request:
-            method: DELETE
-            path: "auth.cgi"
-            params:
-              - {key: method,  value: "logout"}
-              - {key: version, value: "3"}
-              - {key: api,     value: "SYNO.API.Auth"}
-          cookie_binding: "set_cookie"   # session variable name; runtime ref:
-                                         # ${authentication.session.set_cookie}
-          header_injection:
-            - {key: Cookie, value: "${authentication.session.set_cookie}"}
-        # --- Option B: legacy SESSION (body-token extraction) ---
-        type: SESSION
-        session: { ... }               # required when type=SESSION
-        # --- Option C/D: simple credential types ---
-        type: BASIC | TOKEN | NONE
+        # Flow-based auth grammar (Tier 3.2, 2026-04-18).
+        # Use a named preset; authors fill in preset-specific blocks.
+        preset: cookie_session          # one of: cookie_session, bearer_token, basic_auth, none
+        credentials:
+          - {key: username, label: username, sensitive: false}
+          - {key: passwd,   label: passwd,   sensitive: true}
+        login:
+          method: GET
+          path: "auth.cgi"
+          params:
+            - {key: api,     value: "SYNO.API.Auth"}
+            - {key: version, value: "3"}
+            - {key: method,  value: "login"}
+            - {key: session, value: "FileStation"}
+            - {key: format,  value: "cookie"}
+            - {key: account, value: "${credentials.username}"}
+            - {key: passwd,  value: "${credentials.passwd}"}
+        extract:
+          location: HEADER              # HEADER or BODY
+          name: set_cookie              # header name or JSON path
+          bind_to: session.set_cookie   # session variable
+        inject:
+          - type: header                # header or query_param
+            name: id
+            value: "${session.set_cookie}"
+        logout:
+          method: DELETE
+          path: "auth.cgi"
+          params:
+            - {key: api,     value: "SYNO.API.Auth"}
+            - {key: version, value: "3"}
+            - {key: method,  value: "logout"}
       test_request:
         path: "entry.cgi"
         method: GET
-        params:
-          - {key: api,     value: "SYNO.DSM.Info"}
-          - {key: version, value: "2"}
-          - {key: method,  value: "getinfo"}
+        params: [...]
       config_fields: []
+
+    # NEW (Option C) — requests at MP scope, not under object_type
+    requests:
+      - name: storage_load_info
+        method: GET
+        path: "entry.cgi"
+        params:
+          - {key: api, value: "SYNO.Storage.CGI.Storage"}
+        response_path: "data"
+
+      - name: volume_util
+        method: GET
+        path: "entry.cgi"
+        params:
+          - {key: location, value: "${chain.volume_id}"}   # chain substitution
+        response_path: "data"
 
     object_types:
       - name: "Synology Diskstation"
-        key: "synology_diskstation"    # auto-derived if omitted
-        type: INTERNAL                 # INTERNAL or ARIA_OPS
-        icon: "server.svg"
+        key: "diskstation"
+        type: INTERNAL
         is_world: true
         identifiers: [serial]
-        name_expression: "hostname"    # single metric key only (no templates)
-        requests:
-          - name: "system_info"
-            method: GET
-            path: "entry.cgi"
-            params:
-              - {key: api, value: "SYNO.DSM.Info"}
-            response_path: "data"
+        name_expression: "model"
+
+        # NEW (Option C) — replaces implicit request-is-metricSet
+        metricSets:
+          - from_request: system_info
+            list_path: ""          # empty = consume whole response root
+
         metrics:
           - key: serial
             label: "Serial Number"
             usage: PROPERTY
             type: STRING
-            source: "request:system_info.serial"
-        # NOTE: 'events' is NOT supported in MP YAML v1.
-        # Author threshold-based alerts as factory symptoms + alerts instead.
+            source: "metricset:system_info.serial"   # NEW source form
+
+      - name: "Volume"
+        key: volume
+        type: INTERNAL
+        identifiers: [volume_id]
+        name_expression: display_name
+
+        metricSets:
+          - from_request: storage_load_info
+            primary: true
+            list_path: "volumes"
+          - from_request: volume_util
+            chained_from: storage_load_info     # parent metricSet on THIS object_type
+            list_path: "space.volume"
+            bind:
+              - name: volume_id               # ${chain.volume_id} in the request
+                from_attribute: id            # parent row attribute label
+
+        metrics:
+          - key: volume_id
+            source: "metricset:storage_load_info.id"
+          - key: io_read_iops
+            source: "metricset:volume_util.read_access"
 
     relationships:
-      - parent: synology_diskstation
-        child: storage_pool
-        child_expression: pool_path    # metric key on child whose value is matched
-        parent_expression: id          # metric key on parent whose value is matched
-        # child_expression / parent_expression are optional at schema level.
-        # When omitted the renderer will flag the relationship as incomplete.
+      - parent: diskstation
+        child: volume
+        child_expression: pool_path
+        parent_expression: id
 
     content:
       dashboards: []
       views: []
+
+SKIP CONVENTION:
+    load_dir() ignores files whose name contains ".reference." so that
+    archived pre-Option-C YAMLs can coexist in the directory as reference
+    material without being loaded.  Example:
+        managementpacks/synology_dsm.reference.yaml   ← skipped
+        managementpacks/synology_dsm.yaml             ← loaded
+
+MIGRATION NOTE:
+    Old grammar had requests: under each object_type: entry and used
+    source: "request:<name>.<field>" in metrics.  Both forms now produce
+    a ManagementPackValidationError with a clear migration hint.  See
+    designs/synology-mp-v1.md §"Chaining grammar design" for the Option C
+    specification.
 """
 from __future__ import annotations
 
@@ -146,8 +190,19 @@ def _strict_load(stream):
 VALID_METRIC_USAGE = {"PROPERTY", "METRIC"}
 VALID_METRIC_TYPE = {"STRING", "NUMBER"}
 VALID_OBJECT_TYPE = {"INTERNAL", "ARIA_OPS"}
-VALID_AUTH_TYPE = {"BASIC", "TOKEN", "SESSION", "NONE", "CUSTOM"}
+# Flow-based auth presets (Tier 3.2, 2026-04-18).
+# VALID_AUTH_TYPE enum is retired — see migration note in _parse_auth().
+VALID_AUTH_PRESET = {"cookie_session", "bearer_token", "basic_auth", "none"}
 VALID_SSL = {"NO_VERIFY", "VERIFY", "NO_SSL"}
+
+# Relationship scope kinds (Tier 3.3, 2026-04-18).
+# field_match — value-join predicate (child_expression + parent_expression required).
+# adapter_instance — trivial adapter-instance containment (no expressions allowed).
+VALID_RELATIONSHIP_SCOPE = {"field_match", "adapter_instance"}
+
+# World-object identity tiers (Tier 3.3, 2026-04-18).
+# Ordered preference: system_issued > connection_address > display_name.
+VALID_IDENTITY_TIER = {"system_issued", "connection_address", "display_name"}
 VALID_HTTP_METHOD = {"GET", "POST", "PUT", "DELETE", "PATCH"}
 
 # MPB event severity — VCF Ops vocabulary (Rubrik §6c + cartographer guidance)
@@ -169,13 +224,19 @@ VALID_DEDUP_STRATEGY = {"TUPLE_HASH", "FIELD_ID", "NONE"}
 _ADAPTER_KIND_RE = re.compile(r"^mpb_[a-z0-9_]+$")
 
 # A single-metric name_expression: either a bare identifier or ${identifier}.
-# Multi-metric templates like "${model} (${hostname})" are rejected.
 _SINGLE_METRIC_RE = re.compile(r"^\$\{([a-zA-Z0-9_]+)\}$|^([a-zA-Z0-9_]+)$")
 
-# Detect template strings that contain more than one ${...} or literal text
-# mixed with ${...}.  If a value matches _TEMPLATE_RE it is a composite
-# template and must be rejected.
+# Detect template strings that contain ${...} tokens.
 _TEMPLATE_RE = re.compile(r"\$\{[^}]+\}")
+
+# NEW: Parse "metricset:<metricset_name>.<field_path>" source references
+_METRICSET_SOURCE_RE = re.compile(r"^metricset:([a-zA-Z0-9_]+)\.(.+)$")
+
+# OLD (rejected): "request:<request_name>.<field_path>" source references
+_OLD_REQUEST_SOURCE_RE = re.compile(r"^request:[a-zA-Z0-9_]+\..+$")
+
+# ${chain.<name>} substitution in request params/path/body
+_CHAIN_TOKEN_RE = re.compile(r"\$\{chain\.([a-zA-Z0-9_]+)\}")
 
 
 # Derive adapter_kind from MP name: lowercase, replace non-alphanum with _
@@ -186,9 +247,6 @@ def _derive_adapter_kind(name: str) -> str:
 # Derive object type key from object name
 def _derive_object_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
-
-# Parse "request:<request_name>.<field_path>" source references
-_SOURCE_RE = re.compile(r"^request:([a-zA-Z0-9_]+)\.(.+)$")
 
 
 # ---------------------------------------------------------------------------
@@ -204,12 +262,93 @@ class ManagementPackValidationError(ValueError):
 # ---------------------------------------------------------------------------
 
 @dataclass
+class IdentifierDef:
+    """One identifier entry (Tier 3.3 structured form).
+
+    Shorthand ``identifiers: [foo, bar]`` parses to a list of
+    ``IdentifierDef(key='foo', source=None)`` etc.
+
+    ``source`` — optional; ``None`` means "use the primary metricSet by
+    convention" (renderer resolves at emit time).
+
+    ``derive`` — reserved for future use. If present the loader raises
+    ``ManagementPackValidationError`` with a "reserved — not implementable
+    yet" message.
+    """
+    key: str
+    source: Optional[str] = None   # "metricset:<name>.<path>" or None
+    derive: Optional[Any] = None   # reserved; fail-loud if set
+
+
+@dataclass
+class NamePartDef:
+    """One part of a structured name_expression (Tier 3.3).
+
+    Exactly one of ``metric`` or ``literal`` must be set.
+    """
+    metric: Optional[str] = None    # metric key on this object_type
+    literal: Optional[str] = None   # literal text string
+
+
+@dataclass
+class NameExpressionDef:
+    """Structured name expression (Tier 3.3).
+
+    Both shorthand (``name_expression: hostname``) and structured
+    (``name_expression: {parts: [...]}``) parse to this type.
+
+    ``parts`` contains at least one ``NamePartDef``.  At render time:
+    - Single-part (one ``metric`` entry): emits the standard single-part
+      expression (verified wire format).
+    - Multi-part: renderer raises a clear "not yet implemented" error until
+      live capture of the composite wire format is available.
+    """
+    parts: List["NamePartDef"]
+
+
+@dataclass
+class MetricSourceDef:
+    """Structured metric source (Tier 3.3).
+
+    Both shorthand (``source: "metricset:X.Y.Z"``) and structured
+    (``source: {metricset: X, path: Y.Z}``) parse to this type.
+
+    ``aggregate``, ``extract``, ``compose`` are reserved for future use.
+    If any is set the loader raises a "reserved — not implementable yet"
+    error.
+    """
+    metricset: str
+    path: str
+    aggregate: Optional[str] = None   # reserved
+    extract: Optional[Any] = None     # reserved
+    compose: Optional[Any] = None     # reserved
+
+
+@dataclass
+class WorldIdentityDef:
+    """Identity declaration for a world object_type (Tier 3.3 axis 7).
+
+    ``tier`` names the identity preference category:
+      - ``system_issued``     — stable hardware/system UUID or serial
+      - ``connection_address`` — operator-entered hostname/URL
+      - ``display_name``      — last resort; admin-entered name
+
+    ``source`` — ``"metricset:<name>.<path>"`` shorthand pointing at the
+    metric that carries the unique identity value.  Required for
+    ``system_issued``; for other tiers the renderer logs the tier choice
+    but the wire emission is the same.
+    """
+    tier: str     # VALID_IDENTITY_TIER
+    source: str   # "metricset:<name>.<path>"
+
+
+@dataclass
 class MetricDef:
     key: str
     label: str
-    usage: str          # PROPERTY or METRIC
-    type: str           # STRING or NUMBER
-    source: str         # "request:<name>.<field>"
+    usage: str              # PROPERTY or METRIC
+    type: str               # STRING or NUMBER
+    source: "MetricSourceDef"   # parsed source (Tier 3.3)
     unit: str = ""
     kpi: bool = False
 
@@ -225,12 +364,106 @@ class RequestDef:
 
 
 @dataclass
-class SessionDef:
-    """Parsed session settings for CUSTOM auth type."""
-    login_request: Dict[str, Any]
-    logout_request: Optional[Dict[str, Any]]
-    cookie_binding: str                    # session variable name (e.g. "set_cookie")
-    header_injection: List[Dict[str, str]] # [{key, value}, ...]
+class BindDef:
+    """Per-row substitution binding on a chained metricSet."""
+    name: str            # factory-facing key; ${chain.<name>} in parent request templates
+    from_attribute: str  # attribute label on the parent metricSet's rows
+
+
+@dataclass
+class MetricSetDef:
+    """One metricSet entry on an object_type (Option C grammar)."""
+    from_request: str                    # top-level request name
+    list_path: str = ""                  # sub-path under request.response_path
+    primary: bool = False                # exactly one per list object_type
+    chained_from: Optional[str] = None   # sibling metricSet's from_request name
+    bind: List[BindDef] = field(default_factory=list)
+    # Optional alias for this metricSet within the object_type;
+    # defaults to from_request; used as the key in chained_from lookups.
+    as_name: Optional[str] = None
+
+    @property
+    def local_name(self) -> str:
+        """The name used to identify this metricSet within its object_type's metricSets list."""
+        return self.as_name if self.as_name else self.from_request
+
+
+@dataclass
+class CredentialFieldDef:
+    """One declared credential field in auth.credentials[]."""
+    key: str            # factory-facing key; used in ${credentials.<key>} references
+    label: str          # wire label; determines ${authentication.credentials.<label>} variable name
+    sensitive: bool = False
+
+
+@dataclass
+class LoginRequestDef:
+    """auth.login block — the session-establishment request."""
+    method: str                     # HTTP method (GET, POST, ...)
+    path: str                       # request path (relative to base_path)
+    params: Any = None              # list of {key, value} or dict
+    headers: Optional[List[Dict[str, Any]]] = None
+    body: Optional[str] = None
+
+
+@dataclass
+class ExtractRuleDef:
+    """auth.extract block — where to find the session token in the login response."""
+    location: str     # HEADER or BODY
+    name: str         # header name (for HEADER) or JSON path (for BODY)
+    bind_to: str      # session variable name as "session.<key>" (e.g. "session.set_cookie")
+
+    @property
+    def session_key(self) -> str:
+        """The bare session key, stripped of the 'session.' prefix."""
+        if self.bind_to.startswith("session."):
+            return self.bind_to[len("session."):]
+        return self.bind_to
+
+
+@dataclass
+class InjectRuleDef:
+    """One entry in auth.inject[] — where/how to inject the session token per request."""
+    type: str    # "header" or "query_param"
+    name: str    # header name or query-param key
+    value: str   # value template (may reference ${session.<key>} or ${credentials.<key>})
+
+
+@dataclass
+class LogoutRequestDef:
+    """auth.logout block — the session-teardown request."""
+    method: str
+    path: str
+    params: Any = None
+    headers: Optional[List[Dict[str, Any]]] = None
+    body: Optional[str] = None
+
+
+@dataclass
+class AuthFlowDef:
+    """Flow-based auth definition (Tier 3.2).
+
+    Replaces the old AuthDef + SessionDef pair.  Every auth block now carries:
+      preset       — named shorthand that sets the MPB credentialType and
+                     supplies defaults for blocks the author omits.
+      credentials  — declared credential fields (key, label, sensitive).
+      login        — optional login (session-establishment) request.
+      extract      — optional extraction rule for the session token.
+      inject       — list of injection rules (headers / query params).
+      logout       — optional logout (session-teardown) request.
+
+    Preset rules (enforced by _validate_auth_flow):
+      none          creds absent/empty; login/extract/inject/logout absent.
+      basic_auth    creds: username + password pair only; login/extract/logout absent.
+      bearer_token  creds: single token field; login/extract/logout absent.
+      cookie_session creds, login, extract, inject, logout all REQUIRED.
+    """
+    preset: str
+    credentials: List[CredentialFieldDef] = field(default_factory=list)
+    login: Optional[LoginRequestDef] = None
+    extract: Optional[ExtractRuleDef] = None
+    inject: List[InjectRuleDef] = field(default_factory=list)
+    logout: Optional[LogoutRequestDef] = None
 
 
 @dataclass
@@ -238,20 +471,22 @@ class ObjectTypeDef:
     name: str
     key: str
     type: str               # INTERNAL or ARIA_OPS
-    identifiers: List[str]
-    requests: List[RequestDef]
+    identifiers: List["IdentifierDef"]    # Tier 3.3 structured form
+    metric_sets: List[MetricSetDef]       # Option C: explicit metricSets block
     metrics: List[MetricDef]
     icon: str = "server.svg"
     is_world: bool = False
-    name_expression: str = ""
+    name_expression: Optional["NameExpressionDef"] = None   # Tier 3.3 structured form
+    identity: Optional["WorldIdentityDef"] = None           # Tier 3.3 axis 7 (required for is_world)
 
 
 @dataclass
 class RelationshipDef:
     parent: str
     child: str
-    child_expression: Optional[str] = None   # metric key on child for value join
-    parent_expression: Optional[str] = None  # metric key on parent for value join
+    scope: str = "field_match"                  # Tier 3.3: "field_match" or "adapter_instance"
+    child_expression: Optional[str] = None      # metric key on child (required for field_match)
+    parent_expression: Optional[str] = None     # metric key on parent (required for field_match)
 
 
 @dataclass
@@ -289,13 +524,6 @@ class MPBEventDef:
 
 
 @dataclass
-class AuthDef:
-    type: str                        # BASIC, TOKEN, SESSION, NONE, CUSTOM
-    session: Optional[Dict[str, Any]] = None     # raw dict for SESSION type
-    custom_session: Optional[SessionDef] = None  # parsed for CUSTOM type
-
-
-@dataclass
 class ConfigFieldDef:
     key: str
     label: str
@@ -312,7 +540,7 @@ class SourceDef:
     timeout: int
     max_retries: int
     max_concurrent: int
-    auth: Optional[AuthDef] = None
+    auth: Optional[AuthFlowDef] = None
     test_request: Optional[Dict[str, Any]] = None
     config_fields: List[ConfigFieldDef] = field(default_factory=list)
 
@@ -326,6 +554,7 @@ class ManagementPackDef:
     build_number: int = 1
     author: str = ""
     source: Optional[SourceDef] = None
+    requests: List[RequestDef] = field(default_factory=list)   # NEW: MP-scope requests
     object_types: List[ObjectTypeDef] = field(default_factory=list)
     relationships: List[RelationshipDef] = field(default_factory=list)
     mpb_events: List[MPBEventDef] = field(default_factory=list)
@@ -360,10 +589,24 @@ def _validate_mp(mp: ManagementPackDef) -> None:
     if mp.source is not None:
         _validate_source(tag, mp.source)
 
+    # Top-level requests: names must be unique
+    request_names: Dict[str, int] = {}
+    for i, req in enumerate(mp.requests):
+        if not req.name or not req.name.strip():
+            raise ManagementPackValidationError(
+                f"{tag}: requests[{i}]: name is required"
+            )
+        if req.name in request_names:
+            raise ManagementPackValidationError(
+                f"{tag}: duplicate request name '{req.name}' (first at index "
+                f"{request_names[req.name]}, repeated at {i})"
+            )
+        request_names[req.name] = i
+        _validate_request(tag, req)
+
     # Object types
     object_keys: Dict[str, set] = {}  # key -> set of metric keys
     world_count = 0
-    request_names_by_object: Dict[str, set] = {}
 
     for ot in mp.object_types:
         ot_tag = f"{tag}: object_type '{ot.name}'"
@@ -379,9 +622,12 @@ def _validate_mp(mp: ManagementPackDef) -> None:
             raise ManagementPackValidationError(
                 f"{ot_tag}: at least one identifier is required"
             )
-        if not ot.requests:
+        # Validate each IdentifierDef
+        for ident in ot.identifiers:
+            _validate_identifier(ot_tag, ident)
+        if not ot.metric_sets:
             raise ManagementPackValidationError(
-                f"{ot_tag}: at least one request is required"
+                f"{ot_tag}: at least one metricSet is required"
             )
         if not ot.metrics:
             raise ManagementPackValidationError(
@@ -390,24 +636,59 @@ def _validate_mp(mp: ManagementPackDef) -> None:
 
         if ot.is_world:
             world_count += 1
+            # identity block is required for world objects
+            if ot.identity is None:
+                raise ManagementPackValidationError(
+                    f"{ot_tag}: is_world: true objects require an 'identity:' block. "
+                    f"Add 'identity: {{tier: system_issued, source: \"metricset:<name>.<path>\"}}' "
+                    f"(or connection_address / display_name tier as appropriate). "
+                    f"See designs/synology-mp-v1.md §\"Axis 7 — World-object identity\"."
+                )
+        else:
+            # Non-world objects must NOT declare identity
+            if ot.identity is not None:
+                raise ManagementPackValidationError(
+                    f"{ot_tag}: is_world: false objects must not declare 'identity:'. "
+                    f"Remove the 'identity:' block or set 'is_world: true'."
+                )
 
-        # Validate requests
-        req_names = set()
-        for req in ot.requests:
-            _validate_request(ot_tag, req)
-            req_names.add(req.name)
-        request_names_by_object[ot.key] = req_names
+        # Build the set of local metricSet names for this object_type
+        ms_local_names: Dict[str, int] = {}
+        for i, ms in enumerate(ot.metric_sets):
+            local = ms.local_name
+            if local in ms_local_names:
+                raise ManagementPackValidationError(
+                    f"{ot_tag}: metricSets[{i}]: duplicate local name '{local}' "
+                    f"(also at index {ms_local_names[local]}). Use 'as:' on one "
+                    f"of them to disambiguate."
+                )
+            ms_local_names[local] = i
 
-        # Collect metric keys for this object type
+        # Validate each metricSet
+        for i, ms in enumerate(ot.metric_sets):
+            _validate_metric_set(ot_tag, i, ms, request_names, ms_local_names)
+
+        # Primary-validator
+        _validate_primary(ot_tag, ot)
+
+        # Chain-graph walker (cycle detection + orphan detection)
+        _validate_chain_graph(ot_tag, ot)
+
+        # Validate ${chain.*} token coverage on each chained request
+        _validate_chain_tokens(ot_tag, ot, mp.requests)
+
+        # Collect metric keys for this object_type
+        # Build the set of metricSet local names for source validation
+        ms_names_for_source = set(ms_local_names.keys())
         metric_keys = set()
         for m in ot.metrics:
-            _validate_metric(ot_tag, m, req_names)
+            _validate_metric(ot_tag, m, ms_names_for_source)
             metric_keys.add(m.key)
         object_keys[ot.key] = metric_keys
 
-        # Validate name_expression
-        if ot.name_expression:
-            _validate_name_expression(ot_tag, ot.name_expression)
+        # Validate name_expression (NameExpressionDef)
+        if ot.name_expression is not None:
+            _validate_name_expression(ot_tag, ot.name_expression, metric_keys)
 
     # Exactly one world object
     if mp.object_types and world_count != 1:
@@ -416,7 +697,7 @@ def _validate_mp(mp: ManagementPackDef) -> None:
             f"found {world_count}"
         )
 
-    # Relationships reference valid object type keys
+    # Relationships reference valid object type keys + scope validation
     for rel in mp.relationships:
         if rel.parent not in object_keys:
             raise ManagementPackValidationError(
@@ -432,47 +713,284 @@ def _validate_mp(mp: ManagementPackDef) -> None:
             raise ManagementPackValidationError(
                 f"{tag}: relationship cannot be self-referential ('{rel.parent}')"
             )
+        _validate_relationship_scope(tag, rel)
 
-    # Collect all request names across all object types for MPB event cross-reference
-    all_request_names: set = set()
-    for ot in mp.object_types:
-        for req in ot.requests:
-            all_request_names.add(req.name)
+    # Collect all request names for MPB event cross-reference
+    all_request_names: set = set(request_names.keys())
 
     # MPB events
     for ev in mp.mpb_events:
         _validate_mpb_event(ev, tag, all_request_names, set(object_keys.keys()))
 
 
-def _validate_name_expression(tag: str, expr: str) -> None:
-    """Reject multi-metric templates; only bare metric key or ${metric_key} allowed."""
-    # Count how many ${...} groups are present
-    refs = _TEMPLATE_RE.findall(expr)
-    if len(refs) > 1:
+def _validate_metric_set(
+    ot_tag: str,
+    index: int,
+    ms: MetricSetDef,
+    mp_request_names: Dict[str, int],
+    sibling_names: Dict[str, int],
+) -> None:
+    """Validate one MetricSetDef entry."""
+    mstag = f"{ot_tag}: metricSets[{index}]"
+
+    if not ms.from_request or not ms.from_request.strip():
+        raise ManagementPackValidationError(f"{mstag}: from_request is required")
+
+    if ms.from_request not in mp_request_names:
         raise ManagementPackValidationError(
-            f"{tag}: name_expression contains multiple metric references "
-            f"({refs!r}). Template name expressions with multiple metrics / "
-            f"literals are not supported in v1; use a single metric key "
-            f"(e.g. 'hostname' or '${{hostname}}')."
+            f"{mstag}: from_request '{ms.from_request}' does not match any "
+            f"top-level request (known: {sorted(mp_request_names)})"
         )
-    if len(refs) == 1:
-        # Has exactly one ${...} — check there is no surrounding literal text
-        stripped = expr.strip()
-        if not stripped.startswith("${") or not stripped.endswith("}"):
+
+    if ms.chained_from is not None:
+        # chained_from must name a sibling metricSet local_name
+        if ms.chained_from not in sibling_names:
             raise ManagementPackValidationError(
-                f"{tag}: name_expression mixes a metric reference with literal "
-                f"text ({expr!r}). Template name expressions with multiple "
-                f"metrics / literals are not supported in v1; use a single "
-                f"metric key (e.g. 'hostname' or '${{hostname}}')."
+                f"{mstag}: chained_from '{ms.chained_from}' does not match any "
+                f"sibling metricSet local name (known: {sorted(sibling_names)}). "
+                f"chained_from must reference a sibling metricSet's from_request "
+                f"(or its 'as:' alias if set)."
             )
-    # If zero ${...} refs, it must be a bare identifier
-    if len(refs) == 0:
-        if not re.match(r"^[a-zA-Z0-9_]+$", expr.strip()):
+        if ms.chained_from == ms.local_name:
             raise ManagementPackValidationError(
-                f"{tag}: name_expression {expr!r} is not a valid metric key. "
-                f"Use a bare metric key (e.g. 'hostname') or a single "
-                f"reference (e.g. '${{hostname}}')."
+                f"{mstag}: chained_from cannot point at itself ('{ms.chained_from}')"
             )
+        if not ms.bind:
+            raise ManagementPackValidationError(
+                f"{mstag}: chained_from '{ms.chained_from}' requires at least one "
+                f"bind entry"
+            )
+
+    for j, b in enumerate(ms.bind):
+        btag = f"{mstag}: bind[{j}]"
+        if not b.name or not b.name.strip():
+            raise ManagementPackValidationError(f"{btag}: name is required")
+        if not b.from_attribute or not b.from_attribute.strip():
+            raise ManagementPackValidationError(f"{btag}: from_attribute is required")
+
+
+def _validate_primary(ot_tag: str, ot: ObjectTypeDef) -> None:
+    """Validate primary metricSet rule per is_world."""
+    primary_count = sum(1 for ms in ot.metric_sets if ms.primary)
+
+    if ot.is_world:
+        # World/singleton: primary must be absent/false on all metricSets
+        if primary_count > 0:
+            raise ManagementPackValidationError(
+                f"{ot_tag}: is_world objects must not declare 'primary: true' "
+                f"on any metricSet (singletons don't define list membership); "
+                f"found {primary_count} metricSet(s) with primary: true"
+            )
+    else:
+        # List object: exactly one primary required
+        if primary_count == 0:
+            raise ManagementPackValidationError(
+                f"{ot_tag}: list objects (is_world: false) require exactly one "
+                f"metricSet with 'primary: true'; found zero"
+            )
+        if primary_count > 1:
+            raise ManagementPackValidationError(
+                f"{ot_tag}: list objects (is_world: false) must have exactly one "
+                f"metricSet with 'primary: true'; found {primary_count}"
+            )
+
+
+def _validate_chain_graph(ot_tag: str, ot: ObjectTypeDef) -> None:
+    """Detect cycles and orphan chains in the metricSet chained_from graph."""
+    # Build adjacency: local_name -> chained_from (or None)
+    local_names = {ms.local_name for ms in ot.metric_sets}
+
+    # Detect orphan chains (chained_from points at a non-existent sibling)
+    # This is already caught in _validate_metric_set, but double-check here
+    # for cross-object-type chain detection.
+    for ms in ot.metric_sets:
+        if ms.chained_from is not None and ms.chained_from not in local_names:
+            raise ManagementPackValidationError(
+                f"{ot_tag}: metricSet '{ms.local_name}' has chained_from "
+                f"'{ms.chained_from}' which is not a sibling metricSet. "
+                f"Cross-object-type chains are not supported in v1."
+            )
+
+    # Detect cycles using DFS
+    parent_map: Dict[str, Optional[str]] = {
+        ms.local_name: ms.chained_from for ms in ot.metric_sets
+    }
+
+    def _find_cycle(start: str) -> Optional[List[str]]:
+        visited: List[str] = []
+        current: Optional[str] = start
+        while current is not None:
+            if current in visited:
+                cycle_start = visited.index(current)
+                return visited[cycle_start:]
+            visited.append(current)
+            current = parent_map.get(current)
+        return None
+
+    for name in list(parent_map.keys()):
+        cycle = _find_cycle(name)
+        if cycle:
+            raise ManagementPackValidationError(
+                f"{ot_tag}: cycle detected in metricSet chained_from graph: "
+                f"{' -> '.join(cycle)} -> {cycle[0]}"
+            )
+
+
+def _validate_chain_tokens(
+    ot_tag: str,
+    ot: ObjectTypeDef,
+    mp_requests: List[RequestDef],
+) -> None:
+    """Validate ${chain.*} token coverage.
+
+    For each chained metricSet, ensure every ${chain.<name>} token in the
+    request's params/path/body/headers has a matching bind entry.
+    Also ensure that requests with ${chain.*} tokens are consumed as a
+    chained metricSet on at least one object_type (within this object_type's
+    metricSets).
+    """
+    request_by_name: Dict[str, RequestDef] = {r.name: r for r in mp_requests}
+
+    for ms in ot.metric_sets:
+        req = request_by_name.get(ms.from_request)
+        if req is None:
+            continue  # already caught by _validate_metric_set
+
+        # Collect all ${chain.*} tokens in this request's templates
+        chain_tokens_in_req: set = set()
+        for part in _collect_request_template_parts(req):
+            for m in _CHAIN_TOKEN_RE.finditer(part):
+                chain_tokens_in_req.add(m.group(1))
+
+        if chain_tokens_in_req and ms.chained_from is None:
+            # Request has chain tokens but this metricSet is not chained
+            raise ManagementPackValidationError(
+                f"{ot_tag}: metricSet '{ms.local_name}' uses request "
+                f"'{ms.from_request}' which contains ${{chain.*}} token(s) "
+                f"{sorted(chain_tokens_in_req)!r}, but no 'chained_from' is "
+                f"declared on this metricSet. Either add 'chained_from:' or "
+                f"remove the ${{chain.*}} token from the request params/path/body."
+            )
+
+        if ms.chained_from is not None:
+            # Chained: verify all ${chain.*} tokens have matching bind entries
+            bind_names = {b.name for b in ms.bind}
+            missing = chain_tokens_in_req - bind_names
+            if missing:
+                raise ManagementPackValidationError(
+                    f"{ot_tag}: metricSet '{ms.local_name}' is chained from "
+                    f"'{ms.chained_from}' but request '{ms.from_request}' uses "
+                    f"${{chain.*}} token(s) {sorted(missing)!r} with no matching "
+                    f"bind entry. Add bind entries for each missing name."
+                )
+
+
+def _collect_request_template_parts(req: RequestDef) -> List[str]:
+    """Return all string values from a request that may contain ${...} tokens."""
+    parts: List[str] = []
+    if req.path:
+        parts.append(req.path)
+    if req.body:
+        parts.append(str(req.body))
+    params = req.params or []
+    if isinstance(params, list):
+        for p in params:
+            if isinstance(p, dict):
+                v = p.get("value")
+                if v:
+                    parts.append(str(v))
+    elif isinstance(params, dict):
+        for v in params.values():
+            if v:
+                parts.append(str(v))
+    return parts
+
+
+def _validate_identifier(tag: str, ident: "IdentifierDef") -> None:
+    """Validate one IdentifierDef."""
+    if not ident.key or not ident.key.strip():
+        raise ManagementPackValidationError(f"{tag}: identifier key is required")
+    if ident.derive is not None:
+        raise ManagementPackValidationError(
+            f"{tag}: identifier '{ident.key}': 'derive:' is reserved for future use "
+            f"and is not implementable in the current version. "
+            f"Remove the 'derive:' key — computed/derived identifiers are not yet "
+            f"supported. Use a metric key reference instead."
+        )
+
+
+def _validate_relationship_scope(tag: str, rel: "RelationshipDef") -> None:
+    """Validate relationship scope + expression requirements."""
+    rtag = f"{tag}: relationship {rel.parent!r} → {rel.child!r}"
+
+    if rel.scope not in VALID_RELATIONSHIP_SCOPE:
+        raise ManagementPackValidationError(
+            f"{rtag}: scope must be one of {sorted(VALID_RELATIONSHIP_SCOPE)}; "
+            f"got {rel.scope!r}"
+        )
+
+    if rel.scope == "adapter_instance":
+        if rel.child_expression is not None or rel.parent_expression is not None:
+            raise ManagementPackValidationError(
+                f"{rtag}: scope 'adapter_instance' must not declare "
+                f"child_expression or parent_expression (the renderer synthesizes "
+                f"the wire-level predicate). Remove both expression fields."
+            )
+
+    elif rel.scope == "field_match":
+        if rel.child_expression is None or rel.parent_expression is None:
+            raise ManagementPackValidationError(
+                f"{rtag}: scope 'field_match' requires both child_expression and "
+                f"parent_expression. "
+                f"Provide metric keys for both sides of the value-join predicate."
+            )
+
+
+def _validate_name_expression(
+    tag: str,
+    expr: "NameExpressionDef",
+    metric_keys: set,
+) -> None:
+    """Validate a NameExpressionDef.
+
+    Rules:
+      - At least one part required.
+      - Each part has exactly one of metric: or literal:.
+      - Metric references must resolve to a metric on this object_type.
+      - Multi-part expressions (more than one non-literal entry) are accepted
+        by the grammar but the renderer will emit a "not yet implemented" error
+        at render time.
+    """
+    if not expr.parts:
+        raise ManagementPackValidationError(
+            f"{tag}: name_expression requires at least one part. "
+            f"Provide at least one '{{metric: <key>}}' or '{{literal: <text>}}' entry "
+            f"under 'parts:'."
+        )
+    for i, part in enumerate(expr.parts):
+        ptag = f"{tag}: name_expression.parts[{i}]"
+        has_metric = part.metric is not None
+        has_literal = part.literal is not None
+        if has_metric and has_literal:
+            raise ManagementPackValidationError(
+                f"{ptag}: each part must have exactly one of 'metric:' or 'literal:', "
+                f"not both. Got metric={part.metric!r} and literal={part.literal!r}."
+            )
+        if not has_metric and not has_literal:
+            raise ManagementPackValidationError(
+                f"{ptag}: each part must have exactly one of 'metric:' or 'literal:'. "
+                f"Got neither."
+            )
+        if has_metric:
+            if not part.metric.strip():
+                raise ManagementPackValidationError(
+                    f"{ptag}: metric key must not be empty"
+                )
+            if part.metric not in metric_keys:
+                raise ManagementPackValidationError(
+                    f"{ptag}: metric key {part.metric!r} is not declared on this "
+                    f"object_type (known metric keys: {sorted(metric_keys)})"
+                )
 
 
 def _validate_mpb_event(
@@ -497,8 +1015,7 @@ def _validate_mpb_event(
     if ev.source_request not in all_request_names:
         raise ManagementPackValidationError(
             f"{etag}: source_request '{ev.source_request}' does not match any "
-            f"request defined on the object types "
-            f"(known requests: {sorted(all_request_names)})"
+            f"top-level request (known requests: {sorted(all_request_names)})"
         )
     if not ev.response_path or not ev.response_path.strip():
         raise ManagementPackValidationError(
@@ -584,75 +1101,223 @@ def _validate_source(tag: str, src: SourceDef) -> None:
             )
 
 
-def _validate_auth(tag: str, auth: AuthDef) -> None:
+def _validate_auth(tag: str, auth: AuthFlowDef) -> None:
     atag = f"{tag}: auth"
-    if auth.type not in VALID_AUTH_TYPE:
+
+    if auth.preset not in VALID_AUTH_PRESET:
         raise ManagementPackValidationError(
-            f"{atag}: type must be one of {sorted(VALID_AUTH_TYPE)}; "
-            f"got {auth.type!r}"
+            f"{atag}: unknown preset {auth.preset!r}. "
+            f"Valid presets are: {sorted(VALID_AUTH_PRESET)}. "
+            f"See designs/synology-mp-v1.md §\"Framework-vs-Synology review "
+            f"(2026-04-18)\" axis 1 for the flow grammar spec."
         )
-    if auth.type == "SESSION" and not auth.session:
+
+    preset = auth.preset
+
+    if preset == "none":
+        _validate_auth_none(atag, auth)
+    elif preset == "basic_auth":
+        _validate_auth_basic(atag, auth)
+    elif preset == "bearer_token":
+        _validate_auth_bearer(atag, auth)
+    elif preset == "cookie_session":
+        _validate_auth_cookie_session(atag, auth)
+
+    # Validate ${credentials.X}, ${session.X}, ${configuration.X} references
+    _validate_auth_substitution_refs(atag, auth)
+
+
+def _validate_auth_none(tag: str, auth: AuthFlowDef) -> None:
+    """Preset 'none': no credentials, no flow blocks."""
+    if auth.credentials:
         raise ManagementPackValidationError(
-            f"{atag}: session settings are required when auth type is SESSION"
+            f"{tag}: preset 'none' must not declare credentials"
         )
-    if auth.type == "CUSTOM":
-        if not auth.custom_session:
+    for block, name in [(auth.login, "login"), (auth.extract, "extract"),
+                        (auth.logout, "logout")]:
+        if block is not None:
             raise ManagementPackValidationError(
-                f"{atag}: session block is required when auth type is CUSTOM"
+                f"{tag}: preset 'none' must not declare '{name}'"
             )
-        _validate_custom_session(atag, auth.custom_session)
-
-
-def _validate_custom_session(tag: str, cs: SessionDef) -> None:
-    stag = f"{tag}: session"
-    # login_request is required
-    if not cs.login_request:
+    if auth.inject:
         raise ManagementPackValidationError(
-            f"{stag}: login_request is required for CUSTOM auth"
+            f"{tag}: preset 'none' must not declare 'inject'"
         )
-    login_method = str(
-        cs.login_request.get("method", "GET") or "GET"
-    ).strip().upper()
+
+
+def _validate_auth_basic(tag: str, auth: AuthFlowDef) -> None:
+    """Preset 'basic_auth': exactly username + password credentials; no flow blocks."""
+    for block, name in [(auth.login, "login"), (auth.extract, "extract"),
+                        (auth.logout, "logout")]:
+        if block is not None:
+            raise ManagementPackValidationError(
+                f"{tag}: preset 'basic_auth' must not declare '{name}'"
+            )
+    # credentials: must have exactly a username and a password field
+    keys = {c.key for c in auth.credentials}
+    if "username" not in keys or "password" not in keys:
+        raise ManagementPackValidationError(
+            f"{tag}: preset 'basic_auth' requires credentials with keys "
+            f"'username' and 'password'; found: {sorted(keys)!r}"
+        )
+    extra = keys - {"username", "password"}
+    if extra:
+        raise ManagementPackValidationError(
+            f"{tag}: preset 'basic_auth' credentials must contain only "
+            f"'username' and 'password'; unexpected keys: {sorted(extra)!r}"
+        )
+    _validate_inject_rules(tag, auth.inject)
+
+
+def _validate_auth_bearer(tag: str, auth: AuthFlowDef) -> None:
+    """Preset 'bearer_token': single token credential; no flow blocks."""
+    for block, name in [(auth.login, "login"), (auth.extract, "extract"),
+                        (auth.logout, "logout")]:
+        if block is not None:
+            raise ManagementPackValidationError(
+                f"{tag}: preset 'bearer_token' must not declare '{name}'"
+            )
+    if len(auth.credentials) != 1:
+        raise ManagementPackValidationError(
+            f"{tag}: preset 'bearer_token' requires exactly one credential "
+            f"field (the token); found {len(auth.credentials)}"
+        )
+    _validate_inject_rules(tag, auth.inject)
+
+
+def _validate_auth_cookie_session(tag: str, auth: AuthFlowDef) -> None:
+    """Preset 'cookie_session': all blocks required."""
+    if not auth.credentials:
+        raise ManagementPackValidationError(
+            f"{tag}: preset 'cookie_session' requires credentials"
+        )
+    if auth.login is None:
+        raise ManagementPackValidationError(
+            f"{tag}: preset 'cookie_session' requires a 'login' block"
+        )
+    if auth.extract is None:
+        raise ManagementPackValidationError(
+            f"{tag}: preset 'cookie_session' requires an 'extract' block"
+        )
+    if not auth.inject:
+        raise ManagementPackValidationError(
+            f"{tag}: preset 'cookie_session' requires at least one 'inject' rule"
+        )
+    if auth.logout is None:
+        raise ManagementPackValidationError(
+            f"{tag}: preset 'cookie_session' requires a 'logout' block"
+        )
+
+    # login method
+    login_method = (auth.login.method or "GET").strip().upper()
     if login_method not in VALID_HTTP_METHOD:
         raise ManagementPackValidationError(
-            f"{stag}: login_request.method must be one of "
-            f"{sorted(VALID_HTTP_METHOD)}; got {login_method!r}"
+            f"{tag}: login.method must be one of {sorted(VALID_HTTP_METHOD)}; "
+            f"got {login_method!r}"
         )
-    # cookie_binding must be a non-empty identifier
-    if not cs.cookie_binding or not cs.cookie_binding.strip():
+
+    # extract location
+    if auth.extract.location not in ("HEADER", "BODY"):
         raise ManagementPackValidationError(
-            f"{stag}: cookie_binding is required for CUSTOM auth "
-            f"(e.g. 'set_cookie')"
+            f"{tag}: extract.location must be HEADER or BODY; "
+            f"got {auth.extract.location!r}"
         )
-    # header_injection must be a non-empty list of {key, value} dicts
-    if not cs.header_injection:
+    if not auth.extract.name or not auth.extract.name.strip():
         raise ManagementPackValidationError(
-            f"{stag}: header_injection must contain at least one entry "
-            f"for CUSTOM auth"
+            f"{tag}: extract.name is required"
         )
-    for i, h in enumerate(cs.header_injection):
-        if not isinstance(h, dict):
+    if not auth.extract.bind_to or not auth.extract.bind_to.strip():
+        raise ManagementPackValidationError(
+            f"{tag}: extract.bind_to is required (e.g. 'session.set_cookie')"
+        )
+
+    # logout method
+    logout_method = (auth.logout.method or "DELETE").strip().upper()
+    if logout_method not in VALID_HTTP_METHOD:
+        raise ManagementPackValidationError(
+            f"{tag}: logout.method must be one of {sorted(VALID_HTTP_METHOD)}; "
+            f"got {logout_method!r}"
+        )
+
+    _validate_inject_rules(tag, auth.inject)
+
+
+def _validate_inject_rules(tag: str, inject: List) -> None:
+    """Validate inject[] entries."""
+    for i, rule in enumerate(inject):
+        rtag = f"{tag}: inject[{i}]"
+        if rule.type not in ("header", "query_param"):
             raise ManagementPackValidationError(
-                f"{stag}: header_injection[{i}] must be a mapping"
+                f"{rtag}: type must be 'header' or 'query_param'; "
+                f"got {rule.type!r}"
             )
-        if not h.get("key"):
-            raise ManagementPackValidationError(
-                f"{stag}: header_injection[{i}] is missing 'key'"
-            )
-        if "value" not in h:
-            raise ManagementPackValidationError(
-                f"{stag}: header_injection[{i}] is missing 'value'"
-            )
-    # logout_request method, if present
-    if cs.logout_request:
-        logout_method = str(
-            cs.logout_request.get("method", "GET") or "GET"
-        ).strip().upper()
-        if logout_method not in VALID_HTTP_METHOD:
-            raise ManagementPackValidationError(
-                f"{stag}: logout_request.method must be one of "
-                f"{sorted(VALID_HTTP_METHOD)}; got {logout_method!r}"
-            )
+        if not rule.name or not rule.name.strip():
+            raise ManagementPackValidationError(f"{rtag}: name is required")
+        if not rule.value or not rule.value.strip():
+            raise ManagementPackValidationError(f"{rtag}: value is required")
+
+
+# Patterns for substitution reference validation
+_CRED_REF_RE = re.compile(r"\$\{credentials\.([a-zA-Z0-9_]+)\}")
+_SESSION_REF_RE = re.compile(r"\$\{session\.([a-zA-Z0-9_]+)\}")
+
+
+def _validate_auth_substitution_refs(tag: str, auth: AuthFlowDef) -> None:
+    """Validate that ${credentials.X} and ${session.X} refs resolve."""
+    declared_cred_keys = {c.key for c in auth.credentials}
+    declared_session_keys: set = set()
+    if auth.extract is not None:
+        declared_session_keys.add(auth.extract.session_key)
+
+    # Collect all template strings to check
+    templates: List[str] = []
+
+    def _collect_from_request(req) -> None:
+        if req is None:
+            return
+        if req.path:
+            templates.append(req.path)
+        if req.body:
+            templates.append(str(req.body))
+        params = req.params or []
+        if isinstance(params, list):
+            for p in params:
+                if isinstance(p, dict):
+                    v = p.get("value")
+                    if v:
+                        templates.append(str(v))
+        elif isinstance(params, dict):
+            for v in params.values():
+                if v:
+                    templates.append(str(v))
+        for h in (req.headers or []):
+            if isinstance(h, dict):
+                v = h.get("value")
+                if v:
+                    templates.append(str(v))
+
+    _collect_from_request(auth.login)
+    _collect_from_request(auth.logout)
+    for rule in auth.inject:
+        if rule.value:
+            templates.append(rule.value)
+
+    for tmpl in templates:
+        for m in _CRED_REF_RE.finditer(tmpl):
+            key = m.group(1)
+            if key not in declared_cred_keys:
+                raise ManagementPackValidationError(
+                    f"{tag}: unresolved credential reference ${{credentials.{key}}}; "
+                    f"declared credential keys: {sorted(declared_cred_keys)!r}"
+                )
+        for m in _SESSION_REF_RE.finditer(tmpl):
+            key = m.group(1)
+            if key not in declared_session_keys:
+                raise ManagementPackValidationError(
+                    f"{tag}: unresolved session reference ${{session.{key}}}; "
+                    f"declared session keys (from extract.bind_to): "
+                    f"{sorted(declared_session_keys)!r}"
+                )
 
 
 def _validate_request(tag: str, req: RequestDef) -> None:
@@ -666,7 +1331,42 @@ def _validate_request(tag: str, req: RequestDef) -> None:
         )
 
 
-def _validate_metric(tag: str, m: MetricDef, req_names: set) -> None:
+def _validate_metric_source(tag: str, src: "MetricSourceDef", ms_names: set) -> None:
+    """Validate a MetricSourceDef.
+
+    Reserved fields (aggregate, extract, compose) raise an error if present.
+    """
+    if not src.metricset or not src.metricset.strip():
+        raise ManagementPackValidationError(f"{tag}: source.metricset is required")
+    if not src.path or not src.path.strip():
+        raise ManagementPackValidationError(f"{tag}: source.path is required")
+    if src.aggregate is not None:
+        raise ManagementPackValidationError(
+            f"{tag}: source.aggregate is reserved for future use and is not "
+            f"implementable in the current version. "
+            f"Remove the 'aggregate:' key — aggregation transforms are not yet supported."
+        )
+    if src.extract is not None:
+        raise ManagementPackValidationError(
+            f"{tag}: source.extract is reserved for future use and is not "
+            f"implementable in the current version. "
+            f"Remove the 'extract:' key — regex extraction is not yet supported."
+        )
+    if src.compose is not None:
+        raise ManagementPackValidationError(
+            f"{tag}: source.compose is reserved for future use and is not "
+            f"implementable in the current version. "
+            f"Remove the 'compose:' key — multi-source composition is not yet supported."
+        )
+    if src.metricset not in ms_names:
+        raise ManagementPackValidationError(
+            f"{tag}: source references unknown metricSet '{src.metricset}' "
+            f"(known metricSet names on this object_type: {sorted(ms_names)}). "
+            f"The name is the from_request value of the metricSet (or its 'as:' alias)."
+        )
+
+
+def _validate_metric(tag: str, m: MetricDef, ms_names: set) -> None:
     mtag = f"{tag}: metric '{m.key}'"
     if not m.key or not m.key.strip():
         raise ManagementPackValidationError(f"{tag}: metric key is required")
@@ -686,20 +1386,8 @@ def _validate_metric(tag: str, m: MetricDef, req_names: set) -> None:
         raise ManagementPackValidationError(
             f"{mtag}: METRIC usage requires type NUMBER; got {m.type!r}"
         )
-    # Validate source reference
-    if m.source:
-        match = _SOURCE_RE.match(m.source)
-        if not match:
-            raise ManagementPackValidationError(
-                f"{mtag}: source must be 'request:<name>.<field>'; "
-                f"got {m.source!r}"
-            )
-        req_ref = match.group(1)
-        if req_ref not in req_names:
-            raise ManagementPackValidationError(
-                f"{mtag}: source references unknown request '{req_ref}' "
-                f"(known: {sorted(req_names)})"
-            )
+    # Validate source (MetricSourceDef — Tier 3.3 structured form)
+    _validate_metric_source(mtag, m.source, ms_names)
 
 
 # ---------------------------------------------------------------------------
@@ -716,6 +1404,19 @@ def _reject_events_key(raw: dict, context: str) -> None:
             f"alert-author) after the MP is installed. Remove the 'events' key "
             f"and rewrite each threshold as a factory symptom referencing the "
             f"MP adapter kind's metric."
+        )
+
+
+def _reject_object_type_requests(raw: dict, ot_tag: str) -> None:
+    """Raise if 'requests' appears under an object_type (old Option A grammar)."""
+    if "requests" in raw:
+        raise ManagementPackValidationError(
+            f"{ot_tag}: 'requests:' under an object_type is not supported in "
+            f"the Option C grammar. Move all requests to the top-level 'requests:' "
+            f"block (sibling of 'object_types:') and replace the implicit "
+            f"request-is-metricSet convention with an explicit 'metricSets:' "
+            f"block on each object_type. "
+            f"See designs/synology-mp-v1.md §'Chaining grammar design'."
         )
 
 
@@ -738,45 +1439,284 @@ def _parse_request(raw: dict, parent_tag: str) -> RequestDef:
     )
 
 
+def _parse_metric_source(raw_source: Any, parent_tag: str) -> "MetricSourceDef":
+    """Parse a metric source — string shorthand or structured dict.
+
+    String shorthand: ``"metricset:<name>.<path>"`` → MetricSourceDef(metricset=<name>, path=<path>)
+    Structured: ``{metricset: <name>, path: <path>, [aggregate: ...], ...}``
+
+    Old grammar ``"request:..."`` is rejected with a migration hint.
+    """
+    if isinstance(raw_source, str):
+        s = raw_source.strip()
+        # Reject old-grammar form loudly
+        if _OLD_REQUEST_SOURCE_RE.match(s):
+            raise ManagementPackValidationError(
+                f"{parent_tag}: old-grammar source form 'request:...' is no longer "
+                f"supported. Migrate to 'metricset:<metricset_name>.<field_path>'. "
+                f"The metricset_name is the from_request value (or 'as:' alias) of "
+                f"the metricSet that sources this metric. "
+                f"See designs/synology-mp-v1.md §'Chaining grammar design'."
+            )
+        m = _METRICSET_SOURCE_RE.match(s)
+        if not m:
+            raise ManagementPackValidationError(
+                f"{parent_tag}: source string must be 'metricset:<name>.<field>'; "
+                f"got {s!r}"
+            )
+        return MetricSourceDef(metricset=m.group(1), path=m.group(2))
+
+    if isinstance(raw_source, dict):
+        return MetricSourceDef(
+            metricset=str(raw_source.get("metricset", "") or "").strip(),
+            path=str(raw_source.get("path", "") or "").strip(),
+            aggregate=raw_source.get("aggregate"),
+            extract=raw_source.get("extract"),
+            compose=raw_source.get("compose"),
+        )
+
+    raise ManagementPackValidationError(
+        f"{parent_tag}: source must be a string ('metricset:<name>.<path>') "
+        f"or a mapping ({{metricset: <name>, path: <path>}}); "
+        f"got {type(raw_source).__name__}"
+    )
+
+
 def _parse_metric(raw: dict, parent_tag: str) -> MetricDef:
     if not isinstance(raw, dict):
         raise ManagementPackValidationError(
             f"{parent_tag}: each metric must be a mapping"
         )
+    raw_source = raw.get("source")
+    if raw_source is None:
+        raise ManagementPackValidationError(
+            f"{parent_tag}: metric '{raw.get('key', '')}': source is required"
+        )
+    source = _parse_metric_source(raw_source, f"{parent_tag}: metric '{raw.get('key', '')}'")
     return MetricDef(
         key=str(raw.get("key", "") or "").strip(),
         label=str(raw.get("label", "") or "").strip(),
         usage=str(raw.get("usage", "") or "").strip().upper(),
         type=str(raw.get("type", "") or "").strip().upper(),
-        source=str(raw.get("source", "") or "").strip(),
+        source=source,
         unit=str(raw.get("unit", "") or "").strip(),
         kpi=bool(raw.get("kpi", False)),
     )
 
 
-def _parse_custom_session(raw: dict, parent_tag: str) -> SessionDef:
-    """Parse a CUSTOM-auth session block."""
+def _parse_bind(raw: dict, parent_tag: str) -> BindDef:
     if not isinstance(raw, dict):
         raise ManagementPackValidationError(
-            f"{parent_tag}: auth.session must be a mapping for CUSTOM auth"
+            f"{parent_tag}: each bind entry must be a mapping"
         )
-    raw_login = raw.get("login_request")
-    if not isinstance(raw_login, dict):
-        raise ManagementPackValidationError(
-            f"{parent_tag}: auth.session.login_request must be a mapping"
-        )
-    raw_logout = raw.get("logout_request")
-    raw_headers = raw.get("header_injection") or []
-    if not isinstance(raw_headers, list):
-        raise ManagementPackValidationError(
-            f"{parent_tag}: auth.session.header_injection must be a list"
-        )
-    return SessionDef(
-        login_request=raw_login,
-        logout_request=raw_logout if isinstance(raw_logout, dict) else None,
-        cookie_binding=str(raw.get("cookie_binding", "") or "").strip(),
-        header_injection=list(raw_headers),
+    return BindDef(
+        name=str(raw.get("name", "") or "").strip(),
+        from_attribute=str(raw.get("from_attribute", "") or "").strip(),
     )
+
+
+def _parse_metric_set(raw: dict, parent_tag: str) -> MetricSetDef:
+    if not isinstance(raw, dict):
+        raise ManagementPackValidationError(
+            f"{parent_tag}: each metricSet must be a mapping"
+        )
+    raw_bind = raw.get("bind") or []
+    if not isinstance(raw_bind, list):
+        raise ManagementPackValidationError(f"{parent_tag}: bind must be a list")
+    bind = [_parse_bind(b, parent_tag) for b in raw_bind]
+
+    raw_as = raw.get("as")
+    return MetricSetDef(
+        from_request=str(raw.get("from_request", "") or "").strip(),
+        list_path=str(raw.get("list_path", "") or "").strip(),
+        primary=bool(raw.get("primary", False)),
+        chained_from=str(raw.get("chained_from")).strip() if raw.get("chained_from") else None,
+        bind=bind,
+        as_name=str(raw_as).strip() if raw_as else None,
+    )
+
+
+def _parse_login_request(raw: dict, parent_tag: str) -> LoginRequestDef:
+    """Parse an auth.login or auth.logout block."""
+    if not isinstance(raw, dict):
+        raise ManagementPackValidationError(
+            f"{parent_tag}: must be a mapping"
+        )
+    raw_headers = raw.get("headers") or []
+    if not isinstance(raw_headers, list):
+        raw_headers = []
+    return LoginRequestDef(
+        method=str(raw.get("method", "GET") or "GET").strip().upper(),
+        path=str(raw.get("path", "") or "").strip(),
+        params=raw.get("params") or [],
+        headers=list(raw_headers),
+        body=raw.get("body"),
+    )
+
+
+def _parse_logout_request(raw: dict, parent_tag: str) -> LogoutRequestDef:
+    if not isinstance(raw, dict):
+        raise ManagementPackValidationError(
+            f"{parent_tag}: must be a mapping"
+        )
+    raw_headers = raw.get("headers") or []
+    if not isinstance(raw_headers, list):
+        raw_headers = []
+    return LogoutRequestDef(
+        method=str(raw.get("method", "DELETE") or "DELETE").strip().upper(),
+        path=str(raw.get("path", "") or "").strip(),
+        params=raw.get("params") or [],
+        headers=list(raw_headers),
+        body=raw.get("body"),
+    )
+
+
+def _parse_extract_rule(raw: dict, parent_tag: str) -> ExtractRuleDef:
+    if not isinstance(raw, dict):
+        raise ManagementPackValidationError(
+            f"{parent_tag}: auth.extract must be a mapping"
+        )
+    return ExtractRuleDef(
+        location=str(raw.get("location", "HEADER") or "HEADER").strip().upper(),
+        name=str(raw.get("name", "") or "").strip(),
+        bind_to=str(raw.get("bind_to", "") or "").strip(),
+    )
+
+
+def _parse_inject_rule(raw: dict, parent_tag: str) -> InjectRuleDef:
+    if not isinstance(raw, dict):
+        raise ManagementPackValidationError(
+            f"{parent_tag}: each inject entry must be a mapping"
+        )
+    return InjectRuleDef(
+        type=str(raw.get("type", "header") or "header").strip().lower(),
+        name=str(raw.get("name", "") or "").strip(),
+        value=str(raw.get("value", "") or "").strip(),
+    )
+
+
+def _parse_credential_field(raw: dict, parent_tag: str) -> CredentialFieldDef:
+    if not isinstance(raw, dict):
+        raise ManagementPackValidationError(
+            f"{parent_tag}: each credentials entry must be a mapping"
+        )
+    return CredentialFieldDef(
+        key=str(raw.get("key", "") or "").strip(),
+        label=str(raw.get("label", "") or "").strip(),
+        sensitive=bool(raw.get("sensitive", False)),
+    )
+
+
+def _parse_identifier(raw: Any, parent_tag: str) -> "IdentifierDef":
+    """Parse one identifier entry — string shorthand or structured dict.
+
+    String shorthand: ``"foo"`` → IdentifierDef(key="foo", source=None)
+    Structured:       ``{key: foo, source: "metricset:X.Y"}``
+    """
+    if isinstance(raw, str):
+        key = raw.strip()
+        if not key:
+            raise ManagementPackValidationError(
+                f"{parent_tag}: identifier string must not be empty"
+            )
+        return IdentifierDef(key=key, source=None, derive=None)
+
+    if isinstance(raw, dict):
+        key = str(raw.get("key", "") or "").strip()
+        if not key:
+            raise ManagementPackValidationError(
+                f"{parent_tag}: identifier mapping requires a 'key' field"
+            )
+        raw_derive = raw.get("derive")
+        if raw_derive is not None:
+            # Parse it — we stash it so the validator can reject it with a
+            # clear "reserved" message
+            return IdentifierDef(
+                key=key,
+                source=str(raw.get("source", "") or "").strip() or None,
+                derive=raw_derive,
+            )
+        return IdentifierDef(
+            key=key,
+            source=str(raw.get("source", "") or "").strip() or None,
+            derive=None,
+        )
+
+    raise ManagementPackValidationError(
+        f"{parent_tag}: identifier must be a string or a mapping; "
+        f"got {type(raw).__name__}"
+    )
+
+
+def _parse_name_expression(raw: Any, parent_tag: str) -> "NameExpressionDef":
+    """Parse a name_expression — string shorthand or structured dict.
+
+    String shorthand: ``"hostname"`` → NameExpressionDef(parts=[NamePartDef(metric="hostname")])
+    Structured:       ``{parts: [{metric: model}, {literal: " ("}, {metric: hostname}, {literal: ")"}]}``
+    """
+    if isinstance(raw, str):
+        key = raw.strip()
+        # Strip leading ${...} wrapper if present — bare key or ${key}
+        bare_match = re.match(r"^\$\{([a-zA-Z0-9_]+)\}$", key)
+        if bare_match:
+            key = bare_match.group(1)
+        return NameExpressionDef(parts=[NamePartDef(metric=key)])
+
+    if isinstance(raw, dict):
+        raw_parts = raw.get("parts")
+        if raw_parts is None:
+            raise ManagementPackValidationError(
+                f"{parent_tag}: name_expression mapping must have a 'parts:' key"
+            )
+        if not isinstance(raw_parts, list):
+            raise ManagementPackValidationError(
+                f"{parent_tag}: name_expression.parts must be a list"
+            )
+        parts: List[NamePartDef] = []
+        for i, p in enumerate(raw_parts):
+            if not isinstance(p, dict):
+                raise ManagementPackValidationError(
+                    f"{parent_tag}: name_expression.parts[{i}] must be a mapping"
+                )
+            metric = p.get("metric")
+            literal = p.get("literal")
+            parts.append(NamePartDef(
+                metric=str(metric).strip() if metric is not None else None,
+                literal=str(literal) if literal is not None else None,
+            ))
+        return NameExpressionDef(parts=parts)
+
+    raise ManagementPackValidationError(
+        f"{parent_tag}: name_expression must be a string or a mapping with 'parts:'; "
+        f"got {type(raw).__name__}"
+    )
+
+
+def _parse_world_identity(raw: Any, parent_tag: str) -> "WorldIdentityDef":
+    """Parse an identity: block on a world object_type."""
+    if not isinstance(raw, dict):
+        raise ManagementPackValidationError(
+            f"{parent_tag}: identity must be a mapping "
+            f"{{tier: <tier>, source: 'metricset:<name>.<path>'}}"
+        )
+    tier = str(raw.get("tier", "") or "").strip()
+    if not tier:
+        raise ManagementPackValidationError(
+            f"{parent_tag}: identity.tier is required. "
+            f"Valid values: {sorted(VALID_IDENTITY_TIER)}"
+        )
+    if tier not in VALID_IDENTITY_TIER:
+        raise ManagementPackValidationError(
+            f"{parent_tag}: identity.tier must be one of {sorted(VALID_IDENTITY_TIER)}; "
+            f"got {tier!r}"
+        )
+    source = str(raw.get("source", "") or "").strip()
+    if not source:
+        raise ManagementPackValidationError(
+            f"{parent_tag}: identity.source is required "
+            f"(e.g. 'metricset:system_info.serial')"
+        )
+    return WorldIdentityDef(tier=tier, source=source)
 
 
 def _parse_object_type(raw: dict, parent_tag: str) -> ObjectTypeDef:
@@ -790,20 +1730,40 @@ def _parse_object_type(raw: dict, parent_tag: str) -> ObjectTypeDef:
     # Reject events key immediately
     _reject_events_key(raw, ot_tag)
 
+    # Reject old-grammar 'requests:' under object_type
+    _reject_object_type_requests(raw, ot_tag)
+
     raw_key = raw.get("key")
     ot_key = str(raw_key).strip() if raw_key else _derive_object_key(ot_name)
 
-    raw_requests = raw.get("requests") or []
-    if not isinstance(raw_requests, list):
-        raise ManagementPackValidationError(f"{ot_tag}: requests must be a list")
-    requests = [_parse_request(r, ot_tag) for r in raw_requests]
+    # Parse metricSets (Option C — required, replaces implicit requests)
+    raw_metric_sets = raw.get("metricSets") or []
+    if not isinstance(raw_metric_sets, list):
+        raise ManagementPackValidationError(f"{ot_tag}: metricSets must be a list")
+    metric_sets = [_parse_metric_set(ms, ot_tag) for ms in raw_metric_sets]
 
     raw_metrics = raw.get("metrics") or []
     if not isinstance(raw_metrics, list):
         raise ManagementPackValidationError(f"{ot_tag}: metrics must be a list")
     metrics = [_parse_metric(m, ot_tag) for m in raw_metrics]
 
-    identifiers = list(raw.get("identifiers") or [])
+    # Identifiers — Tier 3.3 structured form (shorthand or structured)
+    raw_identifiers = raw.get("identifiers") or []
+    if not isinstance(raw_identifiers, list):
+        raise ManagementPackValidationError(f"{ot_tag}: identifiers must be a list")
+    identifiers = [_parse_identifier(ident, ot_tag) for ident in raw_identifiers]
+
+    # name_expression — Tier 3.3 structured form (shorthand string or parts dict)
+    raw_name_expr = raw.get("name_expression")
+    name_expression: Optional[NameExpressionDef] = None
+    if raw_name_expr is not None:
+        name_expression = _parse_name_expression(raw_name_expr, ot_tag)
+
+    # identity — Tier 3.3 axis 7 (required for is_world, forbidden otherwise)
+    raw_identity = raw.get("identity")
+    identity: Optional[WorldIdentityDef] = None
+    if raw_identity is not None:
+        identity = _parse_world_identity(raw_identity, ot_tag)
 
     return ObjectTypeDef(
         name=ot_name,
@@ -812,33 +1772,63 @@ def _parse_object_type(raw: dict, parent_tag: str) -> ObjectTypeDef:
         icon=str(raw.get("icon", "server.svg") or "server.svg").strip(),
         is_world=bool(raw.get("is_world", False)),
         identifiers=identifiers,
-        name_expression=str(raw.get("name_expression", "") or "").strip(),
-        requests=requests,
+        name_expression=name_expression,
+        identity=identity,
+        metric_sets=metric_sets,
         metrics=metrics,
     )
 
 
-def _parse_auth(raw: dict, parent_tag: str) -> AuthDef:
+def _parse_auth(raw: dict, parent_tag: str) -> AuthFlowDef:
     if not isinstance(raw, dict):
         raise ManagementPackValidationError(
             f"{parent_tag}: auth must be a mapping"
         )
-    auth_type = str(raw.get("type", "NONE") or "NONE").strip().upper()
-    if auth_type == "CUSTOM":
-        raw_session = raw.get("session")
-        custom_session = _parse_custom_session(
-            raw_session if isinstance(raw_session, dict) else {},
-            f"{parent_tag}: auth",
+
+    # Detect and reject the old enum grammar immediately.
+    if "type" in raw:
+        raise ManagementPackValidationError(
+            f"{parent_tag}: auth.type: enum form is retired. "
+            f"Migrate to auth.preset with one of: "
+            f"{', '.join(sorted(VALID_AUTH_PRESET))}. "
+            f"See designs/synology-mp-v1.md §\"Framework-vs-Synology review "
+            f"(2026-04-18)\" axis 1 for the flow grammar spec."
         )
-        return AuthDef(
-            type=auth_type,
-            session=None,
-            custom_session=custom_session,
-        )
-    return AuthDef(
-        type=auth_type,
-        session=raw.get("session"),
-        custom_session=None,
+
+    atag = f"{parent_tag}: auth"
+    preset = str(raw.get("preset", "none") or "none").strip().lower()
+
+    # credentials
+    raw_creds = raw.get("credentials") or []
+    if not isinstance(raw_creds, list):
+        raise ManagementPackValidationError(f"{atag}: credentials must be a list")
+    credentials = [_parse_credential_field(c, atag) for c in raw_creds]
+
+    # login
+    raw_login = raw.get("login")
+    login = _parse_login_request(raw_login, f"{atag}: login") if isinstance(raw_login, dict) else None
+
+    # extract
+    raw_extract = raw.get("extract")
+    extract = _parse_extract_rule(raw_extract, atag) if isinstance(raw_extract, dict) else None
+
+    # inject
+    raw_inject = raw.get("inject") or []
+    if not isinstance(raw_inject, list):
+        raise ManagementPackValidationError(f"{atag}: inject must be a list")
+    inject = [_parse_inject_rule(r, atag) for r in raw_inject]
+
+    # logout
+    raw_logout = raw.get("logout")
+    logout = _parse_logout_request(raw_logout, f"{atag}: logout") if isinstance(raw_logout, dict) else None
+
+    return AuthFlowDef(
+        preset=preset,
+        credentials=credentials,
+        login=login,
+        extract=extract,
+        inject=inject,
+        logout=logout,
     )
 
 
@@ -1000,6 +1990,12 @@ def load_file(path: str | Path) -> ManagementPackDef:
     raw_source = data.get("source")
     source = _parse_source(raw_source, tag) if raw_source else None
 
+    # NEW: parse top-level requests block
+    raw_requests = data.get("requests") or []
+    if not isinstance(raw_requests, list):
+        raise ManagementPackValidationError(f"{tag}: requests must be a list")
+    requests = [_parse_request(r, tag) for r in raw_requests]
+
     raw_ots = data.get("object_types") or []
     if not isinstance(raw_ots, list):
         raise ManagementPackValidationError(f"{tag}: object_types must be a list")
@@ -1014,9 +2010,13 @@ def load_file(path: str | Path) -> ManagementPackDef:
             raise ManagementPackValidationError(
                 f"{tag}: each relationship must be a mapping"
             )
+        # scope defaults to "field_match" for backwards-compat
+        raw_scope = raw_rel.get("scope")
+        scope = str(raw_scope).strip() if raw_scope else "field_match"
         relationships.append(RelationshipDef(
             parent=str(raw_rel.get("parent", "") or "").strip(),
             child=str(raw_rel.get("child", "") or "").strip(),
+            scope=scope,
             child_expression=raw_rel.get("child_expression") or None,
             parent_expression=raw_rel.get("parent_expression") or None,
         ))
@@ -1038,6 +2038,7 @@ def load_file(path: str | Path) -> ManagementPackDef:
         build_number=int(data.get("build_number", 1) or 1),
         author=str(data.get("author", "") or "").strip(),
         source=source,
+        requests=requests,
         object_types=object_types,
         relationships=relationships,
         mpb_events=mpb_events,
@@ -1049,12 +2050,23 @@ def load_file(path: str | Path) -> ManagementPackDef:
 
 
 def load_dir(directory: str | Path = "managementpacks") -> List[ManagementPackDef]:
+    """Load all MP YAML files from a directory.
+
+    Skip convention: files whose name contains ".reference." are ignored.
+    This allows pre-Option-C YAMLs to coexist in the directory as reference
+    material.  Example:
+        managementpacks/synology_dsm.reference.yaml   ← skipped
+        managementpacks/synology_dsm.yaml             ← loaded
+    """
     directory = Path(directory)
     if not directory.exists():
         return []
     out: List[ManagementPackDef] = []
     seen: dict = {}
     for p in sorted(directory.rglob("*.y*ml")):
+        # Skip reference files (pre-Option-C archive YAMLs)
+        if ".reference." in p.name:
+            continue
         mp = load_file(p)
         if mp.name in seen:
             raise ManagementPackValidationError(
