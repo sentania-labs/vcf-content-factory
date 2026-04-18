@@ -9,7 +9,10 @@ Wire format derived from:
   - docs/reference-mpb-research.md (baseline research)
 
 Key wire-format facts encoded here:
-  - All IDs are 22-char base62 strings, derived deterministically via UUID5.
+  - All IDs are UUID5 strings (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx), derived
+    deterministically from a stable factory namespace + semantic seed string.
+    MPB's UI import endpoint (POST /suite-api/internal/mpbuilder/designs/import)
+    validates UUID shape before processing; base62 IDs cause HTTP 400.
   - Two independent `id` fields per object: object.id AND internalObjectInfo.id.
   - is_world: true → isListObject: false; world metricSets use listId "base".
   - Requests are deduplicated across object_types into a flat top-level array.
@@ -26,13 +29,11 @@ Key wire-format facts encoded here:
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import re
 import sys
 import uuid
-import warnings
 from typing import Any, Dict, List, Optional, Tuple
 
 from .loader import (
@@ -46,32 +47,31 @@ from .loader import (
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Deterministic ID generation — UUID5 base62, 22 characters
+# Deterministic ID generation — UUID5, standard hyphenated format
+#
+# Canonical factory namespace shared with vcfops_dashboards/loader.py.
+# Do NOT change this value once any MP has been deployed — every sub-object
+# ID in every rendered design is derived from it (CLAUDE.md §6 UUID stability).
 # ---------------------------------------------------------------------------
 
-_BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-_BASE62_LEN = len(_BASE62)  # 62
-
-
-def _b62encode(n: int, length: int = 22) -> str:
-    """Encode a non-negative integer as a base62 string of fixed length."""
-    chars: List[str] = []
-    while n > 0:
-        chars.append(_BASE62[n % _BASE62_LEN])
-        n //= _BASE62_LEN
-    # Pad or truncate to target length
-    result = "".join(reversed(chars)) if chars else "0"
-    if len(result) < length:
-        result = result.zfill(length).replace("0", _BASE62[0])
-    return result[-length:]  # last 22 chars (most-variable tail)
+_FACTORY_NS = uuid.UUID("4b8d2c10-1f9e-4f4f-9b90-0e8f6a8e2a12")
 
 
 def _make_id(seed: str) -> str:
-    """Derive a stable 22-char base62 ID from a seed string via UUID5."""
-    u = uuid.uuid5(uuid.NAMESPACE_DNS, seed)
-    # UUID5 gives 128 bits; encode as base62(int)
-    n = u.int
-    return _b62encode(n, 22)
+    """Derive a stable UUID5 string from a seed string.
+
+    Uses the factory-wide namespace (_FACTORY_NS) so IDs are globally
+    unique across all factory content types and stable across re-renders
+    of the same YAML (CLAUDE.md §6).
+
+    The seed should encode the object's semantic position, e.g.:
+      "<adapter_kind>:object:<object_key>"
+      "<adapter_kind>:request:<request_name>"
+      "<adapter_kind>:object:<object_key>:metric:<metric_key>"
+    so two renders of the same YAML produce identical UUIDs for each
+    sub-object.
+    """
+    return str(uuid.uuid5(_FACTORY_NS, seed))
 
 
 def _make_sub_id(parent_seed: str, discriminator: str) -> str:
@@ -833,11 +833,25 @@ def _render_requests(
         for req in ot.requests:
             if req.name not in registry:
                 registry[req.name] = _RequestInfo(req, ot.key, ak)
-            # Register all metric sources that feed from this request
+            # Register all metric sources that feed from this request.
+            # For world objects: use base DML with full dotted path (e.g.
+            # "data.serial") so MPB can locate the field.  The response_path
+            # (e.g. "data") is the object-level response envelope, not an
+            # array path — world objects produce flat scalar JSON objects, not
+            # lists, so the DML must be "base" (not "data.*").
             for metric in ot.metrics:
                 req_name, field_path = _parse_source_ref(metric.source)
                 if req_name == req.name:
-                    registry[req.name].register_field(field_path, req.response_path)
+                    if ot.is_world:
+                        # Base DML; prepend response_path to get full field label
+                        full_fp = (
+                            f"{req.response_path}.{field_path}"
+                            if req.response_path
+                            else field_path
+                        )
+                        registry[req.name].register_field(full_fp, None)
+                    else:
+                        registry[req.name].register_field(field_path, req.response_path)
 
     wire = [info.to_wire() for info in registry.values()]
     return wire, registry
@@ -908,13 +922,22 @@ def _render_one_object(
 
             # Determine the DML id and attribute origin ID
             if ot.is_world:
-                # World object: base DML; attribute key includes full field path
-                dml_id = "base"
-                # The field_path from source includes the response path prefix
-                # (e.g. "data.cpu_clock_speed") — this is correct for base DML
-                origin_id = req_info_ref.register_field(field_path, None)
+                # World object: always use base DML.
+                # The attribute label and key must be the FULL dotted path from
+                # the JSON root (e.g. "data.serial" not just "serial") so that
+                # MPB can locate the field.  Prepend the request's response_path
+                # (e.g. "data") to the metric field_path (e.g. "serial").
+                # Canonical confirmation: MPB export base DML attrs use
+                # "data.cpu_clock_speed" / ["data","cpu_clock_speed"] as label/key.
+                full_field_path = (
+                    f"{req_obj.response_path}.{field_path}"
+                    if req_obj.response_path
+                    else field_path
+                )
+                origin_id = req_info_ref.register_field(full_field_path, None)
             else:
                 # List object: array DML; field_path is relative to list item
+                full_field_path = field_path
                 origin_id = req_info_ref.register_field(
                     field_path, req_obj.response_path
                 )
@@ -922,7 +945,7 @@ def _render_one_object(
             # Build the metric expression
             expr_seed = f"{obj_seed}:metric:{m.key}:expr"
             expression = _make_expression(
-                label=field_path,
+                label=full_field_path,
                 origin_id=origin_id,
                 origin_type="ATTRIBUTE",
                 expr_seed=expr_seed,
@@ -1079,11 +1102,19 @@ def _render_relationships(
             wire_rels = _render_join_relationship(rel, mp, object_id_map, metric_id_map, ak)
             result.extend(wire_rels)
         else:
-            # Trivial (null expressions) — branch on strategy
-            trivial_rels = _render_trivial_relationships(
-                rel, mp, object_id_map, metric_id_map, ak, relationship_strategy
+            # Trivial (null expressions) = containment only.
+            # Per describe.xml structural analysis (2026-04-18): containment is
+            # modelled via adapter_instance_id + TraversalSpec, NOT via
+            # relationships[]. The MPB canonical export has exactly one
+            # relationship (storage_pool → volume, a real FK join). Trivial
+            # containment relationships cause MPB design validation errors.
+            # Drop them entirely here.
+            logger.debug(
+                "Relationship %s→%s: null expressions (containment-only) — "
+                "omitted from relationships[]. Containment is handled by "
+                "describe.xml TraversalSpec + adapter_instance_id.",
+                rel.parent, rel.child,
             )
-            result.extend(trivial_rels)
 
     return result
 
@@ -1772,7 +1803,7 @@ def _render_content(mp: ManagementPackDef) -> List:
 
 def render_mp_design_json(
     mp: ManagementPackDef,
-    relationship_strategy: str = "test_all",
+    relationship_strategy: str = "synthetic_adapter_instance",
 ) -> dict:
     """Render a ManagementPackDef into the MPB design JSON structure.
 
@@ -1862,26 +1893,24 @@ def render_mp_design_json(
     emitted_rel_count = len(wire_relationships)
 
     logger.info(
-        "Rendered %s: %d requests, %d objects, %d relationships "
-        "(%d with join predicates, %d trivial -> %d emitted via %s), "
+        "Rendered %s: %d requests, %d objects, %d relationships emitted "
+        "(%d with join predicates, %d containment-only dropped), "
         "%d events.",
         mp.name,
         len(wire_requests),
         len(wire_objects),
-        len(mp.relationships),
+        emitted_rel_count,
         join_count,
         trivial_count,
-        emitted_rel_count,
-        relationship_strategy,
         len(wire_events),
     )
     print(
         f"Rendered {mp.name}: "
         f"{len(wire_requests)} requests, "
         f"{len(wire_objects)} objects, "
-        f"{len(mp.relationships)} relationships "
-        f"({join_count} with join predicates, "
-        f"{trivial_count} trivial -> {emitted_rel_count} emitted via {relationship_strategy}), "
+        f"{emitted_rel_count} relationships emitted "
+        f"({join_count} join predicates, "
+        f"{trivial_count} containment-only dropped), "
         f"{len(wire_events)} events.",
         file=sys.stderr,
     )

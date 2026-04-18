@@ -1,0 +1,975 @@
+{
+  "shared": true,
+  "temporary": false,
+  "hidden": false,
+  "creationTime": 1776359154872,
+  "autoswitchEnabled": false,
+  "importAttempts": 0,
+  "lastUpdateUserId": "0c44e115-dc21-4ea5-8a56-01c22f18325b",
+  "columnProportion": "1-1",
+  "importComplete": true,
+  "description": "",
+  "columnCount": 1,
+  "widgets": [
+    {
+      "collapsed": false,
+      "id": "4e417358-ccd1-4ee6-908b-57796aa87a87",
+      "gridsterCoords": {
+        "w": 7,
+        "x": 1,
+        "h": 6,
+        "y": 7
+      },
+      "type": "View",
+      "title": "IDPS Host Metrics",
+      "config": {
+        "refreshInterval": 300,
+        "resource": null,
+        "traversalSpecId": "vSphere Hosts and Clusters-VMWARE-vSphere World",
+        "refreshContent": {
+          "refreshContent": true
+        },
+        "isUpdatedView": true,
+        "chartViewItems": [],
+        "selectFirstRow": {
+          "selectFirstRow": true
+        },
+        "selfProvider": {
+          "selfProvider": false
+        },
+        "title": "IDPS Host Metrics",
+        "viewDefinitionId": "7740019a-a664-4d58-9e26-344b47364dcc"
+      },
+      "height": 323,
+      "states": [
+        {
+          "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87-column-0%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A268.6171875%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87-column-Super%25252520Metric%2525257Csm_f4acf93a-06b8-4450-8237-92cee270bc651%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87-column-Super%25252520Metric%2525257Csm_f4acf93a-06b8-4450-8237-92cee270bc652%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A129.671875%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87-column-Super%25252520Metric%2525257Csm_f4acf93a-06b8-4450-8237-92cee270bc653%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87-column-Super%25252520Metric%2525257Csm_c458582f-b63f-4085-8465-fa32cb7182714%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87-column-Super%25252520Metric%2525257Csm_57be077d-f61e-4d25-ae05-ae27eed152295%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87-column-Super%25252520Metric%2525257Csm_c6816ee1-2b94-43ae-baf3-180f95b0e94c6%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87-column-Super%25252520Metric%2525257Csm_c6816ee1-2b94-43ae-baf3-180f95b0e94c7%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87-column-Super%25252520Metric%2525257Csm_c6816ee1-2b94-43ae-baf3-180f95b0e94c8%25255Ehidden%25253Db%2525253A0%5EstoreState%3Do%253Asorters%253Da%25253Ao%2525253Aroot%2525253Ds%252525253Adata%2525255Eproperty%2525253Ds%252525253A6%2525255Edirection%2525253Ds%252525253AASC%2525255Eid%2525253Ds%252525253A6",
+          "key": "permTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87"
+        },
+        {
+          "value": "b%3A1",
+          "key": "perm_isDashboardTime_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87"
+        },
+        {
+          "value": "b%3A1",
+          "key": "perm_toolbarVisible_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87"
+        },
+        {
+          "value": "n%3A50",
+          "key": "permPageSize_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87"
+        },
+        {
+          "value": "s%3A%7B%22minType%22%3A%22.TimeIntervalControl%22%2C%22advancedTimeMode%22%3Afalse%2C%22fromTime%22%3Anull%2C%22unit%22%3A%22DAYS%22%2C%22count%22%3A7%2C%22priorUnit%22%3Anull%2C%22priorCount%22%3Anull%2C%22startSubUnit%22%3Anull%2C%22startPeriod%22%3Anull%2C%22toTime%22%3Anull%2C%22endUnit%22%3Anull%2C%22endCount%22%3Anull%2C%22endSubUnit%22%3Anull%2C%22endPeriod%22%3Anull%2C%22isRealTimeData%22%3Anull%2C%22mondayHours%22%3Anull%2C%22tuesdayHours%22%3Anull%2C%22wednesdayHours%22%3Anull%2C%22thursdayHours%22%3Anull%2C%22fridayHours%22%3Anull%2C%22saturdayHours%22%3Anull%2C%22sundayHours%22%3Anull%7D",
+          "key": "permSelectedDate_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_4e417358-ccd1-4ee6-908b-57796aa87a87"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "id": "81ca9c8a-24d6-4c24-99a6-520ebbc4213b",
+      "gridsterCoords": {
+        "w": 7,
+        "x": 1,
+        "h": 7,
+        "y": 17
+      },
+      "type": "View",
+      "title": "IDPS Planner VM Metrics",
+      "config": {
+        "refreshInterval": 300,
+        "resource": null,
+        "traversalSpecId": "",
+        "refreshContent": {
+          "refreshContent": true
+        },
+        "isUpdatedView": true,
+        "chartViewItems": [],
+        "selectFirstRow": {
+          "selectFirstRow": true
+        },
+        "selfProvider": {
+          "selfProvider": false
+        },
+        "title": "IDPS Planner VM Metrics",
+        "viewDefinitionId": "4d393353-02fe-474a-932f-be0d9f0e6327"
+      },
+      "height": 381,
+      "states": [
+        {
+          "value": "b%3A1",
+          "key": "perm_toolbarVisible_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b"
+        },
+        {
+          "value": "s%3A%7B%22minType%22%3A%22.TimeIntervalControl%22%2C%22count%22%3A%226%22%2C%22unit%22%3A%22HOUR%22%7D",
+          "key": "permSelectedDate_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b"
+        },
+        {
+          "value": "n%3A50",
+          "key": "permPageSize_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b"
+        },
+        {
+          "value": "b%3A1",
+          "key": "perm_isDashboardTime_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b"
+        },
+        {
+          "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-0%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-net%2525257C20_sec_peak_usage_average1%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A149.92578125%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-net%2525257Cusage_average2%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A133%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-net%2525257Cusage_average3%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-net%2525257Creceived_average4%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-net%2525257Creceived_average5%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-net%2525257Ctransmitted_average6%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-net%2525257Ctransmitted_average7%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-net%2525257C20_sec_peak_packetsPerSec8%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-net%2525257C20_sec_peak_packetsPerSec9%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-net%2525257C20_sec_peak_packetsPerSec10%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-summary%2525257Cguest%2525257CtoolsVersion11%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b-column-summary%2525257Cguest%2525257CtoolsRunningStatus12%25255Ehidden%25253Db%2525253A0",
+          "key": "permTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_81ca9c8a-24d6-4c24-99a6-520ebbc4213b"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "id": "85c05c6b-e60d-4b2c-a6c0-af2fe2ec472e",
+      "gridsterCoords": {
+        "w": 11,
+        "x": 1,
+        "h": 4,
+        "y": 24
+      },
+      "type": "Scoreboard",
+      "title": "Selected VM Historical Metrics",
+      "config": {
+        "maxCellCount": 100,
+        "oldMetricValues": false,
+        "relationshipMode": {
+          "relationshipMode": 0
+        },
+        "valueSize": 24,
+        "title": "Selected VM Historical Metrics",
+        "boxHeight": null,
+        "showResourceName": {
+          "showResourceName": false
+        },
+        "roundDecimals": null,
+        "mode": {
+          "layoutMode": "fixedView"
+        },
+        "labelSize": 16,
+        "customFilter": {
+          "filter": [],
+          "excludedResources": null,
+          "includedResources": null
+        },
+        "selfProvider": {
+          "selfProvider": false
+        },
+        "resInteractionMode": null,
+        "visualTheme": 6,
+        "showMetricName": {
+          "showMetricName": true
+        },
+        "refreshInterval": 300,
+        "resource": [],
+        "showDT": {
+          "showDT": false
+        },
+        "refreshContent": {
+          "refreshContent": true
+        },
+        "showMetricUnit": {
+          "showMetricUnit": true
+        },
+        "depth": 1,
+        "metric": {
+          "mode": "resourceKind",
+          "resourceMetrics": [],
+          "resourceKindMetrics": [
+            {
+              "yellowBound": 7000,
+              "metricUnitId": "mbitsps",
+              "metricName": "Network|Peak Usage Rate within collection cycle",
+              "metricKey": "net|20_sec_peak_usage_average",
+              "handleOldColoring": false,
+              "link": "",
+              "resourceKindName": "Virtual Machine",
+              "isStringMetric": false,
+              "resourceKindId": "resourceKind:id:3_::_",
+              "label": "Peak Net Usage within cycle",
+              "orangeBound": 8000,
+              "unit": "Mbps",
+              "redBound": 9000,
+              "id": "extModel7831-1",
+              "colorMethod": 0
+            },
+            {
+              "yellowBound": 7000,
+              "metricUnitId": "mbitsps",
+              "metricName": "Network|Usage Rate",
+              "metricKey": "net|usage_average",
+              "handleOldColoring": false,
+              "link": "",
+              "resourceKindName": "Virtual Machine",
+              "isStringMetric": false,
+              "resourceKindId": "resourceKind:id:3_::_",
+              "label": "Net Usage",
+              "orangeBound": 8000,
+              "unit": "Mbps",
+              "redBound": 9000,
+              "id": "extModel7831-3",
+              "colorMethod": 0
+            },
+            {
+              "yellowBound": 7000,
+              "metricUnitId": "mbitsps",
+              "metricName": "Network|Data Receive Rate",
+              "metricKey": "net|received_average",
+              "handleOldColoring": false,
+              "link": "",
+              "resourceKindName": "Virtual Machine",
+              "isStringMetric": false,
+              "resourceKindId": "resourceKind:id:3_::_",
+              "label": "Net Receive",
+              "orangeBound": 8000,
+              "unit": "Mbps",
+              "redBound": 9000,
+              "id": "extModel7831-4",
+              "colorMethod": 0
+            },
+            {
+              "yellowBound": 7000,
+              "metricUnitId": "mbitsps",
+              "metricName": "Network|Data Transmit Rate",
+              "metricKey": "net|transmitted_average",
+              "handleOldColoring": false,
+              "link": "",
+              "resourceKindName": "Virtual Machine",
+              "isStringMetric": false,
+              "resourceKindId": "resourceKind:id:3_::_",
+              "label": "Net Transmit",
+              "orangeBound": 8000,
+              "unit": "Mbps",
+              "redBound": 9000,
+              "id": "extModel7831-5",
+              "colorMethod": 0
+            },
+            {
+              "yellowBound": 120000,
+              "metricUnitId": null,
+              "metricName": "Network|Peak Network Packet per second within collection cycle",
+              "metricKey": "net|20_sec_peak_packetsPerSec",
+              "handleOldColoring": false,
+              "link": "",
+              "resourceKindName": "Virtual Machine",
+              "isStringMetric": false,
+              "resourceKindId": "resourceKind:id:3_::_",
+              "label": "Peak Net PPS within cycle",
+              "orangeBound": 130000,
+              "unit": "",
+              "redBound": 140000,
+              "id": "extModel7831-9",
+              "colorMethod": 0
+            },
+            {
+              "yellowBound": 120000,
+              "metricUnitId": null,
+              "metricName": "Network:Aggregate of all instances|Packets per second",
+              "metricKey": "net:Aggregate of all instances|packetsPerSec",
+              "handleOldColoring": false,
+              "link": "",
+              "resourceKindName": "Virtual Machine",
+              "isStringMetric": false,
+              "resourceKindId": "resourceKind:id:3_::_",
+              "label": "Packets Per Second",
+              "orangeBound": 130000,
+              "unit": "",
+              "redBound": 140000,
+              "id": "extModel7831-6",
+              "colorMethod": 0
+            }
+          ],
+          "subMode": "resourceKindAll"
+        },
+        "showSparkline": {
+          "showSparkline": true
+        },
+        "boxColumns": 6,
+        "periodLength": "dashboardTime"
+      },
+      "height": 210
+    },
+    {
+      "collapsed": false,
+      "id": "9f39473b-c662-4735-8699-cfff3218fe80",
+      "gridsterCoords": {
+        "w": 11,
+        "x": 1,
+        "h": 4,
+        "y": 13
+      },
+      "type": "Scoreboard",
+      "title": "Selected Host Historical Metrics",
+      "config": {
+        "maxCellCount": 100,
+        "oldMetricValues": false,
+        "relationshipMode": {
+          "relationshipMode": 0
+        },
+        "valueSize": 24,
+        "title": "Selected Host Historical Metrics",
+        "boxHeight": null,
+        "showResourceName": {
+          "showResourceName": false
+        },
+        "roundDecimals": null,
+        "mode": {
+          "layoutMode": "fixedView"
+        },
+        "labelSize": 16,
+        "customFilter": {
+          "filter": [],
+          "excludedResources": null,
+          "includedResources": null
+        },
+        "selfProvider": {
+          "selfProvider": false
+        },
+        "resInteractionMode": null,
+        "visualTheme": 6,
+        "showMetricName": {
+          "showMetricName": true
+        },
+        "refreshInterval": 300,
+        "resource": [],
+        "showDT": {
+          "showDT": false
+        },
+        "refreshContent": {
+          "refreshContent": true
+        },
+        "showMetricUnit": {
+          "showMetricUnit": true
+        },
+        "depth": 1,
+        "metric": {
+          "mode": "resourceKind",
+          "resourceMetrics": [],
+          "resourceKindMetrics": [
+            {
+              "yellowBound": 7000,
+              "metricUnitId": "mbitsps",
+              "metricName": "Network|Usage Rate",
+              "metricKey": "net|usage_average",
+              "handleOldColoring": false,
+              "maxValue": "",
+              "link": "",
+              "resourceKindName": "Host System",
+              "isStringMetric": false,
+              "resourceKindId": "resourceKind:id:5_::_",
+              "label": "Net Usage",
+              "orangeBound": 8000,
+              "unit": "Mbps",
+              "redBound": 9000,
+              "id": "extModel25245-1",
+              "colorMethod": 0
+            },
+            {
+              "yellowBound": 7000,
+              "metricUnitId": "mbitsps",
+              "metricName": "Network|Data Receive Rate",
+              "metricKey": "net|received_average",
+              "handleOldColoring": false,
+              "maxValue": "",
+              "link": "",
+              "resourceKindName": "Host System",
+              "isStringMetric": false,
+              "resourceKindId": "resourceKind:id:5_::_",
+              "label": "Net Receive",
+              "orangeBound": 8000,
+              "unit": "Mbps",
+              "redBound": 9000,
+              "id": "extModel25245-2",
+              "colorMethod": 0
+            },
+            {
+              "yellowBound": 7000,
+              "metricUnitId": "mbitsps",
+              "metricName": "Network|Data Transmit Rate",
+              "metricKey": "net|transmitted_average",
+              "handleOldColoring": false,
+              "maxValue": "",
+              "link": "",
+              "resourceKindName": "Host System",
+              "isStringMetric": false,
+              "resourceKindId": "resourceKind:id:5_::_",
+              "label": "Net Transmit",
+              "orangeBound": 8000,
+              "unit": "Mbps",
+              "redBound": 9000,
+              "id": "extModel25245-3",
+              "colorMethod": 0
+            },
+            {
+              "yellowBound": 120000,
+              "metricUnitId": null,
+              "metricName": "Super Metrics|[IDPS] Peak PPS within cycle (All VMs)",
+              "metricKey": "Super Metric|sm_c6816ee1-2b94-43ae-baf3-180f95b0e94c",
+              "handleOldColoring": false,
+              "maxValue": "",
+              "link": "",
+              "resourceKindName": "Host System",
+              "isStringMetric": false,
+              "resourceKindId": "resourceKind:id:5_::_",
+              "label": "Peak PPS",
+              "orangeBound": 130000,
+              "unit": "",
+              "redBound": 140000,
+              "id": "extModel25245-4",
+              "colorMethod": 0
+            },
+            {
+              "yellowBound": 120000,
+              "metricUnitId": null,
+              "metricName": "Super Metrics|[IDPS] Packets per second (All VMs)",
+              "metricKey": "Super Metric|sm_a5ada313-49da-4feb-b6de-86c49646c3fc",
+              "handleOldColoring": false,
+              "maxValue": "",
+              "link": "",
+              "resourceKindName": "Host System",
+              "isStringMetric": false,
+              "resourceKindId": "resourceKind:id:5_::_",
+              "label": "PPS",
+              "orangeBound": 130000,
+              "unit": "",
+              "redBound": 140000,
+              "id": "extModel25245-5",
+              "colorMethod": 0
+            }
+          ],
+          "subMode": "resourceKindAll"
+        },
+        "showSparkline": {
+          "showSparkline": true
+        },
+        "boxColumns": 5,
+        "periodLength": "dashboardTime"
+      },
+      "height": 210,
+      "states": [
+        {
+          "value": "b%3A0",
+          "key": "perm_toolbarVisible_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_9f39473b-c662-4735-8699-cfff3218fe80"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "id": "8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3",
+      "gridsterCoords": {
+        "w": 4,
+        "x": 1,
+        "h": 6,
+        "y": 1
+      },
+      "type": "View",
+      "title": "vCenter Selection",
+      "config": {
+        "refreshInterval": 300,
+        "resource": {
+          "resourceId": "resource:id:0_::_",
+          "traversalSpecId": "",
+          "resourceName": "vSphere World",
+          "resourceKindId": "002006VMWAREvSphere World",
+          "id": "Ext.vcops.chrome.model.Resource-1"
+        },
+        "traversalSpecId": null,
+        "refreshContent": {
+          "refreshContent": true
+        },
+        "isUpdatedView": true,
+        "chartViewItems": [],
+        "selectFirstRow": {
+          "selectFirstRow": true
+        },
+        "selfProvider": {
+          "selfProvider": true
+        },
+        "title": "vCenter Selection",
+        "viewDefinitionId": "075cbdb7-8bef-42e8-a119-ae521067d67e"
+      },
+      "height": 324,
+      "states": [
+        {
+          "value": "b%3A1",
+          "key": "perm_toolbarVisible_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3"
+        },
+        {
+          "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3-column-0%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3-column-summary%2525257Cversion1%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A118.296875%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3-column-summary%2525257Ctotal_number_datacenters2%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A82.88671875%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3-column-summary%2525257Ctotal_number_clusters3%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A60.078125%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3-column-summary%2525257Ctotal_number_hosts4%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A77.13671875%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3-column-summary%2525257Ctotal_number_vms5%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A99.890625",
+          "key": "permTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3"
+        },
+        {
+          "value": "b%3A0",
+          "key": "perm_isDashboardTime_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "id": "3079a0a7-1d9c-49ce-a0ed-3c593d4f5162",
+      "gridsterCoords": {
+        "w": 3,
+        "x": 5,
+        "h": 6,
+        "y": 1
+      },
+      "type": "View",
+      "title": "Datacenter Selection",
+      "config": {
+        "refreshInterval": 300,
+        "resource": {
+          "resourceId": "resource:id:0_::_",
+          "traversalSpecId": "",
+          "resourceName": "vSphere World",
+          "resourceKindId": "002006VMWAREvSphere World",
+          "id": "Ext.vcops.chrome.model.Resource-9"
+        },
+        "traversalSpecId": null,
+        "refreshContent": {
+          "refreshContent": true
+        },
+        "isUpdatedView": true,
+        "chartViewItems": [],
+        "selectFirstRow": {
+          "selectFirstRow": true
+        },
+        "selfProvider": {
+          "selfProvider": true
+        },
+        "title": "Datacenter Selection",
+        "viewDefinitionId": "7ac44bb2-923c-4aa5-ae84-585a743a72f2"
+      },
+      "height": 324,
+      "states": [
+        {
+          "value": "b%3A0",
+          "key": "perm_isDashboardTime_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_3079a0a7-1d9c-49ce-a0ed-3c593d4f5162"
+        },
+        {
+          "value": "b%3A1",
+          "key": "perm_toolbarVisible_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_3079a0a7-1d9c-49ce-a0ed-3c593d4f5162"
+        },
+        {
+          "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_3079a0a7-1d9c-49ce-a0ed-3c593d4f5162-column-0%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_3079a0a7-1d9c-49ce-a0ed-3c593d4f5162-column-summary%2525257Ctotal_number_clusters1%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A58.09375%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_3079a0a7-1d9c-49ce-a0ed-3c593d4f5162-column-summary%2525257Ctotal_number_hosts2%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A41.421875%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_3079a0a7-1d9c-49ce-a0ed-3c593d4f5162-column-summary%2525257Ctotal_number_vms3%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A107.0625",
+          "key": "permTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_3079a0a7-1d9c-49ce-a0ed-3c593d4f5162"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "id": "fac590ee-77cd-4887-8b0f-dd0dac060203",
+      "gridsterCoords": {
+        "w": 4,
+        "x": 8,
+        "h": 6,
+        "y": 1
+      },
+      "type": "View",
+      "title": "Cluster Selection",
+      "config": {
+        "refreshInterval": 300,
+        "resource": {
+          "resourceId": "resource:id:0_::_",
+          "traversalSpecId": "",
+          "resourceName": "vSphere World",
+          "resourceKindId": "002006VMWAREvSphere World",
+          "id": "Ext.vcops.chrome.model.Resource-10"
+        },
+        "traversalSpecId": null,
+        "refreshContent": {
+          "refreshContent": true
+        },
+        "isUpdatedView": true,
+        "chartViewItems": [],
+        "selectFirstRow": {
+          "selectFirstRow": true
+        },
+        "selfProvider": {
+          "selfProvider": true
+        },
+        "title": "Cluster Selection",
+        "viewDefinitionId": "e50bcb18-05e9-4530-8482-2882f675c82b"
+      },
+      "height": 324,
+      "states": [
+        {
+          "value": "s%3A%7B%22minType%22%3A%22.TimeIntervalControl%22%2C%22advancedTimeMode%22%3Afalse%2C%22fromTime%22%3Anull%2C%22unit%22%3A%22DAYS%22%2C%22count%22%3A7%2C%22priorUnit%22%3Anull%2C%22priorCount%22%3Anull%2C%22startSubUnit%22%3Anull%2C%22startPeriod%22%3Anull%2C%22toTime%22%3Anull%2C%22endUnit%22%3Anull%2C%22endCount%22%3Anull%2C%22endSubUnit%22%3Anull%2C%22endPeriod%22%3Anull%2C%22isRealTimeData%22%3Anull%2C%22mondayHours%22%3Anull%2C%22tuesdayHours%22%3Anull%2C%22wednesdayHours%22%3Anull%2C%22thursdayHours%22%3Anull%2C%22fridayHours%22%3Anull%2C%22saturdayHours%22%3Anull%2C%22sundayHours%22%3Anull%7D",
+          "key": "permSelectedDate_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_fac590ee-77cd-4887-8b0f-dd0dac060203"
+        },
+        {
+          "value": "n%3A50",
+          "key": "permPageSize_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_fac590ee-77cd-4887-8b0f-dd0dac060203"
+        },
+        {
+          "value": "b%3A1",
+          "key": "perm_toolbarVisible_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_fac590ee-77cd-4887-8b0f-dd0dac060203"
+        },
+        {
+          "value": "b%3A0",
+          "key": "perm_isDashboardTime_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_fac590ee-77cd-4887-8b0f-dd0dac060203"
+        },
+        {
+          "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_fac590ee-77cd-4887-8b0f-dd0dac060203-column-0%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_fac590ee-77cd-4887-8b0f-dd0dac060203-column-summary%2525257Ctotal_number_hosts1%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A42.5703125%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_fac590ee-77cd-4887-8b0f-dd0dac060203-column-summary%2525257Ctotal_number_vms2%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A40%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_fac590ee-77cd-4887-8b0f-dd0dac060203-column-cpu%2525257Ccapacity_contentionPct3%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A114.0390625%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_fac590ee-77cd-4887-8b0f-dd0dac060203-column-mem%2525257Chost_contentionPct4%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A133.11328125",
+          "key": "permTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_fac590ee-77cd-4887-8b0f-dd0dac060203"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "id": "24f9f7d0-cad0-4f59-8531-a8df679f96ef",
+      "gridsterCoords": {
+        "w": 4,
+        "x": 8,
+        "h": 6,
+        "y": 7
+      },
+      "type": "Heatmap",
+      "title": "Cluster Host Heatmap",
+      "config": {
+        "mode": "all",
+        "configs": [
+          {
+            "colorBy": {
+              "metricKey": "Super Metric|sm_c6816ee1-2b94-43ae-baf3-180f95b0e94c",
+              "value": "Super Metrics|[IDPS] Peak PPS within cycle (All VMs)"
+            },
+            "focusOnGroups": true,
+            "color": {
+              "thresholds": {
+                "values": [
+                  0,
+                  50,
+                  100
+                ],
+                "colors": [
+                  "#74B43B",
+                  "#ECC33E",
+                  "#DE3F30"
+                ]
+              },
+              "maxValue": 140000
+            },
+            "sizeBy": {
+              "metricKey": "Super Metric|sm_f4acf93a-06b8-4450-8237-92cee270bc65",
+              "value": "Super Metrics|[IDPS] Net Usage (All VMs) (KBps)"
+            },
+            "relationalGrouping": false,
+            "groupBy": {
+              "originalText": "Cluster Compute Resource",
+              "resourceKind": "ClusterComputeResource",
+              "adapterKind": "VMWARE",
+              "typeId": "resourceKind:id:1_::_",
+              "id": "004null002006VMWAREClusterComputeResource",
+              "text": "Cluster Compute Resource",
+              "type": "resourceKind",
+              "parentText": "vCenter",
+              "parentId": "VMWARE"
+            },
+            "attributeKind": {
+              "value": ""
+            },
+            "thenBy": null,
+            "mode": {
+              "mode": false
+            },
+            "resourceKind": "resourceKind:id:5_::_",
+            "filterMode": "tagPicker",
+            "solidColoring": false,
+            "name": "Host Net usage vs PPS",
+            "id": "extModel19807-1"
+          }
+        ],
+        "depth": 10,
+        "refreshInterval": 300,
+        "resource": [],
+        "refreshContent": {
+          "refreshContent": false
+        },
+        "relationshipMode": {
+          "relationshipMode": [
+            1,
+            -1,
+            0
+          ]
+        },
+        "selfProvider": {
+          "selfProvider": false
+        },
+        "title": "Cluster Host Heatmap",
+        "value": 0
+      },
+      "height": 323,
+      "states": [
+        {
+          "value": "b%3A0",
+          "key": "perm_toolbarVisible_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_24f9f7d0-cad0-4f59-8531-a8df679f96ef"
+        },
+        {
+          "value": "o%3A",
+          "key": "perm_HeatMap_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_24f9f7d0-cad0-4f59-8531-a8df679f96ef"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "id": "1a5088d3-957f-4ab9-82fc-589072915622",
+      "gridsterCoords": {
+        "w": 4,
+        "x": 8,
+        "h": 7,
+        "y": 17
+      },
+      "type": "Heatmap",
+      "title": "VM by Host PPS",
+      "config": {
+        "mode": "all",
+        "configs": [
+          {
+            "colorBy": {
+              "metricKey": "net|20_sec_peak_packetsPerSec",
+              "value": "Network|Peak Network Packet per second within collection cycle"
+            },
+            "focusOnGroups": true,
+            "color": {
+              "thresholds": {
+                "values": [
+                  0,
+                  50,
+                  100
+                ],
+                "colors": [
+                  "#74B43B",
+                  "#ECC33E",
+                  "#DE3F30"
+                ]
+              },
+              "maxValue": 14000
+            },
+            "sizeBy": {
+              "metricKey": "net|usage_average",
+              "value": "Network|Usage Rate (KBps)"
+            },
+            "relationalGrouping": false,
+            "groupBy": {
+              "originalText": "Host System",
+              "resourceKind": "HostSystem",
+              "adapterKind": "VMWARE",
+              "typeId": "resourceKind:id:5_::_",
+              "id": "004null002006VMWAREHostSystem",
+              "text": "Host System",
+              "type": "resourceKind",
+              "parentText": "vCenter",
+              "parentId": "VMWARE",
+              "isLogSupported": true
+            },
+            "attributeKind": {
+              "value": ""
+            },
+            "thenBy": null,
+            "mode": {
+              "mode": false
+            },
+            "resourceKind": "resourceKind:id:3_::_",
+            "filterMode": "tagPicker",
+            "solidColoring": false,
+            "name": "VM by Host PPS",
+            "id": "extModel23792-1"
+          }
+        ],
+        "depth": 10,
+        "refreshInterval": 300,
+        "resource": [],
+        "refreshContent": {
+          "refreshContent": false
+        },
+        "relationshipMode": {
+          "relationshipMode": [
+            1,
+            -1,
+            0
+          ]
+        },
+        "selfProvider": {
+          "selfProvider": false
+        },
+        "title": "VM by Host PPS",
+        "value": 0
+      },
+      "height": 381,
+      "states": [
+        {
+          "value": "o%3A",
+          "key": "perm_HeatMap_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_1a5088d3-957f-4ab9-82fc-589072915622"
+        }
+      ]
+    }
+  ],
+  "userId": "0c44e115-dc21-4ea5-8a56-01c22f18325b",
+  "states": [
+    {
+      "value": "o%3AdateRange%3Ds%253Alast6Hour%5EdateRangeText%3Ds%253A6H",
+      "key": "permDashboardTime_dashboard_2311a526-598e-47bc-95e1-0ffa76d22a96"
+    }
+  ],
+  "homeTab": false,
+  "name": "IDPS Planner",
+  "gridsterMaxColumns": 12,
+  "rank": 0,
+  "disabled": false,
+  "id": "2311a526-598e-47bc-95e1-0ffa76d22a96",
+  "locked": false,
+  "dashboardNavigations": {},
+  "widgetInteractions": [
+    {
+      "widgetIdProvider": "4e417358-ccd1-4ee6-908b-57796aa87a87",
+      "type": "resourceId",
+      "widgetIdReceiver": "81ca9c8a-24d6-4c24-99a6-520ebbc4213b"
+    },
+    {
+      "widgetIdProvider": "81ca9c8a-24d6-4c24-99a6-520ebbc4213b",
+      "type": "resourceId",
+      "widgetIdReceiver": "85c05c6b-e60d-4b2c-a6c0-af2fe2ec472e"
+    },
+    {
+      "widgetIdProvider": "4e417358-ccd1-4ee6-908b-57796aa87a87",
+      "type": "resourceId",
+      "widgetIdReceiver": "9f39473b-c662-4735-8699-cfff3218fe80"
+    },
+    {
+      "widgetIdProvider": "8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3",
+      "type": "resourceId",
+      "widgetIdReceiver": "4e417358-ccd1-4ee6-908b-57796aa87a87"
+    },
+    {
+      "widgetIdProvider": "3079a0a7-1d9c-49ce-a0ed-3c593d4f5162",
+      "type": "resourceId",
+      "widgetIdReceiver": "4e417358-ccd1-4ee6-908b-57796aa87a87"
+    },
+    {
+      "widgetIdProvider": "fac590ee-77cd-4887-8b0f-dd0dac060203",
+      "type": "resourceId",
+      "widgetIdReceiver": "4e417358-ccd1-4ee6-908b-57796aa87a87"
+    },
+    {
+      "widgetIdProvider": "8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3",
+      "type": "resourceId",
+      "widgetIdReceiver": "3079a0a7-1d9c-49ce-a0ed-3c593d4f5162"
+    },
+    {
+      "widgetIdProvider": "3079a0a7-1d9c-49ce-a0ed-3c593d4f5162",
+      "type": "resourceId",
+      "widgetIdReceiver": "fac590ee-77cd-4887-8b0f-dd0dac060203"
+    },
+    {
+      "widgetIdProvider": "8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3",
+      "type": "resourceId",
+      "widgetIdReceiver": "24f9f7d0-cad0-4f59-8531-a8df679f96ef"
+    },
+    {
+      "widgetIdProvider": "3079a0a7-1d9c-49ce-a0ed-3c593d4f5162",
+      "type": "resourceId",
+      "widgetIdReceiver": "24f9f7d0-cad0-4f59-8531-a8df679f96ef"
+    },
+    {
+      "widgetIdProvider": "fac590ee-77cd-4887-8b0f-dd0dac060203",
+      "type": "resourceId",
+      "widgetIdReceiver": "24f9f7d0-cad0-4f59-8531-a8df679f96ef"
+    }
+  ],
+  "lastUpdateTime": 1776441648084,
+  "entries": {
+    "resourceKind": [
+      {
+        "resourceKindKey": "Datacenter",
+        "internalId": "resourceKind:id:2_::_",
+        "adapterKindKey": "VMWARE"
+      },
+      {
+        "resourceKindKey": "VirtualMachine",
+        "internalId": "resourceKind:id:3_::_",
+        "adapterKindKey": "VMWARE"
+      },
+      {
+        "resourceKindKey": "mpb_rubrik_rubrik_event",
+        "internalId": "resourceKind:id:9_::_",
+        "adapterKindKey": "mpb_rubrik"
+      },
+      {
+        "resourceKindKey": "ResourcePool",
+        "internalId": "resourceKind:id:15_::_",
+        "adapterKindKey": "VMWARE"
+      },
+      {
+        "resourceKindKey": "vSphere World",
+        "internalId": "resourceKind:id:0_::_",
+        "adapterKindKey": "VMWARE"
+      },
+      {
+        "resourceKindKey": "mpb_broadcom_security_advisories_vcf",
+        "internalId": "resourceKind:id:8_::_",
+        "adapterKindKey": "mpb_broadcom_security_advisories"
+      },
+      {
+        "resourceKindKey": "mpb_rubrik_rubrik_cluster",
+        "internalId": "resourceKind:id:10_::_",
+        "adapterKindKey": "mpb_rubrik"
+      },
+      {
+        "resourceKindKey": "mpb_broadcom_security_advisories_tanzu",
+        "internalId": "resourceKind:id:7_::_",
+        "adapterKindKey": "mpb_broadcom_security_advisories"
+      },
+      {
+        "resourceKindKey": "mpb_rubrik_rubrik_job",
+        "internalId": "resourceKind:id:11_::_",
+        "adapterKindKey": "mpb_rubrik"
+      },
+      {
+        "resourceKindKey": "mpb_rubrik_rubrik_sla_domain",
+        "internalId": "resourceKind:id:12_::_",
+        "adapterKindKey": "mpb_rubrik"
+      },
+      {
+        "resourceKindKey": "HostSystem",
+        "internalId": "resourceKind:id:5_::_",
+        "adapterKindKey": "VMWARE"
+      },
+      {
+        "resourceKindKey": "VirtualSANDCCluster",
+        "internalId": "resourceKind:id:6_::_",
+        "adapterKindKey": "VirtualAndPhysicalSANAdapter"
+      },
+      {
+        "resourceKindKey": "mpb_rubrik_rubrik_vm",
+        "internalId": "resourceKind:id:13_::_",
+        "adapterKindKey": "mpb_rubrik"
+      },
+      {
+        "resourceKindKey": "VMwareAdapter Instance",
+        "internalId": "resourceKind:id:4_::_",
+        "adapterKindKey": "VMWARE"
+      },
+      {
+        "resourceKindKey": "ClusterComputeResource",
+        "internalId": "resourceKind:id:1_::_",
+        "adapterKindKey": "VMWARE"
+      },
+      {
+        "resourceKindKey": "Datastore",
+        "internalId": "resourceKind:id:14_::_",
+        "adapterKindKey": "VMWARE"
+      }
+    ],
+    "resource": [
+      {
+        "internalId": "resource:id:1_::_",
+        "identifiers": []
+      },
+      {
+        "resourceKindKey": "vSphere World",
+        "internalId": "resource:id:0_::_",
+        "adapterKindKey": "VMWARE",
+        "identifiers": [],
+        "name": "vSphere World"
+      }
+    ]
+  }
+}

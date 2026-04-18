@@ -232,6 +232,48 @@ class VCFOpsClient:
                 enabled_ids.add(elem.get("id", ""))
         return {sm_id: sm_id in enabled_ids for sm_id in sm_ids}
 
+    @staticmethod
+    def get_sm_policy_assignments(policy_xml: str) -> dict:
+        """Parse policy XML and return a mapping of SM UUID -> list of
+        {adapter_kind_key, resource_kind_key} dicts for every (adapter, kind)
+        scope where the SM is enabled=true.
+
+        The policy XML structure is:
+          PolicyContent/Policies/Policy/PackageSettings/SuperMetricsCatalog/
+            SuperMetrics adapterKind="X" resourceKind="Y"/
+              SuperMetric enabled="true" id="<uuid>"/>
+
+        Returns: {sm_uuid_lower: [{adapter_kind_key, resource_kind_key}, ...]}
+        """
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(policy_xml)
+        assignments: dict = {}
+        # Match both namespaced and bare element names.
+        for sm_block in root.iter("SuperMetrics"):
+            adapter_kind = sm_block.get("adapterKind", "")
+            resource_kind = sm_block.get("resourceKind", "")
+            if not adapter_kind or not resource_kind:
+                continue
+            for child in sm_block:
+                # Strip namespace if present: {ns}SuperMetric -> SuperMetric
+                tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+                if tag != "SuperMetric":
+                    continue
+                if child.get("enabled", "").lower() != "true":
+                    continue
+                sm_id = (child.get("id") or "").lower()
+                if not sm_id:
+                    continue
+                entry = {
+                    "adapter_kind_key": adapter_kind,
+                    "resource_kind_key": resource_kind,
+                }
+                if sm_id not in assignments:
+                    assignments[sm_id] = []
+                if entry not in assignments[sm_id]:
+                    assignments[sm_id].append(entry)
+        return assignments
+
     def enable_supermetric_on_default_policy(
         self,
         sm_id: str,

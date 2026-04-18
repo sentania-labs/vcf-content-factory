@@ -198,12 +198,15 @@ def _parse_manifest_txt(pak_path: Path) -> Dict[str, str]:
                 f"manifest.txt in {pak_path.name} looks like JSON but could not "
                 f"be parsed: {e}"
             ) from e
-        # Flatten all top-level string/int/bool values to strings; skip
-        # nested objects (adapters, adapter_kinds) — the caller only needs
-        # name and version for pre-flight display.
+        # Flatten all top-level string/int/bool values to strings.
+        # Also capture adapter_kinds (list) as a comma-joined string so
+        # install_pak() can extract the expected adapterKind for post-
+        # install verification without needing the raw parsed object.
         for k, v in parsed.items():
             if isinstance(v, (str, int, float, bool)):
                 result[str(k)] = str(v)
+            elif k == "adapter_kinds" and isinstance(v, list):
+                result["adapter_kinds"] = ",".join(str(x) for x in v)
     else:
         # Legacy key=value manifest.txt
         for line in raw.splitlines():
@@ -620,6 +623,112 @@ class _UISession:
 
 
 # ---------------------------------------------------------------------------
+# Post-install adapter registration verification
+# ---------------------------------------------------------------------------
+
+def _verify_adapter_registered(
+    ui: "_UISession",
+    manifest: Dict[str, str],
+    server_name: str,
+    server_version: str,
+) -> None:
+    """Verify that the adapter kind is registered after isPakInstalling=False.
+
+    The silent-fail pattern (Synology Gap 2): VCF Ops accepts the pak upload,
+    triggers install, and flips isPakInstalling=False in ~35s — but without
+    valid adapters.zip directory entries the adapter kind is never extracted
+    or registered.  isPakInstalling=False alone is not sufficient to confirm
+    a successful install.
+
+    This function calls getIntegrations and checks that:
+      1. The expected adapterKind (from manifest adapter_kinds[0]) appears in
+         installedMPs[] with isInstalled=true.
+      2. If manifest does not declare adapter_kinds, fall back to matching by
+         pak name and emit WARN instead of hard-fail.
+
+    On success: prints "OK: Install completed" and returns.
+    On verification failure: calls _abort() with the silent-fail diagnosis.
+    On getIntegrations call failure: emits WARN and returns (defensive —
+      network failure should not mask a potentially successful install).
+    """
+    # Extract expected adapterKind from manifest adapter_kinds (first entry).
+    # _parse_manifest_txt stores the list as a comma-joined string.
+    raw_ak_field = manifest.get("adapter_kinds", "").strip()
+    expected_ak = raw_ak_field.split(",")[0].strip() if raw_ak_field else ""
+
+    try:
+        installed = ui.get_integrations()
+    except Exception as e:
+        _warn(
+            f"Post-install verification: getIntegrations call failed ({e}). "
+            f"Cannot confirm adapter registration — check Admin UI > "
+            f"Software Updates > Solutions manually."
+        )
+        _info(f"OK: Install completed (unverified): {server_name} {server_version}")
+        return
+
+    if expected_ak:
+        # Look for the expected adapterKind with isInstalled=true
+        matched = None
+        for entry in installed:
+            # getIntegrations returns adapterKind (camelCase) on VCF Ops 9.0.2
+            ak_val = str(entry.get("adapterKind", "")).strip().lower()
+            if ak_val == expected_ak.lower():
+                matched = entry
+                break
+
+        if matched is None:
+            _abort(
+                f"Install task completed (isPakInstalling=False) but adapter kind "
+                f"'{expected_ak}' was NOT found in getIntegrations installedMPs[]. "
+                f"This is the silent-fail pattern: pak upload and install task "
+                f"completed but the adapter kind was never registered. "
+                f"Root cause: inspect the pak's adapters.zip directory entries "
+                f"and manifest.txt adapter_kinds declaration. "
+                f"The adapters.zip must contain explicit directory entries for "
+                f"'<adapter_dir>/' (e.g. '{expected_ak}_adapter3/') — Python's "
+                f"zipfile does not emit these automatically when writing file members."
+            )
+
+        if not matched.get("isInstalled", False):
+            _abort(
+                f"Install task completed but adapter kind '{expected_ak}' has "
+                f"isInstalled=false in getIntegrations. "
+                f"This may indicate a partial or failed registration. "
+                f"Check Admin UI > Software Updates > Solutions."
+            )
+
+        # Success
+        _info(
+            f"OK: Install completed and verified: {server_name} {server_version} "
+            f"(adapterKind={expected_ak!r} isInstalled=true)"
+        )
+    else:
+        # No adapter_kinds in manifest — fall back to name match with WARN
+        _warn(
+            "Post-install verification: manifest does not declare adapter_kinds. "
+            "Cannot verify adapterKind registration — matching by pak name only."
+        )
+        matched_names = [
+            e.get("name", e.get("pakId", ""))
+            for e in installed
+            if str(e.get("name", "")).strip().lower() == server_name.strip().lower()
+            or str(e.get("pakId", "")).strip().lower() == server_name.strip().lower()
+        ]
+        if matched_names:
+            _info(
+                f"OK: Install completed (name-only verification): "
+                f"{server_name} {server_version}"
+            )
+        else:
+            _warn(
+                f"Post-install: pak name '{server_name}' not found in "
+                f"getIntegrations — install may have silently failed. "
+                f"Check Admin UI > Software Updates > Solutions."
+            )
+
+
+# ---------------------------------------------------------------------------
 # Public install function
 # ---------------------------------------------------------------------------
 
@@ -750,7 +859,9 @@ def install_pak(
                 _info(f"      {last_state}")
 
                 if not installing:
-                    _info(f"OK: Install completed: {server_name} {server_version}")
+                    _verify_adapter_registered(
+                        ui, manifest, server_name, server_version
+                    )
                     return
 
                 time.sleep(poll_interval)

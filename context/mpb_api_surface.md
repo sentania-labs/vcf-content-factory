@@ -1,0 +1,400 @@
+# MPB (Management Pack Builder) API Surface
+
+**Namespace**: `/suite-api/internal/mpbuilder/*` on VCF Ops 9.0.2.
+
+**Auth**: bearer token `Authorization: vRealizeOpsToken <token>`. All
+endpoints require the unsupported header:
+
+    X-Ops-API-use-unsupported: true
+
+Missing header → 404. Wrong header → same. Treat this entire
+namespace as `/internal/*` per CLAUDE.md §7.
+
+**OpenAPI coverage**: neither `docs/internal-api.json` nor
+`docs/operations-api.json` documents any of this. The MPB API is
+undocumented in the shipped specs. Everything below is empirically
+confirmed on `vcf-lab-operations-devel.int.sentania.net` on
+2026-04-17.
+
+## Endpoint catalog
+
+| Method | Path                                                             | Purpose                                | Status     |
+|--------|------------------------------------------------------------------|----------------------------------------|------------|
+| GET    | `/suite-api/internal/mpbuilder/designs`                          | List all designs (summaries)           | CONFIRMED  |
+| POST   | `/suite-api/internal/mpbuilder/designs/import`                   | Import a design from export.json       | CONFIRMED  |
+| DELETE | `/suite-api/internal/mpbuilder/designs?id={uuid}`                | Delete a design (**query-param**)      | CONFIRMED  |
+| DELETE | `/suite-api/internal/mpbuilder/designs/{id}` (path-param)        | **BROKEN** — always 500 NPE            | BUG        |
+| GET    | `/suite-api/internal/mpbuilder/designs/export?id={uuid}&userWillVerifySensitiveInfo=true` | Download design export JSON | CONFIRMED (requires VALID status) |
+| GET    | `/suite-api/internal/mpbuilder/designs/{id}`                     | Get full design detail                 | CONFIRMED  |
+| PUT    | `/suite-api/internal/mpbuilder/designs/{id}`                     | Update design (full replace)           | CONFIRMED (422 if id missing) |
+| GET    | `/suite-api/internal/mpbuilder/designs/{id}/status`              | Get design status breakdown            | CONFIRMED  |
+| GET    | `/suite-api/internal/mpbuilder/designs/{id}/source`              | Get source (connection) config         | CONFIRMED  |
+| GET    | `/suite-api/internal/mpbuilder/designs/{id}/requests`            | List HTTP requests in design           | CONFIRMED  |
+| GET    | `/suite-api/internal/mpbuilder/designs/{id}/objects`             | List object types in design            | CONFIRMED  |
+| GET    | `/suite-api/internal/mpbuilder/designs/{id}/objects/{objId}`     | Get object detail (metrics/properties) | CONFIRMED  |
+| GET    | `/suite-api/internal/mpbuilder/designs/{id}/relationships`       | List relationship types                | CONFIRMED  |
+| GET    | `/suite-api/internal/mpbuilder/designs/{id}/events`              | List event types                       | CONFIRMED  |
+| POST   | `/suite-api/internal/mpbuilder/designs/{id}/install`             | **Build + install** the pak            | CONFIRMED (requires VALID design) |
+
+**No endpoints found for:**
+- Standalone pak build-without-install (checked `/build`, `/package`,
+  `/pak`, `/export?asPak=1`, `/install?exportOnly=true`). Query
+  params on `/install` are silently ignored.
+- Separate pak download (`/pak`, `/paks`, `/artifact`, `/artifacts`,
+  `/downloadPak`, `/installers`, `/pakManager`).
+- Build history / async job inspection (`/builds`, `/deployments`,
+  `/{id}/deployments/{depId}`). The `DEPLOYMENT_STATUS` object the
+  install endpoint returns has no follow-up GET surface.
+- Source environment test (`/source/test`, `/designs/{id}/test`).
+  Yet the design stays INVALID until a "source test" happens —
+  this is evidently UI-only and gates `/install` and `/export`.
+- API docs / OpenAPI self-description (`/swagger.json`,
+  `/openapi.json` both 403).
+
+## Request/response shapes
+
+### `POST /designs/import`
+
+- **Request body**: JSON matching `export.json` format. Top-level
+  keys: `type`, `design`, `source`, `objects`, `relationships`,
+  `events`, `requests`. (This is the same envelope the MPB UI's
+  Export button produces — see
+  `tmp/diff_mpb/adapters/mpb_synology_dsm_mp_adapter3/conf/export.json`
+  for a working reference.)
+- **Sanitization**: design name is stripped of whitespace,
+  punctuation, and non-alphanumerics. "api-explorer-probe-20260418"
+  became "apiexplorerprobe20260418" server-side.
+- **Response**: `201 Created` + `{"id": "<design-uuid>"}`. The
+  returned UUID is different from any UUID embedded in the import
+  body (server assigns fresh IDs).
+- **Errors**: empty or malformed body → 400
+  `{"type":"Error","message":"Invalid input format.",...}`.
+
+### `GET /designs/export?id={uuid}&userWillVerifySensitiveInfo=true`
+
+- Returns the same envelope shape accepted by `/designs/import`.
+- **Requires `designStatus.status == "VALID"`**, otherwise 403:
+  `{"message":"This operation cannot be run on a design that is not valid.", "apiErrorCode": 1518}`.
+- `userWillVerifySensitiveInfo=true` is mandatory — 400 if missing.
+
+### `POST /designs/{id}/install`
+
+- **Request body**: empty `{}` is accepted.
+- **Response**: `201 Created` + async envelope:
+  ```json
+  {
+    "type": "DEPLOYMENT_STATUS",
+    "id": "<deployment-uuid>",
+    "status": "IN_PROGRESS",
+    "startTime": <epoch-ms>,
+    "endTime": 0,
+    "result": {}
+  }
+  ```
+- **Observed behavior**: on an INVALID design, `/install` returns
+  201 but the deployment is silently a no-op — design remains
+  `installed: false`, `installStatus: null/DRAFT`. No 422, no
+  error. The call does not leave artifacts.
+- **Unknown**: on a VALID design, does `/install` produce a pak
+  alongside deploying it? Could not test end-to-end because
+  Scott's Synology design on devel is INVALID (needs source test
+  the API doesn't expose). **This is the critical gap for Phase 3.**
+
+### `GET /designs/{id}/status`
+
+Returns counts + errors per section:
+
+```json
+{
+  "status": "VALID|INVALID|...",
+  "installStatus": "DRAFT|INSTALLED|...",
+  "designInfo":    {"errors":[], "itemCount":N},
+  "source":        {"errors":[{"refId","error"}], "itemCount":1},
+  "requests":      {"errors":[], "itemCount":N},
+  "objects":       {"errors":[], "itemCount":N},
+  "events":        {"errors":[], "itemCount":N},
+  "relationships": {"errors":[], "itemCount":N},
+  "configuration": {"errors":[], "itemCount":N}
+}
+```
+
+Each section's errors block carries `refId` (the offending
+sub-object UUID) and `error` (human text).
+
+### `DELETE /designs?id={uuid}`
+
+- Query-param form. Returns 200 with empty body on success.
+- Path-param `DELETE /designs/{id}` returns 500 NPE regardless of
+  whether the ID exists — this is a **server bug** in the
+  path-based handler. Always use the query-param form.
+
+## Auth / session notes
+
+- Bearer token from `/suite-api/api/auth/token/acquire` works for
+  all these endpoints. No CSRF/session cookie needed.
+- UI session (JSESSIONID from `/ui/login.action`) is a separate
+  path — MPB UI at `/ui/mpbuilder/` does its own VCF-SSO login
+  flow and could not be driven headlessly during this
+  investigation. The suite-api path is the right plumbing for
+  programmatic use.
+
+## What this means for Phase 3 tooling
+
+**Achievable with this API:**
+1. Programmatically import an MPB design from a local JSON file
+   (`POST /designs/import`).
+2. Get that design's status / validation errors (`GET /designs/{id}/status`).
+3. Delete the design when done (`DELETE /designs?id={uuid}`).
+4. If the design is already VALID (e.g. source test previously
+   passed through the UI), trigger `POST /designs/{id}/install` to
+   build + install on the same cluster.
+
+**Not achievable with this API (blockers):**
+1. **No pak download.** The "build a signed pak and hand it back
+   as a file" workflow does not exist as an API endpoint. Install
+   is the only build-trigger, and it deploys directly to the
+   cluster it ran on. If Phase 3 requires a transferable signed
+   pak, MPB API alone isn't enough — the UI's "Save Pak" button
+   (if it exists) hasn't been located, and may be purely a
+   client-side bundle of the import-envelope (not a signed pak).
+2. **No source-test API.** Designs stay INVALID after import until
+   something runs the source environment test. No
+   `/source/{id}/test` or `/designs/{id}/test` endpoint responded.
+   This test is likely UI-only in 9.0.2, blocking a pure-API
+   import-then-build pipeline unless pre-tested designs are
+   imported via other means or the test can be stubbed.
+
+## Open questions / follow-ups
+
+- **Does `POST /install` on a VALID design produce a pak byte
+  stream somewhere?** Couldn't test without a VALID design on
+  devel.
+- **Can the source-test be triggered headlessly?** May require
+  sniffing actual MPB UI XHR traffic while a user clicks "Test
+  Connection" — this investigation did not capture UI traffic.
+- **Is the DELETE path-param 500 fixable on 9.0.2 or server-side-only?**
+  Bug exists but is working around via query-param form. Not
+  worth chasing.
+- **Does `/install` on a design with a local (non-HTTP) source
+  type behave differently?** Only tested HTTP adapter type.
+
+## Exchange format — flat vs. nested (2026-04-18)
+
+The factory's `render_mp_design_json()` produces the **flat Rubrik format**
+(same as `adapters.zip/conf/template.json`). The MPB UI Import/Export API
+(`POST /designs/import`) requires the **exchange format** (`export.json`).
+
+These two formats share the same internal schemas (authentication, metricSets,
+expressions, dataModelLists) but differ in top-level organization:
+
+| Flat (template.json)              | Exchange (export.json)                              |
+|-----------------------------------|-----------------------------------------------------|
+| `.version`, `.id`, `.constants`   | (dropped)                                           |
+| `.pakSettings.name/version/desc`  | → `.design.design.{name,type,description,version}`  |
+| `.source.type`                    | → `.type` (top-level) + `.design.design.type`       |
+| `.source.basePath`                | → `.source.source.configuration.baseApiPath`        |
+| `.source.authentication`          | → `.source.source.authentication` (same schema)     |
+| `.source.configuration`           | → `.source.configuration` (same position)           |
+| `.source.requests` (dict)         | → `.requests` (list of `{"request": ...}`)          |
+| `.source.resources` (list)        | → `.objects` (list of `{"object": ...}`)            |
+| `.relationships` (list)           | → `.relationships` (list of `{"relationship": ...}`) |
+| `.source.events` (list)           | → `.events` (flat list, `designId` stripped)        |
+| test request (from requests dict) | → `.source.source.testRequest`                      |
+| `_render_global_headers()`        | → `.source.source.globalHeaders`                    |
+
+The `source.source.id` field is MPB-server-minted (UUID4) in the reference export;
+the factory derives a stable UUID5 from `adapter_kind` per CLAUDE.md §6.
+
+**Factory support**: `python3 -m vcfops_managementpacks render-export <mp.yaml> --out <output.json>`
+implemented in `vcfops_managementpacks/render_export.py` (2026-04-18).
+
+## Source Test Endpoint (2026-04-18 sniffing attempt — NOT FOUND)
+
+**Status**: Source-test endpoint **not located on `/suite-api/`**. Headless
+Playwright sniffing of the MPB UI is blocked by VCF-SSO on
+`/vcf-operations/*` (per `project_vcf_operations_url_structure.md`).
+Designs imported via `POST /designs/import` stay INVALID with
+`"Source requires environment test response after import."` and cannot
+be transitioned to VALID via any endpoint reachable by bearer auth.
+
+### Playwright blocker
+
+- `/ui/login.action` accepts local auth and returns a JSESSIONID.
+- MPB UI lives ONLY under `/vcf-operations/rest/ops/...` and `/vcf-operations/plug/ops/...`,
+  which are SSO-gated. Every `/vcf-operations/*` path 302s to
+  `login.action?vcf=1&uri=<b64>` for any non-SSO session.
+- SSO unlock requires full OAuth2 auth_code flow through
+  `https://vcf-lab-vcenter-mgmt.int.sentania.net/acs/t/CUSTOMER/authorize`
+  — cannot be driven by env-var headless Playwright.
+- `/ui/mpbuilder/` returns 404; there is no legacy Struts mpb entry point.
+- Bearer token against `/vcf-operations/rest/ops/internal/mpbuilder/*` → 302 (SSO).
+- To sniff the actual "Test Connection" XHR, a human-in-the-loop
+  Chrome DevTools capture during Scott's SSO'd browser session is
+  required. Playwright cannot replicate.
+
+### Endpoint enumeration done (all 404/405 on devel)
+
+Exhaustive probe of bearer-auth-reachable paths on `/suite-api/internal/mpbuilder/`
+for an INVALID design with known `{designId}`, `{sourceId}`, `{testRequestId}`:
+
+- `/designs/{id}/test`, `/designs/{id}/testConnection`, `/designs/{id}/test-connection`
+- `/designs/{id}/validate`, `/designs/{id}/check`, `/designs/{id}/checkSource`
+- `/designs/{id}/environmentTest`, `/designs/{id}/environment-test`,
+  `/designs/{id}/environment`, `/designs/{id}/runTest`, `/designs/{id}/connect`
+- `/designs/{id}/source/test`, `/designs/{id}/source/validate`,
+  `/designs/{id}/source/run`, `/designs/{id}/source/send`,
+  `/designs/{id}/source/execute`, `/designs/{id}/source/invoke`,
+  `/designs/{id}/source/discover`, `/designs/{id}/source/testRequest`,
+  `/designs/{id}/source/testResponse`, `/designs/{id}/source/response`,
+  `/designs/{id}/source/environment`, `/designs/{id}/source/run-test`,
+  `/designs/{id}/source/{sourceId}/test`
+- `/designs/{id}/testRequest/...`, `/designs/{id}/testResponse`,
+  `/designs/{id}/responses/{testRequestId}`, `/designs/{id}/sourceResponse`
+- `/designs/{id}/requests/{reqId}/run|send|execute|invoke|test|response`
+- `/sources/*`, `/sources/{id}/test`, `/source/{id}/test`
+- `/test`, `/testSource`, `/validate`, `/validation/*`, `/environmentTest`
+- `/suite-api/api/mpbuilder/*`, `/suite-api/internal/mpb/*`,
+  `/suite-api/internal/contentauthoring/*`, `/suite-api/internal/mpauthoring/*`
+- Query-string commands: `?action=test|testConnection|environmentTest`,
+  `?test=true`, `?cmd=test`, `?operation=test`, `?verify=true` on
+  `/designs/{id}` and `/designs/{id}/source` (200/400/500 but all
+  behaviour-invariant vs. no query)
+- Body-command POST to `/designs/{id}`: `{"action":"test"}`,
+  `{"operation":"test"}` → 500 (generic handler error, not a dispatch hit)
+
+**Only distinct live sub-routes under `/designs/{id}/` found:**
+`/source` (GET/PUT; POST returns "already exists"),
+`/status`, `/requests`, `/objects`, `/relationships`, `/events`,
+`/install`. None trigger source test.
+
+### Pre-tested import does not bypass INVALID
+
+Re-importing `tmp/diff_mpb/adapters/mpb_synology_dsm_mp_adapter3/conf/export.json`
+(which originated from a VALID UI-tested design, with
+`source.source.testRequest.response.result.responseCode = 200`)
+still lands INVALID with the same error. The exported response
+payload is stripped during round-trip, and/or the server
+requires a server-side execution of the test, not a client-supplied
+response.
+
+### Verdict for Phase 3
+
+**Pure-API end-to-end MPB automation (import → source-test → install)
+is NOT achievable on VCF Ops 9.0.2 with currently-known endpoints.**
+The remaining options:
+
+1. **Human-in-the-loop**: Scott clicks Test Connection in the MPB UI
+   after a factory-driven import. Unblocks `/install` immediately after.
+2. **Sniff from Scott's browser**: one-time capture of Chrome DevTools
+   network log during Test Connection click, share HAR with api-explorer.
+   If the call goes to `/suite-api/internal/mpbuilder/*` with bearer,
+   we win. If it goes to `/vcf-operations/rest/ops/*` with SSO session,
+   we're blocked headlessly regardless.
+3. **Punt to a future VCF Ops release** where `/suite-api/` may gain
+   the test endpoint.
+
+### Collateral note — import may collide on `source.source.id`
+
+During the probe, re-importing a design whose `source.source.id`
+matches an existing design appears to have caused the existing
+design to disappear from the listing (reproduced once, not
+conclusively). When the factory renders export.json it mints a
+stable UUID5 per-adapter, so two factory-driven imports of the
+same adapter will collide. **Hypothesis (NOT confirmed)**: the
+importer dedupes by `source.source.id` silently, overwriting
+prior designs. Needs dedicated follow-up investigation before
+relying on back-to-back import behaviour.
+
+## Exchange format — field-level diff (2026-04-17 investigation)
+
+Structural diff of `tmp/synology_mpb_import.json` vs
+`tmp/diff_mpb/adapters/mpb_synology_dsm_mp_adapter3/conf/export.json`.
+Confirmed via binary-substitution live-import tests (requests/objects
+pass; events fail).
+
+### Fields present in flat format that MPB's import parser rejects
+
+These cause HTTP 400 "Invalid input format" when present anywhere in
+the payload:
+
+| Field | Location | Flat format value | Fix |
+|---|---|---|---|
+| `example` | expressionParts, dataModelList attributes, session variables | `""` or `None` | Stripped globally by `_strip_flat_only_fields()` |
+| `regex` | expressionParts | `null` | Stripped globally |
+| `regexOutput` | expressionParts | `""` | Stripped globally |
+| `_renderer_note` | relationships, expressionParts | string | Stripped globally |
+| `value` | `authentication.creds[]` | `null` | Stripped in `_strip_cred()` |
+| `internalObjectInfo.id` | objects | string ID | Stripped in `_strip_internal_object_info()` |
+| `metricSets[].objectBinding` | objects | `null` | Stripped in `_strip_metric_set()` |
+| `metricSets[].metrics[].timeseries` | objects | `null` | Stripped in `_strip_metric()` |
+| `dataModelLists` | auth session requests (getSession/releaseSession) and testRequest response | list | Dropped in `_strip_session_request()` — these three use `{responseCode: N}` only |
+
+### Events wire format — OPEN GAP
+
+**Binary-substitution test result (2026-04-17)**: substituting factory
+`events[]` into the good export skeleton causes HTTP 400. Substituting
+factory `requests[]` and `objects[]` independently returns 201.
+
+The reference export has **0 events**, so we have no ground truth for
+the exchange format of the `events[]` array. The factory's event
+structure (which includes `alert.badge`, `alert.type`, `alert.subType`,
+`matchMode`, `unmatchedEventBehavior`, `severityMap`, `eventMatchers`,
+`message`, `severity`, `listId`, `requestId`, `defaultSeverity`) is
+UNVERIFIED against what MPB's import parser actually accepts.
+
+**Consequence**: `render-export` on any MP that has events produces a
+payload MPB rejects. MPs with 0 events would pass (requests and objects
+are confirmed clean).
+
+**Discovery path**: capture a live MPB export from a design that has
+event definitions (any Synology-class design with syslog events), then
+diff the `events[]` array shape against what the factory emits.
+api-explorer is the right agent — needs browser HAR capture from Scott
+or a second reference export file.
+
+## References
+
+- CLAUDE.md §7 (`X-Ops-API-use-unsupported`)
+- `tmp/diff_mpb/adapters/mpb_synology_dsm_mp_adapter3/conf/export.json`
+  — working export envelope reference
+- `tmp/vcf_operations_mp_designs_export.zip` — MPB UI Export output (byte-for-byte identical to above)
+- Memory `project_vcf_operations_url_structure.md` — URL structure
+  for VCF Ops 9.0.2 (MPB UI is behind `/vcf-operations/*` SSO)
+
+## 2026-04-18 — UI-path MPB job endpoints (from Scott's DevTools capture)
+
+The MPB UI talks to a **separate namespace** from `/suite-api/internal/mpbuilder/*`. Host-relative URLs:
+
+### POST `/vcf-operations/rest/ops/internal/mpbuilder/designs/{designId}/jobs`
+Triggers async source-test jobs. Two observed `testType` values:
+- `GET_SESSION` — just the auth step; tests `sessionSettings.getSession` in isolation
+- `TEST_CONNECTION` — full connection test; requires prior GET_SESSION response to be embedded under `sessionSettings.getSession.response` in the body (MPB carries state forward between the two calls)
+
+Request body shape:
+```json
+{
+  "jobType": "TEST_SOURCE",
+  "type": "HTTP",
+  "testType": "GET_SESSION" | "TEST_CONNECTION",
+  "source": { ... full source block ... },
+  "additionalTrustedCertificates": []
+}
+```
+
+Response: action id (for polling).
+
+### GET `/vcf-operations/rest/ops/api/actions/{actionId}/status?detail=true`
+Polls job status. Detail flag returns full result body including test-response and dataModelLists.
+
+### Auth model for `/vcf-operations/rest/ops/*`
+- Session cookie: `JSESSIONID` (obtained via VCF-SSO OAuth flow or local UI login)
+- `csrf-token` header (required)
+- `x-requested-with: XMLHttpRequest` (required)
+- `x-ops-api-use-unsupported: true` (for internal endpoints)
+- Cookie-based, not bearer. To script this headlessly: full VCF-SSO OAuth2 flow through `/acs/t/CUSTOMER/authorize`, OR local admin login via `/ui/login.action` if the same JSESSIONID carries over (untested).
+
+### Open question — is `/suite-api/` a proxy or parallel API?
+`/suite-api/internal/mpbuilder/designs/*` handles CRUD (import, export, install). `/vcf-operations/rest/ops/internal/mpbuilder/designs/{id}/jobs` handles test-source. They may be one behind the other, or parallel. If `/jobs` is available at `/suite-api/` under bearer auth, Phase 3 full-auto unlocks. Untested — needs a careful probe with existing bearer creds.
+
+### Session variable key rules — revisit
+Validator on import path (`POST /designs/import`) rejects sessionVariable keys containing hyphens (e.g. `Set-Cookie`) — see earlier notes. **Runtime path `/jobs` accepts `Set-Cookie` with hyphen** per Scott's capture. Different code paths, different validators. Worth factoring into `render_export.py` decision: do we emit `Set-Cookie` (works at runtime, rejected by import validator) or `set_cookie` (accepted at import, unclear at runtime)? Needs concrete test before deciding.

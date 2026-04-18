@@ -4,4 +4,4 @@ formula: Sum(${adaptertype=VMWARE, objecttype=VirtualMachine, metric=net|transmi
   depth=1})
 resource_kinds:
 - adapter_kind_key: VMWARE
-  resource_kind_key: VirtualMachine
+  resource_kind_key: HostSystem

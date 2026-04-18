@@ -95,6 +95,48 @@ def cmd_render(args) -> int:
     return 0
 
 
+def cmd_render_export(args) -> int:
+    from .render_export import render_mpb_exchange_json
+
+    try:
+        mp = load_file(args.path)
+    except ManagementPackValidationError as e:
+        print(f"INVALID: {e}", file=sys.stderr)
+        return 1
+
+    strategy = args.relationship_strategy
+    valid_strategies = {
+        "world_implicit", "synthetic_adapter_instance",
+        "shared_constant_property", "test_all",
+    }
+    if strategy not in valid_strategies:
+        print(
+            f"ERROR: --relationship-strategy must be one of "
+            f"{sorted(valid_strategies)}; got {strategy!r}",
+            file=sys.stderr,
+        )
+        return 1
+
+    rendered = render_mpb_exchange_json(
+        mp,
+        relationship_strategy=strategy,
+        no_events=args.no_events,
+    )
+    output_str = json.dumps(rendered, indent=2)
+
+    out_path = args.out
+    if out_path:
+        Path(out_path).write_text(output_str)
+        byte_size = len(output_str.encode("utf-8"))
+        top_keys = list(rendered.keys())
+        print(f"Wrote {out_path}  ({byte_size:,} bytes, top-level keys: {top_keys})",
+              file=sys.stderr)
+    else:
+        print(output_str)
+
+    return 0
+
+
 def cmd_build(args) -> int:
     from .builder import build_pak
 
@@ -201,16 +243,51 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--output", "-o", help="output file path (default: stdout)")
     pr.add_argument(
         "--relationship-strategy",
-        default="test_all",
+        default="synthetic_adapter_instance",
         choices=[
             "world_implicit",
             "synthetic_adapter_instance",
             "shared_constant_property",
             "test_all",
         ],
-        help="strategy for adapter-instance-trivial (null-expression) relationships (default: test_all)",
+        help="strategy for adapter-instance-trivial (null-expression) relationships (default: synthetic_adapter_instance)",
     )
     pr.set_defaults(func=cmd_render)
+
+    pre = sub.add_parser(
+        "render-export",
+        help="render MP YAML to MPB UI exchange format (for MPB UI Import Design)",
+    )
+    pre.add_argument("path", help="path to MP YAML file")
+    pre.add_argument(
+        "--out", "--output", "-o",
+        dest="out",
+        default=None,
+        help="output file path (default: stdout)",
+    )
+    pre.add_argument(
+        "--relationship-strategy",
+        default="synthetic_adapter_instance",
+        choices=[
+            "world_implicit",
+            "synthetic_adapter_instance",
+            "shared_constant_property",
+            "test_all",
+        ],
+        help="strategy for adapter-instance-trivial relationships (default: synthetic_adapter_instance)",
+    )
+    pre.add_argument(
+        "--no-events",
+        action="store_true",
+        dest="no_events",
+        default=False,
+        help=(
+            "emit events: [] in output (empty list, key preserved). "
+            "Use until a ground-truth MPB event export is available to "
+            "establish the correct wire format."
+        ),
+    )
+    pre.set_defaults(func=cmd_render_export)
 
     pb = sub.add_parser("build", help="build a .pak file from MP YAML")
     pb.add_argument("path", help="path to MP YAML file")
@@ -221,14 +298,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pb.add_argument(
         "--relationship-strategy",
-        default="test_all",
+        default="synthetic_adapter_instance",
         choices=[
             "world_implicit",
             "synthetic_adapter_instance",
             "shared_constant_property",
             "test_all",
         ],
-        help="strategy for adapter-instance-trivial relationships (default: test_all)",
+        help="strategy for adapter-instance-trivial relationships (default: synthetic_adapter_instance)",
     )
     pb.set_defaults(func=cmd_build)
 

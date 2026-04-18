@@ -733,19 +733,76 @@ def _resource_kinds_from_formula(formula: str) -> list[dict]:
     return result
 
 
-def _write_sm_yaml(path: Path, sm_data: dict, formula_rewritten: str) -> None:
-    """Write a super metric YAML file in factory shape."""
-    resource_kinds = []
-    for rk in (sm_data.get("resourceKinds") or []):
-        entry = {}
-        rk_key = rk.get("resourceKindKey") or rk.get("resourceKind", "")
-        ak_key = rk.get("adapterKindKey") or rk.get("adapterKind", "VMWARE")
-        if rk_key:
-            entry["resource_kind_key"] = rk_key
-        if ak_key:
-            entry["adapter_kind_key"] = ak_key
-        if entry:
-            resource_kinds.append(entry)
+def _write_sm_yaml(
+    path: Path,
+    sm_data: dict,
+    formula_rewritten: str,
+    policy_resource_kinds: Optional[list] = None,
+) -> None:
+    """Write a super metric YAML file in factory shape.
+
+    resource_kinds resolution order:
+      1. policy_resource_kinds — authoritative policy assignment from the
+         Default Policy export (adapter, kind) tuples where the SM is enabled.
+         This is the host type the SM is evaluated against, NOT the formula
+         input type.
+      2. sm_data["resourceKinds"] — the REST API field.  Present on some SMs
+         but encodes the formula's input-metric scope, which can differ from
+         the policy assignment (e.g. IDPS Planner SMs: formula references
+         VirtualMachine metrics but the SM is hosted on HostSystem).
+      3. Formula parse fallback — last resort, with a WARN.
+      4. Empty list — if nothing works; validator will reject.
+    """
+    resource_kinds: list = []
+
+    if policy_resource_kinds is not None:
+        # Authoritative source: use policy assignment directly.
+        resource_kinds = list(policy_resource_kinds)
+        if not resource_kinds:
+            print(
+                f"  WARN: super metric '{sm_data.get('name')}' is not enabled in the "
+                "Default Policy for any (adapter, kind) scope; writing resource_kinds: [] "
+                "— edit YAML to add the correct scope before installing.",
+                file=sys.stderr,
+            )
+    else:
+        # policy_resource_kinds not supplied — fall back to REST API field.
+        for rk in (sm_data.get("resourceKinds") or []):
+            entry = {}
+            rk_key = rk.get("resourceKindKey") or rk.get("resourceKind", "")
+            ak_key = rk.get("adapterKindKey") or rk.get("adapterKind", "VMWARE")
+            if rk_key:
+                entry["resource_kind_key"] = rk_key
+            if ak_key:
+                entry["adapter_kind_key"] = ak_key
+            if entry:
+                resource_kinds.append(entry)
+
+        if not resource_kinds:
+            # Fallback: parse the formula for ${adaptertype=X, objecttype=Y} pairs.
+            # NOTE: this reflects the formula INPUT type, not the policy host type.
+            # Prefer fetching policy assignments at call-site to avoid this path.
+            formula_rks = _resource_kinds_from_formula(formula_rewritten)
+            if formula_rks:
+                resource_kinds = formula_rks
+                print(
+                    f"  WARN: super metric '{sm_data.get('name')}' had no policy "
+                    "assignment data and no resourceKinds in API response; inferred "
+                    "from formula (INPUT type — may be wrong host scope): "
+                    + ", ".join(
+                        f"{rk.get('adapter_kind_key')}/{rk.get('resource_kind_key')}"
+                        for rk in resource_kinds
+                    ),
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"  WARN: super metric '{sm_data.get('name')}' has no resourceKinds "
+                    "in API response and none could be inferred from the formula; "
+                    "writing resource_kinds: [] (validator will reject — "
+                    "edit YAML to add the correct resource_kind_key/adapter_kind_key)",
+                    file=sys.stderr,
+                )
 
     doc: dict = {
         "id": sm_data.get("id", ""),
@@ -758,33 +815,6 @@ def _write_sm_yaml(path: Path, sm_data: dict, formula_rewritten: str) -> None:
     unit = sm_data.get("unitId", "") or ""
     if unit:
         doc["unit_id"] = unit
-    if not resource_kinds:
-        # Fallback: parse the formula for ${adaptertype=X, objecttype=Y} pairs
-        # and use them as resource_kinds.  The API sometimes returns an empty
-        # resourceKinds list even when the formula clearly encodes the target
-        # kind (observed on IDPS Planner SMs against VCF Ops 9.0.2).
-        formula_rks = _resource_kinds_from_formula(formula_rewritten)
-        if formula_rks:
-            resource_kinds = formula_rks
-            import sys as _sys
-            print(
-                f"  INFO: super metric '{doc.get('name')}' had no resourceKinds in API "
-                f"response; inferred from formula: "
-                + ", ".join(
-                    f"{rk.get('adapter_kind_key')}/{rk.get('resource_kind_key')}"
-                    for rk in resource_kinds
-                ),
-                file=_sys.stderr,
-            )
-        else:
-            import sys as _sys
-            print(
-                f"  WARN: super metric '{doc.get('name')}' has no resourceKinds in API "
-                "response and none could be inferred from the formula; "
-                "writing resource_kinds: [] (validator will reject — "
-                "edit YAML to add the correct resource_kind_key/adapter_kind_key)",
-                file=_sys.stderr,
-            )
     doc["resource_kinds"] = resource_kinds
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -1638,6 +1668,26 @@ def extract_dashboard(
             if m:
                 sm_uuids_from_views.add(m.group(1))
 
+    # Fetch Default Policy XML once (cached across all SM writes).
+    # This is the authoritative source for resource_kinds: it tells us which
+    # (adapter, kind) scopes each SM is actually enabled on in the policy,
+    # which is the host type the SM evaluates against.  The SM REST API's
+    # resourceKinds field encodes the formula INPUT type, which can differ.
+    print("\nFetching Default Policy export for SM scope resolution ...")
+    _policy_sm_assignments: dict = {}
+    try:
+        from vcfops_supermetrics.client import VCFOpsClient as _VCFOpsClient
+        _policy_xml = sm_client.export_default_policy_xml()
+        _policy_sm_assignments = _VCFOpsClient.get_sm_policy_assignments(_policy_xml)
+        print(
+            f"  Policy parsed: {len(_policy_sm_assignments)} SM(s) have enabled scopes."
+        )
+    except Exception as _e:
+        _warn(
+            f"could not fetch Default Policy XML: {_e}; "
+            "falling back to SM API resourceKinds field (may be wrong scope)"
+        )
+
     # BFS over super metrics (with transitive SM->SM via formula rewriting)
     sm_queue: deque[tuple[str, str]] = deque()
     sm_seen: set[str] = set()
@@ -1714,7 +1764,15 @@ def extract_dashboard(
 
     print(f"Super metrics to extract ({len(sm_results)}):")
     for suuid, smdata in sm_results.items():
-        print(f"  + {smdata.get('name', suuid)}  ({smdata.get('id', suuid)})")
+        sm_id_lower = (smdata.get("id") or suuid).lower()
+        rks = _policy_sm_assignments.get(sm_id_lower)
+        if rks:
+            scope_str = ", ".join(
+                f"{r['adapter_kind_key']}:{r['resource_kind_key']}" for r in rks
+            )
+        else:
+            scope_str = "NOT IN DEFAULT POLICY — resource_kinds will be empty"
+        print(f"  + {smdata.get('name', suuid)}  ({smdata.get('id', suuid)})  scope={scope_str}")
     for suuid, reason in skipped_sms:
         print(f"  - SKIP {suuid}: {reason}")
     print()
@@ -1753,7 +1811,14 @@ def extract_dashboard(
         sm_name_safe = _safe_filename(sm_data.get("name", suuid))
         filename = f"{sm_name_safe}.yaml"
         path = sm_subdir / filename
-        _write_sm_yaml(path, sm_data, sm_formulas.get(sm_data.get("id", suuid), sm_data.get("formula", "")))
+        sm_id_lower = (sm_data.get("id") or suuid).lower()
+        policy_rks = _policy_sm_assignments.get(sm_id_lower)  # None if policy fetch failed
+        _write_sm_yaml(
+            path,
+            sm_data,
+            sm_formulas.get(sm_data.get("id", suuid), sm_data.get("formula", "")),
+            policy_resource_kinds=policy_rks,
+        )
         rel = f"supermetrics/{filename}"
         sm_file_paths.append(rel)
         _info(f"wrote {path}")

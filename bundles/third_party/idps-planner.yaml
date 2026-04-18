@@ -43,6 +43,7 @@ supermetrics:
 - idps-planner/supermetrics/IDPS Net Usage All VMs.yaml
 - idps-planner/supermetrics/IDPS Net Transmit All VMs.yaml
 - idps-planner/supermetrics/IDPS Net Receive All VMs.yaml
+- idps-planner/supermetrics/IDPS Packets per second All VMs.yaml
 - idps-planner/supermetrics/IDPS Peak PPS within cycle All VMs.yaml
 views:
 - idps-planner/views/IDPS Planner Host Metrics.yaml

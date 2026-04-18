@@ -194,11 +194,26 @@ def _generate_describe_xml(mp: ManagementPackDef) -> str:
     pre-baked into adapters.zip/conf/describe.xml and read by the adapter
     loader at startup (via the redescribe triggered by post-install.py).
 
-    Structure derived from GitHub-1.0.0.2.pak and Broadcom Security
-    Advisories-1.0.1.6.pak describe.xml files.
+    Structure matches the MPB canonical (diff_mpb/conf/describe.xml, 2026-04-18):
+
+      1. <adapter_kind>           — type=7, has credentials + mpb_hostname etc.
+                                    Corresponds to the YAML is_world=True kind.
+      2. <adapter_kind>_<data>    — NO type attribute (regular data kinds).
+                                    adapter_instance_id is their FIRST identifier.
+      3. <adapter_kind>_relatives — type=4, dynamic=true, showTag=true.
+                                    Runtime-discovered ad-hoc relationship bucket.
+      4. <adapter_kind>_world     — type=8, subType=6.
+                                    Root aggregate container for the hierarchy.
+
+    TraversalSpecKinds block is populated with one entry (usedFor="ALL") that
+    declares the resource hierarchy path.
     """
     ak = mp.adapter_kind
     src = mp.source
+
+    # Identify the root data kind (YAML is_world=True) and child kinds.
+    world_ot = next((o for o in mp.object_types if o.is_world), None)
+    child_ots = [o for o in mp.object_types if not o.is_world]
 
     lines: list[str] = []
     lines.append('<?xml version="1.0" encoding="UTF-8"?>')
@@ -220,8 +235,23 @@ def _generate_describe_xml(mp: ManagementPackDef) -> str:
     lines.append("  <ResourceKinds>")
     name_key_counter = [10]  # mutable counter via list
 
-    for ot in mp.object_types:
-        _append_resource_kind(lines, ot, mp, src, ak, name_key_counter)
+    # 1. Adapter instance root kind (type=7) — the YAML is_world kind becomes this.
+    #    It has credentials + mpb_hostname identifiers but is NOT the world aggregate.
+    if world_ot is not None:
+        _append_adapter_instance_kind(lines, world_ot, mp, src, ak, name_key_counter)
+    else:
+        # No world kind declared — emit a bare adapter instance kind
+        _append_bare_adapter_instance_kind(lines, mp, src, ak, name_key_counter)
+
+    # 2. Regular data kinds (no type attribute, adapter_instance_id first identifier)
+    for ot in child_ots:
+        _append_data_kind(lines, ot, mp, ak, name_key_counter)
+
+    # 3. Relatives kind (type=4, dynamic) — MPB runtime relationship bucket
+    _append_relatives_kind(lines, ak, name_key_counter)
+
+    # 4. World aggregate kind (type=8, subType=6)
+    _append_world_aggregate_kind(lines, mp, ak, name_key_counter)
 
     lines.append("  </ResourceKinds>")
 
@@ -232,9 +262,8 @@ def _generate_describe_xml(mp: ManagementPackDef) -> str:
     )
     lines.append("  </Discoveries>")
 
-    # TraversalSpecKinds (empty)
-    lines.append("  <TraversalSpecKinds>")
-    lines.append("  </TraversalSpecKinds>")
+    # TraversalSpecKinds — one entry with the resource hierarchy path
+    _append_traversal_spec_kinds(lines, mp, ak, world_ot, child_ots)
 
     # LicenseConfig
     lines.append('  <LicenseConfig enabled="false"></LicenseConfig>')
@@ -252,6 +281,56 @@ def _generate_describe_xml(mp: ManagementPackDef) -> str:
 
     lines.append("</AdapterKind>")
     return "\n".join(lines) + "\n"
+
+
+def _append_traversal_spec_kinds(
+    lines: list,
+    mp: ManagementPackDef,
+    ak: str,
+    world_ot: Optional[ObjectTypeDef],
+    child_ots: list,
+) -> None:
+    """Append the TraversalSpecKinds XML block.
+
+    Emits one TraversalSpecKind (usedFor="ALL") that walks the hierarchy from
+    the world aggregate kind down through the root data kind (adapter instance
+    world) and all child data kinds.
+
+    ResourcePath pattern (from MPB canonical):
+      <ak>::<ak>_world||<ak>::<ak>::child/skip||<ak>::<ak>_<child1>::child||...
+
+    The 'child/skip' on the adapter instance root kind (type=7) tells VCF Ops
+    to skip that level when displaying the hierarchy — child objects appear
+    directly under the world aggregate, not under the adapter instance entry.
+    """
+    lines.append("  <TraversalSpecKinds>")
+
+    world_rk_key = f"{ak}_world"
+    display_name = mp.name
+
+    # Build the resource path: world -> adapter-instance (skip) -> all child kinds
+    path_parts = [f"{ak}::{world_rk_key}"]
+    if world_ot is not None:
+        root_rk_key = f"{ak}_{world_ot.key}" if not world_ot.key.startswith(ak) else world_ot.key
+        path_parts.append(f"{ak}::{root_rk_key}::child/skip")
+    for ot in child_ots:
+        rk_key = f"{ak}_{ot.key}" if not ot.key.startswith(ak) else ot.key
+        path_parts.append(f"{ak}::{rk_key}::child")
+
+    resource_path = "||".join(path_parts)
+
+    lines.append(
+        f'    <TraversalSpecKind'
+        f' name="{display_name} Resources"'
+        f' rootAdapterKind="{ak}"'
+        f' rootResourceKind="{world_rk_key}"'
+        f' iconName="default.svg"'
+        f' description="Traversal for {display_name} Resources"'
+        f' usedFor="ALL">'
+    )
+    lines.append(f'      <ResourcePath path="{resource_path}"></ResourcePath>')
+    lines.append("    </TraversalSpecKind>")
+    lines.append("  </TraversalSpecKinds>")
 
 
 def _append_credential_kinds(lines: list, mp: ManagementPackDef, ak: str) -> None:
@@ -290,7 +369,7 @@ def _append_credential_kinds(lines: list, mp: ManagementPackDef, ak: str) -> Non
     lines.append("  </CredentialKinds>")
 
 
-def _append_resource_kind(
+def _append_adapter_instance_kind(
     lines: list,
     ot: ObjectTypeDef,
     mp: ManagementPackDef,
@@ -298,38 +377,34 @@ def _append_resource_kind(
     ak: str,
     name_key_counter: list,
 ) -> None:
-    """Append a ResourceKind XML block for one object type."""
+    """Append the adapter instance ResourceKind (type=7).
+
+    This corresponds to the YAML is_world=True kind.  In MPB's canonical
+    structure this kind holds the connection/credential config (mpb_hostname
+    etc.) and is the leaf-level data object, NOT the world aggregate.
+
+    Pattern from MPB canonical: type="7" credentialKind="<ak>_credentials"
+    monitoringInterval="5", with mpb_hostname ... mpb_min_event_severity
+    identifiers and an optional summary ResourceGroup for any METRIC fields.
+    """
     nk = name_key_counter[0]
-    name_key_counter[0] += len(ot.metrics) + len(ot.identifiers) + 5
+    name_key_counter[0] += len(ot.metrics) + len(ot.identifiers) + 20
 
     rk_key = f"{ak}_{ot.key}" if not ot.key.startswith(ak) else ot.key
-    # For adapter-instance/world kinds — replicate reference structure
-    if ot.is_world:
-        # World objects: type 8 / subType 6
-        lines.append(
-            f'    <ResourceKind key="{rk_key}" nameKey="{nk}"'
-            f' worldObjectName="{ot.name} World"'
-            f' showTag="true" type="{_RESOURCE_KIND_TYPE_WORLD}"'
-            f' subType="{_RESOURCE_KIND_SUBTYPE_WORLD}">'
-        )
-    else:
-        # Regular resource kinds: include monitoringInterval + credentialKind
-        cred_attr = ""
-        if src and src.auth and src.auth.type != "NONE":
-            cred_attr = f' credentialKind="{ak}_credentials"'
-        lines.append(
-            f'    <ResourceKind key="{rk_key}" nameKey="{nk}"'
-            f' type="7"{cred_attr} monitoringInterval="5">'
-        )
-
+    cred_attr = ""
+    if src and src.auth and src.auth.type != "NONE":
+        cred_attr = f' credentialKind="{ak}_credentials"'
+    lines.append(
+        f'    <ResourceKind key="{rk_key}" nameKey="{nk}"'
+        f' type="7"{cred_attr} monitoringInterval="5">'
+    )
     nk += 1
 
-    # Connection config resource identifiers (only on non-world objects)
-    if not ot.is_world and src:
-        port_default = str(src.port)
-        ssl_default = src.ssl.replace("_", " ").title() if src.ssl else "No Verify"
+    # Connection config identifiers (mpb_hostname etc.)
+    if src:
         ssl_map = {"NO_VERIFY": "No Verify", "VERIFY": "Verify", "NO_SSL": "No SSL"}
         ssl_display = ssl_map.get(src.ssl, "No Verify") if src.ssl else "No Verify"
+        port_default = str(src.port)
 
         lines.append(
             f'      <ResourceIdentifier dispOrder="1" key="mpb_hostname"'
@@ -375,7 +450,18 @@ def _append_resource_kind(
         lines.append("      </ResourceIdentifier>")
         nk += 1
         lines.append(
-            f'      <ResourceIdentifier dispOrder="7" key="support_autodiscovery"'
+            f'      <ResourceIdentifier dispOrder="7" key="mpb_min_event_severity"'
+            f' nameKey="{nk}" required="true" type="string" identType="2"'
+            f' enum="true" default="Warning">'
+        )
+        lines.append('        <enum default="false" value="Critical"></enum>')
+        lines.append('        <enum default="false" value="Immediate"></enum>')
+        lines.append('        <enum default="true" value="Warning"></enum>')
+        lines.append('        <enum default="false" value="Info"></enum>')
+        lines.append("      </ResourceIdentifier>")
+        nk += 1
+        lines.append(
+            f'      <ResourceIdentifier dispOrder="8" key="support_autodiscovery"'
             f' nameKey="{nk}" required="true" type="string" identType="2"'
             f' enum="true" default="True">'
         )
@@ -384,8 +470,7 @@ def _append_resource_kind(
         lines.append("      </ResourceIdentifier>")
         nk += 1
 
-    # Metrics and properties
-    # Group all metrics into a summary ResourceGroup
+    # Metrics and properties for the adapter instance kind
     all_metrics = [m for m in ot.metrics if m.usage != "PROPERTY"]
     all_props = [m for m in ot.metrics if m.usage == "PROPERTY"]
 
@@ -411,7 +496,6 @@ def _append_resource_kind(
         nk += len(all_metrics)
         lines.append("      </ResourceGroup>")
 
-    # Standalone properties (outside group — matches reference pak pattern)
     for i, m in enumerate(all_props):
         dt = _DESCRIBE_DATA_TYPE.get(m.type, "string")
         lines.append(
@@ -428,19 +512,177 @@ def _append_resource_kind(
         )
         nk += 1
 
-    # Computed metrics for world objects (sum across adapter instance depth=1)
-    if ot.is_world and all_metrics:
-        lines.append("      <ComputedMetrics>")
-        for m in all_metrics:
-            child_rk = None
-            for other in (o for o in [] if True):  # placeholder — skip for now
-                pass
-            lines.append(
-                f'        <ComputedMetric key="summary|{m.key}"'
-                f' expression="sum(${{{ak}}}, attribute=summary|{m.key}, depth=1)" />'
-            )
-        lines.append("      </ComputedMetrics>")
+    lines.append("    </ResourceKind>")
 
+
+def _append_bare_adapter_instance_kind(
+    lines: list,
+    mp: ManagementPackDef,
+    src: Optional[SourceDef],
+    ak: str,
+    name_key_counter: list,
+) -> None:
+    """Append a minimal adapter instance kind (type=7) when no is_world kind exists."""
+    nk = name_key_counter[0]
+    name_key_counter[0] += 20
+    cred_attr = ""
+    if src and src.auth and src.auth.type != "NONE":
+        cred_attr = f' credentialKind="{ak}_credentials"'
+    lines.append(
+        f'    <ResourceKind key="{ak}" nameKey="{nk}"'
+        f' type="7"{cred_attr} monitoringInterval="5">'
+    )
+    nk += 1
+    if src:
+        ssl_map = {"NO_VERIFY": "No Verify", "VERIFY": "Verify", "NO_SSL": "No SSL"}
+        ssl_display = ssl_map.get(src.ssl, "No Verify") if src.ssl else "No Verify"
+        lines.append(
+            f'      <ResourceIdentifier dispOrder="1" key="mpb_hostname"'
+            f' nameKey="{nk}" required="true" type="string" identType="1"'
+            f' enum="false" default=""></ResourceIdentifier>'
+        )
+    lines.append("    </ResourceKind>")
+
+
+def _append_data_kind(
+    lines: list,
+    ot: ObjectTypeDef,
+    mp: ManagementPackDef,
+    ak: str,
+    name_key_counter: list,
+) -> None:
+    """Append a regular data ResourceKind (no type attribute).
+
+    MPB canonical structure: data kinds have NO type attribute,
+    adapter_instance_id as their FIRST ResourceIdentifier (dispOrder=1),
+    followed by the kind's own declared identifiers (dispOrder=2+),
+    then a 'relationships' ResourceGroup with a mpb_<ak>_parent attribute,
+    then metric/property ResourceAttributes.
+    """
+    nk = name_key_counter[0]
+    name_key_counter[0] += len(ot.metrics) + len(ot.identifiers) + 10
+
+    rk_key = f"{ak}_{ot.key}" if not ot.key.startswith(ak) else ot.key
+    lines.append(f'    <ResourceKind key="{rk_key}" nameKey="{nk}">')
+    nk += 1
+
+    # adapter_instance_id — always first (dispOrder=1)
+    lines.append(
+        f'      <ResourceIdentifier dispOrder="1" key="adapter_instance_id"'
+        f' nameKey="{nk}" required="true" type="string" identType="1"'
+        f' enum="false" ></ResourceIdentifier>'
+    )
+    nk += 1
+
+    # Kind-specific identifiers (dispOrder=2+)
+    for disp, ident_key in enumerate(ot.identifiers, start=2):
+        lines.append(
+            f'      <ResourceIdentifier dispOrder="{disp}" key="{ident_key}"'
+            f' nameKey="{nk}" required="true" type="string" identType="1"'
+            f' enum="false" ></ResourceIdentifier>'
+        )
+        nk += 1
+
+    # Relationships group (MPB canonical always has this on data kinds)
+    lines.append(
+        f'      <ResourceGroup key="relationships" nameKey="{nk}" instanced="false">'
+    )
+    nk += 1
+    lines.append(
+        f'        <ResourceAttribute nameKey="{nk}" dashboardOrder="1"'
+        f' key="{ak}_parent" dataType="string" defaultMonitored="true"'
+        f' isDiscrete="false" keyAttribute="false" isRate="false"'
+        f' isProperty="true" hidden="false" />'
+    )
+    nk += 1
+    lines.append("      </ResourceGroup>")
+
+    # Metric and property attributes
+    all_metrics = [m for m in ot.metrics if m.usage != "PROPERTY"]
+    all_props = [m for m in ot.metrics if m.usage == "PROPERTY"]
+
+    for i, m in enumerate(all_metrics):
+        dt = _DESCRIBE_DATA_TYPE.get(m.type, "float")
+        lines.append(
+            f'      <ResourceAttribute nameKey="{nk}"'
+            f' dashboardOrder="{i + 1}"'
+            f' key="{m.key}"'
+            f' dataType="{dt}"'
+            f' defaultMonitored="true"'
+            f' isDiscrete="false"'
+            f' keyAttribute="false"'
+            f' isRate="false"'
+            f' isProperty="false"'
+            f' hidden="false" />'
+        )
+        nk += 1
+
+    for i, m in enumerate(all_props):
+        dt = _DESCRIBE_DATA_TYPE.get(m.type, "string")
+        lines.append(
+            f'      <ResourceAttribute nameKey="{nk}"'
+            f' dashboardOrder="{i + 1}"'
+            f' key="{m.key}"'
+            f' dataType="{dt}"'
+            f' defaultMonitored="true"'
+            f' isDiscrete="false"'
+            f' keyAttribute="false"'
+            f' isRate="false"'
+            f' isProperty="true"'
+            f' hidden="false" />'
+        )
+        nk += 1
+
+    lines.append("    </ResourceKind>")
+
+
+def _append_relatives_kind(
+    lines: list,
+    ak: str,
+    name_key_counter: list,
+) -> None:
+    """Append the <ak>_relatives ResourceKind (type=4, dynamic).
+
+    This is the MPB runtime bucket for ad-hoc relationship discovery.
+    It is always present in MPB-generated paks regardless of the MP design.
+    """
+    nk = name_key_counter[0]
+    name_key_counter[0] += 5
+    rk_key = f"{ak}_relatives"
+    lines.append(
+        f'    <ResourceKind key="{rk_key}" nameKey="{nk}"'
+        f' type="4" showTag="true" dynamic="true">'
+    )
+    nk += 1
+    lines.append(
+        f'      <ResourceGroup key="relationships" nameKey="{nk}" instanced="false">'
+    )
+    lines.append("      </ResourceGroup>")
+    lines.append("    </ResourceKind>")
+
+
+def _append_world_aggregate_kind(
+    lines: list,
+    mp: ManagementPackDef,
+    ak: str,
+    name_key_counter: list,
+) -> None:
+    """Append the <ak>_world ResourceKind (type=8, subType=6).
+
+    This is the root aggregate container for the hierarchy tree. It aggregates
+    counts/rollups from the adapter instance data kinds via ComputedMetrics.
+    The worldObjectName is derived from the MP display name.
+    """
+    nk = name_key_counter[0]
+    name_key_counter[0] += 10
+    rk_key = f"{ak}_world"
+    world_name = f"{mp.name} World"
+    lines.append(
+        f'    <ResourceKind key="{rk_key}" nameKey="{nk}"'
+        f' worldObjectName="{world_name}" showTag="true"'
+        f' type="{_RESOURCE_KIND_TYPE_WORLD}" subType="{_RESOURCE_KIND_SUBTYPE_WORLD}">'
+    )
+    nk += 1
     lines.append("    </ResourceKind>")
 
 
@@ -606,6 +848,28 @@ def _rewrite_adapter_properties(jar_bytes: bytes, adapter_kind: str) -> bytes:
 # adapters.zip assembly
 # ---------------------------------------------------------------------------
 
+def _zip_mkdir(zf: zipfile.ZipFile, path: str) -> None:
+    """Write an explicit directory entry to a ZipFile.
+
+    Python's zipfile module does NOT emit directory entries automatically
+    when you write file members into a path — it only writes the file
+    members themselves.  VCF Ops's pak installer walks adapters.zip
+    directory entries to discover which adapters to extract and register.
+    Without an explicit entry for '<adapter_dir>/' the installer skips
+    extraction entirely and reports a silent success based on pak-metadata
+    acceptance alone.  See Gap 1 root-cause analysis in
+    /tmp/qa-run-1776464499/pak_comparison.json.
+
+    path must end with '/' (zip convention for directory entries).
+    """
+    assert path.endswith("/"), f"directory path must end with '/': {path!r}"
+    info = zipfile.ZipInfo(path)
+    # External attributes 0x10 = MS-DOS directory flag; widely recognised
+    # by zip implementations as a directory marker.
+    info.external_attr = 0x10
+    zf.writestr(info, b"")
+
+
 def _build_adapters_zip(
     mp: ManagementPackDef,
     design_json_str: str,
@@ -617,7 +881,13 @@ def _build_adapters_zip(
 ) -> bytes:
     """Build adapters.zip in memory and return the bytes.
 
-    Structure mirrors the reference pak adapters.zip layout exactly.
+    Structure mirrors the reference pak adapters.zip layout exactly,
+    including explicit directory entries that VCF Ops requires to discover
+    and extract the adapter.  Reference: Rubrik-1.1.0.25.pak adapters.zip
+    has 16 explicit directory entries; their absence caused the Synology
+    silent-install failure (pak upload accepted, isPakInstalling=False in
+    ~35s vs Rubrik's 100-200s, adapter kind never registered).
+
     The adapter runtime JAR is copied from adapter_runtime/mpb_adapter3.jar
     (renamed to <adapter_dir>.jar) — see ADAPTER_JAR_GAP in module docstring.
     """
@@ -626,6 +896,29 @@ def _build_adapters_zip(
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+
+        # --- Explicit directory entries (CRITICAL for pak installer) ---
+        # VCF Ops pak installer walks adapters.zip directory entries to
+        # discover which adapters to extract and register.  Without the
+        # adapter root entry ('<adapter_dir>/') the installer skips
+        # extraction entirely.  Mirror Rubrik's 16-entry layout exactly.
+        # Order: root, adapter root, then subdirs depth-first.
+        _zip_mkdir(zf, "/")
+        _zip_mkdir(zf, f"{adapter_dir}/")
+        _zip_mkdir(zf, f"{adapter_dir}/doc/")
+        _zip_mkdir(zf, f"{adapter_dir}/lib/")
+        _zip_mkdir(zf, f"{adapter_dir}/work/")
+        _zip_mkdir(zf, f"{adapter_dir}/conf/")
+        _zip_mkdir(zf, f"{adapter_dir}/conf/supermetrics/")
+        _zip_mkdir(zf, f"{adapter_dir}/conf/dashboards/")
+        _zip_mkdir(zf, f"{adapter_dir}/conf/reports/")
+        _zip_mkdir(zf, f"{adapter_dir}/conf/images/")
+        _zip_mkdir(zf, f"{adapter_dir}/conf/images/TraversalSpec/")
+        _zip_mkdir(zf, f"{adapter_dir}/conf/images/AdapterKind/")
+        _zip_mkdir(zf, f"{adapter_dir}/conf/images/ResourceKind/")
+        _zip_mkdir(zf, f"{adapter_dir}/conf/views/")
+        _zip_mkdir(zf, f"{adapter_dir}/conf/resources/")
+        _zip_mkdir(zf, "resources/")
 
         # --- duplicate pak-root files at adapters.zip root ---
         zf.writestr("manifest.txt", manifest_str.encode("utf-8"))
@@ -657,11 +950,6 @@ def _build_adapters_zip(
             jar_bytes = _rewrite_adapter_properties(jar_bytes, ak)
         zf.writestr(f"{adapter_dir}.jar", jar_bytes)
 
-        # --- adapter directory structure ---
-        # Empty directories (represented as zero-byte entries with trailing /)
-        for empty_dir in ["doc/", "work/"]:
-            zf.writestr(f"{adapter_dir}/{empty_dir}", b"")
-
         # lib/*.jar — shared library JARs
         lib_dir = _ADAPTER_RUNTIME_DIR / "lib"
         if lib_dir.exists():
@@ -691,10 +979,8 @@ def _build_adapters_zip(
         )
         # conf/supermetrics/
         zf.writestr(f"{adapter_dir}/conf/supermetrics/customSuperMetrics.json", b"{}")
-        # conf/dashboards/, conf/reports/, conf/views/ — empty dirs
-        for empty_conf_dir in ["dashboards/", "reports/", "views/"]:
-            zf.writestr(f"{adapter_dir}/conf/{empty_conf_dir}", b"")
-        # conf/images/ — copy default.png into standard locations
+        # conf/images/ — copy default.png into standard icon locations
+        # (directory entries already written above via _zip_mkdir)
         for img_path in [
             f"images/TraversalSpec/default.png",
             f"images/AdapterKind/{ak}.png",
@@ -719,7 +1005,7 @@ def build_pak(
     mp: ManagementPackDef,
     *,
     output_dir: Path,
-    relationship_strategy: str = "test_all",
+    relationship_strategy: str = "synthetic_adapter_instance",
 ) -> Path:
     """Build a .pak ZIP file for the management pack.
 
