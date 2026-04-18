@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-04-17T16:35:16Z",
+  "fetched_at": "2026-04-18T18:04:19Z",
   "metrics": {
     "Compliance|Critical|totalCount": {
       "default_monitored": true,
@@ -1081,6 +1081,23 @@
     "vmop|vmotion|total_successes": {
       "default_monitored": true,
       "name": "Number of VM Operations|vMotion|Total Successful vMotions Events"
+    }
+  },
+  "properties": {
+    "System Properties|host_collector_id": {
+      "name": "VCF Operations Generated Properties|Current Collector ID"
+    },
+    "System Properties|resource_kind_subtype": {
+      "name": "VCF Operations Generated Properties|Object Type Subclassification"
+    },
+    "System Properties|resource_kind_type": {
+      "name": "VCF Operations Generated Properties|Object Type Classification"
+    },
+    "metering|MeteringPolicyId": {
+      "name": "Metering|(DEP) Metering Policy ID"
+    },
+    "metering|MeteringPolicyName": {
+      "name": "Metering|(DEP) Metering Policy Name"
     }
   },
   "resource_kind": "vSphere World",

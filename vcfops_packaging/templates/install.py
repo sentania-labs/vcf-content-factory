@@ -33,6 +33,12 @@ Exit codes:
 Requires Python 3.8+. Uses only stdlib plus `requests` (auto-installed
 into a temporary venv if not already available).
 """
+
+# Template version stamp — injected at build time by vcfops_packaging builder.
+# Used by `python3 -m vcfops_packaging check-staleness <zip>` to detect stale
+# distribution zips after framework template changes.
+TEMPLATE_VERSION = "2026-04-18-1"
+
 from __future__ import annotations
 
 import argparse

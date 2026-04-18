@@ -1,8 +1,9 @@
-"""Minimal VCF Operations Suite API client for super metric management.
+"""VCF Operations Suite API helpers for super metric management.
 
-Auth: POST /api/auth/token/acquire returns a token. Subsequent calls send
-`Authorization: vRealizeOpsToken <token>`. Token TTL is sliding (6h from
-last call).
+The base auth/session client (VCFOpsClient, VCFOpsError) now lives in
+vcfops_common.client. This module re-exports both names for backwards
+compatibility with any code that imports from vcfops_supermetrics.client,
+and adds the supermetric-domain helpers on top.
 
 SuperMetric endpoints used:
   GET    /api/supermetrics              list (paged)
@@ -18,88 +19,29 @@ from __future__ import annotations
 
 import io
 import json
-import os
 import zipfile
 from typing import Iterable, Iterator, Optional
 
-import requests
+# Re-export from common so all existing callers keep working.
+from vcfops_common.client import VCFOpsClient, VCFOpsError  # noqa: F401
 
-from ._env import load_dotenv
+# Supermetric-specific methods are mixed into VCFOpsClient via a
+# subclass approach that patches back onto the base name, preserving
+# the public API surface (VCFOpsClient.from_env() returns an object
+# with SM methods).  We extend VCFOpsClient in-place by inheriting and
+# reassigning the module-level name — downstream code that does
+# `from vcfops_supermetrics.client import VCFOpsClient` gets the full
+# SM-capable class, while code that uses `vcfops_common.client.VCFOpsClient`
+# gets the slim base.  The vcfops_supermetrics.__init__ re-exports
+# VCFOpsClient from this module, so the package-level import is also
+# the SM-extended one.
 
 
-class VCFOpsError(RuntimeError):
-    pass
+class _SMExtendedClient(VCFOpsClient):
+    """VCFOpsClient extended with super metric and policy helpers.
 
-
-class VCFOpsClient:
-    def __init__(
-        self,
-        host: str,
-        username: str,
-        password: str,
-        auth_source: str = "Local",
-        verify_ssl: bool = True,
-    ):
-        self.base = f"https://{host}/suite-api"
-        self._username = username
-        self._password = password
-        self._auth_source = auth_source
-        self._session = requests.Session()
-        self._session.verify = verify_ssl
-        self._session.headers.update(
-            {"Accept": "application/json", "Content-Type": "application/json"}
-        )
-        self._token: Optional[str] = None
-        # Cached per-instance content marker filename (discovered via a
-        # throwaway export). Re-probing it triggers export<->import task
-        # contention, so discover once per client lifetime.
-        self._marker_filename: Optional[str] = None
-
-    # ---- env constructor ------------------------------------------------
-    @classmethod
-    def from_env(cls) -> "VCFOpsClient":
-        load_dotenv()
-        try:
-            host = os.environ["VCFOPS_HOST"]
-            user = os.environ["VCFOPS_USER"]
-            pw = os.environ["VCFOPS_PASSWORD"]
-        except KeyError as e:
-            raise VCFOpsError(f"Missing env var: {e.args[0]}") from None
-        return cls(
-            host=host,
-            username=user,
-            password=pw,
-            auth_source=os.environ.get("VCFOPS_AUTH_SOURCE", "Local"),
-            verify_ssl=os.environ.get("VCFOPS_VERIFY_SSL", "true").lower() != "false",
-        )
-
-    # ---- auth -----------------------------------------------------------
-    def authenticate(self) -> None:
-        r = self._session.post(
-            f"{self.base}/api/auth/token/acquire",
-            json={
-                "username": self._username,
-                "password": self._password,
-                "authSource": self._auth_source,
-            },
-        )
-        if r.status_code != 200:
-            raise VCFOpsError(f"auth failed ({r.status_code}): {r.text}")
-        self._token = r.json()["token"]
-        self._session.headers["Authorization"] = f"vRealizeOpsToken {self._token}"
-
-    def _ensure_auth(self) -> None:
-        if not self._token:
-            self.authenticate()
-
-    def _request(self, method: str, path: str, **kw) -> requests.Response:
-        self._ensure_auth()
-        r = self._session.request(method, f"{self.base}{path}", **kw)
-        if r.status_code == 401:  # token expired -> reauth once
-            self._token = None
-            self._ensure_auth()
-            r = self._session.request(method, f"{self.base}{path}", **kw)
-        return r
+    Exported as VCFOpsClient from this module for backwards compat.
+    """
 
     # ---- super metrics --------------------------------------------------
     def list_supermetrics(self, page_size: int = 1000) -> Iterator[dict]:
@@ -642,3 +584,12 @@ class VCFOpsClient:
         r = self._request("DELETE", f"/api/supermetrics/{sm_id}")
         if r.status_code not in (200, 204):
             raise VCFOpsError(f"delete failed ({r.status_code}): {r.text}")
+
+
+# Replace the module-level VCFOpsClient name with the SM-extended subclass
+# so that `from vcfops_supermetrics.client import VCFOpsClient` returns
+# an instance with all SM methods available, as it did before this refactor.
+# Restore the public class name so repr/logging stays clean.
+_SMExtendedClient.__name__ = "VCFOpsClient"
+_SMExtendedClient.__qualname__ = "VCFOpsClient"
+VCFOpsClient = _SMExtendedClient

@@ -8,6 +8,7 @@ from .handler import (
     ItemResult,
     discover_handlers,
 )
+from .template_version import CURRENT_TEMPLATE_VERSION
 
 __all__ = [
     "Bundle",
@@ -21,4 +22,5 @@ __all__ = [
     "ValidateResult",
     "ItemResult",
     "discover_handlers",
+    "CURRENT_TEMPLATE_VERSION",
 ]

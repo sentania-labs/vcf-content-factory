@@ -60,9 +60,17 @@ class SuperMetricDef:
     unit_id: str = ""
     source_path: Path | None = None
 
-    def validate(self) -> None:
+    def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
             raise SuperMetricValidationError("name is required")
+        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
+            src = f" ({self.source_path})" if self.source_path else ""
+            raise SuperMetricValidationError(
+                f'{self.source_path or self.name}: name "{self.name}" missing framework prefix '
+                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
+                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
+                f"bundle content, ensure the bundle manifest sets factory_native: false."
+            )
         if not self.formula or not self.formula.strip():
             raise SuperMetricValidationError(f"{self.name}: formula is required")
         if not self.resource_kinds:
@@ -157,7 +165,7 @@ def _mint_id_into_file(path: Path) -> str:
     return new_id
 
 
-def load_file(path: str | Path) -> SuperMetricDef:
+def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SuperMetricDef:
     path = Path(path)
     try:
         data = _strict_load(path.read_text()) or {}
@@ -200,18 +208,18 @@ def load_file(path: str | Path) -> SuperMetricDef:
         unit_id=str(data.get("unit_id", "") or data.get("unitId", "") or "").strip(),
         source_path=path,
     )
-    sm.validate()
+    sm.validate(enforce_framework_prefix=enforce_framework_prefix)
     return sm
 
 
-def load_dir(directory: str | Path = "supermetrics") -> List[SuperMetricDef]:
+def load_dir(directory: str | Path = "supermetrics", enforce_framework_prefix: bool = True) -> List[SuperMetricDef]:
     directory = Path(directory)
     if not directory.exists():
         return []
     out: List[SuperMetricDef] = []
     seen: dict[str, Path] = {}
     for p in sorted(directory.rglob("*.y*ml")):
-        sm = load_file(p)
+        sm = load_file(p, enforce_framework_prefix=enforce_framework_prefix)
         if sm.name in seen:
             raise SuperMetricValidationError(
                 f"duplicate super metric name '{sm.name}' "

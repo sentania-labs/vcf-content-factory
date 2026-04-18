@@ -9,7 +9,7 @@ import io
 import time
 import zipfile
 
-from vcfops_supermetrics.client import VCFOpsClient, VCFOpsError
+from vcfops_common.client import VCFOpsClient, VCFOpsError
 
 
 def get_current_user(client: VCFOpsClient) -> dict:

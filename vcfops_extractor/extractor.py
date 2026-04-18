@@ -290,7 +290,7 @@ def _run_content_export(sm_client, content_types: list[str]) -> bytes:
       ["VIEW_DEFINITIONS", "DASHBOARDS"]
     """
     import time
-    from vcfops_supermetrics.client import VCFOpsError
+    from vcfops_common.client import VCFOpsError
 
     # Wait for any running export to finish first
     deadline = time.monotonic() + 120
@@ -363,7 +363,7 @@ def _export_dashboard_json(sm_client, dashboard_uuid: str) -> Optional[dict]:
     or None if the UUID is not found in the export.
     """
     import json as _json
-    from vcfops_supermetrics.client import VCFOpsError
+    from vcfops_common.client import VCFOpsError
 
     outer_zip = _run_content_export(sm_client, ["DASHBOARDS"])
 

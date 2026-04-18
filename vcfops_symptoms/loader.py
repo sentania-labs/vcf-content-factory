@@ -118,9 +118,17 @@ class SymptomDef:
     description: str = ""
     source_path: Optional[Path] = None
 
-    def validate(self) -> None:
+    def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
             raise SymptomValidationError("name is required")
+        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
+            src = str(self.source_path) if self.source_path else self.name
+            raise SymptomValidationError(
+                f'{src}: name "{self.name}" missing framework prefix '
+                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
+                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
+                f"bundle content, ensure the bundle manifest sets factory_native: false."
+            )
         if not self.adapter_kind:
             raise SymptomValidationError(f"{self.name}: adapter_kind is required")
         if not self.resource_kind:
@@ -267,7 +275,7 @@ def _condition_to_wire(cond: dict) -> dict:
     raise SymptomValidationError(f"Unknown condition type: {ctype!r}")
 
 
-def load_file(path: str | Path) -> SymptomDef:
+def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SymptomDef:
     path = Path(path)
     try:
         data = _strict_load(path.read_text()) or {}
@@ -290,18 +298,18 @@ def load_file(path: str | Path) -> SymptomDef:
         description=str(data.get("description", "") or "").strip(),
         source_path=path,
     )
-    sd.validate()
+    sd.validate(enforce_framework_prefix=enforce_framework_prefix)
     return sd
 
 
-def load_dir(directory: str | Path = "symptoms") -> List[SymptomDef]:
+def load_dir(directory: str | Path = "symptoms", enforce_framework_prefix: bool = True) -> List[SymptomDef]:
     directory = Path(directory)
     if not directory.exists():
         return []
     out: List[SymptomDef] = []
     seen: dict[str, Path] = {}
     for p in sorted(directory.rglob("*.y*ml")):
-        sd = load_file(p)
+        sd = load_file(p, enforce_framework_prefix=enforce_framework_prefix)
         if sd.name in seen:
             raise SymptomValidationError(
                 f"duplicate symptom name '{sd.name}' "

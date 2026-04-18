@@ -232,6 +232,56 @@ def cmd_analyze(args) -> int:
     return 0 if not result.unknown else 1
 
 
+def cmd_check_staleness(args) -> int:
+    """Check whether a distribution zip's template version matches current."""
+    import json as _json
+    import zipfile as _zf
+    from .template_version import CURRENT_TEMPLATE_VERSION
+
+    zip_path = Path(args.zip_path)
+    if not zip_path.exists():
+        print(f"ERROR: file not found: {zip_path}", file=sys.stderr)
+        return 1
+
+    try:
+        with _zf.ZipFile(zip_path, "r") as z:
+            if "vcfops_manifest.json" not in z.namelist():
+                print(
+                    f"UNKNOWN -- bundle zip has no template version marker "
+                    f"(pre-versioning era): {zip_path}"
+                )
+                return 0
+            manifest_data = _json.loads(z.read("vcfops_manifest.json").decode("utf-8"))
+    except _zf.BadZipFile as exc:
+        print(f"ERROR: not a valid zip file: {zip_path}: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"ERROR: could not read zip: {zip_path}: {exc}", file=sys.stderr)
+        return 1
+
+    bundle_version = manifest_data.get("template_version")
+    if not bundle_version:
+        print(
+            f"UNKNOWN -- bundle zip has no template version marker "
+            f"(pre-versioning era): {zip_path}"
+        )
+        return 0
+
+    if bundle_version == CURRENT_TEMPLATE_VERSION:
+        print(
+            f"OK -- bundle template version matches current "
+            f"({CURRENT_TEMPLATE_VERSION}): {zip_path}"
+        )
+        return 0
+    else:
+        print(
+            f"STALE -- bundle template is {bundle_version}, "
+            f"current is {CURRENT_TEMPLATE_VERSION}. "
+            f"Rebuild to pick up framework hardening: {zip_path}"
+        )
+        return 1
+
+
 def cmd_sync(args) -> int:
     # Import here to avoid pulling in requests at module import time
     from .syncer import sync_bundle, sync_all_bundles, uninstall_bundle
@@ -341,6 +391,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="use describe cache only; do not refresh against live instance",
     )
     pa.set_defaults(func=cmd_analyze)
+
+    pcs = sub.add_parser(
+        "check-staleness",
+        help="check whether a distribution zip's template version matches current",
+    )
+    pcs.add_argument(
+        "zip_path",
+        help="path to a distribution zip file built by vcfops_packaging",
+    )
+    pcs.set_defaults(func=cmd_check_staleness)
 
     ps = sub.add_parser(
         "sync",

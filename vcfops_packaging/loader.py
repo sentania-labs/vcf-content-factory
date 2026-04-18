@@ -95,6 +95,10 @@ class Bundle:
     recommendations: List[Recommendation] = field(default_factory=list)
     builtin_metric_enables: List[BuiltinMetricEnable] = field(default_factory=list)
     source_path: Optional[Path] = None
+    # Resolved absolute paths to the SM YAML files declared in this bundle's
+    # manifest.  Preserved so the renderer can scope SM name resolution to
+    # exactly the SMs in this bundle, preventing cross-bundle UUID leakage.
+    sm_paths: List[Path] = field(default_factory=list)
     # Attribution and provenance fields (all optional; default to empty/True
     # so existing factory-native manifests load unchanged).
     author: str = ""
@@ -145,6 +149,12 @@ def load_bundle(path: str | Path) -> Bundle:
             f"{path}: 'sync' must be a boolean (true/false), got {sync_raw!r}"
         )
     sync_enabled = bool(sync_raw)
+
+    # factory_native is read early because it controls SM prefix enforcement
+    # during content loading below.  Full validation with a clear error
+    # message is done again later (after all paths are resolved).
+    factory_native_raw = data.get("factory_native", True)
+    factory_native = bool(factory_native_raw) if isinstance(factory_native_raw, bool) else True
 
     # Resolve all file references relative to the manifest's directory if
     # paths are not absolute. Manifests in bundles/ use repo-relative paths
@@ -209,19 +219,22 @@ def load_bundle(path: str | Path) -> Bundle:
     alert_paths = [_resolve(r) for r in (data.get("alerts") or [])]
     recommendation_paths = [_resolve(r) for r in (data.get("recommendations") or [])]
 
-    # Load and validate each content object
+    # Load and validate each content object.
+    # For third-party (factory_native=False) bundles, SM names are not required
+    # to carry the "[VCF Content Factory]" prefix — they use the original author's
+    # naming convention.  Skip prefix enforcement for those bundles.
     try:
-        supermetrics = [load_sm(p) for p in sm_paths]
+        supermetrics = [load_sm(p, enforce_framework_prefix=factory_native) for p in sm_paths]
     except Exception as e:
         raise BundleValidationError(f"{path}: super metric error: {e}") from e
 
     try:
-        views = [load_view(p) for p in view_paths]
+        views = [load_view(p, enforce_framework_prefix=factory_native) for p in view_paths]
     except Exception as e:
         raise BundleValidationError(f"{path}: view error: {e}") from e
 
     try:
-        dashboards = [load_dashboard(p) for p in dash_paths]
+        dashboards = [load_dashboard(p, enforce_framework_prefix=factory_native) for p in dash_paths]
     except Exception as e:
         raise BundleValidationError(f"{path}: dashboard error: {e}") from e
 
@@ -229,34 +242,34 @@ def load_bundle(path: str | Path) -> Bundle:
     views_by_name = {v.name: v for v in views}
     for d in dashboards:
         try:
-            d.validate(views_by_name)
+            d.validate(views_by_name, enforce_framework_prefix=factory_native)
         except Exception as e:
             raise BundleValidationError(
                 f"{path}: dashboard '{d.name}' cross-validation error: {e}"
             ) from e
 
     try:
-        customgroups = [load_cg(p) for p in cg_paths]
+        customgroups = [load_cg(p, enforce_framework_prefix=factory_native) for p in cg_paths]
     except Exception as e:
         raise BundleValidationError(f"{path}: custom group error: {e}") from e
 
     try:
-        reports = [load_report(p) for p in report_paths]
+        reports = [load_report(p, enforce_framework_prefix=factory_native) for p in report_paths]
     except Exception as e:
         raise BundleValidationError(f"{path}: report error: {e}") from e
 
     try:
-        symptoms = [load_symptom(p) for p in symptom_paths]
+        symptoms = [load_symptom(p, enforce_framework_prefix=factory_native) for p in symptom_paths]
     except Exception as e:
         raise BundleValidationError(f"{path}: symptom error: {e}") from e
 
     try:
-        alerts = [load_alert(p) for p in alert_paths]
+        alerts = [load_alert(p, enforce_framework_prefix=factory_native) for p in alert_paths]
     except Exception as e:
         raise BundleValidationError(f"{path}: alert error: {e}") from e
 
     try:
-        recommendations = [load_recommendation_file(p) for p in recommendation_paths]
+        recommendations = [load_recommendation_file(p, enforce_framework_prefix=factory_native) for p in recommendation_paths]
     except Exception as e:
         raise BundleValidationError(f"{path}: recommendation error: {e}") from e
 
@@ -295,6 +308,7 @@ def load_bundle(path: str | Path) -> Bundle:
         recommendations=recommendations,
         builtin_metric_enables=builtin_metric_enables,
         source_path=path,
+        sm_paths=sm_paths,
         author=author,
         license=license_field,
         source=source,

@@ -25,7 +25,7 @@ from vcfops_dashboards.client import (
     get_current_user,
     import_content_zip,
 )
-from vcfops_supermetrics.client import VCFOpsClient, VCFOpsError
+from vcfops_common.client import VCFOpsClient, VCFOpsError
 
 
 class VCFOpsReportsError(RuntimeError):

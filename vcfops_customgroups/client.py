@@ -15,90 +15,17 @@ See context/customgroup_authoring.md and context/wire_formats.md
 """
 from __future__ import annotations
 
-import os
 from typing import Iterator, List, Optional
 
-import requests
-
-from vcfops_supermetrics._env import load_dotenv
+from vcfops_common.client import VCFOpsClient, VCFOpsError
 
 
-class VCFOpsCustomGroupError(RuntimeError):
+class VCFOpsCustomGroupError(VCFOpsError):
     pass
 
 
-class VCFOpsCustomGroupClient:
-    def __init__(
-        self,
-        host: str,
-        username: str,
-        password: str,
-        auth_source: str = "Local",
-        verify_ssl: bool = True,
-    ):
-        self.base = f"https://{host}/suite-api"
-        self._username = username
-        self._password = password
-        self._auth_source = auth_source
-        self._session = requests.Session()
-        self._session.verify = verify_ssl
-        self._session.headers.update(
-            {"Accept": "application/json", "Content-Type": "application/json"}
-        )
-        self._token: Optional[str] = None
-
-    # ---- env constructor ----------------------------------------
-    @classmethod
-    def from_env(cls) -> "VCFOpsCustomGroupClient":
-        load_dotenv()
-        try:
-            host = os.environ["VCFOPS_HOST"]
-            user = os.environ["VCFOPS_USER"]
-            pw = os.environ["VCFOPS_PASSWORD"]
-        except KeyError as e:
-            raise VCFOpsCustomGroupError(
-                f"Missing env var: {e.args[0]}"
-            ) from None
-        return cls(
-            host=host,
-            username=user,
-            password=pw,
-            auth_source=os.environ.get("VCFOPS_AUTH_SOURCE", "Local"),
-            verify_ssl=os.environ.get("VCFOPS_VERIFY_SSL", "true").lower()
-            != "false",
-        )
-
-    # ---- auth ----------------------------------------------------
-    def authenticate(self) -> None:
-        r = self._session.post(
-            f"{self.base}/api/auth/token/acquire",
-            json={
-                "username": self._username,
-                "password": self._password,
-                "authSource": self._auth_source,
-            },
-        )
-        if r.status_code != 200:
-            raise VCFOpsCustomGroupError(
-                f"auth failed ({r.status_code}): {r.text}"
-            )
-        self._token = r.json()["token"]
-        self._session.headers["Authorization"] = (
-            f"vRealizeOpsToken {self._token}"
-        )
-
-    def _ensure_auth(self) -> None:
-        if not self._token:
-            self.authenticate()
-
-    def _request(self, method: str, path: str, **kw) -> requests.Response:
-        self._ensure_auth()
-        r = self._session.request(method, f"{self.base}{path}", **kw)
-        if r.status_code == 401:
-            self._token = None
-            self._ensure_auth()
-            r = self._session.request(method, f"{self.base}{path}", **kw)
-        return r
+class VCFOpsCustomGroupClient(VCFOpsClient):
+    """VCFOpsClient subclass with custom group and group type helpers."""
 
     # ---- group types --------------------------------------------
     def list_group_types(self) -> List[dict]:

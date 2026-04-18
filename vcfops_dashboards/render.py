@@ -17,6 +17,8 @@ import json
 import re
 import time
 import uuid
+from pathlib import Path
+from typing import Optional
 from xml.sax.saxutils import escape
 
 from .loader import (
@@ -120,7 +122,14 @@ def _xml_transformations_block(view: ViewDef) -> str:
     return '<Property name="transformations"><List><Item value="CURRENT"/></List></Property>'
 
 
-def _xml_attribute_item(view: ViewDef, col, idx: int, sm_map: dict[str, str] | None = None) -> str:
+def _xml_attribute_item(
+    view: ViewDef,
+    col,
+    idx: int,
+    sm_map: dict[str, str] | None = None,
+    sm_scope_active: bool = False,
+    bundle_context: str | None = None,
+) -> str:
     # Super metric columns live in their own namespace and need the
     # "Super Metric|sm_<uuid>" attributeKey form — bare "sm_<uuid>"
     # renders as a blank column in the UI. Reference: exported views
@@ -137,7 +146,19 @@ def _xml_attribute_item(view: ViewDef, col, idx: int, sm_map: dict[str, str] | N
             if sm_id:
                 attribute_key = f"Super Metric|sm_{sm_id}"
             else:
-                # SM not found in map — emit the raw token so the error
+                if sm_scope_active:
+                    # Scoped mode: unresolved SM reference is a hard error.
+                    # The bundle declared an explicit SM scope but this name
+                    # was not found in it. Either add the SM to the bundle's
+                    # `supermetrics:` manifest list, or remove the reference.
+                    ctx = bundle_context or "(unknown bundle)"
+                    raise ValueError(
+                        f'View "{view.name}" references super metric "{sm_name}" '
+                        f"which is not in the bundle scope for {ctx!r}. "
+                        f"Either add the SM to the bundle's `supermetrics:` manifest "
+                        f"list, or remove the reference from the view."
+                    )
+                # Native (unscoped) mode — emit the raw token so the error
                 # is visible in the XML rather than silently blank.
                 attribute_key = raw
         else:
@@ -250,8 +271,16 @@ def _render_summary_infos(view: ViewDef) -> str:
     )
 
 
-def _render_view_def_fragment(view: ViewDef, sm_map: dict[str, str] | None = None) -> str:
-    items = "".join(_xml_attribute_item(view, c, i, sm_map) for i, c in enumerate(view.columns))
+def _render_view_def_fragment(
+    view: ViewDef,
+    sm_map: dict[str, str] | None = None,
+    sm_scope_active: bool = False,
+    bundle_context: str | None = None,
+) -> str:
+    items = "".join(
+        _xml_attribute_item(view, c, i, sm_map, sm_scope_active, bundle_context)
+        for i, c in enumerate(view.columns)
+    )
 
     # Shared header elements
     header = (
@@ -362,21 +391,67 @@ def _render_view_def_fragment(view: ViewDef, sm_map: dict[str, str] | None = Non
     return header + controls + data_provider + presentation + "</ViewDef>"
 
 
-def render_views_xml(views: list[ViewDef]) -> str:
+def render_views_xml(
+    views: list[ViewDef],
+    sm_scope: Optional[list[Path]] = None,
+    bundle_context: Optional[str] = None,
+) -> str:
     """Render one or more ViewDefs into the single content.xml the
-    VCF Ops content importer expects inside views.zip."""
-    # Build SM name->uuid map from supermetrics/ YAML so that view column
-    # attributes written as supermetric:"<name>" resolve to SuperMetric|sm_<uuid>.
+    VCF Ops content importer expects inside views.zip.
+
+    Args:
+        views: ViewDef objects to render.
+        sm_scope: When provided, restrict SM name resolution to only the SM
+            YAML files in this list (bundle-scoped mode).  Any
+            ``supermetric:"<name>"`` reference that cannot be resolved within
+            this scope raises ``ValueError`` with a descriptive message naming
+            the view, the unresolved reference, and the bundle context.
+            When ``None`` (default), the full ``supermetrics/`` directory tree
+            is scanned — the existing native-content behaviour.
+        bundle_context: Human-readable bundle name used in scoped-mode error
+            messages (e.g. ``'"idps-planner" (factory_native=False)'``).
+            Ignored when ``sm_scope`` is None.
+
+    Returns:
+        XML string for ``content.xml`` inside ``views.zip``.
+
+    Raises:
+        ValueError: (scoped mode only) when a ``supermetric:"<name>"``
+            column references an SM not present in ``sm_scope``.
+    """
     sm_map: dict[str, str] = {}
-    try:
-        from vcfops_supermetrics.loader import load_dir as _sm_load_dir
-        for sm in _sm_load_dir():
-            sm_map[sm.name] = sm.id
-    except Exception:
-        # If supermetrics package or directory is unavailable, fall through
-        # with an empty map; unresolved tokens remain visible in the XML.
-        pass
-    fragments = "".join(_render_view_def_fragment(v, sm_map) for v in views)
+    sm_scope_active = sm_scope is not None
+
+    if sm_scope_active:
+        # Scoped mode: load only the SM files declared in the bundle manifest.
+        # An empty list is valid — it means the bundle has no SMs, and any SM
+        # reference in a view will be caught as an error below.
+        try:
+            from vcfops_supermetrics.loader import load_file as _sm_load_file
+            for sm_path in sm_scope:
+                sm = _sm_load_file(sm_path, enforce_framework_prefix=False)
+                sm_map[sm.name] = sm.id
+        except Exception as exc:
+            # Re-raise as ValueError so the build fails with a clear message.
+            raise ValueError(
+                f"render_views_xml: failed to load scoped SM for bundle "
+                f"{bundle_context!r}: {exc}"
+            ) from exc
+    else:
+        # Native (unscoped) mode: scan the full supermetrics/ directory tree.
+        try:
+            from vcfops_supermetrics.loader import load_dir as _sm_load_dir
+            for sm in _sm_load_dir():
+                sm_map[sm.name] = sm.id
+        except Exception:
+            # If supermetrics package or directory is unavailable, fall through
+            # with an empty map; unresolved tokens remain visible in the XML.
+            pass
+
+    fragments = "".join(
+        _render_view_def_fragment(v, sm_map, sm_scope_active, bundle_context)
+        for v in views
+    )
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f"<Content><Views>{fragments}</Views></Content>"

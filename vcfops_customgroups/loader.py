@@ -122,9 +122,17 @@ class CustomGroupDef:
     source_path: Path | None = None
 
     # ---- validation ------------------------------------------------
-    def validate(self) -> None:
+    def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
             raise CustomGroupValidationError("name is required")
+        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
+            src = str(self.source_path) if self.source_path else self.name
+            raise CustomGroupValidationError(
+                f'{src}: name "{self.name}" missing framework prefix '
+                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
+                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
+                f"bundle content, ensure the bundle manifest sets factory_native: false."
+            )
         if not self.type_key or not self.type_key.strip():
             raise CustomGroupValidationError(
                 f"{self.name}: type is required (e.g. 'Environment')"
@@ -409,7 +417,7 @@ def _relationship_condition_to_wire(c: dict) -> dict:
     return out
 
 
-def load_file(path: str | Path) -> CustomGroupDef:
+def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> CustomGroupDef:
     path = Path(path)
     try:
         data = _strict_load(path.read_text()) or {}
@@ -429,18 +437,18 @@ def load_file(path: str | Path) -> CustomGroupDef:
         rules=list(data.get("rules") or []),
         source_path=path,
     )
-    cg.validate()
+    cg.validate(enforce_framework_prefix=enforce_framework_prefix)
     return cg
 
 
-def load_dir(directory: str | Path = "customgroups") -> List[CustomGroupDef]:
+def load_dir(directory: str | Path = "customgroups", enforce_framework_prefix: bool = True) -> List[CustomGroupDef]:
     directory = Path(directory)
     if not directory.exists():
         return []
     out: List[CustomGroupDef] = []
     seen: dict[str, Path] = {}
     for p in sorted(directory.rglob("*.y*ml")):
-        cg = load_file(p)
+        cg = load_file(p, enforce_framework_prefix=enforce_framework_prefix)
         if cg.name in seen:
             raise CustomGroupValidationError(
                 f"duplicate custom group name '{cg.name}' in "

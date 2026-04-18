@@ -182,9 +182,17 @@ class AlertDef:
     recommendations: List[RecommendationRef] = field(default_factory=list)
     source_path: Optional[Path] = None
 
-    def validate(self) -> None:
+    def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
             raise AlertValidationError("name is required")
+        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
+            src = str(self.source_path) if self.source_path else self.name
+            raise AlertValidationError(
+                f'{src}: name "{self.name}" missing framework prefix '
+                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
+                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
+                f"bundle content, ensure the bundle manifest sets factory_native: false."
+            )
         if not self.adapter_kind:
             raise AlertValidationError(f"{self.name}: adapter_kind is required")
         if not self.resource_kind:
@@ -407,7 +415,7 @@ def _set_to_wire(s: dict, symptom_name_to_id: dict[str, str], alert_name: str) -
 # Recommendation loading
 # ---------------------------------------------------------------------------
 
-def load_recommendation_file(path: str | Path) -> Recommendation:
+def load_recommendation_file(path: str | Path, enforce_framework_prefix: bool = True) -> Recommendation:
     """Load a single recommendation YAML file."""
     path = Path(path)
     try:
@@ -420,6 +428,13 @@ def load_recommendation_file(path: str | Path) -> Recommendation:
     name = str(data.get("name", "")).strip()
     if not name:
         raise AlertValidationError(f"{path}: 'name' is required")
+    if enforce_framework_prefix and not name.startswith("[VCF Content Factory] "):
+        raise AlertValidationError(
+            f'{path}: name "{name}" missing framework prefix '
+            f'"[VCF Content Factory]". All factory-authored content must carry the literal '
+            f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
+            f"bundle content, ensure the bundle manifest sets factory_native: false."
+        )
     description = str(data.get("description", "") or "").strip()
     if not description:
         raise AlertValidationError(f"{path}: 'description' is required")
@@ -435,7 +450,7 @@ def load_recommendation_file(path: str | Path) -> Recommendation:
     )
 
 
-def load_recommendations(directory: str | Path = "recommendations") -> List[Recommendation]:
+def load_recommendations(directory: str | Path = "recommendations", enforce_framework_prefix: bool = True) -> List[Recommendation]:
     """Load all recommendation YAML files from a directory.
 
     Following the pattern of load_symptoms() / load_alerts():
@@ -449,7 +464,7 @@ def load_recommendations(directory: str | Path = "recommendations") -> List[Reco
     out: List[Recommendation] = []
     seen: Dict[str, Path] = {}
     for p in sorted(directory.rglob("*.y*ml")):
-        rec = load_recommendation_file(p)
+        rec = load_recommendation_file(p, enforce_framework_prefix=enforce_framework_prefix)
         if rec.name in seen:
             raise AlertValidationError(
                 f"duplicate recommendation name '{rec.name}' "
@@ -494,7 +509,7 @@ def resolve_alert_recommendations(
 # Alert file / dir loading
 # ---------------------------------------------------------------------------
 
-def load_file(path: str | Path) -> AlertDef:
+def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> AlertDef:
     path = Path(path)
     try:
         data = _strict_load(path.read_text()) or {}
@@ -556,18 +571,18 @@ def load_file(path: str | Path) -> AlertDef:
         recommendations=rec_refs,
         source_path=path,
     )
-    ad.validate()
+    ad.validate(enforce_framework_prefix=enforce_framework_prefix)
     return ad
 
 
-def load_dir(directory: str | Path = "alerts") -> List[AlertDef]:
+def load_dir(directory: str | Path = "alerts", enforce_framework_prefix: bool = True) -> List[AlertDef]:
     directory = Path(directory)
     if not directory.exists():
         return []
     out: List[AlertDef] = []
     seen: dict[str, Path] = {}
     for p in sorted(directory.rglob("*.y*ml")):
-        ad = load_file(p)
+        ad = load_file(p, enforce_framework_prefix=enforce_framework_prefix)
         if ad.name in seen:
             raise AlertValidationError(
                 f"duplicate alert name '{ad.name}' "

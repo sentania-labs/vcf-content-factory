@@ -42,6 +42,7 @@ from vcfops_dashboards.render import render_views_xml, render_dashboards_bundle_
 from vcfops_reports.render import render_report_xml
 from vcfops_alerts.render import render_alert_content_xml
 from .loader import Bundle, load_bundle
+from .template_version import CURRENT_TEMPLATE_VERSION
 
 # ---------------------------------------------------------------------------
 # Display-name derivation
@@ -531,7 +532,16 @@ def build_bundle(
     sm_dict = _render_supermetrics_dict(bundle) if bundle.supermetrics else {}
     sm_json = json.dumps(sm_dict, indent=2) if sm_dict else None
 
-    views_xml = render_views_xml(bundle.views) if bundle.views else None
+    # Build the SM scope for the renderer: the set of SM YAML files declared
+    # in this bundle's manifest.  This prevents cross-bundle UUID leakage —
+    # a third-party bundle's views resolve only against its own SMs, never
+    # against native SMs or another bundle's SMs.
+    # bundle_context label is included in any resolution-error messages.
+    bundle_ctx = f'"{bundle.name}" (factory_native={bundle.factory_native})'
+    views_xml = (
+        render_views_xml(bundle.views, sm_scope=bundle.sm_paths, bundle_context=bundle_ctx)
+        if bundle.views else None
+    )
 
     dashboard_json = None
     if bundle.dashboards:
@@ -614,12 +624,21 @@ def build_bundle(
     license_text = license_path.read_text() if license_path.exists() else None
 
     # --- Assemble zip ---
+    # --- vcfops_manifest.json: in-zip metadata for staleness detection ---
+    import datetime as _dt
+    vcfops_manifest = json.dumps({
+        "bundle_name": bundle.name,
+        "template_version": CURRENT_TEMPLATE_VERSION,
+        "built_at": _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }, indent=2)
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         # Root-level static files
         z.writestr("install.py", install_py)
         z.writestr("install.ps1", install_ps1)
         z.writestr("README.md", framework_readme)
+        z.writestr("vcfops_manifest.json", vcfops_manifest)
         if license_text is not None:
             z.writestr("LICENSE", license_text)
 

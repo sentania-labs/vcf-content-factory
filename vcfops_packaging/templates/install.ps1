@@ -94,6 +94,11 @@ if ($Force -and -not $Uninstall) {
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+# Template version stamp -- injected at build time by vcfops_packaging builder.
+# Used by `python3 -m vcfops_packaging check-staleness <zip>` to detect stale
+# distribution zips after framework template changes.
+$TEMPLATE_VERSION = "2026-04-18-1"
+
 # Tracks whether the interactive SSL prompt (in Get-Credentials) chose to
 # disable verification.  Initialized to $false; Get-Credentials sets it to
 # $true if the user answers 'n'.

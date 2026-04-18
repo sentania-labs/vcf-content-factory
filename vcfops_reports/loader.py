@@ -135,9 +135,17 @@ class ReportDef:
     id: str = ""
     source_path: Optional[Path] = None
 
-    def validate(self) -> None:
+    def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name.strip():
             raise ReportValidationError("name is required")
+        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
+            src = str(self.source_path) if self.source_path else self.name
+            raise ReportValidationError(
+                f'{src}: name "{self.name}" missing framework prefix '
+                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
+                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
+                f"bundle content, ensure the bundle manifest sets factory_native: false."
+            )
         if not self.subject_types:
             raise ReportValidationError(
                 f"{self.name}: at least one subject_type is required"
@@ -251,6 +259,7 @@ def load_file(
     path: str | Path,
     views_dir: str | Path = "views",
     dashboards_dir: str | Path = "dashboards",
+    enforce_framework_prefix: bool = True,
 ) -> "ReportDef":
     """Load and validate a single report definition YAML file.
 
@@ -363,7 +372,7 @@ def load_file(
         settings=settings,
         source_path=path,
     )
-    rd.validate()
+    rd.validate(enforce_framework_prefix=enforce_framework_prefix)
     return rd
 
 
@@ -371,6 +380,7 @@ def load_dir(
     directory: str | Path = "reports",
     views_dir: str | Path = "views",
     dashboards_dir: str | Path = "dashboards",
+    enforce_framework_prefix: bool = True,
 ) -> List[ReportDef]:
     """Load all report definition YAML files from a directory.
 
@@ -383,7 +393,7 @@ def load_dir(
     out: List[ReportDef] = []
     seen: dict[str, Path] = {}
     for p in sorted(directory.rglob("*.y*ml")):
-        rd = load_file(p, views_dir=views_dir, dashboards_dir=dashboards_dir)
+        rd = load_file(p, views_dir=views_dir, dashboards_dir=dashboards_dir, enforce_framework_prefix=enforce_framework_prefix)
         if rd.name in seen:
             raise ReportValidationError(
                 f"duplicate report name '{rd.name}' "

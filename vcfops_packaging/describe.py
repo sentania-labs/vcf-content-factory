@@ -353,13 +353,13 @@ def make_cache(live: bool = True, cache_dir: Optional[Path] = None) -> DescribeC
     client = None
     if live:
         try:
-            from vcfops_supermetrics._env import load_dotenv
+            from vcfops_common._env import load_dotenv
             load_dotenv()
             host = os.environ.get("VCFOPS_HOST")
             user = os.environ.get("VCFOPS_USER")
             pw = os.environ.get("VCFOPS_PASSWORD")
             if host and user and pw:
-                from vcfops_supermetrics.client import VCFOpsClient
+                from vcfops_common.client import VCFOpsClient
                 client = VCFOpsClient(
                     host=host,
                     username=user,

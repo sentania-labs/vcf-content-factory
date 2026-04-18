@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-04-17T15:23:08Z",
+  "fetched_at": "2026-04-18T18:04:21Z",
   "metrics": {
     "Guest OS Services|mkInComingConnectionCount": {
       "default_monitored": true,
@@ -2917,6 +2917,572 @@
     "virtualDisk|write_average": {
       "default_monitored": true,
       "name": "Virtual Disk|Write Throughput"
+    }
+  },
+  "properties": {
+    "DependsOnApplicationComponents": {
+      "name": "Application components the Virtual Machine depends on"
+    },
+    "Guest OS Services|AuthenticationStatus": {
+      "name": "Guest OS Services|Authentication Status"
+    },
+    "Guest OS Services|DiscoveredServicesInfo": {
+      "name": "Guest OS Services|Discovered Services Info"
+    },
+    "Guest OS Services|DiscoveryMethod": {
+      "name": "Guest OS Services|Authentication Method"
+    },
+    "Guest OS Services|InboundPorts": {
+      "name": "Guest OS Services|Inbound Ports"
+    },
+    "Guest OS Services|ServiceDiscoveryStatus": {
+      "name": "Guest OS Services|Discovery Status"
+    },
+    "RunsOnApplicationComponents": {
+      "name": "Application components running on the Virtual Machine"
+    },
+    "SRM Info|ProtectionGroup": {
+      "name": "SRM Info|Protection Group"
+    },
+    "SRM Info|RecoveryPlans": {
+      "name": "SRM Info|Recovery Plans"
+    },
+    "System Properties|businessHours": {
+      "name": "VCF Operations Generated Properties|Business Hours"
+    },
+    "System Properties|host_collector_id": {
+      "name": "VCF Operations Generated Properties|Current Collector ID"
+    },
+    "System Properties|resource_kind_subtype": {
+      "name": "VCF Operations Generated Properties|Object Type Subclassification"
+    },
+    "System Properties|resource_kind_type": {
+      "name": "VCF Operations Generated Properties|Object Type Classification"
+    },
+    "UCPFQDN": {
+      "name": "ARC FQDN"
+    },
+    "UCPVCCOMBI": {
+      "name": "ARC Mapped vCenters"
+    },
+    "VAP Content|Endpoint Content Version": {
+      "name": "Application Remote Collector|Agent Version"
+    },
+    "VAP Content|Server Content Version": {
+      "name": "Application Remote Collector|Version"
+    },
+    "VAP Content|Server Upgrade Required": {
+      "name": "Application Remote Collector|Upgrade Required"
+    },
+    "config|boot_options_efi_secure_boot_enabled": {
+      "name": "Configuration|EFI Secure Boot Enabled"
+    },
+    "config|cpuAllocation|limit": {
+      "name": "Configuration|CPU Resource Allocation|Limit"
+    },
+    "config|cpuAllocation|reservation": {
+      "name": "Configuration|CPU Resource Allocation|Reservation"
+    },
+    "config|cpuAllocation|shares|shares": {
+      "name": "Configuration|CPU Resource Allocation|Shares|Shares"
+    },
+    "config|createDate": {
+      "name": "Configuration|Creation Date"
+    },
+    "config|ctkEnabled": {
+      "name": "Configuration|Changed Block Tracking"
+    },
+    "config|extraConfig|mem_hotadd": {
+      "name": "Configuration|Extra Configuration|Memory Hot Add"
+    },
+    "config|extraConfig|mem_tps_share": {
+      "name": "Configuration|Extra Configuration|VM MEM TPS"
+    },
+    "config|extraConfig|vcpu_hotadd": {
+      "name": "Configuration|Extra Configuration|vCPU Hot Add"
+    },
+    "config|extraConfig|vcpu_hotremove": {
+      "name": "Configuration|Extra Configuration|vCPU Hot Remove"
+    },
+    "config|faultTolerant": {
+      "name": "Configuration|Fault Tolerant"
+    },
+    "config|ft_peer_vm": {
+      "name": "Configuration|FT Peer VM"
+    },
+    "config|ft_role": {
+      "name": "Configuration|FT Role"
+    },
+    "config|guestFullName": {
+      "name": "Configuration|Guest OS from vCenter"
+    },
+    "config|hardware|diskSpace": {
+      "name": "Configuration|Hardware|Disk Space"
+    },
+    "config|hardware|memoryKB": {
+      "name": "Configuration|Hardware|Memory"
+    },
+    "config|hardware|numCoresPerSocket": {
+      "name": "Configuration|Hardware|Number of CPU cores per socket"
+    },
+    "config|hardware|numCpu": {
+      "name": "Configuration|Hardware|Number of virtual CPUs"
+    },
+    "config|hardware|numSockets": {
+      "name": "Configuration|Hardware|Number of virtual sockets"
+    },
+    "config|hardware|thinEnabled": {
+      "name": "Configuration|Hardware|(DEP) Thin Provisioned Disk"
+    },
+    "config|memoryAllocation|limit": {
+      "name": "Configuration|Memory Resource Allocation|Limit"
+    },
+    "config|memoryAllocation|reservation": {
+      "name": "Configuration|Memory Resource Allocation|Reservation"
+    },
+    "config|memoryAllocation|shares|shares": {
+      "name": "Configuration|Memory Resource Allocation|Shares|Shares"
+    },
+    "config|migrateEncryption": {
+      "name": "Configuration|Migrate Encryption"
+    },
+    "config|name": {
+      "name": "Configuration|Name"
+    },
+    "config|numVMDKs": {
+      "name": "Configuration|Number of Virtual Disks"
+    },
+    "config|security|disable_autoinstall": {
+      "name": "Configuration|Security|Deactivate tools auto install (isolation.tools.autoInstall.disable)"
+    },
+    "config|security|disable_console_copy": {
+      "name": "Configuration|Security|Deactivate console copy operations (isolation.tools.copy.disable)"
+    },
+    "config|security|disable_console_dnd": {
+      "name": "Configuration|Security|Deactivate console drag and drop operations (isolation.tools.dnd.disable)"
+    },
+    "config|security|disable_console_paste": {
+      "name": "Configuration|Security|Deactivate console paste operations (isolation.tools.paste.disable)"
+    },
+    "config|security|disable_device_interaction_connect": {
+      "name": "Configuration|Security|Deactivate unauthorized removal, connection of devices (isolation.device.connectable.disable)"
+    },
+    "config|security|disable_device_interaction_edit": {
+      "name": "Configuration|Security|Deactivate unauthorized modification of devices (isolation.device.edit.disable)"
+    },
+    "config|security|disable_disk_shrinking_shrink": {
+      "name": "Configuration|Security|Deactivate virtual disk shrink (isolation.tools.diskShrink.disable)"
+    },
+    "config|security|disable_disk_shrinking_wiper": {
+      "name": "Configuration|Security|Deactivate virtual disk wiper (isolation.tools.diskWiper.disable)"
+    },
+    "config|security|disable_hgfs": {
+      "name": "Configuration|Security|Deactivate HGFS file transfers (isolation.tools.hgfsServerSet.disable)"
+    },
+    "config|security|disable_independent_nonpersistent": {
+      "name": "Configuration|Security|Avoid using independent nonpersistent disks (scsiX:Y.mode)"
+    },
+    "config|security|disable_monitor_control": {
+      "name": "Configuration|Security|Deactivate VM Monitor Control (isolation.monitor.control.disable)"
+    },
+    "config|security|disable_unexposed_features_autologon": {
+      "name": "Configuration|Security|Deactivate unexposed features - autologon (isolation.tools.ghi.autologon.disable)"
+    },
+    "config|security|disable_unexposed_features_biosbbs": {
+      "name": "Configuration|Security|Deactivate unexposed features - biosbbs (isolation.bios.bbs.disable)"
+    },
+    "config|security|disable_unexposed_features_getcreds": {
+      "name": "Configuration|Security|Deactivate unexposed features - getcreds (isolation.tools.getCreds.disable)"
+    },
+    "config|security|disable_unexposed_features_launchmenu": {
+      "name": "Configuration|Security|Deactivate unexposed features - launchmenu (isolation.tools.ghi.launchmenu.change)"
+    },
+    "config|security|disable_unexposed_features_memsfss": {
+      "name": "Configuration|Security|Deactivate unexposed features - memsfss (isolation.tools.memSchedFakeSampleStats.disable)"
+    },
+    "config|security|disable_unexposed_features_protocolhandler": {
+      "name": "Configuration|Security|Deactivate unexposed features - protocolhandler (isolation.tools.ghi.protocolhandler.info.disable)"
+    },
+    "config|security|disable_unexposed_features_shellaction": {
+      "name": "Configuration|Security|Deactivate unexposed features - shellaction (isolation.ghi.host.shellAction.disable)"
+    },
+    "config|security|disable_unexposed_features_toporequest": {
+      "name": "Configuration|Security|Deactivate unexposed features - toporequest (isolation.tools.dispTopoRequest.disable)"
+    },
+    "config|security|disable_unexposed_features_trashfolderstate": {
+      "name": "Configuration|Security|Deactivate unexposed features - trashfolderstate (isolation.tools.trashFolderState.disable)"
+    },
+    "config|security|disable_unexposed_features_trayicon": {
+      "name": "Configuration|Security|Deactivate unexposed features - trayicon (isolation.tools.ghi.trayicon.disable)"
+    },
+    "config|security|disable_unexposed_features_unity": {
+      "name": "Configuration|Security|Deactivate unexposed features - unity (isolation.tools.unity.disable)"
+    },
+    "config|security|disable_unexposed_features_unity_interlock": {
+      "name": "Configuration|Security|Deactivate unexposed features - unity-interlock (isolation.tools.unityInterlockOperation.disable)"
+    },
+    "config|security|disable_unexposed_features_unity_taskbar": {
+      "name": "Configuration|Security|Deactivate unexposed features - unity-taskbar (isolation.tools.unity.taskbar.disable)"
+    },
+    "config|security|disable_unexposed_features_unity_unityactive": {
+      "name": "Configuration|Security|Deactivate unexposed features - unity-unityactive (isolation.tools.unityActive.disable)"
+    },
+    "config|security|disable_unexposed_features_unity_windowcontents": {
+      "name": "Configuration|Security|Deactivate unexposed features - unity-windowcontents (isolation.tools.unity.windowContents.disable)"
+    },
+    "config|security|disable_unexposed_features_unitypush": {
+      "name": "Configuration|Security|Deactivate unexposed features - unitypush (isolation.tools.unity.push.update.disable)"
+    },
+    "config|security|disable_unexposed_features_versionget": {
+      "name": "Configuration|Security|Deactivate unexposed features - versionget (isolation.tools.vmxDnDVersionGet.disable)"
+    },
+    "config|security|disable_unexposed_features_versionset": {
+      "name": "Configuration|Security|Deactivate unexposed features - versionset (isolation.tools.guestDnDVersionSet.disable)"
+    },
+    "config|security|disable_vix_messages": {
+      "name": "Configuration|Security|Deactivate VIX messages from the VM (isolation.tools.vixMessage.disable)"
+    },
+    "config|security|disconnect_devices_cd": {
+      "name": "Configuration|Security|Disconnect CD-ROM"
+    },
+    "config|security|disconnect_devices_floppy": {
+      "name": "Configuration|Security|Disconnect floppy drive"
+    },
+    "config|security|disconnect_devices_parallel": {
+      "name": "Configuration|Security|Disconnect parallel port"
+    },
+    "config|security|disconnect_devices_serial": {
+      "name": "Configuration|Security|Disconnect serial port"
+    },
+    "config|security|disconnect_devices_usb": {
+      "name": "Configuration|Security|Disconnect USB controller"
+    },
+    "config|security|disconnect_devices_virtualahcicontroller": {
+      "name": "Configuration|Security|Virtual AHCI Controller Disconnected"
+    },
+    "config|security|disconnect_devices_virtualensoniq1371": {
+      "name": "Configuration|Security|Virtual Ensoniq 1371 Disconnected"
+    },
+    "config|security|disconnect_devices_virtualhdaudiocard": {
+      "name": "Configuration|Security|Virtual HD Audio Card Disconnected"
+    },
+    "config|security|enable_console_VNC": {
+      "name": "Configuration|Security|Enable access to VM console via VNC protocol (RemoteDisplay.vnc.enabled)"
+    },
+    "config|security|enable_console_gui_options": {
+      "name": "Configuration|Security|Activate console GUI operations (isolation.tools.setGUIOptions.enable)"
+    },
+    "config|security|enable_host_info": {
+      "name": "Configuration|Security|Enable send host information to guests (tools.guestlib.enableHostInfo)"
+    },
+    "config|security|enable_intervm_vmci": {
+      "name": "Configuration|Security|Enable VM-to-VM communication through VMCI (vmci0.unrestricted)"
+    },
+    "config|security|enable_logging": {
+      "name": "Configuration|Security|Enable VM logging (logging)"
+    },
+    "config|security|enable_non_essential_3D_features": {
+      "name": "Configuration|Security|Enable 3D features on Server and desktop virtual machines (mks.enable3d)"
+    },
+    "config|security|enable_vga_only_mode": {
+      "name": "Configuration|Security|Deactivate all but VGA mode on virtual machines (svga.vgaOnly)"
+    },
+    "config|security|limit_console_connection": {
+      "name": "Configuration|Security|Limit number of console connections (RemoteDisplay.maxConnection)"
+    },
+    "config|security|limit_log_number": {
+      "name": "Configuration|Security|Limit number of log files (log.keepOld)"
+    },
+    "config|security|limit_log_size": {
+      "name": "Configuration|Security|Limit log file size (log.rotateSize)"
+    },
+    "config|security|limit_setinfo_size": {
+      "name": "Configuration|Security|Limit VMX file size (tools.setInfo.sizeLimit)"
+    },
+    "config|security|network_filter_enable": {
+      "name": "Configuration|Security|Enable dvfilter network APIs (ethernetX.filterY.name)"
+    },
+    "config|security|pci_device_configured": {
+      "name": "Configuration|Security|PCI PassThrough"
+    },
+    "config|security|tools_guest_desktop_autolock": {
+      "name": "Configuration|Security|Tool Guest Desktop Autolock (tools.guest.desktop.autolock)"
+    },
+    "config|security|vmsafe_cpumem_agentaddress": {
+      "name": "Configuration|Security|VMsafe CPU/memory APIs - IP address (vmsafe.agentAddress)"
+    },
+    "config|security|vmsafe_cpumem_agentport": {
+      "name": "Configuration|Security|VMsafe CPU/memory APIs - port number (vmsafe.agentPort)"
+    },
+    "config|security|vmsafe_cpumem_enable": {
+      "name": "Configuration|Security|Enable VMsafe CPU/memory APIs (vmsafe.enable)"
+    },
+    "config|version": {
+      "name": "Configuration|Version"
+    },
+    "cpu|cpuModel": {
+      "name": "CPU|CPU Model"
+    },
+    "cpu|limit": {
+      "name": "CPU|CPU limit"
+    },
+    "cpu|reservation": {
+      "name": "CPU|CPU reservation"
+    },
+    "cpu|speed": {
+      "name": "CPU|CPU"
+    },
+    "datastore|maxObservedNumberRead": {
+      "name": "Datastore|Highest Observed Number of Read Requests"
+    },
+    "datastore|maxObservedNumberWrite": {
+      "name": "Datastore|Highest Observed Number of Write Requests"
+    },
+    "datastore|maxObservedOIO": {
+      "name": "Datastore|Highest Observed Outstanding Requests"
+    },
+    "datastore|maxObservedRead": {
+      "name": "Datastore|Highest Observed Read Rate"
+    },
+    "datastore|maxObservedWrite": {
+      "name": "Datastore|Highest Observed Write Rate"
+    },
+    "diskspace|snapshot|creator": {
+      "name": "Disk Space|Snapshot|Creator"
+    },
+    "diskspace|snapshot|description": {
+      "name": "Disk Space|Snapshot|Description"
+    },
+    "diskspace|snapshot|mor": {
+      "name": "Disk Space|Snapshot|Managed Object Reference"
+    },
+    "diskspace|snapshot|name": {
+      "name": "Disk Space|Snapshot|Name"
+    },
+    "diskspace|snapshot|numberOfDays": {
+      "name": "Disk Space|Snapshot|Number of Days Old"
+    },
+    "diskspace|snapshot|snapshotAge": {
+      "name": "Disk Space|Snapshot|Age (Days)"
+    },
+    "guestfilesystem|capacity_property": {
+      "name": "Guest File System|Guest File System Capacity Property"
+    },
+    "guestfilesystem|capacity_property_total": {
+      "name": "Guest File System|Total Capacity Property"
+    },
+    "mem|guestOSMemNotCollecting": {
+      "name": "Memory|Guest OS Memory not collecting"
+    },
+    "mem|host_limit": {
+      "name": "Memory|Pod Limit"
+    },
+    "mem|host_reservation": {
+      "name": "Memory|VM Reservation"
+    },
+    "net|default_gateway": {
+      "name": "Network|Default Gateway"
+    },
+    "net|ip_address": {
+      "name": "Network|IP Address"
+    },
+    "net|ipv6_address": {
+      "name": "Network|IPv6 Address"
+    },
+    "net|ipv6_prefix_length": {
+      "name": "Network|IPv6 Prefix Length"
+    },
+    "net|mac_address": {
+      "name": "Network|Mac Address"
+    },
+    "net|nvp_vm_uuid": {
+      "name": "Network|NVP VM UUID"
+    },
+    "net|portGroup": {
+      "name": "Network|Port Group"
+    },
+    "net|subnet_mask": {
+      "name": "Network|Subnet Mask"
+    },
+    "net|uptCompatibilityEnabled": {
+      "name": "Network|Direct Path I/O Status"
+    },
+    "net|vnic_label": {
+      "name": "Network|Label"
+    },
+    "net|vnic_type": {
+      "name": "Network|Virtual NIC Type"
+    },
+    "runtime|memoryCap": {
+      "name": "Runtime|Memory Capacity"
+    },
+    "summary|MOID": {
+      "name": "Summary|MOID"
+    },
+    "summary|UUID": {
+      "name": "Summary|UUID"
+    },
+    "summary|config|appliance": {
+      "name": "Summary|Configuration|(DEP) Appliance"
+    },
+    "summary|config|numEthernetCards": {
+      "name": "Summary|Configuration|Number of NICs"
+    },
+    "summary|config|productName": {
+      "name": "Summary|Configuration|Product Name"
+    },
+    "summary|config|reserved_profile_id": {
+      "name": "Summary|Configuration|Reserved Class Based"
+    },
+    "summary|customTag|customTagValue": {
+      "name": "Summary|Custom Tag|Value"
+    },
+    "summary|datastore": {
+      "name": "Summary|Datastore(s)"
+    },
+    "summary|datastoreClusters": {
+      "name": "Summary|Datastore Cluster(s)"
+    },
+    "summary|folder": {
+      "name": "Summary|vSphere Folder"
+    },
+    "summary|guest|fullName": {
+      "name": "Summary|Guest Operating System|Guest OS from Tools"
+    },
+    "summary|guest|guestFamily": {
+      "name": "Summary|Guest Operating System|Guest Family"
+    },
+    "summary|guest|hostName": {
+      "name": "Summary|Guest Operating System|Hostname"
+    },
+    "summary|guest|ipAddress": {
+      "name": "Summary|Guest Operating System|Guest OS IP Address"
+    },
+    "summary|guest|toolsRunningStatus": {
+      "name": "Summary|Guest Operating System|Tools Running Status"
+    },
+    "summary|guest|toolsVersion": {
+      "name": "Summary|Guest Operating System|Tools Version"
+    },
+    "summary|guest|toolsVersionStatus2": {
+      "name": "Summary|Guest Operating System|Tools Version Status"
+    },
+    "summary|guest|vrealize_operations_agent_id": {
+      "name": "Summary|Guest Operating System|VMware Cloud Foundation Operations Agent ID"
+    },
+    "summary|guest|vrealize_operations_euc_agent_id": {
+      "name": "Summary|Guest Operating System|VMware Cloud Foundation Operations Euc Agent ID"
+    },
+    "summary|parentCluster": {
+      "name": "Summary|Parent Cluster"
+    },
+    "summary|parentDatacenter": {
+      "name": "Summary|Parent Datacenter"
+    },
+    "summary|parentFolder": {
+      "name": "Summary|Parent Folder"
+    },
+    "summary|parentHost": {
+      "name": "Summary|Parent Host"
+    },
+    "summary|parentNamespace": {
+      "name": "Summary|Parent Namespace"
+    },
+    "summary|parentVcenter": {
+      "name": "Summary|Parent vCenter"
+    },
+    "summary|runtime|connectionState": {
+      "name": "Summary|Runtime|Connection State"
+    },
+    "summary|runtime|isIdle": {
+      "name": "Summary|Runtime|Idleness indicator"
+    },
+    "summary|runtime|powerState": {
+      "name": "Summary|Runtime|Power State"
+    },
+    "summary|smbiosUUID": {
+      "name": "Summary|SMBIOS UUID"
+    },
+    "summary|swapOnlyDatastore": {
+      "name": "Summary|Datastore with only swap file"
+    },
+    "summary|tag": {
+      "name": "Summary|vSphere Tag"
+    },
+    "summary|tagJson": {
+      "name": "Summary|vSphere Tag Json"
+    },
+    "sys|notes": {
+      "name": "System|Notes"
+    },
+    "vcm|compscoreupdated": {
+      "name": "VCM|Compliance score updated"
+    },
+    "vcm|template|active": {
+      "name": "VCM|Template|Active"
+    },
+    "vcm|template|checktime": {
+      "name": "VCM|Template|Checktime"
+    },
+    "vcm|template|failedchecks": {
+      "name": "VCM|Template|Failed Checks"
+    },
+    "vcm|template|lastevaluated": {
+      "name": "VCM|Template|Last data collection"
+    },
+    "vcm|template|link": {
+      "name": "VCM|Template|Link"
+    },
+    "vcm|template|mappingname": {
+      "name": "VCM|Template|Mapping name"
+    },
+    "vcm|template|score": {
+      "name": "VCM|Template|Score"
+    },
+    "vcm|template|templatename": {
+      "name": "VCM|Template|Template name"
+    },
+    "vcm|template|totalchecks": {
+      "name": "VCM|Template|Total checks"
+    },
+    "virtualDisk|configuredGB": {
+      "name": "Virtual Disk|Configured Size"
+    },
+    "virtualDisk|datastore": {
+      "name": "Virtual Disk|Datastore"
+    },
+    "virtualDisk|diskMode": {
+      "name": "Virtual Disk|Disk Mode"
+    },
+    "virtualDisk|encryptionStatus": {
+      "name": "Virtual Disk|Encryption Status"
+    },
+    "virtualDisk|fileName": {
+      "name": "Virtual Disk|File Name"
+    },
+    "virtualDisk|iopsLimit": {
+      "name": "Virtual Disk|IOPS Limit"
+    },
+    "virtualDisk|label": {
+      "name": "Virtual Disk|Label"
+    },
+    "virtualDisk|provisioning_type": {
+      "name": "Virtual Disk|Provisioning Type"
+    },
+    "virtualDisk|scsiBusSharing": {
+      "name": "Virtual Disk|SCSI Bus Sharing"
+    },
+    "virtualDisk|scsiController": {
+      "name": "Virtual Disk|Virtual Device Node"
+    },
+    "virtualDisk|scsiControllerType": {
+      "name": "Virtual Disk|SCSI Controller Type"
+    },
+    "virtualDisk|sharing": {
+      "name": "Virtual Disk|Virtual Disk Sharing"
+    },
+    "vsan|policy|compliance": {
+      "name": "vSAN|VM Storage Policies|Compliance"
     }
   },
   "resource_kind": "Pod",

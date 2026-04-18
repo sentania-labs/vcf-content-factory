@@ -145,10 +145,18 @@ class ViewDef:
     # Rendered as a time-interval-selector Control replacing the default 24h window.
     time_window: Optional[ViewTimeWindow] = None
 
-    def validate(self) -> None:
+    def validate(self, enforce_framework_prefix: bool = True) -> None:
         import warnings
         if not self.name.strip():
             raise DashboardValidationError("view: name is required")
+        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
+            src = str(self.source_path) if self.source_path else self.name
+            raise DashboardValidationError(
+                f'{src}: name "{self.name}" missing framework prefix '
+                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
+                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
+                f"bundle content, ensure the bundle manifest sets factory_native: false."
+            )
         if not self.adapter_kind or not self.resource_kind:
             raise DashboardValidationError(
                 f"view {self.name}: adapter_kind and resource_kind required"
@@ -633,9 +641,17 @@ class Dashboard:
     id: str = ""
     source_path: Path | None = None
 
-    def validate(self, known_views: dict[str, ViewDef]) -> None:
+    def validate(self, known_views: dict[str, ViewDef], enforce_framework_prefix: bool = True) -> None:
         if not self.name.strip():
             raise DashboardValidationError("dashboard: name is required")
+        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
+            src = str(self.source_path) if self.source_path else self.name
+            raise DashboardValidationError(
+                f'{src}: name "{self.name}" missing framework prefix '
+                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
+                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
+                f"bundle content, ensure the bundle manifest sets factory_native: false."
+            )
         _supported_types = (
             "ResourceList", "View", "TextDisplay", "Scoreboard", "MetricChart",
             "HealthChart", "ParetoAnalysis", "AlertList", "ProblemAlertsList",
@@ -741,7 +757,7 @@ def _mint_id_into_file(path: Path) -> str:
     return new_id
 
 
-def load_view(path: Path) -> ViewDef:
+def load_view(path: Path, enforce_framework_prefix: bool = True) -> ViewDef:
     try:
         data = _strict_load(path.read_text()) or {}
     except yaml.constructor.ConstructorError as exc:
@@ -878,11 +894,11 @@ def load_view(path: Path) -> ViewDef:
         transformations=transformations,
         time_window=time_window,
     )
-    v.validate()
+    v.validate(enforce_framework_prefix=enforce_framework_prefix)
     return v
 
 
-def load_dashboard(path: Path) -> Dashboard:
+def load_dashboard(path: Path, enforce_framework_prefix: bool = True) -> Dashboard:
     try:
         data = _strict_load(path.read_text()) or {}
     except yaml.constructor.ConstructorError as exc:
@@ -1155,13 +1171,13 @@ def load_dashboard(path: Path) -> Dashboard:
     )
 
 
-def load_all(views_dir: Path, dashboards_dir: Path) -> tuple[list[ViewDef], list[Dashboard]]:
-    views = [load_view(p) for p in sorted(views_dir.rglob("*.y*ml"))] if views_dir.exists() else []
+def load_all(views_dir: Path, dashboards_dir: Path, enforce_framework_prefix: bool = True) -> tuple[list[ViewDef], list[Dashboard]]:
+    views = [load_view(p, enforce_framework_prefix=enforce_framework_prefix) for p in sorted(views_dir.rglob("*.y*ml"))] if views_dir.exists() else []
     by_name = {v.name: v for v in views}
     dashboards: List[Dashboard] = []
     if dashboards_dir.exists():
         for p in sorted(dashboards_dir.rglob("*.y*ml")):
-            d = load_dashboard(p)
-            d.validate(by_name)
+            d = load_dashboard(p, enforce_framework_prefix=enforce_framework_prefix)
+            d.validate(by_name, enforce_framework_prefix=enforce_framework_prefix)
             dashboards.append(d)
     return views, dashboards

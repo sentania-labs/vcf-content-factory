@@ -237,7 +237,7 @@ def _resolve_credentials(args) -> tuple[str, str, str, bool]:
     Returns (host, user, password, verify_ssl).
     Aborts with a clear error if any required value is missing.
     """
-    from vcfops_supermetrics._env import load_dotenv
+    from vcfops_common._env import load_dotenv
     load_dotenv()
 
     import os
