@@ -53,6 +53,7 @@ from xml.etree import ElementTree as ET
 
 from .loader import ManagementPackDef, ObjectTypeDef, MetricDef, SourceDef
 from .render import render_mp_design_json
+from .render_export import render_mpb_exchange_json
 
 # ---------------------------------------------------------------------------
 # Paths relative to this file
@@ -872,6 +873,7 @@ def _zip_mkdir(zf: zipfile.ZipFile, path: str) -> None:
 def _build_adapters_zip(
     mp: ManagementPackDef,
     design_json_str: str,
+    export_json_str: str,
     describe_xml_str: str,
     manifest_str: str,
     pak_resources_props_str: str,
@@ -966,7 +968,13 @@ def _build_adapters_zip(
             )
 
         # conf/ files
+        # design.json — flat factory-grammar format (read by some internal tooling)
         zf.writestr(f"{adapter_dir}/conf/design.json", design_json_str.encode("utf-8"))
+        # export.json — MPB UI exchange format (read by the adapter runtime at
+        # initialization / redescribe; required for adapter kind registration).
+        # Rubrik-1.1.0.25.pak carries BOTH files; absence of export.json is what
+        # caused the silent adapter-kind registration failure on earlier Synology builds.
+        zf.writestr(f"{adapter_dir}/conf/export.json", export_json_str.encode("utf-8"))
         zf.writestr(f"{adapter_dir}/conf/describe.xml", describe_xml_str.encode("utf-8"))
         zf.writestr(
             f"{adapter_dir}/conf/{ak}.properties",
@@ -1029,9 +1037,20 @@ def build_pak(
     pak_name = f"{ak}.{version_str}.pak"
     pak_path = output_dir / pak_name
 
-    # 1. Render design JSON
+    # 1. Render design JSON (flat factory-grammar format)
     design_dict = render_mp_design_json(mp, relationship_strategy=relationship_strategy)
     design_json_str = json.dumps(design_dict, indent=2)
+
+    # 1b. Render export.json (MPB UI exchange format — required by adapter runtime).
+    #
+    #     Root cause of the prior silent adapter-kind registration failure:
+    #     The factory was embedding only design.json (flat format).  The MPB
+    #     adapter runtime reads export.json at initialization (post-install
+    #     redescribe) to register the adapter kind.  The Rubrik reference pak
+    #     carries BOTH files; without export.json the runtime silently skips
+    #     registration and the adapter kind never appears in getIntegrations.
+    export_dict = render_mpb_exchange_json(mp, relationship_strategy=relationship_strategy)
+    export_json_str = json.dumps(export_dict, indent=2)
 
     # 2. Generate describe.xml
     describe_xml_str = _generate_describe_xml(mp)
@@ -1053,6 +1072,7 @@ def build_pak(
     adapters_zip_bytes = _build_adapters_zip(
         mp=mp,
         design_json_str=design_json_str,
+        export_json_str=export_json_str,
         describe_xml_str=describe_xml_str,
         manifest_str=manifest_str,
         pak_resources_props_str=pak_resources_props_str,

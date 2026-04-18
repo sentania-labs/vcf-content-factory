@@ -208,6 +208,35 @@ the factory derives a stable UUID5 from `adapter_kind` per CLAUDE.md §6.
 **Factory support**: `python3 -m vcfops_managementpacks render-export <mp.yaml> --out <output.json>`
 implemented in `vcfops_managementpacks/render_export.py` (2026-04-18).
 
+## Pak conf/ layout — both design.json AND export.json required (2026-04-18)
+
+**Root cause of Synology silent adapter-kind registration failure (2026-04-18).**
+
+The MPB adapter runtime requires BOTH files to be present in `adapters.zip/<adapter_dir>/conf/`:
+
+| File | Format | Read by | Purpose |
+|---|---|---|---|
+| `conf/design.json` | Flat factory-grammar (version/id/name/pakSettings/source/constants/relationships) | Internal MPB tooling / template engine | Design persistence / template |
+| `conf/export.json` | Exchange format (type/design/source/objects/relationships/events/requests) | Adapter runtime at init (post-install redescribe) | **Adapter kind registration** |
+
+The factory was previously writing only `design.json` (flat format, correct content).
+`export.json` was entirely absent. The adapter runtime silently skipped registration —
+pak installed in ~35s vs Rubrik's 100-200s, and `getIntegrations` never showed the adapter kind.
+
+**Confirmed from Rubrik-1.1.0.25.pak (mpb_rubrik_adapter3/conf/):**
+Both files are present. `design.json` uses the flat format; `export.json` uses the exchange format.
+The two files are structurally different — they are NOT the same content in two formats.
+
+**Fix applied 2026-04-18**: `vcfops_managementpacks/builder.py` `build_pak()` now calls
+`render_mpb_exchange_json()` and writes the result to `conf/export.json` alongside the existing
+`conf/design.json`. Both files are required.
+
+**Structural divergences from Rubrik export.json (benign)**:
+- `type` key appears at top level in our output; absent in Rubrik's. Does not break import.
+- `design.design` lacks `id: null` and `author: ""` null/empty placeholders. Equivalent.
+- `source.source` lacks `designId: null`. We strip it as a flat-format-only field. Equivalent.
+- `content: []` key present in Rubrik, absent in ours. Empty list; not required for registration.
+
 ## Source Test Endpoint (2026-04-18 sniffing attempt — NOT FOUND)
 
 **Status**: Source-test endpoint **not located on `/suite-api/`**. Headless

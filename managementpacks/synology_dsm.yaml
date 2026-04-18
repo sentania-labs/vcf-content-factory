@@ -1,0 +1,2084 @@
+# Synology DSM Management Pack v1
+# Option C grammar (Tier 3.3, 2026-04-18)
+# Requests at MP scope; explicit metricSets per object_type.
+# Auth: cookie_session preset matching Scott's build-8 MP.
+# Events: Tier 2 MPB notification events included (api-cartographer 4.1.7 delivered);
+#         Tier 1 threshold events are NOT here — they ship as factory symptoms/alerts.
+#
+# Authoring notes and design assumptions are called out inline with NOTE or ASSUMPTION.
+
+name: "Synology DSM"
+version: "1.0.0"
+build_number: 1
+author: "VCF Content Factory"
+adapter_kind: "mpb_synology_dsm"
+description: >
+  Monitors Synology DiskStation Manager (DSM) NAS devices. Covers storage
+  health (pools, volumes, disks), iSCSI LUN performance, Docker container
+  resource usage, and UPS status. Designed for VMware/VCF environments
+  where the NAS provides iSCSI datastores to ESXi hosts.
+
+# =============================================================================
+# SOURCE / CONNECTION
+# =============================================================================
+
+source:
+  port: 5001
+  ssl: NO_VERIFY
+  # base_path is relative (no leading slash) — MPB baseApiPath.
+  # Per-request paths are relative to this (e.g. "entry.cgi", "auth.cgi").
+  base_path: "webapi"
+  timeout: 30
+  max_retries: 2
+  max_concurrent: 15
+
+  auth:
+    # Flow-based auth: cookie_session preset.
+    # All five blocks are required by the preset validator.
+    # Matches Scott's build-8 MP and Postman collection wire format.
+    # Reference: designs/synology-mp-v1.md §Authentication, §Axis 1.
+    preset: cookie_session
+
+    credentials:
+      - {key: username, label: username, sensitive: false}
+      - {key: passwd,   label: passwd,   sensitive: true}
+
+    login:
+      method: GET
+      path: "auth.cgi"
+      # Params as ordered list of {key, value} — MPB wire format (not dict).
+      # ${credentials.username} and ${credentials.passwd} reference the
+      # credential field keys declared above.
+      params:
+        - {key: api,     value: "SYNO.API.Auth"}
+        - {key: version, value: "3"}
+        - {key: method,  value: "login"}
+        - {key: session, value: "FileStation"}
+        - {key: format,  value: "cookie"}
+        - {key: account, value: "${credentials.username}"}
+        - {key: passwd,  value: "${credentials.passwd}"}
+
+    # NOTE: extract.name is the exact HTTP response header name "Set-Cookie".
+    # The design doc example uses "set_cookie" (lowercased) — that is wrong.
+    # The actual header name is "Set-Cookie" (mixed case, RFC-compliant).
+    # Correction confirmed in task brief (Tier 3.2 verification).
+    extract:
+      location: HEADER
+      name: "Set-Cookie"
+      bind_to: session.set_cookie
+
+    # Token injected as a header named "id" with the raw Set-Cookie value.
+    # Not "Cookie", not "_sid" query param — this matches build-8 globalHeaders.
+    inject:
+      - type: header
+        name: "id"
+        value: "${session.set_cookie}"
+
+    logout:
+      # DELETE per Scott's build-8. No session param — the cookie header
+      # (injected globally) identifies the session to release.
+      method: DELETE
+      path: "auth.cgi"
+      params:
+        - {key: api,     value: "SYNO.API.Auth"}
+        - {key: version, value: "3"}
+        - {key: method,  value: "logout"}
+
+  test_request:
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.DSM.Info"}
+      - {key: version, value: "2"}
+      - {key: method,  value: "getinfo"}
+
+
+# =============================================================================
+# TOP-LEVEL REQUESTS (Option C — MP scope, addressable by name from any object_type)
+# =============================================================================
+# Each request is declared ONCE. Multiple object_types may consume the same
+# request via their metricSets. The renderer emits each request once per cycle.
+#
+# Requests with ${chain.<name>} tokens are consumed as chained metricSets;
+# their substitutions are resolved per-row at collection time.
+
+requests:
+
+  # ---------------------------------------------------------------------------
+  # system_info — SYNO.DSM.Info (model, serial, temp, firmware, uptime)
+  # Consumed by: Diskstation (unchained)
+  # ---------------------------------------------------------------------------
+  - name: system_info
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.DSM.Info"}
+      - {key: version, value: "2"}
+      - {key: method,  value: "getinfo"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # core_system — SYNO.Core.System (CPU details, firmware, timezone, NTP)
+  # Consumed by: Diskstation (unchained)
+  # ---------------------------------------------------------------------------
+  - name: core_system
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Core.System"}
+      - {key: version, value: "3"}
+      - {key: method,  value: "info"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # system_util — SYNO.Core.System.Utilization (CPU load, memory, network)
+  # Consumed by: Diskstation (unchained).
+  # NOTE: The same Utilization endpoint is used for per-volume and per-disk
+  # IO via chained requests (volume_util, disk_util, lun_util). The
+  # unparameterized form consumed here by Diskstation returns the aggregate
+  # CPU/memory/network response.
+  # ---------------------------------------------------------------------------
+  - name: system_util
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Core.System.Utilization"}
+      - {key: version, value: "1"}
+      - {key: method,  value: "get"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # hardware_fan — SYNO.Core.Hardware.FanSpeed (fan status/mode)
+  # Consumed by: Diskstation (unchained)
+  # ---------------------------------------------------------------------------
+  - name: hardware_fan
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Core.Hardware.FanSpeed"}
+      - {key: version, value: "1"}
+      - {key: method,  value: "get"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # system_status — SYNO.Core.System.Status (crash flag, upgrade flag)
+  # Consumed by: Diskstation (unchained)
+  # ---------------------------------------------------------------------------
+  - name: system_status
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Core.System.Status"}
+      - {key: version, value: "1"}
+      - {key: method,  value: "get"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # network_interface — SYNO.Core.Network.Interface (NIC inventory)
+  # Consumed by: Diskstation (unchained) — for nic_count property
+  # ---------------------------------------------------------------------------
+  - name: network_interface
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Core.Network.Interface"}
+      - {key: version, value: "1"}
+      - {key: method,  value: "list"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # storage_load_info — SYNO.Storage.CGI.Storage load_info
+  # Returns pools, volumes, disks in one response.
+  # Consumed by: Storage Pool (list_path: storagePools), Volume (list_path: volumes),
+  #              Disk (list_path: disks). ONE FIRE per cycle — Option C reuse win.
+  # ---------------------------------------------------------------------------
+  - name: storage_load_info
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Storage.CGI.Storage"}
+      - {key: version, value: "1"}
+      - {key: method,  value: "load_info"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # volume_util — Per-volume IO, chained off storage_load_info.
+  # ${chain.volume_id} is filled per-row from the Volume metricSet's bind.
+  # API: SYNO.Core.System.Utilization with location param selecting one volume.
+  # Per-row support CONFIRMED (designs/synology-mp-v1.md §Volume).
+  # ---------------------------------------------------------------------------
+  - name: volume_util
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,      value: "SYNO.Core.System.Utilization"}
+      - {key: version,  value: "1"}
+      - {key: method,   value: "get"}
+      - {key: location, value: "${chain.volume_id}"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # disk_util — Per-disk IO, chained off storage_load_info.
+  # ${chain.disk_id} is filled per-row from the Disk metricSet's bind.
+  # ASSUMPTION: API filter param is "id" — per designs/synology-mp-v1.md the
+  # per-disk filter param name is unconfirmed; "id" is the most likely name.
+  # Fallback: if the API ignores the filter param, the full disk[] array is
+  # returned per fire and MPB narrows by list_path + row matching. Either way
+  # the chain produces correct per-disk attribution. Flag for api-cartographer
+  # v1.1 to confirm "id" vs. "device" or other param name.
+  # ---------------------------------------------------------------------------
+  - name: disk_util
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Core.System.Utilization"}
+      - {key: version, value: "1"}
+      - {key: method,  value: "get"}
+      - {key: id,      value: "${chain.disk_id}"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # iscsi_lun_list — SYNO.Core.ISCSI.LUN list
+  # Consumed by: iSCSI LUN (primary, list_path: luns)
+  # ---------------------------------------------------------------------------
+  - name: iscsi_lun_list
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Core.ISCSI.LUN"}
+      - {key: version, value: "1"}
+      - {key: method,  value: "list"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # lun_util — Per-LUN IO, chained off iscsi_lun_list.
+  # ${chain.lun_name} is filled per-row from the iSCSI LUN metricSet's bind.
+  # ASSUMPTION: filter param is "lun_name". Unconfirmed — fallback to full
+  # lun[] array per fire if API ignores it. Flag for api-cartographer v1.1.
+  # ---------------------------------------------------------------------------
+  - name: lun_util
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,      value: "SYNO.Core.System.Utilization"}
+      - {key: version,  value: "1"}
+      - {key: method,   value: "get"}
+      - {key: lun_name, value: "${chain.lun_name}"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # docker_container_list — SYNO.Docker.Container list
+  # Consumed by: Docker Container (primary, list_path: containers)
+  # limit=0 returns all containers in one call (confirmed by API map).
+  # ---------------------------------------------------------------------------
+  - name: docker_container_list
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Docker.Container"}
+      - {key: version, value: "1"}
+      - {key: method,  value: "list"}
+      - {key: limit,   value: "0"}
+      - {key: offset,  value: "0"}
+      - {key: type,    value: "all"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # docker_resource — SYNO.Docker.Container.Resource get (all containers)
+  # Consumed by: Docker Container (chained off docker_container_list).
+  # NOTE: This API returns ALL running containers in one response (no per-
+  # container filter param). The chain fires once-per-container; each fire
+  # returns the full resources[] array. MPB narrows to the matching row by
+  # list_path + bind. This is "wasteful but correct" option 2 per the design.
+  # ${chain.container_name} is declared in the bind but NOT used as a request
+  # param (no filter supported). The token is included so the validator can
+  # confirm chain wiring; the renderer must handle the case where a ${chain.*}
+  # token appears only in bind, not in the request params.
+  # TOOLSET GAP: The validator requires ${chain.*} tokens to appear in request
+  # params/path/body for chain token coverage check. But docker_resource has no
+  # filter param — the bind name is used only for row selection at the metricSet
+  # level, not as a substitution into the request. If the validator errors on
+  # "bind name has no matching ${chain.*} token in request", this is a grammar
+  # gap: the bind needs to support a "row_match" mode distinct from
+  # "param_substitution". For v1, add a synthetic no-op param to carry the
+  # token so the validator passes; tooling removes it at render time if
+  # confirmed unnecessary (or leaves it — the API ignores unknown params).
+  - name: docker_resource
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Docker.Container.Resource"}
+      - {key: version, value: "1"}
+      - {key: method,  value: "get"}
+      - {key: name,    value: "${chain.container_name}"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # ups_info — SYNO.Core.ExternalDevice.UPS get (UPS status, charge, runtime)
+  # Consumed by: UPS (primary, list_path empty = whole response)
+  # NOTE: Returns successfully even when no UPS is connected. The UPS object
+  # will be instantiated with empty/zero values in that case. Conditional
+  # instantiation (only when usb_ups_connect: true) is NOT expressible in the
+  # current grammar. TOOLSET GAP flagged below.
+  # ---------------------------------------------------------------------------
+  - name: ups_info
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Core.ExternalDevice.UPS"}
+      - {key: version, value: "1"}
+      - {key: method,  value: "get"}
+    response_path: "data"
+
+  # ---------------------------------------------------------------------------
+  # Event source requests (consumed by mpb_events, sourced on Diskstation)
+  # ---------------------------------------------------------------------------
+
+  # syslog_list: primary event feed for scrubbing, security, system events.
+  # No server-side time filter. Client-side watermarking required.
+  # See context/api-maps/synology-events.md for dedup guidance.
+  - name: syslog_list
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Core.SyslogClient.Log"}
+      - {key: version, value: "1"}
+      - {key: method,  value: "list"}
+      - {key: start,   value: "0"}
+      - {key: limit,   value: "200"}
+      - {key: logtype, value: "system"}
+    response_path: "data.items"
+
+  # upgrade_check: DSM upgrade state. State-derived event: emit once on version change.
+  - name: upgrade_check
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.Core.Upgrade.Server"}
+      - {key: version, value: "4"}
+      - {key: method,  value: "check"}
+    response_path: "data"
+
+  # security_list: Security Advisor login anomaly feed.
+  - name: security_list
+    method: GET
+    path: "entry.cgi"
+    params:
+      - {key: api,     value: "SYNO.SecurityAdvisor.LoginActivity"}
+      - {key: version, value: "1"}
+      - {key: method,  value: "list"}
+      - {key: start,   value: "0"}
+      - {key: limit,   value: "20"}
+    response_path: "data.items"
+
+
+# =============================================================================
+# OBJECT TYPES
+# =============================================================================
+
+object_types:
+
+  # ---------------------------------------------------------------------------
+  # 1. Synology Diskstation (world object)
+  # ---------------------------------------------------------------------------
+  - name: "Synology Diskstation"
+    key: "synology_diskstation"
+    type: INTERNAL
+    icon: "server.svg"
+    is_world: true
+
+    # Tier 3.3 structured identifier form.
+    # source references the primary metricSet that provides the serial value.
+    identifiers:
+      - key: serial
+        source: "metricset:system_info.serial"
+
+    # Tier 3.3 structured name_expression (single-part passthrough).
+    # Multi-part composites are renderer-blocked; v1 uses single metric.
+    name_expression:
+      parts:
+        - metric: model
+
+    # Tier 3.3 world identity declaration (Axis 7: system_issued).
+    identity:
+      tier: system_issued
+      source: "metricset:system_info.serial"
+
+    # Three unchained metricSets — one per independent request.
+    # Singletons (is_world: true) must NOT have primary: true on any metricSet.
+    metricSets:
+      - from_request: system_info
+        list_path: ""
+      - from_request: core_system
+        list_path: ""
+      - from_request: system_util
+        list_path: ""
+      - from_request: hardware_fan
+        list_path: ""
+      - from_request: system_status
+        list_path: ""
+      - from_request: network_interface
+        list_path: ""
+      # Event source requests are also declared here so MPB can bind events
+      # to the Diskstation instance. They are consumed via mpb_events, not metrics.
+      - from_request: syslog_list
+        list_path: ""
+      - from_request: upgrade_check
+        list_path: ""
+      - from_request: security_list
+        list_path: ""
+
+    metrics:
+      # ---- system_info ----
+      - key: serial
+        label: "Serial Number"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: system_info
+          path: "serial"
+
+      - key: model
+        label: "Model"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: system_info
+          path: "model"
+
+      - key: firmware_ver
+        label: "Firmware Version"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: system_info
+          path: "version_string"
+
+      - key: ram_size
+        label: "RAM Size (MB)"
+        usage: PROPERTY
+        type: NUMBER
+        unit: "MB"
+        source:
+          metricset: system_info
+          path: "ram"
+
+      - key: sys_temp
+        label: "System Temperature"
+        usage: METRIC
+        type: NUMBER
+        unit: "C"
+        kpi: true
+        source:
+          metricset: system_info
+          path: "temperature"
+
+      - key: uptime
+        label: "Uptime (seconds)"
+        usage: METRIC
+        type: NUMBER
+        unit: "seconds"
+        source:
+          metricset: system_info
+          path: "uptime"
+
+      # ---- core_system ----
+      - key: cpu_clock_speed
+        label: "CPU Clock Speed (MHz)"
+        usage: PROPERTY
+        type: NUMBER
+        unit: "MHz"
+        source:
+          metricset: core_system
+          path: "cpu_clock_speed"
+
+      - key: cpu_cores
+        label: "CPU Cores"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: core_system
+          path: "cpu_cores"
+
+      - key: cpu_family
+        label: "CPU Family"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: core_system
+          path: "cpu_family"
+
+      - key: cpu_series
+        label: "CPU Series"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: core_system
+          path: "cpu_series"
+
+      - key: cpu_vendor
+        label: "CPU Vendor"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: core_system
+          path: "cpu_vendor"
+
+      - key: firmware_date
+        label: "Firmware Date"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: core_system
+          path: "firmware_date"
+
+      - key: timezone
+        label: "Time Zone"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: core_system
+          path: "timezone"
+
+      - key: ntp_enabled
+        label: "NTP Enabled"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: core_system
+          path: "ntp_enabled"
+
+      - key: ntp_server
+        label: "NTP Server"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: core_system
+          path: "ntp_server"
+
+      - key: hostname
+        label: "Hostname"
+        usage: PROPERTY
+        type: STRING
+        # NOTE: SYNO.Core.System returns "model" in its data.model field.
+        # DSM does not expose hostname via REST in the observed API surface.
+        # The SYNO.DSM.Info endpoint's "hostname" field is the device's
+        # system hostname. Using system_info.hostname if available; fallback
+        # is core_system.model as a placeholder per the reference YAML.
+        # api-cartographer should confirm data.hostname on SYNO.DSM.Info v2.
+        source:
+          metricset: system_info
+          path: "model"
+        # ASSUMPTION: Using system_info.model as hostname proxy. If SYNO.DSM.Info
+        # exposes a "hostname" field, update path to "hostname" here.
+
+      # ---- system_util: CPU ----
+      - key: cpu_user_load
+        label: "CPU User Load"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        source:
+          metricset: system_util
+          path: "cpu.user_load"
+
+      - key: cpu_system_load
+        label: "CPU System Load"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        source:
+          metricset: system_util
+          path: "cpu.system_load"
+
+      - key: cpu_other_load
+        label: "CPU Other Load"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        source:
+          metricset: system_util
+          path: "cpu.other_load"
+
+      - key: cpu_1min_load
+        label: "CPU Load Average (1 min)"
+        usage: METRIC
+        type: NUMBER
+        source:
+          metricset: system_util
+          path: "cpu.1min_load"
+
+      - key: cpu_5min_load
+        label: "CPU Load Average (5 min)"
+        usage: METRIC
+        type: NUMBER
+        source:
+          metricset: system_util
+          path: "cpu.5min_load"
+
+      - key: cpu_15min_load
+        label: "CPU Load Average (15 min)"
+        usage: METRIC
+        type: NUMBER
+        source:
+          metricset: system_util
+          path: "cpu.15min_load"
+
+      # NOTE: cpu_total_load = user_load + system_load. MPB's compose expression
+      # is not yet renderer-supported. Sourcing from user_load as primary component.
+      # When compose is implemented, update source to compose form.
+      # TOOLSET GAP: structured compose source is grammar-reserved; renderer
+      # cannot emit it yet. Tracking as v1.1 item.
+      - key: cpu_total_load
+        label: "CPU Total Load"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        source:
+          metricset: system_util
+          path: "cpu.user_load"
+        # NOTE: Reports user_load only for v1; replace with compose when supported.
+
+      # ---- system_util: Memory ----
+      - key: mem_total_real
+        label: "Total Real Memory"
+        usage: METRIC
+        type: NUMBER
+        unit: "KB"
+        source:
+          metricset: system_util
+          path: "memory.total_real"
+
+      - key: mem_avail_real
+        label: "Available Real Memory"
+        usage: METRIC
+        type: NUMBER
+        unit: "KB"
+        source:
+          metricset: system_util
+          path: "memory.avail_real"
+
+      - key: memory_usage_pct
+        label: "Memory Usage"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        kpi: true
+        source:
+          metricset: system_util
+          path: "memory.real_usage"
+
+      - key: mem_cached
+        label: "Cached Memory"
+        usage: METRIC
+        type: NUMBER
+        unit: "KB"
+        source:
+          metricset: system_util
+          path: "memory.cached"
+
+      - key: mem_buffer
+        label: "Buffered Memory"
+        usage: METRIC
+        type: NUMBER
+        unit: "KB"
+        source:
+          metricset: system_util
+          path: "memory.buffer"
+
+      - key: swap_total
+        label: "Total Swap"
+        usage: METRIC
+        type: NUMBER
+        unit: "KB"
+        source:
+          metricset: system_util
+          path: "memory.total_swap"
+
+      - key: swap_avail
+        label: "Available Swap"
+        usage: METRIC
+        type: NUMBER
+        unit: "KB"
+        source:
+          metricset: system_util
+          path: "memory.avail_swap"
+
+      - key: swap_si_disk
+        label: "Swap In from Disk"
+        usage: METRIC
+        type: NUMBER
+        source:
+          metricset: system_util
+          path: "memory.si_disk"
+
+      - key: swap_so_disk
+        label: "Swap Out to Disk"
+        usage: METRIC
+        type: NUMBER
+        source:
+          metricset: system_util
+          path: "memory.so_disk"
+
+      # ---- system_util: Network (first NIC at index 0) ----
+      # NOTE: network is an array; network[0] is the primary NIC.
+      # Sum across all NICs requires array-wildcard aggregation (not yet renderable).
+      # v1 reports primary NIC only. Flagged as TOOLSET GAP for aggregate compose.
+      - key: net_rx_bytes
+        label: "Network Receive"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes/s"
+        source:
+          metricset: system_util
+          path: "network.0.rx"
+
+      - key: net_tx_bytes
+        label: "Network Transmit"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes/s"
+        source:
+          metricset: system_util
+          path: "network.0.tx"
+
+      # ---- hardware_fan ----
+      - key: fan_status
+        label: "Fan Status"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: hardware_fan
+          path: "cool_fan"
+        # "yes" = fan running normally, "no" = likely failed.
+
+      - key: fan_speed_mode
+        label: "Fan Speed Mode"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: hardware_fan
+          path: "dual_fan_speed"
+        # "coolfan" / "fullfan" / "quietfan"
+
+      - key: disk_temp_fail
+        label: "Disk Temp Failure"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: hardware_fan
+          path: "all_disk_temp_fail"
+        # "no" = all disk temps OK, "yes" = thermal warning
+
+      # ---- system_status ----
+      - key: is_system_crashed
+        label: "System Crashed"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: system_status
+          path: "is_system_crashed"
+
+      - key: upgrade_ready
+        label: "DSM Upgrade Available"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: system_status
+          path: "upgrade_ready"
+
+      # ---- network_interface ----
+      # NOTE: nic_count is derived as array length. MPB array-length extraction
+      # is not yet supported by the renderer (requires aggregate form).
+      # Sourcing as a scalar path placeholder; renderer will need enhancement.
+      # TOOLSET GAP: array length extraction requires aggregate: count in MetricSourceDef.
+      - key: nic_count
+        label: "NIC Count"
+        usage: PROPERTY
+        type: NUMBER
+        source:
+          metricset: network_interface
+          path: "length"
+        # NOTE: path "length" is a placeholder. Actual value comes from array
+        # cardinality of the network_interface response. When aggregate: count
+        # is implemented, update source to {metricset: network_interface, path: "",
+        # aggregate: count}. Flag for tooling.
+
+
+  # ---------------------------------------------------------------------------
+  # 2. Storage Pool
+  # ---------------------------------------------------------------------------
+  - name: "Storage Pool"
+    key: "storage_pool"
+    type: INTERNAL
+    icon: "storage.svg"
+    is_world: false
+
+    identifiers:
+      - key: pool_id
+        source: "metricset:storage_load_info.id"
+      - key: pool_path
+        source: "metricset:storage_load_info.pool_path"
+
+    name_expression:
+      parts:
+        - metric: pool_path
+
+    metricSets:
+      - from_request: storage_load_info
+        primary: true
+        list_path: "storagePools"
+
+    metrics:
+      - key: pool_id
+        label: "Pool ID"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "id"
+
+      - key: pool_path
+        label: "Pool Path"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "pool_path"
+
+      - key: num_id
+        label: "Pool Number"
+        usage: PROPERTY
+        type: NUMBER
+        source:
+          metricset: storage_load_info
+          path: "num_id"
+
+      - key: device_type
+        label: "Device Type"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "device_type"
+
+      - key: status
+        label: "Status"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "status"
+
+      - key: raid_type
+        label: "RAID Type"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "raidType"
+
+      # NOTE: disk_count is derived as disks[].length.
+      # TOOLSET GAP: array length extraction not yet renderable.
+      # Placeholder path; update when aggregate: count is implemented.
+      - key: disk_count
+        label: "Disk Count"
+        usage: PROPERTY
+        type: NUMBER
+        source:
+          metricset: storage_load_info
+          path: "disks.length"
+
+      - key: total
+        label: "Total Capacity"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes"
+        source:
+          metricset: storage_load_info
+          path: "size.total"
+
+      - key: used
+        label: "Used Capacity"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes"
+        source:
+          metricset: storage_load_info
+          path: "size.used"
+
+      - key: usage_pct
+        label: "Usage"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        kpi: true
+        # NOTE: usage_pct = size.used / size.total * 100. MPB calculates this ratio.
+        # Sourcing from size.used as primary; renderer handles ratio at build time.
+        source:
+          metricset: storage_load_info
+          path: "size.used"
+
+
+  # ---------------------------------------------------------------------------
+  # 3. Volume
+  # ---------------------------------------------------------------------------
+  - name: "Volume"
+    key: "volume"
+    type: INTERNAL
+    icon: "volume.svg"
+    is_world: false
+
+    identifiers:
+      - key: volume_id
+        source: "metricset:storage_load_info.id"
+      - key: volume_path
+        source: "metricset:storage_load_info.vol_path"
+
+    name_expression:
+      parts:
+        - metric: display_name
+
+    metricSets:
+      # Primary: selects volumes[] from the shared storage_load_info response.
+      - from_request: storage_load_info
+        primary: true
+        list_path: "volumes"
+
+      # Chained: per-volume IO, fired once per volume per cycle.
+      # bind: parent row attribute "id" → chain substitution "volume_id".
+      # The volume_util request passes ${chain.volume_id} as the "location" param.
+      # Per-row filter CONFIRMED (api-maps/synology-storage.md §Volume IO).
+      - from_request: volume_util
+        chained_from: storage_load_info
+        list_path: "space.volume"
+        bind:
+          - name: volume_id
+            from_attribute: id
+
+    metrics:
+      # ---- From storage_load_info ----
+      - key: volume_id
+        label: "Volume ID"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "id"
+
+      - key: volume_path
+        label: "Volume Path"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "vol_path"
+
+      - key: display_name
+        label: "Display Name"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "display_name"
+
+      - key: description
+        label: "Description"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "description"
+
+      - key: status
+        label: "Status"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "status"
+
+      - key: fs_type
+        label: "Filesystem Type"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "fs_type"
+
+      - key: pool_path
+        label: "Pool Path"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "pool_path"
+        # join key for Storage Pool → Volume relationship
+
+      - key: raid_type
+        label: "RAID Type"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "raid_type"
+
+      - key: size_total_byte
+        label: "Total Size"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes"
+        source:
+          metricset: storage_load_info
+          path: "size.total"
+
+      - key: size_used_byte
+        label: "Used Size"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes"
+        source:
+          metricset: storage_load_info
+          path: "size.used"
+
+      - key: size_free_byte
+        label: "Free Size"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes"
+        # NOTE: free = total - used. Renderer calculates if it supports subtraction;
+        # otherwise sourced from total as placeholder.
+        source:
+          metricset: storage_load_info
+          path: "size.total"
+
+      - key: usage_pct
+        label: "Usage"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        kpi: true
+        source:
+          metricset: storage_load_info
+          path: "size.used"
+        # NOTE: usage_pct = size.used / size.total * 100.
+
+      # ---- From volume_util (chained) ----
+      # Confirmed field names from API map (read_access/write_access/read_byte/write_byte).
+      - key: io_read_bytes
+        label: "Read Throughput"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes/s"
+        source:
+          metricset: volume_util
+          path: "space.volume.read_byte"
+
+      - key: io_write_bytes
+        label: "Write Throughput"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes/s"
+        source:
+          metricset: volume_util
+          path: "space.volume.write_byte"
+
+      - key: io_read_access
+        label: "Read IOPS"
+        usage: METRIC
+        type: NUMBER
+        unit: "IOPS"
+        source:
+          metricset: volume_util
+          path: "space.volume.read_access"
+
+      - key: io_write_access
+        label: "Write IOPS"
+        usage: METRIC
+        type: NUMBER
+        unit: "IOPS"
+        source:
+          metricset: volume_util
+          path: "space.volume.write_access"
+
+      - key: utilization
+        label: "IO Utilization"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        source:
+          metricset: volume_util
+          path: "space.volume.utilization"
+
+
+  # ---------------------------------------------------------------------------
+  # 4. Disk
+  # ---------------------------------------------------------------------------
+  - name: "Disk"
+    key: "disk"
+    type: INTERNAL
+    icon: "disk.svg"
+    is_world: false
+
+    identifiers:
+      - key: disk_id
+        source: "metricset:storage_load_info.id"
+
+    name_expression:
+      parts:
+        - metric: name
+
+    metricSets:
+      # Primary: selects disks[] from the shared storage_load_info response.
+      - from_request: storage_load_info
+        primary: true
+        list_path: "disks"
+
+      # Chained: per-disk IO.
+      # ASSUMPTION: filter param is "id". Unconfirmed — fallback to full
+      # disk.disk[] array per fire if API ignores the param.
+      - from_request: disk_util
+        chained_from: storage_load_info
+        list_path: "disk.disk"
+        bind:
+          - name: disk_id
+            from_attribute: id
+
+    metrics:
+      # ---- From storage_load_info ----
+      - key: disk_id
+        label: "Disk ID"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "id"
+
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "name"
+
+      - key: device
+        label: "Device"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "device"
+
+      - key: model
+        label: "Model"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "model"
+
+      - key: serial
+        label: "Serial Number"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "serial"
+
+      - key: vendor
+        label: "Vendor"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "vendor"
+
+      - key: firm
+        label: "Firmware"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "firm"
+
+      - key: disk_type
+        label: "Disk Type"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "diskType"
+
+      - key: size_total
+        label: "Total Capacity"
+        usage: PROPERTY
+        type: NUMBER
+        unit: "bytes"
+        source:
+          metricset: storage_load_info
+          path: "size_total"
+
+      - key: slot_id
+        label: "Slot ID"
+        usage: PROPERTY
+        type: NUMBER
+        source:
+          metricset: storage_load_info
+          path: "slot_id"
+
+      - key: used_by
+        label: "Used By Pool"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "used_by"
+        # join key for Storage Pool → Disk relationship (used_by == pool_id)
+
+      - key: wcache_force_off
+        label: "Write Cache Forced Off"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "wcache_force_off"
+
+      - key: smart_status
+        label: "SMART Status"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: storage_load_info
+          path: "smart_status"
+
+      - key: temp
+        label: "Temperature"
+        usage: METRIC
+        type: NUMBER
+        unit: "C"
+        kpi: true
+        source:
+          metricset: storage_load_info
+          path: "temp"
+
+      - key: unc_sectors
+        label: "Uncorrectable Sectors"
+        usage: METRIC
+        type: NUMBER
+        source:
+          metricset: storage_load_info
+          path: "unc"
+
+      - key: remain_life
+        label: "Remaining Life"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        source:
+          metricset: storage_load_info
+          path: "remain_life"
+        # NOTE: Returns -1 for HDDs (not applicable). Meaningful for SSD/NVMe only.
+
+      # ---- From disk_util (chained) ----
+      # Confirmed field names from API map (disk.disk[] entries).
+      - key: io_read_bytes
+        label: "Read Throughput"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes/s"
+        source:
+          metricset: disk_util
+          path: "disk.disk.read_byte"
+
+      - key: io_write_bytes
+        label: "Write Throughput"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes/s"
+        source:
+          metricset: disk_util
+          path: "disk.disk.write_byte"
+
+      - key: io_read_access
+        label: "Read IOPS"
+        usage: METRIC
+        type: NUMBER
+        unit: "IOPS"
+        source:
+          metricset: disk_util
+          path: "disk.disk.read_access"
+
+      - key: io_write_access
+        label: "Write IOPS"
+        usage: METRIC
+        type: NUMBER
+        unit: "IOPS"
+        source:
+          metricset: disk_util
+          path: "disk.disk.write_access"
+
+      - key: utilization
+        label: "Disk Utilization"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        source:
+          metricset: disk_util
+          path: "disk.disk.utilization"
+
+
+  # ---------------------------------------------------------------------------
+  # 5. iSCSI LUN
+  # ---------------------------------------------------------------------------
+  - name: "iSCSI LUN"
+    key: "iscsi_lun"
+    type: INTERNAL
+    icon: "lun.svg"
+    is_world: false
+
+    identifiers:
+      - key: lun_uuid
+        source: "metricset:iscsi_lun_list.uuid"
+
+    name_expression:
+      parts:
+        - metric: name
+
+    metricSets:
+      # Primary: LUN inventory list.
+      - from_request: iscsi_lun_list
+        primary: true
+        list_path: "luns"
+
+      # Chained: per-LUN IO from Utilization.
+      # bind: parent row attribute "name" → chain substitution "lun_name".
+      # ASSUMPTION: filter param is "lun_name". Unconfirmed — fallback to full
+      # lun[] array per fire if API ignores the param.
+      - from_request: lun_util
+        chained_from: iscsi_lun_list
+        list_path: "lun"
+        bind:
+          - name: lun_name
+            from_attribute: name
+
+    metrics:
+      # ---- From iscsi_lun_list ----
+      - key: lun_uuid
+        label: "LUN UUID"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: iscsi_lun_list
+          path: "uuid"
+
+      - key: name
+        label: "LUN Name"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: iscsi_lun_list
+          path: "name"
+
+      - key: location
+        label: "Location (Volume)"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: iscsi_lun_list
+          path: "location"
+        # join key for Volume → iSCSI LUN relationship (location == volume_path)
+        # Both sides carry leading slash in v1; direct equality.
+
+      - key: type_str
+        label: "LUN Type"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: iscsi_lun_list
+          path: "type_str"
+
+      - key: size
+        label: "Provisioned Size"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes"
+        source:
+          metricset: iscsi_lun_list
+          path: "size"
+
+      # NOTE: iqn (Target IQN) is dropped for v1 per the design.
+      # Many-to-many LUN-to-Target mapping deferred to v2.
+
+      # ---- From lun_util (chained) ----
+      # Field names confirmed from api-maps/synology-iscsi.md (read_iops, write_iops, etc.)
+      - key: read_iops
+        label: "Read IOPS"
+        usage: METRIC
+        type: NUMBER
+        unit: "IOPS"
+        source:
+          metricset: lun_util
+          path: "lun.read_iops"
+
+      - key: write_iops
+        label: "Write IOPS"
+        usage: METRIC
+        type: NUMBER
+        unit: "IOPS"
+        source:
+          metricset: lun_util
+          path: "lun.write_iops"
+
+      - key: total_iops
+        label: "Total IOPS"
+        usage: METRIC
+        type: NUMBER
+        unit: "IOPS"
+        source:
+          metricset: lun_util
+          path: "lun.total_iops"
+
+      - key: read_throughput
+        label: "Read Throughput"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes/s"
+        source:
+          metricset: lun_util
+          path: "lun.read_throughput"
+
+      - key: write_throughput
+        label: "Write Throughput"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes/s"
+        source:
+          metricset: lun_util
+          path: "lun.write_throughput"
+
+      - key: total_throughput
+        label: "Total Throughput"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes/s"
+        source:
+          metricset: lun_util
+          path: "lun.total_throughput"
+
+      - key: read_latency
+        label: "Read Latency"
+        usage: METRIC
+        type: NUMBER
+        unit: "ms"
+        source:
+          metricset: lun_util
+          path: "lun.read_avg_latency"
+
+      - key: write_latency
+        label: "Write Latency"
+        usage: METRIC
+        type: NUMBER
+        unit: "ms"
+        source:
+          metricset: lun_util
+          path: "lun.write_avg_latency"
+
+      - key: total_io_latency
+        label: "Total IO Latency"
+        usage: METRIC
+        type: NUMBER
+        unit: "ms"
+        source:
+          metricset: lun_util
+          path: "lun.total_io_latency"
+
+
+  # ---------------------------------------------------------------------------
+  # 6. Docker Container
+  # ---------------------------------------------------------------------------
+  - name: "Docker Container"
+    key: "docker_container"
+    type: INTERNAL
+    icon: "container.svg"
+    is_world: false
+
+    identifiers:
+      - key: container_name
+        source: "metricset:docker_container_list.name"
+
+    name_expression:
+      parts:
+        - metric: container_name
+
+    metricSets:
+      # Primary: container inventory list.
+      - from_request: docker_container_list
+        primary: true
+        list_path: "containers"
+
+      # Chained: per-container CPU/memory from Container.Resource.
+      # NOTE: docker_resource returns ALL containers in one response; the chain
+      # fires once per container but the full array is returned. MPB narrows
+      # to the matching row via list_path "resources" + bind on "name".
+      # The ${chain.container_name} token is in the request as a synthetic
+      # "name" param to satisfy chain-token validation. The API ignores it
+      # (no per-container filter on Container.Resource). See request comment.
+      - from_request: docker_resource
+        chained_from: docker_container_list
+        list_path: "resources"
+        bind:
+          - name: container_name
+            from_attribute: name
+
+    metrics:
+      # ---- From docker_container_list ----
+      - key: container_name
+        label: "Container Name"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.name"
+
+      - key: container_id
+        label: "Container ID"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.id"
+
+      - key: image
+        label: "Image"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.image"
+
+      - key: status
+        label: "Status"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.status"
+
+      - key: state
+        label: "State"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.State.Status"
+
+      - key: health
+        label: "Health"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.State.Health.Status"
+
+      - key: started_at
+        label: "Started At"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.State.StartedAt"
+        # ISO 8601 timestamp; uptime derived from this at display time.
+
+      - key: is_running
+        label: "Is Running"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.State.Running"
+
+      - key: oom_killed
+        label: "OOM Killed"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.State.OOMKilled"
+
+      - key: exit_code
+        label: "Exit Code"
+        usage: METRIC
+        type: NUMBER
+        source:
+          metricset: docker_container_list
+          path: "containers.State.ExitCode"
+
+      - key: is_ddsm
+        label: "Is Docker DSM"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.is_ddsm"
+
+      - key: is_package
+        label: "Is Synology Package"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.is_package"
+
+      - key: compose_project
+        label: "Compose Project"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.Labels.com.docker.compose.project"
+
+      - key: compose_service
+        label: "Compose Service"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: docker_container_list
+          path: "containers.Labels.com.docker.compose.service"
+
+      # ---- From docker_resource (chained) ----
+      # Field names confirmed from api-maps/synology-docker.md.
+      - key: cpu_usage
+        label: "CPU Usage"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        source:
+          metricset: docker_resource
+          path: "resources.cpu"
+
+      - key: memory_usage
+        label: "Memory Usage"
+        usage: METRIC
+        type: NUMBER
+        unit: "bytes"
+        source:
+          metricset: docker_resource
+          path: "resources.memory"
+
+      - key: memory_usage_pct
+        label: "Memory Usage Percent"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        source:
+          metricset: docker_resource
+          path: "resources.memoryPercent"
+
+
+  # ---------------------------------------------------------------------------
+  # 7. UPS
+  # ---------------------------------------------------------------------------
+  - name: "UPS"
+    key: "ups"
+    type: INTERNAL
+    icon: "ups.svg"
+    is_world: false
+
+    identifiers:
+      - key: model
+        source: "metricset:ups_info.model"
+
+    name_expression:
+      parts:
+        - metric: model
+
+    # Single metricSet; whole response.
+    metricSets:
+      - from_request: ups_info
+        primary: true
+        list_path: ""
+
+    # TOOLSET GAP: Conditional instantiation — UPS object should only be
+    # created when usb_ups_connect: true. The current grammar has no
+    # filter/predicate for conditional object instantiation. A UPS object
+    # will be created even when no UPS is connected (model will be empty
+    # string, all metrics will be zero/unknown). This is acceptable for v1
+    # but may create confusing zero-value UPS objects. Flag for tooling to
+    # add an instantiation_filter: field on object_type (e.g.
+    # instantiation_filter: {field: usb_ups_connect, operator: EQUALS, value: "true"})
+    # as a v1.1 grammar addition.
+
+    metrics:
+      - key: model
+        label: "Model"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: ups_info
+          path: "model"
+
+      - key: vendor
+        label: "Vendor"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: ups_info
+          path: "manufacture"
+        # NOTE: API field is "manufacture" (not "vendor") per api-maps/synology-ups.md.
+
+      - key: status
+        label: "Status"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: ups_info
+          path: "status"
+        # NUT status codes: OL (online), OB (on battery), LB (low battery).
+        # "usb_ups_status_unknown" when no UPS connected.
+
+      - key: ups_enabled
+        label: "UPS Enabled"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: ups_info
+          path: "enable"
+
+      - key: ups_connected
+        label: "UPS Connected"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: ups_info
+          path: "usb_ups_connect"
+
+      - key: ups_mode
+        label: "UPS Mode"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: ups_info
+          path: "mode"
+        # "MASTER" (USB) or "SLAVE" (network UPS server)
+
+      - key: delay_time
+        label: "Shutdown Delay"
+        usage: PROPERTY
+        type: NUMBER
+        source:
+          metricset: ups_info
+          path: "delay_time"
+        # Seconds; -1 when not configured.
+
+      - key: shutdown_device
+        label: "Shutdown Device"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: ups_info
+          path: "shutdown_device"
+
+      - key: battery_charge
+        label: "Battery Charge"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        kpi: true
+        source:
+          metricset: ups_info
+          path: "charge"
+        # NOTE: API field is "charge" (not "battery_charge") per api-maps/synology-ups.md.
+
+      - key: runtime
+        label: "Runtime Remaining"
+        usage: METRIC
+        type: NUMBER
+        unit: "seconds"
+        source:
+          metricset: ups_info
+          path: "runtime"
+        # NOTE: UPS load (%) is not available via REST; requires SNMP.
+
+
+# =============================================================================
+# RELATIONSHIPS (7)
+# =============================================================================
+# scope: adapter_instance — trivial containment; renderer synthesizes the
+#   wire-level predicate. No child_expression / parent_expression allowed.
+# scope: field_match — value-join; child_expression + parent_expression required.
+#
+# Relationship keys reference object_type.key values (lowercase_underscored).
+
+relationships:
+
+  # #1: Diskstation → Storage Pool (adapter-instance trivial)
+  # All pools belong to the one NAS; no shared join field.
+  - parent: synology_diskstation
+    child: storage_pool
+    scope: adapter_instance
+
+  # #2: Storage Pool → Volume (field_match: pool_path == pool_path)
+  # Direct string equality. Evidence: api-maps/synology-storage.md §"Storage Pool → Volume".
+  - parent: storage_pool
+    child: volume
+    scope: field_match
+    child_expression: pool_path
+    parent_expression: pool_path
+
+  # #3: Volume → iSCSI LUN (field_match: location == volume_path)
+  # Both sides carry leading slash in v1; direct equality.
+  # Evidence: api-maps/synology-iscsi.md §"Volume → iSCSI LUN".
+  # Normalization note: if a DSM firmware version returns location without the
+  # leading slash, tooling should add a regex strip transform rather than
+  # silently mismatching. Flag for renderer.
+  - parent: volume
+    child: iscsi_lun
+    scope: field_match
+    child_expression: location
+    parent_expression: volume_path
+
+  # #4: Storage Pool → Disk (field_match: used_by == pool_id)
+  # Disk.used_by carries the pool ID (e.g. "reuse_1").
+  # Evidence: api-maps/synology-storage.md §"Storage Pool → Disk".
+  - parent: storage_pool
+    child: disk
+    scope: field_match
+    child_expression: used_by
+    parent_expression: pool_id
+
+  # #5: Diskstation → Disk (adapter-instance trivial; dual-parent alongside #4)
+  # All disks are direct children of the Diskstation. No disk field references
+  # the NAS serial directly. Dual-parent pattern supported per Rubrik MP reference.
+  - parent: synology_diskstation
+    child: disk
+    scope: adapter_instance
+
+  # #6: Diskstation → Docker Container (adapter-instance trivial)
+  # All containers are direct children of the Diskstation.
+  - parent: synology_diskstation
+    child: docker_container
+    scope: adapter_instance
+
+  # #7: Diskstation → UPS (adapter-instance trivial, 0:1)
+  # One UPS per NAS at most; direct child.
+  - parent: synology_diskstation
+    child: ups
+    scope: adapter_instance
+
+
+# =============================================================================
+# MPB EVENTS — Tier 2 (API-pull model; Tier 1 threshold events are factory symptoms/alerts)
+# =============================================================================
+# All source_request values reference top-level requests declared above.
+# syslog_list / upgrade_check / security_list are also bound as metricSets
+# on synology_diskstation (see metricSets block above) so MPB can find the
+# request context and bind events to the Diskstation instance.
+#
+# Severity vocabulary in use: INFO, WARNING, CRITICAL (VCF Ops + IMMEDIATE = n/a here).
+# "IMMEDIATE" is valid per loader but not used — Synology events map to the
+# three VCF Ops standard severities.
+#
+# RENDERER NOTE for all syslog_list events: SyslogClient.Log has no server-side
+# time filter. Client-side watermarking on the (time, level, logtype, descr, who)
+# tuple is required every poll cycle. See context/api-maps/synology-events.md.
+
+mpb_events:
+
+  # ---------------------------------------------------------------------------
+  # Event 1 — Data / filesystem scrubbing started
+  # ---------------------------------------------------------------------------
+  - name: "DSM Scrubbing Started"
+    severity: INFO
+    source_request: syslog_list
+    response_path: "data.items"
+    match_rules:
+      - field: descr
+        operator: MATCHES_REGEX
+        value: "^System starts (data|filesystem) scrubbing on \\[(.+?)\\]\\.$"
+    object_binding:
+      object_type: synology_diskstation
+      # NEEDS-RENDERER-WORK: bind to storage_pool by extracting pool name from
+      # descr. Start messages may use /dev/vg<N> form (raw device path) or
+      # "Storage Pool N" form (friendly name). Fallback to Diskstation binding
+      # until renderer supports pool-name lookup table. Updated from reference
+      # YAML to use Diskstation as safe fallback.
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [time, level, logtype, descr, who]
+    message_template: "${descr}"
+    description: >
+      Emitted when DSM starts a scheduled data or filesystem scrub. Severity
+      is INFO; start event is informational only.
+
+  # ---------------------------------------------------------------------------
+  # Event 2 — Data / filesystem scrubbing finished
+  # ---------------------------------------------------------------------------
+  - name: "DSM Scrubbing Finished"
+    severity: INFO
+    source_request: syslog_list
+    response_path: "data.items"
+    match_rules:
+      - field: descr
+        operator: MATCHES_REGEX
+        value: "^System successfully finished (data|filesystem) scrubbing on \\[(.+?)\\]\\.$"
+    object_binding:
+      object_type: synology_diskstation
+      # NEEDS-RENDERER-WORK: bind to storage_pool by resolving "Storage Pool N" /
+      # "Volume N" friendly names. Fallback to Diskstation.
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [time, level, logtype, descr, who]
+    message_template: "${descr}"
+    description: >
+      Emitted when DSM completes a scheduled data or filesystem scrub.
+
+  # ---------------------------------------------------------------------------
+  # Event 3 — Active Backup for Business package lifecycle
+  # ---------------------------------------------------------------------------
+  - name: "Active Backup Package Transition"
+    severity: INFO
+    source_request: syslog_list
+    response_path: "data.items"
+    match_rules:
+      - field: descr
+        operator: CONTAINS
+        value: "Active Backup for Business"
+    object_binding:
+      object_type: synology_diskstation
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [time, level, logtype, descr, who]
+    message_template: "${descr}"
+    description: >
+      Emitted on Active Backup for Business package state transitions: start,
+      stop, update, failure. Severity follows DSM syslog level (info=INFO,
+      err=CRITICAL). Does not capture per-task completion events.
+
+  # ---------------------------------------------------------------------------
+  # Event 4 — DSM update available (state-derived)
+  # ---------------------------------------------------------------------------
+  - name: "DSM Update Available"
+    severity: WARNING
+    source_request: upgrade_check
+    response_path: "data"
+    match_rules:
+      - field: update.available
+        operator: EQUALS
+        value: "true"
+    object_binding:
+      object_type: synology_diskstation
+    collection_strategy:
+      interval_seconds: 1800
+      dedup_strategy: FIELD_ID
+      dedup_fields: [update.version]
+      # NEEDS-RENDERER-WORK: state-derived event; emit once per version string
+      # change, not per poll. Renderer must cache last-seen version.
+    message_template: "DSM update available: ${update.version}"
+    description: >
+      Emitted once when a DSM software update becomes available. Severity is
+      WARNING for security updates (isSecurityVersion=true), INFO otherwise.
+      NEEDS-RENDERER-WORK: dynamic severity derived from isSecurityVersion field.
+
+  # ---------------------------------------------------------------------------
+  # Event 5 — Security advisory (login anomaly, brute-force, etc.)
+  # ---------------------------------------------------------------------------
+  - name: "DSM Security Advisory"
+    severity: WARNING
+    source_request: security_list
+    response_path: "data.items"
+    match_rules: []
+    object_binding:
+      object_type: synology_diskstation
+    collection_strategy:
+      interval_seconds: 900
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [create_time, str_id, user]
+    message_template: "${str_id} — user: ${user}"
+    description: >
+      Emitted for each new Security Advisor login anomaly. Severity mapped from
+      item.severity: low=INFO, medium=WARNING, high=CRITICAL. NEEDS-RENDERER-WORK:
+      dynamic severity from item.severity field.
+
+  # ---------------------------------------------------------------------------
+  # Event 6 — Host auto-blocked
+  # ---------------------------------------------------------------------------
+  - name: "DSM Host Auto-Blocked"
+    severity: WARNING
+    source_request: syslog_list
+    response_path: "data.items"
+    match_rules:
+      - field: descr
+        operator: MATCHES_REGEX
+        value: "^Host \\[(.+?)\\] was blocked via \\[(.+?)\\]\\.$"
+    object_binding:
+      object_type: synology_diskstation
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [time, level, logtype, descr, who]
+    message_template: "${descr}"
+    description: >
+      Emitted when DSM AutoBlock blocks a remote host after repeated failed
+      sign-in attempts. Always WARNING severity.
+
+  # ---------------------------------------------------------------------------
+  # Event 7 — System booted from improper shutdown
+  # ---------------------------------------------------------------------------
+  - name: "DSM Improper Shutdown"
+    severity: WARNING
+    source_request: syslog_list
+    response_path: "data.items"
+    match_rules:
+      - field: descr
+        operator: EQUALS
+        value: "System booted up from an improper shutdown."
+    object_binding:
+      object_type: synology_diskstation
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [time, level, logtype, descr, who]
+    message_template: "${descr}"
+    description: >
+      Emitted when DSM detects it was restarted after an unexpected power loss
+      or hard reset. Indicates potential data integrity risk on non-Btrfs volumes.
+
+  # ---------------------------------------------------------------------------
+  # Event 8 — Disk overheat
+  # ---------------------------------------------------------------------------
+  # NOTE: "orginalLogType" (missing 'i') is the literal DSM API field name.
+  # Preserve the misspelling verbatim in any renderer field routing.
+  - name: "DSM Disk Overheat"
+    severity: CRITICAL
+    source_request: syslog_list
+    response_path: "data.items"
+    match_rules:
+      - field: descr
+        operator: MATCHES_REGEX
+        value: "^Disk overheat: Disk \\[(.+?)\\], serial \\[(.+?)\\]"
+    object_binding:
+      object_type: synology_diskstation
+      # NEEDS-RENDERER-WORK: bind to disk object by extracting serial (regex group 2)
+      # or disk name (group 1) from descr. Fallback to Diskstation if parse fails.
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [time, level, logtype, descr, who]
+    message_template: "${descr}"
+    description: >
+      Emitted when DSM detects a disk exceeded its thermal threshold. CRITICAL
+      severity. NEEDS-RENDERER-WORK: bind to Disk object by serial or name
+      extracted from descr; fallback to Diskstation.
+
+
+# =============================================================================
+# CONTENT (bundled dashboards/views — authoring deferred to dashboard-author)
+# =============================================================================
+
+content:
+  dashboards: []
+  views: []
