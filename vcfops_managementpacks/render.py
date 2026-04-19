@@ -1153,21 +1153,42 @@ def _render_one_object(
         #         a chained request iterates from).  ms.primary == True marks
         #         this metricSet.
         #       * All other metricSets (chained, ms.primary == False) must carry
-        #         a non-null objectBinding.  We bind to the @@@id synthetic
-        #         attribute on the chained metricSet's own DML — it is the only
-        #         positional identity available when the API response does not
-        #         echo back the parent identifier.
+        #         a non-null objectBinding.
         #
-        # For chained metricSets the semantic correlation is already established
-        # via chainingSettings (MPB knows which parent row triggered this call).
-        # The objectBinding here satisfies the MPB validator's non-null requirement;
-        # the actual instance-to-row correlation uses the chain parameters.
+        # For chained metricSets, objectBinding.matchExpression must use
+        # originType: "PARAMETER" pointing at chainingSettings.params[0].id.
+        # This mirrors the Rubrik reference design (Rubrik MP Design.json,
+        # objects[0].object.metricSets[1]) where the expressionPart that
+        # carries the per-row identity anchor uses:
+        #   originId   = chainingSettings.params[0].id   (the param's own ID)
+        #   originType = "PARAMETER"
+        #   label      = params[0].key                   (e.g. "volume_id")
+        # The earlier ATTRIBUTE/@@@id approach was synthesizing a placeholder
+        # that MPB rejects at design-validation time — @@@id is not a real
+        # attribute in this context and MPB cannot resolve it.
         object_binding: Optional[Dict] = None
         if not ot.is_world and not ms_def.primary and ms_def.chained_from is not None:
             # Chained list metricSet: must have non-null objectBinding.
-            # Use @@@id from this metricSet's own DML (always present on
-            # wildcard-iteration DMls per _ensure_dml).
-            at_id_origin = f"{req_info.id}-{dml_id}-@@@id"
+            # Source the identity anchor from the chain parameter, not a
+            # synthetic @@@id attribute.
+            chain_settings = req_info._chaining_settings
+            if chain_settings and chain_settings.get("params"):
+                param = chain_settings["params"][0]
+                param_origin_id = param["id"]
+                param_label = param["key"]
+            else:
+                # Defensive fallback: chainingSettings not yet set or empty.
+                # This should not occur because _render_requests runs before
+                # _render_objects, but guard to avoid a silent crash.
+                logger.warning(
+                    "Object '%s' metricSet '%s': chainingSettings not set on "
+                    "child request at objectBinding build time; "
+                    "falling back to @@@id (will likely fail MPB validation).",
+                    ot.key, ms.local_name,
+                )
+                param_origin_id = f"{req_info.id}-{dml_id}-@@@id"
+                param_label = "@@@id"
+
             ob_seed = f"{obj_seed}:metricSet:{ms.local_name}:objectBinding"
             ob_part_id = _make_id(f"{ob_seed}::part")
             ob_expr_id = _make_id(f"{ob_seed}::expr")
@@ -1179,11 +1200,11 @@ def _render_one_object(
                     "expressionParts": [
                         {
                             "id": ob_part_id,
-                            "label": "@@@id",
+                            "label": param_label,
                             "regex": None,
                             "example": "",
-                            "originId": at_id_origin,
-                            "originType": "ATTRIBUTE",
+                            "originId": param_origin_id,
+                            "originType": "PARAMETER",
                             "regexOutput": "",
                         }
                     ],
