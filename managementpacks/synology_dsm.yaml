@@ -331,45 +331,10 @@ requests:
     response_path: "data"
 
   # ---------------------------------------------------------------------------
-  # Event source requests (consumed by mpb_events, sourced on Diskstation)
+  # Event source requests (syslog_list, upgrade_check, security_list) removed.
+  # Tier 2 events deferred to v1.1 pending renderer support for severity
+  # mapping / message binding / object-binding anchor properties.
   # ---------------------------------------------------------------------------
-
-  # syslog_list: primary event feed for scrubbing, security, system events.
-  # No server-side time filter. Client-side watermarking required.
-  # See context/api-maps/synology-events.md for dedup guidance.
-  - name: syslog_list
-    method: GET
-    path: "entry.cgi"
-    params:
-      - {key: api,     value: "SYNO.Core.SyslogClient.Log"}
-      - {key: version, value: "1"}
-      - {key: method,  value: "list"}
-      - {key: start,   value: "0"}
-      - {key: limit,   value: "200"}
-      - {key: logtype, value: "system"}
-    response_path: "data.items"
-
-  # upgrade_check: DSM upgrade state. State-derived event: emit once on version change.
-  - name: upgrade_check
-    method: GET
-    path: "entry.cgi"
-    params:
-      - {key: api,     value: "SYNO.Core.Upgrade.Server"}
-      - {key: version, value: "4"}
-      - {key: method,  value: "check"}
-    response_path: "data"
-
-  # security_list: Security Advisor login anomaly feed.
-  - name: security_list
-    method: GET
-    path: "entry.cgi"
-    params:
-      - {key: api,     value: "SYNO.SecurityAdvisor.LoginActivity"}
-      - {key: version, value: "1"}
-      - {key: method,  value: "list"}
-      - {key: start,   value: "0"}
-      - {key: limit,   value: "20"}
-    response_path: "data.items"
 
 
 # =============================================================================
@@ -418,14 +383,6 @@ object_types:
       - from_request: system_status
         list_path: ""
       - from_request: network_interface
-        list_path: ""
-      # Event source requests are also declared here so MPB can bind events
-      # to the Diskstation instance. They are consumed via mpb_events, not metrics.
-      - from_request: syslog_list
-        list_path: ""
-      - from_request: upgrade_check
-        list_path: ""
-      - from_request: security_list
         list_path: ""
 
     metrics:
@@ -1870,209 +1827,13 @@ relationships:
 # =============================================================================
 # MPB EVENTS — Tier 2 (API-pull model; Tier 1 threshold events are factory symptoms/alerts)
 # =============================================================================
-# All source_request values reference top-level requests declared above.
-# syslog_list / upgrade_check / security_list are also bound as metricSets
-# on synology_diskstation (see metricSets block above) so MPB can find the
-# request context and bind events to the Diskstation instance.
-#
-# Severity vocabulary in use: INFO, WARNING, CRITICAL (VCF Ops + IMMEDIATE = n/a here).
-# "IMMEDIATE" is valid per loader but not used — Synology events map to the
-# three VCF Ops standard severities.
-#
-# RENDERER NOTE for all syslog_list events: SyslogClient.Log has no server-side
-# time filter. Client-side watermarking on the (time, level, logtype, descr, who)
-# tuple is required every poll cycle. See context/api-maps/synology-events.md.
+# Tier 2 events deferred to v1.1 pending renderer support for severity
+# mapping / message binding / object-binding anchor properties.
+# Event source requests (syslog_list, upgrade_check, security_list) and their
+# metricSet bindings on Synology Diskstation have also been removed for v1.
+# Full event definitions are preserved in designs/synology-mp-v1.md for v1.1.
 
-mpb_events:
-
-  # ---------------------------------------------------------------------------
-  # Event 1 — Data / filesystem scrubbing started
-  # ---------------------------------------------------------------------------
-  - name: "DSM Scrubbing Started"
-    severity: INFO
-    source_request: syslog_list
-    response_path: "data.items"
-    match_rules:
-      - field: descr
-        operator: MATCHES_REGEX
-        value: "^System starts (data|filesystem) scrubbing on \\[(.+?)\\]\\.$"
-    object_binding:
-      object_type: synology_diskstation
-      # NEEDS-RENDERER-WORK: bind to storage_pool by extracting pool name from
-      # descr. Start messages may use /dev/vg<N> form (raw device path) or
-      # "Storage Pool N" form (friendly name). Fallback to Diskstation binding
-      # until renderer supports pool-name lookup table. Updated from reference
-      # YAML to use Diskstation as safe fallback.
-    collection_strategy:
-      interval_seconds: 300
-      dedup_strategy: TUPLE_HASH
-      dedup_fields: [time, level, logtype, descr, who]
-    message_template: "${descr}"
-    description: >
-      Emitted when DSM starts a scheduled data or filesystem scrub. Severity
-      is INFO; start event is informational only.
-
-  # ---------------------------------------------------------------------------
-  # Event 2 — Data / filesystem scrubbing finished
-  # ---------------------------------------------------------------------------
-  - name: "DSM Scrubbing Finished"
-    severity: INFO
-    source_request: syslog_list
-    response_path: "data.items"
-    match_rules:
-      - field: descr
-        operator: MATCHES_REGEX
-        value: "^System successfully finished (data|filesystem) scrubbing on \\[(.+?)\\]\\.$"
-    object_binding:
-      object_type: synology_diskstation
-      # NEEDS-RENDERER-WORK: bind to storage_pool by resolving "Storage Pool N" /
-      # "Volume N" friendly names. Fallback to Diskstation.
-    collection_strategy:
-      interval_seconds: 300
-      dedup_strategy: TUPLE_HASH
-      dedup_fields: [time, level, logtype, descr, who]
-    message_template: "${descr}"
-    description: >
-      Emitted when DSM completes a scheduled data or filesystem scrub.
-
-  # ---------------------------------------------------------------------------
-  # Event 3 — Active Backup for Business package lifecycle
-  # ---------------------------------------------------------------------------
-  - name: "Active Backup Package Transition"
-    severity: INFO
-    source_request: syslog_list
-    response_path: "data.items"
-    match_rules:
-      - field: descr
-        operator: CONTAINS
-        value: "Active Backup for Business"
-    object_binding:
-      object_type: synology_diskstation
-    collection_strategy:
-      interval_seconds: 300
-      dedup_strategy: TUPLE_HASH
-      dedup_fields: [time, level, logtype, descr, who]
-    message_template: "${descr}"
-    description: >
-      Emitted on Active Backup for Business package state transitions: start,
-      stop, update, failure. Severity follows DSM syslog level (info=INFO,
-      err=CRITICAL). Does not capture per-task completion events.
-
-  # ---------------------------------------------------------------------------
-  # Event 4 — DSM update available (state-derived)
-  # ---------------------------------------------------------------------------
-  - name: "DSM Update Available"
-    severity: WARNING
-    source_request: upgrade_check
-    response_path: "data"
-    match_rules:
-      - field: update.available
-        operator: EQUALS
-        value: "true"
-    object_binding:
-      object_type: synology_diskstation
-    collection_strategy:
-      interval_seconds: 1800
-      dedup_strategy: FIELD_ID
-      dedup_fields: [update.version]
-      # NEEDS-RENDERER-WORK: state-derived event; emit once per version string
-      # change, not per poll. Renderer must cache last-seen version.
-    message_template: "DSM update available: ${update.version}"
-    description: >
-      Emitted once when a DSM software update becomes available. Severity is
-      WARNING for security updates (isSecurityVersion=true), INFO otherwise.
-      NEEDS-RENDERER-WORK: dynamic severity derived from isSecurityVersion field.
-
-  # ---------------------------------------------------------------------------
-  # Event 5 — Security advisory (login anomaly, brute-force, etc.)
-  # ---------------------------------------------------------------------------
-  - name: "DSM Security Advisory"
-    severity: WARNING
-    source_request: security_list
-    response_path: "data.items"
-    match_rules: []
-    object_binding:
-      object_type: synology_diskstation
-    collection_strategy:
-      interval_seconds: 900
-      dedup_strategy: TUPLE_HASH
-      dedup_fields: [create_time, str_id, user]
-    message_template: "${str_id} — user: ${user}"
-    description: >
-      Emitted for each new Security Advisor login anomaly. Severity mapped from
-      item.severity: low=INFO, medium=WARNING, high=CRITICAL. NEEDS-RENDERER-WORK:
-      dynamic severity from item.severity field.
-
-  # ---------------------------------------------------------------------------
-  # Event 6 — Host auto-blocked
-  # ---------------------------------------------------------------------------
-  - name: "DSM Host Auto-Blocked"
-    severity: WARNING
-    source_request: syslog_list
-    response_path: "data.items"
-    match_rules:
-      - field: descr
-        operator: MATCHES_REGEX
-        value: "^Host \\[(.+?)\\] was blocked via \\[(.+?)\\]\\.$"
-    object_binding:
-      object_type: synology_diskstation
-    collection_strategy:
-      interval_seconds: 300
-      dedup_strategy: TUPLE_HASH
-      dedup_fields: [time, level, logtype, descr, who]
-    message_template: "${descr}"
-    description: >
-      Emitted when DSM AutoBlock blocks a remote host after repeated failed
-      sign-in attempts. Always WARNING severity.
-
-  # ---------------------------------------------------------------------------
-  # Event 7 — System booted from improper shutdown
-  # ---------------------------------------------------------------------------
-  - name: "DSM Improper Shutdown"
-    severity: WARNING
-    source_request: syslog_list
-    response_path: "data.items"
-    match_rules:
-      - field: descr
-        operator: EQUALS
-        value: "System booted up from an improper shutdown."
-    object_binding:
-      object_type: synology_diskstation
-    collection_strategy:
-      interval_seconds: 300
-      dedup_strategy: TUPLE_HASH
-      dedup_fields: [time, level, logtype, descr, who]
-    message_template: "${descr}"
-    description: >
-      Emitted when DSM detects it was restarted after an unexpected power loss
-      or hard reset. Indicates potential data integrity risk on non-Btrfs volumes.
-
-  # ---------------------------------------------------------------------------
-  # Event 8 — Disk overheat
-  # ---------------------------------------------------------------------------
-  # NOTE: "orginalLogType" (missing 'i') is the literal DSM API field name.
-  # Preserve the misspelling verbatim in any renderer field routing.
-  - name: "DSM Disk Overheat"
-    severity: CRITICAL
-    source_request: syslog_list
-    response_path: "data.items"
-    match_rules:
-      - field: descr
-        operator: MATCHES_REGEX
-        value: "^Disk overheat: Disk \\[(.+?)\\], serial \\[(.+?)\\]"
-    object_binding:
-      object_type: synology_diskstation
-      # NEEDS-RENDERER-WORK: bind to disk object by extracting serial (regex group 2)
-      # or disk name (group 1) from descr. Fallback to Diskstation if parse fails.
-    collection_strategy:
-      interval_seconds: 300
-      dedup_strategy: TUPLE_HASH
-      dedup_fields: [time, level, logtype, descr, who]
-    message_template: "${descr}"
-    description: >
-      Emitted when DSM detects a disk exceeded its thermal threshold. CRITICAL
-      severity. NEEDS-RENDERER-WORK: bind to Disk object by serial or name
-      extracted from descr; fallback to Diskstation.
+mpb_events: []
 
 
 # =============================================================================
