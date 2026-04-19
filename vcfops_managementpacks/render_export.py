@@ -77,10 +77,13 @@ _FLAT_ONLY_KEYS: frozenset = frozenset({
     "regexOutput",   # always "" in our output; absent in exchange format
     # Renderer internal annotation:
     "_renderer_note",
+    # NOTE: example/regex/regexOutput are REQUIRED inside chainingSettings
+    # (confirmed from HoL-2501-12 GitLab-Basic.json, 2026-04-19).
+    # _strip_flat_only_fields() preserves them when _in_chaining=True.
 })
 
 
-def _strip_flat_only_fields(obj: Any) -> Any:
+def _strip_flat_only_fields(obj: Any, _in_chaining: bool = False) -> Any:
     """Recursively remove all flat-format-only keys from the exchange output.
 
     The flat format (render.py) emits several fields that MPB's exchange
@@ -94,12 +97,30 @@ def _strip_flat_only_fields(obj: Any) -> Any:
       - regexOutput   — on expressionParts (empty string)
       - _renderer_note — internal renderer annotation on relationships and
                          expression parts
+
+    Exception: when inside a chainingSettings block, example/regex/regexOutput
+    on params[] and their expressionParts[] are REQUIRED by MPB (confirmed from
+    HoL-2501-12 GitLab-Basic.json reference, 2026-04-19).  Those fields are
+    preserved when _in_chaining=True.
     """
     if isinstance(obj, dict):
-        return {k: _strip_flat_only_fields(v) for k, v in obj.items()
-                if k not in _FLAT_ONLY_KEYS}
+        result = {}
+        for k, v in obj.items():
+            # Entering chainingSettings switches to chaining context
+            if k == "chainingSettings":
+                result[k] = _strip_flat_only_fields(v, _in_chaining=True)
+                continue
+            # Inside chaining, preserve the fields MPB requires
+            if _in_chaining and k in _FLAT_ONLY_KEYS:
+                result[k] = v
+                continue
+            if k in _FLAT_ONLY_KEYS:
+                continue
+            result[k] = _strip_flat_only_fields(v, _in_chaining=_in_chaining)
+        return result
     if isinstance(obj, list):
-        return [_strip_flat_only_fields(item) for item in obj]
+        return [_strip_flat_only_fields(item, _in_chaining=_in_chaining)
+                for item in obj]
     return obj
 
 
