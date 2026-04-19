@@ -326,11 +326,14 @@ def _strip_metric(metric: Dict[str, Any]) -> Dict[str, Any]:
 def _strip_metric_set(ms: Dict[str, Any]) -> Dict[str, Any]:
     """Strip flat-format-only fields from a metricSet dict.
 
-    Removes: objectBinding (null in flat format, absent in exchange format).
+    objectBinding: kept when non-null (required for chained list metricSets per
+    MPB collection-time validator); dropped only when null (absent in exchange
+    format for world/singleton and primary list metricSets).
     Recurses into metrics[].
     """
-    drop = {"objectBinding"}
-    result = {k: v for k, v in ms.items() if k not in drop}
+    result = dict(ms)
+    if result.get("objectBinding") is None:
+        result.pop("objectBinding", None)
     if "metrics" in result:
         result["metrics"] = [_strip_metric(m) for m in result["metrics"]]
     return result

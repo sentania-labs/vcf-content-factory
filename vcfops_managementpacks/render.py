@@ -739,18 +739,24 @@ def _render_authentication(mp: ManagementPackDef) -> Dict:
 
         # Session variables from extract rule
         session_key = auth.extract.session_key
-        # The wire format uses the raw header name (title-case per reference MP)
-        # For HEADER location: key and path[] are the header name exactly as given
-        # in extract.name.  Reference MP uses "Set-Cookie" (not lowercased).
-        header_name = auth.extract.name  # e.g. "set_cookie" or "Set-Cookie"
-        # Normalise to title-case for Set-Cookie specifically, pass others through
-        # Reference: {"key": "Set-Cookie", "path": ["Set-Cookie"], ...}
+        # For HEADER location:
+        #   key   — internal identifier used in substitution expressions;
+        #            MPB requires [A-Za-z0-9_]+ only.  Derived from bind_to
+        #            (e.g. "set_cookie") — NOT from the raw header name.
+        #   path  — the literal HTTP header name (e.g. "Set-Cookie") so MPB
+        #            knows which header to extract at collection time.
+        # These are two different fields with different validation rules.
+        # Wire parity note: Scott's build-8 reference MP (sentania_aria_operations_dsm_mp)
+        # uses key="Set-Cookie" (hyphenated), but MPB collection-time validator
+        # rejects that with SESSION_TOKEN_RESPONSE_FIELD / [A-Za-z0-9_]+ constraint.
+        # The safe form is session_key (already underscore-normalised from bind_to).
+        header_name = auth.extract.name  # literal header name, e.g. "Set-Cookie"
         session_var_id = _make_id(f"{ak}:auth:sessionVar:{session_key}")
         session_variables = [
             {
                 "id": session_var_id,
-                "key": header_name,
-                "path": [header_name],
+                "key": session_key,        # ident-safe: from bind_to (e.g. "set_cookie")
+                "path": [header_name],     # literal header name preserved for extraction
                 "usage": f"${{authentication.session.{session_key}}}",
                 "example": None,
                 "location": auth.extract.location,
@@ -1138,12 +1144,58 @@ def _render_one_object(
                 "timeseries": None,
             })
 
+        # objectBinding rules (MPB collection-time validator):
+        #   - World/singleton objects (is_world): no list iteration → always None.
+        #   - List objects with one metricSet: None is valid (single group).
+        #   - List objects with multiple metricSets:
+        #       * Exactly ONE may have None objectBinding; that one must be
+        #         referenced by another request (i.e. it is the primary that
+        #         a chained request iterates from).  ms.primary == True marks
+        #         this metricSet.
+        #       * All other metricSets (chained, ms.primary == False) must carry
+        #         a non-null objectBinding.  We bind to the @@@id synthetic
+        #         attribute on the chained metricSet's own DML — it is the only
+        #         positional identity available when the API response does not
+        #         echo back the parent identifier.
+        #
+        # For chained metricSets the semantic correlation is already established
+        # via chainingSettings (MPB knows which parent row triggered this call).
+        # The objectBinding here satisfies the MPB validator's non-null requirement;
+        # the actual instance-to-row correlation uses the chain parameters.
+        object_binding: Optional[Dict] = None
+        if not ot.is_world and not ms_def.primary and ms_def.chained_from is not None:
+            # Chained list metricSet: must have non-null objectBinding.
+            # Use @@@id from this metricSet's own DML (always present on
+            # wildcard-iteration DMls per _ensure_dml).
+            at_id_origin = f"{req_info.id}-{dml_id}-@@@id"
+            ob_seed = f"{obj_seed}:metricSet:{ms.local_name}:objectBinding"
+            ob_part_id = _make_id(f"{ob_seed}::part")
+            ob_expr_id = _make_id(f"{ob_seed}::expr")
+            object_binding = {
+                "type": "ATTRIBUTE_TO_PROPERTY",
+                "matchExpression": {
+                    "id": ob_expr_id,
+                    "expressionText": f"@@@MPB_QUOTE {ob_part_id} @@@MPB_QUOTE",
+                    "expressionParts": [
+                        {
+                            "id": ob_part_id,
+                            "label": "@@@id",
+                            "regex": None,
+                            "example": "",
+                            "originId": at_id_origin,
+                            "originType": "ATTRIBUTE",
+                            "regexOutput": "",
+                        }
+                    ],
+                },
+            }
+
         wire_metric_sets.append({
             "id": ms_id,
             "listId": dml_id,
             "requestId": req_info.id,
             "metrics": wire_metrics,
-            "objectBinding": None,
+            "objectBinding": object_binding,
         })
 
     # Build nameMetricExpression
