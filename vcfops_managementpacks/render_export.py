@@ -34,7 +34,7 @@ which is byte-for-byte identical to the pak-embedded export.json):
                                    strip: designId, ariaOpsConf
     .relationships (list)        → .relationships  (list of {"relationship": <rel>})
                                    strip: designId, _renderer_note
-    .source.events (list)        → .events  (list of event dicts, stripped: designId)
+    .source.events (list)        → .events  (list of {"event": <evt>}, stripped: designId)
     .constants                   (dropped)
 
     source.source.id is a stable UUID5 derived from the adapter_kind — MPB normally
@@ -560,7 +560,7 @@ def render_mpb_exchange_json(
         events_list: List[Dict[str, Any]] = []
     else:
         events_list = [
-            _strip_event(evt)
+            {"event": _strip_event(evt)}
             for evt in src.get("events", [])
         ]
 

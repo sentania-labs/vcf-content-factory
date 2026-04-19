@@ -358,28 +358,46 @@ the payload:
 | `metricSets[].metrics[].timeseries` | objects | `null` | Stripped in `_strip_metric()` |
 | `dataModelLists` | auth session requests (getSession/releaseSession) and testRequest response | list | Dropped in `_strip_session_request()` — these three use `{responseCode: N}` only |
 
-### Events wire format — OPEN GAP
+### Events wire format — RESOLVED 2026-04-18
 
-**Binary-substitution test result (2026-04-17)**: substituting factory
-`events[]` into the good export skeleton causes HTTP 400. Substituting
-factory `requests[]` and `objects[]` independently returns 201.
+**Fix**: each item in `events[]` must be wrapped in `{"event": {...}}`,
+matching the wrapping convention used by `objects[]` (`{"object": {...}}`),
+`relationships[]` (`{"relationship": {...}}`), and `requests[]`
+(`{"request": {...}}`).
 
-The reference export has **0 events**, so we have no ground truth for
-the exchange format of the `events[]` array. The factory's event
-structure (which includes `alert.badge`, `alert.type`, `alert.subType`,
-`matchMode`, `unmatchedEventBehavior`, `severityMap`, `eventMatchers`,
-`message`, `severity`, `listId`, `requestId`, `defaultSeverity`) is
-UNVERIFIED against what MPB's import parser actually accepts.
+The factory currently emits **bare** event objects at the top of
+`events[]`, inherited from the flat-format layout where `source.events`
+is a flat list. The export exchange format disagrees: all four arrays
+use singular-key wrappers.
 
-**Consequence**: `render-export` on any MP that has events produces a
-payload MPB rejects. MPs with 0 events would pass (requests and objects
-are confirmed clean).
+**Verification on devel 2026-04-18** (api-explorer probe):
+- `tmp/synology_export.json` (factory output, 8 events bare) →
+  `POST /suite-api/internal/mpbuilder/designs/import` returns HTTP 400
+  `{"message":"Invalid input format.","moreInformation":[{"name":"errorMessage","value":"Unknown error when executing request"}]}`.
+  Removing the events array (`events: []`) flips to 201 Created.
+  Wrapping each event as `{"event": <original>}` also flips to 201 Created.
+- The content of each event (`id`, `alert.{type,badge,subType,waitCycle,cancelCycle,recommendation}`,
+  `label`, `listId`, `message`, `severity`, `matchMode`, `requestId`,
+  `severityMap[]`, `eventMatchers[]`, `defaultSeverity`,
+  `unmatchedEventBehavior`) is accepted verbatim — none of those
+  fields need stripping. Only the list-item wrapping is wrong.
 
-**Discovery path**: capture a live MPB export from a design that has
-event definitions (any Synology-class design with syslog events), then
-diff the `events[]` array shape against what the factory emits.
-api-explorer is the right agent — needs browser HAR capture from Scott
-or a second reference export file.
+**Earlier line-199 entry in this doc — correct for flat format, wrong
+for exchange format**. Update when rewriting the flat-vs-exchange table:
+events in exchange format are `events → list of {"event": ...}` like
+the other three sections, not "flat list".
+
+**Tooling fix location**: `vcfops_managementpacks/render_export.py`.
+Wherever it builds the `events` list, wrap each item:
+`{"event": <current>}` — same pattern as the existing `{"object": ...}`,
+`{"request": ...}`, `{"relationship": ...}` emitters.
+
+**Also note**: the import endpoint never returns field-level diagnostics
+for schema mismatches — it returns the generic
+`{"type":"Error","message":"Invalid input format.","moreInformation":[{"name":"errorMessage","value":"Unknown error when executing request"}]}`
+envelope. The only way to diagnose a 400 on this endpoint is
+bisection/binary-substitution against a known-good payload. Keep
+`/tmp/mpb_bisect.py`-style probes handy.
 
 ## References
 
