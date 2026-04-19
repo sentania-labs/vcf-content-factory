@@ -467,11 +467,14 @@ def render_mpb_exchange_json(
     # 1. design.design block
     # ------------------------------------------------------------------
     design_block = {
+        "buildNumber": mp.build_number,
         "design": {
+            "id": None,
             "name": pak.get("name", mp.name),
             "type": src.get("type", "HTTP"),
             "description": pak.get("description", ""),
             "version": mp.version,  # base version, no build suffix
+            "author": mp.author,
         }
     }
 
@@ -503,6 +506,7 @@ def render_mpb_exchange_json(
 
     source_source = {
         "id": _stable_source_id(ak),
+        "designId": None,
         "configuration": {
             "baseApiPath": src.get("basePath", ""),
             "customConfigs": [],
@@ -561,7 +565,7 @@ def render_mpb_exchange_json(
         ]
 
     exchange = {
-        "type": src.get("type", "HTTP"),
+        "content": [],
         "design": design_block,
         "source": source_block,
         "objects": objects_list,
