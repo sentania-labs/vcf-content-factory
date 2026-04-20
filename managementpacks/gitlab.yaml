@@ -1,0 +1,475 @@
+# GitLab Management Pack — End-to-End Factory Validation (Step B)
+# ============================================================
+# Design artifact: context/mp_design_gitlab_2026_04_19.md
+# Reference:       references/hol-2501-lab-files/HOL-2501-02/Module 17/GitLab-Basic.json
+# Purpose:         Minimal validation MP exercising: world singleton, list object,
+#                  bearer-token auth against live GitLab.
+#
+# Objects: 3 (GitLab Instance, GitLab Project, GitLab Branch)
+# Requests: 3 (getVersion, getProjects, getBranches)
+# Chains: 0 (see TOOLSET GAP note below)
+# Relationships: 0
+# Events: 0
+#
+# RISK-1 RESOLUTION — bearer_token preset:
+#   The factory loader defines "bearer_token" as a valid preset that renders to
+#   credentialType: TOKEN in the MPB wire format.  Confirmed at:
+#     loader.py:195   (VALID_AUTH_PRESET set includes "bearer_token")
+#     loader.py:1173  (_validate_auth_bearer)
+#     render.py:719   (if auth.preset == "bearer_token")
+#   Design artifact preferred bearer_token; no fallback needed.
+#   Risk flag: MPB's TOKEN credentialType may not auto-inject the
+#   "Authorization: Bearer" header.  HoL reference uses credentialType: CUSTOM
+#   with an explicit globalHeaders entry for this reason.  If test-connection
+#   returns 401 after install, escalate to tooling for a custom-header
+#   grammar extension (explicit inject block with
+#   "Authorization: Bearer ${credentials.token}").
+#
+# RISK-2 RESOLUTION — Project→Branch relationship:
+#   The GitLab /projects/:id/repository/branches API does NOT include project_id
+#   in the response body — the project scope comes from the URL path only.
+#   HoL wires this by materialising the chain parameter as an
+#   originType: PARAMETER metric on Branch (PARAMETER-origin metric).
+#   The factory grammar's metric source parser only accepts
+#   "metricset:<name>.<path>" — there is no "chain_parameter:" source shape
+#   in loader.py:_parse_metric_source.  Therefore a field_match relationship
+#   (requiring a project_id property on Branch) cannot be expressed.
+#   DECISION: drop the explicit relationship per design artifact §5 fallback (a).
+#   TOOLSET GAP: loader + render need PARAMETER-origin metric support to express
+#   this relationship via field_match.  File against tooling with design
+#   artifact §4.3 RISK-2 as the spec.
+#
+# TOOLSET GAP — cross-object-type chain (Branch off Project):
+#   The design calls for GitLab Branch to be a list object populated entirely
+#   from the chained getBranches request (GET /projects/${chain.project_id}/
+#   repository/branches), where project_id comes from the getProjects response.
+#   In HoL's MPB wire format (GitLab-Basic.json), GitLab-Branch has ONE metricSet
+#   pointing at getBranches, and the chain parent relationship is expressed via
+#   chainingSettings.parentRequestId on the getBranches request itself — NOT via
+#   a sibling metricSet on the Branch object.
+#
+#   The factory grammar models chaining as sibling metricSets on the SAME object
+#   type (loader.py:746: "chained_from must reference a sibling metricSet local
+#   name").  This works for the Synology enrichment pattern (Volume with two
+#   metricSets: primary get_volumes + chained volume_util) but does NOT support
+#   the cross-object-type pattern where the entire object population comes from
+#   a chained request, and the chain parent belongs to a different object type.
+#
+#   IMPACT: getBranches cannot be expressed as a chained request in the current
+#   grammar.  It is included here as a plain unchained request.  GitLab Branch
+#   objects will be populated with all branches across all projects (unscoped),
+#   which is semantically wrong but structurally valid for factory pipeline
+#   exercise.  The ${chain.project_id} substitution is removed from the path.
+#
+#   REQUIRED TOOLSET CHANGE: extend the factory grammar to support a
+#   cross-object-type chain declaration, e.g.:
+#     metricSets:
+#       - from_request: getBranches
+#         primary: true
+#         list_path: "*"
+#         chained_from_object: gitlab_project   # NEW: cross-object chain
+#         chained_from_request: getProjects     # NEW: parent request
+#         bind:
+#           - name: project_id
+#             from_attribute: id
+#   This would render to chainingSettings.parentRequestId + params on the
+#   getBranches request in MPB wire format (matching GitLab-Basic.json lines
+#   for getBranches.chainingSettings).  File against tooling with this artifact
+#   as the spec.
+
+name: "GitLab"
+version: "1.0.0"
+build_number: 1
+author: "VCF Content Factory"
+adapter_kind: "mpb_gitlab"
+description: >
+  End-to-end factory validation MP for GitLab. Monitors GitLab instances,
+  projects, and branches via the GitLab REST API v4. Exercises world singleton,
+  list object, and chained list object patterns with bearer-token authentication.
+
+# =============================================================================
+# SOURCE / CONNECTION
+# =============================================================================
+# Matches HoL reference: port 443, NO_VERIFY (lab self-signed cert), base api/v4,
+# 30s timeout, 2 retries, 15 concurrent.  Production deployments should set
+# ssl: VERIFY.
+
+source:
+  port: 443
+  ssl: NO_VERIFY
+  base_path: "api/v4"
+  timeout: 30
+  max_retries: 2
+  max_concurrent: 15
+
+  auth:
+    # bearer_token preset → credentialType: TOKEN in MPB wire.
+    # Single sensitive credential: token (GitLab Personal Access Token).
+    # See RISK-1 note at top of file.
+    preset: bearer_token
+
+    credentials:
+      - {key: token, label: "Personal Access Token", sensitive: true}
+
+  # Test connection: GET /api/v4/version — same endpoint as getVersion request.
+  # Kept separate because MPB testRequest block is distinct from requests[].
+  # Matches HoL reference testRequest.path: "version".
+  test_request:
+    method: GET
+    path: "version"
+    params: []
+
+
+# =============================================================================
+# REQUESTS (3)
+# =============================================================================
+# All requests: method GET.
+# response_path: "" on all — GitLab returns JSON at the response root with no
+# data-envelope.  (Contrast with Synology which wraps responses in {"data": ...}.)
+
+requests:
+
+  # ---------------------------------------------------------------------------
+  # 1. getVersion — GET /api/v4/version
+  # Consumed by: GitLab Instance (singleton metricSet, list_path: "")
+  # Response: single JSON object {version, revision, kas, enterprise}
+  # ---------------------------------------------------------------------------
+  - name: getVersion
+    method: GET
+    path: "version"
+    params: []
+    response_path: ""
+
+  # ---------------------------------------------------------------------------
+  # 2. getProjects — GET /api/v4/projects
+  # Consumed by: GitLab Project (primary metricSet, list_path: "*")
+  # Response: JSON array of project objects at root
+  # Also the chain parent for getBranches.
+  # ---------------------------------------------------------------------------
+  - name: getProjects
+    method: GET
+    path: "projects"
+    params: []
+    response_path: ""
+
+  # ---------------------------------------------------------------------------
+  # 3. getBranches — GET /api/v4/projects (unscoped — all branches across all projects)
+  # Consumed by: GitLab Branch (primary metricSet, list_path: "*")
+  # Response: JSON array of branch objects at root.
+  #
+  # NOTE: Design artifact calls for GET /projects/${chain.project_id}/repository/
+  # branches with per-project scoping.  That requires a cross-object-type chain
+  # which the factory grammar does not support (see TOOLSET GAP at top of file).
+  # This placeholder request fetches from a fixed path.  In production usage
+  # the path would need to be per-project-scoped via the chain mechanism.
+  # Kept in the YAML to exercise the three-request structure; actual collection
+  # against GitLab may return an error or empty array depending on the endpoint.
+  # ---------------------------------------------------------------------------
+  - name: getBranches
+    method: GET
+    path: "projects/1/repository/branches"
+    params: []
+    response_path: ""
+
+
+# =============================================================================
+# OBJECT TYPES (3)
+# =============================================================================
+
+object_types:
+
+  # ---------------------------------------------------------------------------
+  # 1. GitLab Instance (singleton / world object)
+  #    HoL: objectTypeLabel "GitLab Instance", icon host.svg, isListObject false
+  #    Identifier: version + external_url (composite — HoL identifierIds match
+  #    Version + External URL metrics; stable across collections)
+  #    Name: external_url (kas.externalUrl per HoL nameMetricExpression)
+  #    Note: kas.externalUrl is non-empty on lab GitLab (kas enabled).
+  # ---------------------------------------------------------------------------
+  - name: "GitLab Instance"
+    key: "gitlab_instance"
+    type: INTERNAL
+    icon: "host.svg"
+    is_world: true
+
+    # Composite identifier: version + external_url (kas WebSocket URL)
+    identifiers:
+      - key: version
+        source: "metricset:getVersion.version"
+      - key: external_url
+        source: "metricset:getVersion.kas.externalUrl"
+
+    # Name is the kas External URL (HoL nameMetricExpression → "External URL")
+    name_expression:
+      parts:
+        - metric: external_url
+
+    # World identity: system-issued version string
+    identity:
+      tier: system_issued
+      source: "metricset:getVersion.version"
+
+    # Single metricSet — singleton, no list iteration (list_path: "")
+    metricSets:
+      - from_request: getVersion
+        list_path: ""
+
+    metrics:
+      # All 6 properties from the getVersion response root.
+      # All typed STRING following HoL convention (MPB stringifies bools).
+
+      - key: version
+        label: "Version"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getVersion
+          path: "version"
+
+      - key: revision
+        label: "Revision"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getVersion
+          path: "revision"
+
+      - key: kas_enabled
+        label: "Enabled"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getVersion
+          path: "kas.enabled"
+
+      # [ID] External URL — also identifier and name_expression
+      - key: external_url
+        label: "External URL"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getVersion
+          path: "kas.externalUrl"
+
+      - key: kas_version
+        label: "kasVersion"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getVersion
+          path: "kas.version"
+
+      - key: enterprise
+        label: "Enterprise"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getVersion
+          path: "enterprise"
+
+
+  # ---------------------------------------------------------------------------
+  # 2. GitLab Project (list object)
+  #    HoL: objectTypeLabel "GitLab Project", icon command.svg, isListObject true
+  #    Identifiers: name + id (composite — HoL identifierIds Name + ID)
+  #    Name: name (HoL nameMetricExpression → "Name")
+  # ---------------------------------------------------------------------------
+  - name: "GitLab Project"
+    key: "gitlab_project"
+    type: INTERNAL
+    icon: "command.svg"
+    is_world: false
+
+    # Composite identifier: name + id (mirrors HoL)
+    identifiers:
+      - key: name
+        source: "metricset:getProjects.name"
+      - key: id
+        source: "metricset:getProjects.id"
+
+    # Name is the project name field
+    name_expression:
+      parts:
+        - metric: name
+
+    # Single primary metricSet — array at response root, each element is a row
+    metricSets:
+      - from_request: getProjects
+        primary: true
+        list_path: "*"
+
+    metrics:
+      # 6 properties per design spec (id + 5 fields).
+      # All STRING following HoL convention.
+
+      # [ID] id — numeric GitLab project ID (stringified as PROPERTY per HoL)
+      - key: id
+        label: "ID"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getProjects
+          path: "id"
+
+      # [ID] name — project name
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getProjects
+          path: "name"
+
+      - key: path_with_namespace
+        label: "Path With Namespace"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getProjects
+          path: "path_with_namespace"
+
+      - key: default_branch
+        label: "Default Branch"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getProjects
+          path: "default_branch"
+
+      - key: created_at
+        label: "Created At"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getProjects
+          path: "created_at"
+
+      - key: description
+        label: "Description"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getProjects
+          path: "description"
+
+
+  # ---------------------------------------------------------------------------
+  # 3. GitLab Branch (list object, chained from Project)
+  #    HoL: objectTypeLabel "GitLab Branch", icon folder-share.svg
+  #    Identifiers: commit_id + name (design spec override of HoL's name+projectID)
+  #    Name: name (HoL nameMetricExpression → "Name")
+  #
+  #    Note: design calls for cross-object-type chain (Branch off Project).
+  #    Factory grammar does not support this pattern (see TOOLSET GAP at top).
+  #    Branch is modelled as a plain list object here.  The getBranches request
+  #    uses a fixed project path as a placeholder.
+  #
+  #    Identifier note: Scott's design spec uses commit_id + name (commit SHA is
+  #    more stable than branch name).  Acceptable for this validation MP.
+  # ---------------------------------------------------------------------------
+  - name: "GitLab Branch"
+    key: "gitlab_branch"
+    type: INTERNAL
+    icon: "folder-share.svg"
+    is_world: false
+
+    # Composite identifier: commit_id + name (design spec §4.3 OQ-3 override)
+    identifiers:
+      - key: commit_id
+        source: "metricset:getBranches.commit.id"
+      - key: name
+        source: "metricset:getBranches.name"
+
+    # Name is the branch name field
+    name_expression:
+      parts:
+        - metric: name
+
+    # Single primary metricSet — plain list (chain not expressible in current grammar)
+    metricSets:
+      - from_request: getBranches
+        primary: true
+        list_path: "*"
+
+    metrics:
+      # 6 properties per design spec.  All STRING following HoL convention.
+
+      # [ID] name — branch name (e.g. "main", "master")
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getBranches
+          path: "name"
+
+      # [ID] commit_id — full commit SHA (40 chars)
+      - key: commit_id
+        label: "Commit ID"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getBranches
+          path: "commit.id"
+
+      - key: commit_short_id
+        label: "Short ID"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getBranches
+          path: "commit.short_id"
+
+      - key: commit_title
+        label: "Title"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getBranches
+          path: "commit.title"
+
+      - key: commit_author_name
+        label: "Author Name"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getBranches
+          path: "commit.author_name"
+
+      - key: commit_created_at
+        label: "Commit Created At"
+        usage: PROPERTY
+        type: STRING
+        source:
+          metricset: getBranches
+          path: "commit.created_at"
+
+
+# =============================================================================
+# RELATIONSHIPS (0)
+# =============================================================================
+# The Project→Branch field_match relationship (parent_expression: id,
+# child_expression: project_id) requires a project_id PROPERTY on Branch sourced
+# from the chain parameter.  The factory grammar does not support PARAMETER-origin
+# metric sources (loader._parse_metric_source accepts only "metricset:<name>.<path>").
+# Relationship omitted per design artifact §5 fallback (a).
+# TOOLSET GAP: add chain_parameter source shape to loader + render to unblock.
+
+relationships: []
+
+
+# =============================================================================
+# EVENTS (0)
+# =============================================================================
+# Design artifact §6: no events for this validation MP.
+
+mpb_events: []
+
+
+# =============================================================================
+# CONTENT
+# =============================================================================
+
+content:
+  dashboards: []
+  views: []

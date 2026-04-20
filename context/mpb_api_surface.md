@@ -121,6 +121,49 @@ Returns counts + errors per section:
 Each section's errors block carries `refId` (the offending
 sub-object UUID) and `error` (human text).
 
+**This is the validation-errors dump the MPB UI's red-dot indicators
+are derived from.** Confirmed 2026-04-18 on Synology DSM design on
+devel: every UI-visible issue appears here verbatim, keyed by
+element UUID. Join against `/objects`, `/events`, `/relationships`,
+`/requests` summaries to resolve `refId` → display name.
+
+Alternative: `GET /designs/{id}` embeds the identical `designStatus`
+block at the top level of the full design response (plus
+`id`/`name`/`version`/`description`/`status`/`installed`). Use
+`/status` when you only need validation state — it's the leaner
+payload.
+
+**No dedicated `/validate`, `/errors`, `/validation` endpoint exists.**
+All three return 404 (both GET and POST) on 9.0.2. Validation runs
+implicitly on import/update; `/status` just returns the persisted
+result.
+
+**Validation error vocabulary observed so far** (by section, from
+the Synology design probe):
+
+- `objects`: `"Request <reqname> did not return attributes required
+  to make metrics on this object. Ensure the request runs correctly,
+  remove affected metrics from this object, or remove the object."`
+  Means: the request ran (in the last source-test) but its response
+  didn't carry the fields the object's metrics/properties
+  reference — a mismatch between declared attribute path and actual
+  response structure. refId is the **object** id, not the request id
+  (request name is interpolated into the error text).
+- `events`: `"Connection to object references a property that does
+  not exist."` Means: the event matcher's anchor property (the one
+  that ties the event to an object instance, typically `name` or a
+  unique identifier on the object) is not declared on the target
+  object's property list. refId is the **event** id.
+- `relationships`: two errors per broken relationship, one
+  `"Child property used in relationship does not exist."` and one
+  `"Parent property used in relationship does not exist."` Means:
+  the join-key properties on the parent and/or child objects that
+  the relationship uses to match instances aren't declared on those
+  objects' property lists. refId is the **relationship** id.
+- `source`, `designInfo`, `requests`, `configuration`: no error
+  vocabulary surfaced in this sample (all clean). Future probes
+  can extend this list.
+
 ### `DELETE /designs?id={uuid}`
 
 - Query-param form. Returns 200 with empty body on success.
