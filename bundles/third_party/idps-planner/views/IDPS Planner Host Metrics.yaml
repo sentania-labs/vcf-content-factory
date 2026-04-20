@@ -1,5 +1,5 @@
 id: 7740019a-a664-4d58-9e26-344b47364dcc
-name: IDPS Planner Host Metrics
+name: '[IDPS] IDPS Planner Host Metrics'
 subject:
   adapter_kind: VMWARE
   resource_kind: HostSystem

@@ -1,5 +1,5 @@
 id: 075cbdb7-8bef-42e8-a119-ae521067d67e
-name: IDPS Planner - vCenter Selection
+name: '[IDPS] IDPS Planner - vCenter Selection'
 subject:
   adapter_kind: VMWARE
   resource_kind: VMwareAdapter Instance

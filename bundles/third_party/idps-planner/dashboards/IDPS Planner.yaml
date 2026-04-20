@@ -11,7 +11,7 @@ widgets:
     y: 7
     w: 7
     h: 6
-  view: IDPS Planner Host Metrics
+  view: '[IDPS] IDPS Planner Host Metrics'
 - id: 672cb3f7-5568-5120-9339-f60a930ce33f
   type: View
   title: IDPS Planner VM Metrics
@@ -186,7 +186,7 @@ widgets:
   pin:
     adapter_kind: VMWARE
     resource_kind: vSphere World
-  view: IDPS Planner - vCenter Selection
+  view: '[IDPS] IDPS Planner - vCenter Selection'
 - id: e494889e-921b-5b76-a5b0-381f300f7380
   type: View
   title: Datacenter Selection
@@ -199,7 +199,7 @@ widgets:
   pin:
     adapter_kind: VMWARE
     resource_kind: vSphere World
-  view: IDPS Planner - Datacenter Selection
+  view: '[IDPS] IDPS Planner - Datacenter Selection'
 - id: 2ca53219-2f35-573f-8ce0-3125936c8e93
   type: View
   title: Cluster Selection
@@ -212,7 +212,7 @@ widgets:
   pin:
     adapter_kind: VMWARE
     resource_kind: vSphere World
-  view: IDPS Planner - Cluster Selection
+  view: '[IDPS] IDPS Planner - Cluster Selection'
 - id: 5c2a30b1-e13a-5627-9bcd-763454f8ef98
   type: Heatmap
   title: Cluster Host Heatmap

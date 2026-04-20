@@ -1,5 +1,5 @@
 id: e50bcb18-05e9-4530-8482-2882f675c82b
-name: IDPS Planner - Cluster Selection
+name: '[IDPS] IDPS Planner - Cluster Selection'
 subject:
   adapter_kind: VMWARE
   resource_kind: ClusterComputeResource
