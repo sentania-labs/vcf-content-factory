@@ -1,7 +1,0 @@
-id: a5ada313-49da-4feb-b6de-86c49646c3fc
-name: '[IDPS] Packets per second (All VMs)'
-formula: sum(${adaptertype=VMWARE, objecttype=VirtualMachine, metric=net:Aggregate
-  of all instances|packetsPerSec, depth=1})
-resource_kinds:
-- adapter_kind_key: VMWARE
-  resource_kind_key: HostSystem
