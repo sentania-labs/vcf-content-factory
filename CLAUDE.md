@@ -75,6 +75,7 @@ instance via the Suite API / content-import zip.
 
 ```
 docs/                        OpenAPI specs + extracted VCF 9 markdown; PDFs gitignored
+vcfops_common/               Shared Python helpers: env loader, base HTTP client
 vcfops_supermetrics/         Python package: client, loader, CLI (validate/list/sync/delete)
 vcfops_dashboards/           Python package: views + dashboards loader/packager/client
 vcfops_customgroups/         Python package: dynamic custom groups + group types loader/client/CLI
@@ -82,8 +83,12 @@ vcfops_symptoms/             Python package: symptom definitions loader/client/C
 vcfops_alerts/               Python package: alert definitions loader/client/CLI
 vcfops_reports/              Python package: report definitions loader/packager/client/CLI
 vcfops_packaging/            Python package: bundle manifest loader, builder, install script templates
+vcfops_managementpacks/      Python package: MP YAML loader, MPB render, .pak builder/installer, CLI
+vcfops_extractor/            Python package: reverse flow — extract live dashboards into third-party bundles
 supermetrics/  views/  dashboards/  customgroups/   YAML source of truth
 symptoms/  alerts/  reports/  recommendations/      YAML source of truth
+managementpacks/             Management pack YAML source of truth (MPB builder input)
+designs/                     Approved MP / content design artifacts (mp-designer output)
 bundles/                     Bundle manifests (input to vcfops_packaging build)
 context/                     Topical background — read these before touching code paths
 scripts/                     Utility scripts (bootstrap_references.sh, etc.)
@@ -113,6 +118,13 @@ scripts/                     Utility scripts (bootstrap_references.sh, etc.)
 | Custom group UI import envelope format | `context/customgroup_import_format.md` |
 | Widget renderer scoping (next expansion targets) | `context/widget_renderer_scope.md` |
 | UI import format investigation (Struts/SPA) | `context/ui_import_formats.md` |
+| Struts/Ext.Direct endpoint catalog + exploration backlog | `context/struts_import_endpoints.md`, `context/struts_exploration_backlog.md` |
+| MPB design JSON schema + API surface | `docs/reference-mpb-research.md`, `context/mpb_api_surface.md` |
+| MPB chaining wire format + runtime diff | `context/mpb_chaining_wire_format.md`, `context/mpb_chain_wire_diff_2026_04_19.md` |
+| Management pack .pak wire format + install/uninstall | `context/pak_wire_format.md`, `context/pak_install_api_exploration.md`, `context/pak_uninstall_api_exploration.md` |
+| Adapter describe (metric/property source of truth) | `context/adapter_describe_comparison.md`, `context/adapter_describe_exploration.md` |
+| Framework review + VCF Ops API surface snapshot | `context/framework_review_2026_04_18.md`, `context/vcf_operations_api_surface.md` |
+| QA acceptance audit trail | `context/qa_log.md` |
 
 ## You are the foreman
 
@@ -149,6 +161,9 @@ that doesn't delegate and ends up holding all the context.
 | `alert-author` | Author | `alerts/` only | After recon confirms no existing alert satisfies the need, **and** required symptoms already exist. |
 | `report-author` | Author | `reports/` only | User wants a report definition. May require views (and transitively super metrics) to exist first; if so, report-author blocks and you delegate upstream. |
 | `qa-tester` | Testing | `/tmp/` only (read-only against repo) | User wants to acceptance-test a built distribution package. Runs install → verify → uninstall → verify cycle against a live instance. Spawn after `content-packager` builds a zip. |
+| `api-cartographer` | Research | `context/api-maps/`, `docs/` | User wants to target a new external API (management pack source). Maps endpoints, response schemas, auth flows; produces the API map that `mp-designer` consumes. |
+| `mp-designer` | Design | `designs/` only | User wants a new management pack. Wizard-style interview against an API map; proposes object hierarchy, classifies metrics/properties, maps requests, defines events. Produces the approved design artifact `mp-author` builds against. |
+| `mp-author` | Author | `managementpacks/` only | After `mp-designer` produces an approved design. Writes factory MP YAML (object types, metrics, properties, requests, relationships, events). Does not build .pak or edit `vcfops_*/`. |
 
 ### Delegation protocol
 
@@ -185,9 +200,10 @@ that doesn't delegate and ends up holding all the context.
    python3 -m vcfops_customgroups validate &&
    python3 -m vcfops_symptoms validate &&
    python3 -m vcfops_alerts validate &&
-   python3 -m vcfops_reports validate`. All other CLI
-   operations (sync, enable, delete, list) go through
-   `content-installer`.
+   python3 -m vcfops_reports validate &&
+   python3 -m vcfops_managementpacks validate`. All other CLI
+   operations (sync, enable, delete, list, .pak build/install) go
+   through `content-installer` or the management pack builder.
 5. **Install only on explicit user confirmation.** Show the user
    the file list and a brief summary, ask yes/no, then delegate
    to `content-installer`. Install is plumbing, not creative work.
@@ -255,6 +271,20 @@ first-class, not a sad fallback.
 **Package + QA** (e.g. "build a distributable bundle and test it"):
 1. Author all content → `content-packager` → `qa-tester` →
    report results.
+
+**Management pack** (e.g. "I need a management pack for the
+Acme Widget REST API"):
+1. Clarify target API + authentication → `api-cartographer`
+   (produces `context/api-maps/<target>.md`) → `mp-designer`
+   (interview; produces `designs/<mp-name>.md`) → `mp-author`
+   (produces `managementpacks/<name>.yaml`) → validate →
+   `tooling`/`content-installer` as needed for .pak build +
+   install. The `.pak` build path requires a bootstrapped
+   `vcfops_managementpacks/adapter_runtime/` — see that
+   package's README for the one-time setup. Management pack
+   display names do NOT carry the `[VCF Content Factory]`
+   prefix — the prefix is for content authored *for* VCF Ops,
+   not for MPs that *extend* VCF Ops.
 
 **Toolset gap** (author returns a gap report):
 1. Decide: punt / api-explorer / tooling → fix → re-invoke author.

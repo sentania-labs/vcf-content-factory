@@ -29,10 +29,12 @@ what's on the horizon. Updated as capabilities land.
 - [x] **Report definitions** — author → validate → content-zip
       sync → delete (via Ext.Direct `reportServiceController.deleteReportDefinitions`
       with the corrected bare-dict data shape).
-- [x] **Recommendations** — authoring infrastructure complete
-      (loader, dataclass, render, CLI, bundle schema). Standalone
-      YAML under `recommendations/`, referenced by alerts via
-      `{name, priority}`. Awaiting first authored content.
+- [x] **Recommendations** — authoring infrastructure and first
+      content shipped. Loader, dataclass, render, CLI, and bundle
+      schema are all complete; six Synology recommendations
+      currently live under `recommendations/`, wired through alerts
+      via `{name, priority}`. REST-sync gap on recommendation
+      attachment remains open — see "Next Up".
 
 ### Framework infrastructure
 
@@ -53,8 +55,10 @@ what's on the horizon. Updated as capabilities land.
       declare which content objects belong to a distribution package.
       Packager reads the manifest, resolves cross-references,
       renders all wire formats, and produces a distributable zip.
-      Four bundles currently ship: vks-core-consumption, vm-performance,
-      test-host-vm-summary, test-sm-enable-verification.
+      Four first-party bundles currently ship: vks-core-consumption,
+      vm-performance, capacity-assessment, environment-config-status.
+      Third-party / extracted bundles live under `bundles/third_party/`
+      (e.g. idps-planner via the `vcfops_extractor` reverse flow).
 - [x] **Multi-bundle distribution packaging** — extract any number of
       bundle zips into the same directory, run `install.py` once,
       get a multi-select checklist (all pre-checked), single
@@ -108,17 +112,31 @@ what's on the horizon. Updated as capabilities land.
 
 ## In Progress
 
-Nothing currently in flight. Previous "In Progress" items
-(distributable packaging, bundle manifests, alert/symptom agents)
-all landed during the 2026-04-11 session.
+### Management pack authoring (MPB-compiled `.pak`)
+New capability: author REST-adapter management packs as YAML and
+compile them into `.pak` files via the built-in Management Pack
+Builder (MPB). Three new agents in place (`api-cartographer`,
+`mp-designer`, `mp-author`) plus `vcfops_managementpacks` package
+with validate / render / render-export / build / install / uninstall
+subcommands. Two learning targets in flight:
+
+- **Synology DSM** — first MP, used to shake out the framework.
+  Render, build, and install wired end-to-end; chainingSettings
+  wire format parity verified against HoL-2501-12 reference after
+  2026-04-19 renderer fix.
+- **UniFi Network API** — second MP, framework-generalization
+  test. API mapped against the devel controller; design in
+  `designs/unifi-mp-v1.md`.
+- **GitLab** — untracked third MP under `managementpacks/`
+  exploring CI/CD observability.
+
+Open work: the **adapter JAR gap** (`<adapter_kind>_adapter3.jar`
+contains the adapter kind baked into its package path and cannot
+be regenerated without the MPB server-side build endpoint); lab
+verification of the 2026-04-19 chain1 renderer fix; and the
+manual-UI MPB tasks tracked under `memory/project_mpb_manual_ui_tasks_pending.md`.
 
 ## Next Up
-
-### Recommendation authoring exercise
-Infrastructure is in place but no recommendations have been authored
-yet. The next session to author an alert with a recommendation will
-be the first end-to-end exercise of the loader, the renderer bug fix,
-the bundle schema, and the updated `alert-author` agent brief.
 
 ### PropertyList dashboard widget
 Highest-value remaining widget gap. 47 live observed uses on the

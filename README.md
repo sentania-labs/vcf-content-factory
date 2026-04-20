@@ -66,7 +66,8 @@ The value is not "one super metric." The value is:
 | Symptom definitions (metric/property/event conditions, static + dynamic thresholds) | Yes |
 | Alert definitions (tiered severity, symptom sets, impact badges) | Yes |
 | Report definitions (cover page, TOC, view + dashboard sections) | Yes |
-| Remediation recommendations (reusable, alert-referenced) | Infrastructure ready; awaiting first content |
+| Remediation recommendations (reusable, alert-referenced) | Yes |
+| Management packs (REST-API-sourced adapters, MPB-compiled `.pak`) | In progress — authoring, render, and .pak build/install wired; adapter JAR gap documented |
 
 **Dashboard widget types supported**: `ResourceList`, `View`,
 `TextDisplay`, `Scoreboard`, `MetricChart`, `HealthChart`,
