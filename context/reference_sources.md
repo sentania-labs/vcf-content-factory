@@ -213,4 +213,27 @@ scripts/bootstrap_references.sh --update # also git pull existing
 - **Attribution:** cite
   `brockpeterson/operations_management_packs/<file>`.
 
+### vmware-aria-hol/hol-2501-lab-files
+
+- **URL:** https://github.com/vmware-aria-hol/hol-2501-lab-files
+- **Local path:** `references/hol-2501-lab-files/`
+- **Owner:** VMware Aria Hands-On-Labs. Public repo.
+- **Scope (MPB-only, NOT a VCF Ops content reference):** This is
+  **not** a VCF Ops content reference — ops-recon should NOT grep
+  it for dashboards, views, super metrics, reports, symptoms, or
+  alerts. It is an **MPB (Management Pack Builder) JSON reference**
+  only. The `HOL-2501-12/` subtree contains progressively-built
+  GitLab management pack MPB JSON design files across five lab
+  modules, including a working **chained request** example in
+  `HOL-2501-12/Module 5/GitLab-Basic.json`
+  (`getBranches` → `getProjects`). Use this as ground truth for
+  chainingSettings wire format, expressionParts field shape, and
+  dataModelLists layout when authoring chained MPB requests or
+  debugging the render_export renderer.
+- **What to grep for:** `chainingSettings`, `expressionParts`,
+  `dataModelLists`, `parentRequestId`, `baseListId` within
+  `HOL-2501-12/Module */GitLab-Basic.json`.
+- **Attribution:** cite
+  `vmware-aria-hol/hol-2501-lab-files/HOL-2501-12/<path>`.
+
 <!-- Add new sources below. Keep entries in the same shape. -->

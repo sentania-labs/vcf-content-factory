@@ -1021,9 +1021,12 @@ def _build_chaining_settings(
             "expressionParts": [
                 {
                     "id": part_id,
-                    "originType": "ATTRIBUTE",
-                    "originId": origin_id,
                     "label": b.from_attribute,
+                    "regex": None,
+                    "example": "",
+                    "originId": origin_id,
+                    "originType": "ATTRIBUTE",
+                    "regexOutput": "",
                 }
             ],
         }
@@ -1032,9 +1035,10 @@ def _build_chaining_settings(
             "id": param_id,
             "key": b.name,
             "label": b.name,
-            "listId": parent_dml_id,
-            "attributeExpression": attr_expression,
             "usage": f"${{requestParameters.{b.name}}}",
+            "listId": parent_dml_id,
+            "example": "",
+            "attributeExpression": attr_expression,
         })
 
     return {

@@ -15,7 +15,12 @@ building blocks we're producing. Each one is a first-class object
 in VCF Operations with its own API, its own lifecycle, and its own
 wire format. The framework supports eight content types today:
 super metrics, custom groups, list views, dashboards, symptoms,
-alert definitions, report definitions, and recommendations.
+alert definitions, report definitions, and recommendations. A ninth
+capability — full **management packs** (REST-sourced adapters
+compiled into `.pak` files via the built-in Management Pack Builder)
+— is in progress; authoring, MPB render, and `.pak` build/install
+are wired end-to-end, with the adapter JAR gap tracked in
+`vcfops_managementpacks/README.md`.
 
 ### Super metrics
 
@@ -548,6 +553,7 @@ bundles/                   Bundle manifest YAML (declares what's in each dist pa
 dist/                      Built distribution zips (gitignored; produced by vcfops_packaging)
 
 # --- Python packages (one per content type + packaging layer) ---
+vcfops_common/             shared env loader + base HTTP client helpers
 vcfops_supermetrics/       loader, client, CLI, content-zip import
 vcfops_dashboards/         views + dashboards loader, render, client, CLI
 vcfops_customgroups/       loader, REST client, CLI
@@ -559,6 +565,8 @@ vcfops_packaging/          bundle loader, builder (zip assembly), sync CLI
     install.py             Python installer (goes inside every dist zip)
     install.ps1            PowerShell installer (goes inside every dist zip)
     README_framework.md    Framework README (goes inside every dist zip)
+vcfops_managementpacks/    MP YAML loader, MPB render, .pak builder/installer, CLI
+vcfops_extractor/          reverse flow — extract live dashboards into third-party bundles
 
 # --- topical background the agents read on demand ---
 context/
@@ -594,6 +602,9 @@ context/
   alert-author.md          Alert + recommendation authoring (tight coupling)
   report-author.md         Report definition authoring
   api-explorer.md          Undocumented wire format investigation
+  api-cartographer.md      External REST API mapping (inputs to mp-designer)
+  mp-designer.md           Management pack object model design from an API map
+  mp-author.md             Management pack YAML authoring (from approved design)
   tooling.md               Python package maintenance (the only agent that edits vcfops_*/)
   content-installer.md     Sync, enable, verify against live instance
   content-packager.md      Bundle manifest + zip build pipeline
@@ -670,6 +681,19 @@ python3 -m vcfops_reports sync
 python3 -m vcfops_packaging validate                            # validate all bundle manifests
 python3 -m vcfops_packaging build bundles/vks-core-consumption.yaml   # build one zip
 python3 -m vcfops_packaging sync bundles/<name>.yaml             # sync a whole bundle to the instance
+
+# --- management packs (MPB-compiled .pak files) ---
+python3 -m vcfops_managementpacks validate
+python3 -m vcfops_managementpacks list
+python3 -m vcfops_managementpacks render managementpacks/<name>.yaml --output /tmp/<name>.mpb.json
+python3 -m vcfops_managementpacks render-export managementpacks/<name>.yaml   # MPB UI Import Design envelope
+python3 -m vcfops_managementpacks build managementpacks/<name>.yaml --output dist/
+python3 -m vcfops_managementpacks install dist/mpb_<name>.1.0.0.1.pak
+python3 -m vcfops_managementpacks uninstall "<Display Name>"
+
+# --- reverse flow: extract a live dashboard into a distributable bundle ---
+python3 -m vcfops_extractor list-dashboards
+python3 -m vcfops_extractor extract dashboard --dashboard-name "<Name>" ...
 ```
 
 The **validate chain** is the fast health check run before any
@@ -681,10 +705,11 @@ python3 -m vcfops_dashboards validate && \
 python3 -m vcfops_customgroups validate && \
 python3 -m vcfops_symptoms validate && \
 python3 -m vcfops_alerts validate && \
-python3 -m vcfops_reports validate
+python3 -m vcfops_reports validate && \
+python3 -m vcfops_managementpacks validate
 ```
 
-If any of those six fail, something is wrong with a source YAML;
+If any of those seven fail, something is wrong with a source YAML;
 fix it before installing.
 
 Credentials are read from a `.env` file at the repo root. The
