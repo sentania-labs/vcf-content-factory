@@ -38,13 +38,12 @@ factory_native: false
 author: Ryan Pletka, Brock Peterson, Scott Bowe, Geoff Shukin, Joe Tietz
 license: Apache-2.0
 source:
-  captured_at: '2026-04-17'
+  captured_at: '2026-04-20'
 supermetrics:
-- idps-planner/supermetrics/IDPS Net Usage All VMs.yaml
 - idps-planner/supermetrics/IDPS Net Transmit All VMs.yaml
-- idps-planner/supermetrics/IDPS Net Receive All VMs.yaml
-- idps-planner/supermetrics/IDPS Packets per second All VMs.yaml
+- idps-planner/supermetrics/IDPS Net Usage All VMs.yaml
 - idps-planner/supermetrics/IDPS Peak PPS within cycle All VMs.yaml
+- idps-planner/supermetrics/IDPS Net Receive All VMs.yaml
 views:
 - idps-planner/views/IDPS Planner Host Metrics.yaml
 - idps-planner/views/IDPS IDPS Planner VM Metrics.yaml
@@ -57,5 +56,5 @@ builtin_metric_enables:
 - adapter_kind: VMWARE
   resource_kind: VirtualMachine
   metric_key: net|packetsPerSec
-  reason: required by dashboard 'IDPS Planner' widget '85c05c6b-e60d-4b2c-a6c0-af2fe2ec472e'
+  reason: required by dashboard 'IDPS Planner' widget '82e28da0-9edc-5605-b349-a218e6ed2707'
     (Scoreboard)
