@@ -98,6 +98,7 @@ scripts/                     Utility scripts (bootstrap_references.sh, etc.)
 
 | Topic | File |
 |---|---|
+| Shared vocabulary (Bundle vs Package, Sync/Enable/Install, Author vs Extract, etc.) | `context/dictionary.md` |
 | Authoring a super metric, DSL rules, style | `context/supermetric_authoring.md` |
 | Authoring a dynamic custom group + group types | `context/customgroup_authoring.md` |
 | Custom group relationship grammar | `context/customgroup_relationship_grammar.md` |
