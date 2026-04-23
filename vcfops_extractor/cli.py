@@ -212,6 +212,20 @@ def _add_dashboard_flags(p: argparse.ArgumentParser) -> None:
         ),
     )
 
+    # Prefix
+    pfx = p.add_argument_group("prefix (optional)")
+    pfx.add_argument(
+        "--prefix", metavar="PREFIX", default="",
+        help=(
+            "Prepend this string to every super metric name, view name, and dashboard "
+            "name in the extracted bundle, e.g. '[IDPS] '.  Cross-references are "
+            "rewritten automatically: SM->SM @supermetric:\"...\" refs in formulas and "
+            "dashboard widget view: refs are all updated to use the prefixed names.  "
+            "UUIDs (id: fields) are never touched.  Filenames on disk are also "
+            "unchanged — only display names get the prefix."
+        ),
+    )
+
     # Run mode
     mode = p.add_argument_group("run mode")
     mode.add_argument(
@@ -310,6 +324,7 @@ def cmd_extract_dashboard(args) -> int:
         output_dir=args.output_dir,
         skip_supermetrics=set(args.skip_supermetric or []),
         include_customgroups=list(args.include_customgroup or []),
+        prefix=getattr(args, "prefix", "") or "",
         dry_run=args.dry_run,
         yes=args.yes,
     )

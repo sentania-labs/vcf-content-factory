@@ -1,0 +1,21 @@
+id: 94f965d5-a389-4186-b801-979702406f92
+name: "[VCF Content Factory] Cluster - Reclaimable vCPUs (sum)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Sum of reclaimable vCPUs across all VMs flagged as oversized under this
+  cluster. VCF Ops sets summary|oversized|vcpus to the number of vCPUs that
+  could be reclaimed from a VM when its CPU demand (at the 95th percentile)
+  is materially below its provisioned allocation; it is zero for VMs that are
+  not flagged oversized. depth=2 walks ClusterComputeResource → HostSystem →
+  VirtualMachine, so every VM homed under the cluster contributes to the sum.
+  Pairs with the companion [VCF Content Factory] Cluster - Reclaimable Memory
+  GB (sum) SM; together they quantify the reclamation prize from right-sizing
+  at cluster scope. Used in the Right-Sizing Scoreboard of the
+  [VCF Content Factory] Capacity Assessment & Right-Sizing dashboard.
+  Pattern mirrors supermetrics/cluster_oversized_vm_count.yaml, which counts
+  flagged VMs via the same depth=2 walk.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+       metric=summary|oversized|vcpus, depth=2})

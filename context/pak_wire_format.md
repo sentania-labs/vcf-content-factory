@@ -68,8 +68,19 @@ Both are in `references/dalehassinger_unlocking_the_potential/VMware-Aria-Operat
 └── <adapter_dir>/
     ├── conf/
     │   ├── design.json       # The MPB design JSON (our rendered output)
+    │   ├── template.json     # MPB native flat format (required by MPB-compiled JARs
+    │   │                     # on re-install; absent → FileNotFoundException on describe)
+    │   │                     # Shape: same top-level keys as design.json MINUS version;
+    │   │                     # differs in auth (credentials/headers/token vs creds/
+    │   │                     # sessionSettings), resources (label/resourceKind/name/
+    │   │                     # identifiers/requestedMetrics vs metricSets), and
+    │   │                     # relationships (parent/child objects vs parentObjectId/
+    │   │                     # childObjectId). UUIDs match the JAR build's own UUIDs.
+    │   │                     # Factory convention: drop pre-built template.json from the
+    │   │                     # MPB pak into adapter_runtime/<ak>_template.json; builder
+    │   │                     # copies it into conf/ when present.
     │   ├── describe.xml      # Adapter kind XML (generated from design)
-    │   ├── export.json       # MPB export metadata (appears to be full design copy)
+    │   ├── export.json       # MPB UI exchange format (read by adapter runtime at init)
     │   ├── <adapter_kind>.properties  # Runtime config (relationship_sync_interval etc.)
     │   ├── version.txt       # Major/Minor/Implementation-Version
     │   ├── supermetrics/

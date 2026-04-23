@@ -354,6 +354,34 @@ class MetricDef:
 
 
 @dataclass
+class PagingDef:
+    """Explicit paging declaration on a request (Tier 3.3+, 2026-04-21).
+
+    Authors who need true MPB-managed chunked pagination declare this block.
+    The factory emits the paging wire block from this declaration so MPB
+    performs multi-page fetching.  Most APIs that use offset/limit params
+    simply need those as literal query params without this block — pass them
+    in ``params:`` directly and omit ``paging:``.
+
+    Fields match the MPB paging wire shape observed in captured designs:
+      type          — pagination strategy; only "OFFSET" observed.
+      paging_param  — query-param key for the page offset (e.g. "offset").
+      limit_param   — query-param key for the page size (e.g. "limit").
+      limit_value   — concrete page-size integer sent to the server.
+      list_path_id  — dot-path (with trailing .*) pointing at the
+                      response array that contains the page items
+                      (e.g. "data.volumes.*").  Maps to MPB listPathId.
+      start         — initial offset value (almost always 0).
+    """
+    type: str           # OFFSET (only value observed in wire captures)
+    paging_param: str   # offset param key
+    limit_param: str    # limit param key
+    limit_value: int    # concrete page size
+    list_path_id: str   # response path to paged array (e.g. "data.volumes.*")
+    start: int = 0      # initial offset (default 0)
+
+
+@dataclass
 class RequestDef:
     name: str
     method: str
@@ -361,6 +389,7 @@ class RequestDef:
     params: Any = field(default_factory=list)   # list[{key,value}] or dict
     body: Optional[str] = None
     response_path: Optional[str] = None
+    paging: Optional["PagingDef"] = None        # explicit paging; None = no paging
 
 
 @dataclass
@@ -618,21 +647,28 @@ def _validate_mp(mp: ManagementPackDef) -> None:
                 f"{ot_tag}: type must be one of {sorted(VALID_OBJECT_TYPE)}; "
                 f"got {ot.type!r}"
             )
-        if not ot.identifiers:
+        # Pure world kinds are topology roots and carry no identifiers by design.
+        if not ot.is_world and not ot.identifiers:
             raise ManagementPackValidationError(
                 f"{ot_tag}: at least one identifier is required"
             )
         # Validate each IdentifierDef
         for ident in ot.identifiers:
             _validate_identifier(ot_tag, ident)
-        if not ot.metric_sets:
-            raise ManagementPackValidationError(
-                f"{ot_tag}: at least one metricSet is required"
-            )
-        if not ot.metrics:
-            raise ManagementPackValidationError(
-                f"{ot_tag}: at least one metric or property is required"
-            )
+        if not ot.is_world:
+            # Non-world object types must have at least one metricSet and one metric.
+            if not ot.metric_sets:
+                raise ManagementPackValidationError(
+                    f"{ot_tag}: at least one metricSet is required"
+                )
+            if not ot.metrics:
+                raise ManagementPackValidationError(
+                    f"{ot_tag}: at least one metric or property is required"
+                )
+        # World kinds (is_world: true) with no metric_sets/metrics are valid —
+        # their only metrics are auto-computed summary rollups emitted by the
+        # MPB runtime (ComputedMetrics in describe.xml).  If metric_sets or
+        # metrics are present on a world kind they are still validated below.
 
         if ot.is_world:
             world_count += 1
@@ -666,7 +702,8 @@ def _validate_mp(mp: ManagementPackDef) -> None:
 
         # Validate each metricSet
         for i, ms in enumerate(ot.metric_sets):
-            _validate_metric_set(ot_tag, i, ms, request_names, ms_local_names)
+            _validate_metric_set(ot_tag, i, ms, request_names, ms_local_names,
+                                 is_world=ot.is_world)
 
         # Primary-validator
         _validate_primary(ot_tag, ot)
@@ -729,12 +766,57 @@ def _validate_metric_set(
     ms: MetricSetDef,
     mp_request_names: Dict[str, int],
     sibling_names: Dict[str, int],
+    is_world: bool = False,
 ) -> None:
     """Validate one MetricSetDef entry."""
+    import warnings as _warnings
     mstag = f"{ot_tag}: metricSets[{index}]"
 
     if not ms.from_request or not ms.from_request.strip():
         raise ManagementPackValidationError(f"{mstag}: from_request is required")
+
+    # list_path must NOT carry a trailing .*
+    # The renderer appends .* automatically for array iteration.
+    # A trailing .* produces a double-star path (data.volumes.*.* instead of
+    # data.volumes.*) which MPB silently uses as a sub-nested iterator, causing
+    # metricSet attributes to be associated with the wrong response level.
+    # Confirmed as the silent-failure mode on 2026-04-21 QA audit.
+    # Emitted as a DeprecationWarning (not an error) to avoid breaking pre-fix
+    # YAMLs that pre-date this lint; the renderer handles it correctly by
+    # stripping the trailing .* before computing the DML id.
+    # New YAMLs MUST NOT use the trailing .* form.
+    lp = ms.list_path or ""
+    if lp.endswith(".*"):
+        _warnings.warn(
+            f"{mstag}: list_path '{lp}' must NOT end with '.*' — "
+            f"the renderer appends '.*' automatically. "
+            f"Correct form: list_path: '{lp[:-2]}' (bare array name, no trailing .*). "
+            f"A trailing .* produces a double-star path (e.g. data.volumes.*.* instead "
+            f"of data.volumes.*) which MPB interprets as a nested sub-iterator, "
+            f"causing all metrics on this metricSet to be silently unresolvable. "
+            f"This will become a hard error in a future release.",
+            DeprecationWarning,
+            stacklevel=4,
+        )
+
+    # World/singleton objects must have an empty list_path on every metricSet.
+    # They consume the whole response root as scalar context ("base" DML).
+    # A non-empty list_path on a world object produces a wildcard DML instead
+    # of the required "base" DML, causing all world-object metrics to be
+    # silently unresolvable at collection time (2026-04-21 QA audit).
+    # Emitted as a DeprecationWarning (matching the .*  lint above) rather than
+    # a hard error for backward-compat; new YAMLs must not use this form.
+    if is_world and lp.strip():
+        _warnings.warn(
+            f"{mstag} (from_request: '{ms.from_request}'): "
+            f"list_path should be empty ('') on is_world: true objects. "
+            f"World/singleton objects consume the whole response root as scalar "
+            f"context (MPB 'base' DML). A non-empty list_path produces a wildcard "
+            f"DML causing all metrics on this object to be silently unresolvable. "
+            f"This will become a hard error in a future release.",
+            DeprecationWarning,
+            stacklevel=4,
+        )
 
     if ms.from_request not in mp_request_names:
         raise ManagementPackValidationError(
@@ -1330,6 +1412,9 @@ def _validate_request(tag: str, req: RequestDef) -> None:
             f"got {req.method!r}"
         )
 
+    # paging: validation removed 2026-04-21 — paging key is retired.
+    # _parse_request emits a DeprecationWarning if paging: is present in YAML.
+
 
 def _validate_metric_source(tag: str, src: "MetricSourceDef", ms_names: set) -> None:
     """Validate a MetricSourceDef.
@@ -1425,9 +1510,29 @@ def _reject_object_type_requests(raw: dict, ot_tag: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _parse_request(raw: dict, parent_tag: str) -> RequestDef:
+    """Parse one request entry from YAML into a RequestDef.
+
+    The ``paging:`` key is silently dropped (2026-04-21 retirement):
+    MPB auto-derives paging configuration from live API responses during
+    interactive import — authors do not need to declare it. If present in
+    YAML it is ignored with a warning so existing files don't fail validation.
+    The PagingDef dataclass and _render_paging() function are kept in render.py
+    to avoid breaking the flat-format path, but RequestDef.paging is always None.
+    """
+    import warnings
     if not isinstance(raw, dict):
         raise ManagementPackValidationError(
             f"{parent_tag}: each request must be a mapping"
+        )
+    if raw.get("paging") is not None:
+        req_name = raw.get("name", "<unnamed>")
+        warnings.warn(
+            f"{parent_tag}: request '{req_name}' declares paging: — "
+            f"this key is retired (2026-04-21). MPB auto-derives paging from "
+            f"live API responses. The paging: block is ignored and will not be "
+            f"emitted. Remove it from your YAML to suppress this warning.",
+            DeprecationWarning,
+            stacklevel=3,
         )
     return RequestDef(
         name=str(raw.get("name", "") or "").strip(),
@@ -1436,6 +1541,7 @@ def _parse_request(raw: dict, parent_tag: str) -> RequestDef:
         params=raw.get("params") or [],
         body=raw.get("body"),
         response_path=raw.get("response_path"),
+        paging=None,  # always None — paging: key retired 2026-04-21
     )
 
 

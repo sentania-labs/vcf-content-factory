@@ -148,7 +148,7 @@ widgets:
       adapter_kind: VMWARE
       resource_kind: vSphere World
     visual_theme: 8
-    box_columns: 4
+    box_columns: 5
     metrics:
       - adapter_kind: VMWARE
         resource_kind: ClusterComputeResource
@@ -173,10 +173,17 @@ widgets:
 
       - adapter_kind: VMWARE
         resource_kind: ClusterComputeResource
-        metric_key: "summary|oversized|vcpus"
+        metric_key: "Super Metric|sm_94f965d5-a389-4186-b801-979702406f92"
         metric_name: "Reclaimable vCPUs"
         color_method: 1
         label: "Reclaimable vCPUs"
+
+      - adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        metric_key: "Super Metric|sm_71ffc210-bae6-46c4-a7c7-23396057b008"
+        metric_name: "Reclaimable Memory GB"
+        color_method: 1
+        label: "Reclaimable Memory GB"
 
   - id: top15_vcpus
     type: ParetoAnalysis

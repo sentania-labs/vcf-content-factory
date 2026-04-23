@@ -898,7 +898,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True) -> ViewDef:
     return v
 
 
-def load_dashboard(path: Path, enforce_framework_prefix: bool = True) -> Dashboard:
+def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_name_path: str = "VCF Content Factory") -> Dashboard:
     try:
         data = _strict_load(path.read_text()) or {}
     except yaml.constructor.ConstructorError as exc:
@@ -1165,19 +1165,19 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True) -> Dashboa
         description=str(data.get("description", "") or "").strip(),
         widgets=widgets,
         interactions=interactions,
-        name_path=name_path or "VCF Content Factory",
+        name_path=name_path or default_name_path,
         shared=shared,
         source_path=path,
     )
 
 
-def load_all(views_dir: Path, dashboards_dir: Path, enforce_framework_prefix: bool = True) -> tuple[list[ViewDef], list[Dashboard]]:
+def load_all(views_dir: Path, dashboards_dir: Path, enforce_framework_prefix: bool = True, default_name_path: str = "VCF Content Factory") -> tuple[list[ViewDef], list[Dashboard]]:
     views = [load_view(p, enforce_framework_prefix=enforce_framework_prefix) for p in sorted(views_dir.rglob("*.y*ml"))] if views_dir.exists() else []
     by_name = {v.name: v for v in views}
     dashboards: List[Dashboard] = []
     if dashboards_dir.exists():
         for p in sorted(dashboards_dir.rglob("*.y*ml")):
-            d = load_dashboard(p, enforce_framework_prefix=enforce_framework_prefix)
+            d = load_dashboard(p, enforce_framework_prefix=enforce_framework_prefix, default_name_path=default_name_path)
             d.validate(by_name, enforce_framework_prefix=enforce_framework_prefix)
             dashboards.append(d)
     return views, dashboards

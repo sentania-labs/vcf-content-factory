@@ -261,12 +261,35 @@ def _transform_configuration(
         else:
             non_standard.append(item)
 
+    # SSL value mapping: loader constants → MPB exchange display strings
+    _SSL_LOADER_TO_MPB: Dict[str, str] = {
+        "NO_VERIFY": "No Verify",
+        "VERIFY":    "Verify",
+        "NO_SSL":    "No SSL",
+    }
+
     result: List[Dict[str, Any]] = []
 
-    # 1. Emit standard seven in canonical order with UUID5 IDs
+    # 1. Emit standard seven in canonical order with UUID5 IDs.
+    #    Overlay defaultValue from the flat entry when present so that
+    #    per-MP source values (port, ssl, timeout, retries, concurrent)
+    #    are preserved rather than silently replaced by template defaults.
     for tmpl in _MPB_STANDARD_CONFIG_TEMPLATE:
         entry = dict(tmpl)
         entry["id"] = _stable_config_id(adapter_kind, tmpl["key"])
+        flat = flat_by_key.get(tmpl["key"])
+        if flat is not None:
+            dv = flat.get("defaultValue")
+            if dv is not None:
+                # SSL axis: loader constant → MPB display string
+                if tmpl["key"] == "mpb_ssl_config":
+                    entry["defaultValue"] = _SSL_LOADER_TO_MPB.get(
+                        str(dv).upper(), str(dv)
+                    )
+                elif not isinstance(dv, str):
+                    entry["defaultValue"] = str(dv)
+                else:
+                    entry["defaultValue"] = dv
         result.append(entry)
 
     # 2. Emit non-standard items with field-level transforms
@@ -291,12 +314,23 @@ def _strip_request(req: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a flat request object to exchange format.
 
     Removes fields that appear in the flat format but NOT in the exchange format:
-      paging, designId
+      paging, designId, chainingSettings (when null/absent)
 
-    chainingSettings IS present in exchange format exports (confirmed from
-    context/mpb_chaining_wire_format.md §2.1 cross-validation against both the
-    Synology DSM MP.json capture and the Rubrik reference).  It must NOT be
-    stripped — dropping it would silently break chain wiring in imported designs.
+    Key rules confirmed from context/mpb_wire_reference/synology_nas_working_export.json
+    (2026-04-21 ground truth):
+
+    1. chainingSettings: present ONLY on chained requests with a non-null value.
+       Non-chained requests have the key entirely absent (not null).
+       Our flat renderer emits chainingSettings=None on every request — strip when null.
+
+    2. paging: MPB auto-populates this from live API responses during interactive
+       creation. It is NOT something authors declare — it is runtime-discovered data.
+       The explicit PagingDef grammar in the YAML/loader is for a future "declare
+       pagination hints" feature that would seed this block without a live round-trip.
+       For now: never emit paging in exchange format — the key is absent from our
+       renderer output and should stay absent. MPB will populate it on first live run.
+
+    3. designId: dropped (flat format only).
 
     Collapses response: keeps only result.{responseCode, dataModelLists}.
     params.id is absent in our flat format already (render.py strips it).
@@ -311,8 +345,12 @@ def _strip_request(req: Dict[str, Any]) -> Dict[str, Any]:
         "params": req.get("params") or [],
     }
 
-    # Preserve chainingSettings (present in exchange format; null means no chain)
-    r["chainingSettings"] = req.get("chainingSettings")
+    # Only emit chainingSettings when it is a non-null dict.
+    # Non-chained requests have the key absent entirely (confirmed 2026-04-21).
+    chain = req.get("chainingSettings")
+    if chain is not None:
+        r["chainingSettings"] = chain
+    # else: key absent — correct for non-chained requests
 
     # Collapse response: keep only result.{responseCode, dataModelLists}
     resp = req.get("response")
@@ -489,16 +527,25 @@ def render_mpb_exchange_json(
 
     # ------------------------------------------------------------------
     # 1. design.design block
+    #
+    # Confirmed shape from synology_nas_working_export.json (2026-04-21):
+    #   {
+    #     "design": {
+    #       "name": "...",
+    #       "type": "HTTP",
+    #       "description": "...",
+    #       "version": "1.0.0"
+    #     }
+    #   }
+    # Keys ABSENT in reference: buildNumber (top-level design block), id, author.
+    # All three were incorrectly emitted before the 2026-04-21 wire-format audit.
     # ------------------------------------------------------------------
     design_block = {
-        "buildNumber": mp.build_number,
         "design": {
-            "id": None,
             "name": pak.get("name", mp.name),
             "type": src.get("type", "HTTP"),
             "description": pak.get("description", ""),
             "version": mp.version,  # base version, no build suffix
-            "author": mp.author,
         }
     }
 
@@ -528,9 +575,10 @@ def render_mpb_exchange_json(
     test_req_raw = src.get("requests", {}).get(test_req_id) if test_req_id else None
     test_req = _strip_session_request(test_req_raw) if test_req_raw else None
 
+    # designId is absent in the exchange format (confirmed 2026-04-21).
+    # The flat render.py emits designId: None, but exchange strips it.
     source_source = {
         "id": _stable_source_id(ak),
-        "designId": None,
         "configuration": {
             "baseApiPath": src.get("basePath", ""),
             "customConfigs": [],
@@ -624,8 +672,13 @@ def render_mpb_exchange_json(
             for evt in src.get("events", [])
         ]
 
+    # Top-level exchange format confirmed from synology_nas_working_export.json
+    # (2026-04-21 ground truth):
+    #   - type: "HTTP"  — present at top level (was missing before 2026-04-21 audit)
+    #   - content key — ABSENT (was incorrectly emitted as content: [] before)
+    # Key order matches the reference for readability, though MPB ignores order.
     exchange = {
-        "content": [],
+        "type": src.get("type", "HTTP"),
         "design": design_block,
         "source": source_block,
         "objects": objects_list,

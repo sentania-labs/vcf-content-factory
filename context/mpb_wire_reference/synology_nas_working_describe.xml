@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- <!DOCTYPE AdapterKind SYSTEM "describeSchema.xsd"> -->
+<!-- Copyright © VMware Inc. All Rights Reserved. -->
+<AdapterKind xmlns="http://schemas.vmware.com/vcops/schema" key="mpb_synology_nas" nameKey="1" version="1">
+  <CredentialKinds>
+    <CredentialKind key="mpb_synology_nas_credentials" nameKey="2">
+      <CredentialField required="true" dispOrder="1" enum="false" key="username" nameKey="3" password="false" type="string"></CredentialField>
+      <CredentialField required="true" dispOrder="2" enum="false" key="passwd" nameKey="4" password="true" type="string"></CredentialField>
+    </CredentialKind>
+  </CredentialKinds>
+  <ResourceKinds>
+    <ResourceKind key="mpb_synology_nas" nameKey="5" type="7" credentialKind="mpb_synology_nas_credentials" monitoringInterval="5">
+      <ResourceGroup key="summary" nameKey="6" instanced="false">
+        <ResourceAttribute nameKey="7" dashboardOrder="1" key="mpb_synology_nas_synology_diskstation_count" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="8" dashboardOrder="2" key="mpb_synology_nas_volume_count" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="9" dashboardOrder="3" key="mpb_synology_nas_iscsi_lun_count" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="10" dashboardOrder="4" key="mpb_synology_nas_storage_pool_count" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="11" dashboardOrder="5" key="mpb_synology_nas_disks_count" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+      </ResourceGroup>
+      <ResourceIdentifier dispOrder="1" key="mpb_hostname" nameKey="12" required="true" type="string" identType="1" enum="false"  default=""></ResourceIdentifier>
+      <ResourceIdentifier dispOrder="2" key="mpb_port" nameKey="13" required="true" type="string" identType="2" enum="false"  default="5001"></ResourceIdentifier>
+      <ResourceIdentifier dispOrder="3" key="mpb_connection_timeout" nameKey="14" required="true" type="string" identType="2" enum="false"  default="30"></ResourceIdentifier>
+      <ResourceIdentifier dispOrder="4" key="mpb_concurrent_requests" nameKey="15" required="true" type="string" identType="2" enum="false"  default="2"></ResourceIdentifier>
+      <ResourceIdentifier dispOrder="5" key="mpb_max_retries" nameKey="16" required="true" type="string" identType="2" enum="false"  default="2"></ResourceIdentifier>
+      <ResourceIdentifier dispOrder="6" key="mpb_ssl_config" nameKey="17" required="true" type="string" identType="2" enum="true"  default="Verify">
+        <enum default="false" value="No Verify"></enum>
+        <enum default="true" value="Verify"></enum>
+        <enum default="false" value="No SSL"></enum>
+      </ResourceIdentifier>
+      <ResourceIdentifier dispOrder="7" key="mpb_min_event_severity" nameKey="18" required="true" type="string" identType="2" enum="true"  default="Warning">
+        <enum default="false" value="Critical"></enum>
+        <enum default="false" value="Immediate"></enum>
+        <enum default="true" value="Warning"></enum>
+        <enum default="false" value="Info"></enum>
+      </ResourceIdentifier>
+      <ResourceIdentifier dispOrder="8" key="support_autodiscovery" nameKey="19" required="true" type="string" identType="2" enum="true"  default="True">
+        <enum default="true" value="True"></enum>
+        <enum default="false" value="False"></enum>
+      </ResourceIdentifier>  </ResourceKind>
+      <ResourceKind key="mpb_synology_nas_synology_diskstation" nameKey="20">
+        <ResourceIdentifier dispOrder="1" key="adapter_instance_id" nameKey="21" required="true" type="string" identType="1" enum="false" ></ResourceIdentifier>
+        <ResourceIdentifier dispOrder="2" key="serial" nameKey="22" required="true" type="string" identType="1" enum="false" ></ResourceIdentifier>
+        <ResourceGroup key="relationships" nameKey="23" instanced="false">
+          <ResourceAttribute nameKey="24" dashboardOrder="1" key="mpb_synology_nas_parent" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        </ResourceGroup>
+        <ResourceAttribute nameKey="25" dashboardOrder="1" key="cpu_clock_speed" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="26" dashboardOrder="2" key="cpu_cores" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="27" dashboardOrder="3" key="cpu_family" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="28" dashboardOrder="4" key="cpu_series" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="29" dashboardOrder="5" key="cpu_vendor" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="30" dashboardOrder="6" key="enabled_ntp" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="31" dashboardOrder="7" key="firmware_date" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="32" dashboardOrder="8" key="firmware_ver" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="33" dashboardOrder="9" key="model" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="34" dashboardOrder="10" key="ntp_server" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="35" dashboardOrder="11" key="ram_size" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" unit="gigabyte" />
+        <ResourceAttribute nameKey="36" dashboardOrder="12" key="serial" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="37" dashboardOrder="13" key="sys_temp" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="38" dashboardOrder="14" key="time_zone_desc" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="39" dashboardOrder="15" key="up_time" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="12" dashboardOrder="16" key="hostname" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="40" dashboardOrder="17" key="15min_load" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="41" dashboardOrder="18" key="1min_load" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="42" dashboardOrder="19" key="5min_load" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="43" dashboardOrder="20" key="other_load" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="44" dashboardOrder="21" key="system_load" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="45" dashboardOrder="22" key="user_load" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="46" dashboardOrder="23" key="avail_real" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="47" dashboardOrder="24" key="avail_swap" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="48" dashboardOrder="25" key="buffer" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="49" dashboardOrder="26" key="cached" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="50" dashboardOrder="27" key="memory_size" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="51" dashboardOrder="28" key="real_usage" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="52" dashboardOrder="29" key="si_disk" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="53" dashboardOrder="30" key="so_disk" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="54" dashboardOrder="31" key="swap_usage" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="55" dashboardOrder="32" key="total_real" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="56" dashboardOrder="33" key="total_swap" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+      </ResourceKind>
+      <ResourceKind key="mpb_synology_nas_volume" nameKey="57">
+        <ResourceIdentifier dispOrder="1" key="adapter_instance_id" nameKey="21" required="true" type="string" identType="1" enum="false" ></ResourceIdentifier>
+        <ResourceIdentifier dispOrder="2" key="volume_id" nameKey="58" required="true" type="string" identType="1" enum="false" ></ResourceIdentifier>
+        <ResourceIdentifier dispOrder="3" key="volume_path" nameKey="59" required="true" type="string" identType="1" enum="false" ></ResourceIdentifier>
+        <ResourceGroup key="relationships" nameKey="23" instanced="false">
+          <ResourceAttribute nameKey="60" dashboardOrder="1" key="mpb_synology_nas_iscsi_lun_child" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+          <ResourceAttribute nameKey="61" dashboardOrder="2" key="mpb_synology_nas_storage_pool_parent" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+          <ResourceAttribute nameKey="24" dashboardOrder="3" key="mpb_synology_nas_parent" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        </ResourceGroup>
+        <ResourceAttribute nameKey="62" dashboardOrder="1" key="crashed" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="63" dashboardOrder="2" key="deduped" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="64" dashboardOrder="3" key="description" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="65" dashboardOrder="4" key="display_name" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="66" dashboardOrder="5" key="fs_type" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="67" dashboardOrder="6" key="is_encrypted" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="68" dashboardOrder="7" key="pool_path" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="69" dashboardOrder="8" key="raid_type" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="70" dashboardOrder="9" key="readonly" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="71" dashboardOrder="10" key="size_free_byte" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="72" dashboardOrder="11" key="size_total_byte" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="73" dashboardOrder="12" key="status" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="74" dashboardOrder="13" key="volume_id" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="75" dashboardOrder="14" key="volume_path" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+      </ResourceKind>
+      <ResourceKind key="mpb_synology_nas_iscsi_lun" nameKey="76">
+        <ResourceIdentifier dispOrder="1" key="adapter_instance_id" nameKey="21" required="true" type="string" identType="1" enum="false" ></ResourceIdentifier>
+        <ResourceIdentifier dispOrder="2" key="uuid" nameKey="77" required="true" type="string" identType="1" enum="false" ></ResourceIdentifier>
+        <ResourceGroup key="relationships" nameKey="23" instanced="false">
+          <ResourceAttribute nameKey="78" dashboardOrder="1" key="mpb_synology_nas_volume_parent" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+          <ResourceAttribute nameKey="24" dashboardOrder="2" key="mpb_synology_nas_parent" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        </ResourceGroup>
+        <ResourceAttribute nameKey="79" dashboardOrder="1" key="uuid" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="80" dashboardOrder="2" key="name" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="81" dashboardOrder="3" key="provisioned_size" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" unit="bytes" />
+        <ResourceAttribute nameKey="82" dashboardOrder="4" key="location" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="83" dashboardOrder="5" key="lun_type" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+      </ResourceKind>
+      <ResourceKind key="mpb_synology_nas_storage_pool" nameKey="84">
+        <ResourceIdentifier dispOrder="1" key="adapter_instance_id" nameKey="21" required="true" type="string" identType="1" enum="false" ></ResourceIdentifier>
+        <ResourceIdentifier dispOrder="2" key="id" nameKey="85" required="true" type="string" identType="1" enum="false" ></ResourceIdentifier>
+        <ResourceIdentifier dispOrder="3" key="pool_path" nameKey="86" required="true" type="string" identType="1" enum="false" ></ResourceIdentifier>
+        <ResourceGroup key="relationships" nameKey="23" instanced="false">
+          <ResourceAttribute nameKey="87" dashboardOrder="1" key="mpb_synology_nas_volume_child" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+          <ResourceAttribute nameKey="88" dashboardOrder="2" key="mpb_synology_nas_disks_child" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+          <ResourceAttribute nameKey="24" dashboardOrder="3" key="mpb_synology_nas_parent" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        </ResourceGroup>
+        <ResourceAttribute nameKey="89" dashboardOrder="1" key="device_type" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="90" dashboardOrder="2" key="id" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="91" dashboardOrder="3" key="num_id" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="68" dashboardOrder="4" key="pool_path" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="92" dashboardOrder="5" key="total" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="93" dashboardOrder="6" key="used" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+      </ResourceKind>
+      <ResourceKind key="mpb_synology_nas_disks" nameKey="94">
+        <ResourceIdentifier dispOrder="1" key="adapter_instance_id" nameKey="21" required="true" type="string" identType="1" enum="false" ></ResourceIdentifier>
+        <ResourceIdentifier dispOrder="2" key="serial" nameKey="22" required="true" type="string" identType="1" enum="false" ></ResourceIdentifier>
+        <ResourceGroup key="relationships" nameKey="23" instanced="false">
+          <ResourceAttribute nameKey="61" dashboardOrder="1" key="mpb_synology_nas_storage_pool_parent" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+          <ResourceAttribute nameKey="24" dashboardOrder="2" key="mpb_synology_nas_parent" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        </ResourceGroup>
+        <ResourceAttribute nameKey="95" dashboardOrder="1" key="device" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="96" dashboardOrder="2" key="firm" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="33" dashboardOrder="3" key="model" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="80" dashboardOrder="4" key="name" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="36" dashboardOrder="5" key="serial" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="97" dashboardOrder="6" key="size_total" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="98" dashboardOrder="7" key="slot_id" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        <ResourceAttribute nameKey="99" dashboardOrder="8" key="smart_status" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="100" dashboardOrder="9" key="used_by" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="101" dashboardOrder="10" key="vendor" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+        <ResourceAttribute nameKey="102" dashboardOrder="11" key="wcache_force_off" dataType="string" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="true" hidden="false" />
+      </ResourceKind>
+      <ResourceKind key="mpb_synology_nas_relatives" nameKey="103" type="4" showTag="true" dynamic="true">
+        <ResourceGroup key="relationships" nameKey="23" instanced="false">
+        </ResourceGroup>
+      </ResourceKind>
+      <ResourceKind key="mpb_synology_nas_world" nameKey="104" worldObjectName="Synology NAS World" showTag="true" type="8" subType="6">
+        <ResourceGroup key="summary" nameKey="6" instanced="false">
+          <ResourceAttribute nameKey="7" dashboardOrder="1" key="mpb_synology_nas_synology_diskstation_count" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+          <ResourceAttribute nameKey="8" dashboardOrder="2" key="mpb_synology_nas_volume_count" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+          <ResourceAttribute nameKey="9" dashboardOrder="3" key="mpb_synology_nas_iscsi_lun_count" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+          <ResourceAttribute nameKey="10" dashboardOrder="4" key="mpb_synology_nas_storage_pool_count" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+          <ResourceAttribute nameKey="11" dashboardOrder="5" key="mpb_synology_nas_disks_count" dataType="float" defaultMonitored="true" isDiscrete="false" keyAttribute="false" isRate="false" isProperty="false" hidden="false" />
+        </ResourceGroup>
+        <ComputedMetrics>
+          <ComputedMetric key="summary|mpb_synology_nas_synology_diskstation_count" expression="sum(${adapterkind=mpb_synology_nas, objecttype=mpb_synology_nas, attribute=summary|mpb_synology_nas_synology_diskstation_count, depth=1})" />
+          <ComputedMetric key="summary|mpb_synology_nas_volume_count" expression="sum(${adapterkind=mpb_synology_nas, objecttype=mpb_synology_nas, attribute=summary|mpb_synology_nas_volume_count, depth=1})" />
+          <ComputedMetric key="summary|mpb_synology_nas_iscsi_lun_count" expression="sum(${adapterkind=mpb_synology_nas, objecttype=mpb_synology_nas, attribute=summary|mpb_synology_nas_iscsi_lun_count, depth=1})" />
+          <ComputedMetric key="summary|mpb_synology_nas_storage_pool_count" expression="sum(${adapterkind=mpb_synology_nas, objecttype=mpb_synology_nas, attribute=summary|mpb_synology_nas_storage_pool_count, depth=1})" />
+          <ComputedMetric key="summary|mpb_synology_nas_disks_count" expression="sum(${adapterkind=mpb_synology_nas, objecttype=mpb_synology_nas, attribute=summary|mpb_synology_nas_disks_count, depth=1})" />
+        </ComputedMetrics>
+      </ResourceKind>
+  </ResourceKinds>
+  <Discoveries>
+    <Discovery key="mpb_synology_nas_manual_discovery" nameKey="105"></Discovery>
+  </Discoveries>
+  <TraversalSpecKinds>
+    <TraversalSpecKind name="Synology NAS Resources" rootAdapterKind="mpb_synology_nas" rootResourceKind="mpb_synology_nas_world" iconName="default.svg" usedFor="ALL" description="Traversal for Synology NAS Resources">
+      <ResourcePath path="mpb_synology_nas::mpb_synology_nas_world||mpb_synology_nas::mpb_synology_nas::child/skip||mpb_synology_nas::mpb_synology_nas_storage_pool::child||mpb_synology_nas::mpb_synology_nas_volume::child||mpb_synology_nas::mpb_synology_nas_iscsi_lun::child"></ResourcePath>
+      <ResourcePath path="mpb_synology_nas::mpb_synology_nas_world||mpb_synology_nas::mpb_synology_nas::child/skip||mpb_synology_nas::mpb_synology_nas_storage_pool::child||mpb_synology_nas::mpb_synology_nas_disks::child"></ResourcePath>
+    </TraversalSpecKind>
+  </TraversalSpecKinds>
+  <LicenseConfig enabled="false"></LicenseConfig>
+  <SymptomDefinitions>
+  
+  </SymptomDefinitions>
+  <AlertDefinitions>
+  
+  </AlertDefinitions>
+  <Recommendations>
+  
+  </Recommendations>
+  <UnitDefinitions>
+    <UnitType key="bytes_base10_type">
+      <Unit key="byte" nameKey="106" order="1" conversionFactor="1"></Unit>
+      <Unit key="kilobyte" nameKey="107" order="2" conversionFactor="1000"></Unit>
+      <Unit key="megabyte" nameKey="108" order="3" conversionFactor="1000"></Unit>
+      <Unit key="gigabyte" nameKey="109" order="4" conversionFactor="1000"></Unit>
+      <Unit key="terabyte" nameKey="110" order="5" conversionFactor="1000"></Unit>
+      <Unit key="petabyte" nameKey="111" order="6" conversionFactor="1000"></Unit>
+    </UnitType>
+    <UnitType key="bytes_base2_type">
+      <Unit key="bibyte" nameKey="106" order="1" conversionFactor="1"></Unit>
+      <Unit key="kibibyte" nameKey="112" order="2" conversionFactor="1024"></Unit>
+      <Unit key="mebibyte" nameKey="113" order="3" conversionFactor="1024"></Unit>
+      <Unit key="gibibyte" nameKey="114" order="4" conversionFactor="1024"></Unit>
+      <Unit key="tebibyte" nameKey="115" order="5" conversionFactor="1024"></Unit>
+      <Unit key="pebibyte" nameKey="116" order="6" conversionFactor="1024"></Unit>
+    </UnitType>
+    <UnitType key="bits_base10_type">
+      <Unit key="bit" nameKey="117" order="1" conversionFactor="1"></Unit>
+      <Unit key="kilobit" nameKey="118" order="2" conversionFactor="1000"></Unit>
+      <Unit key="megabit" nameKey="119" order="3" conversionFactor="1000"></Unit>
+      <Unit key="gigabit" nameKey="120" order="4" conversionFactor="1000"></Unit>
+      <Unit key="terabit" nameKey="121" order="5" conversionFactor="1000"></Unit>
+      <Unit key="petabit" nameKey="122" order="6" conversionFactor="1000"></Unit>
+    </UnitType>
+    <UnitType key="bits_base2_type">
+      <Unit key="bibit" nameKey="117" order="1" conversionFactor="1"></Unit>
+      <Unit key="kibibit" nameKey="123" order="2" conversionFactor="1024"></Unit>
+      <Unit key="mebibit" nameKey="124" order="3" conversionFactor="1024"></Unit>
+      <Unit key="gibibit" nameKey="125" order="4" conversionFactor="1024"></Unit>
+      <Unit key="tebibit" nameKey="126" order="5" conversionFactor="1024"></Unit>
+      <Unit key="pebibit" nameKey="127" order="6" conversionFactor="1024"></Unit>
+    </UnitType>
+    <UnitType key="bytes_rate_base10_type">
+      <Unit key="bytes_per_second" nameKey="128" order="1" conversionFactor="1"></Unit>
+      <Unit key="kilobytes_per_second" nameKey="129" order="2" conversionFactor="1000"></Unit>
+      <Unit key="megabytes_per_second" nameKey="130" order="3" conversionFactor="1000"></Unit>
+      <Unit key="gigabytes_per_second" nameKey="131" order="4" conversionFactor="1000"></Unit>
+      <Unit key="terabytes_per_second" nameKey="132" order="5" conversionFactor="1000"></Unit>
+      <Unit key="petabytes_per_second" nameKey="133" order="6" conversionFactor="1000"></Unit>
+    </UnitType>
+    <UnitType key="bytes_rate_base2_type">
+      <Unit key="bibytes_per_second" nameKey="128" order="1" conversionFactor="1"></Unit>
+      <Unit key="kibibytes_per_second" nameKey="134" order="2" conversionFactor="1024"></Unit>
+      <Unit key="mebibytes_per_second" nameKey="135" order="3" conversionFactor="1024"></Unit>
+      <Unit key="gibibytes_per_second" nameKey="136" order="4" conversionFactor="1024"></Unit>
+      <Unit key="tebibytes_per_second" nameKey="137" order="5" conversionFactor="1024"></Unit>
+      <Unit key="pebibytes_per_second" nameKey="138" order="6" conversionFactor="1024"></Unit>
+    </UnitType>
+    <UnitType key="bits_rate_base10_type">
+      <Unit key="bits_per_second" nameKey="139" order="1" conversionFactor="1"></Unit>
+      <Unit key="kilobits_per_second" nameKey="140" order="2" conversionFactor="1000"></Unit>
+      <Unit key="megabits_per_second" nameKey="141" order="3" conversionFactor="1000"></Unit>
+      <Unit key="gigabits_per_second" nameKey="142" order="4" conversionFactor="1000"></Unit>
+      <Unit key="terabits_per_second" nameKey="143" order="5" conversionFactor="1000"></Unit>
+      <Unit key="petabits_per_second" nameKey="144" order="6" conversionFactor="1000"></Unit>
+    </UnitType>
+    <UnitType key="bits_rate_base2_type">
+      <Unit key="bibits_per_second" nameKey="139" order="1" conversionFactor="1"></Unit>
+      <Unit key="kibibits_per_second" nameKey="145" order="2" conversionFactor="1024"></Unit>
+      <Unit key="mebibits_per_second" nameKey="146" order="3" conversionFactor="1024"></Unit>
+      <Unit key="gibibits_per_second" nameKey="147" order="4" conversionFactor="1024"></Unit>
+      <Unit key="tebibits_per_second" nameKey="148" order="5" conversionFactor="1024"></Unit>
+      <Unit key="pebibits_per_second" nameKey="149" order="6" conversionFactor="1024"></Unit>
+    </UnitType>
+    <UnitType key="cycle_rate_type">
+      <Unit key="hertz" nameKey="150" order="1" conversionFactor="1"></Unit>
+      <Unit key="kilohertz" nameKey="151" order="2" conversionFactor="1000"></Unit>
+      <Unit key="megahertz" nameKey="152" order="3" conversionFactor="1000"></Unit>
+      <Unit key="gigahertz" nameKey="153" order="4" conversionFactor="1000"></Unit>
+      <Unit key="terahertz" nameKey="154" order="5" conversionFactor="1000"></Unit>
+      <Unit key="petahertz" nameKey="155" order="6" conversionFactor="1000"></Unit>
+      <Unit key="exahertz" nameKey="156" order="7" conversionFactor="1000"></Unit>
+    </UnitType>
+    <UnitType key="time_type">
+      <Unit key="microseconds" nameKey="157" order="1" conversionFactor="1"></Unit>
+      <Unit key="milliseconds" nameKey="158" order="2" conversionFactor="1000"></Unit>
+      <Unit key="seconds" nameKey="159" order="3" conversionFactor="1000"></Unit>
+      <Unit key="minutes" nameKey="160" order="4" conversionFactor="60"></Unit>
+      <Unit key="hours" nameKey="161" order="5" conversionFactor="60"></Unit>
+      <Unit key="days" nameKey="162" order="6" conversionFactor="24"></Unit>
+    </UnitType>
+    <UnitType key="count_type">
+      <Unit key="count" nameKey="163" order="1" conversionFactor="1"></Unit>
+    </UnitType>
+    <UnitType key="percent_type">
+      <Unit key="percent" nameKey="164" order="1" conversionFactor="1"></Unit>
+    </UnitType>
+    <UnitType key="per_second_type">
+      <Unit key="per_second" nameKey="165" order="1" conversionFactor="1"></Unit>
+    </UnitType>
+    <UnitType key="bytes_type">
+      <Unit key="bytes" nameKey="166" order="1" conversionFactor="1"></Unit>
+    </UnitType>
+  </UnitDefinitions>
+</AdapterKind>

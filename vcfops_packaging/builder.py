@@ -273,6 +273,81 @@ def _build_reports_dropin_zip(reports_xml: str) -> bytes:
     return buf.getvalue()
 
 
+def _load_design_sections(bundle: Bundle) -> dict:
+    """Load and extract named sections from a bundle's design artifact.
+
+    Resolution order:
+    1. Explicit ``design:`` field in the bundle manifest (repo-relative path).
+    2. Convention: ``designs/<bundle-name>.md`` at repo root.
+    3. If neither exists, return an empty dict (design sections are skipped).
+
+    Sections extracted (keyed by destination name):
+      intent          <- ## Scope and Intent
+      layout          <- ## Dashboard Mockup
+      design_decisions <- ## Design Decisions
+      out_of_scope    <- ## Out of Scope          (if present)
+      origin          <- ## Original Request       (if present)
+                      <- ## Provenance             (if present AND ## Original Request is absent)
+
+    Returns a dict of {section_key: markdown_content_str}.  Only keys whose
+    source heading is found in the design artifact are included.
+    """
+    repo_root = Path(__file__).parent.parent
+
+    # Resolve design artifact path.
+    design_path: Optional[Path] = None
+    if bundle.design:
+        candidate = Path(bundle.design)
+        if not candidate.is_absolute():
+            candidate = repo_root / candidate
+        if candidate.exists():
+            design_path = candidate
+    if design_path is None:
+        # Convention-based lookup.
+        candidate = repo_root / "designs" / f"{bundle.name}.md"
+        if candidate.exists():
+            design_path = candidate
+
+    if design_path is None:
+        return {}
+
+    import re as _re
+    text = design_path.read_text(encoding="utf-8")
+
+    # Split into sections on H2 headings (^## ...).
+    # Each match gives us (heading_text, content_until_next_h2).
+    heading_re = _re.compile(r'^## (.+)$', _re.MULTILINE)
+    sections: dict[str, str] = {}
+    matches = list(heading_re.finditer(text))
+    for i, m in enumerate(matches):
+        heading = m.group(1).strip()
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        content = text[start:end].strip()
+        sections[heading] = content
+
+    result: dict = {}
+
+    # Map source headings -> destination keys.
+    if "Scope and Intent" in sections:
+        result["intent"] = sections["Scope and Intent"]
+    if "Dashboard Mockup" in sections:
+        result["layout"] = sections["Dashboard Mockup"]
+    if "Design Decisions" in sections:
+        result["design_decisions"] = sections["Design Decisions"]
+    if "Out of Scope" in sections:
+        result["out_of_scope"] = sections["Out of Scope"]
+
+    # Origin: prefer ## Original Request; fall back to ## Provenance only if
+    # ## Original Request is absent.
+    if "Original Request" in sections:
+        result["origin"] = sections["Original Request"]
+    elif "Provenance" in sections:
+        result["origin"] = sections["Provenance"]
+
+    return result
+
+
 def _generate_bundle_readme(bundle: Bundle, display_name: str) -> str:
     """Generate the bundle-specific README.md (references ../../install.py)."""
     lines = [
@@ -284,7 +359,7 @@ def _generate_bundle_readme(bundle: Bundle, display_name: str) -> str:
 
     # Provenance section: rendered when factory_native is False OR any
     # attribution field is set.  Placement: after lead description, before
-    # ## Contents.
+    # design sections and ## Contents.
     has_provenance = (
         not bundle.factory_native
         or bool(bundle.author)
@@ -323,6 +398,55 @@ def _generate_bundle_readme(bundle: Bundle, display_name: str) -> str:
         # The ## Provenance block above supplies the structured metadata
         # (source URL, captured date, version, author, license).
         # Duplicating extraction-origin language here creates double provenance.
+
+    # --- Design artifact sections ---
+    # Extracted from designs/<bundle-name>.md (or manifest's design: field).
+    # Only present when the design artifact exists and contains the heading.
+    # Sections included: Intent, Layout (mockup), Design Decisions, Out of
+    # Scope (conditional), Origin (conditional).  Internal sections
+    # (Traceability, Known Issues, Content Inventory, Side-by-Side Analysis)
+    # are deliberately excluded.
+    design_sections = _load_design_sections(bundle)
+
+    if "intent" in design_sections:
+        lines += [
+            "## Intent",
+            "",
+            design_sections["intent"],
+            "",
+        ]
+
+    if "layout" in design_sections:
+        lines += [
+            "## Layout",
+            "",
+            design_sections["layout"],
+            "",
+        ]
+
+    if "design_decisions" in design_sections:
+        lines += [
+            "## Design Decisions",
+            "",
+            design_sections["design_decisions"],
+            "",
+        ]
+
+    if "out_of_scope" in design_sections:
+        lines += [
+            "## Out of Scope",
+            "",
+            design_sections["out_of_scope"],
+            "",
+        ]
+
+    if "origin" in design_sections:
+        lines += [
+            "## Origin",
+            "",
+            design_sections["origin"],
+            "",
+        ]
 
     lines += [
         "## Contents",

@@ -47,6 +47,7 @@ from .loader import (
     NameExpressionDef,
     NamePartDef,
     ObjectTypeDef,
+    PagingDef,
     RelationshipDef,
     RequestDef,
     WorldIdentityDef,
@@ -154,9 +155,17 @@ def _compute_dml_id(response_path: Optional[str], list_path: str) -> str:
       response_path="data", list_path=""           → "data.*"
       response_path="",     list_path=""           → "base"
       response_path="data", list_path="space.volume" → "data.space.volume.*"
+
+    NOTE: list_path values ending in ".*" are stripped before composition to
+    avoid double-star paths (e.g. "volumes.*" → "volumes" → "data.volumes.*").
+    The loader emits a DeprecationWarning for these; this normalization ensures
+    pre-fix YAMLs render correctly while the lint is in warning-only mode.
     """
     rp = (response_path or "").strip()
     lp = list_path.strip() if list_path else ""
+    # Normalize: strip trailing .* from list_path (the renderer always appends .*)
+    if lp.endswith(".*"):
+        lp = lp[:-2]
 
     if not rp and not lp:
         return "base"
@@ -172,6 +181,9 @@ def _compute_dml_key(response_path: Optional[str], list_path: str) -> List[str]:
     """Compute the DML key array from response_path + list_path."""
     rp = (response_path or "").strip()
     lp = list_path.strip() if list_path else ""
+    # Normalize: strip trailing .* from list_path (matches _compute_dml_id)
+    if lp.endswith(".*"):
+        lp = lp[:-2]
 
     if not rp and not lp:
         return []
@@ -234,7 +246,7 @@ _STANDARD_CONFIG_FIELDS = [
     {
         "id": "mpb_connection_timeout",
         "key": "connection_timeout_s",
-        "label": "Connection Timeout",
+        "label": "Connection Timeout (s)",
         "usage": "${configuration.mpb_connection_timeout}",
         "value": None,
         "options": None,
@@ -247,7 +259,7 @@ _STANDARD_CONFIG_FIELDS = [
     {
         "id": "mpb_concurrent_requests",
         "key": "max_concurrent_requests",
-        "label": "Max Concurrent Requests",
+        "label": "Maximum Concurrent Requests",
         "usage": "${configuration.mpb_concurrent_requests}",
         "value": None,
         "options": None,
@@ -273,7 +285,7 @@ _STANDARD_CONFIG_FIELDS = [
     {
         "id": "mpb_ssl_config",
         "key": "ssl",
-        "label": "SSL",
+        "label": "SSL Configuration",
         "usage": "${configuration.mpb_ssl_config}",
         "value": None,
         "options": ["NO_VERIFY", "VERIFY", "NO_SSL"],
@@ -408,7 +420,7 @@ class _RequestInfo:
             "name": req.name,
             "path": path,
             "method": req.method,
-            "paging": None,
+            "paging": _render_paging(req.paging),
             "params": params,
             "headers": [],
             "designId": None,
@@ -446,6 +458,37 @@ def _normalize_params(params: Any) -> List[Dict]:
         # dict → ordered list; preserve insertion order (Python 3.7+)
         return [{"key": k, "value": str(v)} for k, v in params.items()]
     return []
+
+
+def _render_paging(pg: Optional["PagingDef"]) -> Optional[Dict]:
+    """Render an explicit PagingDef to the MPB paging wire block.
+
+    Returns None when no paging is declared (the common case).
+
+    NOTE: The `paging:` YAML key is retired (2026-04-21).  The loader always
+    sets RequestDef.paging=None, so this function always returns None from the
+    YAML-driven path.  It is preserved for the flat-render path only.
+
+    Wire format confirmed from context/mpb_wire_reference/synology_nas_working_export.json
+    (2026-04-21 ground truth).  Key name is `pagingStart` (not `start`).
+    The paging block also has a `response` sub-block with its own dataModelLists,
+    which MPB populates from live API responses — we do not synthesize it here
+    because the content is runtime-derived (wildcard variant permutations).
+
+    MPB derives the paging block from live response data during interactive
+    creation — authors do not need to declare it.  The factory emits no paging
+    block; MPB populates it on first live run.
+    """
+    if pg is None:
+        return None
+    return {
+        "type": pg.type,
+        "pagingParam": pg.paging_param,
+        "limitParam": pg.limit_param,
+        "limitValue": pg.limit_value,
+        "listPathId": pg.list_path_id,
+        "pagingStart": pg.start,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -533,22 +576,21 @@ def _render_source(
     # adapter-instance configuration fields (Rubrik calls this "configuration")
     adapter_config_fields = list(_STANDARD_CONFIG_FIELDS)
     if src:
-        for cf in adapter_config_fields:
-            if cf["id"] == "mpb_port":
+        # Use enumerate so that modified copies are written back into the list.
+        # The previous `for cf in ...` loop rebind pattern lost all mutations
+        # because the rebind only affected the local loop variable, not the list.
+        _SRC_OVERRIDES = {
+            "mpb_port":               src.port,
+            "mpb_ssl_config":         src.ssl,
+            "mpb_connection_timeout": src.timeout,
+            "mpb_max_retries":        src.max_retries,
+            "mpb_concurrent_requests": src.max_concurrent,
+        }
+        for idx, cf in enumerate(adapter_config_fields):
+            if cf["id"] in _SRC_OVERRIDES:
                 cf = dict(cf)
-                cf["defaultValue"] = src.port
-            if cf["id"] == "mpb_ssl_config":
-                cf = dict(cf)
-                cf["defaultValue"] = src.ssl
-            if cf["id"] == "mpb_connection_timeout":
-                cf = dict(cf)
-                cf["defaultValue"] = src.timeout
-            if cf["id"] == "mpb_max_retries":
-                cf = dict(cf)
-                cf["defaultValue"] = src.max_retries
-            if cf["id"] == "mpb_concurrent_requests":
-                cf = dict(cf)
-                cf["defaultValue"] = src.max_concurrent
+                cf["defaultValue"] = _SRC_OVERRIDES[cf["id"]]
+                adapter_config_fields[idx] = cf
 
     # testRequestId: the ID of the test-connection request (if any)
     test_request = _render_test_request(mp)
@@ -917,7 +959,17 @@ def _render_requests(
         ms_dml: Dict[str, Tuple[RequestDef, str]] = {}
         for ms in ot.metric_sets:
             req = req_by_name[ms.from_request]
-            dml_id = _compute_dml_id(req.response_path, ms.list_path)
+            if ot.is_world:
+                # World/singleton objects always use the "base" DML regardless
+                # of response_path or list_path.  The computed dml_id would be
+                # e.g. "data.*" (from response_path="data", list_path=""), which
+                # is wrong — it creates a spurious wildcard DML on what should
+                # be a scalar-context request.  The reference (working export
+                # 2026-04-21) confirms: world-object requests carry ONLY a "base"
+                # DML in their response.result.dataModelLists.
+                dml_id = "base"
+            else:
+                dml_id = _compute_dml_id(req.response_path, ms.list_path)
             ms_dml[ms.local_name] = (req, dml_id)
             # Ensure DML is initialized
             registry[req.name].ensure_dml(dml_id)
@@ -979,6 +1031,15 @@ def _render_requests(
             # multiple object_types chain the same child request — should
             # not happen in v1 but is safe)
             child_req_info._chaining_settings = chain_settings
+
+    # Step 4: ensure every request has at least a "base" DML.
+    # Requests that are declared in the YAML but not consumed by any object
+    # (e.g. storage_info, network_info in the Synology KISS variant) would
+    # otherwise emit dataModelLists: [] — MPB does not accept empty DML lists
+    # and the reference (working export 2026-04-21) shows all requests carry
+    # at minimum a "base" entry.
+    for info in registry.values():
+        info.ensure_dml("base")
 
     wire = [info.to_wire() for info in registry.values()]
     return wire, registry

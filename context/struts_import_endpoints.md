@@ -341,6 +341,38 @@ Local scratch files under `/tmp/struts-probe/` (probe-dashboard.zip,
 api.js, default-policy.xml, exported-dashboard.zip) are throwaway
 and were not committed.
 
+## `getGroupedViewDefinitionThumbnails` response shape (2026-04-20)
+
+The `viewServiceController.getGroupedViewDefinitionThumbnails` Ext.Direct
+action returns a **two-level nested dict**, not a list:
+
+```
+result = {
+  "LIST":  { "VirtualMachine": [...view dicts...], "HostSystem": [...], ... },
+  "TREND": { "VirtualMachine": [...], ... },
+  ...
+}
+```
+
+The outer keys are view types (e.g. `"LIST"`, `"TREND"`, `"DISTRIBUTION"`).
+The inner keys are resource kind strings. The leaf values are lists of view
+summary dicts, each with at minimum `id` and `name`.
+
+**Failure mode**: iterating the top-level dict yields string keys. The old
+`_resolve_view_ids` in `vcfops_dashboards/cli.py` tested each `item` for
+`isinstance(item, dict)` or `isinstance(item, list)` — string keys matched
+neither branch, so `all_views` stayed empty and every name lookup returned
+`[]`. Result: `list-views` and `delete-view` silently found nothing.
+
+**Fix (2026-04-20)**: `_resolve_view_ids` now detects `isinstance(groups, dict)`
+and flattens both levels with nested `for view_type, resource_map in groups.items()`
+→ `for resource_kind, view_list in resource_map.items()` → `all_views.extend(view_list)`.
+A list-of-dicts fallback handles any older API shape.
+
+**Live observation**: 769 total views across LIST/TREND/DISTRIBUTION types on
+the primary lab, with ~40+ resource kinds represented. Confirmed on VCF Ops
+9.0.2 primary lab 2026-04-20 by ops-recon second-pass traversal.
+
 ## Supportability caveat
 
 Everything in this file is **unsupported internal UI surface**.

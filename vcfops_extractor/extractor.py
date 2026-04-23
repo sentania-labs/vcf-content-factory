@@ -481,6 +481,8 @@ def _parse_view_def_element(elem) -> dict:
     data_type = "list"
     presentation = "list"
 
+    time_window: Optional[dict] = None
+
     for child in elem:
         tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
 
@@ -510,6 +512,7 @@ def _parse_view_def_element(elem) -> dict:
                 presentation = ptype
         elif tag == "Controls":
             columns = _parse_controls_columns(child)
+            time_window = _parse_time_window(child)
 
     return {
         "id": view_id,
@@ -520,7 +523,55 @@ def _parse_view_def_element(elem) -> dict:
         "columns": columns,
         "data_type": data_type,
         "presentation": presentation,
+        "time_window": time_window,
     }
+
+
+def _parse_time_window(controls_elem) -> Optional[dict]:
+    """Parse the time-interval-selector Control from a <Controls> element.
+
+    Returns a dict {unit, count, advanced_time_mode} if the control is present
+    with both ``unit`` and ``count`` properties, else None.
+
+    Wire format (from context/view_column_wire_format.md):
+        <Control id="..." type="time-interval-selector" visible="false">
+          <Property name="advancedTimeMode" value="false"/>
+          <Property name="unit" value="MONTHS"/>
+          <Property name="count" value="6"/>
+        </Control>
+    """
+    for ctrl in controls_elem:
+        ctrl_tag = ctrl.tag.split("}")[-1] if "}" in ctrl.tag else ctrl.tag
+        if ctrl_tag != "Control":
+            continue
+        if ctrl.get("type") != "time-interval-selector":
+            continue
+
+        props: dict[str, str] = {}
+        for prop in ctrl:
+            prop_tag = prop.tag.split("}")[-1] if "}" in prop.tag else prop.tag
+            if prop_tag == "Property":
+                props[prop.get("name", "")] = prop.get("value", "")
+
+        unit = props.get("unit", "").strip().upper()
+        count_raw = props.get("count", "").strip()
+        if not unit or not count_raw:
+            continue
+        try:
+            count = int(count_raw)
+        except ValueError:
+            continue
+        if count <= 0:
+            continue
+
+        advanced_raw = props.get("advancedTimeMode", "false").strip().lower()
+        return {
+            "unit": unit,
+            "count": count,
+            "advanced_time_mode": advanced_raw == "true",
+        }
+
+    return None
 
 
 def _parse_controls_columns(controls_elem) -> list[dict]:
@@ -846,6 +897,13 @@ def _write_view_yaml(path: Path, view_data: dict) -> None:
 
     doc["columns"] = view_data.get("columns", [])
 
+    tw = view_data.get("time_window")
+    if tw and tw.get("unit") and tw.get("count"):
+        tw_doc: dict = {"unit": tw["unit"], "count": tw["count"]}
+        if tw.get("advanced_time_mode"):
+            tw_doc["advanced_time_mode"] = True
+        doc["time_window"] = tw_doc
+
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(_to_yaml_str(doc), encoding="utf-8")
 
@@ -1110,7 +1168,7 @@ def _widget_to_yaml_dict(widget, view_name_map: dict) -> dict:
     return d
 
 
-def _write_dashboard_yaml(path: Path, dash_data: dict, dashboard_uuid: str, view_results: dict) -> None:
+def _write_dashboard_yaml(path: Path, dash_data: dict, dashboard_uuid: str, view_results: dict, factory_native: bool = False) -> None:
     """Write a dashboard YAML file in factory shape with real widget + interaction graph.
 
     ``dash_data`` is the raw dict from getDashboardConfig.
@@ -1171,7 +1229,11 @@ def _write_dashboard_yaml(path: Path, dash_data: dict, dashboard_uuid: str, view
         doc["description"] = dashboard.description
     elif dash_data.get("description"):
         doc["description"] = dash_data.get("description", "") or ""
-    if name_path:
+    # For third-party (factory_native=False) extracts, suppress the factory
+    # folder name so extracted dashboards don't install into "VCF Content Factory".
+    # A non-factory source dashboard may legitimately be in its own folder; only
+    # suppress the factory-reserved name.
+    if name_path and (factory_native or name_path != "VCF Content Factory"):
         doc["name_path"] = name_path
 
     doc["shared"] = bool(dash_data.get("shared", True))
@@ -1434,8 +1496,9 @@ def extract_dashboard(
     output_dir: str,
     skip_supermetrics: set[str],
     include_customgroups: list[str],
-    dry_run: bool,
-    yes: bool,
+    prefix: str = "",
+    dry_run: bool = False,
+    yes: bool = False,
 ) -> int:
     """Walk a dashboard's dependency graph and emit YAML + manifest.
 
@@ -1743,6 +1806,67 @@ def extract_dashboard(
                 sm_queue.append((ref_uuid, f"SM '{sm_name_resolved}'"))
 
     # -----------------------------------------------------------------------
+    # Prefix application (if --prefix was supplied)
+    # -----------------------------------------------------------------------
+    # Apply the prefix to every SM name, view name, and dashboard display name.
+    # Rewrite cross-references so they still resolve after renaming:
+    #   SM formulas:  @supermetric:"<old>"  ->  @supermetric:"<new>"
+    #   Dashboard widget view: references are rewritten via view_results name map.
+    # UUIDs (id: fields) and filenames on disk are left unchanged.
+    if prefix:
+        _info(f"Applying prefix '{prefix}' to all extracted content names ...")
+
+        # Build old->new name maps before mutating anything
+        sm_name_map: dict[str, str] = {}  # old SM name -> new SM name
+        for suuid, sm_data in sm_results.items():
+            old_name = sm_data.get("name", "")
+            if old_name:
+                sm_name_map[old_name] = prefix + old_name
+
+        view_name_map: dict[str, str] = {}  # old view name -> new view name
+        for vuuid, view_data in view_results.items():
+            old_name = view_data.get("name", "")
+            if old_name:
+                view_name_map[old_name] = prefix + old_name
+
+        # Apply to SM names in sm_results
+        for suuid, sm_data in sm_results.items():
+            old_name = sm_data.get("name", "")
+            if old_name and old_name in sm_name_map:
+                sm_data["name"] = sm_name_map[old_name]
+
+        # Rewrite SM formulas: @supermetric:"<old>" -> @supermetric:"<new>"
+        if sm_name_map:
+            _sm_ref_rewrite_re = re.compile(r'@supermetric:"([^"]+)"')
+
+            def _rewrite_sm_refs(formula: str) -> str:
+                def _sub(m: re.Match) -> str:
+                    old = m.group(1)
+                    return f'@supermetric:"{sm_name_map.get(old, old)}"'
+                return _sm_ref_rewrite_re.sub(_sub, formula)
+
+            sm_formulas = {k: _rewrite_sm_refs(v) for k, v in sm_formulas.items()}
+
+        # Apply to view names in view_results
+        for vuuid, view_data in view_results.items():
+            old_name = view_data.get("name", "")
+            if old_name and old_name in view_name_map:
+                view_data["name"] = view_name_map[old_name]
+
+        # Apply to dashboard display name
+        display_name = prefix + display_name
+
+        _info(
+            f"  Renamed {len(sm_name_map)} SM(s), {len(view_name_map)} view(s), "
+            "1 dashboard."
+        )
+        if view_name_map:
+            _info(
+                "  Dashboard widget view: references will be written using prefixed names "
+                "(resolved at write time via view_results)."
+            )
+
+    # -----------------------------------------------------------------------
     # Dry-run report
     # -----------------------------------------------------------------------
     print(f"\n{'=' * 60}")
@@ -1805,10 +1929,60 @@ def extract_dashboard(
     view_file_paths: list[str] = []
     dash_file_paths: list[str] = []
 
-    # Super metrics
+    # Super metrics — orphan check before writing
+    # An orphan SM is one whose formula references metric keys that are absent
+    # from the describe cache entirely (not merely defaultMonitored=false).
+    # "Ships broken" is a build error: refuse to write the file and surface
+    # the unresolved keys on stdout.  This mirrors the packaging dependency
+    # audit principle from context/feedback_packaging_dependency_audit.md.
     sm_subdir = slug_dir / "supermetrics"
+    orphan_check_cache = DescribeCache()
+    orphaned_sms: list[str] = []
+
     for suuid, sm_data in sm_results.items():
-        sm_name_safe = _safe_filename(sm_data.get("name", suuid))
+        sm_name_display = sm_data.get("name", suuid)
+        formula = sm_formulas.get(sm_data.get("id", suuid), sm_data.get("formula", ""))
+
+        # Collect built-in metric refs from the (rewritten) formula
+        from vcfops_packaging.deps import _refs_from_formula, _is_sm_ref
+        formula_refs = [r for r in _refs_from_formula(formula, sm_name_display) if not _is_sm_ref(r.metric_key)]
+
+        unresolved: list[str] = []
+        for ref in formula_refs:
+            try:
+                info = orphan_check_cache.resolve_metric(ref.adapter_kind, ref.resource_kind, ref.metric_key)
+            except Exception:
+                info = None  # cache miss or offline; skip orphan check for this key
+            if info is None:
+                # Could be a cache miss (stale cache) or a genuinely missing metric.
+                # Only flag as orphan if the cache has entries for this adapter/kind
+                # (i.e., the cache file exists) — avoids false-positives on cold caches.
+                try:
+                    has_cache = orphan_check_cache.has_cache_file(ref.adapter_kind, ref.resource_kind)
+                except Exception:
+                    has_cache = False
+                if has_cache:
+                    unresolved.append(f"{ref.adapter_kind}/{ref.resource_kind}  {ref.metric_key}")
+
+        if unresolved:
+            print(
+                f"  ORPHAN: super metric '{sm_name_display}' references metric keys not in "
+                "describe cache — skipping write.",
+                file=sys.stderr,
+            )
+            for key_str in unresolved:
+                print(f"    unresolved: {key_str}", file=sys.stderr)
+            print(
+                "  Possible cause: source metric was removed from the live instance after "
+                "the SM was authored. Remove the SM from the source dashboard or update "
+                "the describe cache (python3 -m vcfops_packaging refresh-describe) "
+                "and re-extract.",
+                file=sys.stderr,
+            )
+            orphaned_sms.append(sm_name_display)
+            continue
+
+        sm_name_safe = _safe_filename(sm_name_display)
         filename = f"{sm_name_safe}.yaml"
         path = sm_subdir / filename
         sm_id_lower = (sm_data.get("id") or suuid).lower()
@@ -1816,12 +1990,19 @@ def extract_dashboard(
         _write_sm_yaml(
             path,
             sm_data,
-            sm_formulas.get(sm_data.get("id", suuid), sm_data.get("formula", "")),
+            formula,
             policy_resource_kinds=policy_rks,
         )
         rel = f"supermetrics/{filename}"
         sm_file_paths.append(rel)
         _info(f"wrote {path}")
+
+    if orphaned_sms:
+        print(
+            f"\n  WARN: {len(orphaned_sms)} orphan super metric(s) were skipped: "
+            + ", ".join(f"'{n}'" for n in orphaned_sms),
+            file=sys.stderr,
+        )
 
     # Views
     view_subdir = slug_dir / "views"
@@ -1840,7 +2021,7 @@ def extract_dashboard(
     dash_filename = f"{dash_name_safe}.yaml"
     dash_path = dash_subdir / dash_filename
     dash_data["id"] = dashboard_id
-    _write_dashboard_yaml(dash_path, dash_data, dashboard_id, view_results)
+    _write_dashboard_yaml(dash_path, dash_data, dashboard_id, view_results, factory_native=False)
     dash_file_paths.append(f"dashboards/{dash_filename}")
     _info(f"wrote {dash_path}")
 

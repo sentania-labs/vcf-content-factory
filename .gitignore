@@ -30,6 +30,7 @@ dist/
 # see vcfops_managementpacks/README.md for instructions). Not distributed
 # via the repo — these are VMware/Broadcom runtime binaries.
 vcfops_managementpacks/adapter_runtime/
+vcfops_managementpacks/adapter_runtime.stubs.bak/
 
 # Local clones of external reference sources (see context/reference_sources.md)
 references/

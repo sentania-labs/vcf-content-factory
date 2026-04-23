@@ -134,23 +134,38 @@ def _resolve_view_ids(
     )
 
     groups = ui.list_views()
-    # getGroupedViewDefinitionThumbnails returns a list of group objects,
-    # each with a "viewDefinitions" (or similar) sub-list. Flatten defensively.
+    # getGroupedViewDefinitionThumbnails returns a two-level nested dict:
+    #   result[viewType][resourceKind] = [view dicts]
+    # e.g. {"LIST": {"VirtualMachine": [...], "HostSystem": [...]}, ...}
+    # Iterating a dict yields string keys, not dicts or lists, so the old
+    # flat-list traversal silently produced an empty result.  Flatten both
+    # levels explicitly, with a list-of-dicts fallback for older API shapes.
     all_views: list[dict] = []
-    for item in groups:
-        if isinstance(item, dict):
-            # Group object: may have viewDefinitions or similar key
-            for key in ("viewDefinitions", "views", "items"):
-                sub = item.get(key)
-                if isinstance(sub, list):
-                    all_views.extend(sub)
-                    break
-            else:
-                # If no known sub-key, treat item itself as a view entry
-                if "id" in item:
-                    all_views.append(item)
-        elif isinstance(item, list):
-            all_views.extend(item)
+    if isinstance(groups, dict):
+        # Nested-dict shape: viewType -> resourceKind -> [views]
+        for resource_map in groups.values():
+            if isinstance(resource_map, dict):
+                for view_list in resource_map.values():
+                    if isinstance(view_list, list):
+                        all_views.extend(view_list)
+            elif isinstance(resource_map, list):
+                # One level of nesting only
+                all_views.extend(resource_map)
+    elif isinstance(groups, list):
+        for item in groups:
+            if isinstance(item, dict):
+                # Group object: may have viewDefinitions or similar key
+                for key in ("viewDefinitions", "views", "items"):
+                    sub = item.get(key)
+                    if isinstance(sub, list):
+                        all_views.extend(sub)
+                        break
+                else:
+                    # If no known sub-key, treat item itself as a view entry
+                    if "id" in item:
+                        all_views.append(item)
+            elif isinstance(item, list):
+                all_views.extend(item)
 
     by_id = {v["id"]: v.get("name", v["id"]) for v in all_views if "id" in v}
     by_name = {v.get("name", ""): v["id"] for v in all_views if "id" in v and v.get("name")}

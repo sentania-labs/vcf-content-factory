@@ -41,6 +41,10 @@ factory_native: bool (optional, default true)
                                uses display_name for the zip filename.
 display_name:   str  (optional) -- explicit display name for README and zip
                                filename when factory_native is False.
+design:         str  (optional) -- path to design artifact (relative to repo
+                               root), e.g. "designs/capacity-assessment.md".
+                               When absent, the builder tries the convention-
+                               based path "designs/<bundle-name>.md".
 
 All content-type keys are optional.  A bundle may contain only super
 metrics, only dashboards, or any subset of the supported types.
@@ -106,6 +110,7 @@ class Bundle:
     source: dict = field(default_factory=dict)
     factory_native: bool = True
     display_name: str = ""
+    design: str = ""  # explicit design artifact path from manifest (optional)
 
 
 def load_bundle(path: str | Path) -> Bundle:
@@ -233,8 +238,12 @@ def load_bundle(path: str | Path) -> Bundle:
     except Exception as e:
         raise BundleValidationError(f"{path}: view error: {e}") from e
 
+    # For third-party bundles (factory_native=False), don't force dashboards
+    # into the "VCF Content Factory" folder.  Use an empty default_name_path
+    # so only an explicit name_path: field in the YAML places them in a folder.
+    dash_default_name_path = "VCF Content Factory" if factory_native else ""
     try:
-        dashboards = [load_dashboard(p, enforce_framework_prefix=factory_native) for p in dash_paths]
+        dashboards = [load_dashboard(p, enforce_framework_prefix=factory_native, default_name_path=dash_default_name_path) for p in dash_paths]
     except Exception as e:
         raise BundleValidationError(f"{path}: dashboard error: {e}") from e
 
@@ -294,6 +303,8 @@ def load_bundle(path: str | Path) -> Bundle:
 
     display_name = str(data.get("display_name", "") or "").strip()
 
+    design = str(data.get("design", "") or "").strip()
+
     return Bundle(
         name=name,
         description=description,
@@ -314,6 +325,7 @@ def load_bundle(path: str | Path) -> Bundle:
         source=source,
         factory_native=factory_native,
         display_name=display_name,
+        design=design,
     )
 
 

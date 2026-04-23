@@ -1,0 +1,658 @@
+# Extracted from MPB exchange format — review before use.
+# Keys, list_paths, and source paths are derived from MPB's internal
+# structure and may need adjustment. Verify:
+#   - metric keys (slug-derived from MPB labels)
+#   - list_path values (derived from metricSet.listId)
+#   - response_path values (inferred from DML id prefix)
+#   - identity.tier on world object (set to 'system_issued' as placeholder)
+#   - name_expression (derived from nameMetricExpression)
+#   - relationships parent_expression / child_expression (label-derived)
+#
+# This file round-trips through render-export to a semantically
+# equivalent MPB design. Byte-for-byte match with the source is not
+# a goal — UUIDs will differ (factory uses UUID5, MPB uses UUID4).
+name: Synology NAS
+version: 1.0.0
+build_number: 1
+author: "VCF Content Factory"
+adapter_kind: "mpb_synology_nas"
+description: Monitors a Synology DiskStation NAS running DSM 7.x. Collects rootdevice health (CPU, memory, temperature, uptime),
+  storage topology (pools, volumes, disks), pervolume IO, and iSCSI LUN inventory. Uses discrete perentity storage API endpoints
+  (SYNO.Core.Storage.) matching the knownvalid reference build. Designed for DS1520 but applicable to any adminaccessible
+  DSM 7 unit.
+source:
+  port: 5001
+  ssl: NO_VERIFY
+  base_path: webapi
+  timeout: 30
+  max_retries: 2
+  max_concurrent: 15
+  auth:
+    preset: cookie_session
+    credentials:
+    - key: username
+      label: username
+      sensitive: false
+    - key: passwd
+      label: passwd
+      sensitive: true
+    login:
+      method: GET
+      path: auth.cgi
+      params:
+      - key: api
+        value: SYNO.API.Auth
+      - key: version
+        value: '3'
+      - key: method
+        value: login
+      - key: account
+        value: ${credentials.username}
+      - key: passwd
+        value: ${credentials.passwd}
+      - key: session
+        value: FileStation
+      - key: format
+        value: cookie
+    extract:
+      location: HEADER
+      name: Set-Cookie
+      bind_to: session.set_cookie
+    inject:
+    - type: header
+      name: id
+      value: ${session.set_cookie}
+    logout:
+      method: DELETE
+      path: auth.cgi
+      params:
+      - key: method
+        value: logout
+      - key: version
+        value: '3'
+      - key: api
+        value: SYNO.API.Auth
+  test_request:
+    method: GET
+    path: entry.cgi
+    params:
+    - key: api
+      value: SYNO.FileStation.Info
+    - key: method
+      value: get
+    - key: version
+      value: '2'
+requests:
+- name: utilization
+  method: GET
+  path: entry.cgi
+  params:
+  - key: api
+    value: SYNO.Core.System.Utilization
+  - key: version
+    value: '1'
+  - key: method
+    value: get
+  response_path: data
+- name: get_volumes
+  method: GET
+  path: entry.cgi
+  params:
+  - key: version
+    value: '1'
+  - key: method
+    value: list
+  - key: location
+    value: internal
+  - key: offset
+    value: '0'
+  - key: limit
+    value: '-1'
+  - key: api
+    value: SYNO.Core.Storage.Volume
+  response_path: data
+- name: storage_info
+  method: GET
+  path: entry.cgi
+  params:
+  - key: api
+    value: SYNO.Core.System
+  - key: type
+    value: storage
+  - key: method
+    value: info
+  - key: version
+    value: '1'
+  response_path: data
+- name: luns
+  method: GET
+  path: entry.cgi
+  params:
+  - key: api
+    value: SYNO.Core.ISCSI.LUN
+  - key: version
+    value: '1'
+  - key: method
+    value: list
+  response_path: data
+- name: filestation
+  method: GET
+  path: entry.cgi
+  params:
+  - key: api
+    value: SYNO.FileStation.Info
+  - key: version
+    value: '1'
+  - key: method
+    value: get
+  response_path: data
+- name: get_disks
+  method: GET
+  path: entry.cgi
+  params:
+  - key: api
+    value: SYNO.Core.Storage.Disk
+  - key: method
+    value: list
+  - key: version
+    value: '1'
+  - key: location
+    value: internal
+  - key: limit
+    value: '-1'
+  - key: offset
+    value: '0'
+  response_path: data
+- name: volume_util
+  method: GET
+  path: entry.cgi
+  params:
+  - key: api
+    value: SYNO.Core.System.Utilization
+  - key: version
+    value: '1'
+  - key: method
+    value: get
+  - key: location
+    value: ${chain.volume_id}
+  response_path: data
+- name: system
+  method: GET
+  path: entry.cgi
+  params:
+  - key: api
+    value: SYNO.Core.System
+  - key: version
+    value: '3'
+  - key: method
+    value: info
+  response_path: data
+- name: get_storage_pools
+  method: GET
+  path: entry.cgi
+  params:
+  - key: api
+    value: SYNO.Core.Storage.Pool
+  - key: method
+    value: list
+  - key: limit
+    value: '-1'
+  - key: offset
+    value: '0'
+  - key: version
+    value: '1'
+  response_path: data
+- name: network_info
+  method: GET
+  path: entry.cgi
+  params:
+  - key: api
+    value: SYNO.Core.System
+  - key: type
+    value: network
+  - key: version
+    value: '1'
+  - key: method
+    value: info
+  response_path: data
+object_types:
+- name: Storage Pool
+  key: storage_pool
+  type: INTERNAL
+  icon: data-cluster.svg
+  identifiers:
+  - id
+  - pool_path
+  name_expression: id
+  metricSets:
+  - from_request: get_storage_pools
+    primary: true
+    list_path: pools
+  metrics:
+  - key: device_type
+    label: Device Type
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_storage_pools.device_type
+  - key: id
+    label: ID
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_storage_pools.id
+  - key: num_id
+    label: Num ID
+    usage: PROPERTY
+    type: NUMBER
+    source: metricset:get_storage_pools.num_id
+  - key: pool_path
+    label: Pool Path
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_storage_pools.pool_path
+  - key: total
+    label: Total
+    usage: METRIC
+    type: NUMBER
+    source: metricset:get_storage_pools.size.total
+  - key: used
+    label: Used
+    usage: METRIC
+    type: NUMBER
+    source: metricset:get_storage_pools.size.used
+- name: iSCSI LUN
+  key: iscsi_lun
+  type: INTERNAL
+  icon: block-storage.svg
+  identifiers:
+  - uuid
+  name_expression: name
+  metricSets:
+  - from_request: luns
+    primary: true
+    list_path: luns
+  metrics:
+  - key: uuid
+    label: UUID
+    usage: PROPERTY
+    type: STRING
+    source: metricset:luns.uuid
+  - key: name
+    label: Name
+    usage: PROPERTY
+    type: STRING
+    source: metricset:luns.name
+  - key: provisioned_size
+    label: Provisioned Size
+    usage: METRIC
+    type: NUMBER
+    source: metricset:luns.size
+    unit: bytes
+  - key: location
+    label: Location
+    usage: PROPERTY
+    type: STRING
+    source: metricset:luns.location
+  - key: lun_type
+    label: LUN Type
+    usage: PROPERTY
+    type: STRING
+    source: metricset:luns.type_str
+- name: Disks
+  key: disks
+  type: INTERNAL
+  icon: storage.svg
+  identifiers:
+  - serial
+  name_expression: name
+  metricSets:
+  - from_request: get_disks
+    primary: true
+    list_path: disks
+  metrics:
+  - key: device
+    label: Device
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_disks.device
+  - key: firm
+    label: Firm
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_disks.firm
+  - key: model
+    label: Model
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_disks.model
+  - key: name
+    label: Name
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_disks.name
+  - key: serial
+    label: Serial
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_disks.serial
+  - key: size_total
+    label: Size Total
+    usage: METRIC
+    type: NUMBER
+    source: metricset:get_disks.size_total
+  - key: slot_id
+    label: Slot ID
+    usage: METRIC
+    type: NUMBER
+    source: metricset:get_disks.slot_id
+  - key: smart_status
+    label: Smart Status
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_disks.smart_status
+  - key: used_by
+    label: Used By
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_disks.used_by
+  - key: vendor
+    label: Vendor
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_disks.vendor
+  - key: wcache_force_off
+    label: Wcache Force Off
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_disks.wcache_force_off
+- name: Synology Diskstation
+  key: synology_diskstation
+  type: INTERNAL
+  icon: media-changer.svg
+  identifiers:
+  - serial
+  name_expression: hostname
+  metricSets:
+  - from_request: system
+    primary: true
+  - from_request: filestation
+  - from_request: utilization
+  metrics:
+  - key: cpu_clock_speed
+    label: CPU Clock Speed
+    usage: PROPERTY
+    type: NUMBER
+    source: metricset:system.cpu_clock_speed
+  - key: cpu_cores
+    label: CPU Cores
+    usage: PROPERTY
+    type: NUMBER
+    source: metricset:system.cpu_cores
+  - key: cpu_family
+    label: CPU Family
+    usage: PROPERTY
+    type: STRING
+    source: metricset:system.cpu_family
+  - key: cpu_series
+    label: CPU Series
+    usage: PROPERTY
+    type: STRING
+    source: metricset:system.cpu_series
+  - key: cpu_vendor
+    label: CPU Vendor
+    usage: PROPERTY
+    type: STRING
+    source: metricset:system.cpu_vendor
+  - key: enabled_ntp
+    label: Enabled Ntp
+    usage: PROPERTY
+    type: STRING
+    source: metricset:system.enabled_ntp
+  - key: firmware_date
+    label: Firmware Date
+    usage: PROPERTY
+    type: STRING
+    source: metricset:system.firmware_date
+  - key: firmware_ver
+    label: Firmware Ver
+    usage: PROPERTY
+    type: STRING
+    source: metricset:system.firmware_ver
+  - key: model
+    label: Model
+    usage: PROPERTY
+    type: STRING
+    source: metricset:system.model
+  - key: ntp_server
+    label: Ntp Server
+    usage: PROPERTY
+    type: STRING
+    source: metricset:system.ntp_server
+  - key: ram_size
+    label: RAM Size
+    usage: PROPERTY
+    type: NUMBER
+    source: metricset:system.ram_size
+    unit: gigabyte
+  - key: serial
+    label: Serial
+    usage: PROPERTY
+    type: STRING
+    source: metricset:system.serial
+  - key: sys_temp
+    label: Sys Temp
+    usage: METRIC
+    type: NUMBER
+    source: metricset:system.sys_temp
+  - key: time_zone_desc
+    label: Time Zone Desc
+    usage: PROPERTY
+    type: STRING
+    source: metricset:system.time_zone_desc
+  - key: up_time
+    label: Up Time
+    usage: PROPERTY
+    type: STRING
+    source: metricset:system.up_time
+  - key: hostname
+    label: Hostname
+    usage: PROPERTY
+    type: STRING
+    source: metricset:filestation.hostname
+  - key: 15min_load
+    label: 15min Load
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.cpu.15min_load
+  - key: 1min_load
+    label: 1min Load
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.cpu.1min_load
+  - key: 5min_load
+    label: 5min Load
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.cpu.5min_load
+  - key: other_load
+    label: Other Load
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.cpu.other_load
+  - key: system_load
+    label: System Load
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.cpu.system_load
+  - key: user_load
+    label: User Load
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.cpu.user_load
+  - key: avail_real
+    label: Avail Real
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.memory.avail_real
+  - key: avail_swap
+    label: Avail Swap
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.memory.avail_swap
+  - key: buffer
+    label: Buffer
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.memory.buffer
+  - key: cached
+    label: Cached
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.memory.cached
+  - key: memory_size
+    label: Memory Size
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.memory.memory_size
+  - key: real_usage
+    label: Real Usage
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.memory.real_usage
+  - key: si_disk
+    label: Si Disk
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.memory.si_disk
+  - key: so_disk
+    label: So Disk
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.memory.so_disk
+  - key: swap_usage
+    label: Swap Usage
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.memory.swap_usage
+  - key: total_real
+    label: Total Real
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.memory.total_real
+  - key: total_swap
+    label: Total Swap
+    usage: METRIC
+    type: NUMBER
+    source: metricset:utilization.memory.total_swap
+- name: Volume
+  key: volume
+  type: INTERNAL
+  icon: default.svg
+  identifiers:
+  - volume_id
+  - volume_path
+  name_expression: display_name
+  metricSets:
+  - from_request: get_volumes
+    primary: true
+    list_path: volumes
+  metrics:
+  - key: crashed
+    label: Crashed
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_volumes.crashed
+  - key: deduped
+    label: Deduped
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_volumes.deduped
+  - key: description
+    label: Description
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_volumes.description
+  - key: display_name
+    label: Display Name
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_volumes.display_name
+  - key: fs_type
+    label: Fs Type
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_volumes.fs_type
+  - key: is_encrypted
+    label: Is Encrypted
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_volumes.is_encrypted
+  - key: pool_path
+    label: Pool Path
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_volumes.pool_path
+  - key: raid_type
+    label: RAID Type
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_volumes.raid_type
+  - key: readonly
+    label: Readonly
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_volumes.readonly
+  - key: size_free_byte
+    label: Size Free Byte
+    usage: METRIC
+    type: NUMBER
+    source: metricset:get_volumes.size_free_byte
+  - key: size_total_byte
+    label: Size Total Byte
+    usage: METRIC
+    type: NUMBER
+    source: metricset:get_volumes.size_total_byte
+  - key: status
+    label: Status
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_volumes.status
+  - key: volume_id
+    label: Volume ID
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_volumes.volume_id
+  - key: volume_path
+    label: Volume Path
+    usage: PROPERTY
+    type: STRING
+    source: metricset:get_volumes.volume_path
+- name: Synology NAS World
+  key: mpb_synology_nas_world
+  type: INTERNAL
+  icon: default.svg
+  is_world: true
+  identity:
+    tier: connection_address
+    source: metricset
+  # identifiers: intentionally empty — world kinds carry no ResourceIdentifier
+  # elements in MPB wire format (confirmed: synology_nas_working_describe.xml).
+  # Loader currently rejects empty identifiers unconditionally — this requires
+  # a TOOLSET GAP fix: guard the "at least one identifier" check with
+  # `not ot.is_world` (loader.py line ~650).
+  identifiers: []
+relationships:
+- parent: storage_pool
+  child: volume
+  scope: field_match
+  parent_expression: pool_path
+  child_expression: pool_path
+- parent: storage_pool
+  child: disks
+  scope: field_match
+  parent_expression: id
+  child_expression: used_by
+- parent: volume
+  child: iscsi_lun
+  scope: field_match
+  parent_expression: volume_path
+  child_expression: location

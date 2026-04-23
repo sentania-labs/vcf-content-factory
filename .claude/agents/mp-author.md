@@ -55,102 +55,35 @@ You are `mp-author`. You write management pack YAML under
 
 ## YAML source spec structure
 
-```yaml
-# managementpacks/<name>.yaml
-name: "<Human-Readable MP Name>"
-version: "1.0.0"
-build_number: 1
-author: "VCF Content Factory"
-description: "<What this MP monitors and why>"
+The authoritative YAML grammar lives in
+[`context/management_pack_authoring.md`](../../context/management_pack_authoring.md)
+— the current **Option C / Tier 3.3** grammar, which has `source:` (not
+`connection:`), flow-based auth `preset:` (not `type:`), top-level
+`requests:` (not per-object), and structured `metricSets:` blocks.
 
-connection:
-  default_port: <port>
-  ssl: VERIFY | NO_VERIFY | NO_SSL
-  base_path: "<base URL path>"
-  timeout: 30
-  max_retries: 2
-  max_concurrent_requests: 15
-  auth:
-    type: SESSION | BASIC | TOKEN | NONE
-    # For SESSION:
-    login:
-      method: GET | POST
-      path: "<login endpoint>"
-      params: { ... }
-    logout:
-      method: GET | POST | DELETE
-      path: "<logout endpoint>"
-      params: { ... }
-    session_variable:
-      key: "<header or cookie name>"
-      location: HEADER | COOKIE
-    # For BASIC:
-    #   (no extra fields — username/password from credentials)
-    # For TOKEN:
-    #   token_header: "<header name>"
-  test_connection:
-    method: GET | POST
-    path: "<health check endpoint>"
-    params: { ... }
-    expect_field: "<response field to check>"
+**You MUST read that file before writing any YAML.** The embedded schema
+here is retired; any YAML that follows the old shapes
+(`connection:`, `auth.type:`, `request:`/`json_path:` on metrics,
+top-level `events:`, `children:` on object types) will be rejected at
+parse time with migration hints.
 
-requests:
-  - name: "<descriptive name>"
-    method: GET | POST
-    path: "<endpoint path>"
-    params:
-      key1: "value1"
-      key2: "value2"
-    body: null | "<JSON body for POST>"
-    headers: []
-    pagination: null | { type: offset, limit_param: ..., offset_param: ... }
-    chaining: null | { ... }
+Quick field map (for cross-referencing old designs):
 
-objects:
-  - name: "<Object Type Name>"
-    type: INTERNAL | ARIA_OPS
-    icon: "<icon-name>.svg"
-    parent: null | "<parent object name>"
-    identifiers:
-      - key: "<metric/property key that uniquely identifies>"
-        # Multiple identifiers = composite key
-    name_expression: "{field1} ({field2})"
-    metrics:
-      - key: "<unique_key_within_object>"
-        label: "<Display Name>"
-        usage: METRIC | PROPERTY
-        data_type: NUMBER | STRING
-        unit: "" | "%" | "bytes" | "ms" | ...
-        is_kpi: false
-        request: "<request name>"
-        json_path: "<dot.separated.path.to.field>"
-        # For array items: "data.disks.*.temperature"
-        # The * indicates iteration — each array element
-        # produces one object instance.
-    children:
-      - "<child object name>"
+| Old shape | Current shape |
+|---|---|
+| `connection:` | `source:` |
+| `auth.type: SESSION` | `source.auth.preset: cookie_session` + `login/extract/inject/logout` blocks |
+| `auth.type: BASIC` | `source.auth.preset: basic_auth` |
+| `auth.type: TOKEN` | `source.auth.preset: bearer_token` |
+| `auth.type: NONE` | `source.auth.preset: none` |
+| `objects:` | `object_types:` |
+| `parent:` / `children:` on an object | `relationships:` with `scope: field_match` + `parent_expression`/`child_expression` |
+| `request: <name>` + `json_path: <path>` on a metric | `source: "metricset:<local_name>.<path>"` — metricSets declared on each object_type |
+| `name_expression: "{a} ({b})"` | `name_expression: {parts: [{metric: a}, {literal: " ("}, {metric: b}, {literal: ")"}]}` (single-part only for v1) |
+| `events:` (top-level) | `mpb_events:` — and prefer factory symptoms+alerts instead |
 
-relationships:
-  # Explicit if not derivable from parent/children declarations.
-  # Usually auto-generated from the object tree.
-  - parent: "<parent object name>"
-    child: "<child object name>"
-
-events:
-  - name: "<Event Name>"
-    severity: CRITICAL | WARNING | INFO
-    object: "<Object Type Name>"
-    condition:
-      field: "<metric/property key>"
-      operator: ">" | "<" | "=" | "!=" | "contains"
-      value: "<threshold>"
-    message: "<Human-readable event message>"
-
-content:
-  # Optional: dashboards/views bundled in the .pak
-  dashboards: []
-  views: []
-```
+See `context/management_pack_authoring.md` §"File layout at a glance" for
+a canonical example and per-field reference.
 
 ## Workflow
 
@@ -171,11 +104,19 @@ The most critical part of authoring is mapping each metric to
 its exact JSON path in the API response. Use the API map's
 response schemas to trace paths:
 
-- Scalar field: `data.cpu.user_load`
-- Array iteration: `data.disks.*` (each element = one object)
-- Nested array field: `data.disks.*.temperature`
-- Cross-request enrichment: two metrics on the same object come
-  from different requests, joined by a shared identifier.
+- Scalar field: `cpu.user_load` (if request has `response_path: "data"`)
+  or `data.cpu.user_load` (if no `response_path`).
+- Array iteration: set `list_path: "disks.*"` on the metricSet
+  (each element becomes one object instance).
+- Nested array field: `path: "temperature"` on the metric (relative
+  to the iterated item from `list_path`).
+- Cross-request enrichment on the SAME object: two metricSets on the
+  same `object_type`, one of them with `chained_from:` + `bind:` for
+  per-row fan-out. See `context/mpb_relationships.md` §"Chained
+  metricSets".
+- Cross-object-type joins: explicit `relationships:[]` with
+  `scope: field_match` + `parent_expression`/`child_expression`
+  naming the metric keys on each side of the value join.
 
 ## Return format
 

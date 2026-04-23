@@ -1,0 +1,20 @@
+id: 71ffc210-bae6-46c4-a7c7-23396057b008
+name: "[VCF Content Factory] Cluster - Reclaimable Memory GB (sum)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Sum of reclaimable memory (in GB) across all VMs flagged as oversized under
+  this cluster. Source metric is summary|oversized|memory on VirtualMachine,
+  reported in KB by VCF Ops; the formula divides by 1048576 to convert KB to
+  GB so Scoreboard widgets render human-scale values (e.g. "245" rather than
+  "256901120"). depth=2 walks ClusterComputeResource → HostSystem →
+  VirtualMachine, so every VM homed under the cluster contributes to the sum.
+  Companion to [VCF Content Factory] Cluster - Reclaimable vCPUs (sum) (UUID
+  94f965d5-a389-4186-b801-979702406f92); together they quantify the reclamation
+  prize from right-sizing oversized VMs at cluster scope. Used in the
+  Right-Sizing Scoreboard of [VCF Content Factory] Capacity Assessment &
+  Right-Sizing.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
+       metric=summary|oversized|memory, depth=2}) / 1048576

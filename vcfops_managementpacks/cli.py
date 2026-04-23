@@ -137,6 +137,41 @@ def cmd_render_export(args) -> int:
     return 0
 
 
+def cmd_extract(args) -> int:
+    """Extract an MPB UI exchange-format JSON back to a factory YAML.
+
+    Reads an MPB exchange-format JSON (as exported from MPB UI or unpacked
+    from a .pak's adapters.zip/conf/export.json) and produces a YAML
+    definition that round-trips through render-export to a semantically
+    equivalent design.
+
+    Semantic equivalence is the bar — byte-for-byte match is a non-goal
+    because UUIDs minted by MPB (UUID4) will differ from the factory's
+    UUID5-derived IDs.
+    """
+    from .extract import extract_to_yaml
+
+    src = args.from_path
+    out = args.out
+
+    try:
+        yaml_text = extract_to_yaml(src)
+    except FileNotFoundError:
+        print(f"ERROR: file not found: {src}", file=sys.stderr)
+        return 1
+    except (KeyError, TypeError, ValueError) as exc:
+        print(f"ERROR extracting {src}: {exc}", file=sys.stderr)
+        return 1
+
+    if out:
+        Path(out).write_text(yaml_text)
+        print(f"Extracted {src} → {out}", file=sys.stderr)
+    else:
+        print(yaml_text)
+
+    return 0
+
+
 def cmd_build(args) -> int:
     from .builder import build_pak
 
@@ -288,6 +323,29 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     pre.set_defaults(func=cmd_render_export)
+
+    pex = sub.add_parser(
+        "extract",
+        help=(
+            "reverse-extract an MPB UI exchange-format JSON to a factory YAML. "
+            "Reads an MPB design JSON (from MPB UI export or .pak/adapters.zip/conf/export.json) "
+            "and produces a YAML suitable for the factory pipeline."
+        ),
+    )
+    pex.add_argument(
+        "--from",
+        dest="from_path",
+        required=True,
+        metavar="EXCHANGE_JSON",
+        help="path to the MPB exchange-format JSON file to extract from",
+    )
+    pex.add_argument(
+        "--out",
+        default=None,
+        metavar="OUTPUT_YAML",
+        help="output YAML file path (default: stdout)",
+    )
+    pex.set_defaults(func=cmd_extract)
 
     pb = sub.add_parser("build", help="build a .pak file from MP YAML")
     pb.add_argument("path", help="path to MP YAML file")

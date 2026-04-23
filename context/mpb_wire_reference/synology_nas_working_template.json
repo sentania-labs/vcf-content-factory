@@ -1,0 +1,1523 @@
+{
+  "id" : "558b2f05-319b-4c81-bf45-2c5342c05ed7",
+  "name" : "Synology NAS",
+  "pakSettings" : {
+    "author" : "Management Pack Builder",
+    "name" : "Synology NAS",
+    "adapterKind" : "mpb_synology_nas",
+    "version" : "1.0.0.1",
+    "description" : "Monitors a Synology DiskStation NAS running DSM 7.x. Collects rootdevice health (CPU, memory, temperature, uptime), storage topology (pools, volumes, disks), pervolume IO, and iSCSI LUN inventory. Uses discrete perentity storage API endpoints (SYNO.Core.Storage.) matching the knownvalid reference build. Designed for DS1520 but applicable to any adminaccessible DSM 7 unit.",
+    "icon" : "default.svg",
+    "collectionInterval" : 5
+  },
+  "source" : {
+    "basePath" : "webapi",
+    "testRequestId" : "ea8c93c3-9518-484b-8e20-0afdc02a860a",
+    "authentication" : {
+      "credentials" : [ {
+        "id" : "4ad0ace6-734a-401a-a219-7da129e352bd",
+        "key" : "username",
+        "label" : "username",
+        "sensitive" : false,
+        "description" : "username for authentication"
+      }, {
+        "id" : "6cde4250-c501-4b46-98db-acf2ded86172",
+        "key" : "passwd",
+        "label" : "passwd",
+        "sensitive" : true,
+        "description" : "passwd for authentication"
+      } ],
+      "headers" : [ {
+        "id" : "Content-Type",
+        "enabled" : true,
+        "key" : "Content-Type",
+        "value" : "application/json"
+      }, {
+        "id" : "id",
+        "enabled" : true,
+        "key" : "id",
+        "value" : "${authentication.session.set_cookie}"
+      } ],
+      "token" : {
+        "getSession" : {
+          "id" : "3ae59764-40f6-4a3c-a11b-b1990ab684b0",
+          "name" : "Get Session",
+          "path" : "auth.cgi",
+          "method" : "GET",
+          "headers" : [ {
+            "id" : "content_type",
+            "enabled" : true,
+            "key" : "Content-Type",
+            "value" : "application/json"
+          } ],
+          "body" : "",
+          "params" : [ {
+            "id" : "api",
+            "key" : "api",
+            "value" : "SYNO.API.Auth"
+          }, {
+            "id" : "version",
+            "key" : "version",
+            "value" : "3"
+          }, {
+            "id" : "method",
+            "key" : "method",
+            "value" : "login"
+          }, {
+            "id" : "account",
+            "key" : "account",
+            "value" : "${authentication.credentials.username}"
+          }, {
+            "id" : "passwd",
+            "key" : "passwd",
+            "value" : "${authentication.credentials.passwd}"
+          }, {
+            "id" : "session",
+            "key" : "session",
+            "value" : "FileStation"
+          }, {
+            "id" : "format",
+            "key" : "format",
+            "value" : "cookie"
+          } ],
+          "parentRequest" : null,
+          "paging" : null
+        },
+        "releaseSession" : {
+          "id" : "19b5e3b7-3660-4163-9c9b-ec9fbb2eb315",
+          "name" : "Release Session",
+          "path" : "auth.cgi",
+          "method" : "DELETE",
+          "headers" : [ ],
+          "body" : "",
+          "params" : [ {
+            "id" : "method",
+            "key" : "method",
+            "value" : "logout"
+          }, {
+            "id" : "version",
+            "key" : "version",
+            "value" : "3"
+          }, {
+            "id" : "api",
+            "key" : "api",
+            "value" : "SYNO.API.Auth"
+          } ],
+          "parentRequest" : null,
+          "paging" : null
+        },
+        "responseFields" : [ {
+          "id" : "b5a7d2d2-65bd-476b-910e-49650fb76cbd",
+          "key" : "set_cookie",
+          "path" : [ "Set-Cookie" ],
+          "location" : "HEADER"
+        } ],
+        "credentialType" : "CUSTOM"
+      },
+      "type" : "SESSION_TOKEN"
+    },
+    "configuration" : [ {
+      "id" : "e9a16c5d-96bf-4861-ab6b-51f6d20f0bb8",
+      "key" : "mpb_hostname",
+      "label" : "Hostname",
+      "advanced" : false,
+      "default" : "",
+      "description" : "The hostname used to connect to the target API.",
+      "type" : "STRING"
+    }, {
+      "id" : "75f663d7-f7b0-4332-9e86-155573afae18",
+      "key" : "mpb_port",
+      "label" : "Port",
+      "advanced" : true,
+      "default" : "5001",
+      "description" : "The port used to connect to the target API.",
+      "type" : "INTEGER"
+    }, {
+      "id" : "07c529f4-49b9-42ea-a947-9a3da817ef1e",
+      "key" : "mpb_connection_timeout",
+      "label" : "Connection Timeout (s)",
+      "advanced" : true,
+      "default" : "30",
+      "description" : "The maximum number of seconds to wait for a response from the endpoint.",
+      "type" : "INTEGER"
+    }, {
+      "id" : "8d44c7e3-21b7-4824-be7f-3ad69ed71b93",
+      "key" : "mpb_concurrent_requests",
+      "label" : "Maximum Concurrent Requests",
+      "advanced" : true,
+      "default" : "2",
+      "description" : "The maximum number of request that can be run simultaneously.",
+      "type" : "INTEGER"
+    }, {
+      "id" : "6b5ccf7e-5bf3-4775-b250-e6837a0acd0a",
+      "key" : "mpb_max_retries",
+      "label" : "Maximum Retries",
+      "advanced" : true,
+      "default" : "2",
+      "description" : "The maximum number of times a call to an endpoint will be retried if it fails.",
+      "type" : "INTEGER"
+    }, {
+      "id" : "6ffb0a2d-3850-40c5-9088-3fe11d739a7f",
+      "key" : "mpb_ssl_config",
+      "label" : "SSL Configuration",
+      "advanced" : true,
+      "default" : "Verify",
+      "description" : "The SSL mode to use when connecting to the target. Can be configured without SSL (No SSL), to use SSL but do not verify the target's certificate (No Verify), or to use SSL and verify the target's certificate (Verify).",
+      "options" : [ "No Verify", "Verify", "No SSL" ],
+      "type" : "SINGLE_SELECTION"
+    }, {
+      "id" : "ef4b022d-6558-4c4b-985c-aafc2fe2b40e",
+      "key" : "mpb_min_event_severity",
+      "label" : "Minimum VMware Aria Operations Severity",
+      "advanced" : true,
+      "default" : "Warning",
+      "description" : "The minimum event severity to collect.",
+      "options" : [ "Critical", "Immediate", "Warning", "Info" ],
+      "type" : "SINGLE_SELECTION"
+    } ],
+    "requests" : {
+      "c75183f8-c1f5-4af1-9017-585232f0697d" : {
+        "id" : "c75183f8-c1f5-4af1-9017-585232f0697d",
+        "name" : "volume_util",
+        "path" : "entry.cgi",
+        "method" : "GET",
+        "headers" : [ ],
+        "body" : "",
+        "params" : [ {
+          "id" : "api",
+          "key" : "api",
+          "value" : "SYNO.Core.System.Utilization"
+        }, {
+          "id" : "version",
+          "key" : "version",
+          "value" : "1"
+        }, {
+          "id" : "method",
+          "key" : "method",
+          "value" : "get"
+        }, {
+          "id" : "location",
+          "key" : "location",
+          "value" : "${requestParameters.volume_id}"
+        } ],
+        "parentRequest" : {
+          "id" : "82820a43-e14c-4e35-a628-dccd6563b510",
+          "requestId" : "21d1a77e-9d47-4e04-9706-f2d21f2892b6",
+          "parameters" : [ {
+            "id" : "volume_id",
+            "listExpression" : "${@@@MPB_QUOTE_BODY data.volumes.* @@@MPB_QUOTE}",
+            "attributeExpression" : "${@@@MPB_QUOTE_BODY volume_id @@@MPB_QUOTE}"
+          } ]
+        },
+        "paging" : null
+      },
+      "9f93ae0a-5aff-4a23-9786-ae15bbc13c5c" : {
+        "id" : "9f93ae0a-5aff-4a23-9786-ae15bbc13c5c",
+        "name" : "get_disks",
+        "path" : "entry.cgi",
+        "method" : "GET",
+        "headers" : [ ],
+        "body" : "",
+        "params" : [ {
+          "id" : "api",
+          "key" : "api",
+          "value" : "SYNO.Core.Storage.Disk"
+        }, {
+          "id" : "method",
+          "key" : "method",
+          "value" : "list"
+        }, {
+          "id" : "version",
+          "key" : "version",
+          "value" : "1"
+        }, {
+          "id" : "location",
+          "key" : "location",
+          "value" : "internal"
+        }, {
+          "id" : "limit",
+          "key" : "limit",
+          "value" : "-1"
+        }, {
+          "id" : "offset",
+          "key" : "offset",
+          "value" : "0"
+        } ],
+        "parentRequest" : null,
+        "paging" : {
+          "id" : "ec8a5789-e5d7-4c56-97fa-b60b101a6534",
+          "type" : "OFFSET",
+          "pagingParam" : "offset",
+          "limitParam" : "limit",
+          "limitValue" : 100,
+          "pagingStart" : 0,
+          "listPath" : [ "data", "disks" ]
+        }
+      },
+      "e7752f1c-0763-4c46-b9aa-1709bf08fd95" : {
+        "id" : "e7752f1c-0763-4c46-b9aa-1709bf08fd95",
+        "name" : "utilization",
+        "path" : "entry.cgi",
+        "method" : "GET",
+        "headers" : [ ],
+        "body" : "",
+        "params" : [ {
+          "id" : "api",
+          "key" : "api",
+          "value" : "SYNO.Core.System.Utilization"
+        }, {
+          "id" : "version",
+          "key" : "version",
+          "value" : "1"
+        }, {
+          "id" : "method",
+          "key" : "method",
+          "value" : "get"
+        } ],
+        "parentRequest" : null,
+        "paging" : {
+          "id" : "3d3e408c-fab6-4694-9b63-a8b83958c269",
+          "type" : "OFFSET",
+          "pagingParam" : "offset",
+          "limitParam" : "limit",
+          "limitValue" : 100,
+          "pagingStart" : 0,
+          "listPath" : [ "data", "disk", "disk" ]
+        }
+      },
+      "ea8c93c3-9518-484b-8e20-0afdc02a860a" : {
+        "id" : "ea8c93c3-9518-484b-8e20-0afdc02a860a",
+        "name" : "Test Connection",
+        "path" : "entry.cgi",
+        "method" : "GET",
+        "headers" : [ ],
+        "body" : "",
+        "params" : [ {
+          "id" : "api",
+          "key" : "api",
+          "value" : "SYNO.FileStation.Info"
+        }, {
+          "id" : "method",
+          "key" : "method",
+          "value" : "get"
+        }, {
+          "id" : "version",
+          "key" : "version",
+          "value" : "2"
+        } ],
+        "parentRequest" : null,
+        "paging" : null
+      },
+      "21d1a77e-9d47-4e04-9706-f2d21f2892b6" : {
+        "id" : "21d1a77e-9d47-4e04-9706-f2d21f2892b6",
+        "name" : "get_volumes",
+        "path" : "entry.cgi",
+        "method" : "GET",
+        "headers" : [ ],
+        "body" : "",
+        "params" : [ {
+          "id" : "version",
+          "key" : "version",
+          "value" : "1"
+        }, {
+          "id" : "method",
+          "key" : "method",
+          "value" : "list"
+        }, {
+          "id" : "location",
+          "key" : "location",
+          "value" : "internal"
+        }, {
+          "id" : "offset",
+          "key" : "offset",
+          "value" : "0"
+        }, {
+          "id" : "limit",
+          "key" : "limit",
+          "value" : "-1"
+        }, {
+          "id" : "api",
+          "key" : "api",
+          "value" : "SYNO.Core.Storage.Volume"
+        } ],
+        "parentRequest" : null,
+        "paging" : {
+          "id" : "c17cae87-7306-4199-82eb-e918c0910f1d",
+          "type" : "OFFSET",
+          "pagingParam" : "offset",
+          "limitParam" : "limit",
+          "limitValue" : 100,
+          "pagingStart" : 0,
+          "listPath" : [ "data", "volumes" ]
+        }
+      },
+      "14d75e08-c879-45c1-a294-37d49be88936" : {
+        "id" : "14d75e08-c879-45c1-a294-37d49be88936",
+        "name" : "luns",
+        "path" : "entry.cgi",
+        "method" : "GET",
+        "headers" : [ ],
+        "body" : "",
+        "params" : [ {
+          "id" : "api",
+          "key" : "api",
+          "value" : "SYNO.Core.ISCSI.LUN"
+        }, {
+          "id" : "version",
+          "key" : "version",
+          "value" : "1"
+        }, {
+          "id" : "method",
+          "key" : "method",
+          "value" : "list"
+        } ],
+        "parentRequest" : null,
+        "paging" : null
+      },
+      "0889dfac-9e5d-464f-b2b1-e13e3ac6d57a" : {
+        "id" : "0889dfac-9e5d-464f-b2b1-e13e3ac6d57a",
+        "name" : "storage_info",
+        "path" : "entry.cgi",
+        "method" : "GET",
+        "headers" : [ ],
+        "body" : "",
+        "params" : [ {
+          "id" : "api",
+          "key" : "api",
+          "value" : "SYNO.Core.System"
+        }, {
+          "id" : "type",
+          "key" : "type",
+          "value" : "storage"
+        }, {
+          "id" : "method",
+          "key" : "method",
+          "value" : "info"
+        }, {
+          "id" : "version",
+          "key" : "version",
+          "value" : "1"
+        } ],
+        "parentRequest" : null,
+        "paging" : {
+          "id" : "efcd931b-1c69-405a-9489-57c06f9a0e5c",
+          "type" : "OFFSET",
+          "pagingParam" : "offset",
+          "limitParam" : "limit",
+          "limitValue" : 100,
+          "pagingStart" : 0,
+          "listPath" : [ "data", "hdd_info" ]
+        }
+      },
+      "28922e98-0a7a-412f-974c-a2cf25da0d11" : {
+        "id" : "28922e98-0a7a-412f-974c-a2cf25da0d11",
+        "name" : "network_info",
+        "path" : "entry.cgi",
+        "method" : "GET",
+        "headers" : [ ],
+        "body" : "",
+        "params" : [ {
+          "id" : "api",
+          "key" : "api",
+          "value" : "SYNO.Core.System"
+        }, {
+          "id" : "type",
+          "key" : "type",
+          "value" : "network"
+        }, {
+          "id" : "version",
+          "key" : "version",
+          "value" : "1"
+        }, {
+          "id" : "method",
+          "key" : "method",
+          "value" : "info"
+        } ],
+        "parentRequest" : null,
+        "paging" : {
+          "id" : "852eda5b-d9d8-4da1-8e56-546b91aaea3f",
+          "type" : "OFFSET",
+          "pagingParam" : "offset",
+          "limitParam" : "limit",
+          "limitValue" : 100,
+          "pagingStart" : 0,
+          "listPath" : [ "data", "nif" ]
+        }
+      },
+      "d5ef9bac-548c-442a-a8b9-554e70958826" : {
+        "id" : "d5ef9bac-548c-442a-a8b9-554e70958826",
+        "name" : "filestation",
+        "path" : "entry.cgi",
+        "method" : "GET",
+        "headers" : [ ],
+        "body" : "",
+        "params" : [ {
+          "id" : "api",
+          "key" : "api",
+          "value" : "SYNO.FileStation.Info"
+        }, {
+          "id" : "version",
+          "key" : "version",
+          "value" : "1"
+        }, {
+          "id" : "method",
+          "key" : "method",
+          "value" : "get"
+        } ],
+        "parentRequest" : null,
+        "paging" : null
+      },
+      "fb47eaf0-2e94-4358-a775-5557632db95e" : {
+        "id" : "fb47eaf0-2e94-4358-a775-5557632db95e",
+        "name" : "get_storage_pools",
+        "path" : "entry.cgi",
+        "method" : "GET",
+        "headers" : [ ],
+        "body" : "",
+        "params" : [ {
+          "id" : "api",
+          "key" : "api",
+          "value" : "SYNO.Core.Storage.Pool"
+        }, {
+          "id" : "method",
+          "key" : "method",
+          "value" : "list"
+        }, {
+          "id" : "limit",
+          "key" : "limit",
+          "value" : "-1"
+        }, {
+          "id" : "offset",
+          "key" : "offset",
+          "value" : "0"
+        }, {
+          "id" : "version",
+          "key" : "version",
+          "value" : "1"
+        } ],
+        "parentRequest" : null,
+        "paging" : {
+          "id" : "272f2cab-0e1c-4fb7-a846-3576deab412c",
+          "type" : "OFFSET",
+          "pagingParam" : "offset",
+          "limitParam" : "limit",
+          "limitValue" : 100,
+          "pagingStart" : 0,
+          "listPath" : [ "data", "pools" ]
+        }
+      },
+      "61ad22ba-261d-44d5-8924-56cb876edf65" : {
+        "id" : "61ad22ba-261d-44d5-8924-56cb876edf65",
+        "name" : "system",
+        "path" : "entry.cgi",
+        "method" : "GET",
+        "headers" : [ ],
+        "body" : "",
+        "params" : [ {
+          "id" : "api",
+          "key" : "api",
+          "value" : "SYNO.Core.System"
+        }, {
+          "id" : "version",
+          "key" : "version",
+          "value" : "3"
+        }, {
+          "id" : "method",
+          "key" : "method",
+          "value" : "info"
+        } ],
+        "parentRequest" : null,
+        "paging" : null
+      }
+    },
+    "resources" : [ {
+      "id" : "5cd36ff7-4420-4b67-b96b-c3e1fede5c60",
+      "label" : "Synology Diskstation",
+      "resourceKind" : "mpb_synology_nas_synology_diskstation",
+      "name" : {
+        "id" : "21a32165-a136-4f45-9e5a-76df16fcf171",
+        "type" : "PROPERTY",
+        "refId" : "ea30d892-c74c-4df7-a781-d3b4344790c2"
+      },
+      "identifiers" : [ {
+        "id" : "c0158ca5-df70-432e-84f4-ff6b29a6cd55",
+        "key" : "serial",
+        "propertyKey" : "serial"
+      } ],
+      "isListResource" : false,
+      "icon" : "media-changer.svg",
+      "requestedMetrics" : [ {
+        "id" : "58b465dc-ab3d-40a2-82a3-a9e2b9f36098",
+        "requestId" : "61ad22ba-261d-44d5-8924-56cb876edf65",
+        "metrics" : [ {
+          "id" : "5f6b8005-b19b-422e-929d-b77a5ad0fe4d",
+          "expression" : "${@@@MPB_QUOTE_BODY data.cpu_clock_speed @@@MPB_QUOTE}",
+          "key" : "cpu_clock_speed",
+          "label" : "CPU Clock Speed",
+          "dataType" : "DECIMAL",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "5721e03b-6b8b-4dd8-964c-fd0dabf592b9",
+          "expression" : "${@@@MPB_QUOTE_BODY data.cpu_cores @@@MPB_QUOTE}",
+          "key" : "cpu_cores",
+          "label" : "CPU Cores",
+          "dataType" : "DECIMAL",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "01e56a69-ed1e-4f1d-951f-564c5ff4c957",
+          "expression" : "${@@@MPB_QUOTE_BODY data.cpu_family @@@MPB_QUOTE}",
+          "key" : "cpu_family",
+          "label" : "CPU Family",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "5edfc262-227c-4cf0-ad65-c3ab245b0e8a",
+          "expression" : "${@@@MPB_QUOTE_BODY data.cpu_series @@@MPB_QUOTE}",
+          "key" : "cpu_series",
+          "label" : "CPU Series",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "987bcf00-f9ef-41c6-9bc1-e1fd70719ce2",
+          "expression" : "${@@@MPB_QUOTE_BODY data.cpu_vendor @@@MPB_QUOTE}",
+          "key" : "cpu_vendor",
+          "label" : "CPU Vendor",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "84841975-9a01-455d-aac5-02abcf4547c7",
+          "expression" : "${@@@MPB_QUOTE_BODY data.enabled_ntp @@@MPB_QUOTE}",
+          "key" : "enabled_ntp",
+          "label" : "Enabled Ntp",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "ad569542-3554-454f-88fe-9ae5fc9df005",
+          "expression" : "${@@@MPB_QUOTE_BODY data.firmware_date @@@MPB_QUOTE}",
+          "key" : "firmware_date",
+          "label" : "Firmware Date",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "88b6b4ca-f19c-4654-b6e3-23c2216c0f3e",
+          "expression" : "${@@@MPB_QUOTE_BODY data.firmware_ver @@@MPB_QUOTE}",
+          "key" : "firmware_ver",
+          "label" : "Firmware Ver",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "8f57c2a9-8827-43fc-a58e-836165ac89b9",
+          "expression" : "${@@@MPB_QUOTE_BODY data.model @@@MPB_QUOTE}",
+          "key" : "model",
+          "label" : "Model",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "f3f03038-ba01-47ed-b97f-a84656657811",
+          "expression" : "${@@@MPB_QUOTE_BODY data.ntp_server @@@MPB_QUOTE}",
+          "key" : "ntp_server",
+          "label" : "Ntp Server",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "8b27487d-bbf6-4cda-9a91-af1ab323ce9f",
+          "expression" : "${@@@MPB_QUOTE_BODY data.ram_size @@@MPB_QUOTE}",
+          "key" : "ram_size",
+          "label" : "RAM Size",
+          "dataType" : "DECIMAL",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : "gigabyte",
+          "timeseries" : null
+        }, {
+          "id" : "c0158ca5-df70-432e-84f4-ff6b29a6cd55",
+          "expression" : "${@@@MPB_QUOTE_BODY data.serial @@@MPB_QUOTE}",
+          "key" : "serial",
+          "label" : "Serial",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "23f098f1-10a7-4b39-a1c9-cb7b0b6893fb",
+          "expression" : "${@@@MPB_QUOTE_BODY data.sys_temp @@@MPB_QUOTE}",
+          "key" : "sys_temp",
+          "label" : "Sys Temp",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "abb8f22c-fc77-444e-bc21-cced852ce5b1",
+          "expression" : "${@@@MPB_QUOTE_BODY data.time_zone_desc @@@MPB_QUOTE}",
+          "key" : "time_zone_desc",
+          "label" : "Time Zone Desc",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "eb025760-aae6-4253-b42d-d20c2b784812",
+          "expression" : "${@@@MPB_QUOTE_BODY data.up_time @@@MPB_QUOTE}",
+          "key" : "up_time",
+          "label" : "Up Time",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        } ],
+        "objectBinding" : null
+      }, {
+        "id" : "c57c602d-6c38-4886-b997-dd58110d1408",
+        "requestId" : "d5ef9bac-548c-442a-a8b9-554e70958826",
+        "metrics" : [ {
+          "id" : "ea30d892-c74c-4df7-a781-d3b4344790c2",
+          "expression" : "${@@@MPB_QUOTE_BODY data.hostname @@@MPB_QUOTE}",
+          "key" : "hostname",
+          "label" : "Hostname",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        } ],
+        "objectBinding" : null
+      }, {
+        "id" : "e704fbe2-3d23-473a-93c6-f01251056d5a",
+        "requestId" : "e7752f1c-0763-4c46-b9aa-1709bf08fd95",
+        "metrics" : [ {
+          "id" : "784de45b-ae4d-411e-9a29-d46a2efead94",
+          "expression" : "${@@@MPB_QUOTE_BODY data.cpu.15min_load @@@MPB_QUOTE}",
+          "key" : "15min_load",
+          "label" : "15min Load",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "047054a7-5ec8-404d-af70-8c8e357151de",
+          "expression" : "${@@@MPB_QUOTE_BODY data.cpu.1min_load @@@MPB_QUOTE}",
+          "key" : "1min_load",
+          "label" : "1min Load",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "342a288c-645b-48d7-b148-85faecb46012",
+          "expression" : "${@@@MPB_QUOTE_BODY data.cpu.5min_load @@@MPB_QUOTE}",
+          "key" : "5min_load",
+          "label" : "5min Load",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "fec14253-6be9-4efc-9704-0873873c6142",
+          "expression" : "${@@@MPB_QUOTE_BODY data.cpu.other_load @@@MPB_QUOTE}",
+          "key" : "other_load",
+          "label" : "Other Load",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "5c3d6129-ce4b-4879-b325-2a3d9cd6b35b",
+          "expression" : "${@@@MPB_QUOTE_BODY data.cpu.system_load @@@MPB_QUOTE}",
+          "key" : "system_load",
+          "label" : "System Load",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "f341367d-535d-47f7-bbcc-0ee3c67c637f",
+          "expression" : "${@@@MPB_QUOTE_BODY data.cpu.user_load @@@MPB_QUOTE}",
+          "key" : "user_load",
+          "label" : "User Load",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "a029f531-b4fb-4d4e-a0df-d5241075958c",
+          "expression" : "${@@@MPB_QUOTE_BODY data.memory.avail_real @@@MPB_QUOTE}",
+          "key" : "avail_real",
+          "label" : "Avail Real",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "9f3dd291-7f89-475c-a8ac-74aa9360dd55",
+          "expression" : "${@@@MPB_QUOTE_BODY data.memory.avail_swap @@@MPB_QUOTE}",
+          "key" : "avail_swap",
+          "label" : "Avail Swap",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "b5e3df6d-48a2-4a1d-81bb-82d9faff14a3",
+          "expression" : "${@@@MPB_QUOTE_BODY data.memory.buffer @@@MPB_QUOTE}",
+          "key" : "buffer",
+          "label" : "Buffer",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "dee62611-7d52-4621-8ef6-09d66fc16714",
+          "expression" : "${@@@MPB_QUOTE_BODY data.memory.cached @@@MPB_QUOTE}",
+          "key" : "cached",
+          "label" : "Cached",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "393bd528-f86a-412d-b4ba-26aeab33c992",
+          "expression" : "${@@@MPB_QUOTE_BODY data.memory.memory_size @@@MPB_QUOTE}",
+          "key" : "memory_size",
+          "label" : "Memory Size",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "f178a3da-d74f-4e51-9dca-31f80e1b1435",
+          "expression" : "${@@@MPB_QUOTE_BODY data.memory.real_usage @@@MPB_QUOTE}",
+          "key" : "real_usage",
+          "label" : "Real Usage",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "eb6fa42a-d333-44f5-9730-e7d4fd3a0dcf",
+          "expression" : "${@@@MPB_QUOTE_BODY data.memory.si_disk @@@MPB_QUOTE}",
+          "key" : "si_disk",
+          "label" : "Si Disk",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "ad6e7465-e464-4d18-852b-f4543e79576d",
+          "expression" : "${@@@MPB_QUOTE_BODY data.memory.so_disk @@@MPB_QUOTE}",
+          "key" : "so_disk",
+          "label" : "So Disk",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "833495d7-ef48-4dc8-a9d5-651fbd17ee7e",
+          "expression" : "${@@@MPB_QUOTE_BODY data.memory.swap_usage @@@MPB_QUOTE}",
+          "key" : "swap_usage",
+          "label" : "Swap Usage",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "9509e95a-1d49-4de3-8f01-8f8c8e9461a9",
+          "expression" : "${@@@MPB_QUOTE_BODY data.memory.total_real @@@MPB_QUOTE}",
+          "key" : "total_real",
+          "label" : "Total Real",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "1de56c8e-7a80-4cff-8be2-e58789eca3d4",
+          "expression" : "${@@@MPB_QUOTE_BODY data.memory.total_swap @@@MPB_QUOTE}",
+          "key" : "total_swap",
+          "label" : "Total Swap",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        } ],
+        "objectBinding" : null
+      } ],
+      "metricGroups" : { }
+    }, {
+      "id" : "3c20d9d3-c7eb-4965-9b69-34f3b9f00707",
+      "label" : "Volume",
+      "resourceKind" : "mpb_synology_nas_volume",
+      "name" : {
+        "id" : "6d46d8b5-3dea-4411-97f1-a7801216e1b8",
+        "type" : "PROPERTY",
+        "refId" : "ab177ec9-0dca-4926-aacd-99f739a9fc4d"
+      },
+      "identifiers" : [ {
+        "id" : "d9582fad-f0d5-4f1d-97ea-b9ce821bcd73",
+        "key" : "volume_id",
+        "propertyKey" : "volume_id"
+      }, {
+        "id" : "d45b5588-1ff5-4835-9a7b-dbef63e94940",
+        "key" : "volume_path",
+        "propertyKey" : "volume_path"
+      } ],
+      "isListResource" : true,
+      "icon" : "default.svg",
+      "requestedMetrics" : [ {
+        "id" : "ca88c2a7-06d8-4596-9bdc-5e2395ebc034",
+        "requestId" : "21d1a77e-9d47-4e04-9706-f2d21f2892b6",
+        "metrics" : [ {
+          "id" : "d1b150fa-fb45-434a-9ebe-bbe691c92223",
+          "expression" : "${@@@MPB_QUOTE_BODY crashed @@@MPB_QUOTE}",
+          "key" : "crashed",
+          "label" : "Crashed",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "07f0a851-65b8-4bb0-9cf6-77d09dc953b3",
+          "expression" : "${@@@MPB_QUOTE_BODY deduped @@@MPB_QUOTE}",
+          "key" : "deduped",
+          "label" : "Deduped",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "bbe1109b-f740-4557-8d46-421841c969cd",
+          "expression" : "${@@@MPB_QUOTE_BODY description @@@MPB_QUOTE}",
+          "key" : "description",
+          "label" : "Description",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "ab177ec9-0dca-4926-aacd-99f739a9fc4d",
+          "expression" : "${@@@MPB_QUOTE_BODY display_name @@@MPB_QUOTE}",
+          "key" : "display_name",
+          "label" : "Display Name",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "91d76204-9acf-460a-82ee-91a9805933ed",
+          "expression" : "${@@@MPB_QUOTE_BODY fs_type @@@MPB_QUOTE}",
+          "key" : "fs_type",
+          "label" : "Fs Type",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "740bd21f-7645-4243-9d79-af09cf66c2d1",
+          "expression" : "${@@@MPB_QUOTE_BODY is_encrypted @@@MPB_QUOTE}",
+          "key" : "is_encrypted",
+          "label" : "Is Encrypted",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "4fe4a8ff-2ae2-4cfe-bd13-73cc8e00fedc",
+          "expression" : "${@@@MPB_QUOTE_BODY pool_path @@@MPB_QUOTE}",
+          "key" : "pool_path",
+          "label" : "Pool Path",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "6d7db169-2a07-4053-9381-ae6922b6b93b",
+          "expression" : "${@@@MPB_QUOTE_BODY raid_type @@@MPB_QUOTE}",
+          "key" : "raid_type",
+          "label" : "RAID Type",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "88f15719-f410-4290-a01d-b6a040f98c17",
+          "expression" : "${@@@MPB_QUOTE_BODY readonly @@@MPB_QUOTE}",
+          "key" : "readonly",
+          "label" : "Readonly",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "b4afca9b-7e6d-4012-a285-522c8c9c4099",
+          "expression" : "${@@@MPB_QUOTE_BODY size_free_byte @@@MPB_QUOTE}",
+          "key" : "size_free_byte",
+          "label" : "Size Free Byte",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "36393f31-ec86-4f57-8678-5176c9f56c4d",
+          "expression" : "${@@@MPB_QUOTE_BODY size_total_byte @@@MPB_QUOTE}",
+          "key" : "size_total_byte",
+          "label" : "Size Total Byte",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "58a61bcf-0016-4646-8012-f8b5e64be976",
+          "expression" : "${@@@MPB_QUOTE_BODY status @@@MPB_QUOTE}",
+          "key" : "status",
+          "label" : "Status",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "d9582fad-f0d5-4f1d-97ea-b9ce821bcd73",
+          "expression" : "${@@@MPB_QUOTE_BODY volume_id @@@MPB_QUOTE}",
+          "key" : "volume_id",
+          "label" : "Volume ID",
+          "dataType" : "DECIMAL",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "d45b5588-1ff5-4835-9a7b-dbef63e94940",
+          "expression" : "${@@@MPB_QUOTE_BODY volume_path @@@MPB_QUOTE}",
+          "key" : "volume_path",
+          "label" : "Volume Path",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        } ],
+        "objectBinding" : null,
+        "listExpression" : "${@@@MPB_QUOTE_BODY data.volumes.* @@@MPB_QUOTE}"
+      } ],
+      "metricGroups" : { }
+    }, {
+      "id" : "667f0205-7da3-428a-8506-7fd96c94926c",
+      "label" : "iSCSI LUN",
+      "resourceKind" : "mpb_synology_nas_iscsi_lun",
+      "name" : {
+        "id" : "4432214b-af32-4b87-af74-08f997481a90",
+        "type" : "PROPERTY",
+        "refId" : "95a3c9a2-b9a7-4369-bd8b-d37d26b4c99f"
+      },
+      "identifiers" : [ {
+        "id" : "5569cb72-63c2-4985-a51a-0d17fb479818",
+        "key" : "uuid",
+        "propertyKey" : "uuid"
+      } ],
+      "isListResource" : true,
+      "icon" : "block-storage.svg",
+      "requestedMetrics" : [ {
+        "id" : "5cbf3136-2132-42d7-bee9-46bd0392ca85",
+        "requestId" : "14d75e08-c879-45c1-a294-37d49be88936",
+        "metrics" : [ {
+          "id" : "5569cb72-63c2-4985-a51a-0d17fb479818",
+          "expression" : "${@@@MPB_QUOTE_BODY uuid @@@MPB_QUOTE}",
+          "key" : "uuid",
+          "label" : "UUID",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "95a3c9a2-b9a7-4369-bd8b-d37d26b4c99f",
+          "expression" : "${@@@MPB_QUOTE_BODY name @@@MPB_QUOTE}",
+          "key" : "name",
+          "label" : "Name",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "c7fe37ed-c4a0-4cc4-8d93-6fb03eeb713f",
+          "expression" : "${@@@MPB_QUOTE_BODY size @@@MPB_QUOTE}",
+          "key" : "provisioned_size",
+          "label" : "Provisioned Size",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : "bytes",
+          "timeseries" : null
+        }, {
+          "id" : "52b72359-72a3-4420-8169-6ee38e701538",
+          "expression" : "${@@@MPB_QUOTE_BODY location @@@MPB_QUOTE}",
+          "key" : "location",
+          "label" : "Location",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "4b86c330-cc2a-46b4-a639-d4cc068e5e50",
+          "expression" : "${@@@MPB_QUOTE_BODY type_str @@@MPB_QUOTE}",
+          "key" : "lun_type",
+          "label" : "LUN Type",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        } ],
+        "objectBinding" : null,
+        "listExpression" : "${@@@MPB_QUOTE_BODY data.luns.* @@@MPB_QUOTE}"
+      } ],
+      "metricGroups" : { }
+    }, {
+      "id" : "b5b13a24-9025-456f-83b9-84b17b92e8ea",
+      "label" : "Storage Pool",
+      "resourceKind" : "mpb_synology_nas_storage_pool",
+      "name" : {
+        "id" : "f672def3-ca15-499c-81a3-0b5b1575e41f",
+        "type" : "PROPERTY",
+        "refId" : "9211694e-c820-4984-95ef-0a180609f650"
+      },
+      "identifiers" : [ {
+        "id" : "9211694e-c820-4984-95ef-0a180609f650",
+        "key" : "id",
+        "propertyKey" : "id"
+      }, {
+        "id" : "f6e69d0f-a585-4d72-9394-de7d6ff2b91e",
+        "key" : "pool_path",
+        "propertyKey" : "pool_path"
+      } ],
+      "isListResource" : true,
+      "icon" : "data-cluster.svg",
+      "requestedMetrics" : [ {
+        "id" : "d02ca1cc-0e8f-4f84-8237-956b5ec61d50",
+        "requestId" : "fb47eaf0-2e94-4358-a775-5557632db95e",
+        "metrics" : [ {
+          "id" : "54e0ba0a-2441-4bd6-8066-8314a0769e3c",
+          "expression" : "${@@@MPB_QUOTE_BODY device_type @@@MPB_QUOTE}",
+          "key" : "device_type",
+          "label" : "Device Type",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "9211694e-c820-4984-95ef-0a180609f650",
+          "expression" : "${@@@MPB_QUOTE_BODY id @@@MPB_QUOTE}",
+          "key" : "id",
+          "label" : "ID",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "485f8c3d-731c-40e9-9086-b857964e49ce",
+          "expression" : "${@@@MPB_QUOTE_BODY num_id @@@MPB_QUOTE}",
+          "key" : "num_id",
+          "label" : "Num ID",
+          "dataType" : "DECIMAL",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "f6e69d0f-a585-4d72-9394-de7d6ff2b91e",
+          "expression" : "${@@@MPB_QUOTE_BODY pool_path @@@MPB_QUOTE}",
+          "key" : "pool_path",
+          "label" : "Pool Path",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "ff6b7a8a-f36f-4119-8e29-47e2f472bd24",
+          "expression" : "${@@@MPB_QUOTE_BODY size.total @@@MPB_QUOTE}",
+          "key" : "total",
+          "label" : "Total",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "922c9712-d0d4-4255-bbc7-95908a16fd9c",
+          "expression" : "${@@@MPB_QUOTE_BODY size.used @@@MPB_QUOTE}",
+          "key" : "used",
+          "label" : "Used",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        } ],
+        "objectBinding" : null,
+        "listExpression" : "${@@@MPB_QUOTE_BODY data.pools.* @@@MPB_QUOTE}"
+      } ],
+      "metricGroups" : { }
+    }, {
+      "id" : "66b239d1-ec46-4a99-8fd3-83d647aa95ed",
+      "label" : "Disks",
+      "resourceKind" : "mpb_synology_nas_disks",
+      "name" : {
+        "id" : "60d486b4-2a23-441b-986e-aa60f7895e93",
+        "type" : "PROPERTY",
+        "refId" : "ea4b7799-1aaf-48a1-bc69-4b4dcf81f63d"
+      },
+      "identifiers" : [ {
+        "id" : "7900173c-8281-4787-bfd2-be2408f91966",
+        "key" : "serial",
+        "propertyKey" : "serial"
+      } ],
+      "isListResource" : true,
+      "icon" : "storage.svg",
+      "requestedMetrics" : [ {
+        "id" : "6f69aac6-caf6-463a-80ea-d70754b6f15b",
+        "requestId" : "9f93ae0a-5aff-4a23-9786-ae15bbc13c5c",
+        "metrics" : [ {
+          "id" : "a471784b-6874-46df-a127-4da54173aa75",
+          "expression" : "${@@@MPB_QUOTE_BODY device @@@MPB_QUOTE}",
+          "key" : "device",
+          "label" : "Device",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "0112bfe3-d506-4944-8b03-b3b21702925e",
+          "expression" : "${@@@MPB_QUOTE_BODY firm @@@MPB_QUOTE}",
+          "key" : "firm",
+          "label" : "Firm",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "b65f2c2a-46a7-4727-9f08-3b538b82d43d",
+          "expression" : "${@@@MPB_QUOTE_BODY model @@@MPB_QUOTE}",
+          "key" : "model",
+          "label" : "Model",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "ea4b7799-1aaf-48a1-bc69-4b4dcf81f63d",
+          "expression" : "${@@@MPB_QUOTE_BODY name @@@MPB_QUOTE}",
+          "key" : "name",
+          "label" : "Name",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "7900173c-8281-4787-bfd2-be2408f91966",
+          "expression" : "${@@@MPB_QUOTE_BODY serial @@@MPB_QUOTE}",
+          "key" : "serial",
+          "label" : "Serial",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "34384195-153e-48b9-88ef-675363e373ca",
+          "expression" : "${@@@MPB_QUOTE_BODY size_total @@@MPB_QUOTE}",
+          "key" : "size_total",
+          "label" : "Size Total",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "8892fa93-abb1-4620-af96-a4243c08a66a",
+          "expression" : "${@@@MPB_QUOTE_BODY slot_id @@@MPB_QUOTE}",
+          "key" : "slot_id",
+          "label" : "Slot ID",
+          "dataType" : "DECIMAL",
+          "property" : false,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "b09741e8-90cb-4506-86c5-f4e777ffc79b",
+          "expression" : "${@@@MPB_QUOTE_BODY smart_status @@@MPB_QUOTE}",
+          "key" : "smart_status",
+          "label" : "Smart Status",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "2edacc32-8378-4724-b786-2899f8aa7993",
+          "expression" : "${@@@MPB_QUOTE_BODY used_by @@@MPB_QUOTE}",
+          "key" : "used_by",
+          "label" : "Used By",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "226d5a0d-99ec-4c5c-8d6a-072f63f6d6dc",
+          "expression" : "${@@@MPB_QUOTE_BODY vendor @@@MPB_QUOTE}",
+          "key" : "vendor",
+          "label" : "Vendor",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        }, {
+          "id" : "453669c5-69b0-48ba-a08c-626cc1b79adf",
+          "expression" : "${@@@MPB_QUOTE_BODY wcache_force_off @@@MPB_QUOTE}",
+          "key" : "wcache_force_off",
+          "label" : "Wcache Force Off",
+          "dataType" : "STRING",
+          "property" : true,
+          "kpi" : false,
+          "groups" : [ ],
+          "unit" : null,
+          "timeseries" : null
+        } ],
+        "objectBinding" : null,
+        "listExpression" : "${@@@MPB_QUOTE_BODY data.disks.* @@@MPB_QUOTE}"
+      } ],
+      "metricGroups" : { }
+    } ],
+    "externalResources" : [ ],
+    "events" : [ ],
+    "type" : "HTTP"
+  },
+  "constants" : [ ],
+  "relationships" : [ {
+    "id" : "fbfb62c0-311a-4950-a268-66e08232da3d",
+    "parent" : {
+      "id" : "8e7d298c-ff16-4eb8-b3ed-4ffebf1fdfaf",
+      "resourceKind" : "mpb_synology_nas_volume",
+      "adapterKind" : "mpb_synology_nas",
+      "resourceKindName" : "Volume",
+      "expression" : "${33b8dc0e-772b-4706-9b1b-68cda57e75fd}",
+      "matchIdentifiers" : [ {
+        "id" : "33b8dc0e-772b-4706-9b1b-68cda57e75fd",
+        "type" : "IDENTIFIER",
+        "key" : "volume_path",
+        "regex" : null
+      } ]
+    },
+    "child" : {
+      "id" : "a62b2048-7fdf-4b81-9ba8-992a3fd9b88e",
+      "resourceKind" : "mpb_synology_nas_iscsi_lun",
+      "adapterKind" : "mpb_synology_nas",
+      "resourceKindName" : "iSCSI LUN",
+      "expression" : "${0ecf2956-e6fe-4a23-9b29-d340416bb70c}",
+      "matchIdentifiers" : [ {
+        "id" : "0ecf2956-e6fe-4a23-9b29-d340416bb70c",
+        "type" : "PROPERTY",
+        "key" : "location",
+        "regex" : null
+      } ]
+    },
+    "caseSensitive" : true
+  }, {
+    "id" : "37b42bb5-3979-491c-92e7-e07ea9705cb5",
+    "parent" : {
+      "id" : "af3dfd29-34a8-4830-ae4e-90e0b6e9832e",
+      "resourceKind" : "mpb_synology_nas_storage_pool",
+      "adapterKind" : "mpb_synology_nas",
+      "resourceKindName" : "Storage Pool",
+      "expression" : "${991cdd76-13fe-4b72-ab43-eb8574a0f686}",
+      "matchIdentifiers" : [ {
+        "id" : "991cdd76-13fe-4b72-ab43-eb8574a0f686",
+        "type" : "IDENTIFIER",
+        "key" : "pool_path",
+        "regex" : null
+      } ]
+    },
+    "child" : {
+      "id" : "896561ef-c12f-4b36-8931-34db1a9ddd38",
+      "resourceKind" : "mpb_synology_nas_volume",
+      "adapterKind" : "mpb_synology_nas",
+      "resourceKindName" : "Volume",
+      "expression" : "${fe600b52-5961-4ea2-b011-c0f9c0023294}",
+      "matchIdentifiers" : [ {
+        "id" : "fe600b52-5961-4ea2-b011-c0f9c0023294",
+        "type" : "PROPERTY",
+        "key" : "pool_path",
+        "regex" : null
+      } ]
+    },
+    "caseSensitive" : true
+  }, {
+    "id" : "0cc55cde-6734-4577-b8c9-cf1ebb7c8b11",
+    "parent" : {
+      "id" : "b982bdbb-bbbf-4242-ab97-c0e11a430a01",
+      "resourceKind" : "mpb_synology_nas_storage_pool",
+      "adapterKind" : "mpb_synology_nas",
+      "resourceKindName" : "Storage Pool",
+      "expression" : "${94545420-a018-4b57-97ec-8e000ee8bfbf}",
+      "matchIdentifiers" : [ {
+        "id" : "94545420-a018-4b57-97ec-8e000ee8bfbf",
+        "type" : "IDENTIFIER",
+        "key" : "id",
+        "regex" : null
+      } ]
+    },
+    "child" : {
+      "id" : "32fcdd6d-83e3-404b-87e8-855fbdd28d51",
+      "resourceKind" : "mpb_synology_nas_disks",
+      "adapterKind" : "mpb_synology_nas",
+      "resourceKindName" : "Disks",
+      "expression" : "${1d7dfee7-b39a-4eb3-83de-73002afa9ec3}",
+      "matchIdentifiers" : [ {
+        "id" : "1d7dfee7-b39a-4eb3-83de-73002afa9ec3",
+        "type" : "PROPERTY",
+        "key" : "used_by",
+        "regex" : null
+      } ]
+    },
+    "caseSensitive" : true
+  } ]
+}

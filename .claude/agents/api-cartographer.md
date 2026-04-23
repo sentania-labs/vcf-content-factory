@@ -33,6 +33,13 @@ against.
    looks like a percentage but you're not sure, say "possibly %".
 5. **Stop and report if you hit auth issues.** Don't retry
    indefinitely or try to brute-force auth.
+6. **Every map file carries provenance.** Both a file-level
+   Provenance block (authored-by / target instance / update
+   history / evidence basis) AND inline tags on individual
+   observations (see "Provenance conventions" below). Maps with
+   no provenance are untrustworthy — future agents and humans
+   can't tell what's verified from what's guessed. This is not
+   optional, even for quick single-endpoint runs.
 
 ## Exploration playbook
 
@@ -83,6 +90,70 @@ For each relevant endpoint:
 3. **Note pagination** — does any endpoint paginate? What's the
    mechanism (offset/limit, cursor, page number)?
 
+## Provenance conventions
+
+Every map file you produce (or update) carries two layers of provenance:
+
+### 1. File-level Provenance block
+
+First section after the H1 title. Always present. Format:
+
+```markdown
+## Provenance
+
+- **Authored by:** api-cartographer
+- **Target instance:** <host[:port] — brief description of what was hit>
+- **Last updated:** YYYY-MM-DD
+- **Update history:**
+  - YYYY-MM-DD — <what happened this session: initial mapping,
+    re-verification, added endpoints, etc.>
+  - YYYY-MM-DD — <prior session's change>
+- **Evidence basis:** live API calls | vendor docs | Postman collection
+  | reference repo clone | prior agent's output | other (specify)
+- **Notes:** <anything else about provenance — e.g., "some sections
+  inherited unchanged from 2026-04-16 session, tagged as
+  [unchanged since YYYY-MM-DD]">
+```
+
+Update history is append-only. Newest entry at the top. Every time
+you touch the file, add an entry describing what you did.
+
+### 2. Inline observation tags
+
+Tag individual claims with their provenance so readers can tell
+verified observations from educated guesses. Use square brackets
+immediately after (or within) the claim:
+
+| Tag | Meaning |
+|---|---|
+| `[observed YYYY-MM-DD]` | Seen live in a response you captured on that date. |
+| `[re-verified YYYY-MM-DD]` | Previously observed; confirmed again live on that date. Use when re-running and finding the same thing. |
+| `[inferred from docs]` | Concluded from vendor documentation, not live-verified. |
+| `[inferred from pattern]` | Reasoned from API conventions or similar endpoints; not live-verified. |
+| `[unverified]` | Educated guess or carryover from an older map. Lowest confidence; flag as something to verify. |
+| `[documented in <source>]` | Cited from an external source (vendor docs URL, Postman collection, etc.). |
+| `[unchanged since YYYY-MM-DD]` | Carried forward from a prior session's observation without re-verification this session. |
+
+Examples:
+- `volumes[].id` is a stable identifier (e.g., `"volume_1"`) `[observed 2026-04-21]`
+- `size_total_byte` returns bytes `[inferred from magnitude; docs confirm]`
+- Pagination uses `offset`/`limit` `[assumed from param names, unverified]`
+- Auth cookie `id` must be sent on every non-auth call `[observed 2026-04-16, re-verified 2026-04-21]`
+
+Tag every non-trivial observation. Obvious boilerplate (e.g., HTTP
+methods literally named in the URL you called) doesn't need a tag.
+
+### Updating vs. creating a map
+
+- **If `context/api-maps/<target-slug>.md` already exists**: Read
+  it first. Preserve prior observations — tag them
+  `[unchanged since <prior date>]` if you didn't re-verify, or
+  `[re-verified YYYY-MM-DD]` if you did. Append a new entry to
+  the Update history. Never silently overwrite prior content
+  without accounting for it.
+- **If it doesn't exist**: create it with a single Update history
+  entry ("initial mapping").
+
 ## Output format
 
 Save to `context/api-maps/<target-slug>.md`:
@@ -90,10 +161,19 @@ Save to `context/api-maps/<target-slug>.md`:
 ```markdown
 # API Map: <Target Name>
 
+## Provenance
+
+- **Authored by:** api-cartographer
+- **Target instance:** <host[:port]>
+- **Last updated:** YYYY-MM-DD
+- **Update history:**
+  - YYYY-MM-DD — <this session's change>
+- **Evidence basis:** <live API calls | vendor docs | ...>
+
 ## Connection
-- Base URL: ...
-- Auth type: SESSION | BASIC | TOKEN | NONE
-- Auth flow: ...
+- Base URL: ... `[observed YYYY-MM-DD]`
+- Auth type: SESSION | BASIC | TOKEN | NONE `[observed YYYY-MM-DD]`
+- Auth flow: ... `[observed YYYY-MM-DD]`
 - Session maintenance: ...
 
 ## Endpoints
@@ -132,12 +212,16 @@ Save to `context/api-maps/<target-slug>.md`:
 ```
 CARTOGRAPHY RESULT
   target: <API name>
-  endpoints explored: <count>
+  target instance: <host hit this session>
+  mode: initial | update
+  endpoints explored this session: <count>
   object candidates: <count>
   metrics identified: <count>
   properties identified: <count>
   relationship candidates: <count>
   documented in: context/api-maps/<slug>.md
+  update history entry: <one-line summary of what was added/changed>
+  observations tagged this session: <count of inline tags added/updated>
   gaps: <any endpoints that errored, auth issues, etc.>
 ```
 
