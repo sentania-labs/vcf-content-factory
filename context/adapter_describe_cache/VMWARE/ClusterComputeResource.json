@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-04-21T04:12:38Z",
+  "fetched_at": "2026-04-23T20:16:39Z",
   "metrics": {
     "OnlineCapacityAnalytics|capacityRemainingPercentage": {
       "default_monitored": true,
