@@ -59,20 +59,45 @@ The value is not "one super metric." The value is:
 
 ![VCF Content Factory — the authoring loop](docs/diagrams/authoring-loop.png)
 
-You describe what you want. A Claude Code **orchestrator** clarifies
-intent and hands the work to a crew of **specialized subagents** —
-one that runs read-only recon against your live instance, one per
-content type for authoring, one that maintains the framework's own
-Python packages, one that installs, one that packages. Each agent
-has a narrow lane and hard rules it won't break (no inventing metric
-keys, no fabricating API endpoints, no skipping validation).
+You describe what you want. A Claude Code **orchestrator** hands the
+work to a crew of **sixteen specialized subagents** organized into
+five clusters:
 
-The output lands in two forms: **live on your VCF Ops instance** via
-the UUID-preserving content-import path (so cross-references between
-super metrics, views, dashboards, and reports survive cross-instance
-installs), and **as a self-contained distribution package** any admin
-can run on any instance with one command — or drag into the Ops UI
-by hand if they prefer.
+- **Recon & research** — `ops-recon` probes your live instance,
+  `api-explorer` reverse-engineers Ops wire formats. Read-only;
+  never writes content.
+- **Content authors** — one narrow lane per content type:
+  `supermetric`, `view`, `dashboard`, `customgroup`, `symptom`,
+  `alert` (+ recommendation), `report`.
+- **Management-pack pipeline** — a chained trio:
+  `api-cartographer` maps the target external API,
+  `mp-designer` interviews and produces the MP design,
+  `mp-author` writes the YAML.
+- **Framework engineering** — `tooling` is the only agent that
+  edits the `vcfops_*/` Python packages, and only when a content
+  author returns a `TOOLSET GAP` report.
+- **Ship & verify** — `content-installer` syncs and enables,
+  `content-packager` builds distribution zips, `qa-tester` runs
+  end-to-end install / uninstall acceptance cycles.
+
+Each agent has hard rules it won't break — no inventing metric keys,
+no fabricating API endpoints, no skipping validation. Recon always
+runs first; authoring is strictly bottom-up so cross-references
+resolve.
+
+Output lands along **three paths**:
+
+1. **Live on your Ops instance** via the UUID-preserving
+   content-import path (so cross-references between SMs, views,
+   dashboards, and reports survive cross-instance installs).
+2. **One-off shareable distribution zip** — any admin, any instance,
+   one command. Or drag the drop-in artifacts into the Ops UI by hand.
+3. **Published to a static "known" distribution repo** — when you
+   mark items `released: true` in YAML, the `/publish` skill
+   gathers every released item, builds, syncs the artifacts into
+   [`sentania-labs/vcf-content-factory-bundles`](https://github.com/sentania-labs/vcf-content-factory-bundles),
+   regenerates the README's auto-sections, commits, pushes. That
+   becomes the canonical place peers pull factory content from.
 
 All of it is plain-text YAML in a git repo. Nothing is hidden.
 
