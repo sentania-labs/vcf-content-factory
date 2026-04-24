@@ -120,10 +120,11 @@ Builder (MPB). Three new agents in place (`api-cartographer`,
 with validate / render / render-export / build / install / uninstall
 subcommands. Two learning targets in flight:
 
-- **Synology DSM** — first MP, used to shake out the framework.
-  Render, build, and install wired end-to-end; chainingSettings
-  wire format parity verified against HoL-2501-12 reference after
-  2026-04-19 renderer fix.
+- **Synology NAS** — first MP, used to shake out the framework
+  (renamed from the initial `synology_dsm` pass). Render, build,
+  and install wired end-to-end; chainingSettings wire format parity
+  verified against HoL-2501-12 reference after 2026-04-19 renderer
+  fix.
 - **UniFi Network API** — second MP, framework-generalization
   test. API mapped against the devel controller; design in
   `designs/unifi-mp-v1.md`.
@@ -180,6 +181,22 @@ logic already handles arbitrary policy XML.
   the repo. Helps catch stale content after renames or deletions.
 
 ## Future
+
+### Operations SDK management packs
+Complement (and in some cases replace) the MPB-compiled `.pak` path
+with adapters hand-authored against the **VMware Operations SDK**
+(the Python/Java adapter API shipped with VCF Operations). MPB is
+great for "clean REST API with deterministic URL templating," but
+it hits limits on anything that needs stateful auth flows, SDKs that
+VMware only ships as Java libs, richer in-adapter logic (paging,
+backfills, enrichment), or adapters whose source systems simply
+can't be expressed as MPB request chains. The Ops SDK path removes
+the adapter-JAR gap that gates MPB install today (you write the JAR
+yourself) at the cost of a much larger authoring surface —
+adapter-kind definition, collect loop, relationship + resource
+builder, describe.xml, packaging + signing. Candidate as the
+second-tier MP path once MPB coverage stabilizes and we hit a
+target API the MPB DSL can't cleanly express.
 
 ### IntSummary + Skittles widget batch
 8 IntSummary variants + Skittles (summary-page widget types). Can

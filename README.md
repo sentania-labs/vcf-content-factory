@@ -55,6 +55,27 @@ The value is not "one super metric." The value is:
   something, it runs reconnaissance against the live instance or
   asks you.
 
+## How it works
+
+![VCF Content Factory — the authoring loop](docs/diagrams/authoring-loop.png)
+
+You describe what you want. A Claude Code **orchestrator** clarifies
+intent and hands the work to a crew of **specialized subagents** —
+one that runs read-only recon against your live instance, one per
+content type for authoring, one that maintains the framework's own
+Python packages, one that installs, one that packages. Each agent
+has a narrow lane and hard rules it won't break (no inventing metric
+keys, no fabricating API endpoints, no skipping validation).
+
+The output lands in two forms: **live on your VCF Ops instance** via
+the UUID-preserving content-import path (so cross-references between
+super metrics, views, dashboards, and reports survive cross-instance
+installs), and **as a self-contained distribution package** any admin
+can run on any instance with one command — or drag into the Ops UI
+by hand if they prefer.
+
+All of it is plain-text YAML in a git repo. Nothing is hidden.
+
 ## What I can produce today
 
 | Content type | Status |
@@ -67,7 +88,7 @@ The value is not "one super metric." The value is:
 | Alert definitions (tiered severity, symptom sets, impact badges) | Yes |
 | Report definitions (cover page, TOC, view + dashboard sections) | Yes |
 | Remediation recommendations (reusable, alert-referenced) | Yes |
-| Management packs (REST-API-sourced adapters, MPB-compiled `.pak`) | In progress — authoring, render, and .pak build/install wired; adapter JAR gap documented |
+| Management packs (REST-API-sourced adapters, MPB-compiled `.pak`) | In progress — see note below |
 
 **Dashboard widget types supported**: `ResourceList`, `View`,
 `TextDisplay`, `Scoreboard`, `MetricChart`, `HealthChart`,
@@ -77,12 +98,88 @@ scoping doc for the next renderer expansion (PropertyList +
 ResourceRelationshipAdvanced + SparklineChart, targeting ~96%) lives
 at `context/widget_renderer_scope.md`.
 
+**Management pack status — known enough to be dangerous.** You can
+author a REST-adapter MP as YAML, validate it, render the MPB design
+JSON, and build a `.pak` end-to-end. One example MP in the tree
+today: Synology NAS (`managementpacks/synology_nas.yaml`) with two
+more designs in flight under `designs/` (UniFi, GitLab). **Install
+currently hits a known boundary**: the MPB-compiled
+`<adapter_kind>_adapter3.jar` has the adapter kind baked into its
+package path and cannot be regenerated without the MPB server-side
+build endpoint, which the framework does not yet drive. You can
+author/render/build today; expect to hand-finish the JAR or wait
+for the MPB-build wiring before `.pak` install completes cleanly.
+The roadmap also carries a **VMware Operations SDK** MP path as
+the longer-term complement for adapters MPB can't express — see
+[ROADMAP.md](ROADMAP.md).
+
 All content is installed via the Ops content-import path where
 appropriate (super metrics, views, dashboards, reports) so UUIDs
 are preserved — cross-references between super metrics, views,
 dashboards, and reports survive cross-instance installs without
 any manual re-stitching. Custom groups, symptoms, and alerts install
 via the direct REST API because they're identified by name, not UUID.
+
+### How the pieces reference each other
+
+The framework authors compound requests **bottom-up** because content
+types reference each other by name and those names resolve to UUIDs
+at validate time. Super metrics have to exist before views can
+reference them; views before dashboards; symptoms before alerts;
+views and dashboards before reports.
+
+```mermaid
+flowchart LR
+    SM([super metric]):::sm
+    CG([custom group]):::cg
+    V([list view]):::view
+    D([dashboard]):::dash
+    S([symptom]):::sym
+    A([alert]):::alert
+    R([recommendation]):::rec
+    RPT([report]):::rpt
+
+    SM -->|sm_&lt;uuid&gt; column| V
+    CG -->|scope| V
+    V -->|viewDefinitionId| D
+    SM -->|chart metric| D
+    S -->|symptom set| A
+    R -->|references| A
+    V -->|section| RPT
+    D -->|section| RPT
+    SM -.->|formula ref| SM
+
+    classDef sm fill:#a7f3d0,stroke:#047857,color:#064e3b
+    classDef cg fill:#fef3c7,stroke:#b45309,color:#78350f
+    classDef view fill:#dbeafe,stroke:#1e40af,color:#1e3a5f
+    classDef dash fill:#93c5fd,stroke:#1e3a5f,color:#1e3a5f
+    classDef sym fill:#fed7aa,stroke:#c2410c,color:#7c2d12
+    classDef alert fill:#fecaca,stroke:#b91c1c,color:#7f1d1d
+    classDef rec fill:#ddd6fe,stroke:#6d28d9,color:#4c1d95
+    classDef rpt fill:#fde68a,stroke:#b45309,color:#78350f
+```
+
+Green nodes (super metric, list view, dashboard, report) install via
+the **UUID-preserving content-zip path**. Warm nodes (custom group,
+symptom, alert, recommendation) install via **direct REST** and are
+identified by name.
+
+### Demo bundles ready to install
+
+Four first-party bundles ship in `bundles/` today, built with the
+framework itself:
+
+| Bundle | Contents | Built zip |
+|---|---|---|
+| `vm-performance` | 6 SMs + 1 view + 1 dashboard | `[VCF Content Factory] VM Performance.zip` |
+| `vks-core-consumption` | 10 SMs + 1 view + 1 dashboard | `[VCF Content Factory] VKS Core Consumption.zip` |
+| `capacity-assessment` | 11 SMs + 2 views + 1 dashboard + 1 custom group | `[VCF Content Factory] Capacity Assessment.zip` |
+| `environment-config-status` | 4 SMs + 3 views + 1 dashboard | `[VCF Content Factory] Environment Config Status.zip` |
+
+A third-party `idps-planner` bundle (under `bundles/third_party/`)
+demonstrates the reverse flow — it was **extracted** from a community
+dashboard rather than authored from scratch, and re-packaged as a
+distributable zip.
 
 ## Getting started
 
