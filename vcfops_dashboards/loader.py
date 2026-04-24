@@ -144,6 +144,8 @@ class ViewDef:
     # View-wide aggregation time window. Applies to all aggregating columns.
     # Rendered as a time-interval-selector Control replacing the default 24h window.
     time_window: Optional[ViewTimeWindow] = None
+    released: bool = False   # publish gate
+    version: str = "1.0.0"  # internal semver
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         import warnings
@@ -640,6 +642,8 @@ class Dashboard:
     shared: bool = True
     id: str = ""
     source_path: Path | None = None
+    released: bool = False   # publish gate
+    version: str = "1.0.0"  # internal semver
 
     def validate(self, known_views: dict[str, ViewDef], enforce_framework_prefix: bool = True) -> None:
         if not self.name.strip():
@@ -878,6 +882,10 @@ def load_view(path: Path, enforce_framework_prefix: bool = True) -> ViewDef:
         tw_adv = bool(tw_raw.get("advanced_time_mode", False))
         time_window = ViewTimeWindow(unit=tw_unit, count=tw_count, advanced_time_mode=tw_adv)
 
+    released_raw = data.get("released", False)
+    released = bool(released_raw) if isinstance(released_raw, bool) else False
+    version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
+
     v = ViewDef(
         id=view_id,
         name=str(data.get("name", "")).strip(),
@@ -893,6 +901,8 @@ def load_view(path: Path, enforce_framework_prefix: bool = True) -> ViewDef:
         forecast_days=forecast_days,
         transformations=transformations,
         time_window=time_window,
+        released=released,
+        version=version,
     )
     v.validate(enforce_framework_prefix=enforce_framework_prefix)
     return v
@@ -1159,6 +1169,9 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
     name_path = str(data.get("name_path", "") or "").strip()
     shared_raw = data.get("shared")
     shared = True if shared_raw is None else bool(shared_raw)
+    released_raw = data.get("released", False)
+    released = bool(released_raw) if isinstance(released_raw, bool) else False
+    version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
     return Dashboard(
         id=dash_id,
         name=name,
@@ -1168,6 +1181,8 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
         name_path=name_path or default_name_path,
         shared=shared,
         source_path=path,
+        released=released,
+        version=version,
     )
 
 

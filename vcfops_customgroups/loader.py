@@ -120,6 +120,8 @@ class CustomGroupDef:
     type_key: str = "Environment"
     auto_resolve_membership: bool = True
     source_path: Path | None = None
+    released: bool = False   # publish gate
+    version: str = "1.0.0"  # internal semver
 
     # ---- validation ------------------------------------------------
     def validate(self, enforce_framework_prefix: bool = True) -> None:
@@ -427,6 +429,10 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Custom
         raise CustomGroupValidationError(
             f"{path}: expected a YAML mapping"
         )
+    released_raw = data.get("released", False)
+    released = bool(released_raw) if isinstance(released_raw, bool) else False
+    version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
+
     cg = CustomGroupDef(
         name=str(data.get("name", "")).strip(),
         description=str(data.get("description", "") or "").strip(),
@@ -436,6 +442,8 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Custom
         ),
         rules=list(data.get("rules") or []),
         source_path=path,
+        released=released,
+        version=version,
     )
     cg.validate(enforce_framework_prefix=enforce_framework_prefix)
     return cg

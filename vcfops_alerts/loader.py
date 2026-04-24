@@ -137,6 +137,7 @@ class Recommendation:
     description: str
     adapter_kind: str
     source_file: Optional[Path] = None
+    version: str = "1.0.0"  # internal semver (released not applicable to recommendations)
 
     @property
     def id(self) -> str:
@@ -181,6 +182,8 @@ class AlertDef:
     description: str = ""
     recommendations: List[RecommendationRef] = field(default_factory=list)
     source_path: Optional[Path] = None
+    released: bool = False   # publish gate
+    version: str = "1.0.0"  # internal semver
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
@@ -442,11 +445,14 @@ def load_recommendation_file(path: str | Path, enforce_framework_prefix: bool = 
     if not adapter_kind:
         raise AlertValidationError(f"{path}: 'adapter_kind' is required")
 
+    version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
+
     return Recommendation(
         name=name,
         description=description,
         adapter_kind=adapter_kind,
         source_file=path,
+        version=version,
     )
 
 
@@ -556,6 +562,10 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> AlertD
             )
         rec_refs.append(RecommendationRef(name=rec_name, priority=rec_priority))
 
+    released_raw = data.get("released", False)
+    released = bool(released_raw) if isinstance(released_raw, bool) else False
+    version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
+
     ad = AlertDef(
         name=str(data.get("name", "")).strip(),
         description=str(data.get("description", "") or "").strip(),
@@ -570,6 +580,8 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> AlertD
         symptom_sets=dict(data.get("symptom_sets") or {}),
         recommendations=rec_refs,
         source_path=path,
+        released=released,
+        version=version,
     )
     ad.validate(enforce_framework_prefix=enforce_framework_prefix)
     return ad

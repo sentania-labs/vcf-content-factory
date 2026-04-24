@@ -3,6 +3,7 @@
 Commands:
     build   bundles/*.yaml       Build one bundle into dist/<name>.zip
     build   --all                Build all bundles/*.yaml
+    build-discrete <type> <name> Build a self-contained discrete artifact zip
     validate bundles/*.yaml      Validate without building
     list                         List available bundle manifests
     sync bundles/*.yaml          Sync one bundle to the instance
@@ -232,6 +233,47 @@ def cmd_analyze(args) -> int:
     return 0 if not result.unknown else 1
 
 
+def cmd_update_readme(args) -> int:
+    """Regenerate AUTO sections in a distribution repo README.md."""
+    from .readme_gen import update_readme
+    readme_path = Path(args.readme_path)
+    repo_root = Path(args.repo_root) if getattr(args, "repo_root", None) else None
+    try:
+        changed = update_readme(readme_path, repo_root=repo_root)
+        if changed:
+            print(f"updated  {readme_path}")
+        else:
+            print(f"no changes  {readme_path}")
+        return 0
+    except FileNotFoundError as e:
+        print(f"ERROR  {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"FAILED  {e}", file=sys.stderr)
+        return 1
+
+
+def cmd_build_discrete(args) -> int:
+    """Build a self-contained discrete artifact zip for a single released content item."""
+    from .discrete_builder import build_discrete, DiscreteBuilderError
+
+    output_dir = getattr(args, "output_dir", "dist/discrete") or "dist/discrete"
+    try:
+        out = build_discrete(
+            content_type=args.content_type,
+            item_name=args.item_name,
+            output_dir=output_dir,
+        )
+        print(f"built  {out}")
+        return 0
+    except DiscreteBuilderError as e:
+        print(f"ERROR  {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"FAILED  {e}", file=sys.stderr)
+        return 1
+
+
 def cmd_check_staleness(args) -> int:
     """Check whether a distribution zip's template version matches current."""
     import json as _json
@@ -356,6 +398,41 @@ def build_parser() -> argparse.ArgumentParser:
              "Use only when describe cache cannot be refreshed and content is known correct.",
     )
     pb.set_defaults(func=cmd_build)
+
+    pur = sub.add_parser(
+        "update-readme",
+        help="regenerate AUTO:START/END sections in a distribution repo README.md",
+    )
+    pur.add_argument(
+        "readme_path",
+        help="path to the README.md file to update",
+    )
+    pur.add_argument(
+        "--repo-root",
+        default=None,
+        help="path to the factory repo root (default: auto-detected from package location)",
+    )
+    pur.set_defaults(func=cmd_update_readme)
+
+    pbd = sub.add_parser(
+        "build-discrete",
+        help="build a self-contained discrete artifact zip for a single released content item",
+    )
+    pbd.add_argument(
+        "content_type",
+        choices=["supermetric", "dashboard", "view", "report", "alert", "customgroup"],
+        help="type of content item to package",
+    )
+    pbd.add_argument(
+        "item_name",
+        help="exact name of the content item (the 'name:' field in its YAML)",
+    )
+    pbd.add_argument(
+        "--output-dir",
+        default="dist/discrete",
+        help="output directory for the built zip (default: dist/discrete)",
+    )
+    pbd.set_defaults(func=cmd_build_discrete)
 
     pv = sub.add_parser("validate", help="validate bundle manifest(s) without building")
     pv.add_argument("manifests", nargs="+",

@@ -59,6 +59,8 @@ class SuperMetricDef:
     id: str = ""
     unit_id: str = ""
     source_path: Path | None = None
+    released: bool = False   # publish gate
+    version: str = "1.0.0"  # internal semver
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
@@ -199,6 +201,10 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SuperM
                 ).strip(),
             }
         )
+    released_raw = data.get("released", False)
+    released = bool(released_raw) if isinstance(released_raw, bool) else False
+    version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
+
     sm = SuperMetricDef(
         id=sm_id,
         name=str(data.get("name", "")).strip(),
@@ -207,6 +213,8 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SuperM
         resource_kinds=rks,
         unit_id=str(data.get("unit_id", "") or data.get("unitId", "") or "").strip(),
         source_path=path,
+        released=released,
+        version=version,
     )
     sm.validate(enforce_framework_prefix=enforce_framework_prefix)
     return sm

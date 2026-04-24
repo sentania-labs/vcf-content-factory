@@ -134,6 +134,8 @@ class ReportDef:
     settings: ReportSettings
     id: str = ""
     source_path: Optional[Path] = None
+    released: bool = False   # publish gate
+    version: str = "1.0.0"  # internal semver
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name.strip():
@@ -363,6 +365,10 @@ def load_file(
         output_formats=output_formats,
     )
 
+    released_raw = data.get("released", False)
+    released = bool(released_raw) if isinstance(released_raw, bool) else False
+    version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
+
     rd = ReportDef(
         id=report_id,
         name=name,
@@ -371,6 +377,8 @@ def load_file(
         sections=sections,
         settings=settings,
         source_path=path,
+        released=released,
+        version=version,
     )
     rd.validate(enforce_framework_prefix=enforce_framework_prefix)
     return rd

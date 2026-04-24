@@ -8,6 +8,11 @@ Schema
 ------
 name:         str  (required)
 description:  str  (optional)
+released:     bool (optional, default false)
+              When true, this bundle is included in /publish output.
+version:      str  (optional, default "1.0.0")
+              Internal semver used by /publish for duplicate-version guard.
+              Required when released: true.
 sync:         bool (optional, default true)
               When false, ``sync --all`` skips this bundle.
 supermetrics: list[path]   (optional)
@@ -111,6 +116,8 @@ class Bundle:
     factory_native: bool = True
     display_name: str = ""
     design: str = ""  # explicit design artifact path from manifest (optional)
+    released: bool = False   # publish gate — True means include in /publish output
+    version: str = "1.0.0"  # internal semver for duplicate-version guard
 
 
 def load_bundle(path: str | Path) -> Bundle:
@@ -305,6 +312,18 @@ def load_bundle(path: str | Path) -> Bundle:
 
     design = str(data.get("design", "") or "").strip()
 
+    # --- Release fields (publish gate) ---
+    released_raw = data.get("released", False)
+    if not isinstance(released_raw, bool):
+        raise BundleValidationError(
+            f"{path}: 'released' must be a boolean (true/false), got {released_raw!r}"
+        )
+    released = bool(released_raw)
+
+    version = str(data.get("version", "1.0.0") or "1.0.0").strip()
+    if not version:
+        version = "1.0.0"
+
     return Bundle(
         name=name,
         description=description,
@@ -326,6 +345,8 @@ def load_bundle(path: str | Path) -> Bundle:
         factory_native=factory_native,
         display_name=display_name,
         design=design,
+        released=released,
+        version=version,
     )
 
 

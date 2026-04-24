@@ -589,6 +589,7 @@ class ManagementPackDef:
     mpb_events: List[MPBEventDef] = field(default_factory=list)
     content: Dict[str, Any] = field(default_factory=dict)
     source_path: Optional[Path] = None
+    released: bool = False   # publish gate — True means include in /publish output
 
     def validate(self) -> None:
         _validate_mp(self)
@@ -2136,6 +2137,9 @@ def load_file(path: str | Path) -> ManagementPackDef:
     if not isinstance(raw_content, dict):
         raise ManagementPackValidationError(f"{tag}: content must be a mapping")
 
+    released_raw = data.get("released", False)
+    released = bool(released_raw) if isinstance(released_raw, bool) else False
+
     mp = ManagementPackDef(
         name=mp_name,
         version=str(data.get("version", "") or "").strip(),
@@ -2150,6 +2154,7 @@ def load_file(path: str | Path) -> ManagementPackDef:
         mpb_events=mpb_events,
         content=raw_content,
         source_path=path,
+        released=released,
     )
     mp.validate()
     return mp

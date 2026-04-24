@@ -117,6 +117,7 @@ class SymptomDef:
     cancel_cycles: int = 1
     description: str = ""
     source_path: Optional[Path] = None
+    version: str = "1.0.0"  # internal semver (released not applicable to symptoms)
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
@@ -287,6 +288,8 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Sympto
     raw_severity = str(data.get("severity", "") or "").strip().upper()
     wire_severity = SEVERITY_MAP.get(raw_severity, raw_severity)
 
+    version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
+
     sd = SymptomDef(
         name=str(data.get("name", "")).strip(),
         adapter_kind=str(data.get("adapter_kind", "") or "").strip(),
@@ -297,6 +300,7 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Sympto
         cancel_cycles=int(data.get("cancel_cycles", 1) or 1),
         description=str(data.get("description", "") or "").strip(),
         source_path=path,
+        version=version,
     )
     sd.validate(enforce_framework_prefix=enforce_framework_prefix)
     return sd
