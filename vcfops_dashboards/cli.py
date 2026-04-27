@@ -79,7 +79,92 @@ def cmd_sync(args) -> int:
         )
         for msg in s.get("errorMessages", []) or []:
             print(f"    ERROR: {msg}")
-    return 0 if result.get("state") == "FINISHED" else 1
+    if result.get("state") != "FINISHED":
+        return 1
+
+    # --- Dependency walker: check SM enablement + OOTB metric collection state ---
+    dep_rc = _run_dep_walker(
+        client,
+        views=views,
+        dashboards=dashboards,
+        supermetrics_dir=getattr(args, "supermetrics_dir", "supermetrics"),
+        auto_enable_metrics=getattr(args, "auto_enable_metrics", False),
+        skip_metric_check=getattr(args, "skip_metric_check", False),
+    )
+    return dep_rc
+
+
+def _run_dep_walker(
+    client,
+    views: list,
+    dashboards: list,
+    supermetrics_dir: str = "supermetrics",
+    customgroups_dir: str = "customgroups",
+    auto_enable_metrics: bool = False,
+    skip_metric_check: bool = False,
+) -> int:
+    """Run the dependency walker after a successful views/dashboards sync.
+
+    Loads the SM YAML from supermetrics_dir (if it exists) to build the
+    sm_name_map so SM refs discovered by UUID can be annotated with names.
+    The SM definitions themselves are NOT re-synced here — they're passed
+    to the walker only for the name map and to tell the walker which SMs
+    are in the current sync batch (the walker skips those for the enable
+    check, since the SM sync+enable flow handles them).
+
+    Loads the customgroups corpus from customgroups_dir so the walker can
+    validate customgroup references found in view ``customgroup:`` fields.
+    """
+    try:
+        from vcfops_common.dep_walker import walk_and_check
+    except ImportError as e:
+        print(f"WARN  dep walker unavailable: {e}", file=sys.stderr)
+        return 0
+
+    # Load SM defs for name map (optional — walker degrades gracefully if absent)
+    sm_defs: list = []
+    sm_dir = Path(supermetrics_dir)
+    if sm_dir.exists():
+        try:
+            from vcfops_supermetrics.loader import load_dir as _sm_load_dir
+            sm_defs = _sm_load_dir(sm_dir)
+        except Exception:
+            pass  # non-fatal: walker will annotate SMs by UUID only
+
+    sm_name_map = {d.name: d.id for d in sm_defs}
+
+    # Load customgroup defs for ref validation (optional — walker degrades gracefully)
+    cg_defs: list = []
+    cg_dir = Path(customgroups_dir)
+    if cg_dir.exists():
+        try:
+            from vcfops_customgroups.loader import load_dir as _cg_load_dir
+            cg_defs = _cg_load_dir(cg_dir)
+        except Exception:
+            pass  # non-fatal: customgroup validation will be skipped
+
+    # For dashboard-only syncs, supermetrics list is empty — the walker
+    # will still check pre-existing SM refs from views/dashboards.
+    walk = walk_and_check(
+        client=client,
+        supermetrics=[],  # not syncing SMs here; pass empty list
+        views=views,
+        dashboards=dashboards,
+        customgroups=cg_defs,
+        auto_enable_metrics=auto_enable_metrics,
+        skip_metric_check=skip_metric_check,
+        sm_name_map=sm_name_map,
+    )
+    for level, msg in walk.messages:
+        if level == "ERROR":
+            print(f"DEP-{level}  {msg}", file=sys.stderr)
+        else:
+            print(f"DEP-{level}  {msg}")
+    if not walk.ok:
+        print("sync incomplete: dependency check found errors (see DEP-ERROR above)",
+              file=sys.stderr)
+        return 1
+    return 0
 
 
 def _resolve_dashboard_ids(
@@ -279,6 +364,33 @@ def build_parser() -> argparse.ArgumentParser:
     pp.set_defaults(func=cmd_package)
 
     ps = sub.add_parser("sync", help="build and import to VCF Ops")
+    ps.add_argument(
+        "--supermetrics-dir",
+        default="supermetrics",
+        metavar="DIR",
+        help=(
+            "Path to the supermetrics/ YAML directory. Used to build the SM name map "
+            "for dependency check annotations. Default: supermetrics"
+        ),
+    )
+    ps.add_argument(
+        "--auto-enable-metrics",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable OOTB metrics with defaultMonitored=false on the Default Policy. "
+            "Default: warn and flag, but do not modify the policy."
+        ),
+    )
+    ps.add_argument(
+        "--skip-metric-check",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip the OOTB metric defaultMonitored check entirely. "
+            "Use when you know the target policy already covers these metrics."
+        ),
+    )
     ps.set_defaults(func=cmd_sync)
 
     pdd = sub.add_parser(

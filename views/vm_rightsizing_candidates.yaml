@@ -12,6 +12,8 @@ description: >
   VMs only. Drives the right-sizing section of the Capacity Assessment &
   Right-Sizing dashboard.
 
+customgroup: "[VCF Content Factory] VMs - Right-Sizing Candidates"
+
 subject:
   adapter_kind: VMWARE
   resource_kind: VirtualMachine

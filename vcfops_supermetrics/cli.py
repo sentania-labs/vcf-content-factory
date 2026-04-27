@@ -10,6 +10,9 @@ from typing import List
 from .client import VCFOpsClient, VCFOpsError
 from .loader import SuperMetricDef, SuperMetricValidationError, load_dir, load_file
 
+# Dep walker is imported lazily inside cmd_sync to avoid import-time errors
+# when vcfops_dashboards is absent (rare, but keeps the package self-contained).
+
 DEFAULT_DIR = "supermetrics"
 SM_ENABLE_ATTEMPTS = 3
 SM_ENABLE_VERIFY_DELAY = 2
@@ -96,6 +99,56 @@ def cmd_sync(args) -> int:
         )
         return 1
     if failed:
+        return 1
+
+    # --- Dependency walker: check OOTB metric collection state for any
+    #     metrics referenced in the SM formulas being synced. ---------
+    rc = _run_dep_walker_for_sms(
+        client,
+        defs,
+        auto_enable_metrics=getattr(args, "auto_enable_metrics", False),
+        skip_metric_check=getattr(args, "skip_metric_check", False),
+    )
+    return rc
+
+
+def _run_dep_walker_for_sms(
+    client: VCFOpsClient,
+    defs: List[SuperMetricDef],
+    auto_enable_metrics: bool = False,
+    skip_metric_check: bool = False,
+) -> int:
+    """Run the dep walker for an SM-only sync (no views or dashboards).
+
+    Checks OOTB metric references inside SM formulas. SM-to-SM references
+    within this batch are handled by the normal enable step; pre-existing
+    SMs referenced by formula are also checked.
+    """
+    try:
+        from vcfops_common.dep_walker import walk_and_check
+    except ImportError as e:
+        print(f"WARN  dep walker unavailable: {e}", file=sys.stderr)
+        return 0
+
+    sm_name_map = {d.name: d.id for d in defs}
+    walk = walk_and_check(
+        client=client,
+        supermetrics=defs,
+        views=[],
+        dashboards=[],
+        customgroups=[],  # SM-only sync; no customgroup refs to validate
+        auto_enable_metrics=auto_enable_metrics,
+        skip_metric_check=skip_metric_check,
+        sm_name_map=sm_name_map,
+    )
+    for level, msg in walk.messages:
+        if level == "ERROR":
+            print(f"DEP-{level}  {msg}", file=sys.stderr)
+        else:
+            print(f"DEP-{level}  {msg}")
+    if not walk.ok:
+        print("sync incomplete: dependency check found errors (see DEP-ERROR above)",
+              file=sys.stderr)
         return 1
     return 0
 
@@ -204,6 +257,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     ps = sub.add_parser("sync", help="create/update super metrics from YAML")
     ps.add_argument("paths", nargs="*")
+    ps.add_argument(
+        "--auto-enable-metrics",
+        action="store_true",
+        default=False,
+        help=(
+            "Enable OOTB metrics with defaultMonitored=false on the Default Policy. "
+            "Default: warn and flag, but do not modify the policy."
+        ),
+    )
+    ps.add_argument(
+        "--skip-metric-check",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip the OOTB metric defaultMonitored check entirely. "
+            "Use when you know the target policy already covers these metrics."
+        ),
+    )
     ps.set_defaults(func=cmd_sync)
 
     pe = sub.add_parser(

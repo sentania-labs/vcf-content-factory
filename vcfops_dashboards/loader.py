@@ -146,6 +146,10 @@ class ViewDef:
     time_window: Optional[ViewTimeWindow] = None
     released: bool = False   # publish gate
     version: str = "1.0.0"  # internal semver
+    # Optional list of custom group names this view is scoped to.
+    # When set, the dependency walker surfaces these groups as deps.
+    # YAML key: `customgroup:` (str or list[str]).
+    customgroups: List[str] = field(default_factory=list)
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         import warnings
@@ -886,6 +890,17 @@ def load_view(path: Path, enforce_framework_prefix: bool = True) -> ViewDef:
     released = bool(released_raw) if isinstance(released_raw, bool) else False
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
 
+    # customgroup: str | list[str] — names of custom groups this view is scoped to.
+    cg_raw = data.get("customgroup")
+    if cg_raw is None:
+        view_customgroups: List[str] = []
+    elif isinstance(cg_raw, str):
+        view_customgroups = [cg_raw.strip()] if cg_raw.strip() else []
+    elif isinstance(cg_raw, list):
+        view_customgroups = [str(x).strip() for x in cg_raw if str(x).strip()]
+    else:
+        view_customgroups = []
+
     v = ViewDef(
         id=view_id,
         name=str(data.get("name", "")).strip(),
@@ -903,6 +918,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True) -> ViewDef:
         time_window=time_window,
         released=released,
         version=version,
+        customgroups=view_customgroups,
     )
     v.validate(enforce_framework_prefix=enforce_framework_prefix)
     return v

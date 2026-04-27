@@ -48,7 +48,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from vcfops_supermetrics.loader import SuperMetricDef, load_dir as load_sm_dir
-from vcfops_dashboards.loader import ViewDef, Dashboard, load_dir as _load_dashboards_dir
+from vcfops_dashboards.loader import ViewDef, Dashboard
 from vcfops_customgroups.loader import CustomGroupDef, load_dir as load_cg_dir
 from vcfops_reports.loader import ReportDef, load_dir as _load_reports_dir
 from vcfops_symptoms.loader import SymptomDef, load_dir as load_symptom_dir
@@ -420,7 +420,18 @@ def build_discrete(
         item = _find_by_name(item_name, all_dashboards, "dashboard")
         version = item.version
         description = item.description
-        dep_views, dep_sms = _resolve_dashboard_deps(item, all_views, all_sms)
+        # Use the walker's collect_deps for dashboard→view→SM→customgroup
+        # traversal so the dependency model lives in one place.
+        from vcfops_common.dep_walker import collect_deps as _collect_deps
+        dep_graph = _collect_deps([item], all_views, all_sms, all_cgs)
+        if dep_graph.errors:
+            raise DiscreteBuilderError(
+                f"dashboard {item_name!r}: dependency errors:\n"
+                + "\n".join(f"  - {e}" for e in dep_graph.errors)
+            )
+        dep_views = dep_graph.views
+        dep_sms = dep_graph.supermetrics
+        dep_cgs = dep_graph.customgroups
         bundle = _make_synthetic_bundle(
             slug=_item_slug(item_name),
             name=item_name,
@@ -428,6 +439,7 @@ def build_discrete(
             supermetrics=dep_sms,
             views=dep_views,
             dashboards=[item],
+            customgroups=dep_cgs,
             sm_paths=[sm.source_path for sm in dep_sms if sm.source_path],
         )
 
