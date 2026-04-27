@@ -71,6 +71,15 @@ directory), the installer presents a checklist of discovered bundles
 
 Run with `--help` (Python) or `-?` (PowerShell) for all options.
 
+> **Policy enablement caveat.** The install script enables imported super
+> metrics on the **Default Policy** only. If your deployment uses
+> non-default, non-inheriting policies, you may need to manually enable the
+> imported super metrics in those policies — otherwise dashboard cells and
+> view columns that depend on those metrics will appear blank for resources
+> scoped under those policies. Check `Administration > Policies` after
+> install to confirm enablement on every policy that needs to see the
+> bundle's data.
+
 ### Manual drag-drop import
 
 Each bundle subdirectory ships community-convention artifacts for per-object

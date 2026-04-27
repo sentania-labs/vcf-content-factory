@@ -698,3 +698,228 @@ class TestRetiredSectionDownloadLink:
             f"Bare-filename retired download link found — subdir prefix is missing.\n"
             f"Catalog output:\n{catalog}"
         )
+
+
+# ---------------------------------------------------------------------------
+# S6 — lockfile NOT in commit  (Fix 2 regression)
+# ---------------------------------------------------------------------------
+
+class TestLockfileNotInCommit:
+    """S6: .publish.lock must never appear in the commit written to the dist repo.
+
+    Regression test for the bug where git add -A ran while the lockfile was
+    still on disk, causing it to be tracked in the commit.
+    """
+
+    def test_lockfile_absent_from_commit_tree(self, tmp_path, monkeypatch):
+        """After a successful publish(), git ls-tree HEAD must not list .publish.lock."""
+        from vcfops_packaging.publish import publish
+
+        dist = _init_dist_repo(tmp_path)
+        releases_dir = tmp_path / "releases_lockcommit"
+        releases_dir.mkdir()
+        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        _write_release_manifest(
+            releases_dir,
+            name="demand-driven-capacity-v2",
+            version="1.0",
+            source_abs=source_abs,
+            description="Lockfile-not-in-commit regression test.",
+        )
+        _patch_enumerate(monkeypatch, releases_dir)
+
+        result = publish(
+            factory_repo=REPO_ROOT,
+            dist_repo=dist,
+            dry_run=False,
+            no_push=True,
+        )
+
+        assert result.commit_sha is not None, "Expected a commit to have been made"
+
+        # Inspect the commit tree for .publish.lock.
+        r = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", "HEAD"],
+            cwd=str(dist), capture_output=True, text=True, check=True,
+        )
+        tracked_files = r.stdout.splitlines()
+        assert ".publish.lock" not in tracked_files, (
+            f".publish.lock was committed to the dist repo.\n"
+            f"Tracked files in HEAD: {tracked_files}"
+        )
+
+    def test_lockfile_absent_from_commit_stat(self, tmp_path, monkeypatch):
+        """git show HEAD --stat must not list .publish.lock in the diff."""
+        from vcfops_packaging.publish import publish
+
+        dist = _init_dist_repo(tmp_path)
+        releases_dir = tmp_path / "releases_lockstat"
+        releases_dir.mkdir()
+        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        _write_release_manifest(
+            releases_dir,
+            name="demand-driven-capacity-v2",
+            version="1.0",
+            source_abs=source_abs,
+            description="Lockfile stat regression test.",
+        )
+        _patch_enumerate(monkeypatch, releases_dir)
+
+        result = publish(
+            factory_repo=REPO_ROOT,
+            dist_repo=dist,
+            dry_run=False,
+            no_push=True,
+        )
+
+        assert result.commit_sha is not None
+
+        r = subprocess.run(
+            ["git", "show", "HEAD", "--stat", "--name-only"],
+            cwd=str(dist), capture_output=True, text=True, check=True,
+        )
+        commit_output = r.stdout
+        assert ".publish.lock" not in commit_output, (
+            f".publish.lock appeared in 'git show HEAD --stat'.\n"
+            f"Output:\n{commit_output}"
+        )
+
+    def test_lockfile_also_not_on_disk_after_commit(self, tmp_path, monkeypatch):
+        """The lockfile must be removed from disk (not just from the commit)."""
+        from vcfops_packaging.publish import publish
+
+        dist = _init_dist_repo(tmp_path)
+        releases_dir = tmp_path / "releases_lockdisk"
+        releases_dir.mkdir()
+        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        _write_release_manifest(
+            releases_dir,
+            name="demand-driven-capacity-v2",
+            version="1.0",
+            source_abs=source_abs,
+            description="Lockfile on-disk cleanup test.",
+        )
+        _patch_enumerate(monkeypatch, releases_dir)
+
+        publish(
+            factory_repo=REPO_ROOT,
+            dist_repo=dist,
+            dry_run=False,
+            no_push=True,
+        )
+
+        lockfile = dist / ".publish.lock"
+        assert not lockfile.exists(), (
+            f"Lockfile still on disk after publish completed: {lockfile}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# S7 — policy caveat appears in per-zip READMEs  (Fix 1 regression)
+# ---------------------------------------------------------------------------
+
+class TestPolicyCaveatInReadme:
+    """S7: the Default Policy caveat must appear in every per-zip README surface.
+
+    Three surfaces checked:
+      (a) top-level README.md (from README_framework.md template)
+      (b) bundle-level README (from builder._generate_bundle_readme)
+      (c) discrete-level README (from discrete_builder._generate_discrete_readme)
+    """
+
+    _CAVEAT_FRAGMENT = "Default Policy"
+
+    def test_framework_readme_template_has_caveat(self):
+        """The static README_framework.md template contains the policy caveat."""
+        from pathlib import Path
+        template = (
+            Path(__file__).parent.parent
+            / "vcfops_packaging" / "templates" / "README_framework.md"
+        )
+        content = template.read_text(encoding="utf-8")
+        assert self._CAVEAT_FRAGMENT in content, (
+            f"Policy caveat fragment {self._CAVEAT_FRAGMENT!r} not found in "
+            f"README_framework.md.\nTemplate excerpt:\n{content[:1000]}"
+        )
+
+    def test_bundle_readme_has_caveat(self, tmp_path, monkeypatch):
+        """A built bundle zip's top-level README.md contains the policy caveat."""
+        from vcfops_packaging.publish import publish
+        import zipfile
+
+        dist = _init_dist_repo(tmp_path)
+        releases_dir = tmp_path / "caveat_bundle"
+        releases_dir.mkdir()
+        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        _write_release_manifest(
+            releases_dir,
+            name="demand-driven-capacity-v2",
+            version="1.0",
+            source_abs=source_abs,
+            description="Policy caveat bundle test.",
+        )
+        _patch_enumerate(monkeypatch, releases_dir)
+
+        result = publish(
+            factory_repo=REPO_ROOT,
+            dist_repo=dist,
+            dry_run=False,
+            no_push=True,
+        )
+
+        assert result.built, "Expected at least one built zip"
+        zip_path = result.built[0]
+        assert zip_path.exists(), f"Built zip not found: {zip_path}"
+
+        with zipfile.ZipFile(zip_path) as zf:
+            names = zf.namelist()
+            # Top-level README.md (from framework template)
+            assert "README.md" in names, f"README.md not in zip: {names}"
+            readme = zf.read("README.md").decode("utf-8")
+
+        assert self._CAVEAT_FRAGMENT in readme, (
+            f"Policy caveat fragment {self._CAVEAT_FRAGMENT!r} not found in "
+            f"top-level README.md inside the built zip.\n"
+            f"README excerpt:\n{readme[:1500]}"
+        )
+
+    def test_bundle_inner_readme_has_caveat(self, tmp_path, monkeypatch):
+        """A built bundle zip's bundle-level README.md contains the policy caveat."""
+        from vcfops_packaging.publish import publish
+        import zipfile
+
+        dist = _init_dist_repo(tmp_path)
+        releases_dir = tmp_path / "caveat_bundle_inner"
+        releases_dir.mkdir()
+        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        _write_release_manifest(
+            releases_dir,
+            name="demand-driven-capacity-v2",
+            version="1.0",
+            source_abs=source_abs,
+            description="Policy caveat bundle inner test.",
+        )
+        _patch_enumerate(monkeypatch, releases_dir)
+
+        result = publish(
+            factory_repo=REPO_ROOT,
+            dist_repo=dist,
+            dry_run=False,
+            no_push=True,
+        )
+
+        assert result.built
+        with zipfile.ZipFile(result.built[0]) as zf:
+            names = zf.namelist()
+            # Bundle-level README is at bundles/<slug>/README.md
+            inner_readmes = [n for n in names if n.endswith("/README.md")]
+            assert inner_readmes, (
+                f"No bundle-level README.md found in zip. Names: {names}"
+            )
+            inner_readme = zf.read(inner_readmes[0]).decode("utf-8")
+
+        assert self._CAVEAT_FRAGMENT in inner_readme, (
+            f"Policy caveat fragment {self._CAVEAT_FRAGMENT!r} not found in "
+            f"bundle-level README.md ({inner_readmes[0]}) inside the built zip.\n"
+            f"README excerpt:\n{inner_readme[:1500]}"
+        )

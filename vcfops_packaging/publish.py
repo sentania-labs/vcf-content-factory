@@ -200,11 +200,15 @@ def _git_commit(dist_repo: Path, message: str) -> Optional[str]:
 
     Returns None if there was nothing to commit.
     """
-    # Stage everything (new files, modifications, deletions).
-    r = _git(dist_repo, "add", "-A")
+    # Stage everything except the publish lockfile.  The lockfile is a
+    # transient runtime guard that is removed before this call in the normal
+    # path, but may still be on disk if an earlier step failed and the caller
+    # is in the finally branch.  Explicitly excluding it here is belt-and-
+    # suspenders: even if it is present, it will never land in the commit.
+    r = _git(dist_repo, "add", "-A", "--", ":!.publish.lock")
     if r.returncode != 0:
         raise PublishError(
-            f"git add -A failed in {dist_repo}: {r.stderr.strip()}"
+            f"git add failed in {dist_repo}: {r.stderr.strip()}"
         )
 
     r = _git(dist_repo, "commit", "-m", message)
@@ -628,6 +632,15 @@ def _publish_inner(
     # Step 9: Commit + push
     # -----------------------------------------------------------------------
     if not dry_run:
+        # Release the lockfile BEFORE staging so it is never included in the
+        # commit.  The outer try/finally in publish() calls _release_lock again
+        # after this returns, but _release_lock is idempotent (missing_ok=True),
+        # so double-removal is safe.  The finally branch also covers any
+        # exception thrown below (e.g. a failed push) — the lock is already
+        # gone by that point, which is the correct behaviour (the content was
+        # fully written; only the push failed).
+        _release_lock(dist_repo)
+
         n_built = len(result.built)
         n_retired = len(result.retired)
         release_names_str = (
