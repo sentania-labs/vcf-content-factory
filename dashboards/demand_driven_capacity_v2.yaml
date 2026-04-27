@@ -79,6 +79,16 @@ widgets:
 
     signal to act.</p>
 
+    <p><strong>vSAN data on Aria Operations 8.18 / vSphere 8.</strong> The
+
+    Per-Host vSAN Contribution panel (bottom-right) reads from the
+
+    <code>vsan|performance|domClient|*</code> metric path, which is not
+
+    published by vSAN 8. On Aria Operations 8.18 deployments those columns
+
+    will be empty. The CPU and memory panels above are unaffected.</p>
+
     '
   id: overview_explainer
   title: About these metrics
