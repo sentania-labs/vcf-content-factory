@@ -12,6 +12,8 @@ Commands:
     sync --uninstall --force ..  Force-uninstall (skip sharing checks)
     refresh-describe             Refresh adapter describe-surface cache
     analyze  <bundle-dir>        Analyze a staged bundle directory for deps
+    release <type> <name>        Materialize a release manifest + flip released flag
+    publish                      Build released items and push to distribution repo
 """
 from __future__ import annotations
 
@@ -76,12 +78,25 @@ def cmd_build(args) -> int:
 
 
 def cmd_validate(args) -> int:
-    if not args.manifests:
-        print("Specify one or more manifest files", file=sys.stderr)
-        return 1
+    from .releases import (
+        load_all_releases,
+        validate_flag_state,
+        ReleaseValidationError,
+    )
 
     rc = 0
-    for p in args.manifests:
+
+    # --- Bundle manifest validation ---
+    # When no manifests are given on the command line, auto-scan bundles/.
+    manifests = list(args.manifests or [])
+    if not manifests:
+        bundles_dir = Path(DEFAULT_BUNDLES_DIR)
+        if bundles_dir.exists():
+            manifests = sorted(str(p) for p in bundles_dir.rglob("*.y*ml"))
+        if not manifests:
+            print("(no bundle manifests found)")
+
+    for p in manifests:
         try:
             bundle = load_bundle(p)
             sync_note = "" if bundle.sync_enabled else "  [sync: false]"
@@ -103,6 +118,46 @@ def cmd_validate(args) -> int:
         except BundleValidationError as e:
             print(f"INVALID  {p}: {e}", file=sys.stderr)
             rc = 1
+
+    # --- Release manifest validation ---
+    # Scan releases/ if it exists; graceful no-op if it doesn't.
+    releases_dir = Path("releases")
+    if not releases_dir.exists():
+        return rc
+
+    print()
+    print("Release manifests:")
+
+    repo_root = Path.cwd()
+    try:
+        releases = load_all_releases(releases_dir, repo_root=repo_root)
+    except ReleaseValidationError as e:
+        print(f"FAIL  releases/: {e}")
+        return 1
+
+    if not releases:
+        print("  (no release manifests found in releases/)")
+        return rc
+
+    for r in releases:
+        artifact_summary = ", ".join(
+            f"{a.source}" + (" [headline]" if a.headline else "")
+            for a in r.artifacts
+        )
+        print(f"  OK  {r.manifest_path.name}  ({r.name} v{r.version})")
+        print(f"      {artifact_summary}")
+
+    # Flag-state consistency check.
+    flag_errors = validate_flag_state(releases, repo_root)
+    if flag_errors:
+        print()
+        for err in flag_errors:
+            print(f"  FAIL  {err}")
+        print(f"FAIL  {len(flag_errors)} flag-state error(s) in release manifests")
+        rc = 1
+    else:
+        print(f"  OK  {len(releases)} release manifest(s) valid, flag-state clean")
+
     return rc
 
 
@@ -370,6 +425,361 @@ def cmd_sync(args) -> int:
     return sync_bundle(manifest_path, handlers=handlers)
 
 
+def cmd_release(args) -> int:
+    """Materialize a release manifest and flip released: true on the source YAML."""
+    import re
+    import subprocess
+    import yaml
+
+    repo_root = Path.cwd()
+
+    # -----------------------------------------------------------------------
+    # Validate type argument — symptoms and alerts unsupported in v1.
+    # -----------------------------------------------------------------------
+    content_type = args.content_type
+    _SUPPORTED = {"dashboard", "view", "supermetric", "customgroup", "report", "bundle"}
+    _UNSUPPORTED_V1 = {"symptom", "symptoms", "alert", "alerts"}
+    if content_type in _UNSUPPORTED_V1:
+        print(
+            f"ERROR: '{content_type}' is not supported as a standalone release type in v1.\n"
+            f"  Symptoms and alerts ship inside bundles.  Use a bundle headline instead.",
+            file=sys.stderr,
+        )
+        return 1
+    if content_type not in _SUPPORTED:
+        print(
+            f"ERROR: unknown content type {content_type!r}.  "
+            f"Supported: {', '.join(sorted(_SUPPORTED))}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # -----------------------------------------------------------------------
+    # Resolve <name> to source YAML path.
+    #   Priority: exact path -> filename stem -> display name match.
+    # -----------------------------------------------------------------------
+    name_arg = args.name
+
+    # Map type -> directory
+    _TYPE_TO_DIR = {
+        "dashboard":   "dashboards",
+        "view":        "views",
+        "supermetric": "supermetrics",
+        "customgroup": "customgroups",
+        "report":      "reports",
+        "bundle":      "bundles",
+    }
+    content_dir = _TYPE_TO_DIR[content_type]
+
+    source_path: Path | None = None
+
+    # 1. Exact path given (absolute or relative)
+    candidate = Path(name_arg)
+    if candidate.is_absolute() and candidate.exists():
+        source_path = candidate
+    elif not candidate.is_absolute():
+        # Could be a relative path like dashboards/foo.yaml
+        rel = repo_root / candidate
+        if rel.exists() and rel.suffix in (".yaml", ".yml"):
+            source_path = rel
+
+    # 2. Filename stem (e.g. "demand_driven_capacity_v2" -> dashboards/demand_driven_capacity_v2.yaml)
+    if source_path is None:
+        stem_candidate = repo_root / content_dir / (name_arg + ".yaml")
+        if stem_candidate.exists():
+            source_path = stem_candidate
+        else:
+            stem_candidate_yml = repo_root / content_dir / (name_arg + ".yml")
+            if stem_candidate_yml.exists():
+                source_path = stem_candidate_yml
+
+    # 3. Display name match — scan all YAMLs in the directory for matching name: field
+    if source_path is None:
+        search_dir = repo_root / content_dir
+        if search_dir.exists():
+            for yaml_file in sorted(search_dir.glob("*.y*ml")):
+                try:
+                    data = yaml.safe_load(yaml_file.read_text()) or {}
+                    if isinstance(data, dict):
+                        file_name = str(data.get("name", "")).strip()
+                        if file_name == name_arg:
+                            source_path = yaml_file
+                            break
+                except Exception:
+                    continue
+
+    if source_path is None:
+        print(
+            f"ERROR: could not resolve '{name_arg}' to a {content_type} YAML file.\n"
+            f"  Tried: path, {content_dir}/{name_arg}.yaml, display name match in {content_dir}/",
+            file=sys.stderr,
+        )
+        return 1
+
+    source_path = source_path.resolve()
+    if not source_path.exists():
+        print(f"ERROR: source file not found: {source_path}", file=sys.stderr)
+        return 1
+
+    # -----------------------------------------------------------------------
+    # Compute release slug from source filename stem (underscores -> hyphens).
+    # -----------------------------------------------------------------------
+    slug = source_path.stem.replace("_", "-")
+
+    # -----------------------------------------------------------------------
+    # Compute version.
+    # -----------------------------------------------------------------------
+    releases_dir = repo_root / "releases"
+    releases_dir.mkdir(exist_ok=True)
+    manifest_path = releases_dir / f"{slug}.yaml"
+
+    explicit_version = getattr(args, "version", None)
+    if explicit_version:
+        version = explicit_version
+    elif manifest_path.exists():
+        # Auto-bump minor from existing manifest.
+        try:
+            existing = yaml.safe_load(manifest_path.read_text()) or {}
+            existing_version = str(existing.get("version", "1.0")).strip()
+            major, minor = existing_version.split(".")
+            version = f"{major}.{int(minor) + 1}"
+        except Exception:
+            version = "1.0"
+    else:
+        version = "1.0"
+
+    # -----------------------------------------------------------------------
+    # No-op guard: if --version given and manifest already has that exact version.
+    # -----------------------------------------------------------------------
+    if explicit_version and manifest_path.exists():
+        try:
+            existing = yaml.safe_load(manifest_path.read_text()) or {}
+            if (
+                str(existing.get("name", "")).strip() == slug
+                and str(existing.get("version", "")).strip() == version
+            ):
+                print(
+                    f"ERROR: release manifest {manifest_path} already at version {version}. "
+                    f"No-op release attempt.",
+                    file=sys.stderr,
+                )
+                return 1
+        except Exception:
+            pass
+
+    # -----------------------------------------------------------------------
+    # Load description from source YAML (fall back to stub).
+    # -----------------------------------------------------------------------
+    try:
+        source_data = yaml.safe_load(source_path.read_text()) or {}
+        description = str(source_data.get("description", "")).strip()
+    except Exception:
+        description = ""
+    if not description:
+        description = f"Discrete release of {slug}"
+
+    # -----------------------------------------------------------------------
+    # Load release notes from --notes file if provided.
+    # -----------------------------------------------------------------------
+    release_notes = ""
+    notes_file = getattr(args, "notes", None)
+    if notes_file:
+        notes_path = Path(notes_file)
+        if not notes_path.exists():
+            print(f"ERROR: --notes file not found: {notes_path}", file=sys.stderr)
+            return 1
+        release_notes = notes_path.read_text(encoding="utf-8")
+
+    # -----------------------------------------------------------------------
+    # Validate --deprecates targets.
+    # -----------------------------------------------------------------------
+    deprecates_slugs = list(getattr(args, "deprecates", None) or [])
+    deprecates_paths: list[str] = []
+    for dep_slug in deprecates_slugs:
+        dep_path = releases_dir / f"{dep_slug}.yaml"
+        if not dep_path.exists():
+            print(
+                f"ERROR: --deprecates target not found: releases/{dep_slug}.yaml",
+                file=sys.stderr,
+            )
+            return 1
+        deprecates_paths.append(f"releases/{dep_slug}.yaml")
+
+    # -----------------------------------------------------------------------
+    # Build release manifest dict.
+    # -----------------------------------------------------------------------
+    # Compute source path relative to repo root for the manifest.
+    try:
+        source_rel = str(source_path.relative_to(repo_root))
+    except ValueError:
+        source_rel = str(source_path)
+
+    manifest_data = {
+        "name": slug,
+        "version": version,
+        "description": description,
+        "release_notes": release_notes,
+        "artifacts": [
+            {
+                "source": source_rel,
+                "headline": True,
+            }
+        ],
+        "deprecates": deprecates_paths,
+    }
+
+    # -----------------------------------------------------------------------
+    # Write release manifest.
+    # -----------------------------------------------------------------------
+    manifest_path.write_text(
+        yaml.dump(manifest_data, default_flow_style=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+    # -----------------------------------------------------------------------
+    # Flip released: true on source YAML.
+    # -----------------------------------------------------------------------
+    try:
+        raw_source = source_path.read_text(encoding="utf-8")
+        source_loaded = yaml.safe_load(raw_source) or {}
+    except Exception as e:
+        print(f"ERROR: could not read source YAML {source_path}: {e}", file=sys.stderr)
+        return 1
+
+    source_loaded["released"] = True
+    source_path.write_text(
+        yaml.dump(source_loaded, default_flow_style=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+
+    # -----------------------------------------------------------------------
+    # Run validators to confirm both files load cleanly.
+    # -----------------------------------------------------------------------
+    validate_result = subprocess.run(
+        [sys.executable, "-m", "vcfops_packaging", "validate"],
+        capture_output=True,
+        text=True,
+        cwd=str(repo_root),
+    )
+    if validate_result.returncode != 0:
+        print(
+            f"ERROR: validation failed after writing release manifest.\n"
+            f"stdout:\n{validate_result.stdout}\n"
+            f"stderr:\n{validate_result.stderr}",
+            file=sys.stderr,
+        )
+        return 1
+
+    # -----------------------------------------------------------------------
+    # Commit (unless --no-commit).
+    # -----------------------------------------------------------------------
+    commit_sha = None
+    no_commit = getattr(args, "no_commit", False)
+    if not no_commit:
+        # Stage the two files.
+        r = subprocess.run(
+            ["git", "add", str(manifest_path), str(source_path)],
+            capture_output=True,
+            text=True,
+            cwd=str(repo_root),
+        )
+        if r.returncode != 0:
+            print(f"ERROR: git add failed: {r.stderr.strip()}", file=sys.stderr)
+            return 1
+
+        commit_msg = f"release: {slug} {version}"
+        r = subprocess.run(
+            ["git", "commit", "-m", commit_msg],
+            capture_output=True,
+            text=True,
+            cwd=str(repo_root),
+        )
+        if r.returncode != 0:
+            if "nothing to commit" in r.stdout + r.stderr:
+                pass  # Already committed — that's fine.
+            else:
+                print(f"ERROR: git commit failed: {r.stdout.strip()} {r.stderr.strip()}", file=sys.stderr)
+                return 1
+        else:
+            # Grab the new HEAD SHA.
+            r2 = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True,
+                text=True,
+                cwd=str(repo_root),
+            )
+            commit_sha = r2.stdout.strip() if r2.returncode == 0 else None
+
+    # -----------------------------------------------------------------------
+    # Summary.
+    # -----------------------------------------------------------------------
+    print(f"release manifest : {manifest_path.relative_to(repo_root)}")
+    print(f"source flagged   : {source_rel}  (released: true)")
+    print(f"version          : {version}")
+    if deprecates_paths:
+        print(f"deprecates       : {', '.join(deprecates_paths)}")
+    if commit_sha:
+        print(f"commit           : {commit_sha}")
+    elif no_commit:
+        print("commit           : skipped (--no-commit)")
+
+    return 0
+
+
+def cmd_publish(args) -> int:
+    """Run the publish orchestrator."""
+    from .publish import publish, PublishError, PublishResult
+
+    factory_repo = Path.cwd().resolve()
+
+    dist_repo_arg = getattr(args, "dist_repo", None)
+    if dist_repo_arg:
+        dist_repo = Path(dist_repo_arg).resolve()
+    else:
+        dist_repo = (factory_repo / ".." / "vcf-content-factory-bundles").resolve()
+
+    dry_run = getattr(args, "dry_run", False)
+    force = getattr(args, "force", False)
+    no_push = getattr(args, "no_push", False)
+
+    try:
+        result = publish(
+            factory_repo=factory_repo,
+            dist_repo=dist_repo,
+            dry_run=dry_run,
+            force=force,
+            no_push=no_push,
+        )
+    except PublishError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(f"FAILED: {e}", file=sys.stderr)
+        return 1
+
+    # Print human-readable summary.
+    prefix = "[DRY RUN] " if dry_run else ""
+    print(f"{prefix}Publish complete.")
+    print(f"  built   : {len(result.built)}")
+    for p in result.built:
+        print(f"    {p}")
+    print(f"  skipped : {len(result.skipped)}")
+    for p in result.skipped:
+        print(f"    {p}")
+    print(f"  retired : {len(result.retired)}")
+    for p in result.retired:
+        print(f"    {p}")
+    if result.readme_path:
+        print(f"  readme  : {result.readme_path}")
+    if result.commit_sha:
+        print(f"  commit  : {result.commit_sha}")
+    else:
+        print(f"  commit  : {'none (dry-run)' if dry_run else 'none (nothing changed)'}")
+    print(f"  pushed  : {result.pushed}")
+
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="vcfops_packaging")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -434,9 +844,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pbd.set_defaults(func=cmd_build_discrete)
 
-    pv = sub.add_parser("validate", help="validate bundle manifest(s) without building")
-    pv.add_argument("manifests", nargs="+",
-                    help="path(s) to bundle manifest YAML files")
+    pv = sub.add_parser("validate", help="validate bundle manifest(s) and release manifests")
+    pv.add_argument("manifests", nargs="*",
+                    help="path(s) to bundle manifest YAML files; "
+                         "omit to auto-scan bundles/ and releases/")
     pv.set_defaults(func=cmd_validate)
 
     pl = sub.add_parser("list", help="list available bundle manifests")
@@ -505,6 +916,95 @@ def build_parser() -> argparse.ArgumentParser:
         help="with --uninstall: skip cross-bundle sharing checks and delete unconditionally",
     )
     ps.set_defaults(func=cmd_sync)
+
+    # -----------------------------------------------------------------------
+    # release <type> <name>
+    # -----------------------------------------------------------------------
+    pr = sub.add_parser(
+        "release",
+        help="materialize a release manifest and flip the source's released flag",
+    )
+    pr.add_argument(
+        "content_type",
+        metavar="type",
+        help=(
+            "content type: dashboard, view, supermetric, customgroup, report, bundle. "
+            "(symptoms and alerts are not supported in v1)"
+        ),
+    )
+    pr.add_argument(
+        "name",
+        help=(
+            "the slug (filename stem), display name, or path to the source YAML. "
+            "Examples: demand_driven_capacity_v2 | "
+            "\"[VCF Content Factory] Demand-Driven Capacity Planning v2\" | "
+            "dashboards/demand_driven_capacity_v2.yaml"
+        ),
+    )
+    pr.add_argument(
+        "--version",
+        default=None,
+        metavar="X.Y",
+        help=(
+            "release version (major.minor format, e.g. 1.0). "
+            "If omitted, auto-bumps minor from existing manifest, or defaults to 1.0."
+        ),
+    )
+    pr.add_argument(
+        "--notes",
+        default=None,
+        metavar="FILE",
+        help="path to a markdown file whose contents become the release_notes field",
+    )
+    pr.add_argument(
+        "--deprecates",
+        action="append",
+        default=None,
+        metavar="SLUG",
+        help=(
+            "slug of a prior release manifest to mark deprecated (repeatable). "
+            "Each slug must match an existing releases/<slug>.yaml file."
+        ),
+    )
+    pr.add_argument(
+        "--no-commit",
+        action="store_true",
+        help="stage files but do not commit (default is to commit)",
+    )
+    pr.set_defaults(func=cmd_release)
+
+    # -----------------------------------------------------------------------
+    # publish
+    # -----------------------------------------------------------------------
+    ppub = sub.add_parser(
+        "publish",
+        help="build all released items and push to the distribution repo",
+    )
+    ppub.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what would be built/published without writing anything",
+    )
+    ppub.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite an existing zip at the same release name but different version",
+    )
+    ppub.add_argument(
+        "--no-push",
+        action="store_true",
+        help="commit the dist repo but do not push to origin",
+    )
+    ppub.add_argument(
+        "--dist-repo",
+        default=None,
+        metavar="PATH",
+        help=(
+            "path to the distribution repo root "
+            "(default: ../vcf-content-factory-bundles/ relative to factory repo)"
+        ),
+    )
+    ppub.set_defaults(func=cmd_publish)
 
     return p
 
