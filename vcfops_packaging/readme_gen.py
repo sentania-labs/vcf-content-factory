@@ -391,23 +391,23 @@ _SUBDIR_ORDER = [
 def _render_release_table(rows: list[dict]) -> str:
     """Render the per-subdir release table.
 
-    Each row dict has keys: name, version, released, description, download, install.
+    Each row dict has keys: name, released, description, download, install.
+    (Version is internal-only; it is not shown in the consumer-facing catalog.)
     Returns empty string if rows is empty.
     """
     if not rows:
         return ""
     lines = [
-        "| Name | Version | Released | Description | Download | Install |",
-        "|---|---|---|---|---|---|",
+        "| Name | Released | Description | Download | Install |",
+        "|---|---|---|---|---|",
     ]
     for row in rows:
         name = str(row.get("name", "")).replace("|", "\\|")
-        version = str(row.get("version", "")).replace("|", "\\|")
         released = str(row.get("released", "")).replace("|", "\\|")
         description = str(row.get("description", "")).replace("|", "\\|")
         download = str(row.get("download", "")).replace("|", "\\|")
         install = str(row.get("install", "")).replace("|", "\\|")
-        lines.append(f"| {name} | {version} | {released} | {description} | {download} | {install} |")
+        lines.append(f"| {name} | {released} | {description} | {download} | {install} |")
     return "\n".join(lines) + "\n"
 
 
@@ -434,7 +434,8 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
             subdir = _artifact_dest_subdir(a)
             if subdir not in by_subdir:
                 by_subdir[subdir] = []
-            filename = _zip_filename(r.name, r.version)
+            # Versionless consumer artifact filename.
+            filename = _zip_filename(r.name)
             zip_path = dist_repo / subdir / filename
 
             # Release date from filesystem mtime if the zip exists, else "—".
@@ -466,7 +467,8 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
 
             by_subdir[subdir].append({
                 "name": r.name,
-                "version": r.version,
+                # version is intentionally omitted — internal-only field;
+                # the catalog table does not show version to consumers.
                 "released": released_date,
                 "description": first_sentence,
                 "download": download_cell,
@@ -523,6 +525,8 @@ def _collect_retired_rows(dist_repo: Path, releases: list) -> list[dict]:
     from .releases import load_release
 
     # Build a reverse map: zip filename -> deprecating release name.
+    # Register both the versionless name and the legacy versioned name so the
+    # map works regardless of when the deprecated zip was published.
     deprecated_by: dict[str, str] = {}
     for r in releases:
         if not r.deprecates:
@@ -536,8 +540,10 @@ def _collect_retired_rows(dist_repo: Path, releases: list) -> list[dict]:
                 if not a.headline:
                     continue
                 subdir = _artifact_dest_subdir(a)
-                filename = _zip_filename(dep_rel.name, dep_rel.version)
-                deprecated_by[f"{subdir}/{filename}"] = r.name
+                versionless_name = _zip_filename(dep_rel.name)
+                versioned_name = f"{dep_rel.name}-{dep_rel.version}.zip"
+                for filename in (versionless_name, versioned_name):
+                    deprecated_by[f"{subdir}/{filename}"] = r.name
 
     retired_dir = dist_repo / "retired"
     if not retired_dir.exists():

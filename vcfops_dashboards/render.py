@@ -13,6 +13,7 @@ property is omitted, defaulted, or left empty.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
@@ -1151,7 +1152,11 @@ def _build_dashboard_obj(
         for ix in dashboard.interactions
     ]
 
-    now_ms = int(time.time() * 1000)
+    # Use 0 for creationTime/lastUpdateTime: VCF Ops overwrites both fields
+    # on import, so the values in the bundle are placeholder only.  A constant
+    # zero makes the output deterministic across repeated builds of the same
+    # content, which keeps git diffs clean on idempotent re-publishes.
+    now_ms = 0
     return {
         # Default dashboards to shared so other Ops users can see them.
         # The framework's audience is "an average vSphere admin needs
@@ -1281,9 +1286,15 @@ def render_dashboards_bundle_json(
     entries: dict = {"resourceKind": entries_resource_kind}
     if entries_resource:
         entries["resource"] = entries_resource
+    # Derive the envelope UUID deterministically from the sorted dashboard
+    # IDs so that repeated builds of identical content yield the same bytes.
+    # The envelope UUID is an import-session identifier only — VCF Ops does
+    # not persist it after import.
+    _id_seed = ",".join(sorted(d.id for d in dashboards)).encode()
+    _envelope_uuid = str(uuid.UUID(bytes=hashlib.sha256(_id_seed).digest()[:16], version=4))
     return json.dumps(
         {
-            "uuid": str(uuid.uuid4()),
+            "uuid": _envelope_uuid,
             "entries": entries,
             "dashboards": [
                 _build_dashboard_obj(d, views_by_name, kind_index, resource_index, owner_user_id)

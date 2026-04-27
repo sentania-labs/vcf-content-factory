@@ -212,7 +212,8 @@ class TestDryRun:
         assert len(result.built) == 1, (
             f"Expected 1 would-be built artifact, got {result.built}"
         )
-        assert result.built[0].name == "demand-driven-capacity-v2-1.0.zip", (
+        # Versionless consumer artifact name.
+        assert result.built[0].name == "demand-driven-capacity-v2.zip", (
             f"Unexpected artifact name: {result.built[0].name}"
         )
 
@@ -279,7 +280,7 @@ class TestDryRun:
 # ---------------------------------------------------------------------------
 
 def test_real_run_zip_lands(tmp_path, monkeypatch):
-    """S2a: zip lands at <dist>/dashboards/<name>-<version>.zip."""
+    """S2a: zip lands at <dist>/dashboards/<slug>.zip (versionless)."""
     from vcfops_packaging.publish import publish
 
     dist = _init_dist_repo(tmp_path)
@@ -302,12 +303,13 @@ def test_real_run_zip_lands(tmp_path, monkeypatch):
         no_push=True,
     )
 
-    expected = dist / "dashboards" / "demand-driven-capacity-v2-1.0.zip"
+    # Versionless consumer artifact: <slug>.zip, not <slug>-<version>.zip.
+    expected = dist / "dashboards" / "demand-driven-capacity-v2.zip"
     assert expected.exists(), (
         f"Expected zip not found: {expected}\nbuilt: {result.built}"
     )
     assert len(result.built) == 1
-    assert result.built[0].name == "demand-driven-capacity-v2-1.0.zip"
+    assert result.built[0].name == "demand-driven-capacity-v2.zip"
 
 
 def test_real_run_readme_regenerated(tmp_path, monkeypatch):
@@ -383,9 +385,14 @@ def test_real_run_commit_and_no_push(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 class TestNoOpSkip:
-    """S3: a second publish with identical release manifests produces no changes."""
+    """S3: a second publish with identical release manifests produces no new commit.
 
-    def test_second_publish_is_noop(self, tmp_path, monkeypatch):
+    With the versionless naming, publish always builds and copies the zip.
+    Idempotence is at the git level: if the zip bytes are unchanged, git sees
+    no diff and produces no new commit (commit_sha is None on the second run).
+    """
+
+    def test_second_publish_no_new_commit(self, tmp_path, monkeypatch):
         from vcfops_packaging.publish import publish
 
         dist = _init_dist_repo(tmp_path)
@@ -401,7 +408,7 @@ class TestNoOpSkip:
         )
         _patch_enumerate(monkeypatch, releases_dir)
 
-        # First publish.
+        # First publish — should produce a commit.
         result1 = publish(
             factory_repo=REPO_ROOT,
             dist_repo=dist,
@@ -409,19 +416,57 @@ class TestNoOpSkip:
             no_push=True,
         )
         assert len(result1.built) == 1, f"First run should build 1, got {result1.built}"
+        assert result1.commit_sha is not None, "First run should produce a commit"
 
-        # Second publish — same manifests, nothing new.
+        # Second publish — identical content; git diff shows nothing changed.
         result2 = publish(
             factory_repo=REPO_ROOT,
             dist_repo=dist,
             dry_run=False,
             no_push=True,
         )
-        assert result2.built == [], (
-            f"Second run should build nothing (idempotent), got {result2.built}"
+        # Built list still populated (zip was re-copied) but no new commit.
+        assert result2.commit_sha is None, (
+            f"Second run should produce no commit (content unchanged), "
+            f"but got commit_sha={result2.commit_sha!r}"
         )
-        assert len(result2.skipped) == 1, (
-            f"Second run should skip the existing zip, got {result2.skipped}"
+
+    def test_second_publish_commit_count_unchanged(self, tmp_path, monkeypatch):
+        """Commit count must not increase when content is byte-identical."""
+        from vcfops_packaging.publish import publish
+
+        dist = _init_dist_repo(tmp_path)
+        releases_dir = tmp_path / "releases2b"
+        releases_dir.mkdir()
+        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        _write_release_manifest(
+            releases_dir,
+            name="demand-driven-capacity-v2",
+            version="1.0",
+            source_abs=source_abs,
+            description="Idempotence commit count test.",
+        )
+        _patch_enumerate(monkeypatch, releases_dir)
+
+        publish(factory_repo=REPO_ROOT, dist_repo=dist, dry_run=False, no_push=True)
+
+        r_after_first = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD"],
+            cwd=str(dist), capture_output=True, text=True,
+        )
+        count_after_first = int(r_after_first.stdout.strip())
+
+        publish(factory_repo=REPO_ROOT, dist_repo=dist, dry_run=False, no_push=True)
+
+        r_after_second = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD"],
+            cwd=str(dist), capture_output=True, text=True,
+        )
+        count_after_second = int(r_after_second.stdout.strip())
+
+        assert count_after_second == count_after_first, (
+            f"Commit count changed on idempotent second publish: "
+            f"{count_after_first} → {count_after_second}"
         )
 
 
@@ -620,11 +665,11 @@ class TestReadmeCellFormat:
         return (dist / "README.md").read_text(encoding="utf-8"), dist
 
     def test_download_cell_includes_subdir(self, tmp_path, monkeypatch):
-        """Download link target must be '<subdir>/<name>-<version>.zip'."""
+        """Download link target must be '<subdir>/<slug>.zip' (versionless)."""
         readme, _dist = self._run_publish_and_read_readme(tmp_path, monkeypatch)
-        # The correct path-prefixed link must appear.
-        assert "[Download](dashboards/demand-driven-capacity-v2-1.0.zip)" in readme, (
-            f"Expected subdir-prefixed download link not found.\n"
+        # The correct path-prefixed, versionless link must appear.
+        assert "[Download](dashboards/demand-driven-capacity-v2.zip)" in readme, (
+            f"Expected subdir-prefixed versionless download link not found.\n"
             f"README excerpt:\n{readme[readme.find('demand-driven'):][:400]}"
         )
 
@@ -632,7 +677,7 @@ class TestReadmeCellFormat:
         """The old bare-filename pattern (Bug 1) must not appear."""
         readme, _dist = self._run_publish_and_read_readme(tmp_path, monkeypatch)
         # Bare filename link (no subdir prefix before the zip name) should be absent.
-        assert "](demand-driven-capacity-v2-1.0.zip)" not in readme, (
+        assert "](demand-driven-capacity-v2.zip)" not in readme, (
             "Bare-filename download link (Bug 1) is still present in README."
         )
 
@@ -649,13 +694,17 @@ class TestReadmeCellFormat:
         )
 
     def test_readme_has_download_and_install_columns(self, tmp_path, monkeypatch):
-        """Table header must contain both 'Download' and 'Install' columns."""
+        """Table header must contain 'Download' and 'Install' columns but not 'Version'."""
         readme, _dist = self._run_publish_and_read_readme(tmp_path, monkeypatch)
         assert "| Download |" in readme, (
             "Separate 'Download' column header not found in README."
         )
         assert "| Install |" in readme, (
             "Separate 'Install' column header not found in README."
+        )
+        # Version is internal-only — must not appear in consumer-facing catalog.
+        assert "| Version |" not in readme, (
+            "Version column must not appear in consumer-facing README catalog table."
         )
 
 
@@ -922,4 +971,234 @@ class TestPolicyCaveatInReadme:
             f"Policy caveat fragment {self._CAVEAT_FRAGMENT!r} not found in "
             f"bundle-level README.md ({inner_readmes[0]}) inside the built zip.\n"
             f"README excerpt:\n{inner_readme[:1500]}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Versionless naming + legacy cleanup
+# ---------------------------------------------------------------------------
+
+class TestVersionlessNaming:
+    """New requirement: consumer-facing artifacts use <slug>.zip, not <slug>-<version>.zip."""
+
+    def test_versionless_zip_lands_at_correct_path(self, tmp_path, monkeypatch):
+        """A published release lands at <dist>/<subdir>/<slug>.zip, not <slug>-<version>.zip."""
+        from vcfops_packaging.publish import publish
+
+        dist = _init_dist_repo(tmp_path)
+        releases_dir = tmp_path / "vl_releases"
+        releases_dir.mkdir()
+        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        _write_release_manifest(
+            releases_dir,
+            name="demand-driven-capacity-v2",
+            version="1.0",
+            source_abs=source_abs,
+            description="Versionless naming test.",
+        )
+        _patch_enumerate(monkeypatch, releases_dir)
+
+        result = publish(
+            factory_repo=REPO_ROOT,
+            dist_repo=dist,
+            dry_run=False,
+            no_push=True,
+        )
+
+        # Versionless zip must exist.
+        versionless = dist / "dashboards" / "demand-driven-capacity-v2.zip"
+        assert versionless.exists(), (
+            f"Versionless zip not found at {versionless}\nbuilt: {result.built}"
+        )
+        # Legacy versioned zip must NOT exist.
+        versioned = dist / "dashboards" / "demand-driven-capacity-v2-1.0.zip"
+        assert not versioned.exists(), (
+            f"Legacy versioned zip should not exist: {versioned}"
+        )
+
+    def test_legacy_versioned_zip_deleted_on_publish(self, tmp_path, monkeypatch):
+        """A pre-existing legacy <slug>-<X.Y>.zip is deleted in-place on publish."""
+        from vcfops_packaging.publish import publish
+
+        dist = _init_dist_repo(tmp_path)
+
+        # Pre-place a legacy versioned zip.
+        dashboards_dir = dist / "dashboards"
+        dashboards_dir.mkdir(parents=True, exist_ok=True)
+        legacy_zip = dashboards_dir / "demand-driven-capacity-v2-1.0.zip"
+        legacy_zip.write_bytes(b"legacy versioned content")
+
+        # Stage + commit so the dist repo is clean for the pre-check.
+        subprocess.run(["git", "add", "-A"], cwd=str(dist), capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", "add legacy versioned zip"],
+            cwd=str(dist), capture_output=True,
+        )
+
+        releases_dir = tmp_path / "legacy_releases"
+        releases_dir.mkdir()
+        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        _write_release_manifest(
+            releases_dir,
+            name="demand-driven-capacity-v2",
+            version="1.0",
+            source_abs=source_abs,
+            description="Legacy cleanup test.",
+        )
+        _patch_enumerate(monkeypatch, releases_dir)
+
+        result = publish(
+            factory_repo=REPO_ROOT,
+            dist_repo=dist,
+            dry_run=False,
+            no_push=True,
+        )
+
+        # Legacy versioned zip must be gone from dashboards/.
+        assert not legacy_zip.exists(), (
+            f"Legacy versioned zip should have been deleted, still at: {legacy_zip}"
+        )
+        # It must NOT be in retired/ — it is a naming-era artifact, not deprecated content.
+        retired_path = dist / "retired" / "dashboards" / legacy_zip.name
+        assert not retired_path.exists(), (
+            f"Legacy versioned zip was moved to retired/ instead of deleted: {retired_path}"
+        )
+        # result.deleted must record it.
+        deleted_names = [p.name for p in result.deleted]
+        assert legacy_zip.name in deleted_names, (
+            f"Legacy zip name not in result.deleted: {deleted_names}"
+        )
+        # Versionless zip must now be present.
+        assert (dist / "dashboards" / "demand-driven-capacity-v2.zip").exists(), (
+            "Versionless zip should have been created alongside the deletion."
+        )
+
+    def test_legacy_zip_safe_for_release_with_version_looking_slug(self, tmp_path, monkeypatch):
+        """A release whose slug ends in a version-looking suffix is NOT eaten by the sweep.
+
+        A release named 'something-1.2' produces 'something-1.2.zip'.  The legacy
+        sweep must not delete it because the slug 'something-1' doesn't match any
+        known release slug.
+        """
+        from vcfops_packaging.publish import _sweep_legacy_versioned_zips
+
+        dist = tmp_path / "dist"
+        dashboards_dir = dist / "dashboards"
+        dashboards_dir.mkdir(parents=True)
+
+        # Simulate a zip whose name looks like a legacy versioned name.
+        safe_zip = dashboards_dir / "something-1.2.zip"
+        safe_zip.write_bytes(b"content")
+
+        # The slug 'something-1' is not a known release slug (known slug is 'something-1.2').
+        known_slugs = {"something-1.2"}
+        deleted = _sweep_legacy_versioned_zips(dist, known_slugs, dry_run=True)
+
+        assert safe_zip not in deleted and not any(
+            p.name == safe_zip.name for p in deleted
+        ), (
+            f"Safe zip 'something-1.2.zip' was incorrectly identified as a "
+            f"legacy versioned zip.  deleted: {[p.name for p in deleted]}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# --force flag: forces a commit even when content is byte-identical
+# ---------------------------------------------------------------------------
+
+class TestForceFlag:
+    """--force triggers a commit even when no content changed."""
+
+    def test_force_commits_when_content_unchanged(self, tmp_path, monkeypatch):
+        """After an identical second publish with force=True, a new commit exists."""
+        from vcfops_packaging.publish import publish
+
+        dist = _init_dist_repo(tmp_path)
+        releases_dir = tmp_path / "force_releases"
+        releases_dir.mkdir()
+        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        _write_release_manifest(
+            releases_dir,
+            name="demand-driven-capacity-v2",
+            version="1.0",
+            source_abs=source_abs,
+            description="Force flag test.",
+        )
+        _patch_enumerate(monkeypatch, releases_dir)
+
+        # First publish — establishes baseline.
+        result1 = publish(
+            factory_repo=REPO_ROOT,
+            dist_repo=dist,
+            dry_run=False,
+            no_push=True,
+        )
+        assert result1.commit_sha is not None, "First publish should produce a commit"
+
+        r_count1 = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD"],
+            cwd=str(dist), capture_output=True, text=True,
+        )
+        count1 = int(r_count1.stdout.strip())
+
+        # Second publish with force=True — should produce a commit even though
+        # the content is byte-identical.
+        result2 = publish(
+            factory_repo=REPO_ROOT,
+            dist_repo=dist,
+            dry_run=False,
+            force=True,
+            no_push=True,
+        )
+        assert result2.commit_sha is not None, (
+            "force=True should produce a commit even when content is unchanged"
+        )
+
+        r_count2 = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD"],
+            cwd=str(dist), capture_output=True, text=True,
+        )
+        count2 = int(r_count2.stdout.strip())
+        assert count2 == count1 + 1, (
+            f"force=True should add exactly one commit; "
+            f"count before={count1}, after={count2}"
+        )
+
+    def test_normal_second_publish_no_commit(self, tmp_path, monkeypatch):
+        """Without --force, a second identical publish produces no commit."""
+        from vcfops_packaging.publish import publish
+
+        dist = _init_dist_repo(tmp_path)
+        releases_dir = tmp_path / "force_normal_releases"
+        releases_dir.mkdir()
+        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        _write_release_manifest(
+            releases_dir,
+            name="demand-driven-capacity-v2",
+            version="1.0",
+            source_abs=source_abs,
+            description="Force flag normal run test.",
+        )
+        _patch_enumerate(monkeypatch, releases_dir)
+
+        publish(factory_repo=REPO_ROOT, dist_repo=dist, dry_run=False, no_push=True)
+
+        r_count1 = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD"],
+            cwd=str(dist), capture_output=True, text=True,
+        )
+        count1 = int(r_count1.stdout.strip())
+
+        result2 = publish(factory_repo=REPO_ROOT, dist_repo=dist, dry_run=False, no_push=True)
+        assert result2.commit_sha is None, (
+            "Second publish without --force should produce no commit when content is unchanged"
+        )
+
+        r_count2 = subprocess.run(
+            ["git", "rev-list", "--count", "HEAD"],
+            cwd=str(dist), capture_output=True, text=True,
+        )
+        count2 = int(r_count2.stdout.strip())
+        assert count2 == count1, (
+            f"Commit count should not change on identical re-publish: {count1} → {count2}"
         )

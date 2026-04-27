@@ -18,8 +18,14 @@ artifact_already_exists(release, dest_root) -> bool
 
 Naming convention
 -----------------
-Output zip: ``<release-name>-<release-version>.zip``
-  e.g. ``demand-driven-capacity-v2-1.0.zip``
+Output zip: ``<release-name>.zip``  (versionless consumer artifact)
+  e.g. ``demand-driven-capacity-v2.zip``
+
+The ``release_version`` field in :class:`ReleaseArtifact` still carries the
+version string from the release manifest — it is used internally for change
+detection, audit, and commit messages.  The version never appears in the
+consumer-facing zip filename so the distribution repo always contains exactly
+one zip per release slug.
 
 Routing
 -------
@@ -100,13 +106,19 @@ def _read_name_from_yaml(path: Path) -> str:
     return str(name).strip()
 
 
-def _zip_filename(release_name: str, release_version: str) -> str:
-    """Return the canonical output zip filename for a release.
+def _zip_filename(release_name: str, release_version: str = "") -> str:
+    """Return the canonical consumer-facing output zip filename for a release.
 
-    Convention: ``<release-name>-<release-version>.zip``
-    e.g.  ``demand-driven-capacity-v2-1.0.zip``
+    Convention: ``<release-name>.zip``  (versionless)
+    e.g.  ``demand-driven-capacity-v2.zip``
+
+    The ``release_version`` parameter is accepted but ignored — it is kept in
+    the signature so callers that still pass it (e.g. the retirement handler,
+    which needs the OLD versioned name for deprecated releases) can work without
+    changes.  Only the retirement handler and the legacy-sweep need the version-
+    bearing name; they construct it directly rather than using this helper.
     """
-    return f"{release_name}-{release_version}.zip"
+    return f"{release_name}.zip"
 
 
 def _build_bundle_headline(
@@ -170,7 +182,7 @@ def build_release(
     For each headline artifact in the manifest:
       - Determines the content type via ``release_types.headline_to_dir()``.
       - Routes to the appropriate builder (bundle or discrete).
-      - Names the output zip ``<release-name>-<release-version>.zip``.
+      - Names the output zip ``<release-name>.zip`` (versionless).
       - Writes it to ``output_dir``.
 
     Callers are responsible for managing ``output_dir`` (creation, cleanup).

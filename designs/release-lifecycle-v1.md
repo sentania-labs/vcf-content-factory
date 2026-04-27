@@ -487,3 +487,31 @@ No silent failures. Any error stops the chain and reports verbatim.
 - Bundle manifests under `bundles/`.
 - Install scripts in `vcfops_packaging/templates/`.
 - Other `vcfops_*/` packages.
+
+## Addendum 2026-04-27 — Versionless consumer artifacts
+
+**Consumer-facing zip names no longer include the release version.**
+Distribution repo artifacts are named `<slug>.zip` (e.g.
+`demand-driven-capacity-v2.zip`), not `<slug>-<version>.zip`.  The dist
+repo always contains exactly one zip per release slug — users cannot
+accidentally pick a stale older version because there is only ever one
+option.
+
+The `version:` field in `releases/*.yaml` remains.  It is used for:
+- Auto-bump logic in `/release` (minor bump on each re-release).
+- Git commit messages on publish (`release-publish: ... demand-driven-capacity-v2 v1.1`).
+- Audit trail in `vcfops_manifest.json` inside each distribution zip.
+
+The version is intentionally **not** propagated to the zip filename or to
+the consumer-facing README catalog table (the "Released" column shows a
+calendar date, not a version string).
+
+Legacy zips matching the old `<slug>-<X.Y>.zip` pattern are deleted
+in-place by the publish sweep when a current release manifest with the
+same slug exists.  They are **not** moved to `retired/` — the old names
+were a tooling artifact, not deprecated content.  The deletion is visible
+in git history.
+
+Note: the architecture diagram in §D above still shows the legacy
+`-<version>` suffix.  Treat that diagram as historical; the actual
+implementation follows versionless naming as described here.

@@ -7,12 +7,17 @@ distribution repo:
   2. Validate factory repo — seven per-package validators + vcfops_packaging.
   3. Clean-tree check on dist repo — refuse if dirty / not on main / behind origin.
   4. Enumerate release manifests from releases/.
-  5. Per-release build + idempotence routing — build, skip, or fail on conflict.
-  6. Process retirements — move deprecated zips to retired/<subdir>/.
-  7. Stale-zip sweep — move orphaned zips to retired/<subdir>/.
-  8. Regenerate README between AUTO markers.
-  9. Commit + push (skip on dry_run; commit-only on no_push).
-  10. Cleanup — staging dir + lockfile.
+  5. Per-release build + copy — always build; git diff decides whether to commit.
+  6. Legacy-zip sweep — delete in-place any ``<slug>-<X.Y>.zip`` that corresponds
+     to a current release slug (the slug itself is now the canonical versionless
+     artifact name).  Does NOT move to retired/ — these are versioned filenames
+     from the pre-versionless era, not actually deprecated content.
+  7. Process retirements — move deprecated zips to retired/<subdir>/.
+  8. Stale-zip sweep — move other orphaned zips to retired/<subdir>/.
+  9. Regenerate README between AUTO markers.
+  10. Commit + push (skip on dry_run; commit-only on no_push; skipped when no
+      content diff unless force=True).
+  11. Cleanup — staging dir + lockfile.
 
 Public API
 ----------
@@ -24,10 +29,16 @@ dry_run=True:
   - Skips commit/push.
   - Lockfile is still acquired to prevent races with real runs.
   - Returns a populated PublishResult showing what WOULD happen.
+
+force=True:
+  - Forces a commit even when no on-disk content changed (git reports nothing
+    to commit).  Useful for debugging or re-pushing identical content.
 """
 from __future__ import annotations
 
 import datetime
+import hashlib
+import io
 import os
 import shutil
 import subprocess
@@ -58,12 +69,96 @@ class PublishError(RuntimeError):
 
 @dataclass
 class PublishResult:
-    built: List[Path] = field(default_factory=list)      # zips newly built and copied
-    skipped: List[Path] = field(default_factory=list)    # zips already present at expected name+version
-    retired: List[Path] = field(default_factory=list)    # zips moved to retired/
+    built: List[Path] = field(default_factory=list)      # zips built and copied to dist this run
+    skipped: List[Path] = field(default_factory=list)    # kept for API compatibility; always empty now
+    retired: List[Path] = field(default_factory=list)    # zips moved to retired/ (deprecations + stale)
+    deleted: List[Path] = field(default_factory=list)    # legacy versioned zips deleted in-place
     readme_path: Path = None                             # path to the regenerated README
-    commit_sha: Optional[str] = None                     # None on dry-run
+    commit_sha: Optional[str] = None                     # None on dry-run or when nothing changed
     pushed: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Content-hash helpers
+# ---------------------------------------------------------------------------
+
+def _zip_content_hash(path: Path) -> str:
+    """Return a content hash of a distribution zip that ignores build-timestamps.
+
+    Distribution zips are non-deterministic: the ``vcfops_manifest.json``
+    member embeds a ``built_at`` wall-clock timestamp, and nested inner zips
+    (``Dashboard.zip``, ``Views.zip``, etc.) embed per-entry date_time fields
+    that also reflect the build clock.  None of these timestamps carry
+    semantic content — they are all overwritten by VCF Ops on import.
+
+    This function computes a content-only hash by:
+      1. Skipping ``vcfops_manifest.json`` at any nesting level.
+      2. For members that are themselves zips, recursing to hash their
+         logical content (via ``zf.read(name)`` which returns decompressed
+         bytes, stripping the zip framing that embeds date_time stamps).
+      3. Hashing all other members' raw decompressed bytes.
+      4. Sorting member names for deterministic iteration.
+
+    Two builds of the same factory content will produce the same digest,
+    enabling idempotent re-publishes even when the build clock advanced.
+
+    For non-zip files or unreadable zips, falls back to a full file hash.
+
+    Returns:
+        A SHA-256 hex digest stable across same-content re-builds.
+    """
+    import zipfile as _zipfile
+
+    def _hash_zip_data(data: bytes, h: "hashlib._Hash") -> None:
+        """Recursively hash the logical content of a zip given its bytes."""
+        try:
+            with _zipfile.ZipFile(io.BytesIO(data)) as zf:
+                for name in sorted(zf.namelist()):
+                    if name.endswith("/") or name.endswith("vcfops_manifest.json"):
+                        continue  # skip directories and build-timestamp-only member
+                    member_bytes = zf.read(name)
+                    h.update(name.encode())
+                    if name.endswith(".zip"):
+                        # Recurse into inner zip: hash its logical content,
+                        # not its bytes (which embed date_time stamps).
+                        _hash_zip_data(member_bytes, h)
+                    else:
+                        h.update(member_bytes)
+        except Exception:
+            # If we can't parse as zip, hash raw bytes.
+            h.update(data)
+
+    try:
+        h = hashlib.sha256()
+        _hash_zip_data(path.read_bytes(), h)
+        return h.hexdigest()
+    except Exception:
+        # Fallback: hash the raw bytes (non-zip or corrupt zip).
+        h2 = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(65536), b""):
+                h2.update(chunk)
+        return h2.hexdigest()
+
+
+def _copy_if_changed(src: Path, dest: Path) -> bool:
+    """Copy src to dest only when the semantic content differs.
+
+    Uses :func:`_zip_content_hash` to compare zip files, which excludes the
+    ``vcfops_manifest.json`` build-timestamp entry so that idempotent
+    re-builds of the same content do not overwrite the dest file.
+
+    If dest is absent or has different content, copies src to dest using
+    ``shutil.copy2`` (preserves mtime so dist-repo README dates stay stable).
+
+    Returns:
+        True if the file was copied (content changed or dest was absent).
+        False if the copy was skipped (semantically identical).
+    """
+    if dest.exists() and _zip_content_hash(src) == _zip_content_hash(dest):
+        return False
+    shutil.copy2(str(src), str(dest))
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -273,8 +368,8 @@ def _all_known_subdirs() -> List[str]:
 def _all_headline_paths(releases) -> set[str]:
     """Return the set of expected zip filenames across all release headlines.
 
-    Each element is in the form  "<subdir>/<name>-<version>.zip",
-    e.g. "dashboards/demand-driven-capacity-v2-1.0.zip".
+    Each element is in the form  "<subdir>/<slug>.zip" (versionless),
+    e.g. "dashboards/demand-driven-capacity-v2.zip".
     """
     from .release_builder import _artifact_dest_subdir, _zip_filename
     known = set()
@@ -282,7 +377,7 @@ def _all_headline_paths(releases) -> set[str]:
         for a in r.artifacts:
             if a.headline:
                 subdir = _artifact_dest_subdir(a)
-                filename = _zip_filename(r.name, r.version)
+                filename = _zip_filename(r.name)
                 known.add(f"{subdir}/{filename}")
     return known
 
@@ -314,6 +409,64 @@ def _build_one_release(release, staging_dir: Path, factory_repo: Path):
 
 
 # ---------------------------------------------------------------------------
+# Legacy-versioned-zip sweep
+# ---------------------------------------------------------------------------
+
+# Pattern for the OLD versioned zip naming: <anything>-<digits>.<digits>.zip
+# Captured groups: (slug, version) where slug is everything before the last
+# "-<digits>.<digits>" segment.
+import re as _re_module
+_LEGACY_VERSIONED_ZIP_RE = _re_module.compile(
+    r"^(.+)-(\d+\.\d+)\.zip$"
+)
+
+
+def _sweep_legacy_versioned_zips(
+    dist_repo: Path,
+    known_slugs: set[str],
+    dry_run: bool,
+) -> List[Path]:
+    """Delete in-place any ``<slug>-<X.Y>.zip`` whose slug matches a current release.
+
+    These are leftover artifacts from the pre-versionless era.  They are NOT
+    moved to ``retired/`` — the user's intent is "delete and let git history
+    record it."  ``retired/`` is reserved for genuinely deprecated content
+    (entries listed in a release's ``deprecates:`` field).
+
+    Safety: only zips whose parsed slug is an exact member of ``known_slugs``
+    are touched.  A release legitimately named ``something-1.2`` (with a
+    version-looking suffix in its slug) will not be deleted because its
+    expected zip is ``something-1.2.zip`` (present in ``known_filenames``)
+    and the stale-zip sweep skips it.
+
+    Args:
+        dist_repo:   Root of the distribution repo.
+        known_slugs: Set of release slugs (e.g. ``{"demand-driven-capacity-v2"}``).
+        dry_run:     If True, compute but don't delete.
+
+    Returns:
+        List of paths that were (or would be) deleted.
+    """
+    deleted: List[Path] = []
+    for subdir in _all_known_subdirs():
+        subdir_path = dist_repo / subdir
+        if not subdir_path.exists():
+            continue
+        for zip_path in sorted(subdir_path.glob("*.zip")):
+            m = _LEGACY_VERSIONED_ZIP_RE.match(zip_path.name)
+            if not m:
+                continue
+            slug = m.group(1)
+            if slug not in known_slugs:
+                continue
+            # This is a legacy versioned zip for a slug we still manage.
+            if not dry_run:
+                zip_path.unlink()
+            deleted.append(zip_path)
+    return deleted
+
+
+# ---------------------------------------------------------------------------
 # Stale-zip sweep
 # ---------------------------------------------------------------------------
 
@@ -323,6 +476,11 @@ def _sweep_stale_zips(
     dry_run: bool,
 ) -> List[Path]:
     """Move zips with no corresponding release manifest to retired/<subdir>/.
+
+    Only touches zips that are NOT the versionless canonical artifact for a
+    current release (those are in ``known_filenames``) and are NOT legacy
+    versioned zips for a current slug (those are handled by
+    ``_sweep_legacy_versioned_zips``).
 
     Args:
         dist_repo:       Root of the distribution repo.
@@ -357,7 +515,10 @@ def _process_retirements(releases, dist_repo: Path, dry_run: bool) -> List[Path]
     deprecated release's zip(s) and move them to retired/<subdir>/.
 
     The deprecated entries are file paths to other release manifests; we load
-    them to learn their name + version, then compute the expected zip path.
+    them to learn their name + version, then look for the zip under both the
+    current versionless name (``<slug>.zip``) and the legacy versioned name
+    (``<slug>-<version>.zip``) so that retirements work regardless of when
+    the deprecated release was originally published.
 
     Returns list of paths that were (or would be) moved.
     """
@@ -379,13 +540,21 @@ def _process_retirements(releases, dist_repo: Path, dry_run: bool) -> List[Path]
                 if not a.headline:
                     continue
                 subdir = _artifact_dest_subdir(a)
-                filename = _zip_filename(dep_release.name, dep_release.version)
-                src = dist_repo / subdir / filename
-                key = f"{subdir}/{filename}"
-                if key in already_handled:
-                    continue
-                already_handled.add(key)
-                if src.exists():
+                # Look for the deprecated zip under both the versionless name
+                # (if the dep release was published after the naming change) and
+                # the legacy versioned name (if it was published before).
+                candidate_filenames = [
+                    _zip_filename(dep_release.name),                          # versionless
+                    f"{dep_release.name}-{dep_release.version}.zip",          # legacy versioned
+                ]
+                for filename in candidate_filenames:
+                    src = dist_repo / subdir / filename
+                    key = f"{subdir}/{filename}"
+                    if key in already_handled:
+                        continue
+                    if not src.exists():
+                        continue
+                    already_handled.add(key)
                     retired_dir = dist_repo / "retired" / subdir
                     dest = retired_dir / filename
                     if not dry_run:
@@ -472,16 +641,17 @@ def publish(
         dist_repo:    Absolute path to the distribution repo root.
         dry_run:      If True, compute what would happen without writing files
                       or committing.  Lockfile is still acquired.
-        force:        If True, overwrite an existing zip at the same name but
-                      different version instead of failing.
+        force:        If True, force a commit even when no on-disk content changed
+                      (git reports nothing to commit).  Useful for debugging or
+                      re-pushing identical content.
         no_push:      If True, commit the dist repo but do not push to origin.
 
     Returns:
-        PublishResult with built/skipped/retired/readme_path/commit_sha/pushed.
+        PublishResult with built/skipped/deleted/retired/readme_path/commit_sha/pushed.
 
     Raises:
         PublishError: on any hard failure (lock busy, validator fail, git dirty,
-                      version conflict without force, build error).
+                      build error).
     """
     factory_repo = Path(factory_repo).resolve()
     dist_repo = Path(dist_repo).resolve()
@@ -517,8 +687,6 @@ def _publish_inner(
     result: PublishResult,
 ) -> None:
     """Inner body of publish() — runs inside the lockfile try/finally."""
-    import zipfile
-
     # -----------------------------------------------------------------------
     # Step 2: Validate factory repo
     # -----------------------------------------------------------------------
@@ -548,88 +716,76 @@ def _publish_inner(
 
         for release in releases:
             from .release_builder import (
-                artifact_already_exists,
-                expected_artifact_path,
-                _artifact_dest_subdir,
-                _zip_filename,
+                _artifact_dest_subdir as _ads,
+                _zip_filename as _zfn,
             )
 
-            # Compute expected destination path (first headline only for single-headline
-            # releases; multi-headline releases iterate artifacts below).
+            # Determine the expected destination path for each headline.
+            # Always build and copy; git diff --staged decides whether content changed.
+            built_this_release = False
+            if not dry_run:
+                artifacts = _build_one_release(release, staging, factory_repo)
+            else:
+                artifacts = None  # dry-run: no actual build
+
             for manifest_artifact in release.artifacts:
                 if not manifest_artifact.headline:
                     continue
 
-                from .release_builder import _artifact_dest_subdir as _ads
-                from .release_builder import _zip_filename as _zfn
                 subdir = _ads(manifest_artifact)
-                filename = _zfn(release.name, release.version)
+                filename = _zfn(release.name)   # versionless
                 dest_path = dist_repo / subdir / filename
 
-                if dest_path.exists():
-                    # Exact match — skip (idempotent).
-                    result.skipped.append(dest_path)
-                    continue
-
-                # Check for same-name different-version conflict.
-                # A conflict = a zip with the same release name but ANY version in the subdir.
-                import re as _re
-                name_prefix = release.name + "-"
-                conflicts = [
-                    p for p in (dist_repo / subdir).glob("*.zip")
-                    if p.name.startswith(name_prefix)
-                ]
-                if conflicts and not force:
-                    raise PublishError(
-                        f"Version conflict for release {release.name!r}: "
-                        f"existing zip(s) {[c.name for c in conflicts]!r} in "
-                        f"{subdir}/ but release manifest declares version "
-                        f"{release.version!r}.  Use force=True to overwrite."
-                    )
-
-                # Build this release into staging.
                 if not dry_run:
-                    artifacts = _build_one_release(release, staging, factory_repo)
-
+                    assert artifacts is not None
                     for art in artifacts:
+                        if art.dest_subdir != subdir:
+                            continue
                         dest_dir = dist_repo / art.dest_subdir
                         dest_dir.mkdir(parents=True, exist_ok=True)
                         dest_file = dest_dir / art.zip_path.name
-                        shutil.copy2(str(art.zip_path), str(dest_file))
+                        _copy_if_changed(art.zip_path, dest_file)
                         result.built.append(dest_file)
                         built_names.append(release.name)
+                        built_this_release = True
                 else:
                     # Dry-run: record the would-be path.
                     result.built.append(dest_path)
                     built_names.append(release.name)
+                    built_this_release = True
 
-                # Only build each release once even if it has multiple headlines;
-                # break after first headline to avoid duplicate builds.
-                # (build_release internally processes all headlines in one call.)
-                break
+                # Only process each release once (first headline drives the
+                # build; build_release processes all headlines internally).
+                if built_this_release:
+                    break
 
     # -----------------------------------------------------------------------
-    # Step 6: Process retirements
+    # Step 6: Legacy-versioned-zip sweep (delete in-place, not retire)
+    # -----------------------------------------------------------------------
+    # Build the set of release slugs so the sweep can match precisely.
+    known_slugs = {r.name for r in releases}
+    deleted_legacy = _sweep_legacy_versioned_zips(dist_repo, known_slugs, dry_run)
+    result.deleted.extend(deleted_legacy)
+
+    # -----------------------------------------------------------------------
+    # Step 7: Process retirements (move deprecated zips to retired/)
     # -----------------------------------------------------------------------
     retired_from_deprecates = _process_retirements(releases, dist_repo, dry_run)
     result.retired.extend(retired_from_deprecates)
 
-    # Remove deprecations from known_filenames so stale sweep doesn't re-retire.
-    # (Files just moved to retired/ are no longer in the top-level subdirs.)
-
     # -----------------------------------------------------------------------
-    # Step 7: Stale-zip sweep
+    # Step 8: Stale-zip sweep (move other orphaned zips to retired/)
     # -----------------------------------------------------------------------
     retired_from_sweep = _sweep_stale_zips(dist_repo, known_filenames, dry_run)
     result.retired.extend(retired_from_sweep)
 
     # -----------------------------------------------------------------------
-    # Step 8: Regenerate README
+    # Step 9: Regenerate README
     # -----------------------------------------------------------------------
     result.readme_path = _update_dist_readme(dist_repo, factory_repo, releases, dry_run)
 
     # -----------------------------------------------------------------------
-    # Step 9: Commit + push
+    # Step 10: Commit + push
     # -----------------------------------------------------------------------
     if not dry_run:
         # Release the lockfile BEFORE staging so it is never included in the
@@ -643,17 +799,36 @@ def _publish_inner(
 
         n_built = len(result.built)
         n_retired = len(result.retired)
+        n_deleted = len(result.deleted)
         release_names_str = (
             ", ".join(sorted(set(built_names))) if built_names else "none"
         )
         commit_msg = (
-            f"release-publish: {n_built} built, {n_retired} retired "
-            f"({release_names_str})"
+            f"release-publish: {n_built} built, {n_retired} retired, "
+            f"{n_deleted} legacy deleted ({release_names_str})"
         )
-        sha = _git_commit(dist_repo, commit_msg)
-        result.commit_sha = sha
 
-        if sha and not no_push:
+        if force:
+            # force=True: commit even if git reports nothing to commit.
+            # This is useful for debugging / re-pushing identical content.
+            r = _git(dist_repo, "add", "-A", "--", ":!.publish.lock")
+            if r.returncode != 0:
+                raise PublishError(
+                    f"git add failed in {dist_repo}: {r.stderr.strip()}"
+                )
+            r = _git(dist_repo, "commit", "--allow-empty", "-m", commit_msg)
+            if r.returncode != 0:
+                raise PublishError(
+                    f"git commit (force) failed in {dist_repo}: "
+                    f"{r.stdout.strip()} {r.stderr.strip()}"
+                )
+            r2 = _git(dist_repo, "rev-parse", "HEAD")
+            result.commit_sha = r2.stdout.strip() if r2.returncode == 0 else None
+        else:
+            sha = _git_commit(dist_repo, commit_msg)
+            result.commit_sha = sha
+
+        if result.commit_sha and not no_push:
             _git_push(dist_repo)
             result.pushed = True
 

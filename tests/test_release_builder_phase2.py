@@ -6,14 +6,14 @@ Two smoke passes as specified in the Phase 2 requirements:
     Headline: dashboards/demand_driven_capacity_v2.yaml
     Expects:  dest_subdir == "dashboards"
               zip_path.exists()
-              zip filename == <release-name>-<release-version>.zip
+              zip filename == <release-name>.zip  (versionless consumer artifact)
               zip contains dashboard JSON, 4 view definitions, install scaffolding
 
   Pass B — bundle headline
     Headline: bundles/capacity-assessment.yaml
     Expects:  dest_subdir == "bundles"
               zip_path.exists()
-              zip filename follows release convention
+              zip filename follows release convention (versionless)
               zip contains 11 SMs + 2 views + 1 dashboard + 1 customgroup payloads
 
 Both passes use a temporary release manifest constructed at test time so they
@@ -115,8 +115,8 @@ class TestDashboardHeadline:
         )
 
     def test_zip_filename_convention(self, release_artifacts):
-        """Filename must be <release-name>-<release-version>.zip."""
-        expected_name = "demand-driven-capacity-v2-1.0.zip"
+        """Filename must be <release-name>.zip (versionless consumer artifact)."""
+        expected_name = "demand-driven-capacity-v2.zip"
         actual_name = release_artifacts[0].zip_path.name
         assert actual_name == expected_name, (
             f"Expected filename {expected_name!r}, got {actual_name!r}"
@@ -242,7 +242,8 @@ class TestBundleHeadline:
         )
 
     def test_zip_filename_convention(self, release_artifacts):
-        expected_name = "capacity-assessment-1.0.zip"
+        """Filename must be <release-name>.zip (versionless consumer artifact)."""
+        expected_name = "capacity-assessment.zip"
         actual_name = release_artifacts[0].zip_path.name
         assert actual_name == expected_name, (
             f"Expected filename {expected_name!r}, got {actual_name!r}"
@@ -344,7 +345,8 @@ class TestHelpers:
 
         dest_root = tmp_path / "dist-repo"
         path = expected_artifact_path(minimal_release, dest_root)
-        assert path.name == "demand-driven-capacity-v2-1.0.zip"
+        # Versionless: <slug>.zip, not <slug>-<version>.zip
+        assert path.name == "demand-driven-capacity-v2.zip"
         # Should be under <dest_root>/dashboards/
         assert path.parent.name == "dashboards"
         assert path.parent.parent == dest_root.resolve()
