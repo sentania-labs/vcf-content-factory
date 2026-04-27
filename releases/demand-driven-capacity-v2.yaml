@@ -1,0 +1,14 @@
+artifacts:
+- headline: true
+  source: dashboards/demand_driven_capacity_v2.yaml
+deprecates: []
+description: 'Demand-driven capacity planning v2. Combines percentage-first cluster
+  metrics, usable-vs-provisioned CPU comparison, contention heatmaps for visual scanning,
+  and detailed host outlier + vSAN contribution tables from v1. Narrow scope picker
+  (w=2) with wide cluster overview beside it. Select a cluster row to drill into VM
+  contention, host outliers, and per-host vSAN performance. Two interaction tiers:
+  broad visual scanning (heatmaps) at DC level, then drill-down detail (tables) at
+  cluster level.'
+name: demand-driven-capacity-v2
+release_notes: ''
+version: '1.0'
