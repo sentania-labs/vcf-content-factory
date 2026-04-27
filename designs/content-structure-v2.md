@@ -1,8 +1,11 @@
 # Content Structure & Tooling Cleanup v2
 
-**Status:** queued 2026-04-27
+**Status:** queued 2026-04-27 (items #1 and #3 still scoped; #2 superseded
+by v3; #4 subsumed into v3)
 **Owner:** orchestrator (planning) + tooling agent (implementation)
 **Builds on:** `designs/release-lifecycle-v1.md` (publish pipeline + ThirdPartyContent routing already shipped)
+**Related:** `designs/content-structure-v3.md` — bigger restructure that
+supersedes the third_party/ promotion in this doc and the resolver fix.
 
 ## Context
 
