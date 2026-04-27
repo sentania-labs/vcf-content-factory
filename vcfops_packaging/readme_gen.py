@@ -376,7 +376,7 @@ _SUBDIR_HEADING: dict[str, str] = {
     "management-packs": "Management Packs",
 }
 
-# Ordered iteration order for section rendering.
+# Ordered iteration order for factory-native section rendering.
 _SUBDIR_ORDER = [
     "bundles",
     "dashboards",
@@ -387,9 +387,21 @@ _SUBDIR_ORDER = [
     "management-packs",
 ]
 
+# Third-party subdir heading labels (sub-path -> heading text).
+_THIRD_PARTY_SUBDIR_HEADING: dict[str, str] = {
+    "ThirdPartyContent/dashboards": "Dashboards",
+    "ThirdPartyContent/bundles":    "Bundles",
+}
+
+# Ordered iteration order for third-party sub-sections.
+_THIRD_PARTY_SUBDIR_ORDER = [
+    "ThirdPartyContent/dashboards",
+    "ThirdPartyContent/bundles",
+]
+
 
 def _render_release_table(rows: list[dict]) -> str:
-    """Render the per-subdir release table.
+    """Render the per-subdir release table for factory-native content.
 
     Each row dict has keys: name, released, description, download, install.
     (Version is internal-only; it is not shown in the consumer-facing catalog.)
@@ -411,10 +423,53 @@ def _render_release_table(rows: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _render_third_party_table(rows: list[dict]) -> str:
+    """Render the per-subdir release table for third-party content.
+
+    Third-party rows carry additional License and Authors columns read from
+    the bundle YAML's ``license:`` and ``author:`` fields.
+
+    Shape: Name | Version | Released | Description | License | Authors | Download | Install
+
+    Returns empty string if rows is empty.
+    """
+    if not rows:
+        return ""
+    lines = [
+        "| Name | Version | Released | Description | License | Authors | Download | Install |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for row in rows:
+        name = str(row.get("name", "")).replace("|", "\\|")
+        version = str(row.get("version", "")).replace("|", "\\|")
+        released = str(row.get("released", "")).replace("|", "\\|")
+        description = str(row.get("description", "")).replace("|", "\\|")
+        license_val = str(row.get("license", "")).replace("|", "\\|")
+        authors = str(row.get("authors", "")).replace("|", "\\|")
+        download = str(row.get("download", "")).replace("|", "\\|")
+        install = str(row.get("install", "")).replace("|", "\\|")
+        lines.append(
+            f"| {name} | {version} | {released} | {description} "
+            f"| {license_val} | {authors} | {download} | {install} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _load_bundle_yaml_for_release(artifact) -> dict:
+    """Load the raw bundle YAML dict for a release artifact, or return {}."""
+    try:
+        import yaml as _yaml
+        data = _yaml.safe_load(artifact.source_path.read_text()) or {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
 def _render_release_catalog(dist_repo: Path, releases: list) -> str:
     """Render the full release-catalog AUTO section body.
 
-    Produces per-subdir H2 sections followed by a Retired section.
+    Produces factory-native per-subdir H2 sections, a Third-Party Content
+    H2 section with sub-sections, and a Retired section.
 
     Args:
         dist_repo: Root of the distribution repo (for mtime lookups and retired/ scan).
@@ -425,15 +480,16 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
     """
     from .release_builder import _artifact_dest_subdir, _zip_filename
 
-    # Group releases by subdir.
+    # Group releases by subdir — factory-native and third-party separately.
     by_subdir: dict[str, list] = {s: [] for s in _SUBDIR_ORDER}
+    by_third_party: dict[str, list] = {s: [] for s in _THIRD_PARTY_SUBDIR_ORDER}
+
     for r in releases:
         for a in r.artifacts:
             if not a.headline:
                 continue
             subdir = _artifact_dest_subdir(a)
-            if subdir not in by_subdir:
-                by_subdir[subdir] = []
+
             # Versionless consumer artifact filename.
             filename = _zip_filename(r.name)
             zip_path = dist_repo / subdir / filename
@@ -465,21 +521,37 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
             # Install column: bare command in a code fence.
             install_cell = "`python3 install.py`"
 
-            by_subdir[subdir].append({
-                "name": r.name,
-                # version is intentionally omitted — internal-only field;
-                # the catalog table does not show version to consumers.
-                "released": released_date,
-                "description": first_sentence,
-                "download": download_cell,
-                "install": install_cell,
-            })
+            if subdir in by_third_party:
+                # Third-party row — load license + author from bundle YAML.
+                bundle_data = _load_bundle_yaml_for_release(a)
+                by_third_party[subdir].append({
+                    "name": r.name,
+                    "version": r.version,
+                    "released": released_date,
+                    "description": first_sentence,
+                    "license": bundle_data.get("license", "") or "",
+                    "authors": bundle_data.get("author", "") or "",
+                    "download": download_cell,
+                    "install": install_cell,
+                })
+            else:
+                if subdir not in by_subdir:
+                    by_subdir[subdir] = []
+                by_subdir[subdir].append({
+                    "name": r.name,
+                    # version is intentionally omitted — internal-only field;
+                    # the catalog table does not show version to consumers.
+                    "released": released_date,
+                    "description": first_sentence,
+                    "download": download_cell,
+                    "install": install_cell,
+                })
             break  # one entry per release (first headline wins for catalog row)
 
     # Build the retired section.
     retired_rows = _collect_retired_rows(dist_repo, releases)
 
-    # Render.
+    # Render factory-native sections.
     parts: list[str] = []
     for subdir in _SUBDIR_ORDER:
         rows = by_subdir.get(subdir, [])
@@ -490,6 +562,24 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
             parts.append(table)
         else:
             parts.append("_No releases yet._\n")
+
+    # Render third-party section (only if any third-party releases exist).
+    has_third_party = any(rows for rows in by_third_party.values())
+    if has_third_party:
+        parts.append("\n## Third-Party Content\n")
+        parts.append(
+            "_Content authored by the community and packaged here for convenience. "
+            "License and authorship information is shown per item._\n"
+        )
+        for subdir in _THIRD_PARTY_SUBDIR_ORDER:
+            rows = by_third_party.get(subdir, [])
+            if not rows:
+                continue
+            sub_heading = _THIRD_PARTY_SUBDIR_HEADING.get(subdir, subdir.title())
+            parts.append(f"\n### {sub_heading}\n")
+            table = _render_third_party_table(rows)
+            if table:
+                parts.append(table)
 
     # Retired section.
     parts.append("\n## Retired\n")
@@ -550,7 +640,8 @@ def _collect_retired_rows(dist_repo: Path, releases: list) -> list[dict]:
         return []
 
     rows = []
-    for subdir in _SUBDIR_ORDER:
+    all_subdirs = list(_SUBDIR_ORDER) + list(_THIRD_PARTY_SUBDIR_ORDER)
+    for subdir in all_subdirs:
         sub_retired = retired_dir / subdir
         if not sub_retired.exists():
             continue

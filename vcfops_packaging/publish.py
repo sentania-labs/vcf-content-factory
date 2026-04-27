@@ -353,7 +353,13 @@ def _enumerate_releases(factory_repo: Path):
 # ---------------------------------------------------------------------------
 
 def _all_known_subdirs() -> List[str]:
-    """Return the complete list of top-level subdirs we manage in the dist repo."""
+    """Return the complete list of factory-native top-level subdirs we manage.
+
+    These are the subdirs scanned by the legacy-versioned-zip sweep
+    (which is factory-era naming cleanup only) and the stale-zip sweep.
+    Third-party content lives under ThirdPartyContent/<sub>/ and is
+    handled separately by _all_third_party_subdirs().
+    """
     return [
         "bundles",
         "dashboards",
@@ -365,11 +371,24 @@ def _all_known_subdirs() -> List[str]:
     ]
 
 
+def _all_third_party_subdirs() -> List[str]:
+    """Return the complete list of ThirdPartyContent sub-paths we manage.
+
+    These are scanned by the stale-zip sweep but NOT by the legacy-versioned-
+    zip sweep (the versioned-name era predates third-party routing).
+    """
+    return [
+        "ThirdPartyContent/dashboards",
+        "ThirdPartyContent/bundles",
+    ]
+
+
 def _all_headline_paths(releases) -> set[str]:
     """Return the set of expected zip filenames across all release headlines.
 
     Each element is in the form  "<subdir>/<slug>.zip" (versionless),
-    e.g. "dashboards/demand-driven-capacity-v2.zip".
+    e.g. "dashboards/demand-driven-capacity-v2.zip" or
+    "ThirdPartyContent/dashboards/idps-planner.zip".
     """
     from .release_builder import _artifact_dest_subdir, _zip_filename
     known = set()
@@ -482,16 +501,22 @@ def _sweep_stale_zips(
     versioned zips for a current slug (those are handled by
     ``_sweep_legacy_versioned_zips``).
 
+    Scans both factory-native top-level subdirs and ThirdPartyContent/<sub>/
+    subdirs.  The legacy-versioned-zip sweep does NOT scan ThirdPartyContent/
+    (that naming era predates third-party routing).
+
     Args:
         dist_repo:       Root of the distribution repo.
-        known_filenames: Set of "<subdir>/<zipname>" for all current releases.
+        known_filenames: Set of "<subdir>/<zipname>" for all current releases
+                         (may include "ThirdPartyContent/dashboards/foo.zip").
         dry_run:         If True, compute but don't move.
 
     Returns:
         List of paths that were (or would be) moved to retired/.
     """
     retired: List[Path] = []
-    for subdir in _all_known_subdirs():
+    all_subdirs = list(_all_known_subdirs()) + list(_all_third_party_subdirs())
+    for subdir in all_subdirs:
         subdir_path = dist_repo / subdir
         if not subdir_path.exists():
             continue

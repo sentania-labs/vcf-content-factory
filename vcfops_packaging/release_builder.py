@@ -222,7 +222,12 @@ def build_release(
         # Using source_path.parent.name is more robust than parsing the raw
         # source_str, since tests may write absolute paths into the manifest.
         source_prefix = source_path.parent.name
-        dest_subdir = headline_to_dir(source_prefix + "/dummy.yaml")
+        # For bundles/third_party/foo.yaml, parent.name is "third_party" — normalise.
+        if source_prefix not in _SOURCE_PREFIX_TO_DISCRETE_TYPE and source_prefix != "bundles":
+            if source_path.parent.parent.name == "bundles":
+                source_prefix = "bundles"
+        bundle_data = _load_bundle_data_if_bundle(source_path)
+        dest_subdir = headline_to_dir(source_prefix + "/dummy.yaml", bundle_data=bundle_data)
 
         final_filename = _zip_filename(release.name, release.version)
         final_path = output_dir / final_filename
@@ -258,15 +263,49 @@ def build_release(
 # Stale-check / idempotence helpers for Phase 3
 # ---------------------------------------------------------------------------
 
+def _load_bundle_data_if_bundle(source_path: Path) -> "dict | None":
+    """If source_path is a bundle YAML, load and return its raw data dict.
+
+    Returns None if loading fails or the file is not a bundle (i.e. its
+    containing directory is not named "bundles" or "third_party").
+    """
+    # We only need to load data for bundle headlines to check factory_native.
+    # Bundle YAMLs live under a directory named "bundles" or a sub-directory
+    # of a directory named "bundles" (e.g. bundles/third_party/foo.yaml).
+    # Walk up to find any "bundles" ancestor within 2 levels.
+    parent_name = source_path.parent.name
+    grandparent_name = source_path.parent.parent.name
+    if parent_name != "bundles" and grandparent_name != "bundles":
+        return None
+    try:
+        data = yaml.safe_load(source_path.read_text()) or {}
+        return data if isinstance(data, dict) else None
+    except Exception:
+        return None
+
+
 def _artifact_dest_subdir(artifact: "_ManifestArtifact") -> str:
     """Return the distribution subdirectory for a release manifest artifact.
 
     Derives the prefix (dashboards, bundles, views, …) from the resolved
     absolute path rather than the raw source string, so absolute-path
     manifests (common in tests) work correctly alongside repo-relative ones.
+
+    For bundle headlines, loads the bundle YAML to detect ``factory_native:
+    false`` and routes third-party bundles under ``ThirdPartyContent/``.
     """
     source_prefix = artifact.source_path.parent.name
-    return headline_to_dir(source_prefix + "/dummy.yaml")
+    # For sub-directories of bundles/ (e.g. bundles/third_party/), the
+    # parent.name is "third_party", not "bundles".  Use the grandparent to
+    # normalise so headline_to_dir receives a valid prefix.
+    if source_prefix not in _SOURCE_PREFIX_TO_DISCRETE_TYPE and source_prefix != "bundles":
+        # Could be bundles/third_party/foo.yaml — check grandparent.
+        grandparent = artifact.source_path.parent.parent.name
+        if grandparent == "bundles":
+            source_prefix = "bundles"
+
+    bundle_data = _load_bundle_data_if_bundle(artifact.source_path)
+    return headline_to_dir(source_prefix + "/dummy.yaml", bundle_data=bundle_data)
 
 
 def expected_artifact_path(release: ReleaseDef, dest_root: Path) -> Path:
