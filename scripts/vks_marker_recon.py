@@ -14,8 +14,8 @@ Usage:
     export VCFOPS_HOST=aria-ops-8.example.com
     export VCFOPS_USER=admin
     export VCFOPS_PASSWORD='...'
-    # optional, defaults to "Local Users":
-    export VCFOPS_AUTH_SOURCE='Local Users'
+    # optional, defaults to "Local":
+    export VCFOPS_AUTH_SOURCE='Local'
     # optional, set to "false" to skip TLS verification:
     export VCFOPS_VERIFY_SSL=true
 
@@ -91,7 +91,7 @@ def acquire_token(sess: requests.Session, host: str) -> str:
     body = {
         "username":   env("VCFOPS_USER", required=True),
         "password":   env("VCFOPS_PASSWORD", required=True),
-        "authSource": env("VCFOPS_AUTH_SOURCE", "Local Users"),
+        "authSource": env("VCFOPS_AUTH_SOURCE", "Local"),
     }
     r = sess.post(
         f"https://{host}/suite-api/api/auth/token/acquire",
