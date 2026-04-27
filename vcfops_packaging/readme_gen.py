@@ -391,22 +391,23 @@ _SUBDIR_ORDER = [
 def _render_release_table(rows: list[dict]) -> str:
     """Render the per-subdir release table.
 
-    Each row dict has keys: name, version, released, description, install.
+    Each row dict has keys: name, version, released, description, download, install.
     Returns empty string if rows is empty.
     """
     if not rows:
         return ""
     lines = [
-        "| Name | Version | Released | Description | Install |",
-        "|---|---|---|---|---|",
+        "| Name | Version | Released | Description | Download | Install |",
+        "|---|---|---|---|---|---|",
     ]
     for row in rows:
         name = str(row.get("name", "")).replace("|", "\\|")
         version = str(row.get("version", "")).replace("|", "\\|")
         released = str(row.get("released", "")).replace("|", "\\|")
         description = str(row.get("description", "")).replace("|", "\\|")
+        download = str(row.get("download", "")).replace("|", "\\|")
         install = str(row.get("install", "")).replace("|", "\\|")
-        lines.append(f"| {name} | {version} | {released} | {description} | {install} |")
+        lines.append(f"| {name} | {version} | {released} | {description} | {download} | {install} |")
     return "\n".join(lines) + "\n"
 
 
@@ -454,16 +455,22 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
             if first_sentence and not first_sentence.endswith("."):
                 first_sentence += "."
 
-            # Install command with a link to the zip.
-            zip_url = filename  # relative path within subdir
-            install_cmd = f"[`python3 install.py`]({zip_url})"
+            # Download link: subdir-prefixed path so it resolves from the
+            # dist-repo root (README lives at the root, zip lives at
+            # <subdir>/<filename>).
+            zip_url = f"{subdir}/{filename}"
+            download_cell = f"[Download]({zip_url})"
+
+            # Install column: bare command in a code fence.
+            install_cell = "`python3 install.py`"
 
             by_subdir[subdir].append({
                 "name": r.name,
                 "version": r.version,
                 "released": released_date,
                 "description": first_sentence,
-                "install": install_cmd,
+                "download": download_cell,
+                "install": install_cell,
             })
             break  # one entry per release (first headline wins for catalog row)
 
@@ -486,15 +493,18 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
     parts.append("\n## Retired\n")
     if retired_rows:
         lines = [
-            "| Name | Subdir | Retired | Reason |",
-            "|---|---|---|---|",
+            "| Name | Subdir | Retired | Reason | Download |",
+            "|---|---|---|---|---|",
         ]
         for row in retired_rows:
             name = str(row.get("name", "")).replace("|", "\\|")
             subdir_val = str(row.get("subdir", "")).replace("|", "\\|")
             retired_date = str(row.get("retired_date", "—")).replace("|", "\\|")
             reason = str(row.get("reason", "")).replace("|", "\\|")
-            lines.append(f"| {name} | {subdir_val} | {retired_date} | {reason} |")
+            # Download link uses retired/<subdir>/<filename> path.
+            zip_name = str(row.get("name", ""))
+            download_cell = f"[Download](retired/{subdir_val}/{zip_name})"
+            lines.append(f"| {name} | {subdir_val} | {retired_date} | {reason} | {download_cell} |")
         parts.append("\n".join(lines) + "\n")
     else:
         parts.append("_No retired artifacts._\n")

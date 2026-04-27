@@ -581,3 +581,120 @@ class TestReadmeNoMarkers:
         )
         # README path is still returned.
         assert result.readme_path is not None
+
+
+# ---------------------------------------------------------------------------
+# README cell-format assertions (Bug 1 + Bug 2 regression tests)
+# ---------------------------------------------------------------------------
+
+class TestReadmeCellFormat:
+    """Assert correct Download / Install column shapes in the rendered README.
+
+    Bug 1 — install link was missing the subdir prefix (bare filename).
+    Bug 2 — link text implied running the installer; should be two columns.
+    """
+
+    def _run_publish_and_read_readme(self, tmp_path, monkeypatch) -> str:
+        """Helper: publish a dashboard release and return the README text."""
+        from vcfops_packaging.publish import publish
+
+        dist = _init_dist_repo(tmp_path)
+        releases_dir = tmp_path / "cell_fmt_releases"
+        releases_dir.mkdir()
+        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        _write_release_manifest(
+            releases_dir,
+            name="demand-driven-capacity-v2",
+            version="1.0",
+            source_abs=source_abs,
+            description="Cell format regression test.",
+        )
+        _patch_enumerate(monkeypatch, releases_dir)
+
+        publish(
+            factory_repo=REPO_ROOT,
+            dist_repo=dist,
+            dry_run=False,
+            no_push=True,
+        )
+        return (dist / "README.md").read_text(encoding="utf-8"), dist
+
+    def test_download_cell_includes_subdir(self, tmp_path, monkeypatch):
+        """Download link target must be '<subdir>/<name>-<version>.zip'."""
+        readme, _dist = self._run_publish_and_read_readme(tmp_path, monkeypatch)
+        # The correct path-prefixed link must appear.
+        assert "[Download](dashboards/demand-driven-capacity-v2-1.0.zip)" in readme, (
+            f"Expected subdir-prefixed download link not found.\n"
+            f"README excerpt:\n{readme[readme.find('demand-driven'):][:400]}"
+        )
+
+    def test_download_cell_does_not_use_bare_filename(self, tmp_path, monkeypatch):
+        """The old bare-filename pattern (Bug 1) must not appear."""
+        readme, _dist = self._run_publish_and_read_readme(tmp_path, monkeypatch)
+        # Bare filename link (no subdir prefix before the zip name) should be absent.
+        assert "](demand-driven-capacity-v2-1.0.zip)" not in readme, (
+            "Bare-filename download link (Bug 1) is still present in README."
+        )
+
+    def test_install_cell_is_code_fence(self, tmp_path, monkeypatch):
+        """Install cell must contain the bare command in a code fence, not a link."""
+        readme, _dist = self._run_publish_and_read_readme(tmp_path, monkeypatch)
+        assert "`python3 install.py`" in readme, (
+            f"Expected '`python3 install.py`' not found in README.\n"
+            f"README excerpt:\n{readme[readme.find('demand-driven'):][:400]}"
+        )
+        # The old combined link+command shape (Bug 2) must be gone.
+        assert "[`python3 install.py`](" not in readme, (
+            "Old combined link-text install cell (Bug 2) is still present in README."
+        )
+
+    def test_readme_has_download_and_install_columns(self, tmp_path, monkeypatch):
+        """Table header must contain both 'Download' and 'Install' columns."""
+        readme, _dist = self._run_publish_and_read_readme(tmp_path, monkeypatch)
+        assert "| Download |" in readme, (
+            "Separate 'Download' column header not found in README."
+        )
+        assert "| Install |" in readme, (
+            "Separate 'Install' column header not found in README."
+        )
+
+
+class TestRetiredSectionDownloadLink:
+    """Retired section download links must use 'retired/<subdir>/' prefix (Bug 1 parity)."""
+
+    def test_retired_download_link_uses_retired_prefix(self, tmp_path, monkeypatch):
+        from vcfops_packaging.readme_gen import _render_release_catalog
+        from pathlib import Path
+        import datetime
+
+        # Build a minimal dist_repo with a retired zip.
+        dist = tmp_path / "dist"
+        (dist / "retired" / "dashboards").mkdir(parents=True)
+        zip_name = "old-dashboard-0.9.zip"
+        zip_path = dist / "retired" / "dashboards" / zip_name
+        zip_path.write_bytes(b"retired artifact")
+
+        # Render with no active releases so only the Retired section is populated.
+        catalog = _render_release_catalog(dist_repo=dist, releases=[])
+
+        expected_link = f"[Download](retired/dashboards/{zip_name})"
+        assert expected_link in catalog, (
+            f"Expected retired download link '{expected_link}' not found.\n"
+            f"Catalog output:\n{catalog}"
+        )
+
+    def test_retired_download_link_does_not_use_bare_filename(self, tmp_path, monkeypatch):
+        from vcfops_packaging.readme_gen import _render_release_catalog
+
+        dist = tmp_path / "dist2"
+        (dist / "retired" / "dashboards").mkdir(parents=True)
+        zip_name = "old-dashboard-0.9.zip"
+        (dist / "retired" / "dashboards" / zip_name).write_bytes(b"retired artifact")
+
+        catalog = _render_release_catalog(dist_repo=dist, releases=[])
+
+        # Bare filename link (no retired/subdir prefix) must not appear.
+        assert f"]({zip_name})" not in catalog, (
+            f"Bare-filename retired download link found — subdir prefix is missing.\n"
+            f"Catalog output:\n{catalog}"
+        )
