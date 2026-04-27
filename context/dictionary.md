@@ -17,21 +17,36 @@ Grouped by cluster so related terms stay contrastive.
 ## Artifact forms
 
 ### Bundle
-**Internal construct.** A definition of content expressed in this
-repo's YAML: the super metrics, views, dashboards, custom groups,
-symptoms, alerts, reports, recommendations, and/or management
-packs that belong together. Declared by a manifest under
-`bundles/`. Bundles are the unit of authorship.
+**Internal construct.** A curated multi-content set — super
+metrics, views, dashboards, custom groups, symptoms, alerts,
+reports, recommendations, and/or management packs that belong
+together. Declared by a manifest under `bundles/`. The unit of
+authoring-time grouping. Reserve "Bundle" for genuinely
+multi-content sets; a single dashboard plus its dependencies is
+just a dashboard (released discretely).
 
-*Distinct from:* Package.
+*Distinct from:* Package (the output zip), Release (the shipping
+event), Component (the individual content YAMLs the bundle
+references).
+
+### Component
+A single content YAML — one super metric, one view, one
+dashboard, one custom group, one symptom, one alert, one report,
+one recommendation, or one management pack. The leaves of the
+factory's content graph; what an author agent writes one of at a
+time. A Bundle is a set of Components; a Release ships
+Components and/or Bundles.
 
 ### Package
-**External deliverable.** A zip file produced from a Bundle,
-containing native Ops artifacts (content-zip payloads, `.pak`
-files, etc.) plus install/uninstall scripts. What a user
-downloads and runs. Built by `vcfops_packaging`.
+**External deliverable.** A zip file produced from a Release
+headline (a Bundle or a Component), containing native Ops
+artifacts (content-zip payloads, `.pak` files, etc.) plus
+install/uninstall scripts. What a user downloads and runs. Built
+by `vcfops_packaging`. Lands in the Distribution repo at a path
+determined by the headline's type and `factory_native` flag.
 
-*Distinct from:* Bundle.
+*Distinct from:* Bundle (source-side grouping), Release (the
+shipping event that produces the Package).
 
 ### Source
 The YAML under `supermetrics/`, `views/`, `dashboards/`,
@@ -137,6 +152,92 @@ land, is it enabled, did dependencies resolve?" Same agent
 
 ---
 
+## Release lifecycle
+
+The *Release lifecycle* is how content gets from the factory
+repo to the public Distribution repo. Concepts in this section
+are recent (introduced 2026-04-27) and supersede the earlier
+`released: bool` flag-only model. Full design:
+`designs/release-lifecycle-v1.md`.
+
+### Release
+**A shipping event.** A YAML manifest under `releases/` that
+declares 1+ headline artifacts and the metadata that should
+accompany them on ship: name, version, description, release
+notes, optional `deprecates:` list. One file per release line;
+versions evolve inside the file across `/release` calls.
+
+A Release is what `/publish` consumes. Without a Release
+manifest, content does not ship to the Distribution repo.
+
+*Distinct from:* Bundle (curated content set), Package (the
+output zip), Headline (a single artifact within a Release).
+
+### Headline
+The user-facing artifact in a Release manifest — what a consumer
+is "shopping for" when they browse the Distribution repo. Source
+path implies type (`dashboards/foo.yaml` → dashboard;
+`bundles/foo.yaml` → bundle), and type determines the
+Distribution-repo subdirectory. A Release can have multiple
+headlines (a multi-bundle release ships N headline zips).
+Transitive dependencies (views, SMs, custom groups) travel with
+the headline implicitly via the dependency walker; they aren't
+listed separately in the manifest.
+
+### Publish
+The orchestrated operation that takes every Release manifest in
+`releases/`, builds its headline zips, copies them to the
+correct subdirectory in the Distribution repo, regenerates the
+catalog README between AUTO markers, commits, and pushes. Driven
+by `python3 -m vcfops_packaging publish` (or the `/publish`
+slash command). Idempotent — content-hash compare skips zips
+that haven't changed.
+
+*Distinct from:* Sync (push to a live VCF Ops instance), Install
+(end user runs the Package).
+
+### `/release`
+The slash command (and underlying CLI) that materializes a new
+Release manifest for a content item. Auto-bumps the minor
+version on subsequent calls for the same slug. Flips
+`released: true` on the source YAML. Commits both files. Local
+operation only — does not push or trigger a Publish.
+
+### Distribution repo
+The public git repo at
+`sentania-labs/vcf-content-factory-bundles` (cloned locally as
+`vcf-content-factory-bundles/`). Where Publish lands every
+shipping artifact. Layout mirrors the factory's content
+categories: `dashboards/`, `views/`, `supermetrics/`,
+`customgroups/`, `reports/`, `bundles/`, `management-packs/`,
+plus a `ThirdPartyContent/` subtree for third-party content and
+`retired/` for deprecated artifacts.
+
+### Factory-native vs Third-party content
+A Bundle (or Component) carries `factory_native: true` (default)
+or `factory_native: false`. Factory-native content was authored
+in this repo by the factory's own agents. Third-party content
+was extracted from a live instance via `vcfops_extractor` and is
+maintained here as a redistribution wrapper — original authors
+hold the rights; the factory's value-add is the install /
+uninstall machinery and dependency walking.
+
+Publish routes them to different subtrees in the Distribution
+repo: factory-native bundles to `bundles/`, third-party bundles
+to `ThirdPartyContent/<sub>/`. The `Author` and `License` fields
+on third-party manifests are preserved through to the rendered
+catalog README.
+
+### Versionless naming
+Consumer-facing artifacts in the Distribution repo are named
+`<slug>.zip` — no version suffix. Internal version tracking
+inside `releases/*.yaml` continues (used for change detection
+and audit), but the Distribution repo always shows exactly one
+artifact per release so consumers can't pick a stale or broken
+older copy. Deciding factor 2026-04-27.
+
+---
+
 ## Content categories
 
 ### Content
@@ -200,3 +301,4 @@ Bundle (the YAML collection the manifest references).
 - UUID and cross-reference rules: `context/uuids_and_cross_references.md`
 - API surface map: `context/content_api_surface.md`
 - Install + enable details: `context/install_and_enable.md`
+- Release lifecycle design: `designs/release-lifecycle-v1.md`
