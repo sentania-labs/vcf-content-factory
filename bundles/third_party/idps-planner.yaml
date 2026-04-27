@@ -1,14 +1,23 @@
-name: idps-planner
-display_name: IDPS Planner
-description: >
-  vDefend IDPS resource-monitoring dashboard for VCF Operations. Tracks
-  Packets Per Second and Throughput against the Classic Mode bypass
-  thresholds (140k PPS / 9 Gbps), with peak-based metrics (5-minute peak,
-  period peak, 95th percentile) for safety-first capacity planning. Full
-  description in the bundle README.
-factory_native: false
 author: Ryan Pletka, Brock Peterson, Joe Tietz, Geoff Shukin, Scott Bowe
+builtin_metric_enables:
+- adapter_kind: VMWARE
+  metric_key: net|packetsPerSec
+  reason: required by dashboard 'IDPS Planner' widget '85c05c6b-e60d-4b2c-a6c0-af2fe2ec472e'
+    (Scoreboard)
+  resource_kind: VirtualMachine
+dashboards:
+- idps-planner/dashboards/IDPS Planner.yaml
+description: 'vDefend IDPS resource-monitoring dashboard for VCF Operations. Tracks
+  Packets Per Second and Throughput against the Classic Mode bypass thresholds (140k
+  PPS / 9 Gbps), with peak-based metrics (5-minute peak, period peak, 95th percentile)
+  for safety-first capacity planning. Full description in the bundle README.
+
+  '
+display_name: IDPS Planner
+factory_native: false
 license: MIT
+name: idps-planner
+released: true
 source:
   captured_at: '2026-04-17'
 supermetrics:
@@ -23,11 +32,3 @@ views:
 - idps-planner/views/IDPS Planner - vCenter Selection.yaml
 - idps-planner/views/IDPS Planner - Datacenter Selection.yaml
 - idps-planner/views/IDPS Planner - Cluster Selection.yaml
-dashboards:
-- idps-planner/dashboards/IDPS Planner.yaml
-builtin_metric_enables:
-- adapter_kind: VMWARE
-  resource_kind: VirtualMachine
-  metric_key: net|packetsPerSec
-  reason: required by dashboard 'IDPS Planner' widget '85c05c6b-e60d-4b2c-a6c0-af2fe2ec472e'
-    (Scoreboard)
