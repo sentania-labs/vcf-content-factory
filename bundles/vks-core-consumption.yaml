@@ -1,18 +1,19 @@
 name: vks-core-consumption
 description: >
   VKS Core Consumption package for VCF Operations. Tracks vCPU consumption
-  across all VKS VM classifications — worker nodes, control plane, vCLS,
-  Supervisor, node images, pod VMs, VM Service, and regular VMs — plus a
-  global vCPU-to-pCore ratio super metric. Includes a per-vCenter list view
-  and a consumption dashboard for capacity planning and chargeback reporting.
+  across VKS VM classifications — VKS guest nodes (control plane + workers
+  combined), vCLS, Supervisor, vSphere Pods, VM Service, and regular VMs —
+  plus a global vCPU-to-pCore ratio super metric. Includes a per-vCenter
+  list view and a consumption dashboard for capacity planning and
+  chargeback reporting. Markers chosen to work on both VCF Operations 9.x
+  and Aria Operations 8.18 (productName contains "Kubernetes" matches both
+  VKS and TKGS node images; Supervisor CP identified by VM-name pattern).
 supermetrics:
   - supermetrics/vks_vcls_vcpu.yaml
   - supermetrics/vks_supervisor_vcpu.yaml
   - supermetrics/vks_global_vcpu_pcore_ratio.yaml
   - supermetrics/vks_regular_vm_vcpu.yaml
-  - supermetrics/vks_worker_vcpu.yaml
   - supermetrics/vks_nodeimage_vcpu.yaml
-  - supermetrics/vks_cp_vcpu.yaml
   - supermetrics/vks_vmservice_vcpu.yaml
   - supermetrics/vks_cores.yaml
   - supermetrics/vks_pod_vcpu.yaml

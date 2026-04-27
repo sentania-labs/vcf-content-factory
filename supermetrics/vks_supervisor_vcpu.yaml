@@ -9,16 +9,20 @@ resource_kinds:
     adapter_kind_key: VMWARE
 description: >
   Sum of provisioned vCPUs across all Supervisor control plane VMs within the
-  assigned object's scope. Filter uses summary|config|productName equals
-  "vSphere Supervisor" rather than summary|config|type equals
-  SupervisorControlPlane, because on this lab vCLS VMs also carry
-  type=SupervisorControlPlane but have no productName value. Only genuine
-  Supervisor control plane VMs carry productName="vSphere Supervisor" —
-  verified live. This avoids double-counting vCLS vCPU here.
+  assigned object's scope. Filter uses config|name contains
+  "SupervisorControlPlaneVM" — the VM naming convention is provisioner-
+  controlled and stable across VCF versions. This replaces the earlier
+  productName-equals filter, which diverges between versions: v9 sets
+  productName="vSphere Supervisor" but v8 (VCF 5.2 / Aria Ops 8.18) sets
+  productName="Photon OS" (ambiguous). vCLS VMs also carry
+  type=SupervisorControlPlane but begin with "vCLS-", not
+  "SupervisorControlPlaneVM", so the name filter excludes them cleanly.
+  Single-condition string where clauses are the supported pattern;
+  compound && with string operators silently fail in the VCF Ops engine.
 
   Assigned to ClusterComputeResource, Datacenter, and VMwareAdapter Instance
   so a single formula yields per-cluster, per-DC, and per-vCenter rollups.
 formula: |
   sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
         metric=config|hardware|num_Cpu, depth=10,
-        where="summary|config|productName equals vSphere Supervisor"})
+        where="config|name contains SupervisorControlPlaneVM"})
