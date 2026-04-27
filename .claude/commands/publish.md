@@ -1,5 +1,5 @@
 ---
-description: Publish every bundle, MP, and discrete content item marked `released: true` to the vcf-content-factory-bundles distribution repo. Validates, builds, syncs artifacts, regenerates the README between AUTO markers, commits, and pushes.
+description: Build every release manifest under `releases/` into a zip, route artifacts to per-type subdirs in `vcf-content-factory-bundles/`, regenerate the README between AUTO markers, commit, and push. See `designs/release-lifecycle-v1.md`.
 ---
 
 You are the VCF Content Factory orchestrator. The user invoked `/publish` with the following args:
@@ -10,195 +10,116 @@ $ARGUMENTS
 
 ## Your job
 
-Ship every piece of content marked `released: true` in the factory repo to
-`/home/scott/pka/workspaces/vcf-content-factory-bundles/`, regenerate the
-README, commit, and push. The full design is in
-`designs/publish-command-v1.md` — consult it if anything here is ambiguous.
+Wrap `python3 -m vcfops_packaging publish` and report the result. The CLI
+runs the full publish pipeline (Phase 3 orchestrator from
+`designs/release-lifecycle-v1.md`): validate → enumerate releases →
+build → route → retire stale zips → regenerate README → commit → push.
 
-## Prerequisites
+This slash command is thin glue. Do not re-implement the orchestration in
+markdown.
 
-- Working directory: `/home/scott/pka/workspaces/vcf-content-factory/`
-- Distribution repo already cloned at
-  `/home/scott/pka/workspaces/vcf-content-factory-bundles/` on branch `main`
-  with a clean working tree and up-to-date with `origin/main`. If dirty
-  or behind, stop and tell the user — do not auto-stash or force push.
-- `$ARGUMENTS` optionally contains `--force` to override the
-  version-guard (re-ship a version already present in the bundles repo).
-  Parse it out up front.
+## Args grammar
+
+```
+/publish [--dry-run] [--force] [--no-push] [--dist-repo <path>]
+```
+
+- `--dry-run` (default false): build into a temp dir but do not copy
+  anything to the dist repo, do not commit, do not push. Use for previewing
+  what *would* happen.
+- `--force` (default false): when an existing zip in the dist repo has the
+  same name but a different version, overwrite it. Without `--force` the
+  CLI errors on version conflicts.
+- `--no-push` (default false): commit the dist repo locally but skip the
+  push to `origin/main`. Use when you want to inspect the commit before
+  publishing externally.
+- `--dist-repo <path>` (default `../vcf-content-factory-bundles/`): override
+  the dist repo path. Useful for testing.
 
 ## Flow
 
-### 1. Validate everything
+### 1. Pre-flight reminders to the user
 
-Run the full validation sweep. Abort if anything fails:
+Before running, briefly note:
 
-```
-python3 -m vcfops_supermetrics validate && \
-python3 -m vcfops_dashboards validate && \
-python3 -m vcfops_customgroups validate && \
-python3 -m vcfops_symptoms validate && \
-python3 -m vcfops_alerts validate && \
-python3 -m vcfops_reports validate && \
-python3 -m vcfops_managementpacks validate
-```
+- **Factory repo working tree must be clean.** The CLI will refuse if it
+  isn't (validates by running the eight per-package validators). User
+  should commit any in-flight work first.
+- **Dist repo working tree must be clean and on `main`.** The CLI checks.
+- **Dist repo's README needs `<!-- AUTO:START release-catalog -->` markers
+  somewhere.** Without them the CLI WARNs and skips README regen rather
+  than failing — the publish still succeeds but the catalog table doesn't
+  refresh. Tell the user to add markers if missing (one-time manual edit).
 
-### 2. Enumerate released units
+If any of these aren't met, surface the issue early. Don't run.
 
-Scan for everything marked `released: true`:
+### 2. Run the CLI
 
-- **Bundles:** grep `released: true` across `bundles/*.yaml` and
-  `bundles/third_party/**/*.yaml`. Classify as first-party vs
-  third-party by path.
-- **Management packs:** grep `released: true` across
-  `managementpacks/*.yaml`.
-- **Discrete content items:** grep `released: true` across
-  `supermetrics/`, `dashboards/`, `views/`, `reports/`, `alerts/`,
-  `customgroups/`. (Symptoms and recommendations are never discretely
-  released — they ride with their parent alert.)
-
-Show the user the full published set before proceeding. If the list
-is empty, stop.
-
-### 3. Version guard
-
-For each released unit, compute the expected artifact filename
-(bundle zip, `.pak`, or discrete zip) and check whether a file with
-that exact name already exists in the bundles repo. If yes, compute
-the content hash of the existing file and the about-to-be-built
-artifact; refuse to publish if they differ unless `--force` was
-passed. Report the conflict with the version in the YAML vs the
-existing version on the bundles repo side.
-
-Duplicate-version republish = silent regressions. Always refuse
-without explicit force.
-
-### 4. Build
-
-Delegate the heavy lifting — do NOT run builds inline.
-
-- **Bundles:** delegate to `content-packager` with the list of
-  released bundle manifests. It runs `python3 -m vcfops_packaging
-  build <manifest>` for each.
-- **Management packs:** delegate to `tooling` (or use the MP builder
-  directly — `python3 -m vcfops_managementpacks build <mp-yaml>`)
-  for each released MP.
-- **Discrete items:** delegate to `content-packager` to run
-  `python3 -m vcfops_packaging build-discrete <type> <item-name>`
-  for each released item.
-
-Collect the produced artifact paths.
-
-### 5. Stage to the bundles repo
-
-Rsync-style update of `/home/scott/pka/workspaces/vcf-content-factory-bundles/`:
+Pass `$ARGUMENTS` through directly:
 
 ```
-/
-  README.md, LICENSE           (preserved, README regenerated below)
-  Bundles/                     first-party bundle zips
-  ThirdPartyBundles/           third-party bundle zips
-  ManagementPacks/             .pak files
-  ContentComponents/
-    Dashboards/
-    SuperMetrics/
-    Views/
-    Reports/
-    Alerts/
-    CustomGroups/
+python3 -m vcfops_packaging publish $ARGUMENTS
 ```
 
-For each target directory:
+The CLI handles lockfile acquisition, full validation, build, route,
+retire, README, commit, and push in that order. Each step is atomic; on
+failure the CLI stops and reports.
 
-- Copy newly-built artifacts in.
-- If an artifact exists in the destination whose name matches a
-  previously-released unit that is no longer `released: true`,
-  delete it (release revocation). Use `git rm` so the delete is
-  tracked.
-- Do not touch files outside these directories.
+### 3. Report the result
 
-### 6. Regenerate the README
-
-Run the auto-gen helper:
+The CLI prints a structured summary:
 
 ```
-python3 -m vcfops_packaging update-readme \
-    /home/scott/pka/workspaces/vcf-content-factory-bundles/README.md
+Publish complete.
+  built   : N
+    <list of zip paths>
+  skipped : N
+  retired : N
+    <list>
+  readme  : <path>
+  commit  : <sha>  (or "none (dry-run)")
+  pushed  : True | False
 ```
 
-The helper rewrites the tables between `<!-- AUTO:START <section> -->`
-and `<!-- AUTO:END -->` markers. Sections:
-`bundles`, `third-party-bundles`, `management-packs`, `dashboards`,
-`supermetrics`, `views`, `reports`, `alerts`, `customgroups`.
-Hand-written prose outside the markers is preserved.
+Reflect that to the user. If `--dry-run` was used, make clear nothing
+shipped — this was a preview.
 
-If the README file doesn't yet have the markers, stop and report
-— a human needs to lay out the sections first.
+If the CLI exits non-zero, surface the error verbatim. Common cases:
 
-### 7. Commit and push
+- **Lockfile present.** Another `/publish` is running, OR a previous one
+  crashed without removing the lockfile. The CLI's message will say which.
+  If the prior run is genuinely dead, the user can `rm
+  vcf-content-factory-bundles/.publish.lock` and retry.
+- **Validators failed.** The factory repo has invalid content. Hand the
+  user the validator output and stop.
+- **Dist repo dirty / wrong branch / behind origin.** Tell the user to
+  fix the dist repo state. Do not auto-stash, auto-pull, or auto-push.
+- **Version conflict** (an existing zip has the same release name but a
+  different version). Tell the user to pass `--force` if they truly want
+  to overwrite, or bump the release-manifest version with `/release
+  <type> <name> --version <X.Y>` first.
 
-From the bundles repo working tree:
+### 4. Do not chain into other commands
 
-1. `git add -A` the affected paths (be explicit — don't blindly
-   `git add .`).
-2. `git status --short` to confirm exactly what's staged. If
-   nothing changed, report "No changes to publish" and stop —
-   don't create an empty commit.
-3. Compose a commit message summarizing the delta:
-   ```
-   Publish: +<added units>, ~<updated units>, -<removed units>
+`/publish` is the end of the lifecycle. Do not auto-run additional
+operations after it (no auto-merge, no auto-tag, no auto-followups).
 
-   Added:   <list with versions>
-   Updated: <list with old → new versions>
-   Removed: <list>
-   ```
-4. `git commit -m "<message>"`.
-5. `git push origin main`.
+## Examples
 
-### 8. Report
+```
+/publish
+/publish --dry-run
+/publish --no-push
+/publish --force --dry-run
+/publish --dist-repo /tmp/test-dist
+```
 
-Tell the user:
+## Constraints
 
-- Commit SHA in the bundles repo
-- Full add/update/remove delta
-- Any units that were skipped (version-guard conflicts, force-needed)
-- Any warnings from builds
-
-## Hard rules
-
-- **Never push without user confirmation on the first run.** After
-  step 5 (stage), show the user the diff summary (`git status
-  --short` output) and get a yes before committing. Subsequent
-  `/publish` invocations inside the same session may skip the
-  confirmation if the user explicitly says "auto-confirm future
-  publishes".
-- **Never edit README text outside the AUTO markers.** The helper
-  enforces this; don't route around it.
-- **Never touch the bundles repo's git history.** No force push,
-  no rebase, no amend.
-- **Never publish anything not marked `released: true`.**
-- **Never silently downgrade a version guard.** `--force` must be
-  an explicit flag, never a fallback.
-
-## Failure modes to surface clearly
-
-- Validation failed → stop; report which package failed and the
-  error line.
-- Bundles repo dirty or not on `main` → stop; tell the user to
-  clean up first.
-- Version conflict without `--force` → list the conflicts; tell
-  the user to bump versions in YAML or re-invoke with `--force`.
-- Missing AUTO markers in README → stop; ask for manual setup.
-- `git push` rejected → report the rejection; do not attempt
-  pull-rebase-push automatically.
-
-## Notes
-
-- The authored-content "ALL content creation requires plan approval"
-  rule does not apply to `/publish` — this is a mechanical ship,
-  not content authoring.
-- MPs keep their existing MPB 4-part external version in the `.pak`
-  filename; the new internal `version:` field on MP YAML is used
-  only for the version guard.
-- Third-party bundle filenames are whatever the upstream author
-  chose (e.g. `IDPS Planner.zip`); the factory prefix is not
-  applied to them.
+- Do NOT modify any factory-repo or dist-repo file by hand. The CLI does
+  everything.
+- Do NOT push anything except via the CLI's git push step (which respects
+  `--no-push`).
+- Do NOT run agents — this is a CLI wrapper.
+- If the user wants to ship one item without going through the lifecycle,
+  redirect them to `/release <type> <name>` first, then `/publish`.
