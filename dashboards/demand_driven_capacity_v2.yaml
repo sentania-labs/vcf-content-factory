@@ -29,8 +29,25 @@ widgets:
   - id: cluster_overview
     type: View
     title: "Cluster Demand & Capacity Overview"
-    coords: {x: 3, y: 1, w: 10, h: 8}
+    coords: {x: 3, y: 1, w: 7, h: 8}
     view: "[VCF Content Factory] Cluster Demand & Capacity Overview v2"
+
+  # Metric glossary — explains the three headline columns in cluster_overview.
+  - id: overview_explainer
+    type: TextDisplay
+    title: "About these metrics"
+    coords: {x: 10, y: 1, w: 3, h: 8}
+    html: |
+      <p><strong>Provisioned CPU (GHz)</strong> — total vCPU capacity
+      allocated across all VMs in the cluster, expressed in GHz. This is what
+      you have promised to workloads, not what they are consuming right now.</p>
+      <p><strong>Usable CPU (GHz)</strong> — total cluster CPU after the HA
+      reservation is set aside. This is the capacity vSphere will actually
+      admit; the remaining headroom is held back for failover.</p>
+      <p><strong>CPU Demand %</strong> — active demand from running VMs as a
+      fraction of usable capacity. Elevated demand is expected during business
+      hours; sustained high demand combined with rising contention is the
+      signal to act.</p>
 
   # ── Row 2: Heatmaps + Host outliers (3 across) ───────────────────────────
   # vm_heatmap and host_heatmap receive scope from scope_picker (resourceId).

@@ -117,3 +117,79 @@ Cluster view (row select) --resourceId--> Host Contention Outliers
 | 5 | View | views/host_vsan_contribution.yaml | REUSE from v1 |
 
 Super metrics: none needed. All built-in VMWARE adapter metrics.
+
+---
+
+## Revision 2026-04-27 — vCPU:pCPU column + right-side explainer
+
+### Prompt
+
+> I'd like to make a revision to the Demand-Drive Capacity Planning v2
+> dashboard. on the cluster demand and capacity overview, between
+> Contention P95, let's add a vCPU:pCPU ratio - i beleive there is an
+> OOTB metric for this.
+>
+> Also i'd like a small text widget placed maybe to the left of the
+> capcity overview dashboard (we would need to shrink it a bit) that
+> gives a bit of an explanation of some of the metrics in the overview
+> - namely what the heck is provisioned CPU?
+
+(Clarified during planning: column lands *after* CPU Contention P95;
+explainer goes to the *right* of the overview, not the left — "click
+the datacenter, view the stats, scan right to see the explanation".)
+
+### Decision
+
+- **vCPU:pCPU Ratio column** uses OOTB metric
+  `cpu|vcpus_to_cores_allocation_ratio` (UI display name "CPU|Current
+  Overcommit Ratio", `default_monitored: true`). Found in
+  `context/adapter_describe_cache/VMWARE/ClusterComputeResource.json:1409`.
+  Initial recon missed it because the markdown extract at
+  `docs/vcf9/metrics-properties.md` doesn't list it; user push-back
+  ("what about CPU|Current Overcommit ratio?") corrected the omission.
+  No super metric needed.
+- **Thresholds**: yellow 4.0 / orange 6.0 / red 8.0, descending range
+  (higher is worse). Maps to vSphere overcommit tiers — below 4:1
+  healthy, 4–6:1 watch, 6–8:1 warn, above 8:1 critical.
+- **Explainer placement**: right of the cluster overview, not left.
+  Reading flow is scope-pick → table → glossary.
+- **Width split**: explainer w:3, cluster overview w:7 (was w:10);
+  scope picker w:2 unchanged.
+- **Explainer scope**: Provisioned CPU (GHz), Usable CPU (GHz), CPU
+  Demand %. (Contention % deliberately omitted — user did not ask
+  for it; the column display already implies the "is this hurting"
+  read.)
+
+### New Row 1 layout
+
+```
++-------+----------------------------------+--------------+
+| picker|         cluster_overview          | explainer    |
+| (2)   |              (7)                  |    (3)       |
+|       |                                   |              |
++-------+----------------------------------+--------------+
+  x:1     x:3                                 x:10
+```
+
+### Cluster Demand & Capacity Overview v2 — revised columns
+
+| # | Metric key | Display name | Unit | Transform | Thresholds |
+|---|---|---|---|---|---|
+| 1 | cpu\|demandPct | CPU Demand Avg | percent | AVG | 50y/70o/85r |
+| 2 | cpu\|demandPct | CPU Demand P95 | percent | P95 | 60y/80o/90r |
+| 3 | cpu\|capacity_contentionPct | CPU Contention Avg | percent | AVG | 5y/10o/20r |
+| 4 | cpu\|capacity_contentionPct | CPU Contention P95 | percent | P95 | 7y/15o/25r |
+| **5** | **cpu\|vcpus_to_cores_allocation_ratio** | **vCPU:pCPU Ratio** | **(none)** | **CURRENT** | **4y/6o/8r** |
+| 6 | cpu\|haTotalCapacity_average | Usable CPU (GHz) | ghz | CURRENT | — |
+| 7 | cpu\|vm_capacity_provisioned | Provisioned CPU (GHz) | ghz | CURRENT | — |
+| 8 | mem\|host_demand | Mem Demand Avg | auto | AVG | — |
+| 9 | mem\|host_demand | Mem Demand P95 | auto | P95 | — |
+| 10 | mem\|haTotalCapacity_average | Usable Memory | auto | CURRENT | — |
+| 11 | mem\|memory_allocated_on_all_powered_on_vms | Allocated Memory | auto | CURRENT | — |
+
+### Files touched
+
+| File | Change |
+|---|---|
+| `views/cluster_demand_capacity_v2.yaml` | Inserted column 5 (vCPU:pCPU Ratio); old 5–10 shifted to 6–11. UUID unchanged. |
+| `dashboards/demand_driven_capacity_v2.yaml` | `cluster_overview` w:10 → w:7; new `overview_explainer` TextDisplay at `{x:10, y:1, w:3, h:8}`. UUID + interactions unchanged. |

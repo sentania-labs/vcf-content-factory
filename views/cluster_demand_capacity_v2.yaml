@@ -58,6 +58,16 @@ columns:
     red_bound: 25.0
     ascending_range: false
 
+  # --- CPU overcommit ratio (OOTB: CPU|Current Overcommit Ratio) ---
+  - attribute: cpu|vcpus_to_cores_allocation_ratio
+    display_name: "vCPU:pCPU Ratio"
+    unit: ""
+    transformation: CURRENT
+    yellow_bound: 4.0
+    orange_bound: 6.0
+    red_bound: 8.0
+    ascending_range: false
+
   # --- CPU capacity block (usable vs provisioned, GHz) ---
   - attribute: cpu|haTotalCapacity_average
     display_name: "Usable CPU (GHz)"
