@@ -92,12 +92,17 @@ Output lands along **three paths**:
    dashboards, and reports survive cross-instance installs).
 2. **One-off shareable distribution zip** — any admin, any instance,
    one command. Or drag the drop-in artifacts into the Ops UI by hand.
-3. **Published to a static "known" distribution repo** — when you
-   mark items `released: true` in YAML, the `/publish` skill
-   gathers every released item, builds, syncs the artifacts into
-   [`sentania-labs/vcf-content-factory-bundles`](https://github.com/sentania-labs/vcf-content-factory-bundles),
-   regenerates the README's auto-sections, commits, pushes. That
-   becomes the canonical place peers pull factory content from.
+3. **Published to a static "known" distribution repo** — a two-step
+   release lifecycle. `/release <type> <name>` materializes a release
+   manifest under `releases/`, flips the source's `released:` flag,
+   and commits both. `/publish` then gathers every released item,
+   builds zips, routes each to a per-type subdirectory in
+   [`sentania-labs/vcf-content-factory-bundles`](https://github.com/sentania-labs/vcf-content-factory-bundles)
+   (`dashboards/`, `bundles/`, `views/`, `supermetrics/`, etc.),
+   regenerates the README catalog between AUTO markers, commits, and
+   pushes. That becomes the canonical place peers pull factory
+   content from. See `designs/release-lifecycle-v1.md` for the full
+   pipeline.
 
 All of it is plain-text YAML in a git repo. Nothing is hidden.
 
@@ -295,18 +300,39 @@ recognize from community content packages.
    `VCF Content Factory` folder in the Ops dashboards sidebar,
    prefixed `[VCF Content Factory]` for easy identification.
 
-6. When the content is stable, **build it into a distribution
-   package** for sharing with other admins:
+6. When the content is stable, **release and publish it** to the
+   distribution repo for other admins to consume:
 
-   ```bash
-   # author a bundle manifest at bundles/my-package.yaml listing
-   # the content files you want in the package, then:
-   python3 -m vcfops_packaging build bundles/my-package.yaml
+   ```
+   # one or more times — flips released: true, materializes
+   # releases/<slug>.yaml, commits both files:
+   /release dashboard my_dashboard
+   /release bundle my_curated_set --version 1.1
+   /release view my_view --notes notes/release-1.0.md
+
+   # then once — builds every released item, routes outputs by type
+   # into vcf-content-factory-bundles/, regenerates the README,
+   # commits, pushes:
+   /publish
    ```
 
-   The output lands in `dist/[VCF Content Factory] My Package.zip`
-   and anyone can install it on their own VCF Ops instance via the
-   "content consumer" path above.
+   `/release` accepts a content type (`dashboard`, `view`,
+   `supermetric`, `customgroup`, `report`, `bundle`) plus a name.
+   **Name resolution is strict**, in this order: filename stem
+   (`my_dashboard`), exact display name (`"[VCF Content Factory] My
+   Dashboard"`), or path (`dashboards/my_dashboard.yaml`). Spaces in
+   the slug, typos, or partial matches do not resolve — the slug is
+   the safest form because it's the literal filename stem with no
+   quoting. The CLI errors loudly on unresolved names with the
+   candidates it considered.
+
+   `/publish` is the end of the lifecycle. It refuses to run if the
+   factory or distribution repo has uncommitted changes, validates
+   everything first, supports `--dry-run` to preview, and uses a
+   lockfile in the dist repo to prevent concurrent runs.
+
+   See `designs/release-lifecycle-v1.md` for the full pipeline,
+   schema, and resolved design decisions.
 
 ## Where to go next
 
