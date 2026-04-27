@@ -8,7 +8,7 @@ Regenerates per-section tables in a README.md between marker pairs:
     | ... |
     <!-- AUTO:END -->
 
-Sections supported:
+Sections supported (factory-repo content flags, original update_readme):
     bundles                -- released bundle manifests (bundles/*.yaml, factory_native=True)
     third-party-bundles    -- released third-party bundle manifests (bundles/third_party/*.yaml)
     management-packs       -- released management pack YAMLs (managementpacks/*.yaml)
@@ -18,6 +18,11 @@ Sections supported:
     reports                -- individually released reports
     alerts                 -- individually released alerts
     customgroups           -- individually released custom groups
+
+Sections supported (release manifests, update_readme_release / Phase 3):
+    release-catalog        -- per-subdir tables generated from releases/*.yaml manifests
+                             (bundles, dashboards, views, supermetrics, customgroups,
+                              reports, management-packs) + retired section.
 
 Empty section = blank body between markers (no table header emitted if no items).
 
@@ -29,6 +34,14 @@ Usage (programmatic)::
 
     from vcfops_packaging.readme_gen import update_readme
     changed = update_readme(Path("../vcf-content-factory-bundles/README.md"))
+
+    # Phase 3 — release-manifest-driven generation:
+    from vcfops_packaging.readme_gen import update_readme_release
+    changed = update_readme_release(
+        Path("../vcf-content-factory-bundles/README.md"),
+        dist_repo=Path("../vcf-content-factory-bundles/"),
+        releases=releases,
+    )
 """
 from __future__ import annotations
 
@@ -346,3 +359,269 @@ def _slug_to_display_name(slug: str) -> str:
         else:
             result.append(part.capitalize())
     return " ".join(result)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — release-manifest-driven README generation
+# ---------------------------------------------------------------------------
+
+# Canonical display name for each dist subdir.
+_SUBDIR_HEADING: dict[str, str] = {
+    "bundles":         "Bundles",
+    "dashboards":      "Dashboards",
+    "views":           "Views",
+    "supermetrics":    "Super Metrics",
+    "customgroups":    "Custom Groups",
+    "reports":         "Reports",
+    "management-packs": "Management Packs",
+}
+
+# Ordered iteration order for section rendering.
+_SUBDIR_ORDER = [
+    "bundles",
+    "dashboards",
+    "views",
+    "supermetrics",
+    "customgroups",
+    "reports",
+    "management-packs",
+]
+
+
+def _render_release_table(rows: list[dict]) -> str:
+    """Render the per-subdir release table.
+
+    Each row dict has keys: name, version, released, description, install.
+    Returns empty string if rows is empty.
+    """
+    if not rows:
+        return ""
+    lines = [
+        "| Name | Version | Released | Description | Install |",
+        "|---|---|---|---|---|",
+    ]
+    for row in rows:
+        name = str(row.get("name", "")).replace("|", "\\|")
+        version = str(row.get("version", "")).replace("|", "\\|")
+        released = str(row.get("released", "")).replace("|", "\\|")
+        description = str(row.get("description", "")).replace("|", "\\|")
+        install = str(row.get("install", "")).replace("|", "\\|")
+        lines.append(f"| {name} | {version} | {released} | {description} | {install} |")
+    return "\n".join(lines) + "\n"
+
+
+def _render_release_catalog(dist_repo: Path, releases: list) -> str:
+    """Render the full release-catalog AUTO section body.
+
+    Produces per-subdir H2 sections followed by a Retired section.
+
+    Args:
+        dist_repo: Root of the distribution repo (for mtime lookups and retired/ scan).
+        releases:  List of ReleaseDef objects (already loaded, selftest skipped).
+
+    Returns:
+        The markdown body to insert between the AUTO markers (without the markers).
+    """
+    from .release_builder import _artifact_dest_subdir, _zip_filename
+
+    # Group releases by subdir.
+    by_subdir: dict[str, list] = {s: [] for s in _SUBDIR_ORDER}
+    for r in releases:
+        for a in r.artifacts:
+            if not a.headline:
+                continue
+            subdir = _artifact_dest_subdir(a)
+            if subdir not in by_subdir:
+                by_subdir[subdir] = []
+            filename = _zip_filename(r.name, r.version)
+            zip_path = dist_repo / subdir / filename
+
+            # Release date from filesystem mtime if the zip exists, else "—".
+            if zip_path.exists():
+                mtime = zip_path.stat().st_mtime
+                released_date = (
+                    __import__("datetime")
+                    .datetime
+                    .utcfromtimestamp(mtime)
+                    .strftime("%Y-%m-%d")
+                )
+            else:
+                released_date = "—"
+
+            # Description: first sentence of the release manifest description.
+            desc = (r.description or "").strip()
+            first_sentence = desc.split(".")[0].strip()
+            if first_sentence and not first_sentence.endswith("."):
+                first_sentence += "."
+
+            # Install command with a link to the zip.
+            zip_url = filename  # relative path within subdir
+            install_cmd = f"[`python3 install.py`]({zip_url})"
+
+            by_subdir[subdir].append({
+                "name": r.name,
+                "version": r.version,
+                "released": released_date,
+                "description": first_sentence,
+                "install": install_cmd,
+            })
+            break  # one entry per release (first headline wins for catalog row)
+
+    # Build the retired section.
+    retired_rows = _collect_retired_rows(dist_repo, releases)
+
+    # Render.
+    parts: list[str] = []
+    for subdir in _SUBDIR_ORDER:
+        rows = by_subdir.get(subdir, [])
+        heading = _SUBDIR_HEADING.get(subdir, subdir.title())
+        parts.append(f"\n## {heading}\n")
+        table = _render_release_table(rows)
+        if table:
+            parts.append(table)
+        else:
+            parts.append("_No releases yet._\n")
+
+    # Retired section.
+    parts.append("\n## Retired\n")
+    if retired_rows:
+        lines = [
+            "| Name | Subdir | Retired | Reason |",
+            "|---|---|---|---|",
+        ]
+        for row in retired_rows:
+            name = str(row.get("name", "")).replace("|", "\\|")
+            subdir_val = str(row.get("subdir", "")).replace("|", "\\|")
+            retired_date = str(row.get("retired_date", "—")).replace("|", "\\|")
+            reason = str(row.get("reason", "")).replace("|", "\\|")
+            lines.append(f"| {name} | {subdir_val} | {retired_date} | {reason} |")
+        parts.append("\n".join(lines) + "\n")
+    else:
+        parts.append("_No retired artifacts._\n")
+
+    return "\n" + "".join(parts)
+
+
+def _collect_retired_rows(dist_repo: Path, releases: list) -> list[dict]:
+    """Collect rows for the Retired section.
+
+    Scans retired/<subdir>/ directories.  For each zip, checks whether a
+    release manifest's deprecates: list references it (to produce a reason);
+    otherwise marks it as "stale: no source release manifest".
+    """
+    from .release_builder import _artifact_dest_subdir, _zip_filename
+    from .releases import load_release
+
+    # Build a reverse map: zip filename -> deprecating release name.
+    deprecated_by: dict[str, str] = {}
+    for r in releases:
+        if not r.deprecates:
+            continue
+        for dep_manifest_path in r.deprecates:
+            try:
+                dep_rel = load_release(dep_manifest_path)
+            except Exception:
+                continue
+            for a in dep_rel.artifacts:
+                if not a.headline:
+                    continue
+                subdir = _artifact_dest_subdir(a)
+                filename = _zip_filename(dep_rel.name, dep_rel.version)
+                deprecated_by[f"{subdir}/{filename}"] = r.name
+
+    retired_dir = dist_repo / "retired"
+    if not retired_dir.exists():
+        return []
+
+    rows = []
+    for subdir in _SUBDIR_ORDER:
+        sub_retired = retired_dir / subdir
+        if not sub_retired.exists():
+            continue
+        for zip_path in sorted(sub_retired.glob("*.zip")):
+            key = f"{subdir}/{zip_path.name}"
+            if zip_path.exists():
+                mtime = zip_path.stat().st_mtime
+                retired_date = (
+                    __import__("datetime")
+                    .datetime
+                    .utcfromtimestamp(mtime)
+                    .strftime("%Y-%m-%d")
+                )
+            else:
+                retired_date = "—"
+            reason = (
+                f"deprecated by {deprecated_by[key]!r}"
+                if key in deprecated_by
+                else "stale: no source release manifest"
+            )
+            rows.append({
+                "name": zip_path.name,
+                "subdir": subdir,
+                "retired_date": retired_date,
+                "reason": reason,
+            })
+    return rows
+
+
+def update_readme_release(
+    readme_path: Path,
+    dist_repo: Path,
+    releases: list,
+) -> bool:
+    """Regenerate the ``release-catalog`` AUTO section in a README.md.
+
+    Unlike ``update_readme()`` (which reads from factory repo content flags),
+    this function builds the catalog from a pre-loaded list of ReleaseDef
+    objects (from the publish orchestrator) and looks up zip mtime from
+    the dist repo.
+
+    The README must contain:
+
+        <!-- AUTO:START release-catalog -->
+        ...
+        <!-- AUTO:END -->
+
+    Content outside the markers is preserved verbatim.
+
+    Args:
+        readme_path: Path to the README.md in the dist repo.
+        dist_repo:   Root of the dist repo (for mtime + retired/ lookups).
+        releases:    List of ReleaseDef objects (selftest fixture excluded).
+
+    Returns:
+        True if the file was modified, False if unchanged.
+
+    Raises:
+        FileNotFoundError: if readme_path does not exist.
+        ValueError:        if no ``release-catalog`` AUTO marker is found.
+    """
+    readme_path = Path(readme_path)
+    if not readme_path.exists():
+        raise FileNotFoundError(f"README not found: {readme_path}")
+
+    content = readme_path.read_text(encoding="utf-8")
+    original = content
+
+    # Check marker exists.
+    if "<!-- AUTO:START release-catalog -->" not in content:
+        raise ValueError(
+            f"No '<!-- AUTO:START release-catalog -->' marker found in {readme_path}. "
+            f"Add the marker pair to enable auto-generation."
+        )
+
+    catalog_body = _render_release_catalog(dist_repo, releases)
+
+    def _replace(m: re.Match) -> str:
+        section_name = m.group(2)
+        if section_name != "release-catalog":
+            return m.group(0)
+        open_marker = m.group(1)
+        close_marker = m.group(4)
+        return f"{open_marker}{catalog_body}{close_marker}"
+
+    updated = _MARKER_RE.sub(_replace, content)
+    if updated != original:
+        readme_path.write_text(updated, encoding="utf-8")
+        return True
+    return False
