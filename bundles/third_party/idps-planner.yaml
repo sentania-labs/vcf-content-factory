@@ -1,42 +1,14 @@
 name: idps-planner
 display_name: IDPS Planner
-description: '# IDPS Planner
-
-
-  > **PLACEHOLDER** — hand-edit before redistribution. The authors will supply
-
-  > the real long-form description after validation.
-
-
-  IDPS Planner is a VCF Operations dashboard for vSphere IDPS (Intrusion
-
-  Detection and Prevention System) analysis and planning.
-
-
-  ## Authors
-
-
-  Jointly authored by:
-
-
-  - Ryan Pletka
-
-  - Brock Peterson
-
-  - Scott Bowe
-
-  - Geoff Shukin
-
-  - Joe Tietz
-
-
-  ## Provenance
-
-
-  Extracted from a live VCF Operations lab via the VCF Content Factory extractor.'
+description: >
+  vDefend IDPS resource-monitoring dashboard for VCF Operations. Tracks
+  Packets Per Second and Throughput against the Classic Mode bypass
+  thresholds (140k PPS / 9 Gbps), with peak-based metrics (5-minute peak,
+  period peak, 95th percentile) for safety-first capacity planning. Full
+  description in the bundle README.
 factory_native: false
-author: Ryan Pletka, Brock Peterson, Scott Bowe, Geoff Shukin, Joe Tietz
-license: Apache-2.0
+author: Ryan Pletka, Brock Peterson, Joe Tietz, Geoff Shukin, Scott Bowe
+license: MIT
 source:
   captured_at: '2026-04-17'
 supermetrics:
