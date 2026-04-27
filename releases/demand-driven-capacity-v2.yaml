@@ -11,4 +11,4 @@ description: 'Demand-driven capacity planning v2. Combines percentage-first clus
   cluster level.'
 name: demand-driven-capacity-v2
 release_notes: ''
-version: '1.0'
+version: '1.1'
