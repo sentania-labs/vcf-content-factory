@@ -79,15 +79,11 @@ widgets:
 
     signal to act.</p>
 
-    <p><strong>vSAN data on Aria Operations 8.18 / vSphere 8.</strong> The
+    <p><strong>vSAN Performance Panel.</strong> vSAN telemetry is not collected
 
-    Per-Host vSAN Contribution panel (bottom-right) reads from the
+    for non-vSAN hosts; additionally, metrics don''t exist for VCF 5.2 / vSphere 8
 
-    <code>vsan|performance|domClient|*</code> metric path, which is not
-
-    published by vSAN 8. On Aria Operations 8.18 deployments those columns
-
-    will be empty. The CPU and memory panels above are unaffected.</p>
+    targets.</p>
 
     '
   id: overview_explainer
