@@ -17,49 +17,63 @@ command grammar fully consistent across every content type.
 
 ## Conceptual model
 
-Two source roots for component content, plus the existing `bundles/`:
+Single top-level `content/` umbrella. Everything content-related — the
+type subdirs by provenance, the multi-content bundles, the release
+manifests — lives under it:
 
 ```
 <repo root>/
-├── dashboards/                  ← factory-native components
-├── views/                          (current top-level, unchanged)
-├── supermetrics/
-├── customgroups/
-├── alerts/
-├── symptoms/
-├── reports/
-├── recommendations/
-├── managementpacks/
-│
-├── third_party_content/         ← all third-party content
-│   ├── idps-planner/            ← one subdir per project (cohesion preserved)
-│   │   ├── PROJECT.yaml         ← attribution, license, factory_native, builtin_metric_enables
-│   │   ├── dashboards/
-│   │   ├── views/
-│   │   ├── supermetrics/
-│   │   └── managementpacks/     ← (when a project ships a third-party MP)
-│   └── some-other-project/
-│       ├── PROJECT.yaml
-│       └── ...
-│
-├── bundles/                     ← multi-content sets
-│   └── <only true multi-content bundles live here>
-│
-└── releases/                    ← release manifests (unchanged)
+└── content/
+    ├── factory/                       ← factory-native components
+    │   ├── dashboards/
+    │   ├── views/
+    │   ├── supermetrics/
+    │   ├── customgroups/
+    │   ├── alerts/
+    │   ├── symptoms/
+    │   ├── reports/
+    │   ├── recommendations/
+    │   └── managementpacks/
+    │
+    ├── third_party/                   ← all third-party content
+    │   ├── idps-planner/              ← one subdir per project (cohesion preserved)
+    │   │   ├── PROJECT.yaml           ← attribution, license, factory_native, builtin_metric_enables
+    │   │   ├── dashboards/
+    │   │   ├── views/
+    │   │   ├── supermetrics/
+    │   │   └── managementpacks/       ← (when a project ships a third-party MP)
+    │   └── some-other-project/
+    │       ├── PROJECT.yaml
+    │       └── ...
+    │
+    ├── bundles/                       ← multi-content sets (factory + third-party)
+    │   └── <only true multi-content bundles live here>
+    │
+    └── releases/                      ← release manifests
 ```
 
-**Key principle:** the type subdir is the same word everywhere
-(`dashboards/`, `views/`, `supermetrics/`, ...). Whether it's at the repo
-root (factory-native) or under `third_party_content/<project>/`
-(third-party), the type is the type.
+**Key principles:**
+
+- **One top-level for content.** Everything content-related under
+  `content/`. The repo root stays uncluttered — only `content/` plus
+  framework infrastructure (`vcfops_*/` packages, `docs/`, `context/`,
+  `designs/`, `scripts/`, `tests/`, etc.).
+- **Provenance-first navigation.** "Pick factory or third-party, then
+  drill by type." Path tells the whole story — `content/factory/dashboards/foo.yaml`
+  is unambiguous from the path alone.
+- **Symmetric type subdirs.** The type word (`dashboards/`,
+  `supermetrics/`, ...) is identical at every level. Whether it's
+  `content/factory/dashboards/foo.yaml` or
+  `content/third_party/idps-planner/dashboards/foo.yaml`, the type is
+  the type.
 
 ## Slash command grammar
 
-Type-first lookup across both roots:
+Type-first lookup across both provenances:
 
 ```
-/release dashboard <slug>      ← searches dashboards/ and third_party_content/*/dashboards/
-/release view <slug>           ← searches views/ and third_party_content/*/views/
+/release dashboard <slug>      ← searches content/factory/dashboards/ and content/third_party/*/dashboards/
+/release view <slug>           ← searches content/factory/views/ and content/third_party/*/views/
 /release supermetric <slug>
 /release customgroup <slug>
 /release alert <slug>
@@ -67,10 +81,10 @@ Type-first lookup across both roots:
 /release report <slug>
 /release recommendation <slug>
 /release managementpack <slug> ← same pattern for MPs
-/release bundle <slug>         ← searches bundles/ only
+/release bundle <slug>         ← searches content/bundles/ only
 
 /bundle <name>                 ← new — interactive bundle composer
-/publish                       ← unchanged: ships every release manifest in releases/
+/publish                       ← unchanged: ships every release manifest in content/releases/
 ```
 
 Provenance (factory-native vs third-party) is **discovered from path**,
@@ -96,7 +110,7 @@ Bundles are **always** explicit user composition; no auto-generation.
 
 ## Project-level attribution (third-party only)
 
-Every `third_party_content/<project>/` directory carries a `PROJECT.yaml`:
+Every `content/third_party/<project>/` directory carries a `PROJECT.yaml`:
 
 ```yaml
 name: idps-planner
@@ -158,8 +172,8 @@ share enable requirements).
 Same scheme as content:
 
 - **Factory-native MPs** (e.g., today's `managementpacks/synology_nas.yaml`)
-  stay top-level under `managementpacks/`.
-- **Third-party MPs** would live at `third_party_content/<project>/managementpacks/<file>.yaml`.
+  move to `content/factory/managementpacks/<file>.yaml`.
+- **Third-party MPs** would live at `content/third_party/<project>/managementpacks/<file>.yaml`.
 
 For now, MPs continue to use their **distinct lifecycle** — MPB build
 path, `.pak` install API, no `[VCF Content Factory]` prefix, separate
@@ -177,14 +191,14 @@ Substantial scope. Bundle into a coherent rollout:
 1. **Loaders** (`vcfops_supermetrics`, `vcfops_dashboards`,
    `vcfops_customgroups`, `vcfops_symptoms`, `vcfops_alerts`,
    `vcfops_reports`, `vcfops_managementpacks`) — extend each loader's
-   discovery to scan both the factory top-level path and
-   `third_party_content/*/<type>/`. Resolve attribution by walking up
+   discovery to scan `content/factory/<type>/` AND
+   `content/third_party/*/<type>/`. Resolve attribution by walking up
    to the nearest `PROJECT.yaml`.
 
-2. **Validator** — enforce slug uniqueness across both roots per content
-   type. Validate `PROJECT.yaml` schema. Validate each component's
-   project membership (shouldn't reference components from other
-   projects across third-party boundaries — third-party should be
+2. **Validator** — enforce slug uniqueness across both provenances per
+   content type. Validate `PROJECT.yaml` schema. Validate each
+   component's project membership (shouldn't reference components from
+   other projects across third-party boundaries — third-party should be
    self-contained, factory may share factory-only deps).
 
 3. **Walker** (`vcfops_common/dep_walker`) — the dependency walker
@@ -194,44 +208,69 @@ Substantial scope. Bundle into a coherent rollout:
    (uncommon).
 
 4. **Release CLI** (`vcfops_packaging release`) — type-first lookup
-   across both roots. Slug uniqueness enforced. Resolved path drives
-   the release manifest's `headline.source`.
+   across both provenances. Slug uniqueness enforced. Resolved path
+   drives the release manifest's `headline.source`. Manifests land in
+   `content/releases/`.
 
 5. **New `/bundle` CLI** (`vcfops_packaging bundle`) — interactive
-   composer. Validates picks against discovered components.
+   composer. Validates picks against discovered components. Output:
+   `content/bundles/<slug>.yaml`.
 
 6. **Publish routing** — `release_types.headline_to_dir()` already
    reads `factory_native` from bundle YAML. Extend to read project's
-   `PROJECT.yaml` when source is under `third_party_content/`. No
-   change to actual routing rules (factory → top-level subdir,
+   `PROJECT.yaml` when source is under `content/third_party/`. No
+   change to dist-repo routing rules (factory → top-level subdir,
    third-party → `ThirdPartyContent/<sub>`).
 
 7. **Migration**:
-   - Move `bundles/third_party/<name>/` → `third_party_content/<name>/`.
-   - Convert each project's bundle YAML attribution metadata into a
-     `PROJECT.yaml` at the project root.
-   - Move `builtin_metric_enables` from each project bundle YAML to
-     `PROJECT.yaml`.
+   - Move `dashboards/`, `views/`, `supermetrics/`, `customgroups/`,
+     `alerts/`, `symptoms/`, `reports/`, `recommendations/`,
+     `managementpacks/` → `content/factory/<type>/`.
+   - Move `bundles/third_party/<name>/` →
+     `content/third_party/<name>/`.
+   - Move `bundles/<file>.yaml` → `content/bundles/<file>.yaml`.
+   - Move `releases/<file>.yaml` → `content/releases/<file>.yaml`.
+   - Convert each third-party project's bundle YAML attribution
+     metadata into a `PROJECT.yaml` at the project root.
+   - Move `builtin_metric_enables` from each third-party project's
+     bundle YAML to its `PROJECT.yaml`.
    - For factory-native dashboards (post-v2-cleanup) that need OOTB
      metric enables: move from the now-deleted bundle YAML to the
      dashboard YAML's new `builtin_metric_enables:` field.
+   - Update every release manifest's `headline.source` field to the
+     new `content/<provenance>/<type>/<file>.yaml` path.
 
 ## Migration impact
 
-Significant. Existing repo state changes:
+Significant. Every content-related top-level directory moves under
+`content/`. Existing repo state changes:
 
-- ~5 third-party project directories moved (1 today: idps-planner).
-- 7 loader updates + walker update.
-- Validator gains project-scope checks.
+- ~10 factory content directories collapse from top-level into
+  `content/factory/<type>/` (dashboards, views, supermetrics,
+  customgroups, alerts, symptoms, reports, recommendations,
+  managementpacks).
+- `bundles/` → `content/bundles/`. `releases/` → `content/releases/`.
+- Third-party projects move from `bundles/third_party/<name>/` to
+  `content/third_party/<name>/` (today: 1 project, idps-planner).
+- 7+ loader path updates + walker update.
+- Validator gains project-scope checks and slug-uniqueness enforcement
+  across provenances.
 - New `/bundle` slash command + CLI subcommand.
+- Existing release manifests' `headline.source` paths updated
+  (mechanical sed: prepend `content/factory/` or
+  `content/third_party/<project>/`).
+- Every install template, agent prompt, README walkthrough, context/
+  docs that reference content paths needs path updates.
 - Documentation: dictionary update (define `PROJECT.yaml`, refine
-  Bundle/Component/Project terms), README walkthrough refresh.
+  Bundle/Component/Project terms; update Bundle definition's
+  "lives in" reference), README walkthrough refresh, ADMIN.md path
+  references.
 
 Backward compatibility: UUIDs and content YAML payloads unchanged. Cross-
 references (SM by name, view by name) unchanged in syntax — just
-resolved against a wider search path. Release manifests' `headline.source`
-paths change to reflect new locations; existing release manifests need
-updated paths (mechanical sed).
+resolved against a wider search path. Git history continuity: every
+content YAML's blame becomes history-spanning across the rename, but
+`git log --follow` traces cleanly. One-time cost.
 
 ## Relationship to v2
 
