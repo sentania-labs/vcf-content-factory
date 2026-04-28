@@ -8,7 +8,7 @@ widgets:
   coords:
     x: 1
     y: 7
-    w: 7
+    w: 11
     h: 6
   view: IDPS Planner Host Metrics
 - id: 672cb3f7-5568-5120-9339-f60a930ce33f
@@ -17,7 +17,7 @@ widgets:
   coords:
     x: 1
     y: 17
-    w: 7
+    w: 11
     h: 7
   view: '[IDPS] IDPS Planner VM Metrics'
 - id: 82e28da0-9edc-5605-b349-a218e6ed2707
@@ -216,9 +216,9 @@ widgets:
   type: Heatmap
   title: Cluster Host Heatmap
   coords:
-    x: 8
-    y: 7
-    w: 4
+    x: 1
+    y: 28
+    w: 11
     h: 6
   mode: all
   depth: 10
@@ -252,10 +252,10 @@ widgets:
   type: Heatmap
   title: VM by Host PPS
   coords:
-    x: 8
-    y: 17
-    w: 4
-    h: 7
+    x: 1
+    y: 34
+    w: 11
+    h: 6
   mode: all
   depth: 10
   configs:
@@ -283,7 +283,7 @@ widgets:
         - '#74B43B'
         - '#ECC33E'
         - '#DE3F30'
-      max_value: 14000.0
+      max_value: 140000.0
 interactions:
 - from: 985c9990-d9b1-58a3-a5dd-88c0c683d873
   to: 672cb3f7-5568-5120-9339-f60a930ce33f

@@ -13,7 +13,7 @@
       "collapsed": false,
       "id": "985c9990-d9b1-58a3-a5dd-88c0c683d873",
       "gridsterCoords": {
-        "w": 7,
+        "w": 11,
         "x": 1,
         "h": 6,
         "y": 7
@@ -38,7 +38,7 @@
         "title": "IDPS Host Metrics",
         "viewDefinitionId": "7740019a-a664-4d58-9e26-344b47364dcc"
       },
-      "height": 600,
+      "height": 324,
       "states": [
         {
           "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_985c9990-d9b1-58a3-a5dd-88c0c683d873-column-0%25255Ehidden%25253Db%2525253A0%25255Eindex%25253Dn%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_985c9990-d9b1-58a3-a5dd-88c0c683d873-column-Super%25252520Metric%2525257Csm_f4acf93a-06b8-4450-8237-92cee270bc651%25255Ehidden%25253Db%2525253A0%25255Eindex%25253Dn%2525253A1%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_985c9990-d9b1-58a3-a5dd-88c0c683d873-column-Super%25252520Metric%2525257Csm_f4acf93a-06b8-4450-8237-92cee270bc652%25255Ehidden%25253Db%2525253A0%25255Eindex%25253Dn%2525253A2%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_985c9990-d9b1-58a3-a5dd-88c0c683d873-column-Super%25252520Metric%2525257Csm_f4acf93a-06b8-4450-8237-92cee270bc653%25255Ehidden%25253Db%2525253A0%25255Eindex%25253Dn%2525253A3%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_985c9990-d9b1-58a3-a5dd-88c0c683d873-column-Super%25252520Metric%2525257Csm_c458582f-b63f-4085-8465-fa32cb7182714%25255Ehidden%25253Db%2525253A0%25255Eindex%25253Dn%2525253A4%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_985c9990-d9b1-58a3-a5dd-88c0c683d873-column-Super%25252520Metric%2525257Csm_57be077d-f61e-4d25-ae05-ae27eed152295%25255Ehidden%25253Db%2525253A0%25255Eindex%25253Dn%2525253A5%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_985c9990-d9b1-58a3-a5dd-88c0c683d873-column-Super%25252520Metric%2525257Csm_c6816ee1-2b94-43ae-baf3-180f95b0e94c6%25255Ehidden%25253Db%2525253A0%25255Eindex%25253Dn%2525253A6%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_985c9990-d9b1-58a3-a5dd-88c0c683d873-column-Super%25252520Metric%2525257Csm_c6816ee1-2b94-43ae-baf3-180f95b0e94c7%25255Ehidden%25253Db%2525253A0%25255Eindex%25253Dn%2525253A7%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_985c9990-d9b1-58a3-a5dd-88c0c683d873-column-Super%25252520Metric%2525257Csm_c6816ee1-2b94-43ae-baf3-180f95b0e94c8%25255Ehidden%25253Db%2525253A0%25255Eindex%25253Dn%2525253A8",
@@ -50,7 +50,7 @@
       "collapsed": false,
       "id": "672cb3f7-5568-5120-9339-f60a930ce33f",
       "gridsterCoords": {
-        "w": 7,
+        "w": 11,
         "x": 1,
         "h": 7,
         "y": 17
@@ -75,15 +75,19 @@
         "title": "IDPS Planner VM Metrics",
         "viewDefinitionId": "4d393353-02fe-474a-932f-be0d9f0e6327"
       },
-      "height": 600,
+      "height": 381,
       "states": [
         {
-          "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-0%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257C20_sec_peak_usage_average1%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257Cusage_average2%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257Cusage_average3%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257Creceived_average4%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257Creceived_average5%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257Ctransmitted_average6%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257Ctransmitted_average7%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257C20_sec_peak_packetsPerSec8%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257C20_sec_peak_packetsPerSec9%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257C20_sec_peak_packetsPerSec10%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-summary%2525257Cguest%2525257CtoolsVersion11%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_aaa03f25-6037-41a9-879c-1fafbd84bbd5_672cb3f7-5568-5120-9339-f60a930ce33f-column-summary%2525257Cguest%2525257CtoolsRunningStatus12%25255Ehidden%25253Db%2525253A0",
+          "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-0%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257C20_sec_peak_usage_average1%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257Cusage_average2%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257Cusage_average3%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257Creceived_average4%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257Creceived_average5%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257Ctransmitted_average6%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257Ctransmitted_average7%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257C20_sec_peak_packetsPerSec8%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257C20_sec_peak_packetsPerSec9%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-net%2525257C20_sec_peak_packetsPerSec10%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-summary%2525257Cguest%2525257CtoolsVersion11%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f-column-summary%2525257Cguest%2525257CtoolsRunningStatus12%25255Ehidden%25253Db%2525253A0%25255Ewidth%25253Dn%2525253A161",
           "key": "permTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f"
         },
         {
           "value": "b%3A0",
           "key": "perm_isDashboardTime_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f"
+        },
+        {
+          "value": "s%3A%7B%22minType%22%3A%22.TimeIntervalControl%22%2C%22advancedTimeMode%22%3Afalse%2C%22fromTime%22%3Anull%2C%22unit%22%3A%22HOURS%22%2C%22count%22%3A24%2C%22priorUnit%22%3Anull%2C%22priorCount%22%3Anull%2C%22startSubUnit%22%3Anull%2C%22startPeriod%22%3Anull%2C%22toTime%22%3Anull%2C%22endUnit%22%3Anull%2C%22endCount%22%3Anull%2C%22endSubUnit%22%3Anull%2C%22endPeriod%22%3Anull%2C%22isRealTimeData%22%3Anull%2C%22mondayHours%22%3Anull%2C%22tuesdayHours%22%3Anull%2C%22wednesdayHours%22%3Anull%2C%22thursdayHours%22%3Anull%2C%22fridayHours%22%3Anull%2C%22saturdayHours%22%3Anull%2C%22sundayHours%22%3Anull%7D",
+          "key": "permSelectedDate_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_672cb3f7-5568-5120-9339-f60a930ce33f"
         }
       ]
     },
@@ -261,7 +265,7 @@
         "boxColumns": 6,
         "periodLength": "dashboardTime"
       },
-      "height": 600
+      "height": 210
     },
     {
       "collapsed": false,
@@ -419,7 +423,7 @@
         "boxColumns": 5,
         "periodLength": "dashboardTime"
       },
-      "height": 600
+      "height": 210
     },
     {
       "collapsed": false,
@@ -456,7 +460,7 @@
         "title": "vCenter Selection",
         "viewDefinitionId": "075cbdb7-8bef-42e8-a119-ae521067d67e"
       },
-      "height": 600,
+      "height": 324,
       "states": [
         {
           "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_d6f1c4d3-c97b-5807-ac0c-b9d854b66455-column-0%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_d6f1c4d3-c97b-5807-ac0c-b9d854b66455-column-summary%2525257Cversion1%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_d6f1c4d3-c97b-5807-ac0c-b9d854b66455-column-summary%2525257Ctotal_number_datacenters2%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_d6f1c4d3-c97b-5807-ac0c-b9d854b66455-column-summary%2525257Ctotal_number_clusters3%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_d6f1c4d3-c97b-5807-ac0c-b9d854b66455-column-summary%2525257Ctotal_number_hosts4%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_d6f1c4d3-c97b-5807-ac0c-b9d854b66455-column-summary%2525257Ctotal_number_vms5%25255Ehidden%25253Db%2525253A0",
@@ -503,7 +507,7 @@
         "title": "Datacenter Selection",
         "viewDefinitionId": "7ac44bb2-923c-4aa5-ae84-585a743a72f2"
       },
-      "height": 600,
+      "height": 324,
       "states": [
         {
           "value": "b%3A0",
@@ -550,7 +554,7 @@
         "title": "Cluster Selection",
         "viewDefinitionId": "e50bcb18-05e9-4530-8482-2882f675c82b"
       },
-      "height": 600,
+      "height": 324,
       "states": [
         {
           "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_2ca53219-2f35-573f-8ce0-3125936c8e93-column-0%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_2ca53219-2f35-573f-8ce0-3125936c8e93-column-summary%2525257Ctotal_number_hosts1%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_2ca53219-2f35-573f-8ce0-3125936c8e93-column-summary%2525257Ctotal_number_vms2%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_2ca53219-2f35-573f-8ce0-3125936c8e93-column-cpu%2525257Ccapacity_contentionPct3%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_2311a526-598e-47bc-95e1-0ffa76d22a96_2ca53219-2f35-573f-8ce0-3125936c8e93-column-mem%2525257Chost_contentionPct4%25255Ehidden%25253Db%2525253A0",
@@ -566,10 +570,10 @@
       "collapsed": false,
       "id": "5c2a30b1-e13a-5627-9bcd-763454f8ef98",
       "gridsterCoords": {
-        "w": 4,
-        "x": 8,
+        "w": 11,
+        "x": 1,
         "h": 6,
-        "y": 7
+        "y": 28
       },
       "type": "Heatmap",
       "title": "Cluster Host Heatmap",
@@ -583,7 +587,6 @@
             },
             "focusOnGroups": true,
             "color": {
-              "minValue": 0,
               "thresholds": {
                 "values": [
                   0,
@@ -596,6 +599,7 @@
                   "#DE3F30"
                 ]
               },
+              "minValue": 0,
               "maxValue": 140000
             },
             "sizeBy": {
@@ -618,10 +622,10 @@
               "value": ""
             },
             "thenBy": null,
-            "resourceKind": "resourceKind:id:5_::_",
             "mode": {
               "mode": false
             },
+            "resourceKind": "resourceKind:id:5_::_",
             "filterMode": "tagPicker",
             "tagFilter": null,
             "solidColoring": false,
@@ -652,7 +656,7 @@
         "title": "Cluster Host Heatmap",
         "value": 0
       },
-      "height": 600,
+      "height": 323,
       "states": [
         {
           "value": "o%3A",
@@ -664,10 +668,10 @@
       "collapsed": false,
       "id": "32be0352-9f7e-57c0-a519-718b8d2f9d18",
       "gridsterCoords": {
-        "w": 4,
-        "x": 8,
-        "h": 7,
-        "y": 17
+        "w": 11,
+        "x": 1,
+        "h": 6,
+        "y": 34
       },
       "type": "Heatmap",
       "title": "VM by Host PPS",
@@ -681,7 +685,6 @@
             },
             "focusOnGroups": true,
             "color": {
-              "minValue": 0,
               "thresholds": {
                 "values": [
                   0,
@@ -694,7 +697,8 @@
                   "#DE3F30"
                 ]
               },
-              "maxValue": 14000
+              "minValue": 0,
+              "maxValue": 140000
             },
             "sizeBy": {
               "metricKey": "net|usage_average",
@@ -716,10 +720,10 @@
               "value": ""
             },
             "thenBy": null,
-            "resourceKind": "resourceKind:id:3_::_",
             "mode": {
               "mode": false
             },
+            "resourceKind": "resourceKind:id:3_::_",
             "filterMode": "tagPicker",
             "tagFilter": null,
             "solidColoring": false,
@@ -750,7 +754,7 @@
         "title": "VM by Host PPS",
         "value": 0
       },
-      "height": 600,
+      "height": 323,
       "states": [
         {
           "value": "o%3A",
@@ -829,7 +833,7 @@
   "userId": "29c1613f-3bbe-4aa0-8236-2c74db22c661",
   "name": "VCF Content Factory/IDPS Planner",
   "gridsterMaxColumns": 12,
-  "lastUpdateTime": 1777398924964,
+  "lastUpdateTime": 1777413868339,
   "entries": {
     "resourceKind": [
       {
