@@ -1,6 +1,6 @@
 artifacts:
 - headline: true
-  source: dashboards/demand_driven_capacity_v2.yaml
+  source: content/factory/dashboards/demand_driven_capacity_v2.yaml
 deprecates: []
 description: 'Demand-driven capacity planning v2. Combines percentage-first cluster
   metrics, usable-vs-provisioned CPU comparison, contention heatmaps for visual scanning,

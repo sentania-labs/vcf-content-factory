@@ -9,18 +9,18 @@ description: >
   and Aria Operations 8.18 (productName contains "Kubernetes" matches both
   VKS and TKGS node images; Supervisor CP identified by VM-name pattern).
 supermetrics:
-  - supermetrics/vks_vcls_vcpu.yaml
-  - supermetrics/vks_supervisor_vcpu.yaml
-  - supermetrics/vks_global_vcpu_pcore_ratio.yaml
-  - supermetrics/vks_regular_vm_vcpu.yaml
-  - supermetrics/vks_nodeimage_vcpu.yaml
-  - supermetrics/vks_vmservice_vcpu.yaml
-  - supermetrics/vks_cores.yaml
-  - supermetrics/vks_pod_vcpu.yaml
+  - content/factory/supermetrics/vks_vcls_vcpu.yaml
+  - content/factory/supermetrics/vks_supervisor_vcpu.yaml
+  - content/factory/supermetrics/vks_global_vcpu_pcore_ratio.yaml
+  - content/factory/supermetrics/vks_regular_vm_vcpu.yaml
+  - content/factory/supermetrics/vks_nodeimage_vcpu.yaml
+  - content/factory/supermetrics/vks_vmservice_vcpu.yaml
+  - content/factory/supermetrics/vks_cores.yaml
+  - content/factory/supermetrics/vks_pod_vcpu.yaml
 views:
-  - views/vks_core_consumption_by_vcenter.yaml
+  - content/factory/views/vks_core_consumption_by_vcenter.yaml
 dashboards:
-  - dashboards/vks_core_consumption.yaml
+  - content/factory/dashboards/vks_core_consumption.yaml
 customgroups: []
 reports:
-  - reports/vks_core_consumption_report.yaml
+  - content/factory/reports/vks_core_consumption_report.yaml

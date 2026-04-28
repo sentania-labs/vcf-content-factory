@@ -1,6 +1,6 @@
 artifacts:
 - headline: true
-  source: bundles/third_party/idps-planner.yaml
+  source: content/third_party/idps-planner/PROJECT.yaml
 deprecates: []
 description: vDefend IDPS resource-monitoring dashboard for VCF Operations. Tracks
   Packets Per Second and Throughput against the Classic Mode bypass thresholds (140k

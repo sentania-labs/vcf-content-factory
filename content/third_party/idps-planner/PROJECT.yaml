@@ -5,8 +5,6 @@ builtin_metric_enables:
   reason: required by dashboard 'IDPS Planner' widget '85c05c6b-e60d-4b2c-a6c0-af2fe2ec472e'
     (Scoreboard)
   resource_kind: VirtualMachine
-dashboards:
-- idps-planner/dashboards/IDPS Planner.yaml
 description: 'vDefend IDPS resource-monitoring dashboard for VCF Operations. Tracks
   Packets Per Second and Throughput against the Classic Mode bypass thresholds (140k
   PPS / 9 Gbps), with peak-based metrics (5-minute peak, period peak, 95th percentile)
@@ -20,15 +18,3 @@ name: idps-planner
 released: true
 source:
   captured_at: '2026-04-17'
-supermetrics:
-- idps-planner/supermetrics/IDPS Net Usage All VMs.yaml
-- idps-planner/supermetrics/IDPS Net Transmit All VMs.yaml
-- idps-planner/supermetrics/IDPS Net Receive All VMs.yaml
-- idps-planner/supermetrics/IDPS Packets per second All VMs.yaml
-- idps-planner/supermetrics/IDPS Peak PPS within cycle All VMs.yaml
-views:
-- idps-planner/views/IDPS Planner Host Metrics.yaml
-- idps-planner/views/IDPS IDPS Planner VM Metrics.yaml
-- idps-planner/views/IDPS Planner - vCenter Selection.yaml
-- idps-planner/views/IDPS Planner - Datacenter Selection.yaml
-- idps-planner/views/IDPS Planner - Cluster Selection.yaml
