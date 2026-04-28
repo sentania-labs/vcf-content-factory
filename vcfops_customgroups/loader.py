@@ -122,6 +122,9 @@ class CustomGroupDef:
     source_path: Path | None = None
     released: bool = False   # publish gate
     version: str = "1.0.0"  # internal semver
+    # Provenance: "factory", a third-party project slug, or "" (unknown).
+    # Populated by the loader from source_path; never author-supplied.
+    provenance: str = ""
 
     # ---- validation ------------------------------------------------
     def validate(self, enforce_framework_prefix: bool = True) -> None:
@@ -433,6 +436,8 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Custom
     released = bool(released_raw) if isinstance(released_raw, bool) else False
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
 
+    from vcfops_common.provenance import provenance_from_path
+
     cg = CustomGroupDef(
         name=str(data.get("name", "")).strip(),
         description=str(data.get("description", "") or "").strip(),
@@ -444,6 +449,7 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Custom
         source_path=path,
         released=released,
         version=version,
+        provenance=provenance_from_path(path),
     )
     cg.validate(enforce_framework_prefix=enforce_framework_prefix)
     return cg

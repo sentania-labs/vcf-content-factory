@@ -150,6 +150,9 @@ class ViewDef:
     # When set, the dependency walker surfaces these groups as deps.
     # YAML key: `customgroup:` (str or list[str]).
     customgroups: List[str] = field(default_factory=list)
+    # Provenance: "factory", a third-party project slug, or "" (unknown).
+    # Populated by the loader from source_path; never author-supplied.
+    provenance: str = ""
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         import warnings
@@ -648,6 +651,9 @@ class Dashboard:
     source_path: Path | None = None
     released: bool = False   # publish gate
     version: str = "1.0.0"  # internal semver
+    # Provenance: "factory", a third-party project slug, or "" (unknown).
+    # Populated by the loader from source_path; never author-supplied.
+    provenance: str = ""
 
     def validate(self, known_views: dict[str, ViewDef], enforce_framework_prefix: bool = True) -> None:
         if not self.name.strip():
@@ -901,6 +907,8 @@ def load_view(path: Path, enforce_framework_prefix: bool = True) -> ViewDef:
     else:
         view_customgroups = []
 
+    from vcfops_common.provenance import provenance_from_path
+
     v = ViewDef(
         id=view_id,
         name=str(data.get("name", "")).strip(),
@@ -919,6 +927,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True) -> ViewDef:
         released=released,
         version=version,
         customgroups=view_customgroups,
+        provenance=provenance_from_path(path),
     )
     v.validate(enforce_framework_prefix=enforce_framework_prefix)
     return v
@@ -1188,6 +1197,8 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
     released_raw = data.get("released", False)
     released = bool(released_raw) if isinstance(released_raw, bool) else False
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
+    from vcfops_common.provenance import provenance_from_path
+
     return Dashboard(
         id=dash_id,
         name=name,
@@ -1199,6 +1210,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
         source_path=path,
         released=released,
         version=version,
+        provenance=provenance_from_path(path),
     )
 
 

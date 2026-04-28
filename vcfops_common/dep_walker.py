@@ -26,12 +26,33 @@ Public API — offline (no client required)
       all_views,          # corpus of all ViewDef available in the repo
       all_sms,            # corpus of all SuperMetricDef available in the repo
       all_customgroups,   # corpus of all CustomGroupDef available in the repo
+      project_scope=None, # Optional[str] — "factory", a third-party slug, or None
+      cross_links=None,   # Optional[CollectDepsCrossLinks] — allowed factory fallbacks
   ) -> DepGraph
 
   DepGraph.views          # list[ViewDef] — transitively required views
   DepGraph.supermetrics   # list[SuperMetricDef] — transitively required SMs
   DepGraph.customgroups   # list[CustomGroupDef] — transitively required groups
   DepGraph.errors         # list[str] — missing-dep error messages
+
+Project-scope semantics
+-----------------------
+  project_scope=None         No scoping.  Resolves against the full corpus the same
+                             way as today.  Auto-detected from the starting dashboard's
+                             provenance when exactly one starting dashboard is provided.
+
+  project_scope="factory"    Only resolves to provenance=="factory" components.
+                             Errors if a needed component lives in any third-party project.
+
+  project_scope="<slug>"     Resolves to same-project components first; falls back to
+                             provenance=="factory" only when the dependency's display name
+                             is explicitly listed in the corresponding ``cross_links``
+                             parameter.  Errors otherwise.
+
+  provenance==""             Components with empty provenance (test fixtures, objects
+                             constructed without a source_path) are always accepted
+                             regardless of scope — the scope boundary is only enforced
+                             on objects whose provenance is known.
 
 Public API — online (requires VCFOpsClient)
 -------------------------------------------
@@ -63,7 +84,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from vcfops_supermetrics.client import VCFOpsClient
@@ -140,6 +161,27 @@ class DepGraph:
     supermetrics: "List" = field(default_factory=list)
     customgroups: "List" = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
+
+
+@dataclass
+class CollectDepsCrossLinks:
+    """Allowed factory fallbacks for a project-scoped walk.
+
+    When ``collect_deps`` is called with ``project_scope="<slug>"``, only deps
+    whose display name appears in the corresponding list here are permitted to
+    resolve against factory-provenance content.  All other factory-provenance
+    components are out-of-scope and produce an error.
+
+    All three lists contain *display names* (the ``name`` field in each content
+    YAML).  Pass an instance of this class as the ``cross_links`` argument to
+    ``collect_deps``.
+
+    The common case (fully self-contained project) is to pass ``None`` — the
+    walker then rejects *all* factory fallbacks.
+    """
+    views: Set[str] = field(default_factory=set)
+    supermetrics: Set[str] = field(default_factory=set)
+    customgroups: Set[str] = field(default_factory=set)
 
 
 # ---------------------------------------------------------------------------
@@ -417,11 +459,93 @@ def extract_customgroup_names_from_dashboards(
     return result
 
 
+def _auto_detect_scope(dashboards: "List") -> Optional[str]:
+    """Infer project_scope from the provenance of a single starting dashboard.
+
+    Returns the provenance string if all dashboards share the same non-empty
+    provenance; returns None if the list is empty, has multiple dashboards
+    with different provenances, or has empty provenance.
+
+    Rationale: when a caller passes a single starting dashboard the walker can
+    automatically scope to that dashboard's project, giving DTRT behaviour
+    without requiring every caller to pass project_scope explicitly.
+    """
+    if not dashboards:
+        return None
+    provenances = {getattr(d, "provenance", "") for d in dashboards}
+    # If all dashboards share exactly one non-empty provenance, use it.
+    provenances.discard("")  # ignore unknown-provenance dashes (test fixtures)
+    if len(provenances) == 1:
+        return provenances.pop()
+    return None
+
+
+def _scope_allows(
+    obj_provenance: str,
+    obj_name: str,
+    project_scope: str,
+    cross_links_for_type: Optional[Set[str]],
+) -> Optional[str]:
+    """Return None if the object is in-scope; return an error string if not.
+
+    Args:
+        obj_provenance:      The loaded object's provenance field.
+        obj_name:            The display name of the object (for error messages).
+        project_scope:       "factory" or a third-party slug.
+        cross_links_for_type: The set of cross-linked names allowed for this
+                              content type (e.g. cross_links.views), or None.
+
+    Semantics:
+      * Empty provenance (test fixtures, programmatically constructed objects)
+        → always allowed.  The scope boundary only applies to objects whose
+        provenance is known.
+      * project_scope == "factory" → obj must have provenance "factory".
+      * project_scope == "<slug>" → obj must have provenance "<slug>" OR
+        (provenance "factory" AND name in cross_links_for_type).
+      * Cross-project (third-party slug ≠ project_scope) → always an error.
+    """
+    if not obj_provenance:
+        return None  # unknown provenance — pass through
+
+    if obj_provenance == project_scope:
+        return None  # same project or both factory — always OK
+
+    if project_scope == "factory":
+        # Factory dashboards must only use factory components.
+        if obj_provenance != "factory":
+            return (
+                f"scope violation: '{obj_name}' has provenance "
+                f"'{obj_provenance}' but project_scope='factory' requires "
+                f"factory-native components only"
+            )
+        return None  # obj_provenance == "factory" already handled above
+
+    # project_scope is a third-party slug
+    if obj_provenance == "factory":
+        # Factory fallback — only allowed if the name is in cross_links
+        if cross_links_for_type and obj_name in cross_links_for_type:
+            return None  # explicitly cross-linked
+        return (
+            f"scope violation: '{obj_name}' has provenance 'factory' "
+            f"but is not listed in cross_links for project '{project_scope}'. "
+            f"Add it to the project's PROJECT.yaml cross_links section to "
+            f"allow this dependency."
+        )
+
+    # obj_provenance is a different third-party slug
+    return (
+        f"scope violation: '{obj_name}' belongs to project "
+        f"'{obj_provenance}' but dashboard project_scope is '{project_scope}'"
+    )
+
+
 def collect_deps(
     dashboards: "List",
     all_views: "List",
     all_sms: "List",
     all_customgroups: "List",
+    project_scope: Optional[str] = None,
+    cross_links: Optional["CollectDepsCrossLinks"] = None,
 ) -> "DepGraph":
     """Pure offline dependency walk starting from a set of dashboards.
 
@@ -441,14 +565,39 @@ def collect_deps(
         all_views:        Full corpus of ViewDef from the repo.
         all_sms:          Full corpus of SuperMetricDef from the repo.
         all_customgroups: Full corpus of CustomGroupDef from the repo.
+        project_scope:    Optional project scope string.  When None, the scope
+                          is auto-detected from the starting dashboards'
+                          provenance (if they all share the same provenance).
+                          Pass an explicit string to override.  See module
+                          docstring for full semantics.
+        cross_links:      Allowed factory fallbacks for a project-scoped walk
+                          (a ``CollectDepsCrossLinks`` instance).  Only
+                          relevant when project_scope is a third-party slug.
 
     Returns:
         DepGraph with .views, .supermetrics, .customgroups, .errors populated.
     """
     graph = DepGraph()
 
+    # --- Auto-detect scope from starting dashboards -------------------------
+    _scope = project_scope
+    if _scope is None:
+        _scope = _auto_detect_scope(dashboards)
+
+    # Unpack cross_links sets for efficient lookup (avoid None checks inline)
+    _cl_views: Optional[Set[str]] = None
+    _cl_sms: Optional[Set[str]] = None
+    _cl_cgs: Optional[Set[str]] = None
+    if cross_links is not None:
+        _cl_views = set(cross_links.views) if cross_links.views else set()
+        _cl_sms = set(cross_links.supermetrics) if cross_links.supermetrics else set()
+        _cl_cgs = set(cross_links.customgroups) if cross_links.customgroups else set()
+
     view_by_name = {v.name: v for v in all_views}
     sm_by_id = {sm.id.lower(): sm for sm in all_sms}
+    # Build a name→SM map for scope-checking (SMs are resolved by UUID, but
+    # the scope check uses the name from the cross_links list).
+    sm_by_name = {sm.name: sm for sm in all_sms}
     cg_by_name = {cg.name: cg for cg in all_customgroups}
     known_cg_names = set(cg_by_name.keys())
 
@@ -468,6 +617,17 @@ def collect_deps(
                 f"(not found in views corpus)"
             )
             continue
+        # --- Scope check ---
+        if _scope is not None:
+            err = _scope_allows(
+                getattr(view, "provenance", ""),
+                view.name,
+                _scope,
+                _cl_views,
+            )
+            if err:
+                graph.errors.append(err)
+                continue  # do not recurse into out-of-scope view's SMs/CGs
         needed_views[vname] = view
 
     # --- Step 2a: resolved views → SM refs ---------------------------------
@@ -487,6 +647,17 @@ def collect_deps(
                 f"{source} references unknown SM uuid '{sm_uuid}'"
             )
             return
+        # --- Scope check ---
+        if _scope is not None:
+            err = _scope_allows(
+                getattr(sm, "provenance", ""),
+                sm.name,
+                _scope,
+                _cl_sms,
+            )
+            if err:
+                graph.errors.append(err)
+                return
         needed_sms[sm_uuid] = sm
 
     for view in needed_views.values():
@@ -548,6 +719,17 @@ def collect_deps(
                     f"(not found in customgroups corpus)"
                 )
                 continue
+            # --- Scope check ---
+            if _scope is not None:
+                err = _scope_allows(
+                    getattr(cg, "provenance", ""),
+                    cg.name,
+                    _scope,
+                    _cl_cgs,
+                )
+                if err:
+                    graph.errors.append(err)
+                    continue
             needed_cgs[cg_name] = cg
 
     # --- Step 4: dashboards → direct customgroup refs ----------------------
@@ -561,6 +743,17 @@ def collect_deps(
                     f"'{cg_name}'"
                 )
                 continue
+            # --- Scope check ---
+            if _scope is not None:
+                err = _scope_allows(
+                    getattr(cg, "provenance", ""),
+                    cg.name,
+                    _scope,
+                    _cl_cgs,
+                )
+                if err:
+                    graph.errors.append(err)
+                    continue
             needed_cgs[cg_name] = cg
 
     # --- Step 5: customgroup rules → relationship-referenced group names ---
@@ -587,6 +780,17 @@ def collect_deps(
                             f"references unknown group '{ref_name}'"
                         )
                     else:
+                        # --- Scope check on relationship-referenced CG ---
+                        if _scope is not None:
+                            err = _scope_allows(
+                                getattr(ref_cg, "provenance", ""),
+                                ref_cg.name,
+                                _scope,
+                                _cl_cgs,
+                            )
+                            if err:
+                                graph.errors.append(err)
+                                continue
                         needed_cgs[ref_name] = ref_cg
                         _cg_queue.append(ref_name)
 

@@ -32,6 +32,10 @@ builtin_metric_enables: list[dict]  -- OOTB metrics required by this project
   metric_key:       str   (required in each entry)
   reason:           str   (required in each entry)
 released:           bool  -- publish gate flag
+cross_links:        dict  -- factory components this project may depend on
+  views:            list[str]  -- factory view display names
+  supermetrics:     list[str]  -- factory SM display names
+  customgroups:     list[str]  -- factory custom group display names
 """
 from __future__ import annotations
 
@@ -62,6 +66,21 @@ class BuiltinMetricEnable:
 
 
 @dataclass
+class CrossLinks:
+    """Named factory components that a third-party project is explicitly
+    allowed to pull in as cross-project dependencies.
+
+    All three lists contain *display names* (the ``name`` field in each
+    content YAML).  The walker treats names in these lists as legal
+    factory fallbacks when scoped to this project; anything else must
+    resolve within the project itself.
+    """
+    views: List[str] = field(default_factory=list)
+    supermetrics: List[str] = field(default_factory=list)
+    customgroups: List[str] = field(default_factory=list)
+
+
+@dataclass
 class ProjectDef:
     """Parsed and validated representation of a third-party PROJECT.yaml."""
     name: str
@@ -74,6 +93,9 @@ class ProjectDef:
     builtin_metric_enables: List[BuiltinMetricEnable] = field(default_factory=list)
     released: bool = False
     source_path: Optional[Path] = None
+    # Optional list of factory components this project may depend on.
+    # Absent/empty = project is fully self-contained (the common case).
+    cross_links: CrossLinks = field(default_factory=CrossLinks)
 
 
 def load_project(path: str | Path) -> ProjectDef:
@@ -217,6 +239,46 @@ def load_project(path: str | Path) -> ProjectDef:
             loc=path,
         )
 
+    # ---- cross_links (optional dict of lists) ----
+    cross_links_raw = data.get("cross_links")
+    cross_links_obj = CrossLinks()
+    if cross_links_raw is not None:
+        if not isinstance(cross_links_raw, dict):
+            raise ProjectValidationError(
+                f"{path}: 'cross_links' must be a mapping, "
+                f"got {type(cross_links_raw).__name__}",
+                loc=path,
+            )
+        for cl_key in ("views", "supermetrics", "customgroups"):
+            cl_val = cross_links_raw.get(cl_key)
+            if cl_val is None:
+                continue
+            if not isinstance(cl_val, list):
+                raise ProjectValidationError(
+                    f"{path}: cross_links.{cl_key} must be a list, "
+                    f"got {type(cl_val).__name__}",
+                    loc=path,
+                )
+            validated: List[str] = []
+            for i, entry in enumerate(cl_val):
+                if not isinstance(entry, str) or not entry.strip():
+                    raise ProjectValidationError(
+                        f"{path}: cross_links.{cl_key}[{i}] must be a "
+                        f"non-empty string",
+                        loc=path,
+                    )
+                validated.append(entry.strip())
+            setattr(cross_links_obj, cl_key, validated)
+        # Warn about unknown keys (non-fatal — allows future expansion)
+        unknown_cl_keys = set(cross_links_raw.keys()) - {"views", "supermetrics", "customgroups"}
+        if unknown_cl_keys:
+            import warnings as _warnings
+            _warnings.warn(
+                f"{path}: cross_links contains unrecognised keys: "
+                f"{sorted(unknown_cl_keys)} — ignored",
+                stacklevel=2,
+            )
+
     return ProjectDef(
         name=name,
         display_name=display_name,
@@ -228,6 +290,7 @@ def load_project(path: str | Path) -> ProjectDef:
         builtin_metric_enables=bme_list,
         released=bool(released_raw),
         source_path=path,
+        cross_links=cross_links_obj,
     )
 
 
@@ -366,94 +429,85 @@ def check_project_membership(
 ) -> List[str]:
     """Check that third-party dashboards only pull in deps from their own project.
 
-    For each dashboard whose ``source_path`` lives under
-    ``third_party/<project>/``, every dependency it pulls in (views, super
-    metrics, custom groups) must also live under ``third_party/<project>/``.
+    Delegates to the scope-aware ``collect_deps`` walker.  For each dashboard
+    whose provenance is a third-party project slug, the walker is called with
+    ``project_scope=<slug>`` and the project's ``cross_links`` loaded from
+    its PROJECT.yaml (if present).  Any scope violations recorded in
+    ``DepGraph.errors`` are returned as errors here.
 
-    Cross-project deps (third-party A using third-party B's view, or any
-    third-party component using a factory-native dep) are errors.
-
-    Factory-native dashboards (``content/dashboards/``) are unconstrained —
+    Factory-native dashboards (provenance="factory") are unconstrained —
     they may reference any factory-native component freely.
 
+    Dashboards with empty provenance (test fixtures, programmatically
+    constructed objects) are also skipped.
+
     Args:
-        dashboards:      All loaded Dashboard objects (source_path required).
+        dashboards:      All loaded Dashboard objects.
         all_views:       All loaded ViewDef objects.
         all_supermetrics: All loaded SuperMetricDef objects.
         all_customgroups: All loaded CustomGroupDef objects.
-        third_party_dir: Root of the third-party tree.
+        third_party_dir: Root of the third-party tree (used to locate
+                         PROJECT.yaml files for cross_links).
 
     Returns:
         A list of error message strings.  Empty = all clear.
     """
-    from vcfops_common.dep_walker import collect_deps
+    from vcfops_common.dep_walker import collect_deps, CollectDepsCrossLinks
 
     third_party_dir = Path(third_party_dir).resolve()
+
+    # Cache project cross_links by slug to avoid re-loading PROJECT.yaml per dashboard.
+    _project_cross_links: dict = {}  # slug -> CollectDepsCrossLinks or None
+
+    def _get_cross_links(slug: str) -> Optional["CollectDepsCrossLinks"]:
+        if slug in _project_cross_links:
+            return _project_cross_links[slug]
+        project_yaml = third_party_dir / slug / "PROJECT.yaml"
+        cl = None
+        if project_yaml.exists():
+            try:
+                proj = load_project(project_yaml)
+                raw_cl = proj.cross_links
+                cl = CollectDepsCrossLinks(
+                    views=set(raw_cl.views),
+                    supermetrics=set(raw_cl.supermetrics),
+                    customgroups=set(raw_cl.customgroups),
+                )
+            except Exception:
+                pass  # if load fails, no cross-links (safe default)
+        _project_cross_links[slug] = cl
+        return cl
 
     errors: List[str] = []
 
     for dash in dashboards:
-        dash_path = getattr(dash, "source_path", None)
-        if dash_path is None:
+        dash_provenance = getattr(dash, "provenance", "")
+        # Skip factory-native and unknown-provenance dashboards.
+        if not dash_provenance or dash_provenance == "factory":
             continue
-        dash_path = Path(dash_path).resolve()
 
-        # Only check dashboards that live under third_party/
-        try:
-            rel = dash_path.relative_to(third_party_dir)
-        except ValueError:
-            continue  # factory-native — skip
+        project_slug = dash_provenance
+        cross_links = _get_cross_links(project_slug)
 
-        # Project root is the immediate child of third_party_dir
-        project_name = rel.parts[0]
-        project_root = third_party_dir / project_name
-
-        # Walk deps for this single dashboard
+        # Walk deps with scope enforcement.  The walker auto-detects the scope
+        # from the dashboard's provenance (single dashboard → same provenance),
+        # but we pass it explicitly for clarity.
         graph = collect_deps(
             dashboards=[dash],
             all_views=all_views,
             all_sms=all_supermetrics,
             all_customgroups=all_customgroups,
+            project_scope=project_slug,
+            cross_links=cross_links,
         )
 
-        # Check views
-        for view in graph.views:
-            view_path = getattr(view, "source_path", None)
-            if view_path is None:
-                continue
-            view_path = Path(view_path).resolve()
-            if not _is_under(view_path, project_root):
-                errors.append(
-                    f"dashboard {dash_path.name!r} (project {project_name!r}) "
-                    f"pulls in view {view.name!r} from outside its project: "
-                    f"{view_path}"
-                )
-
-        # Check super metrics
-        for sm in graph.supermetrics:
-            sm_path = getattr(sm, "source_path", None)
-            if sm_path is None:
-                continue
-            sm_path = Path(sm_path).resolve()
-            if not _is_under(sm_path, project_root):
-                errors.append(
-                    f"dashboard {dash_path.name!r} (project {project_name!r}) "
-                    f"pulls in super metric {sm.name!r} from outside its project: "
-                    f"{sm_path}"
-                )
-
-        # Check custom groups
-        for cg in graph.customgroups:
-            cg_path = getattr(cg, "source_path", None)
-            if cg_path is None:
-                continue
-            cg_path = Path(cg_path).resolve()
-            if not _is_under(cg_path, project_root):
-                errors.append(
-                    f"dashboard {dash_path.name!r} (project {project_name!r}) "
-                    f"pulls in custom group {cg.name!r} from outside its project: "
-                    f"{cg_path}"
-                )
+        # Scope violations are reported as errors in graph.errors.
+        # Prefix them with the dashboard name for actionable messages.
+        dash_name = getattr(dash, "name", str(getattr(dash, "source_path", "?")))
+        for err in graph.errors:
+            errors.append(
+                f"dashboard '{dash_name}' (project '{project_slug}'): {err}"
+            )
 
     return errors
 
