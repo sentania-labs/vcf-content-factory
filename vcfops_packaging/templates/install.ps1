@@ -2359,9 +2359,23 @@ function Invoke-Install {
         if ($enableWarns.Count -gt 0) {
             Write-Host "Content was imported but one or more super metrics could not be enabled."
         }
+        Write-Host ""
+        Write-Host "NOTE: VCF Operations needs roughly 5 minutes to finish ingesting and"
+        Write-Host "configuring imported content. Until that completes:"
+        Write-Host "  - Dashboards may render with empty widgets"
+        Write-Host "  - View columns may show 'No data'"
+        Write-Host "  - Newly enabled super metrics will report no values"
+        Write-Host "This is expected. Refresh after ~5 minutes."
         exit 2
     } else {
         Write-Host "Done. All content installed successfully."
+        Write-Host ""
+        Write-Host "NOTE: VCF Operations needs roughly 5 minutes to finish ingesting and"
+        Write-Host "configuring imported content. Until that completes:"
+        Write-Host "  - Dashboards may render with empty widgets"
+        Write-Host "  - View columns may show 'No data'"
+        Write-Host "  - Newly enabled super metrics will report no values"
+        Write-Host "This is expected. Refresh after ~5 minutes."
     }
 }
 

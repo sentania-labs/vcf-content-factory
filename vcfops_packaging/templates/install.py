@@ -2314,9 +2314,23 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
             print(f"  WARN  {w}")
         if enable_warnings:
             print("Content was imported but one or more super metrics could not be enabled.")
+        print()
+        print("NOTE: VCF Operations needs roughly 5 minutes to finish ingesting and")
+        print("configuring imported content. Until that completes:")
+        print("  - Dashboards may render with empty widgets")
+        print("  - View columns may show 'No data'")
+        print("  - Newly enabled super metrics will report no values")
+        print("This is expected. Refresh after ~5 minutes.")
         sys.exit(2)
     else:
         print("Done. All content installed successfully.")
+        print()
+        print("NOTE: VCF Operations needs roughly 5 minutes to finish ingesting and")
+        print("configuring imported content. Until that completes:")
+        print("  - Dashboards may render with empty widgets")
+        print("  - View columns may show 'No data'")
+        print("  - Newly enabled super metrics will report no values")
+        print("This is expected. Refresh after ~5 minutes.")
 
 
 # ---------------------------------------------------------------------------
