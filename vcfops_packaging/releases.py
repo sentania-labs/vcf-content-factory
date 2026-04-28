@@ -42,6 +42,32 @@ import yaml
 VERSION_RE = re.compile(r"^\d+\.\d+$")
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$|^[a-z0-9]$")
 
+# ---------------------------------------------------------------------------
+# Release-naming convention
+# ---------------------------------------------------------------------------
+
+#: Recognized type suffixes for the ``<content-stem>-<type>`` naming convention.
+#: A release manifest ``name:`` that ends with one of these is considered conforming.
+RELEASE_TYPE_SUFFIXES = frozenset({
+    "dashboard",
+    "view",
+    "supermetric",
+    "customgroup",
+    "report",
+    "bundle",
+    "managementpack",
+    "alert",
+    "symptom",
+    "recommendation",
+})
+
+#: Release manifest names that predate the convention and are permanently
+#: grandfathered.  The WARN check skips these.
+_LEGACY_RELEASE_NAMES: frozenset[str] = frozenset({
+    "demand-driven-capacity-v2",
+    "idps-planner",
+})
+
 
 class ReleaseValidationError(ValueError):
     pass
@@ -334,3 +360,67 @@ def validate_flag_state(
                     )
 
     return errors
+
+
+def check_bundle_release_collision(
+    bundles_dir: Path,
+    releases: List[ReleaseDef],
+) -> List[str]:
+    """Hard-error check: a slug must not appear in both bundles/ and releases/.
+
+    Scans every ``bundles/*.yaml`` filename stem and every loaded release
+    manifest ``name:`` field.  If the same slug appears in both sets, returns
+    an error string naming both files.
+
+    Args:
+        bundles_dir: Path to the ``bundles/`` directory (may not exist).
+        releases:    Pre-loaded release manifests (from ``load_all_releases``).
+
+    Returns:
+        A list of error strings.  Empty list means no collision.
+    """
+    errors: List[str] = []
+    if not bundles_dir.exists():
+        return errors
+
+    bundle_slugs: dict[str, Path] = {}
+    for p in sorted(bundles_dir.glob("*.y*ml")):
+        bundle_slugs[p.stem] = p
+
+    release_names: dict[str, Path] = {r.name: r.manifest_path for r in releases}
+
+    for slug, bundle_path in bundle_slugs.items():
+        if slug in release_names:
+            errors.append(
+                f"slug collision: '{slug}' appears as both "
+                f"bundle '{bundle_path}' and release manifest '{release_names[slug]}'"
+            )
+
+    return errors
+
+
+def check_release_naming_convention(
+    releases: List[ReleaseDef],
+) -> List[str]:
+    """WARN check: release manifest names should follow the ``<stem>-<type>`` convention.
+
+    A name conforms if its last hyphen-delimited component is one of
+    ``RELEASE_TYPE_SUFFIXES``.  Names in ``_LEGACY_RELEASE_NAMES`` are
+    silently skipped.
+
+    Returns:
+        A list of warning strings.  Empty list means all clear.
+    """
+    warnings_: List[str] = []
+    for r in releases:
+        if r.name in _LEGACY_RELEASE_NAMES:
+            continue
+        # Check whether the name ends with a recognized type suffix.
+        parts = r.name.rsplit("-", 1)
+        if len(parts) < 2 or parts[-1] not in RELEASE_TYPE_SUFFIXES:
+            warnings_.append(
+                f"WARN  {r.manifest_path.name}: name {r.name!r} does not follow the "
+                f"<content-stem>-<type> convention "
+                f"(recognized types: {', '.join(sorted(RELEASE_TYPE_SUFFIXES))})"
+            )
+    return warnings_

@@ -81,6 +81,8 @@ def cmd_validate(args) -> int:
     from .releases import (
         load_all_releases,
         validate_flag_state,
+        check_bundle_release_collision,
+        check_release_naming_convention,
         ReleaseValidationError,
     )
 
@@ -157,6 +159,23 @@ def cmd_validate(args) -> int:
         rc = 1
     else:
         print(f"  OK  {len(releases)} release manifest(s) valid, flag-state clean")
+
+    # --- Slug collision check: bundles/ vs releases/ ---
+    bundles_dir = Path(DEFAULT_BUNDLES_DIR)
+    collision_errors = check_bundle_release_collision(bundles_dir, releases)
+    if collision_errors:
+        print()
+        for err in collision_errors:
+            print(f"  FAIL  {err}")
+        print(f"FAIL  {len(collision_errors)} bundle/release slug collision(s)")
+        rc = 1
+
+    # --- Naming convention WARN ---
+    naming_warnings = check_release_naming_convention(releases)
+    if naming_warnings:
+        print()
+        for w in naming_warnings:
+            print(f"  {w}")
 
     # --- PROJECT.yaml validation (third_party/) ---
     third_party_dir = Path("third_party")
@@ -584,9 +603,24 @@ def cmd_release(args) -> int:
         return 1
 
     # -----------------------------------------------------------------------
-    # Compute release slug from source filename stem (underscores -> hyphens).
+    # Compute release slug.
+    #
+    # Convention: <content-stem>-<type>  (snake_case → kebab, lowercase).
+    # Exception:  for `bundle` type the source slug already encodes identity;
+    #             we do NOT add a -bundle suffix automatically.
+    # Override:   --slug <name> bypasses the default entirely.
     # -----------------------------------------------------------------------
-    slug = source_path.stem.replace("_", "-")
+    explicit_slug = getattr(args, "slug", None)
+    if explicit_slug:
+        slug = explicit_slug
+    else:
+        stem_kebab = source_path.stem.replace("_", "-").lower()
+        if content_type == "bundle":
+            # Bundles: use the stem as-is (user authors them as foo-bundle.yaml
+            # if they want the convention; we don't auto-add the suffix here).
+            slug = stem_kebab
+        else:
+            slug = f"{stem_kebab}-{content_type}"
 
     # -----------------------------------------------------------------------
     # Compute version.
@@ -1041,6 +1075,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "slug of a prior release manifest to mark deprecated (repeatable). "
             "Each slug must match an existing releases/<slug>.yaml file."
+        ),
+    )
+    pr.add_argument(
+        "--slug",
+        default=None,
+        metavar="SLUG",
+        help=(
+            "explicit release manifest slug (overrides the default "
+            "<content-stem>-<type> naming convention). "
+            "Use for grandfathering existing names or one-off overrides."
         ),
     )
     pr.add_argument(

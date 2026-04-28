@@ -509,20 +509,38 @@ def _prompt_slug(
     input_fn: Callable,
     output_fn: Callable,
 ) -> Optional[str]:
-    """Prompt for a bundle slug, re-prompting on collisions."""
+    """Prompt for a bundle slug, applying the <name>-bundle convention.
+
+    When the user types a bare name without a ``-bundle`` suffix, we suggest
+    ``<name>-bundle`` as the default and re-prompt with that value pre-filled.
+    The user may override by typing a different slug at the confirmation step.
+    """
     import re
     _SLUG_RE = re.compile(r'^[a-z0-9][a-z0-9\-]*[a-z0-9]$|^[a-z0-9]$')
 
     for _ in range(5):  # max 5 attempts
         output_fn("Bundle slug (kebab-case, e.g. 'my-bundle'): ", end="")
         try:
-            slug = input_fn("").strip()
+            raw = input_fn("").strip()
         except EOFError:
             print("ERROR: no slug provided", file=sys.stderr)
             return None
-        if not slug:
+        if not raw:
             output_fn("  (slug is required)")
             continue
+
+        # Apply <name>-bundle convention when user omits the suffix.
+        if not raw.endswith("-bundle"):
+            suggested = f"{raw}-bundle"
+            output_fn(f"Bundle slug [{suggested}]: ", end="")
+            try:
+                override = input_fn("").strip()
+            except EOFError:
+                override = ""
+            slug = override if override else suggested
+        else:
+            slug = raw
+
         if not _SLUG_RE.match(slug):
             output_fn(f"  Invalid slug: must be kebab-case (lowercase, digits, hyphens, no leading/trailing hyphens)")
             continue

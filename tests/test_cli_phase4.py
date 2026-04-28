@@ -147,7 +147,8 @@ class TestReleaseSmoke:
         rc = cmd_release(args)
         assert rc == 0, f"cmd_release returned {rc}"
 
-        manifest_path = factory / "releases" / "demand-driven-capacity-v2.yaml"
+        # New convention: slug = <stem>-<type> = demand-driven-capacity-v2-dashboard
+        manifest_path = factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
         assert manifest_path.exists(), f"manifest not created: {manifest_path}"
 
     def test_manifest_schema(self, tmp_path, monkeypatch):
@@ -158,10 +159,10 @@ class TestReleaseSmoke:
         args = _build_release_args(no_commit=True)
         cmd_release(args)
 
-        manifest_path = factory / "releases" / "demand-driven-capacity-v2.yaml"
+        manifest_path = factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
         data = yaml.safe_load(manifest_path.read_text())
 
-        assert data["name"] == "demand-driven-capacity-v2"
+        assert data["name"] == "demand-driven-capacity-v2-dashboard"
         assert data["version"] == "1.0"
         assert isinstance(data["description"], str) and data["description"].strip()
         assert isinstance(data["artifacts"], list) and len(data["artifacts"]) == 1
@@ -196,7 +197,8 @@ class TestReleaseSmoke:
         args = _build_release_args(name=display_name, no_commit=True)
         rc = cmd_release(args)
         assert rc == 0, f"display-name resolution returned {rc}"
-        assert (factory / "releases" / "demand-driven-capacity-v2.yaml").exists()
+        # New convention slug: <stem>-dashboard
+        assert (factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml").exists()
 
     def test_path_resolution(self, tmp_path, monkeypatch):
         """T1: explicit relative path resolves to correct source file."""
@@ -210,7 +212,7 @@ class TestReleaseSmoke:
         )
         rc = cmd_release(args)
         assert rc == 0
-        assert (factory / "releases" / "demand-driven-capacity-v2.yaml").exists()
+        assert (factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -226,11 +228,11 @@ class TestAutoBump:
 
         from vcfops_packaging.cli import cmd_release
 
-        # First release -> 1.0
+        # First release -> 1.0  (new slug convention: demand-driven-capacity-v2-dashboard)
         args1 = _build_release_args(no_commit=True)
         rc = cmd_release(args1)
         assert rc == 0
-        manifest_path = factory / "releases" / "demand-driven-capacity-v2.yaml"
+        manifest_path = factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
         v1 = yaml.safe_load(manifest_path.read_text())["version"]
         assert v1 == "1.0", f"first release version should be 1.0, got {v1!r}"
 
@@ -250,7 +252,7 @@ class TestAutoBump:
         args = _build_release_args(version="2.0", no_commit=True)
         rc = cmd_release(args)
         assert rc == 0
-        manifest_path = factory / "releases" / "demand-driven-capacity-v2.yaml"
+        manifest_path = factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
         v = yaml.safe_load(manifest_path.read_text())["version"]
         assert v == "2.0", f"explicit version should be 2.0, got {v!r}"
 
@@ -297,7 +299,8 @@ class TestDeprecates:
         rc = cmd_release(args)
         assert rc == 0
 
-        manifest_path = factory / "releases" / "demand-driven-capacity-v2.yaml"
+        # New convention slug: demand-driven-capacity-v2-dashboard
+        manifest_path = factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
         data = yaml.safe_load(manifest_path.read_text())
         assert isinstance(data.get("deprecates"), list)
         assert any(prior_slug in d for d in data["deprecates"]), (
@@ -405,7 +408,8 @@ class TestCommit:
             cwd=str(factory), capture_output=True, text=True,
         )
         changed = set(r.stdout.strip().splitlines())
-        assert "releases/demand-driven-capacity-v2.yaml" in changed, (
+        # New convention slug: demand-driven-capacity-v2-dashboard
+        assert "releases/demand-driven-capacity-v2-dashboard.yaml" in changed, (
             f"manifest not in commit: {changed}"
         )
         assert "content/dashboards/demand_driven_capacity_v2.yaml" in changed, (
@@ -429,7 +433,8 @@ class TestCommit:
             cwd=str(factory), capture_output=True, text=True,
         )
         subject = r.stdout.strip()
-        assert subject == "release: demand-driven-capacity-v2 1.0", (
+        # New convention slug: demand-driven-capacity-v2-dashboard
+        assert subject == "release: demand-driven-capacity-v2-dashboard 1.0", (
             f"unexpected commit message: {subject!r}"
         )
 
