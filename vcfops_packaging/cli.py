@@ -745,6 +745,21 @@ def cmd_release(args) -> int:
     return 0
 
 
+def cmd_bundle(args) -> int:
+    """Interactive bundle composer — produces bundles/<slug>.yaml."""
+    from .composer import compose_bundle
+
+    slug = getattr(args, "name", None) or None
+    dry_run = getattr(args, "dry_run", False)
+    force = getattr(args, "force", False)
+
+    return compose_bundle(
+        slug=slug,
+        dry_run=dry_run,
+        force=force,
+    )
+
+
 def cmd_publish(args) -> int:
     """Run the publish orchestrator."""
     from .publish import publish, PublishError, PublishResult
@@ -991,6 +1006,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="stage files but do not commit (default is to commit)",
     )
     pr.set_defaults(func=cmd_release)
+
+    # -----------------------------------------------------------------------
+    # bundle <name>
+    # -----------------------------------------------------------------------
+    pbun = sub.add_parser(
+        "bundle",
+        help="interactive bundle composer — walks you through picking components and writes bundles/<name>.yaml",
+    )
+    pbun.add_argument(
+        "name",
+        nargs="?",
+        default=None,
+        help="bundle slug (kebab-case filename stem, e.g. 'my-bundle'). Prompts if omitted.",
+    )
+    pbun.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print proposed YAML to stdout without writing to disk",
+    )
+    pbun.add_argument(
+        "--force",
+        action="store_true",
+        help="overwrite existing bundles/<name>.yaml if it already exists",
+    )
+    pbun.set_defaults(func=cmd_bundle)
 
     # -----------------------------------------------------------------------
     # publish
