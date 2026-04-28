@@ -527,6 +527,49 @@ def cmd_release(args) -> int:
                 except Exception:
                     continue
 
+    # 4. Third-party project search — scan third_party/*/<type>/ directories.
+    #    Only for discrete content types (not bundles — those still use bundles/ or PROJECT.yaml).
+    _THIRD_PARTY_TYPE_DIR = {
+        "dashboard":   "dashboards",
+        "view":        "views",
+        "supermetric": "supermetrics",
+        "customgroup": "customgroups",
+        "report":      "reports",
+    }
+    if source_path is None and content_type in _THIRD_PARTY_TYPE_DIR:
+        tp_type_subdir = _THIRD_PARTY_TYPE_DIR[content_type]
+        tp_root = repo_root / "third_party"
+        if tp_root.exists():
+            # Iterate over project directories in sorted order for determinism.
+            for project_dir in sorted(p for p in tp_root.iterdir() if p.is_dir()):
+                type_dir = project_dir / tp_type_subdir
+                if not type_dir.exists():
+                    continue
+                # Filename stem match
+                if source_path is None:
+                    sc = type_dir / (name_arg + ".yaml")
+                    if sc.exists():
+                        source_path = sc
+                        break
+                    sc_yml = type_dir / (name_arg + ".yml")
+                    if sc_yml.exists():
+                        source_path = sc_yml
+                        break
+                # Display name match
+                if source_path is None:
+                    for yaml_file in sorted(type_dir.glob("*.y*ml")):
+                        try:
+                            data = yaml.safe_load(yaml_file.read_text()) or {}
+                            if isinstance(data, dict):
+                                file_name = str(data.get("name", "")).strip()
+                                if file_name == name_arg:
+                                    source_path = yaml_file
+                                    break
+                        except Exception:
+                            continue
+                if source_path is not None:
+                    break
+
     if source_path is None:
         print(
             f"ERROR: could not resolve '{name_arg}' to a {content_type} YAML file.\n"

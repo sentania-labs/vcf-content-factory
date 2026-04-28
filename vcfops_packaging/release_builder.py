@@ -160,8 +160,18 @@ def _build_component_headline(
     source_path: Path,
     source_prefix: str,
     tmp_dir: Path,
+    extra_search_dirs: "list[Path] | None" = None,
 ) -> Path:
     """Build a component headline zip using the discrete builder.
+
+    Args:
+        source_path:        Absolute path to the component YAML file.
+        source_prefix:      Content type directory name ("dashboards", "views", …).
+        tmp_dir:            Temporary directory for builder output.
+        extra_search_dirs:  Additional project root directories to scan for
+                            the item and its dependencies.  Used when the
+                            source lives under ``third_party/<project>/`` rather
+                            than the factory-native ``content/`` tree.
 
     Returns the path to the zip written by the builder (before rename).
     """
@@ -179,6 +189,7 @@ def _build_component_headline(
         content_type=content_type,
         item_name=item_name,
         output_dir=tmp_dir,
+        extra_search_dirs=extra_search_dirs,
     )
     return built
 
@@ -238,14 +249,34 @@ def build_release(
         # Using source_path.parent.name is more robust than parsing the raw
         # source_str, since tests may write absolute paths into the manifest.
         source_prefix = source_path.parent.name
-        # Normalise project-level bundle files to "bundles":
-        # third_party/<project>/PROJECT.yaml → parent.name == <project>
-        #   → grandparent == "third_party"
-        if source_prefix not in _SOURCE_PREFIX_TO_DISCRETE_TYPE and source_prefix != "bundles":
-            if source_path.parent.parent.name == "third_party":
-                source_prefix = "bundles"
-        bundle_data = _load_bundle_data_if_bundle(source_path)
-        dest_subdir = headline_to_dir(source_prefix + "/dummy.yaml", bundle_data=bundle_data)
+
+        # -----------------------------------------------------------------------
+        # Phase 5: detect direct third-party component releases.
+        # Shape: third_party/<project>/<type>/<file>.yaml
+        # grandparent.parent.name == "third_party" (i.e. great-grandparent of file)
+        # -----------------------------------------------------------------------
+        _is_third_party_component = (
+            source_prefix in _SOURCE_PREFIX_TO_DISCRETE_TYPE
+            and source_path.parent.parent.parent.name == "third_party"
+        )
+
+        if not _is_third_party_component:
+            # Normalise project-level bundle files to "bundles":
+            # third_party/<project>/PROJECT.yaml → parent.name == <project>
+            #   → grandparent == "third_party"
+            if source_prefix not in _SOURCE_PREFIX_TO_DISCRETE_TYPE and source_prefix != "bundles":
+                if source_path.parent.parent.name == "third_party":
+                    source_prefix = "bundles"
+
+        if _is_third_party_component:
+            # Route via the third_party/<proj>/<type>/<file> path so
+            # headline_to_dir resolves to ThirdPartyContent/<sub>.
+            dest_subdir = headline_to_dir(
+                f"third_party/{source_path.parent.parent.name}/{source_prefix}/{source_path.name}"
+            )
+        else:
+            bundle_data = _load_bundle_data_if_bundle(source_path)
+            dest_subdir = headline_to_dir(source_prefix + "/dummy.yaml", bundle_data=bundle_data)
 
         final_filename = _zip_filename(release.name, release.version)
         final_path = output_dir / final_filename
@@ -253,7 +284,12 @@ def build_release(
         with tempfile.TemporaryDirectory(prefix="release_build_") as tmp_str:
             tmp_dir = Path(tmp_str)
 
-            if source_prefix == "bundles":
+            if _is_third_party_component:
+                built_path = _build_component_headline(
+                    source_path, source_prefix, tmp_dir,
+                    extra_search_dirs=[source_path.parent.parent],
+                )
+            elif source_prefix == "bundles":
                 built_path = _build_bundle_headline(source_path, tmp_dir, skip_audit)
             elif source_prefix in _SOURCE_PREFIX_TO_DISCRETE_TYPE:
                 built_path = _build_component_headline(source_path, source_prefix, tmp_dir)
@@ -327,8 +363,26 @@ def _artifact_dest_subdir(artifact: "_ManifestArtifact") -> str:
 
     For bundle headlines, loads the bundle YAML to detect ``factory_native:
     false`` and routes third-party bundles under ``ThirdPartyContent/``.
+
+    For direct third-party component paths
+    (``third_party/<project>/<type>/<file>.yaml``), routes to
+    ``ThirdPartyContent/<dist-sub>`` via the Phase 5 branch in
+    ``headline_to_dir``.
     """
     source_prefix = artifact.source_path.parent.name
+
+    # Phase 5: direct third-party component — shape is
+    # third_party/<project>/<type>/<file>.yaml, so great-grandparent == "third_party".
+    _is_third_party_component = (
+        source_prefix in _SOURCE_PREFIX_TO_DISCRETE_TYPE
+        and artifact.source_path.parent.parent.parent.name == "third_party"
+    )
+    if _is_third_party_component:
+        project_name = artifact.source_path.parent.parent.name
+        return headline_to_dir(
+            f"third_party/{project_name}/{source_prefix}/{artifact.source_path.name}"
+        )
+
     # Normalise project-level bundle files
     # (third_party/<project>/PROJECT.yaml → grandparent == "third_party") to "bundles".
     if source_prefix not in _SOURCE_PREFIX_TO_DISCRETE_TYPE and source_prefix != "bundles":

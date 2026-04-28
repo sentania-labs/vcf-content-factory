@@ -27,6 +27,23 @@ Pass the loaded bundle YAML data (a dict) as ``bundle_data`` to enable
 this routing.  When ``bundle_data`` is None or the source path prefix is
 not "bundles", the factory-native routing is used.
 
+Direct third-party component routing (Phase 5)
+----------------------------------------------
+A source path of the form ``third_party/<project>/<type>/<file>.yaml``
+(where ``<type>`` is a recognised content type directory) routes to
+``ThirdPartyContent/<dist-subdir>``:
+
+  third_party/<proj>/dashboards/foo.yaml     -> "ThirdPartyContent/dashboards"
+  third_party/<proj>/views/foo.yaml          -> "ThirdPartyContent/views"
+  third_party/<proj>/supermetrics/foo.yaml   -> "ThirdPartyContent/supermetrics"
+  third_party/<proj>/customgroups/foo.yaml   -> "ThirdPartyContent/customgroups"
+  third_party/<proj>/reports/foo.yaml        -> "ThirdPartyContent/reports"
+  third_party/<proj>/managementpacks/foo.yaml -> "ThirdPartyContent/management-packs"
+
+The existing PROJECT.yaml-style routing (which passes a ``bundles``-prefix
+path + loaded bundle_data with ``factory_native: false``) is unchanged and
+continues to work for back-compat.
+
 Symptoms and alerts are deliberately absent from v1 — they ship inside
 bundles only.  If a headline path begins with symptoms/ or alerts/, this
 function raises a clear error rather than silently routing incorrectly.
@@ -53,6 +70,18 @@ _UNSUPPORTED_V1 = {"symptoms", "alerts"}
 
 # Third-party content subtree root.
 _THIRD_PARTY_ROOT = "ThirdPartyContent"
+
+# Map third-party <type> directory name -> distribution subdir name.
+# Mirrors _SOURCE_TO_DIST for the content types that can be released
+# as discrete third-party components (Phase 5).
+_THIRD_PARTY_TYPE_TO_DIST: dict[str, str] = {
+    "dashboards":     "dashboards",
+    "views":          "views",
+    "supermetrics":   "supermetrics",
+    "customgroups":   "customgroups",
+    "reports":        "reports",
+    "managementpacks": "management-packs",
+}
 
 
 def _third_party_subdir(bundle_data: dict) -> str:
@@ -106,6 +135,30 @@ def headline_to_dir(
         raise ValueError(f"source_path is empty: {source_path!r}")
 
     prefix = parts[0]
+
+    # -----------------------------------------------------------------------
+    # Phase 5: direct third-party component routing.
+    # Path shape: third_party/<project>/<type>/<file>.yaml
+    # We resolve <type> (the third component) to ThirdPartyContent/<dist-sub>.
+    # -----------------------------------------------------------------------
+    if prefix == "third_party":
+        # Must have at least 4 parts: third_party / <project> / <type> / <file>
+        if len(parts) < 4:
+            raise ValueError(
+                f"source path {source_path!r} looks like a third_party path but is "
+                f"malformed — expected at least 4 components "
+                f"(third_party/<project>/<type>/<file>.yaml), got {len(parts)}."
+            )
+        type_dir = parts[2]
+        dist_sub = _THIRD_PARTY_TYPE_TO_DIST.get(type_dir)
+        if dist_sub is None:
+            supported_types = ", ".join(f"{k!r}" for k in _THIRD_PARTY_TYPE_TO_DIST)
+            raise ValueError(
+                f"source path {source_path!r}: third-party type directory "
+                f"{type_dir!r} is not a recognised content type.  "
+                f"Supported: {supported_types}."
+            )
+        return f"{_THIRD_PARTY_ROOT}/{dist_sub}"
 
     if prefix in _UNSUPPORTED_V1:
         raise ValueError(

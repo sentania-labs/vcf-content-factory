@@ -366,13 +366,20 @@ def build_discrete(
     content_type: str,
     item_name: str,
     output_dir: str | Path = "dist/discrete",
+    extra_search_dirs: "list[Path] | None" = None,
 ) -> Path:
     """Build a self-contained discrete artifact zip for a single released content item.
 
     Args:
-        content_type: One of: supermetric, dashboard, view, report, alert, customgroup.
-        item_name: The `name` field of the content item (exact match required).
-        output_dir: Directory where the output zip is written.
+        content_type:       One of: supermetric, dashboard, view, report, alert, customgroup.
+        item_name:          The ``name`` field of the content item (exact match required).
+        output_dir:         Directory where the output zip is written.
+        extra_search_dirs:  Optional list of additional project root directories to scan
+                            for the item and its dependencies *before* the factory-native
+                            ``content/`` tree.  Each directory is expected to contain
+                            sub-directories named after content types (``supermetrics/``,
+                            ``views/``, ``dashboards/``, etc.) following the same layout as
+                            a third-party project root (e.g. ``third_party/idps-planner/``).
 
     Returns:
         Path to the built zip file.
@@ -390,14 +397,15 @@ def build_discrete(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load all content from the repo
-    all_sms = _load_all_sms()
-    all_views, all_dashboards = _load_all_views_and_dashboards()
-    all_cgs = _load_all_customgroups()
-    all_reports = _load_all_reports()
-    all_symptoms = _load_all_symptoms()
-    all_recommendations = _load_all_recommendations()
-    all_alerts = _load_all_alerts()
+    # Load all content — extra_search_dirs content is prepended so it takes
+    # priority when resolving the target item and its dependencies.
+    all_sms = _load_all_sms(extra_search_dirs=extra_search_dirs)
+    all_views, all_dashboards = _load_all_views_and_dashboards(extra_search_dirs=extra_search_dirs)
+    all_cgs = _load_all_customgroups(extra_search_dirs=extra_search_dirs)
+    all_reports = _load_all_reports(extra_search_dirs=extra_search_dirs)
+    all_symptoms = _load_all_symptoms(extra_search_dirs=extra_search_dirs)
+    all_recommendations = _load_all_recommendations(extra_search_dirs=extra_search_dirs)
+    all_alerts = _load_all_alerts(extra_search_dirs=extra_search_dirs)
 
     if ct == "supermetric":
         item = _find_by_name(item_name, all_sms, "super metric")
@@ -528,43 +536,106 @@ def _find_by_name(name: str, items, type_label: str):
     )
 
 
-def _load_all_sms() -> List[SuperMetricDef]:
+def _load_all_sms(extra_search_dirs: "list[Path] | None" = None) -> List[SuperMetricDef]:
     from vcfops_supermetrics.loader import load_dir
-    return load_dir(_REPO_ROOT / "content" / "supermetrics")
+    results = []
+    for proj_root in (extra_search_dirs or []):
+        d = proj_root / "supermetrics"
+        if d.exists():
+            results.extend(load_dir(d, enforce_framework_prefix=False))
+    results.extend(load_dir(_REPO_ROOT / "content" / "supermetrics"))
+    return results
 
 
-def _load_all_views_and_dashboards() -> tuple[List[ViewDef], List[Dashboard]]:
+def _load_all_views_and_dashboards(
+    extra_search_dirs: "list[Path] | None" = None,
+) -> tuple[List[ViewDef], List[Dashboard]]:
     from vcfops_dashboards.loader import load_all
+    extra_views: List[ViewDef] = []
+    extra_dashboards: List[Dashboard] = []
+    for proj_root in (extra_search_dirs or []):
+        vd = proj_root / "views"
+        dd = proj_root / "dashboards"
+        # load_all handles non-existent dirs gracefully; pass them directly.
+        ev, ed = load_all(vd, dd, enforce_framework_prefix=False)
+        extra_views.extend(ev)
+        extra_dashboards.extend(ed)
     vd = _REPO_ROOT / "content" / "views"
     dd = _REPO_ROOT / "content" / "dashboards"
     if not vd.exists() and not dd.exists():
-        return [], []
-    return load_all(vd, dd)
+        return extra_views, extra_dashboards
+    fv, fd = load_all(vd, dd)
+    return extra_views + fv, extra_dashboards + fd
 
 
-def _load_all_customgroups() -> List[CustomGroupDef]:
-    return load_cg_dir(_REPO_ROOT / "content" / "customgroups")
+def _load_all_customgroups(
+    extra_search_dirs: "list[Path] | None" = None,
+) -> List[CustomGroupDef]:
+    results = []
+    for proj_root in (extra_search_dirs or []):
+        d = proj_root / "customgroups"
+        if d.exists():
+            results.extend(load_cg_dir(d))
+    results.extend(load_cg_dir(_REPO_ROOT / "content" / "customgroups"))
+    return results
 
 
-def _load_all_reports() -> List[ReportDef]:
+def _load_all_reports(
+    extra_search_dirs: "list[Path] | None" = None,
+) -> List[ReportDef]:
     from vcfops_reports.loader import load_dir
-    return load_dir(
+    results = []
+    for proj_root in (extra_search_dirs or []):
+        d = proj_root / "reports"
+        if d.exists():
+            results.extend(load_dir(
+                d,
+                views_dir=proj_root / "views",
+                dashboards_dir=proj_root / "dashboards",
+                enforce_framework_prefix=False,
+            ))
+    results.extend(load_dir(
         _REPO_ROOT / "content" / "reports",
         views_dir=_REPO_ROOT / "content" / "views",
         dashboards_dir=_REPO_ROOT / "content" / "dashboards",
-    )
+    ))
+    return results
 
 
-def _load_all_symptoms() -> List[SymptomDef]:
-    return load_symptom_dir(_REPO_ROOT / "content" / "symptoms")
+def _load_all_symptoms(
+    extra_search_dirs: "list[Path] | None" = None,
+) -> List[SymptomDef]:
+    results = []
+    for proj_root in (extra_search_dirs or []):
+        d = proj_root / "symptoms"
+        if d.exists():
+            results.extend(load_symptom_dir(d))
+    results.extend(load_symptom_dir(_REPO_ROOT / "content" / "symptoms"))
+    return results
 
 
-def _load_all_recommendations() -> List[Recommendation]:
-    return load_recommendations(_REPO_ROOT / "content" / "recommendations")
+def _load_all_recommendations(
+    extra_search_dirs: "list[Path] | None" = None,
+) -> List[Recommendation]:
+    results = []
+    for proj_root in (extra_search_dirs or []):
+        d = proj_root / "recommendations"
+        if d.exists():
+            results.extend(load_recommendations(d))
+    results.extend(load_recommendations(_REPO_ROOT / "content" / "recommendations"))
+    return results
 
 
-def _load_all_alerts() -> List[AlertDef]:
-    return load_alert_dir(_REPO_ROOT / "content" / "alerts")
+def _load_all_alerts(
+    extra_search_dirs: "list[Path] | None" = None,
+) -> List[AlertDef]:
+    results = []
+    for proj_root in (extra_search_dirs or []):
+        d = proj_root / "alerts"
+        if d.exists():
+            results.extend(load_alert_dir(d))
+    results.extend(load_alert_dir(_REPO_ROOT / "content" / "alerts"))
+    return results
 
 
 def _assemble_zip(
