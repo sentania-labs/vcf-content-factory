@@ -40,7 +40,7 @@ import yaml
 
 
 VERSION_RE = re.compile(r"^\d+\.\d+$")
-SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9\-]*[a-z0-9]$|^[a-z0-9]$")
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9.\-]*[a-z0-9]$|^[a-z0-9]$")
 
 # ---------------------------------------------------------------------------
 # Release-naming convention
@@ -140,7 +140,8 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
     if not SLUG_RE.match(name):
         raise ReleaseValidationError(
             f"{path}: 'name' must be kebab-case (lowercase letters, digits, "
-            f"hyphens; cannot start or end with a hyphen), got {name!r}"
+            f"hyphens, periods; cannot start or end with a hyphen or period), "
+            f"got {name!r}"
         )
 
     # --- version ---
