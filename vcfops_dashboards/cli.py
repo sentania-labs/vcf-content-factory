@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import warnings
 from pathlib import Path
 
 from vcfops_supermetrics.client import VCFOpsClient, VCFOpsError
@@ -21,12 +22,66 @@ def _load(args) -> tuple[list, list]:
     return load_all(Path(args.views_dir), Path(args.dashboards_dir))
 
 
+_TIME_WINDOW_WARNING_PREFIX = "view "
+_TIME_WINDOW_WARNING_FRAGMENT = "no time_window is set"
+
+
+def _is_time_window_warning(msg: str) -> bool:
+    """Return True if the warning message is the aggregating-column-no-window warning."""
+    return _TIME_WINDOW_WARNING_FRAGMENT in str(msg)
+
+
+def _extract_view_name_from_time_window_warning(msg: str) -> str:
+    """Extract the view name from a time_window warning message string.
+
+    The message format is:
+        view '<name>': one or more columns use an aggregating ...
+    Returns the name between the first pair of single-quotes, or '' on parse failure.
+    """
+    s = str(msg)
+    start = s.find("'")
+    if start == -1:
+        return ""
+    end = s.find("'", start + 1)
+    if end == -1:
+        return ""
+    return s[start + 1:end]
+
+
 def cmd_validate(args) -> int:
-    try:
-        views, dashboards = _load(args)
-    except DashboardValidationError as e:
-        print(f"INVALID: {e}", file=sys.stderr)
-        return 1
+    # Determine whether this is a full-corpus validate (no explicit path overrides).
+    # Only the full-corpus path does dashboard-embedding suppression of the
+    # time_window warning — single-file / explicit-path invocations keep the
+    # warning live since there is no dashboard context to consult.
+    using_defaults = (
+        args.views_dir == str(DEFAULT_VIEWS)
+        and args.dashboards_dir == str(DEFAULT_DASHBOARDS)
+    )
+
+    if using_defaults:
+        # Full-corpus validate: capture time_window warnings during loading so
+        # we can suppress them for dashboard-embedded views after the full
+        # corpus (including third-party dashboards) is loaded.
+        captured_warnings: list = []
+        with warnings.catch_warnings(record=True) as _w:
+            warnings.simplefilter("always")
+            try:
+                views, dashboards = _load(args)
+            except DashboardValidationError as e:
+                print(f"INVALID: {e}", file=sys.stderr)
+                return 1
+            # Collect all captured warnings; separate time_window ones for
+            # deferred re-emit after we know the embedded set.
+            for w in _w:
+                captured_warnings.append(w)
+    else:
+        # Single-file / explicit-path validate: let warnings flow normally.
+        try:
+            views, dashboards = _load(args)
+        except DashboardValidationError as e:
+            print(f"INVALID: {e}", file=sys.stderr)
+            return 1
+
     print(f"OK: {len(views)} view definition(s), {len(dashboards)} dashboard(s) valid")
     for v in views:
         print(f"  view       {v.id}  {v.name}")
@@ -35,16 +90,13 @@ def cmd_validate(args) -> int:
 
     rc = 0
 
-    # Cross-provenance slug-uniqueness checks and project-membership boundary
-    # check run only when no explicit paths were given (i.e. full-repo validate).
-    using_defaults = (
-        args.views_dir == str(DEFAULT_VIEWS)
-        and args.dashboards_dir == str(DEFAULT_DASHBOARDS)
-    )
     if using_defaults:
         try:
             from vcfops_packaging.project import check_slug_uniqueness, check_project_membership
         except ImportError:
+            # vcfops_packaging not available — re-emit captured warnings and exit
+            _replay_non_time_window_warnings(captured_warnings)
+            _replay_time_window_warnings_for_standalone_views(captured_warnings, dashboards)
             return rc  # vcfops_packaging not available — skip checks
 
         # Slug uniqueness for views and dashboards
@@ -77,31 +129,34 @@ def cmd_validate(args) -> int:
                     load_view as _load_view,
                     load_dashboard as _load_dash,
                 )
-                for _proj_dir in sorted(_third_party.iterdir()):
-                    if not _proj_dir.is_dir():
-                        continue
-                    _tp_views_dir = _proj_dir / "views"
-                    if _tp_views_dir.exists():
-                        for _vp in sorted(_tp_views_dir.rglob("*.y*ml")):
-                            try:
-                                all_views_corpus.append(
-                                    _load_view(_vp, enforce_framework_prefix=False)
-                                )
-                            except Exception:
-                                pass
-                    _tp_dash_dir = _proj_dir / "dashboards"
-                    if _tp_dash_dir.exists():
-                        for _dp in sorted(_tp_dash_dir.rglob("*.y*ml")):
-                            try:
-                                all_dashboards_corpus.append(
-                                    _load_dash(
-                                        _dp,
-                                        enforce_framework_prefix=False,
-                                        default_name_path="",
+                with warnings.catch_warnings(record=True) as _w2:
+                    warnings.simplefilter("always")
+                    for _proj_dir in sorted(_third_party.iterdir()):
+                        if not _proj_dir.is_dir():
+                            continue
+                        _tp_views_dir = _proj_dir / "views"
+                        if _tp_views_dir.exists():
+                            for _vp in sorted(_tp_views_dir.rglob("*.y*ml")):
+                                try:
+                                    all_views_corpus.append(
+                                        _load_view(_vp, enforce_framework_prefix=False)
                                     )
-                                )
-                            except Exception:
-                                pass
+                                except Exception:
+                                    pass
+                        _tp_dash_dir = _proj_dir / "dashboards"
+                        if _tp_dash_dir.exists():
+                            for _dp in sorted(_tp_dash_dir.rglob("*.y*ml")):
+                                try:
+                                    all_dashboards_corpus.append(
+                                        _load_dash(
+                                            _dp,
+                                            enforce_framework_prefix=False,
+                                            default_name_path="",
+                                        )
+                                    )
+                                except Exception:
+                                    pass
+                    captured_warnings.extend(_w2)
             except ImportError:
                 pass
 
@@ -171,7 +226,65 @@ def cmd_validate(args) -> int:
                 print(f"PROJECT-BOUNDARY: {err}", file=sys.stderr)
             rc = 1
 
+        # Now that all dashboards are loaded, build the embedded-view set and
+        # selectively re-emit time_window warnings for non-embedded views.
+        _replay_non_time_window_warnings(captured_warnings)
+        _replay_time_window_warnings_for_standalone_views(captured_warnings, all_dashboards_corpus)
+
     return rc
+
+
+def _replay_non_time_window_warnings(captured: list) -> None:
+    """Re-emit all captured warnings that are NOT the time_window advisory."""
+    for w in captured:
+        if not (issubclass(w.category, UserWarning) and _is_time_window_warning(str(w.message))):
+            warnings.warn_explicit(
+                message=w.message,
+                category=w.category,
+                filename=w.filename,
+                lineno=w.lineno,
+                source=w.source,
+            )
+
+
+def _replay_time_window_warnings_for_standalone_views(captured: list, all_dashboards: list) -> None:
+    """Re-emit time_window warnings only for views NOT embedded in any dashboard.
+
+    Uses extract_view_names_from_dashboards to build the embedded set, then
+    suppresses the warning for views whose names appear in that set.
+    """
+    try:
+        from vcfops_common.dep_walker import extract_view_names_from_dashboards
+    except ImportError:
+        # dep_walker unavailable — re-emit all time_window warnings unchanged
+        for w in captured:
+            if issubclass(w.category, UserWarning) and _is_time_window_warning(str(w.message)):
+                warnings.warn_explicit(
+                    message=w.message,
+                    category=w.category,
+                    filename=w.filename,
+                    lineno=w.lineno,
+                    source=w.source,
+                )
+        return
+
+    embedded_names: set = set(extract_view_names_from_dashboards(all_dashboards))
+
+    for w in captured:
+        if not (issubclass(w.category, UserWarning) and _is_time_window_warning(str(w.message))):
+            continue
+        view_name = _extract_view_name_from_time_window_warning(str(w.message))
+        if view_name and view_name in embedded_names:
+            # Suppress: view is embedded in a dashboard; time selector drives aggregation.
+            continue
+        # Re-emit: view is standalone or name could not be extracted.
+        warnings.warn_explicit(
+            message=w.message,
+            category=w.category,
+            filename=w.filename,
+            lineno=w.lineno,
+            source=w.source,
+        )
 
 
 def cmd_package(args) -> int:

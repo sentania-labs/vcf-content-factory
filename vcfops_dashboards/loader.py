@@ -154,7 +154,7 @@ class ViewDef:
     # Populated by the loader from source_path; never author-supplied.
     provenance: str = ""
 
-    def validate(self, enforce_framework_prefix: bool = True) -> None:
+    def validate(self, enforce_framework_prefix: bool = True, embedded_in_dashboard: bool = False) -> None:
         import warnings
         if not self.name.strip():
             raise DashboardValidationError("view: name is required")
@@ -210,7 +210,7 @@ class ViewDef:
             (c.transformation or "CURRENT").upper() in _AGGREGATING
             for c in self.columns
         )
-        if needs_window and self.time_window is None:
+        if needs_window and self.time_window is None and not embedded_in_dashboard:
             warnings.warn(
                 f"view {self.name!r}: one or more columns use an aggregating "
                 "transformation (AVG/MAX/PERCENTILE/TRANSFORM_EXPRESSION) but "
@@ -771,7 +771,7 @@ def _mint_id_into_file(path: Path) -> str:
     return new_id
 
 
-def load_view(path: Path, enforce_framework_prefix: bool = True) -> ViewDef:
+def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_dashboard: bool = False) -> ViewDef:
     try:
         data = _strict_load(path.read_text()) or {}
     except yaml.constructor.ConstructorError as exc:
@@ -929,7 +929,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True) -> ViewDef:
         customgroups=view_customgroups,
         provenance=provenance_from_path(path),
     )
-    v.validate(enforce_framework_prefix=enforce_framework_prefix)
+    v.validate(enforce_framework_prefix=enforce_framework_prefix, embedded_in_dashboard=embedded_in_dashboard)
     return v
 
 
