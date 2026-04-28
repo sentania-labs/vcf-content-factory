@@ -14,3 +14,6 @@ columns:
   display_name: Hosts
 - attribute: summary|total_number_vms
   display_name: VMs
+time_window:
+  unit: HOURS
+  count: 24

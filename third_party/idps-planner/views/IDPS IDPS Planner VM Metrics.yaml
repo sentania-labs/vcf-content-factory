@@ -22,9 +22,13 @@ columns:
   ascending_range: false
 - attribute: net|usage_average
   display_name: Net Usage 95%
-  unit: auto
+  unit: mbitsps
   transformation: PERCENTILE
   percentile: 95
+  yellow_bound: 7000.0
+  orange_bound: 8000.0
+  red_bound: 9000.0
+  ascending_range: false
 - attribute: net|received_average
   display_name: Peak Net Receive
   unit: mbitsps
@@ -35,9 +39,13 @@ columns:
   ascending_range: false
 - attribute: net|received_average
   display_name: Net Receive 95%
-  unit: auto
+  unit: mbitsps
   transformation: PERCENTILE
   percentile: 95
+  yellow_bound: 7000.0
+  orange_bound: 8000.0
+  red_bound: 9000.0
+  ascending_range: false
 - attribute: net|transmitted_average
   display_name: Peak Net Transmit
   unit: mbitsps
@@ -48,9 +56,13 @@ columns:
   ascending_range: false
 - attribute: net|transmitted_average
   display_name: Net Transmit 95%
-  unit: auto
+  unit: mbitsps
   transformation: PERCENTILE
   percentile: 95
+  yellow_bound: 7000.0
+  orange_bound: 8000.0
+  red_bound: 9000.0
+  ascending_range: false
 - attribute: net|20_sec_peak_packetsPerSec
   display_name: Peak PPS
   transformation: MAX
@@ -77,3 +89,6 @@ columns:
 - attribute: summary|guest|toolsRunningStatus
   display_name: VM Tools Running ?
   red_bound: Guest Tools Not Running
+time_window:
+  unit: HOURS
+  count: 24

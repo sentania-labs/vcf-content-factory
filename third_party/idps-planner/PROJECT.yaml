@@ -1,20 +1,47 @@
+name: idps-planner
+display_name: IDPS Planner
+description: "# IDPS Planner\n\nA VCF Operations dashboard for monitoring vDefend\
+  \ IDPS (Intrusion Detection\nand Prevention System) resource consumption — designed\
+  \ specifically for\nadministrators running IDPS in **Classic Mode** to proactively\
+  \ track traffic\nthresholds that trigger the IDPS Bypass feature.\n\n## Purpose\n\
+  \nBy tracking Packets Per Second (PPS) and Throughput across your vDefend\nenvironment,\
+  \ this dashboard surfaces hosts and VMs approaching performance\nlimits, ensuring\
+  \ security inspection coverage stays consistent and\neffective.\n\n## Key Performance\
+  \ Indicators\n\n- **Classic Mode PPS** — identifies entities approaching 140k PPS.\n\
+  - **Turbo Mode Throughput** — identifies entities approaching 9 Gbps.\n\n> **Note\
+  \ on sampling.** When these thresholds are exceeded, the IDPS bypass\n> mechanism\
+  \ may begin sampling traffic on the affected host to maintain\n> system stability.\
+  \ Bypass behaviour applies on ESXi 8.0u3e or later with\n> NSX 4.2.1 or later.\n\
+  \n## Metric Definitions\n\nMetrics use **peak values rather than averages** for\
+  \ a conservative,\nsafety-first view.\n\n### 5-Minute Peak (Current)\n\n- **Definition.**\
+  \ The highest value recorded for each VM during the most\n  recent 5-minute collection\
+  \ interval.\n- **Aggregation.** Sums per-host across VMs.\n- **Observation.** Because\
+  \ per-VM peaks may occur at different seconds\n  within the 5-minute window, the\
+  \ \"Current\" value is a high-water mark and\n  may overstate simultaneous utilization.\n\
+  \n### Period Peak\n\n- **Definition.** The absolute highest traffic spike recorded\
+  \ for a host\n  over the entire dashboard timeframe (e.g. last 24 hours or 7 days).\n\
+  - **Use case.** Identifying bursty workloads that intermittently trigger\n  bypass\
+  \ mode.\n\n### 95th Percentile\n\n- **Definition.** Statistical measure representing\
+  \ the 95th percentile of\n  all peak values recorded for a given host over the dashboard\
+  \ timeframe.\n- **Purpose.** Accounts for the fact that not all VM peaks occur\n\
+  \  simultaneously; filters out one-off outliers to provide a more realistic\n  \"\
+  sustained heavy load\" figure for capacity planning.\n\n## Authors\n\n- Ryan Pletka\n\
+  - Brock Peterson\n- Joe Tietz\n- Geoff Shukin\n- Scott Bowe\n\n## License\n\nMIT.\n\
+  \n## Provenance\n\nExtracted from a live VCF Operations lab via the [VCF Content\
+  \ Factory](https://github.com/sentania-labs/vcf-content-factory)\nextractor. The\
+  \ factory's value-add is the **install / uninstall automation**\nand **dependency\
+  \ walking** — the bundle ships with scripts that import the\ndashboard, sync its\
+  \ dependent views and super metrics, and enable any\nrequired built-in metrics that\
+  \ aren't on by default. Original authors\nretain all rights to the dashboard's design,\
+  \ queries, and view layout."
+factory_native: false
 author: Ryan Pletka, Brock Peterson, Joe Tietz, Geoff Shukin, Scott Bowe
+license: MIT
+source:
+  version: '3.5'
+  captured_at: '2026-04-28'
 builtin_metric_enables:
 - adapter_kind: VMWARE
-  metric_key: net|packetsPerSec
-  reason: required by dashboard 'IDPS Planner' widget '85c05c6b-e60d-4b2c-a6c0-af2fe2ec472e'
-    (Scoreboard)
   resource_kind: VirtualMachine
-description: 'vDefend IDPS resource-monitoring dashboard for VCF Operations. Tracks
-  Packets Per Second and Throughput against the Classic Mode bypass thresholds (140k
-  PPS / 9 Gbps), with peak-based metrics (5-minute peak, period peak, 95th percentile)
-  for safety-first capacity planning. Full description in the bundle README.
-
-  '
-display_name: IDPS Planner
-factory_native: false
-license: MIT
-name: idps-planner
-released: true
-source:
-  captured_at: '2026-04-17'
+  metric_key: net|packetsPerSec
+  reason: required by SM '[IDPS] Packets per second (All VMs)'

@@ -2,7 +2,7 @@ id: 2311a526-598e-47bc-95e1-0ffa76d22a96
 name: IDPS Planner
 shared: true
 widgets:
-- id: 4e417358-ccd1-4ee6-908b-57796aa87a87
+- id: 985c9990-d9b1-58a3-a5dd-88c0c683d873
   type: View
   title: IDPS Host Metrics
   coords:
@@ -11,7 +11,7 @@ widgets:
     w: 7
     h: 6
   view: IDPS Planner Host Metrics
-- id: 81ca9c8a-24d6-4c24-99a6-520ebbc4213b
+- id: 672cb3f7-5568-5120-9339-f60a930ce33f
   type: View
   title: IDPS Planner VM Metrics
   coords:
@@ -20,7 +20,7 @@ widgets:
     w: 7
     h: 7
   view: '[IDPS] IDPS Planner VM Metrics'
-- id: 85c05c6b-e60d-4b2c-a6c0-af2fe2ec472e
+- id: 82e28da0-9edc-5605-b349-a218e6ed2707
   type: Scoreboard
   title: Selected VM Historical Metrics
   coords:
@@ -102,7 +102,7 @@ widgets:
   label_size: 16
   round_decimals: 1.0
   max_cell_count: 100
-- id: 9f39473b-c662-4735-8699-cfff3218fe80
+- id: c3d5eedd-25f7-53c7-aada-885e5661b98a
   type: Scoreboard
   title: Selected Host Historical Metrics
   coords:
@@ -173,7 +173,7 @@ widgets:
   label_size: 16
   round_decimals: 1.0
   max_cell_count: 100
-- id: 8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3
+- id: d6f1c4d3-c97b-5807-ac0c-b9d854b66455
   type: View
   title: vCenter Selection
   coords:
@@ -186,7 +186,7 @@ widgets:
     adapter_kind: VMWARE
     resource_kind: vSphere World
   view: IDPS Planner - vCenter Selection
-- id: 3079a0a7-1d9c-49ce-a0ed-3c593d4f5162
+- id: e494889e-921b-5b76-a5b0-381f300f7380
   type: View
   title: Datacenter Selection
   coords:
@@ -199,7 +199,7 @@ widgets:
     adapter_kind: VMWARE
     resource_kind: vSphere World
   view: IDPS Planner - Datacenter Selection
-- id: fac590ee-77cd-4887-8b0f-dd0dac060203
+- id: 2ca53219-2f35-573f-8ce0-3125936c8e93
   type: View
   title: Cluster Selection
   coords:
@@ -212,7 +212,7 @@ widgets:
     adapter_kind: VMWARE
     resource_kind: vSphere World
   view: IDPS Planner - Cluster Selection
-- id: 24f9f7d0-cad0-4f59-8531-a8df679f96ef
+- id: 5c2a30b1-e13a-5627-9bcd-763454f8ef98
   type: Heatmap
   title: Cluster Host Heatmap
   coords:
@@ -248,7 +248,7 @@ widgets:
         - '#ECC33E'
         - '#DE3F30'
       max_value: 140000.0
-- id: 1a5088d3-957f-4ab9-82fc-589072915622
+- id: 32be0352-9f7e-57c0-a519-718b8d2f9d18
   type: Heatmap
   title: VM by Host PPS
   coords:
@@ -285,36 +285,36 @@ widgets:
         - '#DE3F30'
       max_value: 14000.0
 interactions:
-- from: 4e417358-ccd1-4ee6-908b-57796aa87a87
-  to: 81ca9c8a-24d6-4c24-99a6-520ebbc4213b
+- from: 985c9990-d9b1-58a3-a5dd-88c0c683d873
+  to: 672cb3f7-5568-5120-9339-f60a930ce33f
   type: resourceId
-- from: 81ca9c8a-24d6-4c24-99a6-520ebbc4213b
-  to: 85c05c6b-e60d-4b2c-a6c0-af2fe2ec472e
+- from: 672cb3f7-5568-5120-9339-f60a930ce33f
+  to: 82e28da0-9edc-5605-b349-a218e6ed2707
   type: resourceId
-- from: 4e417358-ccd1-4ee6-908b-57796aa87a87
-  to: 9f39473b-c662-4735-8699-cfff3218fe80
+- from: 985c9990-d9b1-58a3-a5dd-88c0c683d873
+  to: c3d5eedd-25f7-53c7-aada-885e5661b98a
   type: resourceId
-- from: 8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3
-  to: 4e417358-ccd1-4ee6-908b-57796aa87a87
+- from: d6f1c4d3-c97b-5807-ac0c-b9d854b66455
+  to: 985c9990-d9b1-58a3-a5dd-88c0c683d873
   type: resourceId
-- from: 3079a0a7-1d9c-49ce-a0ed-3c593d4f5162
-  to: 4e417358-ccd1-4ee6-908b-57796aa87a87
+- from: e494889e-921b-5b76-a5b0-381f300f7380
+  to: 985c9990-d9b1-58a3-a5dd-88c0c683d873
   type: resourceId
-- from: fac590ee-77cd-4887-8b0f-dd0dac060203
-  to: 4e417358-ccd1-4ee6-908b-57796aa87a87
+- from: 2ca53219-2f35-573f-8ce0-3125936c8e93
+  to: 985c9990-d9b1-58a3-a5dd-88c0c683d873
   type: resourceId
-- from: 8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3
-  to: 3079a0a7-1d9c-49ce-a0ed-3c593d4f5162
+- from: d6f1c4d3-c97b-5807-ac0c-b9d854b66455
+  to: e494889e-921b-5b76-a5b0-381f300f7380
   type: resourceId
-- from: 3079a0a7-1d9c-49ce-a0ed-3c593d4f5162
-  to: fac590ee-77cd-4887-8b0f-dd0dac060203
+- from: e494889e-921b-5b76-a5b0-381f300f7380
+  to: 2ca53219-2f35-573f-8ce0-3125936c8e93
   type: resourceId
-- from: 8fd2d1d4-ca41-45ba-bdce-a9c840f3b6d3
-  to: 24f9f7d0-cad0-4f59-8531-a8df679f96ef
+- from: d6f1c4d3-c97b-5807-ac0c-b9d854b66455
+  to: 5c2a30b1-e13a-5627-9bcd-763454f8ef98
   type: resourceId
-- from: 3079a0a7-1d9c-49ce-a0ed-3c593d4f5162
-  to: 24f9f7d0-cad0-4f59-8531-a8df679f96ef
+- from: e494889e-921b-5b76-a5b0-381f300f7380
+  to: 5c2a30b1-e13a-5627-9bcd-763454f8ef98
   type: resourceId
-- from: fac590ee-77cd-4887-8b0f-dd0dac060203
-  to: 24f9f7d0-cad0-4f59-8531-a8df679f96ef
+- from: 2ca53219-2f35-573f-8ce0-3125936c8e93
+  to: 5c2a30b1-e13a-5627-9bcd-763454f8ef98
   type: resourceId

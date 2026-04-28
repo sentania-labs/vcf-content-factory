@@ -14,7 +14,7 @@ columns:
   ascending_range: false
 - attribute: sm_f4acf93a-06b8-4450-8237-92cee270bc65
   display_name: VM Net Usage 95%
-  unit: auto
+  unit: mbitsps
   transformation: PERCENTILE
   percentile: 95
   yellow_bound: 7000.0
@@ -23,7 +23,7 @@ columns:
   ascending_range: false
 - attribute: sm_f4acf93a-06b8-4450-8237-92cee270bc65
   display_name: Net VM Usage
-  unit: auto
+  unit: mbitsps
   yellow_bound: 7000.0
   orange_bound: 8000.0
   red_bound: 9000.0
@@ -63,3 +63,6 @@ columns:
   orange_bound: 130000.0
   red_bound: 140000.0
   ascending_range: false
+time_window:
+  unit: HOURS
+  count: 24

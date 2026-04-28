@@ -14,3 +14,6 @@ columns:
 - attribute: mem|host_contentionPct
   display_name: mem|host_contentionPct
   unit: percent
+time_window:
+  unit: HOURS
+  count: 24
