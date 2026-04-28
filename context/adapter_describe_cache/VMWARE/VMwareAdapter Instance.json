@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-04-23T20:16:39Z",
+  "fetched_at": "2026-04-28T17:15:33Z",
   "metrics": {
     "CapacityBreakdown|capacityRemaining|cpu|numberCriticalClusters": {
       "default_monitored": true,
@@ -322,10 +322,6 @@
       "default_monitored": true,
       "name": "Super Metrics|Total Network Configuration Issues"
     },
-    "Super Metric|sm_17f31a23-d7e7-4ff9-ab30-7a50d3e3a584": {
-      "default_monitored": true,
-      "name": "Super Metrics|[VCF Content Factory] VKS Worker vCPU (count)"
-    },
     "Super Metric|sm_1d4d0a06-4955-4110-acfe-bddea257b6f0": {
       "default_monitored": true,
       "name": "Super Metrics|[Custom] Non-local Datastore Capacity"
@@ -353,10 +349,6 @@
     "Super Metric|sm_b16e3bb4-b8aa-4844-af10-d9b30702318a": {
       "default_monitored": true,
       "name": "Super Metrics|[VCF Content Factory] Regular VM vCPU (count)"
-    },
-    "Super Metric|sm_b3b292ce-7094-46ca-984e-9413e4df67a0": {
-      "default_monitored": true,
-      "name": "Super Metrics|[VCF Content Factory] VKS Cluster Control Plane vCPU (count)"
     },
     "Super Metric|sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4": {
       "default_monitored": true,

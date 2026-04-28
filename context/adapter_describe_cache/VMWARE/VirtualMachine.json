@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-04-23T20:16:40Z",
+  "fetched_at": "2026-04-28T17:15:33Z",
   "metrics": {
     "Guest OS Services|mkInComingConnectionCount": {
       "default_monitored": true,
@@ -82,9 +82,17 @@
       "default_monitored": true,
       "name": "Capacity Analytics Generated|Time Remaining With Commit"
     },
+    "Super Metric|sm_0cb204a2-4c73-44e3-b398-7b63d2239abc": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] VM - Target Memory GB (undersized)"
+    },
     "Super Metric|sm_1cd5caa5-e8d8-48f8-b02b-c233fd8d235e": {
       "default_monitored": true,
       "name": "Super Metrics|vSphere VM Memory Zip Swap"
+    },
+    "Super Metric|sm_6dfea6a6-e633-4b32-b438-8975e3dc06fa": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] VM - Target vCPUs (oversized)"
     },
     "Super Metric|sm_77c9b561-8a30-496c-80bc-4b049bd63b96": {
       "default_monitored": true,
@@ -93,6 +101,14 @@
     "Super Metric|sm_9ee466de-616a-41a9-b573-e8513e646ea3": {
       "default_monitored": true,
       "name": "Super Metrics|vSphere VM Performance"
+    },
+    "Super Metric|sm_bc4ac034-0b17-4c82-a573-bb2c1400b09f": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] VM - Target Memory GB (oversized)"
+    },
+    "Super Metric|sm_c89674b9-85c6-4eb2-a69f-f003563fb541": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] VM - Target vCPUs (undersized)"
     },
     "Super Metric|sm_f4184f6d-e711-4dc2-93ca-941754a135e7": {
       "default_monitored": true,
