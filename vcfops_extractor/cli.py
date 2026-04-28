@@ -46,16 +46,25 @@ def _build_parser() -> argparse.ArgumentParser:
     # Global connection flags (apply to all subcommands)
     conn = p.add_argument_group("connection (defaults from env / .env)")
     conn.add_argument(
+        "--profile", metavar="NAME",
+        default=None,
+        help=(
+            "Credential profile to use (prod / qa / devel; default: 'devel'). "
+            "Reads VCFOPS_<PROFILE>_HOST/USER/PASSWORD from .env. "
+            "Explicit --host / --user / --password flags override the profile."
+        ),
+    )
+    conn.add_argument(
         "--host", metavar="HOST",
-        help="VCF Ops hostname or IP (default: VCFOPS_HOST env var)",
+        help="VCF Ops hostname or IP (overrides profile VCFOPS_<P>_HOST)",
     )
     conn.add_argument(
         "--user", metavar="USER",
-        help="VCF Ops username (default: VCFOPS_USER env var)",
+        help="VCF Ops username (overrides profile VCFOPS_<P>_USER)",
     )
     conn.add_argument(
         "--password", metavar="PASSWORD",
-        help="VCF Ops password (default: VCFOPS_PASSWORD env var)",
+        help="VCF Ops password (overrides profile VCFOPS_<P>_PASSWORD)",
     )
     conn.add_argument(
         "--no-verify-ssl", action="store_true",
@@ -246,29 +255,42 @@ def _add_dashboard_flags(p: argparse.ArgumentParser) -> None:
 # ---------------------------------------------------------------------------
 
 def _resolve_credentials(args) -> tuple[str, str, str, bool]:
-    """Resolve host/user/password from flags then env vars.
+    """Resolve host/user/password from flags then the active credential profile.
 
     Returns (host, user, password, verify_ssl).
     Aborts with a clear error if any required value is missing.
+
+    CLI flags (--host / --user / --password) take priority over profile values.
+    Profile is resolved from --profile flag > VCFOPS_PROFILE env var > "devel".
     """
-    from vcfops_common._env import load_dotenv
+    from vcfops_common._env import load_dotenv, resolve_profile_credentials
     load_dotenv()
 
-    import os
-    host = args.host or os.environ.get("VCFOPS_HOST", "")
-    user = args.user or os.environ.get("VCFOPS_USER", "")
-    password = args.password or os.environ.get("VCFOPS_PASSWORD", "")
-    verify_ssl = not getattr(args, "no_verify_ssl", False)
-    if os.environ.get("VCFOPS_VERIFY_SSL", "").lower() == "false":
+    profile = getattr(args, "profile", None)
+    try:
+        creds = resolve_profile_credentials(profile, default="devel")
+        profile_host = creds.host
+        profile_user = creds.user
+        profile_password = creds.password
+        profile_verify_ssl = creds.verify_ssl
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    host = (args.host or "").strip() or profile_host
+    user = (args.user or "").strip() or profile_user
+    password = (args.password or "").strip() or profile_password
+    verify_ssl = profile_verify_ssl
+    if getattr(args, "no_verify_ssl", False):
         verify_ssl = False
 
     missing = []
     if not host:
-        missing.append("VCFOPS_HOST (or --host)")
+        missing.append("VCFOPS_DEVEL_HOST (or --host)")
     if not user:
-        missing.append("VCFOPS_USER (or --user)")
+        missing.append("VCFOPS_DEVEL_USER (or --user)")
     if not password:
-        missing.append("VCFOPS_PASSWORD (or --password)")
+        missing.append("VCFOPS_DEVEL_PASSWORD (or --password)")
     if missing:
         print(
             f"ERROR: missing required connection parameters: {', '.join(missing)}",

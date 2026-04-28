@@ -29,11 +29,10 @@ from __future__ import annotations
 
 import base64
 import json
-import os
 
 import requests
 
-from vcfops_common._env import load_dotenv
+from vcfops_common._env import load_dotenv, resolve_profile_credentials
 
 
 class UIClientError(RuntimeError):
@@ -72,31 +71,34 @@ class VCFOpsUIClient:
         self._tid = 1  # monotonically increasing Ext.Direct transaction id
 
     @classmethod
-    def from_env(cls) -> "VCFOpsUIClient":
-        """Construct from VCFOPS_* environment variables."""
-        load_dotenv()
+    def from_env(cls, profile: str | None = None, *, default_profile: str = "devel") -> "VCFOpsUIClient":
+        """Construct from the active credential profile.
+
+        Profile resolution order: ``profile`` arg > ``VCFOPS_PROFILE`` env var
+        > ``default_profile`` arg > ``"devel"``.
+
+        Delete operations (which this client is used for) default to the
+        ``devel`` profile since they are mutating.
+        """
         try:
-            host = os.environ["VCFOPS_HOST"]
-            user = os.environ["VCFOPS_USER"]
-            pw = os.environ["VCFOPS_PASSWORD"]
-        except KeyError as e:
-            raise UIClientError(f"Missing env var: {e.args[0]}") from None
+            creds = resolve_profile_credentials(profile, default=default_profile)
+        except ValueError as e:
+            raise UIClientError(str(e)) from None
         # VCFOPS_AUTH_SOURCE for Suite API is a display name ("Local");
         # for the UI form it must be the authSourceId value ("localItem" for
         # local accounts, or a UUID for SSO/LDAP). Map the common Suite API
         # display name to the UI form value.
-        raw_source = os.environ.get("VCFOPS_AUTH_SOURCE", "").strip()
+        raw_source = creds.auth_source.strip()
         if not raw_source or raw_source.lower() == "local":
             auth_source = "localItem"
         else:
             auth_source = raw_source
-        verify_ssl = os.environ.get("VCFOPS_VERIFY_SSL", "false").lower() == "true"
         return cls(
-            host=host,
-            username=user,
-            password=pw,
+            host=creds.host,
+            username=creds.user,
+            password=creds.password,
             auth_source=auth_source,
-            verify_ssl=verify_ssl,
+            verify_ssl=creds.verify_ssl,
         )
 
     # ------------------------------------------------------------------

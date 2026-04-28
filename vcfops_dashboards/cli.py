@@ -7,6 +7,7 @@ import sys
 import warnings
 from pathlib import Path
 
+from vcfops_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
 from vcfops_supermetrics.client import VCFOpsClient, VCFOpsError
 
 from .client import discover_marker_filename, get_current_user, import_content_zip
@@ -49,6 +50,7 @@ def _extract_view_name_from_time_window_warning(msg: str) -> str:
 
 
 def cmd_validate(args) -> int:
+    validate_profile_arg(args)  # validate --profile name if supplied; exits on unknown profile
     # Determine whether this is a full-corpus validate (no explicit path overrides).
     # Only the full-corpus path does dashboard-embedding suppression of the
     # time_window warning — single-file / explicit-path invocations keep the
@@ -309,7 +311,8 @@ def cmd_sync(args) -> int:
     if not views and not dashboards:
         print("nothing to sync", file=sys.stderr)
         return 1
-    client = VCFOpsClient.from_env()
+    profile, default = resolve_profile_from_args(args)
+    client = VCFOpsClient.from_env(profile=profile, default_profile=default)
     try:
         user = get_current_user(client)
         marker = discover_marker_filename(client)
@@ -535,7 +538,8 @@ def cmd_delete_dashboard(args) -> int:
     Deleting a non-existent UUID is a silent no-op.
     """
     try:
-        ui = VCFOpsUIClient.from_env()
+        profile, default = resolve_profile_from_args(args)
+        ui = VCFOpsUIClient.from_env(profile=profile, default_profile=default)
         ui.login()
     except UIClientError as e:
         print(f"FAILED (UI login): {e}", file=sys.stderr)
@@ -570,7 +574,8 @@ def cmd_delete_view(args) -> int:
     error — this command surfaces that as a non-zero exit.
     """
     try:
-        ui = VCFOpsUIClient.from_env()
+        profile, default = resolve_profile_from_args(args)
+        ui = VCFOpsUIClient.from_env(profile=profile, default_profile=default)
         ui.login()
     except UIClientError as e:
         print(f"FAILED (UI login): {e}", file=sys.stderr)
@@ -611,6 +616,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pv = sub.add_parser("validate", help="validate YAML")
+    add_profile_arg(pv, default="prod")
     pv.set_defaults(func=cmd_validate)
 
     pp = sub.add_parser("package", help="build the import ZIP locally")
@@ -645,6 +651,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Use when you know the target policy already covers these metrics."
         ),
     )
+    add_profile_arg(ps, default="devel")
     ps.set_defaults(func=cmd_sync)
 
     pdd = sub.add_parser(
@@ -662,6 +669,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print what would be deleted without deleting",
     )
+    add_profile_arg(pdd, default="devel")
     pdd.set_defaults(func=cmd_delete_dashboard)
 
     pdv = sub.add_parser(
@@ -679,6 +687,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print what would be deleted without deleting",
     )
+    add_profile_arg(pdv, default="devel")
     pdv.set_defaults(func=cmd_delete_view)
 
     return p

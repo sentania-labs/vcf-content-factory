@@ -7,6 +7,8 @@ import time
 from pathlib import Path
 from typing import List
 
+from vcfops_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
+
 from .client import VCFOpsClient, VCFOpsError
 from .loader import SuperMetricDef, SuperMetricValidationError, load_dir, load_file
 
@@ -32,6 +34,7 @@ def _collect(paths: List[str]) -> List[SuperMetricDef]:
 
 
 def cmd_validate(args) -> int:
+    validate_profile_arg(args)  # validate --profile name if supplied; exits on unknown profile
     try:
         defs = _collect(args.paths)
     except SuperMetricValidationError as e:
@@ -60,7 +63,8 @@ def cmd_validate(args) -> int:
 
 
 def cmd_list(args) -> int:
-    client = VCFOpsClient.from_env()
+    profile, default = resolve_profile_from_args(args)
+    client = VCFOpsClient.from_env(profile=profile, default_profile=default)
     for sm in client.list_supermetrics():
         print(f"{sm.get('id')}  {sm.get('name')}")
     return 0
@@ -75,7 +79,8 @@ def cmd_sync(args) -> int:
     if not defs:
         print("nothing to sync", file=sys.stderr)
         return 1
-    client = VCFOpsClient.from_env()
+    profile, default = resolve_profile_from_args(args)
+    client = VCFOpsClient.from_env(profile=profile, default_profile=default)
     bundle = [
         {
             "id": d.id,
@@ -178,7 +183,8 @@ def cmd_enable(args) -> int:
     if not defs:
         print("nothing to enable", file=sys.stderr)
         return 1
-    client = VCFOpsClient.from_env()
+    profile, default = resolve_profile_from_args(args)
+    client = VCFOpsClient.from_env(profile=profile, default_profile=default)
     rc = 0
 
     # Phase 1: resolve all SM names to server IDs
@@ -250,7 +256,8 @@ def cmd_enable(args) -> int:
 
 
 def cmd_delete(args) -> int:
-    client = VCFOpsClient.from_env()
+    profile, default = resolve_profile_from_args(args)
+    client = VCFOpsClient.from_env(profile=profile, default_profile=default)
     sm = client.find_by_name(args.name)
     if not sm:
         print(f"not found: {args.name}", file=sys.stderr)
@@ -266,9 +273,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     pv = sub.add_parser("validate", help="validate YAML definitions")
     pv.add_argument("paths", nargs="*")
+    add_profile_arg(pv, default="prod")
     pv.set_defaults(func=cmd_validate)
 
     pl = sub.add_parser("list", help="list super metrics on the instance")
+    add_profile_arg(pl, default="prod")
     pl.set_defaults(func=cmd_list)
 
     ps = sub.add_parser("sync", help="create/update super metrics from YAML")
@@ -291,6 +300,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Use when you know the target policy already covers these metrics."
         ),
     )
+    add_profile_arg(ps, default="devel")
     ps.set_defaults(func=cmd_sync)
 
     pe = sub.add_parser(
@@ -299,10 +309,12 @@ def build_parser() -> argparse.ArgumentParser:
              "(uses unsupported /internal/ endpoint; Default Policy only)",
     )
     pe.add_argument("paths", nargs="*")
+    add_profile_arg(pe, default="devel")
     pe.set_defaults(func=cmd_enable)
 
     pd = sub.add_parser("delete", help="delete a super metric by name")
     pd.add_argument("name")
+    add_profile_arg(pd, default="devel")
     pd.set_defaults(func=cmd_delete)
     return p
 

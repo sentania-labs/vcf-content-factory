@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import List
 
+from vcfops_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
+
 from .client import VCFOpsAlertsClient, VCFOpsAlertsError
 from .loader import (
     AlertDef, AlertValidationError,
@@ -65,6 +67,7 @@ def _collect_repo_recommendations() -> List[Recommendation]:
 
 
 def cmd_validate(args) -> int:
+    validate_profile_arg(args)  # validate --profile name if supplied; exits on unknown profile
     try:
         defs = _collect_alerts(args.paths)
     except AlertValidationError as e:
@@ -138,7 +141,8 @@ def cmd_validate(args) -> int:
 
 
 def cmd_list(args) -> int:
-    client = VCFOpsAlertsClient.from_env()
+    profile, default = resolve_profile_from_args(args)
+    client = VCFOpsAlertsClient.from_env(profile=profile, default_profile=default)
     for ad in client.list_alerts():
         print(f"{ad.get('id')}  {ad.get('name')}")
     return 0
@@ -154,7 +158,8 @@ def cmd_sync(args) -> int:
         print("nothing to sync", file=sys.stderr)
         return 1
 
-    client = VCFOpsAlertsClient.from_env()
+    profile, default = resolve_profile_from_args(args)
+    client = VCFOpsAlertsClient.from_env(profile=profile, default_profile=default)
 
     # Resolve all symptom names to ids in one pass before syncing alerts.
     print("resolving symptom definitions on instance...")
@@ -182,7 +187,8 @@ def cmd_sync(args) -> int:
 
 
 def cmd_enable(args) -> int:
-    client = VCFOpsAlertsClient.from_env()
+    profile, default = resolve_profile_from_args(args)
+    client = VCFOpsAlertsClient.from_env(profile=profile, default_profile=default)
     ad = client.find_by_name(args.name)
     if not ad:
         print(f"not found: {args.name}", file=sys.stderr)
@@ -193,7 +199,8 @@ def cmd_enable(args) -> int:
 
 
 def cmd_disable(args) -> int:
-    client = VCFOpsAlertsClient.from_env()
+    profile, default = resolve_profile_from_args(args)
+    client = VCFOpsAlertsClient.from_env(profile=profile, default_profile=default)
     ad = client.find_by_name(args.name)
     if not ad:
         print(f"not found: {args.name}", file=sys.stderr)
@@ -204,7 +211,8 @@ def cmd_disable(args) -> int:
 
 
 def cmd_delete(args) -> int:
-    client = VCFOpsAlertsClient.from_env()
+    profile, default = resolve_profile_from_args(args)
+    client = VCFOpsAlertsClient.from_env(profile=profile, default_profile=default)
     ad = client.find_by_name(args.name)
     if not ad:
         print(f"not found: {args.name}", file=sys.stderr)
@@ -220,13 +228,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     pv = sub.add_parser("validate", help="validate YAML definitions")
     pv.add_argument("paths", nargs="*")
+    add_profile_arg(pv, default="prod")
     pv.set_defaults(func=cmd_validate)
 
     pl = sub.add_parser("list", help="list alert definitions on the instance")
+    add_profile_arg(pl, default="prod")
     pl.set_defaults(func=cmd_list)
 
     ps = sub.add_parser("sync", help="create/update alert definitions from YAML")
     ps.add_argument("paths", nargs="*")
+    add_profile_arg(ps, default="devel")
     ps.set_defaults(func=cmd_sync)
 
     pe = sub.add_parser(
@@ -234,6 +245,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="enable an alert definition by name (public API endpoint)",
     )
     pe.add_argument("name")
+    add_profile_arg(pe, default="devel")
     pe.set_defaults(func=cmd_enable)
 
     pdi = sub.add_parser(
@@ -241,10 +253,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="disable an alert definition by name",
     )
     pdi.add_argument("name")
+    add_profile_arg(pdi, default="devel")
     pdi.set_defaults(func=cmd_disable)
 
     pd = sub.add_parser("delete", help="delete an alert definition by name")
     pd.add_argument("name")
+    add_profile_arg(pd, default="devel")
     pd.set_defaults(func=cmd_delete)
     return p
 

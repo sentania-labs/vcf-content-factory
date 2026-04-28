@@ -5,6 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from vcfops_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
 from vcfops_supermetrics.client import VCFOpsClient, VCFOpsError
 
 from .client import (
@@ -45,6 +46,7 @@ def _collect(args) -> list[ReportDef]:
 
 
 def cmd_validate(args) -> int:
+    validate_profile_arg(args)  # validate --profile name if supplied; exits on unknown profile
     try:
         defs = _collect(args)
     except ReportValidationError as e:
@@ -75,7 +77,8 @@ def cmd_validate(args) -> int:
 
 
 def cmd_list(args) -> int:
-    client = VCFOpsClient.from_env()
+    profile, default = resolve_profile_from_args(args)
+    client = VCFOpsClient.from_env(profile=profile, default_profile=default)
     try:
         count = 0
         for rd in list_reports(client):
@@ -98,7 +101,8 @@ def cmd_sync(args) -> int:
     if not defs:
         print("nothing to sync", file=sys.stderr)
         return 1
-    client = VCFOpsClient.from_env()
+    profile, default = resolve_profile_from_args(args)
+    client = VCFOpsClient.from_env(profile=profile, default_profile=default)
     try:
         user = get_current_user(client)
         marker = discover_marker_filename(client)
@@ -157,9 +161,11 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="*",
         help="report YAML files or directories (default: reports/)",
     )
+    add_profile_arg(pv, default="prod")
     pv.set_defaults(func=cmd_validate)
 
     pl = sub.add_parser("list", help="list report definitions on the instance")
+    add_profile_arg(pl, default="prod")
     pl.set_defaults(func=cmd_list)
 
     ps = sub.add_parser("sync", help="import report definitions to VCF Ops")
@@ -168,6 +174,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="*",
         help="report YAML files or directories (default: reports/)",
     )
+    add_profile_arg(ps, default="devel")
     ps.set_defaults(func=cmd_sync)
 
     pd = sub.add_parser(

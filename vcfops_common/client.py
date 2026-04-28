@@ -17,12 +17,11 @@ the base" coupling.
 """
 from __future__ import annotations
 
-import os
 from typing import Optional
 
 import requests
 
-from ._env import load_dotenv
+from ._env import load_dotenv, resolve_profile_credentials
 
 
 class VCFOpsError(RuntimeError):
@@ -55,20 +54,28 @@ class VCFOpsClient:
 
     # ---- env constructor ------------------------------------------------
     @classmethod
-    def from_env(cls) -> "VCFOpsClient":
-        load_dotenv()
+    def from_env(cls, profile: Optional[str] = None, *, default_profile: str = "prod") -> "VCFOpsClient":
+        """Construct a client from the active credential profile.
+
+        Profile resolution order:
+          1. ``profile`` argument if non-None/non-empty.
+          2. ``VCFOPS_PROFILE`` env var.
+          3. ``default_profile`` argument (caller sets per-command default).
+          4. ``"prod"`` as the hard fallback.
+
+        Raises ``VCFOpsError`` if required env vars for the resolved profile
+        are missing (includes a list of available profiles in the message).
+        """
         try:
-            host = os.environ["VCFOPS_HOST"]
-            user = os.environ["VCFOPS_USER"]
-            pw = os.environ["VCFOPS_PASSWORD"]
-        except KeyError as e:
-            raise VCFOpsError(f"Missing env var: {e.args[0]}") from None
+            creds = resolve_profile_credentials(profile, default=default_profile)
+        except ValueError as e:
+            raise VCFOpsError(str(e)) from None
         return cls(
-            host=host,
-            username=user,
-            password=pw,
-            auth_source=os.environ.get("VCFOPS_AUTH_SOURCE", "Local"),
-            verify_ssl=os.environ.get("VCFOPS_VERIFY_SSL", "true").lower() != "false",
+            host=creds.host,
+            username=creds.user,
+            password=creds.password,
+            auth_source=creds.auth_source,
+            verify_ssl=creds.verify_ssl,
         )
 
     # ---- auth -----------------------------------------------------------

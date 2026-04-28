@@ -5,15 +5,25 @@ instance, and how to enable it in a policy after install.
 
 ## Credentials
 
-Env vars, never on disk:
+Credentials live in three named profiles in `.env`, never as flat vars:
 
 ```
-VCFOPS_HOST           hostname (no scheme)
-VCFOPS_USER           username
-VCFOPS_PASSWORD       password
-VCFOPS_AUTH_SOURCE    optional, default "Local"
-VCFOPS_VERIFY_SSL     optional, "false" to disable TLS verification
+VCFOPS_PROD_HOST / VCFOPS_PROD_USER / VCFOPS_PROD_PASSWORD
+  vcf-lab-operations.int.sentania.net, user claude (read-only recon)
+
+VCFOPS_QA_HOST / VCFOPS_QA_USER / VCFOPS_QA_PASSWORD
+  vcf-lab-operations.int.sentania.net, user admin (uninstall round-trips)
+
+VCFOPS_DEVEL_HOST / VCFOPS_DEVEL_USER / VCFOPS_DEVEL_PASSWORD
+  vcf-lab-operations-devel.int.sentania.net, user admin (destructive playground)
 ```
+
+Each profile also has `_AUTH_SOURCE` (default `Local`) and `_VERIFY_SSL`.
+
+Active profile resolution order (first wins):
+1. `--profile <name>` CLI flag
+2. `VCFOPS_PROFILE` environment variable
+3. Per-command default (`prod` for validate/list/recon; `devel` for sync/enable/delete)
 
 The project's `.claude/settings.local.json` has a PreToolUse/Bash
 hook that sources `.env` before every Bash tool call, so Claude

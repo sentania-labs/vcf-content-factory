@@ -254,17 +254,32 @@ recognize from community content packages.
 ### I want to author new content
 
 1. Put your VCF Operations credentials in a `.env` file at the repo
-   root:
+   root (use `.env.example` as a template):
 
    ```bash
-   VCFOPS_HOST=vcfops.example.com
-   VCFOPS_USER=admin
-   VCFOPS_PASSWORD=...
-   VCFOPS_AUTH_SOURCE=Local        # optional
-   VCFOPS_VERIFY_SSL=false         # optional, for self-signed
-   VCFOPS_ADMIN_USER=admin         # optional; for QA uninstall cycles
-   VCFOPS_ADMIN_PASSWORD=...       # optional
+   # Three profiles: prod (read-only recon), qa (primary-lab admin),
+   # devel (destructive playground).
+   export VCFOPS_PROD_HOST=vcfops.example.com
+   export VCFOPS_PROD_USER=svc-claude-poc
+   export VCFOPS_PROD_PASSWORD='...'
+   export VCFOPS_PROD_VERIFY_SSL=false
+
+   export VCFOPS_QA_HOST=vcfops.example.com
+   export VCFOPS_QA_USER=admin
+   export VCFOPS_QA_PASSWORD='...'
+   export VCFOPS_QA_VERIFY_SSL=false
+
+   export VCFOPS_DEVEL_HOST=vcfops-devel.example.com
+   export VCFOPS_DEVEL_USER=admin
+   export VCFOPS_DEVEL_PASSWORD='...'
+   export VCFOPS_DEVEL_VERIFY_SSL=false
+
+   export VCFOPS_PROFILE=prod   # default active profile
    ```
+
+   Select the active profile with `--profile <name>` on any CLI command,
+   or set `VCFOPS_PROFILE` in your shell. Validate/list default to `prod`;
+   sync/enable/delete default to `devel`.
 
 2. Install Python dependencies:
 

@@ -22,6 +22,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import os
+
 from .builder import build_bundle
 from .loader import BundleValidationError, load_bundle, load_all_bundles
 
@@ -301,6 +303,10 @@ def cmd_refresh_describe(args) -> int:
     """Refresh the adapter describe-surface cache against the live instance."""
     from .describe import make_cache, DescribeCacheError
 
+    _profile = getattr(args, "profile", None)
+    if _profile:
+        os.environ["VCFOPS_PROFILE"] = _profile.upper()
+
     kinds_arg = getattr(args, "kind", None) or []
     kinds: list[tuple[str, str]] | None = None
     if kinds_arg:
@@ -334,6 +340,10 @@ def cmd_analyze(args) -> int:
     import json as _json
     from .audit import analyze_staged_bundle, AuditError, print_audit_summary
     from .describe import make_cache, DescribeCacheError
+
+    _profile = getattr(args, "profile", None)
+    if _profile:
+        os.environ["VCFOPS_PROFILE"] = _profile.upper()
 
     bundle_dir = Path(args.bundle_dir)
     if not bundle_dir.exists():
@@ -481,6 +491,14 @@ def cmd_sync(args) -> int:
     from .syncer import sync_bundle, sync_all_bundles, uninstall_bundle
     from .handler import discover_handlers
     from .loader import load_all_bundles as _load_all
+
+    # Propagate --profile into VCFOPS_PROFILE so that VCFOpsClient.from_env()
+    # inside the syncer picks up the right profile.  Only override if the user
+    # explicitly passed --profile; if VCFOPS_PROFILE is already set, the syncer
+    # will inherit it naturally without any override here.
+    _profile = getattr(args, "profile", None)
+    if _profile:
+        os.environ["VCFOPS_PROFILE"] = _profile.upper()
 
     force = getattr(args, "force", False)
     uninstall = getattr(args, "uninstall", False)
@@ -1057,6 +1075,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="refresh a specific adapter/resource-kind pair (repeatable); "
              "default: refresh all cached pairs",
     )
+    prd.add_argument(
+        "--profile",
+        metavar="NAME",
+        default=None,
+        help="credential profile to use (prod / qa / devel; default: 'prod')",
+    )
     prd.set_defaults(func=cmd_refresh_describe)
 
     pa = sub.add_parser(
@@ -1070,6 +1094,12 @@ def build_parser() -> argparse.ArgumentParser:
     pa.add_argument(
         "--no-live-describe", action="store_true",
         help="use describe cache only; do not refresh against live instance",
+    )
+    pa.add_argument(
+        "--profile",
+        metavar="NAME",
+        default=None,
+        help="credential profile to use (prod / qa / devel; default: 'prod')",
     )
     pa.set_defaults(func=cmd_analyze)
 
@@ -1107,6 +1137,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="with --uninstall: skip cross-bundle sharing checks and delete unconditionally",
+    )
+    ps.add_argument(
+        "--profile",
+        metavar="NAME",
+        default=None,
+        help="credential profile to use (prod / qa / devel; default: 'devel' for sync/uninstall)",
     )
     ps.set_defaults(func=cmd_sync)
 

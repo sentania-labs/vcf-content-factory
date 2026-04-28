@@ -28,10 +28,11 @@ instance via the Suite API / content-import zip.
    `docs/vcf9/metrics-properties.md`, or a name the user provided.
    Ask the user for the exact key if you can't ground it.
 
-3. **Never write secrets to disk.** Credentials flow via env vars
-   (`VCFOPS_HOST`, `VCFOPS_USER`, `VCFOPS_PASSWORD`,
-   optional `VCFOPS_AUTH_SOURCE`, `VCFOPS_VERIFY_SSL`). Not in YAML,
-   not in commits, not echoed in shell history.
+3. **Never write secrets to disk.** Credentials flow via profile-prefixed env
+   vars (`VCFOPS_PROD_*`, `VCFOPS_QA_*`, `VCFOPS_DEVEL_*`) sourced from `.env`.
+   Not in YAML, not in commits, not echoed in shell history. Select the active
+   profile with `--profile <name>` (prod / qa / devel) or the `VCFOPS_PROFILE`
+   env var.
 
 4. **Always validate before installing.** Delegate to
    `content-installer` which validates before every sync.

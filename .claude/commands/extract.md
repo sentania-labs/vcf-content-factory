@@ -19,17 +19,19 @@ Drive a conversational flow to pull a dashboard and its dependencies off the liv
   source /home/scott/pka/workspaces/vcf-content-factory/.env && <command>
   ```
 - Working directory: `/home/scott/pka/workspaces/vcf-content-factory/`.
+- The `.env` defines three credential profiles: `prod` (primary lab, read-only `claude`), `qa` (primary lab, `admin` for uninstall round-trips), `devel` (devel lab, `admin` for destructive playground). `/extract` defaults to `devel` because authoring iterations happen on devel by policy. Override with `from <profile>` in `$ARGUMENTS` (e.g. `from prod`, `from qa`).
 
 ## Flow
 
-### 1. Identify the target dashboard and detect build intent
+### 1. Identify the target dashboard, profile, and build intent
 
+- **Profile**: scan `$ARGUMENTS` for `from <profile>` — `from prod`, `from qa`, `from devel`. If no `from` clause, default to `devel` (per the per-command rule for mutating/authoring round-trips). The resolved profile is passed to every CLI invocation as `--profile <name>`.
 - If `$ARGUMENTS` contains a dashboard name, use it as the candidate. Confirm with the user that this is the right one.
 - Otherwise, run:
   ```
-  source .env && python3 -m vcfops_extractor list-dashboards
+  source .env && python3 -m vcfops_extractor list-dashboards --profile <name>
   ```
-  Present the list to the user, ask them to pick one by name. If the instance has many dashboards and a substring is obvious from context, `list-dashboards --folder <substring>` filters.
+  Present the list to the user, ask them to pick one by name. If the instance has many dashboards and a substring is obvious from context, `list-dashboards --profile <name> --folder <substring>` filters.
 - Capture both the dashboard **name** and **UUID** — UUID is more reliable downstream (no ambiguity).
 - **Build intent**: also scan `$ARGUMENTS` for build preference:
   - Phrases like `build`, `package`, `with zip`, `and package`, `--build` → user wants the zip built automatically after extraction
@@ -79,6 +81,7 @@ Invoke `vcfops_extractor` with the full flag set — `--yes` is safe here becaus
 
 ```
 source .env && python3 -m vcfops_extractor extract dashboard \
+  --profile <profile-from-step-1> \
   --dashboard-id <uuid> \
   --bundle-slug <slug> \
   --author "<author>" \
@@ -143,6 +146,7 @@ The entire flow collapses to a single flag-driven CLI call for power users or CI
 
 ```
 source .env && python3 -m vcfops_extractor extract dashboard \
+  --profile devel \
   --dashboard-name "IDPS Planner" \
   --bundle-slug idps-planner \
   --author "Scott Bowe" \
@@ -153,4 +157,4 @@ source .env && python3 -m vcfops_extractor extract dashboard \
   --yes
 ```
 
-`/extract` is the conversational wrapper around this; behavior is identical given the same inputs.
+`/extract` is the conversational wrapper around this; behavior is identical given the same inputs. The skill defaults `--profile devel` if `from <profile>` is not in `$ARGUMENTS`.

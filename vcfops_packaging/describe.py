@@ -347,26 +347,28 @@ def make_cache(live: bool = True, cache_dir: Optional[Path] = None) -> DescribeC
     If ``live`` is True and the required env vars are present, attaches a live
     client so the cache can be refreshed.  Otherwise returns an offline cache.
 
+    Credentials are resolved from the active profile (VCFOPS_PROFILE env var
+    or ``"prod"`` default — build-time describe refreshes default to prod since
+    they are read-only observations). If no profile credentials are available,
+    falls back to offline mode (no error).
+
     This is a *late* import of VCFOpsClient to avoid pulling ``requests`` at
     module import time (mirrors the pattern used elsewhere in this package).
     """
     client = None
     if live:
         try:
-            from vcfops_common._env import load_dotenv
+            from vcfops_common._env import load_dotenv, resolve_profile_credentials
             load_dotenv()
-            host = os.environ.get("VCFOPS_HOST")
-            user = os.environ.get("VCFOPS_USER")
-            pw = os.environ.get("VCFOPS_PASSWORD")
-            if host and user and pw:
-                from vcfops_common.client import VCFOpsClient
-                client = VCFOpsClient(
-                    host=host,
-                    username=user,
-                    password=pw,
-                    auth_source=os.environ.get("VCFOPS_AUTH_SOURCE", "Local"),
-                    verify_ssl=os.environ.get("VCFOPS_VERIFY_SSL", "true").lower() != "false",
-                )
+            creds = resolve_profile_credentials(default="prod")
+            from vcfops_common.client import VCFOpsClient
+            client = VCFOpsClient(
+                host=creds.host,
+                username=creds.user,
+                password=creds.password,
+                auth_source=creds.auth_source,
+                verify_ssl=creds.verify_ssl,
+            )
         except Exception:
             # Any import or credential failure → offline mode.
             client = None

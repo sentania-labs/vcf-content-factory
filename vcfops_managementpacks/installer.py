@@ -105,50 +105,48 @@ def _resolve_credentials(
     host: Optional[str],
     user: Optional[str],
     password: Optional[str],
+    profile: Optional[str] = None,
 ) -> Tuple[str, str, str]:
-    """Resolve host/user/password from args then env vars.
+    """Resolve host/user/password from args then the active credential profile.
 
-    Primary env vars: VCFOPS_HOST, VCFOPS_USER, VCFOPS_PASSWORD.
-    Backward-compat fallbacks: VCFOPS_ADMIN, VCFOPS_ADMINPASSWORD — both
-    still accepted but emit a deprecation warning on stderr.
+    Resolution order:
+      1. Explicit CLI flags (--host / --user / --password) — highest priority.
+      2. Active credential profile (VCFOPS_<PROFILE>_* env vars, resolved via
+         --profile flag > VCFOPS_PROFILE env var > "devel" default).
 
-    Returns (host, user, password).  Calls _abort() if any are missing.
+    Returns (host, user, password).  Calls _abort() if any required value
+    is missing after all sources are tried.
     """
-    host = host or os.environ.get("VCFOPS_HOST", "").strip()
+    from vcfops_common._env import load_dotenv, resolve_profile_credentials
+    load_dotenv()
 
-    # User: try primary name first, then old name with warning
-    user = user or os.environ.get("VCFOPS_USER", "").strip()
-    if not user:
-        old_user = os.environ.get("VCFOPS_ADMIN", "").strip()
-        if old_user:
-            _warn(
-                "VCFOPS_ADMIN is deprecated; rename to VCFOPS_USER. "
-                "Support for VCFOPS_ADMIN will be removed in a future release."
-            )
-            user = old_user
+    # Resolve profile credentials as the fallback layer.
+    try:
+        creds = resolve_profile_credentials(profile, default="devel")
+        profile_host = creds.host
+        profile_user = creds.user
+        profile_password = creds.password
+    except ValueError as e:
+        _warn(f"Could not resolve profile credentials: {e}")
+        profile_host = profile_user = profile_password = ""
 
-    # Password: try primary name first, then old name with warning
-    password = password or os.environ.get("VCFOPS_PASSWORD", "").strip()
-    if not password:
-        old_pw = os.environ.get("VCFOPS_ADMINPASSWORD", "").strip()
-        if old_pw:
-            _warn(
-                "VCFOPS_ADMINPASSWORD is deprecated; rename to VCFOPS_PASSWORD. "
-                "Support for VCFOPS_ADMINPASSWORD will be removed in a future release."
-            )
-            password = old_pw
+    # CLI flags override profile values.
+    host = (host or "").strip() or profile_host
+    user = (user or "").strip() or profile_user
+    password = (password or "").strip() or profile_password
 
     missing = []
     if not host:
-        missing.append("VCFOPS_HOST")
+        missing.append("VCFOPS_DEVEL_HOST (or --host)")
     if not user:
-        missing.append("VCFOPS_USER")
+        missing.append("VCFOPS_DEVEL_USER (or --user)")
     if not password:
-        missing.append("VCFOPS_PASSWORD")
+        missing.append("VCFOPS_DEVEL_PASSWORD (or --password)")
     if missing:
         _abort(
             f"Missing required credentials: {', '.join(missing)}.\n"
-            f"  Set as env vars or pass as CLI flags (--host, --user, --password)."
+            f"  Set them in .env or pass as CLI flags (--host, --user, --password).\n"
+            f"  Use --profile to select a different credential profile."
         )
 
     return host, user, password
@@ -741,6 +739,7 @@ def install_pak(
     wait: bool = True,
     poll_interval: int = POLL_INTERVAL,
     poll_timeout: int = POLL_TIMEOUT,
+    profile: Optional[str] = None,
 ) -> None:
     """Install a .pak file onto a VCF Ops instance via the /ui/ SPA Struts layer.
 
@@ -764,7 +763,7 @@ def install_pak(
     if not p.is_file():
         _abort(f"Not a file: {pak_path}")
 
-    host, user, password = _resolve_credentials(host, user, password)
+    host, user, password = _resolve_credentials(host, user, password, profile=profile)
 
     # Pre-flight: parse manifest.txt to get declared name + version
     _info(f"[1/6] Parsing manifest from {p.name} ...")
@@ -898,6 +897,7 @@ def uninstall_pak(
     allow_builtin: bool = False,
     poll_interval: int = POLL_INTERVAL,
     poll_timeout: int = POLL_TIMEOUT,
+    profile: Optional[str] = None,
 ) -> None:
     """Uninstall a management pack from a VCF Ops instance.
 
@@ -920,10 +920,9 @@ def uninstall_pak(
     state requiring manual recovery.  See context/pak_uninstall_api_exploration.md
     Safety-critical section for the full incident report.
 
-    Credentials resolve order: CLI flags > VCFOPS_USER/VCFOPS_PASSWORD env vars >
-    legacy VCFOPS_ADMIN/VCFOPS_ADMINPASSWORD env vars (deprecated, warn).
+    Credentials resolve order: CLI flags > active credential profile env vars.
     """
-    host, user, password = _resolve_credentials(host, user, password)
+    host, user, password = _resolve_credentials(host, user, password, profile=profile)
 
     # Step 1: UI session login
     _info(f"[1/5] Authenticating to /ui/ as {user!r} ...")

@@ -7,6 +7,8 @@ import sys
 from pathlib import Path
 from typing import List
 
+from vcfops_common._profile_cli import add_profile_arg, validate_profile_arg
+
 from .loader import ManagementPackDef, ManagementPackValidationError, load_dir, load_file
 
 DEFAULT_DIR = "content/managementpacks"
@@ -26,6 +28,7 @@ def _collect(paths: List[str]) -> List[ManagementPackDef]:
 
 
 def cmd_validate(args) -> int:
+    validate_profile_arg(args)  # validate --profile name if supplied; exits on unknown profile
     try:
         defs = _collect(args.paths)
     except ManagementPackValidationError as e:
@@ -244,6 +247,7 @@ def cmd_install(args) -> int:
         password=args.password,
         skip_ssl_verify=args.skip_ssl_verify,
         wait=args.wait,
+        profile=getattr(args, "profile", None),
     )
     return 0
 
@@ -273,6 +277,7 @@ def cmd_uninstall(args) -> int:
         skip_ssl_verify=args.skip_ssl_verify,
         wait=args.wait,
         allow_builtin=args.allow_builtin,
+        profile=getattr(args, "profile", None),
     )
     return 0
 
@@ -283,6 +288,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pv = sub.add_parser("validate", help="validate MP YAML definitions")
     pv.add_argument("paths", nargs="*")
+    add_profile_arg(pv, default="prod")
     pv.set_defaults(func=cmd_validate)
 
     pl = sub.add_parser("list", help="list management pack definitions")
@@ -447,6 +453,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="trigger install and return immediately without polling for completion",
     )
     pi.epilog = _creds_help
+    add_profile_arg(pi, default="devel")
     pi.set_defaults(func=cmd_install)
 
     # ------------------------------------------------------------------
@@ -526,6 +533,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     pu.epilog = _creds_help
+    add_profile_arg(pu, default="devel")
     pu.set_defaults(func=cmd_uninstall)
 
     return p
