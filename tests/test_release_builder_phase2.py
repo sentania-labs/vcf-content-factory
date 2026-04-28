@@ -10,11 +10,11 @@ Two smoke passes as specified in the Phase 2 requirements:
               zip contains dashboard JSON, 4 view definitions, install scaffolding
 
   Pass B — bundle headline
-    Headline: bundles/capacity-assessment.yaml
+    Headline: bundles/vks-core-consumption-bundle.yaml
     Expects:  dest_subdir == "bundles"
               zip_path.exists()
               zip filename follows release convention (versionless)
-              zip contains 11 SMs + 2 views + 1 dashboard + 1 customgroup payloads
+              zip contains 8 SMs + 1 view + 1 dashboard + 1 report payloads
 
 Both passes use a temporary release manifest constructed at test time so they
 bypass the Phase 1 flag-state validator (which requires released: true on the
@@ -23,6 +23,10 @@ is called directly.
 
 Tests also cover the stale-check helpers expected_artifact_path() and
 artifact_already_exists().
+
+Note: capacity-assessment.yaml was removed in v2 item #1 cleanup (converted
+to a standalone release-manifest dashboard). Pass B was re-pointed to
+vks-core-consumption-bundle, the surviving multi-content bundle.
 """
 from __future__ import annotations
 
@@ -209,7 +213,12 @@ class TestDashboardHeadline:
 # ---------------------------------------------------------------------------
 
 class TestBundleHeadline:
-    """Smoke test: build a release whose headline is a bundle YAML."""
+    """Smoke test: build a release whose headline is a bundle YAML.
+
+    Uses vks-core-consumption-bundle (8 SMs / 1 view / 1 dashboard / 1 report /
+    0 customgroups).  capacity-assessment.yaml was removed in v2 item #1 cleanup
+    and is no longer a valid fixture.
+    """
 
     @pytest.fixture(scope="class")
     def release_artifacts(self, tmp_path_factory):
@@ -218,9 +227,9 @@ class TestBundleHeadline:
         tmp = tmp_path_factory.mktemp("bundle_release")
         manifest_path = _write_release_manifest(
             tmp,
-            name="capacity-assessment",
+            name="vks-core-consumption-bundle",
             version="1.0",
-            source="bundles/capacity-assessment.yaml",
+            source="bundles/vks-core-consumption-bundle.yaml",
         )
         output_dir = tmp / "output"
         output_dir.mkdir()
@@ -243,7 +252,7 @@ class TestBundleHeadline:
 
     def test_zip_filename_convention(self, release_artifacts):
         """Filename must be <release-name>.zip (versionless consumer artifact)."""
-        expected_name = "capacity-assessment.zip"
+        expected_name = "vks-core-consumption-bundle.zip"
         actual_name = release_artifacts[0].zip_path.name
         assert actual_name == expected_name, (
             f"Expected filename {expected_name!r}, got {actual_name!r}"
@@ -251,11 +260,11 @@ class TestBundleHeadline:
 
     def test_release_metadata(self, release_artifacts):
         art = release_artifacts[0]
-        assert art.release_name == "capacity-assessment"
+        assert art.release_name == "vks-core-consumption-bundle"
         assert art.release_version == "1.0"
 
-    def test_zip_has_eleven_supermetrics(self, release_artifacts):
-        """capacity-assessment bundle declares 11 SMs."""
+    def test_zip_has_eight_supermetrics(self, release_artifacts):
+        """vks-core-consumption-bundle declares 8 SMs."""
         zip_path = release_artifacts[0].zip_path
         members = _zip_members(zip_path)
         bundle_json_entries = [m for m in members if m.endswith("bundle.json")]
@@ -264,26 +273,26 @@ class TestBundleHeadline:
             bundle_data = json.loads(z.read(bundle_json_entries[0]).decode("utf-8"))
         sm_section = bundle_data.get("content", {}).get("supermetrics", {})
         sm_items = sm_section.get("items", [])
-        assert len(sm_items) == 11, (
-            f"Expected 11 SMs in bundle.json, got {len(sm_items)}: "
+        assert len(sm_items) == 8, (
+            f"Expected 8 SMs in bundle.json, got {len(sm_items)}: "
             f"{[i.get('name') for i in sm_items]}"
         )
 
-    def test_zip_has_two_views(self, release_artifacts):
-        """capacity-assessment bundle declares 2 views."""
+    def test_zip_has_one_view(self, release_artifacts):
+        """vks-core-consumption-bundle declares 1 view."""
         zip_path = release_artifacts[0].zip_path
         members = _zip_members(zip_path)
         bundle_json_entries = [m for m in members if m.endswith("bundle.json")]
         with zipfile.ZipFile(zip_path, "r") as z:
             bundle_data = json.loads(z.read(bundle_json_entries[0]).decode("utf-8"))
         view_items = bundle_data.get("content", {}).get("views", {}).get("items", [])
-        assert len(view_items) == 2, (
-            f"Expected 2 views, got {len(view_items)}: "
+        assert len(view_items) == 1, (
+            f"Expected 1 view, got {len(view_items)}: "
             f"{[i.get('name') for i in view_items]}"
         )
 
     def test_zip_has_one_dashboard(self, release_artifacts):
-        """capacity-assessment bundle declares 1 dashboard."""
+        """vks-core-consumption-bundle declares 1 dashboard."""
         zip_path = release_artifacts[0].zip_path
         members = _zip_members(zip_path)
         bundle_json_entries = [m for m in members if m.endswith("bundle.json")]
@@ -294,16 +303,16 @@ class TestBundleHeadline:
             f"Expected 1 dashboard, got {len(dash_items)}"
         )
 
-    def test_zip_has_one_customgroup(self, release_artifacts):
-        """capacity-assessment bundle declares 1 custom group."""
+    def test_zip_has_zero_customgroups(self, release_artifacts):
+        """vks-core-consumption-bundle declares 0 custom groups."""
         zip_path = release_artifacts[0].zip_path
         members = _zip_members(zip_path)
         bundle_json_entries = [m for m in members if m.endswith("bundle.json")]
         with zipfile.ZipFile(zip_path, "r") as z:
             bundle_data = json.loads(z.read(bundle_json_entries[0]).decode("utf-8"))
         cg_items = bundle_data.get("content", {}).get("customgroups", {}).get("items", [])
-        assert len(cg_items) == 1, (
-            f"Expected 1 custom group, got {len(cg_items)}: {cg_items}"
+        assert len(cg_items) == 0, (
+            f"Expected 0 custom groups, got {len(cg_items)}: {cg_items}"
         )
 
     def test_zip_has_install_scaffolding(self, release_artifacts):

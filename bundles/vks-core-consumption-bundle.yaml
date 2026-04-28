@@ -1,0 +1,30 @@
+customgroups: []
+dashboards:
+- content/dashboards/vks_core_consumption.yaml
+description: 'VKS Core Consumption suite for VCF Operations — ships the interactive
+  dashboard and a matching scheduled-report companion together. Install this bundle
+  OR the standalone vks-core-consumption-dashboard / vks-core-consumption-report pieces;
+  not both, since the bundle includes everything the standalone pieces do. Tracks
+  vCPU consumption across VKS VM classifications — VKS guest nodes (control plane
+  + workers combined), vCLS, Supervisor, vSphere Pods, VM Service, and regular VMs
+  — plus a global vCPU-to-pCore ratio super metric, with a per-vCenter list view feeding
+  both the dashboard and the report. Markers chosen to work on both VCF Operations
+  9.x and Aria Operations 8.18 (productName contains "Kubernetes" matches both VKS
+  and TKGS node images; Supervisor CP identified by VM-name pattern).
+
+  '
+name: vks-core-consumption-bundle
+released: true
+reports:
+- content/reports/vks_core_consumption_report.yaml
+supermetrics:
+- content/supermetrics/vks_vcls_vcpu.yaml
+- content/supermetrics/vks_supervisor_vcpu.yaml
+- content/supermetrics/vks_global_vcpu_pcore_ratio.yaml
+- content/supermetrics/vks_regular_vm_vcpu.yaml
+- content/supermetrics/vks_nodeimage_vcpu.yaml
+- content/supermetrics/vks_vmservice_vcpu.yaml
+- content/supermetrics/vks_cores.yaml
+- content/supermetrics/vks_pod_vcpu.yaml
+views:
+- content/views/vks_core_consumption_by_vcenter.yaml

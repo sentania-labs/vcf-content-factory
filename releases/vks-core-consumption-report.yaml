@@ -1,0 +1,12 @@
+artifacts:
+- headline: true
+  source: content/reports/vks_core_consumption_report.yaml
+deprecates: []
+description: Printable/exportable summary of VKS vCPU consumption across a VCF environment.
+  Intended for capacity planning reviews and chargeback reporting. Includes a per-vCenter
+  breakdown of vCPU consumption by VM classification (worker, CP, vCLS, supervisor,
+  pod, VM Service, regular) plus the global vCPU-to-pCore ratio and calculated VKS
+  core count.
+name: vks-core-consumption-report
+release_notes: ''
+version: '1.1'

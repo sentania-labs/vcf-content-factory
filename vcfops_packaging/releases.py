@@ -372,6 +372,12 @@ def check_bundle_release_collision(
     manifest ``name:`` field.  If the same slug appears in both sets, returns
     an error string naming both files.
 
+    Exception — legitimate bundle-release pairing: when a release manifest
+    shares its slug with a bundle file AND its headline artifact's source
+    points at that same bundle file (``bundles/<slug>.yaml`` or
+    ``bundles/<slug>.yml``), the release manifest exists precisely to publish
+    that bundle.  This is not a collision; it is skipped silently.
+
     Args:
         bundles_dir: Path to the ``bundles/`` directory (may not exist).
         releases:    Pre-loaded release manifests (from ``load_all_releases``).
@@ -387,14 +393,31 @@ def check_bundle_release_collision(
     for p in sorted(bundles_dir.glob("*.y*ml")):
         bundle_slugs[p.stem] = p
 
-    release_names: dict[str, Path] = {r.name: r.manifest_path for r in releases}
+    release_by_name: dict[str, ReleaseDef] = {r.name: r for r in releases}
 
     for slug, bundle_path in bundle_slugs.items():
-        if slug in release_names:
-            errors.append(
-                f"slug collision: '{slug}' appears as both "
-                f"bundle '{bundle_path}' and release manifest '{release_names[slug]}'"
-            )
+        if slug not in release_by_name:
+            continue
+        release = release_by_name[slug]
+        # Check whether this is a legitimate bundle-release pairing: the
+        # release manifest's headline artifact must point at this bundle file.
+        headline_sources = {
+            Path(a.source)
+            for a in release.artifacts
+            if a.headline
+        }
+        # Acceptable source paths for this bundle slug.
+        expected_sources = {
+            Path(f"bundles/{slug}.yaml"),
+            Path(f"bundles/{slug}.yml"),
+        }
+        if headline_sources & expected_sources:
+            # The headline source IS this bundle — legitimate pairing, not a collision.
+            continue
+        errors.append(
+            f"slug collision: '{slug}' appears as both "
+            f"bundle '{bundle_path}' and release manifest '{release.manifest_path}'"
+        )
 
     return errors
 

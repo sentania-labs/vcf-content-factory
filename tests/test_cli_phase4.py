@@ -84,13 +84,14 @@ def _make_factory_copy(tmp_path: Path) -> Path:
         if releases_dir.exists():
             shutil.rmtree(str(releases_dir))
             releases_dir.mkdir()
-        # Reset released: true flags on dashboards so flag-flip tests start clean.
+        # Reset released: true flags on all content subdirs so flag-flip tests
+        # start clean (reports, dashboards, views, bundles, etc.).
         import yaml as _yaml
-        for dash_yaml in (factory / "content" / "dashboards").glob("*.yaml"):
-            d = _yaml.safe_load(dash_yaml.read_text()) or {}
+        for content_yaml in (factory / "content").rglob("*.yaml"):
+            d = _yaml.safe_load(content_yaml.read_text()) or {}
             if d.get("released"):
                 d["released"] = False
-                dash_yaml.write_text(_yaml.dump(d, default_flow_style=False, allow_unicode=True))
+                content_yaml.write_text(_yaml.dump(d, default_flow_style=False, allow_unicode=True))
     else:
         (factory / "content").mkdir(exist_ok=True)
 

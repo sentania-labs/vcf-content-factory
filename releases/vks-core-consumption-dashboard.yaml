@@ -1,25 +1,13 @@
+artifacts:
+- headline: true
+  source: content/dashboards/vks_core_consumption.yaml
+deprecates: []
 description: 'Per-vCenter breakdown of VM vCPU by role: VKS guest nodes, Supervisor
   CP, vCLS, VM Service, Regular VMs, and vSphere Pods. Plus physical cores, the global
   vCPU:pCore ratio, and the computed VKS core equivalent. One row per vCenter — no
   scoping widget, this is a read-at-a-glance report. Markers work on both VCF Operations
   9.x and Aria Operations 8.18. Replaces the per-vCenter PowerCLI VKS core-consumption
-  script.
-
-  '
-id: 62652554-b2a7-46ef-a7cd-8163ab3b59f1
-name: '[VCF Content Factory] VKS Core Consumption'
-released: true
-widgets:
-- coords:
-    h: 11
-    w: 12
-    x: 1
-    y: 1
-  id: vks_core_view
-  pin:
-    adapter_kind: VMWARE
-    resource_kind: vSphere World
-  self_provider: true
-  title: VKS Core Consumption by vCenter
-  type: View
-  view: '[VCF Content Factory] VKS Core Consumption by vCenter'
+  script.'
+name: vks-core-consumption-dashboard
+release_notes: ''
+version: '1.0'

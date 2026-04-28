@@ -450,17 +450,23 @@ class TestValidatorCollisionHardError:
     """N5: validate exits non-zero when a slug appears in both bundles/ and releases/."""
 
     def _make_collision_repo(self, tmp_path: Path, slug: str) -> None:
-        """Create a minimal repo with a colliding slug in bundles/ and releases/."""
+        """Create a minimal repo with a colliding slug in bundles/ and releases/.
+
+        The release manifest headlines a DIFFERENT source (bundles/<slug>_source.yaml),
+        NOT the bundle file itself, so this is a genuine collision — not a
+        legitimate bundle-release pairing.
+        """
         # Create bundles/<slug>.yaml
         bundle_path = tmp_path / "bundles" / f"{slug}.yaml"
         bundle_path.parent.mkdir(parents=True, exist_ok=True)
         bundle_path.write_text(_minimal_bundle_yaml(slug))
 
         # Create a source content file for the release manifest to reference
+        # (intentionally different from bundles/<slug>.yaml to make it a real collision)
         source_path = tmp_path / "bundles" / f"{slug}_source.yaml"
         source_path.write_text(_minimal_bundle_yaml(f"{slug}-source"))
 
-        # Create releases/<slug>.yaml (collision!)
+        # Create releases/<slug>.yaml (collision! — headlines a different bundle)
         release_path = tmp_path / "releases" / f"{slug}.yaml"
         release_path.parent.mkdir(parents=True, exist_ok=True)
         release_path.write_text(_minimal_release_yaml(slug, f"bundles/{slug}_source.yaml"))
@@ -555,6 +561,119 @@ class TestValidatorCollisionHardError:
         assert len(errors) == 1
         assert "shared-slug" in errors[0]
         assert "collision" in errors[0].lower()
+
+
+# ---------------------------------------------------------------------------
+# N5b — Legitimate bundle-release pairing does NOT trigger collision error
+# ---------------------------------------------------------------------------
+
+class TestBundleReleaseLegitimatePairing:
+    """N5b: collision check is skipped when the release manifest headlines the bundle."""
+
+    def test_bundle_release_pairing_no_error_api(self, tmp_path):
+        """check_bundle_release_collision() returns no errors when the release
+        manifest's headline artifact points at bundles/<slug>.yaml."""
+        from vcfops_packaging.releases import check_bundle_release_collision, load_release
+
+        bundle_dir = tmp_path / "bundles"
+        bundle_dir.mkdir()
+        slug = "vks-core-consumption-bundle"
+        bundle_path = bundle_dir / f"{slug}.yaml"
+        bundle_data = _minimal_bundle_yaml(slug)
+        bundle_path.write_text(bundle_data)
+        # Also set released: true so flag-state check doesn't interfere
+        import yaml as _yaml
+        bd = _yaml.safe_load(bundle_data)
+        bd["released"] = True
+        bundle_path.write_text(_yaml.dump(bd))
+
+        releases_dir = tmp_path / "releases"
+        releases_dir.mkdir()
+        # Release manifest headlines the bundle itself — this is the legitimate pairing
+        (releases_dir / f"{slug}.yaml").write_text(
+            _minimal_release_yaml(slug, f"bundles/{slug}.yaml")
+        )
+
+        release = load_release(releases_dir / f"{slug}.yaml", repo_root=tmp_path)
+        errors = check_bundle_release_collision(bundle_dir, [release])
+        assert errors == [], (
+            f"Legitimate bundle-release pairing should not be flagged as collision: {errors}"
+        )
+
+    def test_bundle_release_pairing_no_error_subprocess(self, tmp_path):
+        """validate exits zero when bundles/<slug>.yaml + releases/<slug>.yaml
+        where the release headlines that same bundle."""
+        import yaml as _yaml
+
+        slug = "my-paired-bundle"
+        bundle_dir = tmp_path / "bundles"
+        bundle_dir.mkdir()
+        bundle_path = bundle_dir / f"{slug}.yaml"
+        bd = _yaml.safe_load(_minimal_bundle_yaml(slug))
+        bd["released"] = True
+        bundle_path.write_text(_yaml.dump(bd))
+
+        releases_dir = tmp_path / "releases"
+        releases_dir.mkdir()
+        (releases_dir / f"{slug}.yaml").write_text(
+            _minimal_release_yaml(slug, f"bundles/{slug}.yaml")
+        )
+
+        env = {"PYTHONPATH": str(REPO_ROOT), "PATH": "/usr/bin:/bin"}
+        result = subprocess.run(
+            [sys.executable, "-m", "vcfops_packaging", "validate"],
+            cwd=str(tmp_path),
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        combined = result.stdout + result.stderr
+        assert "slug collision" not in combined, (
+            f"Legitimate bundle-release pairing should not produce collision error:\n{combined}"
+        )
+
+    def test_non_pairing_collision_still_errors(self, tmp_path):
+        """When the release manifest headlines a DIFFERENT source (not the bundle),
+        the collision error still fires."""
+        from vcfops_packaging.releases import check_bundle_release_collision, load_release
+
+        bundle_dir = tmp_path / "bundles"
+        bundle_dir.mkdir()
+        slug = "shared-name"
+        (bundle_dir / f"{slug}.yaml").write_text(_minimal_bundle_yaml(slug))
+        # A different source file
+        other_source = bundle_dir / "other-source.yaml"
+        other_source.write_text(_minimal_bundle_yaml("other-source"))
+
+        releases_dir = tmp_path / "releases"
+        releases_dir.mkdir()
+        # Release has same slug but headlines a DIFFERENT source — real collision
+        (releases_dir / f"{slug}.yaml").write_text(
+            _minimal_release_yaml(slug, "bundles/other-source.yaml")
+        )
+
+        release = load_release(releases_dir / f"{slug}.yaml", repo_root=tmp_path)
+        errors = check_bundle_release_collision(bundle_dir, [release])
+        assert len(errors) == 1, (
+            f"Expected 1 collision error for non-pairing case, got: {errors}"
+        )
+        assert "slug collision" in errors[0]
+        assert slug in errors[0]
+
+    def test_real_repo_vks_bundle_pairing_clean(self):
+        """Live repo: vks-core-consumption-bundle pairing validates without collision."""
+        from vcfops_packaging.releases import (
+            check_bundle_release_collision,
+            load_all_releases,
+        )
+
+        releases = load_all_releases(REPO_ROOT / "releases", repo_root=REPO_ROOT)
+        bundles_dir = REPO_ROOT / "bundles"
+        errors = check_bundle_release_collision(bundles_dir, releases)
+        assert errors == [], (
+            f"vks-core-consumption-bundle pairing should not be a collision:\n"
+            + "\n".join(errors)
+        )
 
 
 # ---------------------------------------------------------------------------

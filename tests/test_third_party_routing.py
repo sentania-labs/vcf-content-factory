@@ -482,19 +482,22 @@ class TestFactoryNativeRegressionGuard:
     """T7: factory-native bundles keep routing to top-level bundles/."""
 
     def test_capacity_assessment_routes_to_bundles(self, tmp_path):
+        # capacity-assessment.yaml was removed in v2 item #1 cleanup.
+        # Use vks-core-consumption-bundle.yaml — it is factory-native and must
+        # still route to top-level bundles/.
         from vcfops_packaging.release_builder import _artifact_dest_subdir
         from vcfops_packaging.releases import load_release
 
-        source_abs = (REPO_ROOT / "bundles" / "capacity-assessment.yaml").resolve()
-        assert source_abs.exists(), f"capacity-assessment.yaml not found"
+        source_abs = (REPO_ROOT / "bundles" / "vks-core-consumption-bundle.yaml").resolve()
+        assert source_abs.exists(), f"vks-core-consumption-bundle.yaml not found"
 
         manifest = {
-            "name": "capacity-assessment",
+            "name": "vks-core-consumption-bundle",
             "version": "1.0",
             "description": "Regression guard.",
             "artifacts": [{"source": str(source_abs), "headline": True}],
         }
-        manifest_path = tmp_path / "capacity-assessment.yaml"
+        manifest_path = tmp_path / "vks-core-consumption-bundle.yaml"
         manifest_path.write_text(yaml.dump(manifest, default_flow_style=False))
         rel = load_release(manifest_path, repo_root=REPO_ROOT)
 
@@ -502,21 +505,23 @@ class TestFactoryNativeRegressionGuard:
         subdir = _artifact_dest_subdir(headline)
 
         assert subdir == "bundles", (
-            f"capacity-assessment should route to 'bundles', got {subdir!r}"
+            f"vks-core-consumption-bundle should route to 'bundles', got {subdir!r}"
         )
 
     def test_capacity_assessment_publish_zip_in_bundles(self, tmp_path, monkeypatch):
-        """End-to-end: capacity-assessment still lands in dist/bundles/."""
+        """End-to-end: factory-native bundle still lands in dist/bundles/."""
+        # capacity-assessment.yaml was removed in v2 item #1 cleanup.
+        # vks-core-consumption-bundle.yaml is the surviving factory-native bundle.
         from vcfops_packaging.publish import publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "ca_releases"
         releases_dir.mkdir()
 
-        source_abs = (REPO_ROOT / "bundles" / "capacity-assessment.yaml").resolve()
+        source_abs = (REPO_ROOT / "bundles" / "vks-core-consumption-bundle.yaml").resolve()
         _write_release_manifest(
             releases_dir,
-            name="capacity-assessment",
+            name="vks-core-consumption-bundle",
             version="1.0",
             source_abs=source_abs,
             description="Regression guard publish test.",
@@ -530,15 +535,15 @@ class TestFactoryNativeRegressionGuard:
             no_push=True,
         )
 
-        expected = dist / "bundles" / "capacity-assessment.zip"
+        expected = dist / "bundles" / "vks-core-consumption-bundle.zip"
         assert expected.exists(), (
-            f"capacity-assessment.zip should be in bundles/, not found at {expected}\n"
+            f"vks-core-consumption-bundle.zip should be in bundles/, not found at {expected}\n"
             f"built: {result.built}"
         )
         # Must NOT be in ThirdPartyContent/.
-        tp_path = dist / "ThirdPartyContent" / "dashboards" / "capacity-assessment.zip"
+        tp_path = dist / "ThirdPartyContent" / "dashboards" / "vks-core-consumption-bundle.zip"
         assert not tp_path.exists(), (
-            f"capacity-assessment.zip must not appear in ThirdPartyContent/: {tp_path}"
+            f"vks-core-consumption-bundle.zip must not appear in ThirdPartyContent/: {tp_path}"
         )
 
 

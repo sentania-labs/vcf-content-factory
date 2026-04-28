@@ -1,0 +1,15 @@
+artifacts:
+- headline: true
+  source: content/dashboards/capacity_assessment.yaml
+deprecates: []
+description: Single-dashboard capacity review for a VCF Ops admin. Top section shows
+  environment-wide capacity headroom at cluster granularity with post-HA adjustments,
+  days-until-runout projections from VCF Ops capacity analytics, and 'how many more
+  VMs fit' counts. Bottom section identifies right-sizing opportunities — VMs VCF
+  Ops's capacity engine has flagged as oversized, undersized, or idle, with 95th-percentile
+  demand justification columns and explicit current-to-target resize recommendations.
+  Colors follow the standard three-band stoplight throughout. Use for quarterly capacity
+  reviews and before any cluster-scale VM deployment.
+name: capacity-assessment-dashboard
+release_notes: ''
+version: '1.0'

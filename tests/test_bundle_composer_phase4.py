@@ -77,10 +77,12 @@ class TestSlugCollisionBundles:
     """T1: check_slug_collision raises collision on existing bundle."""
 
     def test_existing_bundle_slug_collides(self):
+        # capacity-assessment.yaml was removed in v2 item #1 cleanup.
+        # vks-core-consumption-bundle is the surviving bundle slug.
         from vcfops_packaging.composer import check_slug_collision
-        err = check_slug_collision("capacity-assessment", REPO_ROOT)
-        assert err is not None, "capacity-assessment bundle exists; should report collision"
-        assert "capacity-assessment" in err
+        err = check_slug_collision("vks-core-consumption-bundle", REPO_ROOT)
+        assert err is not None, "vks-core-consumption-bundle bundle exists; should report collision"
+        assert "vks-core-consumption-bundle" in err
 
     def test_fresh_slug_no_collision(self):
         from vcfops_packaging.composer import check_slug_collision

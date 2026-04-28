@@ -41,3 +41,4 @@ status.md
 
 # Local PKA comm zone (not shared)
 .pka/
+.claude/scheduled_tasks.lock
