@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-04-23T20:16:39Z",
+  "fetched_at": "2026-04-28T17:36:58Z",
   "metrics": {
     "OnlineCapacityAnalytics|capacityRemainingPercentage": {
       "default_monitored": true,
@@ -222,10 +222,6 @@
       "default_monitored": true,
       "name": "Super Metrics|Worst VM CPU Ready"
     },
-    "Super Metric|sm_17f31a23-d7e7-4ff9-ab30-7a50d3e3a584": {
-      "default_monitored": true,
-      "name": "Super Metrics|[VCF Content Factory] VKS Worker vCPU (count)"
-    },
     "Super Metric|sm_1d4d0a06-4955-4110-acfe-bddea257b6f0": {
       "default_monitored": true,
       "name": "Super Metrics|[Custom] Non-local Datastore Capacity"
@@ -242,9 +238,21 @@
       "default_monitored": true,
       "name": "Super Metrics|vSphere Cluster Memory Ballooned"
     },
+    "Super Metric|sm_3110b13c-d3c8-4bda-bedc-e6064510c0cf": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Cluster - Idle VM Count"
+    },
     "Super Metric|sm_387571a5-bea4-40a3-b39f-73f9919253fe": {
       "default_monitored": true,
       "name": "Super Metrics|[Custom] vSphere Memory HA N-x Value"
+    },
+    "Super Metric|sm_3bd0cb85-1422-428d-80d0-52533e84431c": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Cluster - Oversized VM Count"
+    },
+    "Super Metric|sm_43cf883b-12e4-4ecf-b1a8-bf36f20f093e": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Cluster - CPU Free % After HA"
     },
     "Super Metric|sm_44e2c78f-8332-4f16-ba3a-eed89a6d24d5": {
       "default_monitored": true,
@@ -266,9 +274,17 @@
       "default_monitored": true,
       "name": "Super Metrics|Worst VM Memory Contention"
     },
+    "Super Metric|sm_66cfa55c-dd8c-4cb4-a10c-ee2b4d2fb16e": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Cluster - Memory Free % After HA"
+    },
     "Super Metric|sm_6a8a4c78-d79e-4953-bc85-623b7bfb612e": {
       "default_monitored": true,
       "name": "Super Metrics|CPU Reservation"
+    },
+    "Super Metric|sm_71ffc210-bae6-46c4-a7c7-23396057b008": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Cluster - Reclaimable Memory GB (sum)"
     },
     "Super Metric|sm_73f9b9d7-1801-4e6d-bdd0-c3f3203d7bcc": {
       "default_monitored": true,
@@ -282,9 +298,17 @@
       "default_monitored": true,
       "name": "Super Metrics|vSphere Cluster Memory Contention"
     },
+    "Super Metric|sm_8d6ca90f-9710-4f5d-b180-cb46a483d65e": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Cluster - VMs That Fit (CPU, demand-based)"
+    },
     "Super Metric|sm_90387c88-5ced-418c-9054-d6e3d7e7ba94": {
       "default_monitored": true,
       "name": "Super Metrics|[Custom] vSphere HA N-x CPU and Memory Match"
+    },
+    "Super Metric|sm_94f965d5-a389-4186-b801-979702406f92": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Cluster - Reclaimable vCPUs (sum)"
     },
     "Super Metric|sm_99152539-e2c3-473d-a4bf-26fc56988f50": {
       "default_monitored": true,
@@ -318,13 +342,13 @@
       "default_monitored": true,
       "name": "Super Metrics|[VCF Content Factory] Regular VM vCPU (count)"
     },
-    "Super Metric|sm_b3b292ce-7094-46ca-984e-9413e4df67a0": {
-      "default_monitored": true,
-      "name": "Super Metrics|[VCF Content Factory] VKS Cluster Control Plane vCPU (count)"
-    },
     "Super Metric|sm_bbd24970-a49d-405b-9d28-0f4165c4f258": {
       "default_monitored": true,
       "name": "Super Metrics|vSphere Cluster vMotions"
+    },
+    "Super Metric|sm_d463820e-403e-488e-974e-27b292a6a701": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Cluster - Undersized VM Count"
     },
     "Super Metric|sm_d60a96a7-d156-46f0-8f55-f608a9f31d86": {
       "default_monitored": true,
@@ -333,6 +357,10 @@
     "Super Metric|sm_d69b0b58-0c39-4462-bb1a-664956b15fce": {
       "default_monitored": true,
       "name": "Super Metrics|[Custom] vSphere CPU HA N-x Value"
+    },
+    "Super Metric|sm_d79cbd0b-ba28-4268-8919-74e14a14b3b4": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Cluster - VMs That Fit (Memory, allocation-based)"
     },
     "Super Metric|sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4": {
       "default_monitored": true,

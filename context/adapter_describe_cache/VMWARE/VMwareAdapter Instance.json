@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-04-28T17:15:33Z",
+  "fetched_at": "2026-04-28T17:37:19Z",
   "metrics": {
     "CapacityBreakdown|capacityRemaining|cpu|numberCriticalClusters": {
       "default_monitored": true,

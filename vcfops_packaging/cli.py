@@ -1,7 +1,8 @@
 """CLI entry point for vcfops_packaging.
 
 Commands:
-    build   bundles/*.yaml       Build one bundle into dist/<name>.zip
+    build   bundles/*.yaml       Build bundle into dist/<slug>.zip (flat)
+    build   releases/*.yaml      Build release into dist/<subdir>/<slug>.zip (routed)
     build   --all                Build all bundles/*.yaml
     build-discrete <type> <name> Build a self-contained discrete artifact zip
     validate bundles/*.yaml      Validate without building
@@ -56,15 +57,21 @@ def cmd_build(args) -> int:
 
     rc = 0
     for manifest in manifests:
+        manifest = Path(manifest)
         try:
-            out = build_bundle(
-                manifest,
-                output_dir=DEFAULT_OUTPUT_DIR,
-                audit_mode=audit_mode,
-                live_describe=live_describe,
-                skip_audit=skip_audit,
-            )
-            print(f"built  {out}")
+            if _is_release_manifest(manifest):
+                outs = _build_release_to_dist(manifest, DEFAULT_OUTPUT_DIR, skip_audit=skip_audit)
+                for out in outs:
+                    print(f"built  {out}")
+            else:
+                out = build_bundle(
+                    manifest,
+                    output_dir=DEFAULT_OUTPUT_DIR,
+                    audit_mode=audit_mode,
+                    live_describe=live_describe,
+                    skip_audit=skip_audit,
+                )
+                print(f"built  {out}")
         except (AuditError, DescribeCacheError) as e:
             print(f"AUDIT FAILED  {manifest}:\n{e}", file=sys.stderr)
             rc = 1
@@ -75,6 +82,58 @@ def cmd_build(args) -> int:
             print(f"FAILED   {manifest}: {e}", file=sys.stderr)
             rc = 1
     return rc
+
+
+def _is_release_manifest(manifest: Path) -> bool:
+    """Return True if the manifest path lives under releases/.
+
+    Detects both relative paths like ``releases/foo.yaml`` and absolute
+    paths whose parent directory is named ``releases``.
+    """
+    # Resolve to absolute so ``releases/foo.yaml`` and ``./releases/foo.yaml``
+    # both work.
+    try:
+        resolved = manifest.resolve()
+    except Exception:
+        resolved = manifest
+    return resolved.parent.name == "releases"
+
+
+def _build_release_to_dist(
+    manifest: Path,
+    output_dir: "str | Path",
+    *,
+    skip_audit: bool = False,
+) -> "list[Path]":
+    """Build a release manifest and write artifacts to dist/<subdir>/<slug>.zip.
+
+    Uses the same routing helpers as /publish so the output paths match
+    exactly what the distribution repo receives.  Returns a list of the
+    paths written under output_dir.
+    """
+    import shutil
+    import tempfile
+    from .release_builder import build_release
+
+    output_dir = Path(output_dir)
+
+    with tempfile.TemporaryDirectory(prefix="vcfops_build_release_") as tmp_str:
+        tmp_dir = Path(tmp_str)
+        artifacts = build_release(
+            release_path=manifest,
+            output_dir=tmp_dir,
+            skip_audit=skip_audit,
+        )
+
+        written: list[Path] = []
+        for art in artifacts:
+            dest_dir = output_dir / art.dest_subdir
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_file = dest_dir / art.zip_path.name
+            shutil.copy2(str(art.zip_path), str(dest_file))
+            written.append(dest_file)
+
+    return written
 
 
 def cmd_validate(args) -> int:
@@ -911,11 +970,18 @@ def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="vcfops_packaging")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    pb = sub.add_parser("build", help="build bundle(s) into distributable zips")
+    pb = sub.add_parser(
+        "build",
+        help=(
+            "build manifests into distributable zips. "
+            "releases/*.yaml -> dist/<subdir>/<slug>.zip (routed, matches /publish). "
+            "bundles/*.yaml  -> dist/<slug>.zip (flat)."
+        ),
+    )
     pb.add_argument("manifests", nargs="*",
-                    help="path(s) to bundle manifest YAML files")
+                    help="path(s) to bundle or release manifest YAML files")
     pb.add_argument("--all", action="store_true",
-                    help=f"build all manifests in {DEFAULT_BUNDLES_DIR}/")
+                    help=f"build all bundle manifests in {DEFAULT_BUNDLES_DIR}/")
     _dep_group = pb.add_mutually_exclusive_group()
     _dep_group.add_argument(
         "--strict-deps", action="store_true",

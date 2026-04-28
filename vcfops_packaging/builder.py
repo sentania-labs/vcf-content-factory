@@ -644,12 +644,10 @@ def build_bundle(
         display_name = bundle.display_name
     else:
         display_name = _slug_to_display_name(slug)
-    # Zip filename: factory-native bundles use [VCF Content Factory] prefix;
-    # non-factory-native bundles with a display_name use it directly.
-    if not bundle.factory_native and bundle.display_name:
-        out_path = output_dir / f"{display_name}.zip"
-    else:
-        out_path = output_dir / f"[VCF Content Factory] {display_name}.zip"
+    # Zip filename: use the bundle slug as the filesystem identity.
+    # The [VCF Content Factory] prefix exists for display-name identity inside
+    # VCF Ops, not for filesystem identity.  Filesystem identity is the slug.
+    out_path = output_dir / f"{slug}.zip"
     bundle_prefix = f"bundles/{slug}/"
     content_prefix = f"bundles/{slug}/content/"
 
