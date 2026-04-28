@@ -44,6 +44,22 @@ def cmd_validate(args) -> int:
             f"objects={obj_count}  relationships={rel_count}  "
             f"({d.source_path})"
         )
+
+    # Slug-uniqueness check across content/ and third_party/*/
+    if not args.paths:
+        try:
+            from vcfops_packaging.project import check_slug_uniqueness
+            errors = check_slug_uniqueness(
+                content_type="managementpacks",
+                content_type_dir=DEFAULT_DIR,
+            )
+            if errors:
+                for err in errors:
+                    print(f"SLUG-COLLISION: {err}", file=sys.stderr)
+                return 1
+        except ImportError:
+            pass  # vcfops_packaging not available — skip cross-provenance check
+
     return 0
 
 

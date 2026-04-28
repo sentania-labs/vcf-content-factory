@@ -32,7 +32,146 @@ def cmd_validate(args) -> int:
         print(f"  view       {v.id}  {v.name}")
     for d in dashboards:
         print(f"  dashboard  {d.id}  {d.name}")
-    return 0
+
+    rc = 0
+
+    # Cross-provenance slug-uniqueness checks and project-membership boundary
+    # check run only when no explicit paths were given (i.e. full-repo validate).
+    using_defaults = (
+        args.views_dir == str(DEFAULT_VIEWS)
+        and args.dashboards_dir == str(DEFAULT_DASHBOARDS)
+    )
+    if using_defaults:
+        try:
+            from vcfops_packaging.project import check_slug_uniqueness, check_project_membership
+        except ImportError:
+            return rc  # vcfops_packaging not available — skip checks
+
+        # Slug uniqueness for views and dashboards
+        for content_type, default_dir in (
+            ("views", DEFAULT_VIEWS),
+            ("dashboards", DEFAULT_DASHBOARDS),
+        ):
+            slug_errors = check_slug_uniqueness(
+                content_type=content_type,
+                content_type_dir=default_dir,
+            )
+            if slug_errors:
+                for err in slug_errors:
+                    print(f"SLUG-COLLISION: {err}", file=sys.stderr)
+                rc = 1
+
+        # Project-membership boundary check.
+        # Build a full cross-provenance corpus for the dep walker:
+        # factory-native content (already loaded) + all third-party content.
+        # Use separate lists so the printed output above is unaffected.
+        all_views_corpus = list(views)
+        all_dashboards_corpus = list(dashboards)
+        all_sms: list = []
+        all_cgs: list = []
+
+        _third_party = Path("third_party")
+        if _third_party.exists():
+            try:
+                from vcfops_dashboards.loader import (
+                    load_view as _load_view,
+                    load_dashboard as _load_dash,
+                )
+                for _proj_dir in sorted(_third_party.iterdir()):
+                    if not _proj_dir.is_dir():
+                        continue
+                    _tp_views_dir = _proj_dir / "views"
+                    if _tp_views_dir.exists():
+                        for _vp in sorted(_tp_views_dir.rglob("*.y*ml")):
+                            try:
+                                all_views_corpus.append(
+                                    _load_view(_vp, enforce_framework_prefix=False)
+                                )
+                            except Exception:
+                                pass
+                    _tp_dash_dir = _proj_dir / "dashboards"
+                    if _tp_dash_dir.exists():
+                        for _dp in sorted(_tp_dash_dir.rglob("*.y*ml")):
+                            try:
+                                all_dashboards_corpus.append(
+                                    _load_dash(
+                                        _dp,
+                                        enforce_framework_prefix=False,
+                                        default_name_path="",
+                                    )
+                                )
+                            except Exception:
+                                pass
+            except ImportError:
+                pass
+
+            try:
+                from vcfops_supermetrics.loader import load_dir as _sm_load_dir
+                for _proj_dir in sorted(_third_party.iterdir()):
+                    if not _proj_dir.is_dir():
+                        continue
+                    _tp_sm_dir = _proj_dir / "supermetrics"
+                    if _tp_sm_dir.exists():
+                        try:
+                            all_sms.extend(
+                                _sm_load_dir(_tp_sm_dir, enforce_framework_prefix=False)
+                            )
+                        except Exception:
+                            pass
+            except ImportError:
+                pass
+
+            try:
+                from vcfops_customgroups.loader import load_dir as _cg_load_dir
+                for _proj_dir in sorted(_third_party.iterdir()):
+                    if not _proj_dir.is_dir():
+                        continue
+                    _tp_cg_dir = _proj_dir / "customgroups"
+                    if _tp_cg_dir.exists():
+                        try:
+                            all_cgs.extend(
+                                _cg_load_dir(_tp_cg_dir, enforce_framework_prefix=False)
+                            )
+                        except Exception:
+                            pass
+            except ImportError:
+                pass
+
+        # Also include factory-native SMs and CGs in the corpus
+        try:
+            from vcfops_supermetrics.loader import load_dir as _sm_load_dir
+            _sm_dir = Path("content/supermetrics")
+            if _sm_dir.exists():
+                try:
+                    all_sms.extend(_sm_load_dir(_sm_dir))
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
+        try:
+            from vcfops_customgroups.loader import load_dir as _cg_load_dir
+            _cg_dir = Path("content/customgroups")
+            if _cg_dir.exists():
+                try:
+                    all_cgs.extend(_cg_load_dir(_cg_dir))
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
+        membership_errors = check_project_membership(
+            dashboards=all_dashboards_corpus,
+            all_views=all_views_corpus,
+            all_supermetrics=all_sms,
+            all_customgroups=all_cgs,
+        )
+        if membership_errors:
+            for err in membership_errors:
+                print(f"PROJECT-BOUNDARY: {err}", file=sys.stderr)
+            rc = 1
+
+    return rc
 
 
 def cmd_package(args) -> int:

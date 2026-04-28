@@ -55,6 +55,22 @@ def cmd_validate(args) -> int:
         sections_summary = ", ".join(s.type for s in rd.sections)
         print(f"  {rd.id}  {rd.name}")
         print(f"    sections: {sections_summary}")
+
+    # Slug-uniqueness check across content/ and third_party/*/
+    if not getattr(args, "paths", None):
+        try:
+            from vcfops_packaging.project import check_slug_uniqueness
+            errors = check_slug_uniqueness(
+                content_type="reports",
+                content_type_dir=DEFAULT_DIR,
+            )
+            if errors:
+                for err in errors:
+                    print(f"SLUG-COLLISION: {err}", file=sys.stderr)
+                return 1
+        except ImportError:
+            pass  # vcfops_packaging not available — skip cross-provenance check
+
     return 0
 
 

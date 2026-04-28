@@ -158,6 +158,25 @@ def cmd_validate(args) -> int:
     else:
         print(f"  OK  {len(releases)} release manifest(s) valid, flag-state clean")
 
+    # --- PROJECT.yaml validation (third_party/) ---
+    third_party_dir = Path("third_party")
+    if third_party_dir.exists():
+        from .project import load_all_projects, ProjectValidationError
+        print()
+        print("Third-party PROJECT.yaml files:")
+        try:
+            projects = load_all_projects(third_party_dir)
+            if not projects:
+                print("  (no third-party projects found)")
+            else:
+                for proj in projects:
+                    print(f"  OK  {proj.source_path.parent.name}/PROJECT.yaml  "
+                          f"({proj.display_name}, license={proj.license})")
+                print(f"  OK  {len(projects)} project(s) valid")
+        except ProjectValidationError as e:
+            print(f"  FAIL  {e}")
+            rc = 1
+
     return rc
 
 

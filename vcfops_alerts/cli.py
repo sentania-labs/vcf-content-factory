@@ -114,6 +114,26 @@ def cmd_validate(args) -> int:
                 f"  - {r.name}  "
                 f"({r.adapter_kind}, ref={r.id})"
             )
+
+    # Slug-uniqueness check across content/ and third_party/*/
+    if not args.paths:
+        try:
+            from vcfops_packaging.project import check_slug_uniqueness
+            for content_type, default_dir in (
+                ("alerts", DEFAULT_ALERT_DIR),
+                ("recommendations", DEFAULT_RECOMMENDATION_DIR),
+            ):
+                slug_errors = check_slug_uniqueness(
+                    content_type=content_type,
+                    content_type_dir=default_dir,
+                )
+                if slug_errors:
+                    for err in slug_errors:
+                        print(f"SLUG-COLLISION: {err}", file=sys.stderr)
+                    rc = 1
+        except ImportError:
+            pass  # vcfops_packaging not available — skip cross-provenance check
+
     return rc
 
 
