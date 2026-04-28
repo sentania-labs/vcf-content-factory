@@ -301,6 +301,7 @@ def test_publish_thirdparty_zip_lands_at_correct_path(tmp_path, monkeypatch):
         dist_repo=dist,
         dry_run=False,
         no_push=True,
+        use_pr=False,
     )
 
     expected = dist / "ThirdPartyContent" / "dashboards" / "idps-planner.zip"
@@ -533,6 +534,7 @@ class TestFactoryNativeRegressionGuard:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
 
         expected = dist / "bundles" / "vks-core-consumption-bundle.zip"

@@ -1,4 +1,4 @@
-"""Publish orchestrator for vcfops_packaging (Phase 3).
+"""Publish orchestrator for vcfops_packaging (Phase 3 / v4).
 
 Orchestrates a full publish operation from the factory repo to the
 distribution repo:
@@ -15,24 +15,40 @@ distribution repo:
   7. Process retirements — move deprecated zips to retired/<subdir>/.
   8. Stale-zip sweep — move other orphaned zips to retired/<subdir>/.
   9. Regenerate README between AUTO markers.
-  10. Commit + push (skip on dry_run; commit-only on no_push; skipped when no
-      content diff unless force=True).
+  10. Commit + branch/PR or direct push:
+        - PR mode (default): create release branch, push, open PR via gh CLI.
+          Lockfile released after PR is open.
+        - Push mode (--push): direct push to main (legacy/owner-fast-path).
+          Lockfile released before staging (existing behaviour).
+        - no_push mode (--no-push): commit to release branch locally, no push,
+          no PR.  Lockfile released after commit.
+        - dry_run: no commit/push/PR; lockfile released at end.
   11. Cleanup — staging dir + lockfile.
 
 Public API
 ----------
-publish(factory_repo, dist_repo, dry_run, force, no_push) -> PublishResult
+publish(factory_repo, dist_repo, dry_run, force, no_push, use_pr, auto_merge)
+  -> PublishResult
 
 dry_run=True:
   - Skips clean-tree git checks on dist repo.
   - Skips actual file copy/move.
-  - Skips commit/push.
+  - Skips commit/push/PR.
   - Lockfile is still acquired to prevent races with real runs.
   - Returns a populated PublishResult showing what WOULD happen.
 
 force=True:
   - Forces a commit even when no on-disk content changed (git reports nothing
     to commit).  Useful for debugging or re-pushing identical content.
+
+use_pr=True (default):
+  - Commit to a release branch, push it, open a PR via the gh CLI.
+  - If gh is absent/unauthenticated, prints manual instructions and exits 0.
+  - Mutually exclusive with no_push=False + use_pr=False (push mode).
+
+auto_merge=True:
+  - After opening the PR, calls ``gh pr merge --auto --merge``.
+  - Only meaningful in use_pr=True mode.
 """
 from __future__ import annotations
 
@@ -76,6 +92,8 @@ class PublishResult:
     readme_path: Path = None                             # path to the regenerated README
     commit_sha: Optional[str] = None                     # None on dry-run or when nothing changed
     pushed: bool = False
+    pr_url: Optional[str] = None                         # URL of the opened PR (PR mode only)
+    release_branch: Optional[str] = None                 # release branch name (PR / no-push mode)
 
 
 # ---------------------------------------------------------------------------
@@ -328,6 +346,266 @@ def _git_push(dist_repo: Path) -> None:
         raise PublishError(
             f"git push failed in {dist_repo}: {r.stderr.strip()}"
         )
+
+
+# ---------------------------------------------------------------------------
+# PR-mode helpers
+# ---------------------------------------------------------------------------
+
+def _detect_gh() -> bool:
+    """Return True if the ``gh`` CLI is installed and authenticated."""
+    try:
+        r = subprocess.run(
+            ["gh", "auth", "status"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return r.returncode == 0
+    except FileNotFoundError:
+        return False
+
+
+def _next_release_branch_name(dist_repo: Path) -> str:
+    """Compute the next available ``release/<date>-<n>`` branch name.
+
+    Checks the remote (and local) for existing branches matching
+    ``release/<YYYY-MM-DD>-<n>`` and returns the next unused name.
+    """
+    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
+    prefix = f"release/{today}-"
+
+    # Fetch remote refs (best-effort).
+    _git(dist_repo, "fetch", "origin", "--prune")
+
+    # List all local + remote branches.
+    r = _git(dist_repo, "branch", "-a", "--list", f"*{prefix}*")
+    existing_n: set[int] = set()
+    if r.returncode == 0:
+        for line in r.stdout.splitlines():
+            line = line.strip().lstrip("* ")
+            # Strip remote prefix e.g. "remotes/origin/release/2026-04-27-2"
+            if "/" in line:
+                short = line.rsplit("/", 1)[-1]
+            else:
+                short = line
+            # short = "release/<date>-<n>" or just "2026-04-27-2" after rsplit
+            # Normalise: strip the "release/" prefix if it survived.
+            if short.startswith("release/"):
+                short = short[len("release/"):]
+            # Now short should be "<date>-<n>"
+            date_part = f"{today}-"
+            if short.startswith(date_part):
+                suffix = short[len(date_part):]
+                try:
+                    existing_n.add(int(suffix))
+                except ValueError:
+                    pass
+
+    n = 1
+    while n in existing_n:
+        n += 1
+    return f"release/{today}-{n}"
+
+
+def _create_and_push_release_branch(
+    dist_repo: Path,
+    branch_name: str,
+) -> None:
+    """Create ``branch_name`` at current HEAD and push to origin.
+
+    Raises PublishError if the branch already exists locally or remotely
+    (idempotence guard — signals a retry situation).
+    """
+    # Check local branch.
+    r_local = _git(dist_repo, "branch", "--list", branch_name)
+    if r_local.returncode == 0 and r_local.stdout.strip():
+        raise PublishError(
+            f"Release branch '{branch_name}' already exists locally in {dist_repo}. "
+            f"Delete it with 'git branch -d {branch_name}' and retry."
+        )
+
+    # Create the branch at current HEAD.
+    r = _git(dist_repo, "checkout", "-b", branch_name)
+    if r.returncode != 0:
+        raise PublishError(
+            f"Could not create release branch '{branch_name}': {r.stderr.strip()}"
+        )
+
+    # Push it to origin.
+    r = _git(dist_repo, "push", "origin", branch_name)
+    if r.returncode != 0:
+        # Push failed — clean up the local branch and raise.
+        _git(dist_repo, "checkout", "main")
+        _git(dist_repo, "branch", "-D", branch_name)
+        err = r.stderr.strip()
+        if "already exists" in err or "rejected" in err:
+            raise PublishError(
+                f"Release branch '{branch_name}' already exists on origin. "
+                f"Delete the remote branch and retry."
+            )
+        raise PublishError(
+            f"git push (release branch) failed in {dist_repo}: {err}"
+        )
+
+    # Switch back to main so subsequent git operations behave normally.
+    _git(dist_repo, "checkout", "main")
+
+
+def _assemble_pr_body(
+    releases,
+    dist_repo: Path,
+    branch_name: str,
+    built_names: List[str],
+    n_retired: int,
+    n_deleted: int,
+) -> str:
+    """Assemble a PR body from release notes + README diff + files summary.
+
+    Keeps the body reasonably compact: release notes per release (full text),
+    README diff (truncated at 3000 chars), files-changed summary.
+    """
+    parts: list[str] = []
+
+    # --- Per-release notes section ---
+    release_notes_section: list[str] = []
+    for r in releases:
+        if r.name not in built_names:
+            continue
+        if r.release_notes and r.release_notes.strip():
+            release_notes_section.append(f"### {r.name} {r.version}\n\n{r.release_notes.strip()}")
+    if release_notes_section:
+        parts.append("## Release notes\n\n" + "\n\n".join(release_notes_section))
+
+    # --- README diff section ---
+    r_diff = subprocess.run(
+        ["git", "diff", f"main...{branch_name}", "--", "README.md"],
+        capture_output=True,
+        text=True,
+        cwd=str(dist_repo),
+        check=False,
+    )
+    if r_diff.returncode == 0 and r_diff.stdout.strip():
+        diff_text = r_diff.stdout.strip()
+        _DIFF_TRUNCATE = 3000
+        if len(diff_text) > _DIFF_TRUNCATE:
+            diff_text = diff_text[:_DIFF_TRUNCATE] + "\n\n…(diff truncated — see full diff in PR files view)"
+        parts.append(f"## README diff\n\n```diff\n{diff_text}\n```")
+
+    # --- Files summary ---
+    r_files = subprocess.run(
+        ["git", "diff", "--name-status", f"main...{branch_name}"],
+        capture_output=True,
+        text=True,
+        cwd=str(dist_repo),
+        check=False,
+    )
+    if r_files.returncode == 0 and r_files.stdout.strip():
+        file_lines = r_files.stdout.strip().splitlines()
+        added = [ln[2:].strip() for ln in file_lines if ln.startswith("A")]
+        modified = [ln[2:].strip() for ln in file_lines if ln.startswith("M")]
+        removed = [ln[2:].strip() for ln in file_lines if ln.startswith("D")]
+        summary_lines: list[str] = []
+        if added:
+            summary_lines.append(f"**Added** ({len(added)}): " + ", ".join(f"`{f}`" for f in added))
+        if modified:
+            summary_lines.append(f"**Modified** ({len(modified)}): " + ", ".join(f"`{f}`" for f in modified))
+        if removed:
+            summary_lines.append(f"**Removed** ({len(removed)}): " + ", ".join(f"`{f}`" for f in removed))
+        if summary_lines:
+            parts.append("## Files changed\n\n" + "\n\n".join(summary_lines))
+
+    return "\n\n---\n\n".join(parts) if parts else "Automated release publish."
+
+
+def _open_pr(
+    dist_repo: Path,
+    branch_name: str,
+    title: str,
+    body: str,
+) -> str:
+    """Open a PR via ``gh pr create`` and return the PR URL.
+
+    Raises PublishError if the gh call fails for reasons other than
+    "PR already exists" (which gets a more specific message).
+    """
+    r = subprocess.run(
+        [
+            "gh", "pr", "create",
+            "--base", "main",
+            "--head", branch_name,
+            "--title", title,
+            "--body", body,
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(dist_repo),
+        check=False,
+    )
+    if r.returncode != 0:
+        combined = (r.stdout + r.stderr).lower()
+        if "already exists" in combined or "pull request" in combined:
+            # Try to surface the existing PR URL.
+            r_view = subprocess.run(
+                ["gh", "pr", "view", branch_name, "--json", "url", "--jq", ".url"],
+                capture_output=True,
+                text=True,
+                cwd=str(dist_repo),
+                check=False,
+            )
+            existing_url = r_view.stdout.strip() if r_view.returncode == 0 else "(unknown)"
+            raise PublishError(
+                f"A PR for branch '{branch_name}' already exists: {existing_url}\n"
+                f"Delete the branch and retry, or merge/close the existing PR first."
+            )
+        raise PublishError(
+            f"gh pr create failed:\n{r.stdout.strip()}\n{r.stderr.strip()}"
+        )
+    return r.stdout.strip()
+
+
+def _gh_auto_merge(dist_repo: Path, pr_url: str) -> None:
+    """Enable auto-merge on the PR identified by ``pr_url``.
+
+    Prints a warning (does not raise) if auto-merge is blocked by branch
+    protection settings, since the PR was already successfully opened.
+    """
+    r = subprocess.run(
+        ["gh", "pr", "merge", "--auto", "--merge", pr_url],
+        capture_output=True,
+        text=True,
+        cwd=str(dist_repo),
+        check=False,
+    )
+    if r.returncode != 0:
+        combined = (r.stdout + r.stderr).strip()
+        print(
+            f"WARN  --auto-merge requested but gh pr merge returned non-zero "
+            f"(branch protection may block auto-merge):\n  {combined}"
+        )
+
+
+def _print_manual_pr_instructions(
+    dist_repo: Path,
+    branch_name: str,
+    title: str,
+    body: str,
+) -> None:
+    """Print manual PR instructions when gh is absent or unauthenticated."""
+    print(
+        "\nINFO  gh CLI is not available or not authenticated.\n"
+        "      The release branch has been pushed — open the PR manually:\n\n"
+        f"  git -C {dist_repo} push origin {branch_name}  # (if not already pushed)\n\n"
+        "  Then open a PR:\n"
+        f"    Base  : main\n"
+        f"    Head  : {branch_name}\n"
+        f"    Title : {title}\n\n"
+        "  Body (copy below the dashes):\n"
+        "  " + "-" * 60 + "\n"
+    )
+    for line in body.splitlines():
+        print(f"  {line}")
+    print("  " + "-" * 60)
 
 
 # ---------------------------------------------------------------------------
@@ -658,6 +936,8 @@ def publish(
     dry_run: bool = False,
     force: bool = False,
     no_push: bool = False,
+    use_pr: bool = True,
+    auto_merge: bool = False,
 ) -> PublishResult:
     """Orchestrate a full publish operation.
 
@@ -669,15 +949,26 @@ def publish(
         force:        If True, force a commit even when no on-disk content changed
                       (git reports nothing to commit).  Useful for debugging or
                       re-pushing identical content.
-        no_push:      If True, commit the dist repo but do not push to origin.
+        no_push:      If True, commit the release branch locally but do not push
+                      and do not open a PR.  (In PR mode: branch committed locally,
+                      no remote push; in push mode: commit only, no push to main.)
+        use_pr:       If True (default), create a release branch, push it, and
+                      open a PR via ``gh pr create``.  Set to False for direct-push
+                      mode (legacy/owner fast-path).  Mutually exclusive: use_pr=False
+                      and auto_merge=True is an error.
+        auto_merge:   If True, call ``gh pr merge --auto --merge`` after opening the
+                      PR.  Only valid when use_pr=True.
 
     Returns:
-        PublishResult with built/skipped/deleted/retired/readme_path/commit_sha/pushed.
+        PublishResult with built/skipped/deleted/retired/readme_path/commit_sha/pushed/pr_url.
 
     Raises:
         PublishError: on any hard failure (lock busy, validator fail, git dirty,
                       build error).
     """
+    if auto_merge and not use_pr:
+        raise PublishError("--auto-merge requires PR mode (do not combine with --push).")
+
     factory_repo = Path(factory_repo).resolve()
     dist_repo = Path(dist_repo).resolve()
 
@@ -695,6 +986,8 @@ def publish(
             dry_run=dry_run,
             force=force,
             no_push=no_push,
+            use_pr=use_pr,
+            auto_merge=auto_merge,
             result=result,
         )
     finally:
@@ -709,6 +1002,8 @@ def _publish_inner(
     dry_run: bool,
     force: bool,
     no_push: bool,
+    use_pr: bool,
+    auto_merge: bool,
     result: PublishResult,
 ) -> None:
     """Inner body of publish() — runs inside the lockfile try/finally."""
@@ -810,18 +1105,9 @@ def _publish_inner(
     result.readme_path = _update_dist_readme(dist_repo, factory_repo, releases, dry_run)
 
     # -----------------------------------------------------------------------
-    # Step 10: Commit + push
+    # Step 10: Commit + branch/PR or direct push
     # -----------------------------------------------------------------------
     if not dry_run:
-        # Release the lockfile BEFORE staging so it is never included in the
-        # commit.  The outer try/finally in publish() calls _release_lock again
-        # after this returns, but _release_lock is idempotent (missing_ok=True),
-        # so double-removal is safe.  The finally branch also covers any
-        # exception thrown below (e.g. a failed push) — the lock is already
-        # gone by that point, which is the correct behaviour (the content was
-        # fully written; only the push failed).
-        _release_lock(dist_repo)
-
         n_built = len(result.built)
         n_retired = len(result.retired)
         n_deleted = len(result.deleted)
@@ -833,28 +1119,120 @@ def _publish_inner(
             f"{n_deleted} legacy deleted ({release_names_str})"
         )
 
-        if force:
-            # force=True: commit even if git reports nothing to commit.
-            # This is useful for debugging / re-pushing identical content.
-            r = _git(dist_repo, "add", "-A", "--", ":!.publish.lock")
-            if r.returncode != 0:
-                raise PublishError(
-                    f"git add failed in {dist_repo}: {r.stderr.strip()}"
-                )
-            r = _git(dist_repo, "commit", "--allow-empty", "-m", commit_msg)
-            if r.returncode != 0:
-                raise PublishError(
-                    f"git commit (force) failed in {dist_repo}: "
-                    f"{r.stdout.strip()} {r.stderr.strip()}"
-                )
-            r2 = _git(dist_repo, "rev-parse", "HEAD")
-            result.commit_sha = r2.stdout.strip() if r2.returncode == 0 else None
-        else:
-            sha = _git_commit(dist_repo, commit_msg)
-            result.commit_sha = sha
+        if use_pr:
+            # PR mode (default) -----------------------------------------------
+            # Compute the release branch name BEFORE the lockfile is released.
+            branch_name = _next_release_branch_name(dist_repo)
+            result.release_branch = branch_name
 
-        if result.commit_sha and not no_push:
-            _git_push(dist_repo)
+            # Create the release branch on the dist repo at current HEAD, then
+            # stage+commit on that branch.
+            r_cb = _git(dist_repo, "checkout", "-b", branch_name)
+            if r_cb.returncode != 0:
+                raise PublishError(
+                    f"Could not create release branch '{branch_name}': "
+                    f"{r_cb.stderr.strip()}"
+                )
+
+            # Release the lockfile before staging — the branch itself now acts
+            # as the in-flight signal for anyone checking the dist repo.
+            # The outer try/finally calls _release_lock again; idempotent.
+            _release_lock(dist_repo)
+
+            # Stage + commit on the release branch.
+            if force:
+                r = _git(dist_repo, "add", "-A", "--", ":!.publish.lock")
+                if r.returncode != 0:
+                    raise PublishError(
+                        f"git add failed in {dist_repo}: {r.stderr.strip()}"
+                    )
+                r = _git(dist_repo, "commit", "--allow-empty", "-m", commit_msg)
+                if r.returncode != 0:
+                    raise PublishError(
+                        f"git commit (force) failed in {dist_repo}: "
+                        f"{r.stdout.strip()} {r.stderr.strip()}"
+                    )
+                r2 = _git(dist_repo, "rev-parse", "HEAD")
+                result.commit_sha = r2.stdout.strip() if r2.returncode == 0 else None
+            else:
+                sha = _git_commit(dist_repo, commit_msg)
+                result.commit_sha = sha
+
+            if no_push:
+                # --no-push: branch committed locally, no remote push, no PR.
+                # Switch back to main so the dist repo is in a predictable state.
+                _git(dist_repo, "checkout", "main")
+                return
+
+            # Push the release branch.
+            r_push = _git(dist_repo, "push", "origin", branch_name)
+            if r_push.returncode != 0:
+                err = r_push.stderr.strip()
+                if "already exists" in err or "rejected" in err:
+                    raise PublishError(
+                        f"Release branch '{branch_name}' already exists on origin. "
+                        f"Delete the remote branch and retry."
+                    )
+                raise PublishError(
+                    f"git push (release branch) failed in {dist_repo}: {err}"
+                )
             result.pushed = True
+
+            # Switch back to main so the dist repo is in a predictable state.
+            _git(dist_repo, "checkout", "main")
+
+            # Build PR title + body.
+            pr_title = (
+                f"release: {release_names_str} "
+                f"({n_built} built, {n_retired} retired)"
+            )
+            pr_body = _assemble_pr_body(
+                releases=releases,
+                dist_repo=dist_repo,
+                branch_name=branch_name,
+                built_names=list(set(built_names)),
+                n_retired=n_retired,
+                n_deleted=n_deleted,
+            )
+
+            # Open the PR via gh CLI (or print manual instructions).
+            if _detect_gh():
+                pr_url = _open_pr(dist_repo, branch_name, pr_title, pr_body)
+                result.pr_url = pr_url
+                print(f"PR opened: {pr_url}")
+                if auto_merge:
+                    _gh_auto_merge(dist_repo, pr_url)
+            else:
+                _print_manual_pr_instructions(dist_repo, branch_name, pr_title, pr_body)
+                result.pr_url = None
+
+        else:
+            # Direct-push mode (--push) ---------------------------------------
+            # Release the lockfile BEFORE staging so it is never included in
+            # the commit.  The outer try/finally calls _release_lock again;
+            # _release_lock is idempotent (missing_ok=True).
+            _release_lock(dist_repo)
+
+            if force:
+                r = _git(dist_repo, "add", "-A", "--", ":!.publish.lock")
+                if r.returncode != 0:
+                    raise PublishError(
+                        f"git add failed in {dist_repo}: {r.stderr.strip()}"
+                    )
+                r = _git(dist_repo, "commit", "--allow-empty", "-m", commit_msg)
+                if r.returncode != 0:
+                    raise PublishError(
+                        f"git commit (force) failed in {dist_repo}: "
+                        f"{r.stdout.strip()} {r.stderr.strip()}"
+                    )
+                r2 = _git(dist_repo, "rev-parse", "HEAD")
+                result.commit_sha = r2.stdout.strip() if r2.returncode == 0 else None
+            else:
+                sha = _git_commit(dist_repo, commit_msg)
+                result.commit_sha = sha
+
+            if result.commit_sha and not no_push:
+                _git_push(dist_repo)
+                result.pushed = True
 
     return

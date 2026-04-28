@@ -852,6 +852,16 @@ def cmd_publish(args) -> int:
     dry_run = getattr(args, "dry_run", False)
     force = getattr(args, "force", False)
     no_push = getattr(args, "no_push", False)
+    push_direct = getattr(args, "push", False)   # --push flag: direct push to main
+    auto_merge = getattr(args, "auto_merge", False)
+
+    # --push and --auto-merge are mutually exclusive.
+    if push_direct and auto_merge:
+        print("ERROR: --push and --auto-merge are mutually exclusive.", file=sys.stderr)
+        return 1
+
+    # use_pr=True unless --push was explicitly requested.
+    use_pr = not push_direct
 
     try:
         result = publish(
@@ -860,6 +870,8 @@ def cmd_publish(args) -> int:
             dry_run=dry_run,
             force=force,
             no_push=no_push,
+            use_pr=use_pr,
+            auto_merge=auto_merge,
         )
     except PublishError as e:
         print(f"ERROR: {e}", file=sys.stderr)
@@ -887,6 +899,10 @@ def cmd_publish(args) -> int:
     else:
         print(f"  commit  : {'none (dry-run)' if dry_run else 'none (nothing changed)'}")
     print(f"  pushed  : {result.pushed}")
+    if result.release_branch:
+        print(f"  branch  : {result.release_branch}")
+    if result.pr_url:
+        print(f"  pr      : {result.pr_url}")
 
     return 0
 
@@ -1124,7 +1140,7 @@ def build_parser() -> argparse.ArgumentParser:
     # -----------------------------------------------------------------------
     ppub = sub.add_parser(
         "publish",
-        help="build all released items and push to the distribution repo",
+        help="build all released items and publish to the distribution repo via PR (default) or direct push",
     )
     ppub.add_argument(
         "--dry-run",
@@ -1139,7 +1155,44 @@ def build_parser() -> argparse.ArgumentParser:
     ppub.add_argument(
         "--no-push",
         action="store_true",
-        help="commit the dist repo but do not push to origin",
+        help=(
+            "build and commit to a release branch locally but do not push "
+            "and do not open a PR (lets you inspect the branch before publishing)"
+        ),
+    )
+
+    # PR-mode flags (--pr / --push are mutually exclusive).
+    _pr_group = ppub.add_mutually_exclusive_group()
+    _pr_group.add_argument(
+        "--pr",
+        action="store_true",
+        default=False,
+        dest="pr",
+        help=(
+            "open a PR against the dist repo's main branch (default behaviour; "
+            "this flag is a no-op provided for explicitness)"
+        ),
+    )
+    _pr_group.add_argument(
+        "--push",
+        action="store_true",
+        default=False,
+        dest="push",
+        help=(
+            "direct push to main (legacy/owner fast-path). "
+            "Skips PR creation. Mutually exclusive with --pr and --auto-merge."
+        ),
+    )
+
+    ppub.add_argument(
+        "--auto-merge",
+        action="store_true",
+        dest="auto_merge",
+        help=(
+            "after opening the PR, immediately enable auto-merge "
+            "(gh pr merge --auto --merge). "
+            "Implies PR mode. Mutually exclusive with --push."
+        ),
     )
     ppub.add_argument(
         "--dist-repo",

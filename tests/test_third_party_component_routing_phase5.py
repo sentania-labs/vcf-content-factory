@@ -517,6 +517,7 @@ def test_project_yaml_release_still_routes_to_thirdparty_dashboards(tmp_path, mo
         dist_repo=dist,
         dry_run=False,
         no_push=True,
+        use_pr=False,
     )
 
     expected = dist / "ThirdPartyContent" / "dashboards" / "idps-planner.zip"

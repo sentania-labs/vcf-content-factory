@@ -206,6 +206,7 @@ class TestDryRun:
             dry_run=True,
             force=False,
             no_push=True,
+            use_pr=False,
         )
 
         # The dashboard should appear in 'built' (would-be path).
@@ -229,6 +230,7 @@ class TestDryRun:
             dry_run=True,
             force=False,
             no_push=True,
+            use_pr=False,
         )
 
         dashboards_dir = dist / "dashboards"
@@ -257,6 +259,7 @@ class TestDryRun:
             dry_run=True,
             force=False,
             no_push=True,
+            use_pr=False,
         )
 
         r_after = subprocess.run(
@@ -301,6 +304,7 @@ def test_real_run_zip_lands(tmp_path, monkeypatch):
         dist_repo=dist,
         dry_run=False,
         no_push=True,
+        use_pr=False,
     )
 
     # Versionless consumer artifact: <slug>.zip, not <slug>-<version>.zip.
@@ -334,6 +338,7 @@ def test_real_run_readme_regenerated(tmp_path, monkeypatch):
         dist_repo=dist,
         dry_run=False,
         no_push=True,
+        use_pr=False,
     )
 
     readme = dist / "README.md"
@@ -368,6 +373,7 @@ def test_real_run_commit_and_no_push(tmp_path, monkeypatch):
         dist_repo=dist,
         dry_run=False,
         no_push=True,
+        use_pr=False,
     )
 
     assert result.commit_sha is not None, "Expected a commit SHA"
@@ -414,6 +420,7 @@ class TestNoOpSkip:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
         assert len(result1.built) == 1, f"First run should build 1, got {result1.built}"
         assert result1.commit_sha is not None, "First run should produce a commit"
@@ -424,6 +431,7 @@ class TestNoOpSkip:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
         # Built list still populated (zip was re-copied) but no new commit.
         assert result2.commit_sha is None, (
@@ -448,7 +456,7 @@ class TestNoOpSkip:
         )
         _patch_enumerate(monkeypatch, releases_dir)
 
-        publish(factory_repo=REPO_ROOT, dist_repo=dist, dry_run=False, no_push=True)
+        publish(factory_repo=REPO_ROOT, dist_repo=dist, dry_run=False, no_push=True, use_pr=False)
 
         r_after_first = subprocess.run(
             ["git", "rev-list", "--count", "HEAD"],
@@ -456,7 +464,7 @@ class TestNoOpSkip:
         )
         count_after_first = int(r_after_first.stdout.strip())
 
-        publish(factory_repo=REPO_ROOT, dist_repo=dist, dry_run=False, no_push=True)
+        publish(factory_repo=REPO_ROOT, dist_repo=dist, dry_run=False, no_push=True, use_pr=False)
 
         r_after_second = subprocess.run(
             ["git", "rev-list", "--count", "HEAD"],
@@ -506,6 +514,7 @@ class TestStaleZipSweep:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
 
         # Legacy zip must be gone from dashboards/.
@@ -595,6 +604,7 @@ class TestLockfileGuard:
                 dist_repo=dist,
                 dry_run=False,
                 no_push=True,
+                use_pr=False,
             )
 
         lockfile = dist / ".publish.lock"
@@ -661,6 +671,7 @@ class TestReadmeCellFormat:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
         return (dist / "README.md").read_text(encoding="utf-8"), dist
 
@@ -782,6 +793,7 @@ class TestLockfileNotInCommit:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
 
         assert result.commit_sha is not None, "Expected a commit to have been made"
@@ -819,6 +831,7 @@ class TestLockfileNotInCommit:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
 
         assert result.commit_sha is not None
@@ -855,6 +868,7 @@ class TestLockfileNotInCommit:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
 
         lockfile = dist / ".publish.lock"
@@ -914,6 +928,7 @@ class TestPolicyCaveatInReadme:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
 
         assert result.built, "Expected at least one built zip"
@@ -955,6 +970,7 @@ class TestPolicyCaveatInReadme:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
 
         assert result.built
@@ -1003,6 +1019,7 @@ class TestVersionlessNaming:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
 
         # Versionless zip must exist.
@@ -1052,6 +1069,7 @@ class TestVersionlessNaming:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
 
         # Legacy versioned zip must be gone from dashboards/.
@@ -1132,6 +1150,7 @@ class TestForceFlag:
             dist_repo=dist,
             dry_run=False,
             no_push=True,
+            use_pr=False,
         )
         assert result1.commit_sha is not None, "First publish should produce a commit"
 
@@ -1149,6 +1168,7 @@ class TestForceFlag:
             dry_run=False,
             force=True,
             no_push=True,
+            use_pr=False,
         )
         assert result2.commit_sha is not None, (
             "force=True should produce a commit even when content is unchanged"
@@ -1181,7 +1201,7 @@ class TestForceFlag:
         )
         _patch_enumerate(monkeypatch, releases_dir)
 
-        publish(factory_repo=REPO_ROOT, dist_repo=dist, dry_run=False, no_push=True)
+        publish(factory_repo=REPO_ROOT, dist_repo=dist, dry_run=False, no_push=True, use_pr=False)
 
         r_count1 = subprocess.run(
             ["git", "rev-list", "--count", "HEAD"],
@@ -1189,7 +1209,7 @@ class TestForceFlag:
         )
         count1 = int(r_count1.stdout.strip())
 
-        result2 = publish(factory_repo=REPO_ROOT, dist_repo=dist, dry_run=False, no_push=True)
+        result2 = publish(factory_repo=REPO_ROOT, dist_repo=dist, dry_run=False, no_push=True, use_pr=False)
         assert result2.commit_sha is None, (
             "Second publish without --force should produce no commit when content is unchanged"
         )
