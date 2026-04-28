@@ -161,8 +161,8 @@ def _add_dashboard_flags(p: argparse.ArgumentParser) -> None:
         "--bundle-slug", metavar="SLUG", required=True,
         help=(
             "Short identifier for the bundle, e.g. 'idps-planner'.  "
-            "Used as the directory name under bundles/third_party/ and "
-            "the manifest filename (bundles/third_party/<slug>.yaml)."
+            "Used as the directory name under third_party/ and "
+            "the manifest filename (third_party/<slug>/PROJECT.yaml)."
         ),
     )
     req.add_argument(
@@ -199,8 +199,8 @@ def _add_dashboard_flags(p: argparse.ArgumentParser) -> None:
     # Output control
     out = p.add_argument_group("output control")
     out.add_argument(
-        "--output-dir", metavar="DIR", default="bundles/third_party",
-        help="Root directory for emitted YAML and manifest (default: bundles/third_party)",
+        "--output-dir", metavar="DIR", default="third_party",
+        help="Root directory for emitted YAML and manifest (default: third_party)",
     )
 
     # Per-type filters

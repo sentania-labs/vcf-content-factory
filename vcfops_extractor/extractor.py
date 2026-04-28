@@ -347,6 +347,59 @@ def _export_views_zip(sm_client, view_uuids: list[str]) -> bytes:
     return _run_content_export(sm_client, ["VIEW_DEFINITIONS"])
 
 
+def _export_supermetrics_full(sm_client) -> dict[str, dict]:
+    """Export all custom super metrics via content-zip and return a UUID->dict map.
+
+    The content-zip SUPER_METRICS export carries the full wire shape for each
+    SM including ``unitId``, ``resourceKinds``, and ``modifiedBy`` — fields
+    that the public REST ``GET /api/supermetrics/{id}`` endpoint strips.
+
+    Wire format (confirmed 2026-04-28 via recon on devel):
+      The outer zip contains ``supermetrics.json``, which is a dict keyed by
+      UUID string.  Each value is an SM dict with keys: resourceKinds,
+      modificationTime, name, formula, description, unitId, modifiedBy.
+      The ``id`` field is the dict key, not in the value — we inject it.
+
+    Returns a mapping of uuid_lower -> full SM dict (with ``id`` injected).
+    On error raises VCFOpsError.
+    """
+    import json as _json
+    from vcfops_common.client import VCFOpsError
+
+    outer_zip = _run_content_export(sm_client, ["SUPER_METRICS"])
+
+    result: dict[str, dict] = {}
+    try:
+        with zipfile.ZipFile(io.BytesIO(outer_zip)) as zf:
+            for name in zf.namelist():
+                if not name.lower().endswith(".json"):
+                    continue
+                try:
+                    data = _json.loads(zf.read(name))
+                except Exception:
+                    continue
+                # The primary SM payload is supermetrics.json: a dict keyed by UUID.
+                # Skip configuration.json (its "superMetrics" key is a list of UUIDs,
+                # not SM dicts).
+                if not isinstance(data, dict):
+                    continue
+                # Detect the UUID-keyed SM dict: values should be dicts with "name".
+                # configuration.json has keys "superMetrics" and "type" — skip it.
+                first_value = next(iter(data.values()), None) if data else None
+                if not isinstance(first_value, dict) or "name" not in first_value:
+                    continue
+                for uid, sm in data.items():
+                    if not isinstance(sm, dict):
+                        continue
+                    sm_with_id = dict(sm)
+                    sm_with_id["id"] = uid  # inject id — not present in the value
+                    result[uid.lower()] = sm_with_id
+    except Exception as e:
+        raise VCFOpsError(f"failed to parse super metrics export zip: {e}") from e
+
+    return result
+
+
 def _export_dashboard_json(sm_client, dashboard_uuid: str) -> Optional[dict]:
     """Export all dashboards via content-zip and return the dict for dashboard_uuid.
 
@@ -1354,18 +1407,14 @@ def _write_manifest(
     source_url: str,
     source_version: str,
     description_file: Path,
-    sm_paths: list[str],
-    view_paths: list[str],
-    dashboard_paths: list[str],
-    output_dir: Path,
     builtin_metric_enables: list[dict] = None,
 ) -> None:
-    """Write the bundle manifest YAML at bundles/third_party/<slug>.yaml.
+    """Write the bundle PROJECT.yaml at third_party/<slug>/PROJECT.yaml.
 
-    All content file paths are written relative to the repo root so
-    ``vcfops_packaging/loader.py::_resolve()`` can find them.
-    The manifest itself lives at bundles/third_party/<slug>.yaml, so the
-    loader's repo_root = path.parent.parent correctly resolves to the repo root.
+    Uses the v3 layout: PROJECT.yaml lives inside the slug directory alongside
+    supermetrics/, views/, dashboards/ subdirs.  No explicit content lists are
+    written — vcfops_packaging/loader.py auto-discovers content from subdirs
+    when the manifest is named PROJECT.yaml and carries no explicit lists.
     """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
@@ -1392,24 +1441,8 @@ def _write_manifest(
     if source:
         doc["source"] = source
 
-    # Path strategy: the manifest lives at bundles/third_party/<slug>.yaml.
-    # load_bundle calculates repo_root = path.parent.parent = bundles/ (not
-    # the actual repo root!), so repo-relative paths like
-    # "bundles/third_party/<slug>/supermetrics/foo.yaml" won't resolve.
-    #
-    # Use manifest-relative paths instead: "<slug>/supermetrics/foo.yaml".
-    # load_bundle's fallback is path.parent / ref = bundles/third_party/<slug>/supermetrics/foo.yaml
-    # which is exactly where the extractor writes the files.
-
-    def _rel(p: str) -> str:
-        return str(Path(slug) / p)
-
-    if sm_paths:
-        doc["supermetrics"] = [_rel(p) for p in sm_paths]
-    if view_paths:
-        doc["views"] = [_rel(p) for p in view_paths]
-    if dashboard_paths:
-        doc["dashboards"] = [_rel(p) for p in dashboard_paths]
+    # No explicit supermetrics/views/dashboards lists: the loader auto-discovers
+    # content from subdirs when the file is named PROJECT.yaml.
 
     if builtin_metric_enables:
         doc["builtin_metric_enables"] = builtin_metric_enables
@@ -1504,6 +1537,7 @@ def extract_dashboard(
 
     Returns exit code (0 = success, non-zero = failure).
     """
+    from vcfops_packaging.describe import DescribeCache
     output_path = Path(output_dir)
     slug_dir = output_path / bundle_slug
 
@@ -1622,16 +1656,32 @@ def extract_dashboard(
 
     print(f"  Dashboard: '{display_name}'  id={dashboard_id}")
 
-    # Collect view UUIDs referenced by widgets
+    # Collect view UUIDs and direct SM UUIDs referenced by widgets.
+    # View widgets reference views by viewDefinitionId.
+    # Scoreboard/MetricChart/Heatmap widgets reference SMs directly via metricKey
+    # values like "Super Metric|sm_<uuid>" anywhere in the widget config JSON.
+    # These bypass the view-column walk and must be collected here.
+    import json as _json
+    _SM_METRIC_KEY_RE = re.compile(
+        r"Super Metric\|sm_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+        re.IGNORECASE,
+    )
     widgets = dash_data.get("widgets") or []
     view_uuids: list[str] = []
+    direct_sm_uuids: set[str] = set()
     for w in widgets:
         cfg = w.get("config") or {}
         view_id = cfg.get("viewDefinitionId")
         if view_id and view_id not in view_uuids:
             view_uuids.append(view_id)
+        # Scan the entire widget config JSON string for SM metric key references.
+        # The path varies by widget type (Scoreboard uses config.metric.resourceKindMetrics,
+        # Heatmap uses config.configs, etc.) — string scan is the simplest invariant.
+        cfg_str = _json.dumps(cfg)
+        for m in _SM_METRIC_KEY_RE.finditer(cfg_str):
+            direct_sm_uuids.add(m.group(1).lower())
 
-    print(f"  Found {len(widgets)} widget(s), {len(view_uuids)} view reference(s)")
+    print(f"  Found {len(widgets)} widget(s), {len(view_uuids)} view reference(s), {len(direct_sm_uuids)} direct SM reference(s)")
 
     # Warn about custom groups (Phase 1 gap)
     if include_customgroups:
@@ -1751,7 +1801,21 @@ def extract_dashboard(
             "falling back to SM API resourceKinds field (may be wrong scope)"
         )
 
-    # BFS over super metrics (with transitive SM->SM via formula rewriting)
+    # Export all custom super metrics via content-zip once (authoritative: carries unitId,
+    # resourceKinds, modifiedBy — fields stripped by GET /api/supermetrics/{id}).
+    print("\nExporting super metrics via content-zip ...")
+    _sm_export_cache: dict[str, dict] = {}
+    try:
+        _sm_export_cache = _export_supermetrics_full(sm_client)
+        print(f"  SM export complete ({len(_sm_export_cache)} super metric(s) in export)")
+    except Exception as _sm_export_err:
+        _warn(
+            f"could not export super metrics via content-zip ({_sm_export_err}); "
+            "falling back to GET /api/supermetrics/{id} (unitId will be missing)"
+        )
+
+    # BFS over super metrics (with transitive SM->SM via formula rewriting).
+    # Seeds: SMs from view columns + SMs directly referenced in widget metric configs.
     sm_queue: deque[tuple[str, str]] = deque()
     sm_seen: set[str] = set()
 
@@ -1759,6 +1823,11 @@ def extract_dashboard(
         if suuid not in sm_seen:
             sm_seen.add(suuid)
             sm_queue.append((suuid, "view column"))
+
+    for suuid in direct_sm_uuids:
+        if suuid not in sm_seen:
+            sm_seen.add(suuid)
+            sm_queue.append((suuid, "dashboard widget metric config"))
 
     while sm_queue:
         suuid, parent_desc = sm_queue.popleft()
@@ -1778,15 +1847,23 @@ def extract_dashboard(
             skipped_sms.append((suuid, "skipped by flag"))
             continue
 
-        # Fetch SM
-        try:
-            sm_data = sm_client.get_supermetric(suuid)
-        except Exception as e:
-            print(
-                f"ERROR: could not fetch super metric {suuid} (referenced by {parent_desc}): {e}",
-                file=sys.stderr,
-            )
-            return 1
+        # Look up SM from the content-zip export cache (carries unitId).
+        # Fall back to the public REST endpoint if the SM was missing from
+        # the export (e.g. system-owned SMs that the export omits).
+        sm_data = _sm_export_cache.get(suuid_lower)
+        if sm_data is None:
+            try:
+                sm_data = sm_client.get_supermetric(suuid)
+                _warn(
+                    f"super metric {suuid} not in content-zip export; "
+                    "fell back to GET /api/supermetrics/{id} (unitId may be absent)"
+                )
+            except Exception as e:
+                print(
+                    f"ERROR: could not fetch super metric {suuid} (referenced by {parent_desc}): {e}",
+                    file=sys.stderr,
+                )
+                return 1
 
         sm_id = sm_data.get("id", suuid)
         sm_data["id"] = sm_id
@@ -1917,7 +1994,7 @@ def extract_dashboard(
         print(
             f"\nWould write {total_files} YAML file(s) under {slug_dir}"
         )
-        print(f"and a manifest at {output_path / (bundle_slug + '.yaml')}.")
+        print(f"and a manifest at {slug_dir / 'PROJECT.yaml'}.")
         print()
         print("Re-run with --yes to proceed, or --dry-run to preview without writing.")
         return 0
@@ -2035,7 +2112,6 @@ def extract_dashboard(
         _normalize_metric_key,
         _is_sm_ref,
     )
-    from vcfops_packaging.describe import DescribeCache
 
     all_metric_refs: dict[tuple[str, str, str], MetricReference] = {}
 
@@ -2151,8 +2227,8 @@ def extract_dashboard(
     if not bme_list:
         _info("enablement walk: all referenced metrics are defaultMonitored=true (or cache miss); no builtin_metric_enables entries needed")
 
-    # Bundle manifest
-    manifest_path = output_path / f"{bundle_slug}.yaml"
+    # Bundle manifest (v3 layout: PROJECT.yaml lives inside the slug dir)
+    manifest_path = slug_dir / "PROJECT.yaml"
     _write_manifest(
         manifest_path=manifest_path,
         slug=bundle_slug,
@@ -2162,10 +2238,6 @@ def extract_dashboard(
         source_url=source_url,
         source_version=source_version,
         description_file=description_file,
-        sm_paths=sm_file_paths,
-        view_paths=view_file_paths,
-        dashboard_paths=dash_file_paths,
-        output_dir=output_path,
         builtin_metric_enables=bme_list if bme_list else None,
     )
     _info(f"wrote manifest: {manifest_path}")
@@ -2177,6 +2249,6 @@ def extract_dashboard(
     print()
     print("Next steps:")
     print(f"  1. Review YAML files under {slug_dir}")
-    print(f"  2. Validate:  python -m vcfops_packaging validate {manifest_path}")
-    print(f"  3. Build:     python -m vcfops_packaging build {manifest_path}")
+    print(f"  2. Validate:  python3 -m vcfops_supermetrics validate && python3 -m vcfops_dashboards validate")
+    print(f"  3. Build:     python3 -m vcfops_packaging build {manifest_path}")
     return 0
