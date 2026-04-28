@@ -168,10 +168,20 @@ def load_bundle(path: str | Path) -> Bundle:
     factory_native_raw = data.get("factory_native", True)
     factory_native = bool(factory_native_raw) if isinstance(factory_native_raw, bool) else True
 
-    # Resolve all file references relative to the manifest's directory if
-    # paths are not absolute. Manifests in bundles/ use repo-relative paths
-    # (e.g. "supermetrics/foo.yaml") so we try the repo root first.
-    repo_root = path.parent.parent  # bundles/ is one level under repo root
+    # Resolve all file references relative to the manifest's directory.
+    # Manifests in content/bundles/ are two levels under repo root.
+    # PROJECT.yaml files in content/third_party/<project>/ are three levels under repo root.
+    # Legacy bundles/ manifests are one level under repo root.
+    # Try walking up to find a plausible repo root (one containing vcfops_common/).
+    def _find_repo_root(start: Path) -> Path:
+        current = start
+        for _ in range(5):
+            if (current / "vcfops_common").exists():
+                return current
+            current = current.parent
+        return start.parent  # fallback: manifest's parent
+
+    repo_root = _find_repo_root(path.parent)
 
     def _resolve(ref: str) -> Path:
         p = Path(ref)
@@ -189,6 +199,29 @@ def load_bundle(path: str | Path) -> Bundle:
             f"{path}: referenced file not found: {ref!r} "
             f"(tried {candidate} and {candidate2})"
         )
+
+    # PROJECT.yaml auto-discovery: when no explicit content lists are given,
+    # scan the project's type subdirectories relative to PROJECT.yaml's parent.
+    # This supports the v3 layout where content/third_party/<project>/PROJECT.yaml
+    # implies content by file presence in its type subdirs.
+    _CONTENT_LIST_KEYS = {
+        "supermetrics", "views", "dashboards", "customgroups",
+        "reports", "symptoms", "alerts", "recommendations",
+    }
+    is_project_yaml = path.name == "PROJECT.yaml"
+    has_explicit_lists = any(data.get(k) for k in _CONTENT_LIST_KEYS)
+    if is_project_yaml and not has_explicit_lists:
+        project_dir = path.parent
+        def _discover_type(type_name: str) -> list:
+            type_dir = project_dir / type_name
+            if not type_dir.exists():
+                return []
+            return sorted(str(p) for p in type_dir.rglob("*.y*ml"))
+        # Inject discovered file lists into data for downstream loading.
+        for k in _CONTENT_LIST_KEYS:
+            discovered = _discover_type(k)
+            if discovered:
+                data[k] = discovered
 
     # Validate and load builtin_metric_enables (inline list, not file paths).
     raw_bme = data.get("builtin_metric_enables") or []

@@ -341,7 +341,7 @@ def _enumerate_releases(factory_repo: Path):
     """
     from .releases import load_all_releases
 
-    releases_dir = factory_repo / "releases"
+    releases_dir = factory_repo / "content" / "releases"
     if not releases_dir.exists():
         return []
 

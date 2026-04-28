@@ -13,8 +13,8 @@ from .loader import DashboardValidationError, load_all
 from .packager import build_import_zip
 from .ui_client import UIClientError, VCFOpsUIClient
 
-DEFAULT_VIEWS = Path("views")
-DEFAULT_DASHBOARDS = Path("dashboards")
+DEFAULT_VIEWS = Path("content/factory/views")
+DEFAULT_DASHBOARDS = Path("content/factory/dashboards")
 
 
 def _load(args) -> tuple[list, list]:
@@ -352,8 +352,10 @@ def cmd_delete_view(args) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="vcfops_dashboards")
-    p.add_argument("--views-dir", default=str(DEFAULT_VIEWS))
-    p.add_argument("--dashboards-dir", default=str(DEFAULT_DASHBOARDS))
+    p.add_argument("--views-dir", default=str(DEFAULT_VIEWS),
+                   help=f"Path to views YAML directory (default: {DEFAULT_VIEWS})")
+    p.add_argument("--dashboards-dir", default=str(DEFAULT_DASHBOARDS),
+                   help=f"Path to dashboards YAML directory (default: {DEFAULT_DASHBOARDS})")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pv = sub.add_parser("validate", help="validate YAML")
@@ -366,7 +368,7 @@ def build_parser() -> argparse.ArgumentParser:
     ps = sub.add_parser("sync", help="build and import to VCF Ops")
     ps.add_argument(
         "--supermetrics-dir",
-        default="supermetrics",
+        default="content/factory/supermetrics",
         metavar="DIR",
         help=(
             "Path to the supermetrics/ YAML directory. Used to build the SM name map "

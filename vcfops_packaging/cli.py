@@ -24,7 +24,7 @@ from pathlib import Path
 from .builder import build_bundle
 from .loader import BundleValidationError, load_bundle, load_all_bundles
 
-DEFAULT_BUNDLES_DIR = "bundles"
+DEFAULT_BUNDLES_DIR = "content/bundles"
 DEFAULT_OUTPUT_DIR = "dist"
 
 
@@ -120,8 +120,8 @@ def cmd_validate(args) -> int:
             rc = 1
 
     # --- Release manifest validation ---
-    # Scan releases/ if it exists; graceful no-op if it doesn't.
-    releases_dir = Path("releases")
+    # Scan content/releases/ if it exists; graceful no-op if it doesn't.
+    releases_dir = Path("content/releases")
     if not releases_dir.exists():
         return rc
 
@@ -462,12 +462,12 @@ def cmd_release(args) -> int:
 
     # Map type -> directory
     _TYPE_TO_DIR = {
-        "dashboard":   "dashboards",
-        "view":        "views",
-        "supermetric": "supermetrics",
-        "customgroup": "customgroups",
-        "report":      "reports",
-        "bundle":      "bundles",
+        "dashboard":   "content/factory/dashboards",
+        "view":        "content/factory/views",
+        "supermetric": "content/factory/supermetrics",
+        "customgroup": "content/factory/customgroups",
+        "report":      "content/factory/reports",
+        "bundle":      "content/bundles",
     }
     content_dir = _TYPE_TO_DIR[content_type]
 
@@ -529,8 +529,8 @@ def cmd_release(args) -> int:
     # -----------------------------------------------------------------------
     # Compute version.
     # -----------------------------------------------------------------------
-    releases_dir = repo_root / "releases"
-    releases_dir.mkdir(exist_ok=True)
+    releases_dir = repo_root / "content" / "releases"
+    releases_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = releases_dir / f"{slug}.yaml"
 
     explicit_version = getattr(args, "version", None)
@@ -599,11 +599,11 @@ def cmd_release(args) -> int:
         dep_path = releases_dir / f"{dep_slug}.yaml"
         if not dep_path.exists():
             print(
-                f"ERROR: --deprecates target not found: releases/{dep_slug}.yaml",
+                f"ERROR: --deprecates target not found: content/releases/{dep_slug}.yaml",
                 file=sys.stderr,
             )
             return 1
-        deprecates_paths.append(f"releases/{dep_slug}.yaml")
+        deprecates_paths.append(f"content/releases/{dep_slug}.yaml")
 
     # -----------------------------------------------------------------------
     # Build release manifest dict.

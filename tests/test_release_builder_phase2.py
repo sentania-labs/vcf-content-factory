@@ -91,7 +91,7 @@ class TestDashboardHeadline:
             tmp,
             name="demand-driven-capacity-v2",
             version="1.0",
-            source="dashboards/demand_driven_capacity_v2.yaml",
+            source="content/factory/dashboards/demand_driven_capacity_v2.yaml",
         )
         output_dir = tmp / "output"
         output_dir.mkdir()
@@ -220,7 +220,7 @@ class TestBundleHeadline:
             tmp,
             name="capacity-assessment",
             version="1.0",
-            source="bundles/capacity-assessment.yaml",
+            source="content/bundles/capacity-assessment.yaml",
         )
         output_dir = tmp / "output"
         output_dir.mkdir()
@@ -329,7 +329,7 @@ class TestHelpers:
         from vcfops_packaging.release_builder import build_release
         from vcfops_packaging.releases import load_release
 
-        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         manifest = {
             "name": "demand-driven-capacity-v2",
             "version": "1.0",

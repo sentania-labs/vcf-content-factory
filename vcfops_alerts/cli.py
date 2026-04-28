@@ -14,9 +14,9 @@ from .loader import (
     load_recommendations,
 )
 
-DEFAULT_ALERT_DIR = "alerts"
-DEFAULT_SYMPTOM_DIR = "symptoms"
-DEFAULT_RECOMMENDATION_DIR = "recommendations"
+DEFAULT_ALERT_DIR = "content/factory/alerts"
+DEFAULT_SYMPTOM_DIR = "content/factory/symptoms"
+DEFAULT_RECOMMENDATION_DIR = "content/factory/recommendations"
 
 
 def _collect_alerts(paths: List[str]) -> List[AlertDef]:

@@ -530,41 +530,41 @@ def _find_by_name(name: str, items, type_label: str):
 
 def _load_all_sms() -> List[SuperMetricDef]:
     from vcfops_supermetrics.loader import load_dir
-    return load_dir(_REPO_ROOT / "supermetrics")
+    return load_dir(_REPO_ROOT / "content" / "factory" / "supermetrics")
 
 
 def _load_all_views_and_dashboards() -> tuple[List[ViewDef], List[Dashboard]]:
     from vcfops_dashboards.loader import load_all
-    vd = _REPO_ROOT / "views"
-    dd = _REPO_ROOT / "dashboards"
+    vd = _REPO_ROOT / "content" / "factory" / "views"
+    dd = _REPO_ROOT / "content" / "factory" / "dashboards"
     if not vd.exists() and not dd.exists():
         return [], []
     return load_all(vd, dd)
 
 
 def _load_all_customgroups() -> List[CustomGroupDef]:
-    return load_cg_dir(_REPO_ROOT / "customgroups")
+    return load_cg_dir(_REPO_ROOT / "content" / "factory" / "customgroups")
 
 
 def _load_all_reports() -> List[ReportDef]:
     from vcfops_reports.loader import load_dir
     return load_dir(
-        _REPO_ROOT / "reports",
-        views_dir=_REPO_ROOT / "views",
-        dashboards_dir=_REPO_ROOT / "dashboards",
+        _REPO_ROOT / "content" / "factory" / "reports",
+        views_dir=_REPO_ROOT / "content" / "factory" / "views",
+        dashboards_dir=_REPO_ROOT / "content" / "factory" / "dashboards",
     )
 
 
 def _load_all_symptoms() -> List[SymptomDef]:
-    return load_symptom_dir(_REPO_ROOT / "symptoms")
+    return load_symptom_dir(_REPO_ROOT / "content" / "factory" / "symptoms")
 
 
 def _load_all_recommendations() -> List[Recommendation]:
-    return load_recommendations(_REPO_ROOT / "recommendations")
+    return load_recommendations(_REPO_ROOT / "content" / "factory" / "recommendations")
 
 
 def _load_all_alerts() -> List[AlertDef]:
-    return load_alert_dir(_REPO_ROOT / "alerts")
+    return load_alert_dir(_REPO_ROOT / "content" / "factory" / "alerts")
 
 
 def _assemble_zip(

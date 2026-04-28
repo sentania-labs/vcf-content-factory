@@ -73,7 +73,23 @@ class ReleaseArtifact:
 
 # Map first path component (source prefix) to the discrete_builder content_type
 # string.  "bundles" is handled separately; managementpacks is deferred.
+# Supports both old bare prefixes and the new content/factory/<type> layout.
 _SOURCE_PREFIX_TO_DISCRETE_TYPE: dict[str, str] = {
+    "dashboards":   "dashboard",
+    "views":        "view",
+    "supermetrics": "supermetric",
+    "customgroups": "customgroup",
+    "reports":      "report",
+}
+
+# For the new content/factory/<type>/ layout, the containing dir of the YAML
+# file is the type name — same as before, just deeper in the tree.
+# _build_component_headline() uses source_path.parent.name to find the type.
+
+# Mapping from parent directory name to discrete_builder content_type.
+# Used when source_prefix is not a bare type name (e.g. path is
+# content/factory/dashboards/foo.yaml → parent.name == "dashboards").
+_PARENT_DIR_TO_DISCRETE_TYPE: dict[str, str] = {
     "dashboards":   "dashboard",
     "views":        "view",
     "supermetrics": "supermetric",
@@ -222,9 +238,12 @@ def build_release(
         # Using source_path.parent.name is more robust than parsing the raw
         # source_str, since tests may write absolute paths into the manifest.
         source_prefix = source_path.parent.name
-        # For bundles/third_party/foo.yaml, parent.name is "third_party" — normalise.
+        # Normalise project-level bundle files to "bundles":
+        # Old: bundles/third_party/foo.yaml → parent.name == "third_party" → grandparent == "bundles"
+        # New: content/third_party/<project>/PROJECT.yaml → parent.name == <project>
+        #      → grandparent == "third_party"
         if source_prefix not in _SOURCE_PREFIX_TO_DISCRETE_TYPE and source_prefix != "bundles":
-            if source_path.parent.parent.name == "bundles":
+            if source_path.parent.parent.name in ("bundles", "third_party"):
                 source_prefix = "bundles"
         bundle_data = _load_bundle_data_if_bundle(source_path)
         dest_subdir = headline_to_dir(source_prefix + "/dummy.yaml", bundle_data=bundle_data)
@@ -264,22 +283,41 @@ def build_release(
 # ---------------------------------------------------------------------------
 
 def _load_bundle_data_if_bundle(source_path: Path) -> "dict | None":
-    """If source_path is a bundle YAML, load and return its raw data dict.
+    """If source_path is a bundle YAML or PROJECT.yaml, load and return its raw data dict.
 
-    Returns None if loading fails or the file is not a bundle (i.e. its
-    containing directory is not named "bundles" or "third_party").
+    Returns None if loading fails or the file is not a bundle.
+
+    Recognised bundle file locations:
+    - Old layout: bundles/*.yaml (parent == "bundles")
+    - Old layout: bundles/third_party/*.yaml (grandparent == "bundles")
+    - New layout: content/bundles/*.yaml (parent == "bundles")
+    - New layout: content/third_party/<project>/PROJECT.yaml (grandparent == "third_party")
+
+    For PROJECT.yaml files that have no explicit ``dashboards:`` list, the
+    dashboard count is discovered by scanning the project's dashboards/
+    subdirectory.  This is needed so headline_to_dir can route correctly
+    (exactly-1-dashboard -> ThirdPartyContent/dashboards) without requiring
+    an explicit list in the PROJECT.yaml.
     """
-    # We only need to load data for bundle headlines to check factory_native.
-    # Bundle YAMLs live under a directory named "bundles" or a sub-directory
-    # of a directory named "bundles" (e.g. bundles/third_party/foo.yaml).
-    # Walk up to find any "bundles" ancestor within 2 levels.
     parent_name = source_path.parent.name
     grandparent_name = source_path.parent.parent.name
-    if parent_name != "bundles" and grandparent_name != "bundles":
+    is_bundle = (
+        parent_name == "bundles"
+        or grandparent_name == "bundles"
+        or grandparent_name == "third_party"
+    )
+    if not is_bundle:
         return None
     try:
         data = yaml.safe_load(source_path.read_text()) or {}
-        return data if isinstance(data, dict) else None
+        if not isinstance(data, dict):
+            return None
+        # For PROJECT.yaml with no explicit dashboards list, discover from subdir.
+        if source_path.name == "PROJECT.yaml" and not data.get("dashboards"):
+            dash_dir = source_path.parent / "dashboards"
+            if dash_dir.exists():
+                data["dashboards"] = sorted(str(p) for p in dash_dir.rglob("*.y*ml"))
+        return data
     except Exception:
         return None
 
@@ -295,13 +333,11 @@ def _artifact_dest_subdir(artifact: "_ManifestArtifact") -> str:
     false`` and routes third-party bundles under ``ThirdPartyContent/``.
     """
     source_prefix = artifact.source_path.parent.name
-    # For sub-directories of bundles/ (e.g. bundles/third_party/), the
-    # parent.name is "third_party", not "bundles".  Use the grandparent to
-    # normalise so headline_to_dir receives a valid prefix.
+    # Normalise project-level bundle files (old: bundles/third_party/foo.yaml,
+    # new: content/third_party/<project>/PROJECT.yaml) to "bundles".
     if source_prefix not in _SOURCE_PREFIX_TO_DISCRETE_TYPE and source_prefix != "bundles":
-        # Could be bundles/third_party/foo.yaml — check grandparent.
         grandparent = artifact.source_path.parent.parent.name
-        if grandparent == "bundles":
+        if grandparent in ("bundles", "third_party"):
             source_prefix = "bundles"
 
     bundle_data = _load_bundle_data_if_bundle(artifact.source_path)

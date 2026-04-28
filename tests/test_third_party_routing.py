@@ -227,8 +227,8 @@ class TestBuildReleaseThirdParty:
         from vcfops_packaging.release_builder import build_release
 
         tmp = tmp_path_factory.mktemp("idps_release")
-        source_abs = (REPO_ROOT / "bundles" / "third_party" / "idps-planner.yaml").resolve()
-        assert source_abs.exists(), f"idps-planner.yaml not found: {source_abs}"
+        source_abs = (REPO_ROOT / "content" / "third_party" / "idps-planner" / "PROJECT.yaml").resolve()
+        assert source_abs.exists(), f"PROJECT.yaml not found: {source_abs}"
 
         manifest = {
             "name": "idps-planner",
@@ -284,8 +284,8 @@ def test_publish_thirdparty_zip_lands_at_correct_path(tmp_path, monkeypatch):
     releases_dir = tmp_path / "tp_releases"
     releases_dir.mkdir()
 
-    source_abs = (REPO_ROOT / "bundles" / "third_party" / "idps-planner.yaml").resolve()
-    assert source_abs.exists(), f"idps-planner.yaml not found: {source_abs}"
+    source_abs = (REPO_ROOT / "content" / "third_party" / "idps-planner" / "PROJECT.yaml").resolve()
+    assert source_abs.exists(), f"PROJECT.yaml not found: {source_abs}"
 
     _write_release_manifest(
         releases_dir,
@@ -330,8 +330,8 @@ class TestReadmeCatalogThirdPartySection:
         """Return a loaded ReleaseDef for idps-planner."""
         from vcfops_packaging.releases import load_release
 
-        source_abs = (REPO_ROOT / "bundles" / "third_party" / "idps-planner.yaml").resolve()
-        assert source_abs.exists(), f"idps-planner.yaml not found: {source_abs}"
+        source_abs = (REPO_ROOT / "content" / "third_party" / "idps-planner" / "PROJECT.yaml").resolve()
+        assert source_abs.exists(), f"PROJECT.yaml not found: {source_abs}"
 
         manifest = {
             "name": "idps-planner",
@@ -452,7 +452,7 @@ class TestReadmeCatalogThirdPartySection:
         from vcfops_packaging.releases import load_release
 
         # Use a factory-native release (no factory_native field → defaults True).
-        source_abs = (REPO_ROOT / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         manifest = {
             "name": "demand-driven-capacity-v2",
             "version": "1.0",
@@ -485,7 +485,7 @@ class TestFactoryNativeRegressionGuard:
         from vcfops_packaging.release_builder import _artifact_dest_subdir
         from vcfops_packaging.releases import load_release
 
-        source_abs = (REPO_ROOT / "bundles" / "capacity-assessment.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "bundles" / "capacity-assessment.yaml").resolve()
         assert source_abs.exists(), f"capacity-assessment.yaml not found"
 
         manifest = {
@@ -513,7 +513,7 @@ class TestFactoryNativeRegressionGuard:
         releases_dir = tmp_path / "ca_releases"
         releases_dir.mkdir()
 
-        source_abs = (REPO_ROOT / "bundles" / "capacity-assessment.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "bundles" / "capacity-assessment.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="capacity-assessment",

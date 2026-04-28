@@ -9,7 +9,7 @@ from typing import List
 
 from .loader import ManagementPackDef, ManagementPackValidationError, load_dir, load_file
 
-DEFAULT_DIR = "managementpacks"
+DEFAULT_DIR = "content/factory/managementpacks"
 
 
 def _collect(paths: List[str]) -> List[ManagementPackDef]:
