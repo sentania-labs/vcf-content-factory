@@ -146,7 +146,7 @@ def factory_with_release(tmp_path):
     releases_dir = tmp_path / "tmp_releases"
     releases_dir.mkdir()
 
-    source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+    source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
     assert source_abs.exists(), f"source not found: {source_abs}"
 
     _write_release_manifest(
@@ -286,7 +286,7 @@ def test_real_run_zip_lands(tmp_path, monkeypatch):
     dist = _init_dist_repo(tmp_path)
     releases_dir = tmp_path / "rr_releases"
     releases_dir.mkdir()
-    source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+    source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
     _write_release_manifest(
         releases_dir,
         name="demand-driven-capacity-v2",
@@ -319,7 +319,7 @@ def test_real_run_readme_regenerated(tmp_path, monkeypatch):
     dist = _init_dist_repo(tmp_path)
     releases_dir = tmp_path / "rr_releases2"
     releases_dir.mkdir()
-    source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+    source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
     _write_release_manifest(
         releases_dir,
         name="demand-driven-capacity-v2",
@@ -353,7 +353,7 @@ def test_real_run_commit_and_no_push(tmp_path, monkeypatch):
     dist = _init_dist_repo(tmp_path)
     releases_dir = tmp_path / "rr_releases3"
     releases_dir.mkdir()
-    source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+    source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
     _write_release_manifest(
         releases_dir,
         name="demand-driven-capacity-v2",
@@ -398,7 +398,7 @@ class TestNoOpSkip:
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases2"
         releases_dir.mkdir()
-        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="demand-driven-capacity-v2",
@@ -438,7 +438,7 @@ class TestNoOpSkip:
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases2b"
         releases_dir.mkdir()
-        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="demand-driven-capacity-v2",
@@ -646,7 +646,7 @@ class TestReadmeCellFormat:
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "cell_fmt_releases"
         releases_dir.mkdir()
-        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="demand-driven-capacity-v2",
@@ -767,7 +767,7 @@ class TestLockfileNotInCommit:
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases_lockcommit"
         releases_dir.mkdir()
-        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="demand-driven-capacity-v2",
@@ -804,7 +804,7 @@ class TestLockfileNotInCommit:
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases_lockstat"
         releases_dir.mkdir()
-        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="demand-driven-capacity-v2",
@@ -840,7 +840,7 @@ class TestLockfileNotInCommit:
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases_lockdisk"
         releases_dir.mkdir()
-        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="demand-driven-capacity-v2",
@@ -899,7 +899,7 @@ class TestPolicyCaveatInReadme:
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "caveat_bundle"
         releases_dir.mkdir()
-        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="demand-driven-capacity-v2",
@@ -940,7 +940,7 @@ class TestPolicyCaveatInReadme:
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "caveat_bundle_inner"
         releases_dir.mkdir()
-        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="demand-driven-capacity-v2",
@@ -988,7 +988,7 @@ class TestVersionlessNaming:
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "vl_releases"
         releases_dir.mkdir()
-        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="demand-driven-capacity-v2",
@@ -1037,7 +1037,7 @@ class TestVersionlessNaming:
 
         releases_dir = tmp_path / "legacy_releases"
         releases_dir.mkdir()
-        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="demand-driven-capacity-v2",
@@ -1116,7 +1116,7 @@ class TestForceFlag:
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "force_releases"
         releases_dir.mkdir()
-        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="demand-driven-capacity-v2",
@@ -1171,7 +1171,7 @@ class TestForceFlag:
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "force_normal_releases"
         releases_dir.mkdir()
-        source_abs = (REPO_ROOT / "content" / "factory" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
+        source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         _write_release_manifest(
             releases_dir,
             name="demand-driven-capacity-v2",

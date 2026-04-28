@@ -65,7 +65,7 @@ _MARKER_RE = re.compile(
 def _collect_bundles(repo_root: Path) -> list[dict]:
     """Collect released factory-native bundle manifests."""
     from .loader import load_bundle, BundleValidationError
-    bundles_dir = repo_root / "content" / "bundles"
+    bundles_dir = repo_root / "bundles"
     if not bundles_dir.exists():
         return []
     items = []
@@ -87,7 +87,7 @@ def _collect_bundles(repo_root: Path) -> list[dict]:
 def _collect_third_party_bundles(repo_root: Path) -> list[dict]:
     """Collect released third-party bundle manifests (PROJECT.yaml files)."""
     from .loader import load_bundle, BundleValidationError
-    tp_dir = repo_root / "content" / "third_party"
+    tp_dir = repo_root / "third_party"
     if not tp_dir.exists():
         return []
     items = []
@@ -110,7 +110,7 @@ def _collect_third_party_bundles(repo_root: Path) -> list[dict]:
 def _collect_management_packs(repo_root: Path) -> list[dict]:
     """Collect released management pack definitions."""
     from vcfops_managementpacks.loader import load_dir, ManagementPackValidationError
-    mp_dir = repo_root / "content" / "factory" / "managementpacks"
+    mp_dir = repo_root / "content" / "managementpacks"
     if not mp_dir.exists():
         return []
     items = []
@@ -131,8 +131,8 @@ def _collect_management_packs(repo_root: Path) -> list[dict]:
 def _collect_dashboards(repo_root: Path) -> list[dict]:
     """Collect individually released dashboards."""
     from vcfops_dashboards.loader import load_all, DashboardValidationError
-    vd = repo_root / "content" / "factory" / "views"
-    dd = repo_root / "content" / "factory" / "dashboards"
+    vd = repo_root / "content" / "views"
+    dd = repo_root / "content" / "dashboards"
     if not dd.exists():
         return []
     try:
@@ -153,7 +153,7 @@ def _collect_dashboards(repo_root: Path) -> list[dict]:
 def _collect_supermetrics(repo_root: Path) -> list[dict]:
     """Collect individually released super metrics."""
     from vcfops_supermetrics.loader import load_dir
-    sm_dir = repo_root / "content" / "factory" / "supermetrics"
+    sm_dir = repo_root / "content" / "supermetrics"
     if not sm_dir.exists():
         return []
     try:
@@ -174,7 +174,7 @@ def _collect_supermetrics(repo_root: Path) -> list[dict]:
 def _collect_views(repo_root: Path) -> list[dict]:
     """Collect individually released views."""
     from vcfops_dashboards.loader import load_view, DashboardValidationError
-    views_dir = repo_root / "content" / "factory" / "views"
+    views_dir = repo_root / "content" / "views"
     if not views_dir.exists():
         return []
     items = []
@@ -195,11 +195,11 @@ def _collect_views(repo_root: Path) -> list[dict]:
 def _collect_reports(repo_root: Path) -> list[dict]:
     """Collect individually released reports."""
     from vcfops_reports.loader import load_dir, ReportValidationError
-    r_dir = repo_root / "content" / "factory" / "reports"
+    r_dir = repo_root / "content" / "reports"
     if not r_dir.exists():
         return []
     try:
-        reports = load_dir(r_dir, views_dir=repo_root / "content" / "factory" / "views", dashboards_dir=repo_root / "content" / "factory" / "dashboards")
+        reports = load_dir(r_dir, views_dir=repo_root / "content" / "views", dashboards_dir=repo_root / "content" / "dashboards")
     except ReportValidationError:
         return []
     items = []
@@ -216,7 +216,7 @@ def _collect_reports(repo_root: Path) -> list[dict]:
 def _collect_alerts(repo_root: Path) -> list[dict]:
     """Collect individually released alerts."""
     from vcfops_alerts.loader import load_dir, AlertValidationError
-    a_dir = repo_root / "content" / "factory" / "alerts"
+    a_dir = repo_root / "content" / "alerts"
     if not a_dir.exists():
         return []
     try:
@@ -237,7 +237,7 @@ def _collect_alerts(repo_root: Path) -> list[dict]:
 def _collect_customgroups(repo_root: Path) -> list[dict]:
     """Collect individually released custom groups."""
     from vcfops_customgroups.loader import load_dir, CustomGroupValidationError
-    cg_dir = repo_root / "content" / "factory" / "customgroups"
+    cg_dir = repo_root / "content" / "customgroups"
     if not cg_dir.exists():
         return []
     try:

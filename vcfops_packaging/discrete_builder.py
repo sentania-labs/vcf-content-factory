@@ -530,41 +530,41 @@ def _find_by_name(name: str, items, type_label: str):
 
 def _load_all_sms() -> List[SuperMetricDef]:
     from vcfops_supermetrics.loader import load_dir
-    return load_dir(_REPO_ROOT / "content" / "factory" / "supermetrics")
+    return load_dir(_REPO_ROOT / "content" / "supermetrics")
 
 
 def _load_all_views_and_dashboards() -> tuple[List[ViewDef], List[Dashboard]]:
     from vcfops_dashboards.loader import load_all
-    vd = _REPO_ROOT / "content" / "factory" / "views"
-    dd = _REPO_ROOT / "content" / "factory" / "dashboards"
+    vd = _REPO_ROOT / "content" / "views"
+    dd = _REPO_ROOT / "content" / "dashboards"
     if not vd.exists() and not dd.exists():
         return [], []
     return load_all(vd, dd)
 
 
 def _load_all_customgroups() -> List[CustomGroupDef]:
-    return load_cg_dir(_REPO_ROOT / "content" / "factory" / "customgroups")
+    return load_cg_dir(_REPO_ROOT / "content" / "customgroups")
 
 
 def _load_all_reports() -> List[ReportDef]:
     from vcfops_reports.loader import load_dir
     return load_dir(
-        _REPO_ROOT / "content" / "factory" / "reports",
-        views_dir=_REPO_ROOT / "content" / "factory" / "views",
-        dashboards_dir=_REPO_ROOT / "content" / "factory" / "dashboards",
+        _REPO_ROOT / "content" / "reports",
+        views_dir=_REPO_ROOT / "content" / "views",
+        dashboards_dir=_REPO_ROOT / "content" / "dashboards",
     )
 
 
 def _load_all_symptoms() -> List[SymptomDef]:
-    return load_symptom_dir(_REPO_ROOT / "content" / "factory" / "symptoms")
+    return load_symptom_dir(_REPO_ROOT / "content" / "symptoms")
 
 
 def _load_all_recommendations() -> List[Recommendation]:
-    return load_recommendations(_REPO_ROOT / "content" / "factory" / "recommendations")
+    return load_recommendations(_REPO_ROOT / "content" / "recommendations")
 
 
 def _load_all_alerts() -> List[AlertDef]:
-    return load_alert_dir(_REPO_ROOT / "content" / "factory" / "alerts")
+    return load_alert_dir(_REPO_ROOT / "content" / "alerts")
 
 
 def _assemble_zip(

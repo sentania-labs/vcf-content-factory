@@ -18,9 +18,9 @@ from .client import (
 from .loader import ReportDef, ReportValidationError, load_dir, load_file
 from .render import build_import_zip
 
-DEFAULT_DIR = "content/factory/reports"
-DEFAULT_VIEWS_DIR = "content/factory/views"
-DEFAULT_DASHBOARDS_DIR = "content/factory/dashboards"
+DEFAULT_DIR = "content/reports"
+DEFAULT_VIEWS_DIR = "content/views"
+DEFAULT_DASHBOARDS_DIR = "content/dashboards"
 
 
 def _collect(args) -> list[ReportDef]:

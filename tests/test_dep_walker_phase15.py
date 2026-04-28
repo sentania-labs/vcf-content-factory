@@ -29,12 +29,12 @@ def _load_all():
     from vcfops_dashboards.loader import load_all as _load_dash
     from vcfops_customgroups.loader import load_dir as _load_cgs
 
-    all_sms = _load_sms(REPO_ROOT / "content" / "factory" / "supermetrics")
+    all_sms = _load_sms(REPO_ROOT / "content" / "supermetrics")
     all_views, all_dashboards = _load_dash(
-        REPO_ROOT / "content" / "factory" / "views",
-        REPO_ROOT / "content" / "factory" / "dashboards",
+        REPO_ROOT / "content" / "views",
+        REPO_ROOT / "content" / "dashboards",
     )
-    all_cgs = _load_cgs(REPO_ROOT / "content" / "factory" / "customgroups")
+    all_cgs = _load_cgs(REPO_ROOT / "content" / "customgroups")
     return all_sms, all_views, all_dashboards, all_cgs
 
 

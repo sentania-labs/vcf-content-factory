@@ -73,7 +73,7 @@ class ReleaseArtifact:
 
 # Map first path component (source prefix) to the discrete_builder content_type
 # string.  "bundles" is handled separately; managementpacks is deferred.
-# Supports both old bare prefixes and the new content/factory/<type> layout.
+# Supports both old bare prefixes and the new content/<type> layout.
 _SOURCE_PREFIX_TO_DISCRETE_TYPE: dict[str, str] = {
     "dashboards":   "dashboard",
     "views":        "view",
@@ -82,13 +82,13 @@ _SOURCE_PREFIX_TO_DISCRETE_TYPE: dict[str, str] = {
     "reports":      "report",
 }
 
-# For the new content/factory/<type>/ layout, the containing dir of the YAML
-# file is the type name — same as before, just deeper in the tree.
+# For the new content/<type>/ layout, the containing dir of the YAML
+# file is the type name.
 # _build_component_headline() uses source_path.parent.name to find the type.
 
 # Mapping from parent directory name to discrete_builder content_type.
 # Used when source_prefix is not a bare type name (e.g. path is
-# content/factory/dashboards/foo.yaml → parent.name == "dashboards").
+# content/dashboards/foo.yaml → parent.name == "dashboards").
 _PARENT_DIR_TO_DISCRETE_TYPE: dict[str, str] = {
     "dashboards":   "dashboard",
     "views":        "view",
@@ -239,11 +239,10 @@ def build_release(
         # source_str, since tests may write absolute paths into the manifest.
         source_prefix = source_path.parent.name
         # Normalise project-level bundle files to "bundles":
-        # Old: bundles/third_party/foo.yaml → parent.name == "third_party" → grandparent == "bundles"
-        # New: content/third_party/<project>/PROJECT.yaml → parent.name == <project>
-        #      → grandparent == "third_party"
+        # third_party/<project>/PROJECT.yaml → parent.name == <project>
+        #   → grandparent == "third_party"
         if source_prefix not in _SOURCE_PREFIX_TO_DISCRETE_TYPE and source_prefix != "bundles":
-            if source_path.parent.parent.name in ("bundles", "third_party"):
+            if source_path.parent.parent.name == "third_party":
                 source_prefix = "bundles"
         bundle_data = _load_bundle_data_if_bundle(source_path)
         dest_subdir = headline_to_dir(source_prefix + "/dummy.yaml", bundle_data=bundle_data)
@@ -288,10 +287,8 @@ def _load_bundle_data_if_bundle(source_path: Path) -> "dict | None":
     Returns None if loading fails or the file is not a bundle.
 
     Recognised bundle file locations:
-    - Old layout: bundles/*.yaml (parent == "bundles")
-    - Old layout: bundles/third_party/*.yaml (grandparent == "bundles")
-    - New layout: content/bundles/*.yaml (parent == "bundles")
-    - New layout: content/third_party/<project>/PROJECT.yaml (grandparent == "third_party")
+    - bundles/*.yaml (parent == "bundles")
+    - third_party/<project>/PROJECT.yaml (grandparent == "third_party")
 
     For PROJECT.yaml files that have no explicit ``dashboards:`` list, the
     dashboard count is discovered by scanning the project's dashboards/
@@ -303,7 +300,6 @@ def _load_bundle_data_if_bundle(source_path: Path) -> "dict | None":
     grandparent_name = source_path.parent.parent.name
     is_bundle = (
         parent_name == "bundles"
-        or grandparent_name == "bundles"
         or grandparent_name == "third_party"
     )
     if not is_bundle:
@@ -333,11 +329,11 @@ def _artifact_dest_subdir(artifact: "_ManifestArtifact") -> str:
     false`` and routes third-party bundles under ``ThirdPartyContent/``.
     """
     source_prefix = artifact.source_path.parent.name
-    # Normalise project-level bundle files (old: bundles/third_party/foo.yaml,
-    # new: content/third_party/<project>/PROJECT.yaml) to "bundles".
+    # Normalise project-level bundle files
+    # (third_party/<project>/PROJECT.yaml → grandparent == "third_party") to "bundles".
     if source_prefix not in _SOURCE_PREFIX_TO_DISCRETE_TYPE and source_prefix != "bundles":
         grandparent = artifact.source_path.parent.parent.name
-        if grandparent in ("bundles", "third_party"):
+        if grandparent == "third_party":
             source_prefix = "bundles"
 
     bundle_data = _load_bundle_data_if_bundle(artifact.source_path)

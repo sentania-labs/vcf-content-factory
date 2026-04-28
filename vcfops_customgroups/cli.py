@@ -15,7 +15,7 @@ from .loader import (
     load_file,
 )
 
-DEFAULT_DIR = "content/factory/customgroups"
+DEFAULT_DIR = "content/customgroups"
 
 
 def _collect(paths: List[str]) -> List[CustomGroupDef]:

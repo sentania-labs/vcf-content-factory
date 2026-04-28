@@ -13,7 +13,7 @@ from .loader import SuperMetricDef, SuperMetricValidationError, load_dir, load_f
 # Dep walker is imported lazily inside cmd_sync to avoid import-time errors
 # when vcfops_dashboards is absent (rare, but keeps the package self-contained).
 
-DEFAULT_DIR = "content/factory/supermetrics"
+DEFAULT_DIR = "content/supermetrics"
 SM_ENABLE_ATTEMPTS = 3
 SM_ENABLE_VERIFY_DELAY = 2
 

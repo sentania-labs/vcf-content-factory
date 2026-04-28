@@ -169,9 +169,8 @@ def load_bundle(path: str | Path) -> Bundle:
     factory_native = bool(factory_native_raw) if isinstance(factory_native_raw, bool) else True
 
     # Resolve all file references relative to the manifest's directory.
-    # Manifests in content/bundles/ are two levels under repo root.
-    # PROJECT.yaml files in content/third_party/<project>/ are three levels under repo root.
-    # Legacy bundles/ manifests are one level under repo root.
+    # Manifests in bundles/ are one level under repo root.
+    # PROJECT.yaml files in third_party/<project>/ are two levels under repo root.
     # Try walking up to find a plausible repo root (one containing vcfops_common/).
     def _find_repo_root(start: Path) -> Path:
         current = start
@@ -202,7 +201,7 @@ def load_bundle(path: str | Path) -> Bundle:
 
     # PROJECT.yaml auto-discovery: when no explicit content lists are given,
     # scan the project's type subdirectories relative to PROJECT.yaml's parent.
-    # This supports the v3 layout where content/third_party/<project>/PROJECT.yaml
+    # This supports the v3 layout where third_party/<project>/PROJECT.yaml
     # implies content by file presence in its type subdirs.
     _CONTENT_LIST_KEYS = {
         "supermetrics", "views", "dashboards", "customgroups",

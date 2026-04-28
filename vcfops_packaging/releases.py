@@ -135,9 +135,9 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
     # --- release_notes (optional) ---
     release_notes = str(data.get("release_notes", "") or "").strip()
 
-    # Resolve root: content/releases/ sits two levels under repo root.
+    # Resolve root: releases/ sits one level under repo root.
     if repo_root is None:
-        repo_root = path.parent.parent.parent
+        repo_root = path.parent.parent
 
     def _resolve_source(ref: str) -> Path:
         p = Path(ref)
@@ -219,7 +219,7 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
 
 
 def load_all_releases(
-    releases_dir: str | Path = "content/releases",
+    releases_dir: str | Path = "releases",
     repo_root: Optional[Path] = None,
 ) -> List[ReleaseDef]:
     """Load all release manifests from a directory.
@@ -314,12 +314,12 @@ def validate_flag_state(
     # Direction (b): content has released: true but no release manifest points at it.
     # Scan all content type directories that carry the released: field.
     content_dirs = [
-        repo_root / "content" / "bundles",
-        repo_root / "content" / "factory" / "dashboards",
-        repo_root / "content" / "factory" / "views",
-        repo_root / "content" / "factory" / "supermetrics",
-        repo_root / "content" / "factory" / "customgroups",
-        repo_root / "content" / "factory" / "reports",
+        repo_root / "bundles",
+        repo_root / "content" / "dashboards",
+        repo_root / "content" / "views",
+        repo_root / "content" / "supermetrics",
+        repo_root / "content" / "customgroups",
+        repo_root / "content" / "reports",
     ]
     for content_dir in content_dirs:
         if not content_dir.exists():

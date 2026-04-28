@@ -259,8 +259,8 @@ def _build_dashboard_index(dashboards_dir: Path) -> dict[str, str]:
 
 def load_file(
     path: str | Path,
-    views_dir: str | Path = "content/factory/views",
-    dashboards_dir: str | Path = "content/factory/dashboards",
+    views_dir: str | Path = "content/views",
+    dashboards_dir: str | Path = "content/dashboards",
     enforce_framework_prefix: bool = True,
 ) -> "ReportDef":
     """Load and validate a single report definition YAML file.
@@ -385,9 +385,9 @@ def load_file(
 
 
 def load_dir(
-    directory: str | Path = "content/factory/reports",
-    views_dir: str | Path = "content/factory/views",
-    dashboards_dir: str | Path = "content/factory/dashboards",
+    directory: str | Path = "content/reports",
+    views_dir: str | Path = "content/views",
+    dashboards_dir: str | Path = "content/dashboards",
     enforce_framework_prefix: bool = True,
 ) -> List[ReportDef]:
     """Load all report definition YAML files from a directory.

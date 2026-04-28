@@ -9,7 +9,7 @@ from typing import List
 from .client import VCFOpsSymptomsClient, VCFOpsSymptomsError
 from .loader import SymptomDef, SymptomValidationError, load_dir, load_file
 
-DEFAULT_DIR = "content/factory/symptoms"
+DEFAULT_DIR = "content/symptoms"
 
 
 def _collect(paths: List[str]) -> List[SymptomDef]:

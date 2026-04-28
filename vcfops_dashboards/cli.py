@@ -13,8 +13,8 @@ from .loader import DashboardValidationError, load_all
 from .packager import build_import_zip
 from .ui_client import UIClientError, VCFOpsUIClient
 
-DEFAULT_VIEWS = Path("content/factory/views")
-DEFAULT_DASHBOARDS = Path("content/factory/dashboards")
+DEFAULT_VIEWS = Path("content/views")
+DEFAULT_DASHBOARDS = Path("content/dashboards")
 
 
 def _load(args) -> tuple[list, list]:
@@ -368,7 +368,7 @@ def build_parser() -> argparse.ArgumentParser:
     ps = sub.add_parser("sync", help="build and import to VCF Ops")
     ps.add_argument(
         "--supermetrics-dir",
-        default="content/factory/supermetrics",
+        default="content/supermetrics",
         metavar="DIR",
         help=(
             "Path to the supermetrics/ YAML directory. Used to build the SM name map "

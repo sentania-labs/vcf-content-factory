@@ -1,0 +1,33 @@
+name: capacity-assessment
+description: >
+  Single-dashboard capacity review for a VCF Ops admin. Top section answers
+  'how many more VMs can I deploy?' with post-HA CPU/memory free percentages,
+  VMs-that-fit projections, and days-until-runout pulled from VCF Ops capacity
+  analytics. Bottom section surfaces right-sizing opportunities — VMs flagged
+  by VCF Ops as oversized, undersized, or idle, with 95th-percentile demand
+  justification columns and current-to-target resize recommendations. Color
+  thresholds throughout use the standard green/yellow/orange/red stoplight.
+  Install this bundle on any VCF Ops 9+ instance to get an opinionated capacity
+  dashboard ready for quarterly reviews.
+supermetrics:
+  - content/supermetrics/cluster_cpu_free_pct_after_ha.yaml
+  - content/supermetrics/cluster_memory_free_pct_after_ha.yaml
+  - content/supermetrics/cluster_vms_that_fit_cpu.yaml
+  - content/supermetrics/cluster_vms_that_fit_memory.yaml
+  - content/supermetrics/cluster_oversized_vm_count.yaml
+  - content/supermetrics/cluster_undersized_vm_count.yaml
+  - content/supermetrics/cluster_idle_vm_count.yaml
+  - content/supermetrics/vm_target_vcpus_oversized.yaml
+  - content/supermetrics/vm_target_memory_gb_oversized.yaml
+  - content/supermetrics/vm_target_vcpus_undersized.yaml
+  - content/supermetrics/vm_target_memory_gb_undersized.yaml
+views:
+  - content/views/cluster_capacity_overview.yaml
+  - content/views/vm_rightsizing_candidates.yaml
+dashboards:
+  - content/dashboards/capacity_assessment.yaml
+customgroups:
+  - content/customgroups/vms_rightsizing_candidates.yaml
+symptoms: []
+alerts: []
+reports: []
