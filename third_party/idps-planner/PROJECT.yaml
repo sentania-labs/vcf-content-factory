@@ -35,6 +35,7 @@ description: "# IDPS Planner\n\nA VCF Operations dashboard for monitoring vDefen
   \ aren't on by default. Original authors\nretain all rights to the dashboard's design,\
   \ queries, and view layout."
 factory_native: false
+released: true
 author: Ryan Pletka, Brock Peterson, Joe Tietz, Geoff Shukin, Scott Bowe
 license: MIT
 source:
