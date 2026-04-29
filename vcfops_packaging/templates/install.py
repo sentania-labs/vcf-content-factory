@@ -1307,10 +1307,19 @@ def _prompt_credentials(args: argparse.Namespace, mode: str) -> tuple:
     if not user:
         user = input("Username [admin]: ").strip() or "admin"
 
+    # Auth-source support contract (see README_framework.md "Authentication"):
+    # Supported: Local (recommended), vCenter SSO (VC/VC_GROUP), Active Directory
+    # (UPN form), LDAP (per spec; untested by us).  Not supported: VIDB ("VCF SSO")
+    # and VIDM (Workspace ONE Access) — both are federated SSO sources that refuse
+    # programmatic password grants.  Use a Local service account for those deployments.
     auth_source_raw = args.auth_source
     if not auth_source_raw:
         auth_source_raw = input(
-            "Auth source (local, or domain like corp.example.com) [local]: "
+            "Auth source name (or 'local'). Type 'local' for local accounts;"
+            " for non-local sources, type the auth-source name as configured"
+            " in VCF Operations (e.g. your vCenter SSO source, AD source, or"
+            " LDAP source). VIDB and VIDM are not supported -- use a local"
+            " account. [local]: "
         ).strip()
     auth_source = _resolve_auth_source(auth_source_raw)
 

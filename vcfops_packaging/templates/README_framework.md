@@ -39,6 +39,40 @@ content are present.
 
 ---
 
+## Authentication
+
+The install scripts authenticate to VCF Operations using local accounts and
+auth-source-attached identity providers that support server-side password
+validation.
+
+**Supported** (programmatic install):
+- **Local** — a local VCF Ops admin or service account (recommended)
+- **vCenter SSO** (`VC` / `VC_GROUP`) — vCenter SSO credentials, configured
+  as an auth source in VCF Ops
+- **Active Directory** — domain credentials in UPN form
+  (`user@corp.example.com`)
+- **LDAP** — per the VCF Operations Suite API documentation; bind-validatable
+  LDAP credentials should work, but this path is not yet covered by our
+  test matrix
+
+**Not supported** (use a Local service account instead):
+- **VCF Identity Broker** ("VCF SSO" / `VIDB`) — federated SSO; the Suite API
+  refuses programmatic password authentication for VIDB-typed sources. A
+  future VCF Operations release is expected to address this; check Broadcom
+  support documentation for updates.
+- **VMware Identity Manager / Workspace ONE Access** (`VIDM`) — federated SSO;
+  programmatic password authentication was empirically refused on the
+  Ops versions we tested. Treat as unsupported until verified against your
+  specific environment.
+
+If your VCF Operations instance is configured only with `VIDB` or `VIDM`
+auth sources, create a local service account for automation use.
+
+> The auth-source landscape evolves with each Ops release. Watch this
+> README and the framework's documentation for updates.
+
+---
+
 ## Install paths
 
 ### Automated install (recommended)

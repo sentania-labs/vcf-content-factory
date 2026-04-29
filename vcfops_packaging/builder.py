@@ -511,6 +511,8 @@ def _generate_bundle_readme(bundle: Bundle, display_name: str) -> str:
         "",
         "Both scripts support interactive prompts, CLI flags, and environment variables.",
         "Run with `--help` (Python) or `-?` (PowerShell) for usage details.",
+        "See the top-level `README.md` **Authentication** section for supported auth sources",
+        "(Local, vCenter SSO, AD) and sources that are not supported (VIDB, VIDM).",
         "",
         "> **Policy enablement caveat.** The install script enables imported super",
         "> metrics on the **Default Policy** only. If your deployment uses",

@@ -211,6 +211,24 @@ demonstrates the reverse flow — it was **extracted** from a community
 dashboard rather than authored from scratch, and re-packaged as a
 distributable zip.
 
+## Authentication
+
+The install scripts support the following VCF Operations auth sources:
+
+**Supported:** Local accounts (recommended), vCenter SSO (`VC` / `VC_GROUP`),
+Active Directory (UPN form: `user@corp.example.com`), and LDAP
+(per the Suite API spec; not yet covered by our test matrix).
+
+**Not supported:** VCF Identity Broker ("VCF SSO" / `VIDB`) and VMware Identity
+Manager / Workspace ONE Access (`VIDM`). Both are federated SSO sources whose
+programmatic password grants are refused by the Suite API. If your instance has
+only VIDB or VIDM auth sources, create a Local service account for automation.
+
+See the full breakdown — including per-source behavior and uninstall
+requirements — in the `README.md` shipped inside every distribution zip,
+and in `context/auth_vidb_oauth_flow.md` and
+`designs/auth-source-support-v1.md`.
+
 ## Getting started
 
 There are two ways to use this: **as a content consumer** (install a

@@ -387,8 +387,17 @@ function Get-Credentials {
         $script:User = if ($inp) { $inp } else { "admin" }
     }
 
+    # Auth-source support contract (see README_framework.md "Authentication"):
+    # Supported: Local (recommended), vCenter SSO (VC/VC_GROUP), Active Directory
+    # (UPN form), LDAP (per spec; untested by us).  Not supported: VIDB ("VCF SSO")
+    # and VIDM (Workspace ONE Access) -- both are federated SSO sources that refuse
+    # programmatic password grants.  Use a Local service account for those deployments.
     if (-not $script:AuthSource) {
-        $inp = Read-Host "Auth source (local, or domain like corp.example.com) [local]"
+        $inp = Read-Host ("Auth source name (or 'local'). Type 'local' for local accounts;" +
+            " for non-local sources, type the auth-source name as configured" +
+            " in VCF Operations (e.g. your vCenter SSO source, AD source, or" +
+            " LDAP source). VIDB and VIDM are not supported -- use a local" +
+            " account. [local]")
         $script:AuthSource = $inp
     }
     $script:AuthSource = Resolve-AuthSource $script:AuthSource

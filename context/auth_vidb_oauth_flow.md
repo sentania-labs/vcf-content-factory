@@ -380,3 +380,17 @@ Confirmed mutually exclusive with this path:
    public spec at a high level; full probing requires a vCenter
    credential and an STS endpoint, out of scope for the primary
    lab pass.
+
+---
+
+## Addendum 2026-04-28 — VIDM exhibits the same refusal shape
+
+VIDM (`VMware Identity Manager / Workspace ONE Access`) was probed on the HoL
+lab (Aria Operations 8.x) via `POST /suite-api/api/auth/token/acquire` with
+both the standard `username+password+authSource` form and the embedded-username
+form documented elsewhere (`user@domain@source_name`). Both returned HTTP 401
++ `WWW-Authenticate: OpsToken, VCToken, SSO2Token, CSPToken, VIDBToken` with no
+server-side password-validation attempt — identical to VIDB's refusal shape
+documented above. VIDM is therefore covered by the same Local-only contract:
+use a Local service account for all programmatic access on instances that have
+VIDM as their only auth source.
