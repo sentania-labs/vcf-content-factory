@@ -3,13 +3,14 @@ name: vcfops-project-conventions
 description: >
   Project-specific conventions for the VCF Content Factory repo.
   Covers the [VCF Content Factory] naming prefix, YAML schema
-  conventions, validation commands, the agent delegation protocol,
-  the TOOLSET GAP reporting format, and the recon-before-authoring
-  requirement. Use this skill whenever authoring content in this
-  repo, delegating to subagents, reporting gaps, or validating
-  content. This skill is specific to this project — the domain
-  knowledge lives in the vcfops-api, vcfops-content-model, and
-  vcfops-supermetric-dsl global skills.
+  conventions, validation commands, the TOOLSET GAP reporting
+  format, and the recon-before-authoring requirement. Use this
+  skill whenever authoring content in this repo, reporting gaps,
+  or validating content. For delegation protocol and workflow
+  patterns, use vcfops-orchestration instead. This skill is
+  specific to this project — the domain knowledge lives in the
+  vcfops-api, vcfops-content-model, and vcfops-supermetric-dsl
+  global skills.
 ---
 
 # VCF Content Factory — project conventions
