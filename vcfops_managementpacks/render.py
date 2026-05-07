@@ -288,7 +288,10 @@ _STANDARD_CONFIG_FIELDS = [
         "label": "SSL Configuration",
         "usage": "${configuration.mpb_ssl_config}",
         "value": None,
-        "options": ["NO_VERIFY", "VERIFY", "NO_SSL"],
+        # Options in title-case to match working export (synology_nas_working_export.json §source):
+        # working: ["No Verify", "Verify", "No SSL"]
+        # Previous all-caps form ("NO_VERIFY" etc.) caused SINGLE_SELECTION mismatch.
+        "options": ["No Verify", "Verify", "No SSL"],
         "advanced": True,
         "editable": False,
         "configType": "SINGLE_SELECTION",
@@ -301,12 +304,16 @@ _STANDARD_CONFIG_FIELDS = [
         "label": "Minimum Event Severity",
         "usage": "${configuration.mpb_min_event_severity}",
         "value": None,
-        "options": ["INFO", "WARNING", "IMMEDIATE", "CRITICAL"],
+        # Options in title-case to match working export (synology_nas_working_export.json §source):
+        # working: ["Critical", "Immediate", "Warning", "Info"]
+        # defaultValue must be one of these options — previous "WARNING" (all-caps) caused
+        # SINGLE_SELECTION validator rejection at MPB import time.
+        "options": ["Critical", "Immediate", "Warning", "Info"],
         "advanced": True,
         "editable": False,
         "configType": "SINGLE_SELECTION",
         "description": "Minimum severity level for event collection.",
-        "defaultValue": "WARNING",
+        "defaultValue": "Warning",
     },
 ]
 
@@ -335,9 +342,29 @@ class _RequestInfo:
         dml_id is the fully-computed DML id (e.g. 'data.volumes.*' or 'base').
         field_path is the attribute label within the DML (relative to list item).
         The attribute origin ID is: <request_id>-<dml_id>-<attr_label>.
+
+        Gap F (2026-04-30): field_path may contain JMESPath filter predicates
+        such as ``radio_table_stats[?radio=='ng'].cu_total | [0]``.  Plain
+        ``split('.')`` is unsafe for these paths because the predicate contains
+        literal dots inside brackets.
+
+        Key-array strategy for JMESPath paths:
+          - If the path contains no ``[?`` predicate, split on '.' as before.
+          - If the path contains a ``[?`` predicate, emit the full path as a
+            single-element key array.  This preserves the expression verbatim
+            for MPB runtime evaluation.  The label is the full path string.
+          - The ``| [0]`` pipe-scalar suffix is kept in the key/label; it is
+            the standard JMESPath idiom for forcing a scalar from a list result.
         """
-        attr_key_path = field_path.split(".")
-        attr_label = field_path  # label is the dotted path
+        attr_label = field_path  # label is always the full path string
+
+        # Gap F: choose key-array strategy based on predicate presence.
+        if "[?" in field_path:
+            # JMESPath filter predicate — emit full expression as single token.
+            attr_key_path: List[str] = [field_path]
+        else:
+            attr_key_path = field_path.split(".")
+
         origin_id = f"{self.id}-{dml_id}-{attr_label}"
 
         if dml_id not in self.dmls:
@@ -579,9 +606,17 @@ def _render_source(
         # Use enumerate so that modified copies are written back into the list.
         # The previous `for cf in ...` loop rebind pattern lost all mutations
         # because the rebind only affected the local loop variable, not the list.
+        #
+        # mpb_ssl_config is intentionally omitted from this override map.
+        # The YAML ssl field uses loader enum values (NO_VERIFY, VERIFY, NO_SSL)
+        # but the MPB SINGLE_SELECTION options list uses display values
+        # ("No Verify", "Verify", "No SSL").  Setting defaultValue to the loader
+        # enum form ("NO_VERIFY") causes SINGLE_SELECTION validator rejection at
+        # MPB import time (confirmed: context/mpb_synology_import_diff_2026_04_29.md §7).
+        # The ssl default is user-configured per adapter instance; leave it as None
+        # so MPB forces the operator to pick explicitly.
         _SRC_OVERRIDES = {
             "mpb_port":               src.port,
-            "mpb_ssl_config":         src.ssl,
             "mpb_connection_timeout": src.timeout,
             "mpb_max_retries":        src.max_retries,
             "mpb_concurrent_requests": src.max_concurrent,
@@ -614,6 +649,7 @@ def _render_source(
         "testRequestId": test_request_id,
         "authentication": authentication,
         "configuration": adapter_config_fields,
+        "globalHeaders": _render_global_headers(mp),
         "requests": requests_dict,
         "resources": wire_objects,          # flat array (no {"object": ...} wrapper)
         "externalResources": [],            # factory does not model cross-adapter bindings
@@ -681,7 +717,7 @@ def _render_session_request(
 
     return {
         "id": req_id,
-        "body": req.body,
+        "body": _rewrite_auth_refs(req.body) if req.body else req.body,
         "name": request_name,
         "path": req.path or "",
         "method": (req.method or "GET").strip().upper(),
@@ -766,6 +802,22 @@ def _render_authentication(mp: ManagementPackDef) -> Dict:
             "sessionSettings": None,
         }
 
+    if auth.preset == "http_header":
+        # Stateless header-based auth (e.g. X-API-Key).
+        # Emits CUSTOM credential type with no sessionSettings block.
+        # TOKEN was previously emitted here but appears in zero known-working MPB
+        # imports and caused HTTP 400 on POST /internal/mpbuilder/designs/import.
+        # HoL GitLab-Basic (credentialType: CUSTOM, sessionSettings: null, single
+        # API-key header via globalHeaders) is the correct analogue (2026-05-07).
+        # The inject[] rules on this preset render into globalHeaders (handled in
+        # _render_global_headers) alongside Content-Type.
+        creds = [_render_cred_field(ak, c, "http_header") for c in auth.credentials]
+        return {
+            "creds": creds,
+            "credentialType": "CUSTOM",
+            "sessionSettings": None,
+        }
+
     if auth.preset == "cookie_session":
         creds = [_render_cred_field(ak, c, "custom") for c in auth.credentials]
 
@@ -779,31 +831,34 @@ def _render_authentication(mp: ManagementPackDef) -> Dict:
                 ak, auth.logout, "Release Session", f"{ak}:auth:releaseSession"
             )
 
-        # Session variables from extract rule
-        session_key = auth.extract.session_key
-        # For HEADER location:
-        #   key   — internal identifier used in substitution expressions;
-        #            MPB requires [A-Za-z0-9_]+ only.  Derived from bind_to
-        #            (e.g. "set_cookie") — NOT from the raw header name.
-        #   path  — the literal HTTP header name (e.g. "Set-Cookie") so MPB
-        #            knows which header to extract at collection time.
-        # These are two different fields with different validation rules.
-        # Wire parity note: Scott's build-8 reference MP (sentania_aria_operations_dsm_mp)
-        # uses key="Set-Cookie" (hyphenated), but MPB collection-time validator
-        # rejects that with SESSION_TOKEN_RESPONSE_FIELD / [A-Za-z0-9_]+ constraint.
-        # The safe form is session_key (already underscore-normalised from bind_to).
-        header_name = auth.extract.name  # literal header name, e.g. "Set-Cookie"
-        session_var_id = _make_id(f"{ak}:auth:sessionVar:{session_key}")
-        session_variables = [
-            {
+        # Session variables from extract rule(s).
+        #
+        # Gap B (2026-04-30): auth.extract is now List[ExtractRuleDef], allowing
+        # multiple session variables from one login response (e.g. TOKEN cookie +
+        # x-csrf-token header for UniFi classic-session auth).
+        #
+        # For each binding:
+        #   key   — internal identifier for substitution; MPB requires [A-Za-z0-9_]+.
+        #            Derived from bind_to (e.g. "set_cookie"), NOT the raw header name.
+        #   path  — the literal HTTP header name / JSON path for extraction.
+        #   usage — the ${authentication.session.<key>} template used in inject rules.
+        #   location — HEADER or BODY.
+        #
+        # Wire parity: Synology reference (sentania_aria_operations_dsm_mp) uses one
+        # entry; UniFi requires two.  sessionVariables is already an array in the wire
+        # format — adding a second entry is the natural extension.
+        session_variables = []
+        for ex in auth.extract:
+            session_key = ex.session_key
+            session_var_id = _make_id(f"{ak}:auth:sessionVar:{session_key}")
+            session_variables.append({
                 "id": session_var_id,
                 "key": session_key,        # ident-safe: from bind_to (e.g. "set_cookie")
-                "path": [header_name],     # literal header name preserved for extraction
+                "path": [ex.name],         # literal header name / JSON path for extraction
                 "usage": f"${{authentication.session.{session_key}}}",
                 "example": None,
-                "location": auth.extract.location,
-            }
-        ]
+                "location": ex.location,
+            })
 
         session_settings: Dict = {
             "getSession": get_session,
@@ -829,14 +884,20 @@ def _render_authentication(mp: ManagementPackDef) -> Dict:
 def _render_global_headers(mp: ManagementPackDef) -> List[Dict]:
     """Render globalHeaders.
 
-    For cookie_session preset: emit Content-Type + inject[] rules.
+    For cookie_session preset: emit Content-Type + inject[] rules (session refs).
+    For http_header preset: emit Content-Type + inject[] rules (credential refs).
     For other presets / no auth: emit just Content-Type.
 
     Wire format requires header type: REQUIRED | IMMUTABLE | CUSTOM.
-    Reference MP: Content-Type is REQUIRED; session cookie header is CUSTOM.
+    Reference MP: Content-Type is REQUIRED; injected auth headers are CUSTOM.
+
+    Gap 1 (2026-05-07): http_header preset processes inject rules the same way
+    as cookie_session but rewrites ${credentials.<key>} references instead of
+    ${session.<key>} references.  This allows static API-key headers (e.g.
+    X-API-Key) to be emitted as globalHeaders using the standard inject grammar.
     """
     src = mp.source
-    if not src or not src.auth or src.auth.preset != "cookie_session":
+    if not src or not src.auth or src.auth.preset not in ("cookie_session", "http_header"):
         # Default: just Content-Type
         return [
             {"key": "Content-Type", "type": "REQUIRED", "value": "application/json"}
@@ -846,20 +907,29 @@ def _render_global_headers(mp: ManagementPackDef) -> List[Dict]:
     headers: List[Dict] = []
     content_type_added = False
 
-    # Rewrite ${session.<key>} → ${authentication.session.<key>} at emit.
-    def _rewrite_session_refs(text: str) -> str:
-        return re.sub(r"\$\{session\.([a-zA-Z0-9_]+)\}",
+    def _rewrite_inject_refs(text: str) -> str:
+        """Rewrite auth variable references in inject rule values.
+
+        cookie_session: ${session.<key>} → ${authentication.session.<key>}
+        http_header:    ${credentials.<key>} → ${authentication.credentials.<key>}
+        Both presets may also use ${credentials.<key>} in inject values.
+        """
+        text = re.sub(r"\$\{session\.([a-zA-Z0-9_]+)\}",
                       r"${authentication.session.\1}", text)
+        text = re.sub(r"\$\{credentials\.([a-zA-Z0-9_]+)\}",
+                      r"${authentication.credentials.\1}", text)
+        return text
 
     for rule in auth.inject:
         key = rule.name
-        value = _rewrite_session_refs(rule.value)
+        value = _rewrite_inject_refs(rule.value)
         if key == "Content-Type":
             content_type_added = True
             htype = "REQUIRED"
         else:
             # Non-Content-Type inject rules are CUSTOM per wire format
-            # Reference MP: {"key": "id", "type": "CUSTOM", "value": "${authentication.session.set_cookie}"}
+            # Reference: Synology {"key": "id", "type": "CUSTOM", "value": "..."}
+            #            jcox unifi {"key": "X-API-KEY", "type": "CUSTOM", "value": "..."}
             htype = "CUSTOM"
         headers.append({"key": key, "type": htype, "value": value})
 
@@ -955,18 +1025,25 @@ def _render_requests(
         # Build map: metricSet.local_name → MetricSetDef
         ms_by_name: Dict[str, MetricSetDef] = {ms.local_name: ms for ms in ot.metric_sets}
 
+        # Determine if this object type uses scalar (base DML) context.
+        # Both is_world and is_singleton consume the response root as a
+        # scalar — no list iteration, all metricSets use listId "base".
+        # is_world  → adapter-instance root, no identifiers, MPB-managed rollups.
+        # is_singleton → one-per-adapter named entity with identifiers and metrics.
+        # List kinds (default) iterate over response rows; each row is one object.
+        is_scalar = ot.is_world or ot.is_singleton
+
         # Build map: metricSet.local_name → (req, dml_id)
         ms_dml: Dict[str, Tuple[RequestDef, str]] = {}
         for ms in ot.metric_sets:
             req = req_by_name[ms.from_request]
-            if ot.is_world:
-                # World/singleton objects always use the "base" DML regardless
-                # of response_path or list_path.  The computed dml_id would be
-                # e.g. "data.*" (from response_path="data", list_path=""), which
-                # is wrong — it creates a spurious wildcard DML on what should
-                # be a scalar-context request.  The reference (working export
-                # 2026-04-21) confirms: world-object requests carry ONLY a "base"
-                # DML in their response.result.dataModelLists.
+            if is_scalar:
+                # Scalar kinds always use the "base" DML regardless of response_path
+                # or list_path.  The computed dml_id would be e.g. "data.*" (from
+                # response_path="data", list_path=""), which is wrong — it creates a
+                # spurious wildcard DML on what should be a scalar-context request.
+                # Working export (2026-04-21) confirms: both world and singleton
+                # requests carry ONLY a "base" DML in their dataModelLists.
                 dml_id = "base"
             else:
                 dml_id = _compute_dml_id(req.response_path, ms.list_path)
@@ -983,8 +1060,13 @@ def _render_requests(
             ms_ref, field_path = _parse_source_ref(m.source)
             req, dml_id = ms_dml[ms_ref]
 
-            if ot.is_world:
-                # World/singleton: DML is "base"; prepend response_path to field_path
+            if is_scalar:
+                # Scalar kind: DML is "base"; prepend response_path to field_path so
+                # the attribute originId encodes the full path from the response root.
+                # e.g. response_path="data", field_path="cpu_clock_speed"
+                #   → full_fp="data.cpu_clock_speed", DML attr label="data.cpu_clock_speed"
+                # This matches the working export's originId pattern:
+                #   "<reqId>-base-data.cpu_clock_speed"
                 rp = (req.response_path or "").strip()
                 full_fp = f"{rp}.{field_path}" if rp else field_path
                 registry[req.name].register_field(full_fp, "base")
@@ -999,13 +1081,33 @@ def _render_requests(
             if ms.chained_from is None:
                 continue
 
-            parent_ms = ms_by_name[ms.chained_from]
-            parent_req, parent_dml_id = ms_dml[ms.chained_from]
+            # Gap 2 (2026-05-07): chained_from may reference a cross-object-type
+            # chain root — a top-level request that is NOT consumed as a from_request
+            # on any metricSet (including siblings on this object type).
+            # Detection: chained_from name is absent from ms_by_name but present in
+            # req_by_name.  For chain roots:
+            #   - parent_dml_id is computed from the root request's response_path
+            #     with an empty list_path (the root has no associated metricSet to
+            #     supply a list_path).
+            #   - bind.from_attribute entries are auto-synthesized onto the chain
+            #     root's DML the same way as for sibling chains.
+            #   - chainingSettings on the child is built identically.
+            if ms.chained_from not in ms_by_name:
+                # Cross-type chain root
+                chain_root_req = req_by_name[ms.chained_from]
+                parent_req = chain_root_req
+                parent_dml_id = _compute_dml_id(chain_root_req.response_path, "")
+            else:
+                parent_req, parent_dml_id = ms_dml[ms.chained_from]
+
             child_req, child_dml_id = ms_dml[ms.local_name]
             parent_req_info = registry[parent_req.name]
             child_req_info = registry[child_req.name]
 
-            # Auto-synthesize any bind.from_attribute not already in parent's DML
+            # Auto-synthesize any bind.from_attribute not already in parent's DML.
+            # For chain roots, ms_fields does not have an entry keyed by the root
+            # request name (only sibling metricSet names are in ms_fields), so we
+            # always auto-synthesize for chain-root binds.
             for b in ms.bind:
                 if b.from_attribute not in ms_fields.get(ms.chained_from, set()):
                     # Attribute not sourced by any metric; synthesize it
@@ -1141,12 +1243,21 @@ def _render_one_object(
     obj_id = _make_id(obj_seed)
     internal_id = _make_sub_id(obj_seed, "internalInfo")
 
+    # Scalar kind flag: both is_world and is_singleton use "base" DML context.
+    # is_world  → adapter topology root, no identifiers, MPB rollups only.
+    # is_singleton → one-per-adapter named entity, has identifiers and metrics.
+    # Both share the same scalar-context rendering paths: listId="base",
+    # full dotted path from response root as attribute label.
+    # List kinds use per-row DML ids and relative field paths.
+    is_scalar = ot.is_world or ot.is_singleton
+
     # Build map: metricSet.local_name → (MetricSetDef, RequestDef, dml_id)
     req_by_name: Dict[str, RequestDef] = {r.name: r for r in mp.requests}
     ms_context: Dict[str, Tuple["MetricSetDef", RequestDef, str]] = {}
     for ms in ot.metric_sets:
         req = req_by_name[ms.from_request]
-        if ot.is_world:
+        if is_scalar:
+            # Scalar kinds always use the "base" DML (no list iteration).
             dml_id = "base"
         else:
             dml_id = _compute_dml_id(req.response_path, ms.list_path)
@@ -1160,6 +1271,18 @@ def _render_one_object(
     for m in ot.metrics:
         ms_ref, _ = _parse_source_ref(m.source)
         metrics_by_ms.setdefault(ms_ref, []).append(m)
+
+    # Identify chain-parent metricSet local names on this object.
+    # A metricSet is a chain-parent if another metricSet's chained_from
+    # equals its local_name.  Chain-parents keep objectBinding: null.
+    # Chained secondaries (chained_from is not None) MUST get a non-null
+    # objectBinding per verify-time rule §8.1 of
+    # context/mpb_object_binding_wire_format.md.
+    chain_parent_names: set = {
+        ms.chained_from
+        for ms in ot.metric_sets
+        if ms.chained_from is not None
+    }
 
     # Build wire metricSets — one per MetricSetDef in ot.metric_sets
     wire_metric_sets: List[Dict] = []
@@ -1177,14 +1300,17 @@ def _render_one_object(
 
             _, field_path = _parse_source_ref(m.source)
 
-            if ot.is_world:
-                # World/singleton: base DML; full dotted path from response root
+            if is_scalar:
+                # Scalar kind: base DML; full dotted path from response root.
+                # e.g. response_path="data", field_path="cpu_clock_speed"
+                #   → expr_label = "data.cpu_clock_speed"
+                # Matches working export originId pattern: "<reqId>-base-data.<field>"
                 rp = (req.response_path or "").strip()
                 full_field_path = f"{rp}.{field_path}" if rp else field_path
                 origin_id = req_info.register_field(full_field_path, "base")
                 expr_label = full_field_path
             else:
-                # List object: field_path is relative to list item
+                # List kind: field_path is relative to list item row.
                 origin_id = req_info.register_field(field_path, dml_id)
                 expr_label = field_path
 
@@ -1209,72 +1335,160 @@ def _render_one_object(
                 "timeseries": None,
             })
 
-        # objectBinding rules (MPB collection-time validator):
-        #   - World/singleton objects (is_world): no list iteration → always None.
-        #   - List objects with one metricSet: None is valid (single group).
-        #   - List objects with multiple metricSets:
-        #       * Exactly ONE may have None objectBinding; that one must be
-        #         referenced by another request (i.e. it is the primary that
-        #         a chained request iterates from).  ms.primary == True marks
-        #         this metricSet.
-        #       * All other metricSets (chained, ms.primary == False) must carry
-        #         a non-null objectBinding.
+        # objectBinding for this metricSet.
         #
-        # For chained metricSets, objectBinding.matchExpression must use
-        # originType: "PARAMETER" pointing at chainingSettings.params[0].id.
-        # This mirrors the Rubrik reference design (Rubrik MP Design.json,
-        # objects[0].object.metricSets[1]) where the expressionPart that
-        # carries the per-row identity anchor uses:
-        #   originId   = chainingSettings.params[0].id   (the param's own ID)
-        #   originType = "PARAMETER"
-        #   label      = params[0].key                   (e.g. "volume_id")
-        # The earlier ATTRIBUTE/@@@id approach was synthesizing a placeholder
-        # that MPB rejects at design-validation time — @@@id is not a real
-        # attribute in this context and MPB cannot resolve it.
+        # Three cases — see context/mpb_object_binding_wire_format.md §10:
+        #
+        # Case 1 — Aria-native stitching (stitch_to declared in YAML):
+        #   Emit the two-expression stitching binding per §3.5 (Rubrik pattern):
+        #     matchExpression       → source response field (stitch_match_field),
+        #                             originType: ATTRIBUTE
+        #     objectMatchExpression → Aria-native metric pointer,
+        #                             originType: ARIA_OPS_METRIC, originId: stitch_to
+        #
+        # Case 2 — Chained-secondary metricSet (chained_from is not None):
+        #   Per §8.1 verify-time rule: every chained secondary MUST carry a non-null
+        #   objectBinding.  The null-everywhere approach from the 2026-04-29 morning
+        #   change was correct at import time but fails at verify time (the builder-
+        #   file parser enforces "at most one null per resource, and it must be the
+        #   chain-parent").
+        #   Emit §10.2 cross-metricSet ATTRIBUTE shape:
+        #     matchExpression.expressionParts[0]:
+        #       originId   = <parent_req_id>-<parent_list_id>-<parent_attr_label>
+        #       originType = "ATTRIBUTE"     (NOT "PARAMETER" — PARAMETER is only
+        #                                    valid with companion ome ARIA_OPS_METRIC,
+        #                                    per §9 vSAN-policy pattern; bare PARAMETER
+        #                                    without ome is the broken shape that
+        #                                    triggered this investigation)
+        #   NO objectMatchExpression — not stitching onto an Aria-native object.
+        #
+        # Case 3 — All other metricSets (singletons, scalar kinds, chain-parents):
+        #   objectBinding: null.
+        #   Chain-parent is the one metricSet per resource that MAY be null under
+        #   the verify rule (it is referenced by a secondary via chainingSettings).
+        #   Singletons and scalar kinds never iterate rows, so binding is moot.
         object_binding: Optional[Dict] = None
-        if not ot.is_world and not ms_def.primary and ms_def.chained_from is not None:
-            # Chained list metricSet: must have non-null objectBinding.
-            # Source the identity anchor from the chain parameter, not a
-            # synthetic @@@id attribute.
-            chain_settings = req_info._chaining_settings
-            if chain_settings and chain_settings.get("params"):
-                param = chain_settings["params"][0]
-                param_origin_id = param["id"]
-                param_label = param["key"]
-            else:
-                # Defensive fallback: chainingSettings not yet set or empty.
-                # This should not occur because _render_requests runs before
-                # _render_objects, but guard to avoid a silent crash.
-                logger.warning(
-                    "Object '%s' metricSet '%s': chainingSettings not set on "
-                    "child request at objectBinding build time; "
-                    "falling back to @@@id (will likely fail MPB validation).",
-                    ot.key, ms.local_name,
-                )
-                param_origin_id = f"{req_info.id}-{dml_id}-@@@id"
-                param_label = "@@@id"
+        ob_seed = f"{obj_seed}:metricSet:{ms.local_name}:objectBinding"
 
-            ob_seed = f"{obj_seed}:metricSet:{ms.local_name}:objectBinding"
-            ob_part_id = _make_id(f"{ob_seed}::part")
-            ob_expr_id = _make_id(f"{ob_seed}::expr")
+        if ms_def.stitch_to:
+            # Case 1: Stitching binding — Aria-native object correlation.
+            # Per context/mpb_object_binding_wire_format.md §3.5 (Rubrik pattern).
+            stitch_field = ms_def.stitch_match_field  # validated non-None by loader
+
+            # matchExpression: source field whose value matches the Aria identifier
+            match_origin_id = req_info.register_field(stitch_field, dml_id)
+            match_expr = _make_expression(
+                label=stitch_field,
+                origin_id=match_origin_id,
+                origin_type="ATTRIBUTE",
+                expr_seed=f"{ob_seed}::matchExpr",
+            )
+
+            # objectMatchExpression: Aria-native metric pointer (ARIA_OPS_METRIC)
+            obj_match_expr = _make_expression(
+                label=stitch_field,
+                origin_id=ms_def.stitch_to,
+                origin_type="ARIA_OPS_METRIC",
+                expr_seed=f"{ob_seed}::objMatchExpr",
+            )
+
             object_binding = {
                 "type": "ATTRIBUTE_TO_PROPERTY",
-                "matchExpression": {
-                    "id": ob_expr_id,
-                    "expressionText": f"@@@MPB_QUOTE {ob_part_id} @@@MPB_QUOTE",
-                    "expressionParts": [
-                        {
-                            "id": ob_part_id,
-                            "label": param_label,
-                            "regex": None,
-                            "example": "",
-                            "originId": param_origin_id,
-                            "originType": "PARAMETER",
-                            "regexOutput": "",
-                        }
-                    ],
-                },
+                "matchExpression": match_expr,
+                "objectMatchExpression": obj_match_expr,
             }
+
+        elif ms.chained_from is not None and ms.local_name not in chain_parent_names:
+            # Case 2 — Chained-secondary metricSet: non-null objectBinding required.
+            #
+            # Ground truth: jcox-au_vmware/unifi_MP_Builder_Design.json
+            # "UniFi - Devices" object, ms[1] (get-device-statistics).
+            # Confirmed 2026-05-07.
+            #
+            # Shape (two-expression, ATTRIBUTE_TO_PROPERTY):
+            #
+            #   matchExpression:
+            #     Points at the SECONDARY's own identifier attribute (the field
+            #     in the secondary response that uniquely identifies the row and
+            #     matches the parent's chain key).
+            #     originId   = <secondary_req_id>-<secondary_dml_id>-<from_attribute>
+            #     originType = "ATTRIBUTE"
+            #     label      = bind[0].from_attribute  (same field name, secondary side)
+            #
+            #   objectMatchExpression:
+            #     Points at the PARENT metricSet's metric whose source field equals
+            #     bind[0].from_attribute (i.e., the metric that stores the chain-key
+            #     value from the parent row).
+            #     originId   = metric wire ID of that parent metric (_make_id seed)
+            #     originType = "METRIC"
+            #     label      = that metric's display label (m.label)
+            #
+            # This is NOT an Aria-native stitch (no ARIA_OPS_METRIC) — it is
+            # pure intra-MP cross-metricSet correlation binding.
+            #
+            # bind[0].from_attribute = the attribute label on the parent's DML rows
+            # that is also present on the secondary's DML rows.
+            parent_ms_local_name = ms.chained_from
+            parent_attr_label = ms.bind[0].from_attribute
+
+            # matchExpression: secondary's own attribute (same field name as from_attribute)
+            ob_match_origin_id = req_info.register_field(parent_attr_label, dml_id)
+            match_expr_ob = _make_expression(
+                label=parent_attr_label,
+                origin_id=ob_match_origin_id,
+                origin_type="ATTRIBUTE",
+                expr_seed=f"{ob_seed}::matchExpr",
+            )
+
+            # objectMatchExpression: parent metricSet's metric whose field_path
+            # equals from_attribute.  Iterate parent's metrics to find it.
+            obj_match_expr_ob = None
+            for parent_m in metrics_by_ms.get(parent_ms_local_name, []):
+                _, parent_field_path = _parse_source_ref(parent_m.source)
+                if parent_field_path == parent_attr_label:
+                    parent_metric_id = _make_id(f"{obj_seed}:metric:{parent_m.key}")
+                    obj_match_expr_ob = _make_expression(
+                        label=parent_m.label,
+                        origin_id=parent_metric_id,
+                        origin_type="METRIC",
+                        expr_seed=f"{ob_seed}::objMatchExpr",
+                    )
+                    break
+
+            if obj_match_expr_ob is None:
+                # Parent has no metric sourced from from_attribute — this means
+                # the bind attribute was auto-synthesized (not explicitly declared
+                # as a metric).  Fall back to ATTRIBUTE shape pointing at the
+                # parent's DML attribute (pre-2026-05-07 behaviour) rather than
+                # emitting an invalid binding.
+                _parent_ms_def, parent_req_fb, parent_dml_id_fb = ms_context[parent_ms_local_name]
+                parent_req_info_fb = request_registry[parent_req_fb.name]
+                fb_origin_id = (
+                    f"{parent_req_info_fb.id}-{parent_dml_id_fb}-{parent_attr_label}"
+                )
+                obj_match_expr_ob = _make_expression(
+                    label=parent_attr_label,
+                    origin_id=fb_origin_id,
+                    origin_type="ATTRIBUTE",
+                    expr_seed=f"{ob_seed}::objMatchExprFallback",
+                )
+                logger.warning(
+                    "Object '%s' metricSet '%s': no parent metric sourced from "
+                    "from_attribute '%s' on metricSet '%s'; falling back to "
+                    "ATTRIBUTE objectMatchExpression (MPB may reject at verify time).",
+                    ot.name, ms.local_name, parent_attr_label, parent_ms_local_name,
+                )
+
+            object_binding = {
+                "type": "ATTRIBUTE_TO_PROPERTY",
+                "matchExpression": match_expr_ob,
+                "objectMatchExpression": obj_match_expr_ob,
+            }
+
+        # Case 3 — All other metricSets (chain-parents, singletons, scalar kinds):
+        # objectBinding: null.  Chain-parent keeps null — it is the one metricSet
+        # per resource allowed to be null under the verify rule.
+        # pass — object_binding remains None (null)
 
         wire_metric_sets.append({
             "id": ms_id,
@@ -1287,7 +1501,8 @@ def _render_one_object(
     # Build nameMetricExpression
     name_expr = _render_name_expression(ot, metric_map, obj_seed)
 
-    # Log world-object identity tier for debugging (Tier 3.3 axis 7)
+    # Log world-object identity tier for debugging (Tier 3.3 axis 7).
+    # identity: block is is_world-only; is_singleton does not declare identity.
     if ot.is_world and ot.identity is not None:
         logger.info(
             "Object '%s' (world): identity tier=%r source=%r",
@@ -1309,13 +1524,18 @@ def _render_one_object(
 
     # Return flat object (no {"object": ...} wrapper).
     # Wire format reference: mpb_rubrik_adapter3/conf/design.json §source.resources.
+    #
+    # isListObject:
+    #   - is_world     → false (adapter-instance root, no list iteration)
+    #   - is_singleton → false (one-per-adapter named entity, no list iteration)
+    #   - list kind    → true  (one MPB object instance per response row)
     return {
         "id": obj_id,
         "type": ot.type,
         "designId": None,
         "metricSets": wire_metric_sets,
         "ariaOpsConf": None,
-        "isListObject": not ot.is_world,
+        "isListObject": not is_scalar,
         "internalObjectInfo": {
             "id": internal_id,
             "icon": ot.icon,

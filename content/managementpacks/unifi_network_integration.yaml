@@ -1,0 +1,598 @@
+# UniFi Network Integration Management Pack — v1
+#
+# API map: context/api-maps/unifi-integration-api.md
+# Auth: X-API-Key header (stateless; no login/logout).
+#   Uses http_header preset — renders as a globalHeader with the exact
+#   name "X-API-Key" (no manual MPB adjustment required).
+# Site ID: propagated via chain root (sites request fires once, iterates
+#   site rows, and pushes site UUID to all downstream device requests via
+#   ${chain.site_id}). No config_fields / ${configuration.site_id} needed.
+#   sites is a chain root: declared in requests:, not consumed by any metricSet
+#   as from_request, but referenced via chained_from on each primary metricSet.
+#
+# Architecture:
+#   Access Point — list. Server-side filter: features.contains('accessPoint').
+#     Primary metricSet chains off sites (cross-object-type chain root).
+#     Properties from /devices (primary metricSet).
+#     Metrics from /devices/{id}/statistics/latest (chained metricSet).
+#
+#   Switch — list. Server-side filter: and(features.contains('switching'),
+#     not(features.contains('accessPoint')),not(model.like('UDM*'))).
+#     Excludes APs (dual features.contains results) and UDM Pro gateway.
+#     Primary metricSet chains off sites. Properties from /devices (primary).
+#     Metrics from /statistics/latest (chained).
+#
+#   Gateway — list. Server-side filter: model.like('UDM*').
+#     UDM Pro does not self-tag as 'gateway' in features[] (live-verified 2026-05-07).
+#     Primary metricSet chains off sites. Properties from /devices (primary).
+#     Metrics from /statistics/latest (chained).
+#
+# N+1 pattern: /statistics/latest fires once per device (one call per AP,
+#   switch, gateway row). On a 15-device lab: 6 + 9 + 1 = 16 statistics calls
+#   per collection cycle. Acceptable at this scale.
+#
+# Requires: UniFi Network Application 10.1.84+ with Integration API enabled.
+# Live-verified on: Network App 10.3.55, UniFi OS 5.0.16 (2026-05-07).
+#
+name: "VCF Content Factory UniFi Integration"
+version: "1.0.0"
+build_number: 1
+author: "VCF Content Factory"
+adapter_kind: mpb_unifi_integration
+description: >
+  Monitors UniFi network devices via the Integration API v1. Collects device
+  health (CPU, memory, uptime, load averages, uplink throughput, per-radio TX
+  retries) and inventory properties for Access Points, Switches, and the
+  Gateway (UDM Pro). Uses stateless X-API-Key auth (no login/logout session).
+  Requires UniFi Network Application 10.1.84+ with Integration API enabled.
+
+source:
+  port: 443
+  ssl: NO_VERIFY
+  base_path: ""
+  timeout: 30
+  max_retries: 2
+  max_concurrent: 10
+
+  auth:
+    preset: http_header
+
+    credentials:
+      - {key: api_key, label: api_key, sensitive: true}
+
+    inject:
+      - type: header
+        name: "X-API-Key"
+        value: "${credentials.api_key}"
+
+  test_request:
+    method: GET
+    path: "/proxy/network/integration/v1/info"
+    params: []
+
+
+# ---------------------------------------------------------------------------
+# Requests — MP scope (7 total)
+# All paths are full from root (base_path is empty per feedback_mp_full_paths_required.md).
+# Auth: http_header preset — X-API-Key rendered as a globalHeader (no manual MPB edit needed).
+# Chain topology: sites (chain root, no object type) → devices_ap/switch/gateway (per-site)
+#   → device_stats_ap/switch/gateway (per-device). Site UUID flows via ${chain.site_id};
+#   device UUID flows via ${chain.device_id}.
+# ---------------------------------------------------------------------------
+
+requests:
+  # Request 1: sites — chain root. Fires GET /sites once per collection cycle.
+  # No object type consumes it as from_request; instead, each primary metricSet
+  # on AP, Switch, and Gateway declares chained_from: sites, propagating the
+  # site UUID to their respective device requests via ${chain.site_id}.
+  # Observed response shape: {offset,limit,count,totalCount,data:[{id,internalReference,name}]}
+  - name: sites
+    method: GET
+    path: "/proxy/network/integration/v1/sites"
+    params: []
+    response_path: "data"
+
+  # Request 2: devices_ap — Access Point device list.
+  # ${chain.site_id} is substituted per row from the sites chain root.
+  # Server-side filter: features.contains('accessPoint').
+  # Live-verified 2026-05-07: returns 6 devices on lab (4 pure APs + 2 AP-with-switching AC IW).
+  # response_path: "data" exposes the array; list_path: "" iterates over it.
+  - name: devices_ap
+    method: GET
+    path: "/proxy/network/integration/v1/sites/${chain.site_id}/devices"
+    params:
+      - {key: filter, value: "features.contains('accessPoint')"}
+    response_path: "data"
+
+  # Request 3: devices_switch — Switch device list.
+  # ${chain.site_id} is substituted per row from the sites chain root.
+  # Compound filter excludes APs (dual-feature AC IW) and the UDM Pro gateway
+  # (which has features: ["switching"] but is the gateway device).
+  # Live-verified 2026-05-07: features.contains('switching') returns 11 on lab;
+  # after excluding accessPoint and UDM* model, expect ~9 pure switches.
+  - name: devices_switch
+    method: GET
+    path: "/proxy/network/integration/v1/sites/${chain.site_id}/devices"
+    params:
+      - {key: filter, value: "and(features.contains('switching'),not(features.contains('accessPoint')),not(model.like('UDM*')))"}
+    response_path: "data"
+
+  # Request 4: devices_gateway — Gateway device list.
+  # ${chain.site_id} is substituted per row from the sites chain root.
+  # UDM Pro does NOT self-tag as 'gateway' in features[] — filter by model pattern instead.
+  # Live-verified 2026-05-07: features.contains('gateway') returns 0; model.like('UDM*') is correct.
+  - name: devices_gateway
+    method: GET
+    path: "/proxy/network/integration/v1/sites/${chain.site_id}/devices"
+    params:
+      - {key: filter, value: "model.like('UDM*')"}
+    response_path: "data"
+
+  # Requests 5–7: device_stats_ap / device_stats_switch / device_stats_gateway
+  # Three identical copies of the per-device statistics request, one per object type.
+  # Splitting is required because the renderer can only emit one chainingSettings block
+  # per request name in the wire JSON — sharing a single device_stats across three
+  # object types would silence AP and Switch statistics (chain sharing bug).
+  # ${chain.site_id} propagates from the sites chain root (via devices_ap/switch/gateway);
+  # ${chain.device_id} is substituted with the 'id' UUID field from the parent device row.
+  # response_path: "" — response is a top-level object (not wrapped in data[]).
+  # Observed fields: uptimeSec, cpuUtilizationPct, memoryUtilizationPct,
+  #   loadAverage1Min/5Min/15Min, uplink.{txRateBps,rxRateBps},
+  #   interfaces.radios[].{frequencyGHz,txRetriesPct}
+  # interfaces.radios is absent or empty on switches and the UDM Pro (non-AP devices).
+  # Live-verified 2026-05-07 on UDM Pro, Nano HD AP, USW Pro XG 8 PoE.
+  - name: device_stats_ap
+    method: GET
+    path: "/proxy/network/integration/v1/sites/${chain.site_id}/devices/${chain.device_id}/statistics/latest"
+    params: []
+    response_path: ""
+
+  - name: device_stats_switch
+    method: GET
+    path: "/proxy/network/integration/v1/sites/${chain.site_id}/devices/${chain.device_id}/statistics/latest"
+    params: []
+    response_path: ""
+
+  - name: device_stats_gateway
+    method: GET
+    path: "/proxy/network/integration/v1/sites/${chain.site_id}/devices/${chain.device_id}/statistics/latest"
+    params: []
+    response_path: ""
+
+
+# ---------------------------------------------------------------------------
+# Object types (3 total)
+# UniFi Site is a chain root, not an object type. It is declared in requests:
+# and referenced via chained_from: sites on each primary metricSet.
+# ---------------------------------------------------------------------------
+
+object_types:
+
+  # -------------------------------------------------------------------------
+  # Access Point — list
+  # Source: /sites/{id}/devices filtered by features.contains('accessPoint').
+  # Primary metricSet chains off sites (cross-object-type chain root).
+  # Properties from devices_ap (primary). Metrics from device_stats (chained).
+  # Per-radio TX retry metrics use JMESPath filter predicates on interfaces.radios[].
+  # -------------------------------------------------------------------------
+  - name: "Access Point"
+    key: access_point
+    type: INTERNAL
+    icon: "wireless-access-point.svg"
+    is_singleton: false
+    identifiers: [device_id]
+    name_expression: name
+
+    metricSets:
+      # Primary: defines list membership — one Access Point object per devices_ap row.
+      # chained_from: sites — cross-object-type chain root; propagates site UUID via
+      # ${chain.site_id} into the devices_ap request path.
+      - from_request: devices_ap
+        primary: true
+        list_path: ""
+        chained_from: sites
+        bind:
+          - name: site_id
+            from_attribute: id
+
+      # Chained secondary: fires once per devices_ap row, substituting ${chain.device_id}.
+      # bind: from_attribute: id — the 'id' UUID field on each device row.
+      - from_request: device_stats_ap
+        chained_from: devices_ap
+        list_path: ""
+        bind:
+          - name: device_id
+            from_attribute: id
+
+    metrics:
+      # --- Properties from devices_ap ---
+      - key: device_id
+        label: "Device ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_ap.id"
+
+      - key: mac_address
+        label: "MAC Address"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_ap.macAddress"
+
+      - key: ip_address
+        label: "IP Address"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_ap.ipAddress"
+
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_ap.name"
+
+      - key: model
+        label: "Model"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_ap.model"
+
+      # state is a string enum on Integration API: "ONLINE", "OFFLINE",
+      # "PENDING_ADOPTION", "UPDATING", "GETTING_READY", "ADOPTING",
+      # "DELETING", "CONNECTION_INTERRUPTED", "ISOLATED", "U5G_INCORRECT_TOPOLOGY"
+      - key: state
+        label: "State"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_ap.state"
+
+      - key: firmware_version
+        label: "Firmware Version"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_ap.firmwareVersion"
+
+      - key: firmware_updatable
+        label: "Firmware Updatable"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_ap.firmwareUpdatable"
+
+      # --- Metrics from device_stats_ap ---
+      - key: cpu_pct
+        label: "CPU %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_ap.cpuUtilizationPct"
+
+      - key: mem_pct
+        label: "Memory %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_ap.memoryUtilizationPct"
+
+      - key: uptime_seconds
+        label: "Uptime (s)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_ap.uptimeSec"
+
+      - key: load_avg_1m
+        label: "Load Average (1m)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_ap.loadAverage1Min"
+
+      - key: load_avg_5m
+        label: "Load Average (5m)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_ap.loadAverage5Min"
+
+      - key: load_avg_15m
+        label: "Load Average (15m)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_ap.loadAverage15Min"
+
+      - key: uplink_tx_bps
+        label: "Uplink TX (bps)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_ap.uplink.txRateBps"
+
+      - key: uplink_rx_bps
+        label: "Uplink RX (bps)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_ap.uplink.rxRateBps"
+
+      # Per-radio TX retries — AP-only field. JMESPath filter on frequencyGHz number literal.
+      # interfaces.radios is absent or empty ({}) on switches and gateway — MPB reports
+      # no data for these metrics on non-AP devices (expected; not a collection error).
+      - key: radio_24ghz_tx_retries_pct
+        label: "2.4 GHz TX Retries %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_ap.interfaces.radios[?frequencyGHz==`2.4`].txRetriesPct | [0]"
+
+      - key: radio_5ghz_tx_retries_pct
+        label: "5 GHz TX Retries %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_ap.interfaces.radios[?frequencyGHz==`5`].txRetriesPct | [0]"
+
+
+  # -------------------------------------------------------------------------
+  # Switch — list
+  # Source: /sites/{id}/devices filtered by switching+not(accessPoint)+not(UDM*).
+  # Primary metricSet chains off sites (cross-object-type chain root).
+  # Properties from devices_switch (primary). Metrics from device_stats (chained).
+  # Radio metrics omitted — switches have no radio interfaces.
+  # -------------------------------------------------------------------------
+  - name: "Switch"
+    key: switch
+    type: INTERNAL
+    icon: "network-switch.svg"
+    is_singleton: false
+    identifiers: [device_id]
+    name_expression: name
+
+    metricSets:
+      # Primary: chained_from: sites propagates site UUID via ${chain.site_id}.
+      - from_request: devices_switch
+        primary: true
+        list_path: ""
+        chained_from: sites
+        bind:
+          - name: site_id
+            from_attribute: id
+
+      - from_request: device_stats_switch
+        chained_from: devices_switch
+        list_path: ""
+        bind:
+          - name: device_id
+            from_attribute: id
+
+    metrics:
+      # --- Properties from devices_switch ---
+      - key: device_id
+        label: "Device ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_switch.id"
+
+      - key: mac_address
+        label: "MAC Address"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_switch.macAddress"
+
+      - key: ip_address
+        label: "IP Address"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_switch.ipAddress"
+
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_switch.name"
+
+      - key: model
+        label: "Model"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_switch.model"
+
+      - key: state
+        label: "State"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_switch.state"
+
+      - key: firmware_version
+        label: "Firmware Version"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_switch.firmwareVersion"
+
+      - key: firmware_updatable
+        label: "Firmware Updatable"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_switch.firmwareUpdatable"
+
+      # --- Metrics from device_stats_switch ---
+      - key: cpu_pct
+        label: "CPU %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_switch.cpuUtilizationPct"
+
+      - key: mem_pct
+        label: "Memory %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_switch.memoryUtilizationPct"
+
+      - key: uptime_seconds
+        label: "Uptime (s)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_switch.uptimeSec"
+
+      - key: load_avg_1m
+        label: "Load Average (1m)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_switch.loadAverage1Min"
+
+      - key: load_avg_5m
+        label: "Load Average (5m)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_switch.loadAverage5Min"
+
+      - key: load_avg_15m
+        label: "Load Average (15m)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_switch.loadAverage15Min"
+
+      - key: uplink_tx_bps
+        label: "Uplink TX (bps)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_switch.uplink.txRateBps"
+
+      - key: uplink_rx_bps
+        label: "Uplink RX (bps)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_switch.uplink.rxRateBps"
+
+
+  # -------------------------------------------------------------------------
+  # Gateway — list
+  # Source: /sites/{id}/devices filtered by model.like('UDM*').
+  # UDM Pro is the gateway. features.contains('gateway') returns 0 on this lab
+  # because UDM Pro self-reports features: ["switching"] only (live-verified 2026-05-07).
+  # Primary metricSet chains off sites (cross-object-type chain root).
+  # Properties from devices_gateway (primary). Metrics from device_stats (chained).
+  # uplink.txRateBps/rxRateBps represents the WAN uplink throughput on the UDM Pro.
+  # -------------------------------------------------------------------------
+  - name: "Gateway"
+    key: gateway
+    type: INTERNAL
+    icon: "firewall.svg"
+    is_singleton: false
+    identifiers: [device_id]
+    name_expression: name
+
+    metricSets:
+      # Primary: chained_from: sites propagates site UUID via ${chain.site_id}.
+      - from_request: devices_gateway
+        primary: true
+        list_path: ""
+        chained_from: sites
+        bind:
+          - name: site_id
+            from_attribute: id
+
+      - from_request: device_stats_gateway
+        chained_from: devices_gateway
+        list_path: ""
+        bind:
+          - name: device_id
+            from_attribute: id
+
+    metrics:
+      # --- Properties from devices_gateway ---
+      - key: device_id
+        label: "Device ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_gateway.id"
+
+      - key: mac_address
+        label: "MAC Address"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_gateway.macAddress"
+
+      - key: ip_address
+        label: "IP Address"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_gateway.ipAddress"
+
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_gateway.name"
+
+      - key: model
+        label: "Model"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_gateway.model"
+
+      - key: state
+        label: "State"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_gateway.state"
+
+      - key: firmware_version
+        label: "Firmware Version"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_gateway.firmwareVersion"
+
+      - key: firmware_updatable
+        label: "Firmware Updatable"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:devices_gateway.firmwareUpdatable"
+
+      # --- Metrics from device_stats_gateway ---
+      # uplink.txRateBps/rxRateBps represents WAN uplink throughput on the UDM Pro.
+      # Observed live: {"txRateBps": 4552, "rxRateBps": 4968} during idle polling.
+      - key: cpu_pct
+        label: "CPU %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_gateway.cpuUtilizationPct"
+
+      - key: mem_pct
+        label: "Memory %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_gateway.memoryUtilizationPct"
+
+      - key: uptime_seconds
+        label: "Uptime (s)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_gateway.uptimeSec"
+
+      - key: load_avg_1m
+        label: "Load Average (1m)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_gateway.loadAverage1Min"
+
+      - key: load_avg_5m
+        label: "Load Average (5m)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_gateway.loadAverage5Min"
+
+      - key: load_avg_15m
+        label: "Load Average (15m)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_gateway.loadAverage15Min"
+
+      - key: uplink_tx_bps
+        label: "WAN Uplink TX (bps)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_gateway.uplink.txRateBps"
+
+      - key: uplink_rx_bps
+        label: "WAN Uplink RX (bps)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:device_stats_gateway.uplink.rxRateBps"
+
+
+# No explicit relationships in v1.
+# AP, Switch, and Gateway all parent the adapter instance implicitly
+# via MPB's default containment model.
+# UniFi Site is a chain root, not an object type — it does not appear
+# in the object hierarchy.
+relationships: []

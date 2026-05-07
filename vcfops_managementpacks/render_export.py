@@ -83,7 +83,11 @@ _FLAT_ONLY_KEYS: frozenset = frozenset({
 })
 
 
-def _strip_flat_only_fields(obj: Any, _in_chaining: bool = False) -> Any:
+def _strip_flat_only_fields(
+    obj: Any,
+    _in_chaining: bool = False,
+    _in_objectbinding: bool = False,
+) -> Any:
     """Recursively remove all flat-format-only keys from the exchange output.
 
     The flat format (render.py) emits several fields that MPB's exchange
@@ -98,29 +102,48 @@ def _strip_flat_only_fields(obj: Any, _in_chaining: bool = False) -> Any:
       - _renderer_note — internal renderer annotation on relationships and
                          expression parts
 
-    Exception: when inside a chainingSettings block, example/regex/regexOutput
+    Exception 1: when inside a chainingSettings block, example/regex/regexOutput
     on params[] and their expressionParts[] are REQUIRED by MPB (confirmed from
     HoL-2501-12 GitLab-Basic.json reference, 2026-04-19).  Those fields are
     preserved when _in_chaining=True.
+
+    Exception 2: when inside an objectBinding block, example/regex/regexOutput
+    on matchExpression/objectMatchExpression expressionParts[] are present in
+    jcox-au_vmware/unifi_MP_Builder_Design.json (exchange format ground truth,
+    2026-04-29).  Those fields are preserved when _in_objectbinding=True.
     """
     if isinstance(obj, dict):
         result = {}
         for k, v in obj.items():
             # Entering chainingSettings switches to chaining context
             if k == "chainingSettings":
-                result[k] = _strip_flat_only_fields(v, _in_chaining=True)
+                result[k] = _strip_flat_only_fields(
+                    v, _in_chaining=True, _in_objectbinding=False
+                )
                 continue
-            # Inside chaining, preserve the fields MPB requires
-            if _in_chaining and k in _FLAT_ONLY_KEYS:
+            # Entering objectBinding switches to objectbinding context
+            if k == "objectBinding":
+                result[k] = _strip_flat_only_fields(
+                    v, _in_chaining=False, _in_objectbinding=True
+                )
+                continue
+            # Inside chaining or objectBinding, preserve the fields MPB requires
+            if (_in_chaining or _in_objectbinding) and k in _FLAT_ONLY_KEYS:
                 result[k] = v
                 continue
             if k in _FLAT_ONLY_KEYS:
                 continue
-            result[k] = _strip_flat_only_fields(v, _in_chaining=_in_chaining)
+            result[k] = _strip_flat_only_fields(
+                v, _in_chaining=_in_chaining, _in_objectbinding=_in_objectbinding
+            )
         return result
     if isinstance(obj, list):
-        return [_strip_flat_only_fields(item, _in_chaining=_in_chaining)
-                for item in obj]
+        return [
+            _strip_flat_only_fields(
+                item, _in_chaining=_in_chaining, _in_objectbinding=_in_objectbinding
+            )
+            for item in obj
+        ]
     return obj
 
 
@@ -385,9 +408,16 @@ def _strip_metric(metric: Dict[str, Any]) -> Dict[str, Any]:
 def _strip_metric_set(ms: Dict[str, Any]) -> Dict[str, Any]:
     """Strip flat-format-only fields from a metricSet dict.
 
-    objectBinding: kept when non-null (required for chained list metricSets per
-    MPB collection-time validator); dropped only when null (absent in exchange
-    format for world/singleton and primary list metricSets).
+    objectBinding: kept when non-null (required for chained-secondary metricSets
+    per MPB verify-time rule §8.1 — context/mpb_object_binding_wire_format.md).
+    Dropped only when null (absent in exchange format for chain-parent,
+    world/singleton, and single-metricSet list objects).
+    The _strip_flat_only_fields pass preserves example/regex/regexOutput inside
+    objectBinding.matchExpression/objectMatchExpression (ground truth: jcox
+    exchange format includes them; see render_export.py _in_objectbinding flag).
+    The two-expression shape (matchExpression + objectMatchExpression with
+    originType METRIC) is required for chained-secondary bindings — confirmed
+    from jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-07).
     Recurses into metrics[].
     """
     result = dict(ms)
@@ -537,8 +567,12 @@ def render_mpb_exchange_json(
     #       "version": "1.0.0"
     #     }
     #   }
-    # Keys ABSENT in reference: buildNumber (top-level design block), id, author.
-    # All three were incorrectly emitted before the 2026-04-21 wire-format audit.
+    # Keys ABSENT in synology_nas_working_export.json: buildNumber, id, author.
+    # id and author were incorrectly emitted before the 2026-04-21 wire-format audit.
+    # buildNumber is present in the jcox-au_vmware UniFi reference at
+    # design.buildNumber (sibling to design.design). Emit it from mp.build_number
+    # (YAML field, defaults to 1). This allows MPB to distinguish successive
+    # re-renders of the same version. See 2026-05-01 renderer gap fix.
     # ------------------------------------------------------------------
     design_block = {
         "design": {
@@ -546,7 +580,8 @@ def render_mpb_exchange_json(
             "type": src.get("type", "HTTP"),
             "description": pak.get("description", ""),
             "version": mp.version,  # base version, no build suffix
-        }
+        },
+        "buildNumber": mp.build_number,
     }
 
     # ------------------------------------------------------------------
@@ -672,13 +707,16 @@ def render_mpb_exchange_json(
             for evt in src.get("events", [])
         ]
 
-    # Top-level exchange format confirmed from synology_nas_working_export.json
-    # (2026-04-21 ground truth):
-    #   - type: "HTTP"  — present at top level (was missing before 2026-04-21 audit)
-    #   - content key — ABSENT (was incorrectly emitted as content: [] before)
+    # Top-level exchange format:
+    #   - type: "HTTP"  — present at top level (confirmed from synology_nas_working_export.json)
+    #   - content: null — present in all four reference-pack UI exports (jcox UniFi,
+    #     phpIPAM, Rubrik, vSAN-policy) per mpb_import_diff_unifi_2026_05_07.md §2.
+    #     The Synology working export omits it, but emitting null is the safer
+    #     superset of both patterns.  Added 2026-05-07 to resolve import failures.
     # Key order matches the reference for readability, though MPB ignores order.
     exchange = {
         "type": src.get("type", "HTTP"),
+        "content": None,
         "design": design_block,
         "source": source_block,
         "objects": objects_list,

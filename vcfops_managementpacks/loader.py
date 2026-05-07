@@ -192,7 +192,7 @@ VALID_METRIC_TYPE = {"STRING", "NUMBER"}
 VALID_OBJECT_TYPE = {"INTERNAL", "ARIA_OPS"}
 # Flow-based auth presets (Tier 3.2, 2026-04-18).
 # VALID_AUTH_TYPE enum is retired — see migration note in _parse_auth().
-VALID_AUTH_PRESET = {"cookie_session", "bearer_token", "basic_auth", "none"}
+VALID_AUTH_PRESET = {"cookie_session", "bearer_token", "basic_auth", "http_header", "none"}
 VALID_SSL = {"NO_VERIFY", "VERIFY", "NO_SSL"}
 
 # Relationship scope kinds (Tier 3.3, 2026-04-18).
@@ -234,6 +234,13 @@ _METRICSET_SOURCE_RE = re.compile(r"^metricset:([a-zA-Z0-9_]+)\.(.+)$")
 
 # OLD (rejected): "request:<request_name>.<field_path>" source references
 _OLD_REQUEST_SOURCE_RE = re.compile(r"^request:[a-zA-Z0-9_]+\..+$")
+
+# Gap F: Detect JMESPath filter predicates in source paths.
+# A predicate is any "[?" substring anywhere in the path.
+_JMESPATH_FILTER_RE = re.compile(r"\[\?")
+
+# Gap F: Detect JMESPath pipe-scalar suffix "| [0]" at end of path.
+_JMESPATH_PIPE_SCALAR_RE = re.compile(r"\s*\|\s*\[0\]\s*$")
 
 # ${chain.<name>} substitution in request params/path/body
 _CHAIN_TOKEN_RE = re.compile(r"\$\{chain\.([a-zA-Z0-9_]+)\}")
@@ -351,6 +358,7 @@ class MetricDef:
     source: "MetricSourceDef"   # parsed source (Tier 3.3)
     unit: str = ""
     kpi: bool = False
+    coerce: Optional[str] = None   # Gap D: optional "number" hint for string→NUMBER coercion
 
 
 @dataclass
@@ -410,6 +418,30 @@ class MetricSetDef:
     # Optional alias for this metricSet within the object_type;
     # defaults to from_request; used as the key in chained_from lookups.
     as_name: Optional[str] = None
+    # Optional Aria-native stitching declaration.  When set (together with
+    # stitch_match_field), the renderer emits a full objectBinding block
+    # (matchExpression + objectMatchExpression with originType: ARIA_OPS_METRIC)
+    # to stitch this metricSet's rows onto a native Aria Ops resource kind.
+    #
+    # stitch_to         — Full Aria-native objectMatchExpression originId, in
+    #                     the form "aria-<ADAPTER>-<KIND>-<METRIC_KEY>".
+    #                     E.g. for Rubrik → VMware VM stitching:
+    #                       "aria-VMWARE-VirtualMachine-VMEntityObjectID"
+    #                     The originType on the objectMatchExpression is always
+    #                     ARIA_OPS_METRIC (per the captured Rubrik pattern).
+    # stitch_match_field — The response field label (relative to this metricSet's
+    #                     listId) whose value matches the Aria-native identifier.
+    #                     E.g. for Rubrik VMs this is "moid".  The matchExpression
+    #                     originId composite becomes "<reqId>-<listId>-<field>".
+    #
+    # Both fields must be present or both absent — partial declaration is an
+    # error (see _validate_object_binding_rules).
+    #
+    # Must be absent on scalar kinds (is_world/is_singleton) and may not be
+    # combined with chained_from.
+    # See context/mpb_object_binding_wire_format.md §3.5 and §5 rule 6.
+    stitch_to: Optional[str] = None
+    stitch_match_field: Optional[str] = None
 
     @property
     def local_name(self) -> str:
@@ -437,7 +469,17 @@ class LoginRequestDef:
 
 @dataclass
 class ExtractRuleDef:
-    """auth.extract block — where to find the session token in the login response."""
+    """One auth.extract binding — where to find one session value in the login response.
+
+    Gap B (2026-04-30): AuthFlowDef.extract is now a List[ExtractRuleDef] so that
+    multiple values can be captured from the same login response (e.g. TOKEN cookie
+    AND x-csrf-token header from a UniFi classic-session login).
+
+    Backward compatibility: the YAML author may write either a single mapping
+    (dict — Synology-style) or a list of mappings.  The loader normalises both to
+    a list before handing off to AuthFlowDef.  Single-entry lists are identical
+    in wire output to the previous single-binding form.
+    """
     location: str     # HEADER or BODY
     name: str         # header name (for HEADER) or JSON path (for BODY)
     bind_to: str      # session variable name as "session.<key>" (e.g. "session.set_cookie")
@@ -486,11 +528,17 @@ class AuthFlowDef:
       basic_auth    creds: username + password pair only; login/extract/logout absent.
       bearer_token  creds: single token field; login/extract/logout absent.
       cookie_session creds, login, extract, inject, logout all REQUIRED.
+
+    Gap B (2026-04-30): ``extract`` is now ``Optional[List[ExtractRuleDef]]``.
+    A single-mapping YAML form is parsed into a one-element list; a list-of-
+    mappings form produces a multi-element list.  Validator requires the list to
+    be non-empty for cookie_session.  Renderer iterates the list to emit
+    multiple sessionVariables entries.
     """
     preset: str
     credentials: List[CredentialFieldDef] = field(default_factory=list)
     login: Optional[LoginRequestDef] = None
-    extract: Optional[ExtractRuleDef] = None
+    extract: Optional[List[ExtractRuleDef]] = None   # Gap B: list of bindings
     inject: List[InjectRuleDef] = field(default_factory=list)
     logout: Optional[LogoutRequestDef] = None
 
@@ -505,6 +553,7 @@ class ObjectTypeDef:
     metrics: List[MetricDef]
     icon: str = "server.svg"
     is_world: bool = False
+    is_singleton: bool = False            # one-per-adapter-instance named entity with identifiers
     name_expression: Optional["NameExpressionDef"] = None   # Tier 3.3 structured form
     identity: Optional["WorldIdentityDef"] = None           # Tier 3.3 axis 7 (required for is_world)
 
@@ -648,6 +697,49 @@ def _validate_mp(mp: ManagementPackDef) -> None:
                 f"{ot_tag}: type must be one of {sorted(VALID_OBJECT_TYPE)}; "
                 f"got {ot.type!r}"
             )
+
+        # Guardrail: is_world and is_singleton are mutually exclusive.
+        # is_world  → topology root, no identifiers, MPB-managed rollups only.
+        # is_singleton → one-per-adapter named entity with identifiers and metrics.
+        # Both true simultaneously is nonsensical and produces the rogue-World defect
+        # (objects[5] in the failing Synology import — null name expression, empty
+        # identifiers, empty metricSets).  Fail loudly rather than rendering garbage.
+        if ot.is_world and ot.is_singleton:
+            raise ManagementPackValidationError(
+                f"{ot_tag}: is_world and is_singleton cannot both be true. "
+                f"Use is_world: true for the adapter-instance topology root (no identifiers, "
+                f"MPB-managed rollups). Use is_singleton: true for one-per-adapter named "
+                f"entities that carry identifiers and metrics (e.g. a NAS unit)."
+            )
+
+        # Guardrail: is_world kinds are cross-instance anchors — empty stubs with no
+        # per-adapter-instance identity.  Identifiers on a world kind are architecturally
+        # wrong: with two adapter instances the MPB would create a single shared object
+        # that collides on the identifier value (e.g. serial).  If you need a kind that
+        # carries identifiers and metrics describing the device, use is_singleton: true.
+        if ot.is_world and ot.identifiers:
+            raise ManagementPackValidationError(
+                f"{ot_tag}: `is_world: true` requires empty `identifiers` (world kinds "
+                f"are cross-instance anchors with no per-adapter-instance identity). "
+                f"For a one-per-adapter-instance named entity that carries identifiers "
+                f"and metrics, use `is_singleton: true` instead. See "
+                f"context/mp_chain_authoring.md §\"Singleton vs list\" and the "
+                f"architecture decision in context/mpb_synology_pickup_2026_04_29.md."
+            )
+
+        # Guardrail: is_world kinds are navigation roots only — they must not carry
+        # metricSets or metrics.  Metrics on a world kind belong to a singleton or list
+        # kind that describes the per-adapter-instance device.
+        if ot.is_world and (ot.metric_sets or ot.metrics):
+            raise ManagementPackValidationError(
+                f"{ot_tag}: `is_world: true` kinds are empty stubs (no metrics, no "
+                f"metricSets — they exist only as navigation roots for fleet-level "
+                f"aggregation). For a kind that holds metrics about the "
+                f"adapter-instance-level device, use `is_singleton: true` instead. See "
+                f"context/mp_chain_authoring.md §\"Singleton vs list\" and the "
+                f"architecture decision in context/mpb_synology_pickup_2026_04_29.md."
+            )
+
         # Pure world kinds are topology roots and carry no identifiers by design.
         if not ot.is_world and not ot.identifiers:
             raise ManagementPackValidationError(
@@ -657,7 +749,8 @@ def _validate_mp(mp: ManagementPackDef) -> None:
         for ident in ot.identifiers:
             _validate_identifier(ot_tag, ident)
         if not ot.is_world:
-            # Non-world object types must have at least one metricSet and one metric.
+            # Non-world object types (including is_singleton) must have at least one
+            # metricSet and one metric.
             if not ot.metric_sets:
                 raise ManagementPackValidationError(
                     f"{ot_tag}: at least one metricSet is required"
@@ -666,10 +759,18 @@ def _validate_mp(mp: ManagementPackDef) -> None:
                 raise ManagementPackValidationError(
                     f"{ot_tag}: at least one metric or property is required"
                 )
-        # World kinds (is_world: true) with no metric_sets/metrics are valid —
-        # their only metrics are auto-computed summary rollups emitted by the
-        # MPB runtime (ComputedMetrics in describe.xml).  If metric_sets or
-        # metrics are present on a world kind they are still validated below.
+
+        # Guardrail: is_singleton must have a name_expression.
+        # A singleton with no nameMetricExpression renders as null, which the MPB
+        # importer rejects on non-list objects.  This is the same defect as
+        # the rogue World stub in the failing Synology import.
+        if ot.is_singleton and ot.name_expression is None:
+            raise ManagementPackValidationError(
+                f"{ot_tag}: is_singleton: true objects require a 'name_expression:'. "
+                f"A singleton with no nameMetricExpression renders null, which MPB rejects "
+                f"at import time.  Add 'name_expression: <metric_key>' (shorthand) or "
+                f"the structured 'name_expression: {{parts: [...]}}' form."
+            )
 
         if ot.is_world:
             world_count += 1
@@ -682,10 +783,11 @@ def _validate_mp(mp: ManagementPackDef) -> None:
                     f"See designs/synology-mp-v1.md §\"Axis 7 — World-object identity\"."
                 )
         else:
-            # Non-world objects must NOT declare identity
+            # Non-world objects (both is_singleton and plain list) must NOT declare identity.
+            # identity: is is_world-only because it declares the adapter-instance anchor tier.
             if ot.identity is not None:
                 raise ManagementPackValidationError(
-                    f"{ot_tag}: is_world: false objects must not declare 'identity:'. "
+                    f"{ot_tag}: only is_world: true objects may declare 'identity:'. "
                     f"Remove the 'identity:' block or set 'is_world: true'."
                 )
 
@@ -701,16 +803,24 @@ def _validate_mp(mp: ManagementPackDef) -> None:
                 )
             ms_local_names[local] = i
 
+        # is_singleton objects consume scalar responses — same rule as is_world:
+        # list_path must be empty, and primary: true is disallowed.
+        # Pass is_world=True here to reuse the same metricSet lint rules.
+        is_scalar = ot.is_world or ot.is_singleton
+
         # Validate each metricSet
         for i, ms in enumerate(ot.metric_sets):
             _validate_metric_set(ot_tag, i, ms, request_names, ms_local_names,
-                                 is_world=ot.is_world)
+                                 is_world=is_scalar)
 
-        # Primary-validator
+        # objectBinding guardrails — validate stitch_to/chaining rules
+        _validate_object_binding_rules(ot_tag, ot)
+
+        # Primary-validator (reuses is_world semantics for is_singleton)
         _validate_primary(ot_tag, ot)
 
         # Chain-graph walker (cycle detection + orphan detection)
-        _validate_chain_graph(ot_tag, ot)
+        _validate_chain_graph(ot_tag, ot, mp_request_names=request_names)
 
         # Validate ${chain.*} token coverage on each chained request
         _validate_chain_tokens(ot_tag, ot, mp.requests)
@@ -728,11 +838,34 @@ def _validate_mp(mp: ManagementPackDef) -> None:
         if ot.name_expression is not None:
             _validate_name_expression(ot_tag, ot.name_expression, metric_keys)
 
-    # Exactly one world object
-    if mp.object_types and world_count != 1:
+    # World-kind cardinality: 0 or 1 is valid; 2+ is nonsense.
+    #
+    # world_count == 0: valid — the MP is fully self-contained at the
+    #   adapter-instance level (e.g. Synology NAS where Diskstation is
+    #   is_singleton: true and serves as the per-adapter root).  VCF Ops
+    #   auto-generates the world-aggregate tier in the .pak describe.xml;
+    #   no is_world stub is required.  To enable fleet-level cross-instance
+    #   aggregation later, add an empty is_world: true stub.
+    #
+    # world_count == 1: valid — one world kind, the standard model.
+    #
+    # world_count >= 2: hard error — only one world kind is meaningful.
+    #   Multiple world kinds produce colliding topology roots.
+    if mp.object_types and world_count >= 2:
         raise ManagementPackValidationError(
-            f"{tag}: exactly one object_type must have is_world: true; "
-            f"found {world_count}"
+            f"{tag}: at most one object_type may have is_world: true; "
+            f"found {world_count}. Multiple world kinds produce colliding "
+            f"topology roots and are not supported."
+        )
+
+    if mp.object_types and world_count == 0:
+        import logging as _logging
+        _logging.getLogger(__name__).info(
+            "%s: no is_world: true kind declared. This is valid — the MP is "
+            "fully self-contained at the adapter-instance level. To enable "
+            "fleet-level cross-instance aggregation later, add an empty "
+            "is_world: true stub.",
+            tag,
         )
 
     # Relationships reference valid object type keys + scope validation
@@ -759,6 +892,60 @@ def _validate_mp(mp: ManagementPackDef) -> None:
     # MPB events
     for ev in mp.mpb_events:
         _validate_mpb_event(ev, tag, all_request_names, set(object_keys.keys()))
+
+    # -----------------------------------------------------------------------
+    # Cross-MP guardrail: dangling ${chain.X} requests
+    #
+    # If a top-level request contains ${chain.<name>} tokens it must be
+    # consumed as a chained metricSet (chained_from is set) on at least one
+    # object_type.  A request with chain tokens but no chained consumer is a
+    # dangling chain — the importer sees ${requestParameters.X} with no
+    # chainingSettings block and rejects the design.
+    #
+    # Context: context/mpb_synology_import_diff_2026_04_29.md §3 (defect #3).
+    # -----------------------------------------------------------------------
+    chained_requests: set = set()
+    for ot in mp.object_types:
+        for ms in ot.metric_sets:
+            if ms.chained_from is not None:
+                chained_requests.add(ms.from_request)
+
+    for req in mp.requests:
+        # Collect all ${chain.*} tokens in this request's templates
+        chain_tokens_in_req: set = set()
+        for part in _collect_request_template_parts(req):
+            for m in _CHAIN_TOKEN_RE.finditer(part):
+                chain_tokens_in_req.add(m.group(1))
+
+        if chain_tokens_in_req and req.name not in chained_requests:
+            raise ManagementPackValidationError(
+                f"{tag}: request '{req.name}' contains ${{chain.*}} token(s) "
+                f"{sorted(chain_tokens_in_req)!r} but is never consumed as a "
+                f"chained metricSet (chained_from) on any object_type. "
+                f"Either declare 'chained_from: <parent_metricset_name>' on the "
+                f"metricSet that uses this request, or remove the ${{chain.*}} "
+                f"token from the request params/path/body. "
+                f"A request with ${{chain.*}} tokens but no chainingSettings block "
+                f"causes MPB import to reject the design with 'unknown error'."
+            )
+
+    # -----------------------------------------------------------------------
+    # Cross-MP guardrail: SINGLE_SELECTION config defaultValue must be in options
+    #
+    # The MPB importer validates SINGLE_SELECTION defaults against the options
+    # list at import time.  A mismatch (e.g. case difference: "WARNING" vs
+    # "Warning") causes a hard import rejection.
+    # Context: context/mpb_synology_import_diff_2026_04_29.md §7 (defect #7).
+    # -----------------------------------------------------------------------
+    if mp.source:
+        for cf in mp.source.config_fields:
+            if cf.type == "SINGLE_SELECTION" and cf.default:
+                # config_fields options not stored on ConfigFieldDef — this check
+                # is for future ConfigFieldDef extensions.  Currently config_fields
+                # in YAML have no 'options' list (they're free-form string defaults).
+                # The standard config fields are hardcoded in render.py and audited
+                # separately.  Pass here; extend when ConfigFieldDef gains options.
+                pass
 
 
 def _validate_metric_set(
@@ -800,18 +987,18 @@ def _validate_metric_set(
             stacklevel=4,
         )
 
-    # World/singleton objects must have an empty list_path on every metricSet.
-    # They consume the whole response root as scalar context ("base" DML).
-    # A non-empty list_path on a world object produces a wildcard DML instead
-    # of the required "base" DML, causing all world-object metrics to be
-    # silently unresolvable at collection time (2026-04-21 QA audit).
-    # Emitted as a DeprecationWarning (matching the .*  lint above) rather than
+    # World and singleton objects must have an empty list_path on every metricSet.
+    # Both kinds consume the whole response root as scalar context ("base" DML).
+    # A non-empty list_path on either kind produces a wildcard DML instead of
+    # the required "base" DML, causing all metrics to be silently unresolvable
+    # at collection time (2026-04-21 QA audit).
+    # Emitted as a DeprecationWarning (matching the .* lint above) rather than
     # a hard error for backward-compat; new YAMLs must not use this form.
     if is_world and lp.strip():
         _warnings.warn(
             f"{mstag} (from_request: '{ms.from_request}'): "
-            f"list_path should be empty ('') on is_world: true objects. "
-            f"World/singleton objects consume the whole response root as scalar "
+            f"list_path should be empty ('') on is_world: true / is_singleton: true objects. "
+            f"Scalar kinds consume the whole response root as scalar "
             f"context (MPB 'base' DML). A non-empty list_path produces a wildcard "
             f"DML causing all metrics on this object to be silently unresolvable. "
             f"This will become a hard error in a future release.",
@@ -826,13 +1013,20 @@ def _validate_metric_set(
         )
 
     if ms.chained_from is not None:
-        # chained_from must name a sibling metricSet local_name
-        if ms.chained_from not in sibling_names:
+        # chained_from must name a sibling metricSet local_name OR a top-level request
+        # (cross-object-type chain root — Gap 2, 2026-05-07).
+        # A "chain root" is a top-level request that fires once and propagates its
+        # per-row attributes (e.g. site IDs) to child requests on other object types.
+        # It is not consumed as a from_request on any metricSet.
+        is_chain_root_ref = (ms.chained_from not in sibling_names
+                             and ms.chained_from in mp_request_names)
+        if ms.chained_from not in sibling_names and not is_chain_root_ref:
             raise ManagementPackValidationError(
                 f"{mstag}: chained_from '{ms.chained_from}' does not match any "
-                f"sibling metricSet local name (known: {sorted(sibling_names)}). "
+                f"sibling metricSet local name (known: {sorted(sibling_names)}) "
+                f"or top-level request name (known: {sorted(mp_request_names)}). "
                 f"chained_from must reference a sibling metricSet's from_request "
-                f"(or its 'as:' alias if set)."
+                f"(or its 'as:' alias if set) or a top-level chain-root request."
             )
         if ms.chained_from == ms.local_name:
             raise ManagementPackValidationError(
@@ -853,45 +1047,176 @@ def _validate_metric_set(
 
 
 def _validate_primary(ot_tag: str, ot: ObjectTypeDef) -> None:
-    """Validate primary metricSet rule per is_world."""
+    """Validate primary metricSet rule per object kind.
+
+    Scalar kinds (is_world or is_singleton): primary: true is disallowed on every
+    metricSet.  Scalar objects have no list iteration — the concept of "which request
+    defines list membership" does not apply.  All metricSets fire in parallel once
+    per collection cycle and merge onto the single object instance.
+
+    List kinds (default, neither is_world nor is_singleton): exactly one primary
+    metricSet required.  The primary metricSet's request defines list membership
+    (one object instance per response row); secondary metricSets are chained.
+    """
     primary_count = sum(1 for ms in ot.metric_sets if ms.primary)
 
-    if ot.is_world:
-        # World/singleton: primary must be absent/false on all metricSets
+    if ot.is_world or ot.is_singleton:
+        # Scalar kind: primary must be absent/false on all metricSets.
         if primary_count > 0:
+            kind_label = "is_world" if ot.is_world else "is_singleton"
             raise ManagementPackValidationError(
-                f"{ot_tag}: is_world objects must not declare 'primary: true' "
-                f"on any metricSet (singletons don't define list membership); "
+                f"{ot_tag}: {kind_label} objects must not declare 'primary: true' "
+                f"on any metricSet (scalar kinds don't define list membership); "
                 f"found {primary_count} metricSet(s) with primary: true"
             )
     else:
         # List object: exactly one primary required
         if primary_count == 0:
             raise ManagementPackValidationError(
-                f"{ot_tag}: list objects (is_world: false) require exactly one "
-                f"metricSet with 'primary: true'; found zero"
+                f"{ot_tag}: list objects (is_world: false, is_singleton: false) require "
+                f"exactly one metricSet with 'primary: true'; found zero"
             )
         if primary_count > 1:
             raise ManagementPackValidationError(
-                f"{ot_tag}: list objects (is_world: false) must have exactly one "
-                f"metricSet with 'primary: true'; found {primary_count}"
+                f"{ot_tag}: list objects (is_world: false, is_singleton: false) must have "
+                f"exactly one metricSet with 'primary: true'; found {primary_count}"
             )
 
 
-def _validate_chain_graph(ot_tag: str, ot: ObjectTypeDef) -> None:
-    """Detect cycles and orphan chains in the metricSet chained_from graph."""
+def _validate_object_binding_rules(ot_tag: str, ot: ObjectTypeDef) -> None:
+    """Validate objectBinding-related constraints on metricSets.
+
+    These rules encode the empirical findings from the 2026-04-29 MPB
+    objectBinding investigation on vcf-lab-operations-devel.
+    See context/mpb_object_binding_wire_format.md §5 for the rationale
+    behind every rule here.
+
+    The YAML grammar exposes objectBinding only via the 'stitch_to' knob
+    (§5 rule 6 — author intent must be explicit).  The renderer emits:
+      - objectBinding: null   for singletons, scalar kinds, and chain-parents
+      - objectBinding: <§10.2 cross-metricSet ATTRIBUTE shape>  for chained secondaries
+      - objectBinding: <stitch shape>  when stitch_to is declared
+    Chained secondaries MUST carry a non-null objectBinding to satisfy the
+    MPB verify-time per-resource null-count rule (§8.1 of
+    context/mpb_object_binding_wire_format.md).  The renderer enforces this
+    with a RuntimeError assertion; the loader validates the YAML preconditions
+    (chained_from requires at least one bind entry with from_attribute).
+    """
+    is_scalar = ot.is_world or ot.is_singleton
+    doc_ref = "context/mpb_object_binding_wire_format.md"
+
+    for i, ms in enumerate(ot.metric_sets):
+        mstag = f"{ot_tag}: metricSets[{i}] ('{ms.local_name}')"
+
+        if ms.stitch_to is not None:
+            # Rule 1: scalar kinds (is_world/is_singleton) must not declare stitch_to.
+            # Stitching is a list-object concept — it correlates per-row data with
+            # native Aria resource instances.  Scalar kinds produce one object per
+            # adapter instance; there is nothing to stitch.
+            # §5 rule 1 and rule 6 of the reference doc.
+            if is_scalar:
+                kind_label = "is_world" if ot.is_world else "is_singleton"
+                raise ManagementPackValidationError(
+                    f"{mstag}: 'stitch_to' must not be declared on {kind_label} "
+                    f"objects.  Stitching (objectMatchExpression: ARIA_OPS_METRIC) "
+                    f"correlates list-object rows with native Aria resource instances "
+                    f"and has no meaning on scalar kinds that produce one object per "
+                    f"adapter instance.  Remove 'stitch_to' or change the object kind.  "
+                    f"See {doc_ref} §5 rules 1 and 6."
+                )
+
+            # Rule 2: stitch_to must be a non-empty string and stitch_match_field
+            # must be provided alongside it.  Both fields are required together
+            # because the renderer needs both to build the two-expression stitching
+            # objectBinding (matchExpression for the source field, objectMatchExpression
+            # for the Aria-native identifier).
+            if not ms.stitch_to.strip():
+                raise ManagementPackValidationError(
+                    f"{mstag}: 'stitch_to' must not be blank.  Provide the "
+                    f"Aria-native resource kind path to stitch onto "
+                    f"(e.g. 'vmware/VirtualMachine').  "
+                    f"See {doc_ref} §3.5."
+                )
+            if not ms.stitch_match_field or not ms.stitch_match_field.strip():
+                raise ManagementPackValidationError(
+                    f"{mstag}: 'stitch_to' requires a companion 'stitch_match_field'.  "
+                    f"Set 'stitch_match_field' to the response field label whose value "
+                    f"matches the Aria-native identifier (e.g. 'moid' for VMware VMs).  "
+                    f"See {doc_ref} §3.5."
+                )
+
+            # Rule 3: stitch_to and chained_from cannot be combined on the same
+            # metricSet.  Chained secondary metricSets rely on chainingSettings for
+            # row-binding; adding a stitching objectBinding on the same metricSet
+            # produces conflicting binding semantics and has no captured working
+            # precedent.  If you need both chaining and stitching, split them into
+            # separate metricSets.
+            # §5 rule 6 cross-references §3.3 (chaining) and §3.5 (stitching).
+            if ms.chained_from is not None:
+                raise ManagementPackValidationError(
+                    f"{mstag}: 'stitch_to' and 'chained_from' cannot both be "
+                    f"declared on the same metricSet.  Chained secondary metricSets "
+                    f"use chainingSettings for row-binding; stitching objectBinding "
+                    f"is for correlating primary list rows with native Aria objects.  "
+                    f"Split into separate metricSets if both are needed.  "
+                    f"See {doc_ref} §3.3 and §3.5."
+                )
+
+        # Rule 4a (companion check): stitch_match_field without stitch_to is an error.
+        if ms.stitch_to is None and ms.stitch_match_field is not None:
+            raise ManagementPackValidationError(
+                f"{mstag}: 'stitch_match_field' declared without 'stitch_to'.  "
+                f"Both fields must be present together or both absent.  "
+                f"Add 'stitch_to: <aria_resource_kind>' or remove 'stitch_match_field'.  "
+                f"See {doc_ref} §3.5."
+            )
+
+        # Rule 5: non-primary metricSets on list objects must declare chained_from
+        # (unless they are a stitching primary, identified by stitch_to).
+        # A secondary metricSet without chained_from and without stitch_to has
+        # no declared binding mechanism — the renderer emits objectBinding: null
+        # and the request has no chainingSettings, so the runtime has no row-binding.
+        # (Primary metricSets, stitching metricSets, and scalar metricSets are exempt.)
+        # §5 rule 3 of the reference doc.
+        if not is_scalar and not ms.primary and ms.chained_from is None and ms.stitch_to is None:
+            raise ManagementPackValidationError(
+                f"{mstag}: non-primary metricSet on a list object must declare "
+                f"either 'chained_from: <primary_metricset_name>' (for a chained "
+                f"secondary) or 'primary: true' (for a primary).  Without one of "
+                f"these, the renderer emits objectBinding: null and the request has "
+                f"no chainingSettings, leaving the runtime with no row-binding "
+                f"mechanism.  See {doc_ref} §5 rule 3."
+            )
+
+
+def _validate_chain_graph(
+    ot_tag: str,
+    ot: ObjectTypeDef,
+    mp_request_names: Optional[Dict[str, int]] = None,
+) -> None:
+    """Detect cycles and orphan chains in the metricSet chained_from graph.
+
+    Gap 2 (2026-05-07): cross-object-type chain roots are allowed.
+    A chained_from value that names a top-level request (chain root) instead
+    of a sibling metricSet is valid and skipped in orphan detection.
+    """
     # Build adjacency: local_name -> chained_from (or None)
     local_names = {ms.local_name for ms in ot.metric_sets}
+    mp_req_names = mp_request_names or {}
 
     # Detect orphan chains (chained_from points at a non-existent sibling)
-    # This is already caught in _validate_metric_set, but double-check here
-    # for cross-object-type chain detection.
+    # Exception: cross-type chain roots (top-level request, not a sibling metricSet).
     for ms in ot.metric_sets:
         if ms.chained_from is not None and ms.chained_from not in local_names:
+            if ms.chained_from in mp_req_names:
+                # Cross-type chain root reference — valid; skip orphan check.
+                continue
             raise ManagementPackValidationError(
                 f"{ot_tag}: metricSet '{ms.local_name}' has chained_from "
-                f"'{ms.chained_from}' which is not a sibling metricSet. "
-                f"Cross-object-type chains are not supported in v1."
+                f"'{ms.chained_from}' which is not a sibling metricSet or a "
+                f"top-level chain-root request. "
+                f"Cross-object-type chains require the target to be a top-level "
+                f"request with no ${{chain.*}} tokens of its own."
             )
 
     # Detect cycles using DFS
@@ -927,12 +1252,44 @@ def _validate_chain_tokens(
     """Validate ${chain.*} token coverage.
 
     For each chained metricSet, ensure every ${chain.<name>} token in the
-    request's params/path/body/headers has a matching bind entry.
-    Also ensure that requests with ${chain.*} tokens are consumed as a
+    request's params/path/body/headers has a matching bind entry on this
+    metricSet OR on any ancestor metricSet in the chain hierarchy.
+
+    MPB's requestParameters namespace is cumulative across multi-hop chains:
+    a token bound on a grandparent is already resolved when the grandchild
+    fires, so grandchild requests may legitimately reference ${chain.<name>}
+    tokens that are only bound on an ancestor.
+
+    Also ensures that requests with ${chain.*} tokens are consumed as a
     chained metricSet on at least one object_type (within this object_type's
     metricSets).
     """
     request_by_name: Dict[str, RequestDef] = {r.name: r for r in mp_requests}
+
+    # Build a lookup from local_name -> MetricSetDef for ancestor walks.
+    ms_by_local_name: Dict[str, MetricSetDef] = {
+        ms.local_name: ms for ms in ot.metric_sets
+    }
+
+    def _ancestor_bind_names(start_ms: MetricSetDef) -> set:
+        """Return the union of bind.name values from start_ms and all its ancestors."""
+        names: set = set()
+        current: Optional[MetricSetDef] = start_ms
+        seen: set = set()  # cycle guard (cycles are caught by _validate_chain_graph)
+        while current is not None:
+            if current.local_name in seen:
+                break
+            seen.add(current.local_name)
+            for b in current.bind:
+                names.add(b.name)
+            parent_ref = current.chained_from
+            if parent_ref is None:
+                break
+            # parent_ref names either a sibling metricSet (local_name) or a
+            # top-level chain-root request.  Chain roots have no bind entries
+            # of their own in this namespace, so stop walking there.
+            current = ms_by_local_name.get(parent_ref)
+        return names
 
     for ms in ot.metric_sets:
         req = request_by_name.get(ms.from_request)
@@ -957,8 +1314,10 @@ def _validate_chain_tokens(
 
         if ms.chained_from is not None:
             # Chained: verify all ${chain.*} tokens have matching bind entries
-            bind_names = {b.name for b in ms.bind}
-            missing = chain_tokens_in_req - bind_names
+            # anywhere in the ancestor chain (MPB propagates requestParameters
+            # cumulatively, so a token bound on a grandparent is visible here).
+            all_ancestor_bind_names = _ancestor_bind_names(ms)
+            missing = chain_tokens_in_req - all_ancestor_bind_names
             if missing:
                 raise ManagementPackValidationError(
                     f"{ot_tag}: metricSet '{ms.local_name}' is chained from "
@@ -1203,6 +1562,8 @@ def _validate_auth(tag: str, auth: AuthFlowDef) -> None:
         _validate_auth_basic(atag, auth)
     elif preset == "bearer_token":
         _validate_auth_bearer(atag, auth)
+    elif preset == "http_header":
+        _validate_auth_http_header(atag, auth)
     elif preset == "cookie_session":
         _validate_auth_cookie_session(atag, auth)
 
@@ -1268,8 +1629,44 @@ def _validate_auth_bearer(tag: str, auth: AuthFlowDef) -> None:
     _validate_inject_rules(tag, auth.inject)
 
 
+def _validate_auth_http_header(tag: str, auth: AuthFlowDef) -> None:
+    """Preset 'http_header': static API-key header injection; no session flow.
+
+    Gap 1 (2026-05-07): stateless header-based auth (e.g. X-API-Key).
+    Wire: credentialType TOKEN, no sessionSettings.  The inject[] rules
+    render into globalHeaders alongside Content-Type.
+
+    Constraints:
+      - At least one credential field required (the API key).
+      - At least one inject rule required (the header to inject).
+      - No login, extract, or logout blocks allowed.
+    """
+    if not auth.credentials:
+        raise ManagementPackValidationError(
+            f"{tag}: preset 'http_header' requires at least one credential field"
+        )
+    for block, name in [(auth.login, "login"), (auth.extract, "extract"),
+                        (auth.logout, "logout")]:
+        if block is not None:
+            raise ManagementPackValidationError(
+                f"{tag}: preset 'http_header' must not declare '{name}' "
+                f"(http_header is stateless — no session flow)"
+            )
+    if not auth.inject:
+        raise ManagementPackValidationError(
+            f"{tag}: preset 'http_header' requires at least one 'inject' rule "
+            f"(the header(s) to add to every request)"
+        )
+    _validate_inject_rules(tag, auth.inject)
+
+
 def _validate_auth_cookie_session(tag: str, auth: AuthFlowDef) -> None:
-    """Preset 'cookie_session': all blocks required."""
+    """Preset 'cookie_session': all blocks required.
+
+    Gap B (2026-04-30): auth.extract is now List[ExtractRuleDef].  Each
+    binding in the list is validated individually.  The list must not be
+    empty (cookie_session requires at least one session variable).
+    """
     if not auth.credentials:
         raise ManagementPackValidationError(
             f"{tag}: preset 'cookie_session' requires credentials"
@@ -1278,9 +1675,10 @@ def _validate_auth_cookie_session(tag: str, auth: AuthFlowDef) -> None:
         raise ManagementPackValidationError(
             f"{tag}: preset 'cookie_session' requires a 'login' block"
         )
-    if auth.extract is None:
+    if not auth.extract:
         raise ManagementPackValidationError(
-            f"{tag}: preset 'cookie_session' requires an 'extract' block"
+            f"{tag}: preset 'cookie_session' requires an 'extract' block "
+            f"(single mapping or non-empty list of mappings)"
         )
     if not auth.inject:
         raise ManagementPackValidationError(
@@ -1299,20 +1697,33 @@ def _validate_auth_cookie_session(tag: str, auth: AuthFlowDef) -> None:
             f"got {login_method!r}"
         )
 
-    # extract location
-    if auth.extract.location not in ("HEADER", "BODY"):
-        raise ManagementPackValidationError(
-            f"{tag}: extract.location must be HEADER or BODY; "
-            f"got {auth.extract.location!r}"
-        )
-    if not auth.extract.name or not auth.extract.name.strip():
-        raise ManagementPackValidationError(
-            f"{tag}: extract.name is required"
-        )
-    if not auth.extract.bind_to or not auth.extract.bind_to.strip():
-        raise ManagementPackValidationError(
-            f"{tag}: extract.bind_to is required (e.g. 'session.set_cookie')"
-        )
+    # Validate each extract binding.
+    bind_to_keys: List[str] = []
+    for i, ex in enumerate(auth.extract):
+        etag = f"{tag}: extract[{i}]"
+        if ex.location not in ("HEADER", "BODY"):
+            raise ManagementPackValidationError(
+                f"{etag}: location must be HEADER or BODY; got {ex.location!r}"
+            )
+        if not ex.name or not ex.name.strip():
+            raise ManagementPackValidationError(
+                f"{etag}: name is required (the header name or JSON path to extract)"
+            )
+        if not ex.bind_to or not ex.bind_to.strip():
+            raise ManagementPackValidationError(
+                f"{etag}: bind_to is required (e.g. 'session.set_cookie')"
+            )
+        if not ex.bind_to.startswith("session."):
+            raise ManagementPackValidationError(
+                f"{etag}: bind_to must start with 'session.' (got {ex.bind_to!r})"
+            )
+        sk = ex.session_key
+        if sk in bind_to_keys:
+            raise ManagementPackValidationError(
+                f"{etag}: duplicate bind_to session key '{sk}' — each extract "
+                f"binding must bind to a distinct session variable"
+            )
+        bind_to_keys.append(sk)
 
     # logout method
     logout_method = (auth.logout.method or "DELETE").strip().upper()
@@ -1349,8 +1760,10 @@ def _validate_auth_substitution_refs(tag: str, auth: AuthFlowDef) -> None:
     """Validate that ${credentials.X} and ${session.X} refs resolve."""
     declared_cred_keys = {c.key for c in auth.credentials}
     declared_session_keys: set = set()
-    if auth.extract is not None:
-        declared_session_keys.add(auth.extract.session_key)
+    # Gap B: auth.extract is now List[ExtractRuleDef]; collect all bound keys.
+    if auth.extract:
+        for ex in auth.extract:
+            declared_session_keys.add(ex.session_key)
 
     # Collect all template strings to check
     templates: List[str] = []
@@ -1421,6 +1834,12 @@ def _validate_metric_source(tag: str, src: "MetricSourceDef", ms_names: set) -> 
     """Validate a MetricSourceDef.
 
     Reserved fields (aggregate, extract, compose) raise an error if present.
+
+    Gap F (2026-04-30): source paths that contain JMESPath filter predicates
+    ``[?field=='value']`` are valid.  The JMESPath expression (including the
+    optional ``| [0]`` pipe-scalar suffix) is validated for syntax using the
+    jmespath library.  Render-time: the full expression is emitted verbatim as
+    the attribute label/key; the MPB runtime evaluates it at collection time.
     """
     if not src.metricset or not src.metricset.strip():
         raise ManagementPackValidationError(f"{tag}: source.metricset is required")
@@ -1444,12 +1863,111 @@ def _validate_metric_source(tag: str, src: "MetricSourceDef", ms_names: set) -> 
             f"implementable in the current version. "
             f"Remove the 'compose:' key — multi-source composition is not yet supported."
         )
+    # Gap F: validate JMESPath filter predicates if present.
+    if _JMESPATH_FILTER_RE.search(src.path):
+        _validate_jmespath_path(tag, src.path)
     if src.metricset not in ms_names:
         raise ManagementPackValidationError(
             f"{tag}: source references unknown metricSet '{src.metricset}' "
             f"(known metricSet names on this object_type: {sorted(ms_names)}). "
             f"The name is the from_request value of the metricSet (or its 'as:' alias)."
         )
+
+
+def _validate_jmespath_path(tag: str, path: str) -> None:
+    """Validate a JMESPath expression in a metric source path.
+
+    Gap F (2026-04-30): called when a source path contains '[?' filter
+    predicate syntax.  Uses the jmespath library to catch malformed
+    expressions at validate time (before the render step).
+
+    The full path is validated as a JMESPath expression.  The 'metricset:X.'
+    prefix is already stripped at this point — only the field_path is passed.
+
+    Supported predicate forms (equality and logical conjunctions):
+      [?subsystem=='wan']
+      [?radio=='ng']
+      [?name=='CPU']
+      [?subsystem=='wan' && status=='active']   # multi-condition
+
+    Hyphenated field names outside predicates (e.g. 'tx_bytes-r') are valid
+    UniFi API field names.  JMESPath strict syntax treats '-' as subtraction,
+    so the validator normalises hyphens in identifier positions (between
+    alphanumerics/underscores) to underscores before re-trying compilation.
+    This avoids false failures while still catching real predicate errors.
+
+    Raises ManagementPackValidationError with the metric tag + path + parse
+    error if jmespath cannot compile the expression.
+    """
+    try:
+        import jmespath  # soft dependency; installed alongside package
+    except ImportError:
+        # jmespath not installed — skip validation with a warning.
+        import warnings
+        warnings.warn(
+            f"{tag}: jmespath library not installed — cannot validate filter "
+            f"predicate syntax in source path {path!r}. "
+            f"Install with: pip install jmespath",
+            RuntimeWarning,
+            stacklevel=4,
+        )
+        return
+
+    # Strategy: try full path first; if it fails because of hyphens in
+    # identifier positions (not inside [?...] blocks), normalise hyphens
+    # to underscores outside predicates and retry.  This lets us catch real
+    # predicate errors without rejecting valid hyphenated API field names.
+    def _try_compile(expr: str) -> Optional[str]:
+        """Return error string if compilation fails, else None."""
+        try:
+            jmespath.compile(expr)
+            return None
+        except Exception as exc:
+            return str(exc)
+
+    err = _try_compile(path)
+    if err is None:
+        return
+
+    # Normalise hyphens outside predicates and retry.
+    def _normalize_hyphens(s: str) -> str:
+        """Replace word-internal hyphens (not inside [?...]) with underscores."""
+        result: List[str] = []
+        i = 0
+        while i < len(s):
+            if s[i:i+2] == "[?":
+                # Skip ahead past the predicate block, preserving it verbatim.
+                end = s.find("]", i + 2)
+                if end == -1:
+                    result.append(s[i:])
+                    break
+                result.append(s[i:end + 1])
+                i = end + 1
+            elif (s[i] == "-"
+                  and i > 0 and i < len(s) - 1
+                  and (s[i - 1].isalnum() or s[i - 1] == "_")
+                  and (s[i + 1].isalnum() or s[i + 1] == "_")):
+                result.append("_")
+                i += 1
+            else:
+                result.append(s[i])
+                i += 1
+        return "".join(result)
+
+    normalized = _normalize_hyphens(path)
+    if normalized != path:
+        err2 = _try_compile(normalized)
+        if err2 is None:
+            return   # Valid once hyphenated identifiers are normalised.
+        err = err2   # Report the cleaner error from the normalised form.
+
+    raise ManagementPackValidationError(
+        f"{tag}: source path {path!r} contains a JMESPath filter predicate "
+        f"that failed to parse: {err}. "
+        f"Expected forms: [?field=='value'], [?field=='x'].subfield | [0]. "
+        f"Check the predicate syntax — equality comparison uses == (double equals), "
+        f"logical AND is &&, logical OR is ||."
+    )
 
 
 def _validate_metric(tag: str, m: MetricDef, ms_names: set) -> None:
@@ -1472,6 +1990,22 @@ def _validate_metric(tag: str, m: MetricDef, ms_names: set) -> None:
         raise ManagementPackValidationError(
             f"{mtag}: METRIC usage requires type NUMBER; got {m.type!r}"
         )
+    # Gap D: validate coerce hint.
+    # coerce: number — tells the renderer (and documents to the author) that the
+    # source field is a string that must be parsed as a number at collection time.
+    # The MPB runtime performs the coercion when dataType is NUMBER; this hint is
+    # a documentation signal only (no wire format change).
+    if m.coerce is not None:
+        if m.coerce.strip().lower() != "number":
+            raise ManagementPackValidationError(
+                f"{mtag}: coerce must be 'number' (only supported value); "
+                f"got {m.coerce!r}"
+            )
+        if m.type != "NUMBER":
+            raise ManagementPackValidationError(
+                f"{mtag}: coerce: number requires type: NUMBER; "
+                f"got type {m.type!r}. Set type: NUMBER on this metric."
+            )
     # Validate source (MetricSourceDef — Tier 3.3 structured form)
     _validate_metric_source(mtag, m.source, ms_names)
 
@@ -1600,6 +2134,8 @@ def _parse_metric(raw: dict, parent_tag: str) -> MetricDef:
             f"{parent_tag}: metric '{raw.get('key', '')}': source is required"
         )
     source = _parse_metric_source(raw_source, f"{parent_tag}: metric '{raw.get('key', '')}'")
+    raw_coerce = raw.get("coerce")
+    coerce = str(raw_coerce).strip().lower() if raw_coerce is not None else None
     return MetricDef(
         key=str(raw.get("key", "") or "").strip(),
         label=str(raw.get("label", "") or "").strip(),
@@ -1608,6 +2144,7 @@ def _parse_metric(raw: dict, parent_tag: str) -> MetricDef:
         source=source,
         unit=str(raw.get("unit", "") or "").strip(),
         kpi=bool(raw.get("kpi", False)),
+        coerce=coerce,   # Gap D: optional "number" coerce hint
     )
 
 
@@ -1633,6 +2170,8 @@ def _parse_metric_set(raw: dict, parent_tag: str) -> MetricSetDef:
     bind = [_parse_bind(b, parent_tag) for b in raw_bind]
 
     raw_as = raw.get("as")
+    raw_stitch = raw.get("stitch_to")
+    raw_stitch_field = raw.get("stitch_match_field")
     return MetricSetDef(
         from_request=str(raw.get("from_request", "") or "").strip(),
         list_path=str(raw.get("list_path", "") or "").strip(),
@@ -1640,6 +2179,8 @@ def _parse_metric_set(raw: dict, parent_tag: str) -> MetricSetDef:
         chained_from=str(raw.get("chained_from")).strip() if raw.get("chained_from") else None,
         bind=bind,
         as_name=str(raw_as).strip() if raw_as else None,
+        stitch_to=str(raw_stitch).strip() if raw_stitch else None,
+        stitch_match_field=str(raw_stitch_field).strip() if raw_stitch_field else None,
     )
 
 
@@ -1679,14 +2220,60 @@ def _parse_logout_request(raw: dict, parent_tag: str) -> LogoutRequestDef:
 
 
 def _parse_extract_rule(raw: dict, parent_tag: str) -> ExtractRuleDef:
+    """Parse one extract binding from a mapping.
+
+    Gap B (2026-04-30): called for each element of a list, or once for a
+    single-mapping form.  Callers normalise both forms to a list before
+    storing on AuthFlowDef.extract.
+    """
     if not isinstance(raw, dict):
         raise ManagementPackValidationError(
-            f"{parent_tag}: auth.extract must be a mapping"
+            f"{parent_tag}: each auth.extract entry must be a mapping"
         )
     return ExtractRuleDef(
         location=str(raw.get("location", "HEADER") or "HEADER").strip().upper(),
         name=str(raw.get("name", "") or "").strip(),
         bind_to=str(raw.get("bind_to", "") or "").strip(),
+    )
+
+
+def _parse_extract_block(raw_extract: Any, atag: str) -> Optional[List[ExtractRuleDef]]:
+    """Parse auth.extract — either a single mapping or a list of mappings.
+
+    Gap B (2026-04-30): both forms normalise to List[ExtractRuleDef].
+
+    Single mapping (Synology-style — backward compatible):
+      extract:
+        location: HEADER
+        name: Set-Cookie
+        bind_to: session.set_cookie
+
+    List of mappings (UniFi-style — new):
+      extract:
+        - location: HEADER
+          name: Set-Cookie
+          bind_to: session.token
+        - location: HEADER
+          name: x-csrf-token
+          bind_to: session.csrf_token
+
+    Returns None if raw_extract is None.
+    Returns a non-empty list otherwise (single-mapping → one-element list).
+    """
+    if raw_extract is None:
+        return None
+    if isinstance(raw_extract, dict):
+        # Single-mapping form: wrap in list for uniform processing.
+        return [_parse_extract_rule(raw_extract, atag)]
+    if isinstance(raw_extract, list):
+        if not raw_extract:
+            raise ManagementPackValidationError(
+                f"{atag}: auth.extract list must not be empty"
+            )
+        return [_parse_extract_rule(entry, atag) for entry in raw_extract]
+    raise ManagementPackValidationError(
+        f"{atag}: auth.extract must be a mapping or a list of mappings; "
+        f"got {type(raw_extract).__name__}"
     )
 
 
@@ -1878,6 +2465,7 @@ def _parse_object_type(raw: dict, parent_tag: str) -> ObjectTypeDef:
         type=str(raw.get("type", "INTERNAL") or "INTERNAL").strip().upper(),
         icon=str(raw.get("icon", "server.svg") or "server.svg").strip(),
         is_world=bool(raw.get("is_world", False)),
+        is_singleton=bool(raw.get("is_singleton", False)),
         identifiers=identifiers,
         name_expression=name_expression,
         identity=identity,
@@ -1915,9 +2503,9 @@ def _parse_auth(raw: dict, parent_tag: str) -> AuthFlowDef:
     raw_login = raw.get("login")
     login = _parse_login_request(raw_login, f"{atag}: login") if isinstance(raw_login, dict) else None
 
-    # extract
+    # extract — Gap B: normalise single-mapping or list to List[ExtractRuleDef]
     raw_extract = raw.get("extract")
-    extract = _parse_extract_rule(raw_extract, atag) if isinstance(raw_extract, dict) else None
+    extract = _parse_extract_block(raw_extract, atag)
 
     # inject
     raw_inject = raw.get("inject") or []

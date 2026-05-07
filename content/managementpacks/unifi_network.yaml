@@ -1,0 +1,1118 @@
+# UniFi Network Management Pack — v2
+#
+# Design artifact: designs/unifi-mp-v2.md (round 3, mp-author-ready 2026-04-30)
+# API map: context/api-maps/unifi-network-api.md
+# Adapter kind: mpb_unifi_network
+#
+# Architecture summary (designs/unifi-mp-v2.md §"Object Model"):
+#   Four object kinds. Zero world kinds (adapter instance is the implicit root).
+#
+#   UniFi Site — is_singleton: true. One per adapter instance. Carries
+#     Network App version/build metadata (from stat/sysinfo) and per-subsystem
+#     health aggregates (wlan/wan/www/lan/vpn from stat/health via JMESPath
+#     filter predicates). Hardware metrics for the controller appliance moved
+#     to Gateway (round-3 topology pivot: UDM Pro appears once as a Gateway row).
+#
+#   Access Point — list, source stat/device filtered by type=='uap'. Per-radio
+#     metrics via JMESPath filter predicates on radio_table_stats[].
+#
+#   Switch — list, source stat/device filtered by type=='usw'. Per-port
+#     aggregate counts via JMESPath length() predicates.
+#
+#   Gateway — list, source stat/device filtered by type=='udm'||type=='ugw'.
+#     UDM Pro appears here (once only) carrying hardware metrics (CPU, memory,
+#     system load, uptime) and WAN metrics (wan1/wan2/uplink).
+#
+# Auth: classic cookie_session. POST /api/auth/login returns TOKEN cookie +
+#   x-csrf-token header. Gap B (list-of-extracts) is used to capture both.
+#
+# TOOLSET QUESTION C (degraded but shippable):
+#   self/sites returns a list response. The singleton metricSet grammar
+#   requires list_path: "" (scalar context). First-element array access
+#   on a singleton is unverified. Fallback applied: site_meta request and
+#   its 5 metrics (site_name, site_id, site_desc, site_role, device_count)
+#   are dropped. Site identity uses stat/sysinfo.hostname instead.
+#   When Question C is resolved in a future tooling round, re-add site_meta
+#   as a metricSet and promote site_desc to name_expression.
+#
+# Substrate gaps exercised:
+#   Gap B (list-of-extracts auth grammar) — landed 2026-04-30; used here.
+#   Gap F (JMESPath filter predicates in metric source paths) — landed 2026-04-30; used here.
+#   Gap D (coerce: number for string-typed numeric fields) — landed 2026-04-30; used here.
+#   Question C (singleton consuming first row of list) — NOT landed; fallback used.
+#   Question E (single request feeding multiple list objects with different list_path
+#     filters) — verified by this YAML (AP/Switch/Gateway all consume dev_inventory
+#     with different list_path values; renderer must support this pattern).
+#
+name: VCF Content Factory UniFi
+version: 1.0.0
+build_number: 4
+author: VCF Content Factory
+adapter_kind: mpb_unifi_network
+description: >
+  Monitors a UniFi network deployment running Network Application 10.3+.
+  Collects site-level health subsystem aggregates (WLAN/WAN/LAN/VPN/WWW),
+  Access Point device metrics with per-radio channel utilization and client
+  counts, Switch device metrics with port-up aggregates, and Gateway (UDM/USG)
+  device metrics including WAN link throughput, speedtest results, and CPU
+  temperature. Uses classic cookie_session auth (POST /api/auth/login).
+
+source:
+  port: 443
+  ssl: NO_VERIFY
+  base_path: ""
+  timeout: 30
+  max_retries: 2
+  max_concurrent: 10
+
+  auth:
+    preset: cookie_session
+
+    credentials:
+      - {key: username, label: username, sensitive: false}
+      - {key: password, label: password, sensitive: true}
+
+    login:
+      method: POST
+      # Full path from root per feedback_mp_full_paths_required.md (2026-05-01).
+      # base_path is empty; all paths are absolute from the server root.
+      path: "/api/auth/login"
+      body: '{"username": "${credentials.username}", "password": "${credentials.password}", "rememberMe": false}'
+
+    # Gap B: two-value extract — TOKEN cookie AND CSRF header.
+    # IMPORTANT: header name MUST match the on-wire case exactly.
+    # MPB's HTTP client does case-sensitive header lookup (violates RFC 7230).
+    # UniFi sends two equivalent CSRF headers on the login response:
+    #   X-Csrf-Token        (Title-Case — current CSRF value)
+    #   x-updated-csrf-token (all lowercase — rotated CSRF after this request)
+    # We bind x-updated-csrf-token because it is already lowercase and is the
+    # documented rotation header. Do NOT normalize this to "x-csrf-token" —
+    # that was the build-3 bug (curl -i lowercases header names in its output,
+    # masking the true on-wire casing). The inject side uses "x-csrf-token"
+    # (lowercase) on outgoing requests, which is fine: UniFi's API normalizes
+    # incoming request headers per RFC 7230.
+    extract:
+      - location: HEADER
+        name: "Set-Cookie"
+        bind_to: session.token
+      - location: HEADER
+        name: "x-updated-csrf-token"
+        bind_to: session.csrf_token
+
+    inject:
+      - type: header
+        name: "Cookie"
+        value: "TOKEN=${session.token}"
+      - type: header
+        name: "x-csrf-token"
+        value: "${session.csrf_token}"
+
+    logout:
+      method: POST
+      path: "/api/auth/logout"
+
+  test_request:
+    method: GET
+    path: "/proxy/network/api/s/default/stat/sysinfo"
+    params: []
+
+
+requests:
+  # Request 1: stat/sysinfo — controller-software metadata.
+  # Response envelope: {meta:{rc:"ok"}, data:[{...}]} — single-element array.
+  # response_path: "data" does NOT unwrap the array; the singleton metricSet
+  # consumes the root-of-data which is the array. Metrics reference
+  # data[0].field via JMESPath array index on the singleton's scalar context.
+  # NOTE: For singleton objects the loader requires list_path: "" — i.e. consume
+  # the entire response_path root. stat/sysinfo's data[] is a single-element
+  # array; we set response_path to "data[0]" so the scalar metricSet receives
+  # the unwrapped object directly.
+  - name: site_sysinfo
+    method: GET
+    path: "/proxy/network/api/s/default/stat/sysinfo"
+    params: []
+    response_path: "data[0]"
+
+  # Request 2: stat/health — 5 subsystem rows (wlan/wan/www/lan/vpn).
+  # Response envelope: {meta:{rc:"ok"}, data:[...]} — 5-element array.
+  # response_path: "data" exposes the array; metrics use JMESPath filter
+  # predicates [?subsystem=='X'] to extract per-subsystem scalar fields.
+  - name: site_health
+    method: GET
+    path: "/proxy/network/api/s/default/stat/health"
+    params: []
+    response_path: "data"
+
+  # Request 3: stat/device — all adopted devices, ~385 KB on a 15-device lab.
+  # Response envelope: {meta:{rc:"ok"}, data:[...]} — one row per device.
+  # Consumed by three list object types (AP, Switch, Gateway) each with a
+  # different list_path JMESPath filter on type field.
+  # TOOLSET QUESTION E: single request feeding 3 list objects with different
+  # list_path filters. Rendered and verified by this file.
+  - name: dev_inventory
+    method: GET
+    path: "/proxy/network/api/s/default/stat/device"
+    params: []
+    response_path: "data"
+
+
+object_types:
+
+  # ---------------------------------------------------------------------------
+  # UniFi Site — is_singleton: true
+  # One per adapter instance. Carries controller software metadata and
+  # per-subsystem health aggregates. Hardware device metrics live on Gateway.
+  # ---------------------------------------------------------------------------
+  - name: "UniFi Site"
+    key: unifi_site
+    type: INTERNAL
+    icon: "network-aggregator.svg"
+    is_singleton: true
+    identifiers:
+      - key: controller_id
+        source: "metricset:site_sysinfo.anonymous_controller_id"
+    name_expression: hostname
+
+    metricSets:
+      # metricSet A: controller-software metadata from stat/sysinfo.
+      # response_path: "data[0]" on the request gives us the single sysinfo object.
+      - from_request: site_sysinfo
+        list_path: ""
+
+      # metricSet B: health subsystem aggregates from stat/health.
+      # response_path: "data" exposes the 5-element subsystem array.
+      # Metrics extract per-subsystem scalars with JMESPath filter predicates.
+      - from_request: site_health
+        list_path: ""
+
+    metrics:
+      # --- From site_sysinfo ---
+      - key: hostname
+        label: "Hostname"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_sysinfo.hostname"
+
+      - key: controller_id
+        label: "Controller ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_sysinfo.anonymous_controller_id"
+
+      - key: network_app_version
+        label: "Network App Version"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_sysinfo.version"
+
+      - key: network_app_build
+        label: "Network App Build"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_sysinfo.build"
+
+      - key: previous_network_app_version
+        label: "Previous Network App Version"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_sysinfo.previous_version"
+
+      - key: timezone
+        label: "Timezone"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_sysinfo.timezone"
+
+      - key: is_cloud_console
+        label: "Cloud Console"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_sysinfo.is_cloud_console"
+
+      - key: update_available
+        label: "Update Available"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_sysinfo.update_available"
+
+      - key: data_retention_days
+        label: "Data Retention (days)"
+        usage: PROPERTY
+        type: NUMBER
+        source: "metricset:site_sysinfo.data_retention_days"
+
+      # --- From site_health: WAN subsystem ---
+      - key: wan_status
+        label: "WAN Status"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_health.[?subsystem=='wan'].status | [0]"
+
+      - key: wan_clients
+        label: "WAN Connected Clients"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='wan'].num_sta | [0]"
+
+      - key: wan_tx_bytes_rate
+        label: "WAN TX Bytes/s"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='wan'].tx_bytes-r | [0]"
+
+      - key: wan_rx_bytes_rate
+        label: "WAN RX Bytes/s"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='wan'].rx_bytes-r | [0]"
+
+      - key: wan_gateway_mac
+        label: "WAN Gateway MAC"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_health.[?subsystem=='wan'].gw_mac | [0]"
+
+      - key: wan_isp_name
+        label: "WAN ISP"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_health.[?subsystem=='wan'].isp_name | [0]"
+
+      # --- From site_health: WWW subsystem ---
+      - key: internet_latency_ms
+        label: "Internet Latency (ms)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='www'].latency | [0]"
+
+      - key: internet_uptime_seconds
+        label: "Internet Path Uptime (s)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='www'].uptime | [0]"
+
+      - key: internet_drops
+        label: "Internet Drops"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='www'].drops | [0]"
+
+      - key: internet_xput_up
+        label: "Internet Speedtest Up"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='www'].xput_up | [0]"
+
+      - key: internet_xput_down
+        label: "Internet Speedtest Down"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='www'].xput_down | [0]"
+
+      - key: speedtest_status
+        label: "Speedtest Status"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_health.[?subsystem=='www'].speedtest_status | [0]"
+
+      - key: speedtest_ping_ms
+        label: "Speedtest Ping (ms)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='www'].speedtest_ping | [0]"
+
+      # --- From site_health: WLAN subsystem ---
+      - key: wlan_status
+        label: "WLAN Status"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_health.[?subsystem=='wlan'].status | [0]"
+
+      - key: wlan_user_count
+        label: "Wireless Users"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='wlan'].num_user | [0]"
+
+      - key: wlan_guest_count
+        label: "Guest Users"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='wlan'].num_guest | [0]"
+
+      - key: wlan_iot_count
+        label: "IoT Users"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='wlan'].num_iot | [0]"
+
+      - key: wlan_ap_count
+        label: "APs"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='wlan'].num_ap | [0]"
+
+      - key: wlan_ap_disconnected
+        label: "APs Disconnected"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='wlan'].num_disconnected | [0]"
+
+      - key: wlan_tx_bytes_rate
+        label: "WLAN TX Bytes/s"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='wlan'].tx_bytes-r | [0]"
+
+      - key: wlan_rx_bytes_rate
+        label: "WLAN RX Bytes/s"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='wlan'].rx_bytes-r | [0]"
+
+      # --- From site_health: LAN subsystem ---
+      - key: lan_status
+        label: "LAN Status"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:site_health.[?subsystem=='lan'].status | [0]"
+
+      - key: lan_user_count
+        label: "LAN Wired Users"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='lan'].num_user | [0]"
+
+      - key: lan_switch_count
+        label: "Switches"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='lan'].num_sw | [0]"
+
+      - key: lan_switch_disconnected
+        label: "Switches Disconnected"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='lan'].num_disconnected | [0]"
+
+      - key: lan_tx_bytes_rate
+        label: "LAN TX Bytes/s"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='lan'].tx_bytes-r | [0]"
+
+      - key: lan_rx_bytes_rate
+        label: "LAN RX Bytes/s"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='lan'].rx_bytes-r | [0]"
+
+      # --- From site_health: VPN subsystem ---
+      - key: vpn_remote_users_active
+        label: "VPN Active Users"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='vpn'].remote_user_num_active | [0]"
+
+      - key: vpn_tx_bytes
+        label: "VPN TX Bytes"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='vpn'].remote_user_tx_bytes | [0]"
+
+      - key: vpn_rx_bytes
+        label: "VPN RX Bytes"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:site_health.[?subsystem=='vpn'].remote_user_rx_bytes | [0]"
+
+
+  # ---------------------------------------------------------------------------
+  # Access Point — list
+  # Source: stat/device filtered by type=='uap'. One row per adopted AP.
+  # Per-radio metrics use JMESPath filter predicates on radio_table_stats[].
+  # ---------------------------------------------------------------------------
+  - name: "Access Point"
+    key: access_point
+    type: INTERNAL
+    icon: "wireless-access-point.svg"
+    is_singleton: false
+    identifiers: [mac]
+    name_expression: name
+
+    metricSets:
+      - from_request: dev_inventory
+        primary: true
+        list_path: "[?type=='uap']"
+
+    metrics:
+      # --- Device-level properties ---
+      - key: mac
+        label: "MAC"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.mac"
+
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.name"
+
+      - key: model
+        label: "Model"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.model"
+
+      - key: model_in_lts
+        label: "Model In LTS"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.model_in_lts"
+
+      - key: firmware_version
+        label: "Firmware Version"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.version"
+
+      - key: upgradable
+        label: "Upgrade Available"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.upgradable"
+
+      - key: adopted
+        label: "Adopted"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.adopted"
+
+      - key: ip
+        label: "IP Address"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.ip"
+
+      - key: serial
+        label: "Serial"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.serial"
+
+      - key: country_code
+        label: "Country Code"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.country_code"
+
+      - key: uplink_mac
+        label: "Uplink Device MAC"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.uplink.uplink_mac"
+
+      # --- Device-level metrics ---
+      - key: state
+        label: "State (1=connected)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.state"
+
+      - key: uptime_seconds
+        label: "Uptime (s)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory._uptime"
+
+      - key: last_seen_epoch
+        label: "Last Seen (epoch s)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.last_seen"
+
+      - key: cpu_pct
+        label: "CPU %"
+        usage: METRIC
+        type: NUMBER
+        coerce: number
+        source: "metricset:dev_inventory.system-stats.cpu"
+
+      - key: mem_pct
+        label: "Memory %"
+        usage: METRIC
+        type: NUMBER
+        coerce: number
+        source: "metricset:dev_inventory.system-stats.mem"
+
+      - key: client_count
+        label: "Connected Clients"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.num_sta"
+
+      - key: user_client_count
+        label: "User Clients"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.user-num_sta"
+
+      - key: guest_client_count
+        label: "Guest Clients"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.guest-num_sta"
+
+      - key: satisfaction
+        label: "Satisfaction"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.satisfaction"
+
+      # --- Per-radio metrics: 2.4 GHz (radio=='ng') ---
+      - key: radio_24ghz_clients
+        label: "2.4 GHz Clients"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.radio_table_stats[?radio=='ng'].user-num_sta | [0]"
+
+      - key: radio_24ghz_tx_power
+        label: "2.4 GHz TX Power"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.radio_table_stats[?radio=='ng'].tx_power | [0]"
+
+      - key: radio_24ghz_satisfaction
+        label: "2.4 GHz Satisfaction"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.radio_table_stats[?radio=='ng'].satisfaction | [0]"
+
+      - key: radio_24ghz_channel
+        label: "2.4 GHz Channel"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.radio_table_stats[?radio=='ng'].channel | [0]"
+
+      - key: radio_24ghz_cu_total
+        label: "2.4 GHz Channel Util %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.radio_table_stats[?radio=='ng'].cu_total | [0]"
+
+      - key: radio_24ghz_tx_retries_pct
+        label: "2.4 GHz TX Retries %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.radio_table_stats[?radio=='ng'].tx_retries_pct | [0]"
+
+      # --- Per-radio metrics: 5 GHz (radio=='na') ---
+      - key: radio_5ghz_clients
+        label: "5 GHz Clients"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.radio_table_stats[?radio=='na'].user-num_sta | [0]"
+
+      - key: radio_5ghz_tx_power
+        label: "5 GHz TX Power"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.radio_table_stats[?radio=='na'].tx_power | [0]"
+
+      - key: radio_5ghz_satisfaction
+        label: "5 GHz Satisfaction"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.radio_table_stats[?radio=='na'].satisfaction | [0]"
+
+      - key: radio_5ghz_channel
+        label: "5 GHz Channel"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.radio_table_stats[?radio=='na'].channel | [0]"
+
+      - key: radio_5ghz_cu_total
+        label: "5 GHz Channel Util %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.radio_table_stats[?radio=='na'].cu_total | [0]"
+
+      - key: radio_5ghz_tx_retries_pct
+        label: "5 GHz TX Retries %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.radio_table_stats[?radio=='na'].tx_retries_pct | [0]"
+
+
+  # ---------------------------------------------------------------------------
+  # Switch — list
+  # Source: stat/device filtered by type=='usw'. One row per adopted switch.
+  # Per-port aggregates via JMESPath length() predicates.
+  # ---------------------------------------------------------------------------
+  - name: "Switch"
+    key: switch
+    type: INTERNAL
+    icon: "network-switch.svg"
+    is_singleton: false
+    identifiers: [mac]
+    name_expression: name
+
+    metricSets:
+      - from_request: dev_inventory
+        primary: true
+        list_path: "[?type=='usw']"
+
+    metrics:
+      # --- Device-level properties ---
+      - key: mac
+        label: "MAC"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.mac"
+
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.name"
+
+      - key: model
+        label: "Model"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.model"
+
+      - key: model_in_lts
+        label: "Model In LTS"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.model_in_lts"
+
+      - key: firmware_version
+        label: "Firmware Version"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.version"
+
+      - key: serial
+        label: "Serial"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.serial"
+
+      - key: ip
+        label: "IP Address"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.ip"
+
+      - key: uplink_mac
+        label: "Uplink MAC"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.uplink.uplink_mac"
+
+      - key: overheating
+        label: "Overheating"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.overheating"
+
+      - key: has_temperature
+        label: "Has Temperature Sensor"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.has_temperature"
+
+      - key: has_fan
+        label: "Has Fan"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.has_fan"
+
+      # --- Device-level metrics ---
+      - key: state
+        label: "State"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.state"
+
+      - key: uptime_seconds
+        label: "Uptime (s)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory._uptime"
+
+      - key: last_seen_epoch
+        label: "Last Seen"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.last_seen"
+
+      - key: cpu_pct
+        label: "CPU %"
+        usage: METRIC
+        type: NUMBER
+        coerce: number
+        source: "metricset:dev_inventory.system-stats.cpu"
+
+      - key: mem_pct
+        label: "Memory %"
+        usage: METRIC
+        type: NUMBER
+        coerce: number
+        source: "metricset:dev_inventory.system-stats.mem"
+
+      - key: client_count
+        label: "Clients"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.num_sta"
+
+      # --- Chassis-level ---
+      - key: total_max_power_w
+        label: "PoE Budget Max (W)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.total_max_power"
+
+      # --- Per-port aggregates (JMESPath length() predicates) ---
+      - key: port_count
+        label: "Port Count"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.port_table | length(@)"
+
+      - key: ports_up_count
+        label: "Ports Up"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.port_table[?up==`true`] | length(@)"
+
+      - key: ports_poe_capable_count
+        label: "PoE-Capable Ports"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.port_table[?port_poe==`true`] | length(@)"
+
+
+  # ---------------------------------------------------------------------------
+  # Gateway — list
+  # Source: stat/device filtered by type=='udm' or type=='ugw'.
+  # UDM Pro appears once here. Carries hardware metrics (CPU, mem, system load,
+  # uptime), WAN link metrics (wan1/wan2), active-WAN speedtest (uplink), and
+  # CPU temperature (temperatures[?name=='CPU']).
+  # ---------------------------------------------------------------------------
+  - name: "Gateway"
+    key: gateway
+    type: INTERNAL
+    icon: "firewall.svg"
+    is_singleton: false
+    identifiers: [mac]
+    name_expression: name
+
+    metricSets:
+      - from_request: dev_inventory
+        primary: true
+        list_path: "[?type=='udm' || type=='ugw']"
+
+    metrics:
+      # --- Device-level properties ---
+      - key: mac
+        label: "MAC"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.mac"
+
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.name"
+
+      - key: hostname
+        label: "Hostname"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.hostname"
+
+      - key: model
+        label: "Model"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.model"
+
+      - key: model_in_lts
+        label: "Model In LTS"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.model_in_lts"
+
+      - key: device_type
+        label: "Device Type"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.type"
+
+      - key: firmware_version
+        label: "Firmware Version"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.version"
+
+      - key: unifi_os_version
+        label: "UniFi OS Version"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.console_display_version"
+
+      - key: udm_version
+        label: "UDM Firmware Version"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.udm_version"
+
+      - key: serial
+        label: "Serial"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.serial"
+
+      - key: ip
+        label: "IP Address"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.ip"
+
+      - key: overheating
+        label: "Overheating"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.overheating"
+
+      - key: wan1_up
+        label: "WAN1 Link Up"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.wan1.up"
+
+      - key: active_wan_speedtest_status
+        label: "Active WAN Speedtest Status"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:dev_inventory.uplink.speedtest_status"
+
+      # --- Device-level metrics ---
+      - key: state
+        label: "State"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.state"
+
+      - key: uptime_seconds
+        label: "Uptime (s)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory._uptime"
+
+      - key: last_seen_epoch
+        label: "Last Seen"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.last_seen"
+
+      - key: cpu_pct
+        label: "CPU %"
+        usage: METRIC
+        type: NUMBER
+        coerce: number
+        source: "metricset:dev_inventory.system-stats.cpu"
+
+      - key: mem_pct
+        label: "Memory %"
+        usage: METRIC
+        type: NUMBER
+        coerce: number
+        source: "metricset:dev_inventory.system-stats.mem"
+
+      - key: system_load_1m
+        label: "System Load (1m)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.system-stats.loadavg_1"
+
+      - key: system_load_5m
+        label: "System Load (5m)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.system-stats.loadavg_5"
+
+      - key: system_load_15m
+        label: "System Load (15m)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.system-stats.loadavg_15"
+
+      - key: client_count
+        label: "Clients"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.num_sta"
+
+      # --- WAN1 metrics ---
+      - key: wan1_tx_bytes_total
+        label: "WAN1 TX Bytes (cumulative)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan1.tx_bytes"
+
+      - key: wan1_rx_bytes_total
+        label: "WAN1 RX Bytes (cumulative)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan1.rx_bytes"
+
+      - key: wan1_tx_bytes_rate
+        label: "WAN1 TX Bytes/s"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan1.tx_bytes-r"
+
+      - key: wan1_rx_bytes_rate
+        label: "WAN1 RX Bytes/s"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan1.rx_bytes-r"
+
+      - key: wan1_tx_errors
+        label: "WAN1 TX Errors"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan1.tx_errors"
+
+      - key: wan1_rx_errors
+        label: "WAN1 RX Errors"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan1.rx_errors"
+
+      - key: wan1_latency_ms
+        label: "WAN1 Latency (ms)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan1.latency"
+
+      - key: wan1_availability_pct
+        label: "WAN1 Availability %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan1.availability"
+
+      - key: wan1_speed_mbps
+        label: "WAN1 Speed (Mbps)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan1.speed"
+
+      # --- WAN2 metrics (mirrors WAN1, only present when WAN2 link exists) ---
+      - key: wan2_tx_bytes_total
+        label: "WAN2 TX Bytes (cumulative)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan2.tx_bytes"
+
+      - key: wan2_rx_bytes_total
+        label: "WAN2 RX Bytes (cumulative)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan2.rx_bytes"
+
+      - key: wan2_tx_bytes_rate
+        label: "WAN2 TX Bytes/s"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan2.tx_bytes-r"
+
+      - key: wan2_rx_bytes_rate
+        label: "WAN2 RX Bytes/s"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan2.rx_bytes-r"
+
+      - key: wan2_tx_errors
+        label: "WAN2 TX Errors"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan2.tx_errors"
+
+      - key: wan2_rx_errors
+        label: "WAN2 RX Errors"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan2.rx_errors"
+
+      - key: wan2_latency_ms
+        label: "WAN2 Latency (ms)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan2.latency"
+
+      - key: wan2_availability_pct
+        label: "WAN2 Availability %"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan2.availability"
+
+      - key: wan2_speed_mbps
+        label: "WAN2 Speed (Mbps)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.wan2.speed"
+
+      # --- Active WAN speedtest (from uplink top-level object) ---
+      - key: active_wan_xput_up
+        label: "Active WAN Speedtest Up"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.uplink.xput_up"
+
+      - key: active_wan_xput_down
+        label: "Active WAN Speedtest Down"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.uplink.xput_down"
+
+      - key: active_wan_speedtest_ping_ms
+        label: "Active WAN Ping (ms)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.uplink.speedtest_ping"
+
+      - key: active_wan_drops
+        label: "Active WAN Drops"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.uplink.drops"
+
+      - key: active_wan_uptime
+        label: "Active WAN Path Uptime"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.uplink.uptime"
+
+      # --- Temperatures (UDM only — absent on USG-split deployments) ---
+      # API map confirms temperatures[] is array-of-objects {name, type, value}.
+      # Sensor names on UDM Pro: "CPU", "Local" (board), "PHY" (board).
+      # v1's [?name=='System'] filter does NOT match — corrected to [?name=='CPU'].
+      - key: cpu_temp_c
+        label: "CPU Temperature (°C)"
+        usage: METRIC
+        type: NUMBER
+        source: "metricset:dev_inventory.temperatures[?name=='CPU'].value | [0]"
+
+
+# No explicit relationships in v2. AP, Switch, Gateway, and UniFi Site all
+# parent the adapter instance implicitly via MPB's default containment model.
+# v1.1 adds: AP→Switch and Switch→Switch via uplink.uplink_mac field_match joins.
+relationships: []

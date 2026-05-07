@@ -65,7 +65,7 @@ tags: [synology, management-pack, mpb, rest-api, prometheus, grafana, snmp]
 
 # Synology Community Tools and Existing Integrations
 
-> **Revision note (2026-04-16):** API count and per-LUN I/O capability notes updated against live API testing on a DS1520+ running DSM 7.3.2-86009 Update 1. Community tool accuracy is unchanged. See also the live-tested brief at `workspaces/sentania-lab-toolkit/docs/reference-synology-api-mp-brief.md`.
+> **Revision note (2026-04-16):** API count and per-LUN I/O capability notes updated against live API testing on a DS1520+ running DSM 7.3.2-86009 Update 1. Community tool accuracy is unchanged. See also the live-tested brief at `workspaces/lab-admin/docs/reference-synology-api-mp-brief.md`.
 
 ## Python API Wrappers
 

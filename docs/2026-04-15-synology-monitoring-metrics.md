@@ -35,7 +35,7 @@ tags: [synology, management-pack, mpb, rest-api, snmp, metrics]
 
 # Synology Monitoring Metrics Reference
 
-> **Revision note (2026-04-16):** Storage API namespaces, per-LUN I/O metrics, and backup API namespace corrected against live API testing on a DS1520+ running DSM 7.3.2-86009 Update 1. Corrected sections are marked. See also the live-tested brief at `workspaces/sentania-lab-toolkit/docs/reference-synology-api-mp-brief.md`.
+> **Revision note (2026-04-16):** Storage API namespaces, per-LUN I/O metrics, and backup API namespace corrected against live API testing on a DS1520+ running DSM 7.3.2-86009 Update 1. Corrected sections are marked. See also the live-tested brief at `workspaces/lab-admin/docs/reference-synology-api-mp-brief.md`.
 
 This document catalogs all metrics available from Synology NAS devices via the REST API and SNMP, organized by category for use in a VCF Operations Management Pack.
 

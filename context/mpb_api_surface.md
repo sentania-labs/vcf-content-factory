@@ -443,5 +443,68 @@ Polls job status. Detail flag returns full result body including test-response a
 ### Open question — is `/suite-api/` a proxy or parallel API?
 `/suite-api/internal/mpbuilder/designs/*` handles CRUD (import, export, install). `/vcf-operations/rest/ops/internal/mpbuilder/designs/{id}/jobs` handles test-source. They may be one behind the other, or parallel. If `/jobs` is available at `/suite-api/` under bearer auth, Phase 3 full-auto unlocks. Untested — needs a careful probe with existing bearer creds.
 
+### CONFIRMED 2026-04-29: `/jobs` IS bearer-reachable at `/suite-api/`
+
+`POST /suite-api/internal/mpbuilder/designs/{id}/jobs` accepts
+the same body shape as the UI-path equivalent and dispatches
+the source-test runner. Verified on devel against the existing
+Synology design `a6b6877f-bfad-43af-84e7-aa56f209b8d9`:
+
+- `jobType: TEST_SOURCE`, `testType: GET_SESSION` — runs auth
+  step, returns 200 with session response embedded under
+  `actionResult` (base64-encoded).
+- `jobType: TEST_SOURCE`, `testType: TEST_CONNECTION` — runs
+  the source's `testRequest` after the GET_SESSION response
+  is carried forward in
+  `body.source.sessionSettings.getSession.response`. Returns
+  200 with the test-request response, including
+  `dataModelLists` of attributes inferred from the response
+  body.
+
+**Action polling**: `GET /suite-api/api/actions/{actionId}/status?detail=true`
+returns task state plus base64-encoded `actionResult` payload.
+This is the SAME action-status endpoint the legacy resource-
+action subsystem uses. Decoding `actionResult` yields a JSON
+envelope with `responseCode`, `errorMessage`, `body`,
+`headers`, `dataModelLists`.
+
+**Install deployment polling** has its own path:
+`GET /suite-api/internal/mpbuilder/designs/{designId}/install/{deploymentId}`.
+The deployment id from `POST /install`'s response body works
+as the path-tail. Returns final state + `errorMessage`.
+
+**Source-test prerequisites** (failure modes captured):
+
+- `configuration.collectorId` MUST be a valid collector UUID.
+  Null returns 400 `"No collector found with UUID null"`. Pull
+  via `GET /api/collectors` and inject before calling.
+- `authentication.credentials[].value` MUST be the actual
+  cleartext password for sensitive creds. The importer strips
+  these via `_strip_cred()` on import; the server holds them
+  internally for the design only after a UI password entry.
+  Re-imported probe designs cannot pass source-test without
+  manual UI credential re-entry.
+
+**Phase 3 full-auto status**: source-test IS now scriptable
+under bearer auth — but the per-resource builder-file parser
+that produces verbose validation errors still has no located
+trigger endpoint. Designs with valid source-test responses
+still land INVALID if they have per-resource objectBinding
+issues (see `mpb_object_binding_wire_format.md` §8). Best
+guess: that parser runs as part of the UI Verify wizard's
+final step, not as an isolatable REST call.
+
+### `PUT /designs/{id}/objects/{objId}` is broken (2026-04-29)
+
+Per-object PUT returns 500 ISE on both wrapped (`{"object":{...}}`)
+and unwrapped body shapes against a known-good full-fidelity
+GET payload. `PUT /designs/{id}` accepts only summary-shape
+bodies (name/description/version), not the full export envelope
+the UI uses for design editing. Conclusion: the only way to
+modify a design's objects via REST is to re-import — and
+re-import strips sensitive credentials, breaking source-test
+for the new design. This is the primary blocker for headless
+verify-time probing.
+
 ### Session variable key rules — revisit
 Validator on import path (`POST /designs/import`) rejects sessionVariable keys containing hyphens (e.g. `Set-Cookie`) — see earlier notes. **Runtime path `/jobs` accepts `Set-Cookie` with hyphen** per Scott's capture. Different code paths, different validators. Worth factoring into `render_export.py` decision: do we emit `Set-Cookie` (works at runtime, rejected by import validator) or `set_cookie` (accepted at import, unclear at runtime)? Needs concrete test before deciding.

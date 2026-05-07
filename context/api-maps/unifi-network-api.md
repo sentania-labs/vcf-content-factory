@@ -1054,3 +1054,412 @@ than fits in this map.
 - **`ugw` gateway type** — not exercised (lab has no USG). Design
   filter `[?type=='ugw' || type=='udm']` structurally correct;
   `ugw`-specific fields not verified.
+
+---
+
+## Version verification — 2026-04-30 spot-check
+
+**Authored by:** api-cartographer
+**Probe scope:** 5-minute targeted re-verification (not a re-cartography).
+**Endpoints hit:** 3 (`stat/sysinfo`, `stat/health`, `stat/device`) plus
+the auth login. ~4 of the 10-12 budgeted hits used; remainder unspent
+because the three primary surfaces re-verified everything in the
+brief's spot-check list.
+**Evidence basis:** live API calls against `unifi.int.sentania.net`
+on 2026-04-30 as the `claude` service account.
+
+### Network App version — controller has been upgraded
+
+| Field | 2026-04-18 | 2026-04-30 |
+|---|---|---|
+| `version` | `10.2.105` | `10.3.55` |
+| `build` | `atag_10.2.105_33556` | `atag_10.3.55_34128` |
+| `previous_version` | `10.1.89` | **`10.2.105`** |
+| `udm_version` | `UDMPRO.al324.v5.0.16.238fde6.260227.0037` | unchanged |
+| `console_display_version` | `5.0.16` | unchanged |
+
+**Skew resolved.** The 2026-04-30 Integration v1 probe (10.3.55) and
+today's classic probe (10.3.55) **agree.** The 2026-04-18 classic map
+captured 10.2.105 because that was the live version then; the
+controller was upgraded sometime between 2026-04-18 and 2026-04-30.
+The smoking gun: `previous_version: "10.2.105"` exactly matches the
+prior session's `version`. Neither surface lied — the controller
+moved.
+
+UniFi OS / `udm_version` / `console_display_version` are all
+unchanged at 5.0.16. Only the Network Application bumped one minor.
+
+### Per-metric-path verification
+
+| Path / shape | Status | Notes |
+|---|---|---|
+| `stat/sysinfo` top-level keys | resolves; **additive drift** | All 2026-04-18 keys still present. ~20 new keys (debug_*, default_site_device_auth_password_alert, has_webrtc_support, image_maps_use_google_engine, ip_addrs, override_inform_host, store_enabled, sso_app_id, unsupported_device_count, unsupported_device_list, three more `data_retention_time_in_hours_for_*` scales, etc.). No removals. v2 design unaffected. |
+| `stat/health[?subsystem=='wlan']` | resolves | 12 keys, identical set to 2026-04-18. |
+| `stat/health[?subsystem=='wan']` | resolves | 21 keys, identical set. |
+| `stat/health[?subsystem=='lan']` | resolves | 12 keys, identical set. |
+| `stat/health[?subsystem=='vpn']` | resolves | 10 keys, identical set. |
+| `stat/health[?subsystem=='www']` | resolves | 13 keys, identical set. |
+| `stat/device` row count | resolves | 15 devices (8 usw, 6 uap, 1 udm) — unchanged. |
+| AP `radio_table_stats[?radio=='ng']` fields `cu_total`, `tx_power`, `tx_retries_pct`, `user-num_sta`, `channel`, `satisfaction` | resolves | Sample values from `ap-livingroom`: cu_total=40, tx_power=15, tx_retries_pct=0.0, user-num_sta=0, channel=2, satisfaction=-1 (no clients on 2.4 GHz right now). |
+| AP `radio_table_stats[?radio=='na']` same fields | resolves | Sample: cu_total=4, tx_power=22, tx_retries_pct=18.3, user-num_sta=2, channel=48, satisfaction=97. |
+| AP `radio_table_stats[].last_interference_at` | **MISSING this session** | Was in 2026-04-18 union (1 of 23 keys); 0/12 radio rows carry it today across all 6 APs. Classified the same as `upgrade_to_firmware`: only present when condition holds (recent interference event). Not a rename or removal. mp-author should treat as optional. |
+| UDM `system-stats.cpu`, `system-stats.mem` | resolves | Still STRINGS (`"46.4"`, `"88.4"`). Coercion still required. |
+| UDM `temperatures[?name=='CPU'].value` | resolves | Value 46.5. Three sensors still present (CPU, Local, PHY). |
+| UDM `wan1.tx_bytes-r`, `wan1.rx_bytes-r` | resolves | 7522 / 6891. |
+| UDM `wan1.tx_bytes`, `wan1.rx_bytes`, `wan1.latency`, `wan1.availability` | resolves | All present, sane values. |
+| UDM `port_table[]` shape | resolves | 11 entries; `network_name` discriminator (`lan`/`wan`/`wan2`) unchanged. |
+| Switch `total_max_power` | resolves | 8/8 switches: same null-vs-int pattern as 2026-04-18 (e.g. usw-lite-16-r740 still null). |
+| Switch `has_temperature`, `has_fan` | resolves | usw-lite-16-nuc: both False — unchanged from 2026-04-18 finding for fanless USL16LP. |
+| Switch `port_table[?poe_enable==true].poe_power` | resolves | Same per-switch PoE port counts as 2026-04-18 (8-attic=4, GarageFlex=4, central=4, AtticFlex=4, Backyard Flex=2, three switches with 0). |
+| **Switch `port_table[].mac`** | **MISSING (was missing on 2026-04-18 too — never observed)** | Brief listed this as a spot-check but it has never been in the captured `port_table` union (see lines 437-450 of original capture). The field is not part of the classic switch port shape. mp-author must NOT depend on it. Clients' MACs live on `stat/sta.last_uplink_mac` + `stat/sta.sw_port` (already documented as the Wired-client→switch-port join key). |
+
+### Switch `port_table[]` union — additive drift
+
+| 2026-04-18 union size | 2026-04-30 union size | Delta |
+|---|---|---|
+| 65 keys | 80 keys | +15 (no removals) |
+
+New keys observed on `usw-lite-16-nuc` today (sample switch):
+`enabled` (alongside existing `enable`), `isolation`, `lldpmed_enabled`,
+`multicast_router_networkconf_ids`, `port_caps`,
+`port_keepalive_enabled`, `stormctrl_bcast_enabled`,
+`stormctrl_bcast_rate`, `stormctrl_mcast_enabled`,
+`stormctrl_mcast_rate`, `stormctrl_ucast_enabled`,
+`stormctrl_ucast_rate`, `stp_port_mode`, `stp_role`,
+`voice_networkconf_id`. None affect mp-author's v2 metric paths
+(all are config knobs / new STP fields the design doesn't reference).
+
+### Verdict
+
+**No drift — mp-author may proceed with v2's metric paths.**
+
+Every metric path the brief flagged as a v2-design dependency still
+resolves on Network App 10.3.55 with the same shape and field names
+documented on 2026-04-18. The two changes are both additive
+(`stat/sysinfo` and `port_table[]` gained new keys) and one
+sometimes-present field (`last_interference_at`) is absent in this
+session's data — the same way `upgrade_to_firmware` was absent in the
+prior session. Neither pattern requires authoring changes.
+
+The version skew between the 2026-04-18 classic map (10.2.105) and
+the 2026-04-30 Integration v1 probe (10.3.55) is fully explained by
+a controller upgrade between dates, not a discrepancy between
+surfaces. The classic and Integration surfaces agree on version
+today. **All other 2026-04-18 observations remain valid for v2
+authoring** — flag this section in the file's update history but do
+not re-author the prior sections.
+
+---
+
+## `stat/device` POST body filter probes — 2026-05-06
+
+**Authored by:** api-cartographer
+**Probe scope:** targeted investigation of whether `POST /proxy/network/api/s/default/stat/device` supports server-side filtering via POST body parameters (`type`, `macs`).
+**Endpoints hit:** 7 requests against `stat/device` (3 type-filtered POSTs, 1 macs-filtered POST, 1 empty-body POST, 1 unfiltered GET, 1 path-based single-device GET).
+**Evidence basis:** live API calls against `unifi.int.sentania.net` (Network App 10.3.55) on 2026-05-06 as the `claude` service account.
+
+### Probe 1: POST with `{"type":"uap"}`
+
+- **Method:** POST
+- **URL:** `/proxy/network/api/s/default/stat/device`
+- **Body:** `{"type":"uap"}`
+- **HTTP status:** 200
+- **Items returned:** 15 (all devices)
+- **Types in response:** `{uap, usw, udm}` — all three types present
+- **Verdict:** `type` filter **IGNORED** [observed 2026-05-06]
+
+### Probe 2: POST with `{"type":"usw"}`
+
+- **Method:** POST
+- **URL:** `/proxy/network/api/s/default/stat/device`
+- **Body:** `{"type":"usw"}`
+- **HTTP status:** 200
+- **Items returned:** 15 (all devices)
+- **Types in response:** `{uap, usw, udm}` — all three types present
+- **Verdict:** `type` filter **IGNORED** [observed 2026-05-06]
+
+### Probe 3: POST with `{"type":"udm"}`
+
+- **Method:** POST
+- **URL:** `/proxy/network/api/s/default/stat/device`
+- **Body:** `{"type":"udm"}`
+- **HTTP status:** 200
+- **Items returned:** 15 (all devices)
+- **Types in response:** `{uap, usw, udm}` — all three types present
+- **Verdict:** `type` filter **IGNORED** [observed 2026-05-06]
+
+### Probe 4: GET (unfiltered baseline)
+
+- **Method:** GET
+- **URL:** `/proxy/network/api/s/default/stat/device`
+- **Body:** none
+- **HTTP status:** 200
+- **Items returned:** 15
+- **Type breakdown:** `{usw: 8, uap: 6, udm: 1}` — matches expected inventory [re-verified 2026-05-06]
+
+### Probe 5: POST with `{"macs":["ac:8b:a9:b1:51:a2","fc:ec:da:f3:21:56"]}`
+
+- **Method:** POST
+- **URL:** `/proxy/network/api/s/default/stat/device`
+- **Body:** `{"macs":["ac:8b:a9:b1:51:a2","fc:ec:da:f3:21:56"]}`
+- **HTTP status:** 200
+- **Items returned:** 2
+- **Types in response:** `{usw: 1, uap: 1}` — exactly the two requested devices
+- **MACs returned:** `ac:8b:a9:b1:51:a2` (usw-lite-16-nuc), `fc:ec:da:f3:21:56` (ap-livingroom)
+- **Verdict:** `macs` filter **WORKS** — server-side filtering confirmed [observed 2026-05-06]
+
+### Probe 6: GET single device by MAC in path
+
+- **Method:** GET
+- **URL:** `/proxy/network/api/s/default/stat/device/ac:8b:a9:b1:51:a2`
+- **Body:** none
+- **HTTP status:** 200
+- **Items returned:** 1 (`type=usw`, `mac=ac:8b:a9:b1:51:a2`, `name=usw-lite-16-nuc`)
+- **Verdict:** Path-based single-device lookup **WORKS** [observed 2026-05-06]
+
+### Probe 7: POST with empty body `{}`
+
+- **Method:** POST
+- **URL:** `/proxy/network/api/s/default/stat/device`
+- **Body:** `{}`
+- **HTTP status:** 200
+- **Items returned:** 15
+- **Type breakdown:** `{usw: 8, uap: 6, udm: 1}` — identical to GET
+- **Verdict:** POST with empty body behaves identically to GET [observed 2026-05-06]
+
+### Summary: server-side filtering capabilities on `stat/device`
+
+| Filter mechanism | Works? | Notes |
+|---|---|---|
+| POST body `{"type":"<type>"}` | **NO** | Body is accepted (200) but filter is silently ignored; all 15 devices returned regardless of type value. [observed 2026-05-06] |
+| POST body `{"macs":["<mac>",...]}"` | **YES** | Returns only the devices whose MACs match the array. Server-side filtering confirmed. [observed 2026-05-06] |
+| GET path `/stat/device/<mac>` | **YES** | Returns single device by MAC in URL path. [observed 2026-05-06] |
+| POST body `{}` vs GET (no body) | **Equivalent** | Both return all 15 devices with identical content. [observed 2026-05-06] |
+
+**Implication for MP design:** The MP cannot use POST body `type` filtering to reduce payload size per device type. The adapter must either:
+1. Fetch all devices in one `stat/device` call and apply client-side JMESPath `data[?type=='uap']` / `data[?type=='usw']` / `data[?type=='udm']` filtering (current design approach — confirmed correct). [observed 2026-05-06]
+2. Use `macs` filtering if the adapter maintains a MAC inventory from a prior collection cycle (optimization for large deployments, not needed at 15 devices / ~385 KB). [observed 2026-05-06]
+
+The `macs` filter is useful for targeted single-device refresh but requires prior knowledge of which MACs exist. For initial discovery, a full unfiltered GET followed by client-side type filtering remains the correct pattern.
+
+---
+
+## `stat/device-basic` endpoint mapping and type-filter probes — 2026-05-07
+
+**Authored by:** api-cartographer
+**Probe scope:** 6 requests mapping `stat/device-basic` response schema and testing type-filter support via POST body, GET query param, and cross-checking `stat/device` POST body type filter.
+**Endpoints hit:** `stat/device-basic` (5 requests: 1 GET baseline, 3 POST type-filters, 1 GET query-param filter) + `stat/device` (1 POST type-filter re-check).
+**Evidence basis:** live API calls against `unifi.int.sentania.net` (Network App 10.3.55) on 2026-05-07 as the `claude` service account.
+
+### Endpoint schema: `GET /proxy/network/api/s/default/stat/device-basic`
+
+- **Response envelope:** `{meta:{rc:"ok"}, data:[{...},...]}`
+- **Response size:** ~2 KB (15 items) — compare to `stat/device` at ~444 KB [observed 2026-05-07]
+- **Item count:** 15 (all adopted devices) [observed 2026-05-07]
+- **Type breakdown:** `{usw: 8, uap: 6, udm: 1}` — matches full inventory [re-verified 2026-05-07]
+
+**Fields per item (8 fields total, union across all 15 items):** [observed 2026-05-07]
+
+| Field | Type | Example value | Notes |
+|---|---|---|---|
+| `mac` | string | `"ac:8b:a9:b1:51:a2"` | Device MAC address (identifier) |
+| `state` | integer | `1` | 1=connected, 0=disconnected |
+| `adopted` | boolean | `true` | Whether device is adopted |
+| `disabled` | boolean | `false` | Whether device is admin-disabled |
+| `type` | string | `"usw"` | Device type: `uap`, `usw`, `udm` |
+| `model` | string | `"USL16LP"` | Hardware model code |
+| `in_gateway_mode` | boolean | `false` | Gateway mode flag |
+| `name` | string | `"usw-lite-16-nuc"` | Admin-set device name |
+
+**Sample item:**
+```json
+{
+  "mac": "ac:8b:a9:b1:51:a2",
+  "state": 1,
+  "adopted": true,
+  "disabled": false,
+  "type": "usw",
+  "model": "USL16LP",
+  "in_gateway_mode": false,
+  "name": "usw-lite-16-nuc"
+}
+```
+
+**Comparison to `stat/device`:** `stat/device-basic` returns ~0.5% of the payload size (2 KB vs 444 KB) with only 8 identity/status fields vs the full device telemetry blob. Useful for lightweight inventory/discovery calls. [observed 2026-05-07]
+
+### Type-filter probes on `stat/device-basic`
+
+| # | Method | URL | Body / Params | HTTP Status | Items | Types in response | Verdict |
+|---|---|---|---|---|---|---|---|
+| 1 | GET | `stat/device-basic` | (none) | 200 | 15 | `{usw:8, uap:6, udm:1}` | Baseline [observed 2026-05-07] |
+| 2 | POST | `stat/device-basic` | `{"type":"uap"}` | 200 | 15 | `{usw:8, uap:6, udm:1}` | Filter **IGNORED** [observed 2026-05-07] |
+| 3 | POST | `stat/device-basic` | `{"type":"usw"}` | 200 | 15 | `{usw:8, uap:6, udm:1}` | Filter **IGNORED** [observed 2026-05-07] |
+| 4 | POST | `stat/device-basic` | `{"type":"udm"}` | 200 | 15 | `{usw:8, uap:6, udm:1}` | Filter **IGNORED** [observed 2026-05-07] |
+| 5 | GET | `stat/device-basic?type=uap` | query param | 200 | 15 | `{usw:8, uap:6, udm:1}` | Filter **IGNORED** [observed 2026-05-07] |
+
+### Cross-check: `stat/device` POST type filter
+
+| # | Method | URL | Body | HTTP Status | Items | Types in response | Verdict |
+|---|---|---|---|---|---|---|---|
+| 6 | POST | `stat/device` | `{"type":"uap"}` | 200 | 15 | `{usw:8, uap:6, udm:1}` | Filter **IGNORED** [re-verified 2026-05-07, consistent with 2026-05-06] |
+
+Response size for `stat/device` POST with `{"type":"uap"}`: 444,069 chars (full payload, no reduction). [observed 2026-05-07]
+
+### Summary: type-filtering support across `stat/device*` endpoints
+
+| Endpoint | POST body `{"type":"<t>"}` | GET query `?type=<t>` | POST body `{"macs":[...]}` | GET path `/<mac>` |
+|---|---|---|---|---|
+| `stat/device-basic` | **NO** [observed 2026-05-07] | **NO** [observed 2026-05-07] | **untested** [inferred from pattern: likely works, given stat/device supports it] | **untested** [inferred from pattern] |
+| `stat/device` | **NO** [re-verified 2026-05-07] | **untested** | **YES** [observed 2026-05-06] | **YES** [observed 2026-05-06] |
+
+**Implication for MP design:** Neither `stat/device-basic` nor `stat/device` supports server-side type filtering. The `type` parameter is silently ignored on both endpoints regardless of delivery method (POST body or GET query param). The MP must fetch all devices and apply client-side JMESPath filtering (`data[?type=='uap']` etc.). At 15 devices / ~2 KB for `stat/device-basic` and ~444 KB for `stat/device`, this is not a performance concern at current scale. [observed 2026-05-07]
+
+---
+
+## External reference analysis: Art-of-WiFi API clients — 2026-05-07
+
+**Authored by:** api-cartographer
+**Source repos examined:**
+- `Art-of-WiFi/UniFi-API-client` (classic PHP client, username/password auth)
+- `Art-of-WiFi/UniFi-API-browser` (browser tool wrapping the classic client)
+- `Art-of-WiFi/unifi-network-application-api-client` (official API client, X-API-Key auth)
+
+**Evidence basis:** source code analysis of all three repos (GitHub raw file fetch, read-only). No live API calls in this section.
+**Purpose:** determine whether ANY mechanism exists in the UniFi API (classic or official) to server-side filter devices by type (AP, switch, gateway).
+
+### Classic API client (`UniFi-API-client/src/Client.php`, 4386 lines)
+
+#### Device listing methods
+
+| Method | Endpoint | Parameters | Filters by type? | Notes |
+|---|---|---|---|---|
+| `list_devices($macs=[])` | `POST /api/s/{site}/stat/device` | `{"macs": [...]}` | **NO** | Only filter is by MAC array. No `type` param in the payload. [documented in source 2026-05-07] |
+| `list_devices_basic()` | `GET /api/s/{site}/stat/device-basic` | none | **NO** | Takes no parameters at all. [documented in source 2026-05-07] |
+| `list_aps($mac=null)` | deprecated alias | calls `list_devices($mac)` | **NO** | Emits `E_USER_DEPRECATED`. [documented in source 2026-05-07] |
+
+**There is no `list_switches()`, `list_gateways()`, `list_devices_by_type()`, or any other type-scoped device method.** [documented in source 2026-05-07]
+
+#### Where `type` IS used (mutation-only, not collection)
+
+| Method | Endpoint | `type` values | Purpose |
+|---|---|---|---|
+| `upgrade_all_devices($type='uap')` | `POST /api/s/{site}/cmd/devmgr/upgrade-all` | `"uap"`, `"usw"`, `"ugw"` | Upgrade firmware for one device type. **Mutation, not query.** [documented in source 2026-05-07] |
+| `start_rolling_upgrade($payload=['uap','usw','ugw','uxg'])` | `POST /api/s/{site}/cmd/devmgr/set-rollupgrade` | array of type strings | Rolling firmware upgrade. **Mutation, not query.** [documented in source 2026-05-07] |
+
+These confirm the canonical device type strings (`uap`, `usw`, `ugw`, `uxg`) but are upgrade commands, not read operations.
+
+#### HTTP method handling (`exec_curl`)
+
+When a payload is provided to `fetch_results()`, the client **auto-promotes GET to POST** (`exec_curl` line: "if curl_method is GET or DELETE when passing payload, switch to POST"). This means `list_devices(['mac1','mac2'])` sends a POST with `{"macs":["mac1","mac2"]}` to `stat/device`. The `macs` key is the ONLY recognized filter. [documented in source 2026-05-07]
+
+#### Per-type historical stats (NOT device listing)
+
+The classic client has separate stat endpoints for APs vs gateways, but these are **time-series historical reports**, not device lists:
+
+| Method | Endpoint | Returns |
+|---|---|---|
+| `stat_5minutes_aps()` | `POST /api/s/{site}/stat/report/5minutes.ap` | Time-series AP stats (bytes, num_sta) per 5-min bucket |
+| `stat_hourly_aps()` | `POST /api/s/{site}/stat/report/hourly.ap` | Same, hourly |
+| `stat_daily_aps()` | `POST /api/s/{site}/stat/report/daily.ap` | Same, daily |
+| `stat_monthly_aps()` | `POST /api/s/{site}/stat/report/monthly.ap` | Same, monthly |
+| `stat_5minutes_gateway()` | `POST /api/s/{site}/stat/report/5minutes.gw` | Time-series gateway stats (mem, cpu, loadavg_5) |
+| `stat_hourly_gateway()` | `POST /api/s/{site}/stat/report/hourly.gw` | Same, hourly |
+| `stat_daily_gateway()` | `POST /api/s/{site}/stat/report/daily.gw` | Same, daily |
+| `stat_monthly_gateway()` | `POST /api/s/{site}/stat/report/monthly.gw` | Same, monthly |
+
+These return **aggregated historical metrics** per device (keyed by MAC), not the full device telemetry blob that `stat/device` returns. They accept `mac` (single MAC filter), `start`, `end` (time window), and `attrs` (which metrics to include). [documented in source 2026-05-07]
+
+**No equivalent `stat/report/*.sw` endpoints exist for switches.** Switch historical stats are not exposed in the classic client. [documented in source 2026-05-07]
+
+#### API browser collections (`collections.php`)
+
+The browser's "Devices" menu offers only `list_devices` (no params) -- no type-scoped options. The "Stats" menu offers separate AP stats and gateway stats (the historical endpoints above) but again, no type-filtered device listing. [documented in source 2026-05-07]
+
+### Official API client (`unifi-network-application-api-client`)
+
+#### Device endpoints (Integration API v1)
+
+| Method | HTTP | Endpoint | Parameters |
+|---|---|---|---|
+| `listAdopted()` | `GET /v1/sites/{siteId}/devices` | `offset`, `limit`, `filter` (query param string) |
+| `listPending()` | `GET /v1/devices/pending` | `offset`, `limit`, `filter` |
+| `get($deviceId)` | `GET /v1/sites/{siteId}/devices/{deviceId}` | none |
+| `getStatistics($deviceId)` | `GET /v1/sites/{siteId}/devices/{deviceId}/statistics/latest` | none |
+
+[documented in source 2026-05-07]
+
+#### DeviceFilter: what you CAN filter by
+
+The `DeviceFilter` class (at `src/Filters/Devices/DeviceFilter.php`) defines these filterable properties:
+
+| Property | Operators | Can it filter by device type? |
+|---|---|---|
+| `id` (UUID) | eq, ne, in, notIn | No — this is the device UUID |
+| `macAddress` | eq, ne, in, notIn | No |
+| `ipAddress` | eq, ne, in, notIn | No |
+| `name` | eq, ne, in, notIn, **like** | **Workaround only** — could match naming conventions like `AP-*` or `USW-*` but depends on admin naming. Not reliable. |
+| `model` | eq, ne, in, notIn | **Workaround** — could filter by model codes (e.g. `in(['U6-LR','U6-PRO','U6-ENTERPRISE'])`) but requires enumerating all AP model codes vs switch model codes. Brittle across hardware generations. |
+| `state` | eq, ne, in, notIn | No |
+| `supported` | eq, ne | No |
+| `firmwareVersion` | eq, ne, gt, ge, lt, le, like, in, notIn, isNull, isNotNull | No |
+| `firmwareUpdatable` | eq, ne | No |
+| `features` (SET) | isEmpty, contains, containsAny, containsAll, containsExactly | **Partial workaround** — could filter `features.contains('wifi6')` for wireless devices, or `features.contains('poe')` for PoE-capable switches. But no `'ap'` or `'switch'` or `'gateway'` feature values are documented. |
+| `interfaces` (SET) | isEmpty, contains, containsAny, containsAll, containsExactly | **Possible workaround** — if the `interfaces` set contains values like `wifi` vs `switching`, this could discriminate device types. **Not verified against live data.** [unverified] |
+
+[documented in source 2026-05-07]
+
+**There is no `type` or `deviceType` filter property.** The official API does not expose the classic API's `type` field (`uap`/`usw`/`udm`/`ugw`) as a filterable dimension. [documented in source 2026-05-07]
+
+#### Preset filters (README vs source mismatch)
+
+The README shows a `DeviceFilter::accessPoints()` preset, but **this method does not exist in the source code**. The actual presets are:
+- `needsFirmwareUpdate()` — `firmwareUpdatable.eq(true)`
+- `supportedOnly()` — `supported.eq(true)`
+- `wifi6Capable()` — `features.contains('wifi6')`
+- `poeCapable()` — `features.contains('poe')`
+
+[documented in source 2026-05-07]
+
+### Conclusion: definitive answer on device-type filtering
+
+**There is NO way to get a server-side-filtered list of just one device type from the UniFi API.**
+
+Neither the classic API nor the official Integration API provides:
+- A dedicated endpoint per device type (no `/stat/device/uap`, `/rest/device/uap`, or `/v1/sites/{id}/access-points`)
+- A `type` filter parameter on the device listing endpoint (classic: silently ignored [observed 2026-05-06 + 2026-05-07]; official: property not in the filter schema [documented in source 2026-05-07])
+- A body payload parameter for type-scoping the response
+
+**The MP design's approach is correct and is the only viable option**: fetch all devices from a single endpoint (`stat/device` for classic, `/v1/sites/{id}/devices` for official), then apply client-side filtering (`data[?type=='uap']` in JMESPath, or iterate and check the `type` field). [confirmed 2026-05-07]
+
+**Workarounds that exist but are impractical for an MP:**
+1. **`macs` filter** (classic API only): requires prior knowledge of which MACs are which device type. Would need a two-pass approach (inventory call + filtered call). Useful for single-device refresh, not for type-scoped discovery. [observed 2026-05-06]
+2. **`model` filter** (official API only): could enumerate all known AP model codes vs switch model codes, but the list changes with every hardware release. Fragile. [documented in source 2026-05-07]
+3. **`features` filter** (official API only): `features.contains('wifi6')` catches WiFi 6 APs but misses older APs. `features.contains('poe')` catches PoE switches but misses non-PoE models. No generic "is an AP" or "is a switch" feature value is documented. [documented in source 2026-05-07]
+4. **`interfaces` filter** (official API only): theoretically could work if `interfaces` set values discriminate device types (e.g., `wifi` for APs, `switching` for switches), but the actual set values are not documented in the client library and have not been verified against live data. [unverified]
+
+### Update history (this section)
+
+- 2026-05-07 — External reference analysis (Art-of-WiFi/UniFi-API-client
+  + Art-of-WiFi/unifi-network-application-api-client repos) appended:
+  confirmed no type-scoped device endpoints exist in either the classic
+  or official API surface. `list_aps()` is deprecated alias for
+  `list_devices()`. `type` param only used in `upgrade_all_devices()`
+  and `start_rolling_upgrade()` (mutation endpoints). Official API
+  supports `DeviceFilter` with model/name/features/state filtering
+  but no device-type filter. See "External reference analysis" section.
+- 2026-05-07 — `stat/device-basic` type-filtering probes appended:
+  POST body `{"type":"<type>"}`, GET query param `?type=<type>`, and
+  POST body `{"type":"<type>"}` on `stat/device` all silently ignored
+  (15 devices returned every time). `stat/device-basic` endpoint
+  mapped: 8-field lightweight schema, no type-filtering support.
+- 2026-05-06 — POST body filter probes appended: `type` filter is
+  silently ignored on `stat/device` (all 15 devices returned for
+  every type value); `macs` filter works for server-side filtering
+  by MAC address array; path-based `/stat/device/<mac>` works for
+  single-device lookup. Design's client-side JMESPath type filtering
+  confirmed as the correct approach.
+- 2026-04-30 — initial spot-check appended; controller bumped from
+  Network App 10.2.105 to 10.3.55, no field-shape drift in
+  v2-design dependencies, two additive sysinfo/port_table key
+  growths and one sometimes-present radio field absent this
+  session.

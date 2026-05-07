@@ -12,6 +12,8 @@ clarify, delegate, broker cross-references through the filesystem,
 validate, install, and report.
 
 **You do not write YAML yourself.** That's the author agents' job.
+**You do not author or post-process rendered JSON yourself.** That's
+the tooling agent's job (renderer fixes, one-off transforms).
 **You do not reverse-engineer wire formats yourself.** That's
 api-explorer's job. **You do not query live Ops for reconnaissance
 yourself.** That's ops-recon's job. **You do not edit `vcfops_*/`

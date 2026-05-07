@@ -41,7 +41,7 @@ tags: [synology, management-pack, mpb, rest-api]
 
 # Synology DSM Web API Reference
 
-> **Revision note (2026-04-16):** Several API namespaces in the storage and backup sections were corrected against live API testing on a DS1520+ running DSM 7.3.2-86009 Update 1. Corrected sections are marked. See also the live-tested brief at `workspaces/sentania-lab-toolkit/docs/reference-synology-api-mp-brief.md`.
+> **Revision note (2026-04-16):** Several API namespaces in the storage and backup sections were corrected against live API testing on a DS1520+ running DSM 7.3.2-86009 Update 1. Corrected sections are marked. See also the live-tested brief at `workspaces/lab-admin/docs/reference-synology-api-mp-brief.md`.
 
 ## Overview
 
