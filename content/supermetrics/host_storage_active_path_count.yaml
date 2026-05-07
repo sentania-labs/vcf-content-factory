@@ -1,0 +1,14 @@
+id: 55ef6c51-3b90-4a6e-800a-983d2e86a8a5
+name: "[VCF Content Factory] Storage Active Path Count"
+resource_kinds:
+  - resource_kind_key: HostSystem
+    adapter_kind_key: VMWARE
+description: >
+  Converts the HostSystem active storage path count configuration property
+  into a time-series metric for trending. Reports the total number of active
+  multipath I/O paths across all storage devices on the host. A drop in this
+  value indicates a path failure (dead HBA, SFP, switch port, or storage
+  controller port). Used as input to the cluster-level variance SM for
+  consistency alerting.
+formula: |
+  ${this, metric=config|storageDevice|multipathInfo|numberofActivePath}

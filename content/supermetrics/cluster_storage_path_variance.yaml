@@ -1,0 +1,15 @@
+id: b394eb82-d4d4-47d1-bd7e-0ef267457e52
+name: "[VCF Content Factory] Storage Path Variance (max-min)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Measures the spread of active storage path counts across hosts in a cluster.
+  Computes max minus min of the host-level Storage Active Path Count super
+  metric (sm_55ef6c51-3b90-4a6e-800a-983d2e86a8a5). A result of 0 means all
+  hosts have the same number of active paths (healthy). Any nonzero value
+  indicates at least one host has a different path count, suggesting a storage
+  path failure or misconfiguration. Environment-agnostic — no hardcoded
+  threshold.
+formula: |
+  max(${adaptertype=VMWARE, objecttype=HostSystem, metric=Super Metric|sm_55ef6c51-3b90-4a6e-800a-983d2e86a8a5, depth=1}) - min(${adaptertype=VMWARE, objecttype=HostSystem, metric=Super Metric|sm_55ef6c51-3b90-4a6e-800a-983d2e86a8a5, depth=1})

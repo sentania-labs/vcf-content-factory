@@ -1,0 +1,25 @@
+name: "[VCF Content Factory] Cluster Storage Paths Inconsistent"
+adapter_kind: VMWARE
+resource_kind: ClusterComputeResource
+severity: WARNING
+wait_cycles: 3
+cancel_cycles: 3
+
+condition:
+  type: metric_static
+  key: "Super Metric|sm_b394eb82-d4d4-47d1-bd7e-0ef267457e52"
+  operator: GT
+  value: 0
+  instanced: false
+
+description: >
+  Fires when the storage path variance across hosts in a cluster is greater than
+  zero, indicating at least one host has a different number of active storage
+  paths than the others. The underlying super metric computes max minus min of
+  host-level active path counts. A nonzero variance typically indicates a path
+  failure (dead HBA, SFP, switch port, or storage controller port) on one or
+  more hosts. This catches partial path degradation before it escalates to APD
+  or PDL, which are covered by the built-in StorageRedundancyLostAlert and
+  StorageConnectivityLostAlert. Environment-agnostic — works regardless of the
+  expected path count per cluster. Intended to feed into the alert
+  "[VCF Content Factory] Storage Path Inconsistency in Cluster".

@@ -1,0 +1,10 @@
+name: "[VCF Content Factory] Investigate Storage Path Degradation"
+description: |
+  One or more hosts in this cluster have a different number of active storage paths than the other hosts. This typically indicates a failed HBA, SFP, switch port, or storage controller port on the affected host.
+
+  1. Identify the affected host(s) by comparing the [VCF Content Factory] Storage Active Path Count super metric across hosts in this cluster. Look for the host(s) with a lower value than the majority.
+  2. SSH to the affected host and run: esxcli storage core path list. Look for paths in state "dead" or "standby (active was dead)".
+  3. Check physical connectivity: HBA link lights, switch port status, storage controller port status. Cross-reference with recent change records.
+  4. If a path was intentionally removed or added (e.g., new LUN provisioning in progress), this alert is expected and will auto-cancel once all hosts converge.
+  5. After remediation, verify all hosts in the cluster report the same active path count.
+adapter_kind: VMWARE

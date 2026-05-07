@@ -1,0 +1,33 @@
+name: "[VCF Content Factory] Storage Path Inconsistency in Cluster"
+description: >
+  Alerts when hosts in a cluster have inconsistent active storage path counts.
+  Uses a variance-based approach (max minus min of host path counts) rather than
+  a fixed threshold, so it works regardless of the expected path count per
+  cluster (4, 24, 36, etc.). A nonzero variance means at least one host has lost
+  or gained paths relative to its peers, typically indicating partial multipath
+  degradation. The built-in StorageRedundancyLostAlert and
+  StorageConnectivityLostAlert cover total path loss (APD/PDL); this alert
+  catches the earlier partial-degradation stage.
+adapter_kind: VMWARE
+resource_kind: ClusterComputeResource
+
+type: 18              # Storage
+sub_type: 18          # Availability (Storage)
+wait_cycles: 1
+cancel_cycles: 1
+criticality: WARNING
+
+impact:
+  badge: RISK
+
+symptom_sets:
+  operator: ALL
+  sets:
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Cluster Storage Paths Inconsistent"
+
+recommendations:
+  - name: "[VCF Content Factory] Investigate Storage Path Degradation"
+    priority: 1
