@@ -1,0 +1,23 @@
+alerts:
+- content/alerts/cluster_storage_path_inconsistency.yaml
+customgroups: []
+dashboards: []
+description: 'Monitors active storage path counts on ESXi hosts and alerts when hosts
+  within a cluster have inconsistent path counts. Detects partial multipath degradation
+  before it escalates to APD or PDL. Uses a variance-based approach (max minus min)
+  so it works regardless of the expected path count per cluster.
+
+  '
+display_name: Storage Path Monitoring
+managementpacks: []
+name: storage-path-monitoring
+recommendations:
+- content/recommendations/investigate_storage_path_degradation.yaml
+released: true
+reports: []
+supermetrics:
+- content/supermetrics/host_storage_active_path_count.yaml
+- content/supermetrics/cluster_storage_path_variance.yaml
+symptoms:
+- content/symptoms/cluster_storage_paths_inconsistent.yaml
+views: []

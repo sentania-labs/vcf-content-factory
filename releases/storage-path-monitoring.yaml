@@ -1,0 +1,11 @@
+artifacts:
+- headline: true
+  source: bundles/storage-path-monitoring.yaml
+deprecates: []
+description: Monitors active storage path counts on ESXi hosts and alerts when hosts
+  within a cluster have inconsistent path counts. Detects partial multipath degradation
+  before it escalates to APD or PDL. Uses a variance-based approach (max minus min)
+  so it works regardless of the expected path count per cluster.
+name: storage-path-monitoring
+release_notes: ''
+version: '1.0'
