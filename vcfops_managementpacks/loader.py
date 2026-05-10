@@ -251,6 +251,23 @@ def _derive_adapter_kind(name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
     return f"mpb_{slug}"
 
+
+def derive_class_name_fragment(adapter_kind: str) -> str:
+    """Derive the CamelCase class name fragment from adapter_kind.
+
+    Strips the ``mpb_`` prefix, splits on underscores, and title-cases
+    each part.  Example: ``mpb_unifi_integration`` → ``UnifiIntegration``.
+
+    This auto-derivation is correct for most adapters, but acronym-heavy
+    names (e.g. ``mpb_synology_nas`` → ``SynologyNas`` instead of
+    ``SynologyNAS``) require an explicit ``adapter_class`` override in
+    the YAML.
+    """
+    # Strip leading "mpb_"
+    without_prefix = re.sub(r"^mpb_", "", adapter_kind)
+    parts = without_prefix.split("_")
+    return "".join(p.title() for p in parts if p)
+
 # Derive object type key from object name
 def _derive_object_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
@@ -631,6 +648,7 @@ class ManagementPackDef:
     description: str = ""
     build_number: int = 1
     author: str = ""
+    adapter_class: Optional[str] = None  # CamelCase fragment override (e.g. "SynologyNAS")
     source: Optional[SourceDef] = None
     requests: List[RequestDef] = field(default_factory=list)   # NEW: MP-scope requests
     object_types: List[ObjectTypeDef] = field(default_factory=list)
@@ -2728,6 +2746,13 @@ def load_file(path: str | Path) -> ManagementPackDef:
     released_raw = data.get("released", False)
     released = bool(released_raw) if isinstance(released_raw, bool) else False
 
+    raw_adapter_class = data.get("adapter_class")
+    adapter_class = (
+        str(raw_adapter_class).strip()
+        if raw_adapter_class
+        else None
+    )
+
     mp = ManagementPackDef(
         name=mp_name,
         version=str(data.get("version", "") or "").strip(),
@@ -2735,6 +2760,7 @@ def load_file(path: str | Path) -> ManagementPackDef:
         description=str(data.get("description", "") or "").strip(),
         build_number=int(data.get("build_number", 1) or 1),
         author=str(data.get("author", "") or "").strip(),
+        adapter_class=adapter_class,
         source=source,
         requests=requests,
         object_types=object_types,

@@ -1325,6 +1325,7 @@ def _render_one_object(
 
             wire_metrics.append({
                 "id": m_id,
+                "key": m.key,
                 "unit": m.unit,
                 "isKpi": m.kpi,
                 "label": m.label,
@@ -1405,85 +1406,125 @@ def _render_one_object(
             # "UniFi - Devices" object, ms[1] (get-device-statistics).
             # Confirmed 2026-05-07.
             #
-            # Shape (two-expression, ATTRIBUTE_TO_PROPERTY):
+            # Two sub-cases based on whether the secondary response echoes the
+            # bind attribute (from_attribute) as a field in its own payload:
             #
-            #   matchExpression:
-            #     Points at the SECONDARY's own identifier attribute (the field
-            #     in the secondary response that uniquely identifies the row and
-            #     matches the parent's chain key).
-            #     originId   = <secondary_req_id>-<secondary_dml_id>-<from_attribute>
-            #     originType = "ATTRIBUTE"
-            #     label      = bind[0].from_attribute  (same field name, secondary side)
+            # Sub-case A — secondary DOES echo the bind attribute
+            # (e.g. Synology volume_util returns volume_id in its response):
+            #   Shape: ATTRIBUTE_TO_PROPERTY (two-expression):
+            #     matchExpression       → secondary's own attribute (<from_attribute>)
+            #                             originType: ATTRIBUTE
+            #     objectMatchExpression → parent metric whose source field ==
+            #                             from_attribute, originType: METRIC
             #
-            #   objectMatchExpression:
-            #     Points at the PARENT metricSet's metric whose source field equals
-            #     bind[0].from_attribute (i.e., the metric that stores the chain-key
-            #     value from the parent row).
-            #     originId   = metric wire ID of that parent metric (_make_id seed)
-            #     originType = "METRIC"
-            #     label      = that metric's display label (m.label)
+            # Sub-case B — secondary does NOT echo the bind attribute
+            # (e.g. UniFi /statistics/latest returns only stats, no device ID):
+            #   Shape: CHAINED_REQUEST (no expression parts needed):
+            #     {type: "CHAINED_REQUEST", matchExpression: {id: <uuid>}}
+            #   The chain context provides implicit per-row binding; MPB runtime
+            #   does not need an explicit attribute match.
             #
-            # This is NOT an Aria-native stitch (no ARIA_OPS_METRIC) — it is
-            # pure intra-MP cross-metricSet correlation binding.
+            # Detection: scan this object type's metrics for any metric whose
+            # source is metricset:<ms.local_name>.<from_attribute>.  If found,
+            # the secondary echoes that field (Sub-case A).  If not found,
+            # use CHAINED_REQUEST (Sub-case B).
             #
-            # bind[0].from_attribute = the attribute label on the parent's DML rows
-            # that is also present on the secondary's DML rows.
+            # See context/mpb_object_binding_wire_format.md §12 for rationale.
             parent_ms_local_name = ms.chained_from
             parent_attr_label = ms.bind[0].from_attribute
 
-            # matchExpression: secondary's own attribute (same field name as from_attribute)
-            ob_match_origin_id = req_info.register_field(parent_attr_label, dml_id)
-            match_expr_ob = _make_expression(
-                label=parent_attr_label,
-                origin_id=ob_match_origin_id,
-                origin_type="ATTRIBUTE",
-                expr_seed=f"{ob_seed}::matchExpr",
-            )
-
-            # objectMatchExpression: parent metricSet's metric whose field_path
-            # equals from_attribute.  Iterate parent's metrics to find it.
-            obj_match_expr_ob = None
-            for parent_m in metrics_by_ms.get(parent_ms_local_name, []):
-                _, parent_field_path = _parse_source_ref(parent_m.source)
-                if parent_field_path == parent_attr_label:
-                    parent_metric_id = _make_id(f"{obj_seed}:metric:{parent_m.key}")
-                    obj_match_expr_ob = _make_expression(
-                        label=parent_m.label,
-                        origin_id=parent_metric_id,
-                        origin_type="METRIC",
-                        expr_seed=f"{ob_seed}::objMatchExpr",
-                    )
+            # Detect whether the secondary response echoes the bind attribute.
+            secondary_echoes_bind = False
+            for m in metrics_by_ms.get(ms.local_name, []):
+                _, field_path = _parse_source_ref(m.source)
+                if field_path == parent_attr_label:
+                    secondary_echoes_bind = True
                     break
 
-            if obj_match_expr_ob is None:
-                # Parent has no metric sourced from from_attribute — this means
-                # the bind attribute was auto-synthesized (not explicitly declared
-                # as a metric).  Fall back to ATTRIBUTE shape pointing at the
-                # parent's DML attribute (pre-2026-05-07 behaviour) rather than
-                # emitting an invalid binding.
-                _parent_ms_def, parent_req_fb, parent_dml_id_fb = ms_context[parent_ms_local_name]
-                parent_req_info_fb = request_registry[parent_req_fb.name]
-                fb_origin_id = (
-                    f"{parent_req_info_fb.id}-{parent_dml_id_fb}-{parent_attr_label}"
-                )
-                obj_match_expr_ob = _make_expression(
+            if secondary_echoes_bind:
+                # Sub-case A: secondary echoes the bind attribute →
+                # ATTRIBUTE_TO_PROPERTY with intra-MP cross-metricSet expressions.
+                #
+                # matchExpression: secondary's own attribute (same field name as
+                # from_attribute) originId = <secondary_req_id>-<secondary_dml_id>-
+                # <from_attribute>, originType = "ATTRIBUTE".
+                #
+                # objectMatchExpression: parent metricSet's metric whose source
+                # field_path equals from_attribute.
+                # originId = metric wire ID, originType = "METRIC".
+                ob_match_origin_id = req_info.register_field(parent_attr_label, dml_id)
+                match_expr_ob = _make_expression(
                     label=parent_attr_label,
-                    origin_id=fb_origin_id,
+                    origin_id=ob_match_origin_id,
                     origin_type="ATTRIBUTE",
-                    expr_seed=f"{ob_seed}::objMatchExprFallback",
-                )
-                logger.warning(
-                    "Object '%s' metricSet '%s': no parent metric sourced from "
-                    "from_attribute '%s' on metricSet '%s'; falling back to "
-                    "ATTRIBUTE objectMatchExpression (MPB may reject at verify time).",
-                    ot.name, ms.local_name, parent_attr_label, parent_ms_local_name,
+                    expr_seed=f"{ob_seed}::matchExpr",
                 )
 
-            object_binding = {
-                "type": "ATTRIBUTE_TO_PROPERTY",
-                "matchExpression": match_expr_ob,
-                "objectMatchExpression": obj_match_expr_ob,
-            }
+                # objectMatchExpression: parent metricSet's metric whose field_path
+                # equals from_attribute.  Iterate parent's metrics to find it.
+                obj_match_expr_ob = None
+                for parent_m in metrics_by_ms.get(parent_ms_local_name, []):
+                    _, parent_field_path = _parse_source_ref(parent_m.source)
+                    if parent_field_path == parent_attr_label:
+                        parent_metric_id = _make_id(f"{obj_seed}:metric:{parent_m.key}")
+                        obj_match_expr_ob = _make_expression(
+                            label=parent_m.label,
+                            origin_id=parent_metric_id,
+                            origin_type="METRIC",
+                            expr_seed=f"{ob_seed}::objMatchExpr",
+                        )
+                        break
+
+                if obj_match_expr_ob is None:
+                    # Parent has no metric sourced from from_attribute — this means
+                    # the bind attribute was auto-synthesized (not explicitly declared
+                    # as a metric).  Fall back to ATTRIBUTE shape pointing at the
+                    # parent's DML attribute (pre-2026-05-07 behaviour) rather than
+                    # emitting an invalid binding.
+                    _parent_ms_def, parent_req_fb, parent_dml_id_fb = ms_context[parent_ms_local_name]
+                    parent_req_info_fb = request_registry[parent_req_fb.name]
+                    fb_origin_id = (
+                        f"{parent_req_info_fb.id}-{parent_dml_id_fb}-{parent_attr_label}"
+                    )
+                    obj_match_expr_ob = _make_expression(
+                        label=parent_attr_label,
+                        origin_id=fb_origin_id,
+                        origin_type="ATTRIBUTE",
+                        expr_seed=f"{ob_seed}::objMatchExprFallback",
+                    )
+                    logger.warning(
+                        "Object '%s' metricSet '%s': no parent metric sourced from "
+                        "from_attribute '%s' on metricSet '%s'; falling back to "
+                        "ATTRIBUTE objectMatchExpression (MPB may reject at verify time).",
+                        ot.name, ms.local_name, parent_attr_label, parent_ms_local_name,
+                    )
+
+                object_binding = {
+                    "type": "ATTRIBUTE_TO_PROPERTY",
+                    "matchExpression": match_expr_ob,
+                    "objectMatchExpression": obj_match_expr_ob,
+                }
+
+            else:
+                # Sub-case B: secondary does NOT echo the bind attribute →
+                # CHAINED_REQUEST.  The chain context (chainingSettings on the
+                # request) provides implicit per-row binding; no explicit attribute
+                # match expression is needed.
+                #
+                # Shape: {type: "CHAINED_REQUEST", matchExpression: {id: <uuid>}}
+                # render_template.py _render_object_binding() already handles this
+                # type (line ~338): emits {type: "CHAINED_REQUEST", id: <uuid>}.
+                logger.info(
+                    "Object '%s' metricSet '%s': secondary response does not echo "
+                    "from_attribute '%s' — using CHAINED_REQUEST objectBinding.",
+                    ot.name, ms.local_name, parent_attr_label,
+                )
+                object_binding = {
+                    "type": "CHAINED_REQUEST",
+                    "matchExpression": {
+                        "id": _make_id(f"{ob_seed}::matchExpr"),
+                    },
+                }
 
         # Case 3 — All other metricSets (chain-parents, singletons, scalar kinds):
         # objectBinding: null.  Chain-parent keeps null — it is the one metricSet

@@ -37,6 +37,7 @@ version: 1.0.0
 build_number: 1
 author: "VCF Content Factory"
 adapter_kind: "mpb_synology_nas"
+adapter_class: "SynologyNAS"
 description: Monitors a Synology DiskStation NAS running DSM 7.x. Collects rootdevice health (CPU, memory, temperature, uptime),
   storage topology (pools, volumes, disks), pervolume IO, and iSCSI LUN inventory. Uses discrete perentity storage API endpoints
   (SYNO.Core.Storage.) matching the knownvalid reference build. Designed for DS1520 but applicable to any adminaccessible

@@ -16,14 +16,22 @@
 #     Properties from /devices (primary metricSet).
 #     Metrics from /devices/{id}/statistics/latest (chained metricSet).
 #
-#   Switch — list. Server-side filter: and(features.contains('switching'),
-#     not(features.contains('accessPoint')),not(model.like('UDM*'))).
-#     Excludes APs (dual features.contains results) and UDM Pro gateway.
+#   Switch — list. Server-side filter:
+#     and(features.contains('switching'),not(features.contains('accessPoint')),
+#         model.notIn('UDM Pro','UDM SE','UDM','UDM Pro Max','UXG Pro','UXG Lite','UXG Max'))
+#     Excludes APs (dual features.contains results) and all known gateway models.
+#     model.like() is NOT supported on 'model' (400 error); model.notIn() is the
+#     correct workaround (live-verified 2026-05-08).
 #     Primary metricSet chains off sites. Properties from /devices (primary).
 #     Metrics from /statistics/latest (chained).
 #
-#   Gateway — list. Server-side filter: model.like('UDM*').
+#   Gateway — list. Server-side filter:
+#     model.in('UDM Pro','UDM SE','UDM','UDM Pro Max','UXG Pro','UXG Lite','UXG Max')
 #     UDM Pro does not self-tag as 'gateway' in features[] (live-verified 2026-05-07).
+#     model.like('UDM*') is NOT supported on 'model' (400 error); model.in() with an
+#     explicit allowlist is the correct workaround (live-verified 2026-05-08).
+#     NOTE: This allowlist must be updated when Ubiquiti ships new gateway SKUs.
+#     model.eq('UDM Pro') was verified to return exactly 1 device on the lab.
 #     Primary metricSet chains off sites. Properties from /devices (primary).
 #     Metrics from /statistics/latest (chained).
 #
@@ -36,7 +44,7 @@
 #
 name: "VCF Content Factory UniFi Integration"
 version: "1.0.0"
-build_number: 1
+build_number: 4
 author: "VCF Content Factory"
 adapter_kind: mpb_unifi_integration
 description: >
@@ -106,26 +114,31 @@ requests:
 
   # Request 3: devices_switch — Switch device list.
   # ${chain.site_id} is substituted per row from the sites chain root.
-  # Compound filter excludes APs (dual-feature AC IW) and the UDM Pro gateway
-  # (which has features: ["switching"] but is the gateway device).
+  # Compound filter excludes APs (dual-feature AC IW) and all known gateway models.
+  # model.like() is NOT supported on 'model' (400 error; only 'name' and
+  # 'firmwareVersion' allow 'like'). model.notIn() is the correct workaround.
+  # and()/not() compound syntax live-verified 2026-05-08.
   # Live-verified 2026-05-07: features.contains('switching') returns 11 on lab;
-  # after excluding accessPoint and UDM* model, expect ~9 pure switches.
+  # after excluding accessPoint and gateway model list, returns 8 pure switches.
   - name: devices_switch
     method: GET
     path: "/proxy/network/integration/v1/sites/${chain.site_id}/devices"
     params:
-      - {key: filter, value: "and(features.contains('switching'),not(features.contains('accessPoint')),not(model.like('UDM*')))"}
+      - {key: filter, value: "and(features.contains('switching'),not(features.contains('accessPoint')),model.notIn('UDM Pro','UDM SE','UDM','UDM Pro Max','UXG Pro','UXG Lite','UXG Max'))"}
     response_path: "data"
 
   # Request 4: devices_gateway — Gateway device list.
   # ${chain.site_id} is substituted per row from the sites chain root.
-  # UDM Pro does NOT self-tag as 'gateway' in features[] — filter by model pattern instead.
-  # Live-verified 2026-05-07: features.contains('gateway') returns 0; model.like('UDM*') is correct.
+  # UDM Pro does NOT self-tag as 'gateway' in features[] — must discriminate by model.
+  # model.like('UDM*') is NOT supported on 'model' (400 error; live-verified 2026-05-08).
+  # model.in() with an explicit gateway model allowlist is the correct workaround.
+  # model.eq('UDM Pro') was verified to return exactly 1 device on the lab (2026-05-08).
+  # NOTE: The model allowlist must be updated when Ubiquiti ships new gateway SKUs.
   - name: devices_gateway
     method: GET
     path: "/proxy/network/integration/v1/sites/${chain.site_id}/devices"
     params:
-      - {key: filter, value: "model.like('UDM*')"}
+      - {key: filter, value: "model.in('UDM Pro','UDM SE','UDM','UDM Pro Max','UXG Pro','UXG Lite','UXG Max')"}
     response_path: "data"
 
   # Requests 5–7: device_stats_ap / device_stats_switch / device_stats_gateway
@@ -324,7 +337,9 @@ object_types:
 
   # -------------------------------------------------------------------------
   # Switch — list
-  # Source: /sites/{id}/devices filtered by switching+not(accessPoint)+not(UDM*).
+  # Source: /sites/{id}/devices filtered by
+  #   and(features.contains('switching'),not(features.contains('accessPoint')),
+  #       model.notIn('UDM Pro','UDM SE','UDM','UDM Pro Max','UXG Pro','UXG Lite','UXG Max'))
   # Primary metricSet chains off sites (cross-object-type chain root).
   # Properties from devices_switch (primary). Metrics from device_stats (chained).
   # Radio metrics omitted — switches have no radio interfaces.
@@ -456,9 +471,12 @@ object_types:
 
   # -------------------------------------------------------------------------
   # Gateway — list
-  # Source: /sites/{id}/devices filtered by model.like('UDM*').
+  # Source: /sites/{id}/devices filtered by
+  #   model.in('UDM Pro','UDM SE','UDM','UDM Pro Max','UXG Pro','UXG Lite','UXG Max')
   # UDM Pro is the gateway. features.contains('gateway') returns 0 on this lab
   # because UDM Pro self-reports features: ["switching"] only (live-verified 2026-05-07).
+  # model.like('UDM*') is NOT supported on 'model' (400 error; live-verified 2026-05-08).
+  # model.in() with an explicit allowlist is the correct workaround.
   # Primary metricSet chains off sites (cross-object-type chain root).
   # Properties from devices_gateway (primary). Metrics from device_stats (chained).
   # uplink.txRateBps/rxRateBps represents the WAN uplink throughput on the UDM Pro.

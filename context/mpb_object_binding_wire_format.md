@@ -1055,3 +1055,73 @@ The renderer now:
   with ms[0] null + ms[1] ATTRIBUTE_TO_PROPERTY+METRIC shape. ✓
 - Synology NAS MP: Volume with ms[0] null + ms[1] ATTRIBUTE_TO_PROPERTY+METRIC
   shape (volume_id binding). ✓
+
+---
+
+## 12. CHAINED_REQUEST objectBinding — when secondary doesn't echo the bind attribute (2026-05-09)
+
+### 12.1 The problem
+
+The §11 jcox shape (ATTRIBUTE_TO_PROPERTY with matchExpression pointing at
+the secondary's own attribute) only works when the secondary response
+actually contains that field. For UniFi's `/statistics/latest` response,
+the payload contains only statistics (cpuUtilizationPct, memoryUtilizationPct,
+etc.) — it does NOT contain the device `id` field used as the chain key.
+The `originId` composite `<secondary_req_id>-<listId>-id` references a
+field that never appears in the response, so the runtime attribute match
+silently fails → `numberOfMetricsCollected = 0`.
+
+### 12.2 Detection logic
+
+The renderer detects whether Sub-case A (ATTRIBUTE_TO_PROPERTY) or Sub-case B
+(CHAINED_REQUEST) applies by scanning the object type's metrics for any metric
+whose source is `metricset:<secondary_ms_name>.<from_attribute>`:
+
+```python
+secondary_echoes_bind = False
+for m in metrics_by_ms.get(ms.local_name, []):
+    _, field_path = _parse_source_ref(m.source)
+    if field_path == parent_attr_label:
+        secondary_echoes_bind = True
+        break
+```
+
+- If a metric IS sourced from `metricset:<secondary>.<from_attribute>`,
+  the secondary payload contains that field → use ATTRIBUTE_TO_PROPERTY
+  (Sub-case A, §11 shape).
+- If NO such metric exists, the secondary payload does not echo the bind
+  attribute → use CHAINED_REQUEST (Sub-case B).
+
+### 12.3 CHAINED_REQUEST shape
+
+```python
+object_binding = {
+    "type": "CHAINED_REQUEST",
+    "matchExpression": {
+        "id": _make_id(f"{ob_seed}::matchExpr"),
+    },
+}
+```
+
+`render_template.py` `_render_object_binding()` handles this type by
+emitting `{"type": "CHAINED_REQUEST", "id": <uuid>}` in the template JSON.
+The MPB runtime uses the chain context (chainingSettings) for per-row
+binding implicitly — no explicit attribute match expression is required.
+
+### 12.4 Applied cases (2026-05-09)
+
+| MP | Object | Secondary metricSet | from_attribute | Secondary echoes? | Shape |
+|---|---|---|---|---|---|
+| UniFi Integration | Access Point | device_stats_ap | id | No (/statistics/latest has no `id` field) | CHAINED_REQUEST |
+| UniFi Integration | Switch | device_stats_switch | id | No | CHAINED_REQUEST |
+| UniFi Integration | Gateway | device_stats_gateway | id | No | CHAINED_REQUEST |
+| Synology NAS | Volume | volume_util | volume_id | No (volume_util returns only IO stats) | CHAINED_REQUEST |
+
+### 12.5 Future authoring note
+
+If a future MP chains a secondary API that DOES echo the parent key in
+its response (e.g. a detail endpoint that returns `{"id": "...", ...}`),
+declare a metric sourcing `metricset:<secondary>.<from_attribute>` on that
+object type. The renderer will then automatically select the
+ATTRIBUTE_TO_PROPERTY shape (§11) with the correct ATTRIBUTE+METRIC
+expression pair.

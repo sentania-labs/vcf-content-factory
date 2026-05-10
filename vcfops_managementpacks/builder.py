@@ -8,10 +8,12 @@ Key structural facts:
   - .pak is a ZIP with root-level scripts, manifest.txt, eula.txt, default.png,
     adapters.zip, content/, and resources/.
   - adapters.zip contains:
-    - <adapter_dir>.jar  — the adapter runtime JAR (MPB-generated; we use the
-      reference GitHub JAR as a stand-in — see ADAPTER_JAR_GAP note below)
+    - <adapter_dir>.jar  — the adapter runtime JAR (generated per-adapter via
+      JVM constant-pool patching; see _generate_adapter_jar())
     - <adapter_dir>/lib/*.jar  — shared library JARs (same across all MPB paks)
     - <adapter_dir>/conf/design.json  — our rendered MPB design JSON
+    - <adapter_dir>/conf/template.json — MPB native flat format; SHA256 baked
+      into the adapter class; required by the Gen-2 runtime for SHA validation
     - <adapter_dir>/conf/describe.xml  — adapter kind XML (generated from design)
     - <adapter_dir>/conf/<adapter_kind>.properties  — runtime config
     - <adapter_dir>/conf/version.txt
@@ -28,19 +30,19 @@ Key structural facts:
   - post-install.py triggers ops-cli redescribe + content import.
   - describe.xml is pre-baked (read by VCF Ops adapter loader at startup).
 
-ADAPTER_JAR_GAP:
-  The per-adapter <adapter_dir>.jar (e.g. mpb_github_adapter3.jar) is
-  compiled by the MPB server build endpoint from the design JSON. It contains
-  Kotlin/Java classes with the adapter kind key baked into the package path
-  (e.g. com.vmware.mpb.mpbgithub). We cannot generate this JAR in the factory.
-  The builder uses the GitHub reference JAR (renamed) as a stand-in. At QA
-  time, Scott should obtain the MPB-generated JAR for the real adapter kind
-  (e.g. by uploading the design JSON to the MPB UI and downloading the pak),
-  then drop it into adapter_runtime/ as mpb_<adapter_kind>_adapter3.jar.
-  The lib/*.jar files ARE generic and identical across all MPB paks.
+Per-adapter JAR generation:
+  Gen-2 MPB adapter JARs (VCF Ops 9.0.x) are 842-byte thin wrappers that
+  extend com.vmware.mpb.MPBAdapter (in the shared lib JAR).  The class has
+  exactly 4 variable strings in its JVM constant pool: the class path, the
+  source file name, the adapter directory name, and the template.json SHA256.
+  The builder patches these 4 strings in-memory (pure Python, no JDK needed),
+  then packages the result into a fresh JAR.  The reference class bytes come
+  from adapter_runtime/mpb_adapter3.jar (the Synology NAS adapter from MPB).
+  See context/mpb_adapter_jar_reverse_engineering.md for the full analysis.
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -51,9 +53,10 @@ from pathlib import Path
 from typing import Optional
 from xml.etree import ElementTree as ET
 
-from .loader import ManagementPackDef, ObjectTypeDef, MetricDef, SourceDef
+from .loader import ManagementPackDef, ObjectTypeDef, MetricDef, SourceDef, derive_class_name_fragment
 from .render import render_mp_design_json
 from .render_export import render_mpb_exchange_json
+from .render_template import render_template_json
 
 # ---------------------------------------------------------------------------
 # Paths relative to this file
@@ -63,7 +66,10 @@ _HERE = Path(__file__).parent
 _TEMPLATES_DIR = _HERE / "templates"
 _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"
 
-# The generic adapter runtime JAR (MPB stand-in; see ADAPTER_JAR_GAP above)
+# The reference adapter JAR — source of the Gen-2 class bytes for constant-pool patching.
+# Contains com/vmware/mpb/mpbsynologynas/MPBSynologyNASAdapter.class (842 bytes),
+# the Synology NAS adapter built by MPB on VCF Ops 9.0.2.
+# See _generate_adapter_jar() and context/mpb_adapter_jar_reverse_engineering.md.
 _GENERIC_ADAPTER_JAR = _ADAPTER_RUNTIME_DIR / "mpb_adapter3.jar"
 
 # ---------------------------------------------------------------------------
@@ -289,11 +295,14 @@ def _generate_describe_xml(mp: ManagementPackDef) -> tuple:
     child_ots = [o for o in mp.object_types if not o.is_world]
 
     # labels: nameKey int -> display label string.  Populated by _append_* helpers.
+    # nameKeys 3+ for credential fields are populated dynamically by
+    # _append_credential_kinds() using the actual label from auth.credentials,
+    # so they are NOT pre-seeded here.  nameKey 3 used to be hardcoded as
+    # "Username" and 4 as "Password", which produced a wrong resources.properties
+    # entry for non-basic-auth presets (e.g. http_header api_key credential).
     labels: dict = {
         1: mp.name,
         2: "Credentials",
-        3: "Username",
-        4: "Password",
     }
 
     lines: list[str] = []
@@ -309,12 +318,20 @@ def _generate_describe_xml(mp: ManagementPackDef) -> tuple:
         f' key="{ak}" nameKey="1" version="1">'
     )
 
-    # CredentialKinds
-    _append_credential_kinds(lines, mp, ak)
+    # CredentialKinds — also populates labels dict with credential field nameKeys
+    _append_credential_kinds(lines, mp, ak, labels)
 
     # ResourceKinds
     lines.append("  <ResourceKinds>")
-    name_key_counter = [10]  # mutable counter via list
+    # Start the nameKey counter immediately after the last credential field nameKey.
+    # Credential nameKeys: 1=AdapterKind, 2=CredentialKind, 3=first cred field,
+    # 4=second cred field, etc.  After _append_credential_kinds(), max(labels.keys())
+    # is 2 (no credentials) or 2+N (N credential fields).  The next available nameKey
+    # is max+1.  This produces a sequential, gap-free nameKey sequence matching
+    # every MPB-built reference pak (GitHub, Broadcom, Rubrik, Synology).
+    # Previously hardcoded to 10, which created a gap (e.g. 3→10 for a single
+    # credential) that does not appear in any MPB-generated describe.xml.
+    name_key_counter = [max(labels.keys()) + 1]
 
     # 1. Adapter instance kind (type=7, key=adapter_kind).
     #    MPB canonical: always a bare config-only kind with mpb_hostname + connection
@@ -511,8 +528,24 @@ def _append_traversal_spec_kinds(
     lines.append("  </TraversalSpecKinds>")
 
 
-def _append_credential_kinds(lines: list, mp: ManagementPackDef, ak: str) -> None:
-    """Append CredentialKinds XML block."""
+def _append_credential_kinds(
+    lines: list, mp: ManagementPackDef, ak: str, labels: dict
+) -> None:
+    """Append CredentialKinds XML block.
+
+    Also populates labels[3..] with the credential field display names so that
+    resources.properties shows the correct label for each credential field.
+    nameKey assignment: CredentialKind itself = 2 (hardcoded); fields start at 3
+    and increment per field (same convention as the old hardcoded Username=3,
+    Password=4 scheme, now driven by auth.credentials order).
+
+    Presets handled:
+      basic_auth, cookie_session — iterate credentials, emit per field
+      bearer_token               — single credential, always password=true
+      http_header                — iterate credentials, emit per field (same as
+                                   basic_auth; sensitive flag drives password attr)
+      none                       — emit empty CredentialKinds block
+    """
     src = mp.source
     if not src or not src.auth or src.auth.preset == "none":
         lines.append("  <CredentialKinds>")
@@ -525,20 +558,28 @@ def _append_credential_kinds(lines: list, mp: ManagementPackDef, ak: str) -> Non
         f'    <CredentialKind key="{ak}_credentials" nameKey="2">'
     )
 
-    if auth.preset in ("basic_auth", "cookie_session"):
-        # Emit credential fields from the declared credentials list
+    if auth.preset in ("basic_auth", "cookie_session", "http_header"):
+        # Emit credential fields from the declared credentials list.
+        # nameKey starts at 3 (nameKey 2 = CredentialKind container "Credentials").
         for i, cred in enumerate(auth.credentials, start=1):
+            nk = 2 + i  # nameKey 3 for first field, 4 for second, etc.
             password_attr = 'true' if cred.sensitive else 'false'
+            # Derive a human-readable label: title-case the credential label/key
+            cred_display = cred.label if cred.label else cred.key
+            labels[nk] = " ".join(w.capitalize() for w in cred_display.split("_"))
             lines.append(
                 f'      <CredentialField required="true" dispOrder="{i}" enum="false"'
-                f' key="{cred.key}" nameKey="{2 + i}" password="{password_attr}" type="string">'
+                f' key="{cred.key}" nameKey="{nk}" password="{password_attr}" type="string">'
                 "</CredentialField>"
             )
     elif auth.preset == "bearer_token":
         for i, cred in enumerate(auth.credentials, start=1):
+            nk = 2 + i
+            cred_display = cred.label if cred.label else cred.key
+            labels[nk] = " ".join(w.capitalize() for w in cred_display.split("_"))
             lines.append(
-                '      <CredentialField required="true" dispOrder="1" enum="false"'
-                f' key="{cred.key}" nameKey="3" password="true" type="string">'
+                f'      <CredentialField required="true" dispOrder="{i}" enum="false"'
+                f' key="{cred.key}" nameKey="{nk}" password="true" type="string">'
                 "</CredentialField>"
             )
 
@@ -1224,53 +1265,140 @@ def _generate_manifest(mp: ManagementPackDef) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Adapter JAR KINDKEY rewrite (Option A of ADAPTER_JAR_GAP fix)
+# Per-adapter JAR generation via JVM constant-pool patching
 # ---------------------------------------------------------------------------
 
-def _rewrite_adapter_properties(jar_bytes: bytes, adapter_kind: str) -> bytes:
-    """Rewrite adapter.properties inside the adapter JAR so KINDKEY matches
-    the factory's declared adapter_kind.
+def _generate_adapter_jar(
+    adapter_kind: str,
+    class_name_fragment: str,
+    template_sha256: str,
+    reference_class_bytes: bytes,
+) -> bytes:
+    """Generate a complete per-adapter JAR via JVM constant-pool patching.
 
-    Root cause documented in .pka/updates/2026-04-17-0809-adapter-jar-gap-root-cause.md:
-    The bootstrapped reference JAR (GitHub adapter) embeds adapter.properties
-    with KINDKEY=mpb_github. VCF Ops reads KINDKEY to bind the loaded adapter
-    class to the correct adapter_kind registry slot. When KINDKEY doesn't match
-    the pak's declared adapter_kind, the registration silently fails and the pak
-    installs with no adapter ever appearing in getIntegrations.
+    Gen-2 MPB adapter JARs (VCF Ops 9.0.x) contain exactly one class that
+    extends com.vmware.mpb.MPBAdapter.  That class has exactly 4 variable
+    strings in its JVM constant pool; all other bytecode is identical across
+    every adapter.  We patch only those 4 strings, preserve everything else,
+    and repackage into a fresh JAR.
 
-    ENTRYCLASS is left unchanged: it names a real Kotlin class
-    (com.vmware.mpb.mpbgithub.MPBGitHubAdapter) that must match an actual .class
-    file inside the JAR. Only KINDKEY is a registration label that can be freely
-    set without requiring a matching class path.
+    Args:
+        adapter_kind:            e.g. "mpb_unifi_integration"
+        class_name_fragment:     CamelCase middle fragment, e.g. "UnifiIntegration"
+        template_sha256:         hex SHA256 of conf/template.json (64 chars)
+        reference_class_bytes:   raw bytes of MPBSynologyNASAdapter.class from
+                                 adapter_runtime/mpb_adapter3.jar
 
-    The JAR is a ZIP; we open it in-memory, rewrite the one line, and reconstruct
-    a new ZIP preserving every other member verbatim.
+    Returns:
+        Raw bytes of the generated JAR (ZIP format).
+
+    Wire format reference:
+        context/mpb_adapter_jar_reverse_engineering.md
     """
-    src_buf = io.BytesIO(jar_bytes)
-    dst_buf = io.BytesIO()
+    # Derive the package slug: adapter_kind with all underscores removed
+    # e.g. "mpb_unifi_integration" -> "mpbunifiintegration"
+    slug = adapter_kind.replace("_", "")
 
-    with zipfile.ZipFile(src_buf, "r") as src_zf:
-        with zipfile.ZipFile(dst_buf, "w", compression=zipfile.ZIP_DEFLATED) as dst_zf:
-            for item in src_zf.infolist():
-                data = src_zf.read(item.filename)
-                if item.filename == "adapter.properties":
-                    # Parse key=value lines, rewrite KINDKEY only.
-                    lines = data.decode("utf-8").splitlines()
-                    new_lines = []
-                    for line in lines:
-                        if line.startswith("KINDKEY="):
-                            new_lines.append(f"KINDKEY={adapter_kind}")
-                        else:
-                            new_lines.append(line)
-                    # Preserve trailing newline if original had one
-                    separator = "\n"
-                    new_content = separator.join(new_lines)
-                    if data.endswith(b"\n"):
-                        new_content += "\n"
-                    data = new_content.encode("utf-8")
-                dst_zf.writestr(item, data)
+    # Full class name and path forms
+    class_name = f"MPB{class_name_fragment}Adapter"
+    class_path = f"com/vmware/mpb/{slug}/{class_name}"   # slash-separated
+    source_file = f"{class_name}.java"
+    adapter_dir_name = f"{adapter_kind}_adapter3"
 
-    return dst_buf.getvalue()
+    # The 4 Synology-specific strings to replace (matched by value, not index)
+    _OLD_CLASS_PATH = "com/vmware/mpb/mpbsynologynas/MPBSynologyNASAdapter"
+    _OLD_SOURCE_FILE = "MPBSynologyNASAdapter.java"
+    _OLD_ADAPTER_DIR = "mpb_synology_nas_adapter3"
+    # The Synology SHA (64-char hex); we match by the prefix to be safe
+    _OLD_SHA_PREFIX = "d92a0933b2fa"
+
+    def _patch_class(class_bytes: bytes) -> bytes:
+        """Walk the JVM constant pool and patch the 4 variable Utf8 entries."""
+        buf = io.BytesIO(class_bytes)
+
+        # JVM Class File header: magic(4) + minor(2) + major(2) + cp_count(2)
+        magic = buf.read(4)
+        minor = buf.read(2)
+        major = buf.read(2)
+        cp_count_bytes = buf.read(2)
+        cp_count = struct.unpack(">H", cp_count_bytes)[0]
+        # constant pool has (cp_count - 1) entries; indices 1..cp_count-1
+
+        # Read and optionally patch each constant pool entry.
+        # Build a list of raw entry bytes (including the tag byte).
+        patched_entries: list[bytes] = []
+
+        for _ in range(cp_count - 1):
+            tag_byte = buf.read(1)
+            tag = tag_byte[0]
+
+            if tag == 1:  # CONSTANT_Utf8
+                length_bytes = buf.read(2)
+                length = struct.unpack(">H", length_bytes)[0]
+                value_bytes = buf.read(length)
+                value = value_bytes.decode("utf-8", errors="replace")
+
+                # Apply the 4 targeted replacements (match by value)
+                if value == _OLD_CLASS_PATH:
+                    value_bytes = class_path.encode("utf-8")
+                elif value == _OLD_SOURCE_FILE:
+                    value_bytes = source_file.encode("utf-8")
+                elif value == _OLD_ADAPTER_DIR:
+                    value_bytes = adapter_dir_name.encode("utf-8")
+                elif value.startswith(_OLD_SHA_PREFIX) and len(value) == 64:
+                    value_bytes = template_sha256.encode("utf-8")
+
+                new_length = len(value_bytes)
+                patched_entries.append(
+                    tag_byte
+                    + struct.pack(">H", new_length)
+                    + value_bytes
+                )
+            elif tag == 7:  # CONSTANT_Class: 2-byte index
+                patched_entries.append(tag_byte + buf.read(2))
+            elif tag == 8:  # CONSTANT_String: 2-byte index
+                patched_entries.append(tag_byte + buf.read(2))
+            elif tag in (9, 10, 11):  # Fieldref, Methodref, InterfaceMethodref: 4 bytes
+                patched_entries.append(tag_byte + buf.read(4))
+            elif tag == 12:  # CONSTANT_NameAndType: 4 bytes
+                patched_entries.append(tag_byte + buf.read(4))
+            else:
+                raise ValueError(
+                    f"_generate_adapter_jar: unexpected constant pool tag {tag} "
+                    f"at entry {len(patched_entries) + 1}; "
+                    f"reference class may have changed structure"
+                )
+
+        # Remainder of the class file (access flags onward) — verbatim
+        rest = buf.read()
+
+        # Reassemble
+        out = io.BytesIO()
+        out.write(magic)
+        out.write(minor)
+        out.write(major)
+        out.write(cp_count_bytes)  # cp_count unchanged (same number of entries)
+        for entry in patched_entries:
+            out.write(entry)
+        out.write(rest)
+        return out.getvalue()
+
+    patched_class = _patch_class(reference_class_bytes)
+
+    # Assemble the JAR (ZIP)
+    jar_buf = io.BytesIO()
+    with zipfile.ZipFile(jar_buf, "w", compression=zipfile.ZIP_DEFLATED) as jar_zf:
+        jar_zf.writestr("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\n")
+        # adapter.properties: ENTRYCLASS uses dot-notation of the full class path
+        entryclass = f"com.vmware.mpb.{slug}.{class_name}"
+        jar_zf.writestr(
+            "adapter.properties",
+            f"ENTRYCLASS={entryclass}\nKINDKEY={adapter_kind}\n",
+        )
+        # Class file at its new package path
+        jar_zf.writestr(f"{class_path}.class", patched_class)
+
+    return jar_buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -1309,6 +1437,7 @@ def _build_adapters_zip(
     pak_resources_props_str: str,
     eula_bytes: bytes,
     icon_bytes: bytes,
+    relationship_strategy: str = "synthetic_adapter_instance",
 ) -> bytes:
     """Build adapters.zip in memory and return the bytes.
 
@@ -1319,11 +1448,21 @@ def _build_adapters_zip(
     silent-install failure (pak upload accepted, isPakInstalling=False in
     ~35s vs Rubrik's 100-200s, adapter kind never registered).
 
-    The adapter runtime JAR is copied from adapter_runtime/mpb_adapter3.jar
-    (renamed to <adapter_dir>.jar) — see ADAPTER_JAR_GAP in module docstring.
+    The adapter runtime JAR is generated per-adapter via JVM constant-pool
+    patching using the reference class from adapter_runtime/mpb_adapter3.jar.
+    See _generate_adapter_jar() for the algorithm.
     """
     ak = mp.adapter_kind
     adapter_dir = f"{ak}_adapter3"  # e.g. mpb_synology_dsm_adapter3
+
+    # template.json is the MPB native flat format required by BuilderFile.Companion.read().
+    # It differs structurally from design.json; render_template_json() performs the
+    # section-by-section transformation.  Computed once here so the JAR generator can
+    # hash it and the conf/ writer can include it — both must use the same bytes to
+    # keep the SHA consistent.
+    template_dict = render_template_json(mp, relationship_strategy=relationship_strategy)
+    template_json_str = json.dumps(template_dict, indent=2)
+    template_bytes = template_json_str.encode("utf-8")
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
@@ -1357,28 +1496,31 @@ def _build_adapters_zip(
         zf.writestr("default.png", icon_bytes)
         zf.writestr("resources/resources.properties", pak_resources_props_str.encode("utf-8"))
 
-        # --- adapter runtime JAR (renamed from generic stand-in) ---
-        # Check if there is a pak-specific JAR (custom one dropped in)
-        specific_jar = _ADAPTER_RUNTIME_DIR / f"{adapter_dir}.jar"
-        if specific_jar.exists():
-            jar_bytes = specific_jar.read_bytes()
-        elif _GENERIC_ADAPTER_JAR.exists():
-            jar_bytes = _GENERIC_ADAPTER_JAR.read_bytes()
+        # --- per-adapter runtime JAR (generated via constant-pool patching) ---
+        # Read the reference class bytes from the Synology NAS adapter JAR.
+        # If the reference JAR is missing, write a placeholder that prevents
+        # pak function but allows structure validation.
+        _reference_class_path = (
+            "com/vmware/mpb/mpbsynologynas/MPBSynologyNASAdapter.class"
+        )
+        if _GENERIC_ADAPTER_JAR.exists():
+            with zipfile.ZipFile(_GENERIC_ADAPTER_JAR, "r") as ref_zf:
+                reference_class_bytes = ref_zf.read(_reference_class_path)
+            # Compute SHA256 of the template.json we are about to write.
+            # The generated adapter class hardcodes this SHA; the Gen-2 runtime
+            # validates it on every collection cycle.
+            template_sha256 = hashlib.sha256(template_bytes).hexdigest()
+            # Resolve CamelCase fragment: explicit override or auto-derived.
+            class_fragment = mp.adapter_class or derive_class_name_fragment(ak)
+            jar_bytes = _generate_adapter_jar(
+                ak, class_fragment, template_sha256, reference_class_bytes
+            )
         else:
-            # No JAR available — write a placeholder comment file instead
-            # This will prevent the pak from functioning but allows structure validation
             jar_bytes = (
                 b"# ADAPTER_JAR_GAP: mpb_adapter3.jar not found.\n"
-                b"# Copy the MPB-generated adapter JAR to "
+                b"# Copy the Synology NAS MPB-built adapter JAR to "
                 b"vcfops_managementpacks/adapter_runtime/mpb_adapter3.jar\n"
             )
-        # Rewrite KINDKEY in adapter.properties so VCF Ops registers this
-        # adapter under the correct adapter_kind (not the reference pak's
-        # mpb_github).  ENTRYCLASS is left unchanged.  See
-        # _rewrite_adapter_properties() and the root-cause note in
-        # .pka/updates/2026-04-17-0809-adapter-jar-gap-root-cause.md.
-        if jar_bytes and not jar_bytes.startswith(b"# ADAPTER_JAR_GAP"):
-            jar_bytes = _rewrite_adapter_properties(jar_bytes, ak)
         zf.writestr(f"{adapter_dir}.jar", jar_bytes)
 
         # lib/*.jar — shared library JARs
@@ -1405,27 +1547,13 @@ def _build_adapters_zip(
         # Rubrik-1.1.0.25.pak carries BOTH files; absence of export.json is what
         # caused the silent adapter-kind registration failure on earlier Synology builds.
         zf.writestr(f"{adapter_dir}/conf/export.json", export_json_str.encode("utf-8"))
-        # template.json — MPB native flat format required by MPB-generated adapter JARs.
+        # template.json — MPB native flat format required by the Gen-2 adapter JAR.
         #
-        # Root cause (2026-04-22 devel log): on re-install VCF Ops deletes conf/
-        # then calls constructAdapterDescribes.  MPB-compiled JARs hardcode the
-        # path conf/template.json (not conf/design.json).  When the file is absent
-        # the runtime throws FileNotFoundException and the install fails.
-        #
-        # Generic stand-in JARs (e.g. mpb_github_adapter3.jar) still read
-        # design.json, so no template.json is needed for those.
-        #
-        # Convention: drop a pre-built template.json from the MPB pak build into
-        #   adapter_runtime/<ak>_template.json
-        # When that file exists, include it verbatim in conf/.  The content comes
-        # from the same MPB build that produced the adapter JAR — UUIDs are
-        # internally consistent because both artifacts came from the same design.
-        template_json_path = _ADAPTER_RUNTIME_DIR / f"{ak}_template.json"
-        if template_json_path.exists():
-            zf.writestr(
-                f"{adapter_dir}/conf/template.json",
-                template_json_path.read_bytes(),
-            )
+        # The generated adapter class hardcodes the SHA256 of this file and the
+        # Gen-2 runtime validates it on every collection cycle.  We always write
+        # template_bytes (= design_json_str encoded as UTF-8) so the SHA baked
+        # into the class matches the file on disk.
+        zf.writestr(f"{adapter_dir}/conf/template.json", template_bytes)
         zf.writestr(f"{adapter_dir}/conf/describe.xml", describe_xml_str.encode("utf-8"))
         zf.writestr(
             f"{adapter_dir}/conf/{ak}.properties",
@@ -1531,6 +1659,7 @@ def build_pak(
         pak_resources_props_str=pak_resources_props_str,
         eula_bytes=eula_bytes,
         icon_bytes=icon_bytes,
+        relationship_strategy=relationship_strategy,
     )
 
     # 7. Assemble the top-level .pak ZIP
