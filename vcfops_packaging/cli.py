@@ -552,7 +552,7 @@ def cmd_release(args) -> int:
     # Validate type argument — symptoms and alerts unsupported in v1.
     # -----------------------------------------------------------------------
     content_type = args.content_type
-    _SUPPORTED = {"dashboard", "view", "supermetric", "customgroup", "report", "bundle"}
+    _SUPPORTED = {"dashboard", "view", "supermetric", "customgroup", "report", "bundle", "managementpack"}
     _UNSUPPORTED_V1 = {"symptom", "symptoms", "alert", "alerts"}
     if content_type in _UNSUPPORTED_V1:
         print(
@@ -577,12 +577,13 @@ def cmd_release(args) -> int:
 
     # Map type -> directory
     _TYPE_TO_DIR = {
-        "dashboard":   "content/dashboards",
-        "view":        "content/views",
-        "supermetric": "content/supermetrics",
-        "customgroup": "content/customgroups",
-        "report":      "content/reports",
-        "bundle":      "bundles",
+        "dashboard":      "content/dashboards",
+        "view":           "content/views",
+        "supermetric":    "content/supermetrics",
+        "customgroup":    "content/customgroups",
+        "report":         "content/reports",
+        "bundle":         "bundles",
+        "managementpack": "content/managementpacks",
     }
     content_dir = _TYPE_TO_DIR[content_type]
 
@@ -626,11 +627,12 @@ def cmd_release(args) -> int:
     # 4. Third-party project search — scan third_party/*/<type>/ directories.
     #    Only for discrete content types (not bundles — those still use bundles/ or PROJECT.yaml).
     _THIRD_PARTY_TYPE_DIR = {
-        "dashboard":   "dashboards",
-        "view":        "views",
-        "supermetric": "supermetrics",
-        "customgroup": "customgroups",
-        "report":      "reports",
+        "dashboard":      "dashboards",
+        "view":           "views",
+        "supermetric":    "supermetrics",
+        "customgroup":    "customgroups",
+        "report":         "reports",
+        "managementpack": "managementpacks",
     }
     if source_path is None and content_type in _THIRD_PARTY_TYPE_DIR:
         tp_type_subdir = _THIRD_PARTY_TYPE_DIR[content_type]
