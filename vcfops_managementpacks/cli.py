@@ -191,8 +191,30 @@ def cmd_extract(args) -> int:
     return 0
 
 
+def cmd_pak_validate(args) -> int:
+    """Cross-validate rendered template.json against describe.xml key-sets."""
+    from .pak_validator import validate_pak
+
+    try:
+        mp = load_file(args.path)
+    except ManagementPackValidationError as e:
+        print(f"INVALID: {e}", file=sys.stderr)
+        return 1
+
+    errors = validate_pak(mp)
+    if errors:
+        print(f"PAK-VALIDATE FAIL: {len(errors)} error(s) in {mp.name}:", file=sys.stderr)
+        for err in errors:
+            print(f"  {err}", file=sys.stderr)
+        return 1
+
+    print(f"OK: pak artifacts are internally consistent for {mp.name} v{mp.version}")
+    return 0
+
+
 def cmd_build(args) -> int:
     from .builder import build_pak
+    from .pak_validator import validate_pak
 
     try:
         mp = load_file(args.path)
@@ -213,9 +235,32 @@ def cmd_build(args) -> int:
         )
         return 1
 
+    # Run pak-validate before building; refuse to build if errors are found
+    # unless --force is passed.
+    force = getattr(args, "force", False)
+    errors = validate_pak(mp)
+    if errors:
+        print(f"PAK-VALIDATE FAIL: {len(errors)} error(s) found:", file=sys.stderr)
+        for err in errors:
+            print(f"  {err}", file=sys.stderr)
+        if not force:
+            print(
+                "Refusing to build. Fix the errors above or pass --force to override.",
+                file=sys.stderr,
+            )
+            return 1
+        print("WARNING: --force passed; building despite validation errors.", file=sys.stderr)
+    else:
+        print(f"pak-validate: OK", file=sys.stderr)
+
     output_dir = Path(args.output)
     try:
-        pak_path = build_pak(mp, output_dir=output_dir, relationship_strategy=strategy)
+        pak_path = build_pak(
+            mp,
+            output_dir=output_dir,
+            relationship_strategy=strategy,
+            skip_validation=True,  # CLI already ran validate_pak above with --force handling
+        )
     except Exception as exc:
         print(f"ERROR building .pak: {exc}", file=sys.stderr)
         return 1
@@ -369,6 +414,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pex.set_defaults(func=cmd_extract)
 
+    ppv = sub.add_parser(
+        "pak-validate",
+        help="cross-validate rendered template.json against describe.xml key-sets (no build)",
+    )
+    ppv.add_argument("path", help="path to MP YAML file")
+    ppv.set_defaults(func=cmd_pak_validate)
+
     pb = sub.add_parser("build", help="build a .pak file from MP YAML")
     pb.add_argument("path", help="path to MP YAML file")
     pb.add_argument(
@@ -386,6 +438,12 @@ def build_parser() -> argparse.ArgumentParser:
             "test_all",
         ],
         help="strategy for adapter-instance-trivial relationships (default: synthetic_adapter_instance)",
+    )
+    pb.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="build even if pak-validate reports errors (use for debugging only)",
     )
     pb.set_defaults(func=cmd_build)
 

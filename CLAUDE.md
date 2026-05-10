@@ -116,6 +116,29 @@ instance via the Suite API / content-import zip.
    often do things the public surface can't. See
    `context/content_api_surface.md`.
 
+## Operational rules
+
+Hard-won rules from live sessions, organized by category under
+`context/rules_*.md`. Read the relevant file when working in that
+area. Do not use the auto-memory system — all persistent knowledge
+is maintained in-repo.
+
+| File | Scope |
+|---|---|
+| `context/rules_delegation.md` | Agent delegation, lane discipline, plan mode |
+| `context/rules_content_authoring.md` | SM, view, dashboard, MP authoring patterns |
+| `context/rules_install_verification.md` | Install workflow, dependency audit, describe |
+| `context/rules_api_wire_format.md` | API investigation, wire format ground truth |
+| `context/rules_powershell.md` | PS 5.1 compat, pipeline unwrap, StrictMode |
+| `context/rules_operational.md` | Credentials, labs, cross-workspace, distribution |
+
+## User context
+
+The primary user is a VCF Operations SME with deep domain knowledge
+who operates `sentania/AriaOperationsContent`. Direct feedback style.
+The framework exists to combine the user's domain knowledge with
+Claude's scaling — codify corrections into prompts so they compound.
+
 ## Context files
 
 Topical background for code paths and wire formats. Full index at

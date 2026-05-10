@@ -1593,10 +1593,14 @@ def build_pak(
     *,
     output_dir: Path,
     relationship_strategy: str = "synthetic_adapter_instance",
+    skip_validation: bool = False,
 ) -> Path:
     """Build a .pak ZIP file for the management pack.
 
     Steps:
+    0. Run pak-validate (cross-check template.json vs describe.xml key-sets).
+       Raises ValueError if validation errors are found, preventing the build.
+       Pass ``skip_validation=True`` to bypass this gate (debugging only).
     1. Render MPB design JSON from the ManagementPackDef.
     2. Generate describe.xml from the design.
     3. Build adapters.zip (design + describe + runtime JARs).
@@ -1606,9 +1610,20 @@ def build_pak(
     Returns the path to the created .pak file.
 
     Raises:
+        ValueError         if pak-validate reports errors (prevent bad build).
         FileNotFoundError  if output_dir does not exist (caller must create it).
         OSError            on write errors.
     """
+    if not skip_validation:
+        from .pak_validator import validate_pak
+        errors = validate_pak(mp)
+        if errors:
+            error_lines = "\n  ".join(errors)
+            raise ValueError(
+                f"pak-validate failed for {mp.name!r} — fix errors before building:\n"
+                f"  {error_lines}"
+            )
+
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 

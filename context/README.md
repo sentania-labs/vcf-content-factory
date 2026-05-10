@@ -10,6 +10,12 @@ These are actively maintained and authoritative for their topic.
 
 | Topic | File |
 |---|---|
+| **Operational rules — delegation & lane discipline** | `rules_delegation.md` |
+| **Operational rules — content authoring** | `rules_content_authoring.md` |
+| **Operational rules — install & verification** | `rules_install_verification.md` |
+| **Operational rules — API & wire format** | `rules_api_wire_format.md` |
+| **Operational rules — PowerShell** | `rules_powershell.md` |
+| **Operational rules — operational** | `rules_operational.md` |
 | Shared vocabulary (Bundle vs Package, Sync/Enable/Install, etc.) | `dictionary.md` |
 | Super metric authoring, DSL rules, style | `supermetric_authoring.md` |
 | Dynamic custom group + group types authoring | `customgroup_authoring.md` |
@@ -17,7 +23,8 @@ These are actively maintained and authoritative for their topic.
 | UUIDs, cross-references, rename safety | `uuids_and_cross_references.md` |
 | API surface map (public + internal + content-zip) | `content_api_surface.md` |
 | Content-zip wire formats (super metrics, dashboards, views, policies) | `wire_formats.md` |
-| Chart widget wire formats (MetricChart, Scoreboard, etc.) | `chart_widget_formats.md` |
+| MPB template.json schema (pak runtime format) | `mpb_template_json_schema.md` |
+| MPB adapter JAR reverse engineering (Gen-2 constant pool) | `mpb_adapter_jar_reverse_engineering.md` |
 | Reports API surface + wire format | `reports_api_surface.md` |
 | Install path + policy enablement | `install_and_enable.md` |
 | Internal supermetrics assign endpoint details | `internal_supermetrics_assign.md` |
@@ -64,4 +71,5 @@ reflect current state.
 | `mpb_synology_nas_live_recon_2026_04_22.md` | 2026-04-22 | Synology NAS live recon |
 | `session_pickup_2026_04_30.md` | 2026-04-30 | Session pickup notes |
 | `unifi_mp_jcox_diff_2026_04_30.md` | 2026-04-30 | UniFi MP diff analysis |
-| `self-audit-2026-05-06.md` | 2026-05-06 | Context & composition audit |
+| `mpb_import_diff_unifi_2026_05_07.md` | 2026-05-07 | UniFi MP import diff investigation |
+| `unifi_integration_filter_probe_2026_05_08.md` | 2026-05-08 | UniFi Integration API filter syntax probe |

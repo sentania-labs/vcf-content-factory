@@ -72,7 +72,7 @@ class ReleaseArtifact:
 # ---------------------------------------------------------------------------
 
 # Map first path component (source prefix) to the discrete_builder content_type
-# string.  "bundles" is handled separately; managementpacks is deferred.
+# string.  "bundles" and "managementpacks" are handled separately.
 # Supports both old bare prefixes and the new content/<type> layout.
 _SOURCE_PREFIX_TO_DISCRETE_TYPE: dict[str, str] = {
     "dashboards":   "dashboard",
@@ -194,6 +194,47 @@ def _build_component_headline(
     return built
 
 
+def _build_mp_headline(
+    source_path: Path,
+    tmp_dir: Path,
+) -> Path:
+    """Build a management pack headline zip containing .pak and exchange JSON.
+
+    Loads the ManagementPackDef from source_path, builds the .pak file via
+    vcfops_managementpacks.builder.build_pak, renders the MPB UI exchange JSON
+    via vcfops_managementpacks.render_export.render_mpb_exchange_json, and
+    packages both into a single zip.
+
+    Returns the path to the zip written to tmp_dir.
+    """
+    import json
+    import zipfile
+
+    from vcfops_managementpacks.loader import load_file
+    from vcfops_managementpacks.builder import build_pak
+    from vcfops_managementpacks.render_export import render_mpb_exchange_json
+
+    mp = load_file(str(source_path))
+
+    # Build the .pak file — build_pak returns the path to the created .pak
+    pak_path = build_pak(mp, output_dir=tmp_dir)
+
+    # Render the MPB UI exchange JSON
+    exchange = render_mpb_exchange_json(mp)
+    exchange_filename = f"{mp.adapter_kind}_exchange.json"
+    exchange_path = tmp_dir / exchange_filename
+    exchange_path.write_text(json.dumps(exchange, indent=2))
+
+    # Package both into a single zip
+    zip_name = f"{mp.adapter_kind}.zip"
+    zip_path = tmp_dir / zip_name
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(pak_path, Path(pak_path).name)
+        zf.write(exchange_path, exchange_filename)
+
+    return zip_path
+
+
 # ---------------------------------------------------------------------------
 # Core public functions
 # ---------------------------------------------------------------------------
@@ -293,6 +334,8 @@ def build_release(
                 built_path = _build_bundle_headline(source_path, tmp_dir, skip_audit)
             elif source_prefix in _SOURCE_PREFIX_TO_DISCRETE_TYPE:
                 built_path = _build_component_headline(source_path, source_prefix, tmp_dir)
+            elif source_prefix == "managementpacks":
+                built_path = _build_mp_headline(source_path, tmp_dir)
             else:
                 raise ValueError(
                     f"unsupported headline source prefix {source_prefix!r} "
