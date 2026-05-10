@@ -787,8 +787,7 @@ def _convert_relationship(
             # Look up the metric to get its field key
             m = all_metrics_by_id.get(origin_id)
             if m:
-                ep_label = _get_metric_expr_label(m)
-                key = _derive_key(ep_label)
+                key = m.get("key") or _derive_key(_get_metric_expr_label(m))
             else:
                 # Fallback: derive from expression text label
                 key = _derive_key(part.get("label", origin_id))

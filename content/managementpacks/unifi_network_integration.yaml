@@ -44,14 +44,20 @@
 #
 name: "VCF Content Factory UniFi Integration"
 version: "1.0.0"
-build_number: 4
+build_number: 5
 author: "VCF Content Factory"
 adapter_kind: mpb_unifi_integration
 description: >
   Monitors UniFi network devices via the Integration API v1. Collects device
   health (CPU, memory, uptime, load averages, uplink throughput, per-radio TX
   retries) and inventory properties for Access Points, Switches, and the
-  Gateway (UDM Pro). Uses stateless X-API-Key auth (no login/logout session).
+  Gateway (UDM Pro). Enriches each device with per-device detail properties
+  (adoption/provisioning timestamps, configuration ID, uplink device ID).
+  Access Points additionally carry radio config properties (channel, channel
+  width, WLAN standard) for 2.4 GHz and 5 GHz radios. Includes Client and
+  Network object types for a full inventory view. Topology relationships wire
+  devices to their uplink parent (gateway→switch→AP) and clients to their
+  connected device. Uses stateless X-API-Key auth (no login/logout session).
   Requires UniFi Network Application 10.1.84+ with Integration API enabled.
 
 source:
@@ -80,12 +86,17 @@ source:
 
 
 # ---------------------------------------------------------------------------
-# Requests — MP scope (7 total)
+# Requests — MP scope (12 total)
 # All paths are full from root (base_path is empty per feedback_mp_full_paths_required.md).
 # Auth: http_header preset — X-API-Key rendered as a globalHeader (no manual MPB edit needed).
-# Chain topology: sites (chain root, no object type) → devices_ap/switch/gateway (per-site)
-#   → device_stats_ap/switch/gateway (per-device). Site UUID flows via ${chain.site_id};
-#   device UUID flows via ${chain.device_id}.
+# Chain topology:
+#   sites (chain root, no object type)
+#     → devices_ap/switch/gateway (per-site, filtered by type)
+#       → device_stats_ap/switch/gateway (per-device, N+1 statistics call)
+#       → device_detail_ap/switch/gateway (per-device, N+1 detail call)
+#     → clients (per-site, full client roster)
+#     → networks (per-site, VLAN/network list)
+# Site UUID flows via ${chain.site_id}; device UUID flows via ${chain.device_id}.
 # ---------------------------------------------------------------------------
 
 requests:
@@ -172,9 +183,62 @@ requests:
     params: []
     response_path: ""
 
+  # Requests 8–10: device_detail_ap / device_detail_switch / device_detail_gateway
+  # Per-device detail endpoint. Returns the same 11 list-row fields PLUS:
+  #   adoptedAt, provisionedAt, configurationId (config-drift properties),
+  #   uplink.deviceId (parent device UUID — topology pointer),
+  #   interfaces.radios[{wlanStandard, frequencyGHz, channelWidthMHz, channel}] (APs only),
+  #   interfaces.ports[{idx, state, connector, maxSpeedMbps, speedMbps, poe}]
+  # Split per type: renderer can only emit one chainingSettings block per request name.
+  # ${chain.site_id} propagates from sites; ${chain.device_id} from devices_ap/switch/gateway.
+  # response_path: "" — response is a single device object (not wrapped in data[]).
+  # Live-verified 2026-04-30: 870–2390 bytes per device, varies by interface count.
+  - name: device_detail_ap
+    method: GET
+    path: "/proxy/network/integration/v1/sites/${chain.site_id}/devices/${chain.device_id}"
+    params: []
+    response_path: ""
+
+  - name: device_detail_switch
+    method: GET
+    path: "/proxy/network/integration/v1/sites/${chain.site_id}/devices/${chain.device_id}"
+    params: []
+    response_path: ""
+
+  - name: device_detail_gateway
+    method: GET
+    path: "/proxy/network/integration/v1/sites/${chain.site_id}/devices/${chain.device_id}"
+    params: []
+    response_path: ""
+
+  # Request 11: clients — full client roster for the site.
+  # ${chain.site_id} propagates from sites (cross-object-type chain root).
+  # limit=200 is the documented maximum (live-verified: 124 clients returned on lab).
+  # response_path: "data" exposes the array; list_path: "" iterates over it.
+  # Field inventory: type, id, name, connectedAt, ipAddress, macAddress,
+  #   uplinkDeviceId (device UUID the client is connected to), access.type.
+  # No per-client detail call needed — I-6 returns identical fields to the list row.
+  - name: clients
+    method: GET
+    path: "/proxy/network/integration/v1/sites/${chain.site_id}/clients"
+    params:
+      - {key: limit, value: "200"}
+    response_path: "data"
+
+  # Request 12: networks — VLAN/network inventory for the site.
+  # ${chain.site_id} propagates from sites (cross-object-type chain root).
+  # response_path: "data" exposes the array; list_path: "" iterates over it.
+  # Field inventory: management, id, name, enabled, vlanId, metadata.origin, default.
+  # Live-verified 2026-04-30: 17 networks on lab in a single page.
+  - name: networks
+    method: GET
+    path: "/proxy/network/integration/v1/sites/${chain.site_id}/networks"
+    params: []
+    response_path: "data"
+
 
 # ---------------------------------------------------------------------------
-# Object types (3 total)
+# Object types (5 total): Access Point, Switch, Gateway, Client, Network.
 # UniFi Site is a chain root, not an object type. It is declared in requests:
 # and referenced via chained_from: sites on each primary metricSet.
 # ---------------------------------------------------------------------------
@@ -211,6 +275,16 @@ object_types:
       # Chained secondary: fires once per devices_ap row, substituting ${chain.device_id}.
       # bind: from_attribute: id — the 'id' UUID field on each device row.
       - from_request: device_stats_ap
+        chained_from: devices_ap
+        list_path: ""
+        bind:
+          - name: device_id
+            from_attribute: id
+
+      # Chained tertiary: per-AP detail — adoptedAt, provisionedAt, configurationId,
+      # uplink.deviceId (topology pointer), interfaces.radios[{channel, channelWidthMHz,
+      # wlanStandard, frequencyGHz}]. Fires once per devices_ap row.
+      - from_request: device_detail_ap
         chained_from: devices_ap
         list_path: ""
         bind:
@@ -334,6 +408,80 @@ object_types:
         type: NUMBER
         source: "metricset:device_stats_ap.interfaces.radios[?frequencyGHz==`5`].txRetriesPct | [0]"
 
+      # --- Properties from device_stats_ap ---
+      - key: last_heartbeat_at
+        label: "Last Heartbeat"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_stats_ap.lastHeartbeatAt"
+
+      # --- Properties from device_detail_ap ---
+      # uplink.deviceId is the Integration UUID of the parent device — used for topology
+      # relationships (switch→AP, gateway→AP) via field_match on device_id/uplink_device_id.
+      - key: uplink_device_id
+        label: "Uplink Device ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_ap.uplink.deviceId"
+
+      - key: adopted_at
+        label: "Adopted At"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_ap.adoptedAt"
+
+      - key: provisioned_at
+        label: "Provisioned At"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_ap.provisionedAt"
+
+      - key: configuration_id
+        label: "Configuration ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_ap.configurationId"
+
+      # --- AP-only radio config properties from device_detail_ap ---
+      # interfaces.radios shape in detail endpoint: [{wlanStandard, frequencyGHz,
+      # channelWidthMHz, channel}]. JMESPath filter on frequencyGHz number literal.
+      # Same filter pattern as txRetriesPct metrics above.
+      - key: radio_24ghz_channel
+        label: "2.4 GHz Channel"
+        usage: PROPERTY
+        type: NUMBER
+        source: "metricset:device_detail_ap.interfaces.radios[?frequencyGHz==`2.4`].channel | [0]"
+
+      - key: radio_24ghz_width
+        label: "2.4 GHz Channel Width (MHz)"
+        usage: PROPERTY
+        type: NUMBER
+        source: "metricset:device_detail_ap.interfaces.radios[?frequencyGHz==`2.4`].channelWidthMHz | [0]"
+
+      - key: radio_24ghz_standard
+        label: "2.4 GHz WLAN Standard"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_ap.interfaces.radios[?frequencyGHz==`2.4`].wlanStandard | [0]"
+
+      - key: radio_5ghz_channel
+        label: "5 GHz Channel"
+        usage: PROPERTY
+        type: NUMBER
+        source: "metricset:device_detail_ap.interfaces.radios[?frequencyGHz==`5`].channel | [0]"
+
+      - key: radio_5ghz_width
+        label: "5 GHz Channel Width (MHz)"
+        usage: PROPERTY
+        type: NUMBER
+        source: "metricset:device_detail_ap.interfaces.radios[?frequencyGHz==`5`].channelWidthMHz | [0]"
+
+      - key: radio_5ghz_standard
+        label: "5 GHz WLAN Standard"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_ap.interfaces.radios[?frequencyGHz==`5`].wlanStandard | [0]"
+
 
   # -------------------------------------------------------------------------
   # Switch — list
@@ -363,6 +511,15 @@ object_types:
             from_attribute: id
 
       - from_request: device_stats_switch
+        chained_from: devices_switch
+        list_path: ""
+        bind:
+          - name: device_id
+            from_attribute: id
+
+      # Chained tertiary: per-switch detail — adoptedAt, provisionedAt, configurationId,
+      # uplink.deviceId (topology pointer to parent gateway or switch).
+      - from_request: device_detail_switch
         chained_from: devices_switch
         list_path: ""
         bind:
@@ -468,6 +625,38 @@ object_types:
         type: NUMBER
         source: "metricset:device_stats_switch.uplink.rxRateBps"
 
+      # --- Properties from device_stats_switch ---
+      - key: last_heartbeat_at
+        label: "Last Heartbeat"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_stats_switch.lastHeartbeatAt"
+
+      # --- Properties from device_detail_switch ---
+      - key: uplink_device_id
+        label: "Uplink Device ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_switch.uplink.deviceId"
+
+      - key: adopted_at
+        label: "Adopted At"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_switch.adoptedAt"
+
+      - key: provisioned_at
+        label: "Provisioned At"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_switch.provisionedAt"
+
+      - key: configuration_id
+        label: "Configuration ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_switch.configurationId"
+
 
   # -------------------------------------------------------------------------
   # Gateway — list
@@ -500,6 +689,16 @@ object_types:
             from_attribute: id
 
       - from_request: device_stats_gateway
+        chained_from: devices_gateway
+        list_path: ""
+        bind:
+          - name: device_id
+            from_attribute: id
+
+      # Chained tertiary: per-gateway detail — adoptedAt, provisionedAt, configurationId.
+      # uplink.deviceId is absent on the UDM Pro (it is the root device, not uplinked to
+      # another UniFi device). uplink_device_id will be null/absent for the gateway.
+      - from_request: device_detail_gateway
         chained_from: devices_gateway
         list_path: ""
         bind:
@@ -607,10 +806,238 @@ object_types:
         type: NUMBER
         source: "metricset:device_stats_gateway.uplink.rxRateBps"
 
+      # --- Properties from device_stats_gateway ---
+      - key: last_heartbeat_at
+        label: "Last Heartbeat"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_stats_gateway.lastHeartbeatAt"
 
-# No explicit relationships in v1.
-# AP, Switch, and Gateway all parent the adapter instance implicitly
-# via MPB's default containment model.
-# UniFi Site is a chain root, not an object type — it does not appear
-# in the object hierarchy.
-relationships: []
+      # --- Properties from device_detail_gateway ---
+      # uplink_device_id will be absent on the UDM Pro (it is the root device).
+      - key: uplink_device_id
+        label: "Uplink Device ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_gateway.uplink.deviceId"
+
+      - key: adopted_at
+        label: "Adopted At"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_gateway.adoptedAt"
+
+      - key: provisioned_at
+        label: "Provisioned At"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_gateway.provisionedAt"
+
+      - key: configuration_id
+        label: "Configuration ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:device_detail_gateway.configurationId"
+
+
+  # -------------------------------------------------------------------------
+  # Client — list
+  # Source: /sites/{id}/clients (full roster, limit=200).
+  # chained_from: sites — cross-object-type chain root; propagates site UUID
+  # via ${chain.site_id} into the clients request path.
+  # uplinkDeviceId is the Integration UUID of the device the client is connected
+  # to — used for client-to-device topology relationships via field_match.
+  # No per-client detail call is needed: I-6 returns identical fields to the list row.
+  # -------------------------------------------------------------------------
+  - name: "Client"
+    key: client
+    type: INTERNAL
+    icon: "default.png"
+    is_singleton: false
+    identifiers: [client_id]
+    name_expression: name
+
+    metricSets:
+      - from_request: clients
+        primary: true
+        list_path: ""
+        chained_from: sites
+        bind:
+          - name: site_id
+            from_attribute: id
+
+    metrics:
+      - key: client_id
+        label: "Client ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:clients.id"
+
+      - key: client_type
+        label: "Type"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:clients.type"
+
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:clients.name"
+
+      - key: ip_address
+        label: "IP Address"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:clients.ipAddress"
+
+      - key: mac_address
+        label: "MAC Address"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:clients.macAddress"
+
+      - key: connected_at
+        label: "Connected At"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:clients.connectedAt"
+
+      # uplinkDeviceId — Integration UUID of the device this client is connected to.
+      # Used in field_match relationships: AP.device_id / Switch.device_id /
+      # Gateway.device_id → Client.uplink_device_id.
+      - key: uplink_device_id
+        label: "Uplink Device ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:clients.uplinkDeviceId"
+
+      # access.type observed as "DEFAULT" across all clients on lab.
+      # Surfaces guest-portal / hotspot status when relevant.
+      - key: access_type
+        label: "Access Type"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:clients.access.type"
+
+
+  # -------------------------------------------------------------------------
+  # Network — list
+  # Source: /sites/{id}/networks (VLAN/network inventory).
+  # chained_from: sites — cross-object-type chain root; propagates site UUID
+  # via ${chain.site_id} into the networks request path.
+  # 17 networks observed on lab (single page; default limit=25 is sufficient).
+  # -------------------------------------------------------------------------
+  - name: "Network"
+    key: network
+    type: INTERNAL
+    icon: "default.png"
+    is_singleton: false
+    identifiers: [network_id]
+    name_expression: name
+
+    metricSets:
+      - from_request: networks
+        primary: true
+        list_path: ""
+        chained_from: sites
+        bind:
+          - name: site_id
+            from_attribute: id
+
+    metrics:
+      - key: network_id
+        label: "Network ID"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:networks.id"
+
+      - key: name
+        label: "Name"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:networks.name"
+
+      - key: vlan_id
+        label: "VLAN ID"
+        usage: PROPERTY
+        type: NUMBER
+        source: "metricset:networks.vlanId"
+
+      - key: enabled
+        label: "Enabled"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:networks.enabled"
+
+      # management: "GATEWAY" or "UNMANAGED".
+      - key: management
+        label: "Management"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:networks.management"
+
+      # metadata.origin: "SYSTEM_DEFINED" or "USER_DEFINED".
+      - key: origin
+        label: "Origin"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:networks.metadata.origin"
+
+      - key: is_default
+        label: "Default"
+        usage: PROPERTY
+        type: STRING
+        source: "metricset:networks.default"
+
+
+# ---------------------------------------------------------------------------
+# Relationships — 6 explicit parent/child edges.
+# Device topology is wired via uplink.deviceId (detail endpoint) vs the
+# device UUID (device_id property on each device type). The Integration API
+# returns the parent device UUID cleanly; no MAC-based join is needed.
+#
+# Chain: gateway → switch → AP (uplink topology).
+# Client topology: clients connect to a device via uplinkDeviceId.
+#
+# switch→switch daisy chains are NOT declared — the loader rejects
+# self-referential relationships (same type on both sides is not supported).
+# ---------------------------------------------------------------------------
+relationships:
+  # Uplink topology — device-to-device parent-child based on uplink.deviceId
+  - parent: switch
+    child: access_point
+    scope: field_match
+    parent_expression: device_id
+    child_expression: uplink_device_id
+
+  - parent: gateway
+    child: switch
+    scope: field_match
+    parent_expression: device_id
+    child_expression: uplink_device_id
+
+  - parent: gateway
+    child: access_point
+    scope: field_match
+    parent_expression: device_id
+    child_expression: uplink_device_id
+
+  # Client-to-device — clients connected to devices via uplinkDeviceId
+  - parent: access_point
+    child: client
+    scope: field_match
+    parent_expression: device_id
+    child_expression: uplink_device_id
+
+  - parent: switch
+    child: client
+    scope: field_match
+    parent_expression: device_id
+    child_expression: uplink_device_id
+
+  - parent: gateway
+    child: client
+    scope: field_match
+    parent_expression: device_id
+    child_expression: uplink_device_id

@@ -1399,7 +1399,7 @@ def _render_one_object(
                 "objectMatchExpression": obj_match_expr,
             }
 
-        elif ms.chained_from is not None and ms.local_name not in chain_parent_names:
+        elif ms.chained_from is not None and ms.local_name not in chain_parent_names and not getattr(ms, 'primary', False):
             # Case 2 — Chained-secondary metricSet: non-null objectBinding required.
             #
             # Ground truth: jcox-au_vmware/unifi_MP_Builder_Design.json
