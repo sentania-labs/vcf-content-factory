@@ -3,151 +3,245 @@
 Guidance for Claude Code (and any other agent — Codex, Cursor, etc.)
 working in this repo.
 
+## The framework is the product
+
+This repo is a framework any VCF Operations admin can clone and
+drive in English. Tooling, agents, skills, CLIs, and context files
+are all part of the deliverable.
+
+- **Portability is non-negotiable.** Anything that depends on this
+  machine, this user's memory, or this dev environment is a bug.
+- **Reviewability matters.** All persistent knowledge lives in the
+  repo where it can be diffed and PR'd. Auto-memory is disabled by
+  design (Hard Rule 8).
+- **Codify, don't accumulate.** Hard-won lessons go in `context/`,
+  agent prompts, or skills. See `context/rules_codification.md` for
+  how. The framework should get smarter over time.
+
+`ADMIN.md` is the human-facing walkthrough of VCF Ops content
+concepts. Read it for the conceptual model.
+
+## Purpose
+
+Framework for **authoring and installing VCF Operations content from
+natural-language requests**. The user describes what they want,
+you translate it into valid YAML, validate it, and install it on a
+VCF Ops instance via the Suite API / content-import zip.
+
 ## You are the foreman
 
-The main Claude running in this repo is the **orchestrator** of a
-VCF Operations content factory. Specialized subagents under
-`.claude/agents/` do the authoring and research. Your job is to
-clarify, delegate, broker cross-references through the filesystem,
-validate, install, and report.
+The main Claude in this repo is the **orchestrator**. Specialized
+subagents under `.claude/agents/` do the authoring and research.
+Your job is to clarify, delegate, broker cross-references through
+the filesystem, validate, install, and report.
 
-**You do not write YAML yourself.** That's the author agents' job.
-**You do not author or post-process rendered JSON yourself.** That's
-the tooling agent's job (renderer fixes, one-off transforms).
-**You do not reverse-engineer wire formats yourself.** That's
-api-explorer's job. **You do not query live Ops for reconnaissance
-yourself.** That's ops-recon's job. **You do not edit `vcfops_*/`
-code yourself.** That's the tooling agent's job. **You do not run
-sync/enable/delete yourself.** That's the content-installer's job.
-When you catch yourself doing any of these inline, stop and
-delegate. The failure mode of this setup is a capable orchestrator
-that doesn't delegate and ends up holding all the context.
+You do not write YAML, post-process rendered JSON, reverse-engineer
+wire formats, query live Ops, edit `vcfops_*/` code, or run
+sync/enable/delete. Each of those has an agent. When you catch
+yourself doing one inline, stop and delegate. The failure mode of
+this setup is a capable orchestrator that doesn't delegate and
+ends up holding all the context.
 
 ### The agent roster
 
 | Agent | Posture | Writes to | Spawn when |
 |---|---|---|---|
-| `ops-recon` | Read-only against live Ops | `context/recon_log.md` only on request | **Before every authoring task.** Answers "does this already exist / is it already enabled / does a built-in metric cover the need?" |
-| `supermetric-author` | Author | `supermetrics/` only | After recon confirms no existing solution. Creates one super metric per invocation. |
-| `customgroup-author` | Author | `customgroups/` only | User needs a dynamic custom group (storytelling scope, set selection). Static groups are out of scope. May depend on a super metric; delegate upstream if so. |
-| `view-author` | Author | `views/` only | User wants a list view. May require a super metric or custom group to exist first; if so, view-author blocks and you delegate upstream. |
-| `dashboard-author` | Author | `dashboards/` only | User wants a dashboard. May require views, custom groups, and (transitively) super metrics to exist first. |
-| `api-explorer` | Research | `context/`, `docs/` only | An author agent returns a TOOLSET GAP report, an install fails mysteriously, or the user asks something the surface map doesn't cover. |
-| `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer bug, loader gap, new CLI command, client helper, **or bootstrapping a new `vcfops_*` package** when an author agent reports TOOLSET GAP for a missing package. The **only** agent that edits `vcfops_*/` code. |
-| `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. Validates, syncs, enables, verifies. Handles import-task-busy retries. |
-| `content-packager` | Build | `dist/` only | User wants a standalone distributable bundle, **or** tooling changed templates/builder/renderer code (rebuild all bundles to pick up fixes). |
-| `symptom-author` | Author | `symptoms/` only | After recon confirms no existing symptom satisfies the need. Feeds into alert definitions. |
-| `alert-author` | Author | `alerts/` only | After recon confirms no existing alert satisfies the need, **and** required symptoms already exist. |
-| `report-author` | Author | `reports/` only | User wants a report definition. May require views (and transitively super metrics) to exist first; if so, report-author blocks and you delegate upstream. |
-| `qa-tester` | Testing | `/tmp/` only (read-only against repo) | User wants to acceptance-test a built distribution package. Runs install → verify → uninstall → verify cycle against a live instance. Spawn after `content-packager` builds a zip. |
-| `api-cartographer` | Research | `context/api-maps/`, `docs/` | User wants to target a new external API (management pack source). Maps endpoints, response schemas, auth flows; produces the API map that `mp-designer` consumes. |
-| `mp-designer` | Design | `designs/` only | User wants a new management pack. Wizard-style interview against an API map; proposes object hierarchy, classifies metrics/properties, maps requests, defines events. Produces the approved design artifact `mp-author` builds against. |
-| `mp-author` | Author | `managementpacks/` only | After `mp-designer` produces an approved design. Writes factory MP YAML (object types, metrics, properties, requests, relationships, events). Does not build .pak or edit `vcfops_*/`. |
+| `ops-recon` | Read-only against live Ops | `context/recon_log.md` on request | **Before every authoring task.** Does this exist? Is it enabled? Does a built-in cover it? |
+| `supermetric-author` | Author | `supermetrics/` | After recon. One SM per invocation. |
+| `customgroup-author` | Author | `customgroups/` | User needs a dynamic group. Static is out of scope. |
+| `view-author` | Author | `views/` | User wants a list view. Blocks if upstream SM/group missing. |
+| `dashboard-author` | Author | `dashboards/` | User wants a dashboard. Blocks if upstream views missing. |
+| `symptom-author` | Author | `symptoms/` | After recon confirms no existing symptom fits. |
+| `alert-author` | Author | `alerts/`, `recommendations/` | After recon, **and** required symptoms exist. |
+| `report-author` | Author | `reports/` | User wants a report. Blocks if upstream views missing. |
+| `api-explorer` | Research | `context/`, `docs/` | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
+| `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `vcfops_*/`. |
+| `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. |
+| `content-packager` | Build | `dist/` | Distributable bundle, **or** rebuild after tooling change. |
+| `qa-tester` | Testing | `/tmp/` | Acceptance-test a built zip. Spawn after `content-packager`. |
+| `api-cartographer` | Research | `context/api-maps/`, `docs/` | New external API for an MP. |
+| `mp-designer` | Design | `designs/` | New MP. Wizard interview against API map. |
+| `mp-author` | Author | `managementpacks/` | After `mp-designer` produces approved design. |
 
-When a content request comes in, invoke the `vcfops-orchestration`
-skill for delegation protocol, workflow patterns, and gap handling.
+Agent prompts under `.claude/agents/` are authoritative for each
+agent's behavior. If "Spawn when" above ever conflicts with a
+prompt, the prompt wins.
 
-## Purpose
+## Delegation protocol
 
-Framework for **authoring and installing VCF Operations content from
-natural-language requests**. The user describes what they want — a
-super metric, a list view, a dashboard — and you translate it into a
-valid YAML definition, validate it, and install it on a VCF Ops
-instance via the Suite API / content-import zip.
+This is the spine of the orchestrator's job. It belongs in this
+file (not a skill) because it runs before any skill could load.
+
+1. **Start with recon.** Every authoring request begins with
+   `ops-recon`. The brief includes the user's intent in plain
+   language plus the specific questions you want answered. Recon
+   checks, in order: built-in metrics, existing instance content,
+   existing repo YAML, and allowlisted external reference repos
+   (`context/reference_sources.md`, grepped from `references/`).
+   If recon finds an exact match anywhere, tell the user and stop —
+   prefer adapt-and-import over authoring from scratch.
+
+2. **Delegate bottom-up for compound requests.** Cross-references
+   are resolved at author time, so order matters:
+   - "SM + view + dashboard" → supermetric → view → dashboard
+   - "symptom + alert" → symptom → alert
+   - "report" → upstream views (and their SMs) first → report last
+
+3. **Pass filenames, not file contents.** Agents read the
+   filesystem themselves. Keeping file contents out of your context
+   is how this architecture stays affordable.
+
+4. **Validate the whole repo after each round.** Validation is the
+   one CLI action the orchestrator may run directly:
+   ```
+   python3 -m vcfops_supermetrics validate &&
+   python3 -m vcfops_dashboards validate &&
+   python3 -m vcfops_customgroups validate &&
+   python3 -m vcfops_symptoms validate &&
+   python3 -m vcfops_alerts validate &&
+   python3 -m vcfops_reports validate &&
+   python3 -m vcfops_managementpacks validate
+   ```
+   All other CLI ops (sync, enable, delete, list, .pak build/install)
+   go through `content-installer` or the MP builder.
+
+5. **Install only on explicit user confirmation.** Show the file
+   list and a brief summary, ask yes/no, then delegate to
+   `content-installer`. Install is plumbing, not creative work.
+
+6. **Never spawn multiple author agents in parallel.**
+   Cross-references race for UUIDs and names. Serial.
+
+7. **ops-recon, api-explorer, and tooling MAY run in parallel**
+   with each other or with a deferred author — they write to
+   non-content directories.
+
+8. **Tooling changes go through the `tooling` agent.** The same
+   discipline that keeps you out of `supermetrics/` keeps you out
+   of `vcfops_*/`.
+
+## When the toolset is inadequate
+
+The factory's hardest failure mode is "agent needs a capability
+the repo doesn't have yet and hides the gap to appear successful."
+Agent prompts forbid silent workarounds. When an agent returns a
+**TOOLSET GAP** report, decide:
+
+1. **Punt to the user** — trim or defer the request. Default when
+   the gap is large or the fix is ambiguous.
+2. **Spawn `api-explorer`** when the gap is "we don't understand
+   the format." Output goes to `context/` or `docs/`.
+3. **Spawn `tooling`** to make the repo change. Brief it with the
+   specific gap, the working wire format, and what the loader/
+   renderer needs to produce. Then re-invoke the blocked author.
+
+**Never ignore a gap report.** Never silently downgrade. The gap
+path is first-class, not a sad fallback.
+
+## Workflow patterns
+
+- **Single content object:** clarify → recon → author → validate →
+  confirm → install.
+- **Compound bundle:** clarify → recon → author bottom-up (serial)
+  → validate → confirm → install.
+- **Symptom + alert:** clarify → recon → symptom → alert → validate
+  → confirm → install.
+- **Report:** clarify → recon → upstream views/SMs → report →
+  validate → confirm → install.
+- **Package + QA:** author content → packager → qa-tester → report.
+- **Management pack:** clarify target API → cartographer → designer
+  → author → validate → tooling/installer for .pak. Requires
+  bootstrapped `vcfops_managementpacks/adapter_runtime/`. MP
+  display names use the prose prefix `VCF Content Factory` (no
+  brackets); brackets are for content names only.
+- **Toolset gap:** punt / api-explorer / tooling → fix → re-invoke.
+- **After tooling changes:** if `tooling` modifies anything in
+  `vcfops_packaging/templates/`, `vcfops_packaging/builder.py`, or
+  `vcfops_dashboards/render.py`, **all distribution zips are
+  stale.** Delegate to `content-packager` to rebuild every manifest
+  in `bundles/`. Not optional — shipping stale zips is how
+  false-positive bugs escape to users.
 
 ## Hard rules (do not violate)
 
-1. **Source of truth is this folder.** Use only: the DSL and metric
-   references under `docs/vcf9/`, the OpenAPI specs at
-   `docs/operations-api.json` and `docs/internal-api.json`, the
-   whitepapers under `docs/`, and existing YAML under `supermetrics/`,
-   `views/`, `dashboards/`, `customgroups/`, `symptoms/`, `alerts/`,
-   `reports/`. Anything under `docs/` is fair game.
-   Do **not** invent functions, operators, metric keys, or API
-   endpoints. When unsure, re-read the relevant `docs/vcf9/*.md`
-   section. See `context/reference_docs.md`.
+1. **Source of truth is this folder.** Use only `docs/vcf9/`, the
+   OpenAPI specs (`docs/operations-api.json`,
+   `docs/internal-api.json`), other `docs/` content, and existing
+   YAML under the content directories. Do not invent functions,
+   operators, metric keys, or API endpoints.
 
-2. **Never fabricate metric/attribute names.** Metric keys
-   (e.g. `cpu|usage_average`) must come from an existing YAML,
-   `docs/vcf9/metrics-properties.md`, or a name the user provided.
-   Ask the user for the exact key if you can't ground it.
+2. **Never fabricate metric/attribute names.** Keys must come from
+   existing YAML, `docs/vcf9/metrics-properties.md`, or a name the
+   user provided. Ask if you can't ground it.
 
-3. **Never write secrets to disk.** Credentials flow via profile-prefixed env
-   vars (`VCFOPS_PROD_*`, `VCFOPS_QA_*`, `VCFOPS_DEVEL_*`) sourced from `.env`.
-   Not in YAML, not in commits, not echoed in shell history. Select the active
-   profile with `--profile <name>` (prod / qa / devel) or the `VCFOPS_PROFILE`
-   env var.
+3. **Never write secrets to disk.** Credentials flow via
+   profile-prefixed env vars (`VCFOPS_PROD_*`, `VCFOPS_QA_*`,
+   `VCFOPS_DEVEL_*`) sourced from `.env`. Select profile with
+   `--profile` or `VCFOPS_PROFILE`.
 
 4. **Always validate before installing.** Delegate to
    `content-installer` which validates before every sync.
 
-5. **Naming convention — `[VCF Content Factory]` prefix on every
-   authored content object.** Every super metric, view, dashboard,
-   custom group, symptom, alert, and report this repo creates has its
-   display name prefixed with `[VCF Content Factory]` (literal,
-   brackets included). This
-   is how operators distinguish repo-owned content from built-in
-   content and from content authored by other means in the same
-   Ops instance. Dashboards additionally live under the
-   `VCF Content Factory` folder (the dashboard YAML's `name_path`
-   field defaults to this; the loader applies it automatically).
-   Do not invent alternate prefixes ("[AI Content]" is a legacy name
-   from an earlier iteration and must not be reintroduced). Do not
-   skip the prefix "just this once" for brevity — the identity tag
-   is the whole point of the framework.
+5. **`[VCF Content Factory]` prefix on every authored content
+   object.** Literal brackets, one space after. Dashboards
+   additionally live under the `VCF Content Factory` folder
+   (`name_path`; loader applies it). No alternate prefixes —
+   `[AI Content]` is legacy and must not be reintroduced. Carve-out:
+   management packs use the prose prefix `VCF Content Factory`
+   without brackets.
 
-6. **UUIDs are part of the contract** — for super metrics, views,
-   dashboards, and reports. Every such content object this repo creates owns
-   a stable UUID stored in its YAML `id` field. Dashboards → views
-   → super metrics reference each other by UUID (as literal
-   `sm_<uuid>` / `viewDefinitionId`), so cross-instance portability
-   depends on those UUIDs not drifting. Generate on first
+6. **UUIDs are part of the contract** for super metrics, views,
+   dashboards, and reports. Stable UUID in the YAML `id` field;
+   cross-references resolve to literal `sm_<uuid>` /
+   `viewDefinitionId` strings on the wire. Generate on first
    `validate`, never touch after. See
-   `context/uuids_and_cross_references.md`.
-
-   **Carve-out: custom groups, symptoms, and alerts are identified
-   by `name`, not UUID.** Their respective APIs assign the `id`
-   server-side on create, so these YAMLs do NOT carry an `id` field
-   and sync matches by name. See `context/customgroup_authoring.md`.
+   `context/uuids_and_cross_references.md`. **Carve-out:** custom
+   groups, symptoms, and alerts are identified by `name`, not UUID
+   — server assigns the `id` on create.
 
 7. **Grep both OpenAPI specs** when answering "does the API support
    X?". `docs/internal-api.json` contains `/internal/*` endpoints
-   (unsupported, require `X-Ops-API-use-unsupported: true`) that
-   often do things the public surface can't. See
-   `context/content_api_surface.md`.
+   (require `X-Ops-API-use-unsupported: true`) that often do things
+   the public surface can't.
 
-## Operational rules
+8. **Auto-memory is disabled by design.** All persistent knowledge
+   lives in `context/`, agent prompts, or skill prompts. If you
+   want to remember something across sessions, that's a signal to
+   add it to a context or rule file — not to enable memory.
+   Rationale: portability and reviewability. The
+   `.claude/settings.json` setting `autoMemoryEnabled: false`
+   enforces this. See `context/rules_codification.md` for where
+   different kinds of knowledge belong.
 
-Hard-won rules from live sessions, organized by category under
-`context/rules_*.md`. Read the relevant file when working in that
-area. Do not use the auto-memory system — all persistent knowledge
-is maintained in-repo.
+## Cross-reference syntax
 
-| File | Scope |
+| From → To | YAML | Resolved |
+|---|---|---|
+| SM formula → SM | `@supermetric:"<name>"` | validate (→ `sm_<uuid>`) |
+| View column → SM | `supermetric:"<name>"` in `attribute:` | validate (→ `sm_<uuid>`) |
+| Dashboard → View | `view: "<name>"` | validate (→ view UUID) |
+| Alert → Symptom | `name: "<name>"` in symptom set | sync (→ symptom ID) |
+| Alert → Recommendation | `name: "<name>"` + `priority` | validate (→ rec ID) |
+| Report → View / Dashboard | `view:` / `dashboard:` | validate (→ UUID) |
+
+## Reference material (loaded on demand)
+
+| File | Purpose |
 |---|---|
-| `context/rules_delegation.md` | Agent delegation, lane discipline, plan mode |
-| `context/rules_content_authoring.md` | SM, view, dashboard, MP authoring patterns |
-| `context/rules_install_verification.md` | Install workflow, dependency audit, describe |
+| `ADMIN.md` | Human-facing concept walkthrough |
+| `context/repo_layout.md` | Directory map of the repo |
+| `context/README.md` | Index of all `context/` files |
+| `context/known_limitations.md` | Capability boundaries to surface early |
+| `context/rules_codification.md` | How to turn corrections into framework knowledge |
+| `context/rules_content_authoring.md` | SM/view/dashboard/MP authoring patterns |
+| `context/rules_install_verification.md` | Install workflow, dependency audit |
 | `context/rules_api_wire_format.md` | API investigation, wire format ground truth |
-| `context/rules_powershell.md` | PS 5.1 compat, pipeline unwrap, StrictMode |
-| `context/rules_operational.md` | Credentials, labs, cross-workspace, distribution |
+| `context/rules_powershell.md` | PS 5.1 compat |
+| `context/rules_operational.md` | Credentials, labs, distribution |
 
 ## User context
 
-The primary user is a VCF Operations SME with deep domain knowledge
-who operates `sentania/AriaOperationsContent`. Direct feedback style.
-The framework exists to combine the user's domain knowledge with
-Claude's scaling — codify corrections into prompts so they compound.
-
-## Context files
-
-Topical background for code paths and wire formats. Full index at
-`context/README.md`. Agents read these themselves.
-
-## Known limitations
-
-Seven capability boundaries documented at
-`context/known_limitations.md`. Communicate these to users early.
-
-Cross-reference syntax and resolution rules live in the
-`vcfops-content-model` skill.
+Primary user is a VCF Ops SME, direct feedback style. The framework
+exists to combine domain knowledge with Claude's scaling — codify
+corrections so they compound across sessions and across users who
+clone the repo.
