@@ -1,0 +1,17 @@
+artifacts:
+- headline: true
+  source: content/managementpacks/unifi_network_integration.yaml
+deprecates: []
+description: Monitors UniFi network devices via the Integration API v1. Collects device
+  health (CPU, memory, uptime, load averages, uplink throughput, per-radio TX retries)
+  and inventory properties for Access Points, Switches, and the Gateway (UDM Pro).
+  Enriches each device with per-device detail properties (adoption/provisioning timestamps,
+  configuration ID, uplink device ID). Access Points additionally carry radio config
+  properties (channel, channel width, WLAN standard) for 2.4 GHz and 5 GHz radios.
+  Includes Client and Network object types for a full inventory view. Topology relationships
+  wire devices to their uplink parent (gateway→switch→AP) and clients to their connected
+  device. Uses stateless X-API-Key auth (no login/logout session). Requires UniFi
+  Network Application 10.1.84+ with Integration API enabled.
+name: unifi-network-integration-managementpack
+release_notes: ''
+version: '1.0'
