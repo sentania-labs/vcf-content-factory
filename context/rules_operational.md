@@ -31,6 +31,13 @@ The `--to` slug for cross-workspace requests must match a directory
 name under `~/pka/workspaces/` exactly. Run `ls ~/pka/workspaces/` to
 confirm.
 
+## File paths
+
+### tmp/ means project-local tmp/
+When asked to put files in "tmp" or "temp", use `tmp/` relative to
+the project root (`./tmp/`), not the system `/tmp/`. This directory
+is gitignored and stays inside the workspace.
+
 ## Distribution and attribution
 
 ### Public vs PKA info boundary

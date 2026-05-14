@@ -376,13 +376,19 @@ def _strip_request(req: Dict[str, Any]) -> Dict[str, Any]:
     # else: key absent — correct for non-chained requests
 
     # Collapse response: keep only result.{responseCode, dataModelLists}
+    # dataModelList entries: strip label and parentListId (absent in reference
+    # export; confirmed from tmp/mpb_reference_none_auth.json, 2026-05-13).
+    _DML_DROP = {"label", "parentListId"}
     resp = req.get("response")
     if resp and isinstance(resp, dict):
         result = resp.get("result", {})
+        raw_dmls = result.get("dataModelLists", [])
+        dmls = [{k: v for k, v in dml.items() if k not in _DML_DROP}
+                for dml in raw_dmls]
         r["response"] = {
             "result": {
                 "responseCode": result.get("responseCode", 200),
-                "dataModelLists": result.get("dataModelLists", []),
+                "dataModelLists": dmls,
             }
         }
     else:
@@ -399,9 +405,12 @@ def _strip_request(req: Dict[str, Any]) -> Dict[str, Any]:
 def _strip_metric(metric: Dict[str, Any]) -> Dict[str, Any]:
     """Strip flat-format-only fields from a metric dict.
 
-    Removes: timeseries (null in flat format, absent in exchange format).
+    Removes:
+      - timeseries: null in flat format, absent in exchange format.
+      - key: present in flat format, absent in exchange format (confirmed
+        from tmp/mpb_reference_none_auth.json, 2026-05-13).
     """
-    drop = {"timeseries"}
+    drop = {"timeseries", "key"}
     return {k: v for k, v in metric.items() if k not in drop}
 
 
@@ -431,20 +440,49 @@ def _strip_metric_set(ms: Dict[str, Any]) -> Dict[str, Any]:
 def _strip_internal_object_info(ioi: Dict[str, Any]) -> Dict[str, Any]:
     """Strip flat-format-only fields from internalObjectInfo.
 
-    Removes: id (present in flat format, absent in exchange format).
+    Removes:
+      - id: present in flat format, absent in exchange format.
+      - nameMetricExpression.expressionParts[].label: present in flat format,
+        absent in reference export (confirmed from
+        tmp/mpb_reference_none_auth.json, 2026-05-13).
     """
-    drop = {"id"}
-    return {k: v for k, v in ioi.items() if k not in drop}
+    result = {k: v for k, v in ioi.items() if k != "id"}
+    nme = result.get("nameMetricExpression")
+    if isinstance(nme, dict):
+        eps = nme.get("expressionParts")
+        if isinstance(eps, list):
+            nme["expressionParts"] = [
+                {k: v for k, v in ep.items() if k != "label"}
+                for ep in eps
+            ]
+    return result
 
 
 def _strip_object(obj: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a flat resource/object to exchange format.
 
-    Removes: designId, ariaOpsConf
-    Strips internalObjectInfo.id, metricSets[].objectBinding,
-    and metricSets[].metrics[].timeseries (all absent in exchange format).
+    For INTERNAL objects:
+      Removes: designId, ariaOpsConf (null for INTERNAL, not needed in exchange)
+      Strips internalObjectInfo.id, metricSets[].objectBinding when null,
+      and metricSets[].metrics[].timeseries (all absent in exchange format).
+
+    For ARIA_OPS objects:
+      Removes: designId only.
+      ariaOpsConf is KEPT (confirmed from ground truth:
+        context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json
+        §objects[0].object.ariaOpsConf is present in the exchange format).
+      internalObjectInfo is absent (ARIA_OPS objects don't have it).
+      objectBinding uses "objectBindingType" key (not "type") — passed through as-is.
     """
-    drop = {"designId", "ariaOpsConf"}
+    is_aria_ops = obj.get("type") == "ARIA_OPS"
+
+    if is_aria_ops:
+        # ARIA_OPS: drop only designId; keep ariaOpsConf
+        drop = {"designId"}
+    else:
+        # INTERNAL: drop designId and the null ariaOpsConf placeholder
+        drop = {"designId", "ariaOpsConf"}
+
     result = {k: v for k, v in obj.items() if k not in drop}
     if "internalObjectInfo" in result and isinstance(result["internalObjectInfo"], dict):
         result["internalObjectInfo"] = _strip_internal_object_info(
@@ -577,26 +615,39 @@ def render_mpb_exchange_json(
     design_block = {
         "design": {
             "name": pak.get("name", mp.name),
-            "type": src.get("type", "HTTP"),
             "description": pak.get("description", ""),
             "version": mp.version,  # base version, no build suffix
         },
-        "buildNumber": mp.build_number,
     }
+    # buildNumber and design.design.type are absent in the reference MPB export
+    # (confirmed from tmp/mpb_reference_none_auth.json, 2026-05-13).  Do not emit.
 
     # ------------------------------------------------------------------
     # 2. source.source block
     # ------------------------------------------------------------------
     auth = copy.deepcopy(src.get("authentication", {}))
 
+    # Remap credentialType "NONE" → "CUSTOM" for exchange format.
+    # "NONE" is a flat-format-only sentinel emitted by render.py for preset:none
+    # and no-auth cases.  MPB's import parser rejects it — every known-good import
+    # uses "CUSTOM" (with empty creds and null sessionSettings), "BASIC", or "TOKEN".
+    # This remap is exchange-format-only; render.py's design.json output is unchanged.
+    if auth.get("credentialType") == "NONE":
+        auth["credentialType"] = "CUSTOM"
+
     # Strip flat-format-only fields from credential items (value: null)
     if isinstance(auth.get("creds"), list):
         auth["creds"] = [_strip_cred(c) for c in auth["creds"]]
 
-    # Strip session request fields that don't belong in exchange format.
-    # Auth session requests use responseCode-only response (no dataModelLists).
+    # Strip sessionSettings when null/absent — the reference export omits the key
+    # entirely for no-auth configurations (confirmed from
+    # tmp/mpb_reference_none_auth.json, 2026-05-13).
     ss = auth.get("sessionSettings")
-    if ss and isinstance(ss, dict):
+    if ss is None:
+        auth.pop("sessionSettings", None)
+    elif isinstance(ss, dict):
+        # Strip session request fields that don't belong in exchange format.
+        # Auth session requests use responseCode-only response (no dataModelLists).
         if ss.get("getSession"):
             ss["getSession"] = _strip_auth_request(ss["getSession"])
         if ss.get("releaseSession"):
@@ -612,12 +663,29 @@ def render_mpb_exchange_json(
 
     # designId is absent in the exchange format (confirmed 2026-04-21).
     # The flat render.py emits designId: None, but exchange strips it.
+
+    # Fix 7: populate full source.source.configuration with all connection keys.
+    # Community reference paks (Dale/Rubrik) include the full set; the MPB-built
+    # devel reference only has baseApiPath + customConfigs but both install fine.
+    # We emit the full set to match the widest reference pattern.
+    _ssl_map = {"NO_VERIFY": "No Verify", "VERIFY": "Verify", "NO_SSL": "No SSL"}
+    _mp_src = mp.source  # ManagementPackDef.source (SourceDef)
+    _ssl_str = _ssl_map.get(str(_mp_src.ssl).upper(), "Verify") if _mp_src and _mp_src.ssl else "Verify"
+    _source_configuration: dict = {
+        "hostname": "",
+        "port": str(_mp_src.port) if _mp_src and _mp_src.port is not None else "443",
+        "maxRetries": str(_mp_src.max_retries) if _mp_src and _mp_src.max_retries is not None else "2",
+        "sslSetting": _ssl_str,
+        "baseApiPath": src.get("basePath", ""),
+        "customConfigs": [],
+        "minEventSeverity": "Warning",
+        "connectionTimeout": str(_mp_src.timeout) if _mp_src and _mp_src.timeout is not None else "30",
+        "maxConcurrentRequests": str(_mp_src.max_concurrent) if _mp_src and _mp_src.max_concurrent is not None else "2",
+    }
+
     source_source = {
         "id": _stable_source_id(ak),
-        "configuration": {
-            "baseApiPath": src.get("basePath", ""),
-            "customConfigs": [],
-        },
+        "configuration": _source_configuration,
         "authentication": auth,
         "globalHeaders": global_headers,
         "testRequest": test_req,
@@ -709,16 +777,17 @@ def render_mpb_exchange_json(
 
     # Top-level exchange format:
     #   - type: "HTTP"  — present at top level (confirmed from synology_nas_working_export.json)
-    #   - content: null — present in all four reference-pack UI exports (jcox UniFi,
-    #     phpIPAM, Rubrik, vSAN-policy) per mpb_import_diff_unifi_2026_05_07.md §2.
-    #     The Synology working export omits it, but emitting null is the safer
-    #     superset of both patterns.  Added 2026-05-07 to resolve import failures.
+    #   - content: []   — Fix 6: every reference pak has this key as an empty list.
+    #     GitHub-1.0.0.2.pak and Broadcom both have "content": [] in export.json.
+    #     The MPB-built devel reference (none-auth) had it absent in earlier captures,
+    #     but the pak-compare [B2] finding ("factory missing top-level keys: ['content']")
+    #     against GitHub/Broadcom confirms it must be present.  Emit as empty list.
     # Key order matches the reference for readability, though MPB ignores order.
     exchange = {
         "type": src.get("type", "HTTP"),
-        "content": None,
         "design": design_block,
         "source": source_block,
+        "content": [],
         "objects": objects_list,
         "relationships": relationships_list,
         "events": events_list,

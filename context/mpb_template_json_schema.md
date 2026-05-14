@@ -51,7 +51,7 @@ carrying the same logical content.
 
 ```json
 {
-  "adapterKind": "mpb_unifi_integration",
+  "adapterKind": "mpb_vcf_content_factory_unifi_integration",
   "author": "VCF Content Factory",
   "name": "VCF Content Factory UniFi Integration",
   "version": "1.0.0",

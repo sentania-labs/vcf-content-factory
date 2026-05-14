@@ -333,7 +333,10 @@ def _convert_object_binding(
     if design_ob is None:
         return None
 
-    ob_type = design_ob.get("type", "ATTRIBUTE_TO_PROPERTY")
+    # Handle both "type" (INTERNAL bindings) and "objectBindingType" (ARIA_OPS bindings).
+    # ARIA_OPS objectBinding uses "objectBindingType" as the discriminator key;
+    # INTERNAL uses "type".  Both map to the same template conversion logic.
+    ob_type = design_ob.get("type") or design_ob.get("objectBindingType", "ATTRIBUTE_TO_PROPERTY")
 
     if ob_type == "CHAINED_REQUEST":
         match_expr_id = design_ob.get("matchExpression", {}).get("id", "")
@@ -587,11 +590,26 @@ def _convert_resource(
       - Rename ``isListObject`` -> ``isListResource``.
       - Remove ``type``, ``designId``, ``ariaOpsConf``, ``internalObjectInfo``.
       - Add ``metricGroups: {}``.
+
+    ARIA_OPS resources: these push metrics onto existing Aria Ops resource kinds
+    and do not define their own resourceKind in the adapter.  For template.json
+    they are rendered with an empty label/resourceKind derived from ariaOpsConf
+    and no identifiers/name (the target resource's identity is used).
     """
+    is_aria_ops = design_resource.get("type") == "ARIA_OPS"
+
+    if is_aria_ops:
+        aria_conf = design_resource.get("ariaOpsConf") or {}
+        label = aria_conf.get("objectTypeLabel", "")
+        resource_kind = f"{aria_conf.get('adapterType', adapter_kind)}_{_snake_case(aria_conf.get('objectType', ''))}"
+        icon = ""
+    else:
+        info = design_resource.get("internalObjectInfo", {})
+        label = info.get("objectTypeLabel", "")
+        resource_kind = f"{adapter_kind}_{_snake_case(label)}"
+        icon = info.get("icon", "")
+
     info = design_resource.get("internalObjectInfo", {})
-    label = info.get("objectTypeLabel", "")
-    resource_kind = f"{adapter_kind}_{_snake_case(label)}"
-    icon = info.get("icon", "")
     is_list_resource = design_resource.get("isListObject", True)
 
     # Build metric lookup for this resource (needed for identifiers + name expr)
@@ -920,10 +938,19 @@ def render_template_json(
         requests_template[req_id] = converted
 
     # ---- resources ---------------------------------------------------------
+    # ARIA_OPS objects are excluded from template.json entirely.  They stitch
+    # onto existing Aria Ops resource kinds (e.g. HostSystem, Datastore) and
+    # do not define their own adapter-owned resourceKind.  Including them here
+    # would produce resourceKind values like "VMWARE_hostsystem" which are not
+    # mpb_-prefixed and fail the pak runtime validator.  ARIA_OPS objects
+    # appear only in export.json (via the ariaOpsConf block).
+    # Confirmed from MPB-built reference pak (tmp/devel_mpb_built.pak):
+    # source.resources == [] despite 2 ARIA_OPS objects in the design.
     design_resources = design_source.get("resources", []) or []
     resources_template = [
         _convert_resource(r, ak)
         for r in design_resources
+        if r.get("type") != "ARIA_OPS"
     ]
 
     # Build lookup for relationships: resource id -> design resource dict
@@ -951,7 +978,13 @@ def render_template_json(
         "requests": requests_template,
         "resources": resources_template,
         "externalResources": design_source.get("externalResources", []),
-        "events": design_source.get("events", []),
+        # Always emit empty events list in template.json.  The pak runtime
+        # parses ALL json files in the adapter conf directory; events in
+        # design-import format (from render_mp_design_json) cause a schema
+        # mismatch and pak install failure.  MPB-built reference pak has
+        # source.events: [] in template.json.  Events can be re-enabled once
+        # a pak-runtime event wire format is confirmed.
+        "events": [],
         "type": design_source.get("type", "HTTP"),
     }
 

@@ -1,4 +1,4 @@
-adapter_kind: mpb_unifi_integration
+adapter_kind: mpb_vcf_content_factory_unifi_integration
 author: VCF Content Factory
 build_number: 5
 description: 'Monitors UniFi network devices via the Integration API v1. Collects

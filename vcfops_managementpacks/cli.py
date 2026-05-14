@@ -297,6 +297,51 @@ def cmd_install(args) -> int:
     return 0
 
 
+def cmd_pak_compare(args) -> int:
+    """Structurally compare a factory-built .pak against one or more reference paks."""
+    from .pak_compare import compare_paks, compare_pak_directory, format_report
+
+    factory = Path(args.factory_pak)
+    if not factory.exists():
+        print(f"ERROR: factory pak not found: {factory}", file=sys.stderr)
+        return 1
+
+    output_file = getattr(args, "output", None)
+    out_lines: list[str] = []
+
+    def _emit(text: str) -> None:
+        print(text, end="")
+        if output_file:
+            out_lines.append(text)
+
+    if args.reference_dir:
+        ref_dir = Path(args.reference_dir)
+        if not ref_dir.is_dir():
+            print(f"ERROR: --reference-dir is not a directory: {ref_dir}", file=sys.stderr)
+            return 1
+        results = compare_pak_directory(factory, ref_dir)
+        if not results:
+            print(f"No .pak files found in {ref_dir}", file=sys.stderr)
+            return 1
+        _emit(f"\n=== PAK COMPARE (directory mode): {factory.name} vs {ref_dir} ===\n")
+        _emit(f"Compared against {len(results)} reference pak(s), sorted by score (closest match first):\n\n")
+        for ref_path, result in results:
+            _emit(format_report(result))
+    else:
+        ref = Path(args.reference_pak)
+        if not ref.exists():
+            print(f"ERROR: reference pak not found: {ref}", file=sys.stderr)
+            return 1
+        result = compare_paks(factory, ref)
+        _emit(format_report(result))
+
+    if output_file:
+        Path(output_file).write_text("".join(out_lines))
+        print(f"Report written to: {output_file}", file=sys.stderr)
+
+    return 0
+
+
 def cmd_uninstall(args) -> int:
     """Uninstall a management pack from a live VCF Ops instance.
 
@@ -446,6 +491,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="build even if pak-validate reports errors (use for debugging only)",
     )
     pb.set_defaults(func=cmd_build)
+
+    # ------------------------------------------------------------------
+    # pak-compare subcommand
+    # ------------------------------------------------------------------
+    ppc = sub.add_parser(
+        "pak-compare",
+        help=(
+            "structurally compare a factory-built .pak against a reference .pak "
+            "and report BLOCKING/WARNING/INFO divergences"
+        ),
+    )
+    ppc.add_argument(
+        "factory_pak",
+        metavar="FACTORY_PAK",
+        help="path to the factory-built .pak file",
+    )
+    # Mutually-exclusive: single reference OR directory mode
+    ref_group = ppc.add_mutually_exclusive_group(required=True)
+    ref_group.add_argument(
+        "reference_pak",
+        metavar="REFERENCE_PAK",
+        nargs="?",
+        default=None,
+        help="path to the reference .pak file to compare against",
+    )
+    ref_group.add_argument(
+        "--reference-dir",
+        dest="reference_dir",
+        default=None,
+        metavar="DIR",
+        help=(
+            "compare against all .pak files in DIR; "
+            "results sorted by score (closest match first)"
+        ),
+    )
+    ppc.add_argument(
+        "--output", "-o",
+        default=None,
+        metavar="FILE",
+        help="write the full report to FILE in addition to stdout",
+    )
+    ppc.set_defaults(func=cmd_pak_compare)
 
     # ------------------------------------------------------------------
     # install subcommand

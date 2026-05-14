@@ -291,8 +291,12 @@ def _generate_describe_xml(mp: ManagementPackDef) -> tuple:
     src = mp.source
 
     # Identify the root data kind (YAML is_world=True) and child kinds.
-    world_ot = next((o for o in mp.object_types if o.is_world), None)
-    child_ots = [o for o in mp.object_types if not o.is_world]
+    # ARIA_OPS object types are excluded from describe.xml entirely — they push
+    # metrics onto existing resource kinds in other adapters (e.g. VMWARE).
+    # Including them as ResourceKinds would register spurious kinds in VCF Ops
+    # that conflict with the target adapter's own describe.xml.
+    world_ot = next((o for o in mp.object_types if o.is_world and o.type != "ARIA_OPS"), None)
+    child_ots = [o for o in mp.object_types if not o.is_world and o.type != "ARIA_OPS"]
 
     # labels: nameKey int -> display label string.  Populated by _append_* helpers.
     # nameKeys 3+ for credential fields are populated dynamically by
@@ -358,7 +362,17 @@ def _generate_describe_xml(mp: ManagementPackDef) -> tuple:
         _append_data_kind(lines, ot, mp, ak, name_key_counter, labels)
 
     # 3. Relatives kind (type=4, dynamic) — MPB runtime relationship bucket
-    _append_relatives_kind(lines, ak, name_key_counter, labels, mp_name=mp.name)
+    # Fix 5: collect ARIA_OPS resource_kind values for _relatives population.
+    aria_ops_rk_list = []
+    for ot in mp.object_types:
+        if ot.type == "ARIA_OPS" and hasattr(ot, "aria_ops") and ot.aria_ops:
+            rk = getattr(ot.aria_ops, "resource_kind", None)
+            if rk:
+                aria_ops_rk_list.append(rk)
+    _append_relatives_kind(
+        lines, ak, name_key_counter, labels,
+        mp_name=mp.name, aria_ops_resource_kinds=aria_ops_rk_list,
+    )
 
     # 4. World aggregate kind (type=8, subType=6)
     _append_world_aggregate_kind(lines, mp, ak, name_key_counter, child_ots, labels)
@@ -544,15 +558,15 @@ def _append_credential_kinds(
       bearer_token               — single credential, always password=true
       http_header                — iterate credentials, emit per field (same as
                                    basic_auth; sensitive flag drives password attr)
-      none                       — emit empty CredentialKinds block
+      none                       — SKIP entire CredentialKinds block (MPB reference
+                                   for no-auth paks has NO CredentialKinds element)
     """
     src = mp.source
-    if not src or not src.auth or src.auth.preset == "none":
-        lines.append("  <CredentialKinds>")
-        lines.append("  </CredentialKinds>")
+    auth = src.auth if src else None
+    if not auth or auth.preset == "none":
+        # MPB-built no-auth paks have NO <CredentialKinds> block at all.
+        # Emitting an empty block causes describe.xml divergence from reference.
         return
-
-    auth = src.auth
     lines.append("  <CredentialKinds>")
     lines.append(
         f'    <CredentialKind key="{ak}_credentials" nameKey="2">'
@@ -609,9 +623,7 @@ def _append_adapter_instance_kind(
     name_key_counter[0] += len(ot.metrics) + len(ot.identifiers) + 20
 
     rk_key = f"{ak}_{ot.key}" if not ot.key.startswith(ak) else ot.key
-    cred_attr = ""
-    if src and src.auth and src.auth.preset != "none":
-        cred_attr = f' credentialKind="{ak}_credentials"'
+    cred_attr = f' credentialKind="{ak}_credentials"'
     lines.append(
         f'    <ResourceKind key="{rk_key}" nameKey="{nk}"'
         f' type="7"{cred_attr} monitoringInterval="5">'
@@ -757,10 +769,12 @@ def _append_bare_adapter_instance_kind(
     lines 13-19.  Attribute shape: dataType="float", isProperty="false",
     isRate="false", isDiscrete="false".
     """
-    # Derive count metric keys for all non-world child kinds (same set used by
-    # world kind's ComputedMetrics).
-    world_ot = next((o for o in mp.object_types if o.is_world), None)
-    child_ots = [o for o in mp.object_types if not o.is_world]
+    # Derive count metric keys for all non-world INTERNAL child kinds.
+    # ARIA_OPS object types are excluded: they push metrics onto existing resource
+    # kinds in other adapters and do not have a local ResourceKind in describe.xml,
+    # so a count attribute for them would reference a non-existent kind.
+    world_ot = next((o for o in mp.object_types if o.is_world and o.type != "ARIA_OPS"), None)
+    child_ots = [o for o in mp.object_types if not o.is_world and o.type != "ARIA_OPS"]
     # If world_ot has metrics it is a root data kind; include it in child list
     # for count purposes only when it is NOT the pure world-marker case.
     count_ots = child_ots
@@ -785,8 +799,15 @@ def _append_bare_adapter_instance_kind(
 
     nk = name_key_counter[0]
     name_key_counter[0] += 20 + len(count_attr_keys)
-    cred_attr = ""
-    if src and src.auth and src.auth.preset != "none":
+
+    # Fix 1: omit credentialKind attribute for preset:none paks.
+    # MPB-built no-auth reference has no credentialKind= on the type=7 kind.
+    src = mp.source
+    auth = src.auth if src else None
+    preset = auth.preset if auth else "none"
+    if preset == "none":
+        cred_attr = ""
+    else:
         cred_attr = f' credentialKind="{ak}_credentials"'
 
     # ResourceKind label: use the adapter_kind mp.name (this is the adapter-instance kind)
@@ -797,13 +818,16 @@ def _append_bare_adapter_instance_kind(
     )
     nk += 1
 
-    # Summary ResourceGroup — count attributes (Delta 1)
+    # Fix 2: always emit <ResourceGroup key="summary"> on the adapter instance kind.
+    # MPB reference paks always have this group as the first child of the type=7 kind,
+    # even when empty (no count attributes).  The reference has nameKey="3" for this
+    # group; we use the next available nk in sequence.
+    labels[nk] = "Summary"
+    lines.append(
+        f'      <ResourceGroup key="summary" nameKey="{nk}" instanced="false">'
+    )
+    nk += 1
     if count_attr_keys:
-        labels[nk] = "Summary"
-        lines.append(
-            f'      <ResourceGroup key="summary" nameKey="{nk}" instanced="false">'
-        )
-        nk += 1
         for i, (cm_key, cm_label) in enumerate(zip(count_attr_keys, count_attr_labels)):
             labels[nk] = cm_label
             lines.append(
@@ -813,7 +837,7 @@ def _append_bare_adapter_instance_kind(
                 f' isProperty="false" hidden="false" />'
             )
             nk += 1
-        lines.append("      </ResourceGroup>")
+    lines.append("      </ResourceGroup>")
 
     if src:
         ssl_map = {"NO_VERIFY": "No Verify", "VERIFY": "Verify", "NO_SSL": "No SSL"}
@@ -1054,14 +1078,30 @@ def _append_relatives_kind(
     name_key_counter: list,
     labels: dict,
     mp_name: str = "",
+    aria_ops_resource_kinds: Optional[list] = None,
 ) -> None:
     """Append the <ak>_relatives ResourceKind (type=4, dynamic).
 
     This is the MPB runtime bucket for ad-hoc relationship discovery.
     It is always present in MPB-generated paks regardless of the MP design.
+
+    Fix 5: When the MP has ARIA_OPS object types, populate the relationships
+    ResourceGroup with one ResourceAttribute per unique ARIA_OPS target
+    resource_kind.  The key format is {resource_kind}_child (e.g.
+    "HostSystem_child", "Datastore_child").  Each is a string property.
+    Wire shape confirmed from MPB-built reference pak (2026-05-13).
     """
+    # Deduplicate ARIA_OPS resource kind names (preserve order)
+    aria_rk_list: list = []
+    if aria_ops_resource_kinds:
+        seen: set = set()
+        for rk in aria_ops_resource_kinds:
+            if rk and rk not in seen:
+                aria_rk_list.append(rk)
+                seen.add(rk)
+
     nk = name_key_counter[0]
-    name_key_counter[0] += 5
+    name_key_counter[0] += 5 + len(aria_rk_list)
     rk_key = f"{ak}_relatives"
     labels[nk] = (mp_name + " Relatives") if mp_name else (ak + " Relatives")
     lines.append(
@@ -1073,6 +1113,18 @@ def _append_relatives_kind(
     lines.append(
         f'      <ResourceGroup key="relationships" nameKey="{nk}" instanced="false">'
     )
+    nk += 1
+    for i, resource_kind in enumerate(aria_rk_list):
+        attr_key = f"{resource_kind}_child"
+        attr_label = " ".join(w.capitalize() for w in resource_kind.split("_")) + " Child"
+        labels[nk] = attr_label
+        lines.append(
+            f'        <ResourceAttribute nameKey="{nk}" dashboardOrder="{i + 1}"'
+            f' key="{attr_key}" dataType="string" defaultMonitored="true"'
+            f' isDiscrete="false" keyAttribute="false" isRate="false"'
+            f' isProperty="true" hidden="false" />'
+        )
+        nk += 1
     lines.append("      </ResourceGroup>")
     lines.append("    </ResourceKind>")
 
@@ -1124,13 +1176,15 @@ def _append_world_aggregate_kind(
     )
     nk += 1
 
+    # Fix 3: always emit <ResourceGroup key="summary"> on the world kind.
+    # MPB reference paks always have this group on the type=8 kind even when empty.
+    labels[nk] = "Summary"
+    lines.append(
+        f'      <ResourceGroup key="summary" nameKey="{nk}" instanced="false">'
+    )
+    nk += 1
     if count_metrics:
         # ResourceGroup declares the attributes that ComputedMetrics populate.
-        labels[nk] = "Summary"
-        lines.append(
-            f'      <ResourceGroup key="summary" nameKey="{nk}" instanced="false">'
-        )
-        nk += 1
         for i, (cm_key, cm_label) in enumerate(zip(count_metrics, count_metric_labels)):
             labels[nk] = cm_label
             lines.append(
@@ -1146,12 +1200,15 @@ def _append_world_aggregate_kind(
                 f' hidden="false" />'
             )
             nk += 1
-        lines.append("      </ResourceGroup>")
+    lines.append("      </ResourceGroup>")
 
+    # Fix 4: always emit <ComputedMetrics> on the world kind.
+    # MPB reference paks always have this block (populated or empty).
+    lines.append("      <ComputedMetrics>")
+    if count_metrics:
         # ComputedMetrics — each sums the matching attribute on the adapter-instance
         # kind (objecttype={ak}) at depth=1.  The expression references the
         # "summary|" group prefix matching the ResourceGroup key above.
-        lines.append("      <ComputedMetrics>")
         for cm_key in count_metrics:
             full_key = f"summary|{cm_key}"
             lines.append(
@@ -1159,7 +1216,7 @@ def _append_world_aggregate_kind(
                 f' expression="sum(${{adapterkind={ak}, objecttype={ak},'
                 f' attribute={full_key}, depth=1}})" />'
             )
-        lines.append("      </ComputedMetrics>")
+    lines.append("      </ComputedMetrics>")
 
     lines.append("    </ResourceKind>")
 
@@ -1240,7 +1297,18 @@ def _generate_version_txt(mp: ManagementPackDef) -> str:
 # ---------------------------------------------------------------------------
 
 def _generate_manifest(mp: ManagementPackDef) -> str:
-    """Generate manifest.txt JSON for the pak root."""
+    """Generate manifest.txt JSON for the pak root.
+
+    Fix 1: For preset:none paks, the MPB-built reference emits empty script
+    entries rather than script command strings.  Authenticated paks retain the
+    script references (post-install.py etc.) that trigger redescribe/content
+    import on the target instance.
+    """
+    src = mp.source
+    auth = src.auth if src else None
+    preset = auth.preset if auth else "none"
+    no_auth = (preset == "none")
+
     version_str = f"{mp.version}.{mp.build_number}"
     manifest = {
         "display_name": mp.name,
@@ -1255,9 +1323,11 @@ def _generate_manifest(mp: ManagementPackDef) -> str:
         "vendor": mp.author,
         "pak_icon": "default.png",
         "license_type": f"adapter:{mp.adapter_kind}",
-        "pak_validation_script": {"script": "python validate.py"},
-        "adapter_pre_script": {"script": "python preAdapters.py"},
-        "adapter_post_script": {"script": "python post-install.py"},
+        # Fix 1: no-auth paks use empty script entries (matches MPB-built reference).
+        # Authenticated paks retain script references for post-install automation.
+        "pak_validation_script": {"script": "" if no_auth else "python validate.py"},
+        "adapter_pre_script": {"script": "" if no_auth else "python preAdapters.py"},
+        "adapter_post_script": {"script": "" if no_auth else "python post-install.py"},
         "adapters": ["adapters.zip"],
         "adapter_kinds": [mp.adapter_kind],
     }
@@ -1634,6 +1704,14 @@ def build_pak(
 
     # 1. Render design JSON (flat factory-grammar format)
     design_dict = render_mp_design_json(mp, relationship_strategy=relationship_strategy)
+    # Strip events from design.json before embedding in the pak.  The pak
+    # runtime parses ALL json files in the adapter conf directory and applies
+    # a single schema; events in design-import format cause a schema mismatch
+    # and pak install failure.  MPB-built reference pak has source.events: []
+    # in design.json.  Events can be re-enabled once a pak-runtime event wire
+    # format is confirmed.
+    if "source" in design_dict and "events" in design_dict["source"]:
+        design_dict["source"]["events"] = []
     design_json_str = json.dumps(design_dict, indent=2)
 
     # 1b. Render export.json (MPB UI exchange format — required by adapter runtime).
@@ -1644,7 +1722,15 @@ def build_pak(
     #     redescribe) to register the adapter kind.  The Rubrik reference pak
     #     carries BOTH files; without export.json the runtime silently skips
     #     registration and the adapter kind never appears in getIntegrations.
-    export_dict = render_mpb_exchange_json(mp, relationship_strategy=relationship_strategy)
+    # Always strip events when rendering for pak assembly.  The pak runtime
+    # uses a different event schema from the design-import exchange format,
+    # and no ground-truth pak-runtime event format has been captured yet.
+    # Emitting events in design format causes pak install failures.
+    # Reference: MPB-built pak (tmp/devel_mpb_built.pak) has 0 events.
+    # Events can be re-enabled once a pak-runtime event wire format is confirmed.
+    export_dict = render_mpb_exchange_json(
+        mp, relationship_strategy=relationship_strategy, no_events=True
+    )
     export_json_str = json.dumps(export_dict, indent=2)
 
     # 2. Generate describe.xml + collect nameKey->label map for resources.properties
@@ -1677,41 +1763,50 @@ def build_pak(
         relationship_strategy=relationship_strategy,
     )
 
+    # Determine whether this is a no-auth pak (Fix 1: skip script files).
+    _src = mp.source
+    _auth = _src.auth if _src else None
+    _preset = _auth.preset if _auth else "none"
+    _no_auth = (_preset == "none")
+
     # 7. Assemble the top-level .pak ZIP
     with zipfile.ZipFile(pak_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.txt", manifest_str.encode("utf-8"))
         zf.writestr("eula.txt", eula_bytes)
         zf.writestr("default.png", icon_bytes)
 
-        # Install scripts — read from templates
-        for script_name in [
-            "validate.py",
-            "preAdapters.py",
-            "postAdapters.py",
-            "post-install-fast.sh",
-        ]:
-            script_path = _TEMPLATES_DIR / script_name
-            if script_path.exists():
-                zf.writestr(script_name, script_path.read_bytes())
+        if not _no_auth:
+            # Install scripts — read from templates.
+            # Fix 1: omit script files entirely for no-auth paks (MPB-built
+            # no-auth reference has no script files in the pak root).
+            for script_name in [
+                "validate.py",
+                "preAdapters.py",
+                "postAdapters.py",
+                "post-install-fast.sh",
+            ]:
+                script_path = _TEMPLATES_DIR / script_name
+                if script_path.exists():
+                    zf.writestr(script_name, script_path.read_bytes())
+                else:
+                    zf.writestr(script_name, b"# placeholder\n")
+
+            # post-install.py — template substitution for adapter_kind and adapter_dir
+            post_install_path = _TEMPLATES_DIR / "post-install.py"
+            if post_install_path.exists():
+                post_install_str = post_install_path.read_text()
+                post_install_str = post_install_str.replace(
+                    "{adapter_kind}", ak
+                ).replace(
+                    "{adapter_dir}", f"{ak}_adapter3"
+                )
+                zf.writestr("post-install.py", post_install_str.encode("utf-8"))
             else:
-                zf.writestr(script_name, b"# placeholder\n")
+                zf.writestr("post-install.py", b"import sys; sys.exit(0)\n")
 
-        # post-install.py — template substitution for adapter_kind and adapter_dir
-        post_install_path = _TEMPLATES_DIR / "post-install.py"
-        if post_install_path.exists():
-            post_install_str = post_install_path.read_text()
-            post_install_str = post_install_str.replace(
-                "{adapter_kind}", ak
-            ).replace(
-                "{adapter_dir}", f"{ak}_adapter3"
-            )
-            zf.writestr("post-install.py", post_install_str.encode("utf-8"))
-        else:
-            zf.writestr("post-install.py", b"import sys; sys.exit(0)\n")
-
-        # Also include post-install.sh as a simple bash stub (some installers
-        # invoke it directly; mirrors reference pak layout)
-        zf.writestr("post-install.sh", b"#!/bin/bash\nexit 0\n")
+            # Also include post-install.sh as a simple bash stub (some installers
+            # invoke it directly; mirrors reference pak layout)
+            zf.writestr("post-install.sh", b"#!/bin/bash\nexit 0\n")
 
         # adapters.zip
         zf.writestr("adapters.zip", adapters_zip_bytes)

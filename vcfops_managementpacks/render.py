@@ -37,6 +37,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple
 
 from .loader import (
+    AriaOpsConf,
     AuthFlowDef,
     BindDef,
     IdentifierDef,
@@ -549,6 +550,113 @@ def _make_expression(
                 "regexOutput": "",
             }
         ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# ARIA_OPS label helpers
+# ---------------------------------------------------------------------------
+
+# Hardcoded adapter kind label overrides for known MPB adapter types.
+# "VMWARE" → "vCenter" matches the MPB UI label observed in the ground truth.
+_ARIA_OPS_ADAPTER_LABELS: Dict[str, str] = {
+    "VMWARE": "vCenter",
+}
+
+
+def _humanize_aria_label(raw: str) -> str:
+    """Insert spaces to humanize a CamelCase or PascalCase identifier.
+
+    Handles acronyms correctly — consecutive uppercase sequences are kept
+    together as one word, and a space is inserted before a new word that
+    starts with an uppercase letter followed by a lowercase letter.
+
+    Examples:
+      "HostSystem"       → "Host System"
+      "VirtualMachine"   → "Virtual Machine"
+      "VMEntityObjectID" → "VM Entity Object ID"
+      "VMEntityName"     → "VM Entity Name"
+
+    For adapter kind labels, _ARIA_OPS_ADAPTER_LABELS provides exact overrides
+    (e.g. "VMWARE" → "vCenter").
+    """
+    if raw in _ARIA_OPS_ADAPTER_LABELS:
+        return _ARIA_OPS_ADAPTER_LABELS[raw]
+    # Step 1: insert space between a run of >= 2 uppercase letters and the next
+    # uppercase+lowercase sequence (e.g. "VMEntity" → "VM Entity").
+    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", raw)
+    # Step 2: insert space between a lowercase/digit and an uppercase letter
+    # (e.g. "hostMoid" → "host Moid").
+    s = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", s)
+    return s
+
+
+def _render_aria_ops_conf(aria_ops: "AriaOpsConf", obj_seed: str) -> Dict:
+    """Render the ariaOpsConf block for an ARIA_OPS object type.
+
+    The ariaOpsConf declares the target Aria Ops resource kind and provides
+    a minimal metric set containing only the binding metric
+    (usage: ARIA_OPS_REFERENCE_ID).  MPB uses this metric's UUID as the
+    cross-reference target in the metricSet's objectMatchExpression.
+
+    Wire format ground truth:
+      context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json
+      §objects[0].object.ariaOpsConf
+
+    The binding metric's usage is "ARIA_OPS_REFERENCE_ID" (NOT
+    "ARIA_OPS_REFERENCE_PROPERTY") — confirmed from the ground truth where
+    VMEntityObjectID carries ARIA_OPS_REFERENCE_ID.  Other reference metrics
+    in the 206-metric ariaOpsConf use ARIA_OPS_REFERENCE_PROPERTY, but we
+    only emit the one binding metric.
+
+    The expressionText for ariaOpsConf metrics is "" (empty string), not
+    the "@@@MPB_QUOTE..." format used by regular metrics.
+    """
+    conf_seed = f"{obj_seed}:ariaOpsConf"
+    metric_set_id = _make_id(f"{conf_seed}:metricSet")
+    bind_metric_id = _make_id(f"{conf_seed}:metric:{aria_ops.bind_metric}")
+
+    # Expression for the bind metric — points at the Aria Ops metric key
+    expr_id = _make_id(f"{conf_seed}:metric:{aria_ops.bind_metric}:expr")
+    part_id = _make_id(f"{conf_seed}:metric:{aria_ops.bind_metric}:expr:part")
+
+    bind_metric_expr = {
+        "id": expr_id,
+        "expressionText": "",
+        "expressionParts": [
+            {
+                "id": part_id,
+                "originType": "ARIA_OPS_METRIC",
+                "originId": aria_ops.bind_metric,
+                "label": aria_ops.bind_metric,
+            }
+        ],
+    }
+
+    resource_kind_label = _humanize_aria_label(aria_ops.resource_kind)
+    adapter_kind_label = _humanize_aria_label(aria_ops.adapter_kind)
+    bind_metric_label = _humanize_aria_label(aria_ops.bind_metric)
+
+    return {
+        "objectType": aria_ops.resource_kind,
+        "objectTypeLabel": resource_kind_label,
+        "adapterType": aria_ops.adapter_kind,
+        "adapterTypeLabel": adapter_kind_label,
+        "metricSet": {
+            "id": metric_set_id,
+            "metrics": [
+                {
+                    "id": bind_metric_id,
+                    "label": bind_metric_label,
+                    "dataType": "STRING",
+                    "expression": bind_metric_expr,
+                    "isKpi": False,
+                    "usage": "ARIA_OPS_REFERENCE_ID",
+                    "unit": "",
+                    "groups": [],
+                }
+            ],
+        },
     }
 
 
@@ -1371,8 +1479,51 @@ def _render_one_object(
         object_binding: Optional[Dict] = None
         ob_seed = f"{obj_seed}:metricSet:{ms.local_name}:objectBinding"
 
-        if ms_def.stitch_to:
-            # Case 1: Stitching binding — Aria-native object correlation.
+        if ot.type == "ARIA_OPS" and ms_def.primary and ms_def.stitch_match_field:
+            # Case 0 — ARIA_OPS primary metricSet: cross-resource stitching binding.
+            #
+            # Ground truth: context/mpb_wire_reference/
+            #   vsphere_storage_paths_aria_ops_stitch.json (2026-05-13)
+            #
+            # The objectBinding uses "objectBindingType" (not "type") and the
+            # objectMatchExpression.originId is the UUID of the ariaOpsConf bind
+            # metric (NOT the string key like "VMEntityObjectID").
+            #
+            # The bind metric UUID is deterministically derived by _render_aria_ops_conf()
+            # using the seed f"{obj_seed}:ariaOpsConf:metric:{aria_ops.bind_metric}".
+            stitch_field = ms_def.stitch_match_field
+            aria_ops = ot.aria_ops  # validated non-None by loader for ARIA_OPS type
+
+            # matchExpression: API response field whose value matches the target resource
+            match_origin_id = req_info.register_field(stitch_field, dml_id)
+            match_expr = _make_expression(
+                label=stitch_field,
+                origin_id=match_origin_id,
+                origin_type="ATTRIBUTE",
+                expr_seed=f"{ob_seed}::matchExpr",
+            )
+
+            # objectMatchExpression: points at the ariaOpsConf bind metric by UUID
+            # (NOT the bind_metric string key — the UUID cross-reference is required)
+            bind_metric_uuid = _make_id(
+                f"{obj_seed}:ariaOpsConf:metric:{aria_ops.bind_metric}"
+            )
+            bind_metric_label = _humanize_aria_label(aria_ops.bind_metric)
+            obj_match_expr = _make_expression(
+                label=bind_metric_label,
+                origin_id=bind_metric_uuid,
+                origin_type="ARIA_OPS_METRIC",
+                expr_seed=f"{ob_seed}::objMatchExpr",
+            )
+
+            object_binding = {
+                "objectBindingType": "ATTRIBUTE_TO_PROPERTY",
+                "matchExpression": match_expr,
+                "objectMatchExpression": obj_match_expr,
+            }
+
+        elif ms_def.stitch_to:
+            # Case 1: Stitching binding — Aria-native object correlation (INTERNAL only).
             # Per context/mpb_object_binding_wire_format.md §3.5 (Rubrik pattern).
             stitch_field = ms_def.stitch_match_field  # validated non-None by loader
 
@@ -1570,6 +1721,21 @@ def _render_one_object(
     #   - is_world     → false (adapter-instance root, no list iteration)
     #   - is_singleton → false (one-per-adapter named entity, no list iteration)
     #   - list kind    → true  (one MPB object instance per response row)
+    #   - ARIA_OPS     → always true (list objects by definition)
+    #
+    # ARIA_OPS vs INTERNAL wire differences:
+    #   - ARIA_OPS:  ariaOpsConf populated, internalObjectInfo absent
+    #   - INTERNAL:  ariaOpsConf null, internalObjectInfo populated
+    if ot.type == "ARIA_OPS":
+        return {
+            "id": obj_id,
+            "type": ot.type,
+            "designId": None,
+            "isListObject": True,
+            "metricSets": wire_metric_sets,
+            "ariaOpsConf": _render_aria_ops_conf(ot.aria_ops, obj_seed),
+        }
+
     return {
         "id": obj_id,
         "type": ot.type,

@@ -1,0 +1,101 @@
+{
+  "event": {
+    "id": "e4E3onB9U4orGCSeSsDaSo",
+    "alert": {
+      "type": "APPLICATION",
+      "badge": "HEALTH",
+      "subType": "AVAILABILITY",
+      "waitCycle": 1,
+      "cancelCycle": 1,
+      "recommendation": null
+    },
+    "label": "Rubrik Events",
+    "listId": "data.events.*",
+    "message": {
+      "id": "hGmcu6xpvY6GEKcCpxkAEW",
+      "expressionText": "@@@MPB_QUOTE 6fNQyBBfnAodZ3E7SrD2qu @@@MPB_QUOTE",
+      "expressionParts": [
+        {
+          "id": "6fNQyBBfnAodZ3E7SrD2qu",
+          "label": "eventInfo",
+          "regex": "\"message\":\"(.*?)\"",
+          "example": "",
+          "originId": "cNgKy86jrteekPyVsw4tfq-data.events.*-eventInfo",
+          "originType": "ATTRIBUTE",
+          "regexOutput": ""
+        }
+      ]
+    },
+    "designId": null,
+    "severity": {
+      "id": "71cvX1yHPUhRFNapHopjSz",
+      "expressionText": "@@@MPB_QUOTE 67qcUGN7BFDtLCSu23i3e5 @@@MPB_QUOTE",
+      "expressionParts": [
+        {
+          "id": "67qcUGN7BFDtLCSu23i3e5",
+          "label": "eventSeverity",
+          "regex": null,
+          "example": "",
+          "originId": "cNgKy86jrteekPyVsw4tfq-data.events.*-eventSeverity",
+          "originType": "ATTRIBUTE",
+          "regexOutput": ""
+        }
+      ]
+    },
+    "matchMode": "ALL",
+    "requestId": "cNgKy86jrteekPyVsw4tfq",
+    "severityMap": [
+      {
+        "rawSeverity": "Critical",
+        "ariaOpsSeverity": "CRITICAL"
+      },
+      {
+        "rawSeverity": "Warning",
+        "ariaOpsSeverity": "WARNING"
+      },
+      {
+        "rawSeverity": "Informational",
+        "ariaOpsSeverity": "INFO"
+      }
+    ],
+    "eventMatchers": [
+      {
+        "objectId": "54tJ6sXdEBsR23mdQmjemb",
+        "objectName": "vCenter Virtual Machine",
+        "caseSensitive": false,
+        "eventExpression": {
+          "id": "7nwhpDe5Ar7QkCKvK5BgwD",
+          "expressionText": "@@@MPB_QUOTE 2gDYwStsggA8tL3CWSSqQr @@@MPB_QUOTE",
+          "expressionParts": [
+            {
+              "id": "2gDYwStsggA8tL3CWSSqQr",
+              "label": "objectName",
+              "regex": null,
+              "example": "",
+              "originId": "cNgKy86jrteekPyVsw4tfq-data.events.*-objectName",
+              "originType": "ATTRIBUTE",
+              "regexOutput": ""
+            }
+          ]
+        },
+        "objectExpression": {
+          "id": "aQzRWtvxyBUe7VuJJHyRXS",
+          "expressionText": "@@@MPB_QUOTE 3HMaoBP92WGDXF1z8gdYw4 @@@MPB_QUOTE",
+          "expressionParts": [
+            {
+              "id": "3HMaoBP92WGDXF1z8gdYw4",
+              "label": "VMEntityName",
+              "regex": null,
+              "example": "",
+              "originId": "aria-VMWARE-VirtualMachine-VMEntityName",
+              "originType": "ARIA_OPS_METRIC",
+              "regexOutput": ""
+            }
+          ]
+        }
+      }
+    ],
+    "defaultSeverity": "LOG",
+    "unmatchedEventBehavior": "ATTACH_TO_ADAPTER"
+  }
+}

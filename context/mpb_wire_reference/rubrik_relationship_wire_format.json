@@ -1,0 +1,40 @@
+{
+  "relationship": {
+    "id": "78JJ6QGkXynqaS1KtK6zA2",
+    "name": "Rubrik Cluster -> Rubrik Event",
+    "designId": null,
+    "caseSensitive": false,
+    "childObjectId": "27BW8ASNL3bEEVAe9mt5E8",
+    "parentObjectId": "mQcRxMhZCCG1fNwmQPCt2r",
+    "childExpression": {
+      "id": "vMjjRREGN4LAHnBiywMznY",
+      "expressionText": "@@@MPB_QUOTE jTpbJoa7ZZ9qEk1FNX9LeW @@@MPB_QUOTE",
+      "expressionParts": [
+        {
+          "id": "jTpbJoa7ZZ9qEk1FNX9LeW",
+          "label": "ID",
+          "regex": null,
+          "example": "",
+          "originId": "buddk1DxbLzqjK3BgYEPK5",
+          "originType": "METRIC",
+          "regexOutput": ""
+        }
+      ]
+    },
+    "parentExpression": {
+      "id": "bUxg1SkyTFqStcXdPUAv4Q",
+      "expressionText": "@@@MPB_QUOTE 6yJsGefrPye88w2seJWzvM @@@MPB_QUOTE",
+      "expressionParts": [
+        {
+          "id": "6yJsGefrPye88w2seJWzvM",
+          "label": "ID",
+          "regex": null,
+          "example": "",
+          "originId": "iPYdQTyNfBPV8UtbfPHKvw",
+          "originType": "METRIC",
+          "regexOutput": ""
+        }
+      ]
+    }
+  }
+}

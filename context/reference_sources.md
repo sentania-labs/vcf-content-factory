@@ -236,4 +236,39 @@ scripts/bootstrap_references.sh --update # also git pull existing
 - **Attribution:** cite
   `vmware-aria-hol/hol-2501-lab-files/HOL-2501-12/<path>`.
 
+### jcox-au/vmware (phpIPAM + UniFi MPB paks)
+
+- **URL:** https://github.com/jcox-au/vmware
+- **Local path:** `references/jcox-au_vmware/` (design JSONs);
+  `tmp/reference_paks/` (paks, not in references/ because gitignored
+  binaries)
+- **Owner:** jcox-au (Gibson Virtualization). Public repo.
+- **Scope:** Two complete MPB management packs with .pak files,
+  design JSON exports, and views zips:
+  - **phpIPAM 1.0.0.11** — 3 INTERNAL + 4 ARIA_OPS objects, 6
+    relationships, 3 bundled content items (2 super metrics + 1
+    dashboard). Username+password auth. The richest MPB reference
+    we have for mixed INTERNAL/ARIA_OPS with relationships.
+  - **Ubiquiti UniFi 1.0.0.7** — 4 INTERNAL + 2 ARIA_OPS objects,
+    3 relationships, 1 bundled dashboard. Also has cookie_session-
+    style auth.
+- **What to grep for:** MPB design JSON schemas, ARIA_OPS stitch
+  patterns, relationship wire format, bundled content structure,
+  `_relatives` ResourceAttributes in describe.xml.
+- **Attribution:** cite `jcox-au/vmware/aria_operations/<pack>/`.
+
+### vrealize.it (vSAN Default Storage Policy)
+
+- **URL:** https://vrealize.it/2024/12/20/extend-vcenter-metrics-with-management-pack-builder/
+- **Local path:** `tmp/reference_paks/vSAN default storage policy.json`
+- **Owner:** vRealize.it blog. Downloaded design JSON.
+- **Scope:** Pure ARIA_OPS stitching example — extends VMWARE
+  Datastore with vSAN default storage policy properties. Uses
+  chained vCenter REST API requests. Single ARIA_OPS object with
+  4 REFERENCE_ID bind metrics (VMEntityName, VMEntityObjectID,
+  VMEntityVCID, DataStrorePath[sic]) and 50 REFERENCE_PROPERTYs.
+- **What to grep for:** ARIA_OPS Datastore stitch patterns,
+  chained request wire format, ATTRIBUTE_TO_PROPERTY binding.
+- **Attribution:** cite `vrealize.it vSAN Default Storage Policy`.
+
 <!-- Add new sources below. Keep entries in the same shape. -->

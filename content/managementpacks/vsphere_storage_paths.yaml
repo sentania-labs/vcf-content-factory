@@ -1,0 +1,372 @@
+# vSphere Storage Paths Management Pack — v2 (ARIA_OPS stitching)
+#
+# Design artifact: designs/vsphere-storage-paths-mp-v1.md (mp-author-ready 2026-05-13)
+# API map: context/api-maps/vsphere-data-api.md
+# Adapter kind: mpb_vcf_content_factory_vsphere_storage_paths
+#
+# Architecture summary (v2 — ARIA_OPS stitching grammar):
+#   Two ARIA_OPS object kinds. No INTERNAL object kinds. No world kind
+#   (adapter instance is the implicit root).
+#
+#   Host Storage Health — type: ARIA_OPS, stitches onto VMWARE HostSystem.
+#     Source: host_path_summary -> data[]. One row per ESXi host.
+#     Join: stitch_match_field: hostname (FQDN) matches VMWARE HostSystem
+#           VMEntityName via aria_ops.bind_metric.
+#     7 metrics (VCF-CF - prefixed): vcf_cf_total_luns, vcf_cf_total_paths,
+#                vcf_cf_active_paths, vcf_cf_standby_paths, vcf_cf_dead_paths,
+#                vcf_cf_unknown_paths, vcf_cf_path_health_pct
+#     3 properties: hostname, vcenter, host_moid
+#     No identifiers, no name_expression, no icon (ARIA_OPS rules).
+#
+#   Datastore Storage Health — type: ARIA_OPS, stitches onto VMWARE Datastore.
+#     Source: datastore_path_summary -> data[]. One row per datastore.
+#     Join: stitch_match_field: datastore_moid matches VMWARE Datastore
+#           VMEntityObjectID via aria_ops.bind_metric.
+#     8 metrics (VCF-CF - prefixed): vcf_cf_ds_host_count, vcf_cf_ds_total_paths,
+#                vcf_cf_ds_active_paths, vcf_cf_ds_standby_paths, vcf_cf_ds_dead_paths,
+#                vcf_cf_ds_unknown_paths, vcf_cf_ds_path_health_pct,
+#                vcf_cf_ds_hosts_with_dead_paths
+#     3 properties: datastore_name, vcenter, datastore_moid
+#     No identifiers, no name_expression, no icon (ARIA_OPS rules).
+#     NOTE: data[] is empty in vSAN-only environments. Will populate in
+#     FC/iSCSI environments with VMFS-backed datastores.
+#
+# Auth: preset: none — API is fully unauthenticated.
+#
+# Events (on Host Storage Health):
+#   Dead Storage Paths Detected (CRITICAL) — dead_paths > 0
+#   Storage Path Health Degraded (WARNING) — path_health_pct < 100
+#   Events reference API response field names (not metric keys).
+#
+# No explicit relationships. No chained metricSets. No pagination.
+#
+name: VCF Content Factory vSphere Storage Paths
+version: "2.0.0"
+build_number: 5
+author: VCF Content Factory
+adapter_kind: mpb_vcf_content_factory_vsphere_storage_paths
+description: >
+  Monitors ESXi host and datastore storage path health via the vSphere Data API — a
+  custom FastAPI service that caches path state from multiple vCenters and exposes it
+  as flat REST endpoints. Stitches VCF-CF - prefixed metrics directly onto existing
+  VMWARE HostSystem and Datastore objects in VCF Ops so they appear alongside native
+  CPU/memory/network metrics. Tracks dead paths, path health percentage, LUN counts,
+  and path state breakdowns (active/standby/dead/unknown) per host and per datastore.
+  Fires CRITICAL events on dead path detection and WARNING events on degraded path
+  health. No authentication required.
+
+source:
+  port: 443
+  ssl: NO_VERIFY
+  base_path: ""
+  timeout: 30
+  max_retries: 2
+  max_concurrent: 5
+
+  auth:
+    preset: none
+
+  test_request:
+    method: GET
+    path: "/api/v1/health"
+    params: []
+
+
+requests:
+  # host_path_summary — primary collection request for host storage health.
+  # Returns one row per ESXi host across all polled vCenters.
+  # response_path is empty; the metricSet uses list_path: "data" to iterate
+  # the data[] array. Metric paths are flat keys on each row object.
+  - name: host_path_summary
+    method: GET
+    path: "/api/v1/storage/host-path-summary"
+    params: []
+    response_path: ""
+
+  # datastore_path_summary — primary collection request for datastore storage health.
+  # Returns one row per datastore (VMFS/NFS) across all polled vCenters.
+  # NOTE: Returns empty data[] in vSAN-only environments. Will populate in
+  # FC/iSCSI environments with VMFS-backed datastores.
+  - name: datastore_path_summary
+    method: GET
+    path: "/api/v1/storage/datastore-path-summary"
+    params: []
+    response_path: ""
+
+
+object_types:
+
+  # ---------------------------------------------------------------------------
+  # Host Storage Health — ARIA_OPS, stitches onto VMWARE HostSystem
+  # Source: host_path_summary -> data[]. One row per ESXi host.
+  # Join: hostname (ESXi FQDN) -> VMWARE HostSystem VMEntityObjectID
+  # No identifiers, name_expression, or icon — ARIA_OPS objects push
+  # metrics onto existing VCF Ops resource instances; they do not own
+  # their own identity, name, or icon.
+  # ---------------------------------------------------------------------------
+  - name: "Host Storage Health"
+    key: host_storage_health
+    type: ARIA_OPS
+    aria_ops:
+      adapter_kind: VMWARE
+      resource_kind: HostSystem
+      bind_metric: VMEntityName
+    is_world: false
+
+    metricSets:
+      - from_request: host_path_summary
+        primary: true
+        list_path: "data"
+        stitch_match_field: hostname
+
+    metrics:
+      # --- Properties (identity/metadata carried on our stitched object) ---
+      - key: hostname
+        label: "Hostname"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:host_path_summary.hostname"
+
+      - key: vcenter
+        label: "vCenter"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:host_path_summary.vcenter"
+
+      - key: host_moid
+        label: "Host MOID"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:host_path_summary.host_moid"
+
+      # --- Metrics (VCF-CF - prefix; stitched onto VMWARE HostSystem) ---
+      - key: vcf_cf_total_luns
+        label: "VCF-CF - Total LUNs"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        source: "metricset:host_path_summary.total_luns"
+
+      - key: vcf_cf_total_paths
+        label: "VCF-CF - Total Paths"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        source: "metricset:host_path_summary.total_paths"
+
+      - key: vcf_cf_active_paths
+        label: "VCF-CF - Active Paths"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        source: "metricset:host_path_summary.active_paths"
+
+      - key: vcf_cf_standby_paths
+        label: "VCF-CF - Standby Paths"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        source: "metricset:host_path_summary.standby_paths"
+
+      - key: vcf_cf_dead_paths
+        label: "VCF-CF - Dead Paths"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        kpi: true
+        source: "metricset:host_path_summary.dead_paths"
+
+      - key: vcf_cf_unknown_paths
+        label: "VCF-CF - Unknown Paths"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        source: "metricset:host_path_summary.unknown_paths"
+
+      - key: vcf_cf_path_health_pct
+        label: "VCF-CF - Path Health %"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        kpi: true
+        source: "metricset:host_path_summary.path_health_pct"
+
+
+  # ---------------------------------------------------------------------------
+  # Datastore Storage Health — ARIA_OPS, stitches onto VMWARE Datastore
+  # Source: datastore_path_summary -> data[]. One row per datastore.
+  # Join: datastore_moid -> VMWARE Datastore VMEntityObjectID
+  # No identifiers, name_expression, or icon — ARIA_OPS rules.
+  # NOTE: data[] will be empty in vSAN-only labs. Grammar validates; data
+  #       populates automatically when FC/iSCSI datastores are present.
+  # ---------------------------------------------------------------------------
+  - name: "Datastore Storage Health"
+    key: datastore_storage_health
+    type: ARIA_OPS
+    aria_ops:
+      adapter_kind: VMWARE
+      resource_kind: Datastore
+      bind_metric: VMEntityObjectID
+    is_world: false
+
+    metricSets:
+      - from_request: datastore_path_summary
+        primary: true
+        list_path: "data"
+        stitch_match_field: datastore_moid
+
+    metrics:
+      # --- Properties (identity/metadata carried on our stitched object) ---
+      - key: datastore_name
+        label: "Datastore Name"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:datastore_path_summary.datastore_name"
+
+      - key: vcenter
+        label: "vCenter"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:datastore_path_summary.vcenter"
+
+      - key: datastore_moid
+        label: "Datastore MOID"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:datastore_path_summary.datastore_moid"
+
+      # --- Metrics (VCF-CF - prefix; stitched onto VMWARE Datastore) ---
+      # psp_policies is an array field — skipped (cannot map to a single metric).
+      - key: vcf_cf_ds_host_count
+        label: "VCF-CF - Host Count"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        source: "metricset:datastore_path_summary.host_count"
+
+      - key: vcf_cf_ds_total_paths
+        label: "VCF-CF - Total Paths"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        source: "metricset:datastore_path_summary.total_paths"
+
+      - key: vcf_cf_ds_active_paths
+        label: "VCF-CF - Active Paths"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        source: "metricset:datastore_path_summary.active_paths"
+
+      - key: vcf_cf_ds_standby_paths
+        label: "VCF-CF - Standby Paths"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        source: "metricset:datastore_path_summary.standby_paths"
+
+      - key: vcf_cf_ds_dead_paths
+        label: "VCF-CF - Dead Paths"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        kpi: true
+        source: "metricset:datastore_path_summary.dead_paths"
+
+      - key: vcf_cf_ds_unknown_paths
+        label: "VCF-CF - Unknown Paths"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        source: "metricset:datastore_path_summary.unknown_paths"
+
+      - key: vcf_cf_ds_path_health_pct
+        label: "VCF-CF - Path Health %"
+        usage: METRIC
+        type: NUMBER
+        unit: "%"
+        kpi: true
+        source: "metricset:datastore_path_summary.path_health_pct"
+
+      - key: vcf_cf_ds_hosts_with_dead_paths
+        label: "VCF-CF - Hosts With Dead Paths"
+        usage: METRIC
+        type: NUMBER
+        unit: "count"
+        source: "metricset:datastore_path_summary.hosts_with_dead_paths"
+
+
+# No explicit relationships. Both ARIA_OPS objects stitch directly onto
+# existing VMWARE resource instances via aria_ops.bind_metric. The model
+# is flat — no peer edges needed between the two stitched kinds.
+relationships: []
+
+
+mpb_events:
+  # Events fire against the raw API response field names, not metric keys.
+  # dead_paths, path_health_pct, and hostname are API response field names.
+  # dedup_fields also reference API response fields (not metric keys).
+  # object_binding references the host_storage_health ARIA_OPS object type key.
+
+  # Event 1: Dead storage paths detected.
+  # Any dead path is an immediate operational concern — storage failover may
+  # be compromised. CRITICAL because dead paths can cause I/O errors and VM
+  # unavailability.
+  - name: "Dead Storage Paths Detected"
+    severity: CRITICAL
+    source_request: host_path_summary
+    response_path: "data.*"
+
+    match_rules:
+      - field: "dead_paths"
+        operator: NOT_EQUALS
+        value: "0"
+
+    object_binding:
+      object_type: host_storage_health
+      match_field: "hostname"
+
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [hostname, dead_paths]
+
+    message_template: "Host ${hostname}: ${dead_paths} dead storage path(s) detected"
+    description: >
+      Fires when one or more storage paths on an ESXi host enter the dead state.
+      Dead paths indicate a storage path failure that may reduce redundancy or
+      cause I/O errors.
+
+  # Event 2: Storage path health degraded.
+  # path_health_pct < 100 catches both dead paths and unknown-state paths.
+  # WARNING because the host may still have redundant active paths.
+  - name: "Storage Path Health Degraded"
+    severity: WARNING
+    source_request: host_path_summary
+    response_path: "data.*"
+
+    match_rules:
+      - field: "path_health_pct"
+        operator: NOT_EQUALS
+        value: "100"
+
+    object_binding:
+      object_type: host_storage_health
+      match_field: "hostname"
+
+    collection_strategy:
+      interval_seconds: 300
+      dedup_strategy: TUPLE_HASH
+      dedup_fields: [hostname, path_health_pct]
+
+    message_template: "Host ${hostname}: storage path health at ${path_health_pct}%"
+    description: >
+      Fires when a host's path health percentage drops below 100%. Indicates at
+      least one path is not in active or standby state. Overlaps with Dead Paths
+      Detected but also catches paths in unknown state.

@@ -98,3 +98,41 @@ artifacts (`supermetric.json`, `Dashboard.zip`, `Views.zip`,
 into the UI because the SPA does the envelope wrap, but (b)
 qa-tester cannot automate that drag-drop path headlessly — it's
 human-in-the-loop only. See `memory/project_vcf_ops_902_ui_deadends.md`.
+
+## 8. MPB events not supported in factory-built paks
+
+The factory can define events in YAML (`mpb_events:`) and render
+them for the MPB UI design import path. However, factory-built
+`.pak` files strip all events because the pak runtime expects a
+different schema than the design JSON format. No ground-truth
+reference exists for the pak runtime event format — every MPB
+reference pak in the repo has `events: []`. Events defined in YAML
+will work when the design is imported via MPB and built there, but
+not when built directly by the factory's `build` command.
+
+See `context/lessons_pak_install_reliability.md` §5.
+
+## 9. Metric labels cannot contain `|` or `:`
+
+The VCF Ops stat key format uses `|` as the group separator and
+`:` is also reserved. MPB rejects metric labels containing either
+character at collection time. The factory loader does not currently
+validate this — it's caught only when the adapter tries to run.
+
+## 10. ARIA_OPS properties don't stitch
+
+ARIA_OPS stitching delivers metrics only. Properties declared on
+ARIA_OPS objects are silently dropped at collection time
+(`collected_properties = 0`). This is a VCF Ops platform
+limitation, not a factory bug. Keep properties on ARIA_OPS objects
+for documentation but don't expect them to appear on the target
+resource.
+
+## 11. No multi-key ARIA_OPS binding
+
+MPB's `objectBinding` only supports single-field matching. There
+is no evidence of composite key support (multiple
+`expressionParts`) in any reference pak or design JSON. Join keys
+must be globally unique on their own. For hosts, use `hostname`
+(FQDN) → `VMEntityName`, not `host_moid` → `VMEntityObjectID`
+(MOIDs are per-vCenter, not global).

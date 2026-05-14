@@ -370,7 +370,66 @@ This matches the Rubrik pattern too.
 
 ---
 
-## 9. Design-time checklist
+## 9. `_relatives` ResourceKind and cross-adapter VMWARE parent relationships
+
+### What `_relatives` is
+
+Every MPB-built pak contains an `{adapter_kind}_relatives` ResourceKind
+(type=4, `dynamic="true"`, `showTag="true"`). It is the MPB runtime's
+bucket for ad-hoc relationship discovery — objects in external adapters
+that relate to this pack's objects appear here.
+
+### What drives the `_child` attributes inside `_relatives`
+
+The `_relatives` ResourceGroup contains one `ResourceAttribute` per
+**ARIA_OPS (VMWARE) type that appears as a parent** in any design.json
+relationship. The key format is `{VMWARE_resource_kind}_child`.
+
+Examples from reference paks:
+- phpIPAM (3 INTERNAL objects) → `_relatives` has `VirtualMachine_child`,
+  `DistributedVirtualPortgroup_child`, `HostSystem_child` — because the
+  phpIPAM design has relationships where `VirtualMachine`, `DistributedVirtualPortgroup`,
+  and `HostSystem` (all `adapterKind: VMWARE`) are parents of INTERNAL objects.
+- UniFi Ubiquiti (4 INTERNAL objects) → `_relatives` has
+  `DistributedVirtualPortgroup_child`, `VirtualMachine_child`.
+- Rubrik (5 INTERNAL + 1 ARIA_OPS) → `_relatives` has `VirtualMachine_child`.
+- Our vsphere_storage_paths (2 ARIA_OPS objects) → `_relatives` has
+  `HostSystem_child`, `Datastore_child` — correctly emitted by the builder.
+
+**INTERNAL object keys NEVER appear in `_relatives`.**
+
+### Cross-adapter VMWARE parent relationships — TOOLSET GAP
+
+The reference paks achieve VMWARE parent relationships by including entries
+in `design.json` `.relationships[]` where `parent.adapterKind == "VMWARE"`.
+For example, `VirtualMachine` is declared as the parent of a UniFi Clients
+object — the MPB collector joins clients to VMs by IP address at runtime.
+
+Our current YAML format does NOT support cross-adapter relationships. The
+loader validates that both `parent` and `child` in a `relationships:` entry
+are known object type keys within the same pack. Declaring
+`parent: VirtualMachine` would fail validation.
+
+**Status as of 2026-05-13:** This is a known TOOLSET GAP. Packs that want
+to stitch INTERNAL objects onto VMWARE types (the phpIPAM/UniFi pattern)
+cannot be authored in this factory yet. Fixing it requires:
+1. Loader: new relationship type `scope: vmware_parent` (or similar) with
+   `parent_kind: VirtualMachine` + `parent_expression: <VMWARE metric key>`.
+2. render.py: emit `design.json` relationships with `adapterKind: VMWARE` parent.
+3. builder.py: collect those VMWARE parent kinds for `_relatives` population.
+
+File a TOOLSET GAP report to the `tooling` agent when this feature is needed.
+
+### INTERNAL objects and their own `relationships` group
+
+INTERNAL objects DO get their own inter-object `_parent`/`_child` attributes
+within their own ResourceKind's `relationships` ResourceGroup. These use the
+full object key as prefix (e.g., `mpb_phpipam_phpipam_subnet_parent`).
+The builder emits these correctly today — they are separate from `_relatives`.
+
+---
+
+## 10. Design-time checklist
 
 Before handing a design to `mp-author`, confirm:
 

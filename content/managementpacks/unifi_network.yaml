@@ -2,7 +2,7 @@
 #
 # Design artifact: designs/unifi-mp-v2.md (round 3, mp-author-ready 2026-04-30)
 # API map: context/api-maps/unifi-network-api.md
-# Adapter kind: mpb_unifi_network
+# Adapter kind: mpb_vcf_content_factory_unifi
 #
 # Architecture summary (designs/unifi-mp-v2.md §"Object Model"):
 #   Four object kinds. Zero world kinds (adapter instance is the implicit root).
@@ -48,7 +48,7 @@ name: VCF Content Factory UniFi
 version: 1.0.0
 build_number: 4
 author: VCF Content Factory
-adapter_kind: mpb_unifi_network
+adapter_kind: mpb_vcf_content_factory_unifi
 description: >
   Monitors a UniFi network deployment running Network Application 10.3+.
   Collects site-level health subsystem aggregates (WLAN/WAN/LAN/VPN/WWW),

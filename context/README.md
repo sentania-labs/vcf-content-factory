@@ -48,6 +48,9 @@ These are actively maintained and authoritative for their topic.
 | MPB relationships (parent/child) | `mpb_relationships.md` |
 | MPB object binding wire format | `mpb_object_binding_wire_format.md` |
 | MP schema vs existing MP comparison | `mp_schema_vs_existing_mp.md` |
+| MPB .pak structural reference (canonical format from 8+ paks) | `mpb_pak_structural_reference.md` |
+| Lessons learned: pak install reliability (5 failures → success) | `lessons_pak_install_reliability.md` |
+| MPB build examples research (external sources catalog) | `mpb_build_examples_research.md` |
 | .pak wire format + install/uninstall | `pak_wire_format.md`, `pak_install_api_exploration.md`, `pak_uninstall_api_exploration.md` |
 | .pak UI upload investigation | `pak_ui_upload_investigation.md` |
 | Adapter describe (metric/property source of truth) | `adapter_describe_comparison.md`, `adapter_describe_exploration.md` |
@@ -73,3 +76,5 @@ reflect current state.
 | `unifi_mp_jcox_diff_2026_04_30.md` | 2026-04-30 | UniFi MP diff analysis |
 | `mpb_import_diff_unifi_2026_05_07.md` | 2026-05-07 | UniFi MP import diff investigation |
 | `unifi_integration_filter_probe_2026_05_08.md` | 2026-05-08 | UniFi Integration API filter syntax probe |
+| `mpb_import_investigation.md` | 2026-05-13 | MPB design import failure investigation |
+| `vsphere_storage_paths_v2_plan.md` | 2026-05-13 | vSphere Storage Paths v2 ARIA_OPS stitching plan |

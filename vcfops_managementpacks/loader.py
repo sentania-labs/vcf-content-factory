@@ -561,6 +561,33 @@ class AuthFlowDef:
 
 
 @dataclass
+class AriaOpsConf:
+    """ARIA_OPS object type stitching configuration.
+
+    When an object_type has type: ARIA_OPS, this block declares which existing
+    VCF Ops resource kind to push metrics onto, and which metric on that kind
+    is used to match rows from the API response.
+
+    Fields:
+      adapter_kind  — Aria Ops adapter kind for the target resource kind
+                      (e.g. "VMWARE").
+      resource_kind — Aria Ops resource kind to stitch onto
+                      (e.g. "HostSystem", "VirtualMachine").
+      bind_metric   — Metric key on the target Aria Ops resource kind whose
+                      value matches the API response field declared in the
+                      metricSet's stitch_match_field
+                      (e.g. "VMEntityObjectID").
+
+    Grammar rules (enforced by loader validation):
+      - ARIA_OPS objects REQUIRE this block.
+      - INTERNAL objects MUST NOT declare this block.
+    """
+    adapter_kind: str    # e.g. "VMWARE"
+    resource_kind: str   # e.g. "HostSystem"
+    bind_metric: str     # e.g. "VMEntityObjectID"
+
+
+@dataclass
 class ObjectTypeDef:
     name: str
     key: str
@@ -573,6 +600,7 @@ class ObjectTypeDef:
     is_singleton: bool = False            # one-per-adapter-instance named entity with identifiers
     name_expression: Optional["NameExpressionDef"] = None   # Tier 3.3 structured form
     identity: Optional["WorldIdentityDef"] = None           # Tier 3.3 axis 7 (required for is_world)
+    aria_ops: Optional["AriaOpsConf"] = None                # ARIA_OPS stitching config (ARIA_OPS only)
 
 
 @dataclass
@@ -758,8 +786,44 @@ def _validate_mp(mp: ManagementPackDef) -> None:
                 f"architecture decision in context/mpb_synology_pickup_2026_04_29.md."
             )
 
+        # ARIA_OPS-specific validation block.
+        # ARIA_OPS objects stitch metrics onto existing Aria Ops resource instances;
+        # they do not define their own identity in the adapter.
+        if ot.type == "ARIA_OPS":
+            # Require aria_ops: block
+            if ot.aria_ops is None:
+                raise ManagementPackValidationError(
+                    f"{ot_tag}: type ARIA_OPS requires an 'aria_ops:' block with "
+                    f"adapter_kind, resource_kind, and bind_metric fields."
+                )
+            _validate_aria_ops_conf(ot_tag, ot.aria_ops)
+            # ARIA_OPS objects must not declare identifiers (identity is on the target object)
+            if ot.identifiers:
+                raise ManagementPackValidationError(
+                    f"{ot_tag}: type ARIA_OPS must not declare 'identifiers:'. "
+                    f"ARIA_OPS objects push metrics onto existing Aria Ops resource "
+                    f"instances; identity comes from the target resource kind. "
+                    f"Remove 'identifiers:' or change type to INTERNAL."
+                )
+            # ARIA_OPS objects must not declare name_expression
+            if ot.name_expression is not None:
+                raise ManagementPackValidationError(
+                    f"{ot_tag}: type ARIA_OPS must not declare 'name_expression:'. "
+                    f"ARIA_OPS objects do not own a name — they stitch onto an "
+                    f"existing named resource. Remove 'name_expression:'."
+                )
+            # ARIA_OPS objects must not be world or singleton kinds
+            if ot.is_world or ot.is_singleton:
+                kind_label = "is_world" if ot.is_world else "is_singleton"
+                raise ManagementPackValidationError(
+                    f"{ot_tag}: type ARIA_OPS must not set '{kind_label}: true'. "
+                    f"ARIA_OPS objects are always list objects (one row per matched "
+                    f"Aria Ops resource instance). Remove '{kind_label}: true'."
+                )
+
         # Pure world kinds are topology roots and carry no identifiers by design.
-        if not ot.is_world and not ot.identifiers:
+        # ARIA_OPS objects also omit identifiers (validated above with clearer message).
+        if not ot.is_world and not ot.identifiers and ot.type != "ARIA_OPS":
             raise ManagementPackValidationError(
                 f"{ot_tag}: at least one identifier is required"
             )
@@ -1101,6 +1165,22 @@ def _validate_primary(ot_tag: str, ot: ObjectTypeDef) -> None:
             )
 
 
+def _validate_aria_ops_conf(ot_tag: str, conf: "AriaOpsConf") -> None:
+    """Validate an AriaOpsConf block."""
+    if not conf.adapter_kind or not conf.adapter_kind.strip():
+        raise ManagementPackValidationError(
+            f"{ot_tag}: aria_ops.adapter_kind is required (e.g. 'VMWARE')"
+        )
+    if not conf.resource_kind or not conf.resource_kind.strip():
+        raise ManagementPackValidationError(
+            f"{ot_tag}: aria_ops.resource_kind is required (e.g. 'HostSystem')"
+        )
+    if not conf.bind_metric or not conf.bind_metric.strip():
+        raise ManagementPackValidationError(
+            f"{ot_tag}: aria_ops.bind_metric is required (e.g. 'VMEntityObjectID')"
+        )
+
+
 def _validate_object_binding_rules(ot_tag: str, ot: ObjectTypeDef) -> None:
     """Validate objectBinding-related constraints on metricSets.
 
@@ -1119,12 +1199,48 @@ def _validate_object_binding_rules(ot_tag: str, ot: ObjectTypeDef) -> None:
     context/mpb_object_binding_wire_format.md).  The renderer enforces this
     with a RuntimeError assertion; the loader validates the YAML preconditions
     (chained_from requires at least one bind entry with from_attribute).
+
+    For ARIA_OPS object types the binding is declared differently:
+      - stitch_match_field is REQUIRED on the primary metricSet (which API field
+        to match against the ariaOpsConf bind_metric on the target resource).
+      - stitch_to is FORBIDDEN (the binding target is declared in aria_ops.bind_metric).
     """
     is_scalar = ot.is_world or ot.is_singleton
+    is_aria_ops = ot.type == "ARIA_OPS"
     doc_ref = "context/mpb_object_binding_wire_format.md"
 
     for i, ms in enumerate(ot.metric_sets):
         mstag = f"{ot_tag}: metricSets[{i}] ('{ms.local_name}')"
+
+        # ARIA_OPS-specific metricSet rules.
+        if is_aria_ops:
+            # stitch_to is forbidden for ARIA_OPS — binding target is in aria_ops:
+            if ms.stitch_to is not None:
+                raise ManagementPackValidationError(
+                    f"{mstag}: ARIA_OPS object types must not declare 'stitch_to'. "
+                    f"For ARIA_OPS objects the binding target is declared in the "
+                    f"'aria_ops.bind_metric' field on the object type. "
+                    f"Remove 'stitch_to' from this metricSet."
+                )
+            # The primary metricSet must declare stitch_match_field
+            if ms.primary and (not ms.stitch_match_field or not ms.stitch_match_field.strip()):
+                raise ManagementPackValidationError(
+                    f"{mstag}: the primary metricSet on an ARIA_OPS object type "
+                    f"requires 'stitch_match_field'. "
+                    f"Set 'stitch_match_field' to the API response field whose value "
+                    f"matches the aria_ops.bind_metric on the target resource kind "
+                    f"(e.g. 'host_moid' for VMEntityObjectID matching). "
+                    f"See {doc_ref} §3.5."
+                )
+            # stitch_match_field without primary is an error for ARIA_OPS
+            if not ms.primary and ms.stitch_match_field is not None:
+                raise ManagementPackValidationError(
+                    f"{mstag}: 'stitch_match_field' must only be declared on the "
+                    f"primary metricSet of an ARIA_OPS object type. "
+                    f"Only the primary metricSet drives the object binding. "
+                    f"Remove 'stitch_match_field' from this non-primary metricSet."
+                )
+            continue  # ARIA_OPS metricSets skip the remaining INTERNAL rules
 
         if ms.stitch_to is not None:
             # Rule 1: scalar kinds (is_world/is_singleton) must not declare stitch_to.
@@ -2477,6 +2593,12 @@ def _parse_object_type(raw: dict, parent_tag: str) -> ObjectTypeDef:
     if raw_identity is not None:
         identity = _parse_world_identity(raw_identity, ot_tag)
 
+    # aria_ops — ARIA_OPS stitching configuration (ARIA_OPS only)
+    raw_aria_ops = raw.get("aria_ops")
+    aria_ops: Optional[AriaOpsConf] = None
+    if raw_aria_ops is not None:
+        aria_ops = _parse_aria_ops_conf(raw_aria_ops, ot_tag)
+
     return ObjectTypeDef(
         name=ot_name,
         key=ot_key,
@@ -2489,6 +2611,21 @@ def _parse_object_type(raw: dict, parent_tag: str) -> ObjectTypeDef:
         identity=identity,
         metric_sets=metric_sets,
         metrics=metrics,
+        aria_ops=aria_ops,
+    )
+
+
+def _parse_aria_ops_conf(raw: Any, parent_tag: str) -> AriaOpsConf:
+    """Parse an aria_ops: block on an ARIA_OPS object_type."""
+    if not isinstance(raw, dict):
+        raise ManagementPackValidationError(
+            f"{parent_tag}: aria_ops must be a mapping with adapter_kind, "
+            f"resource_kind, and bind_metric"
+        )
+    return AriaOpsConf(
+        adapter_kind=str(raw.get("adapter_kind", "") or "").strip(),
+        resource_kind=str(raw.get("resource_kind", "") or "").strip(),
+        bind_metric=str(raw.get("bind_metric", "") or "").strip(),
     )
 
 
