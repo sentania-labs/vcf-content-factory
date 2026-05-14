@@ -615,12 +615,12 @@ def render_mpb_exchange_json(
     design_block = {
         "design": {
             "name": pak.get("name", mp.name),
+            "type": "HTTP",
             "description": pak.get("description", ""),
             "version": mp.version,  # base version, no build suffix
         },
+        "buildNumber": mp.build_number,
     }
-    # buildNumber and design.design.type are absent in the reference MPB export
-    # (confirmed from tmp/mpb_reference_none_auth.json, 2026-05-13).  Do not emit.
 
     # ------------------------------------------------------------------
     # 2. source.source block
@@ -784,7 +784,6 @@ def render_mpb_exchange_json(
     #     against GitHub/Broadcom confirms it must be present.  Emit as empty list.
     # Key order matches the reference for readability, though MPB ignores order.
     exchange = {
-        "type": src.get("type", "HTTP"),
         "design": design_block,
         "source": source_block,
         "content": [],
