@@ -1,0 +1,13 @@
+artifacts:
+- headline: true
+  source: content/dashboards/quarterly_capacity_review.yaml
+deprecates: []
+description: Executive quarterly capacity review. Scope picker on the left drives
+  all downstream panels — select vSphere World for the full environment, a Datacenter
+  for a site, or a Cluster for detail. Row 1 shows scope context and VM inventory.
+  Row 2 shows CPU/memory demand, storage utilization, and per-cluster VM counts side
+  by side. Row 3 shows a 90-day CPU demand trend for the selected cluster. P95 figures
+  are emphasized throughout.
+name: quarterly-capacity-review-dashboard
+release_notes: ''
+version: '1.0'

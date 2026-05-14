@@ -1,110 +1,114 @@
+description: 'Executive quarterly capacity review. Scope picker on the left drives
+  all downstream panels — select vSphere World for the full environment, a Datacenter
+  for a site, or a Cluster for detail. Row 1 shows scope context and VM inventory.
+  Row 2 shows CPU/memory demand, storage utilization, and per-cluster VM counts side
+  by side. Row 3 shows a 90-day CPU demand trend for the selected cluster. P95 figures
+  are emphasized throughout.
+
+  '
 id: 4050cc4a-7f26-414c-bcfc-6a1942b4b577
-name: '[VCF Content Factory] Quarterly Capacity Review'
-description: >
-  Executive quarterly capacity review. Scope picker on the left drives all
-  downstream panels — select vSphere World for the full environment, a
-  Datacenter for a site, or a Cluster for detail. Row 1 shows scope context
-  and VM inventory. Row 2 shows CPU/memory demand, storage utilization, and
-  per-cluster VM counts side by side. Row 3 shows a 90-day CPU demand trend
-  for the selected cluster. P95 figures are emphasized throughout.
-
-widgets:
-
-  # ── Row 1 left: Scope picker ─────────────────────────────────────────────
-
-  - id: scope_picker
-    type: ResourceList
-    title: "Select a Scope"
-    coords: {x: 1, y: 1, w: 2, h: 10}
-    resource_kinds:
-      - adapter_kind: VMWARE
-        resource_kind: vSphere World
-      - adapter_kind: VMWARE
-        resource_kind: Datacenter
-      - adapter_kind: VMWARE
-        resource_kind: ClusterComputeResource
-
-  # ── Row 1 center: Description ────────────────────────────────────────────
-
-  - id: header_text
-    type: TextDisplay
-    title: Quarterly Capacity Review
-    coords: {x: 3, y: 1, w: 4, h: 10}
-    html: >
-      <p><strong>Quarterly Capacity Review</strong></p>
-      <p>Select a scope at left — vSphere World for the full environment,
-      a Datacenter for a specific site, or a Cluster for detail.</p>
-      <p>Statistics reflect a <strong>90-day window</strong>.
-      <strong>P95</strong> values give a conservative demand picture —
-      use these, not averages, for growth projections and expansion
-      justification.</p>
-
-  # ── Row 1 right: VM count at selected scope ─────────────────────────────
-
-  - id: scope_vm_count
-    type: View
-    title: "Scope VM Count Overview"
-    coords: {x: 7, y: 1, w: 4, h: 10}
-    view: "[VCF Content Factory] Cluster VM Count Overview"
-
-  # ── Row 2 left: CPU & memory demand (90-day Avg/Max/P95) ────────────────
-
-  - id: cpu_memory_view
-    type: View
-    title: "Cluster Quarterly CPU & Memory Demand"
-    coords: {x: 1, y: 11, w: 4, h: 6}
-    view: "[VCF Content Factory] Cluster Quarterly CPU & Memory Demand"
-
-  # ── Row 2 center: Storage utilization ────────────────────────────────────
-
-  - id: storage_view
-    type: View
-    title: "Cluster Storage Trend"
-    coords: {x: 5, y: 11, w: 4, h: 6}
-    view: "[VCF Content Factory] Cluster Storage Trend"
-
-  # ── Row 2 right: Per-cluster VM counts ───────────────────────────────────
-
-  - id: vm_count_view
-    type: View
-    title: "Cluster VM Count Overview"
-    coords: {x: 9, y: 11, w: 3, h: 6}
-    view: "[VCF Content Factory] Cluster VM Count Overview"
-
-  # ── Row 3: 90-day CPU demand trend chart ─────────────────────────────────
-
-  - id: demand_chart
-    type: MetricChart
-    title: "CPU Demand % — 90-Day Trend"
-    coords: {x: 1, y: 17, w: 12, h: 7}
-    metrics:
-      - adapter_kind: VMWARE
-        resource_kind: ClusterComputeResource
-        metric_key: cpu|demandPct
-        metric_name: "CPU Demand %"
-        color_method: 2
-
 interactions:
-  # Scope picker drives all view widgets and the scope VM count
-  - from: scope_picker
-    to: cpu_memory_view
-    type: resourceId
-  - from: scope_picker
-    to: storage_view
-    type: resourceId
-  - from: scope_picker
-    to: vm_count_view
-    type: resourceId
-  - from: scope_picker
-    to: scope_vm_count
-    type: resourceId
-  # Row 2 views cascade to the trend chart (click a cluster row → chart)
-  - from: cpu_memory_view
-    to: demand_chart
-    type: resourceId
-  - from: storage_view
-    to: demand_chart
-    type: resourceId
-  - from: vm_count_view
-    to: demand_chart
-    type: resourceId
+- from: scope_picker
+  to: cpu_memory_view
+  type: resourceId
+- from: scope_picker
+  to: storage_view
+  type: resourceId
+- from: scope_picker
+  to: vm_count_view
+  type: resourceId
+- from: scope_picker
+  to: scope_vm_count
+  type: resourceId
+- from: cpu_memory_view
+  to: demand_chart
+  type: resourceId
+- from: storage_view
+  to: demand_chart
+  type: resourceId
+- from: vm_count_view
+  to: demand_chart
+  type: resourceId
+name: '[VCF Content Factory] Quarterly Capacity Review'
+released: true
+widgets:
+- coords:
+    h: 10
+    w: 2
+    x: 1
+    y: 1
+  id: scope_picker
+  resource_kinds:
+  - adapter_kind: VMWARE
+    resource_kind: vSphere World
+  - adapter_kind: VMWARE
+    resource_kind: Datacenter
+  - adapter_kind: VMWARE
+    resource_kind: ClusterComputeResource
+  title: Select a Scope
+  type: ResourceList
+- coords:
+    h: 10
+    w: 4
+    x: 3
+    y: 1
+  html: '<p><strong>Quarterly Capacity Review</strong></p> <p>Select a scope at left
+    — vSphere World for the full environment, a Datacenter for a specific site, or
+    a Cluster for detail.</p> <p>Statistics reflect a <strong>90-day window</strong>.
+    <strong>P95</strong> values give a conservative demand picture — use these, not
+    averages, for growth projections and expansion justification.</p>
+
+    '
+  id: header_text
+  title: Quarterly Capacity Review
+  type: TextDisplay
+- coords:
+    h: 10
+    w: 4
+    x: 7
+    y: 1
+  id: scope_vm_count
+  title: Scope VM Count Overview
+  type: View
+  view: '[VCF Content Factory] Cluster VM Count Overview'
+- coords:
+    h: 6
+    w: 4
+    x: 1
+    y: 11
+  id: cpu_memory_view
+  title: Cluster Quarterly CPU & Memory Demand
+  type: View
+  view: '[VCF Content Factory] Cluster Quarterly CPU & Memory Demand'
+- coords:
+    h: 6
+    w: 4
+    x: 5
+    y: 11
+  id: storage_view
+  title: Cluster Storage Trend
+  type: View
+  view: '[VCF Content Factory] Cluster Storage Trend'
+- coords:
+    h: 6
+    w: 3
+    x: 9
+    y: 11
+  id: vm_count_view
+  title: Cluster VM Count Overview
+  type: View
+  view: '[VCF Content Factory] Cluster VM Count Overview'
+- coords:
+    h: 7
+    w: 12
+    x: 1
+    y: 17
+  id: demand_chart
+  metrics:
+  - adapter_kind: VMWARE
+    color_method: 2
+    metric_key: cpu|demandPct
+    metric_name: CPU Demand %
+    resource_kind: ClusterComputeResource
+  title: CPU Demand % — 90-Day Trend
+  type: MetricChart
