@@ -43,8 +43,6 @@ widgets:
     resource_kind: vSphere World
   - adapter_kind: VMWARE
     resource_kind: Datacenter
-  - adapter_kind: VMWARE
-    resource_kind: ClusterComputeResource
   title: Select a Scope
   type: ResourceList
 - coords:
