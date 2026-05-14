@@ -466,24 +466,58 @@ def _strip_metric(metric: Dict[str, Any]) -> Dict[str, Any]:
     return {k: v for k, v in metric.items() if k not in drop}
 
 
+def _remap_object_binding(ob: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Remap a flat-format objectBinding to exchange-format shape.
+
+    Two transforms are applied:
+
+    1. Type remap: the flat renderer emits "type": "CHAINED_REQUEST" for
+       chained-secondary metricSets where the secondary response does not echo
+       the bind attribute (Sub-case B).  "CHAINED_REQUEST" is our internal
+       flat-format designation.  The MPB exchange format requires "ATTRIBUTE_TO_PROPERTY"
+       for ALL chained-secondary bindings.  Confirmed from
+       jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14): no CHAINED_REQUEST
+       entries exist — only ATTRIBUTE_TO_PROPERTY.
+
+    2. Key name: the ARIA_OPS objectBinding (Case 0 in render.py) uses the key
+       "objectBindingType" instead of "type".  That key is passed through as-is
+       (it is correct for ARIA_OPS objects per the vsphere_storage_paths reference).
+       Only the "type" key is subject to the CHAINED_REQUEST → ATTRIBUTE_TO_PROPERTY
+       remap.
+
+    Returns None unchanged (Bug 3 fix: null is kept by _strip_metric_set, not
+    remapped here).
+    """
+    if ob is None:
+        return None
+    ob = dict(ob)
+    if ob.get("type") == "CHAINED_REQUEST":
+        ob["type"] = "ATTRIBUTE_TO_PROPERTY"
+    return ob
+
+
 def _strip_metric_set(ms: Dict[str, Any]) -> Dict[str, Any]:
     """Strip flat-format-only fields from a metricSet dict.
 
-    objectBinding: kept when non-null (required for chained-secondary metricSets
-    per MPB verify-time rule §8.1 — context/mpb_object_binding_wire_format.md).
-    Dropped only when null (absent in exchange format for chain-parent,
-    world/singleton, and single-metricSet list objects).
-    The _strip_flat_only_fields pass preserves example/regex/regexOutput inside
-    objectBinding.matchExpression/objectMatchExpression (ground truth: jcox
-    exchange format includes them; see render_export.py _in_objectbinding flag).
-    The two-expression shape (matchExpression + objectMatchExpression with
-    originType METRIC) is required for chained-secondary bindings — confirmed
-    from jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-07).
+    objectBinding rules (confirmed from ground truth 2026-05-14):
+    - Always emit the "objectBinding" key, even when null.
+      Both jcox-au_vmware/unifi_MP_Builder_Design.json and
+      sentania_aria_operations_dsm_mp/Synology DSM MP.json have
+      "objectBinding": null present on every primary/chain-parent metricSet.
+      Earlier code popped the key when null — that was wrong (Bug 3).
+    - Remap type: "CHAINED_REQUEST" → "ATTRIBUTE_TO_PROPERTY" for exchange
+      format.  "CHAINED_REQUEST" is our flat-format internal marker (Bug 1).
+    - Full expression structures (expressionText + expressionParts) are present
+      in the flat render output after the render.py Sub-case B fix (Bug 2).
+      The _strip_flat_only_fields pass preserves example/regex/regexOutput
+      inside objectBinding (see _in_objectbinding flag).
+
     Recurses into metrics[].
     """
     result = dict(ms)
-    if result.get("objectBinding") is None:
-        result.pop("objectBinding", None)
+    # Always emit objectBinding key — null is valid and required by the exchange
+    # format parser (previously this popped null objectBindings, which was wrong).
+    result["objectBinding"] = _remap_object_binding(result.get("objectBinding"))
     if "metrics" in result:
         result["metrics"] = [_strip_metric(m) for m in result["metrics"]]
     return result

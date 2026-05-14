@@ -1657,24 +1657,80 @@ def _render_one_object(
                 }
 
             else:
-                # Sub-case B: secondary does NOT echo the bind attribute →
-                # CHAINED_REQUEST.  The chain context (chainingSettings on the
-                # request) provides implicit per-row binding; no explicit attribute
-                # match expression is needed.
+                # Sub-case B: secondary does NOT echo the bind attribute.
                 #
-                # Shape: {type: "CHAINED_REQUEST", matchExpression: {id: <uuid>}}
-                # render_template.py _render_object_binding() already handles this
-                # type (line ~338): emits {type: "CHAINED_REQUEST", id: <uuid>}.
+                # Exchange format ground truth (jcox-au_vmware/unifi_MP_Builder_Design.json,
+                # confirmed 2026-05-14): ALL chained-secondary objectBindings in the
+                # exchange format use "ATTRIBUTE_TO_PROPERTY" with full expression
+                # structures — never the bare {type: "CHAINED_REQUEST", matchExpression:
+                # {id: <uuid>}} shape.  The flat format marker "CHAINED_REQUEST" is our
+                # internal designation; render_export.py remaps it to "ATTRIBUTE_TO_PROPERTY"
+                # for the exchange.
+                #
+                # For the expressions we point at the parent metricSet's bind attribute:
+                #   matchExpression       → parent DML attribute (<from_attribute>),
+                #                           originType: ATTRIBUTE
+                #   objectMatchExpression → parent metric sourced from <from_attribute>,
+                #                           originType: METRIC (fallback: ATTRIBUTE when
+                #                           no such metric is explicitly declared)
+                #
+                # This mirrors Sub-case A's expression construction but using the parent's
+                # attribute for the matchExpression (since the secondary has no echo field).
                 logger.info(
                     "Object '%s' metricSet '%s': secondary response does not echo "
-                    "from_attribute '%s' — using CHAINED_REQUEST objectBinding.",
+                    "from_attribute '%s' — building CHAINED_REQUEST objectBinding "
+                    "with full parent-attribute expressions (exchange: ATTRIBUTE_TO_PROPERTY).",
                     ot.name, ms.local_name, parent_attr_label,
                 )
+
+                # matchExpression: parent DML attribute reference
+                _parent_ms_def_b, parent_req_b, parent_dml_id_b = ms_context[parent_ms_local_name]
+                parent_req_info_b = request_registry[parent_req_b.name]
+                # Register the field against the parent's DML so the originId is correct.
+                ob_match_origin_id_b = (
+                    f"{parent_req_info_b.id}-{parent_dml_id_b}-{parent_attr_label}"
+                )
+                match_expr_b = _make_expression(
+                    label=parent_attr_label,
+                    origin_id=ob_match_origin_id_b,
+                    origin_type="ATTRIBUTE",
+                    expr_seed=f"{ob_seed}::matchExpr",
+                )
+
+                # objectMatchExpression: parent metric sourced from from_attribute
+                obj_match_expr_b = None
+                for parent_m_b in metrics_by_ms.get(parent_ms_local_name, []):
+                    _, parent_field_path_b = _parse_source_ref(parent_m_b.source)
+                    if parent_field_path_b == parent_attr_label:
+                        parent_metric_id_b = _make_id(f"{obj_seed}:metric:{parent_m_b.key}")
+                        obj_match_expr_b = _make_expression(
+                            label=parent_m_b.label,
+                            origin_id=parent_metric_id_b,
+                            origin_type="METRIC",
+                            expr_seed=f"{ob_seed}::objMatchExpr",
+                        )
+                        break
+
+                if obj_match_expr_b is None:
+                    # Parent has no metric explicitly sourced from from_attribute
+                    # (bind attribute auto-synthesized).  Fall back to ATTRIBUTE shape.
+                    obj_match_expr_b = _make_expression(
+                        label=parent_attr_label,
+                        origin_id=ob_match_origin_id_b,
+                        origin_type="ATTRIBUTE",
+                        expr_seed=f"{ob_seed}::objMatchExprFallback",
+                    )
+                    logger.warning(
+                        "Object '%s' metricSet '%s': no parent metric sourced from "
+                        "from_attribute '%s' on metricSet '%s' (Sub-case B); falling "
+                        "back to ATTRIBUTE objectMatchExpression.",
+                        ot.name, ms.local_name, parent_attr_label, parent_ms_local_name,
+                    )
+
                 object_binding = {
                     "type": "CHAINED_REQUEST",
-                    "matchExpression": {
-                        "id": _make_id(f"{ob_seed}::matchExpr"),
-                    },
+                    "matchExpression": match_expr_b,
+                    "objectMatchExpression": obj_match_expr_b,
                 }
 
         # Case 3 — All other metricSets (chain-parents, singletons, scalar kinds):
