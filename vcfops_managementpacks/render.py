@@ -1305,7 +1305,7 @@ def _build_chaining_settings(
         params.append({
             "id": param_id,
             "key": b.name,
-            "label": b.name,
+            "label": b.from_attribute,
             "usage": f"${{requestParameters.{b.name}}}",
             "listId": parent_dml_id,
             "example": "",
