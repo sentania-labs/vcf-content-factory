@@ -660,6 +660,9 @@ def collect_deps(
                 return
         needed_sms[sm_uuid] = sm
 
+    sm_name_re = _re.compile(r'''supermetric:["'](.+?)["']''')
+    sm_by_name = {sm.name: sm for sm in all_sms}
+
     for view in needed_views.values():
         for col in view.columns:
             m = sm_uuid_re.search(col.attribute)
@@ -668,6 +671,20 @@ def collect_deps(
                     m.group(1),
                     f"view '{view.name}' col '{col.display_name}'",
                 )
+                continue
+            mn = sm_name_re.search(col.attribute)
+            if mn:
+                sm = sm_by_name.get(mn.group(1))
+                if sm and sm.id:
+                    _collect_sm_uuid(
+                        sm.id,
+                        f"view '{view.name}' col '{col.display_name}'",
+                    )
+                elif sm is None:
+                    graph.errors.append(
+                        f"view '{view.name}' col '{col.display_name}' "
+                        f"references unknown SM name '{mn.group(1)}'"
+                    )
 
     # --- Step 2b: dashboard widget metric_keys → SM refs -------------------
     # Scoreboard, MetricChart, ParetoAnalysis, HealthChart, and Heatmap
