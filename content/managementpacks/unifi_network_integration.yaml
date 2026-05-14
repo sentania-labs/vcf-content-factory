@@ -41,11 +41,6 @@ object_types:
     from_request: device_detail_ap
     list_path: ''
   metrics:
-  - key: device_id
-    label: Device ID
-    source: metricset:devices_ap.id
-    type: STRING
-    usage: PROPERTY
   - key: mac_address
     label: MAC Address
     source: metricset:devices_ap.macAddress
@@ -223,11 +218,6 @@ object_types:
     from_request: device_detail_switch
     list_path: ''
   metrics:
-  - key: device_id
-    label: Device ID
-    source: metricset:devices_switch.id
-    type: STRING
-    usage: PROPERTY
   - key: mac_address
     label: MAC Address
     source: metricset:devices_switch.macAddress
@@ -357,11 +347,6 @@ object_types:
     from_request: device_detail_gateway
     list_path: ''
   metrics:
-  - key: device_id
-    label: Device ID
-    source: metricset:devices_gateway.id
-    type: STRING
-    usage: PROPERTY
   - key: mac_address
     label: MAC Address
     source: metricset:devices_gateway.macAddress
