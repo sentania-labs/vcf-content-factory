@@ -1,0 +1,60 @@
+id: bd5d803b-25c3-4823-8997-2cba6c00f317
+name: "[VCF Content Factory] Cluster VM Count Overview"
+description: >
+  Per-cluster VM count statistics over a 90-day rolling window for quarterly
+  executive capacity review. Columns show current running and total VM counts, plus
+  Avg/Max/P5 running VM counts over the window to signal population stability
+  (Avg close to Max = stable; Avg >> P5 = significant churn). Note: MIN is not
+  a supported VCF Ops view transformation; P5 (5th percentile) is used instead
+  as a low-water-mark proxy over the 90-day window. Running Hosts
+  (Current) provides the denominator for VMs-per-host calculations in the
+  dashboard. No thresholds applied — this view is a raw-count reference used
+  alongside the MetricChart widget that renders the actual timeline per cluster.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: ClusterComputeResource
+
+summary: false
+
+time_window:
+  unit: DAYS
+  count: 90
+
+columns:
+  # --- Current snapshot block ---
+  - attribute: summary|number_running_vms
+    display_name: "Running VMs (Current)"
+    unit: ""
+    transformation: CURRENT
+
+  - attribute: summary|total_number_vms
+    display_name: "Total VMs (Current)"
+    unit: ""
+    transformation: CURRENT
+
+  # --- Running VM trend block (stability signal over 90-day window) ---
+  - attribute: summary|number_running_vms
+    display_name: "Running VMs Avg"
+    unit: ""
+    transformation: AVG
+
+  - attribute: summary|number_running_vms
+    display_name: "Running VMs Max"
+    unit: ""
+    transformation: MAX
+
+  # MIN is not a supported transformation in VCF Ops view XML (not observed in
+  # any real export; loader whitelist rejects it). P5 over 90 days is a valid
+  # low-water-mark proxy: if Avg >> P5, there was significant population churn.
+  - attribute: summary|number_running_vms
+    display_name: "Running VMs P5"
+    unit: ""
+    transformation: PERCENTILE
+    percentile: 5
+
+  # --- Host denominator ---
+  - attribute: summary|number_running_hosts
+    display_name: "Running Hosts"
+    unit: ""
+    transformation: CURRENT

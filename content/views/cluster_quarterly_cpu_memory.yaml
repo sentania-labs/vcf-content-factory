@@ -1,0 +1,77 @@
+id: d3d4e151-65c3-4266-8e72-366953c6e7e1
+name: "[VCF Content Factory] Cluster Quarterly CPU & Memory Demand"
+description: >
+  Per-cluster CPU and memory demand statistics over a 90-day rolling window
+  for quarterly executive capacity review. Columns cover average, maximum, and 95th
+  percentile demand for both CPU and memory. All threshold columns colour
+  higher-is-worse (ascending_range: false). Default sort by CPU Demand P95
+  descending should be applied in the dashboard widget that references this view.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: ClusterComputeResource
+
+summary: false
+
+time_window:
+  unit: DAYS
+  count: 90
+
+columns:
+  # --- CPU demand block ---
+  - attribute: cpu|demandPct
+    display_name: "CPU Demand Avg"
+    unit: percent
+    transformation: AVG
+    yellow_bound: 50.0
+    orange_bound: 70.0
+    red_bound: 85.0
+    ascending_range: false
+
+  - attribute: cpu|demandPct
+    display_name: "CPU Demand Max"
+    unit: percent
+    transformation: MAX
+    yellow_bound: 60.0
+    orange_bound: 80.0
+    red_bound: 90.0
+    ascending_range: false
+
+  - attribute: cpu|demandPct
+    display_name: "CPU Demand P95"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 60.0
+    orange_bound: 80.0
+    red_bound: 90.0
+    ascending_range: false
+
+  # --- Memory usage block ---
+  - attribute: mem|host_usagePct
+    display_name: "Mem Usage Avg"
+    unit: percent
+    transformation: AVG
+    yellow_bound: 50.0
+    orange_bound: 70.0
+    red_bound: 85.0
+    ascending_range: false
+
+  - attribute: mem|host_usagePct
+    display_name: "Mem Usage Max"
+    unit: percent
+    transformation: MAX
+    yellow_bound: 60.0
+    orange_bound: 80.0
+    red_bound: 90.0
+    ascending_range: false
+
+  - attribute: mem|host_usagePct
+    display_name: "Mem Usage P95"
+    unit: percent
+    transformation: PERCENTILE
+    percentile: 95
+    yellow_bound: 60.0
+    orange_bound: 80.0
+    red_bound: 90.0
+    ascending_range: false

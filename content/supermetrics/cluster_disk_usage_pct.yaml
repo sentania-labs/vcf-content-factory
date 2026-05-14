@@ -1,0 +1,14 @@
+id: ed7f2861-7814-4d68-87ab-584de31fc4e7
+name: "[VCF Content Factory] Cluster - Disk Usage % (percent)"
+resource_kinds:
+  - resource_kind_key: ClusterComputeResource
+    adapter_kind_key: VMWARE
+description: >
+  Percentage of total datastore capacity consumed by this cluster. Divides
+  diskspace|total_usage (GB used across all datastores visible to the cluster)
+  by diskspace|total_capacity (total GB across those same datastores) and
+  multiplies by 100. Both metrics are collected directly on
+  ClusterComputeResource by the VMWARE adapter — no depth traversal is
+  needed. Intended as a view column for quarterly capacity review reporting.
+formula: |
+  (${this, metric=diskspace|total_usage} / ${this, metric=diskspace|total_capacity}) * 100

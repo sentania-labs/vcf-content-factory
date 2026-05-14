@@ -1,0 +1,58 @@
+id: ae6bcf5e-da7a-401c-a042-d879118d2351
+name: "[VCF Content Factory] Cluster Storage Trend"
+description: >
+  Per-cluster storage utilization trend for quarterly executive capacity review. Columns
+  cover current total capacity, current used space, disk usage percentage (super
+  metric, thresholded), 90-day average and maximum used space, and current
+  provisioned space. The 90-day time window matches the quarterly review scope;
+  AVG and MAX columns aggregate over that full window. Color thresholds on the
+  disk usage percentage column flag clusters approaching capacity limits.
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: ClusterComputeResource
+
+summary: false
+
+time_window:
+  unit: DAYS
+  count: 90
+
+columns:
+  # --- Capacity baseline ---
+  - attribute: diskspace|total_capacity
+    display_name: "Total Capacity (GB)"
+    unit: gb
+    transformation: CURRENT
+
+  - attribute: diskspace|total_usage
+    display_name: "Used Space (GB)"
+    unit: gb
+    transformation: CURRENT
+
+  # --- Utilisation % (super metric, thresholded) ---
+  - attribute: 'supermetric:"[VCF Content Factory] Cluster - Disk Usage % (percent)"'
+    display_name: "Disk Usage %"
+    unit: percent
+    transformation: CURRENT
+    yellow_bound: 60.0
+    orange_bound: 75.0
+    red_bound: 85.0
+    ascending_range: false
+
+  # --- 90-day trend block ---
+  - attribute: diskspace|total_usage
+    display_name: "Used Avg 90d (GB)"
+    unit: gb
+    transformation: AVG
+
+  - attribute: diskspace|total_usage
+    display_name: "Used Max 90d (GB)"
+    unit: gb
+    transformation: MAX
+
+  # --- Provisioned capacity ---
+  - attribute: diskspace|total_provisioned
+    display_name: "Provisioned (GB)"
+    unit: gb
+    transformation: CURRENT

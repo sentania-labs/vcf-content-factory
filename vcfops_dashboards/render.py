@@ -50,7 +50,7 @@ _ADAPTER_KIND_PREFIX = {
 # ---------------- View definition (XML) ----------------
 
 def _xml_property(name: str, value: str) -> str:
-    return f'<Property name="{escape(name)}" value="{escape(value)}"/>'
+    return f'<Property name="{escape(name, {chr(34): "&quot;"})}" value="{escape(value, {chr(34): "&quot;"})}"/>'
 
 
 def _xml_buckets_control(view: ViewDef) -> str:
@@ -148,10 +148,6 @@ def _xml_attribute_item(
                 attribute_key = f"Super Metric|sm_{sm_id}"
             else:
                 if sm_scope_active:
-                    # Scoped mode: unresolved SM reference is a hard error.
-                    # The bundle declared an explicit SM scope but this name
-                    # was not found in it. Either add the SM to the bundle's
-                    # `supermetrics:` manifest list, or remove the reference.
                     ctx = bundle_context or "(unknown bundle)"
                     raise ValueError(
                         f'View "{view.name}" references super metric "{sm_name}" '
@@ -159,11 +155,17 @@ def _xml_attribute_item(
                         f"Either add the SM to the bundle's `supermetrics:` manifest "
                         f"list, or remove the reference from the view."
                     )
-                # Native (unscoped) mode — emit the raw token so the error
-                # is visible in the XML rather than silently blank.
-                attribute_key = raw
+                raise ValueError(
+                    f'View "{view.name}" column {idx} references super metric '
+                    f'"{sm_name}" which could not be resolved to a UUID. '
+                    f"Ensure the SM YAML exists in content/supermetrics/ and "
+                    f"has a valid id field."
+                )
         else:
-            attribute_key = raw
+            raise ValueError(
+                f'View "{view.name}" column {idx} has malformed supermetric '
+                f'reference: {raw!r}. Expected supermetric:"<name>".'
+            )
         roll_up_type = "NONE"
     elif raw.startswith("sm_"):
         attribute_key = f"Super Metric|{raw}"
@@ -441,12 +443,14 @@ def render_views_xml(
     else:
         # Native (unscoped) mode: scan the full supermetrics/ directory tree.
         try:
+            from pathlib import Path as _Path
             from vcfops_supermetrics.loader import load_dir as _sm_load_dir
-            for sm in _sm_load_dir():
-                sm_map[sm.name] = sm.id
+            for _candidate in (_Path("content/supermetrics"), _Path("supermetrics")):
+                if _candidate.is_dir():
+                    for sm in _sm_load_dir(_candidate):
+                        sm_map[sm.name] = sm.id
+                    break
         except Exception:
-            # If supermetrics package or directory is unavailable, fall through
-            # with an empty map; unresolved tokens remain visible in the XML.
             pass
 
     fragments = "".join(
