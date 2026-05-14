@@ -421,9 +421,16 @@ def _strip_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any
     }
 
     # Emit chainingSettings: non-null dict when chained, null otherwise.
-    # Reference has the key on every request (confirmed 2026-05-14).
+    # Strip params from chainingSettings — MPB reconstructs them from the
+    # parent-child relationship at source test time. Emitting them causes
+    # duplicate label collisions in the Properties screen when the param
+    # key matches an identifier key (e.g., device_id).  Import succeeds
+    # without params (confirmed 2026-05-14); MPB re-populates on source test.
     chain = req.get("chainingSettings")
-    r["chainingSettings"] = chain if chain is not None else None
+    if chain is not None and isinstance(chain, dict):
+        chain = {k: v for k, v in chain.items() if k != "params"}
+        chain["params"] = []
+    r["chainingSettings"] = chain
 
     # Build full response envelope.
     # dataModelList entries: strip label and parentListId (absent in reference
