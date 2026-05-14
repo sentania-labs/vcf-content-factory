@@ -1,4 +1,8 @@
 artifacts:
+- source: content/supermetrics/cluster_disk_usage_pct.yaml
+- source: content/views/cluster_quarterly_cpu_memory.yaml
+- source: content/views/cluster_storage_trend.yaml
+- source: content/views/cluster_vm_count.yaml
 - headline: true
   source: content/dashboards/quarterly_capacity_review.yaml
 deprecates: []
