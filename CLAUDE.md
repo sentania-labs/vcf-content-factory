@@ -150,10 +150,18 @@ path is first-class, not a sad fallback.
   validate → confirm → install.
 - **Package + QA:** author content → packager → qa-tester → report.
 - **Management pack:** clarify target API → cartographer → designer
-  → author → validate → tooling/installer for .pak. Requires
-  bootstrapped `vcfops_managementpacks/adapter_runtime/`. MP
-  display names use the prose prefix `VCF Content Factory` (no
-  brackets); brackets are for content names only.
+  → author → validate → build → pak-compare → confirm → install.
+  Run `pak-compare` against the closest reference pak after every
+  build — zero BLOCKINGs is the install gate. MP display names use
+  the prose prefix `VCF Content Factory` (no brackets); brackets
+  are for content names only.
+- **Management pack (ARIA_OPS stitching):** same flow as above but
+  the YAML declares `type: ARIA_OPS` objects with `aria_ops:` block
+  instead of INTERNAL objects. ARIA_OPS objects push metrics onto
+  existing VCF Ops resources (e.g., VMWARE HostSystem); they do not
+  appear in describe.xml or template.json. Events are stripped from
+  pak builds (runtime format unknown — TOOLSET GAP). See
+  `context/mpb_pak_structural_reference.md`.
 - **Toolset gap:** punt / api-explorer / tooling → fix → re-invoke.
 - **After tooling changes:** if `tooling` modifies anything in
   `vcfops_packaging/templates/`, `vcfops_packaging/builder.py`, or
@@ -204,7 +212,15 @@ path is first-class, not a sad fallback.
    (require `X-Ops-API-use-unsupported: true`) that often do things
    the public surface can't.
 
-8. **Auto-memory is disabled by design.** All persistent knowledge
+8. **MP adapter_kind must match MPB's derivation.** The factory
+   must produce paks identical to what MPB generates from the same
+   design. The adapter_kind is derived by slugifying the MP display
+   name: `mpb_` + `lowercase(name.replace(' ', '_'))`. Example:
+   "VCF Content Factory vSphere Storage Paths" →
+   `mpb_vcf_content_factory_vsphere_storage_paths`. Do not shorten,
+   abbreviate, or invent a different convention.
+
+9. **Auto-memory is disabled by design.** All persistent knowledge
    lives in `context/`, agent prompts, or skill prompts. If you
    want to remember something across sessions, that's a signal to
    add it to a context or rule file — not to enable memory.

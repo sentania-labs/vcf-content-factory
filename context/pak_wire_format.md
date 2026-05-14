@@ -1,5 +1,8 @@
 # .pak Wire Format (MPB Management Pack Package)
 
+See also: `mpb_pak_structural_reference.md` (broader inventory of
+8+ reference paks with Gen-1/Gen-2 comparison).
+
 Documented from reverse-engineering two reference paks:
 - `GitHub-1.0.0.2.pak` (mpb_github_adapter3)
 - `Broadcom Security Advisories-1.0.1.6.pak` (mpb_broadcom_security_advisories_adapter3)

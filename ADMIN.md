@@ -18,9 +18,11 @@ super metrics, custom groups, list views, dashboards, symptoms,
 alert definitions, report definitions, and recommendations. A ninth
 capability — full **management packs** (REST-sourced adapters
 compiled into `.pak` files via the built-in Management Pack Builder)
-— is in progress; authoring, MPB render, and `.pak` build/install
-are wired end-to-end, with the adapter JAR gap tracked in
-`vcfops_managementpacks/README.md`.
+— is production-ready. The factory supports both INTERNAL objects
+(new resource types the adapter discovers) and **ARIA_OPS objects**
+(metrics stitched onto existing VCF Ops resources like VMWARE
+HostSystem or Datastore). The `pak-compare` tool validates factory
+paks against MPB-built reference paks before install.
 
 ### Super metrics
 
@@ -688,6 +690,8 @@ python3 -m vcfops_managementpacks list
 python3 -m vcfops_managementpacks render managementpacks/<name>.yaml --output /tmp/<name>.mpb.json
 python3 -m vcfops_managementpacks render-export managementpacks/<name>.yaml   # MPB UI Import Design envelope
 python3 -m vcfops_managementpacks build managementpacks/<name>.yaml --output dist/
+python3 -m vcfops_managementpacks build managementpacks/<name>.yaml --out dist/
+python3 -m vcfops_managementpacks pak-compare dist/<pak>.pak tmp/<reference>.pak  # structural diff vs MPB reference
 python3 -m vcfops_managementpacks install dist/mpb_<name>.1.0.0.1.pak
 python3 -m vcfops_managementpacks uninstall "<Display Name>"
 

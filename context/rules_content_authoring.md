@@ -16,6 +16,21 @@ View column `attributeKey` must be `Super Metric|sm_<uuid>`, not bare
 `sm_<uuid>`. Bare form validates but renders blank. The renderer
 auto-prefixes; YAML authors write bare `sm_<uuid>`.
 
+### SM references must resolve to UUIDs at render time
+View columns using `supermetric:"<name>"` MUST resolve to
+`Super Metric|sm_<uuid>` when the view XML is rendered. The
+renderer hard-fails if resolution fails. Unresolved name references
+produce broken XML that VCF Ops silently ignores (blank column, no
+error). The renderer loads SMs from `content/supermetrics/` — if
+the SM YAML doesn't exist or has no `id` field, resolution fails.
+Never ship a view with an unresolved SM name reference.
+
+### Metric labels cannot contain | or :
+The VCF Ops stat key format uses `|` as the group separator.
+MPB rejects metric labels containing `|` or `:` at collection
+time with "Metric key cannot contain reserved characters." Use
+`-` or spaces instead.
+
 ### Percentiles are view transforms, not SMs
 Statistical transforms (95th percentile, avg over window) are view
 column transformations. Don't author SMs for single-metric rollups
@@ -63,3 +78,23 @@ under both Host and Resource Pool.
 When the chained response doesn't echo the parent ID, use
 CHAINED_REQUEST objectBinding. The renderer auto-detects this. No
 SDK pivot needed.
+
+### ARIA_OPS objects are export.json-only
+ARIA_OPS objects appear in export.json (ariaOpsConf block) but NOT
+in describe.xml ResourceKinds or template.json resources. The pak
+runtime validator rejects non-`mpb_`-prefixed resourceKind values.
+Skip ARIA_OPS objects when generating template.json and describe.xml.
+
+### Events are stripped from pak builds
+MPB events defined in YAML render correctly for the design import
+path but the pak runtime expects a different schema. All factory pak
+builds emit `events: []` in export.json, template.json, and
+design.json. This is a known TOOLSET GAP — no ground-truth reference
+exists for the pak runtime event format.
+
+### pak-compare is the install gate
+Run `pak-compare` against the closest MPB reference pak after every
+build. Zero BLOCKINGs = safe to install. The tool checks manifest,
+describe.xml, export.json, and template.json structure against a
+reference. See `context/mpb_pak_structural_reference.md` for the
+reference inventory.

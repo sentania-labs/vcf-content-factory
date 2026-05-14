@@ -3,6 +3,9 @@
 Canonical structural reference for Management Pack Builder (MPB) .pak
 files. Derived from dissecting 8+ reference paks (2026-05-14).
 
+See also: `pak_wire_format.md` (detailed wire format spec),
+`lessons_pak_install_reliability.md` (failure analysis).
+
 ## Reference inventory
 
 ### MPB-built paks (Gen-2, VCF Ops 9.x)
