@@ -75,15 +75,12 @@ from .render import render_mp_design_json, _render_global_headers, _make_id
 # ---------------------------------------------------------------------------
 
 _FLAT_ONLY_KEYS: frozenset = frozenset({
-    # On expressionParts (dataModelList attrs, metric/event/name expressions):
-    "example",       # empty string placeholder; absent in exchange format
-    "regex",         # always null in our output; absent in exchange format
-    "regexOutput",   # always "" in our output; absent in exchange format
-    # Renderer internal annotation:
+    # Renderer internal annotation — never in exchange format:
     "_renderer_note",
-    # NOTE: example/regex/regexOutput are REQUIRED inside chainingSettings
-    # (confirmed from HoL-2501-12 GitLab-Basic.json, 2026-04-19).
-    # _strip_flat_only_fields() preserves them when _in_chaining=True.
+    # NOTE: example/regex/regexOutput were previously stripped here but
+    # the jcox reference (confirmed 2026-05-14) has them on ALL
+    # expressionParts — metrics, relationships, objectBindings, chaining.
+    # They are REQUIRED by the import parser. Do not strip.
 })
 
 
@@ -91,6 +88,7 @@ def _strip_flat_only_fields(
     obj: Any,
     _in_chaining: bool = False,
     _in_objectbinding: bool = False,
+    _in_relationship: bool = False,
 ) -> Any:
     """Recursively remove all flat-format-only keys from the exchange output.
 
@@ -115,36 +113,43 @@ def _strip_flat_only_fields(
     on matchExpression/objectMatchExpression expressionParts[] are present in
     jcox-au_vmware/unifi_MP_Builder_Design.json (exchange format ground truth,
     2026-04-29).  Those fields are preserved when _in_objectbinding=True.
+
+    Exception 3: when inside a relationship block, example/regex/regexOutput
+    on childExpression/parentExpression expressionParts[] are present in
+    jcox-au_vmware/unifi_MP_Builder_Design.json.  Preserved when
+    _in_relationship=True.
     """
     if isinstance(obj, dict):
         result = {}
         for k, v in obj.items():
-            # Entering chainingSettings switches to chaining context
             if k == "chainingSettings":
                 result[k] = _strip_flat_only_fields(
-                    v, _in_chaining=True, _in_objectbinding=False
+                    v, _in_chaining=True, _in_objectbinding=False, _in_relationship=False
                 )
                 continue
-            # Entering objectBinding switches to objectbinding context
             if k == "objectBinding":
                 result[k] = _strip_flat_only_fields(
-                    v, _in_chaining=False, _in_objectbinding=True
+                    v, _in_chaining=False, _in_objectbinding=True, _in_relationship=False
                 )
                 continue
-            # Inside chaining or objectBinding, preserve the fields MPB requires
-            if (_in_chaining or _in_objectbinding) and k in _FLAT_ONLY_KEYS:
+            if k == "relationship":
+                result[k] = _strip_flat_only_fields(
+                    v, _in_chaining=False, _in_objectbinding=False, _in_relationship=True
+                )
+                continue
+            if (_in_chaining or _in_objectbinding or _in_relationship) and k in _FLAT_ONLY_KEYS:
                 result[k] = v
                 continue
             if k in _FLAT_ONLY_KEYS:
                 continue
             result[k] = _strip_flat_only_fields(
-                v, _in_chaining=_in_chaining, _in_objectbinding=_in_objectbinding
+                v, _in_chaining=_in_chaining, _in_objectbinding=_in_objectbinding, _in_relationship=_in_relationship
             )
         return result
     if isinstance(obj, list):
         return [
             _strip_flat_only_fields(
-                item, _in_chaining=_in_chaining, _in_objectbinding=_in_objectbinding
+                item, _in_chaining=_in_chaining, _in_objectbinding=_in_objectbinding, _in_relationship=_in_relationship
             )
             for item in obj
         ]
@@ -555,10 +560,11 @@ def _strip_object(obj: Dict[str, Any]) -> Dict[str, Any]:
 def _strip_relationship(rel: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a flat relationship to exchange format.
 
-    Removes: designId, _renderer_note
+    Keeps designId as null (required by import parser). Removes _renderer_note.
     """
-    drop = {"designId", "_renderer_note"}
-    return {k: v for k, v in rel.items() if k not in drop}
+    r = {k: v for k, v in rel.items() if k != "_renderer_note"}
+    r["designId"] = None
+    return r
 
 
 def _strip_event(evt: Dict[str, Any]) -> Dict[str, Any]:
