@@ -30,7 +30,9 @@ which is byte-for-byte identical to the pak-embedded export.json):
     .source.requests (dict)      → .requests  (list of {"request": <req>})
                                    add: designId=null, paging=null, chainingSettings=null
                                    (paging/chainingSettings populated when non-null from flat)
-                                   response: keep only result.{responseCode, dataModelLists}
+                                   response: full envelope (id, log, status, timing,
+                                   toolkitId, errorMessage + result.{body, headers,
+                                   responseCode, dataModelLists})
     .source.resources (list)     → .objects  (list of {"object": <obj>})
                                    designId: always null (was stripped, now emitted)
                                    ariaOpsConf: always present (null for INTERNAL, value for ARIA_OPS)
@@ -335,7 +337,47 @@ def _transform_configuration(
     return result
 
 
-def _strip_request(req: Dict[str, Any]) -> Dict[str, Any]:
+def _build_response_envelope(
+    req_id: str,
+    adapter_kind: str,
+    result_body: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Build the full MPB exchange response envelope for a request.
+
+    Every request in the exchange format (including testRequest) wraps the
+    result block in a full envelope with id, log, status, timing, toolkitId,
+    and errorMessage fields.  Confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json
+    (2026-05-14): all 9 data requests AND testRequest have identical envelope shape.
+
+    Constants used:
+      log / result.body: literal import placeholders from the reference.
+      status: "COMPLETED" — the reference uses this for imported designs.
+      endTime / startTime: 0 (integer).
+      duration: "NA" (string).
+      errorMessage: "".
+      id: deterministic UUID5 from req_id so renders are stable.
+      toolkitId: deterministic UUID5 from adapter_kind — the reference uses a
+        single shared toolkitId across all requests; we derive it from the
+        adapter_kind for stability.
+    """
+    response_id = str(uuid.uuid5(uuid.NAMESPACE_DNS,
+                                 f"vcfops_managementpacks:response:id:{req_id}"))
+    toolkit_id = str(uuid.uuid5(uuid.NAMESPACE_DNS,
+                                f"vcfops_managementpacks:toolkit:{adapter_kind}"))
+    return {
+        "id": response_id,
+        "log": "Imported request, execute to get accurate log",
+        "result": result_body,
+        "status": "COMPLETED",
+        "endTime": 0,
+        "duration": "NA",
+        "startTime": 0,
+        "toolkitId": toolkit_id,
+        "errorMessage": "",
+    }
+
+
+def _strip_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any]:
     """Convert a flat request object to exchange format.
 
     Key rules confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json
@@ -352,11 +394,17 @@ def _strip_request(req: Dict[str, Any]) -> Dict[str, Any]:
        when absent. Reference has the key with null value on non-paginated requests.
        Earlier rule (never emit) was wrong; MPB requires the key present.
 
-    Collapses response: keeps only result.{responseCode, dataModelLists}.
+    4. response: full envelope required — id, log, result, status, endTime,
+       duration, startTime, toolkitId, errorMessage — plus result.body and
+       result.headers inside the result block. Earlier rule (keep only
+       result.{responseCode, dataModelLists}) was wrong; the full envelope is
+       present on EVERY request in the reference (2026-05-14).
+
     params.id is absent in our flat format already (render.py strips it).
     """
+    req_id = req["id"]
     r = {
-        "id": req["id"],
+        "id": req_id,
         "name": req["name"],
         "path": req["path"],
         "method": req["method"],
@@ -372,7 +420,7 @@ def _strip_request(req: Dict[str, Any]) -> Dict[str, Any]:
     chain = req.get("chainingSettings")
     r["chainingSettings"] = chain if chain is not None else None
 
-    # Collapse response: keep only result.{responseCode, dataModelLists}
+    # Build full response envelope.
     # dataModelList entries: strip label and parentListId (absent in reference
     # export; confirmed from tmp/mpb_reference_none_auth.json, 2026-05-13).
     _DML_DROP = {"label", "parentListId"}
@@ -382,19 +430,21 @@ def _strip_request(req: Dict[str, Any]) -> Dict[str, Any]:
         raw_dmls = result.get("dataModelLists", [])
         dmls = [{k: v for k, v in dml.items() if k not in _DML_DROP}
                 for dml in raw_dmls]
-        r["response"] = {
-            "result": {
-                "responseCode": result.get("responseCode", 200),
-                "dataModelLists": dmls,
-            }
+        result_body = {
+            "body": "Imported request, execute to get accurate body",
+            "headers": [],
+            "responseCode": result.get("responseCode", 200),
+            "dataModelLists": dmls,
         }
     else:
-        r["response"] = {
-            "result": {
-                "responseCode": 200,
-                "dataModelLists": [],
-            }
+        result_body = {
+            "body": "Imported request, execute to get accurate body",
+            "headers": [],
+            "responseCode": 200,
+            "dataModelLists": [],
         }
+
+    r["response"] = _build_response_envelope(req_id, adapter_kind, result_body)
 
     return r
 
@@ -437,13 +487,17 @@ def _strip_metric_set(ms: Dict[str, Any]) -> Dict[str, Any]:
 def _strip_internal_object_info(ioi: Dict[str, Any]) -> Dict[str, Any]:
     """Strip flat-format-only fields from internalObjectInfo.
 
+    Earlier rule stripped id from internalObjectInfo.  Confirmed from
+    jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14): ALL INTERNAL
+    objects have internalObjectInfo.id present with a non-null value.
+    The id field is now kept as-is from the flat render output.
+
     Removes:
-      - id: present in flat format, absent in exchange format.
       - nameMetricExpression.expressionParts[].label: present in flat format,
         absent in reference export (confirmed from
         tmp/mpb_reference_none_auth.json, 2026-05-13).
     """
-    result = {k: v for k, v in ioi.items() if k != "id"}
+    result = dict(ioi)
     nme = result.get("nameMetricExpression")
     if isinstance(nme, dict):
         eps = nme.get("expressionParts")
@@ -516,51 +570,25 @@ def _strip_event(evt: Dict[str, Any]) -> Dict[str, Any]:
     return {k: v for k, v in evt.items() if k not in drop}
 
 
-def _strip_session_request(req: Dict[str, Any]) -> Dict[str, Any]:
+def _strip_session_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any]:
     """Strip a session/test request to exchange shape.
 
-    Auth session requests (getSession/releaseSession) and testRequest use a
-    response shape with responseCode only — no dataModelLists.  The full
-    _strip_request shape (which includes dataModelLists) is for regular
-    requests only.
+    Earlier rule (responseCode only, no body/headers/dataModelLists) was derived
+    from an older reference.  The jcox-au_vmware/unifi_MP_Builder_Design.json
+    (2026-05-14) is the ground-truth exchange format and shows testRequest using
+    the SAME full response envelope as regular requests — including body, headers,
+    and dataModelLists inside result, plus the outer id/log/status/toolkitId fields.
 
-    Confirmed from known-good MPB export (2026-04-17): all three request
-    types (getSession, releaseSession, testRequest) have
-    response.result = {responseCode: N} only.
+    This function now delegates to _strip_request for a consistent envelope.
+    Auth session requests (getSession/releaseSession) that genuinely have no
+    dataModelLists will still get an empty list, which is correct.
     """
-    resp = req.get("response")
-    if resp and isinstance(resp, dict):
-        result = resp.get("result", {})
-        response_code = result.get("responseCode", 200)
-    else:
-        response_code = 200
-
-    return {
-        "id": req["id"],
-        "name": req["name"],
-        "path": req["path"],
-        "method": req["method"],
-        "body": req.get("body") or "",
-        "headers": req.get("headers") or [],
-        "params": req.get("params") or [],
-        "designId": None,
-        "paging": None,
-        "chainingSettings": None,
-        "response": {
-            "result": {
-                "responseCode": response_code,
-            }
-        },
-    }
+    return _strip_request(req, adapter_kind=adapter_kind)
 
 
-def _strip_auth_request(req: Dict[str, Any]) -> Dict[str, Any]:
-    """Strip a session request (getSession/releaseSession) to exchange shape.
-
-    Delegates to _strip_session_request which produces responseCode-only
-    response (no dataModelLists).
-    """
-    return _strip_session_request(req)
+def _strip_auth_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any]:
+    """Strip a session request (getSession/releaseSession) to exchange shape."""
+    return _strip_session_request(req, adapter_kind=adapter_kind)
 
 
 def _strip_cred(cred: Dict[str, Any]) -> Dict[str, Any]:
@@ -652,27 +680,29 @@ def render_mpb_exchange_json(
     if isinstance(auth.get("creds"), list):
         auth["creds"] = [_strip_cred(c) for c in auth["creds"]]
 
-    # Strip sessionSettings when null/absent — the reference export omits the key
-    # entirely for no-auth configurations (confirmed from
-    # tmp/mpb_reference_none_auth.json, 2026-05-13).
+    # Always emit sessionSettings — confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json
+    # (2026-05-14): CUSTOM-auth MP has sessionSettings: null explicitly present.
+    # Earlier rule (strip the key when null, based on mpb_reference_none_auth.json)
+    # was wrong; the jcox reference is the correct ground truth.
     ss = auth.get("sessionSettings")
     if ss is None:
-        auth.pop("sessionSettings", None)
+        auth["sessionSettings"] = None
     elif isinstance(ss, dict):
         # Strip session request fields that don't belong in exchange format.
         # Auth session requests use responseCode-only response (no dataModelLists).
         if ss.get("getSession"):
-            ss["getSession"] = _strip_auth_request(ss["getSession"])
+            ss["getSession"] = _strip_auth_request(ss["getSession"], adapter_kind=ak)
         if ss.get("releaseSession"):
-            ss["releaseSession"] = _strip_auth_request(ss["releaseSession"])
+            ss["releaseSession"] = _strip_auth_request(ss["releaseSession"], adapter_kind=ak)
 
     global_headers = _render_global_headers(mp)
 
     # Locate the test request from the requests dict.
-    # testRequest uses responseCode-only response (no dataModelLists).
+    # testRequest uses the full response envelope (same as regular requests) —
+    # confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14).
     test_req_id = src.get("testRequestId")
     test_req_raw = src.get("requests", {}).get(test_req_id) if test_req_id else None
-    test_req = _strip_session_request(test_req_raw) if test_req_raw else None
+    test_req = _strip_session_request(test_req_raw, adapter_kind=ak) if test_req_raw else None
 
     # source.source.configuration block.
     # Confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14):
@@ -719,7 +749,7 @@ def render_mpb_exchange_json(
     for req_id, req in src.get("requests", {}).items():
         if req_id == test_req_id:
             continue  # goes into source.source.testRequest, not requests[]
-        requests_list.append({"request": _strip_request(req)})
+        requests_list.append({"request": _strip_request(req, adapter_kind=ak)})
 
     # ------------------------------------------------------------------
     # 4. objects — list of {"object": ...}
