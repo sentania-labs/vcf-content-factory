@@ -28,10 +28,12 @@ which is byte-for-byte identical to the pak-embedded export.json):
     .source.authentication       → .source.source.authentication  (same schema, stripped)
     .source.configuration        → .source.configuration  (same schema, same position)
     .source.requests (dict)      → .requests  (list of {"request": <req>})
-                                   strip: paging, chainingSettings, designId
+                                   add: designId=null, paging=null, chainingSettings=null
+                                   (paging/chainingSettings populated when non-null from flat)
                                    response: keep only result.{responseCode, dataModelLists}
     .source.resources (list)     → .objects  (list of {"object": <obj>})
-                                   strip: designId, ariaOpsConf
+                                   designId: always null (was stripped, now emitted)
+                                   ariaOpsConf: always present (null for INTERNAL, value for ARIA_OPS)
     .relationships (list)        → .relationships  (list of {"relationship": <rel>})
                                    strip: designId, _renderer_note
     .source.events (list)        → .events  (list of {"event": <evt>}, stripped: designId)
@@ -336,24 +338,19 @@ def _transform_configuration(
 def _strip_request(req: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a flat request object to exchange format.
 
-    Removes fields that appear in the flat format but NOT in the exchange format:
-      paging, designId, chainingSettings (when null/absent)
+    Key rules confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json
+    (exchange format ground truth, 2026-05-14):
 
-    Key rules confirmed from context/mpb_wire_reference/synology_nas_working_export.json
-    (2026-04-21 ground truth):
+    1. designId: always emitted as null (confirmed present on every request in
+       reference, value null). Earlier rule (drop entirely) was wrong.
 
-    1. chainingSettings: present ONLY on chained requests with a non-null value.
-       Non-chained requests have the key entirely absent (not null).
-       Our flat renderer emits chainingSettings=None on every request — strip when null.
+    2. chainingSettings: always emitted — non-null dict when chained, null when
+       not chained. Earlier rule (absent when null) was wrong; reference has the
+       key with null value on non-chained requests.
 
-    2. paging: MPB auto-populates this from live API responses during interactive
-       creation. It is NOT something authors declare — it is runtime-discovered data.
-       The explicit PagingDef grammar in the YAML/loader is for a future "declare
-       pagination hints" feature that would seed this block without a live round-trip.
-       For now: never emit paging in exchange format — the key is absent from our
-       renderer output and should stay absent. MPB will populate it on first live run.
-
-    3. designId: dropped (flat format only).
+    3. paging: always emitted — populated dict when pagination is in use, null
+       when absent. Reference has the key with null value on non-paginated requests.
+       Earlier rule (never emit) was wrong; MPB requires the key present.
 
     Collapses response: keeps only result.{responseCode, dataModelLists}.
     params.id is absent in our flat format already (render.py strips it).
@@ -366,14 +363,14 @@ def _strip_request(req: Dict[str, Any]) -> Dict[str, Any]:
         "body": req.get("body") or "",
         "headers": req.get("headers") or [],
         "params": req.get("params") or [],
+        "designId": None,
+        "paging": None,
     }
 
-    # Only emit chainingSettings when it is a non-null dict.
-    # Non-chained requests have the key absent entirely (confirmed 2026-04-21).
+    # Emit chainingSettings: non-null dict when chained, null otherwise.
+    # Reference has the key on every request (confirmed 2026-05-14).
     chain = req.get("chainingSettings")
-    if chain is not None:
-        r["chainingSettings"] = chain
-    # else: key absent — correct for non-chained requests
+    r["chainingSettings"] = chain if chain is not None else None
 
     # Collapse response: keep only result.{responseCode, dataModelLists}
     # dataModelList entries: strip label and parentListId (absent in reference
@@ -461,29 +458,37 @@ def _strip_internal_object_info(ioi: Dict[str, Any]) -> Dict[str, Any]:
 def _strip_object(obj: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a flat resource/object to exchange format.
 
+    For ALL objects (INTERNAL and ARIA_OPS):
+      - designId: always emitted as null (confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json —
+        all six objects have designId: null, 2026-05-14).
+      - ariaOpsConf: always emitted (null for INTERNAL, populated for ARIA_OPS).
+        Earlier rule (drop ariaOpsConf for INTERNAL) was wrong; reference has the
+        key on all objects including INTERNAL ones, value null.
+
     For INTERNAL objects:
-      Removes: designId, ariaOpsConf (null for INTERNAL, not needed in exchange)
       Strips internalObjectInfo.id, metricSets[].objectBinding when null,
       and metricSets[].metrics[].timeseries (all absent in exchange format).
 
     For ARIA_OPS objects:
-      Removes: designId only.
-      ariaOpsConf is KEPT (confirmed from ground truth:
-        context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json
-        §objects[0].object.ariaOpsConf is present in the exchange format).
+      ariaOpsConf is KEPT with its value (confirmed from ground truth:
+        context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json).
       internalObjectInfo is absent (ARIA_OPS objects don't have it).
       objectBinding uses "objectBindingType" key (not "type") — passed through as-is.
     """
-    is_aria_ops = obj.get("type") == "ARIA_OPS"
-
-    if is_aria_ops:
-        # ARIA_OPS: drop only designId; keep ariaOpsConf
-        drop = {"designId"}
-    else:
-        # INTERNAL: drop designId and the null ariaOpsConf placeholder
-        drop = {"designId", "ariaOpsConf"}
+    # Drop nothing from the object dict — designId and ariaOpsConf are both
+    # kept (designId forced to null below, ariaOpsConf kept as-is or set null).
+    drop: set = set()
 
     result = {k: v for k, v in obj.items() if k not in drop}
+
+    # Always emit designId as null (reference: all objects have designId: null)
+    result["designId"] = None
+
+    # Always emit ariaOpsConf: null for INTERNAL objects (reference confirms key
+    # present with null value on all INTERNAL objects, 2026-05-14).
+    # ARIA_OPS objects: keep existing ariaOpsConf value from flat format.
+    if obj.get("type") != "ARIA_OPS":
+        result["ariaOpsConf"] = None
     if "internalObjectInfo" in result and isinstance(result["internalObjectInfo"], dict):
         result["internalObjectInfo"] = _strip_internal_object_info(
             result["internalObjectInfo"]
@@ -538,6 +543,9 @@ def _strip_session_request(req: Dict[str, Any]) -> Dict[str, Any]:
         "body": req.get("body") or "",
         "headers": req.get("headers") or [],
         "params": req.get("params") or [],
+        "designId": None,
+        "paging": None,
+        "chainingSettings": None,
         "response": {
             "result": {
                 "responseCode": response_code,
@@ -612,10 +620,15 @@ def render_mpb_exchange_json(
     # (YAML field, defaults to 1). This allows MPB to distinguish successive
     # re-renders of the same version. See 2026-05-01 renderer gap fix.
     # ------------------------------------------------------------------
+    # Confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14):
+    # design.design has id: null and author: "" (empty string) as top-level keys.
+    # These were previously omitted; MPB import parser requires them.
     design_block = {
         "design": {
+            "id": None,
             "name": pak.get("name", mp.name),
             "type": "HTTP",
+            "author": None,
             "description": pak.get("description", ""),
             "version": mp.version,  # base version, no build suffix
         },
@@ -661,30 +674,30 @@ def render_mpb_exchange_json(
     test_req_raw = src.get("requests", {}).get(test_req_id) if test_req_id else None
     test_req = _strip_session_request(test_req_raw) if test_req_raw else None
 
-    # designId is absent in the exchange format (confirmed 2026-04-21).
-    # The flat render.py emits designId: None, but exchange strips it.
-
-    # Fix 7: populate full source.source.configuration with all connection keys.
-    # Community reference paks (Dale/Rubrik) include the full set; the MPB-built
-    # devel reference only has baseApiPath + customConfigs but both install fine.
-    # We emit the full set to match the widest reference pattern.
-    _ssl_map = {"NO_VERIFY": "No Verify", "VERIFY": "Verify", "NO_SSL": "No SSL"}
+    # source.source.configuration block.
+    # Confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14):
+    #   - port, maxRetries, connectionTimeout, maxConcurrentRequests: integers (not strings)
+    #   - hostname: null (not empty string "")
+    #   - sslSetting: loader constant string (e.g. "NO_VERIFY", not display "No Verify")
+    #   - minEventSeverity: uppercase constant ("WARNING", not "Warning")
+    # Earlier code stringified numeric values and used display strings for SSL/severity.
     _mp_src = mp.source  # ManagementPackDef.source (SourceDef)
-    _ssl_str = _ssl_map.get(str(_mp_src.ssl).upper(), "Verify") if _mp_src and _mp_src.ssl else "Verify"
+    _ssl_str = str(_mp_src.ssl).upper() if _mp_src and _mp_src.ssl else "VERIFY"
     _source_configuration: dict = {
-        "hostname": "",
-        "port": str(_mp_src.port) if _mp_src and _mp_src.port is not None else "443",
-        "maxRetries": str(_mp_src.max_retries) if _mp_src and _mp_src.max_retries is not None else "2",
+        "hostname": None,
+        "port": int(_mp_src.port) if _mp_src and _mp_src.port is not None else 443,
+        "maxRetries": int(_mp_src.max_retries) if _mp_src and _mp_src.max_retries is not None else 2,
         "sslSetting": _ssl_str,
         "baseApiPath": src.get("basePath", ""),
         "customConfigs": [],
-        "minEventSeverity": "Warning",
-        "connectionTimeout": str(_mp_src.timeout) if _mp_src and _mp_src.timeout is not None else "30",
-        "maxConcurrentRequests": str(_mp_src.max_concurrent) if _mp_src and _mp_src.max_concurrent is not None else "2",
+        "minEventSeverity": "WARNING",
+        "connectionTimeout": int(_mp_src.timeout) if _mp_src and _mp_src.timeout is not None else 30,
+        "maxConcurrentRequests": int(_mp_src.max_concurrent) if _mp_src and _mp_src.max_concurrent is not None else 2,
     }
 
     source_source = {
         "id": _stable_source_id(ak),
+        "designId": None,
         "configuration": _source_configuration,
         "authentication": auth,
         "globalHeaders": global_headers,
