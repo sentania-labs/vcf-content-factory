@@ -1,5 +1,28 @@
 """Transform a flat MPB design JSON into the MPB UI exchange format (export.json).
 
+STRIP RULE POLICY (codified 2026-05-14 after audit of e135142 over-strip pattern):
+
+    A field is stripped from the exchange format ONLY when we have positive
+    evidence MPB rejects it on import.  Evidence means a documented import
+    failure (link to a context/ file or commit message), NOT absence-in-one-sample.
+
+    If the only justification is "this field was absent in the Synology DSM sample",
+    that is NOT sufficient evidence.  The Synology sample was a minimal single-level
+    chain; it did not exercise multi-level chaining, populated chainingSettings.params,
+    or many expression patterns the jcox UniFi reference exhibits.
+
+    Ground-truth references (treat as authoritative — if a field appears in ANY of
+    these, it is NOT forbidden by MPB):
+      1. references/jcox-au_vmware/unifi_MP_Builder_Design.json  ← primary
+      2. tmp/reference_paks/Ubiquiti_UniFi-1.0.0.7_MP_Builder_Design.json
+      3. references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json
+
+    When adding a NEW strip rule: record the positive evidence inline as a comment.
+    Do not add new strip rules on the basis of absence-in-one-sample alone.
+    Mark uncertain rules (no evidence either way) with # UNCERTAIN comment.
+
+    Audit log: context/render_export_strip_audit_2026_05_14.md
+
 WRAPPING RULE (derived from diff_mpb/conf/export.json vs template.json,
 cross-checked against vcf_operations_mp_designs_export.zip "Synology DSM MP.json"
 which is byte-for-byte identical to the pak-embedded export.json):
@@ -28,14 +51,15 @@ which is byte-for-byte identical to the pak-embedded export.json):
     .source.authentication       → .source.source.authentication  (same schema, stripped)
     .source.configuration        → .source.configuration  (same schema, same position)
     .source.requests (dict)      → .requests  (list of {"request": <req>})
-                                   add: designId=null, paging=null, chainingSettings=null
-                                   (paging/chainingSettings populated when non-null from flat)
+                                   strip: designId, paging (neither in MPB exchange)
+                                   chainingSettings: null when absent, populated when chained
+                                   chain params: strip "example" field
                                    response: full envelope (id, log, status, timing,
                                    toolkitId, errorMessage + result.{body, headers,
                                    responseCode, dataModelLists})
     .source.resources (list)     → .objects  (list of {"object": <obj>})
-                                   designId: always null (was stripped, now emitted)
-                                   ariaOpsConf: always present (null for INTERNAL, value for ARIA_OPS)
+                                   INTERNAL: strip designId, ariaOpsConf (both absent in MPB)
+                                   ARIA_OPS: strip designId; keep ariaOpsConf (populated)
     .relationships (list)        → .relationships  (list of {"relationship": <rel>})
                                    strip: designId, _renderer_note
     .source.events (list)        → .events  (list of {"event": <evt>}, stripped: designId)
@@ -394,6 +418,10 @@ def _strip_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any
     2. chainingSettings: always emitted — non-null dict when chained, null when
        not chained. Earlier rule (absent when null) was wrong; reference has the
        key with null value on non-chained requests.
+       chainingSettings.params[] is kept as-is from the flat render.  Earlier
+       e135142 strip (params: []) was wrong — jcox has fully-populated params[].
+       The collision that motivated e135142 is fixed in render.py via
+       _chain_wire_key() (id_device instead of device_id).
 
     3. paging: always emitted — populated dict when pagination is in use, null
        when absent. Reference has the key with null value on non-paginated requests.
@@ -404,6 +432,10 @@ def _strip_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any
        result.headers inside the result block. Earlier rule (keep only
        result.{responseCode, dataModelLists}) was wrong; the full envelope is
        present on EVERY request in the reference (2026-05-14).
+
+    5. dataModelList entries: label and parentListId are KEPT.  jcox has both
+       on every DML entry.  Earlier _DML_DROP {"label","parentListId"} rule was
+       an over-strip from a single Synology sample.
 
     params.id is absent in our flat format already (render.py strips it).
     """
@@ -416,32 +448,41 @@ def _strip_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any
         "body": req.get("body") or "",
         "headers": req.get("headers") or [],
         "params": req.get("params") or [],
-        "designId": None,
-        "paging": None,
     }
+    # designId and paging are NOT emitted.
+    # Evidence (2026-05-15): /tmp/mpb_pak_inspect/mpb_export.json — all request
+    # entries have keys ['body', 'chainingSettings', 'headers', 'id', 'method',
+    # 'name', 'params', 'path', 'response'] — no designId, no paging.
+    # Previous rule (always emit both as null) reversed by this MPB-built evidence.
 
     # Emit chainingSettings: non-null dict when chained, null otherwise.
-    # Strip params from chainingSettings — MPB reconstructs them from the
-    # parent-child relationship at source test time. Emitting them causes
-    # duplicate label collisions in the Properties screen when the param
-    # key matches an identifier key (e.g., device_id).  Import succeeds
-    # without params (confirmed 2026-05-14); MPB re-populates on source test.
+    # params[] is kept as-is from the flat render output — jcox UniFi reference
+    # (ground truth, 2026-05-14) has fully-populated params[] on every chained
+    # request.  Strip "example" from each param entry: MPB-built UniFi export
+    # (2026-05-15) shows param keys ['attributeExpression','id','key','label',
+    # 'listId','usage'] — no 'example' field.
     chain = req.get("chainingSettings")
-    if chain is not None and isinstance(chain, dict):
-        chain = {k: v for k, v in chain.items() if k != "params"}
-        chain["params"] = []
+    if chain and isinstance(chain, dict) and chain.get("params"):
+        chain = dict(chain)
+        chain["params"] = [
+            {k: v for k, v in p.items() if k != "example"}
+            for p in chain["params"]
+        ]
     r["chainingSettings"] = chain
 
     # Build full response envelope.
-    # dataModelList entries: strip label and parentListId (absent in reference
-    # export; confirmed from tmp/mpb_reference_none_auth.json, 2026-05-13).
-    _DML_DROP = {"label", "parentListId"}
+    # dataModelList entries: keep all fields including label and parentListId.
+    # jcox UniFi reference (ground truth exchange format, 2026-05-14) has BOTH
+    # 'label' and 'parentListId' on every DML entry, and 'label'+'example' on
+    # every attribute.  The previous _DML_DROP {"label", "parentListId"} rule
+    # was an over-strip based on absence in the mpb_reference_none_auth.json
+    # single-level sample.  Removed per strip policy (2026-05-14 audit).
+    # Evidence: references/jcox-au_vmware/unifi_MP_Builder_Design.json
     resp = req.get("response")
     if resp and isinstance(resp, dict):
         result = resp.get("result", {})
         raw_dmls = result.get("dataModelLists", [])
-        dmls = [{k: v for k, v in dml.items() if k not in _DML_DROP}
-                for dml in raw_dmls]
+        dmls = list(raw_dmls)
         result_body = {
             "body": "Imported request, execute to get accurate body",
             "headers": [],
@@ -478,28 +519,33 @@ def _remap_object_binding(ob: Optional[Dict[str, Any]]) -> Optional[Dict[str, An
 
     Two transforms are applied:
 
-    1. Type remap: the flat renderer emits "type": "CHAINED_REQUEST" for
-       chained-secondary metricSets where the secondary response does not echo
-       the bind attribute (Sub-case B).  "CHAINED_REQUEST" is our internal
-       flat-format designation.  The MPB exchange format requires "ATTRIBUTE_TO_PROPERTY"
-       for ALL chained-secondary bindings.  Confirmed from
-       jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14): no CHAINED_REQUEST
-       entries exist — only ATTRIBUTE_TO_PROPERTY.
+    1. Type remap + key rename: the flat renderer emits "type": <value> for
+       INTERNAL object bindings.  The MPB exchange format uses the key
+       "objectBindingType" (not "type") — confirmed from mpb_export.json
+       (MPB-built UniFi export, 2026-05-15): all objectBinding dicts use
+       "objectBindingType" key.  Rename "type" → "objectBindingType".
+       Additionally remap "CHAINED_REQUEST" → "ATTRIBUTE_TO_PROPERTY": our
+       flat-format internal marker "CHAINED_REQUEST" must become the exchange
+       value "ATTRIBUTE_TO_PROPERTY" per jcox-au_vmware/unifi_MP_Builder_Design.json
+       (2026-05-14).
 
-    2. Key name: the ARIA_OPS objectBinding (Case 0 in render.py) uses the key
-       "objectBindingType" instead of "type".  That key is passed through as-is
-       (it is correct for ARIA_OPS objects per the vsphere_storage_paths reference).
-       Only the "type" key is subject to the CHAINED_REQUEST → ATTRIBUTE_TO_PROPERTY
-       remap.
+    2. ARIA_OPS objectBinding: the flat renderer already uses "objectBindingType"
+       key for ARIA_OPS objects (Case 0 in render.py), so those pass through
+       unchanged.  Only the "type" key is subject to the rename.
 
-    Returns None unchanged (Bug 3 fix: null is kept by _strip_metric_set, not
-    remapped here).
+    Returns None unchanged (null is kept by _strip_metric_set).
     """
     if ob is None:
         return None
     ob = dict(ob)
-    if ob.get("type") == "CHAINED_REQUEST":
-        ob["type"] = "ATTRIBUTE_TO_PROPERTY"
+    if "type" in ob:
+        # Rename flat-format "type" → exchange "objectBindingType".
+        # Evidence: /tmp/mpb_pak_inspect/mpb_export.json (2026-05-15) — every
+        # objectBinding uses "objectBindingType" key, never "type".
+        binding_type = ob.pop("type")
+        if binding_type == "CHAINED_REQUEST":
+            binding_type = "ATTRIBUTE_TO_PROPERTY"
+        ob["objectBindingType"] = binding_type
     return ob
 
 
@@ -531,64 +577,58 @@ def _strip_metric_set(ms: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _strip_internal_object_info(ioi: Dict[str, Any]) -> Dict[str, Any]:
-    """Strip flat-format-only fields from internalObjectInfo.
+    """Pass internalObjectInfo through to exchange format unchanged.
 
-    Earlier rule stripped id from internalObjectInfo.  Confirmed from
+    Earlier rule stripped id from internalObjectInfo — confirmed wrong from
     jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14): ALL INTERNAL
     objects have internalObjectInfo.id present with a non-null value.
-    The id field is now kept as-is from the flat render output.
 
-    Removes:
-      - nameMetricExpression.expressionParts[].label: present in flat format,
-        absent in reference export (confirmed from
-        tmp/mpb_reference_none_auth.json, 2026-05-13).
+    Earlier rule also stripped nameMetricExpression.expressionParts[].label —
+    confirmed wrong from jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14):
+    ALL nameMetricExpression.expressionParts[] have 'label' present with a
+    non-null value (e.g. "Name-Client", "Name-Device", etc.).
+    Previous evidence (absent in mpb_reference_none_auth.json) was an
+    over-strip from a single-level sample; jcox is the authoritative reference.
+    Removed per strip policy (2026-05-14 audit).
     """
-    result = dict(ioi)
-    nme = result.get("nameMetricExpression")
-    if isinstance(nme, dict):
-        eps = nme.get("expressionParts")
-        if isinstance(eps, list):
-            nme["expressionParts"] = [
-                {k: v for k, v in ep.items() if k != "label"}
-                for ep in eps
-            ]
-    return result
+    return dict(ioi)
 
 
 def _strip_object(obj: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a flat resource/object to exchange format.
 
-    For ALL objects (INTERNAL and ARIA_OPS):
-      - designId: always emitted as null (confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json —
-        all six objects have designId: null, 2026-05-14).
-      - ariaOpsConf: always emitted (null for INTERNAL, populated for ARIA_OPS).
-        Earlier rule (drop ariaOpsConf for INTERNAL) was wrong; reference has the
-        key on all objects including INTERNAL ones, value null.
-
     For INTERNAL objects:
-      Strips internalObjectInfo.id, metricSets[].objectBinding when null,
-      and metricSets[].metrics[].timeseries (all absent in exchange format).
+      - designId: dropped (not emitted).
+        Previous rule (always emit null) was reversed by MPB-built UniFi export
+        (2026-05-15): INTERNAL objects have no designId key at all.
+        Evidence: /tmp/mpb_pak_inspect/mpb_export.json — all 5 INTERNAL objects
+        have keys ['id', 'internalObjectInfo', 'isListObject', 'metricSets', 'type'].
+      - ariaOpsConf: dropped (not emitted).
+        Previous rule (emit null) was reversed by same evidence: INTERNAL objects
+        have no ariaOpsConf key at all.
+      - internalObjectInfo: passed through as-is (id and nameMetricExpression
+        .expressionParts[].label both kept).
+      - metricSets[].metrics[].key: stripped.
+      - metricSets[].metrics[].timeseries: stripped (null-value-only difference).
 
     For ARIA_OPS objects:
-      ariaOpsConf is KEPT with its value (confirmed from ground truth:
+      - ariaOpsConf: KEPT with its value (confirmed from ground truth:
         context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json).
-      internalObjectInfo is absent (ARIA_OPS objects don't have it).
-      objectBinding uses "objectBindingType" key (not "type") — passed through as-is.
+      - internalObjectInfo is absent (ARIA_OPS objects don't have it).
+      - objectBinding uses "objectBindingType" key — passed through as-is.
+      - designId: dropped from ARIA_OPS objects as well (consistent with INTERNAL
+        treatment, no counter-evidence).
     """
-    # Drop nothing from the object dict — designId and ariaOpsConf are both
-    # kept (designId forced to null below, ariaOpsConf kept as-is or set null).
-    drop: set = set()
+    is_internal = obj.get("type") != "ARIA_OPS"
+
+    # For INTERNAL objects: drop designId and ariaOpsConf entirely.
+    # For ARIA_OPS objects: drop designId; keep ariaOpsConf (populated value).
+    drop: set = {"designId"}
+    if is_internal:
+        drop.add("ariaOpsConf")
 
     result = {k: v for k, v in obj.items() if k not in drop}
 
-    # Always emit designId as null (reference: all objects have designId: null)
-    result["designId"] = None
-
-    # Always emit ariaOpsConf: null for INTERNAL objects (reference confirms key
-    # present with null value on all INTERNAL objects, 2026-05-14).
-    # ARIA_OPS objects: keep existing ariaOpsConf value from flat format.
-    if obj.get("type") != "ARIA_OPS":
-        result["ariaOpsConf"] = None
     if "internalObjectInfo" in result and isinstance(result["internalObjectInfo"], dict):
         result["internalObjectInfo"] = _strip_internal_object_info(
             result["internalObjectInfo"]
@@ -601,11 +641,14 @@ def _strip_object(obj: Dict[str, Any]) -> Dict[str, Any]:
 def _strip_relationship(rel: Dict[str, Any]) -> Dict[str, Any]:
     """Convert a flat relationship to exchange format.
 
-    Keeps designId as null (required by import parser). Removes _renderer_note.
+    Removes _renderer_note and designId.
+    Evidence (2026-05-15): /tmp/mpb_pak_inspect/mpb_export.json — relationships
+    have keys ['caseSensitive', 'childExpression', 'childObjectId', 'id', 'name',
+    'parentExpression', 'parentObjectId'] — no designId.
+    Previous rule (emit designId: null) was reversed by this MPB-built evidence.
     """
-    r = {k: v for k, v in rel.items() if k != "_renderer_note"}
-    r["designId"] = None
-    return r
+    drop = {"_renderer_note", "designId"}
+    return {k: v for k, v in rel.items() if k not in drop}
 
 
 def _strip_event(evt: Dict[str, Any]) -> Dict[str, Any]:
@@ -774,7 +817,9 @@ def render_mpb_exchange_json(
 
     source_source = {
         "id": _stable_source_id(ak),
-        "designId": None,
+        # designId omitted: MPB-built UniFi export (2026-05-15) has no designId
+        # in source.source — keys are ['authentication','configuration',
+        # 'globalHeaders','id','testRequest'].
         "configuration": _source_configuration,
         "authentication": auth,
         "globalHeaders": global_headers,
@@ -866,17 +911,22 @@ def render_mpb_exchange_json(
         ]
 
     # Top-level exchange format:
-    #   - type: "HTTP"  — present at top level (confirmed from synology_nas_working_export.json)
-    #   - content: []   — Fix 6: every reference pak has this key as an empty list.
-    #     GitHub-1.0.0.2.pak and Broadcom both have "content": [] in export.json.
-    #     The MPB-built devel reference (none-auth) had it absent in earlier captures,
-    #     but the pak-compare [B2] finding ("factory missing top-level keys: ['content']")
-    #     against GitHub/Broadcom confirms it must be present.  Emit as empty list.
-    # Key order matches the reference for readability, though MPB ignores order.
+    #   - type: "HTTP"  — present at top level.
+    #     Evidence (2026-05-15): /tmp/mpb_pak_inspect/mpb_export.json top-level
+    #     keys are ['type','design','source','objects','relationships','events',
+    #     'requests'].  The wrapping rule docstring already specified this mapping
+    #     (.source.type → .type top-level) but the field was never emitted.  Fixed.
+    #   - content: NOT emitted.
+    #     Previous rule (emit "content": []) reversed: MPB-built UniFi export
+    #     (2026-05-15) has no 'content' key.  Earlier GitHub/Broadcom pak-compare
+    #     evidence may have been from a different MPB version; MPB-built evidence
+    #     is more authoritative.
+    # Key order matches MPB output for readability.
+    _top_type = src.get("type") or "HTTP"
     exchange = {
+        "type": _top_type,
         "design": design_block,
         "source": source_block,
-        "content": [],
         "objects": objects_list,
         "relationships": relationships_list,
         "events": events_list,

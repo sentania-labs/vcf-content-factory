@@ -308,65 +308,27 @@ object_types:
 relationships: []
 
 
-mpb_events:
-  # Events fire against the raw API response field names, not metric keys.
-  # dead_paths, path_health_pct, and hostname are API response field names.
-  # dedup_fields also reference API response fields (not metric keys).
-  # object_binding references the host_storage_health ARIA_OPS object type key.
-
-  # Event 1: Dead storage paths detected.
-  # Any dead path is an immediate operational concern — storage failover may
-  # be compromised. CRITICAL because dead paths can cause I/O errors and VM
-  # unavailability.
-  - name: "Dead Storage Paths Detected"
-    severity: CRITICAL
-    source_request: host_path_summary
-    response_path: "data.*"
-
-    match_rules:
-      - field: "dead_paths"
-        operator: NOT_EQUALS
-        value: "0"
-
-    object_binding:
-      object_type: host_storage_health
-      match_field: "hostname"
-
-    collection_strategy:
-      interval_seconds: 300
-      dedup_strategy: TUPLE_HASH
-      dedup_fields: [hostname, dead_paths]
-
-    message_template: "Host ${hostname}: ${dead_paths} dead storage path(s) detected"
-    description: >
-      Fires when one or more storage paths on an ESXi host enter the dead state.
-      Dead paths indicate a storage path failure that may reduce redundancy or
-      cause I/O errors.
-
-  # Event 2: Storage path health degraded.
-  # path_health_pct < 100 catches both dead paths and unknown-state paths.
-  # WARNING because the host may still have redundant active paths.
-  - name: "Storage Path Health Degraded"
-    severity: WARNING
-    source_request: host_path_summary
-    response_path: "data.*"
-
-    match_rules:
-      - field: "path_health_pct"
-        operator: NOT_EQUALS
-        value: "100"
-
-    object_binding:
-      object_type: host_storage_health
-      match_field: "hostname"
-
-    collection_strategy:
-      interval_seconds: 300
-      dedup_strategy: TUPLE_HASH
-      dedup_fields: [hostname, path_health_pct]
-
-    message_template: "Host ${hostname}: storage path health at ${path_health_pct}%"
-    description: >
-      Fires when a host's path health percentage drops below 100%. Indicates at
-      least one path is not in active or standby state. Overlaps with Dead Paths
-      Detected but also catches paths in unknown state.
+# NOTE — Events intentionally removed (2026-05-15).
+#
+# Earlier drafts of this MP defined an `mpb_events:` block with two
+# threshold-style alerts ("Dead Storage Paths Detected" CRITICAL,
+# "Storage Path Health Degraded" WARNING). They were removed because:
+#
+#   1. The vSphere Data API doesn't expose an event stream — those
+#      were synthetic alerts derived from match rules on metric values
+#      (dead_paths != 0, path_health_pct != 100). MPB's `events:` is
+#      the wrong tool for that pattern.
+#   2. The v9.0.1-patch-1 runtime rejected our event wire format with
+#      a BuilderFileParseException on install (v2.0.0.4 prod logs,
+#      2026-05-14). Renderer needs a confirmed v9.0.1 event-schema
+#      reference (none currently available).
+#   3. The proper VCF Ops pattern for "alert on metric threshold" is
+#      symptom + alert content, not an MP-embedded event.
+#
+# When threshold alerting is needed for this MP, author it as:
+#   - symptoms/storage_paths_dead_paths.yaml (vcf_cf_dead_paths > 0)
+#   - symptoms/storage_paths_health_degraded.yaml (vcf_cf_path_health_pct < 100)
+#   - alerts/storage_paths_alert.yaml referencing the symptoms
+#
+# Do NOT re-add `mpb_events:` to this YAML without first establishing
+# a working v9.0.1+ event-schema reference from an MPB-built pak.

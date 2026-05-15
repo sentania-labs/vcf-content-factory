@@ -159,11 +159,82 @@ The factory YAML chain grammar maps to the MPB design JSON as follows:
 |---|---|
 | `metricSet.chained_from` | `requests[child].chainingSettings.parentRequestId` |
 | `metricSet.list_path` (on parent metricSet) | `chainingSettings.baseListId` |
-| `metricSet.bind[].name` | `chainingSettings.params[].key` = `params[].usage` suffix |
+| `metricSet.bind[].name` | `chainingSettings.params[].key` via `_chain_wire_key()` |
 | `metricSet.bind[].from_attribute` | `chainingSettings.params[].attributeExpression.expressionParts[].label` |
-| `${chain.<name>}` in request | `${requestParameters.<name>}` in emitted request params/path |
+| `${chain.<name>}` in request | `${requestParameters.<wire_key>}` in emitted request params/path |
 
 See `context/mpb_chaining_wire_format.md` §2 for the full wire schema.
+
+### Wire key mapping: bind.name → requestParameters key
+
+**Important:** the YAML `bind[].name` does NOT map directly to the wire
+`chainingSettings.params[].key`.  A render-time transformation remaps bind names
+to avoid collision with identifier metric keys, with a special collision-detection
+path for objects with two chained children sharing the same bind name.
+
+#### Default scheme (no collision)
+
+Identifier metric keys follow `<thing>_id` (e.g. `device_id`, `site_id`).
+Chain param wire keys follow `id_<thing>` (e.g. `id_device`, `id_site`).
+These two namespaces never overlap.
+
+| YAML bind.name | Wire key    | Example wire usage                |
+|----------------|-------------|-----------------------------------|
+| `id`           | `id`        | `${requestParameters.id}`         |
+| `device_id`    | `id_device` | `${requestParameters.id_device}`  |
+| `site_id`      | `id_site`   | `${requestParameters.id_site}`    |
+| `volume_id`    | `id_volume` | `${requestParameters.id_volume}`  |
+| `pool_id`      | `id_pool`   | `${requestParameters.id_pool}`    |
+
+**Rule:** if bind_name ends with `_id`, strip the suffix, prepend `id_`.
+If bind_name is exactly `id`, keep `id`.  Otherwise, prepend `id_`.
+
+#### Collision-scoped scheme (Option B, 2026-05-14)
+
+When two child requests chain from the same parent AND both bind the same
+attribute name (e.g. `device_stats_ap` and `device_detail_ap` both binding
+`device_id` off `devices_ap`), the default scheme produces the same key
+(`id_device`) for both.  MPB's Properties panel unions chain params across
+all requests for an object type and rejects duplicate labels.
+
+**Fix (Option B — collision-scoped):** A pre-scan in `_render_requests`
+detects these collisions.  For each colliding `(ot_key, parent_req_name, bind_name)`
+triple, the renderer uses a per-request-scoped key instead:
+
+```
+id_<child_request_name>
+```
+
+Examples (UniFi Access Point — devices_ap is parent, device_id collides):
+
+| YAML bind.name | Child request    | Wire key               |
+|----------------|------------------|------------------------|
+| `device_id`    | `device_stats_ap`  | `id_device_stats_ap`   |
+| `device_id`    | `device_detail_ap` | `id_device_detail_ap`  |
+
+Non-colliding binds on the same object keep the default scheme:
+
+| YAML bind.name | Child request | Wire key   |
+|----------------|---------------|------------|
+| `site_id`      | `devices_ap`  | `id_site`  |
+
+**Inherited chain tokens:** `${chain.site_id}` in a grandchild request path
+(e.g. `device_stats_ap` whose parent `devices_ap` binds site_id as `id_site`)
+is rewritten to `${requestParameters.id_site}` using the default fallback —
+matching the ancestor's chainingSettings.params key.  Only OWN (direct) bind
+tokens are rewritten with the collision-scoped key.
+
+This mapping applies to BOTH:
+1. The `${chain.<name>}` → `${requestParameters.<wire_key>}` rewrite in paths/params/body.
+2. The `chainingSettings.params[].key` and `.usage` fields.
+
+Authors write `${chain.device_id}` and the YAML validator checks against
+bind names — no change to authoring grammar.  The wire key is purely a
+render-time concern invisible to authors.
+
+Codified 2026-05-14 per context/render_export_strip_audit_2026_05_14.md.
+Bug 1 fix codified 2026-05-14 — duplicate chain key collision on objects
+with two chained children.
 
 ---
 
@@ -268,10 +339,58 @@ object_types:
 
 ---
 
+## objectBinding pattern for multi-metricSet objects (Pattern V, Bug 4, 2026-05-15)
+
+For objects with sibling secondaries, the renderer uses **Pattern V** — derived from the
+vrealize.it vSAN default storage policy MP and confirmed collecting cleanly on devel.
+
+**Rule: primary=null, each secondary=ATTRIBUTE_TO_PROPERTY with PARAMETER-origin matchExpression.**
+
+- **Primary metricSet** (`primary: true`): `objectBinding=null` always.
+- **Each sibling secondary** (chained from a sibling metricSet on the same object type):
+  `objectBinding=ATTRIBUTE_TO_PROPERTY` where:
+  - `matchExpression`: PARAMETER → secondary's own `chainingSettings.params[N].id` UUID.
+    `originType = PARAMETER`, `originId = <chain_param_uuid>`, `label = <wire_key>`.
+    No DML synthesis needed — the PARAMETER origin resolves to the chain-param value
+    substituted into the URL at collection time.
+  - `objectMatchExpression`: METRIC → primary's identifier metric UUID.
+    `originType = METRIC`.
+
+**Why Pattern V over Pattern B (Synology, ATTRIBUTE origin):**
+
+Pattern B (previous approach from the shipped Synology DSM pak) used ATTRIBUTE origin on
+the matchExpression, pointing at a synthesized DML attribute on the secondary's own DML.
+At collection time MPB resolves this from the response body — which fails for endpoints
+(e.g. UniFi `/statistics/latest`) that do not echo the identifier back.  MPB logs:
+"Object binding requestMatchIdExpression ${id} returned matches did not return a result."
+
+Pattern V (PARAMETER origin) resolves from the URL substitution value, not the response
+body.  It works regardless of whether the API echoes the identifier.  Pattern B also works
+for Synology (response echoes `volume_id`), so Pattern V is strictly more universal.
+
+**Ground truth:** `references/vrealize_it_vsan_default_policy/vSAN default storage policy.json`
+— `Get Datastore default policy` request has `chainingSettings.params[0].id = "w3ovEMMMaQF6VvGf7cqRha"`,
+key = `datastore`.  The object's `objectBinding.matchExpression.expressionParts[0]` has
+`originType = "PARAMETER"`, `originId = "w3ovEMMMaQF6VvGf7cqRha"`.
+
+**For single-metricSet objects** (e.g., Client, Network, Synology Storage Pool):
+`objectBinding=null` (MPB single-metricSet exception).  No synthesis needed.
+
+**For cross-type chain-root primaries** (`chained_from` pointing at a top-level request,
+not a sibling ms): the primary falls through to null (Case 3 / chain-root behavior).
+
+No YAML changes needed.  The Pattern V binding is synthesized entirely at render time.
+See `context/render_export_strip_audit_2026_05_14.md §Bug4` for the full ground-truth
+analysis and the failure mode of Pattern B (Bug 2d).
+
+---
+
 ## References
 
 - `context/mpb_chaining_wire_format.md` — wire format spec, UUID rules
 - `context/mpb_synology_import_diff_2026_04_29.md` — root-cause analysis
   of the dangling-chain defect (defect #3)
+- `context/render_export_strip_audit_2026_05_14.md §Bug4` — Pattern V derivation,
+  failure mode of Pattern B (ATTRIBUTE origin), vSAN ground truth
 - `vcfops_managementpacks/loader.py` — validator implementation
 - `vcfops_managementpacks/render.py:_build_chaining_settings` — renderer

@@ -106,12 +106,95 @@ def _parse_source_ref(source: "MetricSourceDef") -> Tuple[str, str]:
     return source.metricset, source.path
 
 
-def _rewrite_chain_tokens(text: str) -> str:
-    """Rewrite ${chain.<name>} → ${requestParameters.<name>} in any string."""
-    return _CHAIN_TOKEN_RE.sub(lambda m: f"${{requestParameters.{m.group(1)}}}", text)
+def _chain_wire_key(bind_name: str) -> str:
+    """Map a YAML bind name to its inherited/fallback wire requestParameters key.
+
+    Used for INHERITED chain params (propagated from ancestor chains at runtime)
+    and for the default non-request-scoped path.  The jcox UniFi reference
+    (ground truth, 2026-05-14) uses a naming convention that avoids collisions
+    between chain param keys and identifier metric keys in MPB's Properties screen.
+    Identifier keys follow the '<thing>_id' pattern (e.g. device_id).  The wire
+    key uses the inverse form: 'id_<thing>' (e.g. id_device, id_site, id_volume).
+
+    Mapping rule:
+      - bind_name == 'id'           → wire key 'id'      (single bare id, no collision possible)
+      - bind_name ends with '_id'   → wire key 'id_<stem>'  (e.g. 'device_id' → 'id_device')
+      - otherwise                   → wire key 'id_<bind_name>'  (prefix for safety)
+
+    NOTE: for DIRECT (own) chain params on a child request, use
+    _chain_wire_key_for_request(bind_name, child_req_name) instead to get a
+    per-request-scoped key that avoids duplicate-attribute collisions on objects
+    with two chained children sharing the same bind name (Bug 1 fix, 2026-05-14).
+
+    Evidence: context/render_export_strip_audit_2026_05_14.md §chainingSettings.params
+    Adopted 2026-05-14 to fix e135142 over-strip regression.
+    """
+    if bind_name == "id":
+        return "id"
+    if bind_name.endswith("_id"):
+        stem = bind_name[:-3]
+        return f"id_{stem}"
+    return f"id_{bind_name}"
 
 
-def _rewrite_params(params: Any) -> Any:
+def _chain_wire_key_for_request(bind_name: str, child_req_name: str) -> str:
+    """Map a YAML bind name + child request name to a per-request-scoped wire key.
+
+    Bug 1 fix (2026-05-14): when an object type has two chained children that
+    both bind the same attribute name (e.g. device_stats_ap and device_detail_ap
+    both bind device_id), the naive _chain_wire_key produces the same wire key
+    (id_device) for both.  MPB's Properties panel unions chain params across all
+    requests for an object type and rejects duplicate labels.
+
+    Fix (Option A): scope the key by child request name, making it globally unique.
+    Each chain param key is id_<child_request_name>, regardless of bind_name.
+    For the common single-bind case this is unambiguous.  For multi-bind requests
+    (hypothetical), the index is appended: id_<child_req_name>_<bind_index>.
+
+    The label follows the same convention as _chain_wire_key: "ID" + title-case
+    of everything after the "id_" prefix.
+
+    Examples (single-bind):
+      (device_id, device_stats_ap)  → id_device_stats_ap
+      (device_id, device_detail_ap) → id_device_detail_ap
+      (site_id,   devices_ap)       → id_devices_ap
+      (id,        get_sites_all)    → id_get_sites_all
+
+    NOTE: the YAML ${chain.*} tokens in request paths/params/body are rewritten
+    using the _own_chain_map stored on _RequestInfo (set by _build_chaining_settings).
+    Inherited ancestor chain params (not in _own_chain_map) continue to use
+    _chain_wire_key() so they match the ancestor's chainingSettings.params key.
+
+    Codified 2026-05-14.  See context/mp_chain_authoring.md §wire key mapping.
+    """
+    return f"id_{child_req_name}"
+
+
+def _rewrite_chain_tokens(text: str, own_chain_map: Optional[Dict[str, str]] = None) -> str:
+    """Rewrite ${chain.<name>} → ${requestParameters.<wire_key>} in any string.
+
+    Uses _chain_wire_key() to map bind names to collision-safe wire keys for
+    inherited chain params, and own_chain_map for direct (own) chain params.
+
+    own_chain_map: dict of {bind_name: wire_key} for the current request's own
+    chainingSettings params.  When provided, tokens matching an own bind name
+    are rewritten with the scoped key; all other tokens (inherited from ancestor
+    chains) fall back to _chain_wire_key().
+
+    E.g. for device_stats_ap with own_chain_map={'device_id': 'id_device_stats_ap'}:
+      ${chain.site_id}   → ${requestParameters.id_site}       (inherited, fallback)
+      ${chain.device_id} → ${requestParameters.id_device_stats_ap}  (own, scoped)
+    """
+    def _replace(m: "re.Match") -> str:
+        bname = m.group(1)
+        if own_chain_map and bname in own_chain_map:
+            return f"${{requestParameters.{own_chain_map[bname]}}}"
+        return f"${{requestParameters.{_chain_wire_key(bname)}}}"
+
+    return _CHAIN_TOKEN_RE.sub(_replace, text)
+
+
+def _rewrite_params(params: Any, own_chain_map: Optional[Dict[str, str]] = None) -> Any:
     """Apply _rewrite_chain_tokens to all param values."""
     if not params:
         return params
@@ -120,12 +203,12 @@ def _rewrite_params(params: Any) -> Any:
         for p in params:
             if isinstance(p, dict):
                 v = p.get("value", "")
-                result.append({"key": p.get("key", ""), "value": _rewrite_chain_tokens(str(v)) if v else ""})
+                result.append({"key": p.get("key", ""), "value": _rewrite_chain_tokens(str(v), own_chain_map) if v else ""})
             else:
                 result.append(p)
         return result
     if isinstance(params, dict):
-        return {k: _rewrite_chain_tokens(str(v)) for k, v in params.items()}
+        return {k: _rewrite_chain_tokens(str(v), own_chain_map) for k, v in params.items()}
     return params
 
 
@@ -336,6 +419,15 @@ class _RequestInfo:
         self._attr_ids: Dict[str, bool] = {}
         # chainingSettings to emit (set by _render_requests when a chained metricSet uses this req)
         self._chaining_settings: Optional[Dict] = None
+        # bind_name → wire_key map for this request's OWN chain params (Bug 1 fix).
+        # Inherited ancestor chain params are NOT in this map; they use _chain_wire_key() fallback.
+        # Set by _build_chaining_settings (called from _render_requests) and consumed by to_wire().
+        self._own_chain_map: Dict[str, str] = {}
+        # bind_name → (param_id, wire_key) for this request's OWN chain params (Pattern V, Bug 4).
+        # param_id is the chainingSettings.params[N].id UUID.  Used by _render_one_object to
+        # build objectBinding.matchExpression with originType=PARAMETER.
+        # Set by _render_requests alongside _own_chain_map; absent = empty dict.
+        self._own_chain_param_ids: Dict[str, Tuple[str, str]] = {}
 
     def register_field(self, field_path: str, dml_id: str) -> str:
         """Register a field and return its attribute-origin ID.
@@ -434,10 +526,14 @@ class _RequestInfo:
         ${requestParameters.<name>} at emit time per the Option C grammar spec.
         """
         req = self.req
-        # Rewrite ${chain.*} tokens in path and params before normalizing
-        path = _rewrite_chain_tokens(req.path) if req.path else req.path
-        body = _rewrite_chain_tokens(req.body) if req.body else req.body
-        raw_params = _rewrite_params(req.params)
+        # Rewrite ${chain.*} tokens in path and params before normalizing.
+        # Pass _own_chain_map so that OWN chain params (direct binds on this request)
+        # use the per-request-scoped wire key (e.g. id_device_stats_ap) while
+        # INHERITED chain params (from ancestor chains) keep the fallback key (e.g. id_site).
+        ocm = self._own_chain_map if self._own_chain_map else None
+        path = _rewrite_chain_tokens(req.path, ocm) if req.path else req.path
+        body = _rewrite_chain_tokens(req.body, ocm) if req.body else req.body
+        raw_params = _rewrite_params(req.params, ocm)
         # params: always a list of {key, value}
         params = _normalize_params(raw_params)
         dmls = list(self.dmls.values())
@@ -1128,6 +1224,35 @@ def _render_requests(
         registry[req.name] = _RequestInfo(req, ak)
         req_by_name[req.name] = req
 
+    # Step 1b: pre-scan all metricSets to detect (parent_req_name, bind_name) collision pairs.
+    # A collision occurs when two different child requests both chain from the same parent
+    # with the same bind name on the same object type.  The naive _chain_wire_key scheme
+    # would produce identical wire keys for both (e.g. id_device for device_id), causing
+    # MPB Properties panel to show duplicate attribute labels.
+    # For colliding pairs, _build_chaining_settings applies the per-request-scoped key
+    # scheme (Option A: id_<child_req_name>).  Non-colliding pairs keep the simpler
+    # _chain_wire_key scheme for cleaner wire output.
+    # Scope: per-object-type.  Two different object types using the same (parent, bind_name)
+    # pair do not collide because their chain params live in separate object namespaces.
+    _colliding_pairs: set = set()  # set of (ot_key, parent_req_name, bind_name)
+    for ot in mp.object_types:
+        _chain_use: Dict[tuple, set] = {}  # (parent_req_name, bind_name) → {child_req_names}
+        for ms in ot.metric_sets:
+            if ms.chained_from is None:
+                continue
+            for b in ms.bind:
+                key = (ms.chained_from, b.name)
+                _chain_use.setdefault(key, set()).add(ms.from_request)
+        for (parent_req_name, bind_name), child_set in _chain_use.items():
+            if len(child_set) > 1:
+                _colliding_pairs.add((ot.key, parent_req_name, bind_name))
+                logger.info(
+                    "Object '%s': bind_name '%s' on parent '%s' is shared by %d "
+                    "child requests (%s) — applying per-request chain key scoping (Option A).",
+                    ot.key, bind_name, parent_req_name, len(child_set),
+                    ", ".join(sorted(child_set)),
+                )
+
     # Step 2: process each object_type's metricSets
     for ot in mp.object_types:
         # Build map: metricSet.local_name → MetricSetDef
@@ -1216,9 +1341,18 @@ def _render_requests(
             # For chain roots, ms_fields does not have an entry keyed by the root
             # request name (only sibling metricSet names are in ms_fields), so we
             # always auto-synthesize for chain-root binds.
+            #
+            # Bug 4 (2026-05-15): the previous Bug 2d addition synthesized
+            # b.from_attribute on the CHILD's own DML so that the Synology-pattern
+            # (ATTRIBUTE-origin) matchExpression had something to point at.  Pattern V
+            # (PARAMETER-origin) does not need this synthesis — the matchExpression
+            # points at the chain param's UUID directly, not at a DML attribute.
+            # The synthesis is removed here.  Parent DML synthesis is retained (it is
+            # still needed so chainingSettings.params[].attributeExpression can
+            # reference the correct parent-row attribute).
             for b in ms.bind:
                 if b.from_attribute not in ms_fields.get(ms.chained_from, set()):
-                    # Attribute not sourced by any metric; synthesize it
+                    # Attribute not sourced by any metric; synthesize it on parent DML
                     parent_req_info.register_field(b.from_attribute, parent_dml_id)
                     logger.info(
                         "Object '%s' metricSet '%s': auto-synthesized attribute "
@@ -1229,18 +1363,24 @@ def _render_requests(
 
             # Build chainingSettings for the child request
             # (uses parent request ID + parent DML id + bind entries)
-            chain_settings = _build_chaining_settings(
+            # Returns (chain_settings_dict, own_chain_map, own_chain_param_ids) —
+            # see _build_chaining_settings.
+            chain_settings, own_chain_map, own_chain_param_ids = _build_chaining_settings(
                 parent_req_info=parent_req_info,
                 parent_dml_id=parent_dml_id,
                 ms=ms,
                 child_req_name=child_req.name,
+                parent_req_name=parent_req.name,
                 ak=ak,
                 ot_key=ot.key,
+                colliding_pairs=_colliding_pairs,
             )
-            # Set chainingSettings on child request (last write wins if
-            # multiple object_types chain the same child request — should
-            # not happen in v1 but is safe)
+            # Set chainingSettings, own_chain_map, and own_chain_param_ids on child request.
+            # Last write wins if multiple object_types chain the same child request
+            # (should not happen in v1 but is safe — keys are per-request-unique).
             child_req_info._chaining_settings = chain_settings
+            child_req_info._own_chain_map = own_chain_map
+            child_req_info._own_chain_param_ids = own_chain_param_ids
 
     # Step 4: ensure every request has at least a "base" DML.
     # Requests that are declared in the YAML but not consumed by any object
@@ -1260,9 +1400,11 @@ def _build_chaining_settings(
     parent_dml_id: str,
     ms: "MetricSetDef",
     child_req_name: str,
+    parent_req_name: str,
     ak: str,
     ot_key: str,
-) -> Dict:
+    colliding_pairs: set,
+) -> Tuple[Dict, Dict[str, str]]:
     """Build the chainingSettings block for a child request.
 
     Wire format per context/mpb_chaining_wire_format.md §2.
@@ -1270,17 +1412,65 @@ def _build_chaining_settings(
     baseListId = parent_dml_id (the DML the chain iterates over).
     params[] = one entry per bind entry.
     Each param's attributeExpression points at the parent DML attribute.
+
+    Wire key scheme (Bug 1 fix, 2026-05-14, Option B — collision-scoped):
+    By default, uses _chain_wire_key() to derive the wire param key from the YAML
+    bind name (e.g. 'device_id' → 'id_device').  This is the simple, jcox-compatible
+    scheme for the common case where no two children share the same bind name.
+
+    When a collision is detected — i.e., the (ot_key, parent_req_name, bind_name)
+    triple is in colliding_pairs — uses _chain_wire_key_for_request(bind_name,
+    child_req_name) instead, producing a per-request-scoped key (e.g. id_device_stats_ap,
+    id_device_detail_ap) that is unique across all children on this parent.
+
+    The collision detection pre-scan in _render_requests fills colliding_pairs.
+    Only colliding (parent, bind_name) pairs get the scoped key; everything else
+    keeps the simpler scheme.  This is Option B from the bug report: jcox-like
+    for the common case, scoped for the collision case.
+
+    Returns: (chainingSettings_dict, own_chain_map, own_chain_param_ids)
+      own_chain_map: {bind_name: wire_key} — stored on _RequestInfo._own_chain_map
+      to rewrite ${chain.<name>} tokens in the child request's paths/params/body.
+      Only OWN chain params are in own_chain_map.  Inherited ancestor chain tokens
+      (not in own_chain_map) fall back to _chain_wire_key() in _rewrite_chain_tokens,
+      matching whatever key the ancestor's chainingSettings declared.
+      own_chain_param_ids: {bind_name: (param_id, wire_key)} — stored on
+      _RequestInfo._own_chain_param_ids.  Used by _render_one_object to build
+      objectBinding.matchExpression with originType=PARAMETER (Pattern V, Bug 4).
+
+    See context/mp_chain_authoring.md §wire key mapping for the full scheme.
+    See context/render_export_strip_audit_2026_05_14.md §Bug1 for evidence.
+    See context/render_export_strip_audit_2026_05_14.md §Bug4 for Pattern V evidence.
     """
     chain_seed = f"{ak}:object:{ot_key}:chain:{child_req_name}"
     chain_id = _make_id(chain_seed)
 
     params = []
+    own_chain_map: Dict[str, str] = {}
+    own_chain_param_ids: Dict[str, Tuple[str, str]] = {}
+
     for i, b in enumerate(ms.bind):
         # origin_id: <parentRequestId>-<baseListId>-<attributeLabel>
         origin_id = f"{parent_req_info.id}-{parent_dml_id}-{b.from_attribute}"
 
         param_seed = f"{chain_seed}:param:{b.name}"
         param_id = _make_id(param_seed)
+
+        # Choose wire key based on collision status.
+        # Colliding: (ot_key, parent_req_name, bind_name) → use per-request-scoped key.
+        # Non-colliding: use the simple _chain_wire_key scheme (jcox-compatible).
+        if (ot_key, parent_req_name, b.name) in colliding_pairs:
+            wire_key = _chain_wire_key_for_request(b.name, child_req_name)
+        else:
+            wire_key = _chain_wire_key(b.name)
+
+        own_chain_map[b.name] = wire_key
+        own_chain_param_ids[b.name] = (param_id, wire_key)
+
+        # Label follows jcox convention: "ID_<everything-after-id_>".
+        # e.g. id_device → ID_device, id_device_stats_ap → ID_device_stats_ap
+        stem = wire_key[3:] if wire_key.startswith("id_") else wire_key
+        label = f"ID_{stem}" if stem else "ID"
 
         # attributeExpression: single-part passthrough
         expr_seed = f"{param_seed}:attrExpr"
@@ -1304,20 +1494,21 @@ def _build_chaining_settings(
 
         params.append({
             "id": param_id,
-            "key": b.name,
-            "label": b.name[0].upper() + b.name[1:],
-            "usage": f"${{requestParameters.{b.name}}}",
+            "key": wire_key,
+            "label": label,
+            "usage": f"${{requestParameters.{wire_key}}}",
             "listId": parent_dml_id,
             "example": "",
             "attributeExpression": attr_expression,
         })
 
-    return {
+    chain_settings = {
         "id": chain_id,
         "parentRequestId": parent_req_info.id,
         "baseListId": parent_dml_id,
         "params": params,
     }
+    return chain_settings, own_chain_map, own_chain_param_ids
 
 
 def _render_objects(
@@ -1382,15 +1573,55 @@ def _render_one_object(
 
     # Identify chain-parent metricSet local names on this object.
     # A metricSet is a chain-parent if another metricSet's chained_from
-    # equals its local_name.  Chain-parents keep objectBinding: null.
-    # Chained secondaries (chained_from is not None) MUST get a non-null
-    # objectBinding per verify-time rule §8.1 of
-    # context/mpb_object_binding_wire_format.md.
+    # equals its local_name.
     chain_parent_names: set = {
         ms.chained_from
         for ms in ot.metric_sets
         if ms.chained_from is not None
     }
+
+    # ---------------------------------------------------------------------------
+    # Bug 4 / Pattern V (2026-05-15): PARAMETER-origin objectBinding for chained secondaries
+    #
+    # Pivot from Pattern B (Synology, ATTRIBUTE-origin) to Pattern V (vSAN policy,
+    # PARAMETER-origin) for chained secondary metricSets on INTERNAL objects.
+    #
+    # Pattern V rules applied here:
+    #   1. Primary metricSet: objectBinding = null (unchanged from Bug 2d).
+    #   2. Each sibling secondary: objectBinding = ATTRIBUTE_TO_PROPERTY where:
+    #      - matchExpression: PARAMETER → secondary's own chainingSettings.params[0].id
+    #        (originType = PARAMETER, originId = chain_param_id, label = wire_key)
+    #      - objectMatchExpression: METRIC → primary's identifier metric UUID (unchanged).
+    #   3. Cross-type chain-root primaries (chained_from not in ms_context) and
+    #      chain-parents, singletons, scalar kinds: objectBinding = null (unchanged).
+    #   4. Single-metricSet objects: objectBinding = null (unchanged).
+    #
+    # Why Pattern V is universal over Pattern B (Synology):
+    #   PARAMETER origin resolves at collection time to the value substituted into the URL.
+    #   This works whether or not the API echoes the identifier back in the response body.
+    #   ATTRIBUTE origin (Pattern B) requires the identifier in the response body.
+    #   For endpoints like UniFi's /devices/{device}/statistics/latest that omit id from
+    #   the response, ATTRIBUTE-origin resolves to nothing, causing silent collection failure.
+    #
+    # Ground truth: vrealize.it vSAN default storage policy MP — confirmed collecting
+    # cleanly on devel with PARAMETER-origin objectBinding (2026-05-15).
+    #
+    # Bug 2d's secondary-DML synthesis (child_req_info.register_field) removed here
+    # because Pattern V does not need the DML attribute.
+    #
+    # "Sibling secondary" definition: a metricSet whose chained_from refers to
+    # another metricSet declared on THIS object type (i.e., chained_from is in
+    # ms_context) AND primary is not True.
+    #
+    # Pre-loop: identify sibling secondaries for later case detection.
+    # No anchor variable or linking-metric synthesis needed (Bug 2c logic removed).
+
+    _sibling_secondaries: List["MetricSetDef"] = [
+        ms for ms in ot.metric_sets
+        if ms.chained_from is not None
+        and not getattr(ms, "primary", False)
+        and ms.chained_from in ms_context
+    ]
 
     # Build wire metricSets — one per MetricSetDef in ot.metric_sets
     wire_metric_sets: List[Dict] = []
@@ -1444,57 +1675,34 @@ def _render_one_object(
                 "timeseries": None,
             })
 
-        # objectBinding for this metricSet.
+        # objectBinding for this metricSet (Bug 2d fix — Synology pattern, 2026-05-15).
         #
-        # Three cases — see context/mpb_object_binding_wire_format.md §10:
+        # Ground truth: /tmp/synology_inspect/design.json (shipped Synology DSM pak,
+        # imports AND collects cleanly end-to-end).
         #
-        # Case 1 — Aria-native stitching (stitch_to declared in YAML):
-        #   Emit the two-expression stitching binding per §3.5 (Rubrik pattern):
-        #     matchExpression       → source response field (stitch_match_field),
-        #                             originType: ATTRIBUTE
-        #     objectMatchExpression → Aria-native metric pointer,
-        #                             originType: ARIA_OPS_METRIC, originId: stitch_to
-        #
-        # Case 2 — Chained-secondary metricSet (chained_from is not None):
-        #   Per §8.1 verify-time rule: every chained secondary MUST carry a non-null
-        #   objectBinding.  The null-everywhere approach from the 2026-04-29 morning
-        #   change was correct at import time but fails at verify time (the builder-
-        #   file parser enforces "at most one null per resource, and it must be the
-        #   chain-parent").
-        #   Emit §10.2 cross-metricSet ATTRIBUTE shape:
-        #     matchExpression.expressionParts[0]:
-        #       originId   = <parent_req_id>-<parent_list_id>-<parent_attr_label>
-        #       originType = "ATTRIBUTE"     (NOT "PARAMETER" — PARAMETER is only
-        #                                    valid with companion ome ARIA_OPS_METRIC,
-        #                                    per §9 vSAN-policy pattern; bare PARAMETER
-        #                                    without ome is the broken shape that
-        #                                    triggered this investigation)
-        #   NO objectMatchExpression — not stitching onto an Aria-native object.
-        #
-        # Case 3 — All other metricSets (singletons, scalar kinds, chain-parents):
-        #   objectBinding: null.
-        #   Chain-parent is the one metricSet per resource that MAY be null under
-        #   the verify rule (it is referenced by a secondary via chainingSettings).
-        #   Singletons and scalar kinds never iterate rows, so binding is moot.
+        # Case 0 — ARIA_OPS primary: cross-resource stitching binding (objectBindingType key).
+        # Case 1 — Aria-native stitching (stitch_to declared in YAML): ATTRIBUTE_TO_PROPERTY.
+        # Case 4 — Primary INTERNAL non-scalar: objectBinding = null (Synology pattern).
+        #   The primary is always null; secondaries carry the binding.
+        #   This is the opposite of Bug 2c's jcox-idiom (which had primary non-null).
+        #   Single-metricSet objects also fall here (same null outcome).
+        # Case 2d — Sibling secondary (Bug 2d fix): objectBinding = ATTRIBUTE_TO_PROPERTY.
+        #   matchExpression: ATTRIBUTE → secondary's OWN DML synthesized bind attr.
+        #   objectMatchExpression: METRIC → primary's identifier metric UUID.
+        #   Both secondaries (first and subsequent) get this binding; none is "anchor".
+        #   Cross-type chain-root consumers (chained_from not in ms_context) are NOT
+        #   sibling secondaries and fall through to null (Case 3).
+        # Case 3 — Chain-parents, singletons, scalar kinds, cross-type primaries:
+        #   objectBinding = null.
         object_binding: Optional[Dict] = None
         ob_seed = f"{obj_seed}:metricSet:{ms.local_name}:objectBinding"
 
         if ot.type == "ARIA_OPS" and ms_def.primary and ms_def.stitch_match_field:
             # Case 0 — ARIA_OPS primary metricSet: cross-resource stitching binding.
-            #
-            # Ground truth: context/mpb_wire_reference/
-            #   vsphere_storage_paths_aria_ops_stitch.json (2026-05-13)
-            #
-            # The objectBinding uses "objectBindingType" (not "type") and the
-            # objectMatchExpression.originId is the UUID of the ariaOpsConf bind
-            # metric (NOT the string key like "VMEntityObjectID").
-            #
-            # The bind metric UUID is deterministically derived by _render_aria_ops_conf()
-            # using the seed f"{obj_seed}:ariaOpsConf:metric:{aria_ops.bind_metric}".
+            # Ground truth: context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json
             stitch_field = ms_def.stitch_match_field
-            aria_ops = ot.aria_ops  # validated non-None by loader for ARIA_OPS type
+            aria_ops = ot.aria_ops
 
-            # matchExpression: API response field whose value matches the target resource
             match_origin_id = req_info.register_field(stitch_field, dml_id)
             match_expr = _make_expression(
                 label=stitch_field,
@@ -1503,8 +1711,6 @@ def _render_one_object(
                 expr_seed=f"{ob_seed}::matchExpr",
             )
 
-            # objectMatchExpression: points at the ariaOpsConf bind metric by UUID
-            # (NOT the bind_metric string key — the UUID cross-reference is required)
             bind_metric_uuid = _make_id(
                 f"{obj_seed}:ariaOpsConf:metric:{aria_ops.bind_metric}"
             )
@@ -1523,11 +1729,9 @@ def _render_one_object(
             }
 
         elif ms_def.stitch_to:
-            # Case 1: Stitching binding — Aria-native object correlation (INTERNAL only).
-            # Per context/mpb_object_binding_wire_format.md §3.5 (Rubrik pattern).
-            stitch_field = ms_def.stitch_match_field  # validated non-None by loader
+            # Case 1: Aria-native stitching binding (INTERNAL only).
+            stitch_field = ms_def.stitch_match_field
 
-            # matchExpression: source field whose value matches the Aria identifier
             match_origin_id = req_info.register_field(stitch_field, dml_id)
             match_expr = _make_expression(
                 label=stitch_field,
@@ -1536,7 +1740,6 @@ def _render_one_object(
                 expr_seed=f"{ob_seed}::matchExpr",
             )
 
-            # objectMatchExpression: Aria-native metric pointer (ARIA_OPS_METRIC)
             obj_match_expr = _make_expression(
                 label=stitch_field,
                 origin_id=ms_def.stitch_to,
@@ -1550,193 +1753,98 @@ def _render_one_object(
                 "objectMatchExpression": obj_match_expr,
             }
 
-        elif ms.chained_from is not None and ms.local_name not in chain_parent_names and not getattr(ms, 'primary', False):
-            # Case 2 — Chained-secondary metricSet: non-null objectBinding required.
+        elif (
+            ms.chained_from is not None
+            and not getattr(ms_def, "primary", False)
+            and ms.chained_from in ms_context
+        ):
+            # Case 2d — Sibling secondary (Bug 4 / Pattern V, 2026-05-15).
             #
-            # Ground truth: jcox-au_vmware/unifi_MP_Builder_Design.json
-            # "UniFi - Devices" object, ms[1] (get-device-statistics).
-            # Confirmed 2026-05-07.
+            # Pivot from Pattern B (Synology, ATTRIBUTE-origin matchExpression) to
+            # Pattern V (vSAN policy, PARAMETER-origin matchExpression).
             #
-            # Two sub-cases based on whether the secondary response echoes the
-            # bind attribute (from_attribute) as a field in its own payload:
+            # Pattern V (canonical for INTERNAL chained secondaries):
+            #   matchExpression: points at the secondary's OWN chainingSettings.params[0].id.
+            #     originType = PARAMETER
+            #     originId   = chain_param_id  (the UUID of chainingSettings.params[N])
+            #     label      = chain_param_key (the wire key, e.g. "id_device_stats_ap")
+            #   objectMatchExpression: UNCHANGED — points at primary's identifier metric UUID.
+            #     originType = METRIC
             #
-            # Sub-case A — secondary DOES echo the bind attribute
-            # (e.g. Synology volume_util returns volume_id in its response):
-            #   Shape: ATTRIBUTE_TO_PROPERTY (two-expression):
-            #     matchExpression       → secondary's own attribute (<from_attribute>)
-            #                             originType: ATTRIBUTE
-            #     objectMatchExpression → parent metric whose source field ==
-            #                             from_attribute, originType: METRIC
+            # Ground truth: vSAN default storage policy MP
+            #   (references/vrealize_it_vsan_default_policy/vSAN default storage policy.json)
+            #   Request "Get Datastore default policy":
+            #     chainingSettings.params[0].id = "w3ovEMMMaQF6VvGf7cqRha", key = "datastore"
+            #   Object objectBinding.matchExpression.expressionParts[0]:
+            #     originType = "PARAMETER", originId = "w3ovEMMMaQF6VvGf7cqRha", label = "datastore"
+            #   Confirmed collecting cleanly on devel (3 resources, 2026-05-15).
             #
-            # Sub-case B — secondary does NOT echo the bind attribute
-            # (e.g. UniFi /statistics/latest returns only stats, no device ID):
-            #   Shape: CHAINED_REQUEST (no expression parts needed):
-            #     {type: "CHAINED_REQUEST", matchExpression: {id: <uuid>}}
-            #   The chain context provides implicit per-row binding; MPB runtime
-            #   does not need an explicit attribute match.
+            # Why Pattern V is universal:
+            #   The PARAMETER origin resolves at collection time to the value substituted into
+            #   the URL — which IS the per-device identifier.  This works whether or not the
+            #   API echoes the identifier back in the response body.  The Synology ATTRIBUTE
+            #   pattern requires the identifier to appear in the response body; for endpoints
+            #   like UniFi's /sites/{site}/devices/{device}/statistics/latest that do not echo
+            #   back id, ATTRIBUTE-origin resolves to nothing and collection fails silently.
             #
-            # Detection: scan this object type's metrics for any metric whose
-            # source is metricset:<ms.local_name>.<from_attribute>.  If found,
-            # the secondary echoes that field (Sub-case A).  If not found,
-            # use CHAINED_REQUEST (Sub-case B).
-            #
-            # See context/mpb_object_binding_wire_format.md §12 for rationale.
-            parent_ms_local_name = ms.chained_from
-            parent_attr_label = ms.bind[0].from_attribute
+            # Bug 2d's secondary-DML synthesis (child_req_info.register_field) is removed
+            # because Pattern V does not need a DML attribute for the matchExpression.
+            # The parent-DML synthesis is retained (needed for chainingSettings.params[].
+            # attributeExpression to reference the correct parent-row attribute).
+            _b0 = ms.bind[0]
 
-            # Detect whether the secondary response echoes the bind attribute.
-            secondary_echoes_bind = False
-            for m in metrics_by_ms.get(ms.local_name, []):
-                _, field_path = _parse_source_ref(m.source)
-                if field_path == parent_attr_label:
-                    secondary_echoes_bind = True
-                    break
+            # Look up this secondary's own chain param id and wire key
+            # from req_info._own_chain_param_ids (populated by _build_chaining_settings).
+            _chain_param_entry = req_info._own_chain_param_ids.get(_b0.name)
 
-            if secondary_echoes_bind:
-                # Sub-case A: secondary echoes the bind attribute →
-                # ATTRIBUTE_TO_PROPERTY with intra-MP cross-metricSet expressions.
-                #
-                # matchExpression: secondary's own attribute (same field name as
-                # from_attribute) originId = <secondary_req_id>-<secondary_dml_id>-
-                # <from_attribute>, originType = "ATTRIBUTE".
-                #
-                # objectMatchExpression: parent metricSet's metric whose source
-                # field_path equals from_attribute.
-                # originId = metric wire ID, originType = "METRIC".
-                ob_match_origin_id = req_info.register_field(parent_attr_label, dml_id)
-                match_expr_ob = _make_expression(
-                    label=parent_attr_label,
-                    origin_id=ob_match_origin_id,
-                    origin_type="ATTRIBUTE",
+            # Look up primary's identifier metric UUID from metric_map
+            _ident_key = ot.identifiers[0].key if ot.identifiers else None
+            _ident_metric_id = metric_map.get(_ident_key) if _ident_key else None
+            _ident_metric_label = next(
+                (m.label for m in ot.metrics if m.key == _ident_key), _ident_key
+            ) if _ident_key else None
+
+            if _ident_metric_id is not None and _chain_param_entry is not None:
+                _cp_id, _cp_wire_key = _chain_param_entry
+                match_expr_v = _make_expression(
+                    label=_cp_wire_key,
+                    origin_id=_cp_id,
+                    origin_type="PARAMETER",
                     expr_seed=f"{ob_seed}::matchExpr",
                 )
-
-                # objectMatchExpression: parent metricSet's metric whose field_path
-                # equals from_attribute.  Iterate parent's metrics to find it.
-                obj_match_expr_ob = None
-                for parent_m in metrics_by_ms.get(parent_ms_local_name, []):
-                    _, parent_field_path = _parse_source_ref(parent_m.source)
-                    if parent_field_path == parent_attr_label:
-                        parent_metric_id = _make_id(f"{obj_seed}:metric:{parent_m.key}")
-                        obj_match_expr_ob = _make_expression(
-                            label=parent_m.label,
-                            origin_id=parent_metric_id,
-                            origin_type="METRIC",
-                            expr_seed=f"{ob_seed}::objMatchExpr",
-                        )
-                        break
-
-                if obj_match_expr_ob is None:
-                    # Parent has no metric sourced from from_attribute — this means
-                    # the bind attribute was auto-synthesized (not explicitly declared
-                    # as a metric).  Fall back to ATTRIBUTE shape pointing at the
-                    # parent's DML attribute (pre-2026-05-07 behaviour) rather than
-                    # emitting an invalid binding.
-                    _parent_ms_def, parent_req_fb, parent_dml_id_fb = ms_context[parent_ms_local_name]
-                    parent_req_info_fb = request_registry[parent_req_fb.name]
-                    fb_origin_id = (
-                        f"{parent_req_info_fb.id}-{parent_dml_id_fb}-{parent_attr_label}"
-                    )
-                    obj_match_expr_ob = _make_expression(
-                        label=parent_attr_label,
-                        origin_id=fb_origin_id,
-                        origin_type="ATTRIBUTE",
-                        expr_seed=f"{ob_seed}::objMatchExprFallback",
-                    )
-                    logger.warning(
-                        "Object '%s' metricSet '%s': no parent metric sourced from "
-                        "from_attribute '%s' on metricSet '%s'; falling back to "
-                        "ATTRIBUTE objectMatchExpression (MPB may reject at verify time).",
-                        ot.name, ms.local_name, parent_attr_label, parent_ms_local_name,
-                    )
-
+                obj_match_expr_v = _make_expression(
+                    label=_ident_metric_label or _ident_key,
+                    origin_id=_ident_metric_id,
+                    origin_type="METRIC",
+                    expr_seed=f"{ob_seed}::objMatchExpr",
+                )
                 object_binding = {
                     "type": "ATTRIBUTE_TO_PROPERTY",
-                    "matchExpression": match_expr_ob,
-                    "objectMatchExpression": obj_match_expr_ob,
+                    "matchExpression": match_expr_v,
+                    "objectMatchExpression": obj_match_expr_v,
                 }
-
-            else:
-                # Sub-case B: secondary does NOT echo the bind attribute.
-                #
-                # Exchange format ground truth (jcox-au_vmware/unifi_MP_Builder_Design.json,
-                # confirmed 2026-05-14): ALL chained-secondary objectBindings in the
-                # exchange format use "ATTRIBUTE_TO_PROPERTY" with full expression
-                # structures — never the bare {type: "CHAINED_REQUEST", matchExpression:
-                # {id: <uuid>}} shape.  The flat format marker "CHAINED_REQUEST" is our
-                # internal designation; render_export.py remaps it to "ATTRIBUTE_TO_PROPERTY"
-                # for the exchange.
-                #
-                # For the expressions we point at the parent metricSet's bind attribute:
-                #   matchExpression       → parent DML attribute (<from_attribute>),
-                #                           originType: ATTRIBUTE
-                #   objectMatchExpression → parent metric sourced from <from_attribute>,
-                #                           originType: METRIC (fallback: ATTRIBUTE when
-                #                           no such metric is explicitly declared)
-                #
-                # This mirrors Sub-case A's expression construction but using the parent's
-                # attribute for the matchExpression (since the secondary has no echo field).
                 logger.info(
-                    "Object '%s' metricSet '%s': secondary response does not echo "
-                    "from_attribute '%s' — building CHAINED_REQUEST objectBinding "
-                    "with full parent-attribute expressions (exchange: ATTRIBUTE_TO_PROPERTY).",
-                    ot.name, ms.local_name, parent_attr_label,
+                    "Object '%s' secondary metricSet '%s': objectBinding "
+                    "matchExpr.originId=%s (PARAMETER, chain param) "
+                    "objMatchExpr.originId=%s (METRIC, primary ident) [Pattern V].",
+                    ot.name, ms.local_name, _cp_id, _ident_metric_id,
+                )
+            elif _chain_param_entry is None:
+                logger.warning(
+                    "Object '%s' secondary metricSet '%s': bind[0].name=%r not found "
+                    "in req_info._own_chain_param_ids. Emitting null objectBinding.",
+                    ot.name, ms.local_name, _b0.name,
+                )
+            else:
+                logger.warning(
+                    "Object '%s' secondary metricSet '%s': no identifier metric "
+                    "in metric_map (key=%r). Emitting null objectBinding.",
+                    ot.name, ms.local_name, _ident_key,
                 )
 
-                # matchExpression: parent DML attribute reference
-                _parent_ms_def_b, parent_req_b, parent_dml_id_b = ms_context[parent_ms_local_name]
-                parent_req_info_b = request_registry[parent_req_b.name]
-                # Register the field against the parent's DML so the originId is correct.
-                ob_match_origin_id_b = (
-                    f"{parent_req_info_b.id}-{parent_dml_id_b}-{parent_attr_label}"
-                )
-                match_expr_b = _make_expression(
-                    label=parent_attr_label,
-                    origin_id=ob_match_origin_id_b,
-                    origin_type="ATTRIBUTE",
-                    expr_seed=f"{ob_seed}::matchExpr",
-                )
-
-                # objectMatchExpression: parent metric sourced from from_attribute
-                obj_match_expr_b = None
-                for parent_m_b in metrics_by_ms.get(parent_ms_local_name, []):
-                    _, parent_field_path_b = _parse_source_ref(parent_m_b.source)
-                    if parent_field_path_b == parent_attr_label:
-                        parent_metric_id_b = _make_id(f"{obj_seed}:metric:{parent_m_b.key}")
-                        obj_match_expr_b = _make_expression(
-                            label=parent_m_b.label,
-                            origin_id=parent_metric_id_b,
-                            origin_type="METRIC",
-                            expr_seed=f"{ob_seed}::objMatchExpr",
-                        )
-                        break
-
-                if obj_match_expr_b is None:
-                    # Parent has no metric explicitly sourced from from_attribute
-                    # (bind attribute auto-synthesized).  Fall back to ATTRIBUTE shape.
-                    obj_match_expr_b = _make_expression(
-                        label=parent_attr_label,
-                        origin_id=ob_match_origin_id_b,
-                        origin_type="ATTRIBUTE",
-                        expr_seed=f"{ob_seed}::objMatchExprFallback",
-                    )
-                    logger.warning(
-                        "Object '%s' metricSet '%s': no parent metric sourced from "
-                        "from_attribute '%s' on metricSet '%s' (Sub-case B); falling "
-                        "back to ATTRIBUTE objectMatchExpression.",
-                        ot.name, ms.local_name, parent_attr_label, parent_ms_local_name,
-                    )
-
-                object_binding = {
-                    "type": "CHAINED_REQUEST",
-                    "matchExpression": match_expr_b,
-                    "objectMatchExpression": obj_match_expr_b,
-                }
-
-        # Case 3 — All other metricSets (chain-parents, singletons, scalar kinds):
-        # objectBinding: null.  Chain-parent keeps null — it is the one metricSet
-        # per resource allowed to be null under the verify rule.
-        # pass — object_binding remains None (null)
+        # Case 4: primary INTERNAL non-scalar → objectBinding=null (Synology pattern).
+        # Case 3: chain-parents, singletons, scalar kinds, cross-type primaries → null.
+        # (object_binding stays None for all these cases)
 
         wire_metric_sets.append({
             "id": ms_id,
