@@ -1,6 +1,6 @@
 adapter_kind: mpb_vcf_content_factory_unifi_integration
 author: VCF Content Factory
-build_number: 11
+build_number: 12
 description: 'Monitors UniFi network devices via the Integration API v1. Collects
   device health (CPU, memory, uptime, load averages, uplink throughput, per-radio
   TX retries) and inventory properties for Access Points, Switches, and the Gateway
