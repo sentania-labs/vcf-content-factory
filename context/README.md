@@ -42,6 +42,7 @@ These are actively maintained and authoritative for their topic.
 | Struts exploration backlog | `struts_exploration_backlog.md` |
 | Known capability limitations | `known_limitations.md` |
 | Management pack authoring conventions | `management_pack_authoring.md` |
+| MP icon library (per-RK SVG hints, when to add new) | `mp_icon_library.md` |
 | MPB design JSON schema + API surface | `mpb_api_surface.md` |
 | MPB chaining YAML authoring grammar | `mp_chain_authoring.md` |
 | MPB chaining wire format | `mpb_chaining_wire_format.md` |

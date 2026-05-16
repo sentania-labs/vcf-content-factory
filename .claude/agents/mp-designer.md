@@ -15,6 +15,8 @@ and produce a design artifact that `mp-author` turns into YAML.
 - `docs/reference-mpb-research.md` — MPB JSON schema reference.
 - `context/mpb_relationships.md` — relationship wiring patterns
   (read this before designing any object hierarchy).
+- `context/mp_icon_library.md` — the icon hint vocabulary
+  (read this before assigning icons to object types).
 - `references/` — existing MP examples (Dale, Brock, Scott's
   Synology) for design patterns.
 - `context/api-maps/<target>.md` — the API map from
@@ -81,6 +83,29 @@ and produce a design artifact that `mp-author` turns into YAML.
   object — they fire when the condition becomes true during
   collection.
 
+### Icons
+- Every object type gets a visual icon in the VCF Ops UI. The
+  factory ships a shared icon library — see
+  `context/mp_icon_library.md` for the current hint vocabulary.
+- Pick a hint for each object type from the library's available
+  silhouettes (currently: `access_point`, `switch`, `gateway`,
+  `client`, `network`, `world`, `adapter_instance`, `host_system`,
+  `datastore`, plus `default` as automatic fallback). The hint
+  is a visual category, not the object type name — reuse is
+  encouraged (e.g. a "WiFi Radio" kind can use `access_point`).
+- **If no existing hint visually fits**, do not shoehorn or silently
+  fall back to default. Raise a TOOLSET GAP in the design artifact:
+  identify the object type, propose a new hint name (matching the
+  existing `<noun>.svg` convention), and describe the desired
+  silhouette in one sentence. The orchestrator will spawn `tooling`
+  to author the SVG before authoring proceeds.
+- Internal synthetic kinds (root container, relatives) that don't
+  need a distinctive icon can explicitly set `icon: default` —
+  documents the choice and silences the build-time WARN.
+- ARIA_OPS-stitched object types don't actually use the icon
+  (they render under their target adapter kind's icons), but
+  set `icon:` anyway for documentation parity.
+
 ## Wizard interview structure
 
 When designing a new MP, ask the user about:
@@ -125,6 +150,8 @@ Save to `designs/<mp-name>.md`:
 - Identifier: ...
 - Name expression: ...
 - Source request(s): ...
+- Icon hint: `<hint>` (from `context/mp_icon_library.md`)
+  — or: TOOLSET GAP: need new hint `<proposed_name>` — `<one-line silhouette description>`.
 
 | Key | Label | Type | Data Type | Source |
 |---|---|---|---|---|
