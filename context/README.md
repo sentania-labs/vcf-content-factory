@@ -57,6 +57,7 @@ These are actively maintained and authoritative for their topic.
 | Auth source wire formats | `auth_vidb_oauth_flow.md`, `auth_source_wire_formats.md` |
 | Framework review + VCF Ops API surface snapshot | `framework_review_2026_04_18.md`, `vcf_operations_api_surface.md` |
 | Bug report: .pak isUnremovable not enforced | `bug_report_pak_isunremovable_not_enforced.md` |
+| Federation Aggregator permanently breaks ARIA_OPS-stitching MPs | `federation_breaks_aria_ops_stitching.md` |
 | QA acceptance audit trail | `qa_log.md` |
 | Recon log (live instance queries) | `recon_log.md` |
 
@@ -78,3 +79,4 @@ reflect current state.
 | `unifi_integration_filter_probe_2026_05_08.md` | 2026-05-08 | UniFi Integration API filter syntax probe |
 | `mpb_import_investigation.md` | 2026-05-13 | MPB design import failure investigation |
 | `vsphere_storage_paths_v2_plan.md` | 2026-05-13 | vSphere Storage Paths v2 ARIA_OPS stitching plan |
+| `vcf_managed_vmware_authz_investigation_2026_05_15.md` | 2026-05-15 | SDK MPs blocked from VCF-managed VMWARE adapter — running activity log |

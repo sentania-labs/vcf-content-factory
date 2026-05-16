@@ -11,7 +11,8 @@ Key structural facts:
     - <adapter_dir>.jar  — the adapter runtime JAR (generated per-adapter via
       JVM constant-pool patching; see _generate_adapter_jar())
     - <adapter_dir>/lib/*.jar  — shared library JARs (same across all MPB paks)
-    - <adapter_dir>/conf/design.json  — our rendered MPB design JSON
+    - <adapter_dir>/conf/design.json   — flat factory-grammar format (adapter kind registration)
+    - <adapter_dir>/conf/export.json  — MPB UI exchange format (adapter kind registration)
     - <adapter_dir>/conf/template.json — MPB native flat format; SHA256 baked
       into the adapter class; required by the Gen-2 runtime for SHA validation
     - <adapter_dir>/conf/describe.xml  — adapter kind XML (generated from design)
@@ -1299,16 +1300,19 @@ def _generate_version_txt(mp: ManagementPackDef) -> str:
 def _generate_manifest(mp: ManagementPackDef) -> str:
     """Generate manifest.txt JSON for the pak root.
 
-    Fix 1: For preset:none paks, the MPB-built reference emits empty script
-    entries rather than script command strings.  Authenticated paks retain the
-    script references (post-install.py etc.) that trigger redescribe/content
-    import on the target instance.
-    """
-    src = mp.source
-    auth = src.auth if src else None
-    preset = auth.preset if auth else "none"
-    no_auth = (preset == "none")
+    All paks — auth or no-auth — emit populated script slots and bundle the
+    matching script files.  post-install.py triggers ops-cli redescribe, which
+    is what registers the adapter kind after install.  Omitting it (the former
+    "Fix 1" no-auth branch) caused the adapter kind to never appear in
+    getIntegrations on devel and hard-failed at "Applied Adapter Pre Script"
+    on prod, because VCF Ops expects the three script slots to be populated
+    together.  Auth state is irrelevant to the install pipeline.
 
+    MPB-built paks ship empty script slots and no script files; factory paks
+    intentionally diverge here to gain post-install automation.
+    pak-compare BLOCKING/WARNING on these fields is expected and acceptable.
+    See context/mp_format_comparison_2026_05_15.md §item 7.
+    """
     version_str = f"{mp.version}.{mp.build_number}"
     manifest = {
         "display_name": mp.name,
@@ -1316,18 +1320,20 @@ def _generate_manifest(mp: ManagementPackDef) -> str:
         "description": mp.description,
         "version": version_str,
         "run_scripts_on_all_nodes": "true",
-        "vcops_minimum_version": "7.5.0",
+        # vcops_minimum_version: bumped to 8.10.0 to match MPB-built paks (2026-05-15).
+        # MPB ships "8.10.0"; the previous factory value "7.5.0" invited install on
+        # older VCF Ops releases that lack the Gen-2 MPB adapter runtime.
+        # See context/mp_format_comparison_2026_05_15.md §item 6.
+        "vcops_minimum_version": "8.10.0",
         "disk_space_required": 500,
         "eula_file": "eula.txt",
         "platform": ["Windows", "Linux Non-VA", "Linux VA"],
         "vendor": mp.author,
         "pak_icon": "default.png",
         "license_type": f"adapter:{mp.adapter_kind}",
-        # Fix 1: no-auth paks use empty script entries (matches MPB-built reference).
-        # Authenticated paks retain script references for post-install automation.
-        "pak_validation_script": {"script": "" if no_auth else "python validate.py"},
-        "adapter_pre_script": {"script": "" if no_auth else "python preAdapters.py"},
-        "adapter_post_script": {"script": "" if no_auth else "python post-install.py"},
+        "pak_validation_script": {"script": "python validate.py"},
+        "adapter_pre_script": {"script": "python preAdapters.py"},
+        "adapter_post_script": {"script": "python post-install.py"},
         "adapters": ["adapters.zip"],
         "adapter_kinds": [mp.adapter_kind],
     }
@@ -1610,12 +1616,31 @@ def _build_adapters_zip(
             )
 
         # conf/ files
-        # design.json — flat factory-grammar format (read by some internal tooling)
+        # design.json — flat factory-grammar format.  BOTH design.json and
+        # export.json are required in conf/ for adapter-kind registration.
+        #
+        # History: The 2026-04-18 Synology pak investigation established that the
+        # adapter runtime needs both files — silently failing adapter-kind
+        # registration when only export.json was present.  On 2026-05-15 this
+        # rule was inferred to be obsolete based on MPB UI exports shipping only
+        # export.json; design.json was removed from pak builds.  That removal
+        # caused "Applied Adapter (Failed)" on prod when vSphere Storage Paths
+        # 2.0.0.6 was installed (design.json absent vs 2.0.0.5 which had it and
+        # installed cleanly, albeit collecting zero metrics).
+        #
+        # The 2026-04-18 rule was empirically established; the 2026-05-15
+        # removal was inferential.  Empirical wins.  The MPB designer's UI
+        # export path evidently injects design.json via a separate mechanism —
+        # factory pak builds must include it explicitly.
+        #
+        # Do NOT remove design.json without strong evidence (confirmed working
+        # prod install) that the 9.0.x runtime no longer needs it.
+        # See context/mp_format_comparison_2026_05_15.md §item 8 (REVERTED) and
+        # context/mpb_api_surface.md §"Pak conf/ layout".
         zf.writestr(f"{adapter_dir}/conf/design.json", design_json_str.encode("utf-8"))
         # export.json — MPB UI exchange format (read by the adapter runtime at
-        # initialization / redescribe; required for adapter kind registration).
-        # Rubrik-1.1.0.25.pak carries BOTH files; absence of export.json is what
-        # caused the silent adapter-kind registration failure on earlier Synology builds.
+        # initialization / redescribe; required for adapter kind registration
+        # alongside design.json — see note above).
         zf.writestr(f"{adapter_dir}/conf/export.json", export_json_str.encode("utf-8"))
         # template.json — MPB native flat format required by the Gen-2 adapter JAR.
         #
@@ -1763,50 +1788,46 @@ def build_pak(
         relationship_strategy=relationship_strategy,
     )
 
-    # Determine whether this is a no-auth pak (Fix 1: skip script files).
-    _src = mp.source
-    _auth = _src.auth if _src else None
-    _preset = _auth.preset if _auth else "none"
-    _no_auth = (_preset == "none")
-
     # 7. Assemble the top-level .pak ZIP
     with zipfile.ZipFile(pak_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.txt", manifest_str.encode("utf-8"))
         zf.writestr("eula.txt", eula_bytes)
         zf.writestr("default.png", icon_bytes)
 
-        if not _no_auth:
-            # Install scripts — read from templates.
-            # Fix 1: omit script files entirely for no-auth paks (MPB-built
-            # no-auth reference has no script files in the pak root).
-            for script_name in [
-                "validate.py",
-                "preAdapters.py",
-                "postAdapters.py",
-                "post-install-fast.sh",
-            ]:
-                script_path = _TEMPLATES_DIR / script_name
-                if script_path.exists():
-                    zf.writestr(script_name, script_path.read_bytes())
-                else:
-                    zf.writestr(script_name, b"# placeholder\n")
-
-            # post-install.py — template substitution for adapter_kind and adapter_dir
-            post_install_path = _TEMPLATES_DIR / "post-install.py"
-            if post_install_path.exists():
-                post_install_str = post_install_path.read_text()
-                post_install_str = post_install_str.replace(
-                    "{adapter_kind}", ak
-                ).replace(
-                    "{adapter_dir}", f"{ak}_adapter3"
-                )
-                zf.writestr("post-install.py", post_install_str.encode("utf-8"))
+        # Install scripts — always included regardless of auth preset.
+        # post-install.py triggers ops-cli redescribe, which registers the adapter
+        # kind in VCF Ops after install.  Omitting these scripts (the former no-auth
+        # branch) caused the adapter kind to never appear in getIntegrations on devel
+        # and hard-failed at "Applied Adapter Pre Script" on prod.  Auth state is
+        # irrelevant to the install pipeline; every pak needs these scripts.
+        for script_name in [
+            "validate.py",
+            "preAdapters.py",
+            "postAdapters.py",
+            "post-install-fast.sh",
+        ]:
+            script_path = _TEMPLATES_DIR / script_name
+            if script_path.exists():
+                zf.writestr(script_name, script_path.read_bytes())
             else:
-                zf.writestr("post-install.py", b"import sys; sys.exit(0)\n")
+                zf.writestr(script_name, b"# placeholder\n")
 
-            # Also include post-install.sh as a simple bash stub (some installers
-            # invoke it directly; mirrors reference pak layout)
-            zf.writestr("post-install.sh", b"#!/bin/bash\nexit 0\n")
+        # post-install.py — template substitution for adapter_kind and adapter_dir
+        post_install_path = _TEMPLATES_DIR / "post-install.py"
+        if post_install_path.exists():
+            post_install_str = post_install_path.read_text()
+            post_install_str = post_install_str.replace(
+                "{adapter_kind}", ak
+            ).replace(
+                "{adapter_dir}", f"{ak}_adapter3"
+            )
+            zf.writestr("post-install.py", post_install_str.encode("utf-8"))
+        else:
+            zf.writestr("post-install.py", b"import sys; sys.exit(0)\n")
+
+        # Also include post-install.sh as a simple bash stub (some installers
+        # invoke it directly; mirrors reference pak layout)
+        zf.writestr("post-install.sh", b"#!/bin/bash\nexit 0\n")
 
         # adapters.zip
         zf.writestr("adapters.zip", adapters_zip_bytes)

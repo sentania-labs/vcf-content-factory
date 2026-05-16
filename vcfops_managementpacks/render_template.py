@@ -156,11 +156,37 @@ def _derive_key(expr_label: str) -> str:
 
 
 def _wrap_quote_body(label: str) -> str:
-    """Wrap a label in the MPB template expression format.
+    """Wrap a label in the MPB template BODY expression format.
 
     Template format: ``"${@@@MPB_QUOTE_BODY <label> @@@MPB_QUOTE}"``
+
+    Use this for expressions that read from the parent/child *response body*
+    (listExpression, attributeExpression, metric expressions, parentRequest
+    parameters).  Do NOT use for objectBinding.requestMatchIdExpression — see
+    _wrap_quote_request_parameters().
     """
     return f"${{@@@MPB_QUOTE_BODY {label} @@@MPB_QUOTE}}"
+
+
+def _wrap_quote_request_parameters(label: str) -> str:
+    """Wrap a label in the MPB template REQUEST_PARAMETERS expression format.
+
+    Template format: ``"${@@@MPB_QUOTE_REQUEST_PARAMETERS <label> @@@MPB_QUOTE}"``
+
+    Use this for objectBinding.requestMatchIdExpression.  The chaining
+    parameter name (e.g. "id_device_stats_ap") is substituted into the
+    sub-request URL via requestParameters, so it lives in REQUEST_PARAMETERS
+    scope — NOT BODY scope.  Using BODY here causes the runtime to look for
+    the label in the response body rather than the request parameters, which
+    returns no match and silently drops all metrics for that resource.
+
+    Evidence: prod adapter logs 2026-05-16 — every chained request WARN:
+      "requestMatchIdExpression ${@@@MPB_QUOTE_BODY id_device_stats_ap
+      @@@MPB_QUOTE} returned matches did not return a result."
+    MPB-built reference pak (VCFContentFactoryUniFiIntegration-1001.pak,
+    template.json) uses @@@MPB_QUOTE_REQUEST_PARAMETERS for this field.
+    """
+    return f"${{@@@MPB_QUOTE_REQUEST_PARAMETERS {label} @@@MPB_QUOTE}}"
 
 
 def _convert_session_request(design_req: Dict) -> Dict:
@@ -309,15 +335,23 @@ def _convert_object_binding(
                                                            originType: "METRIC", ...}]}}
        Template shape:
          {type: "ATTRIBUTE_TO_PROPERTY", id: <uuid>,
-          requestMatchIdExpression: "${@@@MPB_QUOTE_BODY <req_attr> @@@MPB_QUOTE}",
+          requestMatchIdExpression: "${@@@MPB_QUOTE_REQUEST_PARAMETERS <req_attr> @@@MPB_QUOTE}",
           resourceMatcherExpression: "${<matcher-uuid>}",
           resourceMatchers: [{id: "<matcher-uuid>", type: "IDENTIFIER",
                               key: "<prop_key>", regex: null}]}
 
-       Cross-reference contract (confirmed from Synology reference template and
-       round-5 prod error logs, 2026-05-09):
-         - requestMatchIdExpression uses @@@MPB_QUOTE_BODY format — it is the
-           JSON attribute path in the secondary response (e.g. "id").
+       Cross-reference contract (corrected 2026-05-16, prod log evidence):
+         - requestMatchIdExpression uses @@@MPB_QUOTE_REQUEST_PARAMETERS format.
+           The chaining parameter name (e.g. "id_device_stats_ap") is the value
+           injected into the sub-request URL path via requestParameters — it
+           lives in REQUEST_PARAMETERS scope, NOT in the response body.
+           Using @@@MPB_QUOTE_BODY causes the runtime to search the body,
+           returns no match, and silently drops all metrics for that resource.
+           Prod evidence (2026-05-16): every chained request logged WARN
+           "requestMatchIdExpression ${@@@MPB_QUOTE_BODY id_device_stats_ap
+           @@@MPB_QUOTE} returned matches did not return a result."
+           MPB-built reference (VCFContentFactoryUniFiIntegration-1001.pak,
+           template.json) uses @@@MPB_QUOTE_REQUEST_PARAMETERS throughout.
          - resourceMatcherExpression uses ${<uuid>} format — the UUID must
            exactly match resourceMatchers[0].id.  Using @@@MPB_QUOTE_BODY here
            causes BuilderFileParseException: "fields referenced in the resource
@@ -380,7 +414,7 @@ def _convert_object_binding(
     return {
         "type": "ATTRIBUTE_TO_PROPERTY",
         "id": _make_id(f"http-ob-{match_expr.get('id', '')}"),
-        "requestMatchIdExpression": _wrap_quote_body(request_attr),
+        "requestMatchIdExpression": _wrap_quote_request_parameters(request_attr),
         "resourceMatcherExpression": f"${{{matcher_id}}}",
         "resourceMatchers": [
             {
@@ -865,6 +899,133 @@ def _convert_relationship(
     }
 
 
+def _aria_ops_bind_metric_key(aria_conf: Dict) -> Optional[str]:
+    """Extract the VMWARE property key used for ARIA_OPS stitching.
+
+    The ariaOpsConf.metricSet contains a metric with usage=ARIA_OPS_REFERENCE_ID.
+    Its expression.expressionParts[0].originId is the VMWARE property identifier
+    key (e.g. "VMEntityName", "VMEntityObjectID").
+
+    This key must be used as resourceMatchers[].key in the template objectBinding
+    so the runtime knows which VMWARE property to match against.
+    """
+    ms = aria_conf.get("metricSet") or {}
+    for metric in ms.get("metrics", []):
+        if metric.get("usage") == "ARIA_OPS_REFERENCE_ID":
+            parts = (metric.get("expression") or {}).get("expressionParts", [])
+            if parts:
+                return parts[0].get("originId")
+    return None
+
+
+def _patch_aria_ops_resource_matchers(
+    requested_metrics: List[Dict],
+    bind_key: Optional[str],
+) -> List[Dict]:
+    """Patch resourceMatchers[].key in objectBinding to use the VMWARE property key.
+
+    _convert_object_binding falls back to the request-attribute label when the
+    objectMatchExpression's originId is not found in metrics_by_id (which only
+    covers metricSets metrics, not ariaOpsConf metrics).  For ARIA_OPS external
+    resources the correct key is the VMWARE identifier property (e.g.
+    "VMEntityName", "VMEntityObjectID") from ariaOpsConf, not the API field label.
+
+    Confirmed from MPB-built vSphere Storage Paths template.json (2026-05-15):
+      HostSystem: resourceMatchers[0].key = "VMEntityName"
+      Datastore:  resourceMatchers[0].key = "VMEntityObjectID"
+    """
+    if not bind_key:
+        return requested_metrics
+    patched = []
+    for rm in requested_metrics:
+        rm = dict(rm)
+        ob = rm.get("objectBinding")
+        if ob and isinstance(ob, dict):
+            ob = dict(ob)
+            matchers = ob.get("resourceMatchers", [])
+            if matchers:
+                matchers = [dict(m) for m in matchers]
+                matchers[0]["key"] = bind_key
+                ob["resourceMatchers"] = matchers
+            rm["objectBinding"] = ob
+        patched.append(rm)
+    return patched
+
+
+def _convert_aria_ops_external_resource(
+    design_resource: Dict,
+    mp_display_name: str,
+) -> Dict:
+    """Convert an ARIA_OPS design resource to template.json externalResources entry.
+
+    ARIA_OPS objects stitch metrics onto existing Aria Ops resource kinds
+    (e.g. VMWARE/HostSystem, VMWARE/Datastore).  In template.json they appear
+    in source.externalResources[] rather than source.resources[].
+
+    Shape (confirmed from MPB-built vSphere Storage Paths template.json, 2026-05-15;
+    see context/mp_format_comparison_2026_05_15.md §item 1):
+
+      {
+        "id":               "<object_id>",          # same as resources[].id
+        "adapterKind":      "VMWARE",               # from ariaOpsConf.adapterType
+        "resourceKind":     "Datastore",            # from ariaOpsConf.objectType (raw, no prefix)
+        "resourceKindName": "Datastore",            # from ariaOpsConf.objectTypeLabel
+        "isListResource":   true,                   # always true for ARIA_OPS
+        "requestedMetrics": [...],                  # same conversion as _convert_resource
+        "metricGroups": {
+          "<mp_display_name>": {
+            "id": "<mp_display_name>",
+            "key": "<mp_display_name>",
+            "childGroups": {}
+          }
+        }
+      }
+
+    Note: resourceKind is the raw object type (e.g. "Datastore"), NOT the
+    adapter-prefixed form ("VMWARE_datastore") used in source.resources[].
+
+    Note: resourceMatchers[].key in each objectBinding is patched to use the
+    VMWARE property identifier key (e.g. "VMEntityName") from ariaOpsConf,
+    since _convert_object_binding cannot resolve this key from metricSets alone.
+    """
+    aria_conf = design_resource.get("ariaOpsConf") or {}
+    adapter_kind_external = aria_conf.get("adapterType", "")
+    resource_kind_raw = aria_conf.get("objectType", "")
+    resource_kind_label = aria_conf.get("objectTypeLabel", resource_kind_raw)
+
+    # requestedMetrics: reuse _convert_resource which handles ARIA_OPS resources
+    # and produces the correct metric/binding conversion.  We only need the
+    # requestedMetrics sub-field from its output.
+    converted = _convert_resource(design_resource, adapter_kind_external)
+    requested_metrics = converted.get("requestedMetrics", [])
+
+    # Patch resourceMatchers[].key to use the VMWARE property identifier key.
+    # _convert_object_binding falls back to the request-field label for ARIA_OPS
+    # because the ariaOpsConf bind metric UUID is not in the metricSets lookup.
+    bind_key = _aria_ops_bind_metric_key(aria_conf)
+    requested_metrics = _patch_aria_ops_resource_matchers(requested_metrics, bind_key)
+
+    # metricGroups: one entry keyed by the MP display name, matching MPB's output.
+    # This tells the runtime which metric group the pushed metrics belong to.
+    metric_groups = {
+        mp_display_name: {
+            "id": mp_display_name,
+            "key": mp_display_name,
+            "childGroups": {},
+        }
+    }
+
+    return {
+        "id": design_resource["id"],
+        "adapterKind": adapter_kind_external,
+        "resourceKind": resource_kind_raw,
+        "resourceKindName": resource_kind_label,
+        "isListResource": True,
+        "requestedMetrics": requested_metrics,
+        "metricGroups": metric_groups,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Main transform function
 # ---------------------------------------------------------------------------
@@ -938,14 +1099,14 @@ def render_template_json(
         requests_template[req_id] = converted
 
     # ---- resources ---------------------------------------------------------
-    # ARIA_OPS objects are excluded from template.json entirely.  They stitch
-    # onto existing Aria Ops resource kinds (e.g. HostSystem, Datastore) and
-    # do not define their own adapter-owned resourceKind.  Including them here
-    # would produce resourceKind values like "VMWARE_hostsystem" which are not
-    # mpb_-prefixed and fail the pak runtime validator.  ARIA_OPS objects
-    # appear only in export.json (via the ariaOpsConf block).
-    # Confirmed from MPB-built reference pak (tmp/devel_mpb_built.pak):
+    # ARIA_OPS objects are excluded from source.resources[] in template.json.
+    # They stitch onto existing Aria Ops resource kinds (e.g. HostSystem,
+    # Datastore) and do not define their own adapter-owned resourceKind.
+    # Including them in resources[] would produce resourceKind values like
+    # "VMWARE_hostsystem" which are not mpb_-prefixed and fail the pak runtime
+    # validator.  Confirmed from MPB-built reference pak (tmp/devel_mpb_built.pak):
     # source.resources == [] despite 2 ARIA_OPS objects in the design.
+    # ARIA_OPS objects go into source.externalResources[] instead (see below).
     design_resources = design_source.get("resources", []) or []
     resources_template = [
         _convert_resource(r, ak)
@@ -969,6 +1130,21 @@ def render_template_json(
         if converted_rel is not None:
             relationships_template.append(converted_rel)
 
+    # ---- externalResources -------------------------------------------------
+    # ARIA_OPS objects appear in template.json's externalResources[] (not
+    # resources[]).  Convert each ARIA_OPS design resource into the template
+    # externalResources shape (adapterKind, resourceKind, resourceKindName,
+    # isListResource, requestedMetrics, metricGroups).
+    # Fix 2026-05-15: previously passed through design-format list unchanged;
+    # template runtime requires converted format with requestedMetrics.
+    # See context/mp_format_comparison_2026_05_15.md §item 1.
+    aria_ops_resources = [r for r in design_resources if r.get("type") == "ARIA_OPS"]
+    mp_display_name = pak_settings_template.get("name", "")
+    external_resources_template = [
+        _convert_aria_ops_external_resource(r, mp_display_name)
+        for r in aria_ops_resources
+    ]
+
     # ---- source section ----------------------------------------------------
     source_template: Dict[str, Any] = {
         "basePath": design_source.get("basePath", ""),
@@ -977,7 +1153,7 @@ def render_template_json(
         "configuration": config_template,
         "requests": requests_template,
         "resources": resources_template,
-        "externalResources": design_source.get("externalResources", []),
+        "externalResources": external_resources_template,
         # Always emit empty events list in template.json.  The pak runtime
         # parses ALL json files in the adapter conf directory; events in
         # design-import format (from render_mp_design_json) cause a schema

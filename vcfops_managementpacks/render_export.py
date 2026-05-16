@@ -101,82 +101,56 @@ from .render import render_mp_design_json, _render_global_headers, _make_id
 _FLAT_ONLY_KEYS: frozenset = frozenset({
     # Renderer internal annotation — never in exchange format:
     "_renderer_note",
-    # NOTE: example/regex/regexOutput were previously stripped here but
-    # the jcox reference (confirmed 2026-05-14) has them on ALL
-    # expressionParts — metrics, relationships, objectBindings, chaining.
-    # They are REQUIRED by the import parser. Do not strip.
+    # example / regex / regexOutput: stripped universally across ALL contexts
+    # (metric expressionParts, relationship child/parentExpression, objectBinding
+    # sub-expressions, dataModelList attributes, chaining params).
+    #
+    # Previous policy (2026-05-14): preserved these based on jcox-au_vmware
+    # unifi_MP_Builder_Design.json ground truth which had them on all expressionParts.
+    # The `_in_chaining`, `_in_objectbinding`, `_in_relationship` exception flags
+    # enforced this preservation in _strip_flat_only_fields.
+    #
+    # Superseded (2026-05-15): MPB UI exports for both UniFi and vSphere Storage
+    # Paths strip them universally — expressionParts in metrics, relationships,
+    # objectBindings, and chaining all lack these fields in the live MPB output.
+    # The jcox reference appears to have been captured under an older MPB build;
+    # the 2026-05-15 live evidence is more authoritative.  Strip everywhere to
+    # match current MPB behavior.
+    # See context/mp_format_comparison_2026_05_15.md §item 2.
+    "example",
+    "regex",
+    "regexOutput",
 })
 
 
-def _strip_flat_only_fields(
-    obj: Any,
-    _in_chaining: bool = False,
-    _in_objectbinding: bool = False,
-    _in_relationship: bool = False,
-) -> Any:
+def _strip_flat_only_fields(obj: Any) -> Any:
     """Recursively remove all flat-format-only keys from the exchange output.
 
     The flat format (render.py) emits several fields that MPB's exchange
-    format does not accept.  Their presence causes HTTP 400 "Invalid input
-    format" on POST /internal/mpbuilder/designs/import.
+    format does not include.  Stripped universally across all contexts
+    (metrics, relationships, objectBindings, chainingSettings, dataModelLists):
 
-    Fields stripped (confirmed absent in known-good MPB export, 2026-04-17):
-      - example       — on expressionParts, dataModelList attributes,
-                        session variables
+      - example       — on expressionParts, dataModelList attributes, params
       - regex         — on expressionParts (null when no regex used)
       - regexOutput   — on expressionParts (empty string)
-      - _renderer_note — internal renderer annotation on relationships and
-                         expression parts
+      - _renderer_note — internal renderer annotation
 
-    Exception 1: when inside a chainingSettings block, example/regex/regexOutput
-    on params[] and their expressionParts[] are REQUIRED by MPB (confirmed from
-    HoL-2501-12 GitLab-Basic.json reference, 2026-04-19).  Those fields are
-    preserved when _in_chaining=True.
-
-    Exception 2: when inside an objectBinding block, example/regex/regexOutput
-    on matchExpression/objectMatchExpression expressionParts[] are present in
-    jcox-au_vmware/unifi_MP_Builder_Design.json (exchange format ground truth,
-    2026-04-29).  Those fields are preserved when _in_objectbinding=True.
-
-    Exception 3: when inside a relationship block, example/regex/regexOutput
-    on childExpression/parentExpression expressionParts[] are present in
-    jcox-au_vmware/unifi_MP_Builder_Design.json.  Preserved when
-    _in_relationship=True.
+    Policy superseded 2026-05-15: previous code preserved example/regex/
+    regexOutput inside chainingSettings (_in_chaining), objectBinding
+    (_in_objectbinding), and relationship (_in_relationship) contexts based
+    on jcox-au_vmware ground truth (2026-05-14).  Live MPB UI exports for
+    both UniFi and vSphere Storage Paths (2026-05-15) strip them universally.
+    Exception flags and their preservation logic have been removed.
+    See context/mp_format_comparison_2026_05_15.md §item 2.
     """
     if isinstance(obj, dict):
-        result = {}
-        for k, v in obj.items():
-            if k == "chainingSettings":
-                result[k] = _strip_flat_only_fields(
-                    v, _in_chaining=True, _in_objectbinding=False, _in_relationship=False
-                )
-                continue
-            if k == "objectBinding":
-                result[k] = _strip_flat_only_fields(
-                    v, _in_chaining=False, _in_objectbinding=True, _in_relationship=False
-                )
-                continue
-            if k == "relationship":
-                result[k] = _strip_flat_only_fields(
-                    v, _in_chaining=False, _in_objectbinding=False, _in_relationship=True
-                )
-                continue
-            if (_in_chaining or _in_objectbinding or _in_relationship) and k in _FLAT_ONLY_KEYS:
-                result[k] = v
-                continue
-            if k in _FLAT_ONLY_KEYS:
-                continue
-            result[k] = _strip_flat_only_fields(
-                v, _in_chaining=_in_chaining, _in_objectbinding=_in_objectbinding, _in_relationship=_in_relationship
-            )
-        return result
+        return {
+            k: _strip_flat_only_fields(v)
+            for k, v in obj.items()
+            if k not in _FLAT_ONLY_KEYS
+        }
     if isinstance(obj, list):
-        return [
-            _strip_flat_only_fields(
-                item, _in_chaining=_in_chaining, _in_objectbinding=_in_objectbinding, _in_relationship=_in_relationship
-            )
-            for item in obj
-        ]
+        return [_strip_flat_only_fields(item) for item in obj]
     return obj
 
 
@@ -245,6 +219,11 @@ _MPB_STANDARD_CONFIG_TEMPLATE: List[Dict[str, Any]] = [
         "id": "mpb_concurrent_requests",
         "label": "Maximum Concurrent Requests",
         "key": "mpb_concurrent_requests",
+        # Template default "2" matches MPB default.  Per-MP YAML overrides this via
+        # src.max_concurrent (e.g. UniFi ships 10, Storage Paths ships 5).
+        # MPB ships 2 / Verify; factory ships higher concurrency / No Verify
+        # intentionally — parallel collection, lab-friendly TLS.
+        # See context/mp_format_comparison_2026_05_15.md §item 5.
         "defaultValue": "2",
         "description": "The maximum number of request that can be run simultaneously.",
         "advanced": True,
@@ -265,6 +244,10 @@ _MPB_STANDARD_CONFIG_TEMPLATE: List[Dict[str, Any]] = [
         "id": "mpb_ssl_config",
         "label": "SSL Configuration",
         "key": "mpb_ssl_config",
+        # Template default "Verify" matches MPB default.  Per-MP YAML overrides this
+        # via src.ssl (e.g. UniFi and Storage Paths ship "No Verify" for lab TLS).
+        # MPB ships "Verify"; factory ships "No Verify" intentionally for lab environments.
+        # See context/mp_format_comparison_2026_05_15.md §item 5.
         "defaultValue": "Verify",
         "description": "The SSL mode to use when connecting to the target. Can be configured without SSL (No SSL), to use SSL but do not verify the target's certificate (No Verify), or to use SSL and verify the target's certificate (Verify).",
         "advanced": True,
@@ -409,33 +392,36 @@ def _build_response_envelope(
 def _strip_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any]:
     """Convert a flat request object to exchange format.
 
-    Key rules confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json
-    (exchange format ground truth, 2026-05-14):
+    Key rules (updated 2026-05-15 against MPB UI exports for UniFi and
+    vSphere Storage Paths — see context/mp_format_comparison_2026_05_15.md):
 
-    1. designId: always emitted as null (confirmed present on every request in
-       reference, value null). Earlier rule (drop entirely) was wrong.
+    1. designId: NOT emitted.
+       Evidence (2026-05-15): MPB-built UniFi export — request keys are
+       ['body', 'chainingSettings', 'headers', 'id', 'method', 'name',
+       'params', 'path', 'response'] — no designId.
+       Previous rule (always emit null) reversed by this evidence.
 
-    2. chainingSettings: always emitted — non-null dict when chained, null when
-       not chained. Earlier rule (absent when null) was wrong; reference has the
-       key with null value on non-chained requests.
-       chainingSettings.params[] is kept as-is from the flat render.  Earlier
-       e135142 strip (params: []) was wrong — jcox has fully-populated params[].
-       The collision that motivated e135142 is fixed in render.py via
-       _chain_wire_key() (id_device instead of device_id).
+    2. chainingSettings: emitted ONLY when non-null (i.e., only for chained
+       requests).  Drop the key when null.
+       Previous rule (2026-05-14, jcox): always emitted even when null.
+       Superseded (2026-05-15): MPB exports drop the key on non-chaining requests.
+       params[].example stripped (MPB-built UniFi export, 2026-05-15 — param
+       keys are ['attributeExpression','id','key','label','listId','usage'],
+       no 'example').
 
-    3. paging: always emitted — populated dict when pagination is in use, null
-       when absent. Reference has the key with null value on non-paginated requests.
-       Earlier rule (never emit) was wrong; MPB requires the key present.
+    3. paging: NOT emitted (same evidence as designId — absent in MPB export).
+       Previous rule (always emit, even null) was wrong.
 
-    4. response: full envelope required — id, log, result, status, endTime,
-       duration, startTime, toolkitId, errorMessage — plus result.body and
-       result.headers inside the result block. Earlier rule (keep only
-       result.{responseCode, dataModelLists}) was wrong; the full envelope is
-       present on EVERY request in the reference (2026-05-14).
+    4. response: minimal shape — {result: {responseCode, dataModelLists}}.
+       Previous rule (full envelope with id/log/status/toolkitId/etc.) was
+       based on jcox-au_vmware reference (2026-05-14).  Superseded (2026-05-15):
+       MPB UI exports for both UniFi and Storage Paths use the minimal shape.
+       The full envelope (_build_response_envelope) is retained in code for
+       historical reference but is no longer used on this path.
 
-    5. dataModelList entries: label and parentListId are KEPT.  jcox has both
-       on every DML entry.  Earlier _DML_DROP {"label","parentListId"} rule was
-       an over-strip from a single Synology sample.
+    5. dataModelLists: the ghost {"id": "base", "key": [], "attributes": []}
+       entry emitted by the factory when there are no base-level attributes is
+       stripped.  MPB never emits this empty base entry.
 
     params.id is absent in our flat format already (render.py strips it).
     """
@@ -449,18 +435,10 @@ def _strip_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any
         "headers": req.get("headers") or [],
         "params": req.get("params") or [],
     }
-    # designId and paging are NOT emitted.
-    # Evidence (2026-05-15): /tmp/mpb_pak_inspect/mpb_export.json — all request
-    # entries have keys ['body', 'chainingSettings', 'headers', 'id', 'method',
-    # 'name', 'params', 'path', 'response'] — no designId, no paging.
-    # Previous rule (always emit both as null) reversed by this MPB-built evidence.
+    # designId and paging are NOT emitted (absent in MPB-built UniFi export, 2026-05-15).
 
-    # Emit chainingSettings: non-null dict when chained, null otherwise.
-    # params[] is kept as-is from the flat render output — jcox UniFi reference
-    # (ground truth, 2026-05-14) has fully-populated params[] on every chained
-    # request.  Strip "example" from each param entry: MPB-built UniFi export
-    # (2026-05-15) shows param keys ['attributeExpression','id','key','label',
-    # 'listId','usage'] — no 'example' field.
+    # chainingSettings: emit only when non-null.
+    # Strip "example" from params[] (MPB-built UniFi export, 2026-05-15).
     chain = req.get("chainingSettings")
     if chain and isinstance(chain, dict) and chain.get("params"):
         chain = dict(chain)
@@ -468,36 +446,33 @@ def _strip_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any
             {k: v for k, v in p.items() if k != "example"}
             for p in chain["params"]
         ]
-    r["chainingSettings"] = chain
+    if chain is not None:
+        r["chainingSettings"] = chain
+    # else: key omitted entirely when null (matches MPB 2026-05-15 behavior)
 
-    # Build full response envelope.
-    # dataModelList entries: keep all fields including label and parentListId.
-    # jcox UniFi reference (ground truth exchange format, 2026-05-14) has BOTH
-    # 'label' and 'parentListId' on every DML entry, and 'label'+'example' on
-    # every attribute.  The previous _DML_DROP {"label", "parentListId"} rule
-    # was an over-strip based on absence in the mpb_reference_none_auth.json
-    # single-level sample.  Removed per strip policy (2026-05-14 audit).
-    # Evidence: references/jcox-au_vmware/unifi_MP_Builder_Design.json
+    # response: minimal shape {result: {responseCode, dataModelLists}}.
+    # Strip the ghost {"id": "base", "key": [], "attributes": []} base entry
+    # from dataModelLists — MPB never emits this empty list (Category D, report).
     resp = req.get("response")
     if resp and isinstance(resp, dict):
         result = resp.get("result", {})
         raw_dmls = result.get("dataModelLists", [])
-        dmls = list(raw_dmls)
-        result_body = {
-            "body": "Imported request, execute to get accurate body",
-            "headers": [],
-            "responseCode": result.get("responseCode", 200),
+        # Filter out the ghost base entry (empty attributes, id=="base")
+        dmls = [
+            dml for dml in raw_dmls
+            if not (dml.get("id") == "base" and not dml.get("attributes"))
+        ]
+        response_code = result.get("responseCode", 200)
+    else:
+        dmls = []
+        response_code = 200
+
+    r["response"] = {
+        "result": {
+            "responseCode": response_code,
             "dataModelLists": dmls,
         }
-    else:
-        result_body = {
-            "body": "Imported request, execute to get accurate body",
-            "headers": [],
-            "responseCode": 200,
-            "dataModelLists": [],
-        }
-
-    r["response"] = _build_response_envelope(req_id, adapter_kind, result_body)
+    }
 
     return r
 
@@ -552,46 +527,53 @@ def _remap_object_binding(ob: Optional[Dict[str, Any]]) -> Optional[Dict[str, An
 def _strip_metric_set(ms: Dict[str, Any]) -> Dict[str, Any]:
     """Strip flat-format-only fields from a metricSet dict.
 
-    objectBinding rules (confirmed from ground truth 2026-05-14):
-    - Always emit the "objectBinding" key, even when null.
-      Both jcox-au_vmware/unifi_MP_Builder_Design.json and
-      sentania_aria_operations_dsm_mp/Synology DSM MP.json have
-      "objectBinding": null present on every primary/chain-parent metricSet.
-      Earlier code popped the key when null — that was wrong (Bug 3).
+    objectBinding rules (updated 2026-05-15):
+    - Drop the "objectBinding" key entirely when null.
+      Previous rule (2026-05-14, jcox): always emit even when null, because
+      jcox-au_vmware/unifi_MP_Builder_Design.json had objectBinding: null
+      on every primary/chain-parent metricSet.
+      Superseded (2026-05-15): MPB UI exports for both UniFi and Storage Paths
+      drop the key when null.  The field is listed in mpb_api_surface.md
+      "Fields present in flat format that MPB's import parser rejects" for
+      null values.  See context/mp_format_comparison_2026_05_15.md §item 3.
     - Remap type: "CHAINED_REQUEST" → "ATTRIBUTE_TO_PROPERTY" for exchange
-      format.  "CHAINED_REQUEST" is our flat-format internal marker (Bug 1).
+      format.  "CHAINED_REQUEST" is our flat-format internal marker.
     - Full expression structures (expressionText + expressionParts) are present
-      in the flat render output after the render.py Sub-case B fix (Bug 2).
-      The _strip_flat_only_fields pass preserves example/regex/regexOutput
-      inside objectBinding (see _in_objectbinding flag).
+      in the flat render output after the render.py Sub-case B fix.
 
     Recurses into metrics[].
     """
     result = dict(ms)
-    # Always emit objectBinding key — null is valid and required by the exchange
-    # format parser (previously this popped null objectBindings, which was wrong).
-    result["objectBinding"] = _remap_object_binding(result.get("objectBinding"))
+    # objectBinding: emit only when non-null (drop key when null).
+    raw_ob = result.get("objectBinding")
+    remapped_ob = _remap_object_binding(raw_ob)
+    if remapped_ob is not None:
+        result["objectBinding"] = remapped_ob
+    else:
+        result.pop("objectBinding", None)
     if "metrics" in result:
         result["metrics"] = [_strip_metric(m) for m in result["metrics"]]
     return result
 
 
 def _strip_internal_object_info(ioi: Dict[str, Any]) -> Dict[str, Any]:
-    """Pass internalObjectInfo through to exchange format unchanged.
+    """Strip flat-format-only fields from internalObjectInfo.
 
-    Earlier rule stripped id from internalObjectInfo — confirmed wrong from
-    jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14): ALL INTERNAL
-    objects have internalObjectInfo.id present with a non-null value.
+    Strips: id
+      Previous rule (2026-05-14, jcox): preserved id — jcox-au_vmware UniFi
+      reference had internalObjectInfo.id present with a non-null value.
+      Superseded (2026-05-15): MPB UI exports for UniFi and vSphere Storage
+      Paths drop internalObjectInfo.id entirely.  The field is listed in
+      mpb_api_surface.md "Fields present in flat format that MPB's import
+      parser rejects".  The jcox reference was an older MPB version.
+      See context/mp_format_comparison_2026_05_15.md §item 3.
 
-    Earlier rule also stripped nameMetricExpression.expressionParts[].label —
-    confirmed wrong from jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14):
-    ALL nameMetricExpression.expressionParts[] have 'label' present with a
-    non-null value (e.g. "Name-Client", "Name-Device", etc.).
-    Previous evidence (absent in mpb_reference_none_auth.json) was an
-    over-strip from a single-level sample; jcox is the authoritative reference.
-    Removed per strip policy (2026-05-14 audit).
+    Preserves: nameMetricExpression (including expressionParts[].label) —
+      MPB-built exports do have nameMetricExpression; the label field on
+      expressionParts is retained (separate from example/regex/regexOutput
+      which are stripped by _strip_flat_only_fields).
     """
-    return dict(ioi)
+    return {k: v for k, v in ioi.items() if k != "id"}
 
 
 def _strip_object(obj: Dict[str, Any]) -> Dict[str, Any]:
@@ -606,8 +588,8 @@ def _strip_object(obj: Dict[str, Any]) -> Dict[str, Any]:
       - ariaOpsConf: dropped (not emitted).
         Previous rule (emit null) was reversed by same evidence: INTERNAL objects
         have no ariaOpsConf key at all.
-      - internalObjectInfo: passed through as-is (id and nameMetricExpression
-        .expressionParts[].label both kept).
+      - internalObjectInfo: id stripped; nameMetricExpression preserved.
+        (2026-05-15: MPB drops id; _strip_internal_object_info() now removes it.)
       - metricSets[].metrics[].key: stripped.
       - metricSets[].metrics[].timeseries: stripped (null-value-only difference).
 
@@ -663,17 +645,40 @@ def _strip_event(evt: Dict[str, Any]) -> Dict[str, Any]:
 def _strip_session_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any]:
     """Strip a session/test request to exchange shape.
 
-    Earlier rule (responseCode only, no body/headers/dataModelLists) was derived
-    from an older reference.  The jcox-au_vmware/unifi_MP_Builder_Design.json
-    (2026-05-14) is the ground-truth exchange format and shows testRequest using
-    the SAME full response envelope as regular requests — including body, headers,
-    and dataModelLists inside result, plus the outer id/log/status/toolkitId fields.
+    testRequest response: minimal shape {result: {responseCode: N}}.
+    MPB UI exports for UniFi and Storage Paths (2026-05-15) use this minimal
+    shape for testRequest — no body/headers/dataModelLists.
 
-    This function now delegates to _strip_request for a consistent envelope.
-    Auth session requests (getSession/releaseSession) that genuinely have no
-    dataModelLists will still get an empty list, which is correct.
+    Previous rule (2026-05-14, jcox): full envelope same as regular requests.
+    Superseded (2026-05-15) — see context/mp_format_comparison_2026_05_15.md §item 4.
+
+    chainingSettings: dropped when null (testRequest never chains).
     """
-    return _strip_request(req, adapter_kind=adapter_kind)
+    req_id = req["id"]
+    r = {
+        "id": req_id,
+        "name": req["name"],
+        "path": req["path"],
+        "method": req["method"],
+        "body": req.get("body") or "",
+        "headers": req.get("headers") or [],
+        "params": req.get("params") or [],
+    }
+    # chainingSettings: omit when null (testRequest never chains)
+    chain = req.get("chainingSettings")
+    if chain is not None:
+        r["chainingSettings"] = chain
+
+    # Minimal response shape for test/session requests
+    resp = req.get("response")
+    if resp and isinstance(resp, dict):
+        result = resp.get("result", {})
+        response_code = result.get("responseCode", 200)
+    else:
+        response_code = 200
+    r["response"] = {"result": {"responseCode": response_code}}
+
+    return r
 
 
 def _strip_auth_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any]:
@@ -734,23 +739,22 @@ def render_mpb_exchange_json(
     # Keys ABSENT in synology_nas_working_export.json: buildNumber, id, author.
     # id and author were incorrectly emitted before the 2026-04-21 wire-format audit.
     # buildNumber is present in the jcox-au_vmware UniFi reference at
-    # design.buildNumber (sibling to design.design). Emit it from mp.build_number
-    # (YAML field, defaults to 1). This allows MPB to distinguish successive
-    # re-renders of the same version. See 2026-05-01 renderer gap fix.
+    # design.buildNumber (sibling to design.design).
     # ------------------------------------------------------------------
-    # Confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14):
-    # design.design has id: null and author: "" (empty string) as top-level keys.
-    # These were previously omitted; MPB import parser requires them.
+    # Superseded 2026-05-15: MPB UI exports for both UniFi and vSphere Storage
+    # Paths strip design.design.id, design.design.author, and design.buildNumber
+    # entirely.  The jcox reference appears to have been an older MPB build;
+    # 2026-05-15 live MPB output is authoritative.  These null/numeric placeholders
+    # are harmless on import but should be omitted to match current MPB.
+    # See context/mp_format_comparison_2026_05_15.md §item 3.
     design_block = {
         "design": {
-            "id": None,
             "name": pak.get("name", mp.name),
             "type": "HTTP",
-            "author": None,
             "description": pak.get("description", ""),
             "version": mp.version,  # base version, no build suffix
         },
-        "buildNumber": mp.build_number,
+        # buildNumber omitted: MPB UI exports do not emit this field (2026-05-15).
     }
 
     # ------------------------------------------------------------------
@@ -770,13 +774,15 @@ def render_mpb_exchange_json(
     if isinstance(auth.get("creds"), list):
         auth["creds"] = [_strip_cred(c) for c in auth["creds"]]
 
-    # Always emit sessionSettings — confirmed from jcox-au_vmware/unifi_MP_Builder_Design.json
-    # (2026-05-14): CUSTOM-auth MP has sessionSettings: null explicitly present.
-    # Earlier rule (strip the key when null, based on mpb_reference_none_auth.json)
-    # was wrong; the jcox reference is the correct ground truth.
+    # sessionSettings: drop the key entirely when null.
+    # Previous rule (2026-05-14): always emit as null, based on jcox UniFi reference
+    # which had sessionSettings: null explicitly.
+    # Superseded (2026-05-15): MPB UI exports for UniFi and Storage Paths drop the
+    # key entirely when sessionSettings is null (stateless APIs have no session).
+    # See context/mp_format_comparison_2026_05_15.md §item 3.
     ss = auth.get("sessionSettings")
     if ss is None:
-        auth["sessionSettings"] = None
+        auth.pop("sessionSettings", None)
     elif isinstance(ss, dict):
         # Strip session request fields that don't belong in exchange format.
         # Auth session requests use responseCode-only response (no dataModelLists).

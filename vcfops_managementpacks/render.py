@@ -351,6 +351,10 @@ _STANDARD_CONFIG_FIELDS = [
         "editable": False,
         "configType": "NUMBER",
         "description": "Maximum number of concurrent HTTP requests.",
+        # Template default 15; per-MP YAML overrides via src.max_concurrent.
+        # MPB ships 2 / Verify; factory ships higher concurrency / No Verify
+        # intentionally — parallel collection, lab-friendly TLS.
+        # See context/mp_format_comparison_2026_05_15.md §item 5.
         "defaultValue": 15,
     },
     {
@@ -796,8 +800,9 @@ def _render_source(
     / {"object": ...} / {"event": ...} wrappers).
 
     requests is a dict (id → request object); resources and events are arrays.
-    externalResources is always [] — the factory does not model cross-adapter
-    resource bindings.
+    externalResources contains ARIA_OPS objects (same format as resources[])
+    that stitch metrics onto existing adapter resource kinds at collection time.
+    render_template.py converts these to the template.json externalResources shape.
     """
     src = mp.source
 
@@ -847,6 +852,17 @@ def _render_source(
     if test_request and test_request["id"] not in requests_dict:
         requests_dict[test_request["id"]] = test_request
 
+    # externalResources: ARIA_OPS objects that stitch metrics onto existing
+    # Aria Ops resource kinds (e.g. VMWARE/HostSystem, VMWARE/Datastore).
+    # These are the same objects that appear in resources[] — they carry
+    # ariaOpsConf + metricSets in design.json format.  render_template.py
+    # converts them to template.json externalResources format (with
+    # requestedMetrics, adapterKind, resourceKind, etc.).
+    # Fix 2026-05-15: previously hard-coded to []; ARIA_OPS-stitching MPs
+    # (e.g. vSphere Storage Paths) had zero-metric collection as a result.
+    # See context/mp_format_comparison_2026_05_15.md §item 1.
+    external_resources = [obj for obj in wire_objects if obj.get("type") == "ARIA_OPS"]
+
     return {
         "type": "HTTP",
         "basePath": src.base_path if src else "",
@@ -856,7 +872,7 @@ def _render_source(
         "globalHeaders": _render_global_headers(mp),
         "requests": requests_dict,
         "resources": wire_objects,          # flat array (no {"object": ...} wrapper)
-        "externalResources": [],            # factory does not model cross-adapter bindings
+        "externalResources": external_resources,  # ARIA_OPS stitching objects
         "events": wire_events,              # flat array (no {"event": ...} wrapper)
     }
 
@@ -2752,7 +2768,7 @@ def render_mp_design_json(
           "configuration": [ ... ],       <- adapter connection fields
           "requests": { "<id>": { ... } },  <- dict, not array
           "resources": [ ... ],            <- flat objects (no {"object"} wrapper)
-          "externalResources": [],
+          "externalResources": [ ... ],   <- ARIA_OPS stitching objects (populated 2026-05-15)
           "events": [ ... ]               <- flat events (no {"event"} wrapper)
         },
         "constants": [],

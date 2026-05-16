@@ -42,7 +42,7 @@
 #
 name: VCF Content Factory vSphere Storage Paths
 version: "2.0.0"
-build_number: 5
+build_number: 8
 author: VCF Content Factory
 adapter_kind: mpb_vcf_content_factory_vsphere_storage_paths
 description: >

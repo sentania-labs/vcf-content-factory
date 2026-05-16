@@ -242,6 +242,12 @@ path is first-class, not a sad fallback.
 
 ## Reference material (loaded on demand)
 
+**On session pickup, read `context/README.md` first.** It's the index
+to ~50 topical files covering wire formats, API surfaces, authoring
+patterns, and prior investigations. Scanning it costs almost nothing
+and prevents the "I'll just grep for it" failure mode where prior
+hard-won knowledge gets re-derived from scratch.
+
 | File | Purpose |
 |---|---|
 | `ADMIN.md` | Human-facing concept walkthrough |
