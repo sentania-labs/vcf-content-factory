@@ -51,6 +51,15 @@ These are actively maintained and authoritative for their topic.
 | MPB .pak structural reference (canonical format from 8+ paks) | `mpb_pak_structural_reference.md` |
 | Lessons learned: pak install reliability (5 failures → success) | `lessons_pak_install_reliability.md` |
 | MPB build examples research (external sources catalog) | `mpb_build_examples_research.md` |
+| **MPB Tier-1 strategic handoff (Track-C codegen reframe, capability surface, promotion triggers)** | `mpb_handoff.md` |
+| MPB BuilderFile Kotlin runtime model (runtime vocabulary, full subschemas) | `mpb_builderfile_schema.md` |
+| MPB designer wire format + pak generation pipeline (two-JSON-formats, compile pipeline) | `mpb_designer_wire_format.md` |
+| MPB describe.xml emission pipeline (24 Describe* components, IWritableFile implementations) | `mpb_describe_xml_emission.md` |
+| MPB describe.xml canonical XSD (what's permitted vs what MPB emits — Tier 2 surfaces) | `mpb_describe_xsd_canonical.md` |
+| MPB alerts/symptoms/recommendations grammar (6 condition types, 20 operators, compound boolean) | `mpb_alerts_symptoms_grammar.md` |
+| MPB adapter runtime insights (early-discovery deep dive on runtime architecture) | `mpb_adapter_runtime_insights.md` |
+| MPB pak signing chain analysis (self-signed VMware cert, expired 2026-01-03, SHA-1 + RSA exp-3) | `mpb_pak_signing_chain.md` |
+| MPB explicit-key investigation (label→key derivation algorithm, why API path mangles keys) | `mpb_explicit_key_investigation_2026_05_16.md` |
 | .pak wire format + install/uninstall | `pak_wire_format.md`, `pak_install_api_exploration.md`, `pak_uninstall_api_exploration.md` |
 | .pak UI upload investigation | `pak_ui_upload_investigation.md` |
 | Adapter describe (metric/property source of truth) | `adapter_describe_comparison.md`, `adapter_describe_exploration.md` |
