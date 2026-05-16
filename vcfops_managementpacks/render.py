@@ -1527,6 +1527,32 @@ def _build_chaining_settings(
     return chain_settings, own_chain_map, own_chain_param_ids
 
 
+def _icon_string_for_design(hint: Optional[str]) -> str:
+    """Render the icon string written into design.json / template.json
+    ``source.resources[*].internalObjectInfo.icon`` (and the template-level
+    ``icon`` field).
+
+    MPB's adapter runtime rejects icon strings that do not end in an image
+    extension (``.svg`` or ``.png``).  The factory's loader stores a bare
+    hint like ``access_point`` (extension stripped) for library lookup; on
+    emission we re-attach ``.svg`` so the runtime accepts it.
+
+    Empty or unknown hints fall back to ``default.svg``.
+
+    Evidence: UniFi 1.0.0.10 shipped bare hints (``access_point``, ``switch``,
+    etc.) and was rejected with "design file does not match the design file
+    provided by the Management Pack Builder."  UniFi 1.0.0.8 had
+    filename-style values (``wireless-access-point.svg``, ``default.png``)
+    and installed successfully.  MPB-built reference pak puts Clarity-style
+    names with extensions in the same field.  Fix introduced in 1.0.0.11.
+    """
+    if not hint:
+        return "default.svg"
+    if hint.endswith((".svg", ".png")):
+        return hint  # already has extension (defensive — shouldn't normally happen)
+    return f"{hint}.svg"
+
+
 def _render_objects(
     mp: ManagementPackDef,
     request_registry: Dict[str, "_RequestInfo"],
@@ -1925,7 +1951,7 @@ def _render_one_object(
         "isListObject": not is_scalar,
         "internalObjectInfo": {
             "id": internal_id,
-            "icon": ot.icon,
+            "icon": _icon_string_for_design(ot.icon),
             "identifierIds": identifier_ids,
             "objectTypeLabel": ot.name,
             "nameMetricExpression": name_expr,
