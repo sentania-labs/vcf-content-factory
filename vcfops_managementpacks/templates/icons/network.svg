@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Network/VLAN: three nodes connected by lines -->
+  <!-- Connecting lines -->
+  <line x1="200" y1="130" x2="102" y2="284" stroke="#0098c7" stroke-width="14" stroke-linecap="round"/>
+  <line x1="200" y1="130" x2="298" y2="284" stroke="#0098c7" stroke-width="14" stroke-linecap="round"/>
+  <line x1="102" y1="284" x2="298" y2="284" stroke="#005c8a" stroke-width="14" stroke-linecap="round"/>
+  <!-- Top node (hub/switch) -->
+  <circle cx="200" cy="126" r="38" fill="#0098c7"/>
+  <circle cx="200" cy="126" r="20" fill="white" opacity="0.30"/>
+  <!-- Bottom-left node -->
+  <circle cx="102" cy="288" r="30" fill="none" stroke="#0098c7" stroke-width="14"/>
+  <circle cx="102" cy="288" r="14" fill="#005c8a"/>
+  <!-- Bottom-right node -->
+  <circle cx="298" cy="288" r="30" fill="none" stroke="#0098c7" stroke-width="14"/>
+  <circle cx="298" cy="288" r="14" fill="#005c8a"/>
+</svg>

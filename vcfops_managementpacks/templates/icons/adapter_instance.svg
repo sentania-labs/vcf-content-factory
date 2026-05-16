@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Adapter / connector: plug body on left flowing into socket port on right -->
+  <!-- Plug body -->
+  <rect x="52" y="162" width="140" height="76" rx="14"
+        fill="none" stroke="#0098c7" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Plug prongs -->
+  <line x1="110" y1="132" x2="110" y2="162" stroke="#005c8a" stroke-width="14" stroke-linecap="round"/>
+  <line x1="154" y1="132" x2="154" y2="162" stroke="#005c8a" stroke-width="14" stroke-linecap="round"/>
+  <line x1="110" y1="238" x2="110" y2="268" stroke="#005c8a" stroke-width="14" stroke-linecap="round"/>
+  <line x1="154" y1="238" x2="154" y2="268" stroke="#005c8a" stroke-width="14" stroke-linecap="round"/>
+  <!-- Connection cable/arrow -->
+  <line x1="192" y1="200" x2="248" y2="200" stroke="#0098c7" stroke-width="14" stroke-linecap="round"/>
+  <polyline points="232,180 254,200 232,220"
+            fill="none" stroke="#0098c7" stroke-width="14"
+            stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- Socket housing -->
+  <rect x="258" y="148" width="90" height="104" rx="14"
+        fill="none" stroke="#005c8a" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Socket port opening -->
+  <rect x="278" y="175" width="50" height="50" rx="6" fill="#005c8a" opacity="0.30"/>
+  <rect x="278" y="175" width="50" height="50" rx="6"
+        fill="none" stroke="#005c8a" stroke-width="10"/>
+</svg>

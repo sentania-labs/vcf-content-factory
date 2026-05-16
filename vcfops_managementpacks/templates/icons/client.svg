@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Client device: laptop silhouette -->
+  <!-- Screen panel -->
+  <rect x="96" y="80" width="208" height="152" rx="12"
+        fill="none" stroke="#0098c7" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Screen content indicator -->
+  <rect x="120" y="104" width="160" height="104" rx="4" fill="#0098c7" opacity="0.15"/>
+  <rect x="120" y="104" width="160" height="104" rx="4"
+        fill="none" stroke="#005c8a" stroke-width="8" stroke-linejoin="round"/>
+  <!-- Hinge line -->
+  <line x1="80" y1="248" x2="320" y2="248" stroke="#0098c7" stroke-width="8"/>
+  <!-- Base / keyboard area -->
+  <path d="M 52,248 L 72,310 L 328,310 L 348,248 Z"
+        fill="none" stroke="#0098c7" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Touchpad -->
+  <rect x="168" y="268" width="64" height="30" rx="6"
+        fill="none" stroke="#005c8a" stroke-width="10" stroke-linejoin="round"/>
+</svg>

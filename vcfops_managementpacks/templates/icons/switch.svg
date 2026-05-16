@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Network switch: rectangular chassis with port row on front edge -->
+  <!-- Main chassis body -->
+  <rect x="48" y="148" width="304" height="104" rx="12"
+        fill="none" stroke="#0098c7" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Port row: 8 ports evenly spaced across the front face -->
+  <rect x="72"  y="214" width="24" height="22" rx="4" fill="#005c8a"/>
+  <rect x="108" y="214" width="24" height="22" rx="4" fill="#005c8a"/>
+  <rect x="144" y="214" width="24" height="22" rx="4" fill="#005c8a"/>
+  <rect x="180" y="214" width="24" height="22" rx="4" fill="#005c8a"/>
+  <rect x="216" y="214" width="24" height="22" rx="4" fill="#005c8a"/>
+  <rect x="252" y="214" width="24" height="22" rx="4" fill="#005c8a"/>
+  <rect x="288" y="214" width="24" height="22" rx="4" fill="#0098c7"/>
+  <rect x="324" y="214" width="24" height="22" rx="4" fill="#0098c7"/>
+  <!-- Status LED row above ports -->
+  <circle cx="84"  cy="194" r="5" fill="#0098c7"/>
+  <circle cx="120" cy="194" r="5" fill="#0098c7"/>
+  <circle cx="156" cy="194" r="5" fill="#0098c7"/>
+  <circle cx="192" cy="194" r="5" fill="#0098c7"/>
+  <circle cx="228" cy="194" r="5" fill="#0098c7"/>
+  <circle cx="264" cy="194" r="5" fill="#0098c7"/>
+  <circle cx="300" cy="194" r="5" fill="#005c8a"/>
+  <circle cx="336" cy="194" r="5" fill="#005c8a"/>
+  <!-- Rack ears -->
+  <rect x="40" y="162" width="14" height="76" rx="6" fill="#005c8a"/>
+  <rect x="346" y="162" width="14" height="76" rx="6" fill="#005c8a"/>
+</svg>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Gateway/router: shield outline with bidirectional arrows suggesting traffic boundary -->
+  <!-- Shield body -->
+  <path d="M 200,52 L 344,112 L 344,232 C 344,304 200,356 200,356
+           C 200,356 56,304 56,232 L 56,112 Z"
+        fill="none" stroke="#0098c7" stroke-width="16"
+        stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- Left-to-right arrow (inbound traffic) -->
+  <line x1="136" y1="182" x2="234" y2="182" stroke="#005c8a" stroke-width="14" stroke-linecap="round"/>
+  <polyline points="216,162 238,182 216,202"
+            fill="none" stroke="#005c8a" stroke-width="14"
+            stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- Right-to-left arrow (outbound traffic) -->
+  <line x1="264" y1="222" x2="166" y2="222" stroke="#0098c7" stroke-width="14" stroke-linecap="round"/>
+  <polyline points="184,202 162,222 184,242"
+            fill="none" stroke="#0098c7" stroke-width="14"
+            stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

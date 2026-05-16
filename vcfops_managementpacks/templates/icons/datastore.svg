@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Datastore: stacked disk platters with capacity bar -->
+  <!-- Bottom platter -->
+  <ellipse cx="200" cy="298" rx="130" ry="34" fill="none" stroke="#005c8a" stroke-width="14"/>
+  <!-- Bottom platter fill -->
+  <ellipse cx="200" cy="298" rx="130" ry="34" fill="#005c8a" opacity="0.12"/>
+  <!-- Middle platter cylinder sides -->
+  <line x1="70" y1="220" x2="70" y2="298" stroke="#005c8a" stroke-width="14" stroke-linecap="round"/>
+  <line x1="330" y1="220" x2="330" y2="298" stroke="#005c8a" stroke-width="14" stroke-linecap="round"/>
+  <!-- Middle platter rim -->
+  <ellipse cx="200" cy="220" rx="130" ry="34" fill="none" stroke="#0098c7" stroke-width="14"/>
+  <ellipse cx="200" cy="220" rx="130" ry="34" fill="#0098c7" opacity="0.12"/>
+  <!-- Top platter cylinder sides -->
+  <line x1="70" y1="142" x2="70" y2="220" stroke="#0098c7" stroke-width="14" stroke-linecap="round"/>
+  <line x1="330" y1="142" x2="330" y2="220" stroke="#0098c7" stroke-width="14" stroke-linecap="round"/>
+  <!-- Top platter rim (primary, filled) -->
+  <ellipse cx="200" cy="142" rx="130" ry="34" fill="#0098c7" opacity="0.22"/>
+  <ellipse cx="200" cy="142" rx="130" ry="34" fill="none" stroke="#0098c7" stroke-width="16"/>
+  <!-- Capacity bar overlay on top platter face -->
+  <rect x="110" y="134" width="116" height="16" rx="8" fill="#005c8a" opacity="0.60"/>
+</svg>

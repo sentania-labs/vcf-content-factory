@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- World / root container: globe outline with longitude and latitude lines -->
+  <!-- Globe circle -->
+  <circle cx="200" cy="200" r="156" fill="none" stroke="#0098c7" stroke-width="16"/>
+  <!-- Central latitude line (equator) -->
+  <line x1="44" y1="200" x2="356" y2="200" stroke="#0098c7" stroke-width="10"/>
+  <!-- Upper latitude line -->
+  <path d="M 88,136 A 116,32 0 0 1 312,136" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <!-- Lower latitude line -->
+  <path d="M 88,264 A 116,32 0 0 0 312,264" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <!-- Central longitude line (prime meridian) -->
+  <line x1="200" y1="44" x2="200" y2="356" stroke="#0098c7" stroke-width="10"/>
+  <!-- Left longitude curve -->
+  <path d="M 200,44 C 126,96 126,304 200,356" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <!-- Right longitude curve -->
+  <path d="M 200,44 C 274,96 274,304 200,356" fill="none" stroke="#005c8a" stroke-width="10"/>
+</svg>

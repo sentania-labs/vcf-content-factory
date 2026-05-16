@@ -1,6 +1,6 @@
 adapter_kind: mpb_vcf_content_factory_unifi_integration
 author: VCF Content Factory
-build_number: 8
+build_number: 10
 description: 'Monitors UniFi network devices via the Integration API v1. Collects
   device health (CPU, memory, uptime, load averages, uplink throughput, per-radio
   TX retries) and inventory properties for Access Points, Switches, and the Gateway
@@ -15,7 +15,7 @@ description: 'Monitors UniFi network devices via the Integration API v1. Collect
   '
 name: VCF Content Factory UniFi Integration
 object_types:
-- icon: wireless-access-point.svg
+- icon: access_point
   identifiers:
   - device_id
   is_singleton: false
@@ -197,7 +197,7 @@ object_types:
   name: Access Point
   name_expression: name
   type: INTERNAL
-- icon: network-switch.svg
+- icon: switch
   identifiers:
   - device_id
   is_singleton: false
@@ -331,7 +331,7 @@ object_types:
   name: Switch
   name_expression: name
   type: INTERNAL
-- icon: firewall.svg
+- icon: gateway
   identifiers:
   - device_id
   is_singleton: false
@@ -465,7 +465,7 @@ object_types:
   name: Gateway
   name_expression: name
   type: INTERNAL
-- icon: default.png
+- icon: client
   identifiers:
   - client_id
   is_singleton: false
@@ -522,7 +522,7 @@ object_types:
   name: Client
   name_expression: name
   type: INTERNAL
-- icon: default.png
+- icon: network
   identifiers:
   - network_id
   is_singleton: false

@@ -5,7 +5,7 @@ Wire format reverse-engineered from:
   - Broadcom Security Advisories-1.0.1.6.pak  (mpb_broadcom_security_advisories_adapter3)
 
 Key structural facts:
-  - .pak is a ZIP with root-level scripts, manifest.txt, eula.txt, default.png,
+  - .pak is a ZIP with root-level scripts, manifest.txt, eula.txt, default.svg,
     adapters.zip, content/, and resources/.
   - adapters.zip contains:
     - <adapter_dir>.jar  — the adapter runtime JAR (generated per-adapter via
@@ -25,7 +25,7 @@ Key structural facts:
     - <adapter_dir>/work/  — empty runtime work dir
     - <adapter_dir>/doc/  — empty doc dir
     - Also at adapters.zip root (duplicated from pak root):
-      - manifest.txt, eula.txt, default.png, resources/resources.properties
+      - manifest.txt, eula.txt, default.svg, resources/resources.properties
 
   - manifest.txt is JSON with adapter kind key, version, scripts, etc.
   - post-install.py triggers ops-cli redescribe + content import.
@@ -72,6 +72,12 @@ _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"
 # the Synology NAS adapter built by MPB on VCF Ops 9.0.2.
 # See _generate_adapter_jar() and context/mpb_adapter_jar_reverse_engineering.md.
 _GENERIC_ADAPTER_JAR = _ADAPTER_RUNTIME_DIR / "mpb_adapter3.jar"
+
+# Per-resource-kind SVG icon templates.
+# Each icon is a flat SVG keyed by a short stem name.  The builder resolves
+# ot.icon (a stem string or None) to a bytes payload at build time.
+_ICONS_DIR = _TEMPLATES_DIR / "icons"
+_DEFAULT_ICON_STEM = "default"
 
 # ---------------------------------------------------------------------------
 # describe.xml generation
@@ -1329,7 +1335,7 @@ def _generate_manifest(mp: ManagementPackDef) -> str:
         "eula_file": "eula.txt",
         "platform": ["Windows", "Linux Non-VA", "Linux VA"],
         "vendor": mp.author,
-        "pak_icon": "default.png",
+        "pak_icon": "default.svg",
         "license_type": f"adapter:{mp.adapter_kind}",
         "pak_validation_script": {"script": "python validate.py"},
         "adapter_pre_script": {"script": "python preAdapters.py"},
@@ -1503,6 +1509,30 @@ def _zip_mkdir(zf: zipfile.ZipFile, path: str) -> None:
     zf.writestr(info, b"")
 
 
+def _icon_bytes_for(hint: Optional[str]) -> bytes:
+    """Return SVG bytes for the given icon stem hint.
+
+    Looks up ``hint`` in ``_ICONS_DIR`` as ``{hint}.svg``.  Falls back to
+    ``default.svg`` if the file does not exist or hint is None.  The returned
+    bytes are the raw SVG file content.
+    """
+    if hint:
+        candidate = _ICONS_DIR / f"{hint}.svg"
+        if candidate.exists():
+            return candidate.read_bytes()
+    default = _ICONS_DIR / "default.svg"
+    if default.exists():
+        return default.read_bytes()
+    # Last-resort inline SVG: a plain rectangle so the pak is never icon-less
+    return (
+        b'<?xml version="1.0" encoding="UTF-8"?>'
+        b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">'
+        b'<rect x="50" y="50" width="300" height="300" rx="20"'
+        b' fill="none" stroke="#0098c7" stroke-width="16"/>'
+        b"</svg>"
+    )
+
+
 def _build_adapters_zip(
     mp: ManagementPackDef,
     design_json_str: str,
@@ -1512,7 +1542,6 @@ def _build_adapters_zip(
     manifest_str: str,
     pak_resources_props_str: str,
     eula_bytes: bytes,
-    icon_bytes: bytes,
     relationship_strategy: str = "synthetic_adapter_instance",
 ) -> bytes:
     """Build adapters.zip in memory and return the bytes.
@@ -1569,7 +1598,7 @@ def _build_adapters_zip(
         # --- duplicate pak-root files at adapters.zip root ---
         zf.writestr("manifest.txt", manifest_str.encode("utf-8"))
         zf.writestr("eula.txt", eula_bytes)
-        zf.writestr("default.png", icon_bytes)
+        zf.writestr("default.svg", _icon_bytes_for(None))
         zf.writestr("resources/resources.properties", pak_resources_props_str.encode("utf-8"))
 
         # --- per-adapter runtime JAR (generated via constant-pool patching) ---
@@ -1660,14 +1689,38 @@ def _build_adapters_zip(
         )
         # conf/supermetrics/
         zf.writestr(f"{adapter_dir}/conf/supermetrics/customSuperMetrics.json", b"{}")
-        # conf/images/ — copy default.png into standard icon locations
+        # conf/images/ — write per-kind SVG icons.
+        # Layout mirrors MPB reference paks:
+        #   conf/images/TraversalSpec/default.svg      — traversal spec icon
+        #   conf/images/AdapterKind/<ak>.svg           — adapter kind icon (default)
+        #   conf/images/ResourceKind/<ak>.svg          — adapter-instance resource kind
+        #   conf/images/ResourceKind/<ak>_world.svg    — world aggregate kind
+        #   conf/images/ResourceKind/<ak>_relatives.svg — dynamic relatives kind
+        #   conf/images/ResourceKind/<ak>_<ot.key>.svg — one per INTERNAL object_type
         # (directory entries already written above via _zip_mkdir)
-        for img_path in [
-            f"images/TraversalSpec/default.png",
-            f"images/AdapterKind/{ak}.png",
-            f"images/ResourceKind/{ak}.png",
-        ]:
-            zf.writestr(f"{adapter_dir}/conf/{img_path}", icon_bytes)
+        default_svg = _icon_bytes_for(None)
+        zf.writestr(f"{adapter_dir}/conf/images/TraversalSpec/default.svg", default_svg)
+        zf.writestr(f"{adapter_dir}/conf/images/AdapterKind/{ak}.svg", default_svg)
+        # adapter-instance resource kind (key == ak)
+        zf.writestr(f"{adapter_dir}/conf/images/ResourceKind/{ak}.svg", default_svg)
+        # world aggregate kind (auto-generated by builder)
+        zf.writestr(f"{adapter_dir}/conf/images/ResourceKind/{ak}_world.svg", _icon_bytes_for("world"))
+        # dynamic relatives kind (auto-generated by builder)
+        zf.writestr(f"{adapter_dir}/conf/images/ResourceKind/{ak}_relatives.svg", default_svg)
+        # per-INTERNAL-object-type icons
+        for ot in mp.object_types:
+            if ot.type == "ARIA_OPS":
+                # ARIA_OPS objects push metrics onto foreign resource kinds;
+                # they have no ResourceKind entry in describe.xml and no icon slot.
+                continue
+            if ot.is_world:
+                # World kind handled above as {ak}_world
+                continue
+            rk_key = f"{ak}_{ot.key}" if not ot.key.startswith(ak) else ot.key
+            zf.writestr(
+                f"{adapter_dir}/conf/images/ResourceKind/{rk_key}.svg",
+                _icon_bytes_for(ot.icon),
+            )
         # conf/resources/ — generated from the same nameKey->label map used to
         # build describe.xml, ensuring the two files are always in sync.
         adapter_resources_props = _generate_resources_properties(mp, describe_labels)
@@ -1768,8 +1821,7 @@ def build_pak(
     eula_path = _TEMPLATES_DIR / "eula.txt"
     eula_bytes = eula_path.read_bytes() if eula_path.exists() else b"No EULA.\n"
 
-    icon_path = _TEMPLATES_DIR / "default.png"
-    icon_bytes = icon_path.read_bytes() if icon_path.exists() else _minimal_png()
+    # default icon is resolved from the icons/ directory at build time
 
     # 5. Generate pak-level resources.properties
     pak_resources_props_str = _generate_pak_resources_properties(mp)
@@ -1784,7 +1836,6 @@ def build_pak(
         manifest_str=manifest_str,
         pak_resources_props_str=pak_resources_props_str,
         eula_bytes=eula_bytes,
-        icon_bytes=icon_bytes,
         relationship_strategy=relationship_strategy,
     )
 
@@ -1792,7 +1843,7 @@ def build_pak(
     with zipfile.ZipFile(pak_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.txt", manifest_str.encode("utf-8"))
         zf.writestr("eula.txt", eula_bytes)
-        zf.writestr("default.png", icon_bytes)
+        zf.writestr("default.svg", _icon_bytes_for(None))
 
         # Install scripts — always included regardless of auth preset.
         # post-install.py triggers ops-cli redescribe, which registers the adapter
@@ -1854,17 +1905,3 @@ def build_pak(
     return pak_path
 
 
-def _minimal_png() -> bytes:
-    """Return the bytes of a minimal 1x1 white PNG."""
-    # Hardcoded 1x1 white PNG (67 bytes)
-    return bytes([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,  # PNG signature
-        0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,  # IHDR chunk length + type
-        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,  # width=1, height=1
-        0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,  # bitdepth=8, colortype=2(RGB)
-        0xde, 0x00, 0x00, 0x00, 0x0c, 0x49, 0x44, 0x41,  # CRC + IDAT length + type
-        0x54, 0x08, 0xd7, 0x63, 0xf8, 0xcf, 0xc0, 0x00,  # IDAT data (white pixel)
-        0x00, 0x00, 0x02, 0x00, 0x01, 0xe2, 0x21, 0xbc,  # IDAT CRC
-        0x33, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e,  # IEND length + type
-        0x44, 0xae, 0x42, 0x60, 0x82,                     # IEND CRC
-    ])

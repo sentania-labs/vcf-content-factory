@@ -42,7 +42,7 @@
 #
 name: VCF Content Factory vSphere Storage Paths
 version: "2.0.0"
-build_number: 8
+build_number: 10
 author: VCF Content Factory
 adapter_kind: mpb_vcf_content_factory_vsphere_storage_paths
 description: >
@@ -107,6 +107,7 @@ object_types:
   - name: "Host Storage Health"
     key: host_storage_health
     type: ARIA_OPS
+    icon: host_system
     aria_ops:
       adapter_kind: VMWARE
       resource_kind: HostSystem
@@ -206,6 +207,7 @@ object_types:
   - name: "Datastore Storage Health"
     key: datastore_storage_health
     type: ARIA_OPS
+    icon: datastore
     aria_ops:
       adapter_kind: VMWARE
       resource_kind: Datastore

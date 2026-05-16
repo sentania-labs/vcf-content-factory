@@ -595,7 +595,7 @@ class ObjectTypeDef:
     identifiers: List["IdentifierDef"]    # Tier 3.3 structured form
     metric_sets: List[MetricSetDef]       # Option C: explicit metricSets block
     metrics: List[MetricDef]
-    icon: str = "server.svg"
+    icon: Optional[str] = None   # stem of icon SVG file (no extension); None means use "default"
     is_world: bool = False
     is_singleton: bool = False            # one-per-adapter-instance named entity with identifiers
     name_expression: Optional["NameExpressionDef"] = None   # Tier 3.3 structured form
@@ -2603,7 +2603,7 @@ def _parse_object_type(raw: dict, parent_tag: str) -> ObjectTypeDef:
         name=ot_name,
         key=ot_key,
         type=str(raw.get("type", "INTERNAL") or "INTERNAL").strip().upper(),
-        icon=str(raw.get("icon", "server.svg") or "server.svg").strip(),
+        icon=_parse_icon_hint(raw.get("icon")),
         is_world=bool(raw.get("is_world", False)),
         is_singleton=bool(raw.get("is_singleton", False)),
         identifiers=identifiers,
@@ -2613,6 +2613,25 @@ def _parse_object_type(raw: dict, parent_tag: str) -> ObjectTypeDef:
         metrics=metrics,
         aria_ops=aria_ops,
     )
+
+
+def _parse_icon_hint(raw_value: Any) -> Optional[str]:
+    """Parse the icon: field from a raw YAML value.
+
+    Accepts a bare stem ("access_point"), a stem with extension ("access_point.svg"),
+    or None/absent.  Returns the stem only (no extension), or None if the value is
+    absent or empty.  The builder resolves the stem to an SVG path at build time.
+    """
+    if raw_value is None:
+        return None
+    hint = str(raw_value).strip()
+    if not hint:
+        return None
+    # Strip .svg or .png suffix if the YAML author included it
+    for ext in (".svg", ".png"):
+        if hint.lower().endswith(ext):
+            hint = hint[: -len(ext)]
+    return hint or None
 
 
 def _parse_aria_ops_conf(raw: Any, parent_tag: str) -> AriaOpsConf:

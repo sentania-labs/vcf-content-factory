@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Factory generic: hexagon outline with smaller inner hexagon, suggesting a generic object -->
+  <polygon points="200,44 340,122 340,278 200,356 60,278 60,122"
+           fill="none" stroke="#0098c7" stroke-width="16"
+           stroke-linejoin="round"/>
+  <polygon points="200,108 276,152 276,240 200,284 124,240 124,152"
+           fill="#0098c7" opacity="0.18"/>
+  <polygon points="200,108 276,152 276,240 200,284 124,240 124,152"
+           fill="none" stroke="#005c8a" stroke-width="12"
+           stroke-linejoin="round"/>
+  <circle cx="200" cy="196" r="22" fill="#0098c7"/>
+</svg>

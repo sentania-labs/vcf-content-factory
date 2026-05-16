@@ -155,16 +155,76 @@ def _derive_key(expr_label: str) -> str:
     return _camel_to_snake(last_seg)
 
 
+# JMESPath features that require the full evaluator rather than the simple
+# dot-path parser MPB uses by default. When any of these appear in an
+# expression body, MPB's runtime needs the expression wrapped with leading
+# and trailing backslash markers inside the @@@MPB_QUOTE_BODY envelope to
+# route through the full JMESPath engine.
+#
+# Reference: MPB-built UniFi pak ships complex expressions like
+# "${@@@MPB_QUOTE_BODY \\interfaces.radios[?frequencyGHz==`2.4`].txRetriesPct | [0]\\ @@@MPB_QUOTE}"
+# (note the leading and trailing single backslash, which is `\\` in JSON).
+# Without the wrap, the factory's "${@@@MPB_QUOTE_BODY interfaces.radios[?...] @@@MPB_QUOTE}"
+# silently returns no match. Prod evidence: UniFi 1.0.0.8 ships 2 radio
+# metrics + 6 radio properties that never register as statkeys — all use
+# JMESPath filters.
+
+_JMESPATH_COMPLEX_TOKENS = (
+    "[?",        # filter projection
+    "|",         # pipe (sub-expression chaining / flatten with [0])
+    "[*]",       # wildcard index
+    ".*",        # wildcard property (rare but valid)
+    "[]",        # flatten
+    "@",         # current-element reference
+    "length(",   # function call (and similar — to_string, keys, values, etc.)
+    "to_string(",
+    "to_number(",
+    "keys(",
+    "values(",
+    "contains(",
+    "starts_with(",
+    "ends_with(",
+    "not_null(",
+    "sort(",
+    "sort_by(",
+    "min(",
+    "max(",
+    "min_by(",
+    "max_by(",
+    "type(",
+    "map(",
+)
+
+
+def _is_complex_jmespath(expression: str) -> bool:
+    """Return True if ``expression`` contains JMESPath features beyond
+    simple dot-path navigation (filters, pipes, wildcards, function calls).
+    """
+    return any(tok in expression for tok in _JMESPATH_COMPLEX_TOKENS)
+
+
 def _wrap_quote_body(label: str) -> str:
     """Wrap a label in the MPB template BODY expression format.
 
-    Template format: ``"${@@@MPB_QUOTE_BODY <label> @@@MPB_QUOTE}"``
+    Template format for simple paths:
+       ``"${@@@MPB_QUOTE_BODY <label> @@@MPB_QUOTE}"``
+    Template format for complex JMESPath (filters/pipes/wildcards/functions):
+       ``"${@@@MPB_QUOTE_BODY \\<label>\\ @@@MPB_QUOTE}"``
+    The leading + trailing backslash inside the envelope tells MPB to
+    invoke the full JMESPath engine rather than its simple dot-path parser.
+    Without it, complex expressions silently return empty.
+
+    Reference: MPB-built reference pak template.json + UniFi prod
+    evidence (2026-05-16). Spec doesn't yet document this — factory
+    finding, push back to cleanroom.
 
     Use this for expressions that read from the parent/child *response body*
     (listExpression, attributeExpression, metric expressions, parentRequest
     parameters).  Do NOT use for objectBinding.requestMatchIdExpression — see
     _wrap_quote_request_parameters().
     """
+    if _is_complex_jmespath(label):
+        return f"${{@@@MPB_QUOTE_BODY \\{label}\\ @@@MPB_QUOTE}}"
     return f"${{@@@MPB_QUOTE_BODY {label} @@@MPB_QUOTE}}"
 
 

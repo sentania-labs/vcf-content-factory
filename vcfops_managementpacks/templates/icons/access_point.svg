@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Wireless AP: dome with concentric wifi arcs -->
+  <!-- Outer arc -->
+  <path d="M 88,220 A 126,126 0 0 1 312,220"
+        fill="none" stroke="#0098c7" stroke-width="16"
+        stroke-linecap="round"/>
+  <!-- Middle arc -->
+  <path d="M 122,220 A 90,90 0 0 1 278,220"
+        fill="none" stroke="#0098c7" stroke-width="16"
+        stroke-linecap="round"/>
+  <!-- Inner arc -->
+  <path d="M 156,220 A 54,54 0 0 1 244,220"
+        fill="none" stroke="#005c8a" stroke-width="14"
+        stroke-linecap="round"/>
+  <!-- Dome body -->
+  <ellipse cx="200" cy="230" rx="36" ry="20" fill="#0098c7"/>
+  <!-- Stem -->
+  <line x1="200" y1="250" x2="200" y2="310" stroke="#0098c7" stroke-width="16" stroke-linecap="round"/>
+  <!-- Base plate -->
+  <rect x="150" y="310" width="100" height="18" rx="9" fill="#005c8a"/>
+</svg>

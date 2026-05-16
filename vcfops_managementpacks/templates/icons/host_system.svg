@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Server / host system: 1U rack unit with disk slots and status LED -->
+  <!-- Rack unit chassis -->
+  <rect x="48" y="60" width="304" height="280" rx="12"
+        fill="none" stroke="#0098c7" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Disk bay row 1 -->
+  <rect x="72"  y="88" width="50" height="36" rx="6" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <rect x="134" y="88" width="50" height="36" rx="6" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <rect x="196" y="88" width="50" height="36" rx="6" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <rect x="258" y="88" width="50" height="36" rx="6" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <!-- Disk bay row 2 -->
+  <rect x="72"  y="140" width="50" height="36" rx="6" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <rect x="134" y="140" width="50" height="36" rx="6" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <rect x="196" y="140" width="50" height="36" rx="6" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <rect x="258" y="140" width="50" height="36" rx="6" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <!-- Disk bay row 3 -->
+  <rect x="72"  y="192" width="50" height="36" rx="6" fill="#0098c7" opacity="0.20"/>
+  <rect x="72"  y="192" width="50" height="36" rx="6" fill="none" stroke="#0098c7" stroke-width="10"/>
+  <rect x="134" y="192" width="50" height="36" rx="6" fill="#0098c7" opacity="0.20"/>
+  <rect x="134" y="192" width="50" height="36" rx="6" fill="none" stroke="#0098c7" stroke-width="10"/>
+  <rect x="196" y="192" width="50" height="36" rx="6" fill="#0098c7" opacity="0.20"/>
+  <rect x="196" y="192" width="50" height="36" rx="6" fill="none" stroke="#0098c7" stroke-width="10"/>
+  <rect x="258" y="192" width="50" height="36" rx="6" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <!-- Front panel: power button + status LEDs -->
+  <circle cx="102" cy="276" r="18" fill="none" stroke="#0098c7" stroke-width="12"/>
+  <circle cx="102" cy="276" r="8" fill="#0098c7"/>
+  <circle cx="160" cy="276" r="8" fill="#0098c7"/>
+  <circle cx="192" cy="276" r="8" fill="#0098c7"/>
+  <circle cx="224" cy="276" r="8" fill="#005c8a"/>
+  <!-- Port block on right -->
+  <rect x="276" y="260" width="60" height="30" rx="6"
+        fill="none" stroke="#005c8a" stroke-width="10"/>
+</svg>
