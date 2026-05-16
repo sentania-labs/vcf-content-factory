@@ -28,12 +28,29 @@ def _collect(paths: List[str]) -> List[ManagementPackDef]:
 
 
 def cmd_validate(args) -> int:
+    import warnings as _warnings
+
     validate_profile_arg(args)  # validate --profile name if supplied; exits on unknown profile
-    try:
-        defs = _collect(args.paths)
-    except ManagementPackValidationError as e:
-        print(f"INVALID: {e}", file=sys.stderr)
-        return 1
+
+    # Capture label-lint and key-drift warnings emitted during load/validate.
+    # Python's default warning filter de-duplicates identical messages; use
+    # "always" so every occurrence is captured regardless of repetition.
+    captured_warnings: List[str] = []
+    with _warnings.catch_warnings(record=True) as _warn_list:
+        _warnings.simplefilter("always")
+        try:
+            defs = _collect(args.paths)
+        except ManagementPackValidationError as e:
+            print(f"INVALID: {e}", file=sys.stderr)
+            return 1
+
+    # Surface captured warnings to stderr
+    for w in _warn_list:
+        msg = str(w.message)
+        if msg.startswith("[label-lint]") or msg.startswith("[key-drift]"):
+            captured_warnings.append(msg)
+            print(f"WARN: {msg}", file=sys.stderr)
+
     if not defs:
         print("OK: no management pack definitions found")
         return 0
@@ -46,6 +63,16 @@ def cmd_validate(args) -> int:
             f"adapter_kind={d.adapter_kind}  "
             f"objects={obj_count}  relationships={rel_count}  "
             f"({d.source_path})"
+        )
+
+    # Warning summary
+    label_lint_count = sum(1 for w in captured_warnings if w.startswith("[label-lint]"))
+    key_drift_count = sum(1 for w in captured_warnings if w.startswith("[key-drift]"))
+    if label_lint_count or key_drift_count:
+        print(
+            f"  warnings: {label_lint_count} label-lint, {key_drift_count} key-drift "
+            f"(see WARN lines above; these are advisory, not errors)",
+            file=sys.stderr,
         )
 
     # Slug-uniqueness check across content/ and third_party/*/

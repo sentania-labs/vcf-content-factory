@@ -1706,7 +1706,14 @@ def _render_one_object(
 
             wire_metrics.append({
                 "id": m_id,
-                "key": m.key,
+                # wire_key is the label-derived key (MPB derivation algorithm).
+                # It always matches what MPB's pak-build pipeline emits for the same
+                # label, ensuring factory-built paks and MPB-pipeline paks produce
+                # identical metric/property keys.  The YAML's key: field is an
+                # authoring identifier only (used for in-YAML cross-references)
+                # and is never written to the wire.
+                # See context/mpb_explicit_key_investigation_2026_05_16.md.
+                "key": m.wire_key,
                 "unit": m.unit,
                 "isKpi": m.kpi,
                 "label": m.label,

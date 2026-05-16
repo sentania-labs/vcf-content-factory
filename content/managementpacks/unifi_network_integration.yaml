@@ -1,16 +1,21 @@
+# Deferred: per-radio metrics (2.4 GHz / 5 GHz tx_retries, channel, tx_power)
+# pending MPB grammar support for predicate extraction.
+# Authority: context/mp_authoring_design_principles.md §"Case Study 1"
+# Authority: context/known_limitations.md §"MPB <9.2 runtime: no JMESPath filter projections"
+# Re-add as a separate Radio resource kind (matching UniFi's existing
+# kind-per-concept pattern) when grammar support lands.
 adapter_kind: mpb_vcf_content_factory_unifi_integration
 author: VCF Content Factory
-build_number: 12
+build_number: 13
 description: 'Monitors UniFi network devices via the Integration API v1. Collects
-  device health (CPU, memory, uptime, load averages, uplink throughput, per-radio
-  TX retries) and inventory properties for Access Points, Switches, and the Gateway
-  (UDM Pro). Enriches each device with per-device detail properties (adoption/provisioning
-  timestamps, configuration ID, uplink device ID). Access Points additionally carry
-  radio config properties (channel, channel width, WLAN standard) for 2.4 GHz and
-  5 GHz radios. Includes Client and Network object types for a full inventory view.
-  Topology relationships wire devices to their uplink parent (gateway→switch→AP) and
-  clients to their connected device. Uses stateless X-API-Key auth (no login/logout
-  session). Requires UniFi Network Application 10.1.84+ with Integration API enabled.
+  device health (CPU, memory, uptime, load averages, uplink throughput) and inventory
+  properties for Access Points, Switches, and the Gateway (UDM Pro). Enriches each
+  device with per-device detail properties (adoption/provisioning timestamps,
+  configuration ID, uplink device ID). Includes Client and Network object types for
+  a full inventory view. Topology relationships wire devices to their uplink parent
+  (gateway→switch→AP) and clients to their connected device. Uses stateless X-API-Key
+  auth (no login/logout session). Requires UniFi Network Application 10.1.84+ with
+  Integration API enabled.
 
   '
 name: VCF Content Factory UniFi Integration
@@ -82,58 +87,46 @@ object_types:
     type: STRING
     usage: PROPERTY
   - key: cpu_pct
-    label: CPU %
+    label: CPU Pct
     source: metricset:device_stats_ap.cpuUtilizationPct
     type: NUMBER
     usage: METRIC
-  - key: mem_pct
-    label: Memory %
+  - key: memory_pct
+    label: Memory Pct
     source: metricset:device_stats_ap.memoryUtilizationPct
     type: NUMBER
     usage: METRIC
   - key: uptime_seconds
-    label: Uptime (s)
+    label: Uptime Seconds
     source: metricset:device_stats_ap.uptimeSec
     type: NUMBER
     usage: METRIC
-  - key: load_avg_1m
-    label: Load Average (1m)
+  - key: load_average_1m
+    label: Load Average 1m
     source: metricset:device_stats_ap.loadAverage1Min
     type: NUMBER
     usage: METRIC
-  - key: load_avg_5m
-    label: Load Average (5m)
+  - key: load_average_5m
+    label: Load Average 5m
     source: metricset:device_stats_ap.loadAverage5Min
     type: NUMBER
     usage: METRIC
-  - key: load_avg_15m
-    label: Load Average (15m)
+  - key: load_average_15m
+    label: Load Average 15m
     source: metricset:device_stats_ap.loadAverage15Min
     type: NUMBER
     usage: METRIC
   - key: uplink_tx_bps
-    label: Uplink TX (bps)
+    label: Uplink TX Bps
     source: metricset:device_stats_ap.uplink.txRateBps
     type: NUMBER
     usage: METRIC
   - key: uplink_rx_bps
-    label: Uplink RX (bps)
+    label: Uplink RX Bps
     source: metricset:device_stats_ap.uplink.rxRateBps
     type: NUMBER
     usage: METRIC
-  - key: radio_24ghz_tx_retries_pct
-    label: 2.4 GHz TX Retries %
-    source: metricset:device_stats_ap.interfaces.radios[?frequencyGHz==`2.4`].txRetriesPct
-      | [0]
-    type: NUMBER
-    usage: METRIC
-  - key: radio_5ghz_tx_retries_pct
-    label: 5 GHz TX Retries %
-    source: metricset:device_stats_ap.interfaces.radios[?frequencyGHz==`5`].txRetriesPct
-      | [0]
-    type: NUMBER
-    usage: METRIC
-  - key: last_heartbeat_at
+  - key: last_heartbeat
     label: Last Heartbeat
     source: metricset:device_stats_ap.lastHeartbeatAt
     type: STRING
@@ -156,42 +149,6 @@ object_types:
   - key: configuration_id
     label: Configuration ID
     source: metricset:device_detail_ap.configurationId
-    type: STRING
-    usage: PROPERTY
-  - key: radio_24ghz_channel
-    label: 2.4 GHz Channel
-    source: metricset:device_detail_ap.interfaces.radios[?frequencyGHz==`2.4`].channel
-      | [0]
-    type: NUMBER
-    usage: PROPERTY
-  - key: radio_24ghz_width
-    label: 2.4 GHz Channel Width (MHz)
-    source: metricset:device_detail_ap.interfaces.radios[?frequencyGHz==`2.4`].channelWidthMHz
-      | [0]
-    type: NUMBER
-    usage: PROPERTY
-  - key: radio_24ghz_standard
-    label: 2.4 GHz WLAN Standard
-    source: metricset:device_detail_ap.interfaces.radios[?frequencyGHz==`2.4`].wlanStandard
-      | [0]
-    type: STRING
-    usage: PROPERTY
-  - key: radio_5ghz_channel
-    label: 5 GHz Channel
-    source: metricset:device_detail_ap.interfaces.radios[?frequencyGHz==`5`].channel
-      | [0]
-    type: NUMBER
-    usage: PROPERTY
-  - key: radio_5ghz_width
-    label: 5 GHz Channel Width (MHz)
-    source: metricset:device_detail_ap.interfaces.radios[?frequencyGHz==`5`].channelWidthMHz
-      | [0]
-    type: NUMBER
-    usage: PROPERTY
-  - key: radio_5ghz_standard
-    label: 5 GHz WLAN Standard
-    source: metricset:device_detail_ap.interfaces.radios[?frequencyGHz==`5`].wlanStandard
-      | [0]
     type: STRING
     usage: PROPERTY
   name: Access Point
@@ -264,46 +221,46 @@ object_types:
     type: STRING
     usage: PROPERTY
   - key: cpu_pct
-    label: CPU %
+    label: CPU Pct
     source: metricset:device_stats_switch.cpuUtilizationPct
     type: NUMBER
     usage: METRIC
-  - key: mem_pct
-    label: Memory %
+  - key: memory_pct
+    label: Memory Pct
     source: metricset:device_stats_switch.memoryUtilizationPct
     type: NUMBER
     usage: METRIC
   - key: uptime_seconds
-    label: Uptime (s)
+    label: Uptime Seconds
     source: metricset:device_stats_switch.uptimeSec
     type: NUMBER
     usage: METRIC
-  - key: load_avg_1m
-    label: Load Average (1m)
+  - key: load_average_1m
+    label: Load Average 1m
     source: metricset:device_stats_switch.loadAverage1Min
     type: NUMBER
     usage: METRIC
-  - key: load_avg_5m
-    label: Load Average (5m)
+  - key: load_average_5m
+    label: Load Average 5m
     source: metricset:device_stats_switch.loadAverage5Min
     type: NUMBER
     usage: METRIC
-  - key: load_avg_15m
-    label: Load Average (15m)
+  - key: load_average_15m
+    label: Load Average 15m
     source: metricset:device_stats_switch.loadAverage15Min
     type: NUMBER
     usage: METRIC
   - key: uplink_tx_bps
-    label: Uplink TX (bps)
+    label: Uplink TX Bps
     source: metricset:device_stats_switch.uplink.txRateBps
     type: NUMBER
     usage: METRIC
   - key: uplink_rx_bps
-    label: Uplink RX (bps)
+    label: Uplink RX Bps
     source: metricset:device_stats_switch.uplink.rxRateBps
     type: NUMBER
     usage: METRIC
-  - key: last_heartbeat_at
+  - key: last_heartbeat
     label: Last Heartbeat
     source: metricset:device_stats_switch.lastHeartbeatAt
     type: STRING
@@ -398,46 +355,46 @@ object_types:
     type: STRING
     usage: PROPERTY
   - key: cpu_pct
-    label: CPU %
+    label: CPU Pct
     source: metricset:device_stats_gateway.cpuUtilizationPct
     type: NUMBER
     usage: METRIC
-  - key: mem_pct
-    label: Memory %
+  - key: memory_pct
+    label: Memory Pct
     source: metricset:device_stats_gateway.memoryUtilizationPct
     type: NUMBER
     usage: METRIC
   - key: uptime_seconds
-    label: Uptime (s)
+    label: Uptime Seconds
     source: metricset:device_stats_gateway.uptimeSec
     type: NUMBER
     usage: METRIC
-  - key: load_avg_1m
-    label: Load Average (1m)
+  - key: load_average_1m
+    label: Load Average 1m
     source: metricset:device_stats_gateway.loadAverage1Min
     type: NUMBER
     usage: METRIC
-  - key: load_avg_5m
-    label: Load Average (5m)
+  - key: load_average_5m
+    label: Load Average 5m
     source: metricset:device_stats_gateway.loadAverage5Min
     type: NUMBER
     usage: METRIC
-  - key: load_avg_15m
-    label: Load Average (15m)
+  - key: load_average_15m
+    label: Load Average 15m
     source: metricset:device_stats_gateway.loadAverage15Min
     type: NUMBER
     usage: METRIC
-  - key: uplink_tx_bps
-    label: WAN Uplink TX (bps)
+  - key: wan_uplink_tx_bps
+    label: WAN Uplink TX Bps
     source: metricset:device_stats_gateway.uplink.txRateBps
     type: NUMBER
     usage: METRIC
-  - key: uplink_rx_bps
-    label: WAN Uplink RX (bps)
+  - key: wan_uplink_rx_bps
+    label: WAN Uplink RX Bps
     source: metricset:device_stats_gateway.uplink.rxRateBps
     type: NUMBER
     usage: METRIC
-  - key: last_heartbeat_at
+  - key: last_heartbeat
     label: Last Heartbeat
     source: metricset:device_stats_gateway.lastHeartbeatAt
     type: STRING
@@ -484,7 +441,7 @@ object_types:
     source: metricset:clients.id
     type: STRING
     usage: PROPERTY
-  - key: client_type
+  - key: type
     label: Type
     source: metricset:clients.type
     type: STRING
@@ -566,7 +523,7 @@ object_types:
     source: metricset:networks.metadata.origin
     type: STRING
     usage: PROPERTY
-  - key: is_default
+  - key: default
     label: Default
     source: metricset:networks.default
     type: STRING

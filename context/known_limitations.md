@@ -136,3 +136,28 @@ is no evidence of composite key support (multiple
 must be globally unique on their own. For hosts, use `hostname`
 (FQDN) → `VMEntityName`, not `host_moid` → `VMEntityObjectID`
 (MOIDs are per-vCenter, not global).
+
+## 12. MPB <9.2 runtime: no JMESPath filter projections
+
+`ResourceQueryHelperKt` in MPB versions prior to 9.2 does not evaluate
+JMESPath filter expressions like `[?field=='value']` — these are
+silently no-op'd at runtime. The expression is accepted by MPB at import
+and build time and appears valid in the design editor, but the adapter
+collects no data for any metric whose source path contains a filter
+predicate.
+
+Patterns requiring per-element selection by predicate must wait for MPB
+9.2 or use chained metricSets (one resource kind per element, so the
+predicate can be replaced with a chain bind that selects the element by
+identity).
+
+Authority: cleanroom finding (see `context/mpb_designer_wire_format.md`
+§"The expression language (runtime form)") + first-party confirmation
+from the engineer who built MPB.
+
+Prior art: UniFi radio metrics were dropped in 1.0.0.13 because they
+relied on `radio_table[?radio=='ng'].xxx` patterns that the runtime
+could not evaluate. The metrics rendered and built cleanly into a pak
+but registered zero collections on prod. This limitation affects only
+the INTERNAL resource collection path; ARIA_OPS metric expressions are
+evaluated by a different engine and are not affected.

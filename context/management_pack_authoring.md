@@ -422,6 +422,89 @@ resolves to the `name` field on each element of `data.volumes[]`.
 
 ---
 
+### Metric/property key derivation — choose labels carefully
+
+**The `key:` field in YAML is an authoring identifier only.** It is used
+internally for in-YAML cross-references (name_expression, identifiers,
+relationship expressions) but is **never written to the wire** (design.json,
+template.json, describe.xml).
+
+The on-wire key is always derived from `label:` using MPB's deterministic
+algorithm. Factory-built paks and MPB-pipeline paks now emit identical keys
+for the same design. This alignment was established 2026-05-16 — see
+`context/mpb_explicit_key_investigation_2026_05_16.md`.
+
+#### Derivation algorithm
+
+```
+derived_key = label
+1. Drop all '.' characters (no replacement)
+2. Drop '(' and ')' (parenthesis content is kept; only the brackets drop)
+3. Lowercase
+4. Replace '%' and any whitespace with '_'
+5. Collapse consecutive '_' into a single '_'
+```
+
+Leading/trailing `_` are preserved (not stripped). This matches MPB's
+`ResourceQueryHelperKt` build-time derivation.
+
+#### Examples
+
+| `label:` | derived wire key | Notes |
+|---|---|---|
+| `Device ID` | `device_id` | Clean label |
+| `CPU %` | `cpu_` | `%` after space → two `_` → collapsed, trailing `_` kept |
+| `Memory %` | `memory_` | Same pattern |
+| `Uptime (s)` | `uptime_s` | Parens dropped, content kept |
+| `Load Average (1m)` | `load_average_1m` | Parens dropped |
+| `Load Average (15m)` | `load_average_15m` | |
+| `Uplink TX (bps)` | `uplink_tx_bps` | |
+| `2.4 GHz Channel` | `24_ghz_channel` | Period dropped: `2.4` → `24` |
+| `2.4 GHz Channel Width (MHz)` | `24_ghz_channel_width_mhz` | Both rules |
+| `5 GHz TX Retries %` | `5_ghz_tx_retries_` | Trailing `_` from `%` |
+| `Firmware Updatable` | `firmware_updatable` | Clean |
+| `VCF-CF - Total LUNs` | `vcf-cf_-_total_luns` | Hyphens are kept; spaces → `_` |
+
+#### Key quality signals from `validate`
+
+`python3 -m vcfops_managementpacks validate` emits `WARN` lines (not errors)
+for labels that produce unexpected or awkward derived keys:
+
+| Tag | Trigger | What it means |
+|---|---|---|
+| `[label-lint]` | Label contains `%` | Derived key will have trailing `_` |
+| `[label-lint]` | Label contains `.` | Silently dropped; `2.4 GHz` → `24_ghz` |
+| `[label-lint]` | Label contains `(` or `)` | Silently dropped |
+| `[label-lint]` | Label has two-or-more consecutive spaces | Collapses to one `_` |
+| `[label-lint]` | Label has leading/trailing whitespace | May produce unexpected prefix/suffix `_` |
+| `[key-drift]` | YAML `key:` ≠ derived wire key | Audit advisory; wire key wins |
+
+These warnings are advisory — validate still returns `OK`. Use them to:
+1. Confirm that the derived key is what you intended.
+2. Decide whether to update the YAML `key:` to match the derived key
+   (recommended for clarity, so YAML cross-references read the same as
+   the stat-key users will see in the UI).
+3. Flag labels that will produce ugly keys (`cpu_`, `memory_`) and decide
+   whether to change the label (affects the UI display name) or accept the key.
+
+**The `key:` field is never silently coerced** — it remains as your authoring
+identifier in the YAML. Only the wire output changes.
+
+#### Implications for symptom/alert/dashboard authoring
+
+When writing a symptom against an MP metric, use the **derived wire key**
+(what `validate` says `factory will emit`), not the YAML `key:` field.
+The stat-key format in VCF Ops is:
+```
+<adapter_kind>|<resource_kind>|<derived_wire_key>
+```
+Example for `CPU %` on `Access Point` in the UniFi Integration MP:
+```
+mpb_vcf_content_factory_unifi_integration|access_point|cpu_
+```
+
+---
+
 ## Pagination
 
 ### Passing `offset` and `limit` as mandatory query params

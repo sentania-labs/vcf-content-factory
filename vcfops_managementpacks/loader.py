@@ -252,6 +252,53 @@ def _derive_adapter_kind(name: str) -> str:
     return f"mpb_{slug}"
 
 
+def derive_key_from_label(label: str) -> str:
+    """Derive the MPB on-wire metric/property key from a metric label.
+
+    This replicates the algorithm MPB's pak-build pipeline uses when computing
+    ``template.json`` metric keys from label strings.  It is the **only**
+    algorithm that produces keys identical to what MPB emits, regardless of any
+    ``key:`` field declared in the YAML.
+
+    Algorithm (reverse-engineered from 40+ label→key pairs in MPB-built paks —
+    see ``context/mpb_explicit_key_investigation_2026_05_16.md`` §"Derivation
+    algorithm"):
+
+    1. Drop ``.`` (period) — no replacement character.
+    2. Drop ``(`` and ``)`` — parenthesis characters dropped, content kept.
+    3. Lowercase.
+    4. Replace ``%`` and whitespace with ``_``.
+    5. Collapse consecutive ``_`` to a single ``_``.
+
+    Leading/trailing ``_`` are kept intact.  Example: ``"CPU %"`` → ``"cpu_"``.
+
+    Examples
+    --------
+    >>> derive_key_from_label("Device ID")
+    'device_id'
+    >>> derive_key_from_label("CPU %")
+    'cpu_'
+    >>> derive_key_from_label("Uptime (s)")
+    'uptime_s'
+    >>> derive_key_from_label("Load Average (1m)")
+    'load_average_1m'
+    >>> derive_key_from_label("2.4 GHz Channel")
+    '24_ghz_channel'
+    """
+    s = label
+    # Step 1: drop periods
+    s = s.replace(".", "")
+    # Step 2: drop parentheses
+    s = s.replace("(", "").replace(")", "")
+    # Step 3: lowercase
+    s = s.lower()
+    # Step 4: replace % and whitespace with _
+    s = re.sub(r"[%\s]", "_", s)
+    # Step 5: collapse runs of _
+    s = re.sub(r"_+", "_", s)
+    return s
+
+
 def derive_class_name_fragment(adapter_kind: str) -> str:
     """Derive the CamelCase class name fragment from adapter_kind.
 
@@ -376,6 +423,14 @@ class MetricDef:
     unit: str = ""
     kpi: bool = False
     coerce: Optional[str] = None   # Gap D: optional "number" hint for string→NUMBER coercion
+    # wire_key is the on-wire key derived from label using derive_key_from_label().
+    # It is populated by _parse_metric after label is known.  Renderers MUST use
+    # wire_key for all on-wire JSON/XML output (design.json, template.json,
+    # describe.xml) so that factory-built paks match MPB-pipeline paks for the
+    # same design.  The YAML's key: field is an authoring identifier only — used
+    # for in-YAML cross-references (name_expression, identifiers, relationship
+    # expressions) but never written to the wire.
+    wire_key: str = ""
 
 
 @dataclass
@@ -2143,6 +2198,55 @@ def _validate_metric(tag: str, m: MetricDef, ms_names: set) -> None:
     # Validate source (MetricSourceDef — Tier 3.3 structured form)
     _validate_metric_source(mtag, m.source, ms_names)
 
+    # --- Label quality lint (WARN, not error) ---
+    # These checks flag label patterns that produce unexpected wire keys under
+    # MPB's derivation algorithm.  See derive_key_from_label() and
+    # context/mpb_explicit_key_investigation_2026_05_16.md §"Derivation algorithm".
+    import warnings as _w
+    label = m.label
+    if label.strip() != label:
+        _w.warn(
+            f"[label-lint] {mtag}: label {label!r} has leading/trailing whitespace "
+            f"→ derived key {m.wire_key!r} may be unexpected",
+            stacklevel=2,
+        )
+    if "%"in label:
+        _w.warn(
+            f"[label-lint] {mtag}: label {label!r} contains '%' "
+            f"→ derived key {m.wire_key!r} has trailing underscore",
+            stacklevel=2,
+        )
+    if "." in label:
+        _w.warn(
+            f"[label-lint] {mtag}: label {label!r} contains '.' (silently dropped) "
+            f"→ derived key {m.wire_key!r} — e.g. '2.4 GHz' → '24_ghz'",
+            stacklevel=2,
+        )
+    if "(" in label or ")" in label:
+        _w.warn(
+            f"[label-lint] {mtag}: label {label!r} contains parentheses (silently dropped) "
+            f"→ derived key {m.wire_key!r}",
+            stacklevel=2,
+        )
+    if "  " in label:
+        _w.warn(
+            f"[label-lint] {mtag}: label {label!r} contains two-or-more consecutive spaces "
+            f"→ derived key {m.wire_key!r}",
+            stacklevel=2,
+        )
+
+    # --- Key-drift audit (WARN, not error) ---
+    # When the YAML's explicit key: differs from the label-derived wire key,
+    # emit an advisory so authors can decide whether to update the YAML key
+    # or accept the divergence.
+    if m.key and m.wire_key and m.key != m.wire_key:
+        _w.warn(
+            f"[key-drift] {mtag}: key {m.key!r} label {label!r} derives to "
+            f"{m.wire_key!r} — factory will emit {m.wire_key!r} on the wire. "
+            f"Update YAML key: to {m.wire_key!r} or accept that explicit key is advisory only.",
+            stacklevel=2,
+        )
+
 
 # ---------------------------------------------------------------------------
 # events: rejected at YAML-parse time
@@ -2270,15 +2374,21 @@ def _parse_metric(raw: dict, parent_tag: str) -> MetricDef:
     source = _parse_metric_source(raw_source, f"{parent_tag}: metric '{raw.get('key', '')}'")
     raw_coerce = raw.get("coerce")
     coerce = str(raw_coerce).strip().lower() if raw_coerce is not None else None
+    label = str(raw.get("label", "") or "").strip()
+    # Compute wire_key from label using the MPB derivation algorithm.
+    # This is the key that will appear on the wire (design.json, template.json,
+    # describe.xml).  It always matches what MPB's pak-build pipeline would emit.
+    wire_key = derive_key_from_label(label) if label else ""
     return MetricDef(
         key=str(raw.get("key", "") or "").strip(),
-        label=str(raw.get("label", "") or "").strip(),
+        label=label,
         usage=str(raw.get("usage", "") or "").strip().upper(),
         type=str(raw.get("type", "") or "").strip().upper(),
         source=source,
         unit=str(raw.get("unit", "") or "").strip(),
         kpi=bool(raw.get("kpi", False)),
         coerce=coerce,   # Gap D: optional "number" coerce hint
+        wire_key=wire_key,
     )
 
 
