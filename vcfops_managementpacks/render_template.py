@@ -155,112 +155,30 @@ def _derive_key(expr_label: str) -> str:
     return _camel_to_snake(last_seg)
 
 
-# JMESPath features that require the full evaluator rather than the simple
-# dot-path parser MPB uses by default. When any of these appear in an
-# expression body, MPB's runtime needs the expression wrapped with leading
-# and trailing backslash markers inside the @@@MPB_QUOTE_BODY envelope to
-# route through the full JMESPath engine.
-#
-# Reference: MPB-built UniFi pak ships complex expressions like
-# "${@@@MPB_QUOTE_BODY \\interfaces.radios[?frequencyGHz==`2.4`].txRetriesPct | [0]\\ @@@MPB_QUOTE}"
-# (note the leading and trailing single backslash, which is `\\` in JSON).
-# Without the wrap, the factory's "${@@@MPB_QUOTE_BODY interfaces.radios[?...] @@@MPB_QUOTE}"
-# silently returns no match. Prod evidence: UniFi 1.0.0.8 ships 2 radio
-# metrics + 6 radio properties that never register as statkeys — all use
-# JMESPath filters.
-#
-# What is NOT in this tuple (and must NOT be added back):
-#
-#   ".*"  — wildcard property iteration (e.g. "data.*").  MPB's simple parser
-#           handles ".*" natively — it does not need the full-engine wrap.
-#           Evidence (2026-05-16): factory pak 1.0.0.11 included ".*" in this
-#           tuple and wrapped every listExpression that iterated over a top-
-#           level list (e.g. "data.*", "data.devices.*").  MPB-built reference
-#           pak (VCFContentFactoryUniFiIntegration-1001.pak) ships all 18 of
-#           those listExpression sites plain (unwrapped).  The wrapped form
-#           broke runtime list iteration on prod, causing every chained request
-#           and every top-level resource list iteration to yield no resources.
-#           Removing ".*" restores plain emission for these sites.
-#
-#   "[*]" and "[]" — array wildcard and flatten.  These are also iteration
-#           constructs that MPB's simple parser likely handles natively (same
-#           category as ".*").  We don't have a current MP using them in a
-#           listExpression context to confirm either way, so the conservative
-#           choice is to leave them in for now.  If they ever cause the same
-#           kind of prod break as ".*" did, remove them from this tuple and
-#           document the evidence here.
-
-_JMESPATH_COMPLEX_TOKENS = (
-    "[?",        # filter projection
-    "|",         # pipe (sub-expression chaining / flatten with [0])
-    "[*]",       # wildcard index (kept conservatively — see note above)
-    "[]",        # flatten (kept conservatively — see note above)
-    "@",         # current-element reference
-    "length(",   # function call (and similar — to_string, keys, values, etc.)
-    "to_string(",
-    "to_number(",
-    "keys(",
-    "values(",
-    "contains(",
-    "starts_with(",
-    "ends_with(",
-    "not_null(",
-    "sort(",
-    "sort_by(",
-    "min(",
-    "max(",
-    "min_by(",
-    "max_by(",
-    "type(",
-    "map(",
-)
-
-
-def _is_complex_jmespath(expression: str) -> bool:
-    """Return True if ``expression`` contains JMESPath features beyond
-    simple dot-path navigation (filters, pipes, wildcards, function calls).
-    """
-    return any(tok in expression for tok in _JMESPATH_COMPLEX_TOKENS)
-
-
 def _wrap_quote_body(label: str) -> str:
     """Wrap a label in the MPB template BODY expression format.
 
-    Template format for simple paths (dot-paths, wildcards, plain iteration):
-       ``"${@@@MPB_QUOTE_BODY <label> @@@MPB_QUOTE}"``
-    Template format for complex JMESPath (filter projections, pipes, function
-    calls):
-       ``"${@@@MPB_QUOTE_BODY \\<label>\\ @@@MPB_QUOTE}"``
-    The leading + trailing backslash inside the envelope tells MPB to
-    invoke the full JMESPath engine rather than its simple dot-path parser.
-    Without it, complex expressions silently return empty.
+    Template format: ``"${@@@MPB_QUOTE_BODY <label> @@@MPB_QUOTE}"``
 
-    What counts as "complex" (triggers the backslash wrap):
-      - Filter projections: ``[?...]``
-      - Pipes: ``|``
-      - Current-element reference: ``@``
-      - Function calls: ``length(``, ``to_string(``, etc.
-      - Array wildcard ``[*]`` and flatten ``[]`` (conservative; unconfirmed)
+    MPB's runtime expression grammar supports dot-path field navigation and
+    the wildcard form ``data.*`` only.  It is backed by Jackson ``JsonNode``
+    (``BuilderQueryJsonNodeParserKt``), not JMESPath or Jayway JsonPath.
+    Expressions containing filter projections (``[?...]``), pipes (``|``),
+    current-element references (``@``), or function calls are silently no-op'd
+    by the runtime regardless of any wrap markers.
 
-    What does NOT count as complex (stays plain, no wrap):
-      - Wildcard property iteration: ``.*`` (e.g. ``data.*``, ``data.devices.*``)
-        MPB's simple parser handles ``.*`` natively.  Evidence (2026-05-16):
-        factory pak 1.0.0.11 incorrectly wrapped these, breaking all list
-        iteration on prod.  MPB-built reference pak ships all 18 listExpression
-        sites with ``data.*`` plain.  Removing ``.*`` from _JMESPATH_COMPLEX_TOKENS
-        fixed the regression in pak 1.0.0.12.
-
-    Reference: MPB-built reference pak template.json + UniFi prod
-    evidence (2026-05-16). Spec doesn't yet document this — factory
-    finding, push back to cleanroom.
+    The backslash-wrap form (``${@@@MPB_QUOTE_BODY \\<label>\\ @@@MPB_QUOTE}``)
+    was a workaround for what was believed to be a grammar-routing limitation.
+    Cleanroom confirmation (54 compiled paths across UniFi + phpIPAM reference
+    paks, 2026-05-16) established that no such routing exists: MPB always uses
+    its simple dot-path parser for BODY expressions, wrap or no wrap.  The wrap
+    is therefore removed; all BODY expressions use the plain form universally.
 
     Use this for expressions that read from the parent/child *response body*
     (listExpression, attributeExpression, metric expressions, parentRequest
     parameters).  Do NOT use for objectBinding.requestMatchIdExpression — see
     _wrap_quote_request_parameters().
     """
-    if _is_complex_jmespath(label):
-        return f"${{@@@MPB_QUOTE_BODY \\{label}\\ @@@MPB_QUOTE}}"
     return f"${{@@@MPB_QUOTE_BODY {label} @@@MPB_QUOTE}}"
 
 

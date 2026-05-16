@@ -49,6 +49,7 @@ import json
 import os
 import shutil
 import struct
+import sys
 import zipfile
 from pathlib import Path
 from typing import Optional
@@ -1717,6 +1718,16 @@ def _build_adapters_zip(
                 # World kind handled above as {ak}_world
                 continue
             rk_key = f"{ak}_{ot.key}" if not ot.key.startswith(ak) else ot.key
+            # Emit a WARN when the icon hint is absent or unresolvable, unless
+            # the author explicitly set icon: default (a deliberate choice for
+            # synthetic kinds per context/mp_icon_library.md).
+            if ot.icon != "default":
+                if not ot.icon or not (_ICONS_DIR / f"{ot.icon}.svg").exists():
+                    print(
+                        f"WARN: [icon] object_type '{ot.key}' has no resolved"
+                        " icon hint, using default.svg",
+                        file=sys.stderr,
+                    )
             zf.writestr(
                 f"{adapter_dir}/conf/images/ResourceKind/{rk_key}.svg",
                 _icon_bytes_for(ot.icon),
