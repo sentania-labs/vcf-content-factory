@@ -1,0 +1,583 @@
+# Cloudflare Management Pack — v1
+#
+# Design artifact: designs/cloudflare-mp-v1.md (mp-author-ready 2026-05-16)
+# API map: context/api-maps/cloudflare.md (fully live-verified 2026-05-16)
+# Adapter kind: mpb_vcf_content_factory_cloudflare
+#
+# Architecture summary (designs/cloudflare-mp-v1.md §"Object Model"):
+#   Two INTERNAL object kinds. Zero world kinds. Zero explicit relationships.
+#   Adapter instance is the implicit topology root (one Cloudflare account).
+#
+#   Zone — list, primary from GET /zones.
+#     Enriched by two chained metricSets:
+#       zone_dns_analytics: per-zone DNS aggregate (GET /zones/{id}/dns_analytics/report)
+#       zone_http_analytics: per-zone GraphQL HTTP metrics (POST /graphql)
+#     8 metrics, 14 properties.
+#
+#   Pages Project — list, primary from GET /accounts/{account_id}/pages/projects.
+#     Latest deployment flattened as properties. 0 metrics, 16 properties.
+#
+# Auth: http_header preset. api_token (sensitive) + account_id (not sensitive)
+#   both declared as credentials. Authorization header injected on every request.
+#   account_id is user-entered at adapter instantiation and referenced as
+#   ${credentials.account_id} in request paths.
+#
+# TOOLSET NOTE — GraphQL POST with chained variable in body (Risk #2):
+#   get_http_analytics is a POST request with a JSON body containing
+#   ${chain.zone_id}. This is the first factory MP to use a POST as a
+#   chained enrichment request. The renderer must support ${chain.*} token
+#   substitution in the `body:` field of a request. If the renderer cannot
+#   substitute ${chain.zone_id} in the body, HTTP analytics (6 of 8 zone
+#   metrics) will be silently absent. The request is included as authored;
+#   verify substitution behavior at pak build and collection time.
+#
+# TOOLSET NOTE — GraphQL static time window (Risk #3):
+#   The GraphQL query uses a fixed 1-hour lookback (limit: 1 on
+#   httpRequests1hGroups). The adapter cannot inject dynamic ISO timestamps
+#   for $start/$end because MPB's variable grammar does not support
+#   relative time expressions. The 1-hour rollup bucket contains cumulative
+#   totals for the most recent complete hour — suitable for trend analysis
+#   at 5-minute collection intervals.
+#
+# TOOLSET NOTE — DNS response time unit:
+#   dns_response_time_avg is in MICROSECONDS as confirmed by GraphQL
+#   introspection (processingTimeUs field). The REST endpoint (dns_analytics/
+#   report) returns responseTimeAvg in the same unit per live verification.
+#   Labels explicitly call out "us" (microseconds) to avoid user confusion.
+#
+# Status Component Group: DROPPED from v1 (dual-hostname not supported by MPB).
+#   Status page monitoring requires a separate MP targeting
+#   www.cloudflarestatus.com with preset: none. See designs/cloudflare-mp-v1.md
+#   §"REVISION: Status Component Group dropped".
+#
+# Events: design specifies 2 events (Zone Status Not Active, Pages Deploy Failed).
+#   Per mpb_pak_structural_reference.md, events are stripped from pak builds
+#   (runtime format unknown — TOOLSET GAP). Events are documented here for
+#   design-import path only. Use factory symptoms/alerts for runtime alerting.
+#
+name: VCF Content Factory Cloudflare
+version: "1.0.0"
+build_number: 1
+author: VCF Content Factory
+adapter_kind: mpb_vcf_content_factory_cloudflare
+description: >
+  Monitors Cloudflare zones (DNS and HTTP traffic analytics) and Cloudflare
+  Pages projects (deployment status and configuration) via the Cloudflare v4
+  REST and GraphQL Analytics APIs. Collects DNS query counts and response time
+  averages per zone from the DNS Analytics REST endpoint, and HTTP traffic
+  metrics (requests, bytes, cached requests, cached bytes, threat counts,
+  encrypted requests) per zone from the GraphQL httpRequests1hGroups dataset.
+  Pages Projects expose latest deployment status, trigger, branch, commit hash,
+  source repository, and build configuration as properties. Requires a Cloudflare
+  API token with Zone Read + Zone Analytics Read + Account Read permissions, and
+  the Cloudflare Account ID. One adapter instance represents one Cloudflare account.
+
+source:
+  port: 443
+  ssl: VERIFY
+  base_path: "client/v4"
+  timeout: 30
+  max_retries: 2
+  max_concurrent: 10
+
+  auth:
+    # http_header: stateless Bearer token auth with two user-entered fields.
+    # api_token — the Cloudflare API token (sensitive; Authorization header).
+    # account_id — the Cloudflare Account ID (not sensitive; used in request paths).
+    # Both fields appear in the MPB adapter instance credential dialog.
+    preset: http_header
+
+    credentials:
+      - {key: api_token,   label: "API Token",   sensitive: true}
+      - {key: account_id,  label: "Account ID",  sensitive: false}
+
+    inject:
+      - type: header
+        name: "Authorization"
+        value: "Bearer ${credentials.api_token}"
+
+  test_request:
+    method: GET
+    path: "/zones?per_page=1"
+    params: []
+
+
+requests:
+  # Request 1: get_zones — Zone inventory.
+  # GET /zones?per_page=50 with standard v4 envelope.
+  # result[] is the array of zone objects. The Zone object type iterates result[].
+  # No response_path strip — metric paths start from root (result.*).
+  # Feeds: Zone (primary metricSet zone_inventory).
+  - name: get_zones
+    method: GET
+    path: "/zones"
+    params:
+      - {key: per_page, value: "50"}
+    response_path: ""
+
+  # Request 2: get_dns_analytics — Per-zone DNS aggregate (chained).
+  # GET /zones/{zone_id}/dns_analytics/report?metrics=queryCount,responseTimeAvg&since=-5minutes&until=now
+  # ${chain.zone_id} is bound from zone_inventory.id on each Zone row.
+  # Response: v4 envelope; metrics in result.totals.queryCount and
+  #   result.totals.responseTimeAvg (unit: MICROSECONDS per live verification).
+  # Feeds: Zone (chained metricSet zone_dns_analytics).
+  - name: get_dns_analytics
+    method: GET
+    path: "/zones/${chain.zone_id}/dns_analytics/report"
+    params:
+      - {key: metrics, value: "queryCount,responseTimeAvg"}
+      - {key: since,   value: "-5minutes"}
+      - {key: until,   value: "now"}
+    response_path: ""
+
+  # Request 3: get_http_analytics — Per-zone GraphQL HTTP metrics (chained POST).
+  # POST /graphql with JSON body containing the zone filter as ${chain.zone_id}.
+  # Dataset: httpRequests1hGroups (1-hour rollups; limit: 1 returns the latest bucket).
+  # Response: GraphQL envelope; metrics under data.viewer.zones[0].
+  #   httpRequests1hGroups[0].sum.{requests,bytes,cachedRequests,cachedBytes,
+  #   threats,encryptedRequests}.
+  # TOOLSET NOTE: ${chain.zone_id} is substituted in the body string.
+  #   This is the factory's first use of a chained POST with body token substitution.
+  #   Verify at build time that the renderer supports ${chain.*} in body strings.
+  # Feeds: Zone (chained metricSet zone_http_analytics).
+  - name: get_http_analytics
+    method: POST
+    path: "/graphql"
+    params: []
+    body: '{"query":"{ viewer { zones(filter: {zoneTag: \"${chain.zone_id}\"}) { httpRequests1hGroups(limit: 1) { sum { requests bytes cachedRequests cachedBytes threats encryptedRequests } } } } }"}'
+    response_path: ""
+
+  # Request 4: get_pages_projects — Pages Project inventory.
+  # GET /accounts/{account_id}/pages/projects?per_page=25
+  # ${credentials.account_id} comes from the http_header credential field.
+  # result[] is the array of Pages project objects with embedded latest_deployment.
+  # Feeds: Pages Project (primary metricSet pages_inventory).
+  - name: get_pages_projects
+    method: GET
+    path: "/accounts/${credentials.account_id}/pages/projects"
+    params:
+      - {key: per_page, value: "25"}
+    response_path: ""
+
+
+object_types:
+
+  # ---------------------------------------------------------------------------
+  # Zone — list
+  # One row per Cloudflare zone (DNS domain) in the account.
+  # Primary inventory from get_zones (result[]). Enriched by two chained
+  # metricSets: DNS analytics (per-zone aggregate) and GraphQL HTTP metrics.
+  # Identifier: zone_id (32-char hex, globally unique, stable).
+  # Name expression: zone_name (domain name, e.g. example.com).
+  # Icon: world — globe silhouette fits "internet domain / DNS zone".
+  # ---------------------------------------------------------------------------
+  - name: "Zone"
+    key: zone
+    type: INTERNAL
+    icon: world
+    is_world: false
+    identifiers: [zone_id]
+    name_expression: zone_name
+
+    metricSets:
+      # metricSet A: zone_inventory — PRIMARY list source from get_zones.
+      # list_path: "result" iterates the result[] array (v4 envelope wrapper).
+      - from_request: get_zones
+        as: zone_inventory
+        primary: true
+        list_path: "result"
+
+      # metricSet B: zone_dns_analytics — CHAINED per-zone DNS metrics.
+      # Fires once per Zone row; binds zone_id from zone_inventory.id.
+      # Returns a scalar aggregate (not a list); list_path: "" scalar context.
+      - from_request: get_dns_analytics
+        as: zone_dns_analytics
+        primary: false
+        list_path: ""
+        chained_from: zone_inventory
+        bind:
+          - name: zone_id
+            from_attribute: id
+
+      # metricSet C: zone_http_analytics — CHAINED per-zone GraphQL HTTP metrics.
+      # Fires once per Zone row; binds zone_id from zone_inventory.id.
+      # Returns a scalar GraphQL envelope (not a list); list_path: "" scalar context.
+      - from_request: get_http_analytics
+        as: zone_http_analytics
+        primary: false
+        list_path: ""
+        chained_from: zone_inventory
+        bind:
+          - name: zone_id
+            from_attribute: id
+
+    metrics:
+      # --- Zone inventory properties (from zone_inventory / get_zones result[]) ---
+      # JSON path: result[item].field (list_path iterates result[]; metric path is
+      # the bare field name on each result array element).
+
+      - key: zone_id
+        label: "Zone ID"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.id"
+
+      - key: zone_name
+        label: "Zone Name"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.name"
+
+      - key: zone_status
+        label: "Zone Status"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.status"
+        # Values: active, pending, initializing, moved
+        # Event: Zone Status Not Active (WARNING, zone_status != "active")
+        # — see TOOLSET NOTE on events; use factory symptoms for runtime alerting.
+
+      - key: zone_type
+        label: "Zone Type"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.type"
+        # Values: full, partial, secondary, internal
+
+      - key: zone_paused
+        label: "Zone Paused"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.paused"
+
+      - key: development_mode
+        label: "Development Mode"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.development_mode"
+        # 0 = off; any positive integer = on (time remaining in seconds)
+
+      - key: plan_name
+        label: "Plan Name"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.plan.name"
+
+      - key: plan_tier
+        label: "Plan Tier"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.plan.legacy_id"
+        # Values: free, pro, business, enterprise
+
+      - key: name_servers
+        label: "Name Servers"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.name_servers"
+        # Array field; rendered as comma-separated string by the adapter runtime.
+
+      - key: account_name
+        label: "Account Name"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.account.name"
+
+      - key: owner_email
+        label: "Owner Email"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.owner.email"
+
+      - key: created_on
+        label: "Created On"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.created_on"
+
+      - key: activated_on
+        label: "Activated On"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.activated_on"
+
+      - key: modified_on
+        label: "Modified On"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:zone_inventory.modified_on"
+
+      # --- DNS Analytics metrics (from zone_dns_analytics / get_dns_analytics) ---
+      # Full JSON paths from response root (response_path: "" on get_dns_analytics):
+      #   result.totals.queryCount
+      #   result.totals.responseTimeAvg (unit: MICROSECONDS — confirmed live 2026-05-16)
+
+      - key: dns_queries
+        label: "DNS Queries"
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        kpi: true
+        source: "metricset:zone_dns_analytics.result.totals.queryCount"
+
+      - key: dns_avg_response_time_us
+        label: "DNS Avg Response Time (us)"
+        usage: METRIC
+        type: NUMBER
+        unit: "us"
+        source: "metricset:zone_dns_analytics.result.totals.responseTimeAvg"
+        # Unit: microseconds. Divide by 1000 for milliseconds (factory supermetric candidate).
+        # Field confirmed as microseconds via GraphQL introspection (processingTimeUs).
+
+      # --- HTTP Analytics metrics (from zone_http_analytics / get_http_analytics) ---
+      # Full JSON paths from GraphQL response root (response_path: "" on get_http_analytics):
+      #   data.viewer.zones[0].httpRequests1hGroups[0].sum.{field}
+      # Dataset: httpRequests1hGroups (hourly rollup, limit:1 = latest bucket).
+      # All fields are uint64; live-verified via GraphQL introspection 2026-05-16.
+
+      - key: http_requests
+        label: "HTTP Requests"
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        kpi: true
+        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1hGroups[0].sum.requests"
+
+      - key: http_bytes
+        label: "HTTP Bytes"
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1hGroups[0].sum.bytes"
+
+      - key: http_cached_requests
+        label: "HTTP Cached Requests"
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1hGroups[0].sum.cachedRequests"
+
+      - key: http_cached_bytes
+        label: "HTTP Cached Bytes"
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1hGroups[0].sum.cachedBytes"
+
+      - key: http_threats
+        label: "HTTP Threats"
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        kpi: true
+        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1hGroups[0].sum.threats"
+
+      - key: https_requests
+        label: "HTTPS Requests"
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1hGroups[0].sum.encryptedRequests"
+
+
+  # ---------------------------------------------------------------------------
+  # Pages Project — list
+  # One row per Cloudflare Pages project in the account.
+  # Primary inventory from get_pages_projects (result[]). Latest deployment
+  # is embedded in the response and flattened as properties.
+  # 0 numeric metrics in v1 (no traffic data on the list endpoint).
+  # Identifier: project_id (UUID, globally unique, stable).
+  # Name expression: project_name (unique within account).
+  # Icon: default (explicit) — TOOLSET GAP for a dedicated deployment icon.
+  #   The 'deployment' hint does not exist in the icon library as of 2026-05-16.
+  #   See designs/cloudflare-mp-v1.md §"Icons" and context/mp_icon_library.md.
+  #   When tooling adds templates/icons/deployment.svg, update icon: to "deployment".
+  # ---------------------------------------------------------------------------
+  - name: "Pages Project"
+    key: pages_project
+    type: INTERNAL
+    icon: default
+    is_world: false
+    identifiers: [project_id]
+    name_expression: project_name
+
+    metricSets:
+      # metricSet A: pages_inventory — PRIMARY list source from get_pages_projects.
+      # list_path: "result" iterates the result[] array (v4 envelope wrapper).
+      # Latest deployment is embedded in each result row under latest_deployment.
+      - from_request: get_pages_projects
+        as: pages_inventory
+        primary: true
+        list_path: "result"
+
+    metrics:
+      # --- Pages Project properties ---
+      # JSON path: result[item].field (list_path iterates result[]).
+
+      - key: project_id
+        label: "Project ID"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.id"
+
+      - key: project_name
+        label: "Project Name"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.name"
+
+      - key: subdomain
+        label: "Subdomain"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.subdomain"
+        # e.g. my-project.pages.dev
+
+      - key: production_branch
+        label: "Production Branch"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.production_branch"
+
+      - key: created_on
+        label: "Created On"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.created_on"
+
+      - key: source_type
+        label: "Source Type"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.source.type"
+        # Values: github, gitlab
+
+      - key: source_repository
+        label: "Source Repository"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.source.config.repo_name"
+
+      - key: source_owner
+        label: "Source Owner"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.source.config.owner"
+
+      - key: build_command
+        label: "Build Command"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.build_config.build_command"
+
+      - key: latest_deploy_environment
+        label: "Latest Deploy Environment"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.latest_deployment.environment"
+        # Values: production, preview
+
+      - key: latest_deploy_url
+        label: "Latest Deploy URL"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.latest_deployment.url"
+
+      - key: latest_deploy_trigger
+        label: "Latest Deploy Trigger"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.latest_deployment.deployment_trigger.type"
+        # Values: ad_hoc, push, etc.
+
+      - key: latest_deploy_branch
+        label: "Latest Deploy Branch"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.latest_deployment.deployment_trigger.metadata.branch"
+
+      - key: latest_deploy_commit
+        label: "Latest Deploy Commit"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.latest_deployment.deployment_trigger.metadata.commit_hash"
+
+      - key: latest_deploy_status
+        label: "Latest Deploy Status"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.latest_deployment.stages[?status!='idle'] | [-1].status"
+        # Derivation: last non-idle stage status. Values: success, failure, active, canceled.
+        # If all stages are idle, the deployment hasn't started — returns idle.
+        # Fallback path if the JMESPath filter is not supported by the renderer:
+        #   latest_deployment.stages[?name=='deploy'].status | [0]
+        # Event: Pages Deploy Failed (WARNING, latest_deploy_status == "failure")
+        # — see TOOLSET NOTE on events; use factory symptoms for runtime alerting.
+
+      - key: latest_deploy_time
+        label: "Latest Deploy Time"
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:pages_inventory.latest_deployment.created_on"
+
+
+# Zero explicit relationships in v1. Zone and Pages Project both parent
+# the adapter instance implicitly (MPB default containment model).
+# No join keys exist between Zone and Pages Project objects.
+# v2 consideration: if Status Components (leaf) are added, a field_match
+# relationship from Status Component Group -> Status Component via group_id.
+relationships: []
+
+
+# NOTE — Events NOT included in mpb_events block (2026-05-16).
+#
+# Design specifies two events:
+#   1. Zone Status Not Active (WARNING) — zone_status != "active"
+#   2. Pages Deploy Failed (WARNING) — latest_deploy_status == "failure"
+#
+# Events are intentionally omitted from mpb_events: because:
+#   1. The MPB pak runtime event format is unknown (TOOLSET GAP per
+#      mpb_pak_structural_reference.md). The v9.0.1-patch-1 runtime rejected
+#      a prior event block with BuilderFileParseException (vSphere storage paths
+#      MP, build v2.0.0.4, 2026-05-14). Do not re-add until a working wire
+#      format reference is established.
+#   2. Threshold-based alerting (metric value != expected) is the factory
+#      symptom + alert pattern, not MP-embedded events.
+#
+# For runtime alerting, author factory symptoms and alerts:
+#   - symptoms/cloudflare_zone_not_active.yaml
+#       (mpb_vcf_content_factory_cloudflare|zone|zone_status != "active")
+#   - symptoms/cloudflare_deploy_failed.yaml
+#       (mpb_vcf_content_factory_cloudflare|pages_project|latest_deploy_status == "failure")
+#   - alerts/cloudflare_zone_alert.yaml
+#   - alerts/cloudflare_deploy_alert.yaml
