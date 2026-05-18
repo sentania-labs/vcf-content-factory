@@ -21,12 +21,11 @@ This is what the workflow looks like in practice — you and Claude Code,
 in conversation, producing content while you focus on the question
 you're trying to answer.
 
-![The assembly line](docs/diagrams/authoring-loop.png)
+![Ask. Build. Ship.](docs/diagrams/intro-flow.png)
 
-*Plain English in. Working content out. Five stations, one orchestrator,
-sixteen specialists, one repo. The Henry Ford diagram —
-[open in Excalidraw](docs/diagrams/authoring-loop.excalidraw) for the
-editable source.*
+*Three nodes. Talk to it, let the agents work, ship the result on the
+lane you want. The full assembly-line view and the internal plumbing
+are in [HOW_IT_WORKS.md](HOW_IT_WORKS.md).*
 
 ---
 
