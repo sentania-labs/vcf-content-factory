@@ -270,12 +270,12 @@ def _convert_authentication(design_auth: Dict, design_global_headers: List[Dict]
     design_creds = design_auth.get("creds", []) or []
 
     # Convert credentials: rename creds -> credentials, strip usage/value/editable,
-    # add key field (= label).
+    # add key field (= key, falling back to label for backwards compatibility).
     credentials = []
     for c in design_creds:
         credentials.append({
             "id": c["id"],
-            "key": c.get("label", ""),
+            "key": c.get("key", c.get("label", "")),
             "label": c.get("label", ""),
             "sensitive": c.get("sensitive", False),
             "description": c.get("description", ""),

@@ -882,8 +882,9 @@ def _render_cred_field(ak: str, cred, seed_suffix: str) -> Dict:
     cred_id = _make_id(f"{ak}:auth:{seed_suffix}:{cred.key}")
     return {
         "id": cred_id,
+        "key": cred.key,
         "label": cred.label,
-        "usage": f"${{authentication.credentials.{cred.label}}}",
+        "usage": f"${{authentication.credentials.{cred.key}}}",
         "value": None,
         "editable": True,
         "sensitive": cred.sensitive,
@@ -901,10 +902,9 @@ def _render_session_request(
     req_id = _make_id(id_seed)
     params = _normalize_params(req.params or [])
 
-    # Rewrite ${credentials.<key>} → ${authentication.credentials.<label>} at emit.
+    # Rewrite ${credentials.<key>} → ${authentication.credentials.<key>} at emit.
     # The author uses ${credentials.X}; MPB expects ${authentication.credentials.X}.
-    # Labels equal keys in the current grammar (label is load-bearing, key is the
-    # factory-facing alias — for creds they're the same by convention).
+    # X is always the programmatic key (not the display label).
     # Also rewrite ${session.<key>} → ${authentication.session.<key>}.
     def _rewrite_auth_refs(text: str) -> str:
         if not text:

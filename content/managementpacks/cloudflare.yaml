@@ -535,11 +535,11 @@ object_types:
         usage: PROPERTY
         type: STRING
         unit: ""
-        source: "metricset:pages_inventory.latest_deployment.stages[?status!='idle'] | [-1].status"
-        # Derivation: last non-idle stage status. Values: success, failure, active, canceled.
-        # If all stages are idle, the deployment hasn't started — returns idle.
-        # Fallback path if the JMESPath filter is not supported by the renderer:
-        #   latest_deployment.stages[?name=='deploy'].status | [0]
+        source: "metricset:pages_inventory.latest_deployment.stages[-1].status"
+        # stages[-1] is always the "deploy" stage (Cloudflare Pages stages are
+        # ordered: initialize → build → deploy). JMESPath filter expressions
+        # ([?status!='idle']) are not supported by the MPB runtime — they cause
+        # silent pak registration failure.
         # Event: Pages Deploy Failed (WARNING, latest_deploy_status == "failure")
         # — see TOOLSET NOTE on events; use factory symptoms for runtime alerting.
 
