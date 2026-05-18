@@ -8,9 +8,9 @@ is exported from it and embedded in the documentation.
 
 | File | Where it's embedded | Audience |
 |---|---|---|
-| `intro-flow.excalidraw` / `.png` | `README.md` | Newcomer. Three nodes — Ask → Build → Ship. Sells the concept in five seconds. |
-| `authoring-loop.excalidraw` / `.png` | Top of `HOW_IT_WORKS.md` | Curious reader. Five-station assembly-line overview with the agents called out. Henry-Ford framing. |
-| `framework-internals.excalidraw` / `.png` | Deeper in `HOW_IT_WORKS.md` (just before "What lives where") | Fork-and-extend reader. All 16 agents, lanes, file destinations, both build pipelines, three output paths, codification loop. |
+| `intro-flow.excalidraw` / `.svg` | `README.md` | Newcomer. Three nodes — Ask → Build → Ship. Sells the concept in five seconds. |
+| `authoring-loop.excalidraw` / `.svg` | Top of `HOW_IT_WORKS.md` | Curious reader. Five-station assembly-line overview with the agents called out. Henry-Ford framing. |
+| `framework-internals.excalidraw` / `.svg` | Deeper in `HOW_IT_WORKS.md` (just before "What lives where") | Fork-and-extend reader. All 16 agents, lanes, file destinations, both build pipelines, three output paths, codification loop. |
 
 ## Editing
 
@@ -21,9 +21,16 @@ is exported from it and embedded in the documentation.
    existing entries) and `roughness: 0` (sharp lines, no hand-drawn
    feel).
 3. Save back to `.excalidraw`.
-4. Export to PNG: File → Export image → PNG → save over the existing
-   `.png` at the same path.
-5. Commit both files together.
+4. Regenerate the SVG:
+
+   ```
+   python3 scripts/excalidraw_to_svg.py docs/diagrams/<name>.excalidraw
+   ```
+
+   The converter handles the shape subset we use (rectangle, ellipse,
+   diamond, text, arrow, line). If you add a shape it doesn't know
+   about, extend `scripts/excalidraw_to_svg.py`.
+5. Commit both `.excalidraw` and `.svg` together.
 
 ## Why three diagrams
 

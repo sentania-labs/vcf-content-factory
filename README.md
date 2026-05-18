@@ -21,7 +21,7 @@ This is what the workflow looks like in practice — you and Claude Code,
 in conversation, producing content while you focus on the question
 you're trying to answer.
 
-![Ask. Build. Ship.](docs/diagrams/intro-flow.png)
+![Ask. Build. Ship.](docs/diagrams/intro-flow.svg)
 
 *Three nodes. Talk to it, let the agents work, ship the result on the
 lane you want. The full assembly-line view and the internal plumbing

@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2000 700" width="100%" preserveAspectRatio="xMidYMid meet">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/></marker></defs>
+<rect x="0" y="0" width="2000" height="700" fill="#f4f4f5"/>
+<rect x="0" y="0" width="2000" height="700" rx="0" ry="0" fill="#f4f4f5" stroke="none" stroke-width="0"/>
+<rect x="0" y="0" width="2000" height="100" rx="0" ry="0" fill="#111827" stroke="none" stroke-width="0"/>
+<rect x="0" y="100" width="2000" height="6" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<text x="1000.0" y="56" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="32" fill="#fbbf24" text-anchor="middle" xml:space="preserve">
+<tspan x="1000.0" dy="0">VCF CONTENT FACTORY</tspan>
+</text>
+<text x="1000.0" y="84" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#e5e7eb" text-anchor="middle" xml:space="preserve">
+<tspan x="1000.0" dy="0">plain English in.   working content out.</tspan>
+</text>
+<rect x="80" y="220" width="480" height="280" rx="0" ry="0" fill="#fed7aa" stroke="#9a3412" stroke-width="3"/>
+<rect x="80" y="220" width="480" height="48" rx="0" ry="0" fill="#9a3412" stroke="none" stroke-width="0"/>
+<text x="90" y="252" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="22" fill="#fed7aa" text-anchor="start" xml:space="preserve">
+<tspan x="90" dy="0">1.  ASK</tspan>
+</text>
+<rect x="104" y="288" width="432" height="196" rx="0" ry="0" fill="#1c1917" stroke="#1c1917" stroke-width="1"/>
+<text x="120" y="319" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="15" fill="#22c55e" text-anchor="start" xml:space="preserve">
+<tspan x="120" dy="0">&gt; Alert me when any VM</tspan>
+<tspan x="120" dy="18.75">  sustains CPU &gt; 90%.</tspan>
+</text>
+<text x="120" y="375" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="15" fill="#22c55e" text-anchor="start" xml:space="preserve">
+<tspan x="120" dy="0">&gt; Dashboard for VKS core</tspan>
+<tspan x="120" dy="18.75">  consumption per vCenter.</tspan>
+</text>
+<text x="120" y="431" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="15" fill="#22c55e" text-anchor="start" xml:space="preserve">
+<tspan x="120" dy="0">&gt; Build an MP for my</tspan>
+<tspan x="120" dy="18.75">  Synology NAS.</tspan>
+</text>
+<text x="320.0" y="524" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="320.0" dy="0">a sentence to Claude Code</tspan>
+</text>
+<path d="M 580,360 L 740,360" fill="none" stroke="#111827" stroke-width="5" stroke-linecap="square" stroke-linejoin="miter" marker-end="url(#arrow)"/>
+<rect x="760" y="220" width="480" height="280" rx="0" ry="0" fill="#dbeafe" stroke="#1e3a8a" stroke-width="3"/>
+<rect x="760" y="220" width="480" height="48" rx="0" ry="0" fill="#1e3a8a" stroke="none" stroke-width="0"/>
+<text x="770" y="252" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="22" fill="#dbeafe" text-anchor="start" xml:space="preserve">
+<tspan x="770" dy="0">2.  BUILD</tspan>
+</text>
+<rect x="790" y="290" width="420" height="80" rx="0" ry="0" fill="#1e3a8a" stroke="#1e3a8a" stroke-width="2"/>
+<text x="1000.0" y="324" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="18" fill="#fbbf24" text-anchor="middle" xml:space="preserve">
+<tspan x="1000.0" dy="0">CLAUDE CODE</tspan>
+<tspan x="1000.0" dy="22.5">+ 16 specialist agents</tspan>
+</text>
+<rect x="790" y="386" width="420" height="90" rx="0" ry="0" fill="#0f172a" stroke="#0f172a" stroke-width="1"/>
+<text x="800" y="403" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#fbbf24" text-anchor="start" xml:space="preserve">
+<tspan x="800" dy="0">YAML SOURCE</tspan>
+</text>
+<text x="810" y="425" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#86efac" text-anchor="start" xml:space="preserve">
+<tspan x="810" dy="0">name: &quot;[VCF Content Factory] VM CPU Sustained&quot;</tspan>
+<tspan x="810" dy="13.75">resource_kinds: [{kind: VirtualMachine}]</tspan>
+<tspan x="810" dy="13.75">formula: avg(${this, metric=cpu|usage_average}) &gt; 90</tspan>
+</text>
+<text x="1000.0" y="524" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="1000.0" dy="0">conversation  →  validated YAML</tspan>
+</text>
+<path d="M 1260,360 L 1420,360" fill="none" stroke="#111827" stroke-width="5" stroke-linecap="square" stroke-linejoin="miter" marker-end="url(#arrow)"/>
+<rect x="1440" y="220" width="480" height="280" rx="0" ry="0" fill="#dcfce7" stroke="#14532d" stroke-width="3"/>
+<rect x="1440" y="220" width="480" height="48" rx="0" ry="0" fill="#14532d" stroke="none" stroke-width="0"/>
+<text x="1450" y="252" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="22" fill="#dcfce7" text-anchor="start" xml:space="preserve">
+<tspan x="1450" dy="0">3.  SHIP</tspan>
+</text>
+<rect x="1464" y="290" width="432" height="56" rx="0" ry="0" fill="#bbf7d0" stroke="#15803d" stroke-width="2"/>
+<text x="1474" y="312" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#14532d" text-anchor="start" xml:space="preserve">
+<tspan x="1474" dy="0">LIVE INSTALL</tspan>
+<tspan x="1474" dy="15.0">Suite API push to your VCF Ops instance</tspan>
+</text>
+<rect x="1464" y="358" width="432" height="56" rx="0" ry="0" fill="#cffafe" stroke="#0e7490" stroke-width="2"/>
+<text x="1474" y="380" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#155e75" text-anchor="start" xml:space="preserve">
+<tspan x="1474" dy="0">DISTRIBUTION ZIP</tspan>
+<tspan x="1474" dy="15.0">self-installing bundle for any colleague</tspan>
+</text>
+<rect x="1464" y="426" width="432" height="56" rx="0" ry="0" fill="#f3e8ff" stroke="#6b21a8" stroke-width="2"/>
+<text x="1474" y="448" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#581c87" text-anchor="start" xml:space="preserve">
+<tspan x="1474" dy="0">GIT / PR</tspan>
+<tspan x="1474" dy="15.0">YAML source forever — fork it, diff it, share it</tspan>
+</text>
+<text x="1680.0" y="524" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="1680.0" dy="0">pick any lane  ·  all repeatable</tspan>
+</text>
+<rect x="0" y="620" width="2000" height="80" rx="0" ry="0" fill="#111827" stroke="none" stroke-width="0"/>
+<rect x="0" y="614" width="2000" height="6" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<text x="1000.0" y="656" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#fbbf24" text-anchor="middle" xml:space="preserve">
+<tspan x="1000.0" dy="0">talk to it  ·  watch it work  ·  ship the result  ·  fork it forever</tspan>
+</text>
+</svg>

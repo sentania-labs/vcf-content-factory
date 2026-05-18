@@ -1,0 +1,251 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2400 1200" width="100%" preserveAspectRatio="xMidYMid meet">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/></marker></defs>
+<rect x="0" y="0" width="2400" height="1200" fill="#f4f4f5"/>
+<rect x="0" y="0" width="2400" height="1200" rx="0" ry="0" fill="#f4f4f5" stroke="none" stroke-width="0"/>
+<rect x="0" y="0" width="2400" height="160" rx="0" ry="0" fill="#111827" stroke="none" stroke-width="0"/>
+<rect x="0" y="160" width="2400" height="8" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<text x="1200.0" y="78" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="48" fill="#fbbf24" text-anchor="middle" xml:space="preserve">
+<tspan x="1200.0" dy="0">VCF CONTENT FACTORY</tspan>
+</text>
+<text x="1200.0" y="120" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="20" fill="#e5e7eb" text-anchor="middle" xml:space="preserve">
+<tspan x="1200.0" dy="0">The assembly line for VCF Operations content.   Plain English in.   Working content out.   At scale.</tspan>
+</text>
+<text x="80" y="226" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#dc2626" text-anchor="start" xml:space="preserve">
+<tspan x="80" dy="0">STATION 1</tspan>
+</text>
+<text x="480" y="226" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#dc2626" text-anchor="start" xml:space="preserve">
+<tspan x="480" dy="0">STATION 2</tspan>
+</text>
+<text x="880" y="226" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#dc2626" text-anchor="start" xml:space="preserve">
+<tspan x="880" dy="0">STATION 3</tspan>
+</text>
+<text x="1640" y="226" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#dc2626" text-anchor="start" xml:space="preserve">
+<tspan x="1640" dy="0">STATION 4</tspan>
+</text>
+<text x="2000" y="226" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#dc2626" text-anchor="start" xml:space="preserve">
+<tspan x="2000" dy="0">STATION 5</tspan>
+</text>
+<text x="80" y="268" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="28" fill="#111827" text-anchor="start" xml:space="preserve">
+<tspan x="80" dy="0">INTAKE</tspan>
+</text>
+<text x="480" y="268" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="28" fill="#111827" text-anchor="start" xml:space="preserve">
+<tspan x="480" dy="0">PLAN</tspan>
+</text>
+<text x="880" y="268" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="28" fill="#111827" text-anchor="start" xml:space="preserve">
+<tspan x="880" dy="0">AUTHOR</tspan>
+</text>
+<text x="1640" y="268" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="28" fill="#111827" text-anchor="start" xml:space="preserve">
+<tspan x="1640" dy="0">QA</tspan>
+</text>
+<text x="2000" y="268" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="28" fill="#111827" text-anchor="start" xml:space="preserve">
+<tspan x="2000" dy="0">SHIP</tspan>
+</text>
+<rect x="80" y="320" width="380" height="340" rx="0" ry="0" fill="#fed7aa" stroke="#9a3412" stroke-width="3"/>
+<rect x="80" y="320" width="380" height="36" rx="0" ry="0" fill="#9a3412" stroke="none" stroke-width="0"/>
+<text x="90" y="342" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#fed7aa" text-anchor="start" xml:space="preserve">
+<tspan x="90" dy="0">RAW INPUT</tspan>
+</text>
+<rect x="104" y="380" width="332" height="256" rx="0" ry="0" fill="#1c1917" stroke="#1c1917" stroke-width="1"/>
+<text x="120" y="409" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="13" fill="#22c55e" text-anchor="start" xml:space="preserve">
+<tspan x="120" dy="0">&gt; Alert me when any VM</tspan>
+<tspan x="120" dy="16.25">  sustains CPU &gt; 90%.</tspan>
+</text>
+<text x="120" y="469" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="13" fill="#22c55e" text-anchor="start" xml:space="preserve">
+<tspan x="120" dy="0">&gt; Dashboard for VKS core</tspan>
+<tspan x="120" dy="16.25">  consumption per vCenter.</tspan>
+</text>
+<text x="120" y="529" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="13" fill="#22c55e" text-anchor="start" xml:space="preserve">
+<tspan x="120" dy="0">&gt; Build an MP for my</tspan>
+<tspan x="120" dy="16.25">  Synology NAS.</tspan>
+</text>
+<text x="120" y="589" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="13" fill="#22c55e" text-anchor="start" xml:space="preserve">
+<tspan x="120" dy="0">&gt; Extract this community</tspan>
+<tspan x="120" dy="16.25">  dashboard into a bundle.</tspan>
+</text>
+<text x="270.0" y="684" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="270.0" dy="0">natural-language request</tspan>
+</text>
+<rect x="480" y="320" width="380" height="340" rx="0" ry="0" fill="#dbeafe" stroke="#1e3a8a" stroke-width="3"/>
+<rect x="480" y="320" width="380" height="36" rx="0" ry="0" fill="#1e3a8a" stroke="none" stroke-width="0"/>
+<text x="490" y="342" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#dbeafe" text-anchor="start" xml:space="preserve">
+<tspan x="490" dy="0">FOREMAN + RECON</tspan>
+</text>
+<rect x="510" y="386" width="320" height="80" rx="0" ry="0" fill="#1e3a8a" stroke="#1e3a8a" stroke-width="3"/>
+<text x="670.0" y="422" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="18" fill="#fbbf24" text-anchor="middle" xml:space="preserve">
+<tspan x="670.0" dy="0">CLAUDE CODE</tspan>
+<tspan x="670.0" dy="22.5">the orchestrator</tspan>
+</text>
+<rect x="510" y="490" width="154" height="54" rx="0" ry="0" fill="#bfdbfe" stroke="#1e40af" stroke-width="2"/>
+<text x="588.0" y="509" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#1e3a8a" text-anchor="middle" xml:space="preserve">
+<tspan x="588.0" dy="0">ops-recon</tspan>
+<tspan x="588.0" dy="13.75">live-instance probe</tspan>
+</text>
+<rect x="676" y="490" width="154" height="54" rx="0" ry="0" fill="#bfdbfe" stroke="#1e40af" stroke-width="2"/>
+<text x="754.0" y="509" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#1e3a8a" text-anchor="middle" xml:space="preserve">
+<tspan x="754.0" dy="0">api-cartographer</tspan>
+<tspan x="754.0" dy="13.75">maps unknown APIs</tspan>
+</text>
+<rect x="510" y="556" width="154" height="54" rx="0" ry="0" fill="#bfdbfe" stroke="#1e40af" stroke-width="2"/>
+<text x="588.0" y="575" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#1e3a8a" text-anchor="middle" xml:space="preserve">
+<tspan x="588.0" dy="0">api-explorer</tspan>
+<tspan x="588.0" dy="13.75">reverse engineer</tspan>
+</text>
+<rect x="676" y="556" width="154" height="54" rx="0" ry="0" fill="#bfdbfe" stroke="#1e40af" stroke-width="2"/>
+<text x="754.0" y="575" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#1e3a8a" text-anchor="middle" xml:space="preserve">
+<tspan x="754.0" dy="0">mp-designer</tspan>
+<tspan x="754.0" dy="13.75">MP object models</tspan>
+</text>
+<text x="670.0" y="684" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="670.0" dy="0">clarify · ground · delegate</tspan>
+</text>
+<rect x="880" y="320" width="640" height="340" rx="0" ry="0" fill="#e5e7eb" stroke="#374151" stroke-width="3"/>
+<rect x="880" y="320" width="640" height="36" rx="0" ry="0" fill="#374151" stroke="none" stroke-width="0"/>
+<text x="890" y="342" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#e5e7eb" text-anchor="start" xml:space="preserve">
+<tspan x="890" dy="0">SPECIALIST WORKBENCHES</tspan>
+</text>
+<rect x="900" y="376" width="140" height="50" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="970.0" y="395" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="970.0" dy="0">supermetric</tspan>
+<tspan x="970.0" dy="13.75">author</tspan>
+</text>
+<rect x="1050" y="376" width="140" height="50" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1120.0" y="395" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1120.0" dy="0">view</tspan>
+<tspan x="1120.0" dy="13.75">author</tspan>
+</text>
+<rect x="1200" y="376" width="140" height="50" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1270.0" y="395" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1270.0" dy="0">dashboard</tspan>
+<tspan x="1270.0" dy="13.75">author</tspan>
+</text>
+<rect x="1350" y="376" width="140" height="50" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1420.0" y="395" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1420.0" dy="0">customgroup</tspan>
+<tspan x="1420.0" dy="13.75">author</tspan>
+</text>
+<rect x="900" y="446" width="140" height="50" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="970.0" y="465" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="970.0" dy="0">symptom</tspan>
+<tspan x="970.0" dy="13.75">author</tspan>
+</text>
+<rect x="1050" y="446" width="140" height="50" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1120.0" y="465" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1120.0" dy="0">alert</tspan>
+<tspan x="1120.0" dy="13.75">author</tspan>
+</text>
+<rect x="1200" y="446" width="140" height="50" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1270.0" y="465" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1270.0" dy="0">report</tspan>
+<tspan x="1270.0" dy="13.75">author</tspan>
+</text>
+<rect x="1350" y="446" width="140" height="50" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1420.0" y="465" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1420.0" dy="0">mp-author</tspan>
+<tspan x="1420.0" dy="13.75">Tier 1 / Tier 2</tspan>
+</text>
+<rect x="900" y="520" width="600" height="120" rx="0" ry="0" fill="#0f172a" stroke="#0f172a" stroke-width="2"/>
+<text x="906" y="540" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#fbbf24" text-anchor="start" xml:space="preserve">
+<tspan x="906" dy="0">OUTPUT  ·  YAML SOURCE</tspan>
+</text>
+<text x="920" y="565" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#86efac" text-anchor="start" xml:space="preserve">
+<tspan x="920" dy="0">name: &quot;[VCF Content Factory] VM CPU Sustained High&quot;</tspan>
+<tspan x="920" dy="13.75">resource_kinds: [{kind: VirtualMachine, adapter: VMWARE}]</tspan>
+<tspan x="920" dy="13.75">formula: |</tspan>
+<tspan x="920" dy="13.75">  avg(${this, metric=cpu|usage_average}) &gt; 90</tspan>
+</text>
+<text x="1200.0" y="684" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="1200.0" dy="0">each agent owns one lane — never crosses into another</tspan>
+</text>
+<rect x="1540" y="320" width="280" height="340" rx="0" ry="0" fill="#fef3c7" stroke="#a16207" stroke-width="3"/>
+<rect x="1540" y="320" width="280" height="36" rx="0" ry="0" fill="#a16207" stroke="none" stroke-width="0"/>
+<text x="1550" y="342" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#fef3c7" text-anchor="start" xml:space="preserve">
+<tspan x="1550" dy="0">GATE</tspan>
+</text>
+<polygon points="1680.0,380 1784,460.0 1680.0,540 1576,460.0" fill="#fde68a" stroke="#a16207" stroke-width="3"/>
+<text x="1680.0" y="445" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="15" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1680.0" dy="0">VALIDATE</tspan>
+<tspan x="1680.0" dy="18.75">+</tspan>
+<tspan x="1680.0" dy="18.75">MPB UI VERIFY</tspan>
+</text>
+<rect x="1540" y="556" width="280" height="40" rx="0" ry="0" fill="#fee2e2" stroke="#7f1d1d" stroke-width="2"/>
+<text x="1680.0" y="576" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#7f1d1d" text-anchor="middle" xml:space="preserve">
+<tspan x="1680.0" dy="0">REJECT  →  loop to author</tspan>
+</text>
+<text x="1680.0" y="619" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#7f1d1d" text-anchor="middle" xml:space="preserve">
+<tspan x="1680.0" dy="0">prevents broken paks reaching</tspan>
+<tspan x="1680.0" dy="13.75">the field — fix BEFORE shipping</tspan>
+</text>
+<text x="1680.0" y="684" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="1680.0" dy="0">validate · render · push-design</tspan>
+</text>
+<rect x="1900" y="320" width="420" height="340" rx="0" ry="0" fill="#dcfce7" stroke="#14532d" stroke-width="3"/>
+<rect x="1900" y="320" width="420" height="36" rx="0" ry="0" fill="#14532d" stroke="none" stroke-width="0"/>
+<text x="1910" y="342" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#dcfce7" text-anchor="start" xml:space="preserve">
+<tspan x="1910" dy="0">DISTRIBUTION</tspan>
+</text>
+<rect x="1920" y="376" width="380" height="84" rx="0" ry="0" fill="#bbf7d0" stroke="#15803d" stroke-width="2"/>
+<text x="1930" y="396" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#14532d" text-anchor="start" xml:space="preserve">
+<tspan x="1930" dy="0">LIVE INSTALL  ·  content-installer</tspan>
+<tspan x="1930" dy="15.0">Suite API push to a running</tspan>
+<tspan x="1930" dy="15.0">VCF Ops instance</tspan>
+</text>
+<rect x="1920" y="476" width="380" height="84" rx="0" ry="0" fill="#cffafe" stroke="#0e7490" stroke-width="2"/>
+<text x="1930" y="496" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#155e75" text-anchor="start" xml:space="preserve">
+<tspan x="1930" dy="0">DISTRIBUTION ZIP  ·  packager</tspan>
+<tspan x="1930" dy="15.0">self-installing bundle for any</tspan>
+<tspan x="1930" dy="15.0">colleague + any instance</tspan>
+</text>
+<rect x="1920" y="576" width="380" height="68" rx="0" ry="0" fill="#f3e8ff" stroke="#6b21a8" stroke-width="2"/>
+<text x="1930" y="596" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#581c87" text-anchor="start" xml:space="preserve">
+<tspan x="1930" dy="0">GIT  ·  YAML source forever</tspan>
+<tspan x="1930" dy="15.0">fork it · diff it · PR it · share it</tspan>
+</text>
+<text x="2110.0" y="684" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="2110.0" dy="0">three lanes off the line · pick any · all repeatable</tspan>
+</text>
+<rect x="40" y="760" width="2320" height="60" rx="0" ry="0" fill="#1f2937" stroke="#111827" stroke-width="2"/>
+<rect x="80" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="160" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="240" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="320" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="400" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="480" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="560" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="640" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="720" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="800" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="880" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="960" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="1040" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="1120" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="1200" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="1280" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="1360" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="1440" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="1520" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="1600" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="1680" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="1760" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="1840" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="1920" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="2000" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="2080" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="2160" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="2240" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<rect x="2320" y="770" width="40" height="40" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<path d="M 462,480 L 478,480" fill="none" stroke="#111827" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter" marker-end="url(#arrow)"/>
+<path d="M 862,480 L 878,480" fill="none" stroke="#111827" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter" marker-end="url(#arrow)"/>
+<path d="M 1522,480 L 1538,480" fill="none" stroke="#111827" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter" marker-end="url(#arrow)"/>
+<path d="M 1822,480 L 1898,480" fill="none" stroke="#15803d" stroke-width="4" stroke-linecap="square" stroke-linejoin="miter" marker-end="url(#arrow)"/>
+<text x="1860.0" y="463" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="13" fill="#15803d" text-anchor="middle" xml:space="preserve">
+<tspan x="1860.0" dy="0">PASS</tspan>
+</text>
+<rect x="0" y="1100" width="2400" height="100" rx="0" ry="0" fill="#111827" stroke="none" stroke-width="0"/>
+<rect x="0" y="1092" width="2400" height="8" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<text x="1200.0" y="1138" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="20" fill="#fbbf24" text-anchor="middle" xml:space="preserve">
+<tspan x="1200.0" dy="0">&quot;I will build a motor car for the great multitude.&quot;   ·   This is that — for VCF Operations content.</tspan>
+</text>
+<text x="1200.0" y="1173" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="15" fill="#e5e7eb" text-anchor="middle" xml:space="preserve">
+<tspan x="1200.0" dy="0">interchangeable parts  ·  one specialist per station  ·  no broken units leave the line  ·  every batch identical, every order custom</tspan>
+</text>
+</svg>

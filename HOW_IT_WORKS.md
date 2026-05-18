@@ -3,7 +3,7 @@
 This is the deeper architectural dive — for anyone considering
 forking, extending, or just curious how the agent loop is set up.
 
-![Authoring loop overview](docs/diagrams/authoring-loop.png)
+![Authoring loop overview](docs/diagrams/authoring-loop.svg)
 
 *The five-station assembly line. Start with this if you've never seen
 the factory in motion. Editable source:
@@ -269,7 +269,7 @@ Tier 2 adapters.
 
 ## The full picture
 
-![Framework internals](docs/diagrams/framework-internals.png)
+![Framework internals](docs/diagrams/framework-internals.svg)
 
 *All 16 specialists, their lanes, the file each writes, both build
 pipelines (Tier 1 MPB and Tier 2 native SDK), the three output paths,

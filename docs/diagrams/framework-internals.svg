@@ -1,0 +1,344 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2800 1800" width="100%" preserveAspectRatio="xMidYMid meet">
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/></marker></defs>
+<rect x="0" y="0" width="2800" height="1800" fill="#f4f4f5"/>
+<rect x="0" y="0" width="2800" height="1800" rx="0" ry="0" fill="#f4f4f5" stroke="none" stroke-width="0"/>
+<rect x="0" y="0" width="2800" height="140" rx="0" ry="0" fill="#111827" stroke="none" stroke-width="0"/>
+<rect x="0" y="140" width="2800" height="8" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<text x="1400.0" y="66" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="42" fill="#fbbf24" text-anchor="middle" xml:space="preserve">
+<tspan x="1400.0" dy="0">FRAMEWORK INTERNALS</tspan>
+</text>
+<text x="1400.0" y="110" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="18" fill="#e5e7eb" text-anchor="middle" xml:space="preserve">
+<tspan x="1400.0" dy="0">16 specialists  ·  one orchestrator  ·  one YAML per artifact  ·  one repo  ·  every fix codified back into the line</tspan>
+</text>
+<text x="40" y="198" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="18" fill="#dc2626" text-anchor="start" xml:space="preserve">
+<tspan x="40" dy="0">USER LAYER</tspan>
+</text>
+<ellipse cx="210.0" cy="270.0" rx="130.0" ry="40.0" fill="#fed7aa" stroke="#9a3412" stroke-width="3"/>
+<text x="210.0" y="276" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="24" fill="#7c2d12" text-anchor="middle" xml:space="preserve">
+<tspan x="210.0" dy="0">YOU</tspan>
+</text>
+<text x="210.0" y="335" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="13" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="210.0" dy="0">plain English  ·  one request</tspan>
+</text>
+<rect x="80" y="400" width="340" height="100" rx="0" ry="0" fill="#1e3a8a" stroke="#1e3a8a" stroke-width="3"/>
+<text x="250.0" y="436" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="18" fill="#fbbf24" text-anchor="middle" xml:space="preserve">
+<tspan x="250.0" dy="0">CLAUDE CODE</tspan>
+<tspan x="250.0" dy="22.5">the orchestrator (foreman)</tspan>
+</text>
+<text x="250.0" y="522" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="250.0" dy="0">clarifies · routes · validates · reports</tspan>
+<tspan x="250.0" dy="15.0">brokers cross-references between agents</tspan>
+</text>
+<rect x="80" y="580" width="340" height="120" rx="0" ry="0" fill="#fef3c7" stroke="#a16207" stroke-width="3"/>
+<text x="250.0" y="611" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="15" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="250.0" dy="0">RECON GATE</tspan>
+</text>
+<text x="250.0" y="640" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="250.0" dy="0">every author agent REFUSES</tspan>
+<tspan x="250.0" dy="15.0">without ops-recon results.</tspan>
+<tspan x="250.0" dy="15.0">no duplicate content created.</tspan>
+</text>
+<text x="500" y="198" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="18" fill="#dc2626" text-anchor="start" xml:space="preserve">
+<tspan x="500" dy="0">16 SPECIALIST AGENTS  —  grouped by posture, isolated by lane</tspan>
+</text>
+<rect x="500" y="230" width="260" height="420" rx="0" ry="0" fill="#dbeafe" stroke="#1e40af" stroke-width="2"/>
+<rect x="500" y="230" width="260" height="34" rx="0" ry="0" fill="#1e40af" stroke="none" stroke-width="0"/>
+<text x="510" y="249" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="13" fill="#dbeafe" text-anchor="start" xml:space="preserve">
+<tspan x="510" dy="0">RECON &amp; RESEARCH</tspan>
+</text>
+<text x="510" y="287" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#1e3a8a" text-anchor="start" xml:space="preserve">
+<tspan x="510" dy="0">read-only, never authors</tspan>
+</text>
+<rect x="520" y="310" width="220" height="56" rx="0" ry="0" fill="#ffffff" stroke="#1e40af" stroke-width="2"/>
+<text x="630.0" y="328" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#1e3a8a" text-anchor="middle" xml:space="preserve">
+<tspan x="630.0" dy="0">ops-recon</tspan>
+<tspan x="630.0" dy="15.0">live instance probe</tspan>
+</text>
+<text x="630.0" y="382" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="630.0" dy="0">writes  →  recon_log.md</tspan>
+</text>
+<rect x="520" y="396" width="220" height="56" rx="0" ry="0" fill="#ffffff" stroke="#1e40af" stroke-width="2"/>
+<text x="630.0" y="414" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#1e3a8a" text-anchor="middle" xml:space="preserve">
+<tspan x="630.0" dy="0">api-cartographer</tspan>
+<tspan x="630.0" dy="15.0">maps unknown APIs</tspan>
+</text>
+<text x="630.0" y="468" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="630.0" dy="0">writes  →  context/api-maps/</tspan>
+</text>
+<rect x="520" y="482" width="220" height="56" rx="0" ry="0" fill="#ffffff" stroke="#1e40af" stroke-width="2"/>
+<text x="630.0" y="500" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#1e3a8a" text-anchor="middle" xml:space="preserve">
+<tspan x="630.0" dy="0">api-explorer</tspan>
+<tspan x="630.0" dy="15.0">reverse-engineer wire</tspan>
+</text>
+<text x="630.0" y="554" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="630.0" dy="0">writes  →  context/  ·  docs/</tspan>
+</text>
+<rect x="520" y="568" width="220" height="56" rx="0" ry="0" fill="#ffffff" stroke="#1e40af" stroke-width="2"/>
+<text x="630.0" y="586" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#1e3a8a" text-anchor="middle" xml:space="preserve">
+<tspan x="630.0" dy="0">mp-designer</tspan>
+<tspan x="630.0" dy="15.0">MP object model</tspan>
+</text>
+<text x="630.0" y="640" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="630.0" dy="0">writes  →  designs/</tspan>
+</text>
+<rect x="800" y="230" width="620" height="420" rx="0" ry="0" fill="#e5e7eb" stroke="#374151" stroke-width="2"/>
+<rect x="800" y="230" width="620" height="34" rx="0" ry="0" fill="#374151" stroke="none" stroke-width="0"/>
+<text x="810" y="249" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="13" fill="#e5e7eb" text-anchor="start" xml:space="preserve">
+<tspan x="810" dy="0">AUTHORING WORKBENCHES</tspan>
+</text>
+<text x="810" y="287" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#374151" text-anchor="start" xml:space="preserve">
+<tspan x="810" dy="0">one specialist per content type · refuses to cross lanes</tspan>
+</text>
+<rect x="820" y="310" width="190" height="70" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="915.0" y="330" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="915.0" dy="0">supermetric-author</tspan>
+</text>
+<text x="915.0" y="364" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="915.0" dy="0">→ supermetrics/*.yaml</tspan>
+</text>
+<rect x="1020" y="310" width="190" height="70" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1115.0" y="330" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1115.0" dy="0">customgroup-author</tspan>
+</text>
+<text x="1115.0" y="364" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="1115.0" dy="0">→ customgroups/*.yaml</tspan>
+</text>
+<rect x="1220" y="310" width="190" height="70" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1315.0" y="330" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1315.0" dy="0">view-author</tspan>
+</text>
+<text x="1315.0" y="364" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="1315.0" dy="0">→ views/*.yaml</tspan>
+</text>
+<rect x="820" y="396" width="190" height="70" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="915.0" y="416" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="915.0" dy="0">dashboard-author</tspan>
+</text>
+<text x="915.0" y="450" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="915.0" dy="0">→ dashboards/*.yaml</tspan>
+</text>
+<rect x="1020" y="396" width="190" height="70" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1115.0" y="416" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1115.0" dy="0">symptom-author</tspan>
+</text>
+<text x="1115.0" y="450" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="1115.0" dy="0">→ symptoms/*.yaml</tspan>
+</text>
+<rect x="1220" y="396" width="190" height="70" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1315.0" y="416" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1315.0" dy="0">alert-author</tspan>
+</text>
+<text x="1315.0" y="450" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="1315.0" dy="0">→ alerts/ + recommendations/</tspan>
+</text>
+<rect x="820" y="482" width="190" height="70" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="915.0" y="502" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="915.0" dy="0">report-author</tspan>
+</text>
+<text x="915.0" y="536" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="915.0" dy="0">→ reports/*.yaml</tspan>
+</text>
+<rect x="1020" y="482" width="190" height="70" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1115.0" y="502" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1115.0" dy="0">mp-author</tspan>
+</text>
+<text x="1115.0" y="536" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="1115.0" dy="0">→ managementpacks/*.yaml</tspan>
+</text>
+<rect x="1220" y="482" width="190" height="70" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1315.0" y="502" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1315.0" dy="0">content-packager</tspan>
+</text>
+<text x="1315.0" y="536" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="1315.0" dy="0">→ bundles/  ·  dist/</tspan>
+</text>
+<rect x="820" y="568" width="190" height="70" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="915.0" y="588" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="915.0" dy="0">content-installer</tspan>
+</text>
+<text x="915.0" y="622" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="915.0" dy="0">runs Suite API push</tspan>
+</text>
+<rect x="1020" y="568" width="190" height="70" rx="0" ry="0" fill="#fef3c7" stroke="#374151" stroke-width="2"/>
+<text x="1115.0" y="588" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="middle" xml:space="preserve">
+<tspan x="1115.0" dy="0">qa-tester</tspan>
+</text>
+<text x="1115.0" y="622" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#57534e" text-anchor="middle" xml:space="preserve">
+<tspan x="1115.0" dy="0">verifies built artifacts</tspan>
+</text>
+<rect x="1220" y="568" width="190" height="70" rx="0" ry="0" fill="#fee2e2" stroke="#7f1d1d" stroke-width="2"/>
+<text x="1315.0" y="588" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#7f1d1d" text-anchor="middle" xml:space="preserve">
+<tspan x="1315.0" dy="0">tooling</tspan>
+</text>
+<text x="1315.0" y="622" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#7f1d1d" text-anchor="middle" xml:space="preserve">
+<tspan x="1315.0" dy="0">→ vcfops_*/  (only this agent)</tspan>
+</text>
+<text x="1480" y="198" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="18" fill="#dc2626" text-anchor="start" xml:space="preserve">
+<tspan x="1480" dy="0">BUILD PIPELINES  —  YAML to wire format</tspan>
+</text>
+<rect x="1480" y="230" width="620" height="200" rx="0" ry="0" fill="#dcfce7" stroke="#14532d" stroke-width="2"/>
+<rect x="1480" y="230" width="620" height="34" rx="0" ry="0" fill="#14532d" stroke="none" stroke-width="0"/>
+<text x="1490" y="249" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="13" fill="#dcfce7" text-anchor="start" xml:space="preserve">
+<tspan x="1490" dy="0">TIER 1  ·  MPB pipeline (HTTP REST adapters)</tspan>
+</text>
+<text x="1500" y="295" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#14532d" text-anchor="start" xml:space="preserve">
+<tspan x="1500" dy="0">mp.yaml</tspan>
+<tspan x="1500" dy="13.75">   ↓  render-export   (vcfops_managementpacks/render.py)</tspan>
+<tspan x="1500" dy="13.75">exchange-format JSON   (design.json)</tspan>
+<tspan x="1500" dy="13.75">   ↓  push-design        (Suite API import endpoint)</tspan>
+<tspan x="1500" dy="13.75">MPB UI on devel  →  Source test  →  Verify   (CHEAP LOOP)</tspan>
+<tspan x="1500" dy="13.75">   ↓  (green)</tspan>
+<tspan x="1500" dy="13.75">render + build         (template.json + describe.xml + adapter JAR)</tspan>
+<tspan x="1500" dy="13.75">   ↓  pak-compare against MPB reference</tspan>
+<tspan x="1500" dy="13.75">.pak  →  install</tspan>
+</text>
+<rect x="1480" y="450" width="620" height="200" rx="0" ry="0" fill="#f3e8ff" stroke="#6b21a8" stroke-width="2"/>
+<rect x="1480" y="450" width="620" height="34" rx="0" ry="0" fill="#6b21a8" stroke="none" stroke-width="0"/>
+<text x="1490" y="469" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="13" fill="#f3e8ff" text-anchor="start" xml:space="preserve">
+<tspan x="1490" dy="0">TIER 2  ·  native Java SDK  (when MPB can&#x27;t express it)</tspan>
+</text>
+<text x="1500" y="515" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#581c87" text-anchor="start" xml:space="preserve">
+<tspan x="1500" dy="0">adapter.yaml  +  src/com/.../*.java</tspan>
+<tspan x="1500" dy="13.75">   ↓  validate-sdk          (schema + javac sanity)</tspan>
+<tspan x="1500" dy="13.75">   ↓  build-sdk             (compile, embed factory base JAR)</tspan>
+<tspan x="1500" dy="13.75">adapter JAR  +  describe.xml emitted programmatically</tspan>
+<tspan x="1500" dy="13.75">   ↓  pak-compare</tspan>
+<tspan x="1500" dy="13.75">.pak  →  install</tspan>
+<tspan x="1500" dy="13.75"></tspan>
+<tspan x="1500" dy="13.75">Reach for when MPB hits a wall  (hardware MPs, custom auth,</tspan>
+<tspan x="1500" dy="13.75">instanced groups, regex extraction, cross-request scalars)</tspan>
+</text>
+<text x="2160" y="198" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="18" fill="#dc2626" text-anchor="start" xml:space="preserve">
+<tspan x="2160" dy="0">OUTPUTS</tspan>
+</text>
+<rect x="2160" y="230" width="600" height="110" rx="0" ry="0" fill="#bbf7d0" stroke="#15803d" stroke-width="2"/>
+<text x="2170" y="256" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#14532d" text-anchor="start" xml:space="preserve">
+<tspan x="2170" dy="0">LIVE INSTALL</tspan>
+<tspan x="2170" dy="15.0">Suite API push to a running VCF Operations instance.</tspan>
+<tspan x="2170" dy="15.0">UUID-preserving content-zip import means cross-references</tspan>
+<tspan x="2170" dy="15.0">survive between dev / qa / prod.</tspan>
+</text>
+<rect x="2160" y="360" width="600" height="110" rx="0" ry="0" fill="#cffafe" stroke="#0e7490" stroke-width="2"/>
+<text x="2170" y="386" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#155e75" text-anchor="start" xml:space="preserve">
+<tspan x="2170" dy="0">DISTRIBUTION ZIP</tspan>
+<tspan x="2170" dy="15.0">self-installing bundle (Python + PowerShell) packaged with</tspan>
+<tspan x="2170" dy="15.0">rendered wire format. Drop on a colleague&#x27;s laptop, they run</tspan>
+<tspan x="2170" dy="15.0">python3 install.py — works on any VCF Operations instance.</tspan>
+</text>
+<rect x="2160" y="490" width="600" height="110" rx="0" ry="0" fill="#f3e8ff" stroke="#6b21a8" stroke-width="2"/>
+<text x="2170" y="516" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#581c87" text-anchor="start" xml:space="preserve">
+<tspan x="2170" dy="0">GIT / PR / FORK</tspan>
+<tspan x="2170" dy="15.0">YAML source forever. Every artifact diffable, reviewable,</tspan>
+<tspan x="2170" dy="15.0">shareable. Auto-memory is disabled by design — knowledge</tspan>
+<tspan x="2170" dy="15.0">lives in the repo, not in a session.</tspan>
+</text>
+<text x="40" y="918" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="18" fill="#dc2626" text-anchor="start" xml:space="preserve">
+<tspan x="40" dy="0">CODIFICATION LOOP  —  every correction the user makes becomes a rule the next agent follows</tspan>
+</text>
+<rect x="40" y="950" width="2720" height="280" rx="0" ry="0" fill="#fafaf9" stroke="#111827" stroke-width="2"/>
+<rect x="80" y="990" width="340" height="200" rx="0" ry="0" fill="#fed7aa" stroke="#9a3412" stroke-width="2"/>
+<text x="90" y="1018" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#7c2d12" text-anchor="start" xml:space="preserve">
+<tspan x="90" dy="0">1. CORRECTION</tspan>
+</text>
+<text x="90" y="1048" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#7c2d12" text-anchor="start" xml:space="preserve">
+<tspan x="90" dy="0">User catches a wrong-shaped</tspan>
+<tspan x="90" dy="15.0">render, a misleading agent</tspan>
+<tspan x="90" dy="15.0">question, a missed pattern.</tspan>
+<tspan x="90" dy="15.0"></tspan>
+<tspan x="90" dy="15.0">It arrives as a sentence:</tspan>
+<tspan x="90" dy="15.0"></tspan>
+<tspan x="90" dy="15.0">  &gt; the components show up</tspan>
+<tspan x="90" dy="15.0">    flat — should be nested.</tspan>
+</text>
+<rect x="480" y="990" width="340" height="200" rx="0" ry="0" fill="#dbeafe" stroke="#1e3a8a" stroke-width="2"/>
+<text x="490" y="1018" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#1e3a8a" text-anchor="start" xml:space="preserve">
+<tspan x="490" dy="0">2. ROOT CAUSE</tspan>
+</text>
+<text x="490" y="1048" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#1e3a8a" text-anchor="start" xml:space="preserve">
+<tspan x="490" dy="0">Orchestrator + agents identify</tspan>
+<tspan x="490" dy="15.0">the class of failure:</tspan>
+<tspan x="490" dy="15.0"></tspan>
+<tspan x="490" dy="15.0">  · framework gap</tspan>
+<tspan x="490" dy="15.0">  · agent over-interview</tspan>
+<tspan x="490" dy="15.0">  · wire-format invariant</tspan>
+<tspan x="490" dy="15.0">  · undocumented pattern</tspan>
+<tspan x="490" dy="15.0"></tspan>
+<tspan x="490" dy="15.0">Narrow to the smallest change.</tspan>
+</text>
+<rect x="880" y="990" width="340" height="200" rx="0" ry="0" fill="#e5e7eb" stroke="#374151" stroke-width="2"/>
+<text x="890" y="1018" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#111827" text-anchor="start" xml:space="preserve">
+<tspan x="890" dy="0">3. CODIFY</tspan>
+</text>
+<text x="890" y="1048" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#111827" text-anchor="start" xml:space="preserve">
+<tspan x="890" dy="0">Write to the right place:</tspan>
+<tspan x="890" dy="15.0"></tspan>
+<tspan x="890" dy="15.0">  · context/rules_*.md</tspan>
+<tspan x="890" dy="15.0">  · context/lessons_*.md</tspan>
+<tspan x="890" dy="15.0">  · agent prompt updates</tspan>
+<tspan x="890" dy="15.0">  · context/api_pattern_catalog</tspan>
+<tspan x="890" dy="15.0">  · CLAUDE.md if cross-cutting</tspan>
+<tspan x="890" dy="15.0"></tspan>
+<tspan x="890" dy="15.0">All diffable, all reviewable.</tspan>
+</text>
+<rect x="1280" y="990" width="340" height="200" rx="0" ry="0" fill="#fef3c7" stroke="#a16207" stroke-width="2"/>
+<text x="1290" y="1018" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#78350f" text-anchor="start" xml:space="preserve">
+<tspan x="1290" dy="0">4. TOOLING (optional)</tspan>
+</text>
+<text x="1290" y="1048" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#78350f" text-anchor="start" xml:space="preserve">
+<tspan x="1290" dy="0">If the rule can be mechanized,</tspan>
+<tspan x="1290" dy="15.0">the tooling agent adds:</tspan>
+<tspan x="1290" dy="15.0"></tspan>
+<tspan x="1290" dy="15.0">  · loader validator</tspan>
+<tspan x="1290" dy="15.0">  · renderer guard</tspan>
+<tspan x="1290" dy="15.0">  · CLI subcommand</tspan>
+<tspan x="1290" dy="15.0">  · pak-compare rule</tspan>
+<tspan x="1290" dy="15.0"></tspan>
+<tspan x="1290" dy="15.0">so the next user never sees the</tspan>
+<tspan x="1290" dy="15.0">same mistake.</tspan>
+</text>
+<rect x="1680" y="990" width="340" height="200" rx="0" ry="0" fill="#bbf7d0" stroke="#15803d" stroke-width="2"/>
+<text x="1690" y="1018" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#14532d" text-anchor="start" xml:space="preserve">
+<tspan x="1690" dy="0">5. SHIPS WITH REPO</tspan>
+</text>
+<text x="1690" y="1048" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#14532d" text-anchor="start" xml:space="preserve">
+<tspan x="1690" dy="0">Git commit · push · PR.</tspan>
+<tspan x="1690" dy="15.0"></tspan>
+<tspan x="1690" dy="15.0">Next clone, next session, next</tspan>
+<tspan x="1690" dy="15.0">user starts at the new baseline.</tspan>
+<tspan x="1690" dy="15.0"></tspan>
+<tspan x="1690" dy="15.0">The framework is smarter on</tspan>
+<tspan x="1690" dy="15.0">every iteration without anyone</tspan>
+<tspan x="1690" dy="15.0">holding state in their head.</tspan>
+</text>
+<rect x="2080" y="990" width="640" height="200" rx="0" ry="0" fill="#fee2e2" stroke="#7f1d1d" stroke-width="3"/>
+<text x="2090" y="1018" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#7f1d1d" text-anchor="start" xml:space="preserve">
+<tspan x="2090" dy="0">TOOLSET GAP ESCAPE</tspan>
+</text>
+<text x="2090" y="1048" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="12" fill="#7f1d1d" text-anchor="start" xml:space="preserve">
+<tspan x="2090" dy="0">When an author agent needs a capability the framework doesn&#x27;t</tspan>
+<tspan x="2090" dy="15.0">have yet, it raises a TOOLSET GAP rather than silently</tspan>
+<tspan x="2090" dy="15.0">working around. The orchestrator chooses:</tspan>
+<tspan x="2090" dy="15.0"></tspan>
+<tspan x="2090" dy="15.0">  · PUNT to the user (trim the request)</tspan>
+<tspan x="2090" dy="15.0">  · API-EXPLORER (we don&#x27;t know the wire format)</tspan>
+<tspan x="2090" dy="15.0">  · TOOLING (fix the loader / renderer / CLI)</tspan>
+<tspan x="2090" dy="15.0"></tspan>
+<tspan x="2090" dy="15.0">Never ignore a gap report. Never silently downgrade.</tspan>
+</text>
+<path d="M 420,1090 L 480,1090" fill="none" stroke="#111827" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter" marker-end="url(#arrow)"/>
+<path d="M 820,1090 L 880,1090" fill="none" stroke="#111827" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter" marker-end="url(#arrow)"/>
+<path d="M 1220,1090 L 1280,1090" fill="none" stroke="#111827" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter" marker-end="url(#arrow)"/>
+<path d="M 1620,1090 L 1680,1090" fill="none" stroke="#111827" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter" marker-end="url(#arrow)"/>
+<path d="M 2020,1280 L 80,1280 L 80,1200" fill="none" stroke="#dc2626" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter" stroke-dasharray="10,6" marker-end="url(#arrow)"/>
+<text x="1180.0" y="1277" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="13" fill="#dc2626" text-anchor="middle" xml:space="preserve">
+<tspan x="1180.0" dy="0">next session starts here</tspan>
+</text>
+<rect x="0" y="1700" width="2800" height="100" rx="0" ry="0" fill="#111827" stroke="none" stroke-width="0"/>
+<rect x="0" y="1692" width="2800" height="8" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
+<text x="1400.0" y="1732" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="16" fill="#fbbf24" text-anchor="middle" xml:space="preserve">
+<tspan x="1400.0" dy="0">FRAMEWORK PRINCIPLES</tspan>
+</text>
+<text x="1400.0" y="1764" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="14" fill="#e5e7eb" text-anchor="middle" xml:space="preserve">
+<tspan x="1400.0" dy="0">lane discipline  ·  recon before authoring  ·  validate before installing  ·  no fabricated keys  ·  every correction codified  ·  every artifact diffable</tspan>
+</text>
+</svg>
