@@ -915,7 +915,78 @@ For list expressions, the same pattern applies:
 
 ---
 
-## 12. Synology render-vs-template comparison
+## 12. requestedMetrics non-empty invariant — chain-anchor stub pattern
+
+**Invariant:** every `requestedMetrics` entry in template.json **must** contain
+at least one metric. The MPB runtime (`BuilderFile.Companion.read()`) enforces
+this strictly and throws `BuilderFileParseException` on install:
+
+```
+BuilderFileParseException: Could not parse builder file. 'REQUESTED_METRIC'
+error for ids [...] regarding field 'metrics'. Field was invalid.
+Field requires at least one value in the array.
+```
+
+**Source of the tension:** Chain-anchor metricSets exist to declare parent→child
+ownership in the Dell pattern ("singleton anchor + same-request list_path fan-out").
+A SINGLE request (e.g. `thermal`) returns BOTH the parent identity AND an inline
+list of children (Fans array).  For MPB to know that `thermal` belongs to the
+Server (and therefore Fan objects inside thermal's response are the Server's
+children), the Server object MUST carry a `from_request: thermal` binding in its
+metricSets.  That binding is the only chain-ownership signal MPB has.
+
+Without the binding, MPB treats `thermal` as a free-floating root request: no
+chaining, no Relationships tab edges, component objects (Fan, PSU, DIMM, etc.)
+do not appear under the Server in the inventory tree.
+
+**Why suppression is wrong (task #20 revert):** An earlier fix (task #18/#20)
+stripped chain-anchor metricSets from template.json when they had zero metrics.
+This solved the BuilderFileParseException but broke chaining entirely for the
+Dell pattern.  The Dell pattern is NOT the UniFi/phpIPAM two-request chaining
+pattern — there is no `chainingSettings.parentRequestId` on the child request
+because the child data comes from a sub-path of the SAME parent request.  The
+parent binding is the only ownership signal.
+
+**Correct fix — chain-anchor stub (2026-05-18):** Authors declare a benign
+PROPERTY metric on chain-anchor metricSets using the new YAML field:
+
+```yaml
+metricSets:
+  - from_request: thermal
+    list_path: ""
+    chain_anchor_stub: Name    # field path relative to this metricSet's list context
+```
+
+The renderer (`render.py`, `_render_one_object()`) expands `chain_anchor_stub`
+into a synthetic PROPERTY metric if and only if `wire_metrics` is empty after
+the normal metric loop:
+
+- `key`: `__stub_<from_request>` (authoring ID, never on wire)
+- `label`: `"Stub Name (<from_request>)"`
+- `usage`: PROPERTY
+- `type`: STRING
+- `expression`: the stub field path registered against this metricSet's DML
+
+Both design.json and template.json carry the stub, so the chain-anchor binding
+is always non-empty.  `pak_validator.py` Rule 8 remains as a regression gate.
+
+**YAML authoring rule:** any metricSet that carries no metrics from
+`object_type.metrics` AND is referenced as a chain anchor by a child object's
+`from_request` MUST declare `chain_anchor_stub: <field>`.  Redfish endpoints
+consistently expose a `.Name` field at the root of every resource — use that.
+
+**Evidence:** Dell PowerEdge v5 on devel (2026-05-18).
+8 chain-anchor metricSets on the Server object (thermal, power,
+processor_list, memory_inventory, nic_inventory, firmware_inventory,
+storage_controller_cpu1, oem_numeric_sensors) all had `metrics: []`.
+After suppression: Relationships tab empty, 48 "relationships" reported by
+verify step were NOT the expected Server→component edges.
+After stub: all 11 requests render with correct `chainingSettings`,
+`relationships[]` is populated, component objects appear under the Server.
+
+---
+
+## 13. Synology render-vs-template comparison
 
 Running `render` on `synology_nas.yaml` produces a design.json that
 exhibits ALL the same structural differences as UniFi. This confirms the

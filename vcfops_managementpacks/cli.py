@@ -511,6 +511,167 @@ def cmd_pak_compare(args) -> int:
     return 0
 
 
+def cmd_push_design(args) -> int:
+    """Upload an MPB exchange-format JSON (or render one from YAML) and POST it
+    to POST /suite-api/internal/mpbuilder/designs/import on a live VCF Ops instance.
+
+    Accepts either:
+      - A pre-rendered exchange-format JSON file (produced by render-export).
+      - An MP YAML file — it is rendered to a temporary exchange JSON first.
+
+    File type is auto-detected by extension (.json vs .yaml/.yml).
+
+    On success prints the server-minted design UUID and a URL the user can
+    paste into a browser to land on the design in the MPB UI.
+
+    Exit codes: 0 = success, 1 = error.
+    """
+    import json as _json
+    import tempfile
+    import os as _os
+
+    from .client import MPBClient
+    from vcfops_common.client import VCFOpsError
+    from vcfops_common._profile_cli import resolve_profile_from_args
+
+    input_path = Path(args.path)
+    if not input_path.exists():
+        print(f"ERROR: file not found: {input_path}", file=sys.stderr)
+        return 1
+
+    # ------------------------------------------------------------------
+    # Step 1: obtain the exchange-format envelope dict
+    # ------------------------------------------------------------------
+    suffix = input_path.suffix.lower()
+    if suffix in (".yaml", ".yml"):
+        # Render MP YAML to exchange JSON in memory
+        from .loader import ManagementPackValidationError
+        from .render_export import render_mpb_exchange_json
+
+        try:
+            mp = load_file(str(input_path))
+        except ManagementPackValidationError as e:
+            print(f"INVALID: {e}", file=sys.stderr)
+            return 1
+
+        strategy = getattr(args, "relationship_strategy", "synthetic_adapter_instance")
+        no_events = getattr(args, "no_events", False)
+
+        envelope = render_mpb_exchange_json(
+            mp,
+            relationship_strategy=strategy,
+            no_events=no_events,
+        )
+        design_name = mp.name
+
+        # Apply --name-override if supplied
+        name_override = getattr(args, "name_override", None)
+        if name_override:
+            try:
+                envelope["design"]["design"]["name"] = name_override
+                design_name = name_override
+            except (KeyError, TypeError):
+                print(
+                    "WARN: --name-override could not be applied "
+                    "(design.design.name path missing from envelope).",
+                    file=sys.stderr,
+                )
+
+    elif suffix == ".json":
+        # Load pre-rendered exchange JSON directly
+        try:
+            raw = input_path.read_text(encoding="utf-8")
+            envelope = _json.loads(raw)
+        except Exception as e:
+            print(f"ERROR reading {input_path}: {e}", file=sys.stderr)
+            return 1
+
+        # Extract design name for display; tolerate any envelope shape
+        try:
+            design_name = envelope["design"]["design"]["name"]
+        except (KeyError, TypeError):
+            design_name = input_path.stem
+
+        # Apply --name-override if supplied
+        name_override = getattr(args, "name_override", None)
+        if name_override:
+            try:
+                envelope["design"]["design"]["name"] = name_override
+                design_name = name_override
+            except (KeyError, TypeError):
+                print(
+                    "WARN: --name-override could not be applied "
+                    "(design.design.name path missing from envelope).",
+                    file=sys.stderr,
+                )
+
+    else:
+        print(
+            f"ERROR: unrecognised file extension {suffix!r}. "
+            f"Expected .yaml/.yml (MP definition) or .json (exchange format).",
+            file=sys.stderr,
+        )
+        return 1
+
+    # ------------------------------------------------------------------
+    # Step 2: build the MPBClient from the active credential profile
+    # ------------------------------------------------------------------
+    profile, default = resolve_profile_from_args(args)
+    try:
+        client = MPBClient.from_env(profile=profile, default_profile=default)
+    except VCFOpsError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+
+    # ------------------------------------------------------------------
+    # Step 3: POST to import endpoint
+    # ------------------------------------------------------------------
+    print(
+        f"Importing design {design_name!r} to "
+        f"https://{client.host}/suite-api/internal/mpbuilder/designs/import ...",
+        file=sys.stderr,
+    )
+    try:
+        result = client.post_design_import(envelope)
+    except VCFOpsError as e:
+        status_hint = ""
+        msg = str(e)
+        if "HTTP 400" in msg:
+            status_hint = (
+                "  Hint: HTTP 400 usually means the envelope body is malformed. "
+                "Re-render with 'render-export' and check the exchange format."
+            )
+        elif "HTTP 401" in msg:
+            status_hint = (
+                "  Hint: HTTP 401 — authentication failed. "
+                "Check --profile / VCFOPS_<PROFILE>_USER and _PASSWORD in .env."
+            )
+        elif "HTTP 404" in msg:
+            status_hint = (
+                "  Hint: HTTP 404 on the MPB endpoint usually means the "
+                "X-Ops-API-use-unsupported header was rejected or the host "
+                "is not a VCF Ops 9.x instance."
+            )
+        print(f"ERROR: {e}", file=sys.stderr)
+        if status_hint:
+            print(status_hint, file=sys.stderr)
+        return 1
+
+    design_id = result.get("id", "(unknown)")
+    host = client.host
+    # MPB UI design edit URL — confirmed path from context/mpb_api_surface.md
+    # §"Auth / session notes" (MPB UI lives under /vcf-operations/... behind SSO,
+    # but the direct /ui/mpbuilder/ path is what most admins bookmark).
+    # The exact deep-link to a specific design is not documented in mpb_api_surface.md;
+    # the admin-landing URL for the MPB section is used as the closest confirmed path.
+    # Update this when a confirmed per-design deep-link is established.
+    ui_url = f"https://{host}/ui/index.action#/mpbuilder/designs/{design_id}"
+
+    print(f"Design imported: name={design_name!r}  id={design_id}")
+    print(f"  URL: {ui_url}")
+    return 0
+
+
 def cmd_uninstall(args) -> int:
     """Uninstall a management pack from a live VCF Ops instance.
 
@@ -895,6 +1056,67 @@ def build_parser() -> argparse.ArgumentParser:
     pu.epilog = _creds_help
     add_profile_arg(pu, default="devel")
     pu.set_defaults(func=cmd_uninstall)
+
+    # ------------------------------------------------------------------
+    # push-design subcommand
+    # ------------------------------------------------------------------
+    ppd = sub.add_parser(
+        "push-design",
+        help=(
+            "upload an MPB exchange-format JSON (or render from YAML) to "
+            "POST /suite-api/internal/mpbuilder/designs/import on a live "
+            "VCF Ops instance. Replaces the prior manual curl workflow. "
+            "See context/mpb_api_surface.md for endpoint documentation."
+        ),
+    )
+    ppd.add_argument(
+        "path",
+        metavar="PATH",
+        help=(
+            "path to either: (a) an MPB exchange-format JSON file "
+            "(.json, produced by render-export), or (b) an MP YAML file "
+            "(.yaml/.yml, rendered to exchange format automatically before pushing). "
+            "File type is auto-detected by extension."
+        ),
+    )
+    ppd.add_argument(
+        "--name-override",
+        dest="name_override",
+        default=None,
+        metavar="NAME",
+        help=(
+            "override the design name before importing "
+            "(sets design.design.name in the envelope). "
+            "Useful for creating a separate probe design without editing source YAML."
+        ),
+    )
+    ppd.add_argument(
+        "--relationship-strategy",
+        default="synthetic_adapter_instance",
+        dest="relationship_strategy",
+        choices=[
+            "world_implicit",
+            "synthetic_adapter_instance",
+            "shared_constant_property",
+            "test_all",
+        ],
+        help=(
+            "relationship strategy when rendering from YAML "
+            "(ignored for pre-rendered .json input; default: synthetic_adapter_instance)"
+        ),
+    )
+    ppd.add_argument(
+        "--no-events",
+        action="store_true",
+        dest="no_events",
+        default=False,
+        help=(
+            "emit events: [] when rendering from YAML "
+            "(ignored for pre-rendered .json input)"
+        ),
+    )
+    add_profile_arg(ppd, default="devel")
+    ppd.set_defaults(func=cmd_push_design)
 
     return p
 

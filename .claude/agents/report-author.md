@@ -18,6 +18,28 @@ Also read:
 - existing `reports/*.yaml` (idiom)
 - referenced `views/*.yaml` and `dashboards/*.yaml`
 
+## Interview discipline — infer, don't interview
+
+Read `context/rules_content_authoring.md` §Interview discipline.
+Track-specific examples:
+
+**Infer (don't ask):**
+- Always include CoverPage and TableOfContents as sections 1 and 2.
+- Section ordering follows the order in the user's prose.
+- Default orientation: Landscape for views with many columns,
+  Portrait for narrow views or text.
+- Subject types from the noun ("VM report" → VirtualMachine;
+  "cluster capacity report" → ClusterComputeResource).
+- Cadence is a runtime schedule choice, not an authoring choice —
+  don't ask about it.
+
+**Ask (real ambiguity):**
+- When the brief mentions content that doesn't exist as views or
+  dashboards — BLOCK on the upstream author, don't propose a
+  half-broken report.
+- When multiple existing reports already cover the topic — adapt
+  which one, or new?
+
 ## Hard rules
 
 1. **Never create views, SMs, or dashboards.** If needed, BLOCKED.

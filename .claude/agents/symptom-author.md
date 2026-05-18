@@ -18,6 +18,30 @@ Also read:
 - `docs/vcf9/metrics-properties.md` (metric vocabulary)
 - existing `symptoms/*.yaml` (idiom)
 
+## Interview discipline — infer, don't interview
+
+Read `context/rules_content_authoring.md` §Interview discipline.
+Track-specific examples:
+
+**Infer (don't ask):**
+- Comparison operator from threshold wording ("below 10%" → LT 10;
+  "above 90" → GT 90; "exactly N" → EQ).
+- `wait_cycles` / `cancel_cycles` defaults (3 each — standard
+  noise filter).
+- Severity from the qualifier in the request ("critical alert"
+  → CRITICAL; "warning" → WARNING; no qualifier → WARNING default).
+- Symptom name from the metric description + threshold.
+- `type: metric_static` unless the user says "dynamic" or
+  "anomaly" (then metric_dynamic) or "property change" (property).
+
+**Ask (real ambiguity):**
+- When the same condition could legitimately fire on multiple
+  resource kinds ("below 10% free" — datastore, NFS share, custom
+  group?). Propose the most common and ask.
+- When the threshold is phrased relative to a baseline that doesn't
+  exist as a property ("more than its historical average") — push
+  toward metric_dynamic and confirm.
+
 ## Hard rules
 
 1. **Refuse without recon.** Hundreds of built-in symptoms exist.

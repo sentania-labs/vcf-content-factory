@@ -514,6 +514,32 @@ class MetricSetDef:
     # See context/mpb_object_binding_wire_format.md §3.5 and §5 rule 6.
     stitch_to: Optional[str] = None
     stitch_match_field: Optional[str] = None
+    # chain_anchor_stub: optional dotted field path (relative to this metricSet's
+    # list context) whose value is emitted as a single synthetic PROPERTY metric on
+    # a chain-anchor metricSet that carries no real metrics.
+    #
+    # Background: MPB UI's validator requires every metricSet binding to carry at
+    # least one metric ("Request <name> did not return attributes required to make
+    # metrics on this object").  Chain-anchor metricSets exist to declare the
+    # parent→child chaining relationship (the child's from_request chain target),
+    # but the parent object type may not need any metrics FROM that request itself.
+    # Rather than suppress the binding (which breaks MPB's Relationships tab — it
+    # cannot infer ownership without the parent's binding), the author declares a
+    # benign stub property, e.g. `chain_anchor_stub: Name` for a Redfish endpoint
+    # that always returns a `.Name` field.
+    #
+    # The renderer expands this into one PROPERTY metric with:
+    #   key:   "__stub_<from_request>"  (authoring identifier, never on wire)
+    #   label: "Stub Name (<from_request>)"
+    #   usage: PROPERTY
+    #   type:  STRING
+    #   expression: the field path (e.g. "Name") registered against this
+    #               metricSet's DML.
+    #
+    # Must be absent on metricSets that already declare real metrics (redundant).
+    # Must be absent on scalar kinds (world/singleton) — those never need anchors.
+    # Only valid when the metricSet carries no metrics in object_type.metrics.
+    chain_anchor_stub: Optional[str] = None
 
     @property
     def local_name(self) -> str:
@@ -2416,6 +2442,7 @@ def _parse_metric_set(raw: dict, parent_tag: str) -> MetricSetDef:
     raw_as = raw.get("as")
     raw_stitch = raw.get("stitch_to")
     raw_stitch_field = raw.get("stitch_match_field")
+    raw_stub = raw.get("chain_anchor_stub")
     return MetricSetDef(
         from_request=str(raw.get("from_request", "") or "").strip(),
         list_path=str(raw.get("list_path", "") or "").strip(),
@@ -2425,6 +2452,7 @@ def _parse_metric_set(raw: dict, parent_tag: str) -> MetricSetDef:
         as_name=str(raw_as).strip() if raw_as else None,
         stitch_to=str(raw_stitch).strip() if raw_stitch else None,
         stitch_match_field=str(raw_stitch_field).strip() if raw_stitch_field else None,
+        chain_anchor_stub=str(raw_stub).strip() if raw_stub else None,
     )
 
 

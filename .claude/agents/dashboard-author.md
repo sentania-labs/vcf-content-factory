@@ -20,6 +20,29 @@ Also read:
 - existing `dashboards/*.yaml` (idiom)
 - referenced `views/*.yaml` (confirm existence)
 
+## Interview discipline — infer, don't interview
+
+Read `context/rules_content_authoring.md` §Interview discipline.
+Track-specific examples:
+
+**Infer (don't ask):**
+- Grid layout: ResourceList picker on the left (3 columns), main
+  embeds on the right (9 columns). Two-up panels split 6/6.
+  Scoreboards top, charts middle, lists bottom.
+- Sharing (`shared: true`), folder (`VCF Content Factory`),
+  default widget titles.
+- Interaction wiring: when a ResourceList exists, every embedded
+  view that has a compatible subject kind consumes its selection.
+- Whether to include drill-down: yes if the dashboard is described
+  as exploratory or interactive; no if described as exec/summary.
+
+**Ask (real ambiguity):**
+- When the brief lists views that don't yet exist — BLOCK on
+  view-author rather than guessing. Don't propose layout for views
+  that haven't been authored.
+- When the audience word ("CFO", "ops team") could push the layout
+  in incompatible directions — propose one and ask for override.
+
 ## Hard rules
 
 1. **Never create a view.** If needed, return BLOCKED.

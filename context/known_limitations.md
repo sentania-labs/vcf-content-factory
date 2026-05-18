@@ -161,3 +161,62 @@ could not evaluate. The metrics rendered and built cleanly into a pak
 but registered zero collections on prod. This limitation affects only
 the INTERNAL resource collection path; ARIA_OPS metric expressions are
 evaluated by a different engine and are not affected.
+
+## 13. MPB Tier 1 cannot author parent-child relationships for Redfish-shape APIs
+
+MPB's relationship model requires real metric values that match
+between parent and child objects, where both metrics are pulled from
+each object's own primary request response body (the "UniFi
+pattern" — see `context/api_pattern_catalog.md` UniFi entry for the
+canonical example).
+
+Redfish APIs encode parent-child hierarchy in URL paths
+(`/Systems/{id}/Processors/{cpu}`), **not** in flat scalar fields of
+the child's response body. A Fan or PSU response carries its own
+identifier and metrics, but the parent System identifier appears only
+inside the `@odata.id` URL — not as a top-level value MPB can read
+as a metric.
+
+To bridge that data shape, the factory would need at least one of:
+- Cross-request scalar broadcast (`from_request: X` as a non-primary
+  metricSet on a list object whose primary is request Y) — not
+  supported; the factory's `chained_from:` mechanism requires a
+  chained-bind that fits chained-request semantics, not scalar
+  broadcast.
+- Regex extraction from `@odata.id` strings — explicitly "not yet
+  supported" per `loader.py:2073`. The MPB wire format does carry
+  `regex`/`regexOutput` fields on `expressionParts[]`, so the
+  runtime supports it; only the factory's authoring DSL lacks the
+  surface.
+- Config-field source for metrics (`source: config_field:...`) —
+  no such source type in the factory.
+- Instanced metrics on a single parent object (Onur's vCommunity
+  Hardware pattern, the `<ResourceGroup instanced="true">` wire
+  form) — MPB UI cannot author this; would require direct
+  describe.xml emission, which Tier 1 doesn't expose.
+
+All three of the factory's `adapter_instance`-scope relationship
+strategies (`synthetic_adapter_instance`, `shared_constant_property`,
+`world_implicit`) were empirically falsified against live MPB UI in
+the Dell PowerEdge investigation (2026-05-18). They imported but
+either failed MPB's design validator (synthetic placeholder
+references a non-existent property), failed the test collection
+(literal constants forbidden in metric expressions), or were
+rejected at import (null expressions treated as malformed envelope).
+
+**Practical recommendation:** for hardware monitoring MPs (Redfish,
+IPMI, vendor BMC APIs, similar URL-path-hierarchical data), use the
+Tier 2 native Java SDK adapter authoring path. Tier 2 has full
+programmatic control over relationship emission and the metric wire
+format. The factory's Tier 2 pipeline (`build-sdk`, `scaffold-sdk`,
+`validate-sdk` CLI commands, framework JAR at
+`vcfops_managementpacks/adapter_framework/`) is Phase-1 operational.
+
+For Synology DSM-shape APIs (where the data model exposes shared
+scalar identifiers between parent and child responses), `field_match`
+relationships work in Tier 1 — walk each relationship case-by-case
+rather than assuming this limitation blocks everything.
+
+Authority: `context/lessons_dell_redfish_2026_05_18.md` (empirical
+session writeup with MPB error messages for each failure mode);
+`context/api_pattern_catalog.md` Redfish entry.

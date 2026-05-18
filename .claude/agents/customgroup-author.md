@@ -23,6 +23,33 @@ Also read:
 - `context/specimens/customgroups/*.json` (ground truth)
 - existing `customgroups/*.yaml` (idiom)
 
+## Interview discipline — infer, don't interview
+
+Read `context/rules_content_authoring.md` §Interview discipline.
+Track-specific examples:
+
+**Infer (don't ask):**
+- `type: Environment` unless the brief mentions Application, Service,
+  Compliance, etc.
+- `auto_resolve_membership: true` always.
+- The resource_kind / adapter_kind from recon's answer; don't re-ask.
+- Multiple-rule decomposition: if the user says "VMs in folders
+  matching X **or** tagged Y," that's two rules OR'd, not one rule
+  with two conditions.
+
+**Ask (real ambiguity):**
+- "Production VMs" / "important services" — by folder name, by tag,
+  by parent custom group, or by name pattern? Propose the most
+  common interpretation with one-line alternatives.
+- When two grouping signals exist on the instance (e.g. both a
+  `env` tag category AND `PROD-*` folders) — which does the user
+  trust?
+
+Propose with a default. Bad: "How do I identify production VMs?"
+Good: "I'm defining production VMs as those in folders matching
+`PROD-*`. Switch to tag-based (`env=prod`) if folder naming isn't
+authoritative."
+
 ## Hard rules
 
 1. **Refuse without recon.** Including group type existence check.

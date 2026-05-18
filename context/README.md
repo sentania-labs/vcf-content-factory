@@ -37,6 +37,7 @@ These are actively maintained and authoritative for their topic.
 | Recon metric key patterns | `recon_metric_keys.md` |
 | Reference docs inventory + PDF extraction | `reference_docs.md` |
 | Allowlisted external reference repos | `reference_sources.md` |
+| **API pattern catalog (Redfish, Synology DSM, UniFi, Cloudflare, vSphere REST) — read first when designing a new MP** | `api_pattern_catalog.md` |
 | VKS VM type classification + filter patterns | `vks_vm_classification.md` |
 | View column wire format (XML attribute encoding) | `view_column_wire_format.md` |
 | Custom group UI import envelope format | `customgroup_import_format.md` |
@@ -54,6 +55,7 @@ These are actively maintained and authoritative for their topic.
 | MP schema vs existing MP comparison | `mp_schema_vs_existing_mp.md` |
 | MPB .pak structural reference (canonical format from 8+ paks) | `mpb_pak_structural_reference.md` |
 | Lessons learned: pak install reliability (5 failures → success) | `lessons_pak_install_reliability.md` |
+| **Lessons learned: Dell PowerEdge Redfish relationship investigation (MPB Tier 1 wall, four framework gaps identified)** | `lessons_dell_redfish_2026_05_18.md` |
 | MPB build examples research (external sources catalog) | `mpb_build_examples_research.md` |
 | **MPB Tier-1 strategic handoff (Track-C codegen reframe, capability surface, promotion triggers)** | `mpb_handoff.md` |
 | MPB BuilderFile Kotlin runtime model (runtime vocabulary, full subschemas) | `mpb_builderfile_schema.md` |

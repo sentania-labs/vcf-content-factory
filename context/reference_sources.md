@@ -335,4 +335,35 @@ scripts/bootstrap_references.sh --update # also git pull existing
 - **Attribution:** cite
   `vmbro/VCF-Operations-vCommunity/Management Pack/<path>`.
 
+### redfish-sim.int.sentania.net (Redfish mock for MP testing)
+
+- **URL:** https://redfish-sim.int.sentania.net/
+- **Auth:** HTTP Basic, `guest` / `password123!`
+- **Owner:** user (sentania). Internal-domain instance backed by
+  `RedfishMockupHTTPD_v1.2.9` behind Caddy. Publicly reachable from
+  dev environments.
+- **Stance:** **Test target, not a content reference.** This is a
+  Redfish-conformant mock for end-to-end MP testing without needing
+  physical iDRAC hardware. Use it as the data source for any new
+  Redfish-shape MP during the MPB UI Verify loop.
+- **Scope:** Full standard Redfish endpoint surface — `/redfish/v1/`
+  service root, `/Systems/System.Embedded.1/...`,
+  `/Chassis/System.Embedded.1/...`, `/Managers/iDRAC.Embedded.1`,
+  `/UpdateService/FirmwareInventory`, OEM block at
+  `/Systems/System.Embedded.1/Oem/Dell/...`. All 12 endpoints
+  required by the in-repo Dell PowerEdge MP return 200 with
+  meaningful payloads (Memory expand response ~17 KB, etc.).
+- **Limitations:** No `SessionService/Sessions` endpoint — session-
+  token auth not exposed. Basic-per-request is the only auth mode.
+  Returns proper `WWW-Authenticate: Basic realm="restricted"`
+  challenge on 401.
+- **Empirical use:** Validated the Dell PowerEdge v4 design via MPB
+  UI Verify on devel during the 2026-05-18 relationship
+  investigation — see `context/lessons_dell_redfish_2026_05_18.md`.
+  Collection completed in 0.24s and surfaced exactly the wire-format
+  invariants the factory was emitting wrong, which is the
+  fastest-feedback testing path we've established for MPs.
+- **Attribution:** internal Sentania resource, no public attribution
+  needed.
+
 <!-- Add new sources below. Keep entries in the same shape. -->

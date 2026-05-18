@@ -106,23 +106,64 @@ and produce a design artifact that `mp-author` turns into YAML.
   (they render under their target adapter kind's icons), but
   set `icon:` anyway for documentation parity.
 
-## Wizard interview structure
+## Interview discipline — infer, don't interview
 
-When designing a new MP, ask the user about:
+Read `context/rules_content_authoring.md` §Interview discipline.
+The shared rule applies with extra force here: MP design is the
+single biggest interview-trap in the framework, and the Dell
+PowerEdge experience proved that wizard-style interrogation
+produces structurally wrong designs even when every individual
+answer is reasonable.
 
-1. **Monitoring scope** — what aspects of the target system matter?
-2. **Object granularity** — which API entities should be first-class
-   objects vs. metrics on a parent?
-3. **Relationship topology** — flat, shallow tree, or deep hierarchy?
-4. **Cross-adapter relationships** — should MP objects relate to
-   existing VCF Ops objects (ARIA_OPS type)? This is advanced.
-5. **Events/alerting** — what conditions warrant VCF Ops events?
-6. **Bundled content** — dashboard in the .pak, separate factory
-   dashboard, or both?
-7. **Collection intervals** — performance metrics (5min) vs.
-   inventory (15-30min)?
+### Step 1 — Match against the API pattern catalog
 
-Skip questions the user or existing context already answers.
+**Always start here.** Open `context/api_pattern_catalog.md` and
+match the API map against the **Signature** sections. If the API
+is a known shape (Redfish, Synology DSM, UniFi Network, Cloudflare,
+vSphere REST, etc.), the catalog gives you:
+
+- Default object model (don't re-derive)
+- Auth scheme (don't re-discover)
+- Real ambiguities the catalog has identified (these are the only
+  things worth asking the user about)
+- Known limitations (read these BEFORE proposing — several APIs
+  have framework gaps documented from real failures)
+
+**If the catalog matches, your interview is the "Real ambiguities"
+list for that entry. Nothing else.** Propose the catalog's default
+model and walk the user through only the ambiguities. This is
+typically 2-3 sharp questions, not a 7-step wizard.
+
+### Step 2 — Fallback for unknown API shapes
+
+When no catalog entry matches (genuine novel API), use the
+following minimal interview. Even here, propose defaults with each
+question — don't ask open-ended.
+
+- **Monitoring scope** — what aspects of the target system matter?
+  Default proposal: "Inventory + health properties + the headline
+  performance metrics surfaced by the API. Override to add
+  specific concerns."
+- **Object granularity** — propose first-class objects for every
+  resource the API exposes as a collection root, and metrics-on-
+  parent for properties of those resources. Ask only when the API
+  has nested collections deep enough that the choice matters.
+- **Cross-adapter stitching** — propose ARIA_OPS stitching only
+  when the API augments existing VCF Ops resources (e.g., vSphere
+  hosts, K8s pods). Default for everything else: INTERNAL kinds.
+- **Collection intervals** — propose 5min performance, 15min
+  inventory. Override only if user has a specific cadence.
+
+Skip every question the user or existing context already answers.
+Skip every question whose answer is "the catalog says X" — just
+propose X and move on.
+
+### Step 3 — Add new patterns to the catalog
+
+When you finish designing for a novel API shape, the orchestrator
+adds an entry to `context/api_pattern_catalog.md`. Capture:
+signature, auth, default model, real ambiguities you encountered,
+and any framework gaps you hit. The catalog grows by experience.
 
 ## Design artifact format
 

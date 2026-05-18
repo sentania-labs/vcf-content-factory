@@ -52,6 +52,7 @@ from .loader import (
     RelationshipDef,
     RequestDef,
     WorldIdentityDef,
+    derive_key_from_label,
 )
 
 logger = logging.getLogger(__name__)
@@ -1894,6 +1895,76 @@ def _render_one_object(
         # Case 3: chain-parents, singletons, scalar kinds, cross-type primaries → null.
         # (object_binding stays None for all these cases)
 
+        # Chain-anchor stub injection (task #20 revert, 2026-05-18).
+        #
+        # Background: The Dell pattern uses "singleton anchor + same-request
+        # list_path fan-out."  A SINGLE request (e.g. thermal) returns BOTH the
+        # parent identity AND an inline list of children (Fans array).  For MPB UI
+        # to know that thermal "belongs to" the Server (and therefore Fan objects
+        # inside thermal's response are the Server's children), the Server object
+        # MUST have a `from_request: thermal` binding in its metricSets.  That
+        # binding is the only signal MPB has for ownership.  Without it, MPB treats
+        # thermal as a free-floating root request with no owner, no chaining, and
+        # no relationship inference — the Relationships tab is empty.
+        #
+        # This differs from UniFi/phpIPAM, which use chained two-request flow
+        # (request A returns IDs, request B chains via chainingSettings.parentRequestId).
+        # In that pattern, the parent's binding is not needed because chaining is
+        # explicit on the child request.  The Dell pattern has no second request —
+        # fan-out comes from list_path on the response in-place.
+        #
+        # MPB UI also requires every metricSet binding to carry at least one metric
+        # ("Request <name> did not return attributes required to make metrics on
+        # this object").  Authors declare `chain_anchor_stub: <field>` on chain-
+        # anchor metricSets to provide a benign PROPERTY metric satisfying this
+        # constraint while keeping the binding present for chaining inference.
+        #
+        # If chain_anchor_stub is set and wire_metrics is still empty after the
+        # normal metric loop, inject a synthetic PROPERTY metric now.
+        if not wire_metrics and ms_def.chain_anchor_stub:
+            stub_field = ms_def.chain_anchor_stub
+            stub_label = f"Stub Name ({ms.local_name})"
+            stub_wire_key = derive_key_from_label(stub_label)
+            stub_m_id = _make_id(f"{obj_seed}:metricSet:{ms.local_name}:stub")
+            stub_expr_seed = f"{obj_seed}:metricSet:{ms.local_name}:stub:expr"
+            if is_scalar:
+                rp = (req.response_path or "").strip()
+                stub_full_field = f"{rp}.{stub_field}" if rp else stub_field
+                stub_origin_id = req_info.register_field(stub_full_field, "base")
+                stub_expr_label = stub_full_field
+            else:
+                stub_origin_id = req_info.register_field(stub_field, dml_id)
+                stub_expr_label = stub_field
+            stub_expression = _make_expression(
+                label=stub_expr_label,
+                origin_id=stub_origin_id,
+                origin_type="ATTRIBUTE",
+                expr_seed=stub_expr_seed,
+            )
+            wire_metrics.append({
+                "id": stub_m_id,
+                "key": stub_wire_key,
+                "unit": "",
+                "isKpi": False,
+                "label": stub_label,
+                "usage": "PROPERTY",
+                "groups": [],
+                "dataType": "STRING",
+                "expression": stub_expression,
+                "timeseries": None,
+            })
+            logger.debug(
+                "Object '%s' metricSet '%s': injected chain-anchor stub metric "
+                "from chain_anchor_stub=%r (field=%r, wire_key=%r).",
+                ot.name, ms.local_name, ms_def.chain_anchor_stub, stub_expr_label, stub_wire_key,
+            )
+
+        # Emit the metricSet unconditionally (reverted task #20 suppression).
+        # metricSets with no metrics AND no chain_anchor_stub are emitted as-is;
+        # MPB's design.json import accepts empty metrics arrays.  Only template.json
+        # (pak runtime) enforces the non-empty constraint, and the stub mechanism
+        # above guarantees non-empty for all chain-anchor cases.
+
         wire_metric_sets.append({
             "id": ms_id,
             "listId": dml_id,
@@ -2079,12 +2150,12 @@ def _render_relationships(
             # (the best-evidenced option) and log the choice.
             logger.info(
                 "Relationship %s→%s: scope=adapter_instance — "
-                "synthesizing @@@adapterInstance predicate (synthetic_adapter_instance strategy).",
-                rel.parent, rel.child,
+                "using %s strategy.",
+                rel.parent, rel.child, relationship_strategy,
             )
             wire_rels = _render_trivial_relationships(
                 rel, mp, object_id_map, metric_id_map, ak,
-                strategy="synthetic_adapter_instance",
+                strategy=relationship_strategy,
             )
             result.extend(wire_rels)
         else:
@@ -2356,26 +2427,26 @@ def _trivial_shared_constant(
     """Strategy: synthesize a constant PROPERTY on both objects with the same value.
 
     Emits a relationship where both childExpression and parentExpression point to
-    synthetic constant-property metric IDs. In this strategy, we define two
-    "virtual" metric IDs that would need to be added to each object's metricSet
-    as constant-valued properties.
+    synthetic constant-property metric IDs (originType=METRIC).  The corresponding
+    synthetic metrics are injected into each object's first metricSet by
+    _inject_shared_constant_metrics(), which is called from render_mp_design_json()
+    after relationships are built.
 
-    ASSUMPTION: The MPB engine supports a constant literal value as a join predicate.
-    This may require the actual metrics to be present in the object's metricSet.
-    If the MPB engine evaluates the expression at collection time and the metric
-    doesn't exist, the join will fail silently.
+    The metric seed formula used here MUST stay in sync with
+    _inject_shared_constant_metrics() so that the relationship originId and the
+    injected metric id are identical:
+        child:  _make_id("{ak}:object:{rel.child}:metric:__adapter_instance_const")
+        parent: _make_id("{ak}:object:{rel.parent}:metric:__adapter_instance_const")
 
-    NOTE: The renderer does NOT add these synthetic metrics to the object's
-    metricSet — doing so would pollute the object model. This relationship
-    is emitted as a structural placeholder; the operator may need to add a
-    constant property manually in the MPB UI.
+    ASSUMPTION: MPB validates that child/parent expression originIds resolve to
+    actual metric ids on the respective objects.  Without the injection, MPB
+    would fail with "Child property used in relationship does not exist".
     """
     name_suffix = f" ({suffix})" if suffix else ""
     rel_seed = f"{ak}:rel:{rel.parent}:{rel.child}:shared_constant"
     rel_id = _make_id(rel_seed)
 
-    # Synthetic metric IDs for both sides
-    # These would represent a constant PROPERTY with value "adapter_instance"
+    # Synthetic metric IDs for both sides — MUST match _inject_shared_constant_metrics().
     child_metric_id = _make_id(f"{ak}:object:{rel.child}:metric:__adapter_instance_const")
     parent_metric_id = _make_id(f"{ak}:object:{rel.parent}:metric:__adapter_instance_const")
 
@@ -2397,13 +2468,129 @@ def _trivial_shared_constant(
         "parentObjectId": parent_obj_id,
         "childExpression": child_expr,
         "parentExpression": parent_expr,
-        "_renderer_note": (
-            "shared_constant strategy: uses synthetic __adapter_instance_const metric. "
-            "ASSUMPTION: MPB joins on a constant property added to each object. "
-            "Synthetic metrics are NOT added to object metricSets by the renderer — "
-            "add them manually in MPB UI if this approach is selected."
-        ),
     }
+
+
+def _inject_shared_constant_metrics(
+    mp: "ManagementPackDef",
+    wire_objects: List[Dict],
+    object_id_map: Dict[str, str],
+    ak: str,
+) -> None:
+    """Inject synthetic __adapter_instance_const PROPERTY metrics into wire objects.
+
+    Called from render_mp_design_json() when relationship_strategy is
+    "shared_constant_property".  For every object key that appears as parent or
+    child in an adapter_instance-scope relationship, this function:
+
+    1. Derives the deterministic metric id using the same seed as
+       _trivial_shared_constant():
+           _make_id("{ak}:object:{obj_key}:metric:__adapter_instance_const")
+       This ensures the relationship's originId and the metric's id are identical.
+
+    2. Builds a synthetic PROPERTY metric with:
+         - id:       the derived metric id (matches relationship originId)
+         - key:      "__adapter_instance_const"   (derive_key_from_label of label)
+         - label:    "__adapter_instance_const"
+         - usage:    "PROPERTY"
+         - dataType: "STRING"
+         - expression: literal constant "ADAPTER_INSTANCE" (same on every object
+                        so MPB's join predicate always matches)
+
+    3. Prepends the metric to the first metricSet.metrics list of the matching
+       wire object, unless that metric id is already present (idempotent).
+
+    Modifies wire_objects in-place.  No return value.
+    """
+    # Collect unique object keys from adapter_instance-scope relationships.
+    affected_keys: set = set()
+    for rel in mp.relationships:
+        if rel.scope == "adapter_instance":
+            affected_keys.add(rel.parent)
+            affected_keys.add(rel.child)
+
+    if not affected_keys:
+        return
+
+    # Build reverse map: object_id → wire_object dict
+    id_to_wire: Dict[str, Dict] = {obj["id"]: obj for obj in wire_objects}
+
+    for obj_key in sorted(affected_keys):  # sorted for deterministic log order
+        obj_id = object_id_map.get(obj_key)
+        if not obj_id:
+            logger.warning(
+                "_inject_shared_constant_metrics: object key %r not in object_id_map; "
+                "skipping.",
+                obj_key,
+            )
+            continue
+
+        wire_obj = id_to_wire.get(obj_id)
+        if not wire_obj:
+            logger.warning(
+                "_inject_shared_constant_metrics: no wire object for key %r (id=%s); "
+                "skipping.",
+                obj_key, obj_id,
+            )
+            continue
+
+        # Derive metric id — MUST match _trivial_shared_constant().
+        metric_seed = f"{ak}:object:{obj_key}:metric:__adapter_instance_const"
+        metric_id = _make_id(metric_seed)
+
+        # Locate first metricSet (required — objects always have at least one).
+        metric_sets = wire_obj.get("metricSets", [])
+        if not metric_sets:
+            logger.warning(
+                "_inject_shared_constant_metrics: object %r has no metricSets; "
+                "cannot inject synthetic metric.",
+                obj_key,
+            )
+            continue
+
+        target_ms = metric_sets[0]
+        existing_metrics = target_ms.get("metrics", [])
+
+        # Idempotency: skip if already injected.
+        if any(m.get("id") == metric_id for m in existing_metrics):
+            logger.debug(
+                "_inject_shared_constant_metrics: object %r already has "
+                "__adapter_instance_const metric; skipping.",
+                obj_key,
+            )
+            continue
+
+        # Build the synthetic PROPERTY metric.
+        # Expression is a literal constant — same value on every object so the
+        # join predicate always evaluates equal.
+        expr_id = _make_id(f"{metric_seed}:expr")
+        synthetic_expression = {
+            "id": expr_id,
+            "expressionText": "ADAPTER_INSTANCE",
+            "expressionParts": [],
+        }
+
+        synthetic_metric = {
+            "id": metric_id,
+            "key": "__adapter_instance_const",
+            "unit": "",
+            "isKpi": False,
+            "label": "__adapter_instance_const",
+            "usage": "PROPERTY",
+            "groups": [],
+            "dataType": "STRING",
+            "expression": synthetic_expression,
+            "timeseries": None,
+        }
+
+        # Prepend so it appears first (visibility, not semantically required).
+        target_ms["metrics"] = [synthetic_metric] + existing_metrics
+
+        logger.info(
+            "_inject_shared_constant_metrics: injected __adapter_instance_const "
+            "metric (id=%s) into object %r metricSet[0].",
+            metric_id, obj_key,
+        )
 
 
 def _render_events(
@@ -2855,6 +3042,13 @@ def render_mp_design_json(
         mp, object_id_map, metric_id_map, relationship_strategy
     )
 
+    # --- shared_constant_property: inject synthetic metrics into wire_objects ---
+    # Must run AFTER _render_relationships (so we know which objects are affected)
+    # and BEFORE _render_source (which packages wire_objects into source.resources).
+    # Only active for the shared_constant_property strategy; no-op for all others.
+    if relationship_strategy in ("shared_constant_property", "test_all"):
+        _inject_shared_constant_metrics(mp, wire_objects, object_id_map, ak)
+
     # --- events (flat, no wrapper) ---
     wire_events = _render_events(mp, request_registry, object_id_map)
 
@@ -2872,7 +3066,7 @@ def render_mp_design_json(
 
     logger.info(
         "Rendered %s: %d requests, %d objects, %d relationships emitted "
-        "(%d with join predicates, %d containment-only dropped), "
+        "(%d field_match, %d adapter_instance scope), "
         "%d events.",
         mp.name,
         len(wire_requests),
@@ -2887,8 +3081,8 @@ def render_mp_design_json(
         f"{len(wire_requests)} requests, "
         f"{len(wire_objects)} objects, "
         f"{emitted_rel_count} relationships emitted "
-        f"({join_count} join predicates, "
-        f"{trivial_count} containment-only dropped), "
+        f"({join_count} field_match, "
+        f"{trivial_count} adapter_instance scope), "
         f"{len(wire_events)} events.",
         file=sys.stderr,
     )

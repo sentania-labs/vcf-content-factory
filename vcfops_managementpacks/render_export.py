@@ -859,46 +859,24 @@ def render_mpb_exchange_json(
 
     # ------------------------------------------------------------------
     # 5. relationships — list of {"relationship": ...}
-    #    Filter out adapter_instance-scope relationships before emission.
     #
-    #    MPB's relationship wire format requires non-empty childExpression /
-    #    parentExpression — it has no concept of "pure containment" scope.
-    #    Adapter-instance hierarchy is handled implicitly by VCF Ops (all
-    #    resources created by the same adapter instance are already grouped
-    #    under it in the resource tree).  Emitting these with synthetic
-    #    expressions (or null ones) causes MPB validation error:
-    #    "Child property used in relationship does not exist."
+    #    All relationships from the flat design dict are emitted, including
+    #    adapter_instance-scope entries rendered by _render_relationships().
+    #    render.py dispatches adapter_instance rels to
+    #    _render_trivial_relationships(strategy=relationship_strategy), which
+    #    produces a fully-formed wire dict with non-null child/parentExpression
+    #    (for synthetic_adapter_instance and shared_constant_property strategies)
+    #    or null expressions (world_implicit).
     #
-    #    render.py emits adapter_instance rels using a deterministic ID seed
-    #    based on the relationship strategy.  We compute those IDs here and
-    #    skip the matching entries.  field_match rels are unaffected.
-    #
-    #    v1.1 follow-up (NOT this fix): synthesize a real constant-match field
-    #    so adapter_instance rels survive the wire.  Today: strip them, matching
-    #    the pak build_pak() behavior.
+    #    The previous code stripped adapter_instance rels here on the assumption
+    #    that MPB would reject synthetic expressions.  That assumption was
+    #    unverified; it was never confirmed by a documented import failure
+    #    (contrary to the STRIP RULE POLICY at the top of this file).  Removed
+    #    2026-05-18 so the design.json relationships array reflects the full YAML.
     # ------------------------------------------------------------------
-    _adapter_instance_rel_ids: set = set()
-    _strategy_suffixes = {
-        "world_implicit": "world_implicit",
-        "synthetic_adapter_instance": "synthetic_adapter",
-        "shared_constant_property": "shared_constant",
-    }
-    _suffix = _strategy_suffixes.get(relationship_strategy, "synthetic_adapter")
-    for _rel in mp.relationships:
-        if _rel.scope == "adapter_instance":
-            _seed = f"{ak}:rel:{_rel.parent}:{_rel.child}:{_suffix}"
-            _adapter_instance_rel_ids.add(_make_id(_seed))
-            # test_all emits three — add all three seeds
-            if relationship_strategy == "test_all":
-                for _ts in _strategy_suffixes.values():
-                    _adapter_instance_rel_ids.add(
-                        _make_id(f"{ak}:rel:{_rel.parent}:{_rel.child}:{_ts}")
-                    )
-
     relationships_list = [
         {"relationship": _strip_relationship(rel)}
         for rel in flat.get("relationships", [])
-        if rel.get("id") not in _adapter_instance_rel_ids
     ]
 
     # ------------------------------------------------------------------

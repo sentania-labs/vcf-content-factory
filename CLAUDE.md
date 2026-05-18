@@ -149,12 +149,23 @@ path is first-class, not a sad fallback.
 - **Report:** clarify → recon → upstream views/SMs → report →
   validate → confirm → install.
 - **Package + QA:** author content → packager → qa-tester → report.
-- **Management pack:** clarify target API → cartographer → designer
-  → author → validate → build → pak-compare → confirm → install.
-  Run `pak-compare` against the closest reference pak after every
-  build — zero BLOCKINGs is the install gate. MP display names use
-  the prose prefix `VCF Content Factory` (no brackets); brackets
-  are for content names only.
+- **Management pack:** clarify target API → cartographer →
+  catalog-match (`context/api_pattern_catalog.md`) → designer →
+  author → validate → **render-export → push-design → MPB UI Verify
+  against mock/live source** → build → pak-compare → confirm →
+  install. The MPB UI Verify step is the cheap loop — design.json
+  push takes seconds, MPB UI's Verify tab runs a full test
+  collection in under a minute, and design-time errors surface
+  before any pak is built. **Do not build a pak before MPB UI
+  Verify is green.** Pak builds are the expensive loop (minutes to
+  build, more minutes to sneaker-net to a remote instance, full
+  install cycle on the target). Iterating in the cheap loop
+  catches structural errors at the rate of one per minute; iterating
+  in the expensive loop catches the same errors at the rate of one
+  per hour. Run `pak-compare` against the closest reference pak
+  after every build — zero BLOCKINGs is the install gate. MP
+  display names use the prose prefix `VCF Content Factory` (no
+  brackets); brackets are for content names only.
 - **Management pack (ARIA_OPS stitching):** same flow as above but
   the YAML declares `type: ARIA_OPS` objects with `aria_ops:` block
   instead of INTERNAL objects. ARIA_OPS objects push metrics onto

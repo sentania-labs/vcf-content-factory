@@ -44,6 +44,18 @@ Rule 6 — SINGLE_SELECTION config default non-empty
 Rule 7 — Metric key format
     All metric keys must match ``/^[a-z][a-z0-9_]*$/`` (lower-case snake_case,
     start with a letter).
+
+Rule 8 — requestedMetrics non-empty metrics array
+    Every ``requestedMetrics`` entry must have at least one metric.
+    MPB runtime rejects empty metrics arrays with BuilderFileParseException.
+    Chain-anchor metricSets that carry no real metrics must declare
+    ``chain_anchor_stub: <field>`` in the YAML so the renderer injects a
+    synthetic PROPERTY metric.  This rule is a regression gate — if stub
+    injection is working correctly, no empty metrics array should reach here.
+    Evidence: Dell PowerEdge v5 install failure (2026-05-18) caused by the
+    prior fix that stripped chain-anchor bindings entirely (task #18/#20),
+    which broke MPB's Relationships tab by removing the parent→child
+    ownership signal.
 """
 from __future__ import annotations
 
@@ -251,6 +263,30 @@ def validate_pak(mp: ManagementPackDef) -> List[str]:
                         f"/^[a-z][a-z0-9_]*$/ (must be lower-case snake_case, "
                         f"starting with a letter)"
                     )
+
+        # --- Rule 8: requestedMetrics non-empty metrics array ---
+        # BuilderFile.Companion.read() rejects any REQUESTED_METRIC block whose
+        # metrics array is empty.  Chain-anchor metricSets must declare
+        # `chain_anchor_stub: <field>` in the YAML so render.py injects a
+        # synthetic PROPERTY metric before the design.json/template.json pass.
+        # This rule is a regression gate: if stub injection worked, no empty
+        # metrics[] should appear here.
+        # Evidence: Dell PowerEdge v5 BuilderFileParseException (2026-05-18).
+        # Revert note (2026-05-18): the prior fix stripped chain-anchor bindings
+        # entirely (task #18/#20), which broke MPB's Relationships tab.  The
+        # correct fix is stub injection in render.py (chain_anchor_stub field).
+        for rm in resource.get("requestedMetrics", []) or []:
+            if not rm.get("metrics"):
+                rm_id = rm.get("id", "<unknown>")
+                errors.append(
+                    f"Rule 8 [{rk}]: requestedMetrics entry id={rm_id} has an "
+                    f"empty metrics array. "
+                    f"BuilderFile.Companion.read() will reject this with "
+                    f"BuilderFileParseException: REQUESTED_METRIC ... "
+                    f"Field requires at least one value in the array. "
+                    f"If this is a chain-anchor metricSet (no real metrics), "
+                    f"add chain_anchor_stub: <field> to the YAML metricSet block."
+                )
 
         # --- Rule 4: objectBinding null-count rule ---
         # Only applies to list resources (isListResource=true).  Scalar/singleton

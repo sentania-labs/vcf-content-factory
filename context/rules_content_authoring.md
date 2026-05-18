@@ -3,6 +3,91 @@
 Rules for authoring super metrics, views, dashboards, custom groups,
 and management packs. Each rule prevents a documented failure mode.
 
+## Interview discipline — infer, don't interview
+
+The framework's UX promise is "you write sentences, the framework
+figures out the rest." Author agents that interrogate the user for
+information they could infer break that promise. The Dell PowerEdge
+v4 MP — built by someone outside this repo cloning the framework —
+became the reference failure: the design walked the user through
+every minor decision and still produced a structurally wrong result.
+The lesson is structural, and applies to every author agent in
+this repo.
+
+### The rule
+
+**Default to proposing. Interview only when the user's intent is
+genuinely ambiguous AND the answer would change the output AND no
+recon, doc lookup, or sensible default can resolve it.**
+
+### What you do NOT ask the user about
+
+- **Naming.** Every authored object is `[VCF Content Factory] <Name>`
+  (MPs use the prose prefix without brackets). No questions.
+- **File placement and folder.** Loaders handle the directory; the
+  `name_path` convention puts dashboards in `VCF Content Factory`.
+- **UUID generation.** The validator mints IDs on first run.
+- **Whether to ground metric or property keys.** Always yes;
+  ungrounded → refuse to author.
+- **Default rollups, default chart types, default sharing, default
+  severity tier, default container pinning.** Pick a sensible
+  default and state it in the proposal. The user overrides if it
+  matters.
+- **Whether a value is a metric or a property.** Numeric
+  time-series with a unit → metric. String/enum metadata or
+  rarely-changing identity fields → property. Decide and move on.
+- **Anything `ops-recon` already answered.** The orchestrator's
+  brief contains the recon result. Don't re-ask the user.
+
+### What you DO ask about — and how
+
+Real ambiguities are decisions where two reasonable users would
+pick differently and the choice materially changes the output.
+Examples that genuinely warrant a question:
+
+- Two existing super metrics already compute the requested thing
+  with different rollups → "use the cluster-level rollup or write
+  a new one for hosts?"
+- The user says "production VMs" → "by folder name (`PROD-*`),
+  by tag (`env=prod`), by name pattern, or by membership in an
+  existing custom group?"
+- A hardware adapter's components can be modeled per-component
+  (alertable per PSU, more graph nodes) or as properties on the
+  parent (compact, simpler) — the Dell-shape pattern. Default to
+  per-component for hardware; propose otherwise with a reason.
+- The MP can stitch to an existing VCF Ops kind (ARIA_OPS) or
+  stand alone (INTERNAL) — major topology choice. Propose based
+  on whether a sensible match exists in the live instance; ask
+  only when there are multiple plausible parents.
+
+**Always ask with a proposal on the table.** Bad: "How should I
+model the firmware?" Good: "I'm modeling firmware as properties on
+the System kind because they rarely change and are easy to read
+at-a-glance. Switch to a separate Firmware kind if you want
+per-component alerting."
+
+### Probe before asking
+
+When a recon call would answer the question, run recon. Don't ask
+the user "what's the resource kind for VMs?" — the orchestrator
+already ran ops-recon, the answer is in the brief. Don't ask
+"does this property exist?" — search `docs/vcf9/metrics-properties.md`
+or call the live `/statkeys` endpoint.
+
+### Batch the real ambiguities
+
+Don't ping-pong. Collect every genuinely ambiguous decision that
+will materially change the output, present them together with
+proposed defaults, and act on the user's response in one round.
+One round trip, not five.
+
+### Track-specific examples
+
+Each author agent's prompt expands this section with concrete
+"infer / ask" examples for that track. The shared rule is here;
+the track-specific bullets live in
+`.claude/agents/<agent>.md` under "Interview discipline."
+
 ## Super metrics
 
 ### No compound && in string where clauses

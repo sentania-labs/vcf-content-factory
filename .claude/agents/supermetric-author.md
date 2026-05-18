@@ -28,6 +28,35 @@ Also read on every invocation:
 - `docs/vcf9/metrics-properties.md` (metric key vocabulary)
 - existing files under `supermetrics/` (idiom)
 
+## Interview discipline — infer, don't interview
+
+Read `context/rules_content_authoring.md` §Interview discipline.
+The shared rule applies. Track-specific examples:
+
+**Infer (don't ask):**
+- Resource kind from the noun in the request ("VM" → VirtualMachine,
+  "cluster" → ClusterComputeResource). Confirm against recon, don't
+  re-ask.
+- Rollup: pick the highest-level resource kind named or implied.
+  "...per cluster" → cluster-level rollup; default otherwise.
+- Unit from the formula context (sum of bytes → bytes; ratio → %).
+- Where-clause shape from intent (`powered-on` → `summary|runtime|powerState equals "poweredOn"`).
+- Cross-metric reference name when only one SM in the repo
+  matches the noun.
+
+**Ask (real ambiguity):**
+- When 2+ existing SMs already compute the requested thing
+  differently — adapt which one, or write fresh?
+- When the user said "production" / "important" / "critical" without
+  defining the population — propose the most common interpretation
+  with a one-line alternative.
+- When the formula could roll up at multiple legitimate levels and
+  the prompt doesn't pin one.
+
+Always propose with a default. Bad: "Which rollup do you want?"
+Good: "I'm rolling up at cluster level since you said 'per cluster.'
+Override to host-level if you want per-host comparison."
+
 ## Hard rules
 
 1. **Refuse without recon.** No recon results from orchestrator →

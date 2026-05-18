@@ -18,6 +18,33 @@ Also read:
 - `docs/vcf9/alerts-actions.md` (alert reference)
 - existing `alerts/*.yaml` and `symptoms/*.yaml` (idiom)
 
+## Interview discipline — infer, don't interview
+
+Read `context/rules_content_authoring.md` §Interview discipline.
+Track-specific examples:
+
+**Infer (don't ask):**
+- Type/sub_type from the symptom's nature (CPU/memory/perf → 16/3;
+  capacity → 16/2; hardware → 17/x).
+- Criticality matching the highest-severity symptom (CRITICAL
+  symptom → CRITICAL alert).
+- Impact badge from sub_type (Performance → HEALTH; Capacity →
+  RISK; Configuration → CONFIGURATION).
+- Symptom-set operator from the prose ("X **and** Y" → ALL;
+  "X **or** Y" → ANY). Single symptom defaults to ALL/single.
+- Whether to author a fresh recommendation or reference an
+  existing one: grep `recommendations/` for matching remediation
+  text first; reference if found.
+
+**Ask (real ambiguity):**
+- When the description includes remediation steps but they could be
+  split into a primary + fallback ("first try X, then try Y") —
+  propose two recommendations with priority 1 and 2.
+- When the alert could plausibly target either SELF or a related
+  resource (e.g., VM symptom alerting on the host) — propose
+  defined_on: SELF and ask only if recon shows the relationship
+  matters.
+
 ## Hard rules
 
 1. **Refuse without recon.** Hundreds of built-in alerts exist.

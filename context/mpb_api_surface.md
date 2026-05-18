@@ -33,7 +33,7 @@ namespace (the clean-room note that bearer 403s omitted that header).
 |--------|------|---------|--------|
 | GET    | `/suite-api/internal/mpbuilder/designs` | List all designs (summaries) | CONFIRMED |
 | **POST** | **`/suite-api/internal/mpbuilder/designs`** | **Create a new design from `Design` body. Returns `CreatedIdResponse` (201).** | clean-room ref |
-| POST   | `/suite-api/internal/mpbuilder/designs/import` | Import a design from export.json | CONFIRMED |
+| POST   | `/suite-api/internal/mpbuilder/designs/import` | Import a design from export.json | CONFIRMED — factory CLI: `push-design` |
 | DELETE | `/suite-api/internal/mpbuilder/designs?id={uuid}` | Delete one or more designs (**query-param, repeatable**) | CONFIRMED |
 | DELETE | `/suite-api/internal/mpbuilder/designs/{id}` (path-param) | **BROKEN** — always 500 NPE | BUG |
 | GET    | `/suite-api/internal/mpbuilder/designs/export?id={uuid}&userWillVerifySensitiveInfo=true` | Download design export JSON | CONFIRMED (requires VALID status) |

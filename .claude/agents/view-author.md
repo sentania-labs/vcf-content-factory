@@ -20,6 +20,32 @@ Also read:
 - existing `views/*.yaml` (idiom)
 - relevant `supermetrics/*.yaml` (for column references)
 
+## Interview discipline — infer, don't interview
+
+Read `context/rules_content_authoring.md` §Interview discipline.
+Track-specific examples:
+
+**Infer (don't ask):**
+- Column set from the user's nouns ("top VMs by CPU ready" → name,
+  cluster, CPU ready columns; default).
+- Sort key from the verb ("top N by X" → sort by X descending).
+- Default sort direction: descending for metrics (high values
+  ranked first); ascending for free-space / capacity (smallest
+  first).
+- Subject resource kind when the user names a class of object
+  unambiguously ("hosts" → HostSystem; "VMs" → VirtualMachine).
+- Mix of built-in vs super metric columns: prefer built-ins where
+  one exists; reach for the super metric only when the built-in
+  isn't suitable.
+
+**Ask (real ambiguity):**
+- When the noun maps to multiple resource kinds — "datastore" could
+  be VMWARE Datastore or a third-party storage adapter's
+  Datastore kind. Recon resolves most cases; ask only if recon
+  shows multiple candidates.
+- When 2+ super metrics with similar names exist and the choice
+  changes column meaning.
+
 ## Hard rules
 
 1. **Never create a super metric.** If needed, return BLOCKED.

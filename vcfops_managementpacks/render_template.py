@@ -723,6 +723,18 @@ def _convert_resource(
             "objectBinding": _convert_object_binding(object_binding, metrics_by_id),
         }
 
+        # Chain-anchor metricSets are now guaranteed non-empty by the stub
+        # mechanism in render.py (chain_anchor_stub field on MetricSetDef).
+        # The previous guard that skipped empty REQUESTED_METRIC blocks
+        # (task #18/#20) has been reverted: the Dell pattern requires the parent
+        # object to carry a metricSet binding for every chain-anchor request so
+        # that MPB's Relationships tab can infer the parent→child ownership.
+        # Stripping the binding causes MPB to treat the anchored request as a
+        # free-floating root with no chaining and no relationship edges.
+        # Non-empty is now enforced by stub injection in render.py, so
+        # BuilderFile.Companion.read() will never see an empty metrics array.
+        # pak_validator.py Rule 8 remains as a regression gate.
+
         # listExpression: only for list resources with a non-"base" listId
         # Scalar resources (world/singleton, listId="base") omit listExpression
         if is_list_resource and list_id and list_id != "base":
