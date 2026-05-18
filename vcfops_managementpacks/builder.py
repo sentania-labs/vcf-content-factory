@@ -942,7 +942,16 @@ def _append_data_kind(
     then metric/property ResourceAttributes.
     """
     nk = name_key_counter[0]
-    name_key_counter[0] += len(ot.metrics) + len(ot.identifiers) + 10
+    # Budget breakdown (fixed overhead consumed from padding):
+    #   +1 ResourceKind nameKey
+    #   +1 adapter_instance_id identifier
+    #   +1 relationships ResourceGroup header
+    #   +1 generic mpb_{ak}_parent attribute
+    #   +1 summary ResourceGroup header (added 2026-05-18; was missing, causing
+    #      "Adapter install failed" at apply_adapter on VCF Ops 9.1)
+    #   +up to ~5 directed relationship tracking attributes (parent/child roles)
+    # Total fixed overhead: up to 10. +12 budget gives 2 spare for future changes.
+    name_key_counter[0] += len(ot.metrics) + len(ot.identifiers) + 12
 
     rk_key = f"{ak}_{ot.key}" if not ot.key.startswith(ak) else ot.key
     # ResourceKind label: use ot.name (the YAML label field on the object type)
@@ -1039,15 +1048,39 @@ def _append_data_kind(
     nk += 1
     lines.append("      </ResourceGroup>")
 
-    # Metric and property attributes
+    # Metric and property attributes — wrapped in a <ResourceGroup key="summary">.
+    #
+    # Invariant (discovered 2026-05-18): every non-adapter-instance, non-world
+    # data ResourceKind MUST emit all metric/property ResourceAttributes inside
+    # a <ResourceGroup key="summary" instanced="false"> wrapper.  Bare attributes
+    # directly under <ResourceKind> on data kinds cause "Adapter install failed"
+    # at the apply_adapter phase on VCF Operations 9.1 even though the XSD
+    # (xs:choice) technically permits them as direct children.  The MPB runtime
+    # enforces this layout contract at apply time beyond what the XSD validates.
+    #
+    # The adapter-instance kind (type=7) has always had a summary group (see
+    # _append_bare_adapter_instance_kind).  Data kinds previously emitted bare
+    # attributes, which worked on older VCF Ops releases but fails on 9.1.
+    #
+    # Fix: always open a summary ResourceGroup, emit all metrics (isProperty=false)
+    # then all properties (isProperty=true) inside it, then close the group.
+    # dashboardOrder counters are independent within metrics vs properties
+    # (matching MPB canonical emit order).  The group is emitted even if there
+    # are no attributes, matching _append_bare_adapter_instance_kind's behavior.
     all_metrics = [m for m in ot.metrics if m.usage != "PROPERTY"]
     all_props = [m for m in ot.metrics if m.usage == "PROPERTY"]
+
+    labels[nk] = "Summary"
+    lines.append(
+        f'      <ResourceGroup key="summary" nameKey="{nk}" instanced="false">'
+    )
+    nk += 1
 
     for i, m in enumerate(all_metrics):
         dt = _DESCRIBE_DATA_TYPE.get(m.type, "float")
         labels[nk] = m.label
         lines.append(
-            f'      <ResourceAttribute nameKey="{nk}"'
+            f'        <ResourceAttribute nameKey="{nk}"'
             f' dashboardOrder="{i + 1}"'
             f' key="{m.key}"'
             f' dataType="{dt}"'
@@ -1064,7 +1097,7 @@ def _append_data_kind(
         dt = _DESCRIBE_DATA_TYPE.get(m.type, "string")
         labels[nk] = m.label
         lines.append(
-            f'      <ResourceAttribute nameKey="{nk}"'
+            f'        <ResourceAttribute nameKey="{nk}"'
             f' dashboardOrder="{i + 1}"'
             f' key="{m.key}"'
             f' dataType="{dt}"'
@@ -1076,6 +1109,8 @@ def _append_data_kind(
             f' hidden="false" />'
         )
         nk += 1
+
+    lines.append("      </ResourceGroup>")
 
     lines.append("    </ResourceKind>")
 

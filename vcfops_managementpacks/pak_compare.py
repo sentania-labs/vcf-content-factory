@@ -743,6 +743,21 @@ def _compare_describe_xml(
                 f"describe.xml: data kind {k}: group attribute count: factory={fi['group_attrs']}, reference={ri['group_attrs']}"
             ))
 
+        # summary group presence on data kinds (WARNING if factory is missing it).
+        #
+        # Invariant (2026-05-18): every data ResourceKind MUST have all metric/
+        # property ResourceAttributes inside a <ResourceGroup key="summary">.
+        # Bare ResourceAttributes directly under <ResourceKind> cause
+        # "Adapter install failed" at apply_adapter on VCF Operations 9.1.
+        # This check fires as WARNING D27 when the factory pak is missing the
+        # summary group that the reference pak has, flagging potential regressions.
+        if ri["has_summary_group"] and not fi["has_summary_group"]:
+            findings.append(Finding(
+                WARNING, "D27",
+                f"describe.xml: data kind {k}: reference has <ResourceGroup key='summary'>, factory does not — "
+                f"bare ResourceAttributes outside a summary group cause apply_adapter failures on VCF Ops 9.1+"
+            ))
+
     # Discoveries block
     f_disc = root_find_first(f_root, "Discoveries")
     r_disc = root_find_first(r_root, "Discoveries")

@@ -304,6 +304,48 @@ Keys are integers (`nameKey` values from describe.xml). The platform
 selects the locale-appropriate file via `Dictionary` (the SDK's
 localization resolver).
 
+## Runtime invariant: summary ResourceGroup on data kinds (2026-05-18)
+
+**Invariant**: every non-adapter-instance, non-world, non-relatives data
+`ResourceKind` MUST emit all metric/property `ResourceAttribute` elements
+inside a `<ResourceGroup key="summary" instanced="false">` wrapper.
+
+The XSD (`xs:choice` on `ResourceKindType`) technically permits bare
+`ResourceAttribute` as direct children of `ResourceKind`. However the
+MPB runtime at `apply_adapter` phase on VCF Operations 9.1 enforces an
+additional layout contract beyond XSD: data kinds without the summary
+group wrapper cause "Adapter install failed" with no further detail.
+
+**Evidence (2026-05-18)**:
+- `dist/mpb_vcf_content_factory_dell_poweredge_v5.2.0.0.1.pak` (pre-fix)
+  failed at apply_adapter with "Adapter install failed" because
+  `_append_data_kind` in `builder.py` emitted bare `ResourceAttribute`
+  elements directly under `ResourceKind`.
+- Fix: `vcfops_managementpacks/builder.py` `_append_data_kind()` now
+  always opens a `<ResourceGroup key="summary">`, emits all metrics and
+  properties inside it, then closes the group.
+- `pak_compare.py` D27 check added to warn when a factory pak's data
+  kind is missing the summary group that the reference has.
+
+**Canonical layout for data kinds**:
+```xml
+<ResourceKind key="<ak>_<kind>" nameKey="N">
+  <ResourceIdentifier .../>      <!-- adapter_instance_id first -->
+  <ResourceIdentifier .../>      <!-- kind-specific identifiers -->
+  <ResourceGroup key="relationships" nameKey="N" instanced="false">
+    <ResourceAttribute ... isProperty="true" .../>   <!-- directed + generic _parent -->
+  </ResourceGroup>
+  <ResourceGroup key="summary" nameKey="N" instanced="false">
+    <ResourceAttribute ... isProperty="false" .../>  <!-- metrics -->
+    <ResourceAttribute ... isProperty="true" .../>   <!-- properties -->
+  </ResourceGroup>
+</ResourceKind>
+```
+
+The adapter-instance kind (type=7) and world kind (type=8) have the
+same summary group requirement; they were already emitting it correctly
+before this fix.
+
 ## Open questions / pass 2+
 
 - Full inventory of `<ResourceKind type="N">` valid values

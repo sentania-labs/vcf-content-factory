@@ -1,0 +1,1520 @@
+# Dell PowerEdge v5 — VCF Content Factory Management Pack
+#
+# Architecture:
+#   v5 collapses the 8 intermediate collection-container object types from v4
+#   (Power, Thermal, ProcessorsCollection, Memory Devices Collection,
+#   Firmware Inventory Collection, System Ethernet Interface Collection,
+#   DellNumericSensorCollection, CPU.1) and binds all 11 Redfish request
+#   "base" listIds directly to the Dell PowerEdge Server singleton.
+#   Fan-out component objects chain from the Server's primary metricSets.
+#   MPB auto-emits Server->Component parent-child edges from the chaining graph.
+#   No explicit relationships[] are required and none are declared.
+#
+# Object types (12 total):
+#   1  Dell PowerEdge Server   — is_singleton; binds all 11 request base listIds
+#   2  Processor               — list; fans out from processor_list.Members
+#   3  Memory DIMM             — list; fans out from memory_inventory.Members
+#   4  Network Interface       — list; fans out from nic_inventory.Members
+#   5  Firmware Component      — list; fans out from firmware_inventory.Members
+#   6  Physical Drive          — list; fans out from storage_controller_cpu1.Drives
+#   7  Fan                     — list; fans out from thermal.Fans
+#   8  Temperature Sensor      — list; fans out from thermal.Temperatures
+#   9  Power Supply            — list; fans out from power.PowerSupplies
+#   10 Power Control           — list; fans out from power.PowerControl
+#   11 Dell OEM Sensor         — list; fans out from oem_numeric_sensors.Members
+#
+# Adapter identity:
+#   adapter_kind: mpb_vcf_content_factory_dell_poweredge_v5
+#   Separate from v4 (mpb_vcf_content_factory_dell_poweredge_v4) so both
+#   versions can coexist on an instance during migration testing.
+#
+# Source: v4 design.json (tmp/dell_v4_export_source.json)
+# Cleanup plan: orchestrator brief 2026-05-18
+
+name: VCF Content Factory Dell PowerEdge v5
+version: "2.0.0"
+build_number: 1
+author: VCF Content Factory
+adapter_kind: mpb_vcf_content_factory_dell_poweredge_v5
+description: >
+  Dell PowerEdge hardware inventory via Redfish. Pulls system info, iDRAC info,
+  Dell OEM telemetry, plus per-component metrics for processors, memory DIMMs,
+  NICs, firmware components, drives, fans, temperature sensors, power supplies,
+  power-control zones, and Dell OEM sensors. Each component is a child resource
+  of the parent server; relationships are auto-emitted by MPB chaining (no
+  post-install scripts). Each adapter instance manages one iDRAC endpoint.
+
+source:
+  port: 443
+  ssl: NO_VERIFY
+  base_path: ""
+  timeout: 30
+  max_retries: 2
+  max_concurrent: 2
+  auth:
+    preset: basic_auth
+    credentials:
+      - {key: username, label: Username, sensitive: false}
+      - {key: password, label: Password, sensitive: true}
+    inject:
+      - type: header
+        name: Authorization
+        value: "Basic ${authentication.basic}"
+      - type: header
+        name: Content-Type
+        value: "application/json"
+  test_request:
+    method: GET
+    path: "redfish/v1"
+    params: []
+  config_fields:
+    - key: mpb_hostname
+      label: Hostname
+      type: STRING
+      default: ""
+      description: "The hostname used to connect to the target API."
+    - key: mpb_port
+      label: Port
+      type: NUMBER
+      default: "443"
+      description: "The port used to connect to the target API."
+    - key: mpb_connection_timeout
+      label: Connection Timeout (s)
+      type: NUMBER
+      default: "30"
+      description: "The maximum number of seconds to wait for a response from the endpoint."
+    - key: mpb_concurrent_requests
+      label: Maximum Concurrent Requests
+      type: NUMBER
+      default: "2"
+      description: "The maximum number of request that can be run simultaneously."
+    - key: mpb_max_retries
+      label: Maximum Retries
+      type: NUMBER
+      default: "2"
+      description: "The maximum number of times a call to an endpoint will be retried if it fails."
+    - key: mpb_ssl_config
+      label: SSL Configuration
+      type: SINGLE_SELECTION
+      default: "Verify"
+      options: ["No Verify", "Verify", "No SSL"]
+      description: >-
+        The SSL mode to use when connecting to the target. Can be configured
+        without SSL (No SSL), to use SSL but do not verify the target's
+        certificate (No Verify), or to use SSL and verify the target's
+        certificate (Verify).
+    - key: mpb_min_event_severity
+      label: Minimum VMware Aria Operations Severity
+      type: SINGLE_SELECTION
+      default: "Warning"
+      options: ["Critical", "Immediate", "Warning", "Info"]
+      description: "The minimum event severity to collect."
+
+# -----------------------------------------------------------------------
+# Requests — all 11 Redfish endpoints, unchanged from v4
+# -----------------------------------------------------------------------
+requests:
+  # system_info: primary server identity + health summary
+  - name: system_info
+    method: GET
+    path: "redfish/v1/Systems/System.Embedded.1"
+    params: []
+
+  # manager_info: iDRAC firmware and model
+  - name: manager_info
+    method: GET
+    path: "redfish/v1/Managers/iDRAC.Embedded.1"
+    params: []
+
+  # oem_dell_system: Dell-specific OEM system telemetry and slot inventory
+  - name: oem_dell_system
+    method: GET
+    path: "redfish/v1/Systems/System.Embedded.1/Oem/Dell/DellSystem/System.Embedded.1"
+    params: []
+
+  # thermal: Fans.* and Temperatures.* arrays + base Name scalar
+  - name: thermal
+    method: GET
+    path: "redfish/v1/Chassis/System.Embedded.1/Thermal"
+    params: []
+
+  # power: PowerSupplies.* and PowerControl.* arrays + base Name scalar
+  - name: power
+    method: GET
+    path: "redfish/v1/Chassis/System.Embedded.1/Power"
+    params: []
+
+  # processor_list: Members.* expanded processor objects
+  - name: processor_list
+    method: GET
+    path: "redfish/v1/Systems/System.Embedded.1/Processors?$expand=.($levels=1)"
+    params: []
+
+  # memory_inventory: Members.* expanded DIMM objects
+  - name: memory_inventory
+    method: GET
+    path: "redfish/v1/Systems/System.Embedded.1/Memory?$expand=.($levels=1)"
+    params: []
+
+  # nic_inventory: Members.* expanded Ethernet interface objects
+  - name: nic_inventory
+    method: GET
+    path: "redfish/v1/Systems/System.Embedded.1/EthernetInterfaces?$expand=.($levels=1)"
+    params: []
+
+  # firmware_inventory: Members.* expanded firmware component objects
+  - name: firmware_inventory
+    method: GET
+    path: "redfish/v1/UpdateService/FirmwareInventory?$expand=.($levels=1)"
+    params: []
+
+  # storage_controller_cpu1: Drives.* expanded physical drive objects
+  # NOTE: "CPU.1" is the Redfish path artifact for the storage controller
+  # endpoint, not a CPU object. Physical drives chain directly from the Server.
+  - name: storage_controller_cpu1
+    method: GET
+    path: "redfish/v1/Systems/System.Embedded.1/Storage/CPU.1?$expand=.($levels=1)"
+    params: []
+
+  # oem_numeric_sensors: Members.* expanded Dell OEM sensor objects
+  - name: oem_numeric_sensors
+    method: GET
+    path: "redfish/v1/Systems/System.Embedded.1/Oem/Dell/DellNumericSensors?$expand=."
+    params: []
+
+# -----------------------------------------------------------------------
+# Object types
+# -----------------------------------------------------------------------
+object_types:
+
+  # =====================================================================
+  # 1. Dell PowerEdge Server — singleton (one per adapter instance)
+  #    Binds all 11 request base listIds; serves as chaining anchor for
+  #    all fan-out component objects.
+  # =====================================================================
+  - name: Dell PowerEdge Server
+    key: dell_poweredge_server
+    type: INTERNAL
+    icon: host_system
+    is_singleton: true
+    identifiers:
+      - key: serial_number
+        source: "metricset:system_info.SerialNumber"
+    name_expression: hostname
+    metricSets:
+      # Primary: system_info base — server identity and health summary
+      - from_request: system_info
+        list_path: ""
+      # manager_info base — iDRAC firmware and model
+      - from_request: manager_info
+        list_path: ""
+      # oem_dell_system base — Dell OEM slot inventory and health rollups
+      - from_request: oem_dell_system
+        list_path: ""
+      # thermal base — binds thermal request so Fans/Temperatures can chain from it
+      - from_request: thermal
+        list_path: ""
+      # power base — binds power request so PowerSupplies/PowerControl can chain from it
+      - from_request: power
+        list_path: ""
+      # processor_list base — binds request so Processor can chain from it
+      - from_request: processor_list
+        list_path: ""
+      # memory_inventory base — binds request so Memory DIMM can chain from it
+      - from_request: memory_inventory
+        list_path: ""
+      # nic_inventory base — binds request so Network Interface can chain from it
+      - from_request: nic_inventory
+        list_path: ""
+      # firmware_inventory base — binds request so Firmware Component can chain from it
+      - from_request: firmware_inventory
+        list_path: ""
+      # storage_controller_cpu1 base — binds request so Physical Drive can chain from it
+      - from_request: storage_controller_cpu1
+        list_path: ""
+      # oem_numeric_sensors base — binds request so Dell OEM Sensor can chain from it
+      - from_request: oem_numeric_sensors
+        list_path: ""
+    metrics:
+      # --- system_info scalars ---
+      - key: hostname
+        label: Hostname
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:system_info.HostName"
+      - key: model
+        label: Model
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:system_info.Model"
+      - key: serial_number
+        label: Serial Number
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:system_info.SerialNumber"
+      - key: manufacturer
+        label: Manufacturer
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:system_info.Manufacturer"
+      - key: part_number
+        label: Part Number
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:system_info.PartNumber"
+      - key: sku
+        label: SKU
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:system_info.SKU"
+      - key: bios_version
+        label: BIOS Version
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:system_info.BiosVersion"
+      - key: power_state
+        label: Power State
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:system_info.PowerState"
+      - key: overall_health
+        label: Overall Health
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:system_info.Status.Health"
+      - key: cpu_count
+        label: CPU Count
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:system_info.ProcessorSummary.Count"
+      - key: cores_per_cpu
+        label: Cores Per CPU
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:system_info.ProcessorSummary.CoreCount"
+      - key: logical_cpus_total
+        label: Logical CPUs (Total)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:system_info.ProcessorSummary.LogicalProcessorCount"
+      - key: cpu_model
+        label: CPU Model
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:system_info.ProcessorSummary.Model"
+      - key: cpu_health
+        label: CPU Health
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:system_info.ProcessorSummary.Status.HealthRollup"
+      - key: total_memory_gib
+        label: Total Memory (GiB)
+        usage: METRIC
+        type: NUMBER
+        unit: "gigabyte"
+        source: "metricset:system_info.MemorySummary.TotalSystemMemoryGiB"
+      - key: memory_health
+        label: Memory Health
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:system_info.MemorySummary.Status.HealthRollup"
+      # --- manager_info scalars ---
+      - key: idrac_firmware_version
+        label: iDRAC Firmware Version
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:manager_info.FirmwareVersion"
+      - key: idrac_model
+        label: iDRAC Model
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:manager_info.Model"
+      # --- oem_dell_system scalars ---
+      - key: system_generation
+        label: System Generation
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.SystemGeneration"
+      - key: chassis_height_u
+        label: Chassis Height (U)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_dell_system.ChassisSystemHeightUnit"
+      - key: populated_dimm_slots
+        label: Populated DIMM Slots
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_dell_system.PopulatedDIMMSlots"
+      - key: max_dimm_slots
+        label: Max DIMM Slots
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_dell_system.MaxDIMMSlots"
+      - key: populated_pcie_slots
+        label: Populated PCIe Slots
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_dell_system.PopulatedPCIeSlots"
+      - key: max_pcie_slots
+        label: Max PCIe Slots
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_dell_system.MaxPCIeSlots"
+      - key: estimated_exhaust_temp_c
+        label: Estimated Exhaust Temp (C)
+        usage: METRIC
+        type: NUMBER
+        unit: "celsius"
+        source: "metricset:oem_dell_system.EstimatedExhaustTemperatureCelsius"
+      - key: estimated_airflow_cfm
+        label: Estimated Airflow (CFM)
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_dell_system.EstimatedSystemAirflowCFM"
+      - key: cpu_health_rollup
+        label: CPU Health Rollup
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.CPURollupStatus"
+      - key: memory_health_rollup
+        label: Memory Health Rollup
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.SysMemPrimaryStatus"
+      - key: cooling_health_rollup
+        label: Cooling Health Rollup
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.CoolingRollupStatus"
+      - key: fan_health_rollup
+        label: Fan Health Rollup
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.FanRollupStatus"
+      - key: psu_health_rollup
+        label: PSU Health Rollup
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.PSRollupStatus"
+      - key: storage_health_rollup
+        label: Storage Health Rollup
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.StorageRollupStatus"
+      - key: temperature_health_rollup
+        label: Temperature Health Rollup
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.TempRollupStatus"
+      - key: voltage_health_rollup
+        label: Voltage Health Rollup
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.VoltRollupStatus"
+      - key: system_event_log_rollup
+        label: System Event Log Rollup
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.SELRollupStatus"
+      - key: chassis_intrusion_rollup
+        label: Chassis Intrusion Rollup
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.IntrusionRollupStatus"
+      - key: battery_health_rollup
+        label: Battery Health Rollup
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.BatteryRollupStatus"
+      - key: memory_operation_mode
+        label: Memory Operation Mode
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_dell_system.MemoryOperationMode"
+      - key: max_system_memory_mib
+        label: Max System Memory (MiB)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_dell_system.MaxSystemMemoryMiB"
+
+  # =====================================================================
+  # 2. Processor — one per physical CPU socket
+  # =====================================================================
+  - name: Processor
+    key: processor
+    type: INTERNAL
+    icon: default
+    is_singleton: false
+    identifiers:
+      - key: processor_id
+        source: "metricset:processor_list.Id"
+    name_expression: processor_name
+    metricSets:
+      - from_request: processor_list
+        primary: true
+        list_path: "Members"
+    metrics:
+      - key: processor_id
+        label: Processor ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.Id"
+      - key: processor_name
+        label: Processor Name
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.Name"
+      - key: proc_model
+        label: Proc Model
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.Model"
+      - key: proc_manufacturer
+        label: Proc Manufacturer
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.Manufacturer"
+      - key: processor_type
+        label: Processor Type
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.ProcessorType"
+      - key: architecture
+        label: Architecture
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.ProcessorArchitecture"
+      - key: instruction_set
+        label: Instruction Set
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.InstructionSet"
+      - key: socket
+        label: Socket
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.Socket"
+      - key: total_cores
+        label: Total Cores
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        source: "metricset:processor_list.TotalCores"
+      - key: enabled_cores
+        label: Enabled Cores
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:processor_list.TotalEnabledCores"
+      - key: total_threads
+        label: Total Threads
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        source: "metricset:processor_list.TotalThreads"
+      - key: max_speed_mhz
+        label: Max Speed (MHz)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:processor_list.MaxSpeedMHz"
+      - key: operating_speed_mhz
+        label: Operating Speed (MHz)
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        source: "metricset:processor_list.OperatingSpeedMHz"
+      - key: turbo_state
+        label: Turbo State
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.TurboState"
+      - key: stepping_version
+        label: Stepping Version
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.Version"
+      - key: cache_size_mib
+        label: Cache Size (MiB)
+        usage: METRIC
+        type: NUMBER
+        unit: "megabyte"
+        source: "metricset:processor_list.MemorySummary.TotalCacheSizeMiB"
+      - key: memory_size_mib
+        label: Memory Size (MiB)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:processor_list.MemorySummary.TotalMemorySizeMiB"
+      - key: cpu_family
+        label: CPU Family
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.ProcessorId.EffectiveFamily"
+      - key: cpu_model_id
+        label: CPU Model ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.ProcessorId.EffectiveModel"
+      - key: microcode
+        label: Microcode
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.ProcessorId.MicrocodeInfo"
+      - key: vendor_id
+        label: Vendor ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.ProcessorId.VendorId"
+      - key: proc_health
+        label: Proc Health
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.Status.Health"
+      - key: proc_state
+        label: Proc State
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:processor_list.Status.State"
+
+  # =====================================================================
+  # 3. Memory DIMM — one per installed memory module
+  # =====================================================================
+  - name: Memory DIMM
+    key: memory_dimm
+    type: INTERNAL
+    icon: default
+    is_singleton: false
+    identifiers:
+      - key: dimm_id
+        source: "metricset:memory_inventory.Id"
+    name_expression: dimm_name
+    metricSets:
+      - from_request: memory_inventory
+        primary: true
+        list_path: "Members"
+    metrics:
+      - key: dimm_id
+        label: DIMM ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:memory_inventory.Id"
+      - key: dimm_name
+        label: DIMM Name
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:memory_inventory.Name"
+      - key: slot
+        label: Slot
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:memory_inventory.DeviceLocator"
+      - key: dimm_manufacturer
+        label: DIMM Manufacturer
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:memory_inventory.Manufacturer"
+      - key: dimm_part_number
+        label: DIMM Part Number
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:memory_inventory.PartNumber"
+      - key: dimm_serial_number
+        label: DIMM Serial Number
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:memory_inventory.SerialNumber"
+      - key: memory_type
+        label: Memory Type
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:memory_inventory.MemoryDeviceType"
+      - key: memory_category
+        label: Memory Category
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:memory_inventory.MemoryType"
+      - key: module_type
+        label: Module Type
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:memory_inventory.BaseModuleType"
+      - key: capacity_mib
+        label: Capacity (MiB)
+        usage: METRIC
+        type: NUMBER
+        unit: "megabyte"
+        source: "metricset:memory_inventory.CapacityMiB"
+      - key: operating_speed_mhz
+        label: Operating Speed (MHz)
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        source: "metricset:memory_inventory.OperatingSpeedMhz"
+      - key: bus_width_bits
+        label: Bus Width (bits)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:memory_inventory.BusWidthBits"
+      - key: data_width_bits
+        label: Data Width (bits)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:memory_inventory.DataWidthBits"
+      - key: rank_count
+        label: Rank Count
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:memory_inventory.RankCount"
+      - key: error_correction
+        label: Error Correction
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:memory_inventory.ErrorCorrection"
+      - key: volatile_size_mib
+        label: Volatile Size (MiB)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:memory_inventory.VolatileSizeMiB"
+      - key: cache_size_mib
+        label: Cache Size (MiB)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:memory_inventory.CacheSizeMiB"
+      - key: non_volatile_mib
+        label: Non Volatile (MiB)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:memory_inventory.NonVolatileSizeMiB"
+      - key: dimm_health
+        label: DIMM Health
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:memory_inventory.Status.Health"
+      - key: dimm_state
+        label: DIMM State
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:memory_inventory.Status.State"
+
+  # =====================================================================
+  # 4. Network Interface — one per Ethernet interface
+  # =====================================================================
+  - name: Network Interface
+    key: network_interface
+    type: INTERNAL
+    icon: network
+    is_singleton: false
+    identifiers:
+      - key: nic_id
+        source: "metricset:nic_inventory.Id"
+    name_expression: interface_name
+    metricSets:
+      - from_request: nic_inventory
+        primary: true
+        list_path: "Members"
+    metrics:
+      - key: nic_id
+        label: NIC ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.Id"
+      - key: interface_name
+        label: Interface Name
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.Name"
+      - key: description
+        label: Description
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.Description"
+      - key: mac_address
+        label: MAC Address
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.MACAddress"
+      - key: permanent_mac_address
+        label: Permanent MAC Address
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.PermanentMACAddress"
+      - key: link_speed_mbps
+        label: Link Speed (Mbps)
+        usage: METRIC
+        type: NUMBER
+        unit: "megabit"
+        source: "metricset:nic_inventory.SpeedMbps"
+      - key: link_status
+        label: Link Status
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.LinkStatus"
+      - key: full_duplex
+        label: Full Duplex
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.FullDuplex"
+      - key: auto_negotiation
+        label: Auto Negotiation
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.AutoNeg"
+      - key: interface_enabled
+        label: Interface Enabled
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.InterfaceEnabled"
+      - key: interface_type
+        label: Interface Type
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.EthernetInterfaceType"
+      - key: mtu_size_bytes
+        label: MTU Size (bytes)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:nic_inventory.MTUSize"
+      - key: uefi_device_path
+        label: UEFI Device Path
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.UefiDevicePath"
+      - key: nic_health
+        label: NIC Health
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.Status.Health"
+      - key: nic_state
+        label: NIC State
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:nic_inventory.Status.State"
+
+  # =====================================================================
+  # 5. Firmware Component — one per firmware inventory entry
+  # =====================================================================
+  - name: Firmware Component
+    key: firmware_component
+    type: INTERNAL
+    icon: default
+    is_singleton: false
+    identifiers:
+      - key: firmware_entry_id
+        source: "metricset:firmware_inventory.Id"
+    name_expression: component_name
+    metricSets:
+      - from_request: firmware_inventory
+        primary: true
+        list_path: "Members"
+    metrics:
+      - key: firmware_entry_id
+        label: Firmware Entry ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:firmware_inventory.Id"
+      - key: component_name
+        label: Component Name
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:firmware_inventory.Name"
+      - key: fw_version
+        label: FW Version
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:firmware_inventory.Version"
+      - key: software_id
+        label: Software ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:firmware_inventory.SoftwareId"
+      - key: release_date
+        label: Release Date
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:firmware_inventory.ReleaseDate"
+      - key: updateable
+        label: Updateable
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:firmware_inventory.Updateable"
+      - key: fw_health
+        label: FW Health
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:firmware_inventory.Status.Health"
+      - key: fw_state
+        label: FW State
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:firmware_inventory.Status.State"
+
+  # =====================================================================
+  # 6. Physical Drive — one per drive in the storage controller
+  #    NOTE: The v4 intermediate "CPU.1" was a Redfish path artifact
+  #    (storage controller endpoint named CPU.1), NOT a CPU object.
+  #    Physical Drive chains directly from the Server in v5.
+  # =====================================================================
+  - name: Physical Drive
+    key: physical_drive
+    type: INTERNAL
+    icon: datastore
+    is_singleton: false
+    identifiers:
+      - key: drive_id
+        source: "metricset:storage_controller_cpu1.Id"
+    name_expression: drive_name
+    metricSets:
+      - from_request: storage_controller_cpu1
+        primary: true
+        list_path: "Drives"
+    metrics:
+      - key: drive_id
+        label: Drive ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.Id"
+      - key: drive_name
+        label: Drive Name
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.Name"
+      - key: drive_model
+        label: Drive Model
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.Model"
+      - key: drive_manufacturer
+        label: Drive Manufacturer
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.Manufacturer"
+      - key: drive_serial_number
+        label: Drive Serial Number
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.SerialNumber"
+      - key: drive_part_number
+        label: Drive Part Number
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.PartNumber"
+      - key: firmware_revision
+        label: Firmware Revision
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.Revision"
+      - key: media_type
+        label: Media Type
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.MediaType"
+      - key: protocol
+        label: Protocol
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.Protocol"
+      - key: capacity_bytes
+        label: Capacity (Bytes)
+        usage: METRIC
+        type: NUMBER
+        unit: "byte"
+        source: "metricset:storage_controller_cpu1.CapacityBytes"
+      - key: link_speed_gbps
+        label: Link Speed (Gbps)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:storage_controller_cpu1.CapableSpeedGbs"
+      - key: block_size_bytes
+        label: Block Size (Bytes)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:storage_controller_cpu1.BlockSizeBytes"
+      - key: predicted_life_left_pct
+        label: Predicted Life Left (pct)
+        usage: METRIC
+        type: NUMBER
+        unit: "percent"
+        source: "metricset:storage_controller_cpu1.PredictedMediaLifeLeftPercent"
+      - key: failure_predicted
+        label: Failure Predicted
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.FailurePredicted"
+      - key: encryption_status
+        label: Encryption Status
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.EncryptionStatus"
+      - key: drive_health
+        label: Drive Health
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.Status.Health"
+      - key: drive_state
+        label: Drive State
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:storage_controller_cpu1.Status.State"
+
+  # =====================================================================
+  # 7. Fan — one per chassis fan
+  # =====================================================================
+  - name: Fan
+    key: fan
+    type: INTERNAL
+    icon: default
+    is_singleton: false
+    identifiers:
+      - key: fan_member_id
+        source: "metricset:thermal.MemberId"
+    name_expression: fan_name
+    metricSets:
+      - from_request: thermal
+        primary: true
+        list_path: "Fans"
+    metrics:
+      - key: fan_member_id
+        label: Fan Member ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:thermal.MemberId"
+      - key: fan_name
+        label: Fan Name
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:thermal.Name"
+      - key: fan_sensor_number
+        label: Fan Sensor Number
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:thermal.SensorNumber"
+      - key: physical_context
+        label: Physical Context
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:thermal.PhysicalContext"
+      - key: fan_speed_rpm
+        label: Fan Speed (RPM)
+        usage: METRIC
+        type: NUMBER
+        unit: "rpm"
+        source: "metricset:thermal.Reading"
+      - key: reading_units
+        label: Reading Units
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:thermal.ReadingUnits"
+      - key: critical_low_threshold_rpm
+        label: Critical Low Threshold (RPM)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:thermal.LowerThresholdCritical"
+      - key: warning_low_threshold_rpm
+        label: Warning Low Threshold (RPM)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:thermal.LowerThresholdNonCritical"
+      - key: fan_health
+        label: Fan Health
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:thermal.Status.Health"
+      - key: fan_state
+        label: Fan State
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:thermal.Status.State"
+
+  # =====================================================================
+  # 8. Temperature Sensor — one per chassis temperature probe
+  # =====================================================================
+  - name: Temperature Sensor
+    key: temperature_sensor
+    type: INTERNAL
+    icon: default
+    is_singleton: false
+    identifiers:
+      - key: temp_member_id
+        source: "metricset:thermal_temps.MemberId"
+    name_expression: sensor_name
+    metricSets:
+      - from_request: thermal
+        as: thermal_temps
+        primary: true
+        list_path: "Temperatures"
+    metrics:
+      - key: temp_member_id
+        label: Temp Member ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:thermal_temps.MemberId"
+      - key: sensor_name
+        label: Sensor Name
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:thermal_temps.Name"
+      - key: sensor_number
+        label: Sensor Number
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:thermal_temps.SensorNumber"
+      - key: temp_physical_context
+        label: Temp Physical Context
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:thermal_temps.PhysicalContext"
+      - key: temperature_c
+        label: Temperature C
+        usage: METRIC
+        type: NUMBER
+        unit: "celsius"
+        source: "metricset:thermal_temps.ReadingCelsius"
+      - key: critical_threshold_c
+        label: Critical Threshold C
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:thermal_temps.UpperThresholdCritical"
+      - key: low_critical_threshold_c
+        label: Low Critical Threshold C
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:thermal_temps.LowerThresholdCritical"
+      - key: temp_health
+        label: Temp Health
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:thermal_temps.Status.Health"
+      - key: temp_state
+        label: Temp State
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:thermal_temps.Status.State"
+
+  # =====================================================================
+  # 9. Power Supply — one per PSU bay
+  # =====================================================================
+  - name: Power Supply
+    key: power_supply
+    type: INTERNAL
+    icon: default
+    is_singleton: false
+    identifiers:
+      - key: psu_member_id
+        source: "metricset:power.MemberId"
+    name_expression: psu_name
+    metricSets:
+      - from_request: power
+        primary: true
+        list_path: "PowerSupplies"
+    metrics:
+      - key: psu_member_id
+        label: PSU Member ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power.MemberId"
+      - key: psu_name
+        label: PSU Name
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power.Name"
+      - key: psu_model
+        label: PSU Model
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power.Model"
+      - key: psu_manufacturer
+        label: PSU Manufacturer
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power.Manufacturer"
+      - key: psu_serial_number
+        label: PSU Serial Number
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power.SerialNumber"
+      - key: psu_part_number
+        label: PSU Part Number
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power.PartNumber"
+      - key: psu_firmware_version
+        label: PSU Firmware Version
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power.FirmwareVersion"
+      - key: supply_type
+        label: Supply Type
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power.PowerSupplyType"
+      - key: capacity_w
+        label: Capacity (W)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:power.PowerCapacityWatts"
+      - key: input_watts
+        label: Input Watts
+        usage: METRIC
+        type: NUMBER
+        unit: "watt"
+        source: "metricset:power.PowerInputWatts"
+      - key: output_watts
+        label: Output Watts
+        usage: METRIC
+        type: NUMBER
+        unit: "watt"
+        source: "metricset:power.PowerOutputWatts"
+      - key: last_output_watts
+        label: Last Output Watts
+        usage: METRIC
+        type: NUMBER
+        unit: "watt"
+        source: "metricset:power.LastPowerOutputWatts"
+      - key: efficiency_pct
+        label: Efficiency (pct)
+        usage: METRIC
+        type: NUMBER
+        unit: "percent"
+        source: "metricset:power.EfficiencyPercent"
+      - key: input_voltage_v
+        label: Input Voltage (V)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:power.LineInputVoltage"
+      - key: input_voltage_type
+        label: Input Voltage Type
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power.LineInputVoltageType"
+      - key: hot_pluggable
+        label: Hot Pluggable
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power.HotPluggable"
+      - key: psu_health
+        label: PSU Health
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power.Status.Health"
+      - key: psu_state
+        label: PSU State
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power.Status.State"
+
+  # =====================================================================
+  # 10. Power Control — one per power control zone (typically one per server)
+  # =====================================================================
+  - name: Power Control
+    key: power_control
+    type: INTERNAL
+    icon: default
+    is_singleton: false
+    identifiers:
+      - key: pc_member_id
+        source: "metricset:power_ctrl.MemberId"
+    name_expression: zone_name
+    metricSets:
+      - from_request: power
+        as: power_ctrl
+        primary: true
+        list_path: "PowerControl"
+    metrics:
+      - key: pc_member_id
+        label: PC Member ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power_ctrl.MemberId"
+      - key: zone_name
+        label: Zone Name
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:power_ctrl.Name"
+      - key: power_consumed_w
+        label: Power Consumed (W)
+        usage: METRIC
+        type: NUMBER
+        unit: "watt"
+        source: "metricset:power_ctrl.PowerConsumedWatts"
+      - key: total_capacity_w
+        label: Total Capacity (W)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:power_ctrl.PowerCapacityWatts"
+      - key: allocated_w
+        label: Allocated (W)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:power_ctrl.PowerAllocatedWatts"
+      - key: requested_by_bios_w
+        label: Requested by BIOS (W)
+        usage: METRIC
+        type: NUMBER
+        unit: "watt"
+        source: "metricset:power_ctrl.PowerRequestedWatts"
+      - key: available_headroom_w
+        label: Available Headroom (W)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:power_ctrl.PowerAvailableWatts"
+      - key: active_power_cap_w
+        label: Active Power Cap (W)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:power_ctrl.PowerLimit.LimitInWatts"
+      - key: avg_power_w
+        label: Avg Power (W)
+        usage: METRIC
+        type: NUMBER
+        unit: "watt"
+        source: "metricset:power_ctrl.PowerMetrics.AverageConsumedWatts"
+      - key: peak_power_w
+        label: Peak Power (W)
+        usage: METRIC
+        type: NUMBER
+        unit: "watt"
+        source: "metricset:power_ctrl.PowerMetrics.MaxConsumedWatts"
+      - key: min_power_w
+        label: Min Power (W)
+        usage: METRIC
+        type: NUMBER
+        unit: "watt"
+        source: "metricset:power_ctrl.PowerMetrics.MinConsumedWatts"
+
+  # =====================================================================
+  # 11. Dell OEM Sensor — one per Dell OEM numeric sensor
+  # =====================================================================
+  - name: Dell OEM Sensor
+    key: dell_oem_sensor
+    type: INTERNAL
+    icon: default
+    is_singleton: false
+    identifiers:
+      - key: sensor_id
+        source: "metricset:oem_numeric_sensors.Id"
+    name_expression: oem_sensor_name
+    metricSets:
+      - from_request: oem_numeric_sensors
+        primary: true
+        list_path: "Members"
+    metrics:
+      - key: sensor_id
+        label: Sensor ID
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_numeric_sensors.Id"
+      - key: oem_sensor_name
+        label: OEM Sensor Name
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_numeric_sensors.ElementName"
+      - key: reading_raw
+        label: Reading (raw)
+        usage: METRIC
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_numeric_sensors.CurrentReading"
+      - key: reading_units
+        label: Reading Units
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_numeric_sensors.ReadingUnits"
+      - key: unit_scale
+        label: Unit Scale
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_numeric_sensors.UnitModifier"
+      - key: sensor_type_description
+        label: Sensor Type Description
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_numeric_sensors.OtherSensorTypeDescription"
+      - key: current_state
+        label: Current State
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_numeric_sensors.CurrentState"
+      - key: oem_health
+        label: OEM Health
+        usage: PROPERTY
+        type: STRING
+        unit: ""
+        source: "metricset:oem_numeric_sensors.PrimaryStatus"
+      - key: lower_critical_threshold_raw
+        label: Lower Critical Threshold (raw)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_numeric_sensors.LowerThresholdCritical"
+      - key: lower_warning_threshold_raw
+        label: Lower Warning Threshold (raw)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_numeric_sensors.LowerThresholdNonCritical"
+      - key: upper_critical_threshold_raw
+        label: Upper Critical Threshold (raw)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_numeric_sensors.UpperThresholdCritical"
+      - key: upper_warning_threshold_raw
+        label: Upper Warning Threshold (raw)
+        usage: PROPERTY
+        type: NUMBER
+        unit: ""
+        source: "metricset:oem_numeric_sensors.UpperThresholdNonCritical"
+
+relationships: []
