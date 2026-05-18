@@ -6,7 +6,7 @@
 # kind-per-concept pattern) when grammar support lands.
 adapter_kind: mpb_vcf_content_factory_unifi_integration
 author: VCF Content Factory
-build_number: 13
+build_number: 14
 description: 'Monitors UniFi network devices via the Integration API v1. Collects
   device health (CPU, memory, uptime, load averages, uplink throughput) and inventory
   properties for Access Points, Switches, and the Gateway (UDM Pro). Enriches each
