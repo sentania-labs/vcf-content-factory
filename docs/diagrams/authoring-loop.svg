@@ -242,10 +242,7 @@
 </text>
 <rect x="0" y="1100" width="2400" height="100" rx="0" ry="0" fill="#111827" stroke="none" stroke-width="0"/>
 <rect x="0" y="1092" width="2400" height="8" rx="0" ry="0" fill="#fbbf24" stroke="none" stroke-width="0"/>
-<text x="1200.0" y="1138" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="20" fill="#fbbf24" text-anchor="middle" xml:space="preserve">
+<text x="1200.0" y="1155" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="20" fill="#fbbf24" text-anchor="middle" xml:space="preserve">
 <tspan x="1200.0" dy="0">&quot;I will build a motor car for the great multitude.&quot;   ·   This is that — for VCF Operations content.</tspan>
-</text>
-<text x="1200.0" y="1173" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="15" fill="#e5e7eb" text-anchor="middle" xml:space="preserve">
-<tspan x="1200.0" dy="0">interchangeable parts  ·  one specialist per station  ·  no broken units leave the line  ·  every batch identical, every order custom</tspan>
 </text>
 </svg>
