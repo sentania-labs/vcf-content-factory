@@ -1307,18 +1307,16 @@ def _generate_version_txt(mp: ManagementPackDef) -> str:
 def _generate_manifest(mp: ManagementPackDef) -> str:
     """Generate manifest.txt JSON for the pak root.
 
-    All paks — auth or no-auth — emit populated script slots and bundle the
-    matching script files.  post-install.py triggers ops-cli redescribe, which
-    is what registers the adapter kind after install.  Omitting it (the former
-    "Fix 1" no-auth branch) caused the adapter kind to never appear in
-    getIntegrations on devel and hard-failed at "Applied Adapter Pre Script"
-    on prod, because VCF Ops expects the three script slots to be populated
-    together.  Auth state is irrelevant to the install pipeline.
+    Gen-2 MPB paks (VCF Ops 9.x) ship empty script slots and NO script files.
+    Earlier factory builds populated the three script slots and bundled
+    validate.py / preAdapters.py / post-install.py.  pak-compare against the
+    Gen-2 reference pak (VCFContentFactoryUniFiIntegration-1001.pak) revealed
+    these as BLOCKINGs — the silent-fail root cause for the Cloudflare MP
+    never appearing in getIntegrations.
 
-    MPB-built paks ship empty script slots and no script files; factory paks
-    intentionally diverge here to gain post-install automation.
-    pak-compare BLOCKING/WARNING on these fields is expected and acceptable.
-    See context/mp_format_comparison_2026_05_15.md §item 7.
+    The fix: emit empty strings for all three script slots and omit
+    run_scripts_on_all_nodes.  This matches the Gen-2 wire format exactly.
+    See context/mpb_pak_structural_reference.md §"manifest.txt key fields".
     """
     version_str = f"{mp.version}.{mp.build_number}"
     manifest = {
@@ -1326,7 +1324,6 @@ def _generate_manifest(mp: ManagementPackDef) -> str:
         "name": mp.name,
         "description": mp.description,
         "version": version_str,
-        "run_scripts_on_all_nodes": "true",
         # vcops_minimum_version: bumped to 8.10.0 to match MPB-built paks (2026-05-15).
         # MPB ships "8.10.0"; the previous factory value "7.5.0" invited install on
         # older VCF Ops releases that lack the Gen-2 MPB adapter runtime.
@@ -1338,9 +1335,12 @@ def _generate_manifest(mp: ManagementPackDef) -> str:
         "vendor": mp.author,
         "pak_icon": "default.svg",
         "license_type": f"adapter:{mp.adapter_kind}",
-        "pak_validation_script": {"script": "python validate.py"},
-        "adapter_pre_script": {"script": "python preAdapters.py"},
-        "adapter_post_script": {"script": "python post-install.py"},
+        # Gen-2 MPB format: all three script slots are empty strings.
+        # Gen-1 paks used "python validate.py" / "python preAdapters.py" /
+        # "python post-install.py" here.  Gen-2 does not use post-install scripts.
+        "pak_validation_script": {"script": ""},
+        "adapter_pre_script": {"script": ""},
+        "adapter_post_script": {"script": ""},
         "adapters": ["adapters.zip"],
         "adapter_kinds": [mp.adapter_kind],
     }
@@ -1856,40 +1856,15 @@ def build_pak(
         zf.writestr("eula.txt", eula_bytes)
         zf.writestr("default.svg", _icon_bytes_for(None))
 
-        # Install scripts — always included regardless of auth preset.
-        # post-install.py triggers ops-cli redescribe, which registers the adapter
-        # kind in VCF Ops after install.  Omitting these scripts (the former no-auth
-        # branch) caused the adapter kind to never appear in getIntegrations on devel
-        # and hard-failed at "Applied Adapter Pre Script" on prod.  Auth state is
-        # irrelevant to the install pipeline; every pak needs these scripts.
-        for script_name in [
-            "validate.py",
-            "preAdapters.py",
-            "postAdapters.py",
-            "post-install-fast.sh",
-        ]:
-            script_path = _TEMPLATES_DIR / script_name
-            if script_path.exists():
-                zf.writestr(script_name, script_path.read_bytes())
-            else:
-                zf.writestr(script_name, b"# placeholder\n")
-
-        # post-install.py — template substitution for adapter_kind and adapter_dir
-        post_install_path = _TEMPLATES_DIR / "post-install.py"
-        if post_install_path.exists():
-            post_install_str = post_install_path.read_text()
-            post_install_str = post_install_str.replace(
-                "{adapter_kind}", ak
-            ).replace(
-                "{adapter_dir}", f"{ak}_adapter3"
-            )
-            zf.writestr("post-install.py", post_install_str.encode("utf-8"))
-        else:
-            zf.writestr("post-install.py", b"import sys; sys.exit(0)\n")
-
-        # Also include post-install.sh as a simple bash stub (some installers
-        # invoke it directly; mirrors reference pak layout)
-        zf.writestr("post-install.sh", b"#!/bin/bash\nexit 0\n")
+        # Gen-2 MPB paks do NOT include any post-install scripts.
+        # Scripts (validate.py, preAdapters.py, postAdapters.py, post-install.py,
+        # post-install.sh, post-install-fast.sh) are Gen-1 (Aria Ops 8.x) artifacts.
+        # Including them in Gen-2 paks causes BLOCKINGs in pak-compare and is the
+        # root cause of the silent-fail pattern where the pak installs but the adapter
+        # kind never appears in getIntegrations.
+        # Template files under vcfops_managementpacks/templates/ are kept for
+        # historical reference but are never written into the pak.
+        # See context/mpb_pak_structural_reference.md §"Gen-1 vs Gen-2 MPB differences".
 
         # adapters.zip
         zf.writestr("adapters.zip", adapters_zip_bytes)
