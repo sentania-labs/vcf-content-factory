@@ -3,6 +3,12 @@
 This is the deeper architectural dive — for anyone considering
 forking, extending, or just curious how the agent loop is set up.
 
+![Authoring loop overview](docs/diagrams/authoring-loop.png)
+
+*The five-station assembly line. Start with this if you've never seen
+the factory in motion. Editable source:
+[authoring-loop.excalidraw](docs/diagrams/authoring-loop.excalidraw).*
+
 If you're trying to use the framework, you don't need this.
 [Getting_Started.md](Getting_Started.md) is what you want.
 
@@ -260,6 +266,15 @@ adapter); Synology and Dell PowerEdge are queued as the first real
 Tier 2 adapters.
 
 ---
+
+## The full picture
+
+![Framework internals](docs/diagrams/framework-internals.png)
+
+*All 16 specialists, their lanes, the file each writes, both build
+pipelines (Tier 1 MPB and Tier 2 native SDK), the three output paths,
+and the codification loop that closes back into the repo. Editable
+source: [framework-internals.excalidraw](docs/diagrams/framework-internals.excalidraw).*
 
 ## What lives where in the repo
 
