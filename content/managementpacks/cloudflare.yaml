@@ -32,12 +32,12 @@
 #   verify substitution behavior at pak build and collection time.
 #
 # TOOLSET NOTE — GraphQL static time window (Risk #3):
-#   The GraphQL query uses a fixed 1-hour lookback (limit: 1 on
-#   httpRequests1hGroups). The adapter cannot inject dynamic ISO timestamps
-#   for $start/$end because MPB's variable grammar does not support
-#   relative time expressions. The 1-hour rollup bucket contains cumulative
-#   totals for the most recent complete hour — suitable for trend analysis
-#   at 5-minute collection intervals.
+#   The GraphQL query uses httpRequests1dGroups (daily rollups) with a static
+#   date_geq filter because the MPB runtime has no time variables — confirmed
+#   by bytecode analysis of the 6 supported variable scopes (see
+#   context/mpb_runtime_variable_scopes.md). limit: 1 returns the latest
+#   completed daily bucket. Metric values update once per day, not per hour.
+#   The date_geq value ("2026-01-01") must be refreshed annually.
 #
 # TOOLSET NOTE — DNS response time unit:
 #   dns_response_time_avg is in MICROSECONDS as confirmed by GraphQL
@@ -66,7 +66,7 @@ description: >
   REST and GraphQL Analytics APIs. Collects DNS query counts and response time
   averages per zone from the DNS Analytics REST endpoint, and HTTP traffic
   metrics (requests, bytes, cached requests, cached bytes, threat counts,
-  encrypted requests) per zone from the GraphQL httpRequests1hGroups dataset.
+  encrypted requests) per zone from the GraphQL httpRequests1dGroups dataset.
   Pages Projects expose latest deployment status, trigger, branch, commit hash,
   source repository, and build configuration as properties. Requires a Cloudflare
   API token with Zone Read + Zone Analytics Read + Account Read permissions, and
@@ -116,35 +116,55 @@ requests:
     response_path: ""
 
   # Request 2: get_dns_analytics — Per-zone DNS aggregate (chained).
-  # GET /zones/{zone_id}/dns_analytics/report?metrics=queryCount,responseTimeAvg&since=-5minutes&until=now
+  # GET /zones/{zone_id}/dns_analytics/report?metrics=queryCount,responseTimeAvg
   # ${chain.zone_id} is bound from zone_inventory.id on each Zone row.
   # Response: v4 envelope; metrics in result.totals.queryCount and
   #   result.totals.responseTimeAvg (unit: MICROSECONDS per live verification).
   # Feeds: Zone (chained metricSet zone_dns_analytics).
+  #
+  # Time window: since/until params are OMITTED. The Cloudflare DNS Analytics
+  # REST API defaults to a ~6h rolling window when these are absent. The API
+  # rejects relative strings like "-5minutes"/"now" — it requires ISO 8601
+  # timestamps, which the MPB runtime cannot inject (no time variables exist;
+  # see context/mpb_runtime_variable_scopes.md). Omitting the params is the
+  # correct pattern for any API that defaults to a recent window.
+  #
+  # responseTimeAvg requires Cloudflare Business plan or higher. On Free/Pro
+  # plans, including it causes the ENTIRE request to fail (not just that metric).
+  # Kept in v1 because the target audience runs Business+ plans.
   - name: get_dns_analytics
     method: GET
     path: "/zones/${chain.zone_id}/dns_analytics/report"
     params:
       - {key: metrics, value: "queryCount,responseTimeAvg"}
-      - {key: since,   value: "-5minutes"}
-      - {key: until,   value: "now"}
     response_path: ""
 
   # Request 3: get_http_analytics — Per-zone GraphQL HTTP metrics (chained POST).
   # POST /graphql with JSON body containing the zone filter as ${chain.zone_id}.
-  # Dataset: httpRequests1hGroups (1-hour rollups; limit: 1 returns the latest bucket).
+  # Dataset: httpRequests1dGroups (daily rollups; limit: 1 returns latest bucket).
   # Response: GraphQL envelope; metrics under data.viewer.zones[0].
-  #   httpRequests1hGroups[0].sum.{requests,bytes,cachedRequests,cachedBytes,
+  #   httpRequests1dGroups[0].sum.{requests,bytes,cachedRequests,cachedBytes,
   #   threats,encryptedRequests}.
   # TOOLSET NOTE: ${chain.zone_id} is substituted in the body string.
   #   This is the factory's first use of a chained POST with body token substitution.
-  #   Verify at build time that the renderer supports ${chain.*} in body strings.
+  #
+  # TOOLSET NOTE — Static date_geq filter (MPB time variable gap):
+  #   The Cloudflare GraphQL API requires a date/datetime filter on all analytics
+  #   datasets — it rejects empty filters and filterless queries. The MPB runtime
+  #   has no time variables (see context/mpb_runtime_variable_scopes.md), so we
+  #   cannot inject dynamic timestamps. Workaround: use httpRequests1dGroups with
+  #   a static date_geq far enough back to stay within plan limits. Daily groups
+  #   allow up to 52 weeks on Free, wider on Business/Enterprise.
+  #   date_geq: "2026-01-01" provides ~12 months of runway from that date.
+  #   Update this value annually or when approaching the plan's lookback limit.
+  #   Resolution: daily (metric values change once per day, not per hour).
+  #   For hourly resolution, promote to Tier 2 (SDK adapter with dynamic time).
   # Feeds: Zone (chained metricSet zone_http_analytics).
   - name: get_http_analytics
     method: POST
     path: "/graphql"
     params: []
-    body: '{"query":"{ viewer { zones(filter: {zoneTag: \"${chain.zone_id}\"}) { httpRequests1hGroups(limit: 1) { sum { requests bytes cachedRequests cachedBytes threats encryptedRequests } } } } }"}'
+    body: '{"query":"{ viewer { zones(filter: {zoneTag: \"${chain.zone_id}\"}) { httpRequests1dGroups(limit: 1, filter: {date_geq: \"2026-01-01\"}) { sum { requests bytes cachedRequests cachedBytes threats encryptedRequests } } } } }"}'
     response_path: ""
 
   # Request 4: get_pages_projects — Pages Project inventory.
@@ -345,8 +365,8 @@ object_types:
 
       # --- HTTP Analytics metrics (from zone_http_analytics / get_http_analytics) ---
       # Full JSON paths from GraphQL response root (response_path: "" on get_http_analytics):
-      #   data.viewer.zones[0].httpRequests1hGroups[0].sum.{field}
-      # Dataset: httpRequests1hGroups (hourly rollup, limit:1 = latest bucket).
+      #   data.viewer.zones[0].httpRequests1dGroups[0].sum.{field}
+      # Dataset: httpRequests1dGroups (daily rollup, limit:1 = latest bucket).
       # All fields are uint64; live-verified via GraphQL introspection 2026-05-16.
 
       - key: http_requests
@@ -355,28 +375,28 @@ object_types:
         type: NUMBER
         unit: ""
         kpi: true
-        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1hGroups[0].sum.requests"
+        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1dGroups[0].sum.requests"
 
       - key: http_bytes
         label: "HTTP Bytes"
         usage: METRIC
         type: NUMBER
         unit: ""
-        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1hGroups[0].sum.bytes"
+        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1dGroups[0].sum.bytes"
 
       - key: http_cached_requests
         label: "HTTP Cached Requests"
         usage: METRIC
         type: NUMBER
         unit: ""
-        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1hGroups[0].sum.cachedRequests"
+        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1dGroups[0].sum.cachedRequests"
 
       - key: http_cached_bytes
         label: "HTTP Cached Bytes"
         usage: METRIC
         type: NUMBER
         unit: ""
-        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1hGroups[0].sum.cachedBytes"
+        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1dGroups[0].sum.cachedBytes"
 
       - key: http_threats
         label: "HTTP Threats"
@@ -384,14 +404,14 @@ object_types:
         type: NUMBER
         unit: ""
         kpi: true
-        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1hGroups[0].sum.threats"
+        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1dGroups[0].sum.threats"
 
       - key: https_requests
         label: "HTTPS Requests"
         usage: METRIC
         type: NUMBER
         unit: ""
-        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1hGroups[0].sum.encryptedRequests"
+        source: "metricset:zone_http_analytics.data.viewer.zones[0].httpRequests1dGroups[0].sum.encryptedRequests"
 
 
   # ---------------------------------------------------------------------------

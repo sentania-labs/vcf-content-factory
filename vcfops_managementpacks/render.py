@@ -194,8 +194,27 @@ def _rewrite_chain_tokens(text: str, own_chain_map: Optional[Dict[str, str]] = N
     return _CHAIN_TOKEN_RE.sub(_replace, text)
 
 
+def _rewrite_auth_refs(text: str) -> str:
+    """Rewrite short auth variable references to the MPB full forms.
+
+    ${credentials.<key>} → ${authentication.credentials.<key>}
+    ${session.<key>}     → ${authentication.session.<key>}
+
+    The MPB runtime only recognises the long form; the YAML author uses the
+    short form for readability.  Applied to request path, body, param values,
+    header values, and inject rule values.
+    """
+    if not text:
+        return text
+    text = re.sub(r"\$\{credentials\.([a-zA-Z0-9_]+)\}",
+                  r"${authentication.credentials.\1}", text)
+    text = re.sub(r"\$\{session\.([a-zA-Z0-9_]+)\}",
+                  r"${authentication.session.\1}", text)
+    return text
+
+
 def _rewrite_params(params: Any, own_chain_map: Optional[Dict[str, str]] = None) -> Any:
-    """Apply _rewrite_chain_tokens to all param values."""
+    """Apply _rewrite_chain_tokens and _rewrite_auth_refs to all param values."""
     if not params:
         return params
     if isinstance(params, list):
@@ -203,12 +222,14 @@ def _rewrite_params(params: Any, own_chain_map: Optional[Dict[str, str]] = None)
         for p in params:
             if isinstance(p, dict):
                 v = p.get("value", "")
-                result.append({"key": p.get("key", ""), "value": _rewrite_chain_tokens(str(v), own_chain_map) if v else ""})
+                rewritten = _rewrite_chain_tokens(str(v), own_chain_map) if v else ""
+                rewritten = _rewrite_auth_refs(rewritten) if rewritten else rewritten
+                result.append({"key": p.get("key", ""), "value": rewritten})
             else:
                 result.append(p)
         return result
     if isinstance(params, dict):
-        return {k: _rewrite_chain_tokens(str(v), own_chain_map) for k, v in params.items()}
+        return {k: _rewrite_auth_refs(_rewrite_chain_tokens(str(v), own_chain_map)) for k, v in params.items()}
     return params
 
 
@@ -536,7 +557,9 @@ class _RequestInfo:
         # INHERITED chain params (from ancestor chains) keep the fallback key (e.g. id_site).
         ocm = self._own_chain_map if self._own_chain_map else None
         path = _rewrite_chain_tokens(req.path, ocm) if req.path else req.path
+        path = _rewrite_auth_refs(path) if path else path
         body = _rewrite_chain_tokens(req.body, ocm) if req.body else req.body
+        body = _rewrite_auth_refs(body) if body else body
         raw_params = _rewrite_params(req.params, ocm)
         # params: always a list of {key, value}
         params = _normalize_params(raw_params)
@@ -903,18 +926,7 @@ def _render_session_request(
     params = _normalize_params(req.params or [])
 
     # Rewrite ${credentials.<key>} → ${authentication.credentials.<key>} at emit.
-    # The author uses ${credentials.X}; MPB expects ${authentication.credentials.X}.
-    # X is always the programmatic key (not the display label).
-    # Also rewrite ${session.<key>} → ${authentication.session.<key>}.
-    def _rewrite_auth_refs(text: str) -> str:
-        if not text:
-            return text
-        text = re.sub(r"\$\{credentials\.([a-zA-Z0-9_]+)\}",
-                      r"${authentication.credentials.\1}", text)
-        text = re.sub(r"\$\{session\.([a-zA-Z0-9_]+)\}",
-                      r"${authentication.session.\1}", text)
-        return text
-
+    # Delegates to the module-level _rewrite_auth_refs() function.
     rewritten_params = []
     for p in params:
         if isinstance(p, dict):
@@ -1127,22 +1139,9 @@ def _render_global_headers(mp: ManagementPackDef) -> List[Dict]:
     headers: List[Dict] = []
     content_type_added = False
 
-    def _rewrite_inject_refs(text: str) -> str:
-        """Rewrite auth variable references in inject rule values.
-
-        cookie_session: ${session.<key>} → ${authentication.session.<key>}
-        http_header:    ${credentials.<key>} → ${authentication.credentials.<key>}
-        Both presets may also use ${credentials.<key>} in inject values.
-        """
-        text = re.sub(r"\$\{session\.([a-zA-Z0-9_]+)\}",
-                      r"${authentication.session.\1}", text)
-        text = re.sub(r"\$\{credentials\.([a-zA-Z0-9_]+)\}",
-                      r"${authentication.credentials.\1}", text)
-        return text
-
     for rule in auth.inject:
         key = rule.name
-        value = _rewrite_inject_refs(rule.value)
+        value = _rewrite_auth_refs(rule.value)
         if key == "Content-Type":
             content_type_added = True
             htype = "REQUIRED"
