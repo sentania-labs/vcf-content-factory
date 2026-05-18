@@ -271,4 +271,68 @@ scripts/bootstrap_references.sh --update # also git pull existing
   chained request wire format, ATTRIBUTE_TO_PROPERTY binding.
 - **Attribution:** cite `vrealize.it vSAN Default Storage Policy`.
 
+### vmbro/VCF-Operations-Hardware-vCommunity
+
+- **URL:** https://github.com/vmbro/VCF-Operations-Hardware-vCommunity
+- **Local path:** `references/vmbro_vcf_operations_hardware_vcommunity/`
+- **Owner:** Onur Yuzseven. Public repo.
+- **Stance:** **How it works — NOT what we copy.** Onur uses the
+  Python Integration SDK (Docker-per-pak runtime). We are explicitly
+  staying away from Docker as a Tier 2 runtime. Treat the **architectural
+  patterns** as reference material; do not adopt the build / packaging /
+  runtime mechanics.
+- **Scope:** Dell iDRAC inventory MP. Adapter kind `HardwarevCommunity`.
+  Declares exactly two object types — `ConfigFile`, `PhysicalServer` —
+  and models every sub-component (PSUs, fans, DIMMs, drives, firmware,
+  controllers, volumes, memory, ping availability) as **instanced groups**
+  on PhysicalServer using the colon syntax
+  (`Hardware|Power:{psu_name}|Power Output Watts`,
+  `Hardware|Cooler|Fans:{fan_name}|Fan Health`, etc.). No collection
+  intermediates, no separate component resource kinds.
+- **What to grep for:**
+  - `app/adapter.py` — object type declarations and `define_instanced_group(...)`
+    calls. Canonical example of the "own-kinds + instanced groups" pattern.
+  - `app/collectors/collect_*.py` — how instanced data is emitted:
+    `physicalServer_obj.with_metric(f"Hardware|Power:{name}|...", value)`.
+  - `content/customgroups/`, `content/alertdefs/`, `content/dashboards/`
+    — content shipped alongside the adapter.
+- **MPB Tier 1 equivalence:** the colon syntax (`Group:{instance}|attr`)
+  in MPB describe.xml produces the same wire output. We can replicate
+  this pattern in Tier 1 YAML — Tier 2 (native Java SDK) is not required.
+- **Attribution:** cite
+  `vmbro/VCF-Operations-Hardware-vCommunity/Management Pack/<path>` in
+  any adapted content's description.
+
+### vmbro/VCF-Operations-vCommunity
+
+- **URL:** https://github.com/vmbro/VCF-Operations-vCommunity
+- **Local path:** `references/vmbro_vcf_operations_vcommunity/`
+- **Owner:** Onur Yuzseven. Public repo.
+- **Stance:** **How it works — NOT what we copy.** Same Docker /
+  Python Integration SDK reservation as the Hardware repo. Reference
+  the **patterns** only.
+- **Scope:** vSphere enrichment MP. Adapter kind `VCFOperationsvCommunity`.
+  **Defines no new object types of its own** — instead declares objects
+  whose kind names match the built-in VMware adapter kinds exactly
+  (`"Cluster Compute Resource"`, `"Host System"`, `"Virtual Machine"`).
+  The Integration SDK merges by name match, so emitted properties /
+  metrics land on the existing VMware-adapter resources. Canonical
+  example of pure ARIA_OPS stitching with no domain hierarchy of its
+  own. Ships 13 dashboards + dozens of super metrics + alerts.
+- **What to grep for:**
+  - `app/adapter.py` — `define_object_type("Host System", ...)` etc.;
+    the name-match stitching is the core trick. Group structure under
+    `vCommunity|...` keeps augmentation property paths namespaced.
+  - `app/properties/host/`, `app/properties/vm/`, `app/properties/cluster/`
+    — collectors that emit `host_obj.with_property("vCommunity|...", ...)`
+    against existing VMware HostSystem/VM/Cluster objects.
+  - `content/dashboards/`, `content/supermetrics/`, `content/alertdefs/`
+    — substantial shipped content built on the augmented properties.
+- **MPB Tier 1 equivalence:** ARIA_OPS stitching in MPB YAML
+  (`type: ARIA_OPS`) achieves the same end. See
+  `content/managementpacks/vsphere_storage_paths.yaml` for our existing
+  in-repo example.
+- **Attribution:** cite
+  `vmbro/VCF-Operations-vCommunity/Management Pack/<path>`.
+
 <!-- Add new sources below. Keep entries in the same shape. -->

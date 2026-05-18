@@ -1,0 +1,10 @@
+name: "VCF Content Factory Hello World SDK"
+version: "1.0.0"
+build_number: 1
+adapter_kind: "hello_world"
+tier: 2
+description: >
+  Phase 1 validation gate for the VCF Content Factory Tier 2 SDK pipeline.
+  Emits one HelloResource with a tickCount metric and a greeting property.
+  No real HTTP — validates the framework build chain end-to-end.
+entry_class: "com.vcfcf.adapters.helloworld.HelloWorldAdapter"

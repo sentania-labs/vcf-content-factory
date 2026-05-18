@@ -16,6 +16,9 @@ These are actively maintained and authoritative for their topic.
 | **Operational rules — API & wire format** | `rules_api_wire_format.md` |
 | **Operational rules — PowerShell** | `rules_powershell.md` |
 | **Operational rules — operational** | `rules_operational.md` |
+| **Tier 2 SPEC (cleanroom bundle, 2026-05-16)** | `cleanroom-spec/` (see `cleanroom-spec/MANIFEST.md`; start at `spec/17` for framework, `spec/15` for adapter authoring) |
+| **Tier 2 architecture (this repo's framework + tooling)** | `tier2_architecture.md` |
+| **Tier 1 vs Tier 2 decision framework** | `tier_decision_framework.md` |
 | Shared vocabulary (Bundle vs Package, Sync/Enable/Install, etc.) | `dictionary.md` |
 | Super metric authoring, DSL rules, style | `supermetric_authoring.md` |
 | Dynamic custom group + group types authoring | `customgroup_authoring.md` |

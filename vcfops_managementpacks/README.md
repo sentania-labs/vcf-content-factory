@@ -131,6 +131,125 @@ adapter kind:
 After that one-time bootstrap, the factory handles all subsequent
 regenerations end-to-end for that adapter kind.
 
+## Bootstrap: populating `adapter_runtime/` for Tier 2 SDK
+
+Tier 2 SDK builds require four Broadcom/VMware JAR files in
+`vcfops_managementpacks/adapter_runtime/` plus the compiled framework JAR.
+These are VMware/Broadcom binaries; **do not commit them**. The directory
+is gitignored for this reason.
+
+### Where the JARs come from
+
+The four staged JARs originate from the cleanroom workspace
+`inputs/from-devel/sdk/` (captured from the VCF Ops devel appliance
+on 2026-05-15 by Navani):
+
+| JAR | Layer | On appliance classpath? |
+|---|---|---|
+| `vrops-adapters-sdk-2.2.jar` | Layer 1 — SDK contract | Yes (do NOT bundle in pak) |
+| `alive_common.jar` | Layer 1 — SDK types | Yes (do NOT bundle in pak) |
+| `alive_platform.jar` | Layer 1 — platform API types | Yes (do NOT bundle in pak) |
+| `aria-ops-core-8.0.0.jar` | Layer 2 — UnlicensedAdapter | No (MUST bundle in pak) |
+
+A new cloning user would source these JARs the same way: from a VCF Ops
+devel/lab appliance using the same cleanroom extraction procedure. The
+JARs are NOT publicly downloadable — they ship as part of the VCF Ops
+appliance installation.
+
+### Bootstrap steps
+
+1. Obtain the four JARs (from a Navani-style devel extraction or equivalent):
+
+   ```
+   vcfops_managementpacks/adapter_runtime/vrops-adapters-sdk-2.2.jar
+   vcfops_managementpacks/adapter_runtime/alive_common.jar
+   vcfops_managementpacks/adapter_runtime/alive_platform.jar
+   vcfops_managementpacks/adapter_runtime/aria-ops-core-8.0.0.jar
+   ```
+
+2. Build the framework JAR (requires JDK 11+):
+
+   ```bash
+   cd vcfops_managementpacks/
+   ./adapter_framework/build-framework.sh
+   ```
+
+   This produces `adapter_runtime/vcfcf-adapter-base.jar` (~28KB).
+
+3. Create the compile-time stub for `com.vmware.ops.api.model.resource.ResourceDto`
+   (needed because aria-ops-core's `Resource` class references this type, which
+   lives on the appliance's runtime classpath but is absent from the staged JARs):
+
+   ```bash
+   mkdir -p /tmp/rds/com/vmware/ops/api/model/resource
+   cat > /tmp/rds/com/vmware/ops/api/model/resource/ResourceDto.java << 'EOF'
+   package com.vmware.ops.api.model.resource;
+   public class ResourceDto implements java.io.Serializable {
+       private static final long serialVersionUID = 1L;
+   }
+   EOF
+   javac /tmp/rds/com/vmware/ops/api/model/resource/ResourceDto.java -d /tmp/rds/classes
+   jar cf vcfops_managementpacks/adapter_runtime/vmware-ops-api-stubs.jar \
+       -C /tmp/rds/classes .
+   ```
+
+4. Verify: `python3 -m vcfops_managementpacks validate-sdk content/sdk-adapters/hello-world/`
+   should print `OK`.
+
+## Tier 2 commands
+
+```bash
+# Compile and package a Tier 2 SDK adapter project into a .pak
+python3 -m vcfops_managementpacks build-sdk content/sdk-adapters/hello-world/
+# Output: dist/vcfcf_hello_world.1.0.0.1.pak
+
+# Validate an adapter project (schema + compile-check, no pak output)
+python3 -m vcfops_managementpacks validate-sdk content/sdk-adapters/hello-world/
+
+# Generate an empty Tier 2 adapter project skeleton
+python3 -m vcfops_managementpacks scaffold-sdk "My Custom Monitor" \
+    --output content/sdk-adapters/
+
+# Auto-routed build (detects Tier 1 vs Tier 2 from the argument):
+#   If arg is a .yaml file → Tier 1 MPB build
+#   If arg is a directory with adapter.yaml → Tier 2 SDK build
+python3 -m vcfops_managementpacks build content/sdk-adapters/hello-world/
+python3 -m vcfops_managementpacks build content/managementpacks/cloudflare.yaml
+```
+
+### Framework rebuild
+
+When framework Java source under `adapter_framework/src/` changes:
+
+```bash
+cd vcfops_managementpacks/
+./adapter_framework/build-framework.sh
+```
+
+This rebuilds `adapter_runtime/vcfcf-adapter-base.jar` in place.
+
+### Tier 2 pak structure (SDK format)
+
+Tier 2 paks differ from Tier 1 (MPB) paks in these ways:
+
+| Field | Tier 1 (MPB) | Tier 2 (SDK) |
+|---|---|---|
+| Outer pak prefix | `mpb_vcf_content_factory_*` | `vcfcf_*` |
+| `manifest.txt` `adapters:` field | Present | Absent |
+| `manifest.txt` `adapter_kinds:` | Yes | Yes (only field referencing adapter) |
+| `design.json` in adapters.zip | Present | Absent |
+| `template.json` in adapters.zip | Present | Absent |
+| Entry JAR | `mpb_adapter-*.jar` (Broadcom) | `<adapter_kind>.jar` (we build) |
+| `adapter.properties` | MPB generates | `sdk_builder.py` generates |
+| `describe.xml` | MPB generates from BuilderFile | Hand-authored in project |
+| `lib/vcfcf-adapter-base.jar` | Absent | Present (our framework) |
+| `lib/aria-ops-core-*.jar` | Present (MPB dep) | Present (required; not on shared classpath) |
+
+For the Tier 2 adapter kind naming convention:
+- `adapter_kind` in `adapter.yaml` does NOT include the `vcfcf_` prefix
+  (e.g. `hello_world`, `synology`)
+- The pak filename automatically adds the prefix: `vcfcf_hello_world.1.0.0.1.pak`
+
 ## Related context
 
 - `docs/reference-mpb-research.md` — MPB design JSON schema baseline

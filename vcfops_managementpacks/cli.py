@@ -27,6 +27,44 @@ def _collect(paths: List[str]) -> List[ManagementPackDef]:
     return defs
 
 
+_SDK_ADAPTERS_DIR = "content/sdk-adapters"
+
+
+def _validate_tier2_projects() -> tuple[int, int]:
+    """Validate all Tier 2 SDK adapter projects under content/sdk-adapters/.
+
+    Returns (valid_count, error_count).
+    """
+    from .sdk_builder import validate_sdk_project
+
+    sdk_dir = Path(_SDK_ADAPTERS_DIR)
+    if not sdk_dir.is_dir():
+        return 0, 0
+
+    valid = 0
+    errors_total = 0
+    for project_dir in sorted(sdk_dir.iterdir()):
+        if not project_dir.is_dir():
+            continue
+        adapter_yaml = project_dir / "adapter.yaml"
+        if not adapter_yaml.is_file():
+            continue
+        errors = validate_sdk_project(project_dir)
+        if errors:
+            errors_total += 1
+            print(
+                f"  INVALID (Tier 2): {project_dir.name} — "
+                f"{len(errors)} error(s):",
+                file=sys.stderr,
+            )
+            for err in errors:
+                print(f"    {err}", file=sys.stderr)
+        else:
+            valid += 1
+            print(f"  OK (Tier 2): {project_dir.name}")
+    return valid, errors_total
+
+
 def cmd_validate(args) -> int:
     import warnings as _warnings
 
@@ -52,18 +90,18 @@ def cmd_validate(args) -> int:
             print(f"WARN: {msg}", file=sys.stderr)
 
     if not defs:
-        print("OK: no management pack definitions found")
-        return 0
-    print(f"OK: {len(defs)} management pack definition(s) valid")
-    for d in defs:
-        obj_count = len(d.object_types)
-        rel_count = len(d.relationships)
-        print(
-            f"  - {d.name}  v{d.version}  "
-            f"adapter_kind={d.adapter_kind}  "
-            f"objects={obj_count}  relationships={rel_count}  "
-            f"({d.source_path})"
-        )
+        print("OK: no Tier 1 management pack definitions found")
+    else:
+        print(f"OK: {len(defs)} Tier 1 management pack definition(s) valid")
+        for d in defs:
+            obj_count = len(d.object_types)
+            rel_count = len(d.relationships)
+            print(
+                f"  - [Tier 1] {d.name}  v{d.version}  "
+                f"adapter_kind={d.adapter_kind}  "
+                f"objects={obj_count}  relationships={rel_count}  "
+                f"({d.source_path})"
+            )
 
     # Warning summary
     label_lint_count = sum(1 for w in captured_warnings if w.startswith("[label-lint]"))
@@ -76,6 +114,7 @@ def cmd_validate(args) -> int:
         )
 
     # Slug-uniqueness check across content/ and third_party/*/
+    tier1_error = 0
     if not args.paths:
         try:
             from vcfops_packaging.project import check_slug_uniqueness
@@ -86,24 +125,57 @@ def cmd_validate(args) -> int:
             if errors:
                 for err in errors:
                     print(f"SLUG-COLLISION: {err}", file=sys.stderr)
-                return 1
+                tier1_error = 1
         except ImportError:
             pass  # vcfops_packaging not available — skip cross-provenance check
 
-    return 0
+    # Tier 2 validation (only when doing a full repo sweep, not path-specific)
+    tier2_error = 0
+    if not args.paths:
+        t2_valid, t2_errors = _validate_tier2_projects()
+        if t2_errors > 0:
+            tier2_error = 1
+        elif t2_valid > 0:
+            print(f"OK: {t2_valid} Tier 2 SDK adapter project(s) valid")
+
+    return 1 if (tier1_error or tier2_error) else 0
 
 
 def cmd_list(args) -> int:
+    # Tier 1 MPs
     try:
         defs = _collect([])
     except ManagementPackValidationError as e:
         print(f"INVALID: {e}", file=sys.stderr)
         return 1
-    if not defs:
-        print("no management pack definitions found")
-        return 0
+
     for d in defs:
-        print(f"{d.adapter_kind}  {d.name}  v{d.version}  ({d.source_path})")
+        print(f"[Tier 1]  {d.adapter_kind}  {d.name}  v{d.version}  ({d.source_path})")
+
+    # Tier 2 SDK adapters
+    sdk_dir = Path(_SDK_ADAPTERS_DIR)
+    if sdk_dir.is_dir():
+        from .sdk_project import load_sdk_project, SdkProjectError
+        for project_dir in sorted(sdk_dir.iterdir()):
+            if not project_dir.is_dir():
+                continue
+            adapter_yaml = project_dir / "adapter.yaml"
+            if not adapter_yaml.is_file():
+                continue
+            try:
+                proj = load_sdk_project(adapter_yaml)
+                print(
+                    f"[Tier 2]  {proj.adapter_kind}  {proj.name}  "
+                    f"v{proj.version}.{proj.build_number}  ({adapter_yaml})"
+                )
+            except SdkProjectError as exc:
+                print(
+                    f"[Tier 2]  INVALID: {adapter_yaml} — {exc}",
+                    file=sys.stderr,
+                )
+
+    if not defs and not sdk_dir.is_dir():
+        print("no management pack definitions found")
     return 0
 
 
@@ -240,6 +312,18 @@ def cmd_pak_validate(args) -> int:
 
 
 def cmd_build(args) -> int:
+    """Auto-routing build command.
+
+    Routes to Tier 1 (MPB) if arg ends in .yaml;
+    routes to Tier 2 (SDK) if arg is a directory with adapter.yaml.
+    """
+    path = Path(args.path)
+
+    # Auto-detect Tier 2: directory with adapter.yaml
+    if path.is_dir() and (path / "adapter.yaml").is_file():
+        return _cmd_build_sdk_inner(path, Path(args.output))
+
+    # Tier 1: YAML file path
     from .builder import build_pak
     from .pak_validator import validate_pak
 
@@ -294,6 +378,64 @@ def cmd_build(args) -> int:
 
     print(f"Built: {pak_path}")
     return 0
+
+
+def _cmd_build_sdk_inner(project_dir: Path, output_dir: Path) -> int:
+    """Inner helper: build a Tier 2 SDK adapter pak from project_dir."""
+    from .sdk_builder import build_sdk_pak, SdkBuildError
+    from .sdk_project import SdkProjectError
+
+    try:
+        pak_path = build_sdk_pak(project_dir, output_dir)
+        print(f"Built: {pak_path}")
+        return 0
+    except (SdkBuildError, SdkProjectError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"ERROR building SDK pak: {exc}", file=sys.stderr)
+        return 1
+
+
+def cmd_build_sdk(args) -> int:
+    """build-sdk <dir> — compile and package a Tier 2 SDK adapter project."""
+    return _cmd_build_sdk_inner(Path(args.project_dir), Path(args.output))
+
+
+def cmd_validate_sdk(args) -> int:
+    """validate-sdk <dir> — validate adapter.yaml schema and compile-check source."""
+    from .sdk_builder import validate_sdk_project, SdkBuildError
+    from .sdk_project import SdkProjectError
+
+    project_dir = Path(args.project_dir)
+    try:
+        errors = validate_sdk_project(project_dir)
+    except Exception as exc:
+        print(f"ERROR during validate-sdk: {exc}", file=sys.stderr)
+        return 1
+
+    if errors:
+        print(f"INVALID: {len(errors)} error(s) in {project_dir}:", file=sys.stderr)
+        for err in errors:
+            print(f"  {err}", file=sys.stderr)
+        return 1
+
+    print(f"OK: {project_dir} is a valid Tier 2 SDK adapter project")
+    return 0
+
+
+def cmd_scaffold_sdk(args) -> int:
+    """scaffold-sdk <name> — generate an empty Tier 2 adapter project skeleton."""
+    from .sdk_builder import scaffold_sdk_project, SdkBuildError
+
+    output_base = Path(args.output)
+    try:
+        project_dir = scaffold_sdk_project(args.name, output_base)
+        print(f"Scaffolded: {project_dir}")
+        return 0
+    except SdkBuildError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
 
 
 def cmd_install(args) -> int:
@@ -518,6 +660,52 @@ def build_parser() -> argparse.ArgumentParser:
         help="build even if pak-validate reports errors (use for debugging only)",
     )
     pb.set_defaults(func=cmd_build)
+
+    # ------------------------------------------------------------------
+    # Tier 2 SDK subcommands
+    # ------------------------------------------------------------------
+    pbsdk = sub.add_parser(
+        "build-sdk",
+        help="compile and package a Tier 2 SDK adapter project into a .pak",
+    )
+    pbsdk.add_argument(
+        "project_dir",
+        metavar="PROJECT_DIR",
+        help="path to the Tier 2 adapter project directory (contains adapter.yaml)",
+    )
+    pbsdk.add_argument(
+        "--output", "-o",
+        default="dist",
+        help="output directory for the .pak file (default: dist/)",
+    )
+    pbsdk.set_defaults(func=cmd_build_sdk)
+
+    pvsdk = sub.add_parser(
+        "validate-sdk",
+        help="validate adapter.yaml schema and compile-check a Tier 2 SDK adapter",
+    )
+    pvsdk.add_argument(
+        "project_dir",
+        metavar="PROJECT_DIR",
+        help="path to the Tier 2 adapter project directory",
+    )
+    pvsdk.set_defaults(func=cmd_validate_sdk)
+
+    pssdk = sub.add_parser(
+        "scaffold-sdk",
+        help="generate an empty Tier 2 SDK adapter project skeleton",
+    )
+    pssdk.add_argument(
+        "name",
+        metavar="NAME",
+        help="human-friendly adapter name (e.g. 'My Custom Monitor')",
+    )
+    pssdk.add_argument(
+        "--output", "-o",
+        default="content/sdk-adapters",
+        help="base directory for the new project (default: content/sdk-adapters/)",
+    )
+    pssdk.set_defaults(func=cmd_scaffold_sdk)
 
     # ------------------------------------------------------------------
     # pak-compare subcommand

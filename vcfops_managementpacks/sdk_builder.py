@@ -1,0 +1,691 @@
+"""sdk_builder.py — Tier 2 SDK adapter build pipeline.
+
+Implements steps 1-13 of the design plan (designs/tier2-mp-architecture-plan.md):
+  1. Load adapter.yaml metadata
+  2. Detect JDK on PATH
+  3. Build classpath from adapter_runtime/ + project lib/*.jar
+  4. Compile src/**/*.java into a temp build dir
+  5. Generate adapter.properties (ENTRYCLASS + KINDKEY)
+  6. Package adapter JAR via jar cf
+  7. Copy describe.xml, resources, icons into adapter conf directory
+  8. Collect runtime deps for lib/ (framework JAR only; SDK JARs stay off-pak)
+  9. Assemble adapters.zip (SDK pak structure)
+ 10. Generate manifest.txt (SDK format; no adapters: field)
+ 11. Write outer .pak ZIP under dist/
+ 12. Run pak-compare against SDK reference paks (or log warning if none found)
+
+Pak structure produced (SDK format — differs from MPB Tier 1):
+  dist/vcfcf_<adapter_kind>.<version>.<build>.pak   [outer ZIP]
+    manifest.txt                                      [JSON metadata]
+    eula.txt                                          [empty placeholder]
+    adapters.zip                                      [inner ZIP]
+      manifest.txt                                    [ENTRYCLASS + KINDKEY]
+      eula.txt
+      resources/resources.properties
+      <adapter_kind>.jar                              [entry JAR at root]
+        adapter.properties                            [ENTRYCLASS + KINDKEY]
+        com/vcfcf/adapters/<name>/...                 [compiled classes]
+      <adapter_kind>/
+        conf/
+          describe.xml
+          resources/resources.properties
+        lib/
+          vcfcf-adapter-base.jar                      [framework; NOT SDK JARs]
+          aria-ops-core-<ver>.jar                     [bundled; NOT on shared classpath]
+          [project lib/*.jar if any]
+
+Key design decisions:
+  - vrops-adapters-sdk-*.jar and alive_common/alive_platform are on the
+    appliance shared classpath (spec/13) — NOT bundled in lib/.
+  - aria-ops-core is NOT on the shared classpath — MUST bundle it.
+  - vcfcf-adapter-base.jar ships in the pak's lib/ (our framework).
+  - No design.json, no template.json, no adapters: field in manifest (Tier 1 only).
+  - Outer pak manifest uses adapter_kinds: [...] (no adapters: key).
+"""
+from __future__ import annotations
+
+import glob
+import io
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import zipfile
+from pathlib import Path
+from typing import List, Optional
+
+from .sdk_project import SdkProjectDef, SdkProjectError, load_sdk_project
+
+# ---------------------------------------------------------------------------
+# Paths relative to this module
+# ---------------------------------------------------------------------------
+
+_HERE = Path(__file__).parent
+_ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"
+
+# JARs that ship in every pak's lib/ — framework + aria-ops-core (not on shared classpath)
+_FRAMEWORK_JAR_PATTERN = "vcfcf-adapter-base.jar"
+_ARIA_OPS_CORE_PATTERN = "aria-ops-core-*.jar"
+
+# JARs that are on the appliance shared classpath — compile against, DON'T bundle
+_SHARED_CLASSPATH_PATTERNS = [
+    "vrops-adapters-sdk-*.jar",
+    "alive_common.jar",
+    "alive_platform.jar",
+]
+
+# Reference pak directories to check for pak-compare
+_REFERENCES_DIR = _HERE.parent / "tmp" / "reference_paks"
+
+
+class SdkBuildError(RuntimeError):
+    """Raised when the SDK build fails for a recoverable reason."""
+
+
+def _find_jars(directory: Path, pattern: str) -> List[Path]:
+    """Return all JARs in directory matching the glob pattern."""
+    return sorted(directory.glob(pattern))
+
+
+def _detect_jdk() -> str:
+    """Locate javac on PATH. Returns the javac path string.
+
+    Raises SdkBuildError with install instructions if not found.
+    """
+    javac = shutil.which("javac")
+    if javac is None:
+        raise SdkBuildError(
+            "javac not found on PATH. Install JDK 11 or newer:\n"
+            "  Ubuntu/Debian: sudo apt-get install -y openjdk-17-jdk\n"
+            "  RHEL/CentOS:   sudo dnf install -y java-17-openjdk-devel\n"
+            "  macOS (brew):  brew install openjdk@17\n"
+            "Then ensure javac is on PATH."
+        )
+    # Quick version check
+    try:
+        result = subprocess.run([javac, "-version"], capture_output=True, text=True, timeout=10)
+        version_str = result.stderr.strip() or result.stdout.strip()
+    except Exception as exc:
+        raise SdkBuildError(f"javac found at {javac} but version check failed: {exc}") from exc
+    return javac
+
+
+def _detect_jar_tool() -> str:
+    """Locate the jar tool on PATH. Returns path string."""
+    jar = shutil.which("jar")
+    if jar is None:
+        raise SdkBuildError(
+            "jar tool not found on PATH. It ships with the JDK. "
+            "Ensure the JDK bin directory is on PATH."
+        )
+    return jar
+
+
+def _build_classpath(project_dir: Path) -> str:
+    """Build the javac classpath: runtime JARs (all) + project lib/*.jar.
+
+    Compile against all runtime JARs (including SDK JARs that won't be bundled).
+    The shared-classpath distinction only matters at packaging time.
+    """
+    jars: List[Path] = []
+
+    # All adapter_runtime JARs for compilation (SDK, framework, aria-ops-core, etc.)
+    for jar in sorted(_ADAPTER_RUNTIME_DIR.glob("*.jar")):
+        jars.append(jar)
+    # Also adapter_runtime/lib/*.jar (Tier 1 libs — compile harmless, not bundled)
+    for jar in sorted((_ADAPTER_RUNTIME_DIR / "lib").glob("*.jar") if (_ADAPTER_RUNTIME_DIR / "lib").is_dir() else []):
+        jars.append(jar)
+
+    # Project-local lib/ (optional vendor JARs)
+    project_lib = project_dir / "lib"
+    if project_lib.is_dir():
+        for jar in sorted(project_lib.glob("*.jar")):
+            jars.append(jar)
+
+    if not jars:
+        raise SdkBuildError(
+            f"No JARs found in {_ADAPTER_RUNTIME_DIR}. "
+            "Run the Tier 2 bootstrap to populate adapter_runtime/ "
+            "(see vcfops_managementpacks/README.md)."
+        )
+
+    separator = ";" if sys.platform.startswith("win") else ":"
+    return separator.join(str(j) for j in jars)
+
+
+def _find_sources(project_dir: Path) -> List[Path]:
+    """Find all .java source files under project_dir/src/."""
+    src_dir = project_dir / "src"
+    if not src_dir.is_dir():
+        raise SdkBuildError(
+            f"No src/ directory found in {project_dir}. "
+            "Adapter source code must be under src/."
+        )
+    sources = sorted(src_dir.rglob("*.java"))
+    if not sources:
+        raise SdkBuildError(f"No .java files found under {src_dir}")
+    return sources
+
+
+def _compile(javac: str, classpath: str, sources: List[Path],
+             build_dir: Path) -> None:
+    """Compile Java sources into build_dir. Raises SdkBuildError on failure."""
+    build_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [
+        javac,
+        "-source", "11", "-target", "11",
+        "-cp", classpath,
+        "-d", str(build_dir),
+    ] + [str(s) for s in sources]
+
+    print(f"  javac: compiling {len(sources)} source file(s)...", file=sys.stderr)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise SdkBuildError(
+            f"javac compilation failed:\n{result.stderr}\n{result.stdout}"
+        )
+    if result.stderr.strip():
+        print(f"  javac warnings:\n{result.stderr}", file=sys.stderr)
+
+
+def _write_adapter_properties(build_dir: Path, project: SdkProjectDef) -> None:
+    """Write adapter.properties into the build dir (root of the entry JAR)."""
+    props_content = (
+        f"ENTRYCLASS={project.entry_class}\n"
+        f"KINDKEY={project.adapter_kind}\n"
+    )
+    (build_dir / "adapter.properties").write_text(props_content, encoding="utf-8")
+
+
+def _package_adapter_jar(jar_tool: str, build_dir: Path, jar_path: Path) -> None:
+    """Package compiled classes + adapter.properties into the entry JAR."""
+    jar_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = [jar_tool, "cf", str(jar_path), "-C", str(build_dir), "."]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise SdkBuildError(f"jar packaging failed:\n{result.stderr}\n{result.stdout}")
+
+
+def _collect_lib_jars(project_dir: Path) -> List[Path]:
+    """Collect JARs to bundle in the pak's <adapter>/lib/ directory.
+
+    Bundle:
+      - vcfcf-adapter-base.jar (our framework — NOT on shared classpath)
+      - aria-ops-core-*.jar (NOT on shared classpath; per spec/13)
+      - project lib/*.jar (optional vendor JARs)
+
+    Do NOT bundle:
+      - vrops-adapters-sdk-*.jar (on shared classpath)
+      - alive_common.jar / alive_platform.jar (on shared classpath)
+    """
+    lib_jars: List[Path] = []
+
+    # Framework JAR
+    fw_jars = _find_jars(_ADAPTER_RUNTIME_DIR, _FRAMEWORK_JAR_PATTERN)
+    if not fw_jars:
+        raise SdkBuildError(
+            f"vcfcf-adapter-base.jar not found in {_ADAPTER_RUNTIME_DIR}.\n"
+            "Build it first: cd vcfops_managementpacks && "
+            "./adapter_framework/build-framework.sh"
+        )
+    lib_jars.extend(fw_jars)
+
+    # aria-ops-core (required for UnlicensedAdapter; not on shared classpath)
+    core_jars = _find_jars(_ADAPTER_RUNTIME_DIR, _ARIA_OPS_CORE_PATTERN)
+    if not core_jars:
+        print(
+            "  WARNING: aria-ops-core-*.jar not found in adapter_runtime/. "
+            "The pak may fail to load on the appliance.",
+            file=sys.stderr,
+        )
+    lib_jars.extend(core_jars)
+
+    # Project-local vendor JARs
+    project_lib = project_dir / "lib"
+    if project_lib.is_dir():
+        lib_jars.extend(sorted(project_lib.glob("*.jar")))
+
+    return lib_jars
+
+
+def _assemble_adapters_zip(
+    project: SdkProjectDef,
+    project_dir: Path,
+    adapter_jar: Path,
+    lib_jars: List[Path],
+) -> bytes:
+    """Build adapters.zip in memory and return as bytes.
+
+    Structure:
+      manifest.txt                     [ENTRYCLASS + KINDKEY]
+      eula.txt
+      resources/resources.properties
+      <adapter_kind>.jar               [entry JAR]
+      <adapter_kind>/
+        conf/
+          describe.xml
+          resources/resources.properties
+        lib/
+          vcfcf-adapter-base.jar
+          aria-ops-core-*.jar
+          [project lib/*.jar]
+    """
+    buf = io.BytesIO()
+    adapter_dir = project.adapter_dir_name
+
+    with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        # Inner manifest.txt (plain text format, same as Tier 1 inner manifest)
+        inner_manifest = (
+            f"ENTRYCLASS={project.entry_class}\n"
+            f"KINDKEY={project.adapter_kind}\n"
+        )
+        zf.writestr("manifest.txt", inner_manifest)
+
+        # eula.txt (empty placeholder)
+        zf.writestr("eula.txt", "")
+
+        # resources/resources.properties at the adapters.zip root (compat)
+        res_file = project_dir / "resources" / "resources.properties"
+        if res_file.is_file():
+            zf.writestr("resources/resources.properties",
+                        res_file.read_bytes())
+        else:
+            zf.writestr("resources/resources.properties", "")
+
+        # Entry JAR at the root of adapters.zip
+        zf.write(adapter_jar, adapter_jar.name)
+
+        # describe.xml
+        describe_src = project_dir / "describe.xml"
+        if not describe_src.is_file():
+            raise SdkBuildError(
+                f"describe.xml not found in {project_dir}. "
+                "Every Tier 2 adapter must have a describe.xml."
+            )
+        zf.write(describe_src, f"{adapter_dir}/conf/describe.xml")
+
+        # conf/resources/resources.properties
+        if res_file.is_file():
+            zf.write(res_file, f"{adapter_dir}/conf/resources/resources.properties")
+        else:
+            zf.writestr(f"{adapter_dir}/conf/resources/resources.properties", "")
+
+        # lib/ directory — bundled JARs
+        for jar in lib_jars:
+            zf.write(jar, f"{adapter_dir}/lib/{jar.name}")
+
+        # Empty work/ and doc/ dirs (structural convention; ensures the dirs exist)
+        zf.writestr(f"{adapter_dir}/work/.gitkeep", "")
+        zf.writestr(f"{adapter_dir}/doc/.gitkeep", "")
+
+    return buf.getvalue()
+
+
+def _generate_outer_manifest(project: SdkProjectDef) -> str:
+    """Generate the outer pak manifest.txt JSON (SDK format, no adapters: field)."""
+    manifest = {
+        "display_name": project.name,
+        "name": project.name,
+        "description": project.description,
+        "version": f"{project.version}.{project.build_number}",
+        "vcops_minimum_version": "8.0.0",
+        "disk_space_required": 500,
+        "eula_file": "eula.txt",
+        "platform": ["Linux VA"],
+        "vendor": "VCF Content Factory",
+        "pak_icon": "default.png",
+        "license_type": "",
+        "pak_validation_script": {"script": ""},
+        "adapter_pre_script": {"script": ""},
+        "adapter_post_script": {"script": ""},
+        # SDK format: adapter_kinds instead of adapters:
+        "adapter_kinds": [project.adapter_kind],
+    }
+    return json.dumps(manifest, indent=4)
+
+
+def _write_outer_pak(
+    project: SdkProjectDef,
+    adapters_zip_bytes: bytes,
+    output_dir: Path,
+) -> Path:
+    """Write the outer .pak ZIP to output_dir and return the path."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    pak_path = output_dir / project.pak_filename
+
+    with zipfile.ZipFile(pak_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.txt", _generate_outer_manifest(project))
+        zf.writestr("eula.txt", "")
+        zf.writestr("default.png", "")  # empty icon placeholder
+        zf.writestr("resources/resources.properties", "")
+        zf.writestr("adapters.zip", adapters_zip_bytes)
+
+    return pak_path
+
+
+def _run_pak_compare(pak_path: Path) -> None:
+    """Run pak-compare against SDK reference paks if available.
+
+    Logs a warning (does not fail) if no reference paks are found.
+    """
+    if not _REFERENCES_DIR.is_dir():
+        print(
+            f"  pak-compare: reference directory not found ({_REFERENCES_DIR}); "
+            "skipping comparison.",
+            file=sys.stderr,
+        )
+        return
+
+    sdk_paks = list(_REFERENCES_DIR.glob("*.pak"))
+    if not sdk_paks:
+        print(
+            f"  pak-compare: no .pak files found in {_REFERENCES_DIR}; "
+            "skipping comparison.",
+            file=sys.stderr,
+        )
+        return
+
+    try:
+        from .pak_compare import compare_paks, format_report
+
+        best_ref = sdk_paks[0]
+        print(
+            f"  pak-compare: comparing against {best_ref.name}...", file=sys.stderr
+        )
+        result = compare_paks(pak_path, best_ref)
+        # Print a summary — only show BLOCKINGs and WARNINGs
+        blockings = result.blocking()
+        warning_list = result.warnings()
+        if blockings:
+            print(
+                f"  pak-compare: {len(blockings)} BLOCKING(s) found!", file=sys.stderr
+            )
+            for item in blockings:
+                print(f"    BLOCKING: {item.message}", file=sys.stderr)
+        elif warning_list:
+            print(
+                f"  pak-compare: {len(warning_list)} WARNING(s) (no BLOCKINGs); "
+                "install gate passed.",
+                file=sys.stderr,
+            )
+        else:
+            print("  pak-compare: OK (no BLOCKINGs or WARNINGs).", file=sys.stderr)
+
+    except Exception as exc:
+        print(
+            f"  pak-compare: failed to run comparison: {exc}; skipping.",
+            file=sys.stderr,
+        )
+
+
+def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
+    """End-to-end Tier 2 SDK adapter build pipeline.
+
+    Args:
+        project_dir:  path to the adapter project directory (contains adapter.yaml)
+        output_dir:   destination for the .pak file (default: dist/ relative to repo root)
+
+    Returns:
+        Path to the produced .pak file.
+
+    Raises:
+        SdkBuildError: on any build failure
+        SdkProjectError: on adapter.yaml validation failure
+    """
+    if output_dir is None:
+        output_dir = _HERE.parent / "dist"
+
+    project_dir = Path(project_dir).resolve()
+    adapter_yaml = project_dir / "adapter.yaml"
+    if not adapter_yaml.is_file():
+        raise SdkBuildError(
+            f"adapter.yaml not found in {project_dir}. "
+            "Pass the path to a Tier 2 adapter project directory."
+        )
+
+    print(f"Building SDK adapter from {project_dir} ...", file=sys.stderr)
+
+    # Step 1: load adapter.yaml
+    project = load_sdk_project(adapter_yaml)
+    print(f"  name={project.name}  version={project.version}.{project.build_number}  "
+          f"kind={project.adapter_kind}", file=sys.stderr)
+
+    # Step 2: detect JDK
+    javac = _detect_jdk()
+    jar_tool = _detect_jar_tool()
+
+    # Step 3: build classpath
+    classpath = _build_classpath(project_dir)
+
+    # Step 4: find sources
+    sources = _find_sources(project_dir)
+    print(f"  sources: {len(sources)} .java file(s)", file=sys.stderr)
+
+    with tempfile.TemporaryDirectory(prefix="vcfcf-sdk-build-") as tmpdir:
+        tmp = Path(tmpdir)
+        build_dir = tmp / "classes"
+        jar_dir = tmp / "jars"
+
+        # Step 4: compile
+        _compile(javac, classpath, sources, build_dir)
+
+        # Step 5: write adapter.properties into build dir
+        _write_adapter_properties(build_dir, project)
+
+        # Step 6: package adapter JAR
+        adapter_jar = jar_dir / project.adapter_jar_name
+        _package_adapter_jar(jar_tool, build_dir, adapter_jar)
+        print(f"  adapter JAR: {adapter_jar.name} "
+              f"({adapter_jar.stat().st_size:,} bytes)", file=sys.stderr)
+
+        # Step 7+8: collect lib JARs (framework + aria-ops-core + project deps)
+        lib_jars = _collect_lib_jars(project_dir)
+        print(
+            f"  lib/ deps: {len(lib_jars)} JAR(s): "
+            f"{[j.name for j in lib_jars]}",
+            file=sys.stderr,
+        )
+
+        # Step 9: assemble adapters.zip
+        print("  assembling adapters.zip ...", file=sys.stderr)
+        adapters_zip_bytes = _assemble_adapters_zip(
+            project, project_dir, adapter_jar, lib_jars
+        )
+        print(
+            f"  adapters.zip: {len(adapters_zip_bytes):,} bytes", file=sys.stderr
+        )
+
+        # Step 10+11: generate manifest and write outer .pak
+        pak_path = _write_outer_pak(project, adapters_zip_bytes, Path(output_dir))
+
+    print(f"Built: {pak_path}", file=sys.stderr)
+
+    # Step 12: pak-compare (best-effort)
+    _run_pak_compare(pak_path)
+
+    return pak_path
+
+
+def validate_sdk_project(project_dir: Path) -> List[str]:
+    """Validate a Tier 2 adapter project without building.
+
+    Returns a list of error strings (empty = valid).
+    """
+    errors: List[str] = []
+    project_dir = Path(project_dir).resolve()
+
+    adapter_yaml = project_dir / "adapter.yaml"
+    if not adapter_yaml.is_file():
+        errors.append(f"adapter.yaml not found in {project_dir}")
+        return errors
+
+    try:
+        project = load_sdk_project(adapter_yaml)
+    except (SdkProjectError, Exception) as exc:
+        errors.append(f"adapter.yaml validation error: {exc}")
+        return errors
+
+    # Check required files
+    describe_xml = project_dir / "describe.xml"
+    if not describe_xml.is_file():
+        errors.append(f"describe.xml not found in {project_dir}")
+
+    src_dir = project_dir / "src"
+    if not src_dir.is_dir():
+        errors.append(f"src/ directory not found in {project_dir}")
+    else:
+        sources = list(src_dir.rglob("*.java"))
+        if not sources:
+            errors.append(f"No .java files found under {src_dir}")
+
+    # Attempt compilation check if JDK is available
+    javac = shutil.which("javac")
+    if javac and not errors:
+        try:
+            classpath = _build_classpath(project_dir)
+            sources = _find_sources(project_dir)
+            with tempfile.TemporaryDirectory(prefix="vcfcf-validate-") as tmpdir:
+                _compile(javac, classpath, sources, Path(tmpdir) / "classes")
+        except SdkBuildError as exc:
+            errors.append(f"compile check failed: {exc}")
+    elif not javac:
+        print(
+            "  validate-sdk: javac not on PATH — skipping compile check",
+            file=sys.stderr,
+        )
+
+    return errors
+
+
+def scaffold_sdk_project(name: str, output_base: Path) -> Path:
+    """Generate an empty Tier 2 adapter project skeleton.
+
+    Args:
+        name:         human-friendly adapter name (e.g. "My Custom Monitor")
+        output_base:  base directory; project created at output_base/<slug>/
+
+    Returns:
+        Path to the created project directory.
+    """
+    # Derive adapter_kind slug from name
+    slug = name.lower().replace(" ", "_").replace("-", "_")
+    slug = "".join(c for c in slug if c.isalnum() or c == "_")
+    if not slug or not slug[0].isalpha():
+        slug = "vcfcf_" + slug
+
+    project_dir = output_base / slug
+    if project_dir.exists():
+        raise SdkBuildError(f"Project directory already exists: {project_dir}")
+
+    # Derive class name stem
+    camel = "".join(part.capitalize() for part in slug.lstrip("vcfcf_").split("_"))
+    class_name = f"{camel}Adapter"
+    package = f"com.vcfcf.adapters.{slug}"
+    package_path = package.replace(".", "/")
+
+    src_dir = project_dir / "src" / package_path
+    src_dir.mkdir(parents=True)
+    (project_dir / "resources").mkdir()
+    (project_dir / "lib").mkdir()
+
+    # adapter.yaml
+    (project_dir / "adapter.yaml").write_text(
+        f'name: "{name}"\n'
+        f'version: "1.0.0"\n'
+        f'build_number: 1\n'
+        f'adapter_kind: "{slug}"\n'
+        f'tier: 2\n'
+        f'description: "TODO: describe this adapter"\n',
+        encoding="utf-8",
+    )
+
+    # Skeleton adapter class
+    (src_dir / f"{class_name}.java").write_text(
+        f"package {package};\n\n"
+        f"import com.vcfcf.adapter.VcfCfAdapter;\n"
+        f"import com.integrien.alive.common.adapter3.ResourceStatus;\n"
+        f"import com.integrien.alive.common.adapter3.config.ResourceConfig;\n"
+        f"import com.vmware.tvs.vrealize.adapter.core.collection.CollectionException;\n"
+        f"import com.vmware.tvs.vrealize.adapter.core.collection.live.LiveCollector;\n"
+        f"import com.vmware.tvs.vrealize.adapter.core.data.ResourceCollection;\n"
+        f"import com.vmware.tvs.vrealize.adapter.core.discovery.Discoverer;\n"
+        f"import com.vmware.tvs.vrealize.adapter.core.test.Tester;\n\n"
+        f"// TODO: replace Object with your typed config POJO\n"
+        f"public final class {class_name} extends VcfCfAdapter<Object> {{\n\n"
+        f"\t@Override\n"
+        f"\tprotected String getAdapterDirectory() {{ return \"{slug}\"; }}\n\n"
+        f"\t@Override\n"
+        f"\tpublic void configure(ResourceStatus status, ResourceConfig rc) {{\n"
+        f"\t\t// TODO: read credentials and identifiers from rc, build this.config\n"
+        f"\t}}\n\n"
+        f"\t@Override\n"
+        f"\tpublic Tester getTester(ResourceStatus s, ResourceConfig rc) {{\n"
+        f"\t\treturn param -> {{ /* TODO: validate connectivity */ }};\n"
+        f"\t}}\n\n"
+        f"\t@Override\n"
+        f"\tpublic Discoverer getDiscoverer(ResourceStatus s, ResourceConfig rc) {{\n"
+        f"\t\t// TODO: return discovered resources\n"
+        f"\t\treturn param -> new ResourceCollection();\n"
+        f"\t}}\n\n"
+        f"\t@Override\n"
+        f"\tpublic LiveCollector getLiveDataCollector(ResourceStatus s, ResourceConfig rc) {{\n"
+        f"\t\treturn new LiveCollector() {{\n"
+        f"\t\t\t@Override public ResourceCollection getCurrentMetrics(\n"
+        f"\t\t\t\t\tResourceConfig rc, ResourceCollection acc)\n"
+        f"\t\t\t\t\tthrows CollectionException, InterruptedException {{\n"
+        f"\t\t\t\t// TODO: collect metrics and return them\n"
+        f"\t\t\t\treturn new ResourceCollection();\n"
+        f"\t\t\t}}\n"
+        f"\t\t\t@Override public ResourceCollection getEvents(\n"
+        f"\t\t\t\t\tResourceConfig rc, ResourceCollection acc)\n"
+        f"\t\t\t\t\tthrows CollectionException, InterruptedException {{\n"
+        f"\t\t\t\treturn new ResourceCollection();\n"
+        f"\t\t\t}}\n"
+        f"\t\t\t@Override public ResourceCollection getRelationships(\n"
+        f"\t\t\t\t\tResourceConfig rc, ResourceCollection acc)\n"
+        f"\t\t\t\t\tthrows CollectionException, InterruptedException {{\n"
+        f"\t\t\t\treturn new ResourceCollection();\n"
+        f"\t\t\t}}\n"
+        f"\t\t\t@Override public boolean shouldForceUpdateRelationships() {{ return false; }}\n"
+        f"\t\t}};\n"
+        f"\t}}\n"
+        f"}}\n",
+        encoding="utf-8",
+    )
+
+    # Skeleton describe.xml
+    (project_dir / "describe.xml").write_text(
+        f'<?xml version="1.0" encoding="UTF-8"?>\n'
+        f'<AdapterKind xmlns="http://schemas.vmware.com/vcops/schema"\n'
+        f'             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"\n'
+        f'             key="{slug}"\n'
+        f'             nameKey="1"\n'
+        f'             version="1"\n'
+        f'             xsi:schemaLocation="http://schemas.vmware.com/vcops/schema describeSchema.xsd">\n\n'
+        f'\t<ResourceKinds>\n'
+        f'\t\t<!-- TODO: add adapter instance (type=7) and data resource kinds -->\n'
+        f'\t\t<ResourceKind key="{slug}" nameKey="2" type="7" monitoringInterval="5"/>\n'
+        f'\t</ResourceKinds>\n\n'
+        f'\t<LicenseConfig enabled="false"/>\n'
+        f'</AdapterKind>\n',
+        encoding="utf-8",
+    )
+
+    # resources.properties
+    (project_dir / "resources" / "resources.properties").write_text(
+        f"# resources.properties — i18n strings for {name}\n"
+        f"1={name}\n"
+        f"2={name} Adapter Instance\n",
+        encoding="utf-8",
+    )
+
+    print(f"Scaffolded: {project_dir}", file=sys.stderr)
+    print(f"  Adapter class: {src_dir / (class_name + '.java')}", file=sys.stderr)
+    print(f"  Next steps:", file=sys.stderr)
+    print(f"    1. Edit src/{package_path}/{class_name}.java", file=sys.stderr)
+    print(f"    2. Edit describe.xml", file=sys.stderr)
+    print(f"    3. python3 -m vcfops_managementpacks build-sdk {project_dir}", file=sys.stderr)
+
+    return project_dir

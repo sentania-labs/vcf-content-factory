@@ -1,23 +1,43 @@
-# Federation Aggregator Permanently Breaks ARIA_OPS-Stitching SDK MPs
+# Federation Aggregator and ARIA_OPS-Stitching SDK MPs
 
-Captured: 2026-05-15. Authored by ops-recon from live devel API data (T2)
-and orchestrator-supplied T0/T1 summaries. All API calls were read-only
+Captured: 2026-05-15. Updated 2026-05-18 with extended devel observation
+(below). Authored by ops-recon from live devel API data (T2) and
+orchestrator-supplied T0/T1 summaries. All API calls were read-only
 against the devel profile.
 
 ---
 
 ## TL;DR
 
-Configuring a VCF Operations instance as a Federation Aggregator permanently
-registers `FDR_*` shadow adapter kinds that survive solution uninstall,
-redescribe, and full service reboot. On at least one prod instance, these
-shadow kinds cause ARIA_OPS-stitching SDK Management Packs to receive `403
-Forbidden` on every collection cycle. Devel is currently in a "working but
-transitioning" state (T2) — the Storage Paths MP is still collecting, but
-FDR_* resources are being actively populated. Whether T2→T3 breakage
-occurs on an Ops9→Ops9 federation is the open question under active watch.
-Cleanup options are limited: no documented DELETE endpoint for adapter kinds
-exists in either the public or internal API.
+Configuring a VCF Operations instance as a Federation Aggregator
+permanently registers `FDR_*` shadow adapter kinds that survive solution
+uninstall, redescribe, and full service reboot. On at least one **prod
+(Ops8 source)** instance, these shadow kinds caused ARIA_OPS-stitching
+SDK Management Packs to receive `403 Forbidden` on every collection
+cycle. **On devel (Ops9 source) the breakage has NOT recurred across
+extended observation (T2 → present, ≥72 hours).** This narrows the
+working hypothesis to "Ops8 → Ops9 federation specifically corrupts the
+adapter-kind metadata resolver"; Ops9 → Ops9 federation appears safe
+for ARIA_OPS stitching based on the devel evidence. Default posture
+for new content is updated below.
+
+## 2026-05-18 disproof status (Ops9 → Ops9)
+
+The original 2026-05-15 capture flagged "T2 → T3 breakage on Ops9→Ops9
+is the open question under active watch." Three days of continued
+collection on devel (federated against an Ops9 source) without any of
+the breakage signals in the watch protocol below constitutes informal
+disproof of the strong claim ("federation permanently breaks ARIA_OPS
+stitching"). The narrower claim ("Ops8 → Ops9 federation broke it on
+that specific prod") stands as the original observation.
+
+**Implication for the framework**: mp-designer may propose ARIA_OPS
+stitching (Pattern B) for hardware / vSphere-enrichment MPs without a
+federation-related health warning, **provided** the target instance is
+Ops9 and any federated source is also Ops9. Retain the warning for
+Ops8 → Ops9 deployments. A defensive pre-install check that aborts when
+`FDR_*` kinds are registered is still a reasonable belt-and-suspenders
+move for content shipped to unknown customer environments.
 
 ---
 
@@ -206,36 +226,45 @@ will follow the same path depends on questions in the Open Questions section.
 
 ---
 
-## Implications for content authoring
+## Implications for content authoring (updated 2026-05-18)
 
-**Default posture for platform-resident objects:**
+**Default posture for platform-resident objects (updated):**
 
-- Do NOT use `ARIA_OPS` stitching for content targeting resources on
-  instances with federation history. The risk of 403 breakage is high and
-  unrecoverable via the API.
-- Prefer `INTERNAL`-object MPs with `relationship_rules` that traverse
-  the parent-child graph to reach VMWARE-native resources. INTERNAL objects
-  are not affected by FDR_* kind registration because they do not perform
-  adapter-kind metadata resolution against VMWARE.
+- ARIA_OPS stitching is **fine to propose** for new MPs targeting Ops9
+  instances — Ops9 → Ops9 federation has not reproduced the breakage
+  after three days of continuous observation on devel.
+- Retain the original caution **only** for instances with Ops8 → Ops9
+  federation history. That specific path produced the prod breakage and
+  the cleanup limitation (no DELETE endpoint for adapter kinds) is
+  unchanged.
 
-**If ARIA_OPS stitching is required:**
+**Optional defensive posture for content shipped to unknown environments:**
 
-- Document in the MP's README that the target instance must never have
-  hosted a Federation Aggregator configuration (not just never had the
-  Aggregator solution installed — T1 data shows install alone is safe;
-  it is the federation configuration that triggers FDR_* registration).
-- Gate delivery on a pre-install check: `GET /api/adapterkinds` must
-  return no keys matching `FDR_*`. If any are present, the MP should not
-  be installed until cleanup is possible.
+- If the target customer's federation history is unknown and the MP
+  will be installed broadly, gate delivery on a pre-install check:
+  `GET /api/adapterkinds` returning `FDR_*` keys + an Ops8 source
+  somewhere in the federation history is the risk signature. If both
+  are present, warn or block. Either condition alone is not enough to
+  block (Ops9-source FDR_* kinds on devel have not caused issues).
+
+**Alternative when stitching is contraindicated:**
+
+- Use `INTERNAL`-object MPs with `relationship_rules` that traverse the
+  parent-child graph to reach VMWARE-native resources. INTERNAL objects
+  are not affected by FDR_* kind registration because they do not
+  perform adapter-kind metadata resolution against VMWARE. This remains
+  the safer choice when the target instance is known to have Ops8
+  federation history.
 
 **This repo's affected MP:**
 
 - `mpb_vcf_content_factory_vsphere_storage_paths` uses ARIA_OPS stitching
-  on `VMWARE:HostSystem` and `VMWARE:Datastore`. It is currently working on
-  devel (T2) but is broken on prod. The v2 plan (`vsphere_storage_paths_v2_plan.md`)
-  should be reviewed in light of this finding — if the prod target instance
-  carries FDR_* residue, v2 must be INTERNAL-only or deferred until cleanup
-  is possible.
+  on `VMWARE:HostSystem` and `VMWARE:Datastore`. It has been collecting
+  cleanly on devel through the federated-state observation window. The
+  v2 plan (`vsphere_storage_paths_v2_plan.md`) is unblocked for ARIA_OPS
+  stitching against Ops9 targets. Prod (the Ops8-source instance) is
+  still a known-bad target and should remain on a non-stitching path
+  until that environment is upgraded or cleaned up.
 
 ---
 
