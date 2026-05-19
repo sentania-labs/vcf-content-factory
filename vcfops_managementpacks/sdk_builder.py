@@ -65,13 +65,16 @@ from .sdk_project import SdkProjectDef, SdkProjectError, load_sdk_project
 _HERE = Path(__file__).parent
 _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"
 
-# JARs that ship in every pak's lib/ — framework + aria-ops-core (not on shared classpath)
+# JARs that ship in every pak's lib/ — framework + aria-ops-core + SDK
+# vrops-adapters-sdk IS on the shared classpath but working SDK paks (HPE
+# SimpliVity, Pure Storage) all bundle it in lib/ — the platform appears
+# to need it inside the pak for adapter-kind registration during install.
 _FRAMEWORK_JAR_PATTERN = "vcfcf-adapter-base.jar"
 _ARIA_OPS_CORE_PATTERN = "aria-ops-core-*.jar"
+_SDK_JAR_PATTERN = "vrops-adapters-sdk-*.jar"
 
 # JARs that are on the appliance shared classpath — compile against, DON'T bundle
 _SHARED_CLASSPATH_PATTERNS = [
-    "vrops-adapters-sdk-*.jar",
     "alive_common.jar",
     "alive_platform.jar",
 ]
@@ -212,12 +215,14 @@ def _collect_lib_jars(project_dir: Path) -> List[Path]:
     """Collect JARs to bundle in the pak's <adapter>/lib/ directory.
 
     Bundle:
-      - vcfcf-adapter-base.jar (our framework — NOT on shared classpath)
-      - aria-ops-core-*.jar (NOT on shared classpath; per spec/13)
+      - vcfcf-adapter-base.jar (our framework)
+      - aria-ops-core-*.jar (UnlicensedAdapter SPI)
+      - vrops-adapters-sdk-*.jar (also on shared classpath, but working
+        SDK paks all bundle it — platform needs it in lib/ for adapter
+        kind registration during install)
       - project lib/*.jar (optional vendor JARs)
 
     Do NOT bundle:
-      - vrops-adapters-sdk-*.jar (on shared classpath)
       - alive_common.jar / alive_platform.jar (on shared classpath)
     """
     lib_jars: List[Path] = []
@@ -241,6 +246,16 @@ def _collect_lib_jars(project_dir: Path) -> List[Path]:
             file=sys.stderr,
         )
     lib_jars.extend(core_jars)
+
+    # vrops-adapters-sdk (on shared classpath but must be in pak for install)
+    sdk_jars = _find_jars(_ADAPTER_RUNTIME_DIR, _SDK_JAR_PATTERN)
+    if not sdk_jars:
+        print(
+            "  WARNING: vrops-adapters-sdk-*.jar not found in adapter_runtime/. "
+            "The platform may reject the adapter during install.",
+            file=sys.stderr,
+        )
+    lib_jars.extend(sdk_jars)
 
     # Project-local vendor JARs
     project_lib = project_dir / "lib"
@@ -282,8 +297,15 @@ def _assemble_adapters_zip(
         # inside the adapter JAR (handled by _write_adapter_properties).
         zf.writestr("manifest.txt", _generate_outer_manifest(project))
 
-        # eula.txt (empty placeholder)
+        # eula.txt (empty placeholder — duplicated from outer pak per wire format)
         zf.writestr("eula.txt", "")
+
+        # default.png (duplicated from outer pak — validate phase checks for it)
+        icon_path = _HERE / "templates" / "default.png"
+        if icon_path.is_file():
+            zf.write(icon_path, "default.png")
+        else:
+            zf.writestr("default.png", "")
 
         # resources/resources.properties at the adapters.zip root (compat)
         res_file = project_dir / "resources" / "resources.properties"
