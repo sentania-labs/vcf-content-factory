@@ -95,3 +95,4 @@ reflect current state.
 | `mpb_import_investigation.md` | 2026-05-13 | MPB design import failure investigation |
 | `vsphere_storage_paths_v2_plan.md` | 2026-05-13 | vSphere Storage Paths v2 ARIA_OPS stitching plan |
 | `vcf_managed_vmware_authz_investigation_2026_05_15.md` | 2026-05-15 | SDK MPs blocked from VCF-managed VMWARE adapter — running activity log |
+| `lessons_synology_sdk_2026_05_19.md` | 2026-05-19 | **Synology SDK adapter: 21 lessons across pak structure, runtime, stitching, icons. First Tier 2 MP end-to-end.** |

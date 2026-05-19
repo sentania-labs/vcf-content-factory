@@ -267,14 +267,39 @@ will determine what object type they bind to. Outcomes:
   the user can decide whether to delete or rebind them after the
   MP is installed.
 
-## Workflow path (per CLAUDE.md)
+## Implementation outcome (2026-05-19)
 
-```
-clarify (done) → cartographer (extend NFS + stitching) → catalog-match
-→ designer → mp-author → validate → render-export → push-design →
-MPB UI Verify → build → pak-compare → confirm → install →
-reconcile orphan content
-```
+**Architecture pivot:** The design started as Hybrid (C) with MPB
+ARIA_OPS stitching, but was built as a **Tier 2 native Java SDK
+adapter** instead. The Synology API's cross-endpoint joining
+requirement (trigger #2) and the NAA transform (trigger #9) made
+Tier 1/MPB unviable. See `context/tier_decision_framework.md`.
+
+**Final object model (build 1.0.0.9, 23 objects on devel):**
+
+| Object type | Count | Metrics | Relationships |
+|---|---|---|---|
+| SynologyDiskstation | 1 | 41 (CPU, memory, network, NFS, fan, temp) | → StoragePool |
+| SynologyStoragePool | 1 | 3 (capacity) | → Volume, → 7 Disks |
+| SynologyVolume | 1 | 9 (capacity, IO, cache hit rates) | → iSCSI LUNs, → NFS Exports, → SSD Cache |
+| SynologyDisk | 7 | 5 IO + 4 health each | ← StoragePool (incl 2 NVMe cache) |
+| SynologyIscsiLun | 3 | 6 IO each | ← Volume, → VMWARE Datastore (1 of 3 stitched) |
+| SynologyNfsExport | 8 | 4 each | ← Volume, → VMWARE Datastore (2 of 8 stitched) |
+| SynologySsdCache | 1 | 6 (hit rates, capacity) | ← Volume |
+
+**Cross-MP stitching confirmed (3 relationships):**
+- iSCSI LUN `d023e190` → `vcf-lab-wld01-cl01-iscsi` (via NAA)
+- NFS Export `wld01` → `vcf-lab-nfs-wld01` (via export path)
+- NFS Export `vcf9` → `vcf-lab-mgmt01-nfs` (via export path)
+
+**Deferred to v2:** Docker containers, SMB shares, events, UPS
+(no UPS available in current lab config).
+
+**Lessons learned:** `context/lessons_synology_sdk_2026_05_19.md`
+(21 numbered lessons across pak structure, runtime, stitching, icons).
+
+**Framework components built:** ForeignResourceResolver,
+RelationshipBuilder, SimpleJson — all in `vcfcf-adapter-base.jar`.
 
 This file is the prompt-of-record. Author agents may read it; they
 may not rewrite the user's verbatim prompt above.
