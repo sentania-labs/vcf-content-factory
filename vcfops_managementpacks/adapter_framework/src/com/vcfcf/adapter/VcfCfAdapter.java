@@ -47,6 +47,20 @@ import java.util.logging.Level;
 public abstract class VcfCfAdapter<C> extends UnlicensedAdapter {
 
 	/**
+	 * No-arg constructor required by the analytics engine.
+	 *
+	 * <p>The analytics engine instantiates adapter classes via
+	 * {@code Class.newInstance()} (no-arg reflection) during {@code describe()}
+	 * generation. Without this constructor the engine throws
+	 * {@code InstantiationException}. Delegates to {@code super()} which
+	 * ultimately chains to {@code UnlicensedAdapter(null, null)} matching
+	 * the pattern confirmed in {@code UnlicensedAdapter} bytecode.
+	 */
+	public VcfCfAdapter() {
+		super();
+	}
+
+	/**
 	 * Platform-reflection constructor.
 	 *
 	 * <p>The Tier 2 platform instantiates adapter classes via reflection using

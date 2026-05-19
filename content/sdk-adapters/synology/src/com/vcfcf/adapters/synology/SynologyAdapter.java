@@ -29,6 +29,10 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 
 	private volatile SynologyApiClient api;
 
+	public SynologyAdapter() {
+		super();
+	}
+
 	public SynologyAdapter(String adapterDir, Integer adapterInstanceId) {
 		super(adapterDir, adapterInstanceId);
 	}
