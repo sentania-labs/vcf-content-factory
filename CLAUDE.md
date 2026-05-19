@@ -81,17 +81,44 @@ file (not a skill) because it runs before any skill could load.
    If recon finds an exact match anywhere, tell the user and stop —
    prefer adapt-and-import over authoring from scratch.
 
-2. **Delegate bottom-up for compound requests.** Cross-references
+2. **Capture intent before delegating.** Once recon confirms the
+   content needs to be authored (i.e. no existing match), write a
+   design note to `designs/<type>/<slug>.md` *before* spawning the
+   author. The note has two short sections:
+
+   - **Initial prompt** — the user's request, verbatim, no editing
+     or smoothing. If it took multiple turns of clarification, paste
+     the relevant turns.
+   - **Vision** — your distilled understanding of what they want and
+     why, after any clarifying questions. A few bullets is enough.
+
+   Applies to every authored content type: supermetric, view,
+   dashboard, customgroup, symptom, alert, recommendation, report,
+   bundle, managementpack. `<type>` is the plural directory name
+   (`supermetrics`, `dashboards`, `bundles`, etc.); `<slug>` is the
+   kebab-case slug that matches the eventual content slug. Multi-
+   object requests (SM + view + dashboard) get one design file per
+   object — the bottom-up delegation order in step 3 still holds.
+
+   Skip capture only when the user is correcting something already
+   in flight, not for new content. This is what turns the repo into
+   a sample-prompt corpus over time; the design file is the
+   prompt-of-record and agents may read but should not rewrite the
+   user's prompt.
+
+3. **Delegate bottom-up for compound requests.** Cross-references
    are resolved at author time, so order matters:
    - "SM + view + dashboard" → supermetric → view → dashboard
    - "symptom + alert" → symptom → alert
    - "report" → upstream views (and their SMs) first → report last
 
-3. **Pass filenames, not file contents.** Agents read the
+4. **Pass filenames, not file contents.** Agents read the
    filesystem themselves. Keeping file contents out of your context
-   is how this architecture stays affordable.
+   is how this architecture stays affordable. Every authoring brief
+   includes the `designs/<type>/<slug>.md` path from step 2 so the
+   author can read the intent without you re-typing it.
 
-4. **Validate the whole repo after each round.** Validation is the
+5. **Validate the whole repo after each round.** Validation is the
    one CLI action the orchestrator may run directly:
    ```
    python3 -m vcfops_supermetrics validate &&
@@ -105,18 +132,18 @@ file (not a skill) because it runs before any skill could load.
    All other CLI ops (sync, enable, delete, list, .pak build/install)
    go through `content-installer` or the MP builder.
 
-5. **Install only on explicit user confirmation.** Show the file
+6. **Install only on explicit user confirmation.** Show the file
    list and a brief summary, ask yes/no, then delegate to
    `content-installer`. Install is plumbing, not creative work.
 
-6. **Never spawn multiple author agents in parallel.**
+7. **Never spawn multiple author agents in parallel.**
    Cross-references race for UUIDs and names. Serial.
 
-7. **ops-recon, api-explorer, and tooling MAY run in parallel**
+8. **ops-recon, api-explorer, and tooling MAY run in parallel**
    with each other or with a deferred author — they write to
    non-content directories.
 
-8. **Tooling changes go through the `tooling` agent.** The same
+9. **Tooling changes go through the `tooling` agent.** The same
    discipline that keeps you out of `supermetrics/` keeps you out
    of `vcfops_*/`.
 
