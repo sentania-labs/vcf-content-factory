@@ -456,12 +456,13 @@ def _assemble_adapters_zip(
         # eula.txt — MIT license text, duplicated from outer pak per wire format
         zf.writestr("eula.txt", _read_license())
 
-        # default.png (duplicated from outer pak — validate phase checks for it)
-        icon_path = _HERE / "templates" / "default.png"
-        if icon_path.is_file():
-            zf.write(icon_path, "default.png")
-        else:
-            zf.writestr("default.png", "")
+        # default.svg — pak icon duplicated inside adapters.zip (validate phase
+        # checks for it).  Use the AdapterKind icon so Repository/Accounts
+        # shows the real icon instead of a black-square placeholder.
+        icon_map = _load_icon_map(project_dir)
+        ak_icon_name = icon_map.get("_adapter_kind", "default.svg")
+        pak_icon_bytes = _resolve_icon(ak_icon_name, project_dir)
+        zf.writestr("default.svg", pak_icon_bytes)
 
         # resources/ directory + resources.properties at adapters.zip root
         _add_dir(zf, "resources")
@@ -526,7 +527,7 @@ def _generate_outer_manifest(project: SdkProjectDef) -> str:
         "eula_file": "eula.txt",
         "platform": ["Linux VA"],
         "vendor": "VCF Content Factory",
-        "pak_icon": "default.png",
+        "pak_icon": "default.svg",
         "license_type": "",
         "pak_validation_script": {"script": ""},
         "adapter_pre_script": {"script": ""},
@@ -541,21 +542,33 @@ def _write_outer_pak(
     project: SdkProjectDef,
     adapters_zip_bytes: bytes,
     output_dir: Path,
+    project_dir: Optional[Path] = None,
 ) -> Path:
-    """Write the outer .pak ZIP to output_dir and return the path."""
+    """Write the outer .pak ZIP to output_dir and return the path.
+
+    pak_icon is written as default.svg using the AdapterKind icon so that
+    Repository/Accounts renders the real icon instead of a black placeholder.
+    Falls back to templates/icons/default.svg when no project icon mapping
+    exists.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     pak_path = output_dir / project.pak_filename
 
-    # Load the default icon from templates/ (must be a valid PNG —
-    # the pak manager validates icon format during STAGE and rejects
-    # empty/corrupt files with "incorrect format--exiting").
-    icon_path = _HERE / "templates" / "default.png"
-    icon_bytes = icon_path.read_bytes() if icon_path.is_file() else b""
+    # Resolve the AdapterKind icon — reuse the same logic as _pack_icons so
+    # the pak-level icon matches what appears inside adapters.zip/conf/images/.
+    if project_dir is not None:
+        icon_map = _load_icon_map(project_dir)
+        ak_icon_name = icon_map.get("_adapter_kind", "default.svg")
+        icon_bytes = _resolve_icon(ak_icon_name, project_dir)
+    else:
+        # No project_dir supplied — use the shared default SVG directly.
+        default_svg = _HERE / "templates" / "icons" / "default.svg"
+        icon_bytes = default_svg.read_bytes() if default_svg.is_file() else b""
 
     with zipfile.ZipFile(pak_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.txt", _generate_outer_manifest(project))
         zf.writestr("eula.txt", _read_license())
-        zf.writestr("default.png", icon_bytes)
+        zf.writestr("default.svg", icon_bytes)
         zf.writestr("resources/resources.properties", "")
         zf.writestr("adapters.zip", adapters_zip_bytes)
 
@@ -695,7 +708,9 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
         )
 
         # Step 10+11: generate manifest and write outer .pak
-        pak_path = _write_outer_pak(project, adapters_zip_bytes, Path(output_dir))
+        pak_path = _write_outer_pak(
+            project, adapters_zip_bytes, Path(output_dir), project_dir
+        )
 
     print(f"Built: {pak_path}", file=sys.stderr)
 
