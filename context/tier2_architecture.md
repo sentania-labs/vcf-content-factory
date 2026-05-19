@@ -316,10 +316,9 @@ an explicit INFO level override. Do NOT use:
 
 ### JSON parsing
 
-The framework does not include a JSON library. Write a per-adapter
-`SimpleJson` parser or bundle Gson/Jackson in the project's `lib/`.
-FRAMEWORK GAP — a shared JSON utility should be added to
-`vcfcf-adapter-base.jar`.
+`com.vcfcf.adapter.json.SimpleJson` is included in the framework JAR.
+Zero-dependency recursive-descent parser. Sufficient for REST API
+responses. For adapters needing full Jackson/Gson, bundle in `lib/`.
 
 ### Auth patterns
 
@@ -328,13 +327,50 @@ The `SessionCookieAuth` strategy doesn't fit. The adapter manages
 auth directly by appending `&_sid=<token>` to every request URL.
 Consider adding a `QueryParamAuth` strategy to the framework.
 
+## Framework helpers (Layer 3)
+
+| Component | Package | Purpose |
+|---|---|---|
+| `SimpleJson` | `com.vcfcf.adapter.json` | Zero-dep recursive-descent JSON parser |
+| `ForeignResourceResolver` | `com.vcfcf.adapter.stitch` | Cross-MP resource lookup via Suite API. Caches by (adapterKind, resourceKind, identifierName). Used for Datastore/Host/VM stitching. |
+| `RelationshipBuilder` | `com.vcfcf.adapter.stitch` | Fluent parent/child + cross-adapter relationship construction for `getRelationships()` |
+
+## Pak signing roadmap
+
+**Current (Phase 2):** paks ship unsigned via the VCF Content Factory
+bundle pipeline. The appliance accepts unsigned paks without admin
+override (confirmed empirically — 42 unsigned installs in the devel
+corpus, see `cleanroom-spec/spec/16-platform-install-and-signing.md`).
+
+**Future — self-signed:** generate a VCF Content Factory keypair, sign
+paks with it, include `signature.mf` + `signature.cert`. The appliance
+will report `signed: true, signatureValid: true, certificateUntrusted:
+true` — proves provenance but doesn't achieve platform trust. Users
+who care can verify the cert manually. Design the `--sign` step as a
+pluggable hook in `sdk_builder.py` (no-op today).
+
+**Future — marketplace:** for paks promoted through the VMware/Broadcom
+marketplace, Broadcom re-signs with their trusted key. The appliance
+reports `certificateUntrusted: false`. This is the Broadcom-side
+process; the factory's job is to produce a pak that passes marketplace
+review. Scott will work internally on the marketplace submission
+pipeline once the content generation workflow is proven.
+
+**The three tiers:**
+
+| Tier | Signature | Platform trust | Distribution |
+|---|---|---|---|
+| Unsigned | none | accepted (no gate) | GitHub, direct download, bundle pipeline |
+| Self-signed | VCF-CF keypair | `certificateUntrusted: true` (accepted, not trusted) | Same, but with provenance proof |
+| Marketplace | Broadcom key | `certificateUntrusted: false` (fully trusted) | VMware marketplace |
+
 ## Implementation status
 
 - Phase 1 (framework + tooling skeleton): **COMPLETE**
-- Phase 2 (Synology adapter): **IN PROGRESS** — build 1.0.0.6
-  installed on devel, 22 objects discovered, 278 metrics collected.
-  Remaining: parent/child relationships, ARIA_OPS stitching (iSCSI
-  NAA + NFS export path → VMWARE Datastore).
+- Phase 2 (Synology adapter): **IN PROGRESS** — build 1.0.0.7
+  installed on devel, 22 objects discovered, 278 metrics collected,
+  internal parent/child relationships working. Remaining: cross-MP
+  Datastore stitching via ForeignResourceResolver (build 8).
 - Phase 3 (polish, agent prompts, promotion docs): not started.
 
 Tracking: `designs/tier2-mp-architecture-plan.md`.
