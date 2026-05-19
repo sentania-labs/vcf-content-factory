@@ -290,11 +290,20 @@ def _assemble_adapters_zip(
     buf = io.BytesIO()
     adapter_dir = project.adapter_dir_name
 
+    def _add_dir(zf: zipfile.ZipFile, dirname: str) -> None:
+        """Add an explicit zero-byte directory entry to the zip.
+
+        The platform's SyncAdapters.extractFiles() uses Files.copy()
+        which requires parent directories to exist.  It creates them
+        from explicit directory entries in the zip — without these,
+        extraction fails with NoSuchFileException.
+        """
+        if not dirname.endswith("/"):
+            dirname += "/"
+        zf.writestr(dirname, "")
+
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         # Inner manifest.txt — JSON format, identical to outer pak manifest.txt.
-        # Verified against HPE SimpliVity and Pure Storage reference paks.
-        # NOTE: ENTRYCLASS/KINDKEY key=value belongs ONLY in adapter.properties
-        # inside the adapter JAR (handled by _write_adapter_properties).
         zf.writestr("manifest.txt", _generate_outer_manifest(project))
 
         # eula.txt (empty placeholder — duplicated from outer pak per wire format)
@@ -307,7 +316,8 @@ def _assemble_adapters_zip(
         else:
             zf.writestr("default.png", "")
 
-        # resources/resources.properties at the adapters.zip root (compat)
+        # resources/ directory + resources.properties at adapters.zip root
+        _add_dir(zf, "resources")
         res_file = project_dir / "resources" / "resources.properties"
         if res_file.is_file():
             zf.writestr("resources/resources.properties",
@@ -317,6 +327,14 @@ def _assemble_adapters_zip(
 
         # Entry JAR at the root of adapters.zip
         zf.write(adapter_jar, adapter_jar.name)
+
+        # Adapter subdirectory tree — explicit dir entries first
+        _add_dir(zf, adapter_dir)
+        _add_dir(zf, f"{adapter_dir}/conf")
+        _add_dir(zf, f"{adapter_dir}/conf/resources")
+        _add_dir(zf, f"{adapter_dir}/lib")
+        _add_dir(zf, f"{adapter_dir}/work")
+        _add_dir(zf, f"{adapter_dir}/doc")
 
         # describe.xml
         describe_src = project_dir / "describe.xml"
@@ -336,10 +354,6 @@ def _assemble_adapters_zip(
         # lib/ directory — bundled JARs
         for jar in lib_jars:
             zf.write(jar, f"{adapter_dir}/lib/{jar.name}")
-
-        # Empty work/ and doc/ dirs (structural convention; ensures the dirs exist)
-        zf.writestr(f"{adapter_dir}/work/.gitkeep", "")
-        zf.writestr(f"{adapter_dir}/doc/.gitkeep", "")
 
     return buf.getvalue()
 
