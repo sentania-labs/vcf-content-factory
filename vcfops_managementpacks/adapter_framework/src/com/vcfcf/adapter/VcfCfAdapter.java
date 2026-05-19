@@ -47,6 +47,21 @@ import java.util.logging.Level;
 public abstract class VcfCfAdapter<C> extends UnlicensedAdapter {
 
 	/**
+	 * Platform-reflection constructor.
+	 *
+	 * <p>The Tier 2 platform instantiates adapter classes via reflection using
+	 * the two-argument signature {@code (String adapterDir, Integer adapterInstanceId)}.
+	 * This constructor satisfies that requirement by delegating to
+	 * {@code UnlicensedAdapter(String, Integer)} → {@code AdapterBase(String, Integer)}.
+	 *
+	 * @param adapterDir        the adapter directory path supplied by the platform
+	 * @param adapterInstanceId the adapter instance identifier supplied by the platform
+	 */
+	public VcfCfAdapter(String adapterDir, Integer adapterInstanceId) {
+		super(adapterDir, adapterInstanceId);
+	}
+
+	/**
 	 * The typed configuration for this adapter instance.
 	 * Populated by {@link #configure(ResourceStatus, ResourceConfig)}.
 	 */

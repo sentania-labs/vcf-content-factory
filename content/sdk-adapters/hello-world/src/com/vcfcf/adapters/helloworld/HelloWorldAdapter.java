@@ -45,6 +45,10 @@ public final class HelloWorldAdapter extends VcfCfAdapter<HelloWorldConfig> {
 	/** Monotonically increasing counter to prove metrics change each cycle. */
 	private final AtomicLong tickCount = new AtomicLong(0);
 
+	public HelloWorldAdapter(String adapterDir, Integer adapterInstanceId) {
+		super(adapterDir, adapterInstanceId);
+	}
+
 	@Override
 	protected String getAdapterDirectory() {
 		return ADAPTER_KIND;
