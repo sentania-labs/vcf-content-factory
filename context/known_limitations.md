@@ -220,3 +220,26 @@ rather than assuming this limitation blocks everything.
 Authority: `context/lessons_dell_redfish_2026_05_18.md` (empirical
 session writeup with MPB error messages for each failure mode);
 `context/api_pattern_catalog.md` Redfish entry.
+
+## Pak install is UI-only (not scriptable via Suite API)
+
+The Suite API has no pak install endpoint. `.pak` files must be
+installed via the VCF Ops admin UI (Administration → Solutions →
+Upload). The bundle install scripts (`install.py`, `install.ps1`)
+use the Suite API and cannot install paks.
+
+**Impact on bundles that include management paks:** the README and
+install instructions must explicitly state: "Install the .pak via
+the VCF Ops UI first, then run `install.py` for the content bundle."
+The `managementpacks:` field in the bundle manifest identifies the
+dependency but does not automate the install.
+
+**Impact on the `/publish` pipeline:** the auto-generated README in
+the distribution repo must include pak install instructions before
+the content install section for any bundle that references a
+management pack.
+
+Alternatives considered and deferred:
+- UI session auth in the install script (complex, adds Struts login)
+- SSH + pakManager in the install script (requires SSH access)
+- CaSA REST API (tested, returns "Operation failed" on all pak ops)
