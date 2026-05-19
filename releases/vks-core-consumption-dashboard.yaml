@@ -9,5 +9,6 @@ description: 'Per-vCenter breakdown of VM vCPU by role: VKS guest nodes, Supervi
   9.x and Aria Operations 8.18. Replaces the per-vCenter PowerCLI VKS core-consumption
   script.'
 name: vks-core-consumption-dashboard
+release_date: '2026-04-27'
 release_notes: ''
 version: '1.0'

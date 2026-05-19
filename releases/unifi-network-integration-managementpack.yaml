@@ -13,5 +13,6 @@ description: Monitors UniFi network devices via the Integration API v1. Collects
   device. Uses stateless X-API-Key auth (no login/logout session). Requires UniFi
   Network Application 10.1.84+ with Integration API enabled.
 name: unifi-network-integration-managementpack
+release_date: '2026-05-09'
 release_notes: ''
 version: '1.0'

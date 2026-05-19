@@ -13,5 +13,6 @@ description: VKS Core Consumption suite for VCF Operations — ships the interac
   9.x and Aria Operations 8.18 (productName contains "Kubernetes" matches both VKS
   and TKGS node images; Supervisor CP identified by VM-name pattern).
 name: vks-core-consumption-bundle
+release_date: '2026-04-27'
 release_notes: ''
 version: '1.0'

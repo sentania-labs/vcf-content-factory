@@ -495,8 +495,12 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
             filename = _zip_filename(r.name)
             zip_path = dist_repo / subdir / filename
 
-            # Release date from filesystem mtime if the zip exists, else "—".
-            if zip_path.exists():
+            # Release date: prefer the stable release_date field stamped in the
+            # manifest at /release time.  Fall back to zip mtime only if the
+            # field is absent (pre-existing manifests that were never re-released).
+            if r.release_date:
+                released_date = r.release_date
+            elif zip_path.exists():
                 mtime = zip_path.stat().st_mtime
                 released_date = (
                     __import__("datetime")

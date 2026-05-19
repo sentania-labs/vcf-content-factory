@@ -11,5 +11,6 @@ description: Single-dashboard capacity review for a VCF Ops admin. Top section s
   Colors follow the standard three-band stoplight throughout. Use for quarterly capacity
   reviews and before any cluster-scale VM deployment.
 name: capacity-assessment-dashboard
+release_date: '2026-04-27'
 release_notes: ''
 version: '1.0'

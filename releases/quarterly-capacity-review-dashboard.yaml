@@ -17,5 +17,6 @@ description: Executive quarterly capacity review. Scope picker on the left drive
   by side. Row 3 shows a 90-day CPU demand trend for the selected cluster. P95 figures
   are emphasized throughout.
 name: quarterly-capacity-review-dashboard
+release_date: '2026-05-14'
 release_notes: ''
 version: '1.0'

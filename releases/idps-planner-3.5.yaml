@@ -7,5 +7,6 @@ description: vDefend IDPS resource-monitoring dashboard for VCF Operations. Trac
   PPS / 9 Gbps), with peak-based metrics (5-minute peak, period peak, 95th percentile)
   for safety-first capacity planning. Full description in the bundle README.
 name: idps-planner-3.5
+release_date: '2026-04-27'
 release_notes: ''
 version: '3.5'

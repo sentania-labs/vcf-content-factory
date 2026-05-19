@@ -10,5 +10,6 @@ description: 'Demand-driven capacity planning v2. Combines percentage-first clus
   broad visual scanning (heatmaps) at DC level, then drill-down detail (tables) at
   cluster level.'
 name: demand-driven-capacity-v2
+release_date: '2026-04-27'
 release_notes: ''
 version: '1.1'

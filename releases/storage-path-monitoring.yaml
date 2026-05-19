@@ -7,5 +7,6 @@ description: Monitors active storage path counts on ESXi hosts and alerts when h
   before it escalates to APD or PDL. Uses a variance-based approach (max minus min)
   so it works regardless of the expected path count per cluster.
 name: storage-path-monitoring
+release_date: '2026-05-07'
 release_notes: ''
 version: '1.0'

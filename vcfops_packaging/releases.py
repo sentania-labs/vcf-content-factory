@@ -89,6 +89,7 @@ class ReleaseDef:
     artifacts: List[ReleaseArtifact]
     deprecates: List[Path]           # resolved absolute paths
     manifest_path: Path
+    release_date: Optional[str] = None   # YYYY-MM-DD; None if not present
 
 
 def _load_released_flag(path: Path) -> Optional[bool]:
@@ -161,6 +162,12 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
 
     # --- release_notes (optional) ---
     release_notes = str(data.get("release_notes", "") or "").strip()
+
+    # --- release_date (optional, YYYY-MM-DD) ---
+    raw_release_date = data.get("release_date")
+    release_date: Optional[str] = None
+    if raw_release_date is not None:
+        release_date = str(raw_release_date).strip() or None
 
     # Resolve root: releases/ sits one level under repo root.
     if repo_root is None:
@@ -242,6 +249,7 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
         artifacts=artifacts,
         deprecates=deprecates,
         manifest_path=path,
+        release_date=release_date,
     )
 
 

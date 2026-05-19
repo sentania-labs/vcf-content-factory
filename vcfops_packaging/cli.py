@@ -789,10 +789,14 @@ def cmd_release(args) -> int:
     except ValueError:
         source_rel = str(source_path)
 
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+
     manifest_data = {
         "name": slug,
         "version": version,
         "description": description,
+        "release_date": today,
         "release_notes": release_notes,
         "artifacts": [
             {

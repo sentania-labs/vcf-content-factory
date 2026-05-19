@@ -11,5 +11,6 @@ description: >
   Datastore shows the backing Synology storage health. Requires DSM 7.2+ with
   admin API access on port 5001.
 name: synology-diskstation-managementpack
+release_date: '2026-05-19'
 release_notes: 'First public build. 23 objects, 290+ metrics, Datastore stitching.'
 version: '1.0'
