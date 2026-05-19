@@ -165,6 +165,15 @@
 				<ResourceAttribute key="status" nameKey="135" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="description" nameKey="136" dataType="string" isProperty="true"/>
 			</ResourceGroup>
+
+			<ResourceGroup key="Cache" nameKey="137" instanced="false">
+				<ResourceAttribute key="cache_enabled" nameKey="138" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="cache_status" nameKey="139" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="cache_read_hit_rate" nameKey="161" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="cache_write_hit_rate" nameKey="162" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
 		</ResourceKind>
 
 		<!-- ================================================================ -->
@@ -289,7 +298,57 @@
 			</ResourceGroup>
 		</ResourceKind>
 
+		<!-- ================================================================ -->
+		<!-- SynologySsdCache: SSD/NVMe cache hit rates + capacity           -->
+		<!-- ================================================================ -->
+		<ResourceKind key="SynologySsdCache" nameKey="220" type="1">
+			<ResourceIdentifier key="cache_id" nameKey="221" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="HitRate" nameKey="222" instanced="false">
+				<ResourceAttribute key="read_hit_rate" nameKey="223" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="write_hit_rate" nameKey="224" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Capacity" nameKey="225" instanced="false">
+				<ResourceAttribute key="total_bytes" nameKey="226" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="occupied_bytes" nameKey="227" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="reusable_bytes" nameKey="228" dataType="float"
+				                   isProperty="false" defaultMonitored="false" unit="bytes"/>
+				<ResourceAttribute key="memory_used" nameKey="229" dataType="float"
+				                   isProperty="false" defaultMonitored="false" unit="bytes"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Properties" nameKey="230" instanced="false">
+				<ResourceAttribute key="mode" nameKey="231" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="status" nameKey="232" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="mount_volume" nameKey="233" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="disk_failure_count" nameKey="234" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
 	</ResourceKinds>
+
+	<TraversalSpecKinds>
+		<TraversalSpecKind name="Synology DiskStation Storage Tree"
+		                   nameKey="240"
+		                   rootAdapterKind="synology_diskstation"
+		                   rootResourceKind="synology_diskstation"
+		                   filterType="GENERIC_RELATION"
+		                   usedFor="ALL">
+			<!-- StoragePool > Volume > iSCSI LUN -->
+			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyStoragePool::child||synology_diskstation::SynologyVolume::child||synology_diskstation::SynologyIscsiLun::child"/>
+			<!-- StoragePool > Volume > NFS Export -->
+			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyStoragePool::child||synology_diskstation::SynologyVolume::child||synology_diskstation::SynologyNfsExport::child"/>
+			<!-- StoragePool > Volume > SSD Cache -->
+			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyStoragePool::child||synology_diskstation::SynologyVolume::child||synology_diskstation::SynologySsdCache::child"/>
+			<!-- StoragePool > Disk -->
+			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyStoragePool::child||synology_diskstation::SynologyDisk::child"/>
+		</TraversalSpecKind>
+	</TraversalSpecKinds>
 
 	<LicenseConfig enabled="false"/>
 

@@ -5,8 +5,17 @@
 - **Authored by:** api-cartographer
 - **Target instance:** `$SYNO_HOST:$SYNO_PORT` — DS1520+ running DSM
   7.3.2-86009 Update 1
-- **Last updated:** 2026-05-18
+- **Last updated:** 2026-05-19
 - **Update history:**
+  - 2026-05-19 — SSD cache deep dive by api-explorer. Closed
+    gap #8: captured full verbatim `sharedCaches[]` and
+    `ssdCaches[]` from `load_info` with complete field
+    references. Documented `storagePools[].cache_disks` as the
+    pool-to-cache link. Added NVMe disk distinguishing fields.
+    Confirmed NVMe IO works in Utilization (current + history).
+    Dead-ended `Flashcache`, `Cache.Protection`,
+    `Core.Storage.Volume` APIs (no valid methods on DSM 7.3.2).
+    Updated `synology-storage.md` with all findings.
   - 2026-05-18 — Added `synology-vcfops-stitching.md` entry to
     the file index. That map documents how to bind Synology
     iSCSI LUNs and NFS exports onto existing VMWARE Datastores
@@ -261,6 +270,16 @@
 
 7. **Network aggregation** -- the Utilization `network[]` array has per-NIC data. The design puts net_rx/tx on the Diskstation object. MPB needs to either sum across NICs or pick one.
 
-8. **SSD cache as separate object vs. property** -- the v1 design does not have SSD Cache as a separate object type. Cache disks (NVMe) are just Disk objects with `diskType: "NVMe"`. The `sharedCaches[]` response data is unused in v1 but available for v2.
+8. **SSD cache as separate object vs. property** -- FULLY MAPPED
+   2026-05-19. `ssdCaches[]` provides a complete SSD Cache object:
+   `hit_rate` (83% read), `hit_rate_write` (99%), `hit_rates`
+   per-interval breakdown (7 intervals with `io_hit` /
+   `io_need_acceleration`), `size.{total,occupied,reusable}`,
+   `memory` (metadata cache RAM), `mode` (read/write), `status`,
+   `space_status`. Cache disks are in `disks[]` with
+   `portType:"cache"`, `isSsd:true`, `diskType:"M.2 NVMe"`.
+   `storagePools[].cache_disks` provides the pool-to-cache-disk
+   link. Full verbatim schemas in `synology-storage.md`.
+   No additional endpoint needed -- `load_info` has everything.
 
 9. **LUN-to-Target mapping method** -- current join is by naming convention. `SYNO.Core.ISCSI.LUN` may have a `map_target` method for authoritative mapping. Needs investigation.

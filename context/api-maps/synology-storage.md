@@ -5,8 +5,22 @@
 - **Authored by:** api-cartographer
 - **Target instance:** `$SYNO_HOST:$SYNO_PORT` — DS1520+ running DSM
   7.3.2-86009 Update 1 (credentials from repo `.env`)
-- **Last updated:** 2026-04-21
+- **Last updated:** 2026-05-19
 - **Update history:**
+  - 2026-05-19 — SSD cache deep dive. Captured full verbatim
+    `sharedCaches[]` and `ssdCaches[]` from `load_info` (both
+    were summary-only before). Documented all cache metrics:
+    `hit_rate`, `hit_rate_write`, `hit_rates` per-interval
+    breakdown, `size.{total,occupied,reusable}`, `memory`,
+    `mode`, `status`, `space_status`. Added
+    `storagePools[].cache_disks` pool-to-cache link. Added
+    NVMe disk distinguishing fields table (7 fields that
+    differentiate NVMe cache disks from SATA data disks).
+    Confirmed NVMe IO from `Utilization disk.disk[]` including
+    history. Probed `SYNO.Storage.CGI.Flashcache`,
+    `Cache.Protection`, `Core.Storage.Volume` — all dead ends
+    on DSM 7.3.2. Updated Identifier Chains with full cache
+    relationship graph.
   - 2026-04-21 — KISS-unblock refresh. Captured full verbatim
     `volumes[0]` from `SYNO.Storage.CGI.Storage load_info`.
     Documented several 2026-04-16 field errors superseded by
@@ -23,8 +37,8 @@
     Captured load_info + utilization per-disk/per-volume IO;
     drafted object model + identifier chains.
 - **Evidence basis:** live API calls this session (auth, load_info,
-  several filter permutations against `Utilization get`); prior
-  map content inherited from 2026-04-16 session.
+  Utilization, Flashcache/Cache.Protection/Smart probes);
+  prior map content inherited from 2026-04-21 and 2026-04-16.
 - **Notes:** Any bare claim without an inline tag is either
   trivially obvious (e.g., "GET against this path") or inherited
   from 2026-04-16 without re-verification — treat as
@@ -331,19 +345,366 @@ Downstream MP authoring must handle the shared-cache used_by case
 or those two disks lose their parent relationship.
 `[observed 2026-04-21]`
 
-#### Response Schema — `sharedCaches[]` + `ssdCaches[]`
+#### Response Schema — `sharedCaches[]` (full verbatim) `[observed 2026-05-19]`
 
-- `sharedCaches[0]` exists on this NAS: `id: "shared_cache_1"`,
-  `device_type: "raid_1"`, `disks: ["nvme0n1","nvme1n1"]`,
-  `size.total` = ~2 TB (string). `[observed 2026-04-21]`
-- `ssdCaches[0]` is the **allocated cache** for volume 1:
-  `id: "alloc_cache_1_1"`, `mountSpaceId: "volume_1"`,
-  `path: "/volume1"`, `mode: "write"`, plus a **`hit_rates` object**
-  with per-interval hit counts (`Minutely`, `Current`, `Daily`,
-  `Weekly`, `Monthly`, `HalfYearly`, `Yearly`). Each interval
-  entry has `io_hit`, `io_need_acceleration`, `data_size`. These
-  could feed a future SSD-Cache metric set without needing a
-  separate endpoint. `[observed 2026-04-21]`
+The physical RAID group underlying the SSD cache. On this NAS
+there is one shared cache composed of two NVMe drives in RAID 1.
+
+```json
+{
+  "apm_flush_status": "no_need",
+  "can_do": {
+    "delete": true,
+    "disk_replace": true,
+    "migrate": { "add_mirror": 2, "to_raid5": 1 },
+    "raid_cross": true
+  },
+  "compatibility": true,
+  "desc": "",
+  "device_type": "raid_1",
+  "disks": ["nvme0n1", "nvme1n1"],
+  "id": "shared_cache_1",
+  "is_hcl_migrated": false,
+  "is_missing": false,
+  "is_writable": true,
+  "minimal_disk_size": "2000394258432",
+  "num_id": 1,
+  "raids": [
+    {
+      "designedDiskCount": 2,
+      "devices": [
+        { "id": "nvme1n1", "slot": 0, "status": "normal" },
+        { "id": "nvme0n1", "slot": 1, "status": "normal" }
+      ],
+      "hasParity": false,
+      "minDevSize": "2000394258432",
+      "normalDevCount": 2,
+      "raidCrashedReason": 0,
+      "raidPath": "/dev/md3",
+      "raidStatus": 1,
+      "spares": []
+    }
+  ],
+  "size": {
+    "recyclable": "0",
+    "total": "2000393601024",
+    "used": "2000393601024"
+  },
+  "space_path": "/dev/shared_cache_vg1",
+  "task": "none"
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | STRING | Primary key (`shared_cache_1`); matches `disks[].used_by` on NVMe drives `[observed 2026-05-19]` |
+| `device_type` | STRING | RAID level of cache group (`raid_1` = mirrored) `[observed 2026-05-19]` |
+| `disks[]` | ARRAY[STRING] | Member disk IDs — join to `disks[].id` `[observed 2026-05-19]` |
+| `raids[].devices[].status` | STRING | Per-device health in RAID (`normal`, `degraded`) `[observed 2026-05-19]` |
+| `raids[].raidStatus` | NUMBER | 1 = healthy `[observed 2026-05-19]` |
+| `size.total` | STRING (bytes) | Raw capacity of the shared cache RAID `[observed 2026-05-19]` |
+| `size.used` | STRING (bytes) | Equals total (fully allocated to ssdCaches) `[observed 2026-05-19]` |
+| `size.recyclable` | STRING (bytes) | Always "0" observed `[observed 2026-05-19]` |
+| `is_missing` | BOOLEAN | `true` if a member disk is absent `[observed 2026-05-19]` |
+| `is_writable` | BOOLEAN | `[observed 2026-05-19]` |
+| `space_path` | STRING | LVM VG path (`/dev/shared_cache_vg1`) `[observed 2026-05-19]` |
+
+#### Response Schema — `ssdCaches[]` (full verbatim) `[observed 2026-05-19]`
+
+The **allocated cache** mounted on a specific volume. This is the
+object with the cache metrics (hit rates, space, mode). On this NAS
+there is one ssdCache (`alloc_cache_1_1`) bound to `volume_1`.
+
+```json
+{
+  "SSDPath": "/dev/shared_cache_vg1/alloc_cache_1",
+  "SSDUUID": "0lpu3x-JrY7-Crt2-F2RI-j2xS-FYEY-xNGUYF",
+  "cacheStatus": "",
+  "cache_disks": [],
+  "can_assemble": false,
+  "can_do": {
+    "cancelDelete": false,
+    "delete": true,
+    "disk_replace": true,
+    "migrate": { "add_mirror": 2, "to_raid5": 1 },
+    "raid_cross": true
+  },
+  "compatibility": true,
+  "container": "internal",
+  "designedDiskCount": 2,
+  "dev_count": 2,
+  "device_type": "raid_1",
+  "disk_failure_number": 0,
+  "disks": ["nvme0n1", "nvme1n1"],
+  "drive_type": 1,
+  "hash_mapping": true,
+  "hit_rate": 83,
+  "hit_rate_write": 99,
+  "hit_rates": {
+    "Current": {
+      "data_size": 1,
+      "io_hit": 172,
+      "io_need_acceleration": 172,
+      "success": true
+    },
+    "Daily": {
+      "data_size": "1427",
+      "io_hit": 5917471,
+      "io_need_acceleration": 5959620,
+      "success": true
+    },
+    "HalfYearly": {
+      "data_size": "8614",
+      "io_hit": 1705720204,
+      "io_need_acceleration": 1733206134,
+      "success": true
+    },
+    "Minutely": {
+      "data_size": "19",
+      "io_hit": 42045,
+      "io_need_acceleration": 42045,
+      "success": true
+    },
+    "Monthly": {
+      "data_size": "8601",
+      "io_hit": 189860364,
+      "io_need_acceleration": 191802026,
+      "success": true
+    },
+    "Weekly": {
+      "data_size": "9983",
+      "io_hit": 41575779,
+      "io_need_acceleration": 41917058,
+      "success": true
+    },
+    "Yearly": {
+      "data_size": "4303",
+      "io_hit": 7380316079,
+      "io_need_acceleration": 7515047219,
+      "success": true
+    },
+    "has_history": true
+  },
+  "id": "alloc_cache_1_1",
+  "is_actioning": false,
+  "is_backgroundbuilding": false,
+  "is_hcl_migrated": false,
+  "is_missing": false,
+  "is_scheduled": false,
+  "last_done_time": 0,
+  "limited_disk_number": 24,
+  "loaded": true,
+  "maxDegradeFlush": false,
+  "maximal_disk_size": "0",
+  "memory": "763084800",
+  "metadataCache": true,
+  "metadataCacheOptionShow": true,
+  "minimal_disk_size": "2000394258432",
+  "minimal_spare_size": "0",
+  "missing_drives": [],
+  "mode": "write",
+  "mountSpaceId": "volume_1",
+  "next_schedule_time": 0,
+  "notes": [],
+  "num_id": 0,
+  "path": "/volume1",
+  "policy": 0,
+  "pool_path": "",
+  "progress": {
+    "cur_step": 0,
+    "is_resync_speed_limited": false,
+    "percent": "-1",
+    "remaining_time": 0,
+    "step": "none",
+    "total_step": 0
+  },
+  "protectProgress": -1,
+  "raids": [
+    {
+      "designedDiskCount": 2,
+      "devices": [
+        { "id": "nvme1n1", "slot": 0, "status": "normal" },
+        { "id": "nvme0n1", "slot": 1, "status": "normal" }
+      ],
+      "hasParity": false,
+      "minDevSize": "2000394258432",
+      "normalDevCount": 2,
+      "raidCrashedReason": 0,
+      "raidPath": "/dev/md3",
+      "raidStatus": 1,
+      "spares": []
+    }
+  ],
+  "repair_action": "none",
+  "scrubbingStatus": "",
+  "show_assemble_btn": false,
+  "size": {
+    "occupied": "247198187520",
+    "reusable": "1751135879168",
+    "total": "2000381018112"
+  },
+  "skipSeqIO": true,
+  "space_path": "/dev/shared_cache_vg1/alloc_cache_1",
+  "space_status": {
+    "detail": "cache_normal",
+    "show_attention": false,
+    "show_danger": false,
+    "show_flag_detail": "",
+    "status": "cache_normal",
+    "summary_status": "normal"
+  },
+  "spares": [],
+  "status": "normal",
+  "suggestions": [],
+  "summary_status": "normal",
+  "task": "none",
+  "timebackup": false,
+  "uuid": "0lpu3x-JrY7-Crt2-F2RI-j2xS-FYEY-xNGUYF",
+  "version": 3,
+  "version_status": "vol_latest_version",
+  "vspace_can_do": { "...": "omitted" }
+}
+```
+
+#### `ssdCaches[]` field reference `[observed 2026-05-19]`
+
+**Identity and binding:**
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | STRING | Primary key (`alloc_cache_1_1`); matches `volumes[].cache.id` `[observed 2026-05-19]` |
+| `uuid` / `SSDUUID` | STRING | Stable DSM UUID (identical values) `[observed 2026-05-19]` |
+| `mountSpaceId` | STRING | Volume this cache serves (`volume_1`) -- **the join to Volume** `[observed 2026-05-19]` |
+| `path` | STRING | Mount path of the volume (`/volume1`) `[observed 2026-05-19]` |
+| `SSDPath` | STRING | LVM LV path (`/dev/shared_cache_vg1/alloc_cache_1`) `[observed 2026-05-19]` |
+| `disks[]` | ARRAY[STRING] | Member disk IDs (same as `sharedCaches[].disks[]`) `[observed 2026-05-19]` |
+| `mode` | STRING | `"write"` = read-write cache; `"read"` = read-only cache `[observed 2026-05-19]` |
+| `device_type` | STRING | RAID level (`raid_1`) `[observed 2026-05-19]` |
+
+**Hit rates (pre-computed by DSM):**
+
+| Field | Type | Notes |
+|---|---|---|
+| `hit_rate` | NUMBER | Read hit rate percentage (83 = 83%) `[observed 2026-05-19]` |
+| `hit_rate_write` | NUMBER | Write hit rate percentage (99 = 99%) `[observed 2026-05-19]` |
+| `hit_rates.<interval>.io_hit` | NUMBER | IOs served from cache in the interval window `[observed 2026-05-19]` |
+| `hit_rates.<interval>.io_need_acceleration` | NUMBER | Total IOs that could be cached (denominator) `[observed 2026-05-19]` |
+| `hit_rates.<interval>.data_size` | NUMBER/STRING | Number of sample points in the interval `[observed 2026-05-19]` |
+| `hit_rates.<interval>.success` | BOOLEAN | Whether interval data is valid `[observed 2026-05-19]` |
+| `hit_rates.has_history` | BOOLEAN | Whether historical data is available `[observed 2026-05-19]` |
+
+**Available intervals**: `Current`, `Minutely`, `Daily`, `Weekly`,
+`Monthly`, `HalfYearly`, `Yearly`. Computed hit rate per interval:
+`io_hit / io_need_acceleration * 100`.
+
+Observed values (2026-05-19): Daily 99.29%, Weekly 99.19%,
+Monthly 98.99%, HalfYearly 98.41%, Yearly 98.21%. The inline
+`hit_rate` (83%) appears to be a different calculation window
+(possibly current/recent) vs. the interval-based rates.
+
+**Size and space:**
+
+| Field | Type | Notes |
+|---|---|---|
+| `size.total` | STRING (bytes) | Total allocated cache space (1863 GiB on this NAS) `[observed 2026-05-19]` |
+| `size.occupied` | STRING (bytes) | Actual cached data (230 GiB = 12.4% of total) `[observed 2026-05-19]` |
+| `size.reusable` | STRING (bytes) | Reclaimable space (total - occupied, roughly) `[observed 2026-05-19]` |
+| `memory` | STRING (bytes) | Metadata cache memory allocation (728 MiB) `[observed 2026-05-19]` |
+| `metadataCache` | BOOLEAN | Whether metadata caching is enabled `[observed 2026-05-19]` |
+
+**Health and status:**
+
+| Field | Type | Notes |
+|---|---|---|
+| `status` | STRING | `"normal"`, likely also `"degraded"`, `"crashed"` `[observed 2026-05-19]` |
+| `summary_status` | STRING | Mirrors `status` `[observed 2026-05-19]` |
+| `space_status.detail` | STRING | `"cache_normal"` -- cache-specific status detail `[observed 2026-05-19]` |
+| `space_status.status` | STRING | `"cache_normal"` `[observed 2026-05-19]` |
+| `space_status.show_attention` | BOOLEAN | Alert flag `[observed 2026-05-19]` |
+| `space_status.show_danger` | BOOLEAN | Alert flag `[observed 2026-05-19]` |
+| `disk_failure_number` | NUMBER | 0 = no failed disks `[observed 2026-05-19]` |
+| `is_missing` | BOOLEAN | `[observed 2026-05-19]` |
+| `loaded` | BOOLEAN | Whether cache is actively loaded/mounted `[observed 2026-05-19]` |
+
+**Operational:**
+
+| Field | Type | Notes |
+|---|---|---|
+| `skipSeqIO` | BOOLEAN | Skip sequential IO (optimize for random) `[observed 2026-05-19]` |
+| `hash_mapping` | BOOLEAN | Hash-based block mapping enabled `[observed 2026-05-19]` |
+| `policy` | NUMBER | Cache policy (0 observed; semantics unknown) `[observed 2026-05-19]` |
+| `maxDegradeFlush` | BOOLEAN | Whether degraded flush limit is reached `[observed 2026-05-19]` |
+| `protectProgress` | NUMBER | -1 = not in progress `[observed 2026-05-19]` |
+
+#### `storagePools[].cache_disks` — Pool-to-Cache link `[observed 2026-05-19]`
+
+**Key finding:** `storagePools[]` has a `cache_disks` field that
+lists the NVMe disk IDs serving as cache for that pool's volumes:
+
+```json
+"cache_disks": ["nvme0n1", "nvme1n1"]
+```
+
+This is separate from `storagePools[].disks[]` (which lists only
+the SATA data disks). The `cache_disks` field provides the
+Pool-to-Cache relationship from the pool side. Combined with
+`volumes[].cache.id` -> `ssdCaches[].id` -> `ssdCaches[].disks[]`,
+there are two independent paths to link pools/volumes to their
+cache disks. `[observed 2026-05-19]`
+
+#### NVMe disk distinguishing fields `[observed 2026-05-19]`
+
+NVMe cache disks appear in the same `disks[]` array as regular
+SATA drives. Fields that distinguish them:
+
+| Field | NVMe value | SATA value | Notes |
+|---|---|---|---|
+| `diskType` | `"M.2 NVMe"` | `"SATA"` | Primary discriminator `[observed 2026-05-19]` |
+| `isSsd` | `true` | `false` | Boolean SSD flag `[observed 2026-05-19]` |
+| `portType` | `"cache"` | `"normal"` | Distinguishes cache role from data role `[observed 2026-05-19]` |
+| `disk_location` | `"Native M.2"` | `"Main"` | Physical location descriptor `[observed 2026-05-19]` |
+| `used_by` | `"shared_cache_1"` | `"reuse_1"` (pool id) | Parent: cache group vs. storage pool `[observed 2026-05-19]` |
+| `allocation_role` | `"shared_cache_1"` | `"reuse_1"` | Mirrors `used_by` `[observed 2026-05-19]` |
+| `tray_status` | `"ssd cache"` | `"join"` | UI tray label `[observed 2026-05-19]` |
+| `has_system` | `false` | `true` | Cache disks have no system partition `[observed 2026-05-19]` |
+| `isSynoPartition` | `false` | `true` | `[observed 2026-05-19]` |
+| `container_id` | `2000` | `0` | M.2 slot container (2000 vs main bay 0) `[observed 2026-05-19]` |
+| `pciSlot` | `0` (or 1) | `-1` | PCI slot index for M.2 NVMe `[observed 2026-05-19]` |
+| `remain_life.value` | `81` / `79` | `-1` | Meaningful percentage for SSDs; -1 sentinel for HDDs `[observed 2026-05-19]` |
+| `unc` | `-1` | `0` | UNC sectors not applicable to NVMe; -1 sentinel `[observed 2026-05-19]` |
+| `smart_test_support` | `false` | `true` | NVMe SMART self-test not supported via this API `[observed 2026-05-19]` |
+
+#### NVMe cache disk IO (from Utilization) `[observed 2026-05-19]`
+
+NVMe cache disks appear in `Utilization disk.disk[]` with the
+same fields as SATA disks. They are identifiable by `display_name`
+prefix `"Cache device"`:
+
+```json
+{
+  "device": "nvme0n1",
+  "display_name": "Cache device 2",
+  "read_access": 3,
+  "read_byte": 64905,
+  "type": "internal",
+  "utilization": 1,
+  "write_access": 228,
+  "write_byte": 5458983
+}
+```
+
+History data also works via `interfaces.disk=["nvme0n1"]` with
+`type=history&time_range=week`: returns 10,081-point arrays at
+60-second intervals, same as SATA disks. `[observed 2026-05-19]`
+
+#### Dead-end APIs `[observed 2026-05-19]`
+
+| API | Methods tested | Result | Notes |
+|---|---|---|---|
+| `SYNO.Storage.CGI.Flashcache` | `get`, `list`, `load_info`, `info`, `status`, `load`, `query`, `check_env`, `estimate`, `create`, `delete`, `set_mode`, `set_policy`, `resize` | All error 103 | May be for dedicated (non-shared) cache only; no valid methods found on DSM 7.3.2 with shared cache `[observed 2026-05-19]` |
+| `SYNO.Storage.CGI.Cache.Protection` | `get`, `list`, `load_info`, `info`, `status`, `load`, `query` | All error 103 | No valid methods found `[observed 2026-05-19]` |
+| `SYNO.Core.Storage.Volume` | `get`, `list` | Error 101 (privilege) | Requires higher privilege than `claude` account has; `info`/`load` return 103 `[observed 2026-05-19]` |
+| `SYNO.Storage.CGI.Smart` | `get_health_info` (disk_id=nvme0n1) | Error 114 (privilege) | SMART detail for NVMe requires elevated privilege `[observed 2026-05-19]` |
 
 ---
 
@@ -605,17 +966,37 @@ MP must post-filter client-side. `[observed 2026-04-21]`
 - **Join key**: `storagePools[].disks[]` contains disk IDs matching `disks[].id`
 - `reuse_1` has `disks: ["sata1","sata2","sata3","sata4","sata5"]`
 
-### Shared Cache -> Disk `[observed 2026-04-21]`
+### Shared Cache -> Disk `[re-verified 2026-05-19]`
 - **Join key**: `sharedCaches[].disks[]` contains disk IDs
   (`nvme0n1`, `nvme1n1`)
 - NVMe disks have `used_by="shared_cache_1"` — so these two
   disks do NOT appear under any storage pool.
+- Reverse: `disks[].used_by` == `sharedCaches[].id`
+- Also: `disks[].allocation_role` mirrors `used_by` for cache disks
 
-### Volume -> Cache `[observed 2026-04-21]`
+### Storage Pool -> Cache Disks `[observed 2026-05-19]`
+- **Join key**: `storagePools[].cache_disks[]` contains NVMe disk
+  IDs (`["nvme0n1","nvme1n1"]`). This is separate from
+  `storagePools[].disks[]` (which lists SATA data disks only).
+- This provides the pool-side link to its cache hardware.
+  `cache_disks` is an array (can be empty if no cache is configured).
+
+### Volume -> SSD Cache `[re-verified 2026-05-19]`
 - **Join key**: `volumes[].cache.id` == `ssdCaches[].id`
 - e.g., `volume_1.cache.id = "alloc_cache_1_1"` links to
   `ssdCaches[0]` which has `mountSpaceId: "volume_1"` confirming
   reverse direction.
+- `volumes[].cache.status` gives cache health from the volume side
+  (`"normal"` observed).
+
+### SSD Cache -> Shared Cache `[observed 2026-05-19]`
+- Both have identical `disks[]` arrays and `raids[]` structures.
+- `ssdCaches[].SSDPath` references the `sharedCaches[].space_path`
+  VG: `/dev/shared_cache_vg1/alloc_cache_1` is an LV on
+  `/dev/shared_cache_vg1`.
+- Conceptually: `sharedCaches` = physical RAID group of NVMe disks;
+  `ssdCaches` = logical cache allocation mounted on a volume.
+  One shared cache can back multiple ssd caches (one per volume).
 
 ### Diskstation -> Disk (dual parent) `[unchanged since 2026-04-16]`
 - All `disks[]` are also direct children of the Diskstation
@@ -663,9 +1044,10 @@ here as backlog for a future cartography session:
   `detected_pools`, `missing_pools`, `overview_data`, `env`,
   `ports`. Could feed Diskstation-level environment/health
   metrics.
-- `ssdCaches[].hit_rates` object (7 interval entries) is a
+- ~~`ssdCaches[].hit_rates` object (7 interval entries) is a
   fully-formed metric source for an SSD Cache object type —
-  no additional endpoint needed.
+  no additional endpoint needed.~~ **Fully documented 2026-05-19**
+  — see `ssdCaches[]` verbatim schema + field reference above.
 - `SYNO.Core.System.Utilization` supports `type=history` with
   `time_range=week` returning 10,081-point arrays at 60-second
   intervals (~7 days × 24 h × 60 m = 10,080 + 1). Other

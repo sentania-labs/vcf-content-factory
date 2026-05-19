@@ -18,3 +18,4 @@ resource_kinds:
   SynologyIscsiLun:     iscsi_lun.svg
   SynologyNfsExport:    nfs_export.svg
   SynologyUps:          ups.svg
+  SynologySsdCache:     storage_pool.svg

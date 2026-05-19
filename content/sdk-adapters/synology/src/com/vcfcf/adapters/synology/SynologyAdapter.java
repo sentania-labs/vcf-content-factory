@@ -129,6 +129,16 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 					collection.add(r);
 				}
 
+				// --- SSD Caches ---
+				SimpleJson ssdCaches = storage.data().get("ssdCaches");
+				if (!ssdCaches.isNull()) {
+					for (SimpleJson cache : ssdCaches.asList()) {
+						String cacheId = cache.get("id").asString();
+						Resource r = createResource("SynologySsdCache", cacheId, "cache_id", cacheId);
+						collection.add(r);
+					}
+				}
+
 				// --- iSCSI LUNs ---
 				SimpleJson luns = api.iscsiLunList();
 				for (SimpleJson lun : luns.data().get("luns").asList()) {
@@ -185,7 +195,8 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 				try {
 					api.ensureSession();
 					collectDiskstation(result);
-					collectStorageTopology(result);
+					SimpleJson storage = collectStorageTopology(result);
+					collectSsdCache(result, storage);
 					collectIscsiLuns(result);
 					collectNfsExports(result);
 					collectUps(result);
@@ -314,7 +325,7 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 	// Collection: Storage Pools, Volumes, Disks (with IO join)
 	// -----------------------------------------------------------------------
 
-	private void collectStorageTopology(ResourceCollection result) throws Exception {
+	private SimpleJson collectStorageTopology(ResourceCollection result) throws Exception {
 		SimpleJson storage = api.storageLoadInfo();
 		SimpleJson util = api.utilization();
 
@@ -389,6 +400,21 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 				r.addData("IO|utilization_pct", io.get("utilization").asDouble());
 			}
 
+			// JOIN: Cache hit rates on Volume (from ssdCaches[] matched by path == vol_path)
+			SimpleJson ssdCaches = storage.data().get("ssdCaches");
+			if (!ssdCaches.isNull()) {
+				for (SimpleJson cache : ssdCaches.asList()) {
+					String mountPath = cache.get("path").asString("");
+					if (volPath.equals(mountPath)) {
+						r.addData("Cache|cache_enabled", "true");
+						r.addData("Cache|cache_status", cache.get("status").asString(""));
+						r.addData("Cache|cache_read_hit_rate", cache.get("hit_rate").asDouble());
+						r.addData("Cache|cache_write_hit_rate", cache.get("hit_rate_write").asDouble());
+						break;
+					}
+				}
+			}
+
 			result.add(r);
 		}
 
@@ -421,6 +447,39 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 				r.addData("IO|write_iops", io.get("write_access").asDouble());
 				r.addData("IO|utilization_pct", io.get("utilization").asDouble());
 			}
+
+			result.add(r);
+		}
+
+		return storage;
+	}
+
+	// -----------------------------------------------------------------------
+	// Collection: SSD Cache (hit rates + capacity)
+	// -----------------------------------------------------------------------
+
+	private void collectSsdCache(ResourceCollection result, SimpleJson storage) throws Exception {
+		SimpleJson caches = storage.data().get("ssdCaches");
+		if (caches.isNull() || caches.size() == 0) return;
+
+		for (SimpleJson cache : caches.asList()) {
+			String cacheId = cache.get("id").asString();
+			Resource r = findOrCreate(result, "SynologySsdCache", cacheId, "cache_id", cacheId);
+
+			r.addData("HitRate|read_hit_rate", cache.get("hit_rate").asDouble());
+			r.addData("HitRate|write_hit_rate", cache.get("hit_rate_write").asDouble());
+
+			SimpleJson size = cache.get("size");
+			r.addData("Capacity|total_bytes", size.get("total").asDouble());
+			r.addData("Capacity|occupied_bytes", size.get("occupied").asDouble());
+			r.addData("Capacity|reusable_bytes", size.get("reusable").asDouble());
+			r.addData("Capacity|memory_used", cache.get("memory").asDouble());
+
+			r.addData("Properties|mode", cache.get("mode").asString(""));
+			r.addData("Properties|status", cache.get("status").asString(""));
+			r.addData("Properties|mount_volume", cache.get("mountSpaceId").asString(""));
+			r.addData("Properties|disk_failure_count",
+					String.valueOf(cache.get("disk_failure_number").asLong()));
 
 			result.add(r);
 		}
@@ -610,6 +669,18 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 					}
 				}
 			}
+
+			// Cache disks → child of Storage Pool (from cache_disks array)
+			SimpleJson cacheDiskIds = pool.get("cache_disks");
+			if (!cacheDiskIds.isNull()) {
+				for (SimpleJson diskRef : cacheDiskIds.asList()) {
+					String diskId = diskRef.asString();
+					if (diskId != null && !diskId.isEmpty()) {
+						Resource diskRes = createResource("SynologyDisk", diskId, "disk_id", diskId);
+						poolRes.addChild(diskRes);
+					}
+				}
+			}
 		}
 
 		// iSCSI LUN → child of Volume (joined by location == vol_path)
@@ -648,6 +719,28 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 					Resource volRes = createResource("SynologyVolume", volId, "volume_id", volId);
 					volRes.addChild(exportRes);
 					break;
+				}
+			}
+		}
+
+		// SSD Cache → child of Volume (joined by ssdCaches[].mountSpaceId == volumes[].id)
+		SimpleJson ssdCaches = storage.data().get("ssdCaches");
+		if (!ssdCaches.isNull()) {
+			for (SimpleJson cache : ssdCaches.asList()) {
+				String cacheId = cache.get("id").asString();
+				String mountSpaceId = cache.get("mountSpaceId").asString("");
+				if (cacheId == null || cacheId.isEmpty() || mountSpaceId.isEmpty()) continue;
+				Resource cacheRes = createResource("SynologySsdCache", cacheId, "cache_id", cacheId);
+
+				for (SimpleJson vol : storage.data().get("volumes").asList()) {
+					String volApiId = vol.get("id").asString("");
+					if (mountSpaceId.equals(volApiId)) {
+						String volId = vol.get("volume_id").asString(vol.get("vol_path").asString());
+						Resource volRes = createResource("SynologyVolume", volId, "volume_id", volId);
+						volRes.addChild(cacheRes);
+						rel.add(volRes);
+						break;
+					}
 				}
 			}
 		}

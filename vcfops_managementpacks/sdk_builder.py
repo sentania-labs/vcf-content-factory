@@ -412,6 +412,58 @@ def _pack_icons(
     print(f"  icons: TraversalSpec/default.svg <- default.svg", file=sys.stderr)
 
 
+def _generate_version_txt(project: SdkProjectDef) -> str:
+    """Generate the content of conf/version.txt from adapter.yaml version fields.
+
+    Format mirrors MPB-generated paks (confirmed against phpIPAM-1.0.0.11.pak and
+    Ubiquiti_UniFi-1.0.0.7.pak in tmp/reference_paks/).  The VCF Ops collector reads
+    these properties via VersionDotTxt and logs the adapter version on startup; without
+    this file every property returns null and the log shows
+    '<adapter_kind> adapter version: null.null.null.null.null'.
+
+    Mapping from SdkProjectDef (version = "MAJOR.MINOR.PATCH", build_number = N):
+      Major-Version          <- MAJOR
+      Minor-Version          <- MINOR
+      Implementation-Version <- PATCH.N   (patch + build_number joined by ".")
+      Build-Tools-Version-Ref <- N/A      (MPB build toolchain ref; not applicable)
+      Adapter-Version-Ref    <- vrops-adapters-sdk version detected from adapter_runtime/
+      Core-Version-Ref       <- aria-ops-core version detected from adapter_runtime/
+    """
+    parts = project.version.split(".")
+    major = parts[0] if len(parts) > 0 else "1"
+    minor = parts[1] if len(parts) > 1 else "0"
+    patch = parts[2] if len(parts) > 2 else "0"
+    impl = f"{patch}.{project.build_number}"
+
+    # Detect Core-Version-Ref from the aria-ops-core jar present in adapter_runtime/
+    core_ver = "8.0.0"
+    core_jars = _find_jars(_ADAPTER_RUNTIME_DIR, _ARIA_OPS_CORE_PATTERN)
+    if core_jars:
+        # aria-ops-core-8.0.0.jar -> "8.0.0"
+        stem = core_jars[0].stem  # e.g. "aria-ops-core-8.0.0"
+        if "-" in stem:
+            core_ver = stem.rsplit("-", 1)[-1]
+
+    # Detect Adapter-Version-Ref from vrops-adapters-sdk jar present in adapter_runtime/
+    adapter_ver_ref = "N/A"
+    sdk_jars = _find_jars(_ADAPTER_RUNTIME_DIR, _SDK_JAR_PATTERN)
+    if sdk_jars:
+        # vrops-adapters-sdk-2.2.jar -> "2.2"
+        stem = sdk_jars[0].stem
+        if "-" in stem:
+            adapter_ver_ref = stem.rsplit("-", 1)[-1]
+
+    lines = [
+        f"Major-Version={major}",
+        f"Minor-Version={minor}",
+        f"Implementation-Version={impl}",
+        f"Build-Tools-Version-Ref=N/A",
+        f"Adapter-Version-Ref={adapter_ver_ref}",
+        f"Core-Version-Ref={core_ver}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def _assemble_adapters_zip(
     project: SdkProjectDef,
     project_dir: Path,
@@ -428,6 +480,7 @@ def _assemble_adapters_zip(
       <adapter_kind>/
         conf/
           describe.xml
+          version.txt
           resources/resources.properties
         lib/
           vcfcf-adapter-base.jar
@@ -492,6 +545,14 @@ def _assemble_adapters_zip(
                 "Every Tier 2 adapter must have a describe.xml."
             )
         zf.write(describe_src, f"{adapter_dir}/conf/describe.xml")
+
+        # conf/version.txt — required by UnlicensedAdapter.logAdapterInformation().
+        # Without it every property returns null and the collector logs
+        # '<adapter_kind> adapter version: null.null.null.null.null'.
+        zf.writestr(
+            f"{adapter_dir}/conf/version.txt",
+            _generate_version_txt(project),
+        )
 
         # conf/resources/resources.properties
         if res_file.is_file():
