@@ -360,10 +360,16 @@ def _write_outer_pak(
     output_dir.mkdir(parents=True, exist_ok=True)
     pak_path = output_dir / project.pak_filename
 
+    # Load the default icon from templates/ (must be a valid PNG —
+    # the pak manager validates icon format during STAGE and rejects
+    # empty/corrupt files with "incorrect format--exiting").
+    icon_path = _HERE / "templates" / "default.png"
+    icon_bytes = icon_path.read_bytes() if icon_path.is_file() else b""
+
     with zipfile.ZipFile(pak_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.txt", _generate_outer_manifest(project))
         zf.writestr("eula.txt", "")
-        zf.writestr("default.png", "")  # empty icon placeholder
+        zf.writestr("default.png", icon_bytes)
         zf.writestr("resources/resources.properties", "")
         zf.writestr("adapters.zip", adapters_zip_bytes)
 
