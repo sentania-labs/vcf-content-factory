@@ -15,7 +15,7 @@ underlying SDK contract and design rationale, see
 ## Four-layer stack
 
 ```
-Layer 4: Per-adapter code (Claude-generated, ~50–150 lines)
+Layer 4: Per-adapter code (Claude-generated, ~200–600 lines)
          class SynologyAdapter extends VcfCfAdapter<SynologyConfig>
 ─────────────────────────────────────────────────────────────────────
 Layer 3: vcfcf-adapter-base.jar (THIS PROJECT'S FRAMEWORK)
@@ -78,10 +78,10 @@ what Synology actually needs first:
 |---|---|
 | `VcfCfAdapter<C>` | Abstract base. Typed config binding, lifecycle defaults, hooks the aria-ops-core SPI. |
 | `HttpClientBuilder` | Fluent builder over a stdlib HTTP client (java.net.http). Base URL, SSL, default headers. |
-| `AuthStrategy` (SPI) + `BasicAuth`, `BearerAuth`, `SessionCookieAuth` | Auth plug-in. SessionCookie is what Synology DSM needs. |
+| `AuthStrategy` (SPI) + `BasicAuth`, `BearerAuth`, `SessionCookieAuth` | Auth plug-in. Note: Synology uses query-param auth (`_sid=`), not cookies — the adapter manages the session ID directly. SessionCookieAuth is available for APIs that use cookie-based sessions. |
 | `RetryPolicy` | Exponential backoff + jitter. Default 3 attempts, retry on 5xx/429/IOException. Required because the platform doesn't retry `collect()` (Pass 23). |
-| `MetricPusher` | One-liner helpers: `push(resource).metric(key, value).property(key, value)`. |
-| `DescribeBuilder` | Typed builder for describe.xml — covers ResourceKinds, CredentialKinds, Identifiers, Attributes. |
+| `ManagedHttpClient` + DNS round-robin | stdlib HTTP client wrapper with base URL, SSL, default headers. On `ConnectException`, resolves all IPs via `InetAddress.getAllByName()` and cycles through them — survives multi-IP hostnames with a dead IP. |
+| `MetricPusher` | One-liner helpers: `push(resource).metric(key, value).property(key, value)`. (Note: Synology adapter uses `Resource.addData()` directly instead — MetricPusher is available but not required.) |
 
 **Explicitly deferred** to future framework versions (don't build
 until a second adapter needs them):
@@ -94,17 +94,73 @@ until a second adapter needs them):
 - Action annotation dispatcher
 - `<CustomGroupMetrics>`, capacity / policy describe surfaces
 
-## Pak format differences vs Tier 1
+## Pak format — hard-won lessons (2026-05-19)
+
+These were discovered empirically by installing SDK paks on VCF Ops
+9.0.2 and diagnosing failures via appliance logs. Each row cost at
+least one failed install attempt.
+
+| Aspect | Requirement | What happens if wrong |
+|---|---|---|
+| `manifest.txt` (outer + inner) | JSON format, both identical | Staging hangs or install fails silently |
+| `manifest.txt` `adapters:` field | `["adapters.zip"]` — **required** | STAGE phase can't locate the adapter archive; install hangs |
+| `manifest.txt` `pak_icon:` | `"default.svg"` — must be a valid SVG, not 0-byte | Validate phase rejects: "incorrect format--exiting" |
+| Inner `adapters.zip` | Must duplicate `manifest.txt`, `eula.txt`, `default.svg` from outer pak | Validate phase rejects missing files |
+| `eula.txt` | Non-empty (MIT license text) | UI shows blank EULA page |
+| ZIP directory entries | Explicit zero-byte directory entries required for every subdirectory in `adapters.zip` | `SyncAdapters.extractFiles()` throws `NoSuchFileException` — parent dirs don't exist |
+| `vrops-adapters-sdk.jar` | **Must bundle in `<adapter>/lib/`** despite being on shared classpath | `installSolution` task fails in 14ms with empty errorMessages |
+| `aria-ops-core.jar` | Must bundle in `<adapter>/lib/` | Adapter class can't load at runtime |
+| Adapter JAR | `<adapter_kind>.jar` at root of `adapters.zip`, contains `adapter.properties` (ENTRYCLASS + KINDKEY) | Adapter kind not registered |
+| Icons | SVG format at `conf/images/{AdapterKind,ResourceKind,TraversalSpec}/` | Generic icons in UI |
+| Build number | Must increment on each rebuild — same version = platform skips JAR replacement | "Folder digests are not different" — old buggy JARs persist |
+
+### Pak structure (canonical)
+
+```
+vcfcf_<adapter_kind>.<version>.<build>.pak        [outer ZIP]
+  manifest.txt                                     [JSON]
+  eula.txt                                         [MIT license]
+  default.svg                                      [AdapterKind icon]
+  resources/resources.properties                   [empty or i18n]
+  adapters.zip                                     [inner ZIP]
+    manifest.txt                                   [JSON — same as outer]
+    eula.txt                                       [same as outer]
+    default.svg                                    [same as outer]
+    resources/                                     [dir entry]
+    resources/resources.properties
+    <adapter_kind>.jar                             [entry JAR]
+      adapter.properties                           [ENTRYCLASS + KINDKEY]
+      com/vcfcf/adapters/<name>/*.class
+    <adapter_kind>/                                [dir entry]
+    <adapter_kind>/conf/                           [dir entry]
+    <adapter_kind>/conf/describe.xml
+    <adapter_kind>/conf/resources/                 [dir entry]
+    <adapter_kind>/conf/resources/resources.properties
+    <adapter_kind>/conf/images/                    [dir entry]
+    <adapter_kind>/conf/images/AdapterKind/        [dir entry]
+    <adapter_kind>/conf/images/AdapterKind/<ak>.svg
+    <adapter_kind>/conf/images/ResourceKind/       [dir entry]
+    <adapter_kind>/conf/images/ResourceKind/<rk>.svg  [one per ResourceKind]
+    <adapter_kind>/conf/images/TraversalSpec/      [dir entry]
+    <adapter_kind>/conf/images/TraversalSpec/default.svg
+    <adapter_kind>/lib/                            [dir entry]
+    <adapter_kind>/lib/vcfcf-adapter-base.jar
+    <adapter_kind>/lib/aria-ops-core-*.jar
+    <adapter_kind>/lib/vrops-adapters-sdk-*.jar
+    <adapter_kind>/lib/[project vendor JARs]
+    <adapter_kind>/work/                           [dir entry]
+    <adapter_kind>/doc/                            [dir entry]
+```
+
+### Tier 1 vs Tier 2 comparison
 
 | | Tier 1 (MPB) | Tier 2 (SDK) |
 |---|---|---|
 | `template.json` | Yes (BuilderFile) | No |
 | `design.json` | Yes | No |
-| `manifest.txt` `adapters:` field | Yes (MPB-runtime adapter) | No (custom adapter JAR is in the pak) |
 | Adapter JAR | `mpb_adapter-*.jar` (Broadcom) | `<name>.jar` (we built) |
-| `adapter.properties` | Auto-emitted by MPB | We emit from `adapter.yaml` |
-| `describe.xml` | Generated by MPB from BuilderFile | Hand-authored or built via DSL |
-| Post-install scripts | None (we strip Gen-1 leftovers) | None |
+| `describe.xml` | Generated by MPB | Hand-authored |
+| Icons | SVG | SVG |
 | Outer pak prefix | `mpb_vcf_content_factory_*` | `vcfcf_*` |
 
 ## Verification
@@ -220,13 +276,65 @@ the prefix is added by the pak filename builder. Example:
 This differs from Tier 1 where `adapter_kind` IS prefixed
 (`mpb_vcf_content_factory_*`).
 
+## Adapter authoring contract — critical rules
+
+These are the non-obvious requirements discovered during the Synology
+adapter build. Every Tier 2 adapter must follow these or it will fail
+silently on the appliance.
+
+### Constructors (both required)
+
+```java
+public MyAdapter() { super(); }
+public MyAdapter(String adapterDir, Integer instanceId) { super(adapterDir, instanceId); }
+```
+
+- **No-arg**: analytics engine calls `Class.newInstance()` for describe
+  generation. Without it: `InstantiationException`, adapter kind not
+  registered, `apply_adapter` phase fails.
+- **Two-arg**: collector calls `Constructor(String, Integer)` for
+  instance startup. Without it: `NoSuchMethodException`, adapter
+  instance won't start.
+
+### Auto-discovery must be enabled
+
+`getAutoDiscoveryEnabled()` must return `true` (the `VcfCfAdapter`
+default). If `false`, `UnlicensedAdapter.processMetrics()` silently
+drops every new resource returned by `getCurrentMetrics()`. The
+adapter collects but discovers nothing — perpetual "1 object, 0 new
+objects."
+
+### Logging
+
+Use the `logInfo()` / `logWarn()` / `logError()` helpers on
+`VcfCfAdapter`. They use `getAdapterLoggerFactory().getLogger()` with
+an explicit INFO level override. Do NOT use:
+- The inherited `logger` field (WARN-filtered, INFO is silent)
+- `java.util.logging.Logger` (goes to collector-wrapper.log, not adapter log)
+- `System.err.println` (goes to collector-wrapper.log — useful for
+  debug only, remove before shipping)
+
+### JSON parsing
+
+The framework does not include a JSON library. Write a per-adapter
+`SimpleJson` parser or bundle Gson/Jackson in the project's `lib/`.
+FRAMEWORK GAP — a shared JSON utility should be added to
+`vcfcf-adapter-base.jar`.
+
+### Auth patterns
+
+Synology uses `_sid` as a query parameter, not a cookie or header.
+The `SessionCookieAuth` strategy doesn't fit. The adapter manages
+auth directly by appending `&_sid=<token>` to every request URL.
+Consider adding a `QueryParamAuth` strategy to the framework.
+
 ## Implementation status
 
-- Phase 1 (framework + tooling skeleton): **COMPLETE** — framework JAR built
-  (`vcfcf-adapter-base.jar`), `sdk_builder.py` + `sdk_project.py` written,
-  CLI extended (`build-sdk`, `validate-sdk`, `scaffold-sdk`), hello-world
-  adapter compiles and produces a correct SDK-format `.pak` in `dist/`.
-- Phase 2 (Synology adapter): not started.
+- Phase 1 (framework + tooling skeleton): **COMPLETE**
+- Phase 2 (Synology adapter): **IN PROGRESS** — build 1.0.0.6
+  installed on devel, 22 objects discovered, 278 metrics collected.
+  Remaining: parent/child relationships, ARIA_OPS stitching (iSCSI
+  NAA + NFS export path → VMWARE Datastore).
 - Phase 3 (polish, agent prompts, promotion docs): not started.
 
 Tracking: `designs/tier2-mp-architecture-plan.md`.
