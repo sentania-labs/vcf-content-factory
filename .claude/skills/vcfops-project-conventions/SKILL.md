@@ -76,6 +76,22 @@ this order:
 
 If any source has an exact match, prefer reuse over authoring.
 
+## Intent capture (`designs/<type>/<slug>.md`)
+
+After recon confirms new content is needed, the orchestrator writes
+a design note before spawning an author:
+
+- `designs/supermetrics/<slug>.md`, `designs/dashboards/<slug>.md`,
+  `designs/bundles/<slug>.md`, `designs/managementpacks/<slug>.md`,
+  etc. — one file per authored content object.
+- Two required sections: **Initial prompt** (verbatim) and **Vision**
+  (distilled understanding).
+- Path is passed to the author agent in its brief. Author agents
+  read it; they do not rewrite the prompt or vision sections.
+
+See `designs/README.md` for the full template. Over time this turns
+the repo into a sample-prompt corpus.
+
 ## TOOLSET GAP reporting
 
 When a loader, renderer, or schema can't express what's needed:

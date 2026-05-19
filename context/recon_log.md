@@ -233,3 +233,49 @@ The SM inflation is confirmed as a **runtime-state issue, not a namespace-scope 
 
 **Fix:** add `where=(${metric=sys|poweredOn}==1)` to the SM formula. This reduces the reported value from ~256 to ~10, which accurately reflects actively running pod vCPU reservation. The `expected_value` comment in the YAML should also be updated.
 
+
+---
+
+## 2026-05-18 — Synology DSM MP pre-design recon
+
+**Instance:** vcf-lab-operations.int.sentania.net (prod, read-only)
+**Profile:** VCFOPS_PROD
+
+### 1. Synology adapter / management pack on live instance
+
+- **`mpb_synology_nas` adapter kind:** NOT PRESENT (HTTP 404). Was installed at recon date 2026-04-22 (ver 1.0.0.1, solution id "Synology NAS") but has since been uninstalled. No adapter instances, no resource objects, no solution entry.
+- **`mpb_synology_dsm` adapter kind:** NOT PRESENT (HTTP 404). This is the adapter kind targeted by the repo's symptom/alert/recommendation YAML — it has never been installed.
+- 29 adapter kinds total on instance. No Synology string in any name or key.
+
+### 2. Synology-named object types on live instance
+
+None from an MP perspective. Three objects matching "synology" by name search:
+- "Synology NAS Licensing" — adapter=Container, kind=Licensing (licensing placeholder, not an MP object)
+- "Synology DSM MP Licensing" — adapter=Container, kind=Licensing (same)
+- "Synology NAS f9:9b" — adapter=mpb_vcf_content_factory_unifi_integration, kind=mpb_vcf_content_factory_unifi_integration_client (this is a UniFi client record whose device name is the NAS MAC — not an MP object)
+
+No SynologyDisk, SynologyVolume, SynologyLUN, or SynologySystem objects exist.
+
+### 3. Built-in storage / vSAN MPs present
+
+| Solution | Version | Scope | NAS/iSCSI/NFS coverage |
+|---|---|---|---|
+| vSAN (Management Pack for Storage Area Network) | 9.0.2.0.25137912 | vSAN Cluster, Disk Group, Cache/Capacity Disk, File Server, File Share, Storage Pool, Witness Host | vSAN File Share only. No external NAS, iSCSI target, or NFS share. |
+| vCenter (VMWARE) | 9.0.2.0.25137897 | 25 resource kinds including Datastore, Datastore Cluster, Datastore Folder | Datastore-level only — no NAS target identity, no LUN or share representation |
+| NSX | 9.0.2.0.25137922 | Network fabric | No storage coverage |
+| VCF for Networks | 9.0.2.0.25137914 | Network flows | No storage coverage |
+| OS and App Monitoring | 9.0.2.0.25137916 | Guest OS | No external storage |
+
+**Gap confirmed:** No built-in MP covers NAS target health, iSCSI LUN provisioning, NFS share, Synology disk/storage-pool/volume, or the stitching of those objects to ESXi hosts or datastores.
+
+### 4. Repo content/managementpacks/
+
+No `synology_nas.yaml` exists under `content/managementpacks/`. The file was referenced in `context/mpb_synology_pickup_2026_04_29.md` but was not committed — the list shows only: cloudflare, dell_poweredge, unifi_network, unifi_network_integration, vsphere_storage_paths. A built pak exists at `dist/mpb_synology_nas.1.0.0.1.pak` (23 MB, mtime 2026-05-09) but no source YAML backs it.
+
+### 5. Prior session state (from context files)
+
+As of 2026-04-29 the Synology MP workstream was parked with two paths documented:
+- Path 1: remove Volume's chained metricSet, ship the community-pattern 5-object MPB pak (loses per-volume IO metrics, ~10 min work)
+- Path 2: pivot to Operations Adapter SDK (keeps IO metrics, larger effort)
+The YAML was left in "v3 state, not in shipping state" with a broken `volume_util` chain.
+

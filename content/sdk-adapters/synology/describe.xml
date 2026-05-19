@@ -1,0 +1,296 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AdapterKind xmlns="http://schemas.vmware.com/vcops/schema"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             key="synology_diskstation"
+             nameKey="1"
+             version="1"
+             xsi:schemaLocation="http://schemas.vmware.com/vcops/schema describeSchema.xsd">
+
+	<CredentialKinds>
+		<CredentialKind key="synology_credentials" nameKey="2">
+			<CredentialField key="username" nameKey="3" type="string" required="true" dispOrder="1"/>
+			<CredentialField key="password" nameKey="4" type="string" required="true" password="true" dispOrder="2"/>
+		</CredentialKind>
+	</CredentialKinds>
+
+	<ResourceKinds>
+
+		<!-- ================================================================ -->
+		<!-- Adapter Instance (type=7): connection configuration              -->
+		<!-- ================================================================ -->
+		<ResourceKind key="synology_diskstation" nameKey="5" type="7"
+		              credentialKind="synology_credentials"
+		              monitoringInterval="5">
+			<ResourceIdentifier key="host" nameKey="6" type="string"
+			                    required="true" dispOrder="1"/>
+			<ResourceIdentifier key="port" nameKey="7" type="string"
+			                    required="false" dispOrder="2" default="5001"/>
+			<ResourceIdentifier key="allowInsecure" nameKey="8" type="string"
+			                    required="false" dispOrder="3" default="true"/>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- SynologyDiskstation (singleton): system health + CPU + memory     -->
+		<!-- ================================================================ -->
+		<ResourceKind key="SynologyDiskstation" nameKey="10" type="1">
+			<ResourceIdentifier key="serial" nameKey="11" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="System" nameKey="20" instanced="false">
+				<ResourceAttribute key="system_temp" nameKey="21" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="C"/>
+				<ResourceAttribute key="uptime" nameKey="22" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="sec"/>
+				<ResourceAttribute key="model" nameKey="23" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="hostname" nameKey="24" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="firmware_version" nameKey="25" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="firmware_date" nameKey="26" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="CPU" nameKey="30" instanced="false">
+				<ResourceAttribute key="cpu_load_1m" nameKey="31" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="cpu_load_5m" nameKey="32" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="cpu_load_15m" nameKey="33" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="cpu_user_pct" nameKey="34" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="cpu_system_pct" nameKey="35" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="cpu_total_load" nameKey="36" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Memory" nameKey="40" instanced="false">
+				<ResourceAttribute key="memory_available" nameKey="41" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="memory_total" nameKey="42" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="memory_usage_pct" nameKey="43" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="memory_cached" nameKey="44" dataType="float"
+				                   isProperty="false" defaultMonitored="false" unit="bytes"/>
+				<ResourceAttribute key="swap_usage" nameKey="45" dataType="float"
+				                   isProperty="false" defaultMonitored="false" unit="bytes"/>
+				<ResourceAttribute key="swap_total" nameKey="46" dataType="float"
+				                   isProperty="false" defaultMonitored="false" unit="bytes"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Network" nameKey="50" instanced="false">
+				<ResourceAttribute key="net_rx_bytes" nameKey="51" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes/s"/>
+				<ResourceAttribute key="net_tx_bytes" nameKey="52" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes/s"/>
+				<ResourceAttribute key="nic_count" nameKey="53" dataType="float"
+				                   isProperty="false" defaultMonitored="false"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Fan" nameKey="60" instanced="false">
+				<ResourceAttribute key="fan_status" nameKey="61" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="fan_speed_mode" nameKey="62" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="NFS" nameKey="70" instanced="false">
+				<ResourceAttribute key="nfs_enabled" nameKey="71" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="nfs_v4_enabled" nameKey="72" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="nfs_total_ops" nameKey="73" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ops/s"/>
+				<ResourceAttribute key="nfs_read_ops" nameKey="74" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ops/s"/>
+				<ResourceAttribute key="nfs_write_ops" nameKey="75" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ops/s"/>
+				<ResourceAttribute key="nfs_max_latency" nameKey="76" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ms"/>
+				<ResourceAttribute key="nfs_client_count" nameKey="77" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- SynologyStoragePool: capacity + RAID health                       -->
+		<!-- ================================================================ -->
+		<ResourceKind key="SynologyStoragePool" nameKey="100" type="1">
+			<ResourceIdentifier key="pool_id" nameKey="101" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="Capacity" nameKey="102" instanced="false">
+				<ResourceAttribute key="total_bytes" nameKey="103" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="used_bytes" nameKey="104" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="usage_pct" nameKey="105" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Properties" nameKey="106" instanced="false">
+				<ResourceAttribute key="raid_type" nameKey="107" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="status" nameKey="108" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="pool_path" nameKey="109" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="device_type" nameKey="110" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="disk_count" nameKey="111" dataType="float"
+				                   isProperty="true" defaultMonitored="false"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- SynologyVolume: capacity + IO (joined from Utilization)           -->
+		<!-- ================================================================ -->
+		<ResourceKind key="SynologyVolume" nameKey="120" type="1">
+			<ResourceIdentifier key="volume_id" nameKey="121" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="Capacity" nameKey="122" instanced="false">
+				<ResourceAttribute key="total_bytes" nameKey="123" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="free_bytes" nameKey="124" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="usage_pct" nameKey="125" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="IO" nameKey="126" instanced="false">
+				<ResourceAttribute key="read_bytes" nameKey="127" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes/s"/>
+				<ResourceAttribute key="write_bytes" nameKey="128" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes/s"/>
+				<ResourceAttribute key="read_iops" nameKey="129" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ops/s"/>
+				<ResourceAttribute key="write_iops" nameKey="130" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ops/s"/>
+				<ResourceAttribute key="utilization_pct" nameKey="131" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Properties" nameKey="132" instanced="false">
+				<ResourceAttribute key="volume_path" nameKey="133" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="fs_type" nameKey="134" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="status" nameKey="135" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="description" nameKey="136" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- SynologyDisk: SMART health + IO (joined from Utilization)         -->
+		<!-- ================================================================ -->
+		<ResourceKind key="SynologyDisk" nameKey="140" type="1">
+			<ResourceIdentifier key="disk_id" nameKey="141" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="Health" nameKey="142" instanced="false">
+				<ResourceAttribute key="temperature" nameKey="143" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="C"/>
+				<ResourceAttribute key="smart_status" nameKey="144" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="unc_sectors" nameKey="145" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+				<ResourceAttribute key="remain_life" nameKey="146" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="IO" nameKey="147" instanced="false">
+				<ResourceAttribute key="read_bytes" nameKey="148" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes/s"/>
+				<ResourceAttribute key="write_bytes" nameKey="149" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes/s"/>
+				<ResourceAttribute key="read_iops" nameKey="150" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ops/s"/>
+				<ResourceAttribute key="write_iops" nameKey="151" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ops/s"/>
+				<ResourceAttribute key="utilization_pct" nameKey="152" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Properties" nameKey="153" instanced="false">
+				<ResourceAttribute key="model" nameKey="154" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="firmware" nameKey="155" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="serial" nameKey="156" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="vendor" nameKey="157" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="disk_type" nameKey="158" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="slot_id" nameKey="159" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="size_bytes" nameKey="160" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- SynologyIscsiLun: LUN metadata + IO (joined from Utilization)    -->
+		<!-- ================================================================ -->
+		<ResourceKind key="SynologyIscsiLun" nameKey="170" type="1">
+			<ResourceIdentifier key="lun_uuid" nameKey="171" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="IO" nameKey="172" instanced="false">
+				<ResourceAttribute key="read_iops" nameKey="173" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ops/s"/>
+				<ResourceAttribute key="write_iops" nameKey="174" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ops/s"/>
+				<ResourceAttribute key="read_throughput" nameKey="175" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes/s"/>
+				<ResourceAttribute key="write_throughput" nameKey="176" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes/s"/>
+				<ResourceAttribute key="read_latency" nameKey="177" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ms"/>
+				<ResourceAttribute key="write_latency" nameKey="178" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ms"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Properties" nameKey="179" instanced="false">
+				<ResourceAttribute key="name" nameKey="180" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="size_bytes" nameKey="181" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="location" nameKey="182" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="type" nameKey="183" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="target_iqn" nameKey="184" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- SynologyNfsExport: NFS share capacity + client info               -->
+		<!-- ================================================================ -->
+		<ResourceKind key="SynologyNfsExport" nameKey="190" type="1">
+			<ResourceIdentifier key="share_name" nameKey="191" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="Capacity" nameKey="192" instanced="false">
+				<ResourceAttribute key="size_used_mib" nameKey="193" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="MiB"/>
+				<ResourceAttribute key="size_logical_mib" nameKey="194" dataType="float"
+				                   isProperty="false" defaultMonitored="false" unit="MiB"/>
+				<ResourceAttribute key="quota_usage_pct" nameKey="195" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Clients" nameKey="196" instanced="false">
+				<ResourceAttribute key="active_client_count" nameKey="197" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Properties" nameKey="198" instanced="false">
+				<ResourceAttribute key="export_path" nameKey="199" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="volume_path" nameKey="200" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="description" nameKey="201" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="quota_value_mib" nameKey="202" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="cow_enabled" nameKey="203" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="compress_enabled" nameKey="204" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="rule_count" nameKey="205" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="allowed_clients" nameKey="206" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- SynologyUps: UPS battery + status                                -->
+		<!-- ================================================================ -->
+		<ResourceKind key="SynologyUps" nameKey="210" type="1">
+			<ResourceIdentifier key="ups_model" nameKey="211" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="Battery" nameKey="212" instanced="false">
+				<ResourceAttribute key="charge_pct" nameKey="213" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="runtime_seconds" nameKey="214" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="sec"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Properties" nameKey="215" instanced="false">
+				<ResourceAttribute key="status" nameKey="216" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="mode" nameKey="217" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="connected" nameKey="218" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+	</ResourceKinds>
+
+	<LicenseConfig enabled="false"/>
+
+</AdapterKind>

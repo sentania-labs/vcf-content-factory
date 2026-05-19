@@ -1,5 +1,33 @@
 # Synology DSM API Map: Overview
 
+## Provenance
+
+- **Authored by:** api-cartographer
+- **Target instance:** `$SYNO_HOST:$SYNO_PORT` — DS1520+ running DSM
+  7.3.2-86009 Update 1
+- **Last updated:** 2026-05-18
+- **Update history:**
+  - 2026-05-18 — Added `synology-vcfops-stitching.md` entry to
+    the file index. That map documents how to bind Synology
+    iSCSI LUNs and NFS exports onto existing VMWARE Datastores
+    in VCF Ops (ARIA_OPS pattern). Includes the empirically
+    verified Synology LUN UUID → ESXi NAA transform. No changes
+    to the Synology endpoint inventory or object summary in this
+    overview file beyond the new row in the map index.
+  - 2026-05-18 — Added NFS Export object type. New rows in
+    Object Inventory, Endpoint Inventory, Cross-Request Join
+    Keys, and Object Model Summary. Linked `synology-nfs.md` in
+    the map file index. Bumped collection-strategy headers for
+    the new per-share `SharePrivilege` and `CurrentConnection`
+    calls.
+  - 2026-04-16 — Original overview content (storage, iSCSI,
+    docker, UPS, system, events).
+- **Evidence basis:** synthesized from sibling map files
+  (`synology-*.md`); the 2026-05-18 stitching entry was authored
+  from live API calls against both Synology
+  (`storage.int.sentania.net:5001`) and VCF Ops
+  (`vcf-lab-operations.int.sentania.net`, profile `prod`).
+
 ## Target System
 
 | Property | Value |
@@ -19,9 +47,11 @@
 | `synology-system.md` | Diskstation object: system info, CPU, memory, network, fan |
 | `synology-storage.md` | Storage Pool, Volume, Disk objects: capacity, health, IO |
 | `synology-iscsi.md` | iSCSI LUN object: metadata, IO metrics, target IQN |
+| `synology-nfs.md` | NFS Export object: per-share inventory, rules, client tallies; NFS service properties on Diskstation `[2026-05-18]` |
 | `synology-docker.md` | Docker Container object: status, resource usage |
 | `synology-ups.md` | UPS object: status, battery, load |
 | `synology-events.md` | DSM notifications / events: SyslogClient.Log, Upgrade.Server.check, SecurityAdvisor.LoginActivity -- for MPB events section |
+| `synology-vcfops-stitching.md` | ARIA_OPS stitching — joining Synology iSCSI LUNs / NFS exports to existing VMWARE Datastores in VCF Ops via the `DataStrorePath` resource identifier; includes the empirically-verified Synology LUN UUID → ESXi NAA transform `[2026-05-18]` |
 
 ## Endpoint Inventory
 
@@ -39,11 +69,15 @@
 | 10 | `SYNO.Core.ExternalDevice.UPS` | `get` | UPS | 15 min | UPS status (if connected) |
 | 11 | `SYNO.Core.System.Status` | `get` | Diskstation | 30 min | Crash flag, upgrade flag |
 | 12 | `SYNO.Docker.Container` | `list` | Docker Container | 30 min | Container inventory and status |
+| 13 | `SYNO.Core.FileServ.NFS` | `get` | Diskstation (NFS service props) | 5 min | NFS server enabled, v4 settings `[2026-05-18]` |
+| 14 | `SYNO.Core.Share` | `list` | NFS Export | 5 min | All shares + capacity; with `additional` array `[2026-05-18]` |
+| 15 | `SYNO.Core.FileServ.NFS.SharePrivilege` | `load` | NFS Export | 5 min (or 30) | Per-share NFS rules; **N+1 calls** keyed by `share_name=` — consider caching at 30-min cycle `[2026-05-18]` |
+| 16 | `SYNO.Core.CurrentConnection` | `get` | NFS Export, Diskstation | 5 min | Active NFS client list; tally by `descr` for per-export counts `[2026-05-18]` |
 
-**Total unique endpoints**: 12 (including auth)
-**Requests per 5-min cycle**: 3 (auth cached; DSM.Info + Utilization + Storage.load_info)
-**Requests per 15-min cycle**: 3 + 5 = 8 (add System.info, FanSpeed, Interface, ISCSI.LUN, ISCSI.Target, UPS)
-**Requests per 30-min cycle**: 8 + 2 = 10 (add System.Status, Docker.Container)
+**Total unique endpoints**: 16 (including auth) `[2026-05-18]`
+**Requests per 5-min cycle**: 3 + 3 + N_shares = 6 + N (auth cached; DSM.Info + Utilization + Storage.load_info + NFS get + Share list + CurrentConnection get + 1 SharePrivilege call per share) — on this NAS with 11 shares: 17 requests `[2026-05-18]`
+**Requests per 15-min cycle**: 17 + 5 = 22 (add System.info, FanSpeed, Interface, ISCSI.LUN, ISCSI.Target, UPS)
+**Requests per 30-min cycle**: 22 + 2 = 24 (add System.Status, Docker.Container)
 
 ## Object Model Summary
 
@@ -54,10 +88,11 @@
 | Volume | volume_id + vol_path | Storage Pool | Storage.load_info, Utilization (space.volume[]) | 5 | 6 |
 | Disk | disk_id | Storage Pool + Diskstation | Storage.load_info, Utilization (disk[]) | 6 | 10 |
 | iSCSI LUN | lun_uuid | Volume | ISCSI.LUN, ISCSI.Target, Utilization (lun[]) | 10 | 5 |
+| NFS Export `[2026-05-18]` | name (alt: uuid) | Volume | Share.list, FileServ.NFS.SharePrivilege.load, CurrentConnection.get | 4 | 10 |
 | Docker Container | container_name | Diskstation | Docker.Container | 3 | 4 |
 | UPS | model | Diskstation | ExternalDevice.UPS | 3 | 2 |
 
-**Totals**: 7 object types, ~48 metrics, ~48 properties
+**Totals**: 8 object types, ~52 metrics, ~58 properties `[2026-05-18]`
 
 ## Cross-Request Join Keys
 
@@ -72,6 +107,10 @@
 | `targets[].name` | ISCSI.Target | `luns[].name` | ISCSI.LUN | Target -> LUN (by naming convention) |
 | `disks[].id` | Storage.load_info | `disk[].device` | Utilization | Disk metadata -> Disk IO |
 | `volumes[].vol_path` (strip "/") | Storage.load_info | `space.volume[].display_name` | Utilization | Volume metadata -> Volume IO |
+| `shares[].vol_path` | Share.list | `volumes[].vol_path` | Storage.load_info | NFS Export -> Volume (parent) `[2026-05-18]` |
+| `shares[].name` | Share.list | `share_name` (query param) | FileServ.NFS.SharePrivilege.load | Drives per-share rule fetch `[2026-05-18]` |
+| `shares[].name` | Share.list | `items[].descr` (filter `protocol='NFS'`) | CurrentConnection.get | NFS Export -> active client list `[2026-05-18]` |
+| derived `vol_path + "/" + name` | local | ESXi NFS datastore mount `host:/volume1/<share>` | vSphere | NFS Export -> Datastore (cross-MP stitch) `[2026-05-18]` |
 | `containers[].name` | Docker.Container list | `resources[].name` | Docker.Container.Resource get | Container metadata -> Container resource metrics |
 
 ## Coverage Matrix: Design Artifact vs. API Sources
@@ -148,6 +187,32 @@
 | read_iops, write_iops | Utilization lun[] | CONFIRMED (live-tested) |
 | read_throughput, write_throughput | Utilization lun[] | CONFIRMED (live-tested) |
 | read_latency, write_latency | Utilization lun[] | CONFIRMED (live-tested) |
+
+### NFS Export (NEW 2026-05-18 -- 14 total)
+
+| Metric/Property | Source | Status |
+|---|---|---|
+| name, uuid, vol_path, desc | Share.list shares[] | CONFIRMED `[observed 2026-05-18]` |
+| export_path (vol_path + "/" + name) | derived | CONFIRMED (derivable) |
+| quota_value, encryption, hidden | Share.list shares[] | CONFIRMED `[observed 2026-05-18]` |
+| enable_share_cow, enable_share_compress | Share.list shares[] | CONFIRMED `[observed 2026-05-18]` |
+| share_size_used, share_size_logical | Share.list shares[] | CONFIRMED `[observed 2026-05-18]` (units inferred MiB) |
+| quota_usage_pct | derived | CONFIRMED (derivable) |
+| rule_count, allowed_clients (joined) | NFS.SharePrivilege.load data.rule[] | CONFIRMED `[observed 2026-05-18]` |
+| has_kerberos_required, has_root_squash, has_readonly_clients | derived from rules | CONFIRMED (derivable) |
+| active_client_count | CurrentConnection.get filter protocol=NFS, group by descr | CONFIRMED `[observed 2026-05-18]` |
+| per-share NFS IO (bytes/OPS/latency) | (none) | CONFIRMED NOT AVAILABLE — fall back to parent Volume IO `[observed 2026-05-18]` |
+
+### Diskstation NFS service (NEW 2026-05-18 -- adds 11 to Diskstation total)
+
+| Metric/Property | Source | Status |
+|---|---|---|
+| nfs_enabled, nfs_v4_enabled, nfs_active_minor_ver | FileServ.NFS.get | CONFIRMED `[observed 2026-05-18]` |
+| nfs_read_size, nfs_write_size | FileServ.NFS.get | CONFIRMED `[observed 2026-05-18]` |
+| nfs_total_ops, nfs_read_ops, nfs_write_ops | Utilization nfs[0] | CONFIRMED `[observed 2026-05-18]` |
+| nfs_total_max_latency | Utilization nfs[0] | CONFIRMED `[observed 2026-05-18]` (units inferred ms) |
+| nfs_total_client_count | derived from CurrentConnection | CONFIRMED `[observed 2026-05-18]` |
+| nfs_export_count | derived | CONFIRMED (derivable) |
 
 ### Docker Container (NEW -- 10 total)
 
