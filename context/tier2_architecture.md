@@ -158,6 +158,31 @@ vrops-adapters-sdk-2.2.jar). Key findings:
   field, not set during `onConfigure()`. It is available when `configure()`
   is called.
 
+- **Do NOT log through the inherited `logger` field.** That logger is
+  registered under `com.vmware.tvs.vrealize.adapter.core.UnlicensedAdapter`
+  and its appender-level filter is derived from the root Log4j logger, which
+  sits at WARN in production. INFO messages are silently dropped.
+
+  The correct pattern (already implemented in `VcfCfAdapter`) is to obtain a
+  logger via `getAdapterLoggerFactory().getLogger(getClass())` on first use
+  and then pin it to INFO with `setLevel(Logger.CustomLevel.INFO)`. This
+  gives a logger named after the concrete adapter class, attached to the
+  right `SynologyAdapter_3008.log` file, with INFO messages passing through.
+  The `VcfCfAdapter.logInfo()/logWarn()/logError()` helpers do this
+  automatically via the lazily-initialised `adapterLogger` field — use those
+  helpers; do not call the inherited `logger` directly.
+
+- **Wire-format discovery (AdapterLoggerFactoryImpl internals):**
+  `AdapterLoggerFactoryImpl(adapterName, adapterDir, instanceId)` creates the
+  file appender at `<ADAPTERS_LOG>/<adapterName>/<adapterName>_<instanceId>.log`
+  only when all three arguments are non-null. In the no-arg describe path
+  `adapterDir` is null so the appender is skipped — that is expected.
+  In the live-collection path all three are set, so the file IS created;
+  the problem was purely the WARN-level appender filter.
+  `Logger.setLevel(CustomLevel.INFO)` calls
+  `Configurator.setLevel(loggerName, Level.INFO)` which overrides the
+  LoggerConfig level at runtime.
+
 - If `configure()` receives a `ResourceConfig` with an empty
   `getResourceIdentifiers()` list, the cause is NOT a missing
   `super.configure()` call. The most likely cause is a platform

@@ -158,18 +158,43 @@ public abstract class VcfCfAdapter<C> extends UnlicensedAdapter {
 	/**
 	 * Whether auto-discovery is enabled for this adapter.
 	 *
-	 * <p>Default: {@code false}. Override to return {@code true} for adapters
-	 * that support automatic resource discovery without user intervention.
+	 * <p>MUST return {@code true} for VCF-CF adapters. The
+	 * {@code UnlicensedAdapter.processMetrics()} gate checks this flag for
+	 * every resource returned by {@code LiveCollector.getCurrentMetrics()}: if
+	 * the resource is new (not yet known to the platform) AND
+	 * {@code autoDiscoveryEnabled} is {@code false} AND
+	 * {@code resource.overridesAutoDiscovery()} is {@code false}, the resource
+	 * is silently dropped and never registered. This produces the symptom of
+	 * collection running successfully but showing zero child objects —
+	 * {@code Number of New Objects = 0} — because every resource is "new" and
+	 * the gate rejects all of them.
+	 *
+	 * <p>Returning {@code true} here causes the framework to call
+	 * {@code addCollectedResource()} for each new resource, which adds it to
+	 * the {@code CollectResult}'s embedded {@code DiscoveryResult} and makes it
+	 * visible in VCF Ops on the same collection cycle it was first seen.
+	 *
+	 * <p>Subclasses MAY override to return {@code false} only for adapters that
+	 * intentionally require explicit user-triggered discovery before metrics
+	 * are accepted (rare; none in the VCF-CF corpus).
 	 */
 	@Override
 	public boolean getAutoDiscoveryEnabled(ResourceStatus status, ResourceConfig resourceConfig) {
-		return false;
+		return true;
 	}
 
 	/**
 	 * Whether rediscovery is needed. Default implementation always returns
-	 * {@code false}; override when the adapter needs to re-discover resources
-	 * on each collection cycle.
+	 * {@code false}; override when the adapter needs to re-run the explicit
+	 * {@code Discoverer.getResources()} path on each collection cycle (e.g.,
+	 * to detect removed resources and trigger state-change transitions).
+	 *
+	 * <p>Note: returning {@code true} here is distinct from
+	 * {@link #getAutoDiscoveryEnabled} — this path calls
+	 * {@code internalDiscover()} at the top of every {@code onCollect()} and
+	 * is the right hook for tombstone / disappear detection. It is not required
+	 * for basic resource registration; {@link #getAutoDiscoveryEnabled()}
+	 * returning {@code true} is sufficient for that.
 	 */
 	@Override
 	protected boolean needRediscovery(ResourceConfig adapterInstance,
@@ -237,39 +262,66 @@ public abstract class VcfCfAdapter<C> extends UnlicensedAdapter {
 	// Logging helpers
 	// -----------------------------------------------------------------------
 
-	/** Log a message at INFO level. */
-	protected void logInfo(String message) {
-		if (logger != null) {
-			logger.info(message);
-		} else {
-			java.util.logging.Logger.getLogger(getClass().getName()).info(message);
+	/**
+	 * Per-adapter-instance logger obtained from the platform's
+	 * {@link com.vmware.vrops.logging.AdapterLoggerFactory}.  Lazily
+	 * initialised on first use so that it is always obtained after the
+	 * platform has fully constructed the adapter instance (and therefore
+	 * after the file appender for {@code <AdapterName>_<instanceId>.log}
+	 * has been created).
+	 *
+	 * <p>The level is pinned to INFO so that INFO messages are never
+	 * silently filtered by a root Log4j config that sits at WARN or
+	 * higher.  The platform's {@link com.vmware.vrops.logging.AdapterLoggerFactory}
+	 * creates the file appender correctly when {@code adapterDir} and
+	 * {@code instanceId} are non-null (i.e. the live-collection path);
+	 * in the describe-only / no-arg path both values are null and the
+	 * factory falls back to the root Log4j context, which is acceptable
+	 * because nothing of interest is logged during describe generation.
+	 */
+	private volatile Logger adapterLogger;
+
+	/**
+	 * Return the adapter-specific logger, creating it on first call.
+	 *
+	 * <p>Routing: {@code getAdapterLoggerFactory().getLogger(getClass())}
+	 * ensures the logger name is the concrete adapter class (e.g.
+	 * {@code com.vcfcf.adapters.synology.SynologyAdapter}) and that the
+	 * platform's file appender is attached.  The explicit INFO pin
+	 * prevents the WARN-level root logger from suppressing INFO output.
+	 */
+	private Logger adapterLogger() {
+		Logger l = adapterLogger;
+		if (l == null) {
+			synchronized (this) {
+				l = adapterLogger;
+				if (l == null) {
+					l = getAdapterLoggerFactory().getLogger(getClass());
+					l.setLevel(Logger.CustomLevel.INFO);
+					adapterLogger = l;
+				}
+			}
 		}
+		return l;
 	}
 
-	/** Log a message at WARNING level. */
+	/** Log a message at INFO level to the adapter-specific log file. */
+	protected void logInfo(String message) {
+		adapterLogger().info(message);
+	}
+
+	/** Log a message at WARNING level to the adapter-specific log file. */
 	protected void logWarn(String message) {
-		if (logger != null) {
-			logger.warn(message);
-		} else {
-			java.util.logging.Logger.getLogger(getClass().getName()).warning(message);
-		}
+		adapterLogger().warn(message);
 	}
 
 	/** Log a message at WARNING level with an exception. */
 	protected void logWarn(String message, Throwable t) {
-		if (logger != null) {
-			logger.warn(message, t);
-		} else {
-			java.util.logging.Logger.getLogger(getClass().getName()).log(java.util.logging.Level.WARNING, message, t);
-		}
+		adapterLogger().warn(message, t);
 	}
 
-	/** Log a message at SEVERE level with an exception. */
+	/** Log a message at ERROR level with an exception. */
 	protected void logError(String message, Throwable t) {
-		if (logger != null) {
-			logger.error(message, t);
-		} else {
-			java.util.logging.Logger.getLogger(getClass().getName()).log(java.util.logging.Level.SEVERE, message, t);
-		}
+		adapterLogger().error(message, t);
 	}
 }

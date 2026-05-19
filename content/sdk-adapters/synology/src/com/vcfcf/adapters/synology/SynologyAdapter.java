@@ -50,22 +50,7 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 		String username = getCredentialField(resourceConfig, "username");
 		String password = getCredentialField(resourceConfig, "password");
 
-		// VCFCF-DEBUG: temporary diagnostic output to collector stderr
-		System.err.println("[VCFCF-DEBUG] SynologyAdapter.configure() called");
-		System.err.println("[VCFCF-DEBUG]   host=" + host);
-		System.err.println("[VCFCF-DEBUG]   port=" + port);
-		System.err.println("[VCFCF-DEBUG]   allowInsecure=" + allowInsecure);
-		System.err.println("[VCFCF-DEBUG]   username=" + (username != null ? username : "(null)"));
-		System.err.println("[VCFCF-DEBUG]   resourceConfig.class=" + resourceConfig.getClass().getName());
-		System.err.println("[VCFCF-DEBUG]   identifiers.size=" + resourceConfig.getResourceIdentifiers().size());
-		for (com.integrien.alive.common.adapter3.config.ResourceIdentifierConfig id
-				: resourceConfig.getResourceIdentifiers()) {
-			System.err.println("[VCFCF-DEBUG]   identifier key=" + id.getKey() + " value=" + id.getValue());
-		}
-
 		this.config = new SynologyConfig(host, port, username, password, allowInsecure);
-
-		System.err.println("[VCFCF-DEBUG]   baseUrl=" + config.baseUrl());
 
 		this.httpClient = HttpClientBuilder.builder()
 				.baseUrl(config.baseUrl())
