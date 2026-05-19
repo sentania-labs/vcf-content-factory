@@ -10,3 +10,4 @@ description: >
   Cross-endpoint joining stitches IO metrics onto the correct
   storage objects (Tier 2 trigger: complex data-model stitching).
 entry_class: "com.vcfcf.adapters.synology.SynologyAdapter"
+released: true
