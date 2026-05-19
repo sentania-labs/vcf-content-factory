@@ -198,13 +198,19 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 			public ResourceCollection getRelationships(ResourceConfig rc,
 					ResourceCollection acc)
 					throws CollectionException, InterruptedException {
-				// TODO: emit parent-child relationships in a future iteration
-				return new ResourceCollection();
+				ResourceCollection rel = new ResourceCollection();
+				try {
+					api.ensureSession();
+					buildRelationships(rel);
+				} catch (Exception e) {
+					logWarn("Relationship build failed: " + e.getMessage());
+				}
+				return rel;
 			}
 
 			@Override
 			public boolean shouldForceUpdateRelationships() {
-				return false;
+				return true;
 			}
 		};
 	}
@@ -555,6 +561,169 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 		r.addData("Properties|connected", connected ? "true" : "false");
 
 		result.add(r);
+	}
+
+	// -----------------------------------------------------------------------
+	// Relationships: internal parent/child + ARIA_OPS Datastore stitching
+	// -----------------------------------------------------------------------
+
+	private void buildRelationships(ResourceCollection rel) throws Exception {
+		SimpleJson storage = api.storageLoadInfo();
+		SimpleJson dsmInfo = api.dsmInfo();
+		String serial = dsmInfo.data().get("serial").asString("unknown");
+
+		Resource diskstation = createResource("SynologyDiskstation", serial, "serial", serial);
+
+		// Storage Pool → child of Diskstation
+		for (SimpleJson pool : storage.data().get("storagePools").asList()) {
+			String poolId = pool.get("id").asString();
+			String poolPath = pool.get("pool_path").asString();
+			Resource poolRes = createResource("SynologyStoragePool", poolId, "pool_id", poolId);
+			diskstation.addChild(poolRes);
+
+			// Volume → child of Storage Pool (joined by pool_path)
+			for (SimpleJson vol : storage.data().get("volumes").asList()) {
+				if (poolPath.equals(vol.get("pool_path").asString())) {
+					String volId = vol.get("volume_id").asString(vol.get("vol_path").asString());
+					Resource volRes = createResource("SynologyVolume", volId, "volume_id", volId);
+					poolRes.addChild(volRes);
+				}
+			}
+
+			// Disk → child of Storage Pool (joined by disk id in pool's disks array)
+			SimpleJson poolDisks = pool.get("disks");
+			if (!poolDisks.isNull()) {
+				for (SimpleJson diskRef : poolDisks.asList()) {
+					String diskId = diskRef.asString();
+					if (diskId != null && !diskId.isEmpty()) {
+						Resource diskRes = createResource("SynologyDisk", diskId, "disk_id", diskId);
+						poolRes.addChild(diskRes);
+					}
+				}
+			}
+		}
+
+		// iSCSI LUN → child of Volume (joined by location == vol_path)
+		SimpleJson luns = api.iscsiLunList();
+		for (SimpleJson lun : luns.data().get("luns").asList()) {
+			String uuid = lun.get("uuid").asString();
+			String location = lun.get("location").asString();
+			Resource lunRes = createResource("SynologyIscsiLun", uuid, "lun_uuid", uuid);
+
+			for (SimpleJson vol : storage.data().get("volumes").asList()) {
+				if (location.equals(vol.get("vol_path").asString())) {
+					String volId = vol.get("volume_id").asString(vol.get("vol_path").asString());
+					Resource volRes = createResource("SynologyVolume", volId, "volume_id", volId);
+					volRes.addChild(lunRes);
+					break;
+				}
+			}
+		}
+
+		// NFS Export → child of Volume (joined by vol_path)
+		SimpleJson shares = api.shareList();
+		for (SimpleJson share : shares.data().get("shares").asList()) {
+			String name = share.get("name").asString();
+			try {
+				SimpleJson rules = api.nfsSharePrivilege(name);
+				if (rules.data().get("rule").size() == 0) continue;
+			} catch (Exception e) {
+				continue;
+			}
+			String volPath = share.get("vol_path").asString();
+			Resource exportRes = createResource("SynologyNfsExport", name, "share_name", name);
+
+			for (SimpleJson vol : storage.data().get("volumes").asList()) {
+				if (volPath.equals(vol.get("vol_path").asString())) {
+					String volId = vol.get("volume_id").asString(vol.get("vol_path").asString());
+					Resource volRes = createResource("SynologyVolume", volId, "volume_id", volId);
+					volRes.addChild(exportRes);
+					break;
+				}
+			}
+		}
+
+		// UPS → child of Diskstation
+		try {
+			SimpleJson ups = api.upsGet();
+			if (ups.data().get("usb_ups_connect").asBoolean()) {
+				String model = ups.data().get("model").asString("UPS");
+				Resource upsRes = createResource("SynologyUps", model, "ups_model", model);
+				diskstation.addChild(upsRes);
+			}
+		} catch (Exception ignored) {}
+
+		rel.add(diskstation);
+
+		// --- ARIA_OPS stitching: Synology objects → VMWARE Datastore ---
+		stitchDatastores(rel, luns, shares, storage);
+
+		logInfo("Relationships built: internal tree + datastore stitching");
+	}
+
+	private void stitchDatastores(ResourceCollection rel, SimpleJson luns,
+			SimpleJson shares, SimpleJson storage) throws Exception {
+		// Get NAS IPs for NFS stitching
+		SimpleJson nics = api.networkInterfaceList();
+		List<String> nasIps = new java.util.ArrayList<>();
+		for (SimpleJson nic : nics.data().asList()) {
+			String ip = nic.get("ip").asString("");
+			String status = nic.get("status").asString("");
+			if (!ip.isEmpty() && "connected".equals(status)) {
+				nasIps.add(ip);
+			}
+		}
+
+		// iSCSI LUN → VMWARE Datastore via NAA transform
+		for (SimpleJson lun : luns.data().get("luns").asList()) {
+			String uuid = lun.get("uuid").asString();
+			String naa = synologyUuidToNaa(uuid);
+			String stitchKey = "VMFS:|" + naa + "|";
+
+			Resource lunRes = createResource("SynologyIscsiLun", uuid, "lun_uuid", uuid);
+			Resource datastore = createForeignDatastore(stitchKey);
+			lunRes.addParent(datastore);
+			rel.add(lunRes);
+		}
+
+		// NFS Export → VMWARE Datastore via export path
+		for (SimpleJson share : shares.data().get("shares").asList()) {
+			String name = share.get("name").asString();
+			try {
+				SimpleJson rules = api.nfsSharePrivilege(name);
+				if (rules.data().get("rule").size() == 0) continue;
+			} catch (Exception e) {
+				continue;
+			}
+			String volPath = share.get("vol_path").asString("");
+			String serverPath = volPath.startsWith("/") ? volPath.substring(1) : volPath;
+			serverPath = serverPath + "/" + name;
+
+			Resource exportRes = createResource("SynologyNfsExport", name, "share_name", name);
+			for (String ip : nasIps) {
+				String stitchKey = ip + "/" + serverPath;
+				Resource datastore = createForeignDatastore(stitchKey);
+				exportRes.addParent(datastore);
+			}
+			rel.add(exportRes);
+		}
+	}
+
+	/** Synology LUN UUID → ESXi NAA (Type 6, OUI 001405). */
+	static String synologyUuidToNaa(String uuid) {
+		String[] parts = uuid.split("-");
+		StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < parts.length; i++) {
+			if (i > 0) sb.append("d");
+			sb.append(parts[i]);
+		}
+		return "naa.6001405" + sb.substring(0, Math.min(25, sb.length()));
+	}
+
+	private Resource createForeignDatastore(String datastorePath) {
+		ResourceKey key = new ResourceKey(datastorePath, "Datastore", "VMWARE");
+		key.addIdentifier(new ResourceIdentifierConfig("DataStrorePath", datastorePath, true));
+		return new Resource(key);
 	}
 
 	// -----------------------------------------------------------------------
