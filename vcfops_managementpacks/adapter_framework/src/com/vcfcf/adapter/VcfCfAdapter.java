@@ -16,7 +16,6 @@ import com.vmware.tvs.vrealize.adapter.core.discovery.Discoverer;
 import com.vmware.tvs.vrealize.adapter.core.test.Tester;
 
 import java.util.Collection;
-import java.util.logging.Level;
 
 /**
  * Abstract base class for all VCF Content Factory Tier 2 SDK adapters.
@@ -240,21 +239,37 @@ public abstract class VcfCfAdapter<C> extends UnlicensedAdapter {
 
 	/** Log a message at INFO level. */
 	protected void logInfo(String message) {
-		java.util.logging.Logger.getLogger(getClass().getName()).info(message);
+		if (logger != null) {
+			logger.info(message);
+		} else {
+			java.util.logging.Logger.getLogger(getClass().getName()).info(message);
+		}
 	}
 
 	/** Log a message at WARNING level. */
 	protected void logWarn(String message) {
-		java.util.logging.Logger.getLogger(getClass().getName()).warning(message);
+		if (logger != null) {
+			logger.warn(message);
+		} else {
+			java.util.logging.Logger.getLogger(getClass().getName()).warning(message);
+		}
 	}
 
 	/** Log a message at WARNING level with an exception. */
 	protected void logWarn(String message, Throwable t) {
-		java.util.logging.Logger.getLogger(getClass().getName()).log(Level.WARNING, message, t);
+		if (logger != null) {
+			logger.warn(message, t);
+		} else {
+			java.util.logging.Logger.getLogger(getClass().getName()).log(java.util.logging.Level.WARNING, message, t);
+		}
 	}
 
 	/** Log a message at SEVERE level with an exception. */
 	protected void logError(String message, Throwable t) {
-		java.util.logging.Logger.getLogger(getClass().getName()).log(Level.SEVERE, message, t);
+		if (logger != null) {
+			logger.error(message, t);
+		} else {
+			java.util.logging.Logger.getLogger(getClass().getName()).log(java.util.logging.Level.SEVERE, message, t);
+		}
 	}
 }

@@ -1,6 +1,6 @@
 name: "VCF Content Factory Hello World SDK"
 version: "1.0.0"
-build_number: 3
+build_number: 4
 adapter_kind: "hello_world"
 tier: 2
 description: >
