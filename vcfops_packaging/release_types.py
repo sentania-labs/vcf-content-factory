@@ -63,6 +63,7 @@ _SOURCE_TO_DIST: dict[str, str] = {
     "customgroups":   "customgroups",
     "reports":        "reports",
     "managementpacks": "management-packs",
+    "sdk-adapters":   "management-packs",
 }
 
 # Types intentionally excluded from discrete release routing in v1.

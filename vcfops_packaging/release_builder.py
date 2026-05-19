@@ -194,6 +194,34 @@ def _build_component_headline(
     return built
 
 
+def _build_sdk_mp_headline(
+    source_path: Path,
+    tmp_dir: Path,
+) -> Path:
+    """Build a Tier 2 SDK management pack headline.
+
+    Calls sdk_builder.build_sdk_pak() to compile and package the adapter,
+    then wraps the .pak in a zip for the release pipeline.
+
+    Unlike Tier 1 MPs, there is no exchange JSON — SDK paks are
+    self-contained.
+    """
+    import zipfile
+    from vcfops_managementpacks.sdk_builder import build_sdk_pak
+
+    # source_path points to content/sdk-adapters/<name>/adapter.yaml
+    project_dir = source_path.parent
+    pak_path = build_sdk_pak(project_dir, output_dir=tmp_dir)
+
+    # Wrap in a zip for the release pipeline
+    zip_name = f"{pak_path.stem}.zip"
+    zip_path = tmp_dir / zip_name
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(pak_path, pak_path.name)
+
+    return zip_path
+
+
 def _build_mp_headline(
     source_path: Path,
     tmp_dir: Path,
@@ -309,6 +337,12 @@ def build_release(
                 if source_path.parent.parent.name == "third_party":
                     source_prefix = "bundles"
 
+            # Normalise SDK adapter paths:
+            # content/sdk-adapters/<name>/adapter.yaml
+            #   → parent.name == <name>, grandparent.name == "sdk-adapters"
+            if source_path.parent.parent.name == "sdk-adapters":
+                source_prefix = "sdk-adapters"
+
         if _is_third_party_component:
             # Route via the third_party/<proj>/<type>/<file> path so
             # headline_to_dir resolves to ThirdPartyContent/<sub>.
@@ -336,6 +370,8 @@ def build_release(
                 built_path = _build_component_headline(source_path, source_prefix, tmp_dir)
             elif source_prefix == "managementpacks":
                 built_path = _build_mp_headline(source_path, tmp_dir)
+            elif source_prefix == "sdk-adapters":
+                built_path = _build_sdk_mp_headline(source_path, tmp_dir)
             else:
                 raise ValueError(
                     f"unsupported headline source prefix {source_prefix!r} "
@@ -432,6 +468,11 @@ def _artifact_dest_subdir(artifact: "_ManifestArtifact") -> str:
         grandparent = artifact.source_path.parent.parent.name
         if grandparent == "third_party":
             source_prefix = "bundles"
+
+    # Normalise SDK adapter paths:
+    # content/sdk-adapters/<name>/adapter.yaml → grandparent == "sdk-adapters"
+    if artifact.source_path.parent.parent.name == "sdk-adapters":
+        source_prefix = "sdk-adapters"
 
     bundle_data = _load_bundle_data_if_bundle(artifact.source_path)
     return headline_to_dir(source_prefix + "/dummy.yaml", bundle_data=bundle_data)

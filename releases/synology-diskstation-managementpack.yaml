@@ -1,0 +1,15 @@
+artifacts:
+- headline: true
+  source: content/sdk-adapters/synology/adapter.yaml
+deprecates: []
+description: >
+  Monitors Synology DiskStation NAS devices via the DSM Web API (Tier 2 SDK).
+  Discovers storage pools, volumes, disks (including NVMe SSD cache), iSCSI
+  LUNs, and NFS exports. Collects capacity, performance (IO, hit rates), and
+  health metrics. Cross-adapter stitching links iSCSI LUNs and NFS exports to
+  VMWARE Datastores via NAA transform and export path matching — clicking a
+  Datastore shows the backing Synology storage health. Requires DSM 7.2+ with
+  admin API access on port 5001.
+name: synology-diskstation-managementpack
+release_notes: 'First public build. 23 objects, 290+ metrics, Datastore stitching.'
+version: '1.0'
