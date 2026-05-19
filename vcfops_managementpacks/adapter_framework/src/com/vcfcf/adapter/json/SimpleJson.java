@@ -1,4 +1,4 @@
-package com.vcfcf.adapters.synology;
+package com.vcfcf.adapter.json;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -7,8 +7,8 @@ import java.util.Map;
 
 /**
  * Minimal recursive-descent JSON parser. Zero external dependencies.
- * FRAMEWORK GAP: vcfcf-adapter-base should provide JSON utilities;
- * every real adapter needs them. This is a per-adapter stopgap.
+ * Provided by vcfcf-adapter-base so every adapter can parse JSON responses
+ * without pulling in third-party libraries.
  */
 public final class SimpleJson {
 

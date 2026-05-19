@@ -2,7 +2,9 @@ package com.vcfcf.adapters.synology;
 
 import com.vcfcf.adapter.VcfCfAdapter;
 import com.vcfcf.adapter.http.HttpClientBuilder;
+import com.vcfcf.adapter.json.SimpleJson;
 import com.vcfcf.adapter.retry.RetryPolicy;
+import com.vcfcf.adapter.stitch.ForeignResourceResolver;
 
 import com.integrien.alive.common.adapter3.DiscoveryParam;
 import com.integrien.alive.common.adapter3.ResourceKey;
@@ -19,6 +21,7 @@ import com.vmware.tvs.vrealize.adapter.core.test.TestException;
 import com.vmware.tvs.vrealize.adapter.core.test.Tester;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,6 +31,7 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 	private static final String ADAPTER_KIND = "synology_diskstation";
 
 	private volatile SynologyApiClient api;
+	private volatile ForeignResourceResolver datastoreResolver;
 
 	public SynologyAdapter() {
 		super();
@@ -63,6 +67,11 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 				.build();
 
 		this.api = new SynologyApiClient(httpClient, config.username, config.password);
+
+		if (this.suiteAPIClient != null) {
+			this.datastoreResolver = new ForeignResourceResolver(this.suiteAPIClient, this.logger);
+		}
+
 		logInfo("SynologyAdapter configured: host=" + config.host + " port=" + config.port);
 	}
 
@@ -663,16 +672,15 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 
 	private void stitchDatastores(ResourceCollection rel, SimpleJson luns,
 			SimpleJson shares, SimpleJson storage) throws Exception {
-		// Get NAS IPs for NFS stitching
-		SimpleJson nics = api.networkInterfaceList();
-		List<String> nasIps = new java.util.ArrayList<>();
-		for (SimpleJson nic : nics.data().asList()) {
-			String ip = nic.get("ip").asString("");
-			String status = nic.get("status").asString("");
-			if (!ip.isEmpty() && "connected".equals(status)) {
-				nasIps.add(ip);
-			}
+		if (datastoreResolver == null) {
+			logWarn("SuiteAPI client not available — skipping Datastore stitching");
+			return;
 		}
+
+		// Load all VMWARE Datastores, indexed by DataStrorePath
+		Map<String, ResourceKey> datastoresByPath = datastoreResolver.loadAll(
+				"VMWARE", "Datastore", "DataStrorePath");
+		logInfo("Loaded " + datastoresByPath.size() + " VMWARE Datastores for stitching");
 
 		// iSCSI LUN → VMWARE Datastore via NAA transform
 		for (SimpleJson lun : luns.data().get("luns").asList()) {
@@ -680,13 +688,26 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 			String naa = synologyUuidToNaa(uuid);
 			String stitchKey = "VMFS:|" + naa + "|";
 
-			Resource lunRes = createResource("SynologyIscsiLun", uuid, "lun_uuid", uuid);
-			Resource datastore = createForeignDatastore(stitchKey);
-			lunRes.addParent(datastore);
-			rel.add(lunRes);
+			ResourceKey dsKey = datastoresByPath.get(stitchKey);
+			if (dsKey != null) {
+				Resource lunRes = createResource("SynologyIscsiLun", uuid, "lun_uuid", uuid);
+				lunRes.addParent(new Resource(dsKey));
+				rel.add(lunRes);
+				logInfo("Stitched iSCSI LUN " + uuid + " → Datastore " + dsKey.getResourceName());
+			}
 		}
 
 		// NFS Export → VMWARE Datastore via export path
+		// Get NAS IPs for path construction
+		SimpleJson nics = api.networkInterfaceList();
+		List<String> nasIps = new ArrayList<>();
+		for (SimpleJson nic : nics.data().asList()) {
+			String ip = nic.get("ip").asString("");
+			if (!ip.isEmpty() && "connected".equals(nic.get("status").asString(""))) {
+				nasIps.add(ip);
+			}
+		}
+
 		for (SimpleJson share : shares.data().get("shares").asList()) {
 			String name = share.get("name").asString();
 			try {
@@ -695,17 +716,24 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 			} catch (Exception e) {
 				continue;
 			}
+
 			String volPath = share.get("vol_path").asString("");
-			String serverPath = volPath.startsWith("/") ? volPath.substring(1) : volPath;
-			serverPath = serverPath + "/" + name;
+			String serverPath = (volPath.startsWith("/") ? volPath.substring(1) : volPath) + "/" + name;
 
 			Resource exportRes = createResource("SynologyNfsExport", name, "share_name", name);
+			boolean stitched = false;
 			for (String ip : nasIps) {
 				String stitchKey = ip + "/" + serverPath;
-				Resource datastore = createForeignDatastore(stitchKey);
-				exportRes.addParent(datastore);
+				ResourceKey dsKey = datastoresByPath.get(stitchKey);
+				if (dsKey != null) {
+					exportRes.addParent(new Resource(dsKey));
+					logInfo("Stitched NFS export " + name + " via " + ip + " → Datastore " + dsKey.getResourceName());
+					stitched = true;
+				}
 			}
-			rel.add(exportRes);
+			if (stitched) {
+				rel.add(exportRes);
+			}
 		}
 	}
 
@@ -718,12 +746,6 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 			sb.append(parts[i]);
 		}
 		return "naa.6001405" + sb.substring(0, Math.min(25, sb.length()));
-	}
-
-	private Resource createForeignDatastore(String datastorePath) {
-		ResourceKey key = new ResourceKey(datastorePath, "Datastore", "VMWARE");
-		key.addIdentifier(new ResourceIdentifierConfig("DataStrorePath", datastorePath, true));
-		return new Resource(key);
 	}
 
 	// -----------------------------------------------------------------------

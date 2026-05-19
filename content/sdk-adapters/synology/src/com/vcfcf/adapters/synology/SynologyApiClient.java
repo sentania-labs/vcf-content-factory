@@ -1,6 +1,7 @@
 package com.vcfcf.adapters.synology;
 
 import com.vcfcf.adapter.http.ManagedHttpClient;
+import com.vcfcf.adapter.json.SimpleJson;
 
 import java.io.IOException;
 import java.net.http.HttpResponse;
