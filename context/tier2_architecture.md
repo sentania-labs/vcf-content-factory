@@ -138,6 +138,35 @@ SDK behavior:
 | Why these framework choices? | `spec/17-vcfcf-framework-design-guidance.md` |
 | What does an authored Tier 2 adapter look like? | `spec/15-tier2-handoff-for-vcf-cf.md` |
 
+## configure() vs onConfigure() — confirmed call chain
+
+This was investigated against JAR bytecode (aria-ops-core-8.0.0.jar,
+vrops-adapters-sdk-2.2.jar). Key findings:
+
+- `UnlicensedAdapter.configure(ResourceStatus, ResourceConfig)` is declared
+  **abstract**. It IS the hook that adapter subclasses must implement.
+  There is no `super.configure()` to call — doing so would cause a compile
+  error.
+
+- `UnlicensedAdapter.onConfigure(ResourceStatus, ResourceConfig)` is called
+  by the framework (via `AdapterBase.configureBase(AdapterStatus, ResourceConfig)`)
+  **before** our hook. `onConfigure()` does internal setup: nulls the
+  tester/discoverer/collector fields, creates the work directory, and
+  initialises the SuiteAPI client. It then calls `configure()`.
+
+- The `logger` field in `UnlicensedAdapter` is a **constructor-injected**
+  field, not set during `onConfigure()`. It is available when `configure()`
+  is called.
+
+- If `configure()` receives a `ResourceConfig` with an empty
+  `getResourceIdentifiers()` list, the cause is NOT a missing
+  `super.configure()` call. The most likely cause is a platform
+  serialisation failure (e.g., the adapter instance's describe.xml
+  identifiers don't match the stored config on the server, or the
+  adapter was added before the current describe.xml was installed).
+  Use `System.err.println()` debug output to confirm — the collector
+  process captures stderr and it should appear in appliance logs.
+
 ## Compile-time stub JAR: `vmware-ops-api-stubs.jar`
 
 The aria-ops-core `Resource` class has a field of type
