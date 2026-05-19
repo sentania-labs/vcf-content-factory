@@ -19,7 +19,7 @@ Pak structure produced (SDK format — differs from MPB Tier 1):
     manifest.txt                                      [JSON metadata]
     eula.txt                                          [empty placeholder]
     adapters.zip                                      [inner ZIP]
-      manifest.txt                                    [ENTRYCLASS + KINDKEY]
+      manifest.txt                                    [JSON — same format as outer]
       eula.txt
       resources/resources.properties
       <adapter_kind>.jar                              [entry JAR at root]
@@ -259,7 +259,7 @@ def _assemble_adapters_zip(
     """Build adapters.zip in memory and return as bytes.
 
     Structure:
-      manifest.txt                     [ENTRYCLASS + KINDKEY]
+      manifest.txt                     [JSON — identical to outer pak manifest.txt]
       eula.txt
       resources/resources.properties
       <adapter_kind>.jar               [entry JAR]
@@ -276,12 +276,11 @@ def _assemble_adapters_zip(
     adapter_dir = project.adapter_dir_name
 
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-        # Inner manifest.txt (plain text format, same as Tier 1 inner manifest)
-        inner_manifest = (
-            f"ENTRYCLASS={project.entry_class}\n"
-            f"KINDKEY={project.adapter_kind}\n"
-        )
-        zf.writestr("manifest.txt", inner_manifest)
+        # Inner manifest.txt — JSON format, identical to outer pak manifest.txt.
+        # Verified against HPE SimpliVity and Pure Storage reference paks.
+        # NOTE: ENTRYCLASS/KINDKEY key=value belongs ONLY in adapter.properties
+        # inside the adapter JAR (handled by _write_adapter_properties).
+        zf.writestr("manifest.txt", _generate_outer_manifest(project))
 
         # eula.txt (empty placeholder)
         zf.writestr("eula.txt", "")
