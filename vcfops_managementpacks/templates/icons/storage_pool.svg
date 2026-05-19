@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Storage pool: stacked disk platters (like datastore) with RAID shield badge overlay -->
+  <!-- Bottom platter -->
+  <ellipse cx="196" cy="298" rx="126" ry="33" fill="none" stroke="#005c8a" stroke-width="14"/>
+  <ellipse cx="196" cy="298" rx="126" ry="33" fill="#005c8a" opacity="0.12"/>
+  <!-- Middle platter cylinder sides -->
+  <line x1="70" y1="222" x2="70" y2="298" stroke="#005c8a" stroke-width="14" stroke-linecap="round"/>
+  <line x1="322" y1="222" x2="322" y2="298" stroke="#005c8a" stroke-width="14" stroke-linecap="round"/>
+  <!-- Middle platter rim -->
+  <ellipse cx="196" cy="222" rx="126" ry="33" fill="none" stroke="#0098c7" stroke-width="14"/>
+  <ellipse cx="196" cy="222" rx="126" ry="33" fill="#0098c7" opacity="0.12"/>
+  <!-- Top platter cylinder sides -->
+  <line x1="70" y1="146" x2="70" y2="222" stroke="#0098c7" stroke-width="14" stroke-linecap="round"/>
+  <line x1="322" y1="146" x2="322" y2="222" stroke="#0098c7" stroke-width="14" stroke-linecap="round"/>
+  <!-- Top platter rim (primary, filled) -->
+  <ellipse cx="196" cy="146" rx="126" ry="33" fill="#0098c7" opacity="0.22"/>
+  <ellipse cx="196" cy="146" rx="126" ry="33" fill="none" stroke="#0098c7" stroke-width="16"/>
+  <!-- RAID shield badge (top-right corner overlay) -->
+  <!-- Shield filled background -->
+  <path d="M 292,52 L 352,72 L 352,122 Q 352,162 292,180 Q 232,162 232,122 L 232,72 Z"
+        fill="#0098c7" opacity="0.90"/>
+  <!-- Shield outline -->
+  <path d="M 292,52 L 352,72 L 352,122 Q 352,162 292,180 Q 232,162 232,122 L 232,72 Z"
+        fill="none" stroke="#005c8a" stroke-width="10" stroke-linejoin="round"/>
+  <!-- Shield inner check-mark (redundancy symbol) -->
+  <polyline points="258,116 280,140 328,92"
+            fill="none" stroke="white" stroke-width="12"
+            stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

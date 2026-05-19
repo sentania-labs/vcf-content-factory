@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- UPS: rectangular battery shape with lightning bolt -->
+  <!-- Battery body -->
+  <rect x="80" y="100" width="240" height="220" rx="16"
+        fill="none" stroke="#0098c7" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Battery fill indicator (partial charge — lower two thirds) -->
+  <rect x="96" y="190" width="208" height="116" rx="8"
+        fill="#0098c7" opacity="0.18"/>
+  <!-- Battery positive terminal (nub at top center) -->
+  <rect x="164" y="76" width="72" height="28" rx="10"
+        fill="none" stroke="#005c8a" stroke-width="12" stroke-linejoin="round"/>
+  <!-- Lightning bolt (centered on battery face) -->
+  <polygon points="220,136 182,214 206,214 180,286 238,200 212,200"
+           fill="#005c8a" opacity="0.85"/>
+  <polygon points="220,136 182,214 206,214 180,286 238,200 212,200"
+           fill="none" stroke="#005c8a" stroke-width="4" stroke-linejoin="round"/>
+</svg>

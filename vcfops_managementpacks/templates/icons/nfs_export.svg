@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- NFS Export: folder shape with share/network arrow -->
+  <!-- Folder tab (top-left corner) -->
+  <path d="M 60,148 L 60,132 Q 60,120 72,120 L 172,120 L 192,148 Z"
+        fill="#0098c7" opacity="0.30"/>
+  <path d="M 60,148 L 60,132 Q 60,120 72,120 L 172,120 L 192,148"
+        fill="none" stroke="#0098c7" stroke-width="14" stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- Folder body -->
+  <rect x="60" y="148" width="248" height="172" rx="12"
+        fill="none" stroke="#0098c7" stroke-width="16" stroke-linejoin="round"/>
+  <rect x="60" y="148" width="248" height="172" rx="12"
+        fill="#0098c7" opacity="0.10"/>
+  <!-- Share / network arrow (outward from folder, upper-right) -->
+  <!-- Arrow stem pointing right -->
+  <line x1="216" y1="204" x2="308" y2="204" stroke="#005c8a" stroke-width="14" stroke-linecap="round"/>
+  <!-- Arrowhead -->
+  <polyline points="288,184 312,204 288,224"
+            fill="none" stroke="#005c8a" stroke-width="14"
+            stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Small node circle at arrow origin (representing the share source) -->
+  <circle cx="204" cy="204" r="14" fill="#005c8a"/>
+  <!-- Fork: two destination dots at the arrow end (split share) -->
+  <line x1="308" y1="204" x2="330" y2="180" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <line x1="308" y1="204" x2="330" y2="228" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <circle cx="336" cy="176" r="10" fill="#005c8a" opacity="0.70"/>
+  <circle cx="336" cy="232" r="10" fill="#005c8a" opacity="0.70"/>
+</svg>

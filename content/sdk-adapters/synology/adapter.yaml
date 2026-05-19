@@ -1,6 +1,6 @@
 name: "VCF Content Factory Synology DiskStation"
 version: "1.0.0"
-build_number: 1
+build_number: 2
 adapter_kind: "synology_diskstation"
 tier: 2
 description: >

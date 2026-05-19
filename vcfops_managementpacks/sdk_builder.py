@@ -52,9 +52,16 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
+
+try:
+    import yaml as _yaml
+    _YAML_AVAILABLE = True
+except ImportError:
+    _YAML_AVAILABLE = False
 
 from .sdk_project import SdkProjectDef, SdkProjectError, load_sdk_project
 
@@ -265,6 +272,129 @@ def _collect_lib_jars(project_dir: Path) -> List[Path]:
     return lib_jars
 
 
+def _load_icon_map(project_dir: Path) -> Dict[str, str]:
+    """Load the icon mapping from project_dir/icons/icons.yaml.
+
+    Returns a dict mapping ResourceKind key -> icon filename.
+    Also exposes 'adapter_kind_icon' under the special key '_adapter_kind'.
+    Returns an empty dict when the file is missing or yaml is unavailable.
+    """
+    icons_yaml = project_dir / "icons" / "icons.yaml"
+    if not icons_yaml.is_file() or not _YAML_AVAILABLE:
+        return {}
+    with icons_yaml.open(encoding="utf-8") as fh:
+        data = _yaml.safe_load(fh) or {}
+    mapping: Dict[str, str] = {}
+    if "adapter_kind_icon" in data:
+        mapping["_adapter_kind"] = data["adapter_kind_icon"]
+    for rk, icon in (data.get("resource_kinds") or {}).items():
+        mapping[str(rk)] = str(icon)
+    return mapping
+
+
+def _resolve_icon(name: str, project_dir: Path) -> bytes:
+    """Resolve an icon file name to its bytes.
+
+    Search order:
+      1. project_dir/icons/<name>
+      2. templates/icons/<name>
+      3. templates/icons/default.svg
+    Returns empty bytes only if none of the above exist.
+    """
+    candidates = [
+        project_dir / "icons" / name,
+        _HERE / "templates" / "icons" / name,
+        _HERE / "templates" / "icons" / "default.svg",
+    ]
+    for path in candidates:
+        if path.is_file():
+            return path.read_bytes()
+    return b""
+
+
+def _parse_resource_kind_keys(describe_xml: Path) -> List[str]:
+    """Return all ResourceKind key attribute values from describe.xml."""
+    try:
+        tree = ET.parse(describe_xml)
+    except ET.ParseError as exc:
+        print(f"  icons: could not parse describe.xml: {exc}", file=sys.stderr)
+        return []
+    root = tree.getroot()
+    # Strip namespace prefix if present
+    ns = ""
+    if root.tag.startswith("{"):
+        ns = root.tag.split("}")[0] + "}"
+    keys: List[str] = []
+    for rk in root.iter(f"{ns}ResourceKind"):
+        key = rk.get("key")
+        if key:
+            keys.append(key)
+    return keys
+
+
+def _pack_icons(
+    zf: zipfile.ZipFile,
+    project: SdkProjectDef,
+    project_dir: Path,
+    describe_xml: Path,
+) -> None:
+    """Write conf/images/* icon entries into the open adapters.zip ZipFile.
+
+    Writes:
+      <adapter_dir>/conf/images/AdapterKind/<adapter_kind>.svg
+      <adapter_dir>/conf/images/ResourceKind/<resource_kind_key>.svg  (one per RK)
+      <adapter_dir>/conf/images/TraversalSpec/default.svg
+
+    Directory entries are added before each file group (required by the
+    platform's SyncAdapters.extractFiles() — it uses Files.copy() and
+    needs parent dirs to pre-exist from explicit zip directory entries).
+    """
+    adapter_dir = project.adapter_dir_name
+    icon_map = _load_icon_map(project_dir)
+
+    def _add_dir(dirname: str) -> None:
+        if not dirname.endswith("/"):
+            dirname += "/"
+        zf.writestr(dirname, "")
+
+    # --- AdapterKind icon ---
+    _add_dir(f"{adapter_dir}/conf/images")
+    _add_dir(f"{adapter_dir}/conf/images/AdapterKind")
+    ak_icon_name = icon_map.get("_adapter_kind", "default.svg")
+    ak_icon_bytes = _resolve_icon(ak_icon_name, project_dir)
+    zf.writestr(
+        f"{adapter_dir}/conf/images/AdapterKind/{project.adapter_kind}.svg",
+        ak_icon_bytes,
+    )
+    print(
+        f"  icons: AdapterKind/{project.adapter_kind}.svg <- {ak_icon_name}",
+        file=sys.stderr,
+    )
+
+    # --- ResourceKind icons ---
+    rk_keys = _parse_resource_kind_keys(describe_xml)
+    if rk_keys:
+        _add_dir(f"{adapter_dir}/conf/images/ResourceKind")
+        for rk_key in rk_keys:
+            icon_name = icon_map.get(rk_key, "default.svg")
+            icon_bytes = _resolve_icon(icon_name, project_dir)
+            dest = f"{adapter_dir}/conf/images/ResourceKind/{rk_key}.svg"
+            zf.writestr(dest, icon_bytes)
+            print(
+                f"  icons: ResourceKind/{rk_key}.svg <- {icon_name}",
+                file=sys.stderr,
+            )
+
+    # --- TraversalSpec icon ---
+    _add_dir(f"{adapter_dir}/conf/images/TraversalSpec")
+    ts_icon_bytes = _resolve_icon("default.svg", project_dir)
+    zf.writestr(
+        f"{adapter_dir}/conf/images/TraversalSpec/default.svg",
+        ts_icon_bytes,
+    )
+    print(f"  icons: TraversalSpec/default.svg <- default.svg", file=sys.stderr)
+
+
 def _assemble_adapters_zip(
     project: SdkProjectDef,
     project_dir: Path,
@@ -354,6 +484,9 @@ def _assemble_adapters_zip(
         # lib/ directory — bundled JARs
         for jar in lib_jars:
             zf.write(jar, f"{adapter_dir}/lib/{jar.name}")
+
+        # conf/images/ — icons per ResourceKind and AdapterKind
+        _pack_icons(zf, project, project_dir, describe_src)
 
     return buf.getvalue()
 

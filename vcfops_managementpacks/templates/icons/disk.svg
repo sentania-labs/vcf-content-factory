@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- Single hard drive: 3.5" form factor with platter circle visible, connector pins at bottom -->
+  <!-- Drive body -->
+  <rect x="90" y="60" width="220" height="260" rx="14"
+        fill="none" stroke="#0098c7" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Platter circle visible through top surface -->
+  <circle cx="200" cy="178" r="80" fill="none" stroke="#0098c7" stroke-width="14"/>
+  <circle cx="200" cy="178" r="46" fill="#0098c7" opacity="0.18"/>
+  <circle cx="200" cy="178" r="46" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <!-- Spindle hub -->
+  <circle cx="200" cy="178" r="16" fill="#0098c7"/>
+  <!-- Mounting screw corner indicators -->
+  <circle cx="108" cy="78" r="8" fill="#005c8a" opacity="0.60"/>
+  <circle cx="292" cy="78" r="8" fill="#005c8a" opacity="0.60"/>
+  <!-- Connector block at bottom -->
+  <rect x="120" y="320" width="160" height="22" rx="6"
+        fill="none" stroke="#005c8a" stroke-width="10"/>
+  <!-- Connector pins -->
+  <line x1="140" y1="320" x2="140" y2="342" stroke="#005c8a" stroke-width="8" stroke-linecap="round"/>
+  <line x1="160" y1="320" x2="160" y2="342" stroke="#005c8a" stroke-width="8" stroke-linecap="round"/>
+  <line x1="180" y1="320" x2="180" y2="342" stroke="#005c8a" stroke-width="8" stroke-linecap="round"/>
+  <line x1="200" y1="320" x2="200" y2="342" stroke="#005c8a" stroke-width="8" stroke-linecap="round"/>
+  <line x1="220" y1="320" x2="220" y2="342" stroke="#005c8a" stroke-width="8" stroke-linecap="round"/>
+  <line x1="240" y1="320" x2="240" y2="342" stroke="#005c8a" stroke-width="8" stroke-linecap="round"/>
+  <line x1="260" y1="320" x2="260" y2="342" stroke="#005c8a" stroke-width="8" stroke-linecap="round"/>
+</svg>

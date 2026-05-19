@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- iSCSI LUN: cylinder with target/crosshair overlay -->
+  <!-- Cylinder bottom cap -->
+  <ellipse cx="200" cy="306" rx="126" ry="36" fill="none" stroke="#005c8a" stroke-width="14"/>
+  <ellipse cx="200" cy="306" rx="126" ry="36" fill="#005c8a" opacity="0.12"/>
+  <!-- Cylinder sides -->
+  <line x1="74" y1="136" x2="74" y2="306" stroke="#0098c7" stroke-width="14" stroke-linecap="round"/>
+  <line x1="326" y1="136" x2="326" y2="306" stroke="#0098c7" stroke-width="14" stroke-linecap="round"/>
+  <!-- Cylinder top cap (primary) -->
+  <ellipse cx="200" cy="136" rx="126" ry="36" fill="#0098c7" opacity="0.20"/>
+  <ellipse cx="200" cy="136" rx="126" ry="36" fill="none" stroke="#0098c7" stroke-width="16"/>
+  <!-- Target / crosshair overlay on top face -->
+  <!-- Outer ring -->
+  <ellipse cx="200" cy="136" rx="68" ry="20" fill="none" stroke="#005c8a" stroke-width="10"/>
+  <!-- Inner dot -->
+  <ellipse cx="200" cy="136" rx="20" ry="6" fill="#005c8a"/>
+  <!-- Horizontal crosshair tick marks (left and right of outer ring) -->
+  <line x1="74" y1="136" x2="104" y2="136" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+  <line x1="296" y1="136" x2="326" y2="136" stroke="#005c8a" stroke-width="10" stroke-linecap="round"/>
+</svg>

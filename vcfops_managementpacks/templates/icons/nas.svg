@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <!-- NAS enclosure: front-facing desktop NAS with drive bays, status LED, network port -->
+  <!-- Outer chassis -->
+  <rect x="88" y="52" width="224" height="296" rx="14"
+        fill="none" stroke="#0098c7" stroke-width="16" stroke-linejoin="round"/>
+  <!-- Drive bay 1 -->
+  <rect x="112" y="80" width="176" height="46" rx="8"
+        fill="none" stroke="#005c8a" stroke-width="10"/>
+  <rect x="122" y="90" width="156" height="26" rx="5"
+        fill="#005c8a" opacity="0.18"/>
+  <!-- Drive bay 2 -->
+  <rect x="112" y="140" width="176" height="46" rx="8"
+        fill="none" stroke="#005c8a" stroke-width="10"/>
+  <rect x="122" y="150" width="156" height="26" rx="5"
+        fill="#005c8a" opacity="0.18"/>
+  <!-- Drive bay 3 -->
+  <rect x="112" y="200" width="176" height="46" rx="8"
+        fill="none" stroke="#0098c7" stroke-width="10"/>
+  <rect x="122" y="210" width="156" height="26" rx="5"
+        fill="#0098c7" opacity="0.20"/>
+  <!-- Drive bay 4 -->
+  <rect x="112" y="258" width="176" height="46" rx="8"
+        fill="none" stroke="#005c8a" stroke-width="10"/>
+  <rect x="122" y="268" width="156" height="26" rx="5"
+        fill="#005c8a" opacity="0.18"/>
+  <!-- Status LED cluster (bottom-left of front panel, below bays) -->
+  <circle cx="120" cy="326" r="8" fill="#0098c7"/>
+  <circle cx="146" cy="326" r="8" fill="#0098c7"/>
+  <circle cx="172" cy="326" r="8" fill="#005c8a"/>
+  <!-- Network port outline (bottom-right) -->
+  <rect x="248" y="312" width="44" height="28" rx="6"
+        fill="none" stroke="#005c8a" stroke-width="10"/>
+  <line x1="258" y1="320" x2="258" y2="332" stroke="#005c8a" stroke-width="6" stroke-linecap="round"/>
+  <line x1="272" y1="320" x2="272" y2="332" stroke="#005c8a" stroke-width="6" stroke-linecap="round"/>
+  <line x1="284" y1="320" x2="284" y2="332" stroke="#005c8a" stroke-width="6" stroke-linecap="round"/>
+</svg>

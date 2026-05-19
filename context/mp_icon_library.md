@@ -55,6 +55,12 @@ Output paths inside the pak:
 | `adapter_instance` | Plug + socket with directional arrow | The synthetic adapter-instance object every MP has |
 | `host_system` | Server rack unit with disk bays + LEDs | Physical/virtual host servers |
 | `datastore` | Stacked disk platters + capacity bar | Storage volumes, datastores, file shares |
+| `nas` | Front-facing desktop NAS enclosure with 4 drive bays, status LEDs, network port | NAS appliances (e.g. Synology DiskStation) |
+| `storage_pool` | Stacked disk platters with RAID shield/check-mark badge overlay | RAID storage pools |
+| `disk` | 3.5" hard drive with platter circle and connector pins | Individual physical disks |
+| `iscsi_lun` | Cylinder (LUN shape) with target/crosshair overlay on top face | iSCSI LUNs |
+| `nfs_export` | Folder shape with share arrow and dual destination nodes | NFS exports, shared folders |
+| `ups` | Rectangular battery body with positive terminal nub and lightning bolt | UPS devices |
 
 ## When the library doesn't have a fit
 
