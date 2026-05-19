@@ -323,7 +323,13 @@ def _assemble_adapters_zip(
 
 
 def _generate_outer_manifest(project: SdkProjectDef) -> str:
-    """Generate the outer pak manifest.txt JSON (SDK format, no adapters: field)."""
+    """Generate the outer pak manifest.txt JSON.
+
+    The STAGE phase of the VCF Ops install pipeline requires the
+    "adapters" key to locate adapters.zip.  Both "adapters" and
+    "adapter_kinds" are present in working paks (confirmed against
+    MPB-built paks and the pak wire format doc).
+    """
     manifest = {
         "display_name": project.name,
         "name": project.name,
@@ -339,7 +345,7 @@ def _generate_outer_manifest(project: SdkProjectDef) -> str:
         "pak_validation_script": {"script": ""},
         "adapter_pre_script": {"script": ""},
         "adapter_post_script": {"script": ""},
-        # SDK format: adapter_kinds instead of adapters:
+        "adapters": ["adapters.zip"],
         "adapter_kinds": [project.adapter_kind],
     }
     return json.dumps(manifest, indent=4)
