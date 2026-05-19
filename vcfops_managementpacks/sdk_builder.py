@@ -17,7 +17,7 @@ Implements steps 1-13 of the design plan (designs/tier2-mp-architecture-plan.md)
 Pak structure produced (SDK format — differs from MPB Tier 1):
   dist/vcfcf_<adapter_kind>.<version>.<build>.pak   [outer ZIP]
     manifest.txt                                      [JSON metadata]
-    eula.txt                                          [empty placeholder]
+    eula.txt                                          [MIT license text]
     adapters.zip                                      [inner ZIP]
       manifest.txt                                    [JSON — same format as outer]
       eula.txt
@@ -71,6 +71,23 @@ from .sdk_project import SdkProjectDef, SdkProjectError, load_sdk_project
 
 _HERE = Path(__file__).parent
 _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"
+_LICENSE_PATH = _HERE.parent / "LICENSE"
+
+
+def _read_license() -> str:
+    """Return the contents of the repo LICENSE file.
+
+    Falls back to an empty string (with a printed warning) if the file
+    does not exist so the build does not crash over a missing license file.
+    """
+    if _LICENSE_PATH.is_file():
+        return _LICENSE_PATH.read_text(encoding="utf-8")
+    print(
+        f"  WARNING: LICENSE file not found at {_LICENSE_PATH}; "
+        "writing empty eula.txt.",
+        file=sys.stderr,
+    )
+    return ""
 
 # JARs that ship in every pak's lib/ — framework + aria-ops-core + SDK
 # vrops-adapters-sdk IS on the shared classpath but working SDK paks (HPE
@@ -436,8 +453,8 @@ def _assemble_adapters_zip(
         # Inner manifest.txt — JSON format, identical to outer pak manifest.txt.
         zf.writestr("manifest.txt", _generate_outer_manifest(project))
 
-        # eula.txt (empty placeholder — duplicated from outer pak per wire format)
-        zf.writestr("eula.txt", "")
+        # eula.txt — MIT license text, duplicated from outer pak per wire format
+        zf.writestr("eula.txt", _read_license())
 
         # default.png (duplicated from outer pak — validate phase checks for it)
         icon_path = _HERE / "templates" / "default.png"
@@ -537,7 +554,7 @@ def _write_outer_pak(
 
     with zipfile.ZipFile(pak_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.txt", _generate_outer_manifest(project))
-        zf.writestr("eula.txt", "")
+        zf.writestr("eula.txt", _read_license())
         zf.writestr("default.png", icon_bytes)
         zf.writestr("resources/resources.properties", "")
         zf.writestr("adapters.zip", adapters_zip_bytes)
