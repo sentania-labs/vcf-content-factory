@@ -523,8 +523,12 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
             zip_url = f"{subdir}/{filename}"
             download_cell = f"[Download]({zip_url})"
 
-            # Install column: bare command in a code fence.
-            install_cell = "`python3 install.py`"
+            # Install column: MP releases install via the VCF Ops UI, not
+            # the install script.
+            if subdir == "management-packs" or subdir.endswith("/management-packs"):
+                install_cell = "UI: Administration → Solutions"
+            else:
+                install_cell = "`python3 install.py`"
 
             if subdir in by_third_party:
                 # Third-party row — load license + author from bundle YAML.
