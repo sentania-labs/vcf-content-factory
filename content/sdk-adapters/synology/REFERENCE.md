@@ -1,7 +1,6 @@
 # VCF Content Factory Synology DiskStation — Reference
 
-Complete metric, property, and traversal spec reference.
-Generated from `describe.xml` and `resources.properties` for build 1.0.0.10.
+Generated from `describe.xml` and `resources.properties` for build 1.0.0.13.
 
 ## Adapter
 
@@ -24,8 +23,8 @@ Generated from `describe.xml` and `resources.properties` for build 1.0.0.10.
 | Field | Key | Default | Required |
 |---|---|---|---|
 | Host / IP Address | `host` | — | Yes |
-| Port (HTTPS) | `port` | 5001 | No |
-| Allow Insecure SSL | `allowInsecure` | true | No |
+| Port (HTTPS, default 5001) | `port` | 5001 | No |
+| Allow Insecure SSL (true/false) | `allowInsecure` | true | No |
 
 ---
 
@@ -33,19 +32,13 @@ Generated from `describe.xml` and `resources.properties` for build 1.0.0.10.
 
 ### Synology World
 
-Global aggregation root. One singleton shared across all adapter instances.
-
-**Identifier**: `world_id` (fixed value `synology_world`)
-
-No metrics or properties. Serves as the top-level hierarchy entry point.
+**Identifier**: `world_id` (World ID)
 
 ---
 
 ### Synology Diskstation
 
-The NAS device. One per adapter instance. Named `<model> <serial>` (e.g., "DS1520+ 20B0RYRXRF3KF").
-
-**Identifier**: `serial`
+**Identifier**: `serial` (Serial Number)
 
 #### System
 
@@ -111,9 +104,7 @@ The NAS device. One per adapter instance. Named `<model> <serial>` (e.g., "DS152
 
 ### Synology Storage Pool
 
-RAID group containing volumes and disks. Named "Storage Pool N" from DSM `num_id`.
-
-**Identifier**: `pool_id` (e.g., `reuse_1`)
+**Identifier**: `pool_id` (Pool ID)
 
 #### Capacity
 
@@ -123,7 +114,7 @@ RAID group containing volumes and disks. Named "Storage Pool N" from DSM `num_id
 | `used_bytes` | Used | metric | bytes | yes |
 | `usage_pct` | Usage % | metric | % | yes |
 
-#### Properties
+#### Configuration
 
 | Key | Label | Type | Unit | Monitored |
 |---|---|---|---|---|
@@ -137,9 +128,7 @@ RAID group containing volumes and disks. Named "Storage Pool N" from DSM `num_id
 
 ### Synology Volume
 
-Filesystem volume. Named "Volume N" from DSM `num_id`. IO metrics joined from Utilization API.
-
-**Identifier**: `volume_id` (e.g., `volume_1`)
+**Identifier**: `volume_id` (Volume ID)
 
 #### Capacity
 
@@ -159,7 +148,7 @@ Filesystem volume. Named "Volume N" from DSM `num_id`. IO metrics joined from Ut
 | `write_iops` | Write IOPS | metric | ops/s | yes |
 | `utilization_pct` | Utilization | metric | % | yes |
 
-#### Properties
+#### Configuration
 
 | Key | Label | Type | Unit | Monitored |
 |---|---|---|---|---|
@@ -181,10 +170,7 @@ Filesystem volume. Named "Volume N" from DSM `num_id`. IO metrics joined from Ut
 
 ### Synology Disk
 
-Physical drive (SATA or NVMe). Named from DSM `name` field (e.g., "Drive 4", "Cache device 1").
-IO metrics joined from Utilization API.
-
-**Identifier**: `disk_id` (e.g., `sata1`, `nvme0n1`)
+**Identifier**: `disk_id` (Disk ID)
 
 #### Health
 
@@ -205,7 +191,7 @@ IO metrics joined from Utilization API.
 | `write_iops` | Write IOPS | metric | ops/s | yes |
 | `utilization_pct` | Utilization | metric | % | yes |
 
-#### Properties
+#### Hardware
 
 | Key | Label | Type | Unit | Monitored |
 |---|---|---|---|---|
@@ -224,9 +210,7 @@ IO metrics joined from Utilization API.
 
 ### Synology iSCSI LUN
 
-iSCSI Logical Unit. Named from DSM LUN name. IO metrics joined from Utilization API.
-
-**Identifier**: `lun_uuid`
+**Identifier**: `lun_uuid` (LUN UUID)
 
 #### IO
 
@@ -239,7 +223,7 @@ iSCSI Logical Unit. Named from DSM LUN name. IO metrics joined from Utilization 
 | `read_latency` | Read Latency | metric | ms | yes |
 | `write_latency` | Write Latency | metric | ms | yes |
 
-#### Properties
+#### Configuration
 
 | Key | Label | Type | Unit | Monitored |
 |---|---|---|---|---|
@@ -248,14 +232,14 @@ iSCSI Logical Unit. Named from DSM LUN name. IO metrics joined from Utilization 
 | `location` | Location | property | — | — |
 | `type` | Type | property | — | — |
 | `target_iqn` | Target IQN | property | — | — |
+| `target_enabled` | Target Enabled | property | — | — |
+| `network_portals` | Network Portals | property | — | — |
 
 ---
 
 ### Synology NFS Export
 
-Shared folder with NFS rules. Named by share name (e.g., "vcf-lab-mgmt01-nfs").
-
-**Identifier**: `share_name`
+**Identifier**: `share_name` (Share Name)
 
 #### Capacity
 
@@ -271,7 +255,7 @@ Shared folder with NFS rules. Named by share name (e.g., "vcf-lab-mgmt01-nfs").
 |---|---|---|---|---|
 | `active_client_count` | Active Client Count | metric | — | yes |
 
-#### Properties
+#### Configuration
 
 | Key | Label | Type | Unit | Monitored |
 |---|---|---|---|---|
@@ -279,6 +263,11 @@ Shared folder with NFS rules. Named by share name (e.g., "vcf-lab-mgmt01-nfs").
 | `volume_path` | Volume Path | property | — | — |
 | `description` | Description | property | — | — |
 | `quota_value_mib` | Quota Value | property | — | — |
+
+#### Access Control
+
+| Key | Label | Type | Unit | Monitored |
+|---|---|---|---|---|
 | `cow_enabled` | CoW Enabled | property | — | — |
 | `compress_enabled` | Compression Enabled | property | — | — |
 | `rule_count` | Rule Count | property | — | — |
@@ -288,9 +277,7 @@ Shared folder with NFS rules. Named by share name (e.g., "vcf-lab-mgmt01-nfs").
 
 ### Synology UPS
 
-Uninterruptible power supply (when connected via USB). Only discovered if physically present.
-
-**Identifier**: `ups_model`
+**Identifier**: `ups_model` (UPS Model)
 
 #### Battery
 
@@ -299,7 +286,7 @@ Uninterruptible power supply (when connected via USB). Only discovered if physic
 | `charge_pct` | Charge | metric | % | yes |
 | `runtime_seconds` | Runtime | metric | sec | yes |
 
-#### Properties
+#### Status
 
 | Key | Label | Type | Unit | Monitored |
 |---|---|---|---|---|
@@ -311,9 +298,7 @@ Uninterruptible power supply (when connected via USB). Only discovered if physic
 
 ### Synology SSD Cache
 
-NVMe/SSD cache allocation mounted on a volume.
-
-**Identifier**: `cache_id` (e.g., `alloc_cache_1_1`)
+**Identifier**: `cache_id` (Cache ID)
 
 #### Hit Rate
 
@@ -331,13 +316,23 @@ NVMe/SSD cache allocation mounted on a volume.
 | `reusable_bytes` | Reusable | metric | bytes | no |
 | `memory_used` | Metadata Memory | metric | bytes | no |
 
-#### Properties
+#### Configuration
 
 | Key | Label | Type | Unit | Monitored |
 |---|---|---|---|---|
 | `mode` | Mode | property | — | — |
 | `status` | Status | property | — | — |
 | `mount_volume` | Mount Volume | property | — | — |
+| `device_type` | RAID Type | property | — | — |
+| `skip_seq_io` | Skip Sequential IO | property | — | — |
+
+#### Hardware
+
+| Key | Label | Type | Unit | Monitored |
+|---|---|---|---|---|
+| `disk_count` | Disk Count | property | — | — |
+| `disk_members` | Disk Members | property | — | — |
+| `total_capacity` | Total Capacity | property | — | — |
 | `disk_failure_count` | Disk Failure Count | property | — | — |
 
 ---
@@ -346,81 +341,16 @@ NVMe/SSD cache allocation mounted on a volume.
 
 **Name**: Synology DiskStation Storage Tree
 
-Hierarchical navigation paths from the adapter instance root:
-
 ```
-Adapter Instance (synology_diskstation, type=7)
-└── Synology World
-    └── Synology Diskstation
-        ├── Synology Storage Pool
-        │   ├── Synology Volume
-        │   │   ├── Synology iSCSI LUN
-        │   │   ├── Synology NFS Export
-        │   │   └── Synology SSD Cache
-        │   └── Synology Disk
-        └── Synology UPS
+synology_diskstation
+    └── Synology World
+        └── Synology Diskstation
+            ├── Synology Storage Pool
+            │   ├── Synology Volume
+            │   │   ├── Synology iSCSI LUN
+            │   │   ├── Synology NFS Export
+            │   │   └── Synology SSD Cache
+            │   │       └── Synology Disk
+            │   └── Synology Disk
+            └── Synology UPS
 ```
-
-### Resource Paths
-
-| Path | Description |
-|---|---|
-| `...SynologyWorld::child\|\|...SynologyDiskstation::child\|\|...SynologyStoragePool::child\|\|...SynologyVolume::child\|\|...SynologyIscsiLun::child` | World → DiskStation → Pool → Volume → iSCSI LUN |
-| `...SynologyWorld::child\|\|...SynologyDiskstation::child\|\|...SynologyStoragePool::child\|\|...SynologyVolume::child\|\|...SynologyNfsExport::child` | World → DiskStation → Pool → Volume → NFS Export |
-| `...SynologyWorld::child\|\|...SynologyDiskstation::child\|\|...SynologyStoragePool::child\|\|...SynologyVolume::child\|\|...SynologySsdCache::child` | World → DiskStation → Pool → Volume → SSD Cache |
-| `...SynologyWorld::child\|\|...SynologyDiskstation::child\|\|...SynologyStoragePool::child\|\|...SynologyDisk::child` | World → DiskStation → Pool → Disk |
-| `...SynologyWorld::child\|\|...SynologyDiskstation::child\|\|...SynologyUps::child` | World → DiskStation → UPS |
-
----
-
-## Cross-Adapter Stitching
-
-iSCSI LUNs and NFS exports are linked to existing **VMWARE Datastore** objects
-via the `DataStrorePath` resource identifier.
-
-### iSCSI LUN → Datastore
-
-Transform: Synology LUN UUID → ESXi NAA identifier.
-
-```
-UUID:  3ea293f1-e18f-4cb2-929d-b0aff7ea43c2
-NAA:   naa.60014053ea293f1de18f4cb292
-Match: VMFS:|naa.60014053ea293f1de18f4cb292|
-```
-
-Algorithm: `naa.6001405` + UUID parts joined with `d`, truncated to 25 hex characters.
-
-### NFS Export → Datastore
-
-Match: `<nas_ip>/<volume_path_no_slash>/<share_name>` against Datastore `DataStrorePath`.
-
-```
-Export:    /volume1/vcf-lab-mgmt01-nfs
-NAS IP:   10.0.30.4
-Match:    10.0.30.4/volume1/vcf-lab-mgmt01-nfs
-```
-
-All connected NAS IPs are tried (from `SYNO.Core.Network.Interface`).
-
----
-
-## API Endpoints
-
-| # | API | Method | Objects Fed | Cycle |
-|---|---|---|---|---|
-| 1 | `SYNO.API.Auth` | `login` | (session) | on-demand |
-| 2 | `SYNO.DSM.Info` | `getinfo` | Diskstation | 5 min |
-| 3 | `SYNO.Core.System` | `info` | Diskstation | 5 min |
-| 4 | `SYNO.Core.System.Utilization` | `get` | Diskstation, Disk, Volume, iSCSI LUN | 5 min |
-| 5 | `SYNO.Storage.CGI.Storage` | `load_info` | Storage Pool, Volume, Disk, SSD Cache | 5 min |
-| 6 | `SYNO.Core.Hardware.FanSpeed` | `get` | Diskstation | 5 min |
-| 7 | `SYNO.Core.Network.Interface` | `list` | Diskstation, stitching | 5 min |
-| 8 | `SYNO.Core.ISCSI.LUN` | `list` | iSCSI LUN | 5 min |
-| 9 | `SYNO.Core.ISCSI.Target` | `list` | iSCSI LUN | 5 min |
-| 10 | `SYNO.Core.FileServ.NFS` | `get` | Diskstation | 5 min |
-| 11 | `SYNO.Core.Share` | `list` | NFS Export | 5 min |
-| 12 | `SYNO.Core.FileServ.NFS.SharePrivilege` | `load` | NFS Export | 5 min (N calls) |
-| 13 | `SYNO.Core.CurrentConnection` | `get` | NFS Export, Diskstation | 5 min |
-| 14 | `SYNO.Core.ExternalDevice.UPS` | `get` | UPS | 5 min |
-
-Requests per cycle: 13 + N (one `SharePrivilege` call per shared folder with NFS rules).

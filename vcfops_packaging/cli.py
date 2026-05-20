@@ -552,7 +552,7 @@ def cmd_release(args) -> int:
     # Validate type argument — symptoms and alerts unsupported in v1.
     # -----------------------------------------------------------------------
     content_type = args.content_type
-    _SUPPORTED = {"dashboard", "view", "supermetric", "customgroup", "report", "bundle", "managementpack"}
+    _SUPPORTED = {"dashboard", "view", "supermetric", "customgroup", "report", "bundle", "managementpack", "sdk-adapter"}
     _UNSUPPORTED_V1 = {"symptom", "symptoms", "alert", "alerts"}
     if content_type in _UNSUPPORTED_V1:
         print(
@@ -572,6 +572,8 @@ def cmd_release(args) -> int:
     # -----------------------------------------------------------------------
     # Resolve <name> to source YAML path.
     #   Priority: exact path -> filename stem -> display name match.
+    #   Special case for sdk-adapter: <name> is the adapter directory name
+    #   (e.g. "unifi"), resolved to content/sdk-adapters/<name>/adapter.yaml.
     # -----------------------------------------------------------------------
     name_arg = args.name
 
@@ -584,8 +586,221 @@ def cmd_release(args) -> int:
         "report":         "content/reports",
         "bundle":         "bundles",
         "managementpack": "content/managementpacks",
+        "sdk-adapter":    "content/sdk-adapters",
     }
     content_dir = _TYPE_TO_DIR[content_type]
+
+    # -----------------------------------------------------------------------
+    # sdk-adapter: resolve <name> as a directory under content/sdk-adapters/
+    # -----------------------------------------------------------------------
+    if content_type == "sdk-adapter":
+        # name_arg may be: a directory name ("unifi"), or a direct path to adapter.yaml.
+        candidate = Path(name_arg)
+        if candidate.is_absolute() and candidate.exists() and candidate.name == "adapter.yaml":
+            source_path = candidate.resolve()
+        else:
+            # Try name_arg as an exact path first (relative)
+            rel = repo_root / candidate
+            if rel.exists() and rel.suffix in (".yaml", ".yml"):
+                source_path = rel.resolve()
+            else:
+                # Treat name_arg as a directory name under content/sdk-adapters/
+                adapter_candidate = repo_root / "content" / "sdk-adapters" / name_arg / "adapter.yaml"
+                if adapter_candidate.exists():
+                    source_path = adapter_candidate.resolve()
+                else:
+                    print(
+                        f"ERROR: could not resolve '{name_arg}' to an sdk-adapter.\n"
+                        f"  Tried: {adapter_candidate}",
+                        file=sys.stderr,
+                    )
+                    return 1
+
+        if not source_path.exists():
+            print(f"ERROR: source file not found: {source_path}", file=sys.stderr)
+            return 1
+
+        # Compute slug from the adapter's name field.
+        try:
+            adapter_data = yaml.safe_load(source_path.read_text()) or {}
+            adapter_name = str(adapter_data.get("name", "")).strip()
+        except Exception as e:
+            print(f"ERROR: could not read adapter.yaml {source_path}: {e}", file=sys.stderr)
+            return 1
+
+        if not adapter_name:
+            print(f"ERROR: adapter.yaml {source_path} has no 'name:' field", file=sys.stderr)
+            return 1
+
+        explicit_slug = getattr(args, "slug", None)
+        if explicit_slug:
+            slug = explicit_slug
+        else:
+            # Strip the "VCF Content Factory " prefix if present, slugify the rest.
+            _prefix = "VCF Content Factory "
+            display = adapter_name
+            if display.startswith(_prefix):
+                display = display[len(_prefix):]
+            slug = re.sub(r"[^a-z0-9]+", "-", display.lower()).strip("-")
+            slug = f"{slug}-managementpack"
+
+        # Jump directly to version/manifest computation (skip the general resolution
+        # block below which does not apply to sdk-adapter).
+        releases_dir = repo_root / "releases"
+        releases_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = releases_dir / f"{slug}.yaml"
+
+        explicit_version = getattr(args, "version", None)
+        if explicit_version:
+            version = explicit_version
+        elif manifest_path.exists():
+            try:
+                existing = yaml.safe_load(manifest_path.read_text()) or {}
+                existing_version = str(existing.get("version", "1.0")).strip()
+                major, minor = existing_version.split(".")
+                version = f"{major}.{int(minor) + 1}"
+            except Exception:
+                version = "1.0"
+        else:
+            version = "1.0"
+
+        if explicit_version and manifest_path.exists():
+            try:
+                existing = yaml.safe_load(manifest_path.read_text()) or {}
+                if (
+                    str(existing.get("name", "")).strip() == slug
+                    and str(existing.get("version", "")).strip() == version
+                ):
+                    print(
+                        f"ERROR: release manifest {manifest_path} already at version {version}. "
+                        f"No-op release attempt.",
+                        file=sys.stderr,
+                    )
+                    return 1
+            except Exception:
+                pass
+
+        description = str(adapter_data.get("description", "")).strip()
+        if not description:
+            description = f"Discrete release of {slug}"
+
+        release_notes = ""
+        notes_file = getattr(args, "notes", None)
+        if notes_file:
+            notes_path = Path(notes_file)
+            if not notes_path.exists():
+                print(f"ERROR: --notes file not found: {notes_path}", file=sys.stderr)
+                return 1
+            release_notes = notes_path.read_text(encoding="utf-8")
+
+        deprecates_slugs = list(getattr(args, "deprecates", None) or [])
+        deprecates_paths: list[str] = []
+        for dep_slug in deprecates_slugs:
+            dep_path = releases_dir / f"{dep_slug}.yaml"
+            if not dep_path.exists():
+                print(
+                    f"ERROR: --deprecates target not found: releases/{dep_slug}.yaml",
+                    file=sys.stderr,
+                )
+                return 1
+            deprecates_paths.append(f"releases/{dep_slug}.yaml")
+
+        try:
+            source_rel = str(source_path.relative_to(repo_root))
+        except ValueError:
+            source_rel = str(source_path)
+
+        import datetime as _dt
+        today = _dt.date.today().isoformat()
+
+        manifest_data = {
+            "name": slug,
+            "version": version,
+            "description": description,
+            "release_date": today,
+            "release_notes": release_notes,
+            "artifacts": [
+                {
+                    "source": source_rel,
+                    "headline": True,
+                }
+            ],
+            "deprecates": deprecates_paths,
+        }
+
+        manifest_path.write_text(
+            yaml.dump(manifest_data, default_flow_style=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+
+        # Flip released: true on adapter.yaml.
+        adapter_data["released"] = True
+        source_path.write_text(
+            yaml.dump(adapter_data, default_flow_style=False, allow_unicode=True),
+            encoding="utf-8",
+        )
+
+        validate_result = subprocess.run(
+            [sys.executable, "-m", "vcfops_packaging", "validate"],
+            capture_output=True,
+            text=True,
+            cwd=str(repo_root),
+        )
+        if validate_result.returncode != 0:
+            print(
+                f"ERROR: validation failed after writing release manifest.\n"
+                f"stdout:\n{validate_result.stdout}\n"
+                f"stderr:\n{validate_result.stderr}",
+                file=sys.stderr,
+            )
+            return 1
+
+        commit_sha = None
+        no_commit = getattr(args, "no_commit", False)
+        if not no_commit:
+            r = subprocess.run(
+                ["git", "add", str(manifest_path), str(source_path)],
+                capture_output=True,
+                text=True,
+                cwd=str(repo_root),
+            )
+            if r.returncode != 0:
+                print(f"ERROR: git add failed: {r.stderr.strip()}", file=sys.stderr)
+                return 1
+
+            commit_msg = f"release: {slug} {version}"
+            r = subprocess.run(
+                ["git", "commit", "-m", commit_msg],
+                capture_output=True,
+                text=True,
+                cwd=str(repo_root),
+            )
+            if r.returncode != 0:
+                if "nothing to commit" in r.stdout + r.stderr:
+                    pass
+                else:
+                    print(f"ERROR: git commit failed: {r.stdout.strip()} {r.stderr.strip()}", file=sys.stderr)
+                    return 1
+            else:
+                r2 = subprocess.run(
+                    ["git", "rev-parse", "--short", "HEAD"],
+                    capture_output=True,
+                    text=True,
+                    cwd=str(repo_root),
+                )
+                commit_sha = r2.stdout.strip() if r2.returncode == 0 else None
+
+        print(f"release manifest : {manifest_path.relative_to(repo_root)}")
+        print(f"source flagged   : {source_rel}  (released: true)")
+        print(f"version          : {version}")
+        if deprecates_paths:
+            print(f"deprecates       : {', '.join(deprecates_paths)}")
+        if commit_sha:
+            print(f"commit           : {commit_sha}")
+        elif no_commit:
+            print("commit           : skipped (--no-commit)")
+
+        return 0
 
     source_path: Path | None = None
 
@@ -1163,7 +1378,8 @@ def build_parser() -> argparse.ArgumentParser:
         "content_type",
         metavar="type",
         help=(
-            "content type: dashboard, view, supermetric, customgroup, report, bundle. "
+            "content type: dashboard, view, supermetric, customgroup, report, bundle, "
+            "managementpack, sdk-adapter. "
             "(symptoms and alerts are not supported in v1)"
         ),
     )

@@ -1,0 +1,400 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AdapterKind xmlns="http://schemas.vmware.com/vcops/schema"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             key="unifi_controller"
+             nameKey="1"
+             version="1"
+             xsi:schemaLocation="http://schemas.vmware.com/vcops/schema describeSchema.xsd">
+
+	<CredentialKinds>
+		<CredentialKind key="unifi_credentials" nameKey="2">
+			<CredentialField key="username" nameKey="3" type="string" required="true" dispOrder="1"/>
+			<CredentialField key="password" nameKey="4" type="string" required="true" password="true" dispOrder="2"/>
+		</CredentialKind>
+	</CredentialKinds>
+
+	<ResourceKinds>
+
+		<!-- ================================================================ -->
+		<!-- Adapter Instance (type=7): connection configuration              -->
+		<!-- ================================================================ -->
+		<ResourceKind key="unifi_controller" nameKey="5" type="7"
+		              credentialKind="unifi_credentials"
+		              monitoringInterval="5">
+			<ResourceIdentifier key="host" nameKey="6" type="string"
+			                    required="true" dispOrder="1"/>
+			<ResourceIdentifier key="port" nameKey="7" type="string"
+			                    required="false" dispOrder="2" default="443"/>
+			<ResourceIdentifier key="allowInsecure" nameKey="8" type="string"
+			                    required="false" dispOrder="3" default="true"/>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- UniFiWorld: top-down traversal entry point                       -->
+		<!-- ================================================================ -->
+		<ResourceKind key="UniFiWorld" nameKey="10" type="1">
+			<ResourceIdentifier key="world_id" nameKey="11" type="string" required="true" dispOrder="1"/>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- UniFiSite: controller site                                       -->
+		<!-- ================================================================ -->
+		<ResourceKind key="UniFiSite" nameKey="20" type="1">
+			<ResourceIdentifier key="site_name" nameKey="21" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="Configuration" nameKey="22" instanced="false">
+				<ResourceAttribute key="description" nameKey="23" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="version" nameKey="24" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="timezone" nameKey="25" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="device_count" nameKey="26" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- UniFiGateway: UDM / USG / UXG                                   -->
+		<!-- ================================================================ -->
+		<ResourceKind key="UniFiGateway" nameKey="30" type="1">
+			<ResourceIdentifier key="mac" nameKey="31" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="System" nameKey="32" instanced="false">
+				<ResourceAttribute key="cpu_pct" nameKey="33" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="mem_pct" nameKey="34" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="uptime" nameKey="35" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="sec"/>
+				<ResourceAttribute key="num_sta" nameKey="36" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Temperature" nameKey="37" instanced="false">
+				<ResourceAttribute key="temp_cpu" nameKey="38" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="C"/>
+				<ResourceAttribute key="temp_local" nameKey="39" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="C"/>
+				<ResourceAttribute key="temp_phy" nameKey="40" dataType="float"
+				                   isProperty="false" defaultMonitored="false" unit="C"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Speedtest" nameKey="41" instanced="false">
+				<ResourceAttribute key="xput_up" nameKey="42" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="Mbps"/>
+				<ResourceAttribute key="xput_down" nameKey="43" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="Mbps"/>
+				<ResourceAttribute key="speedtest_latency" nameKey="44" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ms"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Configuration" nameKey="45" instanced="false">
+				<ResourceAttribute key="model" nameKey="46" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="firmware" nameKey="47" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="serial" nameKey="48" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="ip" nameKey="49" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="mac_address" nameKey="50" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="name" nameKey="51" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- UniFiWanInterface: wan1 / wan2                                   -->
+		<!-- ================================================================ -->
+		<ResourceKind key="UniFiWanInterface" nameKey="60" type="1">
+			<ResourceIdentifier key="wan_name" nameKey="61" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="Traffic" nameKey="62" instanced="false">
+				<ResourceAttribute key="tx_bytes" nameKey="63" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes/s"/>
+				<ResourceAttribute key="rx_bytes" nameKey="64" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes/s"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Health" nameKey="65" instanced="false">
+				<ResourceAttribute key="latency" nameKey="66" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="ms"/>
+				<ResourceAttribute key="availability" nameKey="67" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="speed" nameKey="68" dataType="float"
+				                   isProperty="false" defaultMonitored="false" unit="Mbps"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Configuration" nameKey="69" instanced="false">
+				<ResourceAttribute key="type" nameKey="70" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="ip" nameKey="71" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="netmask" nameKey="72" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="gateway_ip" nameKey="73" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="dns" nameKey="74" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- UniFiSwitch: managed switch                                      -->
+		<!-- ================================================================ -->
+		<ResourceKind key="UniFiSwitch" nameKey="80" type="1">
+			<ResourceIdentifier key="mac" nameKey="81" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="System" nameKey="82" instanced="false">
+				<ResourceAttribute key="cpu_pct" nameKey="83" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="mem_pct" nameKey="84" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="uptime" nameKey="85" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="sec"/>
+				<ResourceAttribute key="num_sta" nameKey="86" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+				<ResourceAttribute key="satisfaction" nameKey="87" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="PoE" nameKey="88" instanced="false">
+				<ResourceAttribute key="total_max_power" nameKey="89" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="W"/>
+				<ResourceAttribute key="poe_consumption" nameKey="90" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="W"/>
+				<ResourceAttribute key="poe_budget_remaining" nameKey="91" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="W"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Configuration" nameKey="92" instanced="false">
+				<ResourceAttribute key="model" nameKey="93" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="firmware" nameKey="94" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="serial" nameKey="95" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="ip" nameKey="96" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="mac_address" nameKey="97" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="name" nameKey="98" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="port_count" nameKey="99" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="poe_capable" nameKey="100" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="has_fan" nameKey="101" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- UniFiSwitchPort: per-port metrics + PoE + LLDP                   -->
+		<!-- ================================================================ -->
+		<ResourceKind key="UniFiSwitchPort" nameKey="110" type="1">
+			<ResourceIdentifier key="port_key" nameKey="111" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="Traffic" nameKey="112" instanced="false">
+				<ResourceAttribute key="tx_bytes" nameKey="113" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="rx_bytes" nameKey="114" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="tx_errors" nameKey="115" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+				<ResourceAttribute key="rx_errors" nameKey="116" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Status" nameKey="117" instanced="false">
+				<ResourceAttribute key="satisfaction" nameKey="118" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="mac_table_count" nameKey="119" dataType="float"
+				                   isProperty="false" defaultMonitored="false"/>
+				<ResourceAttribute key="up" nameKey="120" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="speed" nameKey="121" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="duplex" nameKey="122" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="is_uplink" nameKey="123" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="media" nameKey="124" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="stp_state" nameKey="125" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="port_name" nameKey="126" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="PoE" nameKey="127" instanced="false">
+				<ResourceAttribute key="poe_power" nameKey="128" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="W"/>
+				<ResourceAttribute key="poe_voltage" nameKey="129" dataType="float"
+				                   isProperty="false" defaultMonitored="false" unit="V"/>
+				<ResourceAttribute key="poe_current" nameKey="130" dataType="float"
+				                   isProperty="false" defaultMonitored="false" unit="mA"/>
+				<ResourceAttribute key="poe_enable" nameKey="131" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="poe_class" nameKey="132" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="poe_mode" nameKey="133" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="LLDP" nameKey="134" instanced="false">
+				<ResourceAttribute key="lldp_system_name" nameKey="135" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="lldp_port_id" nameKey="136" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="lldp_chassis_id" nameKey="137" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- UniFiAccessPoint: WiFi AP                                        -->
+		<!-- ================================================================ -->
+		<ResourceKind key="UniFiAccessPoint" nameKey="160" type="1">
+			<ResourceIdentifier key="mac" nameKey="161" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="System" nameKey="162" instanced="false">
+				<ResourceAttribute key="cpu_pct" nameKey="163" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="mem_pct" nameKey="164" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="uptime" nameKey="165" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="sec"/>
+				<ResourceAttribute key="num_sta" nameKey="166" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+				<ResourceAttribute key="satisfaction" nameKey="167" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Configuration" nameKey="168" instanced="false">
+				<ResourceAttribute key="model" nameKey="169" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="firmware" nameKey="170" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="serial" nameKey="171" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="ip" nameKey="172" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="mac_address" nameKey="173" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="name" nameKey="174" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- UniFiRadio: per-AP radio (2.4GHz / 5GHz / 6GHz)                 -->
+		<!-- ================================================================ -->
+		<ResourceKind key="UniFiRadio" nameKey="180" type="1">
+			<ResourceIdentifier key="radio_key" nameKey="181" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="RF" nameKey="182" instanced="false">
+				<ResourceAttribute key="channel" nameKey="183" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+				<ResourceAttribute key="tx_power" nameKey="184" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="dBm"/>
+				<ResourceAttribute key="cu_total" nameKey="185" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="satisfaction" nameKey="186" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+				<ResourceAttribute key="tx_retries_pct" nameKey="187" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Clients" nameKey="188" instanced="false">
+				<ResourceAttribute key="user_num_sta" nameKey="189" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Traffic" nameKey="190" instanced="false">
+				<ResourceAttribute key="tx_bytes" nameKey="191" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="rx_bytes" nameKey="192" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Configuration" nameKey="193" instanced="false">
+				<ResourceAttribute key="radio_type" nameKey="194" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="radio_name" nameKey="195" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="ht" nameKey="196" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="min_txpower" nameKey="197" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="max_txpower" nameKey="198" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- UniFiWirelessAggregate: site-level WiFi summary                  -->
+		<!-- ================================================================ -->
+		<ResourceKind key="UniFiWirelessAggregate" nameKey="210" type="1">
+			<ResourceIdentifier key="aggregate_id" nameKey="211" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="Clients" nameKey="212" instanced="false">
+				<ResourceAttribute key="num_user" nameKey="213" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+				<ResourceAttribute key="num_guest" nameKey="214" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+				<ResourceAttribute key="num_iot" nameKey="215" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+				<ResourceAttribute key="num_disconnected" nameKey="216" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Performance" nameKey="217" instanced="false">
+				<ResourceAttribute key="num_ap" nameKey="218" dataType="float"
+				                   isProperty="false" defaultMonitored="true"/>
+				<ResourceAttribute key="tx_bytes_r" nameKey="219" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes/s"/>
+				<ResourceAttribute key="rx_bytes_r" nameKey="220" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes/s"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- UniFiNvr: Protect NVR                                           -->
+		<!-- ================================================================ -->
+		<ResourceKind key="UniFiNvr" nameKey="230" type="1">
+			<ResourceIdentifier key="nvr_mac" nameKey="231" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="System" nameKey="232" instanced="false">
+				<ResourceAttribute key="uptime" nameKey="233" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="sec"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Storage" nameKey="234" instanced="false">
+				<ResourceAttribute key="used_bytes" nameKey="235" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="total_bytes" nameKey="236" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="bytes"/>
+				<ResourceAttribute key="usage_pct" nameKey="237" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="%"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Configuration" nameKey="238" instanced="false">
+				<ResourceAttribute key="model" nameKey="239" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="firmware" nameKey="240" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="name" nameKey="241" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="host_type" nameKey="242" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="recording_retention_mode" nameKey="243" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="camera_count" nameKey="244" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
+		<!-- UniFiCamera: Protect camera                                     -->
+		<!-- ================================================================ -->
+		<ResourceKind key="UniFiCamera" nameKey="250" type="1">
+			<ResourceIdentifier key="camera_mac" nameKey="251" type="string" required="true" dispOrder="1"/>
+
+			<ResourceGroup key="Status" nameKey="252" instanced="false">
+				<ResourceAttribute key="uptime" nameKey="253" dataType="float"
+				                   isProperty="false" defaultMonitored="true" unit="sec"/>
+				<ResourceAttribute key="last_motion" nameKey="254" dataType="float"
+				                   isProperty="false" defaultMonitored="false" unit="sec"/>
+				<ResourceAttribute key="state" nameKey="255" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="is_connected" nameKey="256" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="is_recording" nameKey="257" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Hardware" nameKey="258" instanced="false">
+				<ResourceAttribute key="model" nameKey="259" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="firmware" nameKey="260" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="type" nameKey="261" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="is_wireless" nameKey="262" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="phy_rate" nameKey="263" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Network" nameKey="264" instanced="false">
+				<ResourceAttribute key="ip" nameKey="265" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="mac_address" nameKey="266" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+		</ResourceKind>
+
+	</ResourceKinds>
+
+	<TraversalSpecKinds>
+		<TraversalSpecKind name="UniFi Controller Infrastructure"
+		                   nameKey="280"
+		                   rootAdapterKind="unifi_controller"
+		                   rootResourceKind="unifi_controller"
+		                   filterType="GENERIC_RELATION"
+		                   usedFor="ALL">
+			<!-- World > Site > Gateway > WAN Interface -->
+			<ResourcePath path="unifi_controller::unifi_controller||unifi_controller::UniFiWorld::child||unifi_controller::UniFiSite::child||unifi_controller::UniFiGateway::child||unifi_controller::UniFiWanInterface::child"/>
+			<!-- World > Site > Switch > Switch Port -->
+			<ResourcePath path="unifi_controller::unifi_controller||unifi_controller::UniFiWorld::child||unifi_controller::UniFiSite::child||unifi_controller::UniFiSwitch::child||unifi_controller::UniFiSwitchPort::child"/>
+			<!-- World > Site > Access Point > Radio -->
+			<ResourcePath path="unifi_controller::unifi_controller||unifi_controller::UniFiWorld::child||unifi_controller::UniFiSite::child||unifi_controller::UniFiAccessPoint::child||unifi_controller::UniFiRadio::child"/>
+			<!-- World > Site > NVR > Camera -->
+			<ResourcePath path="unifi_controller::unifi_controller||unifi_controller::UniFiWorld::child||unifi_controller::UniFiSite::child||unifi_controller::UniFiNvr::child||unifi_controller::UniFiCamera::child"/>
+			<!-- World > Site > Wireless Aggregate -->
+			<ResourcePath path="unifi_controller::unifi_controller||unifi_controller::UniFiWorld::child||unifi_controller::UniFiSite::child||unifi_controller::UniFiWirelessAggregate::child"/>
+		</TraversalSpecKind>
+	</TraversalSpecKinds>
+
+	<LicenseConfig enabled="false"/>
+
+</AdapterKind>

@@ -1,0 +1,22 @@
+# Icon mapping for the UniFi Controller adapter.
+#
+# Keys correspond to describe.xml ResourceKind key attributes.
+# Values are icon filenames resolved against:
+#   1. This directory (project-specific overrides)
+#   2. vcfops_managementpacks/templates/icons/ (shared library)
+
+adapter_kind_icon: network.svg
+
+resource_kinds:
+  unifi_controller:      network.svg       # adapter instance (type=7)
+  UniFiWorld:            world.svg
+  UniFiSite:             network.svg
+  UniFiGateway:          gateway.svg
+  UniFiWanInterface:     gateway.svg
+  UniFiSwitch:           switch.svg
+  UniFiSwitchPort:       switch.svg
+  UniFiAccessPoint:      access_point.svg
+  UniFiRadio:            access_point.svg
+  UniFiWirelessAggregate: client.svg
+  UniFiNvr:              nas.svg
+  UniFiCamera:           default.svg

@@ -691,6 +691,698 @@ def _run_pak_compare(pak_path: Path) -> None:
         )
 
 
+def _load_properties(path: Path) -> Dict[str, str]:
+    """Parse a Java-style key=value properties file.
+
+    Returns a dict of str → str.  Lines beginning with '#' or '!' are
+    skipped.  Blank lines are skipped.  Keys and values are stripped of
+    leading/trailing whitespace.  The first '=' on a line is the delimiter.
+    """
+    props: Dict[str, str] = {}
+    if not path.is_file():
+        return props
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or line.startswith("!"):
+            continue
+        if "=" in line:
+            key, _, value = line.partition("=")
+            props[key.strip()] = value.strip()
+    return props
+
+
+def _parse_describe_xml(describe_xml: Path):
+    """Parse describe.xml and return a rich structure for doc generation.
+
+    Returns a dict:
+      {
+        "adapter_kind": str,
+        "adapter_name_key": str,
+        "monitoring_interval": str,
+        "license_enabled": bool,
+        "credential_kinds": [
+            {"key": str, "name_key": str,
+             "fields": [{"key": str, "name_key": str, "type": str, "password": bool}]}
+        ],
+        "adapter_instance": {
+            "key": str, "name_key": str, "monitoring_interval": str,
+            "identifiers": [{"key": str, "name_key": str, "default": str, "required": bool}]
+        },
+        "resource_kinds": [
+            {
+                "key": str, "name_key": str, "type": str,
+                "identifiers": [{"key": str, "name_key": str}],
+                "groups": [
+                    {"key": str, "name_key": str,
+                     "attributes": [{"key": str, "name_key": str, "is_property": bool,
+                                     "unit": str, "default_monitored": bool}]}
+                ]
+            }
+        ],
+        "traversal_specs": [
+            {"name": str, "name_key": str,
+             "paths": [str]}
+        ],
+      }
+    """
+    tree = ET.parse(describe_xml)
+    root = tree.getroot()
+
+    # Detect namespace
+    ns = ""
+    if root.tag.startswith("{"):
+        ns = root.tag.split("}")[0] + "}"
+
+    def tag(local: str) -> str:
+        return f"{ns}{local}"
+
+    result: dict = {
+        "adapter_kind": root.get("key", ""),
+        "adapter_name_key": root.get("nameKey", ""),
+        "monitoring_interval": "",
+        "license_enabled": False,
+        "credential_kinds": [],
+        "adapter_instance": None,
+        "resource_kinds": [],
+        "traversal_specs": [],
+    }
+
+    # LicenseConfig
+    lc = root.find(tag("LicenseConfig"))
+    if lc is not None:
+        result["license_enabled"] = lc.get("enabled", "false").lower() == "true"
+
+    # CredentialKinds
+    for ck in root.iter(tag("CredentialKind")):
+        fields = []
+        for cf in ck.iter(tag("CredentialField")):
+            fields.append({
+                "key": cf.get("key", ""),
+                "name_key": cf.get("nameKey", ""),
+                "type": cf.get("type", "string"),
+                "password": cf.get("password", "false").lower() == "true",
+            })
+        result["credential_kinds"].append({
+            "key": ck.get("key", ""),
+            "name_key": ck.get("nameKey", ""),
+            "fields": fields,
+        })
+
+    # ResourceKinds
+    for rk in root.iter(tag("ResourceKind")):
+        rk_type = rk.get("type", "1")
+        rk_data: dict = {
+            "key": rk.get("key", ""),
+            "name_key": rk.get("nameKey", ""),
+            "type": rk_type,
+            "monitoring_interval": rk.get("monitoringInterval", ""),
+            "identifiers": [],
+            "groups": [],
+        }
+
+        for ri in rk.findall(tag("ResourceIdentifier")):
+            rk_data["identifiers"].append({
+                "key": ri.get("key", ""),
+                "name_key": ri.get("nameKey", ""),
+                "default": ri.get("default", ""),
+                "required": ri.get("required", "true").lower() == "true",
+            })
+
+        for rg in rk.findall(tag("ResourceGroup")):
+            group_data: dict = {
+                "key": rg.get("key", ""),
+                "name_key": rg.get("nameKey", ""),
+                "attributes": [],
+            }
+            for ra in rg.findall(tag("ResourceAttribute")):
+                is_prop = ra.get("isProperty", "false").lower() == "true"
+                monitored_str = ra.get("defaultMonitored", "false")
+                group_data["attributes"].append({
+                    "key": ra.get("key", ""),
+                    "name_key": ra.get("nameKey", ""),
+                    "is_property": is_prop,
+                    "unit": ra.get("unit", ""),
+                    "default_monitored": monitored_str.lower() == "true",
+                })
+            rk_data["groups"].append(group_data)
+
+        # Adapter instance (type=7) stored separately
+        if rk_type == "7":
+            result["adapter_instance"] = rk_data
+            result["monitoring_interval"] = rk_data["monitoring_interval"]
+        else:
+            result["resource_kinds"].append(rk_data)
+
+    # TraversalSpecKinds
+    for tsk in root.iter(tag("TraversalSpecKind")):
+        paths = [rp.get("path", "") for rp in tsk.findall(tag("ResourcePath"))]
+        result["traversal_specs"].append({
+            "name": tsk.get("name", ""),
+            "name_key": tsk.get("nameKey", ""),
+            "paths": paths,
+        })
+
+    return result
+
+
+def _build_traversal_tree(paths: List[str], props: Dict[str, str],
+                          resource_kinds_by_key: Dict[str, dict]) -> str:
+    """Build an ASCII tree from ResourcePath entries.
+
+    Each path element has the form:
+      <adapter_kind>::<resource_kind>::<relation>
+    The first element in every path is the adapter instance root.
+
+    Returns a multi-line string showing the hierarchy.
+    """
+    # Parse each path into a list of (rk_key, relation) tuples.
+    # We reconstruct parent→children relationships then render as a tree.
+    # child_map: parent_key → set of child_keys (ordered by first appearance)
+    child_map: Dict[str, List[str]] = {}
+    all_nodes: List[str] = []
+
+    def _label(rk_key: str) -> str:
+        """Get display label for a resource kind key."""
+        rk = resource_kinds_by_key.get(rk_key)
+        if rk:
+            nk = rk.get("name_key", "")
+            label = props.get(nk, rk_key)
+            if label:
+                return label
+        return rk_key
+
+    def _register_child(parent: str, child: str) -> None:
+        if parent not in child_map:
+            child_map[parent] = []
+            all_nodes.append(parent)
+        if child not in child_map[parent]:
+            child_map[parent].append(child)
+        if child not in all_nodes:
+            all_nodes.append(child)
+
+    root_node: Optional[str] = None
+
+    for path_str in paths:
+        # Each path is pipe-delimited segments of the form "ak::rk::rel"
+        segments = path_str.split("||")
+        prev_rk: Optional[str] = None
+        for seg in segments:
+            parts = seg.split("::")
+            if len(parts) < 2:
+                continue
+            rk_key = parts[1]
+            if root_node is None:
+                root_node = rk_key
+                all_nodes.append(rk_key)
+            if prev_rk is not None:
+                _register_child(prev_rk, rk_key)
+            prev_rk = rk_key
+
+    if root_node is None:
+        return ""
+
+    # Recursively render tree
+    lines: List[str] = []
+
+    def _render(node: str, prefix: str, is_last: bool) -> None:
+        connector = "└── " if is_last else "├── "
+        if not lines:
+            # Root node — no connector
+            lines.append(_label(node))
+        else:
+            lines.append(f"{prefix}{connector}{_label(node)}")
+
+        children = child_map.get(node, [])
+        extension = "    " if is_last else "│   "
+        child_prefix = prefix + extension if lines else prefix
+        for i, child in enumerate(children):
+            _render(child, child_prefix if lines else prefix,
+                    i == len(children) - 1)
+
+    _render(root_node, "", True)
+    return "\n".join(lines)
+
+
+def _generate_reference_md(
+    project_dir: Path,
+    project_name: str,
+    version_string: str,
+) -> str:
+    """Generate REFERENCE.md content from describe.xml and resources.properties."""
+    describe_xml = project_dir / "describe.xml"
+    res_props = project_dir / "resources" / "resources.properties"
+
+    parsed = _parse_describe_xml(describe_xml)
+    props = _load_properties(res_props)
+
+    def p(name_key: str, fallback: str = "") -> str:
+        """Look up a nameKey in resources.properties."""
+        return props.get(str(name_key), fallback)
+
+    lines: List[str] = []
+
+    # Title and subtitle
+    lines.append(f"# {project_name} — Reference")
+    lines.append("")
+    lines.append(
+        f"Generated from `describe.xml` and `resources.properties` "
+        f"for build {version_string}."
+    )
+    lines.append("")
+
+    # Adapter section
+    lines.append("## Adapter")
+    lines.append("")
+    lines.append("| Field | Value |")
+    lines.append("|---|---|")
+    lines.append(f"| Adapter Kind | `{parsed['adapter_kind']}` |")
+    lines.append("| Tier | 2 (Java SDK) |")
+    interval = parsed.get("monitoring_interval", "5")
+    lines.append(f"| Monitoring Interval | {interval} minutes |")
+    license_val = "Yes" if parsed["license_enabled"] else "No"
+    lines.append(f"| License Required | {license_val} |")
+    lines.append("")
+
+    # Credentials section
+    if parsed["credential_kinds"]:
+        lines.append("### Credentials")
+        lines.append("")
+        lines.append("| Field | Key | Type |")
+        lines.append("|---|---|---|")
+        for ck in parsed["credential_kinds"]:
+            for cf in ck["fields"]:
+                label = p(cf["name_key"], cf["key"])
+                type_label = "string (masked)" if cf["password"] else cf["type"]
+                lines.append(f"| {label} | `{cf['key']}` | {type_label} |")
+        lines.append("")
+
+    # Connection Settings section
+    ai = parsed.get("adapter_instance")
+    if ai and ai.get("identifiers"):
+        lines.append("### Connection Settings")
+        lines.append("")
+        lines.append("| Field | Key | Default | Required |")
+        lines.append("|---|---|---|---|")
+        for ri in ai["identifiers"]:
+            label = p(ri["name_key"], ri["key"])
+            default = ri["default"] if ri["default"] else "—"
+            required = "Yes" if ri["required"] else "No"
+            lines.append(f"| {label} | `{ri['key']}` | {default} | {required} |")
+        lines.append("")
+
+    lines.append("---")
+    lines.append("")
+
+    # Object Types section
+    lines.append("## Object Types")
+    lines.append("")
+
+    # Build lookup dicts
+    resource_kinds_by_key: Dict[str, dict] = {
+        rk["key"]: rk for rk in parsed["resource_kinds"]
+    }
+
+    for rk in parsed["resource_kinds"]:
+        rk_label = p(rk["name_key"], rk["key"])
+        lines.append(f"### {rk_label}")
+        lines.append("")
+
+        # Identifier
+        if rk["identifiers"]:
+            id_field = rk["identifiers"][0]
+            id_label = p(id_field["name_key"], id_field["key"])
+            lines.append(f"**Identifier**: `{id_field['key']}` ({id_label})")
+            lines.append("")
+
+        # Groups
+        for grp in rk["groups"]:
+            grp_label = p(grp["name_key"], grp["key"])
+            lines.append(f"#### {grp_label}")
+            lines.append("")
+            lines.append("| Key | Label | Type | Unit | Monitored |")
+            lines.append("|---|---|---|---|---|")
+            for attr in grp["attributes"]:
+                attr_label = p(attr["name_key"], attr["key"])
+                attr_type = "property" if attr["is_property"] else "metric"
+                unit = attr["unit"] if attr["unit"] else "—"
+                monitored = "yes" if attr["default_monitored"] else (
+                    "no" if not attr["is_property"] else "—"
+                )
+                lines.append(
+                    f"| `{attr['key']}` | {attr_label} | {attr_type} "
+                    f"| {unit} | {monitored} |"
+                )
+            lines.append("")
+
+        lines.append("---")
+        lines.append("")
+
+    # Traversal Spec section
+    if parsed["traversal_specs"]:
+        lines.append("## Traversal Spec")
+        lines.append("")
+        for ts in parsed["traversal_specs"]:
+            ts_name = p(ts["name_key"], ts["name"]) if ts["name_key"] else ts["name"]
+            lines.append(f"**Name**: {ts_name}")
+            lines.append("")
+            tree_str = _build_traversal_tree(
+                ts["paths"], props, resource_kinds_by_key
+            )
+            if tree_str:
+                lines.append("```")
+                lines.append(tree_str)
+                lines.append("```")
+            lines.append("")
+
+    return "\n".join(lines)
+
+
+def _generate_changelog_md(project_dir: Path, current_version: str,
+                            current_build: int) -> str:
+    """Generate CHANGELOG.md from git history of the adapter project directory.
+
+    Groups commits by build number by reading the adapter.yaml at each commit
+    that touched the project directory.  Falls back to date-grouped listing
+    when git is not available or the history is shallow.
+    """
+    import datetime
+
+    # Collect git log for the project directory
+    try:
+        result = subprocess.run(
+            [
+                "git", "log",
+                "--format=%H\t%ai\t%s",
+                "--follow",
+                "--",
+                str(project_dir),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            cwd=str(project_dir.parent.parent.parent),  # repo root
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            # No git history for this directory
+            return (
+                "# Changelog\n\n"
+                f"## {current_version}.{current_build}\n\n"
+                "- Initial release.\n"
+            )
+    except Exception:
+        return (
+            "# Changelog\n\n"
+            f"## {current_version}.{current_build}\n\n"
+            "- Initial release.\n"
+        )
+
+    commits = []
+    for line in result.stdout.strip().splitlines():
+        parts = line.split("\t", 2)
+        if len(parts) < 3:
+            continue
+        sha, date_str, subject = parts
+        # Parse date: "2026-05-19 19:36:46 -0500"
+        try:
+            dt = datetime.datetime.strptime(date_str[:10], "%Y-%m-%d")
+            date_label = dt.strftime("%Y-%m-%d")
+        except ValueError:
+            date_label = date_str[:10]
+        commits.append({"sha": sha, "date": date_label, "subject": subject})
+
+    if not commits:
+        return (
+            "# Changelog\n\n"
+            f"## {current_version}.{current_build}\n\n"
+            "- Initial release.\n"
+        )
+
+    # Read adapter.yaml build_number at each commit to detect build transitions.
+    # We read it only when the adapter.yaml changed (to keep git calls minimal).
+    # Build a list: for each commit, determine which build it belongs to.
+    adapter_yaml_rel = str(
+        (project_dir / "adapter.yaml").relative_to(
+            project_dir.parent.parent.parent
+        )
+    )
+
+    build_at_commit: Dict[str, Optional[int]] = {}
+    version_at_commit: Dict[str, Optional[str]] = {}
+
+    for commit in commits:
+        sha = commit["sha"]
+        try:
+            show = subprocess.run(
+                ["git", "show", f"{sha}:{adapter_yaml_rel}"],
+                capture_output=True, text=True, timeout=10,
+                cwd=str(project_dir.parent.parent.parent),
+            )
+            if show.returncode == 0:
+                # Simple key=value parse (YAML may not be available without safe_load)
+                bn: Optional[int] = None
+                ver: Optional[str] = None
+                for raw_line in show.stdout.splitlines():
+                    if raw_line.startswith("build_number:"):
+                        try:
+                            bn = int(raw_line.split(":", 1)[1].strip())
+                        except ValueError:
+                            pass
+                    if raw_line.startswith("version:"):
+                        ver = raw_line.split(":", 1)[1].strip().strip('"').strip("'")
+                build_at_commit[sha] = bn
+                version_at_commit[sha] = ver
+            else:
+                build_at_commit[sha] = None
+                version_at_commit[sha] = None
+        except Exception:
+            build_at_commit[sha] = None
+            version_at_commit[sha] = None
+
+    # Group commits by (version, build_number).
+    # Use the build at each commit; if unknown, inherit from the next-earlier one.
+    # Commits are in reverse chronological order (newest first).
+    groups: Dict[str, dict] = {}  # key: "version.build" -> {date, subjects}
+    # We also want the current build as a group even if some commits have it.
+    last_known_build: int = current_build
+    last_known_version: str = current_version
+
+    for commit in commits:
+        sha = commit["sha"]
+        bn = build_at_commit.get(sha)
+        ver = version_at_commit.get(sha)
+        if bn is None:
+            bn = last_known_build
+        if ver is None:
+            ver = last_known_version
+        last_known_build = bn
+        last_known_version = ver
+
+        group_key = f"{ver}.{bn}"
+        if group_key not in groups:
+            groups[group_key] = {"version": ver, "build": bn,
+                                  "date": commit["date"], "subjects": []}
+        # Append subject (skip merge commits and pure CHANGELOG/doc-only commits
+        # that just update the CHANGELOG itself — they add no information)
+        groups[group_key]["subjects"].append(commit["subject"])
+
+    # Render — newest build first
+    def _sort_key(k: str) -> tuple:
+        parts = k.split(".")
+        try:
+            return tuple(int(x) for x in parts)
+        except ValueError:
+            return (0,)
+
+    sorted_keys = sorted(groups.keys(), key=_sort_key, reverse=True)
+
+    lines_out: List[str] = ["# Changelog", ""]
+    for gk in sorted_keys:
+        g = groups[gk]
+        lines_out.append(f"## {gk} ({g['date']})")
+        lines_out.append("")
+        for subj in g["subjects"]:
+            lines_out.append(f"- {subj}")
+        lines_out.append("")
+
+    return "\n".join(lines_out)
+
+
+def _generate_readme_md(
+    project_dir: Path,
+    project_name: str,
+    description: str,
+    parsed_xml: dict,
+    props: Dict[str, str],
+) -> str:
+    """Generate a quick-start README.md from adapter.yaml + describe.xml."""
+
+    def p(name_key: str, fallback: str = "") -> str:
+        return props.get(str(name_key), fallback)
+
+    lines: List[str] = []
+    lines.append(f"# {project_name}")
+    lines.append("")
+    if description:
+        lines.append(description)
+        lines.append("")
+
+    lines.append("## Installation")
+    lines.append("")
+    lines.append(
+        "Upload the `.pak` file via **Administration → Solutions** "
+        "in VCF Operations."
+    )
+    lines.append("")
+
+    # Configuration — adapter instance identifiers
+    ai = parsed_xml.get("adapter_instance")
+    if ai and ai.get("identifiers"):
+        lines.append("## Configuration")
+        lines.append("")
+        lines.append(
+            "Create an adapter instance under **Integrations → Repository** "
+            "and provide:"
+        )
+        lines.append("")
+        lines.append("| Field | Description | Default |")
+        lines.append("|---|---|---|")
+        for ri in ai["identifiers"]:
+            label = p(ri["name_key"], ri["key"])
+            default = ri["default"] if ri["default"] else "—"
+            lines.append(f"| {label} | | {default} |")
+        lines.append("")
+
+    # Credentials
+    if parsed_xml.get("credential_kinds"):
+        lines.append("### Credentials")
+        lines.append("")
+        lines.append("| Field | Description |")
+        lines.append("|---|---|")
+        for ck in parsed_xml["credential_kinds"]:
+            for cf in ck["fields"]:
+                label = p(cf["name_key"], cf["key"])
+                lines.append(f"| {label} | |")
+        lines.append("")
+
+    # Object Types
+    if parsed_xml.get("resource_kinds"):
+        lines.append("## Object Types")
+        lines.append("")
+        for rk in parsed_xml["resource_kinds"]:
+            rk_label = p(rk["name_key"], rk["key"])
+            lines.append(f"- {rk_label}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _generate_docs(project_dir: Path, version_string: str) -> None:
+    """Generate REFERENCE.md, CHANGELOG.md, and (if absent) README.md.
+
+    Always overwrites:
+      - REFERENCE.md  — metric/property reference from describe.xml + resources.properties
+      - CHANGELOG.md  — git commit history grouped by build number
+
+    Only writes if absent:
+      - README.md  — quick-start template
+
+    Args:
+        project_dir:     adapter project directory (contains adapter.yaml, describe.xml)
+        version_string:  full version+build string for the subtitle (e.g. "1.0.0.13")
+    """
+    project_dir = Path(project_dir)
+    describe_xml = project_dir / "describe.xml"
+
+    # Load adapter.yaml basics
+    adapter_yaml = project_dir / "adapter.yaml"
+    project_name = "VCF Content Factory Adapter"
+    description = ""
+    current_version = "1.0.0"
+    current_build = 1
+
+    if _YAML_AVAILABLE and adapter_yaml.is_file():
+        try:
+            import yaml as _yaml_mod
+            raw = _yaml_mod.safe_load(adapter_yaml.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                project_name = raw.get("name", project_name)
+                description = raw.get("description", "")
+                if isinstance(description, str):
+                    description = description.strip()
+                current_version = raw.get("version", current_version)
+                current_build = int(raw.get("build_number", current_build))
+        except Exception as exc:
+            print(f"  docs: warning — could not read adapter.yaml: {exc}",
+                  file=sys.stderr)
+    elif not _YAML_AVAILABLE:
+        # Fallback: simple line parser
+        if adapter_yaml.is_file():
+            for line in adapter_yaml.read_text(encoding="utf-8").splitlines():
+                if line.startswith("name:"):
+                    project_name = line.split(":", 1)[1].strip().strip('"').strip("'")
+                elif line.startswith("description:"):
+                    description = line.split(":", 1)[1].strip().strip('"').strip("'")
+                elif line.startswith("version:"):
+                    current_version = (
+                        line.split(":", 1)[1].strip().strip('"').strip("'")
+                    )
+                elif line.startswith("build_number:"):
+                    try:
+                        current_build = int(
+                            line.split(":", 1)[1].strip()
+                        )
+                    except ValueError:
+                        pass
+
+    if not describe_xml.is_file():
+        print(
+            f"  docs: describe.xml not found in {project_dir}; skipping doc generation.",
+            file=sys.stderr,
+        )
+        return
+
+    # 1. Generate REFERENCE.md (always overwrite)
+    try:
+        ref_content = _generate_reference_md(project_dir, project_name, version_string)
+        ref_path = project_dir / "REFERENCE.md"
+        ref_path.write_text(ref_content, encoding="utf-8")
+        print(f"  docs: wrote {ref_path}", file=sys.stderr)
+    except Exception as exc:
+        print(f"  docs: warning — REFERENCE.md generation failed: {exc}",
+              file=sys.stderr)
+
+    # 2. Generate CHANGELOG.md (always overwrite)
+    try:
+        cl_content = _generate_changelog_md(
+            project_dir, current_version, current_build
+        )
+        cl_path = project_dir / "CHANGELOG.md"
+        cl_path.write_text(cl_content, encoding="utf-8")
+        print(f"  docs: wrote {cl_path}", file=sys.stderr)
+    except Exception as exc:
+        print(f"  docs: warning — CHANGELOG.md generation failed: {exc}",
+              file=sys.stderr)
+
+    # 3. Generate README.md (only if absent)
+    readme_path = project_dir / "README.md"
+    if readme_path.is_file():
+        print(f"  docs: README.md exists — skipping (hand-written).", file=sys.stderr)
+    else:
+        try:
+            parsed_xml = _parse_describe_xml(describe_xml)
+            res_props = _load_properties(
+                project_dir / "resources" / "resources.properties"
+            )
+            readme_content = _generate_readme_md(
+                project_dir, project_name, description, parsed_xml, res_props
+            )
+            readme_path.write_text(readme_content, encoding="utf-8")
+            print(f"  docs: wrote {readme_path}", file=sys.stderr)
+        except Exception as exc:
+            print(f"  docs: warning — README.md generation failed: {exc}",
+                  file=sys.stderr)
+
+
 def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
     """End-to-end Tier 2 SDK adapter build pipeline.
 
@@ -758,6 +1450,11 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
             f"{[j.name for j in lib_jars]}",
             file=sys.stderr,
         )
+
+        # Step 8b: generate documentation files into the project directory.
+        # Runs after successful compilation so only a clean build produces docs.
+        version_string = f"{project.version}.{project.build_number}"
+        _generate_docs(project_dir, version_string)
 
         # Step 9: assemble adapters.zip
         print("  assembling adapters.zip ...", file=sys.stderr)
