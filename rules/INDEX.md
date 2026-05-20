@@ -25,3 +25,10 @@ Read every rule at session start. Rules are absolute — obey without question.
 | RULE-019 | Nested-array iteration in expressions requires Tier 2 | [nested-array-iteration-requires-tier2.md](nested-array-iteration-requires-tier2.md) |
 | RULE-020 | Per-instance long-lived state requires Tier 2 | [per-instance-state-requires-tier2.md](per-instance-state-requires-tier2.md) |
 | RULE-021 | Exhaust built-in metrics and transformations before creating supermetrics | [exhaust-builtins-first.md](exhaust-builtins-first.md) |
+| RULE-022 | Metric labels cannot contain reserved characters | [metric-labels-no-reserved-chars.md](metric-labels-no-reserved-chars.md) |
+| RULE-023 | Match MPB wire formats exactly | [match-mpb-wire-formats.md](match-mpb-wire-formats.md) |
+| RULE-024 | When wire format is unknown, emit nothing | [emit-nothing-when-format-unknown.md](emit-nothing-when-format-unknown.md) |
+| RULE-025 | Verify join key uniqueness across all collection sources | [verify-join-key-uniqueness.md](verify-join-key-uniqueness.md) |
+| RULE-026 | Use pak-compare before every install attempt | [pak-compare-before-install.md](pak-compare-before-install.md) |
+| RULE-027 | APIs with parent-child encoded in URL paths require Tier 2 | [url-hierarchy-requires-tier2.md](url-hierarchy-requires-tier2.md) |
+| RULE-028 | Use human-readable resource names, not internal API IDs | [human-readable-resource-names.md](human-readable-resource-names.md) |
