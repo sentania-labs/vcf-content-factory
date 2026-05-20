@@ -3,6 +3,21 @@
 Guidance for Claude Code (and any other agent — Codex, Cursor, etc.)
 working in this repo.
 
+## Knowledge precedence (read in this order)
+
+1. `rules/INDEX.md` — Absolute. Obey without question.
+2. `decisions/INDEX.md` — The "why" behind rules. Read on demand
+   when a rule is questioned or a new situation has no matching rule.
+3. `context/README.md` — Domain knowledge. Reference when doing work.
+4. `references/` — Examples. Grep when authoring.
+5. `memory/INDEX.md` — Advisory. Read for texture, never overrides
+   rules or decisions.
+
+If a context file contradicts a rule, the rule wins.
+If a memory entry contradicts a decision, the decision wins.
+Rules are not negotiable. Decisions are negotiable only through
+the explicit override ceremony in `decisions/overrides/`.
+
 ## The framework is the product
 
 This repo is a framework any VCF Operations admin can clone and
@@ -208,64 +223,9 @@ path is first-class, not a sad fallback.
   in `bundles/`. Not optional — shipping stale zips is how
   false-positive bugs escape to users.
 
-## Hard rules (do not violate)
+## Rules
 
-1. **Source of truth is this folder.** Use only `docs/vcf9/`, the
-   OpenAPI specs (`docs/operations-api.json`,
-   `docs/internal-api.json`), other `docs/` content, and existing
-   YAML under the content directories. Do not invent functions,
-   operators, metric keys, or API endpoints.
-
-2. **Never fabricate metric/attribute names.** Keys must come from
-   existing YAML, `docs/vcf9/metrics-properties.md`, or a name the
-   user provided. Ask if you can't ground it.
-
-3. **Never write secrets to disk.** Credentials flow via
-   profile-prefixed env vars (`VCFOPS_PROD_*`, `VCFOPS_QA_*`,
-   `VCFOPS_DEVEL_*`) sourced from `.env`. Select profile with
-   `--profile` or `VCFOPS_PROFILE`.
-
-4. **Always validate before installing.** Delegate to
-   `content-installer` which validates before every sync.
-
-5. **`[VCF Content Factory]` prefix on every authored content
-   object.** Literal brackets, one space after. Dashboards
-   additionally live under the `VCF Content Factory` folder
-   (`name_path`; loader applies it). No alternate prefixes —
-   `[AI Content]` is legacy and must not be reintroduced. Carve-out:
-   management packs use the prose prefix `VCF Content Factory`
-   without brackets.
-
-6. **UUIDs are part of the contract** for super metrics, views,
-   dashboards, and reports. Stable UUID in the YAML `id` field;
-   cross-references resolve to literal `sm_<uuid>` /
-   `viewDefinitionId` strings on the wire. Generate on first
-   `validate`, never touch after. See
-   `context/uuids_and_cross_references.md`. **Carve-out:** custom
-   groups, symptoms, and alerts are identified by `name`, not UUID
-   — server assigns the `id` on create.
-
-7. **Grep both OpenAPI specs** when answering "does the API support
-   X?". `docs/internal-api.json` contains `/internal/*` endpoints
-   (require `X-Ops-API-use-unsupported: true`) that often do things
-   the public surface can't.
-
-8. **MP adapter_kind must match MPB's derivation.** The factory
-   must produce paks identical to what MPB generates from the same
-   design. The adapter_kind is derived by slugifying the MP display
-   name: `mpb_` + `lowercase(name.replace(' ', '_'))`. Example:
-   "VCF Content Factory vSphere Storage Paths" →
-   `mpb_vcf_content_factory_vsphere_storage_paths`. Do not shorten,
-   abbreviate, or invent a different convention.
-
-9. **Auto-memory is disabled by design.** All persistent knowledge
-   lives in `context/`, agent prompts, or skill prompts. If you
-   want to remember something across sessions, that's a signal to
-   add it to a context or rule file — not to enable memory.
-   Rationale: portability and reviewability. The
-   `.claude/settings.json` setting `autoMemoryEnabled: false`
-   enforces this. See `context/rules_codification.md` for where
-   different kinds of knowledge belong.
+Read `rules/INDEX.md`. Every rule is absolute. Do not violate.
 
 ## Cross-reference syntax
 

@@ -1,5 +1,7 @@
 # Context files index
 
+**Note:** Context files provide domain knowledge. They are lower priority than `rules/` and `decisions/`. If a context file contradicts a rule or decision, the rule/decision wins. See `CLAUDE.md` Knowledge precedence section.
+
 Topical background for code paths, wire formats, and investigations.
 Agents read these on demand — don't paste file contents into
 orchestrator context.

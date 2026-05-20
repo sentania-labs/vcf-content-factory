@@ -39,6 +39,9 @@ references/
 tmp/
 status.md
 
+# Memory layer — sessions are per-user and don't travel
+memory/sessions/
+
 # Local PKA comm zone (not shared)
 .pka/
 .claude/scheduled_tasks.lock
