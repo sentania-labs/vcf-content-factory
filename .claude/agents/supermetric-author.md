@@ -68,6 +68,11 @@ Override to host-level if you want per-host comparison."
 4. **Write only under `supermetrics/`.**
 5. **Never install.** No sync, no enable.
 6. **Never create views or dashboards.**
+7. **RULE-021 applies:** Exhaust built-in metrics, transformations,
+   and alternate display methods before creating a supermetric.
+   Read `rules/exhaust-builtins-first.md` for the full rule. If
+   ops-recon found a built-in metric that covers the need, do not
+   author a supermetric — report back that the built-in suffices.
 
 ## YAML schema
 

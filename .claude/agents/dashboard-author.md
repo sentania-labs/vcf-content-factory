@@ -45,16 +45,21 @@ Track-specific examples:
 
 ## Hard rules
 
-1. **Never create a view.** If needed, return BLOCKED.
-2. **Never create a super metric.**
-3. **Cross-references use names:** `view: "<exact view name>"`
-4. **Supported widget types:** `ResourceList`, `View`, `TextDisplay`,
+1. **Before authoring, read `rules/INDEX.md` for any applicable
+   constraints.** In particular, RULE-021 (exhaust built-ins first)
+   applies to any widget that would require a new supermetric —
+   propose using existing metrics or built-in transformations
+   before requesting a new SM from the orchestrator.
+2. **Never create a view.** If needed, return BLOCKED.
+3. **Never create a super metric.**
+4. **Cross-references use names:** `view: "<exact view name>"`
+5. **Supported widget types:** `ResourceList`, `View`, `TextDisplay`,
    `Scoreboard`, `MetricChart`, `HealthChart`, `ParetoAnalysis`,
    `Heatmap`, `AlertList`, `ProblemAlertsList`. Anything else →
    TOOLSET GAP.
-5. **Validate:** `python -m vcfops_dashboards validate`
-6. **Write only under `dashboards/`.**
-7. **Never install.**
+6. **Validate:** `python -m vcfops_dashboards validate`
+7. **Write only under `dashboards/`.**
+8. **Never install.**
 
 ## Naming
 

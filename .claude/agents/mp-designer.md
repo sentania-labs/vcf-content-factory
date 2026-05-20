@@ -22,6 +22,24 @@ and produce a design artifact that `mp-author` turns into YAML.
 - `context/api-maps/<target>.md` — the API map from
   `api-cartographer` for the target system.
 
+## Tier check (mandatory before design)
+
+Before beginning any design work:
+
+1. Read `rules/INDEX.md` — check RULE-010 through RULE-020
+   (Tier 2 triggers). Evaluate the API map against each rule.
+2. If any Tier 2 rule fires, check `decisions/INDEX.md` for an
+   existing decision on this target.
+3. If a decision exists and says Tier 2: route to `sdk-author`
+   via the orchestrator. Do not proceed with MPB design.
+4. If no decision exists but a rule fires: propose Tier 2 to the
+   user, citing the specific rule(s). If the user confirms, the
+   orchestrator should create a new decision in `decisions/`.
+5. If no rules fire: proceed with Tier 1 (MPB) design as normal.
+
+This check replaces the old inline tier decision flow. The rules
+are the source of truth, not the designer's judgment.
+
 ## Hard rules
 
 1. **Write only to `designs/`.** Never touch content YAML,

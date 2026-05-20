@@ -87,6 +87,13 @@ prompt, the prompt wins.
 This is the spine of the orchestrator's job. It belongs in this
 file (not a skill) because it runs before any skill could load.
 
+0. **Check rules and decisions.** Before planning any work, read
+   `rules/INDEX.md`. If any rule applies to the current request,
+   follow it — do not propose alternatives. If the situation is
+   ambiguous, check `decisions/INDEX.md` for a specific ruling.
+   Only proceed to recon after confirming no rule blocks or
+   redirects the request.
+
 1. **Start with recon.** Every authoring request begins with
    `ops-recon`. The brief includes the user's intent in plain
    language plus the specific questions you want answered. Recon
@@ -147,20 +154,20 @@ file (not a skill) because it runs before any skill could load.
    All other CLI ops (sync, enable, delete, list, .pak build/install)
    go through `content-installer` or the MP builder.
 
-6. **Install only on explicit user confirmation.** Show the file
+7. **Install only on explicit user confirmation.** Show the file
    list and a brief summary, ask yes/no, then delegate to
    `content-installer`. Install is plumbing, not creative work.
 
-7. **Never spawn multiple author agents in parallel.**
+8. **Never spawn multiple author agents in parallel.**
    Cross-references race for UUIDs and names. Serial.
 
-8. **ops-recon, api-explorer, and tooling MAY run in parallel**
+9. **ops-recon, api-explorer, and tooling MAY run in parallel**
    with each other or with a deferred author — they write to
    non-content directories.
 
-9. **Tooling changes go through the `tooling` agent.** The same
-   discipline that keeps you out of `supermetrics/` keeps you out
-   of `vcfops_*/`.
+10. **Tooling changes go through the `tooling` agent.** The same
+    discipline that keeps you out of `supermetrics/` keeps you out
+    of `vcfops_*/`.
 
 ## When the toolset is inadequate
 
