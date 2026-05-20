@@ -214,10 +214,23 @@ def _build_sdk_mp_headline(
     pak_path = build_sdk_pak(project_dir, output_dir=tmp_dir)
 
     # Wrap in a zip for the release pipeline
+    repo_root = Path(__file__).parent.parent
     zip_name = f"{pak_path.stem}.zip"
     zip_path = tmp_dir / zip_name
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.write(pak_path, pak_path.name)
+        readme = project_dir / "README.md"
+        if readme.exists():
+            zf.write(readme, "README.md")
+        changelog = project_dir / "CHANGELOG.md"
+        if changelog.exists():
+            zf.write(changelog, "CHANGELOG.md")
+        reference = project_dir / "REFERENCE.md"
+        if reference.exists():
+            zf.write(reference, "REFERENCE.md")
+        license_src = repo_root / "LICENSE"
+        if license_src.exists():
+            zf.write(license_src, "LICENSE.md")
 
     return zip_path
 

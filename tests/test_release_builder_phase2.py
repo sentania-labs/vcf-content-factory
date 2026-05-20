@@ -326,6 +326,266 @@ class TestBundleHeadline:
 
 
 # ---------------------------------------------------------------------------
+# SDK MP headline — README inclusion
+# ---------------------------------------------------------------------------
+
+class TestSdkMpHeadlineReadme:
+    """Unit tests for _build_sdk_mp_headline README inclusion.
+
+    build_sdk_pak() calls the real Java compiler and is not suitable for
+    CI unit tests.  We patch it to write a minimal stub .pak so that the
+    zipfile-wrapping logic in _build_sdk_mp_headline can be exercised in
+    isolation.
+    """
+
+    def _fake_build_sdk_pak(self, tmp_dir: Path, adapter_kind: str = "test_adapter") -> "Callable":
+        """Return a patched build_sdk_pak that writes a stub .pak to output_dir."""
+        def _build(project_dir: Path, output_dir: Path = None) -> Path:
+            dest = (output_dir or tmp_dir) / f"vcfcf_{adapter_kind}.1.0.0.1.pak"
+            with zipfile.ZipFile(dest, "w") as zf:
+                zf.writestr("manifest.txt", '{"name": "stub"}')
+            return dest
+        return _build
+
+    def test_readme_included_when_present(self, tmp_path):
+        """If project_dir/README.md exists, it must appear as README.md in the zip root."""
+        import vcfops_managementpacks.sdk_builder as _sdk_mod
+        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+
+        project_dir = tmp_path / "my-adapter"
+        project_dir.mkdir()
+        readme = project_dir / "README.md"
+        readme.write_text("# My Adapter\n\nInstallation instructions here.\n")
+        adapter_yaml = project_dir / "adapter.yaml"
+        adapter_yaml.write_text("name: My Adapter\n")
+
+        tmp_out = tmp_path / "out"
+        tmp_out.mkdir()
+
+        # Patch at the import site used by _build_sdk_mp_headline.
+        # The function does `from vcfops_managementpacks.sdk_builder import build_sdk_pak`
+        # on every call, so mutating the module attribute is the correct patch point.
+        original = _sdk_mod.build_sdk_pak
+        try:
+            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "my_adapter")
+            zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
+        finally:
+            _sdk_mod.build_sdk_pak = original
+
+        assert zip_path.exists(), f"Output zip not created: {zip_path}"
+        with zipfile.ZipFile(zip_path) as zf:
+            members = zf.namelist()
+        assert "README.md" in members, (
+            f"README.md missing from SDK pak zip. Members: {members}"
+        )
+        # Verify it is at the zip root (no subdirectory prefix)
+        assert members.count("README.md") == 1
+
+    def test_no_readme_when_absent(self, tmp_path):
+        """If project_dir/README.md does not exist, no README.md in the zip."""
+        import vcfops_managementpacks.sdk_builder as _sdk_mod
+        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+
+        project_dir = tmp_path / "bare-adapter"
+        project_dir.mkdir()
+        adapter_yaml = project_dir / "adapter.yaml"
+        adapter_yaml.write_text("name: Bare Adapter\n")
+
+        tmp_out = tmp_path / "out"
+        tmp_out.mkdir()
+
+        original = _sdk_mod.build_sdk_pak
+        try:
+            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "bare_adapter")
+            zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
+        finally:
+            _sdk_mod.build_sdk_pak = original
+
+        assert zip_path.exists(), f"Output zip not created: {zip_path}"
+        with zipfile.ZipFile(zip_path) as zf:
+            members = zf.namelist()
+        assert "README.md" not in members, (
+            f"README.md should not be present when absent from project_dir. Members: {members}"
+        )
+
+    def test_readme_content_preserved(self, tmp_path):
+        """README.md bytes in the zip must match the source file exactly."""
+        import vcfops_managementpacks.sdk_builder as _sdk_mod
+        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+
+        project_dir = tmp_path / "content-adapter"
+        project_dir.mkdir()
+        readme_text = "# Content Adapter\n\nDetailed docs.\n"
+        (project_dir / "README.md").write_text(readme_text)
+        adapter_yaml = project_dir / "adapter.yaml"
+        adapter_yaml.write_text("name: Content Adapter\n")
+
+        tmp_out = tmp_path / "out"
+        tmp_out.mkdir()
+
+        original = _sdk_mod.build_sdk_pak
+        try:
+            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "content_adapter")
+            zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
+        finally:
+            _sdk_mod.build_sdk_pak = original
+
+        with zipfile.ZipFile(zip_path) as zf:
+            extracted = zf.read("README.md").decode("utf-8")
+        assert extracted == readme_text, (
+            f"README.md content mismatch.\nExpected: {readme_text!r}\nGot: {extracted!r}"
+        )
+
+    def test_changelog_included_when_present(self, tmp_path):
+        """If project_dir/CHANGELOG.md exists, it must appear as CHANGELOG.md in the zip root."""
+        import vcfops_managementpacks.sdk_builder as _sdk_mod
+        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+
+        project_dir = tmp_path / "changelog-adapter"
+        project_dir.mkdir()
+        (project_dir / "CHANGELOG.md").write_text("## v1.0.0\n\n- Initial release\n")
+        adapter_yaml = project_dir / "adapter.yaml"
+        adapter_yaml.write_text("name: Changelog Adapter\n")
+
+        tmp_out = tmp_path / "out"
+        tmp_out.mkdir()
+
+        original = _sdk_mod.build_sdk_pak
+        try:
+            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "changelog_adapter")
+            zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
+        finally:
+            _sdk_mod.build_sdk_pak = original
+
+        with zipfile.ZipFile(zip_path) as zf:
+            members = zf.namelist()
+        assert "CHANGELOG.md" in members, (
+            f"CHANGELOG.md missing from SDK pak zip. Members: {members}"
+        )
+        assert members.count("CHANGELOG.md") == 1
+
+    def test_no_changelog_when_absent(self, tmp_path):
+        """If project_dir/CHANGELOG.md does not exist, no CHANGELOG.md in the zip."""
+        import vcfops_managementpacks.sdk_builder as _sdk_mod
+        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+
+        project_dir = tmp_path / "no-changelog-adapter"
+        project_dir.mkdir()
+        adapter_yaml = project_dir / "adapter.yaml"
+        adapter_yaml.write_text("name: No Changelog Adapter\n")
+
+        tmp_out = tmp_path / "out"
+        tmp_out.mkdir()
+
+        original = _sdk_mod.build_sdk_pak
+        try:
+            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "no_changelog_adapter")
+            zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
+        finally:
+            _sdk_mod.build_sdk_pak = original
+
+        with zipfile.ZipFile(zip_path) as zf:
+            members = zf.namelist()
+        assert "CHANGELOG.md" not in members, (
+            f"CHANGELOG.md should not be present when absent from project_dir. Members: {members}"
+        )
+
+    def test_changelog_content_preserved(self, tmp_path):
+        """CHANGELOG.md bytes in the zip must match the source file exactly."""
+        import vcfops_managementpacks.sdk_builder as _sdk_mod
+        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+
+        project_dir = tmp_path / "changelog-content-adapter"
+        project_dir.mkdir()
+        changelog_text = "## v1.0.0\n\n- Initial release\n## v0.9.0\n\n- Beta\n"
+        (project_dir / "CHANGELOG.md").write_text(changelog_text)
+        adapter_yaml = project_dir / "adapter.yaml"
+        adapter_yaml.write_text("name: Changelog Content Adapter\n")
+
+        tmp_out = tmp_path / "out"
+        tmp_out.mkdir()
+
+        original = _sdk_mod.build_sdk_pak
+        try:
+            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "changelog_content_adapter")
+            zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
+        finally:
+            _sdk_mod.build_sdk_pak = original
+
+        with zipfile.ZipFile(zip_path) as zf:
+            extracted = zf.read("CHANGELOG.md").decode("utf-8")
+        assert extracted == changelog_text, (
+            f"CHANGELOG.md content mismatch.\nExpected: {changelog_text!r}\nGot: {extracted!r}"
+        )
+
+    def test_license_md_included(self, tmp_path):
+        """Repo-root LICENSE must appear as LICENSE.md in the zip root."""
+        import vcfops_managementpacks.sdk_builder as _sdk_mod
+        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+
+        repo_root = REPO_ROOT
+        license_src = repo_root / "LICENSE"
+        if not license_src.exists():
+            pytest.skip("Repo root LICENSE file not present; cannot test LICENSE.md inclusion")
+
+        project_dir = tmp_path / "license-adapter"
+        project_dir.mkdir()
+        adapter_yaml = project_dir / "adapter.yaml"
+        adapter_yaml.write_text("name: License Adapter\n")
+
+        tmp_out = tmp_path / "out"
+        tmp_out.mkdir()
+
+        original = _sdk_mod.build_sdk_pak
+        try:
+            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "license_adapter")
+            zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
+        finally:
+            _sdk_mod.build_sdk_pak = original
+
+        with zipfile.ZipFile(zip_path) as zf:
+            members = zf.namelist()
+        assert "LICENSE.md" in members, (
+            f"LICENSE.md missing from SDK pak zip. Members: {members}"
+        )
+        assert members.count("LICENSE.md") == 1
+
+    def test_license_md_content_matches_repo_root(self, tmp_path):
+        """LICENSE.md bytes in the zip must match the repo-root LICENSE file exactly."""
+        import vcfops_managementpacks.sdk_builder as _sdk_mod
+        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+
+        repo_root = REPO_ROOT
+        license_src = repo_root / "LICENSE"
+        if not license_src.exists():
+            pytest.skip("Repo root LICENSE file not present; cannot test LICENSE.md content")
+
+        expected_bytes = license_src.read_bytes()
+
+        project_dir = tmp_path / "license-content-adapter"
+        project_dir.mkdir()
+        adapter_yaml = project_dir / "adapter.yaml"
+        adapter_yaml.write_text("name: License Content Adapter\n")
+
+        tmp_out = tmp_path / "out"
+        tmp_out.mkdir()
+
+        original = _sdk_mod.build_sdk_pak
+        try:
+            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "license_content_adapter")
+            zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
+        finally:
+            _sdk_mod.build_sdk_pak = original
+
+        with zipfile.ZipFile(zip_path) as zf:
+            extracted_bytes = zf.read("LICENSE.md")
+        assert extracted_bytes == expected_bytes, (
+            f"LICENSE.md content mismatch: zip has {len(extracted_bytes)} bytes, "
+            f"repo root LICENSE has {len(expected_bytes)} bytes"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Stale-check / idempotence helpers
 # ---------------------------------------------------------------------------
 

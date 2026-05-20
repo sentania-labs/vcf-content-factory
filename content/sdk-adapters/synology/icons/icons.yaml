@@ -11,6 +11,7 @@ adapter_kind_icon: nas.svg
 
 resource_kinds:
   synology_diskstation: nas.svg        # adapter instance (type=7)
+  SynologyWorld:        nas.svg
   SynologyDiskstation:  nas.svg
   SynologyStoragePool:  storage_pool.svg
   SynologyVolume:       datastore.svg

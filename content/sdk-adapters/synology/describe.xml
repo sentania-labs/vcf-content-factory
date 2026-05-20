@@ -30,6 +30,13 @@
 		</ResourceKind>
 
 		<!-- ================================================================ -->
+		<!-- SynologyWorld: top-down traversal entry point across instances    -->
+		<!-- ================================================================ -->
+		<ResourceKind key="SynologyWorld" nameKey="250" type="1">
+			<ResourceIdentifier key="world_id" nameKey="251" type="string" required="true" dispOrder="1"/>
+		</ResourceKind>
+
+		<!-- ================================================================ -->
 		<!-- SynologyDiskstation (singleton): system health + CPU + memory     -->
 		<!-- ================================================================ -->
 		<ResourceKind key="SynologyDiskstation" nameKey="10" type="1">
@@ -121,7 +128,7 @@
 				                   isProperty="false" defaultMonitored="true" unit="%"/>
 			</ResourceGroup>
 
-			<ResourceGroup key="Properties" nameKey="106" instanced="false">
+			<ResourceGroup key="Configuration" nameKey="106" instanced="false">
 				<ResourceAttribute key="raid_type" nameKey="107" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="status" nameKey="108" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="pool_path" nameKey="109" dataType="string" isProperty="true"/>
@@ -159,7 +166,7 @@
 				                   isProperty="false" defaultMonitored="true" unit="%"/>
 			</ResourceGroup>
 
-			<ResourceGroup key="Properties" nameKey="132" instanced="false">
+			<ResourceGroup key="Configuration" nameKey="132" instanced="false">
 				<ResourceAttribute key="volume_path" nameKey="133" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="fs_type" nameKey="134" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="status" nameKey="135" dataType="string" isProperty="true"/>
@@ -205,12 +212,15 @@
 				                   isProperty="false" defaultMonitored="true" unit="%"/>
 			</ResourceGroup>
 
-			<ResourceGroup key="Properties" nameKey="153" instanced="false">
+			<ResourceGroup key="Hardware" nameKey="153" instanced="false">
+				<ResourceAttribute key="display_name" nameKey="260" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="model" nameKey="154" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="firmware" nameKey="155" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="serial" nameKey="156" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="vendor" nameKey="157" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="disk_type" nameKey="158" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="disk_code" nameKey="261" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="is_ssd" nameKey="262" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="slot_id" nameKey="159" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="size_bytes" nameKey="160" dataType="string" isProperty="true"/>
 			</ResourceGroup>
@@ -237,12 +247,14 @@
 				                   isProperty="false" defaultMonitored="true" unit="ms"/>
 			</ResourceGroup>
 
-			<ResourceGroup key="Properties" nameKey="179" instanced="false">
+			<ResourceGroup key="Configuration" nameKey="179" instanced="false">
 				<ResourceAttribute key="name" nameKey="180" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="size_bytes" nameKey="181" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="location" nameKey="182" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="type" nameKey="183" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="target_iqn" nameKey="184" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="target_enabled" nameKey="283" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="network_portals" nameKey="284" dataType="string" isProperty="true"/>
 			</ResourceGroup>
 		</ResourceKind>
 
@@ -266,11 +278,14 @@
 				                   isProperty="false" defaultMonitored="true"/>
 			</ResourceGroup>
 
-			<ResourceGroup key="Properties" nameKey="198" instanced="false">
+			<ResourceGroup key="Configuration" nameKey="198" instanced="false">
 				<ResourceAttribute key="export_path" nameKey="199" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="volume_path" nameKey="200" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="description" nameKey="201" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="quota_value_mib" nameKey="202" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Access" nameKey="280" instanced="false">
 				<ResourceAttribute key="cow_enabled" nameKey="203" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="compress_enabled" nameKey="204" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="rule_count" nameKey="205" dataType="string" isProperty="true"/>
@@ -291,7 +306,7 @@
 				                   isProperty="false" defaultMonitored="true" unit="sec"/>
 			</ResourceGroup>
 
-			<ResourceGroup key="Properties" nameKey="215" instanced="false">
+			<ResourceGroup key="Status" nameKey="215" instanced="false">
 				<ResourceAttribute key="status" nameKey="216" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="mode" nameKey="217" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="connected" nameKey="218" dataType="string" isProperty="true"/>
@@ -322,10 +337,18 @@
 				                   isProperty="false" defaultMonitored="false" unit="bytes"/>
 			</ResourceGroup>
 
-			<ResourceGroup key="Properties" nameKey="230" instanced="false">
+			<ResourceGroup key="Configuration" nameKey="230" instanced="false">
 				<ResourceAttribute key="mode" nameKey="231" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="status" nameKey="232" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="mount_volume" nameKey="233" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="device_type" nameKey="270" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="skip_seq_io" nameKey="274" dataType="string" isProperty="true"/>
+			</ResourceGroup>
+
+			<ResourceGroup key="Hardware" nameKey="281" instanced="false">
+				<ResourceAttribute key="disk_count" nameKey="271" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="disk_members" nameKey="272" dataType="string" isProperty="true"/>
+				<ResourceAttribute key="total_capacity" nameKey="273" dataType="string" isProperty="true"/>
 				<ResourceAttribute key="disk_failure_count" nameKey="234" dataType="string" isProperty="true"/>
 			</ResourceGroup>
 		</ResourceKind>
@@ -339,14 +362,16 @@
 		                   rootResourceKind="synology_diskstation"
 		                   filterType="GENERIC_RELATION"
 		                   usedFor="ALL">
-			<!-- StoragePool > Volume > iSCSI LUN -->
-			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyStoragePool::child||synology_diskstation::SynologyVolume::child||synology_diskstation::SynologyIscsiLun::child"/>
-			<!-- StoragePool > Volume > NFS Export -->
-			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyStoragePool::child||synology_diskstation::SynologyVolume::child||synology_diskstation::SynologyNfsExport::child"/>
-			<!-- StoragePool > Volume > SSD Cache -->
-			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyStoragePool::child||synology_diskstation::SynologyVolume::child||synology_diskstation::SynologySsdCache::child"/>
-			<!-- StoragePool > Disk -->
-			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyStoragePool::child||synology_diskstation::SynologyDisk::child"/>
+			<!-- World > Diskstation > StoragePool > Volume > iSCSI LUN -->
+			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyWorld::child||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyStoragePool::child||synology_diskstation::SynologyVolume::child||synology_diskstation::SynologyIscsiLun::child"/>
+			<!-- World > Diskstation > StoragePool > Volume > NFS Export -->
+			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyWorld::child||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyStoragePool::child||synology_diskstation::SynologyVolume::child||synology_diskstation::SynologyNfsExport::child"/>
+			<!-- World > Diskstation > StoragePool > Volume > SSD Cache > Disk (cache) -->
+			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyWorld::child||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyStoragePool::child||synology_diskstation::SynologyVolume::child||synology_diskstation::SynologySsdCache::child||synology_diskstation::SynologyDisk::child"/>
+			<!-- World > Diskstation > StoragePool > Disk -->
+			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyWorld::child||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyStoragePool::child||synology_diskstation::SynologyDisk::child"/>
+			<!-- World > Diskstation > UPS -->
+			<ResourcePath path="synology_diskstation::synology_diskstation||synology_diskstation::SynologyWorld::child||synology_diskstation::SynologyDiskstation::child||synology_diskstation::SynologyUps::child"/>
 		</TraversalSpecKind>
 	</TraversalSpecKinds>
 

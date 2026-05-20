@@ -98,34 +98,41 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 			try {
 				api.ensureSession();
 
+				// --- Global World singleton (shared across all adapter instances) ---
+				Resource world = createResource("SynologyWorld", "Synology World",
+						"world_id", "synology_world");
+				collection.add(world);
+
 				// --- Diskstation singleton ---
 				SimpleJson dsmInfo = api.dsmInfo();
 				String serial = dsmInfo.data().get("serial").asString("unknown");
-				Resource diskstation = createResource("SynologyDiskstation", serial, "serial", serial);
+				String model = dsmInfo.data().get("model").asString("");
+				String dsName = model.isEmpty() ? serial : model + " " + serial;
+				Resource diskstation = createResource("SynologyDiskstation", dsName, "serial", serial);
 				collection.add(diskstation);
 
 				// --- Storage topology (one call returns pools, volumes, disks) ---
 				SimpleJson storage = api.storageLoadInfo();
 
-				Map<String, String> poolIdToPath = new HashMap<>();
 				for (SimpleJson pool : storage.data().get("storagePools").asList()) {
 					String poolId = pool.get("id").asString();
-					String poolPath = pool.get("pool_path").asString();
-					poolIdToPath.put(poolId, poolPath);
-					Resource r = createResource("SynologyStoragePool", poolId, "pool_id", poolId);
+					String poolName = poolDisplayName(pool);
+					Resource r = createResource("SynologyStoragePool", poolName, "pool_id", poolId);
 					collection.add(r);
 				}
 
 				for (SimpleJson vol : storage.data().get("volumes").asList()) {
 					String volPath = vol.get("vol_path").asString();
 					String volId = vol.get("volume_id").asString(volPath);
-					Resource r = createResource("SynologyVolume", volId, "volume_id", volId);
+					String volName = volumeDisplayName(vol);
+					Resource r = createResource("SynologyVolume", volName, "volume_id", volId);
 					collection.add(r);
 				}
 
 				for (SimpleJson disk : storage.data().get("disks").asList()) {
 					String diskId = disk.get("id").asString();
-					Resource r = createResource("SynologyDisk", diskId, "disk_id", diskId);
+					String diskName = disk.get("name").asString(diskId);
+					Resource r = createResource("SynologyDisk", diskName, "disk_id", diskId);
 					collection.add(r);
 				}
 
@@ -134,7 +141,8 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 				if (!ssdCaches.isNull()) {
 					for (SimpleJson cache : ssdCaches.asList()) {
 						String cacheId = cache.get("id").asString();
-						Resource r = createResource("SynologySsdCache", cacheId, "cache_id", cacheId);
+						String cacheName = cacheDisplayName(cache, storage);
+						Resource r = createResource("SynologySsdCache", cacheName, "cache_id", cacheId);
 						collection.add(r);
 					}
 				}
@@ -143,7 +151,8 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 				SimpleJson luns = api.iscsiLunList();
 				for (SimpleJson lun : luns.data().get("luns").asList()) {
 					String uuid = lun.get("uuid").asString();
-					Resource r = createResource("SynologyIscsiLun", uuid, "lun_uuid", uuid);
+					String lunName = lun.get("name").asString(uuid);
+					Resource r = createResource("SynologyIscsiLun", lunName, "lun_uuid", uuid);
 					collection.add(r);
 				}
 
@@ -167,8 +176,8 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 					SimpleJson ups = api.upsGet();
 					boolean connected = ups.data().get("usb_ups_connect").asBoolean();
 					if (connected) {
-						String model = ups.data().get("model").asString("UPS");
-						Resource r = createResource("SynologyUps", model, "ups_model", model);
+						String upsModel = ups.data().get("model").asString("UPS");
+						Resource r = createResource("SynologyUps", upsModel, "ups_model", upsModel);
 						collection.add(r);
 					}
 				} catch (Exception e) {
@@ -194,6 +203,7 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 				ResourceCollection result = new ResourceCollection();
 				try {
 					api.ensureSession();
+					collectWorld(result);
 					collectDiskstation(result);
 					SimpleJson storage = collectStorageTopology(result);
 					collectSsdCache(result, storage);
@@ -247,13 +257,15 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 		SimpleJson nfs = api.nfsServiceGet();
 
 		String serial = dsmInfo.data().get("serial").asString("unknown");
-		Resource ds = findOrCreate(result, "SynologyDiskstation", serial, "serial", serial);
+		String dsModel = dsmInfo.data().get("model").asString("");
+		String dsName = dsModel.isEmpty() ? serial : dsModel + " " + serial;
+		Resource ds = findOrCreate(result, "SynologyDiskstation", dsName, "serial", serial);
 
 		// System properties
-		ds.addData("System|model", dsmInfo.data().get("model").asString(""));
-		ds.addData("System|hostname", sysInfo.data().get("sys_name").asString(""));
-		ds.addData("System|firmware_version", sysInfo.data().get("firmware_ver").asString(""));
-		ds.addData("System|firmware_date", sysInfo.data().get("firmware_date").asString(""));
+		addProperty(ds, "System|model", dsmInfo.data().get("model").asString(""));
+		addProperty(ds, "System|hostname", sysInfo.data().get("sys_name").asString(""));
+		addProperty(ds, "System|firmware_version", sysInfo.data().get("firmware_ver").asString(""));
+		addProperty(ds, "System|firmware_date", sysInfo.data().get("firmware_date").asString(""));
 
 		// System metrics
 		ds.addData("System|system_temp", dsmInfo.data().get("temperature").asDouble());
@@ -291,12 +303,12 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 		ds.addData("Network|nic_count", (double) nics.data().size());
 
 		// Fan
-		ds.addData("Fan|fan_status", fan.data().get("cool_fan").asString("unknown"));
-		ds.addData("Fan|fan_speed_mode", fan.data().get("dual_fan_speed").asString("unknown"));
+		addProperty(ds, "Fan|fan_status", fan.data().get("cool_fan").asString("unknown"));
+		addProperty(ds, "Fan|fan_speed_mode", fan.data().get("dual_fan_speed").asString("unknown"));
 
 		// NFS service
-		ds.addData("NFS|nfs_enabled", nfs.data().get("enable_nfs").asBoolean() ? "true" : "false");
-		ds.addData("NFS|nfs_v4_enabled", nfs.data().get("enable_nfs_v4").asBoolean() ? "true" : "false");
+		addProperty(ds, "NFS|nfs_enabled", nfs.data().get("enable_nfs").asBoolean() ? "true" : "false");
+		addProperty(ds, "NFS|nfs_v4_enabled", nfs.data().get("enable_nfs_v4").asBoolean() ? "true" : "false");
 
 		SimpleJson nfsUtil = util.data().get("nfs");
 		if (!nfsUtil.isNull() && nfsUtil.size() > 0) {
@@ -351,7 +363,8 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 		// --- Storage Pools ---
 		for (SimpleJson pool : storage.data().get("storagePools").asList()) {
 			String poolId = pool.get("id").asString();
-			Resource r = findOrCreate(result, "SynologyStoragePool", poolId, "pool_id", poolId);
+			String poolName = poolDisplayName(pool);
+			Resource r = findOrCreate(result, "SynologyStoragePool", poolName, "pool_id", poolId);
 
 			SimpleJson size = pool.get("size");
 			double total = size.get("total").asDouble();
@@ -360,13 +373,13 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 			r.addData("Capacity|used_bytes", used);
 			r.addData("Capacity|usage_pct", total > 0 ? (used / total) * 100.0 : 0.0);
 
-			r.addData("Properties|raid_type", pool.get("raidType").asString(""));
-			r.addData("Properties|status", pool.get("status").asString(""));
-			r.addData("Properties|pool_path", pool.get("pool_path").asString(""));
-			r.addData("Properties|device_type", pool.get("device_type").asString(""));
+			addProperty(r, "Configuration|raid_type", pool.get("raidType").asString(""));
+			addProperty(r, "Configuration|status", pool.get("status").asString(""));
+			addProperty(r, "Configuration|pool_path", pool.get("pool_path").asString(""));
+			addProperty(r, "Configuration|device_type", pool.get("device_type").asString(""));
 
 			SimpleJson disks = pool.get("disks");
-			r.addData("Properties|disk_count", (double) (disks.isNull() ? 0 : disks.size()));
+			r.addData("Configuration|disk_count", (double) (disks.isNull() ? 0 : disks.size()));
 
 			result.add(r);
 		}
@@ -375,7 +388,8 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 		for (SimpleJson vol : storage.data().get("volumes").asList()) {
 			String volPath = vol.get("vol_path").asString();
 			String volId = vol.get("volume_id").asString(volPath);
-			Resource r = findOrCreate(result, "SynologyVolume", volId, "volume_id", volId);
+			String volName = volumeDisplayName(vol);
+			Resource r = findOrCreate(result, "SynologyVolume", volName, "volume_id", volId);
 
 			SimpleJson size = vol.get("size");
 			double total = size.get("total").asDouble();
@@ -384,14 +398,14 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 			r.addData("Capacity|free_bytes", free);
 			r.addData("Capacity|usage_pct", total > 0 ? ((total - free) / total) * 100.0 : 0.0);
 
-			r.addData("Properties|volume_path", volPath);
-			r.addData("Properties|fs_type", vol.get("fs_type").asString(""));
-			r.addData("Properties|status", vol.get("status").asString(""));
-			r.addData("Properties|description", vol.get("deploy_path").asString(""));
+			addProperty(r, "Configuration|volume_path", volPath);
+			addProperty(r, "Configuration|fs_type", vol.get("fs_type").asString(""));
+			addProperty(r, "Configuration|status", vol.get("status").asString(""));
+			addProperty(r, "Configuration|description", vol.get("deploy_path").asString(""));
 
 			// JOIN: Volume IO from Utilization (keyed by vol_path stripped of leading /)
-			String volName = volPath.startsWith("/") ? volPath.substring(1) : volPath;
-			SimpleJson io = volIoByName.get(volName);
+			String volIoKey = volPath.startsWith("/") ? volPath.substring(1) : volPath;
+			SimpleJson io = volIoByName.get(volIoKey);
 			if (io != null) {
 				r.addData("IO|read_bytes", io.get("read_byte").asDouble());
 				r.addData("IO|write_bytes", io.get("write_byte").asDouble());
@@ -406,8 +420,8 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 				for (SimpleJson cache : ssdCaches.asList()) {
 					String mountPath = cache.get("path").asString("");
 					if (volPath.equals(mountPath)) {
-						r.addData("Cache|cache_enabled", "true");
-						r.addData("Cache|cache_status", cache.get("status").asString(""));
+						addProperty(r, "Cache|cache_enabled", "true");
+						addProperty(r, "Cache|cache_status", cache.get("status").asString(""));
 						r.addData("Cache|cache_read_hit_rate", cache.get("hit_rate").asDouble());
 						r.addData("Cache|cache_write_hit_rate", cache.get("hit_rate_write").asDouble());
 						break;
@@ -421,18 +435,22 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 		// --- Disks ---
 		for (SimpleJson disk : storage.data().get("disks").asList()) {
 			String diskId = disk.get("id").asString();
-			Resource r = findOrCreate(result, "SynologyDisk", diskId, "disk_id", diskId);
+			String diskName = disk.get("name").asString(diskId);
+			Resource r = findOrCreate(result, "SynologyDisk", diskName, "disk_id", diskId);
 
-			r.addData("Properties|model", disk.get("model").asString(""));
-			r.addData("Properties|firmware", disk.get("firm").asString(""));
-			r.addData("Properties|serial", disk.get("serial").asString(""));
-			r.addData("Properties|vendor", disk.get("vendor").asString(""));
-			r.addData("Properties|disk_type", disk.get("diskType").asString(""));
-			r.addData("Properties|slot_id", disk.get("slot_id").asString(""));
-			r.addData("Properties|size_bytes", disk.get("size_total").asString("0"));
+			addProperty(r, "Hardware|display_name", diskName);
+			addProperty(r, "Hardware|model", disk.get("model").asString(""));
+			addProperty(r, "Hardware|firmware", disk.get("firm").asString(""));
+			addProperty(r, "Hardware|serial", disk.get("serial").asString(""));
+			addProperty(r, "Hardware|vendor", disk.get("vendor").asString(""));
+			addProperty(r, "Hardware|disk_type", disk.get("diskType").asString(""));
+			addProperty(r, "Hardware|disk_code", disk.get("disk_code").asString(""));
+			addProperty(r, "Hardware|is_ssd", disk.get("isSsd").asBoolean() ? "true" : "false");
+			addProperty(r, "Hardware|slot_id", disk.get("slot_id").asString(""));
+			addProperty(r, "Hardware|size_bytes", disk.get("size_total").asString("0"));
 
 			r.addData("Health|temperature", disk.get("temp").asDouble());
-			r.addData("Health|smart_status", disk.get("smart_status").asString(""));
+			addProperty(r, "Health|smart_status", disk.get("smart_status").asString(""));
 			r.addData("Health|unc_sectors", disk.get("unc").asDouble());
 			r.addData("Health|remain_life", disk.get("remain_life").asDouble());
 
@@ -464,7 +482,8 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 
 		for (SimpleJson cache : caches.asList()) {
 			String cacheId = cache.get("id").asString();
-			Resource r = findOrCreate(result, "SynologySsdCache", cacheId, "cache_id", cacheId);
+			String cacheName = cacheDisplayName(cache, storage);
+			Resource r = findOrCreate(result, "SynologySsdCache", cacheName, "cache_id", cacheId);
 
 			r.addData("HitRate|read_hit_rate", cache.get("hit_rate").asDouble());
 			r.addData("HitRate|write_hit_rate", cache.get("hit_rate_write").asDouble());
@@ -475,10 +494,27 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 			r.addData("Capacity|reusable_bytes", size.get("reusable").asDouble());
 			r.addData("Capacity|memory_used", cache.get("memory").asDouble());
 
-			r.addData("Properties|mode", cache.get("mode").asString(""));
-			r.addData("Properties|status", cache.get("status").asString(""));
-			r.addData("Properties|mount_volume", cache.get("mountSpaceId").asString(""));
-			r.addData("Properties|disk_failure_count",
+			addProperty(r, "Configuration|mode", cache.get("mode").asString(""));
+			addProperty(r, "Configuration|status", cache.get("status").asString(""));
+			addProperty(r, "Configuration|mount_volume", cache.get("mountSpaceId").asString(""));
+			addProperty(r, "Configuration|device_type", cache.get("device_type").asString(""));
+			addProperty(r, "Configuration|skip_seq_io",
+					cache.get("skipSeqIO").asBoolean() ? "true" : "false");
+			SimpleJson cacheDisks = cache.get("disks");
+			int diskCount = cacheDisks.isNull() ? 0 : cacheDisks.size();
+			addProperty(r, "Hardware|disk_count", String.valueOf(diskCount));
+			StringBuilder members = new StringBuilder();
+			if (!cacheDisks.isNull()) {
+				for (SimpleJson d : cacheDisks.asList()) {
+					if (members.length() > 0) members.append(", ");
+					members.append(d.asString());
+				}
+			}
+			addProperty(r, "Hardware|disk_members", members.toString());
+			double totalBytes = size.get("total").asDouble();
+			addProperty(r, "Hardware|total_capacity",
+					String.format("%.1f GB", totalBytes / (1024.0 * 1024.0 * 1024.0)));
+			addProperty(r, "Hardware|disk_failure_count",
 					String.valueOf(cache.get("disk_failure_number").asLong()));
 
 			result.add(r);
@@ -503,25 +539,43 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 			}
 		}
 
-		// Build target IQN lookup by name
+		// Build target lookup maps by name
 		Map<String, String> targetIqnByName = new HashMap<>();
+		Map<String, String> targetEnabledByName = new HashMap<>();
+		Map<String, String> targetPortalsByName = new HashMap<>();
 		for (SimpleJson t : targets.data().get("targets").asList()) {
-			targetIqnByName.put(t.get("name").asString(), t.get("iqn").asString());
+			String tName = t.get("name").asString();
+			targetIqnByName.put(tName, t.get("iqn").asString());
+			targetEnabledByName.put(tName, t.get("is_enabled").asBoolean() ? "true" : "false");
+			StringBuilder portals = new StringBuilder();
+			SimpleJson np = t.get("network_portals");
+			if (!np.isNull()) {
+				for (SimpleJson p : np.asList()) {
+					if (portals.length() > 0) portals.append(", ");
+					portals.append(p.asString());
+				}
+			}
+			targetPortalsByName.put(tName, portals.toString());
 		}
 
 		for (SimpleJson lun : luns.data().get("luns").asList()) {
 			String uuid = lun.get("uuid").asString();
 			String name = lun.get("name").asString();
-			Resource r = findOrCreate(result, "SynologyIscsiLun", uuid, "lun_uuid", uuid);
+			String lunDisplayName = name.isEmpty() ? uuid : name;
+			Resource r = findOrCreate(result, "SynologyIscsiLun", lunDisplayName, "lun_uuid", uuid);
 
-			r.addData("Properties|name", name);
-			r.addData("Properties|size_bytes", String.valueOf(lun.get("size").asLong()));
-			r.addData("Properties|location", lun.get("location").asString(""));
-			r.addData("Properties|type", lun.get("type_str").asString(""));
+			addProperty(r, "Configuration|name", name);
+			addProperty(r, "Configuration|size_bytes", String.valueOf(lun.get("size").asLong()));
+			addProperty(r, "Configuration|location", lun.get("location").asString(""));
+			addProperty(r, "Configuration|type", lun.get("type_str").asString(""));
 
-			// Join target IQN by naming convention
+			// Join target properties by naming convention
 			String iqn = targetIqnByName.get(name);
-			r.addData("Properties|target_iqn", iqn != null ? iqn : "");
+			addProperty(r, "Configuration|target_iqn", iqn != null ? iqn : "");
+			String enabled = targetEnabledByName.get(name);
+			addProperty(r, "Configuration|target_enabled", enabled != null ? enabled : "");
+			String portals = targetPortalsByName.get(name);
+			addProperty(r, "Configuration|network_portals", portals != null ? portals : "");
 
 			// JOIN: LUN IO from Utilization
 			SimpleJson io = lunIoByUuid.get(uuid);
@@ -573,13 +627,13 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 			Resource r = findOrCreate(result, "SynologyNfsExport", name, "share_name", name);
 
 			String volPath = share.get("vol_path").asString("");
-			r.addData("Properties|export_path", volPath + "/" + name);
-			r.addData("Properties|volume_path", volPath);
-			r.addData("Properties|description", share.get("desc").asString(""));
-			r.addData("Properties|quota_value_mib", String.valueOf(share.get("quota_value").asLong()));
-			r.addData("Properties|cow_enabled", share.get("enable_share_cow").asBoolean() ? "true" : "false");
-			r.addData("Properties|compress_enabled", share.get("enable_share_compress").asBoolean() ? "true" : "false");
-			r.addData("Properties|rule_count", String.valueOf(ruleCount));
+			addProperty(r, "Configuration|export_path", volPath + "/" + name);
+			addProperty(r, "Configuration|volume_path", volPath);
+			addProperty(r, "Configuration|description", share.get("desc").asString(""));
+			addProperty(r, "Configuration|quota_value_mib", String.valueOf(share.get("quota_value").asLong()));
+			addProperty(r, "Access|cow_enabled", share.get("enable_share_cow").asBoolean() ? "true" : "false");
+			addProperty(r, "Access|compress_enabled", share.get("enable_share_compress").asBoolean() ? "true" : "false");
+			addProperty(r, "Access|rule_count", String.valueOf(ruleCount));
 
 			// Build allowed_clients string
 			StringBuilder clients = new StringBuilder();
@@ -587,7 +641,7 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 				if (clients.length() > 0) clients.append(", ");
 				clients.append(rule.get("client").asString(""));
 			}
-			r.addData("Properties|allowed_clients", clients.toString());
+			addProperty(r, "Access|allowed_clients", clients.toString());
 
 			// Capacity metrics
 			r.addData("Capacity|size_used_mib", share.get("share_quota_used").asDouble());
@@ -624,9 +678,9 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 
 		r.addData("Battery|charge_pct", ups.data().get("charge").asDouble());
 		r.addData("Battery|runtime_seconds", ups.data().get("runtime").asDouble());
-		r.addData("Properties|status", ups.data().get("status").asString(""));
-		r.addData("Properties|mode", ups.data().get("mode").asString(""));
-		r.addData("Properties|connected", connected ? "true" : "false");
+		addProperty(r, "Status|status", ups.data().get("status").asString(""));
+		addProperty(r, "Status|mode", ups.data().get("mode").asString(""));
+		addProperty(r, "Status|connected", connected ? "true" : "false");
 
 		result.add(r);
 	}
@@ -639,21 +693,36 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 		SimpleJson storage = api.storageLoadInfo();
 		SimpleJson dsmInfo = api.dsmInfo();
 		String serial = dsmInfo.data().get("serial").asString("unknown");
+		String dsModel = dsmInfo.data().get("model").asString("");
+		String dsName = dsModel.isEmpty() ? serial : dsModel + " " + serial;
 
-		Resource diskstation = createResource("SynologyDiskstation", serial, "serial", serial);
+		// Build disk name lookup (disk id → human name)
+		Map<String, String> diskNames = new HashMap<>();
+		for (SimpleJson disk : storage.data().get("disks").asList()) {
+			diskNames.put(disk.get("id").asString(),
+					disk.get("name").asString(disk.get("id").asString()));
+		}
+
+		// World → Diskstation
+		Resource world = createResource("SynologyWorld", "Synology World",
+				"world_id", "synology_world");
+		Resource diskstation = createResource("SynologyDiskstation", dsName, "serial", serial);
+		world.addChild(diskstation);
 
 		// Storage Pool → child of Diskstation
 		for (SimpleJson pool : storage.data().get("storagePools").asList()) {
 			String poolId = pool.get("id").asString();
 			String poolPath = pool.get("pool_path").asString();
-			Resource poolRes = createResource("SynologyStoragePool", poolId, "pool_id", poolId);
+			String poolName = poolDisplayName(pool);
+			Resource poolRes = createResource("SynologyStoragePool", poolName, "pool_id", poolId);
 			diskstation.addChild(poolRes);
 
 			// Volume → child of Storage Pool (joined by pool_path)
 			for (SimpleJson vol : storage.data().get("volumes").asList()) {
 				if (poolPath.equals(vol.get("pool_path").asString())) {
 					String volId = vol.get("volume_id").asString(vol.get("vol_path").asString());
-					Resource volRes = createResource("SynologyVolume", volId, "volume_id", volId);
+					String volName = volumeDisplayName(vol);
+					Resource volRes = createResource("SynologyVolume", volName, "volume_id", volId);
 					poolRes.addChild(volRes);
 				}
 			}
@@ -664,7 +733,8 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 				for (SimpleJson diskRef : poolDisks.asList()) {
 					String diskId = diskRef.asString();
 					if (diskId != null && !diskId.isEmpty()) {
-						Resource diskRes = createResource("SynologyDisk", diskId, "disk_id", diskId);
+						String dName = diskNames.getOrDefault(diskId, diskId);
+						Resource diskRes = createResource("SynologyDisk", dName, "disk_id", diskId);
 						poolRes.addChild(diskRes);
 					}
 				}
@@ -676,7 +746,8 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 				for (SimpleJson diskRef : cacheDiskIds.asList()) {
 					String diskId = diskRef.asString();
 					if (diskId != null && !diskId.isEmpty()) {
-						Resource diskRes = createResource("SynologyDisk", diskId, "disk_id", diskId);
+						String dName = diskNames.getOrDefault(diskId, diskId);
+						Resource diskRes = createResource("SynologyDisk", dName, "disk_id", diskId);
 						poolRes.addChild(diskRes);
 					}
 				}
@@ -687,14 +758,17 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 		SimpleJson luns = api.iscsiLunList();
 		for (SimpleJson lun : luns.data().get("luns").asList()) {
 			String uuid = lun.get("uuid").asString();
+			String lunName = lun.get("name").asString(uuid);
 			String location = lun.get("location").asString();
-			Resource lunRes = createResource("SynologyIscsiLun", uuid, "lun_uuid", uuid);
+			Resource lunRes = createResource("SynologyIscsiLun", lunName, "lun_uuid", uuid);
 
 			for (SimpleJson vol : storage.data().get("volumes").asList()) {
 				if (location.equals(vol.get("vol_path").asString())) {
 					String volId = vol.get("volume_id").asString(vol.get("vol_path").asString());
-					Resource volRes = createResource("SynologyVolume", volId, "volume_id", volId);
+					String volName = volumeDisplayName(vol);
+					Resource volRes = createResource("SynologyVolume", volName, "volume_id", volId);
 					volRes.addChild(lunRes);
+					rel.add(volRes);
 					break;
 				}
 			}
@@ -716,31 +790,50 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 			for (SimpleJson vol : storage.data().get("volumes").asList()) {
 				if (volPath.equals(vol.get("vol_path").asString())) {
 					String volId = vol.get("volume_id").asString(vol.get("vol_path").asString());
-					Resource volRes = createResource("SynologyVolume", volId, "volume_id", volId);
+					String volName = volumeDisplayName(vol);
+					Resource volRes = createResource("SynologyVolume", volName, "volume_id", volId);
 					volRes.addChild(exportRes);
+					rel.add(volRes);
 					break;
 				}
 			}
 		}
 
-		// SSD Cache → child of Volume (joined by ssdCaches[].mountSpaceId == volumes[].id)
+		// SSD Cache → child of Volume, Cache Disks → child of SSD Cache
 		SimpleJson ssdCaches = storage.data().get("ssdCaches");
 		if (!ssdCaches.isNull()) {
 			for (SimpleJson cache : ssdCaches.asList()) {
 				String cacheId = cache.get("id").asString();
 				String mountSpaceId = cache.get("mountSpaceId").asString("");
 				if (cacheId == null || cacheId.isEmpty() || mountSpaceId.isEmpty()) continue;
-				Resource cacheRes = createResource("SynologySsdCache", cacheId, "cache_id", cacheId);
+				String cacheName = cacheDisplayName(cache, storage);
+				Resource cacheRes = createResource("SynologySsdCache", cacheName, "cache_id", cacheId);
 
+				// Cache → child of Volume
 				for (SimpleJson vol : storage.data().get("volumes").asList()) {
 					String volApiId = vol.get("id").asString("");
 					if (mountSpaceId.equals(volApiId)) {
 						String volId = vol.get("volume_id").asString(vol.get("vol_path").asString());
-						Resource volRes = createResource("SynologyVolume", volId, "volume_id", volId);
+						String volName = volumeDisplayName(vol);
+						Resource volRes = createResource("SynologyVolume", volName, "volume_id", volId);
 						volRes.addChild(cacheRes);
 						rel.add(volRes);
 						break;
 					}
+				}
+
+				// NVMe Disks → child of SSD Cache
+				SimpleJson cacheDisks = cache.get("disks");
+				if (!cacheDisks.isNull()) {
+					for (SimpleJson diskRef : cacheDisks.asList()) {
+						String diskId = diskRef.asString();
+						if (diskId != null && !diskId.isEmpty()) {
+							String dName = diskNames.getOrDefault(diskId, diskId);
+							Resource diskRes = createResource("SynologyDisk", dName, "disk_id", diskId);
+							cacheRes.addChild(diskRes);
+						}
+					}
+					rel.add(cacheRes);
 				}
 			}
 		}
@@ -749,13 +842,13 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 		try {
 			SimpleJson ups = api.upsGet();
 			if (ups.data().get("usb_ups_connect").asBoolean()) {
-				String model = ups.data().get("model").asString("UPS");
-				Resource upsRes = createResource("SynologyUps", model, "ups_model", model);
+				String upsModel = ups.data().get("model").asString("UPS");
+				Resource upsRes = createResource("SynologyUps", upsModel, "ups_model", upsModel);
 				diskstation.addChild(upsRes);
 			}
 		} catch (Exception ignored) {}
 
-		rel.add(diskstation);
+		rel.add(world);
 
 		// --- ARIA_OPS stitching: Synology objects → VMWARE Datastore ---
 		stitchDatastores(rel, luns, shares, storage);
@@ -778,15 +871,16 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 		// iSCSI LUN → VMWARE Datastore via NAA transform
 		for (SimpleJson lun : luns.data().get("luns").asList()) {
 			String uuid = lun.get("uuid").asString();
+			String lunName = lun.get("name").asString(uuid);
 			String naa = synologyUuidToNaa(uuid);
 			String stitchKey = "VMFS:|" + naa + "|";
 
 			ResourceKey dsKey = datastoresByPath.get(stitchKey);
 			if (dsKey != null) {
-				Resource lunRes = createResource("SynologyIscsiLun", uuid, "lun_uuid", uuid);
+				Resource lunRes = createResource("SynologyIscsiLun", lunName, "lun_uuid", uuid);
 				lunRes.addParent(new Resource(dsKey));
 				rel.add(lunRes);
-				logInfo("Stitched iSCSI LUN " + uuid + " → Datastore " + dsKey.getResourceName());
+				logInfo("Stitched iSCSI LUN " + lunName + " → Datastore " + dsKey.getResourceName());
 			}
 		}
 
@@ -842,6 +936,36 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 	}
 
 	// -----------------------------------------------------------------------
+	// Display name helpers
+	// -----------------------------------------------------------------------
+
+	private static String poolDisplayName(SimpleJson pool) {
+		long numId = pool.get("num_id").asLong();
+		return "Storage Pool " + numId;
+	}
+
+	private void collectWorld(ResourceCollection result) throws Exception {
+		Resource world = findOrCreate(result, "SynologyWorld", "Synology World",
+				"world_id", "synology_world");
+		result.add(world);
+	}
+
+	private static String volumeDisplayName(SimpleJson vol) {
+		long numId = vol.get("num_id").asLong();
+		return "Volume " + numId;
+	}
+
+	private static String cacheDisplayName(SimpleJson cache, SimpleJson storage) {
+		String mountSpaceId = cache.get("mountSpaceId").asString("");
+		for (SimpleJson vol : storage.data().get("volumes").asList()) {
+			if (mountSpaceId.equals(vol.get("id").asString(""))) {
+				return "SSD Cache (Volume " + vol.get("num_id").asLong() + ")";
+			}
+		}
+		return "SSD Cache";
+	}
+
+	// -----------------------------------------------------------------------
 	// Helpers
 	// -----------------------------------------------------------------------
 
@@ -858,4 +982,5 @@ public final class SynologyAdapter extends VcfCfAdapter<SynologyConfig> {
 		Resource existing = coll.get(key);
 		return existing != null ? existing : new Resource(key);
 	}
+
 }

@@ -135,6 +135,57 @@ even after a successful install.
     API responses. `SimpleJson` (recursive-descent, zero-dep) is now
     in the framework at `com.vcfcf.adapter.json.SimpleJson`.
 
+22. **`MetricKey.parseMetricKey(String)` hardcodes `isProperty = false` — string
+    properties are silently dropped.** The SDK's convenience overload
+    `Resource.addData(String, String)` delegates to `MetricKey.parseMetricKey()`,
+    which constructs a `MetricKey` with `isProperty = false`. The platform treats
+    that as a numeric metric and discards the string value at collection time.
+    Properties never appear in the UI and no error is raised anywhere. The fix is
+    to construct `new MetricKey(true, key)` explicitly. This is now encapsulated
+    in `VcfCfAdapter.addProperty(Resource, String, String)` — use that helper for
+    every string property and never call `resource.addData(key, stringValue)`.
+
+23. **Use human-readable resource names, not internal API IDs.** The
+    `ResourceKey` name is the display label in the VCF Ops tree.
+    Using API internals like `reuse_1` or `sata1` produces an
+    unreadable hierarchy. Derive display names from the API:
+    `"Storage Pool " + num_id`, `"Volume " + num_id`,
+    `disk.name` ("Drive 4"), `"SSD Cache (Volume N)"`. The identifier
+    field stays as the internal ID for stability.
+
+24. **World objects are top-down traversal entry points.** A World
+    object (like vSphere World) provides a starting point for
+    drilling through the hierarchy. In the flat Environment
+    inventory, it appears as another ResourceKind category — the
+    real value is in the TraversalSpec tree where it sits at the top.
+    Use a fixed identifier (`world_id=synology_world`) so all
+    adapter instances share one World singleton.
+
+25. **VCF Ops Environment inventory always shows flat ResourceKind
+    categories.** This is platform behavior for ALL adapters,
+    including VMware. The nested parent/child tree appears when you
+    expand a resource or use a TraversalSpec. You cannot suppress the
+    flat grouping from the adapter side.
+
+26. **Relationships must be `rel.add()`'d to the ResourceCollection.**
+    Calling `volRes.addChild(lunRes)` sets up the relationship on
+    the Resource object, but if `volRes` isn't added to the returned
+    `ResourceCollection`, the platform never sees it. This caused
+    NFS exports and iSCSI LUNs to appear flat instead of nested
+    under their parent Volume.
+
+27. **SSD Cache → Disk relationship needs explicit wiring.** Cache
+    disks (NVMe) appear in the same `disks[]` array as data drives
+    but aren't automatically children of the SSD Cache object. Add
+    `cacheRes.addChild(diskRes)` and `rel.add(cacheRes)` explicitly.
+
+28. **Rebuild `vcfcf-adapter-base.jar` after framework changes.**
+    The SDK builder compiles against the pre-built JAR in
+    `adapter_runtime/`. Editing framework source without running
+    `adapter_framework/build-framework.sh` causes "cannot find
+    symbol" errors on new methods. This is a manual step — not
+    automated by the SDK builder.
+
 ## What the design doc got right
 
 - Hybrid architecture (INTERNAL + cross-adapter stitching) was the

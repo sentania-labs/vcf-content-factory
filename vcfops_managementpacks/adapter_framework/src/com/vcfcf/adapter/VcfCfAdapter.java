@@ -3,6 +3,8 @@ package com.vcfcf.adapter;
 import com.vcfcf.adapter.http.ManagedHttpClient;
 
 import com.integrien.alive.common.adapter3.Logger;
+import com.integrien.alive.common.adapter3.MetricData;
+import com.integrien.alive.common.adapter3.MetricKey;
 import com.integrien.alive.common.adapter3.ResourceStatus;
 import com.integrien.alive.common.adapter3.TestParam;
 import com.integrien.alive.common.adapter3.config.CredentialConfig;
@@ -11,6 +13,7 @@ import com.integrien.alive.common.adapter3.config.ResourceConfig;
 import com.vmware.tvs.vrealize.adapter.core.UnlicensedAdapter;
 import com.vmware.tvs.vrealize.adapter.core.collection.historical.HistoricalCollector;
 import com.vmware.tvs.vrealize.adapter.core.collection.live.LiveCollector;
+import com.vmware.tvs.vrealize.adapter.core.data.Resource;
 import com.vmware.tvs.vrealize.adapter.core.data.ResourceCollection;
 import com.vmware.tvs.vrealize.adapter.core.discovery.Discoverer;
 import com.vmware.tvs.vrealize.adapter.core.test.Tester;
@@ -256,6 +259,34 @@ public abstract class VcfCfAdapter<C> extends UnlicensedAdapter {
 			}
 		}
 		return null;
+	}
+
+	// -----------------------------------------------------------------------
+	// Data helpers
+	// -----------------------------------------------------------------------
+
+	/**
+	 * Set a string property on a resource.
+	 *
+	 * <p><strong>Use this method — not {@code resource.addData(String, String)}
+	 * — for all string properties.</strong>
+	 *
+	 * <p>The SDK's convenience overload {@code Resource.addData(String, String)}
+	 * delegates to {@code MetricKey.parseMetricKey(String)}, which hardcodes
+	 * {@code isProperty = false}. A {@code MetricKey} with {@code isProperty =
+	 * false} is classified as a numeric metric by the platform and the string
+	 * value is silently discarded at collection time — properties never appear
+	 * in the UI, and no error is raised. The correct fix is to construct
+	 * {@code new MetricKey(true, key)} explicitly, which is what this helper
+	 * does.
+	 *
+	 * @param r     the resource to set the property on
+	 * @param key   the property key (dot/pipe-separated group|name)
+	 * @param value the string value
+	 */
+	protected static void addProperty(Resource r, String key, String value) {
+		MetricKey mk = new MetricKey(true, key);
+		r.addData(new MetricData(mk, System.currentTimeMillis(), value));
 	}
 
 	// -----------------------------------------------------------------------

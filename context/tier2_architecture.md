@@ -320,6 +320,64 @@ an explicit INFO level override. Do NOT use:
 Zero-dependency recursive-descent parser. Sufficient for REST API
 responses. For adapters needing full Jackson/Gson, bundle in `lib/`.
 
+### String properties: use `addProperty()`, never `resource.addData(key, stringValue)`
+
+`VcfCfAdapter` exposes a `protected static void addProperty(Resource r, String key, String value)` helper.
+**Always use this helper — never call `resource.addData(String, String)` for string properties.**
+
+Root cause: the convenience overload `Resource.addData(String, String)` delegates to
+`MetricKey.parseMetricKey(String)`, which hardcodes `isProperty = false`. A `MetricKey`
+with `isProperty = false` is treated as a numeric metric by the platform. The string
+value is silently discarded at collection time — properties never appear in the UI
+and no error is raised. The `addProperty` helper constructs `new MetricKey(true, key)`
+explicitly to set the property flag correctly.
+
+Numeric metrics (double values) continue to use `resource.addData(String, double)` —
+that overload is unaffected.
+
+### Resource naming: use human-readable names
+
+The `ResourceKey(name, kind, adapterKind)` name is the display label
+in the VCF Ops tree. Always derive human-readable names from the API:
+
+- Storage pools: `"Storage Pool " + num_id` (not `reuse_1`)
+- Volumes: `"Volume " + num_id` (not `volume_1`)
+- Disks: `disk.name` field (e.g., "Drive 4", not `sata1`)
+- SSD Cache: `"SSD Cache (Volume N)"` (not `alloc_cache_1_1`)
+- DiskStation: `model + " " + serial` (e.g., "DS1520+ 20B0RYRXRF3KF")
+
+The stable identifier goes in the `ResourceIdentifier` field, not
+the name. Changing names creates new resources (old ones age out).
+
+### World objects
+
+A "World" resource (like vSphere World) serves as a top-down
+traversal entry point. Use a fixed identifier across all adapter
+instances (e.g., `world_id=synology_world`) so the platform merges
+them into one World that aggregates all DiskStations. Include it in
+every TraversalSpec path as the first child after the adapter
+instance root. No metrics needed — it's a container.
+
+### Relationship `rel.add()` requirement
+
+Calling `parentRes.addChild(childRes)` sets up the relationship on
+the Java object, but the platform only sees it if the parent (or
+child) is added to the `ResourceCollection` returned from
+`getRelationships()`. Missing `rel.add()` causes silent relationship
+loss — the most common cause of objects appearing flat in the tree.
+
+### Rebuild the framework JAR after changes
+
+The SDK builder compiles against `adapter_runtime/vcfcf-adapter-base.jar`.
+After any change to `adapter_framework/src/**/*.java`, run:
+
+```
+cd vcfops_managementpacks/
+./adapter_framework/build-framework.sh
+```
+
+Without this, adapters get "cannot find symbol" on new framework methods.
+
 ### Auth patterns
 
 Synology uses `_sid` as a query parameter, not a cookie or header.
