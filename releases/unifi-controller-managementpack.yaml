@@ -2,7 +2,7 @@ artifacts:
 - headline: true
   source: content/sdk-adapters/unifi/adapter.yaml
 deprecates:
-- unifi-network-integration-managementpack
+- releases/unifi-network-integration-managementpack.yaml
 description: Monitors UniFi infrastructure via the classic Network API and Protect
   API. Discovers sites, gateways, switches, access points, NVR, and cameras. Per-switch-port
   and per-AP-radio child objects with PoE tracking. LLDP-based stitching to ESXi hosts.
