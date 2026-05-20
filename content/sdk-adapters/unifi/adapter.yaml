@@ -1,0 +1,13 @@
+adapter_kind: unifi_controller
+build_number: 2
+description: 'Monitors UniFi infrastructure via the classic Network API and Protect
+  API. Discovers sites, gateways, switches, access points, NVR, and cameras. Per-switch-port
+  and per-AP-radio child objects with PoE tracking. LLDP-based stitching to ESXi hosts.
+  Replaces the Tier 1 UniFi Network and UniFi Network Integration management packs.
+
+  '
+entry_class: com.vcfcf.adapters.unifi.UniFiAdapter
+name: VCF Content Factory UniFi Controller
+released: true
+tier: 2
+version: 1.0.0

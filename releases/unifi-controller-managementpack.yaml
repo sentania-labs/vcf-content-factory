@@ -1,0 +1,12 @@
+artifacts:
+- headline: true
+  source: content/sdk-adapters/unifi/adapter.yaml
+deprecates: []
+description: Monitors UniFi infrastructure via the classic Network API and Protect
+  API. Discovers sites, gateways, switches, access points, NVR, and cameras. Per-switch-port
+  and per-AP-radio child objects with PoE tracking. LLDP-based stitching to ESXi hosts.
+  Replaces the Tier 1 UniFi Network and UniFi Network Integration management packs.
+name: unifi-controller-managementpack
+release_date: '2026-05-19'
+release_notes: ''
+version: '1.0'
