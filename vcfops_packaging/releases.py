@@ -234,11 +234,10 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
                 f"{path}: deprecates[{i}] must be a non-empty path string"
             )
         dep_candidate = repo_root / dep_str
-        if not dep_candidate.exists():
-            raise ReleaseValidationError(
-                f"{path}: deprecates target not found: {dep_str!r} "
-                f"(tried {dep_candidate})"
-            )
+        # A deprecated manifest that no longer exists on disk is acceptable —
+        # it was retired and removed.  Record the path for catalog filtering even
+        # if the file is absent; callers that need the contents use load_release()
+        # themselves and catch the resulting error.
         deprecates.append(dep_candidate)
 
     return ReleaseDef(
@@ -315,6 +314,10 @@ def validate_flag_state(
     - customgroups/
     - reports/
 
+    Deprecated manifests (referenced in another manifest's ``deprecates:``
+    list) are exempt from direction (a) — their source's flag state is not
+    checked because they have been superseded by the deprecating release.
+
     Args:
         releases:  Loaded release manifests (from ``load_all_releases``).
         repo_root: Absolute path to the repo root for scanning content dirs.
@@ -324,6 +327,12 @@ def validate_flag_state(
     """
     errors: List[str] = []
 
+    # Build the set of manifest paths that are deprecated by another manifest.
+    deprecated_manifest_paths: set[Path] = set()
+    for r in releases:
+        for dep_path in r.deprecates:
+            deprecated_manifest_paths.add(dep_path.resolve())
+
     # Collect all headline source_paths across all release manifests.
     headline_paths: set[Path] = set()
     for r in releases:
@@ -332,7 +341,10 @@ def validate_flag_state(
                 headline_paths.add(a.source_path.resolve())
 
     # Direction (a): manifest exists, headline has released: false.
+    # Exempt manifests that are themselves deprecated by another manifest.
     for r in releases:
+        if r.manifest_path.resolve() in deprecated_manifest_paths:
+            continue
         for a in r.artifacts:
             if not a.headline:
                 continue

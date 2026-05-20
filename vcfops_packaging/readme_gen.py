@@ -481,11 +481,23 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
     """
     from .release_builder import _artifact_dest_subdir, _zip_filename
 
+    # Build the set of manifest paths that are deprecated by another manifest.
+    # Deprecated releases are shown only in the Retired section — they must not
+    # also appear in the active catalog tables.
+    deprecated_manifest_paths: set[Path] = set()
+    for r in releases:
+        for dep_path in r.deprecates:
+            deprecated_manifest_paths.add(dep_path.resolve())
+
     # Group releases by subdir — factory-native and third-party separately.
     by_subdir: dict[str, list] = {s: [] for s in _SUBDIR_ORDER}
     by_third_party: dict[str, list] = {s: [] for s in _THIRD_PARTY_SUBDIR_ORDER}
 
     for r in releases:
+        # Skip releases that are deprecated by another manifest — they belong
+        # only in the Retired section.
+        if r.manifest_path.resolve() in deprecated_manifest_paths:
+            continue
         for a in r.artifacts:
             if not a.headline:
                 continue
