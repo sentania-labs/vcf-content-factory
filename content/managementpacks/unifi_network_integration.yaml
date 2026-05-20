@@ -562,7 +562,7 @@ relationships:
   parent: gateway
   parent_expression: device_id
   scope: field_match
-released: true
+released: false
 requests:
 - method: GET
   name: sites
