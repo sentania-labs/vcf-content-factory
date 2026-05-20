@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.0.0.13 (2026-05-20)
+
+- Property groups renamed: Configuration, Hardware, Access, Status (fixes Properties→Properties double nesting)
+- NFS Export properties split into Configuration + Access Control groups
+- SSD Cache properties split into Configuration + Hardware groups
+- iSCSI LUN: added target_enabled and network_portals from Target API
+
+## 1.0.0.12 (2026-05-20)
+
+- Restored Synology World as top-down traversal entry point
+- addProperty() promoted to framework base class (VcfCfAdapter)
+- Rebuilt framework JAR with new helper
+
+## 1.0.0.11 (2026-05-19)
+
+- Fixed string properties silently dropped (MetricKey.parseMetricKey hardcodes isProperty=false)
+- SSD Cache renamed to "SSD Cache (Volume N)"
+- SSD Cache → NVMe Disk parent/child relationships added
+- New SSD Cache properties: RAID type, disk count, disk members, total capacity, skip sequential IO
+- Adapter instance renamed from "Synology DiskStation Connection" to "Synology DiskStation"
+- Removed Synology World (re-added in 1.0.0.12)
+
 ## 1.0.0.10 (2026-05-19)
 
 - Added Synology World top-level aggregation object (global singleton across all adapter instances)
