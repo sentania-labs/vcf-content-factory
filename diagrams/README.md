@@ -24,7 +24,7 @@ is exported from it and embedded in the documentation.
 4. Regenerate the SVG:
 
    ```
-   python3 scripts/excalidraw_to_svg.py docs/diagrams/<name>.excalidraw
+   python3 scripts/excalidraw_to_svg.py diagrams/<name>.excalidraw
    ```
 
    The converter handles the shape subset we use (rectangle, ellipse,

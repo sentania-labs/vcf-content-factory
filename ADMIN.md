@@ -12,7 +12,7 @@ you need:
 
 - **VCF Operations content-type reference (what each type is, how
   they install, UUID contract, wire-format gotchas):**
-  [docs/vcf_ops_concepts.md](docs/vcf_ops_concepts.md)
+  [vcf_ops_concepts.md](vcf_ops_concepts.md)
 
 - **Orchestrator rules (for forks and contributions):**
   [CLAUDE.md](CLAUDE.md)

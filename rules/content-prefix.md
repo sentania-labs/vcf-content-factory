@@ -1,8 +1,8 @@
 ---
-id: RULE-008
+id: RULE-006
 ---
 
-# RULE-008: All authored content uses `[VCF Content Factory]` prefix
+# RULE-006: All authored content uses `[VCF Content Factory]` prefix
 
 Literal brackets, one space after. Dashboards additionally live under the `VCF Content Factory` folder. No alternate prefixes — `[AI Content]` is legacy and must not be reintroduced.
 

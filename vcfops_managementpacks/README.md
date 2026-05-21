@@ -252,7 +252,7 @@ For the Tier 2 adapter kind naming convention:
 
 ## Related context
 
-- `docs/reference-mpb-research.md` — MPB design JSON schema baseline
+- `context/mpb/reference-mpb-research.md` — MPB design JSON schema baseline
 - `context/mp_schema_vs_existing_mp.md` — sanity check against a
   known-working MP; documents wire-format deltas informed by live
   reference JSON

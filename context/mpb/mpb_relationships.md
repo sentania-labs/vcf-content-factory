@@ -11,7 +11,7 @@ cheat-sheet for those decisions.
 - [`mpb_chaining_wire_format.md`](mpb_chaining_wire_format.md) — wire-level
   design-export format for chained requests. Read when the question is
   "what does MPB actually serialize?".
-- `docs/reference-mpb-research.md` — MPB JSON schema reference.
+- `context/mpb/reference-mpb-research.md` — MPB JSON schema reference.
 
 **Evidence base** (as of 2026-04-21): hand-built MPBs from Scott (Synology
 v1, v2), community packs (Unifi, GitLab-Basic, Brock's Rubrik), and the

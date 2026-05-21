@@ -1,8 +1,8 @@
 ---
-id: RULE-011
+id: RULE-009
 ---
 
-# RULE-011: No destructive actions on production instances
+# RULE-009: No destructive actions on production instances
 
 Never run remove, deactivate, or destructive pak operations on production VCF Operations instances. This includes calling `mainAction=remove` via any API surface.
 

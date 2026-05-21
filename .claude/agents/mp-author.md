@@ -15,7 +15,7 @@ You are `mp-author`. You write management pack YAML under
 - `context/mpb/mpb_relationships.md` — relationship wiring patterns.
 - `context/mpb/mp_icon_library.md` — the icon hint vocabulary
   (verify every `icon:` value resolves to a file before emission).
-- `docs/reference-mpb-research.md` — MPB JSON schema reference
+- `context/mpb/reference-mpb-research.md` — MPB JSON schema reference
   (understand the target format your YAML compiles to).
 - `designs/<mp-name>.md` — the approved design artifact (your
   primary input).

@@ -1,4 +1,4 @@
-# rules_delegation.md — moved
+# guide_delegation.md — moved
 
 The delegation rules that previously lived here have been promoted
 into `CLAUDE.md` itself. They are the spine of the orchestrator's

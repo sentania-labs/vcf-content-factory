@@ -302,7 +302,7 @@ already knows the framework, not like filling out a form.
 
 ## Next steps
 
-- Skim [docs/vcf_ops_concepts.md](docs/vcf_ops_concepts.md) for a
+- Skim [vcf_ops_concepts.md](vcf_ops_concepts.md) for a
   reference on what each VCF Ops content type actually is — useful
   if "what's a super metric vs a custom group?" is a real question
   for you.

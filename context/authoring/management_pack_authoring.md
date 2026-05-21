@@ -18,7 +18,7 @@ migration hints — do not use them.
   design-export format for chained requests.
 - [`mpb_api_surface.md`](mpb_api_surface.md) — live MPB REST surface
   (`/suite-api/internal/mpbuilder/*`).
-- `docs/reference-mpb-research.md` — MPB JSON schema reference.
+- `context/mpb/reference-mpb-research.md` — MPB JSON schema reference.
 
 **Ground truth for behavior.** When this doc and the loader disagree, the
 loader wins — open a tooling ticket to reconcile. Loader source is

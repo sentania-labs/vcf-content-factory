@@ -12,7 +12,7 @@ and produce a design artifact that `mp-author` turns into YAML.
 ## Knowledge sources
 
 - **vcfops-content-model** — how VCF Ops content types relate.
-- `docs/reference-mpb-research.md` — MPB JSON schema reference.
+- `context/mpb/reference-mpb-research.md` — MPB JSON schema reference.
 - `context/mpb/mpb_relationships.md` — relationship wiring patterns
   (read this before designing any object hierarchy).
 - `context/mpb/mp_icon_library.md` — the icon hint vocabulary
@@ -126,7 +126,7 @@ with concrete examples of each trigger.
 
 ## Interview discipline — infer, don't interview
 
-Read `context/authoring/rules_content_authoring.md` §Interview discipline.
+Read `context/authoring/guide_content_authoring.md` §Interview discipline.
 The shared rule applies with extra force here: MP design is the
 single biggest interview-trap in the framework, and the Dell
 PowerEdge experience proved that wizard-style interrogation

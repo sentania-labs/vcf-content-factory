@@ -30,7 +30,7 @@ are all part of the deliverable.
 - **Reviewability matters.** All persistent knowledge lives in the
   repo where it can be diffed and PR'd. Auto-memory is off.
 - **Codify, don't accumulate.** Hard-won lessons go in `lessons/`,
-  `context/`, agent prompts, or skills. See `context/authoring/rules_codification.md`
+  `context/`, agent prompts, or skills. See `context/authoring/guide_codification.md`
   for how. The framework should get smarter over time.
 
 `ADMIN.md` is the human-facing walkthrough of VCF Ops content
@@ -154,20 +154,20 @@ file (not a skill) because it runs before any skill could load.
    All other CLI ops (sync, enable, delete, list, .pak build/install)
    go through `content-installer` or the MP builder.
 
-7. **Install only on explicit user confirmation.** Show the file
+6. **Install only on explicit user confirmation.** Show the file
    list and a brief summary, ask yes/no, then delegate to
    `content-installer`. Install is plumbing, not creative work.
 
-8. **Never spawn multiple author agents in parallel.**
+7. **Never spawn multiple author agents in parallel.**
    Cross-references race for UUIDs and names. Serial.
 
-9. **ops-recon, api-explorer, and tooling MAY run in parallel**
+8. **ops-recon, api-explorer, and tooling MAY run in parallel**
    with each other or with a deferred author — they write to
    non-content directories.
 
-10. **Tooling changes go through the `tooling` agent.** The same
-    discipline that keeps you out of `supermetrics/` keeps you out
-    of `vcfops_*/`.
+9. **Tooling changes go through the `tooling` agent.** The same
+   discipline that keeps you out of `supermetrics/` keeps you out
+   of `vcfops_*/`.
 
 ## When the toolset is inadequate
 
@@ -230,12 +230,6 @@ path is first-class, not a sad fallback.
   in `bundles/`. Not optional — shipping stale zips is how
   false-positive bugs escape to users.
 
-## Rules and lessons
-
-Read `rules/INDEX.md`. Every rule is absolute. Do not violate.
-Read `lessons/INDEX.md`. Every lesson is a dead end documented so you
-don't walk into it. Heed them.
-
 ## Cross-reference syntax
 
 | From → To | YAML | Resolved |
@@ -247,26 +241,11 @@ don't walk into it. Heed them.
 | Alert → Recommendation | `name: "<name>"` + `priority` | validate (→ rec ID) |
 | Report → View / Dashboard | `view:` / `dashboard:` | validate (→ UUID) |
 
-## Reference material (loaded on demand)
+## Reference material
 
-**On session pickup, read `context/README.md` first.** It's the index
-to ~50 topical files covering wire formats, API surfaces, authoring
-patterns, and prior investigations. Scanning it costs almost nothing
-and prevents the "I'll just grep for it" failure mode where prior
-hard-won knowledge gets re-derived from scratch.
-
-| File | Purpose |
-|---|---|
-| `ADMIN.md` | Human-facing concept walkthrough |
-| `context/repo_layout.md` | Directory map of the repo |
-| `context/README.md` | Tiered index of all `context/` files |
-| `context/known_limitations.md` | Capability boundaries to surface early |
-| `context/authoring/rules_codification.md` | How to turn corrections into framework knowledge |
-| `context/authoring/rules_content_authoring.md` | SM/view/dashboard/MP authoring patterns |
-| `context/authoring/rules_install_verification.md` | Install workflow, dependency audit |
-| `context/authoring/rules_api_wire_format.md` | API investigation, wire format ground truth |
-| `context/authoring/rules_powershell.md` | PS 5.1 compat |
-| `context/authoring/rules_operational.md` | Credentials, labs, distribution |
+Read `context/README.md` for the tiered index of all context files.
+Scan it at session start — it costs almost nothing and prevents
+re-deriving known knowledge.
 
 ## User context
 

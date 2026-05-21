@@ -703,7 +703,7 @@ already emits `hostname` and `datastore_moid` as flat fields.
 finalizes the Synology MP design, ask `tooling` to confirm whether
 the renderer can compute a stitch key from `lun.uuid` via a YAML
 expression (e.g., a `jinja:` source or similar). If yes, document
-the syntax in `context/rules_content_authoring.md`. If no, that's
+the syntax in `context/authoring/guide_content_authoring.md`. If no, that's
 the gap, and the adapter-side enrichment story needs a new
 mechanism. The transform itself (§1.3) is trivial — five lines of
 Python — and shouldn't block the MP, but the framework needs a

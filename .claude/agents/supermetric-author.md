@@ -30,7 +30,7 @@ Also read on every invocation:
 
 ## Interview discipline — infer, don't interview
 
-Read `context/authoring/rules_content_authoring.md` §Interview discipline.
+Read `context/authoring/guide_content_authoring.md` §Interview discipline.
 The shared rule applies. Track-specific examples:
 
 **Infer (don't ask):**

@@ -28,7 +28,7 @@ required.
 
 **The REST API (`/suite-api/*`) has no pak install endpoint.** Verified
 by grepping both OpenAPI specs and by live probing — confirms the
-passive finding in `docs/reference-mpb-research.md`. The install path
+passive finding in `context/mpb/reference-mpb-research.md`. The install path
 is admin-UI-session-based, not REST-token-based.
 
 ## Endpoints probed (full table)
@@ -524,7 +524,7 @@ Operations 9.0.2.0 build 25137838 only.
 
 ## References
 
-- `docs/reference-mpb-research.md` §"VCF Ops API Surface for
+- `context/mpb/reference-mpb-research.md` §"VCF Ops API Surface for
   Management Pack Lifecycle" — the passive finding this investigation
   corroborates (no REST pak install).
 - `context/dashboard_delete_api.md` — the UI-session auth pattern this

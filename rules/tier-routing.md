@@ -1,8 +1,8 @@
 ---
-id: RULE-006
+id: RULE-004
 ---
 
-# RULE-006: Tier routing based on API capabilities
+# RULE-004: Tier routing based on API capabilities
 
 Management packs default to Tier 1 (MPB) unless a Tier 2 trigger fires. MPB requires simple HTTP APIs with key-joinable relationships.
 

@@ -1,4 +1,4 @@
-# rules_codification.md
+# guide_codification.md
 
 How to turn one-off corrections into permanent framework knowledge.
 
@@ -78,7 +78,7 @@ the next session can apply without re-reading the war story.
   Those go in `userPreferences`, not in the framework.
 - Information about which lab to use, which credentials to use, or
   which machine the user is on. That belongs in `.env` and
-  `rules_operational.md`, not scattered across context files.
+  `guide_operational.md`, not scattered across context files.
 - Anything about the user personally — their name, their employer,
   their schedule, their other projects. The framework is the
   product, and the framework should work the same for any admin

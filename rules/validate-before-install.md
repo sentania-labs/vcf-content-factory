@@ -1,8 +1,8 @@
 ---
-id: RULE-007
+id: RULE-005
 ---
 
-# RULE-007: Always validate before installing
+# RULE-005: Always validate before installing
 
 Run full repo validation before every install. For management packs, also run `pak-compare` against the closest reference pak — zero BLOCKINGs is the install gate.
 

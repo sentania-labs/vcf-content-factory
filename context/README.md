@@ -73,13 +73,13 @@ Tier 2 (Java SDK) framework architecture — read when working on SDK adapters.
 | `mp_chain_authoring.md` | MPB chaining YAML authoring grammar |
 | `mp_authoring_design_principles.md` | MP design principles (codified lessons) |
 | `uuids_and_cross_references.md` | UUIDs, cross-references, rename safety |
-| `rules_content_authoring.md` | Interview discipline, infer-not-interview |
-| `rules_delegation.md` | Orchestrator delegation discipline |
-| `rules_codification.md` | How to turn corrections into framework knowledge |
-| `rules_install_verification.md` | Install workflow, dependency audit |
-| `rules_api_wire_format.md` | API investigation and wire format ground truth |
-| `rules_operational.md` | Credentials, labs, distribution |
-| `rules_powershell.md` | PS 5.1 compatibility |
+| `guide_content_authoring.md` | Interview discipline, infer-not-interview |
+| `guide_delegation.md` | Orchestrator delegation discipline |
+| `guide_codification.md` | How to turn corrections into framework knowledge |
+| `guide_install_verification.md` | Install workflow, dependency audit |
+| `guide_api_wire_format.md` | API investigation and wire format ground truth |
+| `guide_operational.md` | Credentials, labs, distribution |
+| `guide_powershell.md` | PS 5.1 compatibility |
 | `recon_metric_keys.md` | Recon metric key patterns |
 | `vks_vm_classification.md` | VKS VM type classification and filter patterns |
 | `federation_breaks_aria_ops_stitching.md` | Federation permanently breaks ARIA_OPS-stitching MPs |

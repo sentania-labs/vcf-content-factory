@@ -6,7 +6,7 @@
 |---|---|
 | `docs/operations-api.json` | VCF Ops Suite API OpenAPI spec (public, supported) |
 | `docs/internal-api.json` | `/internal/*` OpenAPI spec (unsupported, requires `X-Ops-API-use-unsupported: true`) |
-| `docs/vrops-content-management.md` | Extracted from the Suite-API whitepaper |
+| `context/vrops-content-management.md` | Extracted from the Suite-API whitepaper |
 | `docs/vcf9/supermetrics.md` | VCF 9 docs p.4171–4180, the super metric DSL reference |
 | `docs/vcf9/metrics-properties.md` | VCF 9 docs p.4242–4507, valid metric key reference |
 | `docs/vcf9/dashboards.md` | VCF 9 docs p.3921–4053 |

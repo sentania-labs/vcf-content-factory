@@ -1,0 +1,469 @@
+[
+  {
+    "key": "sql_server_traversal_tag",
+    "name": "Microsoft SQL Server",
+    "adapterKind": "SqlServerAdapter",
+    "adapterKindName": "Microsoft SQL Server",
+    "resourceKindType": "TAG",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/sql_server_traversal_tag",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/sql_server_traversal_tag/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/sql_server_traversal_tag/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "SqlServerAdapterInstance",
+    "name": "Microsoft SQL Server Adapter Instance",
+    "adapterKind": "SqlServerAdapter",
+    "adapterKindName": "Microsoft SQL Server",
+    "resourceKindType": "ADAPTER_INSTANCE",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "active_query_count",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "active_wait_time_count",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "connection_pool_size",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "database_excl_pattern",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "exclude_events",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "exclude_log_based_events",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "host",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "instance",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "port",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "query_count",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "ssl_config",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "support_autodiscovery",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "thread_pool_size",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "thread_timeout",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "use_ntlm_v2",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "wait_time_count",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": false
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlServerAdapterInstance",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlServerAdapterInstance/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlServerAdapterInstance/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "SqlAvailabilityGroup",
+    "name": "Microsoft SQL Server Always On Availability Group",
+    "adapterKind": "SqlServerAdapter",
+    "adapterKindName": "Microsoft SQL Server",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "group_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlAvailabilityGroup",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlAvailabilityGroup/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlAvailabilityGroup/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "SqlDatabase",
+    "name": "Microsoft SQL Server Database",
+    "adapterKind": "SqlServerAdapter",
+    "adapterKindName": "Microsoft SQL Server",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "database_name",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "host",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "instance",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlDatabase",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlDatabase/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlDatabase/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "SqlServer",
+    "name": "Microsoft SQL Server Instance",
+    "adapterKind": "SqlServerAdapter",
+    "adapterKindName": "Microsoft SQL Server",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "host",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "instance",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlServer",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlServer/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlServer/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "microsoft_sql_server_job",
+    "name": "Microsoft SQL Server Job",
+    "adapterKind": "SqlServerAdapter",
+    "adapterKindName": "Microsoft SQL Server",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "host",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "instance",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "job_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/microsoft_sql_server_job",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/microsoft_sql_server_job/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/microsoft_sql_server_job/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "SqlQuery",
+    "name": "Microsoft SQL Server Query",
+    "adapterKind": "SqlServerAdapter",
+    "adapterKindName": "Microsoft SQL Server",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "sql_handle",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "statement_end_offset",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "statement_start_offset",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlQuery",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlQuery/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlQuery/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "SqlServerTag",
+    "name": "Microsoft SQL Server Tag",
+    "adapterKind": "SqlServerAdapter",
+    "adapterKindName": "Microsoft SQL Server",
+    "resourceKindType": "TAG",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlServerTag",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlServerTag/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/SqlServerTag/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "microsoft_sql_server_wait_time",
+    "name": "Microsoft SQL Server Wait Type",
+    "adapterKind": "SqlServerAdapter",
+    "adapterKindName": "Microsoft SQL Server",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "host",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "instance",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "wait_type",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/microsoft_sql_server_wait_time",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/microsoft_sql_server_wait_time/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/microsoft_sql_server_wait_time/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "true_visibility_licensing",
+    "name": "VCF Operations for Integrations Licensing",
+    "adapterKind": "SqlServerAdapter",
+    "adapterKindName": "Microsoft SQL Server",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/true_visibility_licensing",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/true_visibility_licensing/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/SqlServerAdapter/resourcekinds/true_visibility_licensing/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  }
+]

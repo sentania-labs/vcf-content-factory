@@ -3,11 +3,11 @@
 This is the deeper architectural dive — for anyone considering
 forking, extending, or just curious how the agent loop is set up.
 
-![Authoring loop overview](docs/diagrams/authoring-loop.svg)
+![Authoring loop overview](diagrams/authoring-loop.svg)
 
 *The five-station assembly line. Start with this if you've never seen
 the factory in motion. Editable source:
-[authoring-loop.excalidraw](docs/diagrams/authoring-loop.excalidraw).*
+[authoring-loop.excalidraw](diagrams/authoring-loop.excalidraw).*
 
 If you're trying to use the framework, you don't need this.
 [Getting_Started.md](Getting_Started.md) is what you want.
@@ -165,7 +165,7 @@ Instead, every hard-won lesson goes somewhere reviewable:
   capability
 
 The process is documented in
-[context/rules_codification.md](context/rules_codification.md). The
+[context/authoring/guide_codification.md](context/authoring/guide_codification.md). The
 practical rule of thumb: when the user says "no, do it this way
 instead," ask yourself which of the above files should remember
 that.
@@ -180,7 +180,7 @@ or a context file is committable, reviewable, and survives forks.
 
 Codified across all author agents (with per-agent details in their
 prompts and shared discipline in
-`context/rules_content_authoring.md`):
+`context/authoring/guide_content_authoring.md`):
 
 1. **Probe the existing state before asking the user.** Live
    instance + repo + references. If the answer is already there,
@@ -269,12 +269,12 @@ Tier 2 adapters.
 
 ## The full picture
 
-![Framework internals](docs/diagrams/framework-internals.svg)
+![Framework internals](diagrams/framework-internals.svg)
 
 *All 16 specialists, their lanes, the file each writes, both build
 pipelines (Tier 1 MPB and Tier 2 native SDK), the three output paths,
 and the codification loop that closes back into the repo. Editable
-source: [framework-internals.excalidraw](docs/diagrams/framework-internals.excalidraw).*
+source: [framework-internals.excalidraw](diagrams/framework-internals.excalidraw).*
 
 ## What lives where in the repo
 
@@ -311,7 +311,7 @@ CLAUDE.md                        orchestrator rules — hard rules + delegation
 
 README.md  Getting_Started.md    user-facing docs.
 HOW_IT_WORKS.md                  this doc.
-docs/vcf_ops_concepts.md         VCF Ops content-type reference.
+vcf_ops_concepts.md         VCF Ops content-type reference.
 ```
 
 Three things are deliberately small:

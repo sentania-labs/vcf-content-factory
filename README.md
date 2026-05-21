@@ -21,7 +21,7 @@ This is what the workflow looks like in practice — you and Claude Code,
 in conversation, producing content while you focus on the question
 you're trying to answer.
 
-![Ask. Build. Ship.](docs/diagrams/intro-flow.svg)
+![Ask. Build. Ship.](diagrams/intro-flow.svg)
 
 *Three nodes. Talk to it, let the agents work, ship the result on the
 lane you want. The full assembly-line view and the internal plumbing
@@ -142,7 +142,7 @@ in detail with worked examples for each content type.
   architecture, the codification loop, Tier 1 vs Tier 2, why it's set
   up this way. For people considering forking, extending, or just
   curious about the AI-agent design.
-- **[docs/vcf_ops_concepts.md](docs/vcf_ops_concepts.md)** — reference
+- **[vcf_ops_concepts.md](vcf_ops_concepts.md)** — reference
   walkthrough of every VCF Ops content type the framework produces:
   what they are, how they relate, how they're identified, where
   they're enabled.

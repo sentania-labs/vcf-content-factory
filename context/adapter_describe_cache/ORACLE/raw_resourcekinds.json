@@ -1,0 +1,688 @@
+[
+  {
+    "key": "oracledatabase_adapter_instance",
+    "name": "Oracle Database Adapter Instance",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "ADAPTER_INSTANCE",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "active_query_limit",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "collect_archive_logs",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "collect_events",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "collect_filesystem_stats",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "connection_pool_size",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "connection_type",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "host",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "order_queries_by",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "port",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "query_count",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "sid_or_service_name",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "ssl_config",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      },
+      {
+        "name": "support_autodiscovery",
+        "dataType": "STRING",
+        "isPartOfUniqueness": false
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracledatabase_adapter_instance",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracledatabase_adapter_instance/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracledatabase_adapter_instance/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_oracle_database_archive_log",
+    "name": "Oracle Database Archive Log",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "destination_id",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "instance_id",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "record_id",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_archive_log",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_archive_log/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_archive_log/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_oracle_database_asm_disk",
+    "name": "Oracle Database ASM Disk",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "disk_number",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "group_number",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "instance_id",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_asm_disk",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_asm_disk/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_asm_disk/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_oracle_database_control_file",
+    "name": "Oracle Database Control File",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "name",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_control_file",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_control_file/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_control_file/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_oracle_database_database",
+    "name": "Oracle Database Database",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "database_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "global_name",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_database",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_database/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_database/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_oracle_database_database_file",
+    "name": "Oracle Database Database File",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "file_name",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_database_file",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_database_file/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_database_file/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_oracle_database_event_wait_group",
+    "name": "Oracle Database Event Wait Group",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "instance_id",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "wait_class",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_event_wait_group",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_event_wait_group/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_event_wait_group/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_oracle_database_instance",
+    "name": "Oracle Database Instance",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "instance_id",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_instance",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_instance/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_instance/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_oracle_database_pdb",
+    "name": "Oracle Database PDB",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "guid",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_pdb",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_pdb/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_pdb/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_oracle_database_query",
+    "name": "Oracle Database Query",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "instance_id",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "sql_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_query",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_query/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_query/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_oracle_database_redo_log_file",
+    "name": "Oracle Database Redo Log File",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "group_number",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_redo_log_file",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_redo_log_file/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_redo_log_file/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_oracle_database_service",
+    "name": "Oracle Database Service",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "service_name",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_service",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_service/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_service/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_oracle_database_tablespace",
+    "name": "Oracle Database Tablespace",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [
+      {
+        "name": "adapter_instance_id",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "container_id",
+        "dataType": "INTEGER",
+        "isPartOfUniqueness": true
+      },
+      {
+        "name": "tablespace_name",
+        "dataType": "STRING",
+        "isPartOfUniqueness": true
+      }
+    ],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_tablespace",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_tablespace/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_oracle_database_tablespace/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_traversal_tag",
+    "name": "Oracle Database Traversal Tag",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "TAG",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_traversal_tag",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_traversal_tag/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_traversal_tag/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "oracle_database_vms_tag",
+    "name": "Oracle Database Virtual Machines Tag",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "TAG",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_vms_tag",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_vms_tag/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/oracle_database_vms_tag/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  },
+  {
+    "key": "true_visibility_licensing",
+    "name": "VCF Operations for Integrations Licensing",
+    "adapterKind": "OracleDBAdapter",
+    "adapterKindName": "Oracle Database",
+    "resourceKindType": "GENERAL",
+    "resourceKindSubType": "NONE",
+    "resourceIdentifierTypes": [],
+    "links": [
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/true_visibility_licensing",
+        "rel": "SELF",
+        "name": "linkToSelf"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/true_visibility_licensing/statkeys",
+        "rel": "RELATED",
+        "name": "statkeys",
+        "description": "Stat Keys for Resource Kind"
+      },
+      {
+        "href": "/suite-api/api/adapterkinds/OracleDBAdapter/resourcekinds/true_visibility_licensing/properties",
+        "rel": "RELATED",
+        "name": "properties",
+        "description": "Properties for Resource Kind"
+      }
+    ]
+  }
+]
