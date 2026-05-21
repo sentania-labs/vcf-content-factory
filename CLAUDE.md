@@ -6,8 +6,8 @@ working in this repo.
 ## Knowledge precedence (read in this order)
 
 1. `rules/INDEX.md` — Absolute. Obey without question.
-2. `warstories/INDEX.md` — Lessons in blood. Read before going
-   down a path that looks obvious. If a war story covers your
+2. `lessons/INDEX.md` — Hard-won lessons. Read before going
+   down a path that looks obvious. If a lesson covers your
    situation, heed it.
 3. `context/README.md` — Documentation and specs. Reference
    when doing work.
@@ -16,7 +16,7 @@ working in this repo.
 6. `Memory.md` + `memory/` — Soul + per-user state. Advisory.
 
 If a context file contradicts a rule, the rule wins.
-If a war story says a path is a dead end, don't take it.
+If a lesson says a path is a dead end, don't take it.
 Rules are not negotiable.
 
 ## The framework is the product
@@ -29,7 +29,7 @@ are all part of the deliverable.
   machine, this user's memory, or this dev environment is a bug.
 - **Reviewability matters.** All persistent knowledge lives in the
   repo where it can be diffed and PR'd. Auto-memory is off.
-- **Codify, don't accumulate.** Hard-won lessons go in `warstories/`,
+- **Codify, don't accumulate.** Hard-won lessons go in `lessons/`,
   `context/`, agent prompts, or skills. See `context/authoring/rules_codification.md`
   for how. The framework should get smarter over time.
 
@@ -87,10 +87,10 @@ prompt, the prompt wins.
 This is the spine of the orchestrator's job. It belongs in this
 file (not a skill) because it runs before any skill could load.
 
-0. **Check rules and war stories.** Before planning any work, read
+0. **Check rules and lessons.** Before planning any work, read
    `rules/INDEX.md`. If any rule applies to the current request,
    follow it — do not propose alternatives. Then scan
-   `warstories/INDEX.md` — if a war story covers your situation, heed
+   `lessons/INDEX.md` — if a lesson covers your situation, heed
    it before committing to a path. Only proceed to recon after
    confirming no rule blocks or redirects the request.
 
@@ -230,10 +230,10 @@ path is first-class, not a sad fallback.
   in `bundles/`. Not optional — shipping stale zips is how
   false-positive bugs escape to users.
 
-## Rules and war stories
+## Rules and lessons
 
 Read `rules/INDEX.md`. Every rule is absolute. Do not violate.
-Read `warstories/INDEX.md`. Every war story is a dead end documented so you
+Read `lessons/INDEX.md`. Every lesson is a dead end documented so you
 don't walk into it. Heed them.
 
 ## Cross-reference syntax

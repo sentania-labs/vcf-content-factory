@@ -1,6 +1,6 @@
 # Memory Index
 
-Per-user and per-session state. Advisory — read for context, never overrides rules or war stories.
+Per-user and per-session state. Advisory — read for context, never overrides rules or lessons.
 
 ## Structure
 
@@ -17,7 +17,7 @@ Per-user and per-session state. Advisory — read for context, never overrides r
 ## What does NOT go here
 
 - Binding constraints → `rules/`
-- Lessons from failures → `warstories/`
+- Lessons from failures → `lessons/`
 - Domain knowledge → `context/`
 - Authoring patterns → `context/authoring/` or agent prompts
 

@@ -20,6 +20,6 @@ Management packs default to Tier 1 (MPB) unless a Tier 2 trigger fires. MPB requ
 - Per-instance long-lived state (schema cache surviving across cycles)
 - APIs with parent-child relationships encoded in URL paths (Redfish `/Systems/{id}/Processors/{id}`)
 
-See `context/tier_decision_framework.md` for the full trigger table and decision flow. Consult `warstories/` for targets that have been evaluated (Synology, Dell Redfish).
+See `context/tier_decision_framework.md` for the full trigger table and decision flow. Consult `lessons/` for targets that have been evaluated (Synology, Dell Redfish).
 
 **If violated:** The MP will build but produce incomplete data, unjoinable relationships, or fail collection. MPB's limitations surface as runtime failures, not build errors.

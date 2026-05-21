@@ -47,4 +47,4 @@ When the toolset is inadequate, report a TOOLSET GAP — don't silently downgrad
 - Lab instances: devel (MPB pipeline canonical), prod (factory pipeline canonical)
 - VCF Operations version tested against: 9.0.2
 - MPB capability level: no JMESPath filter projections (targeting 9.2)
-- `isUnremovable` flag not enforced server-side (see war story)
+- `isUnremovable` flag not enforced server-side (see lesson)
