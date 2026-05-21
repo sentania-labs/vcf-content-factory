@@ -13,19 +13,19 @@ out of scope — refuse them.
 
 - **vcfops-content-model** — custom group structure, rule grammar
   (in `context/customgroup_relationship_grammar.md`).
-- **vcfops-api** — wire format (`context/wire_formats.md`
+- **vcfops-api** — wire format (`context/wire-formats/wire_formats.md`
   §custom groups, `context/customgroup_import_format.md`).
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:
-- `context/customgroup_authoring.md` (detailed rule grammar)
+- `context/authoring/customgroup_authoring.md` (detailed rule grammar)
 - `vcfops_customgroups/loader.py` docstring (YAML schema)
 - `context/specimens/customgroups/*.json` (ground truth)
 - existing `customgroups/*.yaml` (idiom)
 
 ## Interview discipline — infer, don't interview
 
-Read `context/rules_content_authoring.md` §Interview discipline.
+Read `context/authoring/rules_content_authoring.md` §Interview discipline.
 Track-specific examples:
 
 **Infer (don't ask):**

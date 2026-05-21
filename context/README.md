@@ -1,100 +1,136 @@
-# Context files index
+# Context
 
-**Note:** Context files provide domain knowledge. They are lower priority than `rules/` and `decisions/`. If a context file contradicts a rule or decision, the rule/decision wins. See `CLAUDE.md` Knowledge precedence section.
+Pure documentation: API specs, wire formats, authoring patterns, MP schemas.
+When context contradicts a rule, the rule wins.
 
-Topical background for code paths, wire formats, and investigations.
-Agents read these on demand — don't paste file contents into
-orchestrator context.
+---
 
-## Living references
+## Always read (every session)
 
-These are actively maintained and authoritative for their topic.
+These files cost almost nothing to scan and prevent re-deriving known knowledge.
 
-| Topic | File |
+| File | Purpose |
 |---|---|
-| **Operational rules — delegation & lane discipline** | `rules_delegation.md` |
-| **Operational rules — content authoring** | `rules_content_authoring.md` |
-| **Operational rules — install & verification** | `rules_install_verification.md` |
-| **Operational rules — API & wire format** | `rules_api_wire_format.md` |
-| **Operational rules — PowerShell** | `rules_powershell.md` |
-| **Operational rules — operational** | `rules_operational.md` |
-| **Tier 2 SPEC (cleanroom bundle, 2026-05-16)** | `cleanroom-spec/` (see `cleanroom-spec/MANIFEST.md`; start at `spec/17` for framework, `spec/15` for adapter authoring) |
-| **Tier 2 architecture (this repo's framework + tooling)** | `tier2_architecture.md` |
-| **Tier 1 vs Tier 2 decision framework** | `tier_decision_framework.md` |
-| Shared vocabulary (Bundle vs Package, Sync/Enable/Install, etc.) | `dictionary.md` |
-| Super metric authoring, DSL rules, style | `supermetric_authoring.md` |
-| Dynamic custom group + group types authoring | `customgroup_authoring.md` |
-| Custom group relationship grammar | `customgroup_relationship_grammar.md` |
-| UUIDs, cross-references, rename safety | `uuids_and_cross_references.md` |
-| API surface map (public + internal + content-zip) | `content_api_surface.md` |
-| Content-zip wire formats (super metrics, dashboards, views, policies) | `wire_formats.md` |
-| MPB template.json schema (pak runtime format) | `mpb_template_json_schema.md` |
-| MPB adapter JAR reverse engineering (Gen-2 constant pool) | `mpb_adapter_jar_reverse_engineering.md` |
-| Reports API surface + wire format | `reports_api_surface.md` |
-| Install path + policy enablement | `install_and_enable.md` |
-| Internal supermetrics assign endpoint details | `internal_supermetrics_assign.md` |
-| Dashboard delete API (UI session auth, Struts/Ext.Direct) | `dashboard_delete_api.md` |
-| Widget types survey (supported + unsupported) | `widget_types_survey.md` |
-| Widget renderer scoping (next expansion targets) | `widget_renderer_scope.md` |
-| Recon metric key patterns | `recon_metric_keys.md` |
-| Reference docs inventory + PDF extraction | `reference_docs.md` |
-| Allowlisted external reference repos | `reference_sources.md` |
-| **API pattern catalog (Redfish, Synology DSM, UniFi, Cloudflare, vSphere REST) — read first when designing a new MP** | `api_pattern_catalog.md` |
-| VKS VM type classification + filter patterns | `vks_vm_classification.md` |
-| View column wire format (XML attribute encoding) | `view_column_wire_format.md` |
-| Custom group UI import envelope format | `customgroup_import_format.md` |
-| UI import format investigation (Struts/SPA) | `ui_import_formats.md` |
-| Struts/Ext.Direct endpoint catalog | `struts_import_endpoints.md` |
-| Struts exploration backlog | `struts_exploration_backlog.md` |
-| Known capability limitations | `known_limitations.md` |
-| Management pack authoring conventions | `management_pack_authoring.md` |
-| MP icon library (per-RK SVG hints, when to add new) | `mp_icon_library.md` |
-| MPB design JSON schema + API surface | `mpb_api_surface.md` |
-| MPB chaining YAML authoring grammar | `mp_chain_authoring.md` |
-| MPB chaining wire format | `mpb_chaining_wire_format.md` |
-| MPB relationships (parent/child) | `mpb_relationships.md` |
-| MPB object binding wire format | `mpb_object_binding_wire_format.md` |
-| MP schema vs existing MP comparison | `mp_schema_vs_existing_mp.md` |
-| MPB .pak structural reference (canonical format from 8+ paks) | `mpb_pak_structural_reference.md` |
-| Lessons learned: pak install reliability (5 failures → success) | `lessons_pak_install_reliability.md` |
-| **Lessons learned: Dell PowerEdge Redfish relationship investigation (MPB Tier 1 wall, four framework gaps identified)** | `lessons_dell_redfish_2026_05_18.md` |
-| MPB build examples research (external sources catalog) | `mpb_build_examples_research.md` |
-| **MPB Tier-1 strategic handoff (Track-C codegen reframe, capability surface, promotion triggers)** | `mpb_handoff.md` |
-| MPB BuilderFile Kotlin runtime model (runtime vocabulary, full subschemas) | `mpb_builderfile_schema.md` |
-| MPB designer wire format + pak generation pipeline (two-JSON-formats, compile pipeline) | `mpb_designer_wire_format.md` |
-| MPB describe.xml emission pipeline (24 Describe* components, IWritableFile implementations) | `mpb_describe_xml_emission.md` |
-| MPB describe.xml canonical XSD (what's permitted vs what MPB emits — Tier 2 surfaces) | `mpb_describe_xsd_canonical.md` |
-| MPB alerts/symptoms/recommendations grammar (6 condition types, 20 operators, compound boolean) | `mpb_alerts_symptoms_grammar.md` |
-| MPB adapter runtime insights (early-discovery deep dive on runtime architecture) | `mpb_adapter_runtime_insights.md` |
-| MPB pak signing chain analysis (self-signed VMware cert, expired 2026-01-03, SHA-1 + RSA exp-3) | `mpb_pak_signing_chain.md` |
-| MPB explicit-key investigation (label→key derivation algorithm, why API path mangles keys) | `mpb_explicit_key_investigation_2026_05_16.md` |
-| .pak wire format + install/uninstall | `pak_wire_format.md`, `pak_install_api_exploration.md`, `pak_uninstall_api_exploration.md` |
-| .pak UI upload investigation | `pak_ui_upload_investigation.md` |
-| Adapter describe (metric/property source of truth) | `adapter_describe_comparison.md`, `adapter_describe_exploration.md` |
-| Auth source wire formats | `auth_vidb_oauth_flow.md`, `auth_source_wire_formats.md` |
-| Framework review + VCF Ops API surface snapshot | `framework_review_2026_04_18.md`, `vcf_operations_api_surface.md` |
-| Bug report: .pak isUnremovable not enforced | `bug_report_pak_isunremovable_not_enforced.md` |
-| Federation Aggregator permanently breaks ARIA_OPS-stitching MPs | `federation_breaks_aria_ops_stitching.md` |
-| QA acceptance audit trail | `qa_log.md` |
-| Recon log (live instance queries) | `recon_log.md` |
+| `dictionary.md` | Shared vocabulary — Bundle vs Package, Sync/Enable/Install, tier definitions |
+| `known_limitations.md` | Capability boundaries — read before proposing anything new |
+| `tier_decision_framework.md` | Tier 1 vs. Tier 2 full trigger table and decision flow |
+| `api_pattern_catalog.md` | Recognized API shapes with default object models and known gaps |
+| `repo_layout.md` | Directory map of the repo |
 
-## Investigation archives
+---
 
-Session-specific artifacts. Valid as historical record but may not
-reflect current state.
+## Read for MP tasks
 
-| File | Date | Topic |
-|---|---|---|
-| `growth_path_2026_04_29.md` | 2026-04-29 | Growth path planning |
-| `mpb_chain_wire_diff_2026_04_19.md` | 2026-04-19 | Chain wire format diff investigation |
-| `mpb_synology_import_diff_2026_04_29.md` | 2026-04-29 | Synology import diff |
-| `mpb_synology_pickup_2026_04_29.md` | 2026-04-29 | Synology MP session pickup notes |
-| `mpb_synology_nas_live_recon_2026_04_22.md` | 2026-04-22 | Synology NAS live recon |
-| `session_pickup_2026_04_30.md` | 2026-04-30 | Session pickup notes |
-| `unifi_mp_jcox_diff_2026_04_30.md` | 2026-04-30 | UniFi MP diff analysis |
-| `mpb_import_diff_unifi_2026_05_07.md` | 2026-05-07 | UniFi MP import diff investigation |
-| `unifi_integration_filter_probe_2026_05_08.md` | 2026-05-08 | UniFi Integration API filter syntax probe |
-| `mpb_import_investigation.md` | 2026-05-13 | MPB design import failure investigation |
-| `vsphere_storage_paths_v2_plan.md` | 2026-05-13 | vSphere Storage Paths v2 ARIA_OPS stitching plan |
-| `vcf_managed_vmware_authz_investigation_2026_05_15.md` | 2026-05-15 | SDK MPs blocked from VCF-managed VMWARE adapter — running activity log |
-| `lessons_synology_sdk_2026_05_19.md` | 2026-05-19 | **Synology SDK adapter: 21 lessons across pak structure, runtime, stitching, icons. First Tier 2 MP end-to-end.** |
+### `mpb/` — MPB-specific docs
+| File | Purpose |
+|---|---|
+| `mpb_relationships.md` | Parent/child relationship wiring patterns (read before designing any hierarchy) |
+| `mpb_api_surface.md` | MPB design JSON schema and API surface |
+| `mpb_designer_wire_format.md` | MPB pak generation pipeline and expression grammar |
+| `mpb_pak_structural_reference.md` | Canonical pak format from 8+ reference paks |
+| `mpb_chaining_wire_format.md` | Chaining YAML wire format |
+| `mpb_builderfile_schema.md` | MPB BuilderFile Kotlin runtime model |
+| `mpb_describe_xml_emission.md` | describe.xml emission pipeline |
+| `mpb_describe_xsd_canonical.md` | describe.xml canonical XSD |
+| `mpb_alerts_symptoms_grammar.md` | Alerts/symptoms/recommendations grammar |
+| `mpb_template_json_schema.md` | template.json schema (pak runtime format) |
+| `mpb_instanced_groups_wire_format.md` | Instanced groups wire format |
+| `mpb_object_binding_wire_format.md` | Object binding wire format |
+| `mpb_runtime_variable_scopes.md` | Runtime variable scope rules |
+| `mpb_pak_signing_chain.md` | Pak signing chain analysis |
+| `mpb_explicit_key_investigation_2026_05_16.md` | Label→key derivation algorithm |
+| `mpb_handoff.md` | Tier-1 strategic handoff and capability surface |
+| `mpb_adapter_runtime_insights.md` | Runtime architecture deep dive |
+| `mp_icon_library.md` | Per-ResourceKind SVG hints |
+| `mp_format_comparison_2026_05_15.md` | Format comparison (MPB vs factory) |
+| `mp_schema_vs_existing_mp.md` | Schema vs existing MP comparison |
+| `wire_reference/` | Reference wire format artifacts (describe.xml, export.json, template.json) |
+
+### `wire-formats/` — Wire format documentation
+| File | Purpose |
+|---|---|
+| `wire_formats.md` | Content-zip wire formats (super metrics, dashboards, views, policies) |
+| `customgroup_import_format.md` | Custom group UI import envelope format |
+| `customgroup_relationship_grammar.md` | Custom group relationship grammar |
+| `view_column_wire_format.md` | View column wire format (XML attribute encoding) |
+| `pak_wire_format.md` | .pak wire format |
+| `auth_source_wire_formats.md` | Auth source wire formats |
+| `ui_import_formats.md` | UI import format investigation |
+
+### `tier2_architecture.md`
+Tier 2 (Java SDK) framework architecture — read when working on SDK adapters.
+
+---
+
+## Read for content authoring
+
+### `authoring/` — Content authoring patterns
+| File | Purpose |
+|---|---|
+| `supermetric_authoring.md` | Super metric DSL rules and style |
+| `customgroup_authoring.md` | Dynamic custom group authoring |
+| `management_pack_authoring.md` | MP authoring conventions |
+| `mp_chain_authoring.md` | MPB chaining YAML authoring grammar |
+| `mp_authoring_design_principles.md` | MP design principles (codified lessons) |
+| `uuids_and_cross_references.md` | UUIDs, cross-references, rename safety |
+| `rules_content_authoring.md` | Interview discipline, infer-not-interview |
+| `rules_delegation.md` | Orchestrator delegation discipline |
+| `rules_codification.md` | How to turn corrections into framework knowledge |
+| `rules_install_verification.md` | Install workflow, dependency audit |
+| `rules_api_wire_format.md` | API investigation and wire format ground truth |
+| `rules_operational.md` | Credentials, labs, distribution |
+| `rules_powershell.md` | PS 5.1 compatibility |
+| `recon_metric_keys.md` | Recon metric key patterns |
+| `vks_vm_classification.md` | VKS VM type classification and filter patterns |
+| `federation_breaks_aria_ops_stitching.md` | Federation permanently breaks ARIA_OPS-stitching MPs |
+| `vsphere_storage_paths_v2_plan.md` | vSphere Storage Paths v2 design plan |
+
+---
+
+## Read on demand
+
+### `api-surface/` — API endpoint documentation
+| File | Purpose |
+|---|---|
+| `content_api_surface.md` | Content API (public + internal + content-zip) |
+| `vcf_operations_api_surface.md` | VCF Ops API surface snapshot |
+| `install_and_enable.md` | Install path + policy enablement |
+| `internal_supermetrics_assign.md` | Internal supermetrics assign endpoint |
+| `dashboard_delete_api.md` | Dashboard delete API |
+| `reports_api_surface.md` | Reports API surface |
+| `pak_install_api_exploration.md` | .pak install API exploration |
+| `pak_uninstall_api_exploration.md` | .pak uninstall API exploration |
+| `pak_ui_upload_investigation.md` | .pak UI upload investigation |
+| `auth_vidb_oauth_flow.md` | VIDB OAuth flow |
+| `struts_import_endpoints.md` | Struts/Ext.Direct endpoint catalog |
+| `struts_exploration_backlog.md` | Struts exploration backlog |
+| `widget_types_survey.md` | Widget types (supported + unsupported) |
+| `widget_renderer_scope.md` | Widget renderer expansion targets |
+
+### `api-maps/` — Per-target API maps
+One file per monitored system. Generated by `api-cartographer`.
+
+### `cleanroom-spec/` — Cleanroom findings
+Empirical reverse-engineering of MPB runtime. Start at `spec/17` for framework,
+`spec/15` for adapter authoring.
+
+### `specimens/` — Example payloads
+Live API response samples and working wire format artifacts.
+
+### `adapter_describe_cache/` — Adapter describe cache
+Cached `describe` XML and comparison data.
+
+### `exports/` — Export artifacts
+Content export snapshots from live instances.
+
+### `investigations/` — Investigation archive
+Session-specific research logs, diff analyses, and exploration notes. Read when
+debugging a specific issue; not required reading.
+
+---
+
+## Reference files
+| File | Purpose |
+|---|---|
+| `reference_sources.md` | Allowlisted external reference repos |
+| `reference_docs.md` | Reference docs inventory + PDF extraction |

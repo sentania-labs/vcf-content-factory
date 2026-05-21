@@ -23,7 +23,7 @@ Also read:
 
 1. **Read-only against VCF Ops.** Only GET requests.
 2. **Read-only against the repo.** Never touch content YAML or
-   `vcfops_*/` code. May append to `context/recon_log.md` only
+   `vcfops_*/` code. May append to `context/investigations/recon_log.md` only
    if orchestrator explicitly asks.
 3. **Credentials from env vars.** If missing, return an error.
 4. **Return structured answers**, not prose.

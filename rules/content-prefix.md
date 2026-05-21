@@ -1,12 +1,11 @@
 ---
-id: RULE-005
-decision_refs: []
+id: RULE-008
 ---
 
-# RULE-005: All authored content uses `[VCF Content Factory]` prefix
+# RULE-008: All authored content uses `[VCF Content Factory]` prefix
 
-Literal brackets, one space after. Dashboards additionally live under the `VCF Content Factory` folder (`name_path`; loader applies it). No alternate prefixes — `[AI Content]` is legacy and must not be reintroduced.
+Literal brackets, one space after. Dashboards additionally live under the `VCF Content Factory` folder. No alternate prefixes — `[AI Content]` is legacy and must not be reintroduced.
 
-**Carve-out:** Management packs use the prose prefix `VCF Content Factory` without brackets.
+**Carve-out:** Management packs use the prose prefix `VCF Content Factory` without brackets in display names.
 
 **If violated:** Content becomes indistinguishable from user-authored objects, breaking discovery, bulk operations, and the promise that factory content is clearly tagged.

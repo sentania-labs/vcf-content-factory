@@ -6,17 +6,18 @@ working in this repo.
 ## Knowledge precedence (read in this order)
 
 1. `rules/INDEX.md` — Absolute. Obey without question.
-2. `decisions/INDEX.md` — The "why" behind rules. Read on demand
-   when a rule is questioned or a new situation has no matching rule.
-3. `context/README.md` — Domain knowledge. Reference when doing work.
-4. `references/` — Examples. Grep when authoring.
-5. `memory/INDEX.md` — Advisory. Read for texture, never overrides
-   rules or decisions.
+2. `warstories/INDEX.md` — Lessons in blood. Read before going
+   down a path that looks obvious. If a war story covers your
+   situation, heed it.
+3. `context/README.md` — Documentation and specs. Reference
+   when doing work.
+4. `references/` — Known-good examples. Grep when authoring.
+5. `docs/` — Immutable vendor source material. Read-only.
+6. `Memory.md` + `memory/` — Soul + per-user state. Advisory.
 
 If a context file contradicts a rule, the rule wins.
-If a memory entry contradicts a decision, the decision wins.
-Rules are not negotiable. Decisions are negotiable only through
-the explicit override ceremony in `decisions/overrides/`.
+If a war story says a path is a dead end, don't take it.
+Rules are not negotiable.
 
 ## The framework is the product
 
@@ -27,11 +28,10 @@ are all part of the deliverable.
 - **Portability is non-negotiable.** Anything that depends on this
   machine, this user's memory, or this dev environment is a bug.
 - **Reviewability matters.** All persistent knowledge lives in the
-  repo where it can be diffed and PR'd. Auto-memory is disabled by
-  design (Hard Rule 8).
-- **Codify, don't accumulate.** Hard-won lessons go in `context/`,
-  agent prompts, or skills. See `context/rules_codification.md` for
-  how. The framework should get smarter over time.
+  repo where it can be diffed and PR'd. Auto-memory is off.
+- **Codify, don't accumulate.** Hard-won lessons go in `warstories/`,
+  `context/`, agent prompts, or skills. See `context/authoring/rules_codification.md`
+  for how. The framework should get smarter over time.
 
 `ADMIN.md` is the human-facing walkthrough of VCF Ops content
 concepts. Read it for the conceptual model.
@@ -61,7 +61,7 @@ ends up holding all the context.
 
 | Agent | Posture | Writes to | Spawn when |
 |---|---|---|---|
-| `ops-recon` | Read-only against live Ops | `context/recon_log.md` on request | **Before every authoring task.** Does this exist? Is it enabled? Does a built-in cover it? |
+| `ops-recon` | Read-only against live Ops | `context/investigations/recon_log.md` on request | **Before every authoring task.** Does this exist? Is it enabled? Does a built-in cover it? |
 | `supermetric-author` | Author | `supermetrics/` | After recon. One SM per invocation. |
 | `customgroup-author` | Author | `customgroups/` | User needs a dynamic group. Static is out of scope. |
 | `view-author` | Author | `views/` | User wants a list view. Blocks if upstream SM/group missing. |
@@ -87,12 +87,12 @@ prompt, the prompt wins.
 This is the spine of the orchestrator's job. It belongs in this
 file (not a skill) because it runs before any skill could load.
 
-0. **Check rules and decisions.** Before planning any work, read
+0. **Check rules and war stories.** Before planning any work, read
    `rules/INDEX.md`. If any rule applies to the current request,
-   follow it — do not propose alternatives. If the situation is
-   ambiguous, check `decisions/INDEX.md` for a specific ruling.
-   Only proceed to recon after confirming no rule blocks or
-   redirects the request.
+   follow it — do not propose alternatives. Then scan
+   `warstories/INDEX.md` — if a war story covers your situation, heed
+   it before committing to a path. Only proceed to recon after
+   confirming no rule blocks or redirects the request.
 
 1. **Start with recon.** Every authoring request begins with
    `ops-recon`. The brief includes the user's intent in plain
@@ -221,7 +221,7 @@ path is first-class, not a sad fallback.
   existing VCF Ops resources (e.g., VMWARE HostSystem); they do not
   appear in describe.xml or template.json. Events are stripped from
   pak builds (runtime format unknown — TOOLSET GAP). See
-  `context/mpb_pak_structural_reference.md`.
+  `context/mpb/mpb_pak_structural_reference.md`.
 - **Toolset gap:** punt / api-explorer / tooling → fix → re-invoke.
 - **After tooling changes:** if `tooling` modifies anything in
   `vcfops_packaging/templates/`, `vcfops_packaging/builder.py`, or
@@ -230,9 +230,11 @@ path is first-class, not a sad fallback.
   in `bundles/`. Not optional — shipping stale zips is how
   false-positive bugs escape to users.
 
-## Rules
+## Rules and war stories
 
 Read `rules/INDEX.md`. Every rule is absolute. Do not violate.
+Read `warstories/INDEX.md`. Every war story is a dead end documented so you
+don't walk into it. Heed them.
 
 ## Cross-reference syntax
 
@@ -257,14 +259,14 @@ hard-won knowledge gets re-derived from scratch.
 |---|---|
 | `ADMIN.md` | Human-facing concept walkthrough |
 | `context/repo_layout.md` | Directory map of the repo |
-| `context/README.md` | Index of all `context/` files |
+| `context/README.md` | Tiered index of all `context/` files |
 | `context/known_limitations.md` | Capability boundaries to surface early |
-| `context/rules_codification.md` | How to turn corrections into framework knowledge |
-| `context/rules_content_authoring.md` | SM/view/dashboard/MP authoring patterns |
-| `context/rules_install_verification.md` | Install workflow, dependency audit |
-| `context/rules_api_wire_format.md` | API investigation, wire format ground truth |
-| `context/rules_powershell.md` | PS 5.1 compat |
-| `context/rules_operational.md` | Credentials, labs, distribution |
+| `context/authoring/rules_codification.md` | How to turn corrections into framework knowledge |
+| `context/authoring/rules_content_authoring.md` | SM/view/dashboard/MP authoring patterns |
+| `context/authoring/rules_install_verification.md` | Install workflow, dependency audit |
+| `context/authoring/rules_api_wire_format.md` | API investigation, wire format ground truth |
+| `context/authoring/rules_powershell.md` | PS 5.1 compat |
+| `context/authoring/rules_operational.md` | Credentials, labs, distribution |
 
 ## User context
 

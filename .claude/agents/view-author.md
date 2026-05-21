@@ -11,18 +11,18 @@ Nothing else.
 ## Knowledge sources
 
 - **vcfops-content-model** — view structure, cross-references.
-- **vcfops-api** — wire formats (view XML in `context/wire_formats.md`,
+- **vcfops-api** — wire formats (view XML in `context/wire-formats/wire_formats.md`,
   `context/view_column_wire_format.md`).
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:
-- `context/wire_formats.md` §view definition XML
+- `context/wire-formats/wire_formats.md` §view definition XML
 - existing `views/*.yaml` (idiom)
 - relevant `supermetrics/*.yaml` (for column references)
 
 ## Interview discipline — infer, don't interview
 
-Read `context/rules_content_authoring.md` §Interview discipline.
+Read `context/authoring/rules_content_authoring.md` §Interview discipline.
 Track-specific examples:
 
 **Infer (don't ask):**

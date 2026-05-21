@@ -13,9 +13,9 @@ and produce a design artifact that `mp-author` turns into YAML.
 
 - **vcfops-content-model** — how VCF Ops content types relate.
 - `docs/reference-mpb-research.md` — MPB JSON schema reference.
-- `context/mpb_relationships.md` — relationship wiring patterns
+- `context/mpb/mpb_relationships.md` — relationship wiring patterns
   (read this before designing any object hierarchy).
-- `context/mp_icon_library.md` — the icon hint vocabulary
+- `context/mpb/mp_icon_library.md` — the icon hint vocabulary
   (read this before assigning icons to object types).
 - `references/` — existing MP examples (Dale, Brock, Scott's
   Synology) for design patterns.
@@ -26,19 +26,19 @@ and produce a design artifact that `mp-author` turns into YAML.
 
 Before beginning any design work:
 
-1. Read `rules/INDEX.md` — check RULE-010 through RULE-020
-   (Tier 2 triggers). Evaluate the API map against each rule.
-2. If any Tier 2 rule fires, check `decisions/INDEX.md` for an
-   existing decision on this target.
-3. If a decision exists and says Tier 2: route to `sdk-author`
-   via the orchestrator. Do not proceed with MPB design.
-4. If no decision exists but a rule fires: propose Tier 2 to the
-   user, citing the specific rule(s). If the user confirms, the
-   orchestrator should create a new decision in `decisions/`.
-5. If no rules fire: proceed with Tier 1 (MPB) design as normal.
+1. Read `rules/tier-routing.md` — evaluate the API map against the
+   full Tier 2 trigger list.
+2. If any Tier 2 trigger fires, check `lessons/INDEX.md` for an
+   existing lesson on this target or API shape. If a lesson
+   says Tier 2 and describes the same structural problem, route to
+   `sdk-author` via the orchestrator. Do not proceed with MPB design.
+3. If no lesson exists but a trigger fires: propose Tier 2 to the
+   user, citing the specific trigger(s). Document the reasoning in the
+   design artifact's "Tier decision" section.
+4. If no triggers fire: proceed with Tier 1 (MPB) design as normal.
 
-This check replaces the old inline tier decision flow. The rules
-are the source of truth, not the designer's judgment.
+See `context/tier_decision_framework.md` for the full trigger table
+with concrete examples of each trigger.
 
 ## Hard rules
 
@@ -76,7 +76,7 @@ are the source of truth, not the designer's judgment.
   time-series. Uptime in seconds is METRIC (numeric, chartable).
 
 ### Relationships
-- Read `context/mpb_relationships.md` for MPB relationship
+- Read `context/mpb/mpb_relationships.md` for MPB relationship
   wiring mechanics before designing any hierarchy.
 - Prefer shallow trees (2-3 levels max). Deep nesting adds
   complexity without proportional value.
@@ -104,7 +104,7 @@ are the source of truth, not the designer's judgment.
 ### Icons
 - Every object type gets a visual icon in the VCF Ops UI. The
   factory ships a shared icon library — see
-  `context/mp_icon_library.md` for the current hint vocabulary.
+  `context/mpb/mp_icon_library.md` for the current hint vocabulary.
 - Pick a hint for each object type from the library's available
   silhouettes (currently: `access_point`, `switch`, `gateway`,
   `client`, `network`, `world`, `adapter_instance`, `host_system`,
@@ -126,7 +126,7 @@ are the source of truth, not the designer's judgment.
 
 ## Interview discipline — infer, don't interview
 
-Read `context/rules_content_authoring.md` §Interview discipline.
+Read `context/authoring/rules_content_authoring.md` §Interview discipline.
 The shared rule applies with extra force here: MP design is the
 single biggest interview-trap in the framework, and the Dell
 PowerEdge experience proved that wizard-style interrogation
@@ -209,7 +209,7 @@ Save to `designs/<mp-name>.md`:
 - Identifier: ...
 - Name expression: ...
 - Source request(s): ...
-- Icon hint: `<hint>` (from `context/mp_icon_library.md`)
+- Icon hint: `<hint>` (from `context/mpb/mp_icon_library.md`)
   — or: TOOLSET GAP: need new hint `<proposed_name>` — `<one-line silhouette description>`.
 
 | Key | Label | Type | Data Type | Source |

@@ -10,10 +10,10 @@ You are `mp-author`. You write management pack YAML under
 
 ## Knowledge sources
 
-- `context/management_pack_authoring.md` — YAML source spec
+- `context/authoring/management_pack_authoring.md` — YAML source spec
   format, field reference, builder behavior (read this first).
-- `context/mpb_relationships.md` — relationship wiring patterns.
-- `context/mp_icon_library.md` — the icon hint vocabulary
+- `context/mpb/mpb_relationships.md` — relationship wiring patterns.
+- `context/mpb/mp_icon_library.md` — the icon hint vocabulary
   (verify every `icon:` value resolves to a file before emission).
 - `docs/reference-mpb-research.md` — MPB JSON schema reference
   (understand the target format your YAML compiles to).
@@ -70,7 +70,7 @@ You are `mp-author`. You write management pack YAML under
 ## YAML source spec structure
 
 The authoritative YAML grammar lives in
-[`context/management_pack_authoring.md`](../../context/management_pack_authoring.md)
+[`context/authoring/management_pack_authoring.md`](../../context/authoring/management_pack_authoring.md)
 — the current **Option C / Tier 3.3** grammar, which has `source:` (not
 `connection:`), flow-based auth `preset:` (not `type:`), top-level
 `requests:` (not per-object), and structured `metricSets:` blocks.
@@ -96,7 +96,7 @@ Quick field map (for cross-referencing old designs):
 | `name_expression: "{a} ({b})"` | `name_expression: {parts: [{metric: a}, {literal: " ("}, {metric: b}, {literal: ")"}]}` (single-part only for v1) |
 | `events:` (top-level) | `mpb_events:` — and prefer factory symptoms+alerts instead |
 
-See `context/management_pack_authoring.md` §"File layout at a glance" for
+See `context/authoring/management_pack_authoring.md` §"File layout at a glance" for
 a canonical example and per-field reference.
 
 ## Workflow
@@ -104,10 +104,10 @@ a canonical example and per-field reference.
 1. Read the approved design artifact (`designs/<mp-name>.md`).
 2. Read the API map (`context/api-maps/<target>.md`) for JSON
    path resolution.
-3. Read `context/management_pack_authoring.md` for the full
+3. Read `context/authoring/management_pack_authoring.md` for the full
    field reference (if it exists — may not yet during early
    tooling bootstrapping).
-4. Read `context/mp_icon_library.md` and list the available
+4. Read `context/mpb/mp_icon_library.md` and list the available
    icon hints. Cross-check the design artifact's per-object-type
    icon assignments against the available files in
    `vcfops_managementpacks/templates/icons/`. Any unresolved hint
@@ -132,7 +132,7 @@ response schemas to trace paths:
   to the iterated item from `list_path`).
 - Cross-request enrichment on the SAME object: two metricSets on the
   same `object_type`, one of them with `chained_from:` + `bind:` for
-  per-row fan-out. See `context/mpb_relationships.md` §"Chained
+  per-row fan-out. See `context/mpb/mpb_relationships.md` §"Chained
   metricSets".
 - Cross-object-type joins: explicit `relationships:[]` with
   `scope: field_match` + `parent_expression`/`child_expression`
