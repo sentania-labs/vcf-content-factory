@@ -134,6 +134,13 @@ file (not a skill) because it runs before any skill could load.
    - "symptom + alert" → symptom → alert
    - "report" → upstream views (and their SMs) first → report last
 
+   **For dashboards specifically (RULE-011):** before spawning
+   `dashboard-author`, enter plan mode and present an ASCII / markdown-
+   table wireframe of the proposed layout. Get explicit user approval.
+   Commit the wireframe to `designs/dashboards/<slug>.md`. Only then
+   delegate. Skipping this step is how layout problems escape to install
+   — see `rules/wireframe-before-dashboard.md`.
+
 4. **Pass filenames, not file contents.** Agents read the
    filesystem themselves. Keeping file contents out of your context
    is how this architecture stays affordable. Every authoring brief

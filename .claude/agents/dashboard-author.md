@@ -101,9 +101,14 @@ DASHBOARD AUTHORING BLOCKED
 
 ## Workflow
 
-1. Read brief: title, views, layout, interactions.
+1. Read brief: title, views, layout, interactions. **The brief must
+   include the user-approved wireframe (RULE-011) committed to
+   `designs/dashboards/<slug>.md`.** If the design file lacks a
+   wireframe, BLOCK and tell the orchestrator — do not infer layout
+   from prose alone.
 2. Confirm referenced view YAMLs exist.
-3. Draft YAML under `dashboards/<short_snake_case>.yaml`.
+3. Draft YAML under `dashboards/<short_snake_case>.yaml`, faithfully
+   reproducing the approved wireframe's widget placement and wiring.
 4. Validate. Fix errors.
 5. Return: filename, UUID, widget summary, interaction summary.
 
