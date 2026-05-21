@@ -1,0 +1,219 @@
+id: a426553b-a40b-4629-a8a2-528d6062f118
+name: "[VCF Content Factory] Oracle Query Performance & Blocking"
+description: >
+  Oracle query performance and blocking triage dashboard. Pick an Oracle
+  database instance from the left to scope every panel to that instance.
+  Three vertical stripes: (1) what is slow — query heatmap and sortable
+  query list; (2) who is stuck — active and blocked session counts plus a
+  wait-event-group breakdown (the closest available proxy for a per-session
+  blocker view, since the adapter does not surface individual sessions as
+  VCF Ops resources; wait-event groups give the Oracle DBA the same
+  wait-category triage as the Solarwinds DPA view); (3) what is the box
+  doing — host CPU utilization, buffer cache hit ratio, and disk read/write
+  latency.
+
+  POLICY DEPENDENCY: The Host CPU Utilization and Buffer Cache Hit Ratio
+  charts (widgets cpu_chart and buffer_cache_chart) depend on the
+  Performance metric group being enabled in the Oracle collection policy.
+  Until enabled, those two widgets will show no data. To enable: Policies
+  → Oracle DB policy → Object Types → Oracle Database Instance → enable
+  the Performance group metrics. All metric keys are declared in the
+  adapter describe and validation will pass regardless of collection status.
+
+released: false
+version: "1.0.0"
+
+widgets:
+
+  # ── Row 1: Oracle instance picker ─────────────────────────────────────────
+
+  - id: instance_picker
+    type: ResourceList
+    title: "Select Oracle Instance"
+    coords: {x: 1, y: 1, w: 12, h: 3}
+    resource_kinds:
+      - {adapter_kind: OracleDBAdapter, resource_kind: oracle_database_oracle_database_instance}
+
+  # ── Row 2: Queries panel ──────────────────────────────────────────────────
+  # Widget A: Heatmap — oracle_database_oracle_database_query, driven by instance_picker
+  # Metric keys verified in context/adapter_describe_cache/ORACLE/statkeys_oracle_database_oracle_database_query.json:
+  #   color_by: Activity|elapsed_time  (Activity|Elapsed Time)
+  #   size_by:  omitted — uniform tile size (Activity|executions is a rate/delta
+  #             metric that reads 0.0 for nearly all queries; blank tiles resulted)
+  # Widget B: Top Queries view embed (right column)
+
+  - id: query_heatmap
+    type: Heatmap
+    title: "Top Queries by Elapsed Time"
+    coords: {x: 1, y: 4, w: 5, h: 8}
+    mode: all
+    depth: 10
+    configs:
+      - name: "Top Queries by Elapsed Time"
+        adapter_kind: OracleDBAdapter
+        resource_kind: oracle_database_oracle_database_query
+        color_by:
+          metric_key: Activity|elapsed_time
+          label: "Elapsed Time"
+        group_by: {}
+        color:
+          min_value: 0
+          thresholds:
+            values: [0, 100000, 500000]
+            colors: ["#74B43B", "#ECC33E", "#DE3F30"]
+        solid_coloring: false
+        focus_on_groups: false
+
+  - id: top_queries_view
+    type: View
+    title: "Oracle Top Queries"
+    coords: {x: 6, y: 4, w: 7, h: 8}
+    view: "[VCF Content Factory] Oracle Top Queries"
+
+  # ── Row 3: Sessions panel ─────────────────────────────────────────────────
+  # Widget C: Active sessions count tile
+  # Widget D: Blocked sessions count tile  (red at > 0 via color_method=0, red_bound=0)
+  # Widget E: Wait-event-group drill-down list (right column, full height)
+  #
+  # Metric keys verified in context/adapter_describe_cache/ORACLE/statkeys_oracle_database_oracle_database_instance.json:
+  #   Session|active_user_sessions   (Session|Active User Sessions)
+  #   Session|blocked_user_sessions  (Session|Blocked User Sessions)
+
+  - id: active_sessions_score
+    type: Scoreboard
+    title: "Currently Active Sessions"
+    coords: {x: 1, y: 12, w: 3, h: 3}
+    box_columns: 1
+    metrics:
+      - adapter_kind: OracleDBAdapter
+        resource_kind: oracle_database_oracle_database_instance
+        metric_key: Session|active_user_sessions
+        metric_name: "Active User Sessions"
+        label: "Currently Active Sessions"
+        color_method: 1
+
+  - id: blocked_sessions_score
+    type: Scoreboard
+    title: "Currently Blocked Sessions"
+    coords: {x: 4, y: 12, w: 3, h: 3}
+    box_columns: 1
+    metrics:
+      - adapter_kind: OracleDBAdapter
+        resource_kind: oracle_database_oracle_database_instance
+        metric_key: Session|blocked_user_sessions
+        metric_name: "Blocked User Sessions"
+        label: "Currently Blocked Sessions"
+        color_method: 0
+        yellow_bound: 0
+        orange_bound: 1
+        red_bound: 5
+
+  - id: wait_event_groups_view
+    type: View
+    title: "Oracle Wait Event Groups"
+    coords: {x: 7, y: 12, w: 6, h: 8}
+    view: "[VCF Content Factory] Oracle Wait Event Groups"
+
+  # ── Row 4: Resource charts (MetricChart, all driven by instance_picker) ───
+  # All four charts are scoped directly to the selected oracle_database_oracle_database_instance.
+  # Unlike the MSSQL dashboard's per-database disk latency, Oracle exposes I/O
+  # latency at the instance level — no relationship_mode: children needed.
+  #
+  # Widget F: Host CPU % — Performance|host_cpu_utilization
+  # Widget G: Buffer Cache Hit Ratio — Performance|buffer_cache_hit_ratio
+  # Widget H: Disk Read Latency — Disk IO|average_read_time  (ms)
+  # Widget I: Disk Write Latency — Disk IO|average_write_time (ms)
+  #
+  # Metric keys verified in statkeys_oracle_database_oracle_database_instance.json.
+  # NOTE: Widgets F and G depend on the Performance metric group being
+  # enabled in the Oracle collection policy (see dashboard description).
+
+  - id: cpu_chart
+    type: MetricChart
+    title: "Host CPU Utilization %"
+    coords: {x: 1, y: 20, w: 3, h: 7}
+    metrics:
+      - adapter_kind: OracleDBAdapter
+        resource_kind: oracle_database_oracle_database_instance
+        metric_key: Performance|host_cpu_utilization
+        metric_name: "Host CPU Utilization"
+        color_method: 2
+
+  - id: buffer_cache_chart
+    type: MetricChart
+    title: "Buffer Cache Hit Ratio %"
+    coords: {x: 4, y: 20, w: 3, h: 7}
+    metrics:
+      - adapter_kind: OracleDBAdapter
+        resource_kind: oracle_database_oracle_database_instance
+        metric_key: Performance|buffer_cache_hit_ratio
+        metric_name: "Buffer Cache Hit Ratio"
+        color_method: 2
+
+  - id: disk_read_chart
+    type: MetricChart
+    title: "Disk Read Latency (ms)"
+    coords: {x: 7, y: 20, w: 3, h: 7}
+    metrics:
+      - adapter_kind: OracleDBAdapter
+        resource_kind: oracle_database_oracle_database_instance
+        metric_key: Disk IO|average_read_time
+        metric_name: "Average Read Time"
+        color_method: 2
+
+  - id: disk_write_chart
+    type: MetricChart
+    title: "Disk Write Latency (ms)"
+    coords: {x: 10, y: 20, w: 3, h: 7}
+    metrics:
+      - adapter_kind: OracleDBAdapter
+        resource_kind: oracle_database_oracle_database_instance
+        metric_key: Disk IO|average_write_time
+        metric_name: "Average Write Time"
+        color_method: 2
+
+interactions:
+  # Picker drives the query heatmap (oracle_database_oracle_database_query resources under selected instance)
+  - from: instance_picker
+    to: query_heatmap
+    type: resourceId
+
+  # Picker drives the Top Queries view embed
+  - from: instance_picker
+    to: top_queries_view
+    type: resourceId
+
+  # Picker drives active sessions scoreboard
+  - from: instance_picker
+    to: active_sessions_score
+    type: resourceId
+
+  # Picker drives blocked sessions scoreboard
+  - from: instance_picker
+    to: blocked_sessions_score
+    type: resourceId
+
+  # Picker drives the Wait Event Groups view (wait-event-group resources are children of the instance)
+  - from: instance_picker
+    to: wait_event_groups_view
+    type: resourceId
+
+  # Picker drives Host CPU chart
+  - from: instance_picker
+    to: cpu_chart
+    type: resourceId
+
+  # Picker drives Buffer Cache Hit Ratio chart
+  - from: instance_picker
+    to: buffer_cache_chart
+    type: resourceId
+
+  # Picker drives disk read latency chart
+  - from: instance_picker
+    to: disk_read_chart
+    type: resourceId
+
+  # Picker drives disk write latency chart
+  - from: instance_picker
+    to: disk_write_chart
+    type: resourceId

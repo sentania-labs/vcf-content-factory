@@ -1,0 +1,718 @@
+{
+  "uuid": "1aa87d97-402b-4ea3-a1bd-251b2bdabb74",
+  "entries": {
+    "resourceKind": [
+      {
+        "resourceKindKey": "SqlServer",
+        "internalId": "resourceKind:id:0_::_",
+        "adapterKindKey": "SqlServerAdapter"
+      },
+      {
+        "resourceKindKey": "SqlQuery",
+        "internalId": "resourceKind:id:1_::_",
+        "adapterKindKey": "SqlServerAdapter"
+      },
+      {
+        "resourceKindKey": "SqlDatabase",
+        "internalId": "resourceKind:id:2_::_",
+        "adapterKindKey": "SqlServerAdapter"
+      }
+    ]
+  },
+  "dashboards": [
+    {
+      "shared": true,
+      "temporary": false,
+      "hidden": false,
+      "creationTime": 0,
+      "autoswitchEnabled": false,
+      "importAttempts": 0,
+      "lastUpdateUserId": "x",
+      "columnProportion": "1",
+      "importComplete": true,
+      "description": "MSSQL query performance and blocking triage dashboard. Pick a SqlServer instance from the left to scope every panel to that instance. Three vertical stripes: (1) what is slow \u2014 query heatmap and sortable query list; (2) who is stuck \u2014 active and blocked session counts plus a wait-type breakdown (the closest available proxy for a per-session blocker view, since the adapter does not surface individual sessions as VCF Ops resources); (3) what is the box doing \u2014 CPU usage, page life expectancy, and disk latency. Disk latency charts (H, I) show per- SqlDatabase metrics because read/write latency is not available at the SqlServer level; see TOOLSET GAP note below.\nLayout adapted from brockpeterson/operations_dashboards/Legacy MSSQL Dashboards.zip (MS-SQL-DBA-Overview.json, MS-SQL-Query-Analysis.json) \u2014 layout and interaction pattern reference only; metric keys have been re-verified against the SqlServerAdapter describe cache.",
+      "columnCount": 1,
+      "userId": "x",
+      "states": [],
+      "homeTab": false,
+      "name": "VCF Content Factory/[VCF Content Factory] MSSQL Query Performance & Blocking",
+      "namePath": "VCF Content Factory",
+      "gridsterMaxColumns": 12,
+      "rank": 0,
+      "disabled": false,
+      "id": "2679c78f-e88e-43ba-b1ae-864dbbe9c50c",
+      "locked": false,
+      "dashboardNavigations": {},
+      "widgetInteractions": [
+        {
+          "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+          "type": "resourceId",
+          "widgetIdReceiver": "16856f7c-220f-55e4-87b4-faee19fdbcd6"
+        },
+        {
+          "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+          "type": "resourceId",
+          "widgetIdReceiver": "d6dd1d56-20b4-5f41-adcf-8e14adbe2404"
+        },
+        {
+          "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+          "type": "resourceId",
+          "widgetIdReceiver": "cc64dc05-88f6-5c47-aef9-1cf0c54f4442"
+        },
+        {
+          "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+          "type": "resourceId",
+          "widgetIdReceiver": "d941e6dd-d192-587f-9aab-97085223cfa2"
+        },
+        {
+          "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+          "type": "resourceId",
+          "widgetIdReceiver": "11fa9a23-7c5b-57f9-b20e-a4e155f5e102"
+        },
+        {
+          "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+          "type": "resourceId",
+          "widgetIdReceiver": "4e5c9f67-3e81-5de8-8c81-5506a966ff03"
+        },
+        {
+          "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+          "type": "resourceId",
+          "widgetIdReceiver": "5d7039d5-edae-598c-9a0c-9ed08a2bea00"
+        },
+        {
+          "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+          "type": "resourceId",
+          "widgetIdReceiver": "a3f266f9-91a2-5dec-8378-bb44d772907c"
+        },
+        {
+          "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+          "type": "resourceId",
+          "widgetIdReceiver": "0b9b014e-7568-54a8-94e3-ecda19db06c2"
+        }
+      ],
+      "lastUpdateTime": 0,
+      "widgets": [
+        {
+          "collapsed": false,
+          "id": "01c157ad-38ca-543e-a926-2c82bda2f224",
+          "gridsterCoords": {
+            "x": 1,
+            "y": 1,
+            "w": 12,
+            "h": 3
+          },
+          "type": "ResourceList",
+          "title": "Select SQL Server Instance",
+          "config": {
+            "refreshInterval": 300,
+            "resource": [],
+            "refreshContent": {
+              "refreshContent": false
+            },
+            "relationshipMode": {
+              "relationshipMode": 0
+            },
+            "additionalColumns": [],
+            "title": "Select SQL Server Instance",
+            "mode": "all",
+            "filterMode": "tagPicker",
+            "tagFilter": {
+              "path": [
+                "/source/kind/kind:resourceKind:id:0_::_"
+              ],
+              "value": {
+                "bus": [],
+                "adapterKind": [],
+                "kind": [
+                  "resourceKind:id:0_::_"
+                ],
+                "exclaim": false,
+                "healthRange": [],
+                "maintenanceSchedule": [],
+                "adapterInstance": [],
+                "collector": [],
+                "tier": [],
+                "state": [],
+                "tag": [],
+                "day": [],
+                "status": []
+              }
+            },
+            "depth": 1,
+            "customFilter": {
+              "filter": [],
+              "excludedResources": null,
+              "includedResources": null
+            },
+            "selectFirstRow": {
+              "selectFirstRow": true
+            },
+            "selfProvider": {
+              "selfProvider": false
+            }
+          },
+          "height": 600
+        },
+        {
+          "collapsed": false,
+          "id": "16856f7c-220f-55e4-87b4-faee19fdbcd6",
+          "gridsterCoords": {
+            "x": 1,
+            "y": 4,
+            "w": 5,
+            "h": 8
+          },
+          "type": "Heatmap",
+          "title": "Top Queries by Total Wait Time",
+          "config": {
+            "mode": "all",
+            "depth": 10,
+            "selfProvider": {
+              "selfProvider": false
+            },
+            "refreshInterval": 300,
+            "refreshContent": {
+              "refreshContent": false
+            },
+            "resource": [],
+            "relationshipMode": {
+              "relationshipMode": [
+                1,
+                -1,
+                0
+              ]
+            },
+            "title": "Top Queries by Total Wait Time",
+            "configs": [
+              {
+                "name": "Top Queries by Total Wait Time",
+                "resourceKind": "resourceKind:id:1_::_",
+                "colorBy": {
+                  "metricKey": "general|total_worker_time",
+                  "value": "Total Worker Time"
+                },
+                "sizeBy": {
+                  "metricKey": "general|execution_count",
+                  "value": "Execution Count"
+                },
+                "groupBy": {},
+                "thenBy": null,
+                "color": {
+                  "minValue": 0.0,
+                  "thresholds": {
+                    "values": [
+                      0,
+                      100000,
+                      500000
+                    ],
+                    "colors": [
+                      "#74B43B",
+                      "#ECC33E",
+                      "#DE3F30"
+                    ]
+                  }
+                },
+                "focusOnGroups": false,
+                "relationalGrouping": false,
+                "solidColoring": false,
+                "mode": {
+                  "mode": false
+                },
+                "attributeKind": {
+                  "value": ""
+                },
+                "filterMode": "tagPicker",
+                "tagFilter": null,
+                "customFilter": {
+                  "filter": [],
+                  "excludedResources": null,
+                  "includedResources": null
+                }
+              }
+            ],
+            "value": 0
+          },
+          "height": 600
+        },
+        {
+          "collapsed": false,
+          "id": "d6dd1d56-20b4-5f41-adcf-8e14adbe2404",
+          "gridsterCoords": {
+            "x": 6,
+            "y": 4,
+            "w": 7,
+            "h": 8
+          },
+          "type": "View",
+          "title": "MSSQL Top Queries",
+          "config": {
+            "refreshInterval": 300,
+            "resource": null,
+            "traversalSpecId": null,
+            "refreshContent": {
+              "refreshContent": false
+            },
+            "isUpdatedView": true,
+            "chartViewItems": [],
+            "selectFirstRow": {
+              "selectFirstRow": true
+            },
+            "selfProvider": {
+              "selfProvider": false
+            },
+            "title": "MSSQL Top Queries",
+            "viewDefinitionId": "d60ca02f-e6c0-4ba8-ae2b-8015d371cbe3"
+          },
+          "height": 600
+        },
+        {
+          "collapsed": false,
+          "id": "cc64dc05-88f6-5c47-aef9-1cf0c54f4442",
+          "gridsterCoords": {
+            "x": 1,
+            "y": 12,
+            "w": 3,
+            "h": 3
+          },
+          "type": "Scoreboard",
+          "title": "Currently Active Sessions",
+          "config": {
+            "refreshInterval": 300,
+            "metric": {
+              "mode": "resourceKind",
+              "resourceMetrics": [],
+              "resourceKindMetrics": [
+                {
+                  "metricKey": "sysprocesses_states|running",
+                  "metricName": "Running Processes",
+                  "isStringMetric": false,
+                  "resourceKindId": "resourceKind:id:0_::_",
+                  "resourceKindName": "SqlServer",
+                  "colorMethod": 1,
+                  "handleOldColoring": false,
+                  "id": "extModel81409-1",
+                  "label": "Currently Active Sessions",
+                  "link": "",
+                  "maxValue": "",
+                  "metricUnitId": null,
+                  "unit": null,
+                  "yellowBound": null,
+                  "orangeBound": null,
+                  "redBound": null
+                }
+              ],
+              "subMode": "resourceKindAll"
+            },
+            "resource": [],
+            "refreshContent": {
+              "refreshContent": true
+            },
+            "relationshipMode": {
+              "relationshipMode": 0
+            },
+            "customFilter": {
+              "filter": [],
+              "excludedResources": null,
+              "includedResources": null
+            },
+            "selfProvider": {
+              "selfProvider": false
+            },
+            "title": "Currently Active Sessions",
+            "depth": 1,
+            "resInteractionMode": null,
+            "visualTheme": 8,
+            "mode": {
+              "layoutMode": "fixedView"
+            },
+            "showResourceName": {
+              "showResourceName": false
+            },
+            "showMetricName": {
+              "showMetricName": true
+            },
+            "showMetricUnit": {
+              "showMetricUnit": true
+            },
+            "showDT": {
+              "showDT": false
+            },
+            "showSparkline": {
+              "showSparkline": false
+            },
+            "periodLength": null,
+            "maxCellCount": 100,
+            "oldMetricValues": true,
+            "roundDecimals": 1,
+            "valueSize": 24,
+            "labelSize": 12,
+            "boxHeight": null,
+            "boxColumns": 1
+          },
+          "height": 600
+        },
+        {
+          "collapsed": false,
+          "id": "d941e6dd-d192-587f-9aab-97085223cfa2",
+          "gridsterCoords": {
+            "x": 4,
+            "y": 12,
+            "w": 3,
+            "h": 3
+          },
+          "type": "Scoreboard",
+          "title": "Currently Blocked Sessions",
+          "config": {
+            "refreshInterval": 300,
+            "metric": {
+              "mode": "resourceKind",
+              "resourceMetrics": [],
+              "resourceKindMetrics": [
+                {
+                  "metricKey": "sysprocesses_states|blocked",
+                  "metricName": "Blocked Processes",
+                  "isStringMetric": false,
+                  "resourceKindId": "resourceKind:id:0_::_",
+                  "resourceKindName": "SqlServer",
+                  "colorMethod": 0,
+                  "handleOldColoring": false,
+                  "id": "extModel41235-1",
+                  "label": "Currently Blocked Sessions",
+                  "link": "",
+                  "maxValue": "",
+                  "metricUnitId": null,
+                  "unit": null,
+                  "yellowBound": 0.0,
+                  "orangeBound": 1.0,
+                  "redBound": 5.0
+                }
+              ],
+              "subMode": "resourceKindAll"
+            },
+            "resource": [],
+            "refreshContent": {
+              "refreshContent": true
+            },
+            "relationshipMode": {
+              "relationshipMode": 0
+            },
+            "customFilter": {
+              "filter": [],
+              "excludedResources": null,
+              "includedResources": null
+            },
+            "selfProvider": {
+              "selfProvider": false
+            },
+            "title": "Currently Blocked Sessions",
+            "depth": 1,
+            "resInteractionMode": null,
+            "visualTheme": 8,
+            "mode": {
+              "layoutMode": "fixedView"
+            },
+            "showResourceName": {
+              "showResourceName": false
+            },
+            "showMetricName": {
+              "showMetricName": true
+            },
+            "showMetricUnit": {
+              "showMetricUnit": true
+            },
+            "showDT": {
+              "showDT": false
+            },
+            "showSparkline": {
+              "showSparkline": false
+            },
+            "periodLength": null,
+            "maxCellCount": 100,
+            "oldMetricValues": true,
+            "roundDecimals": 1,
+            "valueSize": 24,
+            "labelSize": 12,
+            "boxHeight": null,
+            "boxColumns": 1
+          },
+          "height": 600
+        },
+        {
+          "collapsed": false,
+          "id": "11fa9a23-7c5b-57f9-b20e-a4e155f5e102",
+          "gridsterCoords": {
+            "x": 7,
+            "y": 12,
+            "w": 6,
+            "h": 8
+          },
+          "type": "View",
+          "title": "MSSQL Wait Types",
+          "config": {
+            "refreshInterval": 300,
+            "resource": null,
+            "traversalSpecId": null,
+            "refreshContent": {
+              "refreshContent": false
+            },
+            "isUpdatedView": true,
+            "chartViewItems": [],
+            "selectFirstRow": {
+              "selectFirstRow": true
+            },
+            "selfProvider": {
+              "selfProvider": false
+            },
+            "title": "MSSQL Wait Types",
+            "viewDefinitionId": "34bda43d-80a4-40a1-ace5-726c6135e095"
+          },
+          "height": 600
+        },
+        {
+          "collapsed": false,
+          "id": "4e5c9f67-3e81-5de8-8c81-5506a966ff03",
+          "gridsterCoords": {
+            "x": 1,
+            "y": 20,
+            "w": 3,
+            "h": 7
+          },
+          "type": "MetricChart",
+          "title": "CPU Usage",
+          "config": {
+            "refreshInterval": 300,
+            "metric": {
+              "mode": "resourceKind",
+              "resourceMetrics": [],
+              "resourceKindMetrics": [
+                {
+                  "metricKey": "cpu|cpu_usage",
+                  "metricName": "CPU Usage",
+                  "isStringMetric": false,
+                  "resourceKindId": "resourceKind:id:0_::_",
+                  "resourceKindName": "SqlServer",
+                  "colorMethod": 2,
+                  "handleOldColoring": false,
+                  "id": "extModel17901-1",
+                  "label": "",
+                  "link": "",
+                  "maxValue": "",
+                  "metricUnitId": null,
+                  "unit": null,
+                  "yellowBound": null,
+                  "orangeBound": null,
+                  "redBound": null
+                }
+              ],
+              "subMode": "resourceKindAll"
+            },
+            "resource": [],
+            "refreshContent": {
+              "refreshContent": true
+            },
+            "relationshipMode": {
+              "relationshipMode": 0
+            },
+            "customFilter": {
+              "filter": [],
+              "excludedResources": null,
+              "includedResources": null
+            },
+            "selfProvider": {
+              "selfProvider": false
+            },
+            "title": "CPU Usage",
+            "depth": 1,
+            "resInteractionMode": null
+          },
+          "height": 600
+        },
+        {
+          "collapsed": false,
+          "id": "5d7039d5-edae-598c-9a0c-9ed08a2bea00",
+          "gridsterCoords": {
+            "x": 4,
+            "y": 20,
+            "w": 3,
+            "h": 7
+          },
+          "type": "MetricChart",
+          "title": "Page Life Expectancy",
+          "config": {
+            "refreshInterval": 300,
+            "metric": {
+              "mode": "resourceKind",
+              "resourceMetrics": [],
+              "resourceKindMetrics": [
+                {
+                  "metricKey": "buffer|buffer_ideal_page_life_expectancy",
+                  "metricName": "Page Life Expectancy",
+                  "isStringMetric": false,
+                  "resourceKindId": "resourceKind:id:0_::_",
+                  "resourceKindName": "SqlServer",
+                  "colorMethod": 2,
+                  "handleOldColoring": false,
+                  "id": "extModel92966-1",
+                  "label": "",
+                  "link": "",
+                  "maxValue": "",
+                  "metricUnitId": null,
+                  "unit": null,
+                  "yellowBound": null,
+                  "orangeBound": null,
+                  "redBound": null
+                }
+              ],
+              "subMode": "resourceKindAll"
+            },
+            "resource": [],
+            "refreshContent": {
+              "refreshContent": true
+            },
+            "relationshipMode": {
+              "relationshipMode": 0
+            },
+            "customFilter": {
+              "filter": [],
+              "excludedResources": null,
+              "includedResources": null
+            },
+            "selfProvider": {
+              "selfProvider": false
+            },
+            "title": "Page Life Expectancy",
+            "depth": 1,
+            "resInteractionMode": null
+          },
+          "height": 600
+        },
+        {
+          "collapsed": false,
+          "id": "a3f266f9-91a2-5dec-8378-bb44d772907c",
+          "gridsterCoords": {
+            "x": 7,
+            "y": 20,
+            "w": 3,
+            "h": 7
+          },
+          "type": "MetricChart",
+          "title": "Disk Read Latency by Database",
+          "config": {
+            "refreshInterval": 300,
+            "metric": {
+              "mode": "resourceKind",
+              "resourceMetrics": [],
+              "resourceKindMetrics": [
+                {
+                  "metricKey": "disk_access|read_delay",
+                  "metricName": "Disk Read Latency",
+                  "isStringMetric": false,
+                  "resourceKindId": "resourceKind:id:2_::_",
+                  "resourceKindName": "SqlDatabase",
+                  "colorMethod": 2,
+                  "handleOldColoring": false,
+                  "id": "extModel82288-1",
+                  "label": "",
+                  "link": "",
+                  "maxValue": "",
+                  "metricUnitId": null,
+                  "unit": null,
+                  "yellowBound": null,
+                  "orangeBound": null,
+                  "redBound": null
+                }
+              ],
+              "subMode": "resourceKindAll"
+            },
+            "resource": [],
+            "refreshContent": {
+              "refreshContent": true
+            },
+            "relationshipMode": {
+              "relationshipMode": [
+                1,
+                -1,
+                0
+              ]
+            },
+            "customFilter": {
+              "filter": [],
+              "excludedResources": null,
+              "includedResources": null
+            },
+            "selfProvider": {
+              "selfProvider": false
+            },
+            "title": "Disk Read Latency by Database",
+            "depth": 1,
+            "resInteractionMode": null
+          },
+          "height": 600
+        },
+        {
+          "collapsed": false,
+          "id": "0b9b014e-7568-54a8-94e3-ecda19db06c2",
+          "gridsterCoords": {
+            "x": 10,
+            "y": 20,
+            "w": 3,
+            "h": 7
+          },
+          "type": "MetricChart",
+          "title": "Disk Write Latency by Database",
+          "config": {
+            "refreshInterval": 300,
+            "metric": {
+              "mode": "resourceKind",
+              "resourceMetrics": [],
+              "resourceKindMetrics": [
+                {
+                  "metricKey": "disk_access|write_delay",
+                  "metricName": "Disk Write Latency",
+                  "isStringMetric": false,
+                  "resourceKindId": "resourceKind:id:2_::_",
+                  "resourceKindName": "SqlDatabase",
+                  "colorMethod": 2,
+                  "handleOldColoring": false,
+                  "id": "extModel91488-1",
+                  "label": "",
+                  "link": "",
+                  "maxValue": "",
+                  "metricUnitId": null,
+                  "unit": null,
+                  "yellowBound": null,
+                  "orangeBound": null,
+                  "redBound": null
+                }
+              ],
+              "subMode": "resourceKindAll"
+            },
+            "resource": [],
+            "refreshContent": {
+              "refreshContent": true
+            },
+            "relationshipMode": {
+              "relationshipMode": [
+                1,
+                -1,
+                0
+              ]
+            },
+            "customFilter": {
+              "filter": [],
+              "excludedResources": null,
+              "includedResources": null
+            },
+            "selfProvider": {
+              "selfProvider": false
+            },
+            "title": "Disk Write Latency by Database",
+            "depth": 1,
+            "resInteractionMode": null
+          },
+          "height": 600
+        }
+      ]
+    }
+  ]
+}

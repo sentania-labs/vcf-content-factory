@@ -4,6 +4,65 @@ Append-only. Each entry is a dated investigation section.
 
 ---
 
+## 2026-05-21 — MSSQL dashboard live diagnosis (api-explorer)
+
+**Target:** `[VCF Content Factory] MSSQL Query Performance & Blocking`
+(UUID `2679c78f-e88e-43ba-b1ae-864dbbe9c50c`), file
+`dashboards/mssql-query-performance.yaml`.
+**Instance:** vcf-lab-operations.int.sentania.net.
+**Symptoms:** (1) heatmap `query_heatmap` renders empty; (2) Internal
+Server Error on dashboard load.
+
+**Findings:**
+
+1. **MetricChart `relationship_mode: children` wire format is wrong.**
+   The 2026-05-20 tooling change emits
+   `"relationshipMode": {"relationshipMode": [1, -1, 0]}` (array form).
+   Survey of 146 MetricChart widgets in reference bundles shows
+   **zero use the array form** — all use scalar `0`, `-1`, or `1`.
+   Canonical "child traversal" reference (brockpeterson VM CPU per
+   ESXi host) uses scalar `-1`. **This is the 500-on-load.** Affects
+   `disk_read_chart` and `disk_write_chart`.
+
+2. **Heatmap `sizeBy: execution_count` collapses every tile.** The
+   `general|execution_count` metric on SqlQuery is a per-collection
+   rate (executions/sec), currently ~0 across all 10 queries. With
+   sizeBy=0 the heatmap renders nothing. The cumulative
+   `general|total_worker_time` metric (already in color_by) has good
+   spread (35K to 26M μs).
+
+3. SqlDatabase resources ARE valid CHILDREN of SqlServer
+   (verified via `/api/resources/{id}/relationships?relationshipType=CHILD`:
+   27 children — 10 SqlQuery, 10 microsoft_sql_server_wait_time,
+   7 SqlDatabase). `disk_access|read_delay` /`write_delay`
+   have valid data (one DB reports 25.9ms write delay).
+
+**Evidence files:**
+- `context/investigations/mssql_dashboard_live.json` — server-side
+  `getDashboardConfig` (shallow tab metadata only; deep widget config
+  is not retrievable for admin-owned locked dashboards from a
+  non-admin user — clone is blocked by the lock).
+- `context/investigations/mssql_dashboard_rendered.json` —
+  the exact JSON the renderer emits and the importer received,
+  including the broken `[1, -1, 0]` shape on the two disk widgets.
+
+**Documentation updates:**
+- `context/api-surface/widget_types_survey.md` §MetricChart — replaced
+  the "array form [1, -1, 0]" extrapolation with the verified scalar
+  `-1` shape and a 146-widget distribution table.
+
+**Implications for code:**
+- `vcfops_dashboards/render.py` `_metric_chart_widget()` line ~725:
+  `relationship_mode_val` must become scalar `-1` for `children`
+  (and presumably scalar `1` if a future `parents` mode is added),
+  not the heatmap array form.
+
+**Clean-up verified:** yes — read-only API calls plus a content-zip
+export of the calling user's own dashboards (no foreign objects
+created). No state mutated.
+
+---
+
 ## 2026-04-29 — Pod vCPU SM inflation investigation (PROD)
 
 **Target:** `[VCF Content Factory] Pod vCPU (count)` (UUID `46179895-f760-4472-960c-e368aa869bc7`)
@@ -278,4 +337,227 @@ As of 2026-04-29 the Synology MP workstream was parked with two paths documented
 - Path 1: remove Volume's chained metricSet, ship the community-pattern 5-object MPB pak (loses per-volume IO metrics, ~10 min work)
 - Path 2: pivot to Operations Adapter SDK (keeps IO metrics, larger effort)
 The YAML was left in "v3 state, not in shipping state" with a broken `volume_util` chain.
+
+
+---
+
+## 2026-05-21 — MSSQL + Oracle Query Performance / Blocking Dashboard (DPA Replacement)
+
+**Intent:** Author two dashboards (one MSSQL, one Oracle) replicating a Solarwinds DPA layout:
+top queries by wait time, active/blocked session count tiles with drill-down lists, and instance
+resource line charts (CPU, buffer cache, disk read/write latency).
+
+---
+
+### Q1 — Adapter Installation and Resource Counts
+
+**MSSQL (`SqlServerAdapter`)** — INSTALLED AND COLLECTING
+
+| Kind | Count |
+|---|---|
+| SqlServer (Instance) | 1 (`mssqldemo MSSQLSERVER`, id `414be6ca-372c-455e-9178-aee9692e999b`) |
+| SqlDatabase | 7 |
+| SqlQuery | 10 |
+| SqlAvailabilityGroup | 0 |
+| microsoft_sql_server_wait_time | 10 |
+| microsoft_sql_server_job | 0 |
+| SqlServerAdapterInstance | 1 |
+| SqlServerTag / sql_server_traversal_tag | 2 / 1 |
+
+**Oracle (`OracleDBAdapter`)** — INSTALLED AND COLLECTING
+
+| Kind | Count |
+|---|---|
+| oracle_database_oracle_database_instance | 1 (`FREE`, id `34a66adc-e0e3-4211-b704-18e471db67f8`) |
+| oracle_database_oracle_database_database | 1 |
+| oracle_database_oracle_database_query | 11 |
+| oracle_database_oracle_database_event_wait_group | 11 |
+| oracle_database_oracle_database_tablespace | 4 |
+| oracle_database_oracle_database_database_file | 5 |
+| oracle_database_oracle_database_pdb | 1 |
+| oracle_database_oracle_database_service | 2 |
+| oracle_database_oracle_database_redo_log_file | 3 |
+| oracle_database_oracle_database_control_file | 2 |
+
+---
+
+### Q2 — Built-in Dashboards and Views from Adapters
+
+No adapter-shipped dashboards or views were found via `/api/reportdefinitions`. The adapters ship
+alert definitions (MSSQL: 16 alerts including "MS SQL Server Low Page Life Expectancy",
+"MS SQL Server Average Query CPU Time is High", "MS SQL Server Number of Queries That End In
+Deadlock has Risen"; Oracle: 6 alerts including "Above Normal Query Time", "High Database CPU
+Time Usage", "High Database Wait Time") but zero report definitions.
+
+**Relevant built-in alerts (PARTIAL match — not dashboards):**
+- MSSQL: `AlertDefinition-SqlServerAdapter-alert_LowPageLifeExpectancy_SqlServer`
+- MSSQL: `AlertDefinition-SqlServerAdapter-alert_AvgQueryTime_SqlServer`
+- MSSQL: `AlertDefinition-SqlServerAdapter-alert_QueriesEndInDeadLock_SqlServer`
+- Oracle: `AlertDefinition-OracleDBAdapter-alert-all-symptom-oracle_database_oracle_database_query-Activity-average_time-GreaterThan-metric-Warning--1449450318-`
+- Oracle: `AlertDefinition-OracleDBAdapter-alert-all-symptom-oracle_database_oracle_database_instance-Performance-database_wait_time_ratio-Above-dtmetric-Warning-0-`
+
+No built-in dashboard satisfies the DPA replacement need. **Author required.**
+
+---
+
+### Q3 — Existing Repo Content
+
+```
+find dashboards views supermetrics -type f
+```
+Returns nothing. Repo currently has zero dashboards, views, or supermetrics. Confirmed.
+
+---
+
+### Q4 — Reference Sources
+
+**`references/AriaOperationsContent/`** — No SQL/Oracle/DPA-themed bundle directories found.
+All bundles are vSphere-centric (VM Encryption, Rightsize, License, Portgroup). Zero match.
+
+**`references/brockpeterson_operations_dashboards/`** — MATCH (HIGH VALUE):
+`Legacy MSSQL Dashboards.zip` contains 7 dashboard JSONs:
+  - `MS-SQL-DBA-Overview.json` — 13 widgets; ResourceList picker (SqlServer instances), scalar
+    tiles for `buffer|buffer_cache_hit_ratio`, `general|sql_version`, `mac_addrs|mac_addr`,
+    interaction wiring. PARTIAL match to session/blocking panels.
+  - `MS-SQL-Query-Analysis.json` — 4 widgets; uses `general|avg_execution_time`,
+    `general|execution_count`, `buffer|buffer_cache_hit_ratio`,
+    `statements|sql_recompilations_ratio`. PARTIAL match to top-queries panel.
+  - `MS-SQL-Query-Plan.json` — 5 widgets. Query plan detail view.
+  - `MS-SQL-Database.json` — 10 widgets; uses `disk_access|read_delay`,
+    `disk_access|write_delay`, `disk_access|total_bytes` on SqlDatabase. PARTIAL match to
+    resource line charts (latency metrics at SqlDatabase level, not SqlServer).
+  - `MS-SQL-Server-Overview.json` — 3 widgets; high-level overview.
+  - `MS-SQL-Server-VM-Relationship.json` — relationship view.
+  - `MS-SQL-Availability-group.json` — AG-specific.
+
+  **Verdict: PARTIAL/INSPIRATION.** The DBA-Overview and Query-Analysis dashboards are the
+  closest analogs to panels 1 and 3. Widget interaction wiring patterns (ResourceList picker →
+  downstream tiles/charts) are adaptable. Metric keys in these JSONs need cross-check — several
+  (`general|sql_version`, `mac_addrs|mac_addr`, `statements|sql_recompilations_ratio`,
+  `relationships|VirtualMachine_parent`, `sys|poweredOn`) are NOT present in the current adapter
+  describe cache and may be from an older adapter version. Usable as layout/wiring templates.
+  Attribution: `brockpeterson/operations_dashboards/Legacy MSSQL Dashboards.zip`.
+
+**`references/tkopton_aria_operations_content/`** — No SQL/Oracle/DPA content found.
+All bundles are vSphere, NSX, energy, sustainability themes. Zero match.
+
+**`references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/`** — No SQL/Oracle
+dashboards in Dashboards/ or Views/. Management-Packs/ contains FastAPI, ServiceNow, GitHub,
+vCommunity MPs — none database-related. Zero match.
+
+---
+
+### Q5 — Metric Availability Sanity Check (Live Instance)
+
+#### MSSQL `SqlQuery` (id `1f659591-96ad-4d79-9e40-f2883852cc11`, query "IF EXISTS (SELECT TOP 1 c...")
+
+| Metric | Status | Last Value |
+|---|---|---|
+| `general|total_worker_time` | COLLECTED | 35922.0 µs |
+| `general|avg_execution_time` | COLLECTED | 35922.0 µs |
+| `general|execution_count` | COLLECTED | 0.0 |
+| `general|last_execution` | COLLECTED | 35922.0 µs |
+| `general|total_logical_reads` | COLLECTED | 0.0 |
+| `general|total_logical_writes` | COLLECTED | 0.0 |
+| `general|total_elapsed_time` | COLLECTED | 0.0 µs |
+
+NOTE: The originally requested metric name `general|total_elapsed_time` is confirmed in
+the SqlQuery describe. `general|execution_count` is present but reports 0 at collection
+time (normal if query ran between collection intervals).
+
+#### MSSQL `SqlServer` (id `414be6ca-372c-455e-9178-aee9692e999b`)
+
+| Metric | Status | Last Value | Notes |
+|---|---|---|---|
+| `sysprocesses_states|running` | COLLECTED | 1.45 | |
+| `sysprocesses_states|blocked` | COLLECTED | 0.0 | Count tile confirmed feasible |
+| `sysprocesses_states|sleeping` | COLLECTED | 26.3 | |
+| `cpu|cpu_usage` | COLLECTED | 19.3 % | |
+| `buffer|buffer_ideal_page_life_expectancy` | COLLECTED | 13.8 | |
+| `buffer|buffer_page_life_expectancy` | COLLECTED | 152397.8 | |
+| `disk_access|read_bytes` | COLLECTED | 0.0 B/s | |
+| `disk_access|write_bytes` | COLLECTED | 2817.7 B/s | |
+| `disk_access|read_ops` | COLLECTED | 0.0 | |
+| `disk_access|write_ops` | COLLECTED | 4.35 | |
+| `connection_capacity|number_of_active_connections` | COLLECTED | 65.4 | |
+| `disk_access|read_delay` | NOT ON SqlServer | — | Only on SqlDatabase |
+| `disk_access|write_delay` | NOT ON SqlServer | — | Only on SqlDatabase |
+
+**FINDING:** Disk read/write LATENCY (`read_delay`, `write_delay`) is NOT available on
+`SqlServer`. It exists on `SqlDatabase`. The requested "SQL Disk Write Latency / SQL Disk Read
+Latency" line charts must use `SqlDatabase` as the subject, not `SqlServer`, OR be dropped.
+The `SqlDatabase` latency metrics ARE collected (confirmed: `disk_access|write_delay` last=0.0,
+`disk_access|read_delay` last=0.0 on db `model`).
+
+#### Oracle `oracle_database_oracle_database_query` (id `12a0d155-cbc0-4c10-bc89-ec71b8e9804d`)
+
+| Metric | Status | Last Value |
+|---|---|---|
+| `Activity|elapsed_time` | COLLECTED | 13363437.4 µs/s |
+| `Activity|executions` | COLLECTED | 3.0 |
+| `Activity|user_io_wait_time` | COLLECTED | 10753180.5 µs/s |
+| `Activity|application_wait_time` | COLLECTED | 0.0 µs/s |
+| `Activity|concurrency_wait_time` | COLLECTED | 773.5 µs/s |
+| `Activity|cpu_time` | COLLECTED | 1495585.1 µs/s |
+| `Activity|average_time` | COLLECTED | 3527777.2 µs |
+| `Activity|disk_reads` | COLLECTED | 38231.3 |
+
+#### Oracle `oracle_database_oracle_database_instance` (id `34a66adc-e0e3-4211-b704-18e471db67f8`)
+
+**CRITICAL FINDING:** The Oracle instance is only reporting 136 of 328 declared statkeys.
+The entire `Performance|` metric group is NOT being collected. This affects:
+
+| Metric (requested) | Status | Notes |
+|---|---|---|
+| `Performance|host_cpu_utilization` | NOT COLLECTED | Not in live statkeys |
+| `Performance|buffer_cache_hit_ratio` | NOT COLLECTED | Not in live statkeys |
+| `Disk IO|average_read_time` | COLLECTED | last=0.0 ms |
+| `Disk IO|average_write_time` | COLLECTED | last=2.0 ms |
+| `Session|waiting_user_sessions` | COLLECTED | last=16.2 |
+| `Session|unblocked_user_sessions` | COLLECTED | last=5.0 |
+| `Session|blocked_user_sessions` | COLLECTED | last=0.18 |
+| `Session|active_user_sessions` | COLLECTED | last=14.1 |
+| `Session|sessions` | COLLECTED | last=80.3 |
+| `Activity|cpu_usage` | COLLECTED | last=174.1 (centiseconds) |
+| `Shared Memory|buffer_cache_size` | COLLECTED | SGA buffer cache size in bytes |
+
+**RULE-002 BLOCKERS (Oracle):**
+- `Performance|host_cpu_utilization` — declared in describe but NOT in live statkeys.
+  Cannot use in a metric widget. Substitute: `Activity|cpu_usage` (centiseconds of DB CPU
+  consumed per second — not a host OS %). INFERRED equivalent, not identical.
+- `Performance|buffer_cache_hit_ratio` — declared in describe but NOT in live statkeys.
+  Cannot use in a metric widget. No direct substitute in collected keys.
+  `Shared Memory|buffer_cache_size` is a size value, not a ratio.
+  **Buffer cache hit ratio widget is NOT FEASIBLE without policy enablement or adapter config change.**
+
+The `Performance|` group absence is likely a data collection policy issue (metric not enabled
+in the collection policy for this adapter instance) or an adapter license/tier limitation.
+The adapter describe says the keys exist; the live instance simply isn't publishing them.
+
+---
+
+### Q6 — Blocking Feasibility
+
+**MSSQL:**
+- `sysprocesses_states|blocked` on `SqlServer` is a count metric — COLLECTED. Count tile = FEASIBLE.
+- No individual blocked-session resource kind exists in the adapter. The adapter has no
+  `SqlSession` or equivalent resource type. Drill-down list of blocked sessions (by SPID, query
+  text, blocking SPID) = **NOT POSSIBLE** with this adapter.
+- `microsoft_sql_server_wait_time` resources (10 collected) expose `general|wait_time` and
+  `general|waiting_tasks_count` per wait type — usable as a list view of wait types,
+  not individual sessions.
+
+**Oracle:**
+- `Session|blocked_user_sessions` on `oracle_database_oracle_database_instance` is a count metric — COLLECTED. Count tile = FEASIBLE.
+- `Session|waiting_user_sessions` also collected — useful for active waits tile.
+- No individual session resource kind in the Oracle adapter either. The adapter has
+  `oracle_database_oracle_database_event_wait_group` (11 resources: Application, Idle, Other,
+  Network, Configuration, etc.) with `Activity|time_waited`, `Activity|total_waits`,
+  `Activity|foreground_time_waited`. This can serve as a list view of wait categories,
+  but NOT individual blocked sessions.
+- **Drill-down list of individual blocked sessions = NOT POSSIBLE** with this adapter.
+
+**Summary:** Both adapters support COUNT tiles for active/blocked sessions. Neither adapter
+exposes individual session resources. The DPA "blocked sessions list" panel cannot be replicated
+as a ResourceList drill-down. A list view of wait types/groups can serve as a partial substitute.
 

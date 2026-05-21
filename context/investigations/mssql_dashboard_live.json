@@ -1,0 +1,679 @@
+{
+  "interactionTypes": {
+    "resourceId": "resourceId",
+    "metricId": "metricId",
+    "expandCollapse": "expandCollapse",
+    "tagId": "tagId",
+    "cleanup": "cleanup",
+    "property": "property",
+    "alertId": "alertId",
+    "widgetConfig": "widgetConfig"
+  },
+  "dashboardConfig": {
+    "tabConfigs": [
+      {
+        "autoswitchTabId": null,
+        "mpName": null,
+        "tabNavigations": {},
+        "videoKey": null,
+        "autoswitchEnabled": false,
+        "columnProportion": [
+          1
+        ],
+        "description": "MSSQL query performance and blocking triage dashboard. Pick a SqlServer instance from the left to scope every panel to that instance. Three vertical stripes: (1) what is slow \u2014 query heatmap and sortable query list; (2) who is stuck \u2014 active and blocked session counts plus a wait-type breakdown (the closest available proxy for a per-session blocker view, since the adapter does not surface individual sessions as VCF Ops resources); (3) what is the box doing \u2014 CPU usage, page life expectancy, and disk latency. Disk latency charts (H, I) show per- SqlDatabase metrics because read/write latency is not available at the SqlServer level; see TOOLSET GAP note below.\nLayout adapted from brockpeterson/operations_dashboards/Legacy MSSQL Dashboards.zip (MS-SQL-DBA-Overview.json, MS-SQL-Query-Analysis.json) \u2014 layout and interaction pattern reference only; metric keys have been re-verified against the SqlServerAdapter describe cache.",
+        "docCenterKey": null,
+        "isHome": false,
+        "columnCount": 1,
+        "videoPlaylistKey": null,
+        "widgets": [
+          {
+            "tabId": "2679c78f-e88e-43ba-b1ae-864dbbe9c50c",
+            "isLoading": false,
+            "collapsed": false,
+            "gridsterX": 1,
+            "gridsterH": 3,
+            "gridsterY": 1,
+            "id": "01c157ad-38ca-543e-a926-2c82bda2f224",
+            "title": "Select SQL Server Instance",
+            "key": "ResourceList",
+            "gridsterW": 12,
+            "height": 600
+          },
+          {
+            "tabId": "2679c78f-e88e-43ba-b1ae-864dbbe9c50c",
+            "isLoading": false,
+            "collapsed": false,
+            "autoSelectInteraction": true,
+            "gridsterX": 1,
+            "gridsterH": 8,
+            "gridsterY": 4,
+            "id": "16856f7c-220f-55e4-87b4-faee19fdbcd6",
+            "title": "Top Queries by Total Wait Time",
+            "key": "Heatmap",
+            "gridsterW": 5,
+            "height": 600
+          },
+          {
+            "tabId": "2679c78f-e88e-43ba-b1ae-864dbbe9c50c",
+            "isLoading": false,
+            "collapsed": false,
+            "autoSelectInteraction": true,
+            "gridsterX": 1,
+            "gridsterH": 3,
+            "gridsterY": 12,
+            "id": "cc64dc05-88f6-5c47-aef9-1cf0c54f4442",
+            "title": "Currently Active Sessions",
+            "key": "Scoreboard",
+            "gridsterW": 3,
+            "height": 600
+          },
+          {
+            "tabId": "2679c78f-e88e-43ba-b1ae-864dbbe9c50c",
+            "isLoading": false,
+            "collapsed": false,
+            "autoSelectInteraction": true,
+            "gridsterX": 1,
+            "gridsterH": 7,
+            "gridsterY": 20,
+            "id": "4e5c9f67-3e81-5de8-8c81-5506a966ff03",
+            "title": "CPU Usage",
+            "key": "MetricChart",
+            "gridsterW": 3,
+            "height": 600
+          },
+          {
+            "tabId": "2679c78f-e88e-43ba-b1ae-864dbbe9c50c",
+            "isLoading": false,
+            "collapsed": false,
+            "autoSelectInteraction": true,
+            "gridsterX": 4,
+            "gridsterH": 3,
+            "gridsterY": 12,
+            "id": "d941e6dd-d192-587f-9aab-97085223cfa2",
+            "title": "Currently Blocked Sessions",
+            "key": "Scoreboard",
+            "gridsterW": 3,
+            "height": 600
+          },
+          {
+            "tabId": "2679c78f-e88e-43ba-b1ae-864dbbe9c50c",
+            "isLoading": false,
+            "collapsed": false,
+            "autoSelectInteraction": true,
+            "gridsterX": 4,
+            "gridsterH": 7,
+            "gridsterY": 20,
+            "id": "5d7039d5-edae-598c-9a0c-9ed08a2bea00",
+            "title": "Page Life Expectancy",
+            "key": "MetricChart",
+            "gridsterW": 3,
+            "height": 600
+          },
+          {
+            "tabId": "2679c78f-e88e-43ba-b1ae-864dbbe9c50c",
+            "isLoading": false,
+            "collapsed": false,
+            "autoSelectInteraction": true,
+            "gridsterX": 6,
+            "gridsterH": 8,
+            "gridsterY": 4,
+            "id": "d6dd1d56-20b4-5f41-adcf-8e14adbe2404",
+            "title": "MSSQL Top Queries",
+            "key": "View",
+            "gridsterW": 7,
+            "height": 600
+          },
+          {
+            "tabId": "2679c78f-e88e-43ba-b1ae-864dbbe9c50c",
+            "isLoading": false,
+            "collapsed": false,
+            "autoSelectInteraction": true,
+            "gridsterX": 7,
+            "gridsterH": 8,
+            "gridsterY": 12,
+            "id": "11fa9a23-7c5b-57f9-b20e-a4e155f5e102",
+            "title": "MSSQL Wait Types",
+            "key": "View",
+            "gridsterW": 6,
+            "height": 600
+          },
+          {
+            "tabId": "2679c78f-e88e-43ba-b1ae-864dbbe9c50c",
+            "isLoading": false,
+            "collapsed": false,
+            "autoSelectInteraction": true,
+            "gridsterX": 7,
+            "gridsterH": 7,
+            "gridsterY": 20,
+            "id": "a3f266f9-91a2-5dec-8378-bb44d772907c",
+            "title": "Disk Read Latency by Database",
+            "key": "MetricChart",
+            "gridsterW": 3,
+            "height": 600
+          },
+          {
+            "tabId": "2679c78f-e88e-43ba-b1ae-864dbbe9c50c",
+            "isLoading": false,
+            "collapsed": false,
+            "autoSelectInteraction": true,
+            "gridsterX": 10,
+            "gridsterH": 7,
+            "gridsterY": 20,
+            "id": "0b9b014e-7568-54a8-94e3-ecda19db06c2",
+            "title": "Disk Write Latency by Database",
+            "key": "MetricChart",
+            "gridsterW": 3,
+            "height": 600
+          }
+        ],
+        "autoswitchDelay": null,
+        "tabInteractions": [
+          {
+            "interactionType": "resourceId",
+            "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+            "widgetIdReceiver": "16856f7c-220f-55e4-87b4-faee19fdbcd6"
+          },
+          {
+            "interactionType": "resourceId",
+            "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+            "widgetIdReceiver": "d6dd1d56-20b4-5f41-adcf-8e14adbe2404"
+          },
+          {
+            "interactionType": "resourceId",
+            "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+            "widgetIdReceiver": "cc64dc05-88f6-5c47-aef9-1cf0c54f4442"
+          },
+          {
+            "interactionType": "resourceId",
+            "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+            "widgetIdReceiver": "d941e6dd-d192-587f-9aab-97085223cfa2"
+          },
+          {
+            "interactionType": "resourceId",
+            "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+            "widgetIdReceiver": "11fa9a23-7c5b-57f9-b20e-a4e155f5e102"
+          },
+          {
+            "interactionType": "resourceId",
+            "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+            "widgetIdReceiver": "4e5c9f67-3e81-5de8-8c81-5506a966ff03"
+          },
+          {
+            "interactionType": "resourceId",
+            "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+            "widgetIdReceiver": "5d7039d5-edae-598c-9a0c-9ed08a2bea00"
+          },
+          {
+            "interactionType": "resourceId",
+            "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+            "widgetIdReceiver": "a3f266f9-91a2-5dec-8378-bb44d772907c"
+          },
+          {
+            "interactionType": "resourceId",
+            "widgetIdProvider": "01c157ad-38ca-543e-a926-2c82bda2f224",
+            "widgetIdReceiver": "0b9b014e-7568-54a8-94e3-ecda19db06c2"
+          }
+        ],
+        "isLoading": false,
+        "nameOriginal": "[VCF Content Factory] MSSQL Query Performance & Blocking",
+        "isLocked": true,
+        "name": "[VCF Content Factory] MSSQL Query Performance & Blocking",
+        "id": "2679c78f-e88e-43ba-b1ae-864dbbe9c50c",
+        "isDisabled": false,
+        "isHidden_": false,
+        "isShared": false
+      }
+    ],
+    "widgetInteractions": {
+      "ResourceRelationship": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "tagId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        }
+      ],
+      "IntSummaryHealth": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        },
+        {
+          "type": "expandCollapse",
+          "isIncoming": false
+        }
+      ],
+      "ClusterSettings": [],
+      "EnvironmentStatus": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "tagId",
+          "isIncoming": true
+        }
+      ],
+      "TagPicker": [
+        {
+          "type": "tagId",
+          "isIncoming": false
+        }
+      ],
+      "TextDisplay": [
+        {
+          "type": "alertId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        }
+      ],
+      "Skittles": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        },
+        {
+          "type": "metricId",
+          "isIncoming": false
+        }
+      ],
+      "IntSummaryEnvironment": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        }
+      ],
+      "ScoreboardHealth": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        },
+        {
+          "type": "metricId",
+          "isIncoming": false
+        }
+      ],
+      "IntSummaryCapacity": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "expandCollapse",
+          "isIncoming": true
+        }
+      ],
+      "ContainerOverview": [
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        }
+      ],
+      "IntSummaryTimeRemaining": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "expandCollapse",
+          "isIncoming": true
+        }
+      ],
+      "MashupChart": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "tagId",
+          "isIncoming": true
+        }
+      ],
+      "Scoreboard": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        },
+        {
+          "type": "metricId",
+          "isIncoming": false
+        }
+      ],
+      "RollingViewChart": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "metricId",
+          "isIncoming": true
+        }
+      ],
+      "TopologyGraph": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        }
+      ],
+      "IntSummaryCurrentPolicy": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        }
+      ],
+      "IntSummaryStress": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "expandCollapse",
+          "isIncoming": true
+        }
+      ],
+      "SparklineChart": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "metricId",
+          "isIncoming": true
+        },
+        {
+          "type": "metricId",
+          "isIncoming": false
+        }
+      ],
+      "IntSummaryAlertVolume": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        }
+      ],
+      "ActionsResult": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "metricId",
+          "isIncoming": true
+        }
+      ],
+      "ContainerDetails": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        }
+      ],
+      "IntSummaryRisk": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "expandCollapse",
+          "isIncoming": false
+        }
+      ],
+      "MetricChart": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "metricId",
+          "isIncoming": true
+        }
+      ],
+      "ResourceRelationshipAdvanced": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "tagId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        }
+      ],
+      "Forensics": [
+        {
+          "type": "metricId",
+          "isIncoming": true
+        }
+      ],
+      "IntSummaryWorkload": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "expandCollapse",
+          "isIncoming": true
+        }
+      ],
+      "IntSummaryEfficiency": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "expandCollapse",
+          "isIncoming": false
+        }
+      ],
+      "HealthChart": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "tagId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        }
+      ],
+      "ParetoChart": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "tagId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        },
+        {
+          "type": "metricId",
+          "isIncoming": false
+        }
+      ],
+      "ProblemAlertsList": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        }
+      ],
+      "Heatmap": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        },
+        {
+          "type": "metricId",
+          "isIncoming": false
+        }
+      ],
+      "View": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        }
+      ],
+      "IntSummaryAnomalies": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "expandCollapse",
+          "isIncoming": true
+        }
+      ],
+      "Geo": [
+        {
+          "type": "tagId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        }
+      ],
+      "LogAnalysis": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        }
+      ],
+      "ResourceList": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "tagId",
+          "isIncoming": true
+        },
+        {
+          "type": "alertId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        }
+      ],
+      "ParetoAnalysis": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "tagId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        },
+        {
+          "type": "metricId",
+          "isIncoming": false
+        }
+      ],
+      "PropertyList": [
+        {
+          "type": "property",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        }
+      ],
+      "MetricPicker": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "metricId",
+          "isIncoming": false
+        },
+        {
+          "type": "property",
+          "isIncoming": false
+        }
+      ],
+      "AlertList": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "tagId",
+          "isIncoming": true
+        },
+        {
+          "type": "resourceId",
+          "isIncoming": false
+        },
+        {
+          "type": "alertId",
+          "isIncoming": false
+        }
+      ],
+      "WeatherMap": [],
+      "RecommendedActions": [],
+      "IntSummaryFaults": [
+        {
+          "type": "resourceId",
+          "isIncoming": true
+        },
+        {
+          "type": "expandCollapse",
+          "isIncoming": true
+        }
+      ]
+    }
+  }
+}

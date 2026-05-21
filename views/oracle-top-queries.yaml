@@ -1,0 +1,27 @@
+id: 8c67ca11-6e6a-4f0b-9d38-b8647d4c58d9
+name: "[VCF Content Factory] Oracle Top Queries"
+description: >
+  Query-performance triage view for the Oracle dashboard; shows per-query
+  execution cost columns (elapsed time, CPU, executions, I/O waits,
+  concurrency waits, disk reads) sortable to identify the highest-impact
+  queries against any Oracle database instance.
+subject:
+  adapter_kind: OracleDBAdapter
+  resource_kind: oracle_database_oracle_database_query
+columns:
+  - attribute: Activity|elapsed_time
+    display_name: Elapsed Time
+  - attribute: Activity|cpu_time
+    display_name: CPU Time
+  - attribute: Activity|executions
+    display_name: Executions
+  - attribute: Activity|user_io_wait_time
+    display_name: User I/O Wait Time
+  - attribute: Activity|application_wait_time
+    display_name: Application Wait Time
+  - attribute: Activity|concurrency_wait_time
+    display_name: Concurrency Wait Time
+  - attribute: Activity|disk_reads
+    display_name: Disk Reads
+released: false
+version: "1.0.0"

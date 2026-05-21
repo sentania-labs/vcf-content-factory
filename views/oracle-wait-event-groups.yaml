@@ -1,0 +1,18 @@
+id: 2b1f39c9-d251-48f0-968b-166e5cf17cec
+name: "[VCF Content Factory] Oracle Wait Event Groups"
+description: >
+  Wait-event-group breakdown for the Oracle dashboard; shows time waited
+  and total waits per wait-category resource (e.g. User I/O, Concurrency,
+  Cluster, Application) scoped to an Oracle database instance — identifies
+  which wait categories are dominating and backs the active/blocked session
+  count tiles.
+subject:
+  adapter_kind: OracleDBAdapter
+  resource_kind: oracle_database_oracle_database_event_wait_group
+columns:
+  - attribute: Activity|time_waited
+    display_name: Time Waited
+  - attribute: Activity|total_waits
+    display_name: Total Waits
+released: false
+version: "1.0.0"

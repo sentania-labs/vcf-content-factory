@@ -1,0 +1,25 @@
+id: d60ca02f-e6c0-4ba8-ae2b-8015d371cbe3
+name: "[VCF Content Factory] MSSQL Top Queries"
+description: >
+  Query-performance triage view for the MSSQL dashboard; shows per-query
+  execution cost columns sortable by Total Worker Time, Average Execution
+  Time, Execution Count, or I/O to identify the highest-impact queries
+  against any SqlServer instance.
+subject:
+  adapter_kind: SqlServerAdapter
+  resource_kind: SqlQuery
+columns:
+  - attribute: general|total_worker_time
+    display_name: Total Worker Time
+  - attribute: general|avg_execution_time
+    display_name: Average Execution Time
+  - attribute: general|execution_count
+    display_name: Execution Count
+  - attribute: general|total_logical_reads
+    display_name: Total Logical Reads
+  - attribute: general|total_logical_writes
+    display_name: Total Logical Writes
+  - attribute: general|last_execution
+    display_name: Last Execution
+released: false
+version: "1.0.0"

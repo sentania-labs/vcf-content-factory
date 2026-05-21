@@ -615,6 +615,13 @@ class Widget:
     alert_list_config: AlertListConfig | None = None
     problems_alerts_list_config: ProblemAlertsListConfig | None = None
     heatmap_config: HeatmapConfig | None = None
+    # Optional traversal mode for MetricChart widgets.
+    # Maps to a scalar integer in config.relationshipMode (NOT an array).
+    # ``None`` (default) → 0 — no traversal.
+    # ``"children"``     → -1 — one line per child of the selected parent.
+    # ``"parents"``      → 1  — one line per parent of the selected child.
+    # Other values are rejected at load time.
+    relationship_mode: Optional[str] = None
     # Set by load_dashboard so widget UUIDs are namespaced by dashboard
     # name — otherwise two dashboards reusing the same local_id (e.g.
     # "vm_perf_view") generate identical widget UUIDs and their
@@ -1026,6 +1033,24 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
             specs = _parse_metric_specs(raw_metrics)
             metric_chart_config = MetricChartConfig(metrics=specs)
 
+        # --- Parse relationship_mode (MetricChart only for now) ---
+        raw_rm = w.get("relationship_mode")
+        if raw_rm is not None:
+            rm_str = str(raw_rm).strip().lower()
+            if rm_str not in ("children", "parents"):
+                raise DashboardValidationError(
+                    f"widget {w.get('id', '?')!r}: relationship_mode must be "
+                    f"'children', 'parents', or omitted, got {raw_rm!r}"
+                )
+            if widget_type != "MetricChart":
+                raise DashboardValidationError(
+                    f"widget {w.get('id', '?')!r}: relationship_mode is only "
+                    f"supported on MetricChart widgets, got type {widget_type!r}"
+                )
+            relationship_mode: Optional[str] = rm_str
+        else:
+            relationship_mode = None
+
         # --- Parse HealthChart config ---
         health_chart_config = None
         if widget_type == "HealthChart":
@@ -1178,6 +1203,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 alert_list_config=alert_list_config,
                 problems_alerts_list_config=problems_alerts_list_config,
                 heatmap_config=heatmap_config,
+                relationship_mode=relationship_mode,
             )
         )
     interactions = [

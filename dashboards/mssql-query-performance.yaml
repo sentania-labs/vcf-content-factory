@@ -1,0 +1,216 @@
+id: 2679c78f-e88e-43ba-b1ae-864dbbe9c50c
+name: "[VCF Content Factory] MSSQL Query Performance & Blocking"
+description: >
+  MSSQL query performance and blocking triage dashboard. Pick a SqlServer
+  instance from the left to scope every panel to that instance. Three
+  vertical stripes: (1) what is slow — query heatmap and sortable query
+  list; (2) who is stuck — active and blocked session counts plus a
+  wait-type breakdown (the closest available proxy for a per-session
+  blocker view, since the adapter does not surface individual sessions as
+  VCF Ops resources); (3) what is the box doing — CPU usage, page life
+  expectancy, and disk latency. Disk latency charts (H, I) show per-
+  SqlDatabase metrics because read/write latency is not available at the
+  SqlServer level; see TOOLSET GAP note below.
+
+  Layout adapted from brockpeterson/operations_dashboards/Legacy MSSQL
+  Dashboards.zip (MS-SQL-DBA-Overview.json, MS-SQL-Query-Analysis.json)
+  — layout and interaction pattern reference only; metric keys have been
+  re-verified against the SqlServerAdapter describe cache.
+
+released: false
+version: "1.0.0"
+
+widgets:
+
+  # ── Row 1: SqlServer instance picker ─────────────────────────────────────
+
+  - id: server_picker
+    type: ResourceList
+    title: "Select SQL Server Instance"
+    coords: {x: 1, y: 1, w: 12, h: 3}
+    resource_kinds:
+      - {adapter_kind: SqlServerAdapter, resource_kind: SqlServer}
+
+  # ── Row 2: Queries panel ──────────────────────────────────────────────────
+  # Heatmap (Widget A) on left, sortable query list (Widget B) on right.
+  # Heatmap subject SqlQuery; driven by server_picker via interaction.
+  # Metric keys verified in context/adapter_describe_cache/MSSQL/statkeys_SqlQuery.json:
+  #   color_by: general|total_worker_time (General|Total Worker Time)
+  #   size_by:  omitted — uniform tile size (general|execution_count is a rate
+  #             metric that reads 0.0 for nearly all queries; blank tiles resulted)
+
+  - id: query_heatmap
+    type: Heatmap
+    title: "Top Queries by Total Wait Time"
+    coords: {x: 1, y: 4, w: 5, h: 8}
+    mode: all
+    depth: 10
+    configs:
+      - name: "Top Queries by Total Wait Time"
+        adapter_kind: SqlServerAdapter
+        resource_kind: SqlQuery
+        color_by:
+          metric_key: general|total_worker_time
+          label: "Total Worker Time"
+        group_by: {}
+        color:
+          min_value: 0
+          thresholds:
+            values: [0, 100000, 500000]
+            colors: ["#74B43B", "#ECC33E", "#DE3F30"]
+        solid_coloring: false
+        focus_on_groups: false
+
+  - id: top_queries_view
+    type: View
+    title: "MSSQL Top Queries"
+    coords: {x: 6, y: 4, w: 7, h: 8}
+    view: "[VCF Content Factory] MSSQL Top Queries"
+
+  # ── Row 3: Sessions panel ─────────────────────────────────────────────────
+  # Widget C: active session count tile
+  # Widget D: blocked session count tile  (red at > 0 via color_method=0, red_bound=0)
+  # Widget E: wait-type list (right column, full height of sessions panel)
+  #
+  # Metric keys verified in context/adapter_describe_cache/MSSQL/statkeys_SqlServer.json:
+  #   sysprocesses_states|running  (Process States|Running Processes)
+  #   sysprocesses_states|blocked  (Process States|Blocked Processes)
+
+  - id: active_sessions_score
+    type: Scoreboard
+    title: "Currently Active Sessions"
+    coords: {x: 1, y: 12, w: 3, h: 3}
+    box_columns: 1
+    metrics:
+      - adapter_kind: SqlServerAdapter
+        resource_kind: SqlServer
+        metric_key: sysprocesses_states|running
+        metric_name: "Running Processes"
+        label: "Currently Active Sessions"
+        color_method: 1
+
+  - id: blocked_sessions_score
+    type: Scoreboard
+    title: "Currently Blocked Sessions"
+    coords: {x: 4, y: 12, w: 3, h: 3}
+    box_columns: 1
+    metrics:
+      - adapter_kind: SqlServerAdapter
+        resource_kind: SqlServer
+        metric_key: sysprocesses_states|blocked
+        metric_name: "Blocked Processes"
+        label: "Currently Blocked Sessions"
+        color_method: 0
+        yellow_bound: 0
+        orange_bound: 1
+        red_bound: 5
+
+  - id: wait_types_view
+    type: View
+    title: "MSSQL Wait Types"
+    coords: {x: 7, y: 12, w: 6, h: 8}
+    view: "[VCF Content Factory] MSSQL Wait Types"
+
+  # ── Row 4: Resource charts (MetricChart, all driven by server_picker) ─────
+  # Widget F: CPU usage on SqlServer
+  # Widget G: Page Life Expectancy on SqlServer
+  # Widget H: Disk Read Latency — SqlDatabase level (relationship_mode: children)
+  # Widget I: Disk Write Latency — SqlDatabase level (relationship_mode: children)
+  #
+  # Metric keys verified:
+  #   cpu|cpu_usage                         statkeys_SqlServer.json  (CPU|CPU Usage)
+  #   buffer|buffer_ideal_page_life_expectancy statkeys_SqlServer.json  (Buffer|Buffer Ideal Page Life Expectancy)
+  #   disk_access|read_delay                statkeys_SqlDatabase.json (Disk Access|Read Delay)
+  #   disk_access|write_delay               statkeys_SqlDatabase.json (Disk Access|Write Delay)
+
+  - id: cpu_chart
+    type: MetricChart
+    title: "CPU Usage"
+    coords: {x: 1, y: 20, w: 3, h: 7}
+    metrics:
+      - adapter_kind: SqlServerAdapter
+        resource_kind: SqlServer
+        metric_key: cpu|cpu_usage
+        metric_name: "CPU Usage"
+        color_method: 2
+
+  - id: ple_chart
+    type: MetricChart
+    title: "Page Life Expectancy"
+    coords: {x: 4, y: 20, w: 3, h: 7}
+    metrics:
+      - adapter_kind: SqlServerAdapter
+        resource_kind: SqlServer
+        metric_key: buffer|buffer_ideal_page_life_expectancy
+        metric_name: "Page Life Expectancy"
+        color_method: 2
+
+  - id: disk_read_chart
+    type: MetricChart
+    title: "Disk Read Latency by Database"
+    coords: {x: 7, y: 20, w: 3, h: 7}
+    relationship_mode: children
+    metrics:
+      - adapter_kind: SqlServerAdapter
+        resource_kind: SqlDatabase
+        metric_key: disk_access|read_delay
+        metric_name: "Disk Read Latency"
+        color_method: 2
+
+  - id: disk_write_chart
+    type: MetricChart
+    title: "Disk Write Latency by Database"
+    coords: {x: 10, y: 20, w: 3, h: 7}
+    relationship_mode: children
+    metrics:
+      - adapter_kind: SqlServerAdapter
+        resource_kind: SqlDatabase
+        metric_key: disk_access|write_delay
+        metric_name: "Disk Write Latency"
+        color_method: 2
+
+interactions:
+  # Picker drives the query heatmap (SqlQuery resources under selected SqlServer)
+  - from: server_picker
+    to: query_heatmap
+    type: resourceId
+
+  # Picker drives the Top Queries view embed
+  - from: server_picker
+    to: top_queries_view
+    type: resourceId
+
+  # Picker drives active sessions scoreboard
+  - from: server_picker
+    to: active_sessions_score
+    type: resourceId
+
+  # Picker drives blocked sessions scoreboard
+  - from: server_picker
+    to: blocked_sessions_score
+    type: resourceId
+
+  # Picker drives the Wait Types view (wait-type resources are children of SqlServer)
+  - from: server_picker
+    to: wait_types_view
+    type: resourceId
+
+  # Picker drives CPU chart
+  - from: server_picker
+    to: cpu_chart
+    type: resourceId
+
+  # Picker drives PLE chart
+  - from: server_picker
+    to: ple_chart
+    type: resourceId
+
+  # Picker drives disk read chart (SqlDatabase children of selected SqlServer)
+  - from: server_picker
+    to: disk_read_chart
+    type: resourceId
+
+  # Picker drives disk write chart (SqlDatabase children of selected SqlServer)
+  - from: server_picker
+    to: disk_write_chart
+    type: resourceId

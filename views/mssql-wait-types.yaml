@@ -1,0 +1,18 @@
+id: 34bda43d-80a4-40a1-ace5-726c6135e095
+name: "[VCF Content Factory] MSSQL Wait Types"
+description: >
+  Wait-type breakdown for the MSSQL dashboard; shows the total wait time
+  and waiting task count per wait-type resource (e.g. PAGEIOLATCH_SH,
+  LCK_M_X) scoped to a SqlServer instance — the closest available proxy
+  for a per-session blocker view since the adapter does not surface
+  individual sessions as VCF Ops resources.
+subject:
+  adapter_kind: SqlServerAdapter
+  resource_kind: microsoft_sql_server_wait_time
+columns:
+  - attribute: general|wait_time
+    display_name: Wait Time
+  - attribute: general|waiting_tasks_count
+    display_name: Waiting Tasks Count
+released: false
+version: "1.0.0"

@@ -99,6 +99,49 @@ be a UI-only state persisted in `states[]` via `permMetricChart_widget_...` keys
 that encode strings like `"o%3A"` (URL-encoded serialised UI state). The default
 rendering is a line chart with area fill.
 
+**`relationshipMode` — child traversal (verified 2026-05-21):**
+MetricChart `config.relationshipMode` is a **scalar integer** wrapped in the
+outer object: `{"relationshipMode": <int>}`. Allowed values:
+
+- `0`  — no traversal (default, emitted when `relationship_mode` is omitted in YAML).
+- `-1` — descendants/children (one line per child of the picker-selected parent).
+- `1`  — ancestors/parents (one line per parent of the picker-selected child).
+
+YAML schema field `relationship_mode: children | parents` maps to `-1 | 1`
+respectively. Omitting the field maps to `0`.
+
+Survey of 146 MetricChart widgets across the reference bundles
+(brockpeterson, dalehassinger, jcox, etc.): 132 use `0`, 6 use `-1`,
+1 uses `1`, **0 use any array form.** Canonical example for child traversal
+(brockpeterson "ESXi Host Performance Details v2 — VM CPU Usage % for
+selected ESXi Host"):
+
+```json
+"relationshipMode": { "relationshipMode": -1 },
+"metric": {
+  "mode": "resourceKind",
+  "resourceMetrics": [],
+  "resourceKindMetrics": [{
+    "metricKey": "cpu|usage_average",
+    "resourceKindId": "resourceKind:id:0_::_",
+    "resourceKindName": "Virtual Machine",
+    "colorMethod": 0
+  }],
+  "subMode": "resourceKindAll"
+},
+"selfProvider": { "selfProvider": false },
+"depth": 1,
+```
+
+**Array forms (`[1, -1, 0]`, `[-1, 0]`) are NOT valid for MetricChart.**
+A prior tooling pass incorrectly extrapolated from Heatmap's array form.
+Empirically confirmed 2026-05-21: emitting `[1, -1, 0]` for
+`relationship_mode: children` caused an Internal Server Error on dashboard
+load (MSSQL disk-latency widgets, `dashboards/mssql-query-performance.yaml`).
+Heatmap and AlertList accept the array form; MetricChart does not.
+Fixed in `vcfops_dashboards/render.py` `_metric_chart_widget()` — now emits
+scalar `-1` / `1` / `0`.
+
 `config.metric` structure:
 - `mode`: `"resource"` (specific named resource) or `"resourceKind"` (all
   resources of a kind, subject to depth/filter)

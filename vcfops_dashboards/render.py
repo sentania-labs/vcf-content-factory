@@ -707,11 +707,27 @@ def _metric_chart_widget(
     w: Widget,
     kind_index: dict[tuple[str, str], int],
 ) -> dict:
-    """Render a MetricChart (time-series line chart) widget."""
+    """Render a MetricChart (time-series line chart) widget.
+
+    MetricChart ``config.relationshipMode`` is a **scalar integer** wrapped in
+    the outer object: ``{"relationshipMode": <int>}``.  Allowed values:
+
+    - ``0``  — no traversal (default).
+    - ``-1`` — children/descendants (one line per child of the selected parent).
+    - ``1``  — parents/ancestors (one line per parent of the selected child).
+
+    Verified against 146 live MetricChart widgets: zero use any array form.
+    The array form ``[1, -1, 0]`` is Heatmap/AlertList-only and causes a 500
+    on MetricChart.  See context/api-surface/widget_types_survey.md §MetricChart.
+    """
     cfg = w.metric_chart_config
     assert cfg is not None
     metric_obj = _render_metric_spec(cfg.metrics, kind_index, w.widget_id)
     self_provider_flag = w.self_provider
+    relationship_mode_val = {
+        "children": -1,
+        "parents": 1,
+    }.get(w.relationship_mode, 0)
     return {
         "collapsed": False,
         "id": w.widget_id,
@@ -726,7 +742,7 @@ def _metric_chart_widget(
             "metric": metric_obj,
             "resource": [],
             "refreshContent": {"refreshContent": True},
-            "relationshipMode": {"relationshipMode": 0},
+            "relationshipMode": {"relationshipMode": relationship_mode_val},
             "customFilter": {
                 "filter": [], "excludedResources": None, "includedResources": None,
             },
