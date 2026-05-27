@@ -54,13 +54,15 @@ public final class BenchmarkProfile {
 		}
 
 		public boolean isHostControl() {
-			return "ESXi".equalsIgnoreCase(component)
-					|| "esxi".equalsIgnoreCase(component);
+			if (component == null) return false;
+			String c = component.toLowerCase();
+			return c.contains("esxi") || c.contains("esx");
 		}
 
 		public boolean isVmControl() {
-			return "VM".equalsIgnoreCase(component)
-					|| "Virtual Machine".equalsIgnoreCase(component);
+			if (component == null) return false;
+			String c = component.toLowerCase();
+			return c.contains("virtual machine") || c.equals("vm");
 		}
 	}
 }

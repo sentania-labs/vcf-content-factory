@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.11 (2026-05-27)
+
+- feat(adapter): vSphere SOAP collection via vim25 — real compliance scoring
+
 ## 1.0.0.10 (2026-05-27)
 
 - feat(adapter): push properties via suiteAPIClient.getClient() reflection
