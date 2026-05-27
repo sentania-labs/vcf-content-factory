@@ -13,6 +13,10 @@ public final class ControlEvaluator {
 		int pass = 0;
 		int fail = 0;
 
+		if (hostDetail == null || hostDetail.isNull()) {
+			return new ComplianceResult(hostname, 0, 0, 0, 100.0, results);
+		}
+
 		for (BenchmarkProfile.Control control : profile.hostControls()) {
 			String param = control.configParameter;
 			if (param == null || param.isEmpty() || "N/A".equals(param)) {

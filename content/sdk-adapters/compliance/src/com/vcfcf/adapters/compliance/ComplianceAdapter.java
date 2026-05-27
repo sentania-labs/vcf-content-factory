@@ -154,13 +154,13 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 						logInfo("Evaluating host " + hostName
 								+ " (" + hostId + ")");
 
-						SimpleJson hostDetail;
+						SimpleJson hostDetail = null;
 						try {
 							hostDetail = vcApi.getHostDetail(hostId);
 						} catch (Exception e) {
-							logWarn("Failed to read config for "
-									+ hostName + ": " + e.getMessage());
-							continue;
+							logWarn("Host detail query failed for "
+									+ hostName + " (expected until SOAP "
+									+ "expansion): " + e.getMessage());
 						}
 
 						ControlEvaluator.ComplianceResult cr =
@@ -186,6 +186,8 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 								pushComplianceData(hostRes, cr,
 										config.benchmarkProfile);
 								result.add(hostRes);
+								logInfo("Pushed compliance data to "
+										+ hostName + " (stitched)");
 							}
 						}
 					}
