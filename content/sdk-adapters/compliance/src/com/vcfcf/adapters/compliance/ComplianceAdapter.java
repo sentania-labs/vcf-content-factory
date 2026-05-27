@@ -189,9 +189,8 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 							ComplianceStitcher.HostEntry he =
 									stitcher.matchHost(hostName, hostId);
 							if (he != null) {
-								pushComplianceData(he.resource, cr,
-										config.benchmarkProfile);
-								result.add(he.resource);
+								pushComplianceViaClient(he.resourceId,
+										cr, config.benchmarkProfile);
 								logInfo("Pushed compliance data to "
 										+ hostName
 										+ " (resource=" + he.resourceId
@@ -249,25 +248,35 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 		};
 	}
 
-	private void pushComplianceData(Resource hostRes,
+	private void pushComplianceViaClient(String resourceId,
 			ControlEvaluator.ComplianceResult cr, String profileName) {
+		long ts = System.currentTimeMillis();
 		String prefix = "VCF-CF Compliance|" + profileName;
 
+		java.util.LinkedHashMap<String, String> props =
+				new java.util.LinkedHashMap<>();
 		for (ControlEvaluator.ControlResult ctrl : cr.controlResults) {
 			String ctrlPrefix = prefix + "|" + ctrl.scgId;
-			addProperty(hostRes, ctrlPrefix + "|Actual", ctrl.actual);
-			addProperty(hostRes, ctrlPrefix + "|Expected", ctrl.expected);
-			hostRes.addData(ctrlPrefix + "|Compliant",
-					ctrl.compliant ? 1.0 : 0.0);
-			addProperty(hostRes, ctrlPrefix + "|Description", ctrl.description);
+			props.put(ctrlPrefix + "|Actual", ctrl.actual);
+			props.put(ctrlPrefix + "|Expected", ctrl.expected);
+			props.put(ctrlPrefix + "|Description", ctrl.description);
 		}
+		props.put("VCF-CF Compliance|profile_name", profileName);
 
-		hostRes.addData("VCF-CF Compliance|score", cr.score);
-		hostRes.addData("VCF-CF Compliance|pass_count", (double) cr.passCount);
-		hostRes.addData("VCF-CF Compliance|fail_count", (double) cr.failCount);
-		hostRes.addData("VCF-CF Compliance|total_count",
-				(double) cr.totalCount);
-		addProperty(hostRes, "VCF-CF Compliance|profile_name", profileName);
+		java.util.LinkedHashMap<String, Double> stats =
+				new java.util.LinkedHashMap<>();
+		for (ControlEvaluator.ControlResult ctrl : cr.controlResults) {
+			String ctrlPrefix = prefix + "|" + ctrl.scgId;
+			stats.put(ctrlPrefix + "|Compliant",
+					ctrl.compliant ? 1.0 : 0.0);
+		}
+		stats.put("VCF-CF Compliance|score", cr.score);
+		stats.put("VCF-CF Compliance|pass_count", (double) cr.passCount);
+		stats.put("VCF-CF Compliance|fail_count", (double) cr.failCount);
+		stats.put("VCF-CF Compliance|total_count", (double) cr.totalCount);
+
+		stitcher.pushProperties(resourceId, props, ts);
+		stitcher.pushStats(resourceId, stats, ts);
 	}
 
 	private Resource createResource(String kind, String name,

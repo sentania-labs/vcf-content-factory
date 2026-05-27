@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.9 (2026-05-27)
+
+- fix(adapter): debug logging confirms stitcher works, ResourceCollection drops foreign data
+
 ## 1.0.0.7 (2026-05-27)
 
 - feat(adapter): custom compliance icons — shield with checkmark
