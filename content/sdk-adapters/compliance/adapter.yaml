@@ -1,0 +1,13 @@
+name: "VCF Content Factory Compliance"
+version: "1.0.0"
+build_number: 1
+adapter_kind: "vcfcf_compliance"
+tier: 2
+description: >
+  Monitors ESXi hosts for CIS benchmark compliance by querying vCenter
+  configuration data and evaluating controls against user-selectable
+  security profiles. Pushes per-control compliance properties and
+  aggregate scores onto existing VMWARE HostSystem resources via
+  ARIA_OPS stitching. Dynamic property keys vary per benchmark profile.
+entry_class: "com.vcfcf.adapters.compliance.ComplianceAdapter"
+released: false

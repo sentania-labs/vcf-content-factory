@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AdapterKind xmlns="http://schemas.vmware.com/vcops/schema"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             key="vcfcf_compliance"
+             nameKey="1"
+             version="1"
+             xsi:schemaLocation="http://schemas.vmware.com/vcops/schema describeSchema.xsd">
+
+  <CredentialKinds>
+    <CredentialKind key="vcenter_credentials" nameKey="2">
+      <CredentialField key="username" nameKey="3" type="string"
+                       required="true" dispOrder="1"/>
+      <CredentialField key="password" nameKey="4" type="string"
+                       required="true" password="true" dispOrder="2"/>
+    </CredentialKind>
+  </CredentialKinds>
+
+  <ResourceKinds>
+
+    <ResourceKind key="vcfcf_compliance" nameKey="5" type="7"
+                  credentialKind="vcenter_credentials"
+                  monitoringInterval="60">
+      <ResourceIdentifier key="vcenter_host" nameKey="6" type="string"
+                          required="true" dispOrder="1"/>
+      <ResourceIdentifier key="benchmark_profile" nameKey="7" type="string"
+                          required="false" dispOrder="2" default="CIS_8.0"/>
+      <ResourceIdentifier key="custom_profile_path" nameKey="8" type="string"
+                          required="false" dispOrder="3" default=""/>
+      <ResourceIdentifier key="allowInsecure" nameKey="9" type="string"
+                          required="false" dispOrder="4" default="true"/>
+    </ResourceKind>
+
+    <ResourceKind key="ComplianceWorld" nameKey="20" type="1">
+      <ResourceIdentifier key="world_id" nameKey="21" type="string"
+                          required="true" dispOrder="1"/>
+      <ResourceGroup key="Summary" nameKey="22" instanced="false">
+        <ResourceAttribute key="total_hosts" nameKey="23"
+                           dataType="float" isProperty="false"
+                           defaultMonitored="true"/>
+        <ResourceAttribute key="avg_host_score" nameKey="24"
+                           dataType="float" isProperty="false"
+                           defaultMonitored="true" unit="%"/>
+        <ResourceAttribute key="hosts_below_threshold" nameKey="25"
+                           dataType="float" isProperty="false"
+                           defaultMonitored="true"/>
+        <ResourceAttribute key="profile_name" nameKey="26"
+                           dataType="string" isProperty="true"/>
+        <ResourceAttribute key="last_scan_timestamp" nameKey="27"
+                           dataType="string" isProperty="true"/>
+      </ResourceGroup>
+    </ResourceKind>
+
+  </ResourceKinds>
+
+  <LicenseConfig enabled="false"/>
+
+</AdapterKind>
