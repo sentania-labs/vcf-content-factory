@@ -2,7 +2,6 @@ package com.vcfcf.adapters.compliance;
 
 import com.vcfcf.adapter.VcfCfAdapter;
 import com.vcfcf.adapter.json.SimpleJson;
-import com.vcfcf.adapter.stitch.ForeignResourceResolver;
 
 import com.integrien.alive.common.adapter3.DiscoveryParam;
 import com.integrien.alive.common.adapter3.ResourceKey;
@@ -128,11 +127,9 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 							config.customProfilePath,
 							confDir);
 
-					Map<String, ResourceKey> hostMap = null;
+					Map<String, Resource> hostMap = null;
 					if (stitcher != null) {
-						hostMap = stitcher.loadHostMap();
-						logInfo("Loaded " + hostMap.size()
-								+ " VMWARE HostSystem resources for stitching");
+						hostMap = stitcher.loadHostResources();
 					}
 
 					SimpleJson hosts = vcApi.listHosts();
@@ -178,11 +175,9 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 								+ cr.totalCount + " total)");
 
 						if (hostMap != null) {
-							ResourceKey vmwareKey = stitcher.matchHost(
+							Resource hostRes = stitcher.matchHost(
 									hostName, hostMap);
-							if (vmwareKey != null) {
-								Resource hostRes = stitcher
-										.createForeignHostResource(vmwareKey);
+							if (hostRes != null) {
 								pushComplianceData(hostRes, cr,
 										config.benchmarkProfile);
 								result.add(hostRes);
