@@ -12,6 +12,8 @@
                        required="true" dispOrder="1"/>
       <CredentialField key="password" nameKey="4" type="string"
                        required="true" password="true" dispOrder="2"/>
+      <CredentialField key="ops_password" nameKey="33" type="string"
+                       required="false" password="true" dispOrder="3"/>
     </CredentialKind>
   </CredentialKinds>
 
@@ -28,6 +30,12 @@
                           required="false" dispOrder="3" default=""/>
       <ResourceIdentifier key="allowInsecure" nameKey="9" type="string"
                           required="false" dispOrder="4" default="true"/>
+      <ResourceIdentifier key="ops_host" nameKey="30" type="string"
+                          required="false" dispOrder="5" default=""/>
+      <ResourceIdentifier key="ops_user" nameKey="31" type="string"
+                          required="false" dispOrder="6" default="admin"/>
+      <ResourceIdentifier key="ops_auth_source" nameKey="32" type="string"
+                          required="false" dispOrder="7" default="Local"/>
     </ResourceKind>
 
     <ResourceKind key="ComplianceWorld" nameKey="20" type="1">

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.4 (2026-05-27)
+
+- fix(adapter): use DTO-backed Resources for foreign property push
+
 ## 1.0.0.3 (2026-05-27)
 
 - fix(adapter): handle vCenter REST 404 gracefully, fix duplicate counter

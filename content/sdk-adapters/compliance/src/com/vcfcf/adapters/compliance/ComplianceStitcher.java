@@ -17,13 +17,15 @@ public final class ComplianceStitcher {
 	private final SuiteAPIClient suiteApiClient;
 	private final Logger logger;
 
+	private Map<String, HostEntry> hostEntryMap;
+
 	public ComplianceStitcher(SuiteAPIClient suiteApiClient, Logger logger) {
 		this.suiteApiClient = suiteApiClient;
 		this.logger = logger;
 	}
 
-	public Map<String, Resource> loadHostResources() {
-		Map<String, Resource> result = new HashMap<>();
+	public void loadHostResources() {
+		Map<String, HostEntry> result = new HashMap<>();
 
 		try {
 			List<ResourceDto> dtos = suiteApiClient.getResources(
@@ -31,17 +33,29 @@ public final class ComplianceStitcher {
 					Arrays.asList("HostSystem"),
 					null, null, null, null);
 
-			if (dtos == null) return result;
+			if (dtos == null) {
+				this.hostEntryMap = result;
+				return;
+			}
 
 			for (ResourceDto dto : dtos) {
 				if (dto == null) continue;
+
 				Resource resource = new Resource(dto);
 				ResourceKey key = resource.getResourceKey();
 				if (key == null) continue;
 
+				String uuid = null;
+				try {
+					uuid = (String) dto.getClass()
+							.getMethod("getIdentifier")
+							.invoke(dto);
+				} catch (Exception ignored) {}
+				if (uuid == null || uuid.isEmpty()) continue;
+
 				String hostName = getIdentifier(key, "VMEntityName");
 				if (hostName != null && !hostName.isEmpty()) {
-					result.put(hostName, resource);
+					result.put(hostName, new HostEntry(uuid, hostName));
 				}
 			}
 		} catch (Exception e) {
@@ -49,31 +63,36 @@ public final class ComplianceStitcher {
 					+ "resources: " + e.getMessage(), e);
 		}
 
+		this.hostEntryMap = result;
 		logger.info("ComplianceStitcher: loaded " + result.size()
 				+ " VMWARE HostSystem resources");
-		return result;
 	}
 
-	public Resource matchHost(String hostname,
-			Map<String, Resource> hostResourceMap) {
-		if (hostname == null || hostname.isEmpty()) return null;
+	public HostEntry matchHost(String hostname) {
+		if (hostname == null || hostname.isEmpty() || hostEntryMap == null) {
+			return null;
+		}
 
-		Resource res = hostResourceMap.get(hostname);
-		if (res != null) return res;
+		HostEntry entry = hostEntryMap.get(hostname);
+		if (entry != null) return entry;
 
-		for (Map.Entry<String, Resource> entry : hostResourceMap.entrySet()) {
-			String registered = entry.getKey();
+		for (Map.Entry<String, HostEntry> e : hostEntryMap.entrySet()) {
+			String registered = e.getKey();
 			if (registered.startsWith(hostname + ".")
 					|| hostname.startsWith(registered + ".")) {
 				logger.info("ComplianceStitcher: matched " + hostname
 						+ " to " + registered + " via prefix");
-				return entry.getValue();
+				return e.getValue();
 			}
 		}
 
 		logger.warn("ComplianceStitcher: no VMWARE HostSystem found for "
 				+ hostname);
 		return null;
+	}
+
+	public int size() {
+		return hostEntryMap != null ? hostEntryMap.size() : 0;
 	}
 
 	private static String getIdentifier(ResourceKey key, String name) {
@@ -83,5 +102,15 @@ public final class ComplianceStitcher {
 			}
 		}
 		return null;
+	}
+
+	public static final class HostEntry {
+		public final String resourceId;
+		public final String hostName;
+
+		public HostEntry(String resourceId, String hostName) {
+			this.resourceId = resourceId;
+			this.hostName = hostName;
+		}
 	}
 }
