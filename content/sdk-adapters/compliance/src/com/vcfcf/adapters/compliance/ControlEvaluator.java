@@ -4,26 +4,35 @@ import com.vcfcf.adapter.json.SimpleJson;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public final class ControlEvaluator {
 
 	public static ComplianceResult evaluate(BenchmarkProfile profile,
 			SimpleJson hostDetail, String hostname) {
+		if (hostDetail == null || hostDetail.isNull()) {
+			return new ComplianceResult(hostname, 0, 0, 0, 100.0,
+					new ArrayList<>());
+		}
+		Map<String, String> settings = new java.util.HashMap<>();
+		return evaluateAdvancedSettings(profile, settings, hostname);
+	}
+
+	public static ComplianceResult evaluateAdvancedSettings(
+			BenchmarkProfile profile,
+			Map<String, String> advancedSettings, String hostname) {
 		List<ControlResult> results = new ArrayList<>();
 		int pass = 0;
 		int fail = 0;
-
-		if (hostDetail == null || hostDetail.isNull()) {
-			return new ComplianceResult(hostname, 0, 0, 0, 100.0, results);
-		}
 
 		for (BenchmarkProfile.Control control : profile.hostControls()) {
 			String param = control.configParameter;
 			if (param == null || param.isEmpty() || "N/A".equals(param)) {
 				continue;
 			}
+			if (param.contains("\n")) continue;
 
-			String actual = resolveValue(hostDetail, param);
+			String actual = advancedSettings.get(param);
 			if (actual == null) {
 				continue;
 			}
@@ -50,22 +59,6 @@ public final class ControlEvaluator {
 		double score = total > 0 ? ((double) pass / total) * 100.0 : 100.0;
 
 		return new ComplianceResult(hostname, pass, fail, total, score, results);
-	}
-
-	static String resolveValue(SimpleJson detail, String configParam) {
-		if (detail == null || detail.isNull()) return null;
-
-		SimpleJson val = detail.path(configParam.replace("|", "."));
-		if (!val.isNull()) {
-			return val.asString(null);
-		}
-
-		val = detail.get(configParam);
-		if (!val.isNull()) {
-			return val.asString(null);
-		}
-
-		return null;
 	}
 
 	static boolean valuesMatch(String actual, String expected) {

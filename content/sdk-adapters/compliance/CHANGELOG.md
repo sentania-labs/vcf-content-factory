@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.10 (2026-05-27)
+
+- feat(adapter): push properties via suiteAPIClient.getClient() reflection
+
 ## 1.0.0.9 (2026-05-27)
 
 - fix(adapter): debug logging confirms stitcher works, ResourceCollection drops foreign data

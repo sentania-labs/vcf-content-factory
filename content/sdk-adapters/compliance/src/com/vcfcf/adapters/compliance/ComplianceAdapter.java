@@ -25,6 +25,7 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	private static final String ADAPTER_KIND = "vcfcf_compliance";
 
 	private volatile VCenterApiClient vcApi;
+	private volatile VSphereClient vsphere;
 	private volatile BenchmarkLoader benchmarkLoader;
 	private volatile ComplianceStitcher stitcher;
 
@@ -62,6 +63,9 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 		this.vcApi = new VCenterApiClient(
 				config.baseUrl(), config.username, config.password,
 				config.allowInsecure);
+
+		this.vsphere = new VSphereClient(
+				config.vcenterHost, config.username, config.password);
 
 		this.benchmarkLoader = new BenchmarkLoader();
 
@@ -120,7 +124,7 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				ResourceCollection result = new ResourceCollection();
 
 				try {
-					vcApi.ensureSession();
+					vsphere.ensureConnected();
 
 					String confDir = getAdaptersHome()
 							+ "/" + ADAPTER_KIND + "/conf";
@@ -143,37 +147,41 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 						}
 					}
 
-					SimpleJson hosts = vcApi.listHosts();
-					if (hosts.isNull() || !hosts.isList()) {
-						logWarn("No hosts returned from vCenter");
+					java.util.List<VSphereClient.HostInfo> hosts =
+							vsphere.getHosts();
+					if (hosts.isEmpty()) {
+						logWarn("No hosts returned from vCenter SOAP");
 						return result;
 					}
+					logInfo("vSphere SOAP: " + hosts.size() + " hosts");
 
 					int totalHosts = 0;
 					double scoreSum = 0;
 					int belowThreshold = 0;
 
-					for (SimpleJson hostEntry : hosts.asList()) {
-						String hostId = hostEntry.get("host").asString("");
-						String hostName = hostEntry.get("name").asString("");
-
-						if (hostId.isEmpty() || hostName.isEmpty()) continue;
+					for (VSphereClient.HostInfo hostInfo : hosts) {
+						String hostId = hostInfo.moid;
+						String hostName = hostInfo.name;
 
 						logInfo("Evaluating host " + hostName
 								+ " (" + hostId + ")");
 
-						SimpleJson hostDetail = null;
+						java.util.Map<String, String> advSettings;
 						try {
-							hostDetail = vcApi.getHostDetail(hostId);
+							advSettings = vsphere.getAdvancedSettings(
+									hostInfo.moRef);
+							logInfo("Host " + hostName + ": "
+									+ advSettings.size()
+									+ " advanced settings");
 						} catch (Exception e) {
-							logWarn("Host detail query failed for "
-									+ hostName + " (expected until SOAP "
-									+ "expansion): " + e.getMessage());
+							logWarn("Failed to read settings for "
+									+ hostName + ": " + e.getMessage());
+							advSettings = new java.util.HashMap<>();
 						}
 
 						ControlEvaluator.ComplianceResult cr =
-								ControlEvaluator.evaluate(
-										profile, hostDetail, hostName);
+								ControlEvaluator.evaluateAdvancedSettings(
+										profile, advSettings, hostName);
 
 						totalHosts++;
 						scoreSum += cr.score;
@@ -288,9 +296,8 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 
 	@Override
 	public void onDiscard() {
-		if (vcApi != null) {
-			vcApi.logout();
-		}
+		if (vcApi != null) vcApi.logout();
+		if (vsphere != null) vsphere.disconnect();
 		super.onDiscard();
 	}
 }
