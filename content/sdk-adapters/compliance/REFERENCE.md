@@ -1,6 +1,6 @@
 # VCF Content Factory Compliance — Reference
 
-Generated from `describe.xml` and `resources.properties` for build 1.0.0.5.
+Generated from `describe.xml` and `resources.properties` for build 1.0.0.6.
 
 ## Adapter
 
@@ -24,8 +24,8 @@ Generated from `describe.xml` and `resources.properties` for build 1.0.0.5.
 | Field | Key | Default | Required |
 |---|---|---|---|
 | vCenter Host / IP | `vcenter_host` | — | Yes |
-| Benchmark Profile (CIS_8.0, CIS_9.0, or Custom) | `benchmark_profile` | CIS_8.0 | No |
-| Custom Profile Path (if Custom) | `custom_profile_path` | — | No |
+| Compliance Profile | `benchmark_profile` | VMware_SCG_8.0 | Yes |
+| Custom Profile CSV Path (required if profile is Custom) | `custom_profile_path` | — | No |
 | Allow Insecure SSL (true/false) | `allowInsecure` | true | No |
 | VCF Ops Host (blank = localhost) | `ops_host` | — | No |
 | VCF Ops Username (for Suite API property push) | `ops_user` | admin | No |

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0.5 (2026-05-27)
+
+- feat(adapter): rename profiles, add CIS vSphere 8 + SCG 9.0, dropdown UI
+- feat(adapter): Suite API direct property push (bypass ResourceCollection)
+
 ## 1.0.0.4 (2026-05-27)
 
 - fix(adapter): use DTO-backed Resources for foreign property push

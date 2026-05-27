@@ -117,6 +117,30 @@ public final class SuiteApiPropertyPusher {
 		}
 	}
 
+	public String suiteApiGet(String path) throws IOException {
+		ensureAuthenticated();
+		URL url = new URL(suiteApiBase + path);
+		HttpURLConnection conn = openConnection(url.toString());
+		conn.setRequestMethod("GET");
+		conn.setRequestProperty("Accept", "application/json");
+		conn.setRequestProperty("Authorization", "OpsToken " + token);
+
+		int status = conn.getResponseCode();
+		String resp = readResponse(conn);
+		conn.disconnect();
+
+		if (status == 401) {
+			token = null;
+			authenticate();
+			return suiteApiGet(path);
+		}
+
+		if (status < 200 || status >= 300) {
+			throw new IOException("GET " + path + " HTTP " + status);
+		}
+		return resp;
+	}
+
 	private String postJsonRaw(String urlStr, String body) throws IOException {
 		HttpURLConnection conn = openConnection(urlStr);
 		conn.setRequestMethod("POST");

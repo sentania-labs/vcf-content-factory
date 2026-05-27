@@ -71,15 +71,13 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 
 		this.benchmarkLoader = new BenchmarkLoader();
 
-		if (this.suiteAPIClient != null) {
-			this.stitcher = new ComplianceStitcher(this.suiteAPIClient, this.logger);
-		}
-
 		if (!config.opsPassword.isEmpty()) {
 			this.pusher = new SuiteApiPropertyPusher(
 					config.suiteApiBase(),
 					config.opsUser, config.opsPassword, config.opsAuthSource,
 					this.logger);
+			this.stitcher = new ComplianceStitcher(
+					this.pusher, this.logger, config.vcenterHost);
 		}
 
 		logInfo("ComplianceAdapter configured: vcenter=" + config.vcenterHost
@@ -141,10 +139,8 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 							config.customProfilePath,
 							confDir);
 
-					if (stitcher != null) {
+					if (stitcher != null && pusher != null) {
 						stitcher.loadHostResources();
-						logInfo("Loaded " + stitcher.size()
-								+ " VMWARE HostSystem resources");
 					}
 
 					SimpleJson hosts = vcApi.listHosts();
@@ -191,7 +187,7 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 
 						if (stitcher != null && pusher != null) {
 							ComplianceStitcher.HostEntry he =
-									stitcher.matchHost(hostName);
+									stitcher.matchHost(hostName, hostId);
 							if (he != null) {
 								pushComplianceViaApi(he.resourceId,
 										cr, config.benchmarkProfile);
