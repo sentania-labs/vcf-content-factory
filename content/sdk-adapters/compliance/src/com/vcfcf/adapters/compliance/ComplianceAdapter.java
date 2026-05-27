@@ -129,8 +129,18 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 							config.customProfilePath,
 							confDir);
 
+					logInfo("suiteAPIClient=" + (suiteAPIClient != null)
+							+ " stitcher=" + (stitcher != null));
 					if (stitcher != null) {
-						stitcher.loadHostResources();
+						try {
+							stitcher.loadHostResources();
+							logInfo("Stitcher loaded: "
+									+ stitcher.size() + " hosts");
+						} catch (Exception e) {
+							logError("Stitcher loadHostResources failed: "
+									+ e.getClass().getName()
+									+ ": " + e.getMessage(), e);
+						}
 					}
 
 					SimpleJson hosts = vcApi.listHosts();

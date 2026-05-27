@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0.7 (2026-05-27)
+
+- feat(adapter): custom compliance icons — shield with checkmark
+- fix(adapter): revert to injected suiteAPIClient, drop Ops credential fields
+
 ## 1.0.0.6 (2026-05-27)
 
 - feat(adapter): self-contained Suite API stitcher (bypass Java SDK SuiteAPIClient)

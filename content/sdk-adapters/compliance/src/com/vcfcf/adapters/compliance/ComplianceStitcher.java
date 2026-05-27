@@ -43,25 +43,29 @@ public final class ComplianceStitcher {
 				return;
 			}
 
+			logger.info("ComplianceStitcher: processing "
+					+ dtos.size() + " ResourceDto objects");
+
 			for (ResourceDto dto : dtos) {
 				if (dto == null) continue;
 
 				Resource resource = new Resource(dto);
 				ResourceKey key = resource.getResourceKey();
-				if (key == null) continue;
+				if (key == null) {
+					logger.warn("ComplianceStitcher: dto has null ResourceKey");
+					continue;
+				}
 
-				String uuid = null;
-				try {
-					uuid = (String) dto.getClass()
-							.getMethod("getIdentifier")
-							.invoke(dto);
-				} catch (Exception ignored) {}
-				if (uuid == null || uuid.isEmpty()) continue;
-
+				String uuid = findUuid(dto);
 				String hostName = getIdValue(key, "VMEntityName");
 				String moid = getIdValue(key, "VMEntityObjectID");
 
-				HostEntry entry = new HostEntry(uuid, hostName, moid, resource);
+				logger.info("ComplianceStitcher: found host "
+						+ hostName + " moid=" + moid + " uuid=" + uuid);
+
+				HostEntry entry = new HostEntry(
+						uuid != null ? uuid : hostName,
+						hostName, moid, resource);
 
 				if (hostName != null && !hostName.isEmpty()) {
 					hostsByName.put(hostName, entry);
@@ -110,6 +114,32 @@ public final class ComplianceStitcher {
 
 	public int size() {
 		return hostsByName != null ? hostsByName.size() : 0;
+	}
+
+	private String findUuid(ResourceDto dto) {
+		String[] methodNames = {"getIdentifier", "getId", "getUuid",
+				"getResourceId"};
+		for (String methodName : methodNames) {
+			try {
+				Object result = dto.getClass()
+						.getMethod(methodName).invoke(dto);
+				if (result != null) {
+					String s = result.toString();
+					if (!s.isEmpty()) {
+						logger.info("ComplianceStitcher: UUID via "
+								+ methodName + "() = " + s);
+						return s;
+					}
+				}
+			} catch (NoSuchMethodException ignored) {
+			} catch (Exception e) {
+				logger.warn("ComplianceStitcher: " + methodName
+						+ "() threw: " + e.getMessage());
+			}
+		}
+		logger.warn("ComplianceStitcher: no UUID method found on "
+				+ dto.getClass().getName());
+		return null;
 	}
 
 	private static String getIdValue(ResourceKey key, String name) {
