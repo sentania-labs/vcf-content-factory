@@ -25,7 +25,13 @@
       <ResourceIdentifier key="vcenter_host" nameKey="6" type="string"
                           required="true" dispOrder="1"/>
       <ResourceIdentifier key="benchmark_profile" nameKey="7" type="string"
-                          required="false" dispOrder="2" default="CIS_8.0"/>
+                          required="true" dispOrder="2" default="VMware_SCG_8.0"
+                          enum="true">
+        <enum value="VMware_SCG_8.0" displayOrder="1"/>
+        <enum value="VMware_SCG_9.0" displayOrder="2"/>
+        <enum value="CIS_vSphere_8" displayOrder="3"/>
+        <enum value="Custom" displayOrder="4"/>
+      </ResourceIdentifier>
       <ResourceIdentifier key="custom_profile_path" nameKey="8" type="string"
                           required="false" dispOrder="3" default=""/>
       <ResourceIdentifier key="allowInsecure" nameKey="9" type="string"

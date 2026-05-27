@@ -46,12 +46,15 @@ public final class BenchmarkLoader {
 	private List<String> readBundledProfile(String profileName, String confDir) {
 		String filename;
 		switch (profileName) {
-			case "CIS_9.0":
-				filename = "cis_esxi_9.0.csv";
+			case "VMware_SCG_9.0":
+				filename = "vmware_scg_9.0.csv";
 				break;
-			case "CIS_8.0":
+			case "CIS_vSphere_8":
+				filename = "cis_vsphere_8.csv";
+				break;
+			case "VMware_SCG_8.0":
 			default:
-				filename = "cis_esxi_8.0.csv";
+				filename = "vmware_scg_8.0.csv";
 				break;
 		}
 
