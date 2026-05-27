@@ -1,0 +1,9 @@
+# Icon mapping for the VCF Compliance adapter.
+#
+# Shield-with-checkmark for the adapter; globe-with-shield for the world.
+
+adapter_kind_icon: compliance.svg
+
+resource_kinds:
+  vcfcf_compliance: compliance.svg        # adapter instance (type=7)
+  ComplianceWorld:  compliance_world.svg

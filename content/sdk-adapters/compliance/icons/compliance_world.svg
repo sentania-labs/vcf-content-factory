@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Globe circle -->
+  <circle cx="128" cy="128" r="96" fill="#3B82C4" stroke="#2A6090" stroke-width="4"/>
+  <!-- Globe lines -->
+  <ellipse cx="128" cy="128" rx="48" ry="96" fill="none" stroke="#2A6090" stroke-width="2"/>
+  <line x1="32" y1="128" x2="224" y2="128" stroke="#2A6090" stroke-width="2"/>
+  <ellipse cx="128" cy="88" rx="80" ry="16" fill="none" stroke="#2A6090" stroke-width="1.5"/>
+  <ellipse cx="128" cy="168" rx="80" ry="16" fill="none" stroke="#2A6090" stroke-width="1.5"/>
+  <!-- Small shield overlay (bottom-right) -->
+  <g transform="translate(160,160) scale(0.5)">
+    <path d="M48 8 L88 24 L88 48 C88 72 72 88 48 96 C24 88 8 72 8 48 L8 24 Z"
+          fill="#2B7D2B" stroke="#1A5C1A" stroke-width="3"/>
+    <polyline points="28,48 40,62 68,36"
+              fill="none" stroke="#FFFFFF" stroke-width="8"
+              stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
