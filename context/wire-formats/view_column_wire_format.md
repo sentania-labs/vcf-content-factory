@@ -90,9 +90,8 @@ as valid for loader input and pass through verbatim).
 
 ### Supported function enum values (full observed list)
 
-From `working_views.xml` + brockpeterson + AriaOperationsContent
-extracts combined, the transformation values that actually appear in
-real exported view XML:
+From `working_views.xml` + brockpeterson + AriaOperationsContent extracts
+plus ops-recon against live 13.6 MB export (2026-05-27):
 
 | Value | Meaning | Notes |
 |---|---|---|
@@ -100,20 +99,47 @@ real exported view XML:
 | `NONE` | Raw data points | Trend/distribution views, stacked with TREND/FORECAST. |
 | `AVG` | Average over window | Per-column use: `working_views.xml:2610`. |
 | `MAX` | Max over window | Per-column use: `VM_Details_v4.2/content.xml:316, 460`. |
+| `MIN` | Minimum over window | 15 uses confirmed in live export. Analogous to MAX, no extra sibling properties. |
+| `SUM` | Sum over window | 59 uses confirmed in live export. Analogous to AVG/MAX, no extra sibling properties. |
+| `LAST` | Most-recent stored sample | 138 uses confirmed in live export. Distinct from CURRENT: CURRENT is the latest polled value; LAST is the most recent stored data-point in the time series. No extra sibling properties. |
 | `PERCENTILE` | Nth percentile over window | Requires sibling `<Property name="percentile" value="N"/>` where N is an integer 1..99. See `working_views.xml:2562, 2568`. |
+| `TIMESTAMP` | Display value as a timestamp | 24 uses confirmed. Typically on property columns (`isProperty=true`) e.g. `config|createDate`. No extra sibling properties. |
+| `TIME_POINT` | Timestamp when related metric hit its extreme | 12 uses confirmed. Requires THREE sibling properties — see below. |
 | `TREND` | Trend line | Trend/distribution views only, stacked. |
 | `FORECAST` | Forecast projection | Trend views only, stacked, requires `forecastDays` on each column. |
 | `TRANSFORM_EXPRESSION` | Arbitrary formula | Requires sibling `<Property name="transformExpression" value="<expr>"/>`. See `working_views.xml:4070, 4076`. Expression is a formula evaluated server-side where `avg` is the bound symbol for the column's rolled-up value. |
 
-**Not observed in any examined export** but worth flagging so the
-loader prompt can be explicit about what's safe: `MIN`, `SUM`,
-`STDDEV`, `HIGH_WATER_MARK`, `HWM`, `P95`, `PERCENTILE_95`. The UI
-column-editor exposes MIN and SUM in its aggregation dropdown on
-some VCF Ops versions; they are plausible but unconfirmed. The
-loader should treat the transformations field as a free-form string
-that is passed through verbatim and reject only blatantly wrong
-values. A small whitelist of the seven confirmed values is the
-safer starting point.
+**Confirmed absent from live export (zero hits in 13.6 MB):** `STDDEV`,
+`HIGH_WATER_MARK`. Do not add these to the whitelist without fresh recon.
+
+### TIME_POINT sibling properties
+
+When `transformation == TIME_POINT`, three additional sibling `<Property>`
+elements must appear **before** the `transformations` block:
+
+```xml
+<Property name="metricToRelateWith" value="cpu|capacity_contentionPct"/>
+<Property name="localizedMetricToRelateWith" value="CPU Contention (%)"/>
+<Property name="operatorToRelateWith" value="MAX"/>
+<Property name="transformations">
+  <List><Item value="TIME_POINT"/></List>
+</Property>
+```
+
+- `metricToRelateWith` — the metric key whose extreme this column timestamps.
+- `localizedMetricToRelateWith` — display label for that metric.
+- `operatorToRelateWith` — `MAX` or `MIN` (which extreme to find).
+
+In YAML:
+
+```yaml
+- attribute: summary|createDate
+  display_name: "Time of Max CPU Contention"
+  transformation: TIME_POINT
+  metric_to_relate_with: "cpu|capacity_contentionPct"
+  localized_metric_to_relate_with: "CPU Contention (%)"
+  operator_to_relate_with: MAX
+```
 
 ### Example XML from real files
 
@@ -204,9 +230,9 @@ safer starting point.
   — and that may not be what the author meant). Render as a
   `time-interval-selector` Control inside `<Controls>`.
 - Whitelist accepted transformation values at load:
-  `{CURRENT, NONE, AVG, MAX, PERCENTILE, TREND, FORECAST,
-  TRANSFORM_EXPRESSION}`. Reject anything else with a clear error
-  pointing at this doc.
+  `{CURRENT, NONE, AVG, MAX, MIN, SUM, LAST, PERCENTILE, TIMESTAMP,
+  TIME_POINT, TREND, FORECAST, TRANSFORM_EXPRESSION}`. Reject anything
+  else with a clear error pointing at this doc.
 
 ## Per-column color thresholds
 

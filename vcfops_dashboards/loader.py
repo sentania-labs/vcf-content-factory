@@ -33,10 +33,14 @@ def stable_id(kind: str, name: str) -> str:
 
 
 # Transformation enum whitelist — verified against real exported view XML.
-# See context/view_column_wire_format.md §Per-column transformations.
+# See context/wire-formats/view_column_wire_format.md §Per-column transformations.
+# MIN/SUM/LAST/TIMESTAMP/TIME_POINT confirmed present in live 13.6 MB export
+# (ops-recon 2026-05-27): MIN=15 uses, SUM=59, LAST=138, TIMESTAMP=24, TIME_POINT=12.
+# STDDEV and HIGH_WATER_MARK confirmed absent (zero hits).
 _VALID_TRANSFORMATIONS: set[str] = {
-    "CURRENT", "NONE", "AVG", "MAX",
-    "PERCENTILE", "TREND", "FORECAST", "TRANSFORM_EXPRESSION",
+    "CURRENT", "NONE", "AVG", "MAX", "MIN", "SUM", "LAST",
+    "PERCENTILE", "TIMESTAMP", "TIME_POINT",
+    "TREND", "FORECAST", "TRANSFORM_EXPRESSION",
 }
 
 # Time-interval-selector unit whitelist.
@@ -77,7 +81,14 @@ class ViewColumn:
     # Required when transformation == "TRANSFORM_EXPRESSION".
     # Arbitrary arithmetic formula; only `avg` is bound as a symbol.
     transform_expression: Optional[str] = None
-    # Per-column color thresholds. See context/view_column_wire_format.md.
+    # Required when transformation == "TIME_POINT".
+    # The metric key whose extreme timestamp this column displays.
+    metric_to_relate_with: Optional[str] = None
+    # Display label for the related metric (shown in column header tooltip).
+    localized_metric_to_relate_with: Optional[str] = None
+    # Which extreme of the related metric to find: "MAX" or "MIN".
+    operator_to_relate_with: Optional[str] = None
+    # Per-column color thresholds. See context/wire-formats/view_column_wire_format.md.
     yellow_bound: Optional[Union[float, str]] = None
     orange_bound: Optional[Union[float, str]] = None
     # red_bound accepts float for numeric, str for property-match (e.g. "Powered Off")
@@ -266,6 +277,32 @@ class ViewDef:
                 f"transformation == 'TRANSFORM_EXPRESSION', got {c.transformation!r}."
             )
 
+        # TIME_POINT cross-validation
+        _time_point_fields = (
+            c.metric_to_relate_with,
+            c.localized_metric_to_relate_with,
+            c.operator_to_relate_with,
+        )
+        if transform == "TIME_POINT":
+            if not all(_time_point_fields):
+                raise DashboardValidationError(
+                    f"{name_ctx}: transformation TIME_POINT requires all three "
+                    "fields: metric_to_relate_with, localized_metric_to_relate_with, "
+                    "and operator_to_relate_with."
+                )
+            op = (c.operator_to_relate_with or "").upper()
+            if op not in ("MAX", "MIN"):
+                raise DashboardValidationError(
+                    f"{name_ctx}: operator_to_relate_with must be 'MAX' or 'MIN', "
+                    f"got {c.operator_to_relate_with!r}."
+                )
+        elif any(_time_point_fields):
+            raise DashboardValidationError(
+                f"{name_ctx}: metric_to_relate_with / localized_metric_to_relate_with "
+                f"/ operator_to_relate_with are only valid when "
+                f"transformation == 'TIME_POINT', got {c.transformation!r}."
+            )
+
         # Color threshold validation
         # Determine which bounds are numeric vs string
         def _is_numeric(v) -> bool:
@@ -336,23 +373,27 @@ class WidgetResourceKindRef:
 
 @dataclass
 class MetricSpec:
-    """One metric entry within a Scoreboard or MetricChart widget.
+    """One metric entry within a Scoreboard, MetricChart, or PropertyList widget.
 
     Maps to a single entry in ``metric.resourceKindMetrics[]``.
 
     Fields:
-        adapter_kind:  VMWARE, NSXTAdapter, etc.
-        resource_kind: VirtualMachine, ClusterComputeResource, etc.
-        metric_key:    Ops stat key, e.g. ``cpu|usage_average`` or
-                       ``Super Metric|sm_<uuid>``.
-        metric_name:   Display name for the metric (shown in legend/tile).
-        unit_id:       Optional Ops unit ID string (e.g. ``"percent"``).
-        unit:          Optional display unit string (e.g. ``"%"``).
-        color_method:  0=custom thresholds, 1=no color, 2=dynamic. Default 2.
-        yellow_bound:  Threshold value when color_method=0.
-        orange_bound:  Threshold value when color_method=0.
-        red_bound:     Threshold value when color_method=0.
-        label:         Short tile label override (Scoreboard). Optional.
+        adapter_kind:     VMWARE, NSXTAdapter, etc.
+        resource_kind:    VirtualMachine, ClusterComputeResource, etc.
+        metric_key:       Ops stat key, e.g. ``cpu|usage_average`` or
+                          ``Super Metric|sm_<uuid>``.
+        metric_name:      Display name for the metric (shown in legend/tile).
+        unit_id:          Optional Ops unit ID string (e.g. ``"percent"``).
+        unit:             Optional display unit string (e.g. ``"%"``).
+        color_method:     0=custom thresholds, 1=no color, 2=dynamic. Default 2.
+        yellow_bound:     Threshold value when color_method=0.
+        orange_bound:     Threshold value when color_method=0.
+        red_bound:        Threshold value when color_method=0.
+        label:            Short tile label override (Scoreboard). Optional.
+        is_string_metric: True when the metric key returns a string property
+                          (e.g. ``summary|parentVcenter``). Default False.
+                          PropertyList commonly uses True; Scoreboard/MetricChart
+                          default to False (backwards compatible).
     """
     adapter_kind: str
     resource_kind: str
@@ -365,6 +406,7 @@ class MetricSpec:
     orange_bound: float | None = None
     red_bound: float | None = None
     label: str = ""
+    is_string_metric: bool = False
 
 
 @dataclass
@@ -502,6 +544,30 @@ class AlertListConfig:
 
 
 @dataclass
+class PropertyListConfig:
+    """Type-specific config for a PropertyList widget.
+
+    Displays a vertical list of metric/property values for the selected
+    resource. Structurally similar to Scoreboard but vertical and
+    single-resource oriented. Typically interaction-driven (receives a
+    resource from a View or ResourceList picker).
+
+    Fields:
+        properties:            List of MetricSpec entries to display. Set
+                               ``is_string_metric: true`` on string property
+                               keys (e.g. ``summary|parentVcenter``).
+        visual_theme:          Display style integer. 0=default. Range 0–5.
+        depth:                 Resource traversal depth. Default 1.
+        show_metric_full_name: Show the full metric name in each row.
+                               Default True.
+    """
+    properties: List[MetricSpec] = field(default_factory=list)
+    visual_theme: int = 0
+    depth: int = 1
+    show_metric_full_name: bool = True
+
+
+@dataclass
 class HeatmapColorThreshold:
     """Color threshold band for a Heatmap tab.
 
@@ -615,6 +681,7 @@ class Widget:
     alert_list_config: AlertListConfig | None = None
     problems_alerts_list_config: ProblemAlertsListConfig | None = None
     heatmap_config: HeatmapConfig | None = None
+    property_list_config: PropertyListConfig | None = None
     # Optional traversal mode for MetricChart widgets.
     # Maps to a scalar integer in config.relationshipMode (NOT an array).
     # ``None`` (default) → 0 — no traversal.
@@ -676,7 +743,7 @@ class Dashboard:
         _supported_types = (
             "ResourceList", "View", "TextDisplay", "Scoreboard", "MetricChart",
             "HealthChart", "ParetoAnalysis", "AlertList", "ProblemAlertsList",
-            "Heatmap",
+            "Heatmap", "PropertyList",
         )
         seen: set[str] = set()
         for w in self.widgets:
@@ -753,6 +820,13 @@ class Dashboard:
                             f"dashboard {self.name}: widget {w.local_id}: "
                             f"Heatmap tab '{tab.name}' requires 'color_by_key'"
                         )
+            if w.type == "PropertyList" and (
+                w.property_list_config is None or not w.property_list_config.properties
+            ):
+                raise DashboardValidationError(
+                    f"dashboard {self.name}: widget {w.local_id}: "
+                    f"PropertyList requires at least one entry in 'properties'"
+                )
         for ix in self.interactions:
             if ix.from_local_id not in seen or ix.to_local_id not in seen:
                 raise DashboardValidationError(
@@ -826,6 +900,13 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
         ascending_raw = c.get("ascending_range")
         ascending = bool(ascending_raw) if ascending_raw is not None else None
 
+        mtrw_raw = c.get("metric_to_relate_with")
+        lmtrw_raw = c.get("localized_metric_to_relate_with")
+        otrw_raw = c.get("operator_to_relate_with")
+        metric_to_relate_with = str(mtrw_raw).strip() if mtrw_raw else None
+        localized_metric_to_relate_with = str(lmtrw_raw).strip() if lmtrw_raw else None
+        operator_to_relate_with = str(otrw_raw).strip().upper() if otrw_raw else None
+
         return ViewColumn(
             attribute=str(c["attribute"]).strip(),
             display_name=str(c["display_name"]).strip(),
@@ -833,6 +914,9 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
             transformation=transformation,
             percentile=percentile,
             transform_expression=str(transform_expr).strip() if transform_expr else None,
+            metric_to_relate_with=metric_to_relate_with,
+            localized_metric_to_relate_with=localized_metric_to_relate_with,
+            operator_to_relate_with=operator_to_relate_with,
             yellow_bound=yellow,
             orange_bound=orange,
             red_bound=red,
@@ -978,7 +1062,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
             html_content = str(w.get("html") or w.get("text") or "<br>").strip()
             text_display_config = TextDisplayConfig(html=html_content)
 
-        # --- Parse metric specs helper (shared by Scoreboard + MetricChart) ---
+        # --- Parse metric specs helper (shared by Scoreboard, MetricChart, PropertyList) ---
         def _parse_metric_specs(raw_metrics: list) -> List[MetricSpec]:
             specs = []
             for m in (raw_metrics or []):
@@ -1002,6 +1086,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                     orange_bound=float(orange) if orange is not None else None,
                     red_bound=float(red) if red is not None else None,
                     label=str(m.get("label", "") or "").strip(),
+                    is_string_metric=bool(m.get("is_string_metric", False)),
                 ))
             return specs
 
@@ -1157,6 +1242,19 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 ))
             heatmap_config = HeatmapConfig(tabs=tabs, mode=mode, depth=depth)
 
+        # --- Parse PropertyList config ---
+        property_list_config = None
+        if widget_type == "PropertyList":
+            raw_pl = w.get("property_list") or {}
+            raw_properties = raw_pl.get("properties") or []
+            props = _parse_metric_specs(raw_properties)
+            property_list_config = PropertyListConfig(
+                properties=props,
+                visual_theme=int(raw_pl.get("visual_theme", 0)),
+                depth=int(raw_pl.get("depth", 1)),
+                show_metric_full_name=bool(raw_pl.get("show_metric_full_name", True)),
+            )
+
         # --- Parse ParetoAnalysis config ---
         pareto_analysis_config = None
         if widget_type == "ParetoAnalysis":
@@ -1203,6 +1301,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 alert_list_config=alert_list_config,
                 problems_alerts_list_config=problems_alerts_list_config,
                 heatmap_config=heatmap_config,
+                property_list_config=property_list_config,
                 relationship_mode=relationship_mode,
             )
         )

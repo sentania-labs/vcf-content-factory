@@ -28,6 +28,7 @@ from .loader import (
     HealthChartConfig, ParetoAnalysisConfig,
     AlertListConfig, ProblemAlertsListConfig,
     HeatmapConfig, HeatmapTab, HeatmapColorThreshold,
+    PropertyListConfig,
 )
 
 
@@ -195,13 +196,23 @@ def _xml_attribute_item(
     if view.data_type == "trend":
         props.append(_xml_transformations_block(view))
     else:
-        # Emit percentile or transformExpression BEFORE the transformations block
-        # (matches exported order: context/view_column_wire_format.md).
+        # Emit per-transformation sibling properties BEFORE the transformations
+        # block (matches exported order: context/wire-formats/view_column_wire_format.md).
         transform = (col.transformation or "CURRENT").upper()
         if transform == "PERCENTILE" and col.percentile is not None:
             props.append(_xml_property("percentile", str(col.percentile)))
         if transform == "TRANSFORM_EXPRESSION" and col.transform_expression:
             props.append(_xml_property("transformExpression", col.transform_expression))
+        if transform == "TIME_POINT":
+            # Three required siblings: metricToRelateWith, localizedMetricToRelateWith,
+            # operatorToRelateWith. Wire format confirmed by ops-recon 2026-05-27
+            # (12 live uses). See context/wire-formats/view_column_wire_format.md.
+            if col.metric_to_relate_with:
+                props.append(_xml_property("metricToRelateWith", col.metric_to_relate_with))
+            if col.localized_metric_to_relate_with:
+                props.append(_xml_property("localizedMetricToRelateWith", col.localized_metric_to_relate_with))
+            if col.operator_to_relate_with:
+                props.append(_xml_property("operatorToRelateWith", col.operator_to_relate_with))
         props.append(
             f'<Property name="transformations">'
             f'<List><Item value="{escape(transform)}"/></List>'
@@ -590,7 +601,7 @@ def _render_metric_spec(
         entry: dict = {
             "metricKey": spec.metric_key,
             "metricName": spec.metric_name,
-            "isStringMetric": False,
+            "isStringMetric": spec.is_string_metric,
             "resourceKindId": rk_id,
             "resourceKindName": spec.resource_kind,
             "colorMethod": spec.color_method,
@@ -1132,6 +1143,62 @@ def _heatmap_widget(
     }
 
 
+def _property_list_widget(
+    w: Widget,
+    kind_index: dict[tuple[str, str], int],
+) -> dict:
+    """Render a PropertyList (vertical property/metric details panel) widget.
+
+    Displays a list of metric or property values for the selected resource.
+    Structurally similar to Scoreboard — both use the same
+    ``metric.resourceKindMetrics[]`` envelope via ``_render_metric_spec()``.
+
+    Key differences from Scoreboard:
+    - Always interaction-driven (``selfProvider: false``); no self-provider mode
+      observed across 47 live + 67 reference samples.
+    - Uses ``showMetricFullName: {"metricFullName": <bool>}`` (inner key is
+      ``metricFullName``, not ``showMetricFullName`` — verified from reference
+      exports in ``references/vmbro_vcf_operations_vcommunity/``).
+    - ``relationshipMode`` is a plain integer ``0``, not wrapped in an object
+      (verified from reference samples).
+    - String properties use ``isStringMetric: true`` on their metric entries;
+      authors set ``is_string_metric: true`` per entry in the YAML.
+
+    Wire format reference: context/api-surface/widget_renderer_scope.md
+    §PropertyList and context/api-surface/widget_types_survey.md §PropertyList.
+    """
+    cfg = w.property_list_config
+    assert cfg is not None
+    metric_obj = _render_metric_spec(cfg.properties, kind_index, w.widget_id)
+    return {
+        "collapsed": False,
+        "id": w.widget_id,
+        "gridsterCoords": {
+            "x": w.coords["x"], "y": w.coords["y"],
+            "w": w.coords["w"], "h": w.coords["h"],
+        },
+        "type": "PropertyList",
+        "title": w.title,
+        "config": {
+            "visualTheme": cfg.visual_theme,
+            "depth": cfg.depth,
+            "refreshInterval": 300,
+            "relationshipMode": 0,
+            "resInteractionMode": None,
+            "resource": [],
+            "refreshContent": {"refreshContent": True},
+            "selfProvider": {"selfProvider": False},
+            "showMetricFullName": {"metricFullName": cfg.show_metric_full_name},
+            "customFilter": {
+                "filter": [], "excludedResources": None, "includedResources": None,
+            },
+            "title": w.title,
+            "metric": metric_obj,
+        },
+        "height": 600,
+    }
+
+
 def _build_dashboard_obj(
     dashboard: Dashboard,
     views_by_name: dict[str, ViewDef],
@@ -1161,6 +1228,8 @@ def _build_dashboard_obj(
             widgets_json.append(_problem_alerts_list_widget(w, resource_index))
         elif w.type == "Heatmap":
             widgets_json.append(_heatmap_widget(w, kind_index))
+        elif w.type == "PropertyList":
+            widgets_json.append(_property_list_widget(w, kind_index))
 
     widget_id_by_local = {w.local_id: w.widget_id for w in dashboard.widgets}
     interactions_json = [
@@ -1270,6 +1339,11 @@ def render_dashboards_bundle_json(
                         gb_key = (gb_adapter, tab.group_by_kind)
                         if gb_key not in kind_index:
                             kind_index[gb_key] = len(kind_index)
+            elif w.type == "PropertyList" and w.property_list_config:
+                for spec in w.property_list_config.properties:
+                    key = (spec.adapter_kind, spec.resource_kind)
+                    if key not in kind_index:
+                        kind_index[key] = len(kind_index)
     # Build resource index for self-provider pinned widgets. Each
     # unique (adapter_kind, resource_kind) pin gets a 0-based slot
     # in entries.resource[]. Widget configs reference these with
