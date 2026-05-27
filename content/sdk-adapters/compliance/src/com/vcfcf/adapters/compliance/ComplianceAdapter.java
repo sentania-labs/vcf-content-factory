@@ -121,9 +121,12 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				try {
 					vcApi.ensureSession();
 
+					String confDir = getAdaptersHome()
+							+ "/" + ADAPTER_KIND + "/conf";
 					BenchmarkProfile profile = benchmarkLoader.load(
 							config.benchmarkProfile,
-							config.customProfilePath);
+							config.customProfilePath,
+							confDir);
 
 					Map<String, ResourceKey> hostMap = null;
 					if (stitcher != null) {

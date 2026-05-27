@@ -16,8 +16,9 @@ public final class BenchmarkLoader {
 	private volatile BenchmarkProfile cachedProfile;
 	private volatile String cachedProfileKey;
 
-	public BenchmarkProfile load(String profileName, String customPath) {
-		String key = profileName + "|" + customPath;
+	public BenchmarkProfile load(String profileName, String customPath,
+			String confDir) {
+		String key = profileName + "|" + customPath + "|" + confDir;
 		if (cachedProfile != null && key.equals(cachedProfileKey)) {
 			return cachedProfile;
 		}
@@ -27,7 +28,7 @@ public final class BenchmarkLoader {
 				&& !customPath.isEmpty()) {
 			lines = readFile(Paths.get(customPath));
 		} else {
-			lines = readBundledProfile(profileName);
+			lines = readBundledProfile(profileName, confDir);
 		}
 
 		List<BenchmarkProfile.Control> controls = parseCsv(lines);
@@ -42,7 +43,7 @@ public final class BenchmarkLoader {
 		cachedProfileKey = null;
 	}
 
-	private List<String> readBundledProfile(String profileName) {
+	private List<String> readBundledProfile(String profileName, String confDir) {
 		String filename;
 		switch (profileName) {
 			case "CIS_9.0":
@@ -54,14 +55,16 @@ public final class BenchmarkLoader {
 				break;
 		}
 
+		if (confDir != null && !confDir.isEmpty()) {
+			Path confPath = Paths.get(confDir, "profiles", filename);
+			if (Files.exists(confPath)) {
+				return readFile(confPath);
+			}
+		}
+
 		InputStream is = getClass().getResourceAsStream("/profiles/" + filename);
 		if (is != null) {
 			return readStream(is);
-		}
-
-		Path localPath = Paths.get("profiles", filename);
-		if (Files.exists(localPath)) {
-			return readFile(localPath);
 		}
 
 		return new ArrayList<>();

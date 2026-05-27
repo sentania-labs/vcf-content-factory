@@ -560,6 +560,14 @@ def _assemble_adapters_zip(
         else:
             zf.writestr(f"{adapter_dir}/conf/resources/resources.properties", "")
 
+        # conf/profiles/ — optional bundled data files (benchmark CSVs, etc.)
+        profiles_dir = project_dir / "profiles"
+        if profiles_dir.is_dir():
+            _add_dir(zf, f"{adapter_dir}/conf/profiles")
+            for pf in sorted(profiles_dir.iterdir()):
+                if pf.is_file():
+                    zf.write(pf, f"{adapter_dir}/conf/profiles/{pf.name}")
+
         # lib/ directory — bundled JARs
         for jar in lib_jars:
             zf.write(jar, f"{adapter_dir}/lib/{jar.name}")
