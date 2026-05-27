@@ -317,30 +317,68 @@ This keeps dashboards maintenance-free across profile versions.
   (Phase 2: write access for remediation actions)
 - No dependency on VMware compliance paks (self-contained collection)
 
+## Resolved questions (2026-05-27 investigations)
+
+1. **Actions on ARIA_OPS stitched resources** — RESOLVED.
+   Cross-adapter actions ARE supported. Three installed adapters prove
+   it: OrchestratorAdapter (33 actions on VMWARE HostSystem/VM/Cluster/
+   Datastore), APPOSUCP (37 actions on VMWARE VirtualMachine),
+   APPLICATIONDISCOVERY (1 action on VMWARE VirtualMachine). The
+   `<ResourceContext adapterKind="VMWARE" resourceKind="HostSystem">`
+   pattern works — no platform guard restricts it. Bonus: Phase 2 can
+   also use Recommendation→Action linkage to trigger existing vRO
+   workflows (17 examples in vSphere describe.xml) without declaring
+   any actions in our adapter.
+
+2. **Property key separators** — RESOLVED.
+   `|` is safe for Tier 2 SDK property keys. The `|` / `:` restriction
+   applies only to MPB Tier 1 metric labels. vCommunity MP pushes keys
+   like `vCommunity|Guest OS|Services:{ServiceName}|Service Status` in
+   production. Our `VCF-CF Compliance|CIS|esxi-8.account-lockout|Actual`
+   convention is standard and correct.
+
+3. **isDynamicMetricsAllowed()** — RESOLVED.
+   Framework is ready. `addProperty()` constructs `MetricKey` with
+   `isProperty=true`. `getAutoDiscoveryEnabled()` returns `true`. Just
+   need a one-line `isDynamicMetricsAllowed()` override returning `true`
+   in the adapter class.
+
+4. **vCenter REST vs SOAP coverage** — APPROACH DECIDED.
+   No vSphere SDK JARs on the shared appliance classpath; per-pak
+   classloader isolation prevents borrowing from the VMWARE adapter.
+   Strategy: start REST-only using `ManagedHttpClient` (Synology
+   pattern), bundle `vapi-runtime` + `vim-stubs` in `lib/` when REST
+   coverage falls short. Host advanced settings likely require the
+   vSphere SDK (SOAP layer), so expect to bundle eventually.
+
 ## Open questions
 
-1. **Actions on ARIA_OPS stitched resources** — can the adapter declare
-   actions that appear on stitched VMWARE HostSystem objects, or do
-   actions only bind to the declaring adapter's own resource kinds?
-   Needs live investigation before Phase 2.
+1. **Stitching identity key** — the MOID trap. `host_moid`
+   (VMEntityObjectID) is not unique across vCenters. Must use FQDN
+   hostname or vCenter UUID + MOID as the stitching join key. Needs
+   concrete design before coding — silent data corruption if wrong.
 
-2. **vCenter REST vs SOAP coverage** — which host security settings
-   are available via REST API vs requiring the vSphere Management SDK
-   (SOAP)? Determines whether we need the full vSphere Java SDK JAR
-   or can use REST-only.
-
-3. **Event publishing** — can the Tier 2 adapter push VCF Ops events
+2. **Event publishing** — can the Tier 2 adapter push VCF Ops events
    per failing control? Events are inherently dynamic and could
    supplement the aggregate alerting model. Currently a TOOLSET GAP
    for pak runtime event format.
 
-4. **Profile hot-reload** — if the user updates the benchmark CSV,
+3. **Profile hot-reload** — if the user updates the benchmark CSV,
    does the adapter pick up changes on the next collection cycle, or
    does it require an adapter instance restart?
 
-5. **Scale testing** — with 100+ controls × 100+ hosts, the adapter
+4. **Scale testing** — with 100+ controls × 100+ hosts, the adapter
    pushes 10,000+ properties per collection cycle. Need to verify
    platform performance at this cardinality.
+
+5. **Phase 2 action architecture** — three options identified:
+   (A) Own Tier 2 actions via `ActionableAdapterInterface` — full
+   custom remediation, highest effort.
+   (B) vRO workflow linkage via Recommendation→Action — zero action
+   code, leverages existing OrchestratorAdapter, lowest effort.
+   (C) Hybrid — vRO for common operations, own actions for
+   compliance-specific remediation. Decision deferred to Phase 2
+   design.
 
 ---
 
