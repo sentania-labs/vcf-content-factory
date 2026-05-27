@@ -1,6 +1,6 @@
 # VCF Content Factory Compliance — Reference
 
-Generated from `describe.xml` and `resources.properties` for build 1.0.0.6.
+Generated from `describe.xml` and `resources.properties` for build 1.0.0.7.
 
 ## Adapter
 
@@ -17,7 +17,6 @@ Generated from `describe.xml` and `resources.properties` for build 1.0.0.6.
 |---|---|---|
 | Username | `username` | string |
 | Password | `password` | string (masked) |
-| VCF Ops Password | `ops_password` | string (masked) |
 
 ### Connection Settings
 
@@ -27,9 +26,6 @@ Generated from `describe.xml` and `resources.properties` for build 1.0.0.6.
 | Compliance Profile | `benchmark_profile` | VMware_SCG_8.0 | Yes |
 | Custom Profile CSV Path (required if profile is Custom) | `custom_profile_path` | — | No |
 | Allow Insecure SSL (true/false) | `allowInsecure` | true | No |
-| VCF Ops Host (blank = localhost) | `ops_host` | — | No |
-| VCF Ops Username (for Suite API property push) | `ops_user` | admin | No |
-| VCF Ops Auth Source (Local or vIDM) | `ops_auth_source` | Local | No |
 
 ---
 

@@ -27,7 +27,6 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	private volatile VCenterApiClient vcApi;
 	private volatile BenchmarkLoader benchmarkLoader;
 	private volatile ComplianceStitcher stitcher;
-	private volatile SuiteApiPropertyPusher pusher;
 
 	public ComplianceAdapter() {
 		super();
@@ -55,15 +54,10 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 		String allowInsecure = getIdentifier(resourceConfig, "allowInsecure");
 		String username = getCredentialField(resourceConfig, "username");
 		String password = getCredentialField(resourceConfig, "password");
-		String opsHost = getIdentifier(resourceConfig, "ops_host");
-		String opsUser = getIdentifier(resourceConfig, "ops_user");
-		String opsPassword = getCredentialField(resourceConfig, "ops_password");
-		String opsAuthSource = getIdentifier(resourceConfig, "ops_auth_source");
 
 		this.config = new ComplianceConfig(
 				vcenterHost, username, password,
-				profile, customPath, allowInsecure,
-				opsHost, opsUser, opsPassword, opsAuthSource);
+				profile, customPath, allowInsecure);
 
 		this.vcApi = new VCenterApiClient(
 				config.baseUrl(), config.username, config.password,
@@ -71,18 +65,14 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 
 		this.benchmarkLoader = new BenchmarkLoader();
 
-		if (!config.opsPassword.isEmpty()) {
-			this.pusher = new SuiteApiPropertyPusher(
-					config.suiteApiBase(),
-					config.opsUser, config.opsPassword, config.opsAuthSource,
-					this.logger);
+		if (this.suiteAPIClient != null) {
 			this.stitcher = new ComplianceStitcher(
-					this.pusher, this.logger, config.vcenterHost);
+					this.suiteAPIClient, this.logger);
 		}
 
 		logInfo("ComplianceAdapter configured: vcenter=" + config.vcenterHost
 				+ " profile=" + config.benchmarkProfile
-				+ " suiteApiPush=" + (pusher != null));
+				+ " stitcher=" + (stitcher != null));
 	}
 
 	@Override
@@ -139,7 +129,7 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 							config.customProfilePath,
 							confDir);
 
-					if (stitcher != null && pusher != null) {
+					if (stitcher != null) {
 						stitcher.loadHostResources();
 					}
 
@@ -185,14 +175,15 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 								+ cr.failCount + " fail, "
 								+ cr.totalCount + " total)");
 
-						if (stitcher != null && pusher != null) {
+						if (stitcher != null) {
 							ComplianceStitcher.HostEntry he =
 									stitcher.matchHost(hostName, hostId);
 							if (he != null) {
-								pushComplianceViaApi(he.resourceId,
-										cr, config.benchmarkProfile);
+								pushComplianceData(he.resource, cr,
+										config.benchmarkProfile);
+								result.add(he.resource);
 								logInfo("Pushed compliance data to "
-										+ hostName + " via Suite API"
+										+ hostName
 										+ " (resource=" + he.resourceId
 										+ ")");
 							}
@@ -248,35 +239,25 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 		};
 	}
 
-	private void pushComplianceViaApi(String resourceId,
+	private void pushComplianceData(Resource hostRes,
 			ControlEvaluator.ComplianceResult cr, String profileName) {
-		long ts = System.currentTimeMillis();
 		String prefix = "VCF-CF Compliance|" + profileName;
 
-		java.util.LinkedHashMap<String, String> props =
-				new java.util.LinkedHashMap<>();
 		for (ControlEvaluator.ControlResult ctrl : cr.controlResults) {
 			String ctrlPrefix = prefix + "|" + ctrl.scgId;
-			props.put(ctrlPrefix + "|Actual", ctrl.actual);
-			props.put(ctrlPrefix + "|Expected", ctrl.expected);
-			props.put(ctrlPrefix + "|Description", ctrl.description);
-		}
-		props.put("VCF-CF Compliance|profile_name", profileName);
-
-		java.util.LinkedHashMap<String, Double> stats =
-				new java.util.LinkedHashMap<>();
-		for (ControlEvaluator.ControlResult ctrl : cr.controlResults) {
-			String ctrlPrefix = prefix + "|" + ctrl.scgId;
-			stats.put(ctrlPrefix + "|Compliant",
+			addProperty(hostRes, ctrlPrefix + "|Actual", ctrl.actual);
+			addProperty(hostRes, ctrlPrefix + "|Expected", ctrl.expected);
+			hostRes.addData(ctrlPrefix + "|Compliant",
 					ctrl.compliant ? 1.0 : 0.0);
+			addProperty(hostRes, ctrlPrefix + "|Description", ctrl.description);
 		}
-		stats.put("VCF-CF Compliance|score", cr.score);
-		stats.put("VCF-CF Compliance|pass_count", (double) cr.passCount);
-		stats.put("VCF-CF Compliance|fail_count", (double) cr.failCount);
-		stats.put("VCF-CF Compliance|total_count", (double) cr.totalCount);
 
-		pusher.pushProperties(resourceId, props, ts);
-		pusher.pushStats(resourceId, stats, ts);
+		hostRes.addData("VCF-CF Compliance|score", cr.score);
+		hostRes.addData("VCF-CF Compliance|pass_count", (double) cr.passCount);
+		hostRes.addData("VCF-CF Compliance|fail_count", (double) cr.failCount);
+		hostRes.addData("VCF-CF Compliance|total_count",
+				(double) cr.totalCount);
+		addProperty(hostRes, "VCF-CF Compliance|profile_name", profileName);
 	}
 
 	private Resource createResource(String kind, String name,
