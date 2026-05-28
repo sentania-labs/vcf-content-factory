@@ -409,6 +409,8 @@ def render_views_xml(
     views: list[ViewDef],
     sm_scope: Optional[list[Path]] = None,
     bundle_context: Optional[str] = None,
+    owning_adapter_kind: Optional[str] = None,
+    owning_resource_kind: Optional[str] = None,
 ) -> str:
     """Render one or more ViewDefs into the single content.xml the
     VCF Ops content importer expects inside views.zip.
@@ -425,6 +427,16 @@ def render_views_xml(
         bundle_context: Human-readable bundle name used in scoped-mode error
             messages (e.g. ``'"idps-planner" (factory_native=False)'``).
             Ignored when ``sm_scope`` is None.
+        owning_adapter_kind: When provided (alongside ``owning_resource_kind``),
+            emit an additional ``<SubjectType>`` element on every ViewDef
+            binding the view to the pak's owning adapter namespace.  Required
+            for the platform's content importer to file the view under the
+            owning adapter; without it the importer drops the view silently.
+            Spec ref: context/cleanroom-spec/spec/18-pak-content-bundle.md §A2.
+        owning_resource_kind: The "World" ResourceKind for the owning adapter
+            (the type=1 ResourceKind in describe.xml by convention).  Must be
+            supplied together with ``owning_adapter_kind``; ignored when
+            ``owning_adapter_kind`` is None.
 
     Returns:
         XML string for ``content.xml`` inside ``views.zip``.
@@ -464,10 +476,31 @@ def render_views_xml(
         except Exception:
             pass
 
-    fragments = "".join(
-        _render_view_def_fragment(v, sm_map, sm_scope_active, bundle_context)
-        for v in views
-    )
+    emit_owning_subject = bool(owning_adapter_kind and owning_resource_kind)
+
+    def _fragment_with_owning(v: ViewDef) -> str:
+        frag = _render_view_def_fragment(v, sm_map, sm_scope_active, bundle_context)
+        if not emit_owning_subject:
+            return frag
+        # Inject the owning-adapter SubjectType immediately after the existing
+        # SubjectType elements (before the first <Usage> tag).
+        # Spec A2: every ViewDef must include a <SubjectType> whose adapterKind
+        # matches the owning adapter so the importer can file it correctly.
+        owning_st = (
+            f'<SubjectType adapterKind="{escape(owning_adapter_kind)}"'
+            f' resourceKind="{escape(owning_resource_kind)}"'
+            f' type="descendant"/>'
+        )
+        # Insert just before the first <Usage> element.
+        usage_pos = frag.find("<Usage>")
+        if usage_pos == -1:
+            # Fallback: append before closing </ViewDef>
+            frag = frag[:-len("</ViewDef>")] + owning_st + "</ViewDef>"
+        else:
+            frag = frag[:usage_pos] + owning_st + frag[usage_pos:]
+        return frag
+
+    fragments = "".join(_fragment_with_owning(v) for v in views)
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f"<Content><Views>{fragments}</Views></Content>"
@@ -1291,12 +1324,25 @@ def render_dashboards_bundle_json(
     dashboards: list[Dashboard],
     views_by_name: dict[str, ViewDef],
     owner_user_id: str,
+    owning_adapter_kind: Optional[str] = None,
 ) -> str:
     """Render all of an owner's dashboards into the single
     dashboard/dashboard.json the VCF Ops content importer expects
     inside dashboards/<ownerUserId>. The `entries.resourceKind` table
     is a shared synthetic-id lookup for every resource kind referenced
-    by any ResourceList widget across the bundle."""
+    by any ResourceList widget across the bundle.
+
+    Args:
+        dashboards: Dashboard objects to render.
+        views_by_name: ViewDef lookup keyed by name (for View-type widgets).
+        owner_user_id: UUID string placed in ``userId`` / ``lastUpdateUserId``.
+        owning_adapter_kind: When provided, populate ``entries.adapterKind``
+            with a single binding entry and set ``dashboards[].adapterName``
+            to this value.  Required for the platform's DashboardImporter to
+            associate the dashboard with the owning adapter; without it the
+            importer silently drops the dashboard.
+            Spec ref: context/cleanroom-spec/spec/18-pak-content-bundle.md §A1.
+    """
     kind_index: dict[tuple[str, str], int] = {}
     for d in dashboards:
         for w in d.widgets:
@@ -1378,6 +1424,17 @@ def render_dashboards_bundle_json(
         for (res_adapter, res_kind), idx in resource_index.items()
     ]
     entries: dict = {"resourceKind": entries_resource_kind}
+    # A1: emit entries.adapterKind when an owning adapter is specified.
+    # The importer uses this to bind the dashboard to the adapter's content
+    # namespace; without it the dashboard is silently dropped on pak install.
+    # Spec ref: context/cleanroom-spec/spec/18-pak-content-bundle.md §A1.
+    if owning_adapter_kind:
+        entries["adapterKind"] = [
+            {
+                "internalId": "adapterKind:id:0_::_",
+                "adapterKindKey": owning_adapter_kind,
+            }
+        ]
     if entries_resource:
         entries["resource"] = entries_resource
     # Derive the envelope UUID deterministically from the sorted dashboard
@@ -1386,13 +1443,18 @@ def render_dashboards_bundle_json(
     # not persist it after import.
     _id_seed = ",".join(sorted(d.id for d in dashboards)).encode()
     _envelope_uuid = str(uuid.UUID(bytes=hashlib.sha256(_id_seed).digest()[:16], version=4))
+
+    def _build_dashboard_with_adapter(d: Dashboard) -> dict:
+        obj = _build_dashboard_obj(d, views_by_name, kind_index, resource_index, owner_user_id)
+        # A1: set adapterName on each dashboard object so the importer can file it.
+        if owning_adapter_kind:
+            obj["adapterName"] = owning_adapter_kind
+        return obj
+
     return json.dumps(
         {
             "uuid": _envelope_uuid,
             "entries": entries,
-            "dashboards": [
-                _build_dashboard_obj(d, views_by_name, kind_index, resource_index, owner_user_id)
-                for d in dashboards
-            ],
+            "dashboards": [_build_dashboard_with_adapter(d) for d in dashboards],
         }
     )

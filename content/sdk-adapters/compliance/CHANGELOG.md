@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.17 (2026-05-27)
+
+- feat(adapter): build 17 — content inside adapters.zip for DashboardImporter
+
 ## 1.0.0.16 (2026-05-27)
 
 - feat(adapter): build 16 — first-party content layout + lessons

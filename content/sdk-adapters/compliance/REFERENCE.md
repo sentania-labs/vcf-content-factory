@@ -1,6 +1,6 @@
 # VCF Content Factory Compliance — Reference
 
-Generated from `describe.xml` and `resources.properties` for build 1.0.0.17.
+Generated from `describe.xml` and `resources.properties` for build 1.0.0.18.
 
 ## Adapter
 

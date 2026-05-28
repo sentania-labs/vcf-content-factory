@@ -44,8 +44,16 @@ class SdkProjectDef:
 
     @property
     def pak_filename(self) -> str:
-        """Output .pak filename: vcfcf_<adapter_kind>.<version>.<build>.pak"""
-        return f"vcfcf_{self.adapter_kind}.{self.version}.{self.build_number}.pak"
+        """Output .pak filename: vcfcf_sdk_<name>.<version>.<build>.pak
+
+        Strips the redundant ``vcfcf_`` prefix from adapter_kind (factory
+        convention is for SDK adapter_kinds to start with ``vcfcf_``) so the
+        filename doesn't double up.
+        """
+        name = self.adapter_kind
+        if name.startswith("vcfcf_"):
+            name = name[len("vcfcf_"):]
+        return f"vcfcf_sdk_{name}.{self.version}.{self.build_number}.pak"
 
     @property
     def adapter_dir_name(self) -> str:

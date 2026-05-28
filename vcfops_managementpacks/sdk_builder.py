@@ -349,6 +349,34 @@ def _parse_resource_kind_keys(describe_xml: Path) -> List[str]:
     return keys
 
 
+def _find_world_resource_kind(describe_xml: Path) -> Optional[str]:
+    """Return the key of the first ResourceKind with type="1" in describe.xml.
+
+    By convention, the type=1 ResourceKind is the adapter's "World" kind —
+    the top-level container used as the owning-adapter SubjectType anchor in
+    view XML (spec A2).  Returns None if none is found or the file cannot be
+    parsed; callers should log a warning and skip the second SubjectType.
+    """
+    try:
+        tree = ET.parse(describe_xml)
+    except ET.ParseError as exc:
+        print(
+            f"  world-kind: could not parse describe.xml: {exc}",
+            file=sys.stderr,
+        )
+        return None
+    root = tree.getroot()
+    ns = ""
+    if root.tag.startswith("{"):
+        ns = root.tag.split("}")[0] + "}"
+    for rk in root.iter(f"{ns}ResourceKind"):
+        if rk.get("type", "") == "1":
+            key = rk.get("key", "")
+            if key:
+                return key
+    return None
+
+
 def _pack_icons(
     zf: zipfile.ZipFile,
     project: SdkProjectDef,
@@ -546,8 +574,6 @@ def _assemble_adapters_zip(
     adapter_jar: Path,
     lib_jars: List[Path],
     views_zip_bytes: Optional[bytes] = None,
-    bundled_views: Optional[list] = None,
-    bundled_dashboards: Optional[list] = None,
 ) -> bytes:
     """Build adapters.zip in memory and return as bytes.
 
@@ -567,15 +593,10 @@ def _assemble_adapters_zip(
           vcfcf-adapter-base.jar
           aria-ops-core-*.jar
           [project lib/*.jar]
-        content/                       [optional; present when bundled_views/dashboards given]
-          reports/<slug>/content.xml   [one per view]
-          dashboards/<slug>/dashboard.json  [one per dashboard]
 
-    The content/ subtree mirrors the outer pak content/ layout so that
-    DashboardImporter and ViewImporter, which scan the adapter plugin
-    directory after adapters.zip is extracted during pak install, find the
-    files at the expected path:
-      /usr/lib/vmware-vcops/user/plugins/inbound/<adapter_kind>/content/...
+    Note: declarative content (dashboards, views) is NOT written inside
+    adapters.zip.  The platform only auto-imports the outer pak's content/
+    directory (spec A4).  Content lives exclusively in the outer pak.
     """
     buf = io.BytesIO()
     adapter_dir = project.adapter_dir_name
@@ -663,46 +684,10 @@ def _assemble_adapters_zip(
             _add_dir(zf, f"{adapter_dir}/conf/views")
             zf.writestr(f"{adapter_dir}/conf/views/views.zip", views_zip_bytes)
 
-        # content/ subtree — written inside adapters.zip so DashboardImporter
-        # and ViewImporter find the files after pak extraction to:
-        #   /usr/lib/vmware-vcops/user/plugins/inbound/<adapter_kind>/
-        # This matches how VrAdapter ships its bundled dashboards.
-        if bundled_views or bundled_dashboards:
-            from vcfops_dashboards.render import render_views_xml, render_dashboards_bundle_json
-            _add_dir(zf, f"{adapter_dir}/content")
-            if bundled_views:
-                _add_dir(zf, f"{adapter_dir}/content/reports")
-                for v in bundled_views:
-                    xml_text = render_views_xml([v])
-                    slug = _view_slug(v.name, v.id)
-                    _add_dir(zf, f"{adapter_dir}/content/reports/{slug}")
-                    zf.writestr(f"{adapter_dir}/content/reports/{slug}/content.xml", xml_text)
-                    print(
-                        f"  adapters.zip: {adapter_dir}/content/reports/{slug}/content.xml"
-                        f" <- {v.name}",
-                        file=sys.stderr,
-                    )
-            if bundled_dashboards:
-                _add_dir(zf, f"{adapter_dir}/content/dashboards")
-                views_by_name = {v.name: v for v in (bundled_views or [])}
-                _OWNER_UUID = "00000000-0000-0000-0000-000000000000"
-                for d in bundled_dashboards:
-                    dashboard_json = render_dashboards_bundle_json(
-                        [d], views_by_name, _OWNER_UUID
-                    )
-                    slug = d.name.replace("/", "_").replace(" ", "_").replace("[", "").replace("]", "")
-                    slug = "".join(c for c in slug if c.isalnum() or c in "_-")
-                    slug = slug.strip("_") or d.id
-                    _add_dir(zf, f"{adapter_dir}/content/dashboards/{slug}")
-                    zf.writestr(
-                        f"{adapter_dir}/content/dashboards/{slug}/dashboard.json",
-                        dashboard_json,
-                    )
-                    print(
-                        f"  adapters.zip: {adapter_dir}/content/dashboards/{slug}/dashboard.json"
-                        f" <- {d.name}",
-                        file=sys.stderr,
-                    )
+        # NOTE: content/ is NOT written inside adapters.zip.
+        # The platform only auto-imports the outer pak's content/ directory
+        # (spec A4 — inner <adapter>/content/ is dead weight, never processed).
+        # Declarative content lives exclusively in the outer pak's content/ tree.
 
         # lib/ directory — bundled JARs
         for jar in lib_jars:
@@ -782,6 +767,8 @@ def _write_outer_pak(
     views: Optional[list] = None,
     dashboards: Optional[list] = None,
     views_zip_bytes: Optional[bytes] = None,
+    owning_adapter_kind: Optional[str] = None,
+    owning_resource_kind: Optional[str] = None,
 ) -> Path:
     """Write the outer .pak ZIP to output_dir and return the path.
 
@@ -803,9 +790,20 @@ def _write_outer_pak(
     Standard empty directories are also written whenever bundled_content is
     present so the platform recognises the full content/ tree structure.
 
+    A ``resources/`` subdirectory is written next to each content.xml and
+    dashboard.json (spec A3).  An empty ``resources.properties`` /
+    ``content.properties`` placeholder is sufficient; it prevents the importer
+    from silently dropping content whose display name uses bracket-prefix notation.
+
     Note: ``views_zip_bytes`` is accepted but NOT written to content/views/ in
     the outer pak.  The views.zip lives only inside adapters.zip at
     ``<adapter>/conf/views/views.zip`` as a belt-and-suspenders copy.
+
+    Args:
+        owning_adapter_kind: Passed to the dashboard renderer to populate
+            ``entries.adapterKind`` and ``dashboards[].adapterName`` (spec A1).
+        owning_resource_kind: Passed to the view renderer to emit the
+            owning-adapter ``<SubjectType>`` on each ViewDef (spec A2).
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     pak_path = output_dir / project.pak_filename
@@ -843,11 +841,24 @@ def _write_outer_pak(
             # vCommunity-compatible layout that VCF Ops auto-imports on pak install.
             # Each file is a standalone <Content><Views><ViewDef>...</ViewDef></Views></Content>
             # document, which is exactly what render_views_xml([single_view]) produces.
+            # A resources/ subdirectory with content.properties is required (spec A3):
+            # bracket-prefix display names resolve through the i18n bundle; a missing
+            # bundle correlates with silent import failure.
             for v in views:
-                xml_text = render_views_xml([v])
+                xml_text = render_views_xml(
+                    [v],
+                    owning_adapter_kind=owning_adapter_kind,
+                    owning_resource_kind=owning_resource_kind,
+                )
                 slug = _view_slug(v.name, v.id)
                 zf.writestr(f"content/reports/{slug}/", "")
                 zf.writestr(f"content/reports/{slug}/content.xml", xml_text)
+                # A3: resources/ subdirectory with placeholder properties file
+                zf.writestr(f"content/reports/{slug}/resources/", "")
+                zf.writestr(
+                    f"content/reports/{slug}/resources/content.properties",
+                    "# Localization placeholder\n",
+                )
                 print(
                     f"  bundled content: content/reports/{slug}/content.xml <- {v.name}",
                     file=sys.stderr,
@@ -859,10 +870,12 @@ def _write_outer_pak(
             views_by_name = {v.name: v for v in (views or [])}
             # Per-dashboard JSON: one file per dashboard, slug derived from dashboard name.
             # Each file contains a single-dashboard bundle envelope.
+            # A resources/ subdirectory with resources.properties is required (spec A3).
             _OWNER_UUID = "00000000-0000-0000-0000-000000000000"
             for d in dashboards:
                 dashboard_json = render_dashboards_bundle_json(
-                    [d], views_by_name, _OWNER_UUID
+                    [d], views_by_name, _OWNER_UUID,
+                    owning_adapter_kind=owning_adapter_kind,
                 )
                 # Derive a filesystem-safe slug from the dashboard name
                 slug = d.name.replace("/", "_").replace(" ", "_").replace("[", "").replace("]", "")
@@ -870,6 +883,12 @@ def _write_outer_pak(
                 slug = slug.strip("_") or d.id
                 zf.writestr(f"content/dashboards/{slug}/", "")
                 zf.writestr(f"content/dashboards/{slug}/dashboard.json", dashboard_json)
+                # A3: resources/ subdirectory with placeholder properties file
+                zf.writestr(f"content/dashboards/{slug}/resources/", "")
+                zf.writestr(
+                    f"content/dashboards/{slug}/resources/resources.properties",
+                    "# Localization placeholder\n",
+                )
                 print(
                     f"  bundled content: content/dashboards/{slug}/dashboard.json <- {d.name}",
                     file=sys.stderr,
@@ -1672,6 +1691,28 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
             file=sys.stderr,
         )
 
+    # Resolve owning-adapter binding info for content renderers.
+    # owning_adapter_kind — the pak's adapter_kind key (e.g. "vcfcf_compliance").
+    # owning_resource_kind — the type=1 "World" ResourceKind from describe.xml.
+    # Both are required for spec A1 (dashboard JSON) and A2 (view SubjectType).
+    _describe_xml_path = project_dir / "describe.xml"
+    _owning_adapter_kind: Optional[str] = project.adapter_kind if (bundled_views or bundled_dashboards) else None
+    _owning_resource_kind: Optional[str] = None
+    if _owning_adapter_kind and _describe_xml_path.is_file():
+        _owning_resource_kind = _find_world_resource_kind(_describe_xml_path)
+        if _owning_resource_kind:
+            print(
+                f"  owning adapter: kind={_owning_adapter_kind}  "
+                f"world_kind={_owning_resource_kind}",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"  WARNING: no type=1 ResourceKind found in describe.xml — "
+                "view SubjectType owning binding will be skipped (spec A2).",
+                file=sys.stderr,
+            )
+
     # Step 2: detect JDK
     javac = _detect_jdk()
     jar_tool = _detect_jar_tool()
@@ -1715,26 +1756,29 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
 
         # Step 9: assemble adapters.zip
         print("  assembling adapters.zip ...", file=sys.stderr)
-        # Render views zip once (used both inside adapters.zip and outer pak)
+        # Render views.zip for the conf/views/ slot inside adapters.zip.
+        # NOTE: content/ is no longer written inside adapters.zip (spec A4).
         _views_zip_bytes: Optional[bytes] = None
         if bundled_views:
             _views_zip_bytes = _build_views_zip_bytes(bundled_views)
         adapters_zip_bytes = _assemble_adapters_zip(
             project, project_dir, adapter_jar, lib_jars,
             views_zip_bytes=_views_zip_bytes,
-            bundled_views=bundled_views if bundled_views else None,
-            bundled_dashboards=bundled_dashboards if bundled_dashboards else None,
         )
         print(
             f"  adapters.zip: {len(adapters_zip_bytes):,} bytes", file=sys.stderr
         )
 
         # Step 10+11: generate manifest and write outer .pak
+        # Pass owning binding info so content renderers emit the required
+        # adapter-namespace fields (spec A1, A2, A3).
         pak_path = _write_outer_pak(
             project, adapters_zip_bytes, Path(output_dir), project_dir,
             views=bundled_views,
             dashboards=bundled_dashboards,
             views_zip_bytes=_views_zip_bytes,
+            owning_adapter_kind=_owning_adapter_kind,
+            owning_resource_kind=_owning_resource_kind,
         )
 
     print(f"Built: {pak_path}", file=sys.stderr)

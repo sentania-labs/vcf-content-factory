@@ -1823,7 +1823,13 @@ def build_pak(
 
     ak = mp.adapter_kind
     version_str = f"{mp.version}.{mp.build_number}"
-    pak_name = f"{ak}.{version_str}.pak"
+    # Strip MPB factory prefix from filename so output is vcfcf_mpb_<name>.<ver>.pak
+    name = ak
+    if name.startswith("mpb_vcf_content_factory_"):
+        name = name[len("mpb_vcf_content_factory_"):]
+    elif name.startswith("mpb_"):
+        name = name[len("mpb_"):]
+    pak_name = f"vcfcf_mpb_{name}.{version_str}.pak"
     pak_path = output_dir / pak_name
 
     # 1. Render design JSON (flat factory-grammar format)
