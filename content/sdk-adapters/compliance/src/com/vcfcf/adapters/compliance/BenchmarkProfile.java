@@ -46,6 +46,45 @@ public final class BenchmarkProfile {
 		return result;
 	}
 
+	public List<Control> vCenterControls() {
+		List<Control> result = new java.util.ArrayList<>();
+		for (Control c : controls) {
+			if (c.isVCenterControl()) result.add(c);
+		}
+		return result;
+	}
+
+	public List<Control> dvsControls() {
+		List<Control> result = new java.util.ArrayList<>();
+		for (Control c : controls) {
+			if (c.isDvsControl()) result.add(c);
+		}
+		return result;
+	}
+
+	public List<Control> dvpgControls() {
+		List<Control> result = new java.util.ArrayList<>();
+		for (Control c : controls) {
+			if (c.isDvpgControl()) result.add(c);
+		}
+		return result;
+	}
+
+	/**
+	 * Controls matching a given canonical {@code resource_kind} string.
+	 * Used by the per-kind loop in {@link ComplianceAdapter} so the
+	 * switch on resource kind doesn't need to know each
+	 * {@code isXControl()} predicate.
+	 */
+	public List<Control> controlsForResourceKind(String resourceKind) {
+		List<Control> result = new java.util.ArrayList<>();
+		if (resourceKind == null) return result;
+		for (Control c : controls) {
+			if (resourceKind.equals(c.resourceKind)) result.add(c);
+		}
+		return result;
+	}
+
 	/**
 	 * Subset of controls that the adapter can actually evaluate today.
 	 * Derived from {@code parameter_kind}: only {@code advanced_setting}
@@ -136,6 +175,18 @@ public final class BenchmarkProfile {
 
 		public boolean isVmControl() {
 			return "VirtualMachine".equals(resourceKind);
+		}
+
+		public boolean isVCenterControl() {
+			return "VCenterAdapterInstance".equals(resourceKind);
+		}
+
+		public boolean isDvsControl() {
+			return "DistributedVirtualSwitch".equals(resourceKind);
+		}
+
+		public boolean isDvpgControl() {
+			return "DistributedVirtualPortgroup".equals(resourceKind);
 		}
 
 		public boolean isEvaluable() {

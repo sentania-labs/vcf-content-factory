@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.26 (2026-05-28)
+
+- feat(adapter): build 26 — canonical compliance schema, Phase 1 working on devel
+
 ## 1.0.0.19 (2026-05-27)
 
 - feat(framework): build 19 — pin self-provider Views at world singletons

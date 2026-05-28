@@ -32,6 +32,7 @@ from _compliance_normalize import (
     infer_value_type,
     log,
     map_component,
+    map_setting_location,
     write_canonical,
 )
 
@@ -96,6 +97,17 @@ def normalize(input_path: str, output_path: str) -> int:
                 skipped["empty_slug"] += 1
                 continue
             control_id = f"{prefix}.{slug}"
+
+            # Setting Location refinement (defensive — CIS source
+            # ships with the column empty today; included so future
+            # CIS updates that populate it get the same handling
+            # as SCG). Re-prefixes the control_id with the
+            # Setting Location-derived prefix when one matches.
+            setting_location = (src.get("Setting Location") or "").strip()
+            sl_override = map_setting_location(setting_location)
+            if sl_override:
+                resource_kind, sl_prefix = sl_override
+                control_id = f"{sl_prefix}.{slug}"
 
             parameter = (src.get("Configuration Parameter") or "").strip()
             if parameter == "N/A":

@@ -21,11 +21,30 @@ public final class ControlEvaluator {
 	public static ComplianceResult evaluateAdvancedSettings(
 			BenchmarkProfile profile,
 			Map<String, String> advancedSettings, String hostname) {
+		return evaluateControls(profile.hostControls(), advancedSettings,
+				hostname);
+	}
+
+	/**
+	 * Phase 2 entry point — score an arbitrary subset of profile
+	 * controls (typically pre-filtered by {@code resource_kind}) against
+	 * a key/value map of advanced settings. Used by VirtualMachine
+	 * (extraConfig), VCenterAdapterInstance (vCenter setting
+	 * OptionManager), and HostSystem (per-host advanced options).
+	 *
+	 * <p>Same zero-divisor contract as the original — when no profile
+	 * controls were evaluable against the resource, score=100.0 rather
+	 * than NaN. Operators distinguish "perfect" from "nothing evaluated"
+	 * by total_count=0 on the rollup.
+	 */
+	public static ComplianceResult evaluateControls(
+			List<BenchmarkProfile.Control> controls,
+			Map<String, String> advancedSettings, String resourceName) {
 		List<ControlResult> results = new ArrayList<>();
 		int pass = 0;
 		int fail = 0;
 
-		for (BenchmarkProfile.Control control : profile.hostControls()) {
+		for (BenchmarkProfile.Control control : controls) {
 			// Skip controls whose parameter_kind is not in the
 			// evaluable set (today: advanced_setting only). These
 			// rows ship in the profile for traceability but can't be
@@ -64,18 +83,10 @@ public final class ControlEvaluator {
 		}
 
 		int total = pass + fail;
-		// Zero-divisor contract for VCF-CF Compliance|score (fix #1):
-		// When no profile controls were evaluable against this host
-		// (total == 0 — e.g. profile loaded zero applicable controls,
-		// or vSphere returned no advanced settings), publish 100.0
-		// rather than NaN/null. Rationale: the symptom thresholds
-		// (vcfcf_compliance_score_warning <95, _critical <80) treat
-		// "no signal" as vacuously compliant rather than firing a
-		// false alert. Operators see total_count=0 if they need to
-		// distinguish "perfect" from "nothing evaluated".
 		double score = total > 0 ? ((double) pass / total) * 100.0 : 100.0;
 
-		return new ComplianceResult(hostname, pass, fail, total, score, results);
+		return new ComplianceResult(resourceName, pass, fail, total, score,
+				results);
 	}
 
 	static boolean valuesMatch(String actual, String expected) {

@@ -17,8 +17,15 @@ public final class ComplianceStitcher {
 	private final SuiteAPIClient suiteApiClient;
 	private final Logger logger;
 
-	private Map<String, HostEntry> hostsByName;
-	private Map<String, HostEntry> hostsByMoid;
+	// Per-VMWARE-resource-kind name/moid lookup tables. Phase 1 only
+	// populated the HostSystem tables; Phase 2 adds VirtualMachine,
+	// VMwareAdapter Instance, VmwareDistributedVirtualSwitch, and
+	// DistributedVirtualPortgroup so the same stitching path handles
+	// every resource kind the compliance profile targets.
+	private final Map<String, Map<String, HostEntry>> resourcesByName =
+			new HashMap<>();
+	private final Map<String, Map<String, HostEntry>> resourcesByMoid =
+			new HashMap<>();
 
 	public ComplianceStitcher(SuiteAPIClient suiteApiClient, Logger logger) {
 		this.suiteApiClient = suiteApiClient;
@@ -26,25 +33,60 @@ public final class ComplianceStitcher {
 	}
 
 	public void loadHostResources() {
-		hostsByName = new HashMap<>();
-		hostsByMoid = new HashMap<>();
+		loadResourcesForKind("HostSystem");
+	}
+
+	public void loadVmResources() {
+		loadResourcesForKind("VirtualMachine");
+	}
+
+	public void loadVCenterAdapterInstance() {
+		loadResourcesForKind("VMwareAdapter Instance");
+	}
+
+	public void loadDvsResources() {
+		loadResourcesForKind("VmwareDistributedVirtualSwitch");
+	}
+
+	public void loadDvpgResources() {
+		loadResourcesForKind("DistributedVirtualPortgroup");
+	}
+
+	/**
+	 * Shared loader for any VMWARE resource kind. Lifted out of the
+	 * per-host loader so VirtualMachine, VMwareAdapter Instance,
+	 * VmwareDistributedVirtualSwitch, and DistributedVirtualPortgroup
+	 * can all reuse the same suiteAPI walk → identifier-extract →
+	 * name/moid index pattern.
+	 *
+	 * <p>All VMWARE resource kinds share the same identity tuple
+	 * ({@code VMEntityName} + {@code VMEntityObjectID}), so the lookup
+	 * key extraction is identical across kinds.
+	 */
+	private void loadResourcesForKind(String resourceKind) {
+		Map<String, HostEntry> byName = new HashMap<>();
+		Map<String, HostEntry> byMoid = new HashMap<>();
+		resourcesByName.put(resourceKind, byName);
+		resourcesByMoid.put(resourceKind, byMoid);
 
 		try {
 			List<ResourceDto> dtos = suiteApiClient.getResources(
 					Arrays.asList("VMWARE"),
-					Arrays.asList("HostSystem"),
+					Arrays.asList(resourceKind),
 					null, null, null, null);
 
 			if (dtos == null || dtos.isEmpty()) {
-				logger.warn("ComplianceStitcher: suiteAPIClient.getResources "
-						+ "returned " + (dtos == null ? "null" : "0 results")
+				logger.warn("ComplianceStitcher: suiteAPIClient.getResources("
+						+ resourceKind + ") returned "
+						+ (dtos == null ? "null" : "0 results")
 						+ " — this may indicate the client is not yet "
-						+ "initialized or has restricted scope");
+						+ "initialized, has restricted scope, or this "
+						+ "resource kind is not present in inventory");
 				return;
 			}
 
-			logger.info("ComplianceStitcher: processing "
-					+ dtos.size() + " ResourceDto objects");
+			logger.info("ComplianceStitcher: " + resourceKind
+					+ " — processing " + dtos.size() + " ResourceDto objects");
 
 			for (ResourceDto dto : dtos) {
 				if (dto == null) continue;
@@ -52,60 +94,110 @@ public final class ComplianceStitcher {
 				Resource resource = new Resource(dto);
 				ResourceKey key = resource.getResourceKey();
 				if (key == null) {
-					logger.warn("ComplianceStitcher: dto has null ResourceKey");
+					logger.warn("ComplianceStitcher: " + resourceKind
+							+ " dto has null ResourceKey");
 					continue;
 				}
 
 				String uuid = findUuid(dto);
-				String hostName = getIdValue(key, "VMEntityName");
+				String name = getIdValue(key, "VMEntityName");
 				String moid = getIdValue(key, "VMEntityObjectID");
 
-				logger.info("ComplianceStitcher: found host "
-						+ hostName + " moid=" + moid + " uuid=" + uuid);
-
 				HostEntry entry = new HostEntry(
-						uuid != null ? uuid : hostName,
-						hostName, moid, resource);
+						uuid != null ? uuid : name,
+						name, moid, resource);
 
-				if (hostName != null && !hostName.isEmpty()) {
-					hostsByName.put(hostName, entry);
+				if (name != null && !name.isEmpty()) {
+					byName.put(name, entry);
 				}
 				if (moid != null && !moid.isEmpty()) {
-					hostsByMoid.put(moid, entry);
+					byMoid.put(moid, entry);
 				}
 			}
 		} catch (Exception e) {
-			logger.warn("ComplianceStitcher: load failed: "
-					+ e.getClass().getName() + ": " + e.getMessage());
+			logger.warn("ComplianceStitcher: load(" + resourceKind
+					+ ") failed: " + e.getClass().getName()
+					+ ": " + e.getMessage());
 		}
 
 		logger.info("ComplianceStitcher: loaded "
-				+ hostsByName.size() + " hosts by name, "
-				+ hostsByMoid.size() + " by MOID");
+				+ byName.size() + " " + resourceKind + " by name, "
+				+ byMoid.size() + " by MOID");
 	}
 
 	public HostEntry matchHost(String hostname, String moid) {
-		if (moid != null && hostsByMoid != null) {
-			HostEntry byMoid = hostsByMoid.get(moid);
-			if (byMoid != null) return byMoid;
+		return matchResource("HostSystem", hostname, moid);
+	}
+
+	public HostEntry matchVm(String name, String moid) {
+		return matchResource("VirtualMachine", name, moid);
+	}
+
+	public HostEntry matchVCenterAdapterInstance(String name, String moid) {
+		return matchResource("VMwareAdapter Instance", name, moid);
+	}
+
+	public HostEntry matchDvs(String name, String moid) {
+		return matchResource("VmwareDistributedVirtualSwitch", name, moid);
+	}
+
+	public HostEntry matchDvpg(String name, String moid) {
+		return matchResource("DistributedVirtualPortgroup", name, moid);
+	}
+
+	/**
+	 * Returns the single resource of a given kind when there is
+	 * exactly one in inventory — used for VMwareAdapter Instance
+	 * where the compliance profile targets "the vCenter we monitor"
+	 * and there is exactly one such instance per ComplianceAdapter
+	 * configuration. Returns null when ambiguous (>1 candidate) or
+	 * missing (0 candidates).
+	 */
+	public HostEntry singletonOfKind(String resourceKind) {
+		Map<String, HostEntry> byName = resourcesByName.get(resourceKind);
+		if (byName == null || byName.size() != 1) {
+			return null;
+		}
+		return byName.values().iterator().next();
+	}
+
+	/**
+	 * Generic resource matcher: try moid first (most authoritative),
+	 * then exact name, then dot-prefix fuzzy match (handles FQDN vs
+	 * shortname mismatches between vCenter inventory and Ops resource
+	 * registration).
+	 */
+	private HostEntry matchResource(String resourceKind, String name,
+			String moid) {
+		Map<String, HostEntry> byMoid = resourcesByMoid.get(resourceKind);
+		Map<String, HostEntry> byName = resourcesByName.get(resourceKind);
+
+		if (moid != null && byMoid != null) {
+			HostEntry m = byMoid.get(moid);
+			if (m != null) return m;
 		}
 
-		if (hostname != null && hostsByName != null) {
-			HostEntry byName = hostsByName.get(hostname);
-			if (byName != null) return byName;
+		if (name != null && byName != null) {
+			HostEntry n = byName.get(name);
+			if (n != null) return n;
 
-			for (Map.Entry<String, HostEntry> e : hostsByName.entrySet()) {
+			for (Map.Entry<String, HostEntry> e : byName.entrySet()) {
 				String registered = e.getKey();
-				if (registered.startsWith(hostname + ".")
-						|| hostname.startsWith(registered + ".")) {
+				if (registered.startsWith(name + ".")
+						|| name.startsWith(registered + ".")) {
 					return e.getValue();
 				}
 			}
 		}
 
-		logger.warn("ComplianceStitcher: no match for "
-				+ hostname + " (moid=" + moid + ")");
+		logger.warn("ComplianceStitcher: no " + resourceKind
+				+ " match for " + name + " (moid=" + moid + ")");
 		return null;
+	}
+
+	public int countOfKind(String resourceKind) {
+		Map<String, HostEntry> byName = resourcesByName.get(resourceKind);
+		return byName == null ? 0 : byName.size();
 	}
 
 	public void pushProperties(String resourceId,
@@ -401,7 +493,7 @@ public final class ComplianceStitcher {
 	}
 
 	public int size() {
-		return hostsByName != null ? hostsByName.size() : 0;
+		return countOfKind("HostSystem");
 	}
 
 	private String findUuid(ResourceDto dto) {

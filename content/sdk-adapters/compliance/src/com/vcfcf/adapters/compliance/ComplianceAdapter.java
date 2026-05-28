@@ -147,106 +147,38 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 					logInfo("suiteAPIClient=" + (suiteAPIClient != null)
 							+ " stitcher=" + (stitcher != null));
 					if (stitcher != null) {
-						try {
-							stitcher.loadHostResources();
-							logInfo("Stitcher loaded: "
-									+ stitcher.size() + " hosts");
-						} catch (Exception e) {
-							logError("Stitcher loadHostResources failed: "
-									+ e.getClass().getName()
-									+ ": " + e.getMessage(), e);
-						}
+						loadStitcherResources();
 					}
 
-					java.util.List<VSphereClient.HostInfo> hosts =
-							vsphere.getHosts();
-					if (hosts.isEmpty()) {
-						logWarn("No hosts returned from vCenter SOAP");
-						return result;
-					}
-					logInfo("vSphere SOAP: " + hosts.size() + " hosts");
-
-					int totalHosts = 0;
-					int scoredHosts = 0;
-					double scoreSum = 0;
-					int belowThreshold = 0;
-
-					for (VSphereClient.HostInfo hostInfo : hosts) {
-						String hostId = hostInfo.moid;
-						String hostName = hostInfo.name;
-
-						logInfo("Evaluating host " + hostName
-								+ " (" + hostId + ")");
-
-						java.util.Map<String, String> advSettings;
-						try {
-							advSettings = vsphere.getAdvancedSettings(
-									hostInfo.moRef);
-							logInfo("Host " + hostName + ": "
-									+ advSettings.size()
-									+ " advanced settings");
-						} catch (Exception e) {
-							logWarn("Failed to read settings for "
-									+ hostName + ": " + e.getMessage());
-							advSettings = new java.util.HashMap<>();
-						}
-
-						ControlEvaluator.ComplianceResult cr =
-								ControlEvaluator.evaluateAdvancedSettings(
-										profile, advSettings, hostName);
-
-						totalHosts++;
-						// Only fold a host into the world average if its
-						// per-host score is REAL data (totalCount > 0).
-						// ControlEvaluator returns score=100.0 as a
-						// zero-divisor sentinel when no profile controls
-						// were evaluable against the host — folding that
-						// in produces a bogus 100 average (this is what
-						// devel showed pre-fix: avg=100 despite per-control
-						// failures). Hosts with no signal are still counted
-						// in total_hosts so operators see them, but they
-						// don't move the score needle.
-						if (cr.totalCount > 0) {
-							scoredHosts++;
-							scoreSum += cr.score;
-							if (cr.score < 95.0) belowThreshold++;
-						}
-
-						logInfo("Host " + hostName + ": score="
-								+ String.format("%.1f", cr.score)
-								+ "% (" + cr.passCount + " pass, "
-								+ cr.failCount + " fail, "
-								+ cr.totalCount + " total)");
-
-						if (stitcher != null) {
-							ComplianceStitcher.HostEntry he =
-									stitcher.matchHost(hostName, hostId);
-							if (he != null) {
-								pushComplianceViaClient(he.resourceId,
-										cr, profile.name);
-								logInfo("Pushed compliance data to "
-										+ hostName
-										+ " (resource=" + he.resourceId
-										+ ")");
-							}
-						}
-					}
+					// Phase 2: HostSystem (Phase 1, green path),
+					// VirtualMachine, VMwareAdapter Instance,
+					// VmwareDistributedVirtualSwitch, and
+					// DistributedVirtualPortgroup. Each loop reads
+					// resources from vSphere SOAP, evaluates its slice
+					// of the profile, and pushes per-resource rollups
+					// + per-control raw onto the matched Ops resource.
+					HostStats hostStats = collectHosts(profile);
+					VmStats vmStats = collectVms(profile);
+					VCenterStats vcStats = collectVCenter(profile);
+					DvsStats dvsStats = collectDvs(profile);
+					DvpgStats dvpgStats = collectDvpg(profile);
 
 					Resource world = createResource("ComplianceWorld",
 							"Compliance World",
 							"world_id", "compliance_world");
-					world.addData("Summary|total_hosts", (double) totalHosts);
+					world.addData("Summary|total_hosts",
+							(double) hostStats.total);
 					// Skip avg_host_score and hosts_below_threshold entirely
 					// when no host produced real data — publishing a sentinel
 					// (0.0 or 100.0) is indistinguishable from a real result.
 					// Operators will see the metric gap on the dashboard and
 					// know to investigate. profile_name + total_hosts still
 					// publish so they know the adapter ran.
-					if (scoredHosts > 0) {
+					if (hostStats.scored > 0) {
 						world.addData("Summary|avg_host_score",
-								scoreSum / scoredHosts);
+								hostStats.scoreSum / hostStats.scored);
 						world.addData("Summary|hosts_below_threshold",
-								(double) belowThreshold);
+								(double) hostStats.belowThreshold);
 					} else {
 						logWarn("No hosts produced real compliance signal "
 								+ "(all totalCount==0); skipping "
@@ -255,6 +187,17 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 								+ "scoreboard reads 'no data' rather than "
 								+ "a sentinel value");
 					}
+					// VirtualMachine fleet rollups (Phase 2). Same
+					// no-sentinel contract: only publish averages when
+					// at least one VM produced real signal.
+					world.addData("Summary|total_vms",
+							(double) vmStats.total);
+					if (vmStats.scored > 0) {
+						world.addData("Summary|avg_vm_score",
+								vmStats.scoreSum / vmStats.scored);
+						world.addData("Summary|vms_below_threshold",
+								(double) vmStats.belowThreshold);
+					}
 					addProperty(world, "Summary|profile_name",
 							profile.name);
 					addProperty(world, "Summary|last_scan_timestamp",
@@ -262,8 +205,12 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 					result.add(world);
 
 					logInfo("ComplianceAdapter collection complete: "
-							+ totalHosts + " hosts seen, "
-							+ scoredHosts + " produced real signal");
+							+ hostStats.total + " hosts, "
+							+ vmStats.total + " VMs, "
+							+ (vcStats.matched ? "1" : "0")
+							+ " vCenter, "
+							+ dvsStats.total + " DVS, "
+							+ dvpgStats.total + " DVPG");
 
 				} catch (InterruptedException ie) {
 					throw ie;
@@ -295,6 +242,369 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				return false;
 			}
 		};
+	}
+
+	// ----- Phase 2 per-kind collectors --------------------------------
+	//
+	// Each collector follows the same shape:
+	//   1. list resources from vSphere SOAP for that kind
+	//   2. read the kind's advanced-setting source (per-host, vmx
+	//      extraConfig, vCenter OptionManager)
+	//   3. evaluate the matching slice of the profile via
+	//      ControlEvaluator.evaluateControls
+	//   4. push rollups + per-control raw onto the matched Ops resource
+	//      via the stitcher
+	//
+	// Don't fold a per-resource score into world aggregates unless that
+	// resource produced REAL signal (totalCount > 0). See the
+	// zero-divisor-contract comment block in collectHosts for the
+	// rationale — it's the same fix #1 sentinel concern Phase 1 found.
+
+	private void loadStitcherResources() {
+		try {
+			stitcher.loadHostResources();
+			logInfo("Stitcher loaded: " + stitcher.size() + " hosts");
+		} catch (Exception e) {
+			logError("Stitcher loadHostResources failed: "
+					+ e.getClass().getName() + ": " + e.getMessage(), e);
+		}
+		try {
+			stitcher.loadVmResources();
+			logInfo("Stitcher loaded: "
+					+ stitcher.countOfKind("VirtualMachine") + " VMs");
+		} catch (Exception e) {
+			logWarn("Stitcher loadVmResources failed: " + e.getMessage());
+		}
+		try {
+			stitcher.loadVCenterAdapterInstance();
+			logInfo("Stitcher loaded: "
+					+ stitcher.countOfKind("VMwareAdapter Instance")
+					+ " VMwareAdapter Instance(s)");
+		} catch (Exception e) {
+			logWarn("Stitcher loadVCenterAdapterInstance failed: "
+					+ e.getMessage());
+		}
+		try {
+			stitcher.loadDvsResources();
+			logInfo("Stitcher loaded: "
+					+ stitcher.countOfKind(
+							"VmwareDistributedVirtualSwitch")
+					+ " DVS");
+		} catch (Exception e) {
+			logWarn("Stitcher loadDvsResources failed: " + e.getMessage());
+		}
+		try {
+			stitcher.loadDvpgResources();
+			logInfo("Stitcher loaded: "
+					+ stitcher.countOfKind("DistributedVirtualPortgroup")
+					+ " DVPG");
+		} catch (Exception e) {
+			logWarn("Stitcher loadDvpgResources failed: " + e.getMessage());
+		}
+	}
+
+	private HostStats collectHosts(BenchmarkProfile profile) throws Exception {
+		HostStats stats = new HostStats();
+		java.util.List<VSphereClient.HostInfo> hosts = vsphere.getHosts();
+		if (hosts.isEmpty()) {
+			logWarn("No hosts returned from vCenter SOAP");
+			return stats;
+		}
+		logInfo("vSphere SOAP: " + hosts.size() + " hosts");
+
+		java.util.List<BenchmarkProfile.Control> hostControls =
+				profile.hostControls();
+
+		for (VSphereClient.HostInfo hostInfo : hosts) {
+			String hostId = hostInfo.moid;
+			String hostName = hostInfo.name;
+
+			logInfo("Evaluating host " + hostName + " (" + hostId + ")");
+
+			java.util.Map<String, String> advSettings;
+			try {
+				advSettings = vsphere.getAdvancedSettings(hostInfo.moRef);
+				logInfo("Host " + hostName + ": "
+						+ advSettings.size() + " advanced settings");
+			} catch (Exception e) {
+				logWarn("Failed to read settings for "
+						+ hostName + ": " + e.getMessage());
+				advSettings = new java.util.HashMap<>();
+			}
+
+			ControlEvaluator.ComplianceResult cr =
+					ControlEvaluator.evaluateControls(
+							hostControls, advSettings, hostName);
+
+			stats.total++;
+			// Only fold a host into the world average if its
+			// per-host score is REAL data (totalCount > 0).
+			// ControlEvaluator returns score=100.0 as a
+			// zero-divisor sentinel when no profile controls
+			// were evaluable — folding that in produces a bogus
+			// 100 average. Hosts with no signal are still counted
+			// in total_hosts so operators see them, but they
+			// don't move the score needle.
+			if (cr.totalCount > 0) {
+				stats.scored++;
+				stats.scoreSum += cr.score;
+				if (cr.score < 95.0) stats.belowThreshold++;
+			}
+
+			logInfo("Host " + hostName + ": score="
+					+ String.format("%.1f", cr.score)
+					+ "% (" + cr.passCount + " pass, "
+					+ cr.failCount + " fail, "
+					+ cr.totalCount + " total)");
+
+			if (stitcher != null) {
+				ComplianceStitcher.HostEntry he =
+						stitcher.matchHost(hostName, hostId);
+				if (he != null) {
+					pushComplianceViaClient(he.resourceId, cr,
+							profile.name);
+					logInfo("Pushed compliance data to " + hostName
+							+ " (resource=" + he.resourceId + ")");
+				}
+			}
+		}
+		return stats;
+	}
+
+	private VmStats collectVms(BenchmarkProfile profile) {
+		VmStats stats = new VmStats();
+		java.util.List<VSphereClient.VmInfo> vms;
+		try {
+			vms = vsphere.getVms();
+		} catch (Exception e) {
+			logWarn("Failed to enumerate VMs: " + e.getMessage());
+			return stats;
+		}
+		if (vms.isEmpty()) {
+			logInfo("No VMs returned from vCenter SOAP");
+			return stats;
+		}
+		logInfo("vSphere SOAP: " + vms.size() + " VMs");
+
+		java.util.List<BenchmarkProfile.Control> vmControls =
+				profile.vmControls();
+
+		for (VSphereClient.VmInfo vm : vms) {
+			java.util.Map<String, String> extra;
+			try {
+				extra = vsphere.getVmExtraConfig(vm.moRef);
+			} catch (Exception e) {
+				logWarn("Failed to read extraConfig for "
+						+ vm.name + ": " + e.getMessage());
+				extra = new java.util.HashMap<>();
+			}
+
+			ControlEvaluator.ComplianceResult cr =
+					ControlEvaluator.evaluateControls(
+							vmControls, extra, vm.name);
+
+			stats.total++;
+			if (cr.totalCount > 0) {
+				stats.scored++;
+				stats.scoreSum += cr.score;
+				if (cr.score < 95.0) stats.belowThreshold++;
+			}
+
+			if (stitcher != null) {
+				ComplianceStitcher.HostEntry he =
+						stitcher.matchVm(vm.name, vm.moid);
+				if (he != null) {
+					pushComplianceViaClient(he.resourceId, cr,
+							profile.name);
+				}
+			}
+		}
+		logInfo("VM compliance: " + stats.total + " VMs seen, "
+				+ stats.scored + " with real signal");
+		return stats;
+	}
+
+	private VCenterStats collectVCenter(BenchmarkProfile profile) {
+		VCenterStats stats = new VCenterStats();
+		java.util.Map<String, String> vcSettings;
+		try {
+			vcSettings = vsphere.getVCenterAdvancedSettings();
+		} catch (Exception e) {
+			logWarn("Failed to read vCenter advanced settings: "
+					+ e.getMessage());
+			return stats;
+		}
+		logInfo("vCenter advanced settings: " + vcSettings.size()
+				+ " entries");
+
+		java.util.List<BenchmarkProfile.Control> vcControls =
+				profile.vCenterControls();
+		String resourceName = config.vcenterHost;
+
+		ControlEvaluator.ComplianceResult cr =
+				ControlEvaluator.evaluateControls(
+						vcControls, vcSettings, resourceName);
+		logInfo("vCenter " + resourceName + ": score="
+				+ String.format("%.1f", cr.score)
+				+ "% (" + cr.passCount + " pass, "
+				+ cr.failCount + " fail, "
+				+ cr.totalCount + " total)");
+
+		if (stitcher != null) {
+			// There is exactly one VMwareAdapter Instance per
+			// vCenter we monitor. Try direct name/moid match first
+			// (uses the vCenter host as the name hint); fall back
+			// to the singleton lookup if Ops registered it under a
+			// different name (common when display name diverges
+			// from connection host).
+			ComplianceStitcher.HostEntry he =
+					stitcher.matchVCenterAdapterInstance(resourceName, null);
+			if (he == null) {
+				he = stitcher.singletonOfKind("VMwareAdapter Instance");
+				if (he != null) {
+					logInfo("Resolved VMwareAdapter Instance via singleton"
+							+ " lookup (registered name="
+							+ he.hostName + ")");
+				}
+			}
+			if (he != null) {
+				pushComplianceViaClient(he.resourceId, cr, profile.name);
+				stats.matched = true;
+				logInfo("Pushed vCenter compliance data to "
+						+ he.hostName + " (resource=" + he.resourceId
+						+ ")");
+			} else {
+				logWarn("Could not resolve VMwareAdapter Instance for "
+						+ resourceName + " — vCenter compliance "
+						+ "rollups will NOT appear");
+			}
+		}
+		return stats;
+	}
+
+	private DvsStats collectDvs(BenchmarkProfile profile) {
+		DvsStats stats = new DvsStats();
+
+		// TOOLSET GAP — DVS/DVPG controls in SCG 9.0 are
+		// parameter_kind=powercli_only. The Java vim25 client can
+		// enumerate DVS MoRefs and read DVS/DVPG config (e.g.
+		// DistributedVirtualSwitch.config.defaultPortConfig.
+		// securityPolicy) but the canonical profile's `parameter`
+		// field is a PowerCLI cmdlet chain ("Get-VirtualSwitch |
+		// Get-SecurityPolicy"), not a settable key. Until the
+		// normalizer is taught to emit Java-addressable parameter
+		// names AND a future Phase implements a real evaluation
+		// path, every DVS control is skipped by
+		// ControlEvaluator.isEvaluable (parameter_kind !=
+		// "advanced_setting"). We still walk DVS inventory so the
+		// profile_name property publishes — that makes the resource
+		// appear under VCF-CF Compliance in the metric browser and
+		// keeps the stitching path wired for the future fix.
+		java.util.List<VSphereClient.DvsInfo> switches;
+		try {
+			switches = vsphere.getDvSwitches();
+		} catch (Exception e) {
+			logWarn("Failed to enumerate DVS: " + e.getMessage());
+			return stats;
+		}
+		if (switches.isEmpty()) {
+			logInfo("No DVS returned from vCenter SOAP");
+			return stats;
+		}
+		logInfo("vSphere SOAP: " + switches.size() + " DVS");
+
+		java.util.List<BenchmarkProfile.Control> dvsControls =
+				profile.dvsControls();
+
+		for (VSphereClient.DvsInfo dvs : switches) {
+			stats.total++;
+			// Evaluator returns a zero-control sentinel score=100 with
+			// totalCount=0. Don't fold sentinels into world aggregates,
+			// but DO push the profile_name property so the DVS appears
+			// under VCF-CF Compliance in the metric browser.
+			ControlEvaluator.ComplianceResult cr =
+					ControlEvaluator.evaluateControls(
+							dvsControls,
+							new java.util.HashMap<>(), dvs.name);
+
+			if (stitcher != null) {
+				ComplianceStitcher.HostEntry he =
+						stitcher.matchDvs(dvs.name, dvs.moid);
+				if (he != null) {
+					pushComplianceViaClient(he.resourceId, cr,
+							profile.name);
+				}
+			}
+		}
+		return stats;
+	}
+
+	private DvpgStats collectDvpg(BenchmarkProfile profile) {
+		DvpgStats stats = new DvpgStats();
+
+		// TOOLSET GAP — same story as collectDvs. DVPG controls in
+		// SCG 9.0 are PowerCLI-only; we walk inventory so
+		// profile_name publishes and the stitching path is wired
+		// for the future fix, but no controls evaluate today.
+		java.util.List<VSphereClient.DvpgInfo> pgs;
+		try {
+			pgs = vsphere.getDvPortgroups();
+		} catch (Exception e) {
+			logWarn("Failed to enumerate DVPG: " + e.getMessage());
+			return stats;
+		}
+		if (pgs.isEmpty()) {
+			logInfo("No DVPG returned from vCenter SOAP");
+			return stats;
+		}
+		logInfo("vSphere SOAP: " + pgs.size() + " DVPG");
+
+		java.util.List<BenchmarkProfile.Control> dvpgControls =
+				profile.dvpgControls();
+
+		for (VSphereClient.DvpgInfo pg : pgs) {
+			stats.total++;
+			ControlEvaluator.ComplianceResult cr =
+					ControlEvaluator.evaluateControls(
+							dvpgControls,
+							new java.util.HashMap<>(), pg.name);
+
+			if (stitcher != null) {
+				ComplianceStitcher.HostEntry he =
+						stitcher.matchDvpg(pg.name, pg.moid);
+				if (he != null) {
+					pushComplianceViaClient(he.resourceId, cr,
+							profile.name);
+				}
+			}
+		}
+		return stats;
+	}
+
+	private static final class HostStats {
+		int total;
+		int scored;
+		double scoreSum;
+		int belowThreshold;
+	}
+
+	private static final class VmStats {
+		int total;
+		int scored;
+		double scoreSum;
+		int belowThreshold;
+	}
+
+	private static final class VCenterStats {
+		boolean matched;
+	}
+
+	private static final class DvsStats {
+		int total;
+	}
+
+	private static final class DvpgStats {
+		int total;
 	}
 
 	// pushComplianceViaClient — publishes two layers of compliance data

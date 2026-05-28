@@ -35,6 +35,7 @@ from _compliance_normalize import (
     infer_value_type,
     log,
     map_component,
+    map_setting_location,
     write_canonical,
 )
 
@@ -91,6 +92,25 @@ def normalize(input_path: str, output_path: str) -> int:
                 continue
             resource_kind = derive_resource_kind(
                 source_id, fallback_resource_kind)
+
+            # Setting Location refinement: when the source-ID prefix
+            # didn't disambiguate to a sub-product (resource_kind ==
+            # Component fallback), let the Setting Location column
+            # narrow the resource_kind further. This catches network
+            # / port-group / virtual-switch controls that the
+            # Component column mis-tags as ESX.
+            setting_location = (src.get("Setting Location") or "").strip()
+            sl_override = map_setting_location(setting_location)
+            if sl_override and resource_kind == fallback_resource_kind:
+                resource_kind, sl_prefix = sl_override
+                # Force the control_id prefix to match the new
+                # resource_kind. build_control_id would keep an
+                # already-recognized source-ID prefix (e.g. `esx`)
+                # even when Setting Location moved us off HostSystem,
+                # leaving the prefix and resource_kind disagreeing.
+                # The schema says they must agree.
+                _, slug = control_id.split(".", 1)
+                control_id = f"{sl_prefix}.{slug}"
 
             parameter = (src.get("Configuration Parameter") or "").strip()
             if parameter == "N/A":

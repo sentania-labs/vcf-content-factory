@@ -192,6 +192,99 @@ def derive_resource_kind(source_id: str, fallback_resource_kind: str) -> str:
     return fallback_resource_kind
 
 
+# Setting Location -> (resource_kind, object_type_prefix). The
+# 'Setting Location' column in Bob Plankers' SCG source CSVs is a
+# second signal that the Component column lacks: 'Component=ESX'
+# covers everything that lives on the host *or* is configured through
+# a host command, including port-group / virtual-switch security
+# policies that should really be stitched to DVS / DVPG objects in
+# VCF Ops. Without this, every network control gets mis-classified
+# as HostSystem.
+#
+# Match rules are case-insensitive substring matches. First match
+# wins, so list the most-specific patterns first (e.g. "port group"
+# before "virtual switch" -- a "Virtual Port Group" string would
+# match both otherwise).
+#
+# Defaults:
+# - Port-group controls -> DistributedVirtualPortgroup. Modern
+#   production environments overwhelmingly use distributed switches;
+#   a future variant could split standard-switch port groups off to
+#   HostNetworkSystem based on the source-ID `network-standard-*`
+#   prefix.
+# - Virtual-switch controls -> DistributedVirtualSwitch. Same
+#   rationale.
+# - vCenter UI / configuration paths -> VCenterAdapterInstance.
+# - ESX advanced / esxcli / shell paths -> HostSystem (this also
+#   happens to be what the Component-based fallback would produce,
+#   so the entry is defensive in case the Component column is later
+#   inconsistent).
+#
+# Anything that doesn't match falls through to the existing
+# Component + source-ID-prefix pipeline. That keeps VM, vSAN, NSX,
+# VCF Operations, and other rows on the same path they were on
+# before this map existed.
+SETTING_LOCATION_MAP: List[tuple] = [
+    # Port group (must come before "virtual switch" so "Virtual Port
+    # Group" lands on dvpg, not vds)
+    ("port group", ("DistributedVirtualPortgroup", "dvpg")),
+    # Virtual / distributed switch
+    ("distributed switch", ("DistributedVirtualSwitch", "vds")),
+    ("virtual switch", ("DistributedVirtualSwitch", "vds")),
+    # vCenter Server UI / configuration paths. "vcenter" appears in
+    # many forms ("vCenter Server SSO Configuration", "Advanced
+    # vCenter Settings", "vCenter Server >> Configure >> ...").
+    ("vcenter", ("VCenterAdapterInstance", "vc")),
+    # vSphere Client / Content Library / SSO admin paths are all
+    # configured through vCenter.
+    ("vsphere client", ("VCenterAdapterInstance", "vc")),
+    ("content library", ("VCenterAdapterInstance", "vc")),
+    ("single sign on", ("VCenterAdapterInstance", "vc")),
+    ("vami", ("VCenterAdapterInstance", "vc")),
+    # ESX(i) host-side locations. The Component-based fallback
+    # already produces HostSystem for these, but pinning them
+    # here makes the map self-documenting and protects against
+    # source files that mis-tag the Component column.
+    ("esx advanced", ("HostSystem", "esx")),
+    ("esxi advanced", ("HostSystem", "esx")),
+    ("esxcli", ("HostSystem", "esx")),
+    ("esx shell", ("HostSystem", "esx")),
+    ("esxi shell", ("HostSystem", "esx")),
+    ("esx services", ("HostSystem", "esx")),
+    ("esxi services", ("HostSystem", "esx")),
+    ("esx security profile", ("HostSystem", "esx")),
+    ("esxi security profile", ("HostSystem", "esx")),
+    ("esx firewall", ("HostSystem", "esx")),
+    ("esxi firewall", ("HostSystem", "esx")),
+    ("esx authentication", ("HostSystem", "esx")),
+    ("esxi authentication", ("HostSystem", "esx")),
+    ("esx iscsi", ("HostSystem", "esx")),
+    ("esxi iscsi", ("HostSystem", "esx")),
+    ("esx vmkernel", ("HostSystem", "esx")),
+    ("esxi vmkernel", ("HostSystem", "esx")),
+    ("esx time", ("HostSystem", "esx")),
+    ("esxi time", ("HostSystem", "esx")),
+]
+
+
+def map_setting_location(setting_location: str) -> Optional[tuple]:
+    """Return (resource_kind, prefix) for a Setting Location value.
+
+    Case-insensitive substring matching. First entry in
+    SETTING_LOCATION_MAP that matches wins. Returns None if no entry
+    matches; caller should fall back to the Component-based pipeline.
+    """
+    if not setting_location:
+        return None
+    needle = setting_location.strip().lower()
+    if not needle or needle == "n/a":
+        return None
+    for token, kind_prefix in SETTING_LOCATION_MAP:
+        if token in needle:
+            return kind_prefix
+    return None
+
+
 def infer_value_type(expected: str) -> str:
     """Infer value_type from an expected_value string."""
     if expected is None:
