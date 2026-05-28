@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.16 (2026-05-27)
+
+- feat(adapter): build 16 — first-party content layout + lessons
+
 ## 1.0.0.15 (2026-05-27)
 
 - fix(adapter): SymptomSets requires >=2 children — split into two SymptomSet refs

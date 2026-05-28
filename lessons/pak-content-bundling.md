@@ -70,12 +70,29 @@ content/
    subdirectories (even empty) so the platform recognizes the
    content/ tree.
 
-## The fix
+## The fix (partial)
 
 Build 16: restructured to subdirectory pattern. Dashboard at
 `content/dashboards/<slug>/dashboard.json`, view at
 `content/reports/<slug>/content.xml`. All standard empty directories
-present.
+present. Still didn't auto-import.
+
+## The actual fix
+
+Build 17: placed content INSIDE `adapters.zip` at
+`<adapter_kind>/content/dashboards/<slug>/dashboard.json` and
+`<adapter_kind>/content/reports/<slug>/content.xml`.
+
+The `DashboardImporter` in vcops-bridge runs at boot time and scans
+`/usr/lib/vmware-vcops/user/plugins/inbound/<adapter>/content/dashboards/`.
+When `adapters.zip` is extracted during pak install, its contents go
+to that directory. VrAdapter's dashboard imports this way — its
+`adapters.zip` contains `VrAdapter/content/dashboards/`.
+
+Content at the outer pak `content/` directory may work for first-party
+paks installed during the VCF OVA deployment, but for third-party pak
+install/upgrade the inner adapters.zip path is what DashboardImporter
+scans. Keep content in BOTH locations (belt-and-suspenders).
 
 ## References
 

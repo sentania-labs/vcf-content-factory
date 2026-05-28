@@ -546,6 +546,8 @@ def _assemble_adapters_zip(
     adapter_jar: Path,
     lib_jars: List[Path],
     views_zip_bytes: Optional[bytes] = None,
+    bundled_views: Optional[list] = None,
+    bundled_dashboards: Optional[list] = None,
 ) -> bytes:
     """Build adapters.zip in memory and return as bytes.
 
@@ -565,6 +567,15 @@ def _assemble_adapters_zip(
           vcfcf-adapter-base.jar
           aria-ops-core-*.jar
           [project lib/*.jar]
+        content/                       [optional; present when bundled_views/dashboards given]
+          reports/<slug>/content.xml   [one per view]
+          dashboards/<slug>/dashboard.json  [one per dashboard]
+
+    The content/ subtree mirrors the outer pak content/ layout so that
+    DashboardImporter and ViewImporter, which scan the adapter plugin
+    directory after adapters.zip is extracted during pak install, find the
+    files at the expected path:
+      /usr/lib/vmware-vcops/user/plugins/inbound/<adapter_kind>/content/...
     """
     buf = io.BytesIO()
     adapter_dir = project.adapter_dir_name
@@ -651,6 +662,47 @@ def _assemble_adapters_zip(
         if views_zip_bytes is not None:
             _add_dir(zf, f"{adapter_dir}/conf/views")
             zf.writestr(f"{adapter_dir}/conf/views/views.zip", views_zip_bytes)
+
+        # content/ subtree — written inside adapters.zip so DashboardImporter
+        # and ViewImporter find the files after pak extraction to:
+        #   /usr/lib/vmware-vcops/user/plugins/inbound/<adapter_kind>/
+        # This matches how VrAdapter ships its bundled dashboards.
+        if bundled_views or bundled_dashboards:
+            from vcfops_dashboards.render import render_views_xml, render_dashboards_bundle_json
+            _add_dir(zf, f"{adapter_dir}/content")
+            if bundled_views:
+                _add_dir(zf, f"{adapter_dir}/content/reports")
+                for v in bundled_views:
+                    xml_text = render_views_xml([v])
+                    slug = _view_slug(v.name, v.id)
+                    _add_dir(zf, f"{adapter_dir}/content/reports/{slug}")
+                    zf.writestr(f"{adapter_dir}/content/reports/{slug}/content.xml", xml_text)
+                    print(
+                        f"  adapters.zip: {adapter_dir}/content/reports/{slug}/content.xml"
+                        f" <- {v.name}",
+                        file=sys.stderr,
+                    )
+            if bundled_dashboards:
+                _add_dir(zf, f"{adapter_dir}/content/dashboards")
+                views_by_name = {v.name: v for v in (bundled_views or [])}
+                _OWNER_UUID = "00000000-0000-0000-0000-000000000000"
+                for d in bundled_dashboards:
+                    dashboard_json = render_dashboards_bundle_json(
+                        [d], views_by_name, _OWNER_UUID
+                    )
+                    slug = d.name.replace("/", "_").replace(" ", "_").replace("[", "").replace("]", "")
+                    slug = "".join(c for c in slug if c.isalnum() or c in "_-")
+                    slug = slug.strip("_") or d.id
+                    _add_dir(zf, f"{adapter_dir}/content/dashboards/{slug}")
+                    zf.writestr(
+                        f"{adapter_dir}/content/dashboards/{slug}/dashboard.json",
+                        dashboard_json,
+                    )
+                    print(
+                        f"  adapters.zip: {adapter_dir}/content/dashboards/{slug}/dashboard.json"
+                        f" <- {d.name}",
+                        file=sys.stderr,
+                    )
 
         # lib/ directory — bundled JARs
         for jar in lib_jars:
@@ -1670,6 +1722,8 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
         adapters_zip_bytes = _assemble_adapters_zip(
             project, project_dir, adapter_jar, lib_jars,
             views_zip_bytes=_views_zip_bytes,
+            bundled_views=bundled_views if bundled_views else None,
+            bundled_dashboards=bundled_dashboards if bundled_dashboards else None,
         )
         print(
             f"  adapters.zip: {len(adapters_zip_bytes):,} bytes", file=sys.stderr
