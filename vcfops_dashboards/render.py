@@ -45,7 +45,62 @@ _ADAPTER_KIND_PREFIX = {
     "NSXTAdapter": "002011",
     "KubernetesAdapter": "002017",
     "VMWARE_INFRA_HEALTH": "002019",
+    "VrAdapter": "002009",
 }
+
+# When a self-provider View (or ProblemAlertsList) widget is pinned to a leaf
+# resource kind — one where no single resource carries the kind name as its
+# display name — the importer cannot resolve "entries.resource[name=<kind>]"
+# because the resource doesn't exist under that name on the instance.  The
+# correct container to pin to is the adapter's world singleton, which always
+# exists.  This table maps (adapter_kind, leaf_resource_kind) to the
+# (container_adapter_kind, container_resource_kind, container_resource_name)
+# that the importer CAN resolve.
+#
+# Evidence: VCFAutomation dashboard pins Views to "Automation World"; idps-
+# planner pins to "vSphere World"; AppOSUCP pins to "Universe".  In every
+# confirmed working case the resource entry name matches an actual resource
+# display name on the target instance.
+#
+# Extend this table when new leaf kinds are pinned:
+#   key:   (adapter_kind, leaf_resource_kind)
+#   value: (container_adapter_kind, container_resource_kind, container_resource_name)
+_VIEW_PIN_CONTAINER: dict[tuple[str, str], tuple[str, str, str]] = {
+    # VMWARE leaf kinds → vSphere World container
+    ("VMWARE", "HostSystem"):        ("VMWARE", "vSphere World", "vSphere World"),
+    ("VMWARE", "VirtualMachine"):    ("VMWARE", "vSphere World", "vSphere World"),
+    ("VMWARE", "Datastore"):         ("VMWARE", "vSphere World", "vSphere World"),
+    ("VMWARE", "ClusterComputeResource"): ("VMWARE", "vSphere World", "vSphere World"),
+    ("VMWARE", "Datacenter"):        ("VMWARE", "vSphere World", "vSphere World"),
+    # World singletons pass through unchanged (no entry needed — the helper
+    # falls back to (adapter_kind, resource_kind, resource_kind) for unknowns)
+}
+
+
+def _resolve_view_pin(
+    adapter_kind: str,
+    resource_kind: str,
+) -> tuple[str, str, str]:
+    """Return (container_adapter_kind, container_resource_kind, container_resource_name)
+    for a self-provider View/ProblemAlertsList widget pin.
+
+    For leaf kinds that are registered in _VIEW_PIN_CONTAINER the function
+    returns the world-singleton container so that the importer can resolve
+    "entries.resource[name=<container_resource_name>]" against an actual
+    running resource on the target instance.
+
+    For unregistered kinds (typically world singletons like ComplianceWorld,
+    Automation World, VRMS World) the resource name equals the kind name, so
+    the function falls back to (adapter_kind, resource_kind, resource_kind).
+    Those resources exist on every instance where the owning adapter is
+    installed.
+    """
+    container = _VIEW_PIN_CONTAINER.get((adapter_kind, resource_kind))
+    if container is not None:
+        return container
+    # World/singleton convention: the resource's display name equals the kind
+    # name (e.g., ComplianceWorld resource is named "ComplianceWorld").
+    return (adapter_kind, resource_kind, resource_kind)
 
 
 # ---------------- View definition (XML) ----------------
@@ -564,24 +619,33 @@ def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int
     # prefix (e.g. `000000`) installs cleanly but the widget fails to
     # render at view time with no diagnostic.
     if w.self_provider and w.pin:
-        pin_key = (w.pin.adapter_kind, w.pin.resource_kind)
-        prefix = _ADAPTER_KIND_PREFIX.get(w.pin.adapter_kind)
+        # Resolve the pin to a container resource that will exist on the
+        # target instance.  For leaf kinds (e.g. VMWARE/HostSystem) the
+        # importer cannot resolve "entries.resource[name='HostSystem']"
+        # because no resource has that display name.  _resolve_view_pin
+        # maps leaf kinds to their world-singleton containers, which always
+        # exist on any instance with the owning adapter installed.
+        c_adapter, c_kind, c_name = _resolve_view_pin(
+            w.pin.adapter_kind, w.pin.resource_kind
+        )
+        container_key = (c_adapter, c_kind)
+        prefix = _ADAPTER_KIND_PREFIX.get(c_adapter)
         if prefix is None:
             raise ValueError(
                 f"no known resourceKindId prefix for adapter kind "
-                f"{w.pin.adapter_kind!r} — extend _ADAPTER_KIND_PREFIX "
+                f"{c_adapter!r} — extend _ADAPTER_KIND_PREFIX "
                 f"after harvesting from an exported reference dashboard"
             )
         # Widget config.resource.resourceId is 0-indexed, matching the
         # entries.resource[].internalId values (resource:id:0_::_, etc.).
         # The Ext.vcops.chrome.model.Resource-N id is 1-based in exports
         # but Ops reassigns it on import — any positive integer works.
-        res_idx = resource_index[pin_key]
+        res_idx = resource_index[container_key]
         resource = {
             "resourceId": f"resource:id:{res_idx}_::_",
             "traversalSpecId": "",
-            "resourceName": w.pin.resource_kind,
-            "resourceKindId": f"{prefix}{w.pin.adapter_kind}{w.pin.resource_kind}",
+            "resourceName": c_name,
+            "resourceKindId": f"{prefix}{c_adapter}{c_kind}",
             "id": f"Ext.vcops.chrome.model.Resource-{res_idx + 1}",
         }
         self_provider_flag = True
@@ -990,18 +1054,17 @@ def _problem_alerts_list_widget(
     assert cfg is not None
 
     if w.self_provider and w.pin:
-        pin_key = (w.pin.adapter_kind, w.pin.resource_kind)
-        prefix = _ADAPTER_KIND_PREFIX.get(w.pin.adapter_kind)
-        if prefix is None:
-            raise ValueError(
-                f"no known resourceKindId prefix for adapter kind "
-                f"{w.pin.adapter_kind!r} — extend _ADAPTER_KIND_PREFIX "
-                f"after harvesting from an exported reference dashboard"
-            )
-        res_idx = resource_index[pin_key]
+        # Use the resolved container resource (same pattern as _view_widget).
+        # Leaf-kind pins (e.g. VMWARE/HostSystem) must redirect to the world
+        # singleton so the importer can find the resource by name.
+        c_adapter, c_kind, c_name = _resolve_view_pin(
+            w.pin.adapter_kind, w.pin.resource_kind
+        )
+        container_key = (c_adapter, c_kind)
+        res_idx = resource_index[container_key]
         resource_obj = {
             "resourceId": f"resource:id:{res_idx}_::_",
-            "resourceName": w.pin.resource_kind,
+            "resourceName": c_name,
         }
         self_provider_flag = True
         refresh_content = True
@@ -1390,20 +1453,37 @@ def render_dashboards_bundle_json(
                     key = (spec.adapter_kind, spec.resource_kind)
                     if key not in kind_index:
                         kind_index[key] = len(kind_index)
-    # Build resource index for self-provider pinned widgets. Each
-    # unique (adapter_kind, resource_kind) pin gets a 0-based slot
-    # in entries.resource[]. Widget configs reference these with
-    # resource:id:<N>_::_ values (0-based, matching internalId).
-    # Pin kinds must NOT be added to kind_index — that table is for
-    # ResourceList filter widgets only. Self-provider dashboards have
-    # no entries.resourceKind for the pinned kind.
+    # Build resource index for self-provider pinned View and ProblemAlertsList
+    # widgets.  Only those two widget types reference entries.resource[] in
+    # their widget configs; other self-provider types (Scoreboard, MetricChart,
+    # Heatmap, AlertList) use "resource": [] and don't need an entry here.
+    #
+    # IMPORTANT: the key is the CONTAINER resource, not the raw pin target.
+    # When the YAML pins a View to a leaf kind (e.g. VMWARE/HostSystem), the
+    # importer cannot resolve "entries.resource[name='HostSystem']" because no
+    # resource on the instance carries that name.  _resolve_view_pin redirects
+    # leaf-kind pins to the adapter's world singleton (e.g. "vSphere World")
+    # which DOES exist on every vSphere-connected instance.  For world kinds
+    # (e.g. vcfcf_compliance/ComplianceWorld) the kind name equals the resource
+    # name, so _resolve_view_pin returns them unchanged.
+    #
+    # The resource_index maps (container_adapter_kind, container_resource_kind)
+    # to a 0-based slot matching entries.resource[].internalId.
+    # resource_name_map stores the display name for each container key, which
+    # may differ from the resource_kind (e.g. "Virtual Machines" vs
+    # "VirtualMachine" for a custom group).
     resource_index: dict[tuple[str, str], int] = {}
+    resource_name_map: dict[tuple[str, str], str] = {}
     for d in dashboards:
         for w in d.widgets:
-            if w.self_provider and w.pin:
-                key = (w.pin.adapter_kind, w.pin.resource_kind)
-                if key not in resource_index:
-                    resource_index[key] = len(resource_index)
+            if w.self_provider and w.pin and w.type in ("View", "ProblemAlertsList"):
+                c_adapter, c_kind, c_name = _resolve_view_pin(
+                    w.pin.adapter_kind, w.pin.resource_kind
+                )
+                container_key = (c_adapter, c_kind)
+                if container_key not in resource_index:
+                    resource_index[container_key] = len(resource_index)
+                    resource_name_map[container_key] = c_name
 
     entries_resource_kind = [
         {
@@ -1419,7 +1499,7 @@ def render_dashboards_bundle_json(
             "internalId": f"resource:id:{idx}_::_",
             "adapterKindKey": res_adapter,
             "identifiers": [],
-            "name": res_kind,
+            "name": resource_name_map[(res_adapter, res_kind)],
         }
         for (res_adapter, res_kind), idx in resource_index.items()
     ]

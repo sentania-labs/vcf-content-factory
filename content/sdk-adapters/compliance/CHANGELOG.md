@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.18 (2026-05-27)
+
+- feat(adapter): build 18 — owning-adapter binding per spec §18 Pass 28
+
 ## 1.0.0.17 (2026-05-27)
 
 - feat(adapter): build 17 — content inside adapters.zip for DashboardImporter

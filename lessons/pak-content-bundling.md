@@ -94,9 +94,74 @@ paks installed during the VCF OVA deployment, but for third-party pak
 install/upgrade the inner adapters.zip path is what DashboardImporter
 scans. Keep content in BOTH locations (belt-and-suspenders).
 
+## The third dead end — entries.resource[] placeholder names
+
+Build 18 (A1–A6 fixes from spec/18 Pass 28 addendum): all binding fields
+present, `entries.adapterKind` set, `resources/` subdirs emitted, inner
+archive content removed.  Still silent import failure on the dashboard.
+
+Root cause: the renderer was adding self-provider pinned widgets to
+`entries.resource[]` using the resource KIND name as the resource display
+name.  The DashboardImporter resolves `entries.resource[]` entries by NAME
+against running resources on the instance.  A resource named "HostSystem"
+(the kind name) does not exist on any vSphere instance — individual hosts
+have names like "esxi01.example.com".  The View widget's `resourceId` field
+references `resource:id:N_::_`, which maps to the placeholder entry, which
+fails to resolve, so `isEntityFound()=false` and the dashboard silently
+does not appear post-install.
+
+### What actually works for self-provider View widget pinning
+
+Evidence from three confirmed-working reference paks:
+- **VCFAutomation**: View widget pinned to `entries.resource[name="Automation World"]`.
+  The "Automation World" resource exists on every instance with VCFAutomation
+  installed — it is the adapter's world singleton.
+- **AppOSUCP/UCP dashboard**: View pinned to `entries.resource[name="Universe"]`.
+  Same pattern — "Universe" is the Container adapter's world singleton.
+- **idps-planner**: View pinned to `entries.resource[name="vSphere World"]`.
+
+Pattern: **self-provider View widgets must be pinned to a world/singleton
+resource whose display name is known to exist on every target instance.**
+Leaf resource kinds (HostSystem, VirtualMachine, etc.) have per-instance
+names — they cannot be pre-resolved in a pak.
+
+### The fix (build 19)
+
+Added `_VIEW_PIN_CONTAINER` table to `vcfops_dashboards/render.py` mapping
+`(adapter_kind, leaf_resource_kind)` to the world-singleton container
+`(container_adapter_kind, container_resource_kind, container_resource_name)`.
+
+Added `_resolve_view_pin()` helper that checks the table and falls back to
+`(adapter_kind, resource_kind, resource_kind)` for world kinds (where the
+resource name equals the kind name — e.g., ComplianceWorld, VRMS World).
+
+Changed the `resource_index` building loop to:
+- Only include View and ProblemAlertsList widgets (the only types that
+  reference `resource:id:N_::_` in their widget config)
+- Use the resolved container key instead of the raw pin key
+
+The compliance dashboard View pinned to `VMWARE/HostSystem` now generates:
+- `entries.resource[name="vSphere World", resourceKindKey="vSphere World"]`
+- View widget `resourceId: "resource:id:0_::_"`, `resourceName: "vSphere World"`
+- View widget `resourceKindId: "002006VMWAREvSphere World"`
+
+The idps-planner reference confirmed this exact pattern works end-to-end.
+
+### Extend _VIEW_PIN_CONTAINER for new adapters
+
+When authoring a dashboard with a self-provider View widget pinned to a
+leaf kind for a new adapter, add an entry to `_VIEW_PIN_CONTAINER` in
+`vcfops_dashboards/render.py`.  The container resource name must be a
+resource that will always exist when the owning adapter is installed
+(typically the adapter's "world" singleton).
+
 ## References
 
 - NSX-T pak: `/storage/db/casa/pak/dist_pak_files/VA_LINUX/NSXTAdapter-*.pak`
 - vSphere pak: `/storage/db/casa/pak/dist_pak_files/VA_LINUX/VMwarevSphere-*.pak`
 - vSAN pak: `/storage/db/casa/pak/dist_pak_files/VA_LINUX/ManagementPackforStorageAreaNetwork-*.pak`
 - vCommunity: `references/vmbro_vcf_operations_vcommunity/Management Pack/content/`
+- VCFAutomation (devel): `vault/workspaces/vcf-mp-cleanroom/inputs/from-devel/paks/VCFAutomation-*.pak`
+- AppOSUCP (devel): `vault/workspaces/vcf-mp-cleanroom/inputs/from-devel/paks/AppOSUCPAdapter-*.pak`
+- VrAdapter (devel): `vault/workspaces/vcf-mp-cleanroom/inputs/from-devel/paks/VrAdapter-*.pak`
+- idps-planner: `dist/ThirdPartyContent/dashboards/idps-planner.zip`

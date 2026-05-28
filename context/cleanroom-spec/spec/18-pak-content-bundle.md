@@ -1,6 +1,6 @@
 # 18 — Pak Content Bundle: Dashboards, Alerts, Views, and Declarative Content
 
-**Status**: Pass 27 (2026-05-27).
+**Status**: Pass 29 (2026-05-27, A7 addendum).
 **Scope**: the declarative content that management packs ship alongside
 their adapter implementation — dashboards, alert definitions, views,
 supermetrics, custom groups, traversal specs, scorecards, and
@@ -789,3 +789,60 @@ harness) should validate at least:
 A fixture pak that has been confirmed importable end-to-end (counts
 all match) should be promoted to a regression-test artifact for
 future generator changes.
+
+### A7. `entries.resource[]` names must match actual running resources
+
+**Provenance**: build 19 calibration against the build 18 silent dashboard
+import failure.  A1–A6 fixes were all present; the dashboard still did not
+appear post-install.
+
+The DashboardImporter resolves `entries.resource[]` entries by the `name`
+field against actual resources on the running instance.  If no resource
+matches the name, `isEntityFound()=false` and the dashboard is silently
+dropped — no error in the install log.
+
+**Observed failure pattern**: the renderer was generating
+`entries.resource[name="HostSystem"]` for a View widget pinned to
+`VMWARE/HostSystem`.  No resource on any vSphere-connected instance is
+named "HostSystem" — individual ESXi hosts have DNS/FQDN display names.
+The importer could not resolve the placeholder and the dashboard was
+silently discarded.
+
+**Evidence from confirmed-working reference paks** (cross-checked across
+VCFAutomation, AppOSUCP, VrAdapter, idps-planner):
+
+| Pak | entries.resource[].name | Resource that resolves |
+|---|---|---|
+| VCFAutomation | "Automation World" | VCFAutomation's world singleton |
+| AppOSUCP (ucp) | "Universe" | Container adapter's world singleton |
+| VrAdapter | "VRMS World" | VrAdapter's world singleton |
+| idps-planner | "vSphere World" | VMWARE's world singleton |
+| VrAdapter | "Virtual Machines" | Built-in custom group (always present) |
+
+Every confirmed-working case uses a resource whose display name is KNOWN
+to exist on any target instance: world singletons and platform-default
+custom groups.
+
+**VCF-CF generator requirement**:
+
+1. `entries.resource[]` MUST only contain entries whose `name` field
+   matches a resource display name that is guaranteed to exist on the
+   target instance when the pak is installed.
+
+2. Self-provider View (and ProblemAlertsList) widgets that are pinned to
+   a LEAF resource kind (HostSystem, VirtualMachine, Datastore, etc.)
+   MUST redirect the pin to the adapter's world-singleton container.
+   The view's `<SubjectType>` specifies what data is shown; the pin just
+   provides the root container to traverse.
+
+3. The `_VIEW_PIN_CONTAINER` table in `vcfops_dashboards/render.py` is
+   the registry for this mapping.  Extend it when new adapter kinds with
+   leaf-kind pinning are introduced.  For world kinds (ComplianceWorld,
+   VRMS World, Automation World) no entry is needed — the resource name
+   equals the kind name by convention, and the resource always exists.
+
+4. Add A7 to the validation recipe (item 6 below): every
+   `entries.resource[]` entry must have a `name` that is either a
+   registered world-singleton name or a known-present custom group name.
+   A generator that emits kind names as resource names (e.g. "HostSystem")
+   is a bug, not a runtime configuration issue.
