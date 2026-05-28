@@ -691,6 +691,37 @@ def _generate_outer_manifest(project: SdkProjectDef) -> str:
     return json.dumps(manifest, indent=4)
 
 
+def _view_slug(view_name: str, view_id: str) -> str:
+    """Derive a filesystem-safe directory name from a view name.
+
+    Used to produce ``content/reports/<slug>/content.xml`` entries that match
+    the VMware first-party pak convention (subdirectory per view).
+    """
+    slug = view_name.replace("/", "_").replace(" ", "_").replace("[", "").replace("]", "")
+    slug = "".join(c for c in slug if c.isalnum() or c in "_-")
+    slug = slug.strip("_")
+    return slug or view_id
+
+
+# Standard content/ subdirectories that VCF Ops auto-imports during pak install.
+# Written as empty directory entries whenever bundled_content is present so the
+# platform recognises the content/ tree structure.
+_CONTENT_DIRS = [
+    "content/",
+    "content/reports/",
+    "content/dashboards/",
+    "content/alertdefs/",
+    "content/symptomdefs/",
+    "content/recommendations/",
+    "content/supermetrics/",
+    "content/customgroups/",
+    "content/policies/",
+    "content/traversalspecs/",
+    "content/files/",
+    "content/resources/",
+]
+
+
 def _write_outer_pak(
     project: SdkProjectDef,
     adapters_zip_bytes: bytes,
@@ -711,11 +742,18 @@ def _write_outer_pak(
     in adapter.yaml), their rendered payloads are written into the pak's
     ``content/`` tree so the platform installs them automatically.
 
-    Views layout (Gen-2 native import):
-      content/views/views.zip           [zip containing content.xml]
+    Views layout (VMware first-party pattern — content.xml inside subdirectory):
+      content/reports/<slug>/content.xml   [standalone <Content><Views>...</Views></Content>]
 
-    Dashboard layout (one file per dashboard, matches reference pak structure):
-      content/dashboards/<slug>.json    [{"uuid":..., "entries":..., "dashboards":[...]}]
+    Dashboard layout (VMware first-party pattern — dashboard.json inside subdirectory):
+      content/dashboards/<slug>/dashboard.json   [{"uuid":..., "entries":..., "dashboards":[...]}]
+
+    Standard empty directories are also written whenever bundled_content is
+    present so the platform recognises the full content/ tree structure.
+
+    Note: ``views_zip_bytes`` is accepted but NOT written to content/views/ in
+    the outer pak.  The views.zip lives only inside adapters.zip at
+    ``<adapter>/conf/views/views.zip`` as a belt-and-suspenders copy.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     pak_path = output_dir / project.pak_filename
@@ -731,6 +769,8 @@ def _write_outer_pak(
         default_svg = _HERE / "templates" / "icons" / "default.svg"
         icon_bytes = default_svg.read_bytes() if default_svg.is_file() else b""
 
+    has_bundled_content = bool(views or dashboards)
+
     with zipfile.ZipFile(pak_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.txt", _generate_outer_manifest(project))
         zf.writestr("eula.txt", _read_license())
@@ -739,15 +779,33 @@ def _write_outer_pak(
         zf.writestr("adapters.zip", adapters_zip_bytes)
 
         # --- Bundled content (views + dashboards) ---
+        if has_bundled_content:
+            # Write standard empty directory entries so VCF Ops recognises the
+            # content/ tree structure regardless of which content types are present.
+            for content_dir in _CONTENT_DIRS:
+                zf.writestr(content_dir, "")
+
         if views:
-            # views_zip_bytes is already computed; embed at content/views/views.zip
-            zf.writestr("content/views/views.zip", views_zip_bytes)
+            from vcfops_dashboards.render import render_views_xml
+            # Write one XML file per view under content/reports/ — this is the
+            # vCommunity-compatible layout that VCF Ops auto-imports on pak install.
+            # Each file is a standalone <Content><Views><ViewDef>...</ViewDef></Views></Content>
+            # document, which is exactly what render_views_xml([single_view]) produces.
+            for v in views:
+                xml_text = render_views_xml([v])
+                slug = _view_slug(v.name, v.id)
+                zf.writestr(f"content/reports/{slug}/", "")
+                zf.writestr(f"content/reports/{slug}/content.xml", xml_text)
+                print(
+                    f"  bundled content: content/reports/{slug}/content.xml <- {v.name}",
+                    file=sys.stderr,
+                )
 
         if dashboards:
             from vcfops_dashboards.render import render_dashboards_bundle_json
             # Build views_by_name from all views (bundled + any loaded for dashboards)
             views_by_name = {v.name: v for v in (views or [])}
-            # Per-dashboard JSON: one file per dashboard, slug derived from dashboard id
+            # Per-dashboard JSON: one file per dashboard, slug derived from dashboard name.
             # Each file contains a single-dashboard bundle envelope.
             _OWNER_UUID = "00000000-0000-0000-0000-000000000000"
             for d in dashboards:
@@ -758,7 +816,12 @@ def _write_outer_pak(
                 slug = d.name.replace("/", "_").replace(" ", "_").replace("[", "").replace("]", "")
                 slug = "".join(c for c in slug if c.isalnum() or c in "_-")
                 slug = slug.strip("_") or d.id
-                zf.writestr(f"content/dashboards/{slug}.json", dashboard_json)
+                zf.writestr(f"content/dashboards/{slug}/", "")
+                zf.writestr(f"content/dashboards/{slug}/dashboard.json", dashboard_json)
+                print(
+                    f"  bundled content: content/dashboards/{slug}/dashboard.json <- {d.name}",
+                    file=sys.stderr,
+                )
 
     return pak_path
 

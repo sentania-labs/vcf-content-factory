@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.15 (2026-05-27)
+
+- fix(adapter): SymptomSets requires >=2 children — split into two SymptomSet refs
+
 ## 1.0.0.14 (2026-05-27)
 
 - feat(compliance): build 14 — alerts, dashboard, and pak content bundling

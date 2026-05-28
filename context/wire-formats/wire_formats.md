@@ -379,6 +379,63 @@ Gotchas:
     Ops behavior; the delete itself returns 200 and is
     authoritative.
 
+## Pak bundled content layout (first-party + SDK)
+
+VCF Ops auto-imports content from the `content/` directory inside a
+`.pak` file during the CASA APPLY_ADAPTER phase. No post-install
+scripts needed. Confirmed against VMware first-party paks (NSX-T,
+vSphere, vSAN) and vCommunity Integration SDK pak on the devel
+appliance.
+
+### Canonical directory structure
+
+```
+<pak>.pak
+└── content/
+    ├── dashboards/<slug>/dashboard.json   # subdirectory per dashboard
+    ├── reports/<slug>/content.xml         # views as <Content><Views> XML
+    ├── alertdefs/alert-content.xml        # combined <alertContent> XML
+    ├── supermetrics/<slug>.json
+    ├── customgroups/<slug>.json
+    ├── traversalspecs/<slug>.xml
+    ├── scorecards/scorecard-def.json
+    ├── files/reskndmetric/                # metric selection configs
+    ├── resources/resources.properties     # localization
+    └── policies/                          # policy configs
+```
+
+### Critical rules
+
+1. **Dashboards use subdirectories.** Each dashboard gets its own
+   directory under `content/dashboards/` with the JSON file inside.
+   Flat files at `content/dashboards/<slug>.json` are NOT processed.
+   NSX-T uses `dashboard.json`; vSphere uses `<slug>.json`. Both work.
+
+2. **Views go in `content/reports/`, NOT `content/views/`.** Each
+   view group gets a subdirectory containing `content.xml`. Format:
+   `<Content><Views><ViewDef id="...">...</ViewDef></Views></Content>`.
+
+3. **Alerts/symptoms/recommendations**: first-party paks put all
+   three in a single `content/alertdefs/<name>.xml` with root element
+   `<alertContent>` containing `<AlertDefinitions>`,
+   `<SymptomDefinitions>`, and `<Recommendations>`. Alternatively,
+   these can go in describe.xml (confirmed working build 15).
+
+4. **Include all standard empty directories** so the platform
+   recognizes the content/ tree.
+
+### Failed approaches
+
+- `content/views/views.zip` — platform ignored it (build 14)
+- Flat `content/dashboards/<slug>.json` — platform ignored it (build 15)
+- Flat `content/reports/<slug>.xml` — not confirmed; switched to
+  subdirectory pattern before testing
+
+`sdk_builder.py::_write_outer_pak` implements this layout. The
+`views_zip_bytes` passed to it is NOT written to the outer pak —
+it lives only inside `adapters.zip/<adapter>/conf/views/views.zip`
+as a belt-and-suspenders copy for post-install scripts.
+
 ## Custom group types
 
 Two-field flat taxonomy that classifies custom group instances.

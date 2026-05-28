@@ -12,3 +12,4 @@ situation, heed it.
 | [unifi-metric-key-parity.md](unifi-metric-key-parity.md) | MPB ignores `key:` in design.json — derives keys from labels only. Six of eight base metrics had key drift. Also: MPB <9.2 doesn't support filter projections; don't ship fragile workarounds. |
 | [pak-isunremovable-vendor-bug.md](pak-isunremovable-vendor-bug.md) | VCF Ops 9.0.2 `isUnremovable` flag not enforced server-side. vSAN pak removed from lab; no recovery path. |
 | [foreign-resource-property-push.md](foreign-resource-property-push.md) | Java SDK `ResourceCollection.add()` silently drops foreign resources. Use `suiteAPIClient.getClient()` via reflection for cross-MP property push. 10 builds to prove it. |
+| [pak-content-bundling.md](pak-content-bundling.md) | Pak content/ directory must use subdirectory pattern (not flat files). Views go in `content/reports/`, not `content/views/`. SymptomSets needs ≥2 children. 3 builds to get right. |
