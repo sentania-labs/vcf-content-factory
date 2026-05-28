@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.14 (2026-05-27)
+
+- feat(compliance): build 14 — alerts, dashboard, and pak content bundling
+
 ## 1.0.0.12 (2026-05-27)
 
 - fix(adapter): component filter matched 'ESXi' but CSV has 'VMware ESXi'

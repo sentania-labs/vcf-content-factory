@@ -1,6 +1,6 @@
 name: "VCF Content Factory Compliance"
 version: "1.0.0"
-build_number: 14
+build_number: 15
 adapter_kind: "vcfcf_compliance"
 tier: 2
 description: >

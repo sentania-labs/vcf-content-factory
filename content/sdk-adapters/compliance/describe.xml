@@ -99,10 +99,10 @@
       <State severity="Automatic">
         <Impact type="badge" key="risk"/>
         <SymptomSets operator="or">
-          <SymptomSet applyOn="self" operator="or">
-            <Symptom ref="vcfcf_compliance_score_warning"/>
-            <Symptom ref="vcfcf_compliance_score_critical"/>
-          </SymptomSet>
+          <SymptomSet ref="vcfcf_compliance_score_warning" operator="and"
+                      aggregation="any" applyOn="self" negateCondition="false"/>
+          <SymptomSet ref="vcfcf_compliance_score_critical" operator="and"
+                      aggregation="any" applyOn="self" negateCondition="false"/>
         </SymptomSets>
         <Recommendations>
           <Recommendation ref="vcfcf_compliance_review_controls" priority="1"/>
