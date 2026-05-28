@@ -1,0 +1,49 @@
+name: "[VCF Content Factory] Host Compliance Score Degraded"
+description: >
+  Alerts when a VMWARE HostSystem's VCF-CF compliance score drops below a
+  hardened-baseline threshold. Uses a tiered severity model: WARNING triggers
+  at a score below 95% and CRITICAL triggers at a score below 80%. Each
+  threshold is an independent symptom so the highest active severity determines
+  the alert criticality (SYMPTOM_BASED). The alert fires when either symptom
+  is active (ANY operator across two single-symptom sets). Compliance score
+  is pushed onto HostSystem resources via ARIA_OPS stitching from the
+  vcfcf_compliance adapter. Built-in compliance packs cover VM, vCenter, DVS,
+  vSAN, and NSX but not HostSystem; this alert fills that gap. Investigate
+  failing controls via the VCF-CF Compliance properties on the affected host.
+adapter_kind: VMWARE
+resource_kind: HostSystem
+
+type: 15              # Application
+sub_type: 20          # Workload
+wait_cycles: 1
+cancel_cycles: 1
+criticality: SYMPTOM_BASED
+
+impact:
+  badge: RISK
+
+# Two symptoms, each in its own set, combined with ANY (OR).
+# The WARNING symptom (<95%) fires first; if the score continues to drop
+# below 80% the CRITICAL symptom also fires and SYMPTOM_BASED escalates
+# the alert criticality automatically. Each set uses ALL with a single
+# symptom — the canonical pattern for independent threshold tiers.
+symptom_sets:
+  operator: ANY
+  sets:
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Host Compliance Score Below 95%"
+
+    - defined_on: SELF
+      operator: ALL
+      symptoms:
+        - name: "[VCF Content Factory] Host Compliance Score Below 80%"
+
+recommendations:
+  - name: "[VCF Content Factory] Host Compliance Review Non-Compliant Controls"
+    priority: 1
+  - name: "[VCF Content Factory] Host Compliance Remediate via SCG or CIS Benchmark"
+    priority: 2
+  - name: "[VCF Content Factory] Host Compliance Verify Score Recovery"
+    priority: 3

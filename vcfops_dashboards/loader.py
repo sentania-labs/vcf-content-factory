@@ -96,6 +96,11 @@ class ViewColumn:
     # Required when all three numeric bounds are set.
     # False = higher is worse (red=high). True = lower is worse (red=low).
     ascending_range: Optional[bool] = None
+    # True when the attribute is a string property (e.g. VCF-CF Compliance|profile_name).
+    # Controls isProperty and isStringAttribute in the rendered XML.
+    # Default False preserves existing behaviour for numeric metric columns.
+    is_property: bool = False
+    is_string_attribute: bool = False
 
 
 @dataclass
@@ -921,6 +926,8 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
             orange_bound=orange,
             red_bound=red,
             ascending_range=ascending,
+            is_property=bool(c.get("is_property", False)),
+            is_string_attribute=bool(c.get("is_string_attribute", False)),
         )
 
     cols = [_load_column(c) for c in (data.get("columns") or [])]

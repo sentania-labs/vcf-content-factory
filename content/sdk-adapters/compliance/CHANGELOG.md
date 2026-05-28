@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.12 (2026-05-27)
+
+- fix(adapter): component filter matched 'ESXi' but CSV has 'VMware ESXi'
+
 ## 1.0.0.11 (2026-05-27)
 
 - feat(adapter): vSphere SOAP collection via vim25 — real compliance scoring

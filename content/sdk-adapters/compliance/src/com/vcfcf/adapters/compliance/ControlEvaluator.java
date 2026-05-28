@@ -63,8 +63,8 @@ public final class ControlEvaluator {
 
 	static boolean valuesMatch(String actual, String expected) {
 		if (actual == null || expected == null) return false;
-		String a = actual.trim();
-		String e = expected.trim();
+		String a = stripQuotes(actual.trim());
+		String e = stripQuotes(expected.trim());
 		if (a.equalsIgnoreCase(e)) return true;
 
 		try {
@@ -74,6 +74,14 @@ public final class ControlEvaluator {
 		} catch (NumberFormatException ignored) {}
 
 		return false;
+	}
+
+	private static String stripQuotes(String s) {
+		if (s.length() >= 2 && s.charAt(0) == '"'
+				&& s.charAt(s.length() - 1) == '"') {
+			return s.substring(1, s.length() - 1);
+		}
+		return s;
 	}
 
 	public static final class ComplianceResult {

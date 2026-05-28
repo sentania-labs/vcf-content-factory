@@ -1,0 +1,13 @@
+name: "[VCF Content Factory] Host Compliance Review Non-Compliant Controls"
+description: |
+  Review the VCF-CF Compliance properties on the affected host in VCF Operations.
+  Navigate to the host resource and open the Metrics or Properties tab. Each
+  compliance control exposes Actual, Expected, and Description properties that
+  identify exactly which security settings are out of compliance. Focus on
+  controls where the Actual value differs from the Expected value — those are
+  the failing controls driving the score degradation.
+
+  Sort controls by severity or by the size of the Actual-vs-Expected gap to
+  prioritize remediation effort. Document the failing control names before
+  making changes so you can verify recovery after remediation.
+adapter_kind: VMWARE

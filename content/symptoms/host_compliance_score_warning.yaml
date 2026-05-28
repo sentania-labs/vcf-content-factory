@@ -1,0 +1,24 @@
+name: "[VCF Content Factory] Host Compliance Score Below 95%"
+adapter_kind: VMWARE
+resource_kind: HostSystem
+severity: WARNING
+wait_cycles: 1
+cancel_cycles: 1
+
+condition:
+  type: metric_static
+  key: VCF-CF Compliance|score
+  operator: LT
+  value: 95
+  instanced: false
+
+description: >
+  Triggers when a VMWARE HostSystem's VCF-CF compliance score drops below 95
+  for 1 consecutive collection cycle. The metric is pushed onto HostSystem
+  resources via ARIA_OPS stitching from the vcfcf_compliance adapter. WARNING
+  severity signals that the host has drifted from the hardened baseline but has
+  not yet crossed the critical threshold. wait_cycles and cancel_cycles are both
+  set to 1 so the symptom fires on the first breach and clears as soon as the
+  score recovers — compliance drift is actionable immediately and should not be
+  filtered by a noise window. Intended to feed into a tiered compliance alert
+  alongside the CRITICAL (<80%) counterpart.

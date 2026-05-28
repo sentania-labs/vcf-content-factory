@@ -1,0 +1,20 @@
+name: "[VCF Content Factory] Host Compliance Verify Score Recovery"
+description: |
+  After remediating failing controls, wait for the next compliance adapter
+  collection cycle (default 60 minutes) to confirm the score recovers above
+  the alert threshold. The VCF-CF Compliance score metric is pushed onto the
+  HostSystem resource by the vcfcf_compliance adapter on each collection
+  interval — the alert will not auto-cancel until the score metric is
+  re-evaluated and the symptom condition clears.
+
+  If using a custom benchmark profile, verify the profile CSV is up to date
+  with your organization's current security baseline. An outdated profile can
+  cause controls to fail against stale Expected values even after the ESXi
+  settings are correct. Update the profile CSV and re-run the adapter collection
+  to reflect the new baseline.
+
+  If the score does not recover after two collection cycles, re-check the
+  failing controls in VCF Operations to confirm the Actual values have changed.
+  Some settings require an ESXi service restart or host reboot before they take
+  effect.
+adapter_kind: VMWARE

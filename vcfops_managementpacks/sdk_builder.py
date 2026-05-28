@@ -464,11 +464,88 @@ def _generate_version_txt(project: SdkProjectDef) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _load_bundled_content(
+    raw: dict,
+    project_dir: Path,
+    repo_root: Path,
+):
+    """Parse the optional ``bundled_content`` key from a raw adapter.yaml dict.
+
+    Returns a tuple ``(views, dashboards)`` where each is a list of loaded
+    objects.  Returns ``([], [])`` when the key is absent or empty.
+
+    Paths in ``bundled_content.views`` and ``bundled_content.dashboards`` are
+    relative to the repo root (the same convention used in bundle manifests).
+
+    Raises:
+        SdkBuildError: if a listed path does not exist or fails to load.
+    """
+    bundled = raw.get("bundled_content") or {}
+    if not bundled:
+        return [], []
+
+    try:
+        from vcfops_dashboards.loader import load_view, load_dashboard
+    except ImportError as exc:
+        raise SdkBuildError(
+            f"bundled_content requires vcfops_dashboards to be installed: {exc}"
+        ) from exc
+
+    views = []
+    for rel in (bundled.get("views") or []):
+        path = (repo_root / rel).resolve()
+        if not path.is_file():
+            raise SdkBuildError(
+                f"bundled_content.views: path not found: {path} "
+                f"(resolved from '{rel}' relative to {repo_root})"
+            )
+        try:
+            v = load_view(path)
+        except Exception as exc:
+            raise SdkBuildError(
+                f"bundled_content.views: failed to load {path}: {exc}"
+            ) from exc
+        views.append(v)
+
+    dashboards = []
+    for rel in (bundled.get("dashboards") or []):
+        path = (repo_root / rel).resolve()
+        if not path.is_file():
+            raise SdkBuildError(
+                f"bundled_content.dashboards: path not found: {path} "
+                f"(resolved from '{rel}' relative to {repo_root})"
+            )
+        try:
+            d = load_dashboard(path)
+        except Exception as exc:
+            raise SdkBuildError(
+                f"bundled_content.dashboards: failed to load {path}: {exc}"
+            ) from exc
+        dashboards.append(d)
+
+    return views, dashboards
+
+
+def _build_views_zip_bytes(views: list) -> bytes:
+    """Render ``views`` (list of ViewDef) to a zip containing content.xml.
+
+    Returns the zip bytes.  The zip structure mirrors what the VCF Ops
+    content importer expects inside a views import payload.
+    """
+    from vcfops_dashboards.render import render_views_xml
+    xml_text = render_views_xml(views)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("content.xml", xml_text)
+    return buf.getvalue()
+
+
 def _assemble_adapters_zip(
     project: SdkProjectDef,
     project_dir: Path,
     adapter_jar: Path,
     lib_jars: List[Path],
+    views_zip_bytes: Optional[bytes] = None,
 ) -> bytes:
     """Build adapters.zip in memory and return as bytes.
 
@@ -482,6 +559,8 @@ def _assemble_adapters_zip(
           describe.xml
           version.txt
           resources/resources.properties
+          views/
+            views.zip                  [optional; present when views_zip_bytes given]
         lib/
           vcfcf-adapter-base.jar
           aria-ops-core-*.jar
@@ -568,6 +647,11 @@ def _assemble_adapters_zip(
                 if pf.is_file():
                     zf.write(pf, f"{adapter_dir}/conf/profiles/{pf.name}")
 
+        # conf/views/views.zip — belt-and-suspenders copy of rendered views
+        if views_zip_bytes is not None:
+            _add_dir(zf, f"{adapter_dir}/conf/views")
+            zf.writestr(f"{adapter_dir}/conf/views/views.zip", views_zip_bytes)
+
         # lib/ directory — bundled JARs
         for jar in lib_jars:
             zf.write(jar, f"{adapter_dir}/lib/{jar.name}")
@@ -612,6 +696,9 @@ def _write_outer_pak(
     adapters_zip_bytes: bytes,
     output_dir: Path,
     project_dir: Optional[Path] = None,
+    views: Optional[list] = None,
+    dashboards: Optional[list] = None,
+    views_zip_bytes: Optional[bytes] = None,
 ) -> Path:
     """Write the outer .pak ZIP to output_dir and return the path.
 
@@ -619,6 +706,16 @@ def _write_outer_pak(
     Repository/Accounts renders the real icon instead of a black placeholder.
     Falls back to templates/icons/default.svg when no project icon mapping
     exists.
+
+    When ``views`` and/or ``dashboards`` are supplied (from ``bundled_content``
+    in adapter.yaml), their rendered payloads are written into the pak's
+    ``content/`` tree so the platform installs them automatically.
+
+    Views layout (Gen-2 native import):
+      content/views/views.zip           [zip containing content.xml]
+
+    Dashboard layout (one file per dashboard, matches reference pak structure):
+      content/dashboards/<slug>.json    [{"uuid":..., "entries":..., "dashboards":[...]}]
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     pak_path = output_dir / project.pak_filename
@@ -640,6 +737,28 @@ def _write_outer_pak(
         zf.writestr("default.svg", icon_bytes)
         zf.writestr("resources/resources.properties", "")
         zf.writestr("adapters.zip", adapters_zip_bytes)
+
+        # --- Bundled content (views + dashboards) ---
+        if views:
+            # views_zip_bytes is already computed; embed at content/views/views.zip
+            zf.writestr("content/views/views.zip", views_zip_bytes)
+
+        if dashboards:
+            from vcfops_dashboards.render import render_dashboards_bundle_json
+            # Build views_by_name from all views (bundled + any loaded for dashboards)
+            views_by_name = {v.name: v for v in (views or [])}
+            # Per-dashboard JSON: one file per dashboard, slug derived from dashboard id
+            # Each file contains a single-dashboard bundle envelope.
+            _OWNER_UUID = "00000000-0000-0000-0000-000000000000"
+            for d in dashboards:
+                dashboard_json = render_dashboards_bundle_json(
+                    [d], views_by_name, _OWNER_UUID
+                )
+                # Derive a filesystem-safe slug from the dashboard name
+                slug = d.name.replace("/", "_").replace(" ", "_").replace("[", "").replace("]", "")
+                slug = "".join(c for c in slug if c.isalnum() or c in "_-")
+                slug = slug.strip("_") or d.id
+                zf.writestr(f"content/dashboards/{slug}.json", dashboard_json)
 
     return pak_path
 
@@ -1423,6 +1542,21 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
     print(f"  name={project.name}  version={project.version}.{project.build_number}  "
           f"kind={project.adapter_kind}", file=sys.stderr)
 
+    # Step 1b: parse bundled_content (optional) — must happen before compile so
+    # content load errors fail fast, before the expensive Java build steps.
+    import yaml as _yaml_mod
+    _raw_adapter_yaml = _yaml_mod.safe_load(adapter_yaml.read_text(encoding="utf-8"))
+    _repo_root = _HERE.parent
+    bundled_views, bundled_dashboards = _load_bundled_content(
+        _raw_adapter_yaml, project_dir, _repo_root
+    )
+    if bundled_views or bundled_dashboards:
+        print(
+            f"  bundled content: {len(bundled_views)} view(s), "
+            f"{len(bundled_dashboards)} dashboard(s)",
+            file=sys.stderr,
+        )
+
     # Step 2: detect JDK
     javac = _detect_jdk()
     jar_tool = _detect_jar_tool()
@@ -1466,8 +1600,13 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
 
         # Step 9: assemble adapters.zip
         print("  assembling adapters.zip ...", file=sys.stderr)
+        # Render views zip once (used both inside adapters.zip and outer pak)
+        _views_zip_bytes: Optional[bytes] = None
+        if bundled_views:
+            _views_zip_bytes = _build_views_zip_bytes(bundled_views)
         adapters_zip_bytes = _assemble_adapters_zip(
-            project, project_dir, adapter_jar, lib_jars
+            project, project_dir, adapter_jar, lib_jars,
+            views_zip_bytes=_views_zip_bytes,
         )
         print(
             f"  adapters.zip: {len(adapters_zip_bytes):,} bytes", file=sys.stderr
@@ -1475,7 +1614,10 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
 
         # Step 10+11: generate manifest and write outer .pak
         pak_path = _write_outer_pak(
-            project, adapters_zip_bytes, Path(output_dir), project_dir
+            project, adapters_zip_bytes, Path(output_dir), project_dir,
+            views=bundled_views,
+            dashboards=bundled_dashboards,
+            views_zip_bytes=_views_zip_bytes,
         )
 
     print(f"Built: {pak_path}", file=sys.stderr)

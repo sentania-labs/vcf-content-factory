@@ -184,7 +184,7 @@ def _xml_attribute_item(
     if col.unit:
         props.append(_xml_property("preferredUnitId", col.unit))
     props += [
-        _xml_property("isStringAttribute", "false"),
+        _xml_property("isStringAttribute", "true" if col.is_string_attribute else "false"),
         _xml_property("adapterKind", view.adapter_kind),
         _xml_property("resourceKind", view.resource_kind),
         _xml_property("rollUpType", roll_up_type),
@@ -218,7 +218,7 @@ def _xml_attribute_item(
             f'<List><Item value="{escape(transform)}"/></List>'
             f'</Property>'
         )
-    props.append(_xml_property("isProperty", "false"))
+    props.append(_xml_property("isProperty", "true" if col.is_property else "false"))
     # Color bound Properties — emitted between isProperty and displayName
     # in order: yellow, orange, red, ascendingRange.
     # See context/view_column_wire_format.md §Per-column color thresholds.

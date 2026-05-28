@@ -58,6 +58,78 @@
 
   </ResourceKinds>
 
+  <SymptomDefinitions>
+
+    <SymptomDefinition id="vcfcf_compliance_score_warning"
+                       nameKey="100"
+                       adapterKind="VMWARE"
+                       resourceKind="HostSystem"
+                       waitCycle="1"
+                       cancelCycle="1">
+      <State severity="Warning">
+        <Condition type="metric" key="VCF-CF Compliance|score"
+                   operator="&lt;" value="95"
+                   valueType="numeric" thresholdType="static"/>
+      </State>
+    </SymptomDefinition>
+
+    <SymptomDefinition id="vcfcf_compliance_score_critical"
+                       nameKey="101"
+                       adapterKind="VMWARE"
+                       resourceKind="HostSystem"
+                       waitCycle="1"
+                       cancelCycle="1">
+      <State severity="Critical">
+        <Condition type="metric" key="VCF-CF Compliance|score"
+                   operator="&lt;" value="80"
+                   valueType="numeric" thresholdType="static"/>
+      </State>
+    </SymptomDefinition>
+
+  </SymptomDefinitions>
+
+  <AlertDefinitions>
+
+    <AlertDefinition id="vcfcf_compliance_score_degraded"
+                     nameKey="102"
+                     adapterKind="VMWARE"
+                     resourceKind="HostSystem"
+                     type="15" subType="20"
+                     waitCycle="1" cancelCycle="1">
+      <State severity="Automatic">
+        <Impact type="badge" key="risk"/>
+        <SymptomSets operator="or">
+          <SymptomSet applyOn="self" operator="or">
+            <Symptom ref="vcfcf_compliance_score_warning"/>
+            <Symptom ref="vcfcf_compliance_score_critical"/>
+          </SymptomSet>
+        </SymptomSets>
+        <Recommendations>
+          <Recommendation ref="vcfcf_compliance_review_controls" priority="1"/>
+          <Recommendation ref="vcfcf_compliance_remediate_controls" priority="2"/>
+          <Recommendation ref="vcfcf_compliance_verify_recovery" priority="3"/>
+        </Recommendations>
+      </State>
+    </AlertDefinition>
+
+  </AlertDefinitions>
+
+  <Recommendations>
+
+    <Recommendation key="vcfcf_compliance_review_controls">
+      <Description nameKey="103"/>
+    </Recommendation>
+
+    <Recommendation key="vcfcf_compliance_remediate_controls">
+      <Description nameKey="104"/>
+    </Recommendation>
+
+    <Recommendation key="vcfcf_compliance_verify_recovery">
+      <Description nameKey="105"/>
+    </Recommendation>
+
+  </Recommendations>
+
   <LicenseConfig enabled="false"/>
 
 </AdapterKind>

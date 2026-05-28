@@ -1,0 +1,16 @@
+name: "[VCF Content Factory] Host Compliance Remediate via SCG or CIS Benchmark"
+description: |
+  Use the VMware Security Configuration Guide (SCG) or CIS Benchmark
+  documentation to understand the remediation steps for each failing control.
+  Most controls map to ESXi advanced settings (e.g., Security.AccountLockFailures,
+  UserVars.ESXiShellInteractiveTimeOut) that can be corrected via PowerCLI or
+  directly in the vSphere Client under Host > Configure > Advanced System Settings.
+
+  PowerCLI example for a single advanced setting:
+  Get-VMHost <hostname> | Get-AdvancedSetting -Name <setting.name> | Set-AdvancedSetting -Value <expected_value>
+
+  Apply changes during a maintenance window where possible. For controls that
+  require a reboot (e.g., kernel module load-time settings), schedule accordingly.
+  Cross-reference the SCG control ID in the Description property to locate the
+  exact guidance section in the benchmark document.
+adapter_kind: VMWARE

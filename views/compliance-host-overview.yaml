@@ -1,0 +1,29 @@
+id: a9a4a2bc-0e61-448c-a72c-0bebea2b7961
+name: "[VCF Content Factory] Compliance Host Overview"
+description: >
+  Per-host compliance scores and control pass/fail counts from the VCF-CF
+  Compliance adapter (stitched via ARIA_OPS onto VMWARE HostSystem resources).
+  Sort by Compliance Score ascending in the dashboard widget to surface
+  non-compliant hosts first.
+subject:
+  adapter_kind: VMWARE
+  resource_kind: HostSystem
+columns:
+  - attribute: VCF-CF Compliance|score
+    display_name: "Compliance Score (%)"
+    red_bound: 80
+    orange_bound: 90
+    yellow_bound: 95
+    ascending_range: true
+  - attribute: VCF-CF Compliance|pass_count
+    display_name: Pass Count
+  - attribute: VCF-CF Compliance|fail_count
+    display_name: Fail Count
+  - attribute: VCF-CF Compliance|total_count
+    display_name: Total Controls
+  - attribute: VCF-CF Compliance|profile_name
+    display_name: Benchmark Profile
+    is_property: true
+    is_string_attribute: true
+released: false
+version: "1.0.0"

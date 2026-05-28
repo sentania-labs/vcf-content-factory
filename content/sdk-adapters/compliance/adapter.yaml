@@ -1,6 +1,6 @@
 name: "VCF Content Factory Compliance"
 version: "1.0.0"
-build_number: 12
+build_number: 14
 adapter_kind: "vcfcf_compliance"
 tier: 2
 description: >
@@ -11,3 +11,8 @@ description: >
   ARIA_OPS stitching. Dynamic property keys vary per benchmark profile.
 entry_class: "com.vcfcf.adapters.compliance.ComplianceAdapter"
 released: false
+bundled_content:
+  views:
+    - views/compliance-host-overview.yaml
+  dashboards:
+    - dashboards/compliance-overview.yaml
