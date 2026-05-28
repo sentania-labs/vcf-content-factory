@@ -451,31 +451,33 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				+ cr.totalCount + " total)");
 
 		if (stitcher != null) {
-			// There is exactly one VMwareAdapter Instance per
-			// vCenter we monitor. Try direct name/moid match first
-			// (uses the vCenter host as the name hint); fall back
-			// to the singleton lookup if Ops registered it under a
-			// different name (common when display name diverges
-			// from connection host).
-			ComplianceStitcher.HostEntry he =
-					stitcher.matchVCenterAdapterInstance(resourceName, null);
-			if (he == null) {
-				he = stitcher.singletonOfKind("VMwareAdapter Instance");
-				if (he != null) {
-					logInfo("Resolved VMwareAdapter Instance via singleton"
-							+ " lookup (registered name="
-							+ he.hostName + ")");
-				}
+			// VMwareAdapter Instance has no vim25 MoRef — the matcher
+			// resolves it by either the configured vCenter FQDN
+			// (against the VCURL identifier) or the vCenter Instance
+			// UUID (against VMEntityVCID). Pull the instance UUID from
+			// the live SOAP session so the lookup is FQDN-rename safe.
+			String vcInstanceUuid = null;
+			try {
+				vcInstanceUuid = vsphere.getVCenterInstanceUuid();
+			} catch (Exception e) {
+				logWarn("Could not read vCenter instance UUID for "
+						+ "stitcher lookup: " + e.getMessage()
+						+ " — will rely on hostname match only");
 			}
+			ComplianceStitcher.HostEntry he =
+					stitcher.matchVCenterAdapterInstance(
+							resourceName, vcInstanceUuid);
 			if (he != null) {
 				pushComplianceViaClient(he.resourceId, cr, profile.name);
 				stats.matched = true;
 				logInfo("Pushed vCenter compliance data to "
 						+ he.hostName + " (resource=" + he.resourceId
-						+ ")");
+						+ ", VCURL=" + he.moid
+						+ ", vcInstanceUuid=" + vcInstanceUuid + ")");
 			} else {
 				logWarn("Could not resolve VMwareAdapter Instance for "
-						+ resourceName + " — vCenter compliance "
+						+ resourceName + " (vcInstanceUuid="
+						+ vcInstanceUuid + ") — vCenter compliance "
 						+ "rollups will NOT appear");
 			}
 		}

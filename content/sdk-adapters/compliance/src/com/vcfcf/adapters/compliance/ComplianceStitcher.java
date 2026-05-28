@@ -27,6 +27,15 @@ public final class ComplianceStitcher {
 	private final Map<String, Map<String, HostEntry>> resourcesByMoid =
 			new HashMap<>();
 
+	// VMwareAdapter Instance-only indexes — keyed by the platform
+	// identifiers that exist for that kind (vCenter FQDN via VCURL and
+	// vCenter Instance UUID via VMEntityVCID). The HostSystem / VM /
+	// DVS / DVPG kinds use the byName + byMoid tables above; we keep
+	// the vCenter indexes separate so the matchResource fallthrough
+	// path doesn't need a kind switch.
+	private final Map<String, HostEntry> vcByHost = new HashMap<>();
+	private final Map<String, HostEntry> vcByVcUuid = new HashMap<>();
+
 	public ComplianceStitcher(SuiteAPIClient suiteApiClient, Logger logger) {
 		this.suiteApiClient = suiteApiClient;
 		this.logger = logger;
@@ -41,7 +50,23 @@ public final class ComplianceStitcher {
 	}
 
 	public void loadVCenterAdapterInstance() {
-		loadResourcesForKind("VMwareAdapter Instance");
+		// VMwareAdapter Instance is NOT a vim25 entity — it is a VCF
+		// Ops construct that identifies a configured vCenter adapter
+		// instance. Unlike HostSystem / VirtualMachine / DVS / DVPG,
+		// it has no MoRef and so does not carry the
+		// VMEntityName + VMEntityObjectID identity tuple. The shared
+		// loader would extract null for both and the lookup tables
+		// would come back empty (the v27-install symptom on devel).
+		//
+		// The platform DOES expose two stable identifiers that we can
+		// match against the configured vcenter_host / instance UUID:
+		//   - VCURL          → vCenter hostname (FQDN)
+		//   - VMEntityVCID   → vCenter Instance UUID (matches
+		//                      ServiceContent.about.instanceUuid)
+		// Plus the resource key's display name (commonly the adapter
+		// instance's friendly label, e.g. "vcf-lab-mgmt") which we
+		// index for fall-through matching.
+		loadVCenterAdapterInstanceByIdentity();
 	}
 
 	public void loadDvsResources() {
@@ -53,15 +78,109 @@ public final class ComplianceStitcher {
 	}
 
 	/**
-	 * Shared loader for any VMWARE resource kind. Lifted out of the
-	 * per-host loader so VirtualMachine, VMwareAdapter Instance,
-	 * VmwareDistributedVirtualSwitch, and DistributedVirtualPortgroup
-	 * can all reuse the same suiteAPI walk → identifier-extract →
-	 * name/moid index pattern.
+	 * VMwareAdapter Instance has no MoRef-style identity tuple — the
+	 * {@code VMEntityName}/{@code VMEntityObjectID} pair the shared
+	 * loader extracts comes back null on these resources, leaving the
+	 * lookup tables empty. We extract the two platform-stable identity
+	 * fields that DO exist on this kind ({@code VCURL} = vCenter FQDN,
+	 * {@code VMEntityVCID} = vCenter Instance UUID), plus the resource
+	 * key's display name as a third index, and store entries in a
+	 * dedicated pair of maps.
 	 *
-	 * <p>All VMWARE resource kinds share the same identity tuple
-	 * ({@code VMEntityName} + {@code VMEntityObjectID}), so the lookup
-	 * key extraction is identical across kinds.
+	 * <p>This is the only VMWARE resource kind whose identifiers
+	 * diverge from the {@code VMEntityName}/{@code VMEntityObjectID}
+	 * contract — splitting the loader is cheaper than adding an
+	 * identifier-pair parameter to {@link #loadResourcesForKind}.
+	 */
+	private void loadVCenterAdapterInstanceByIdentity() {
+		String resourceKind = "VMwareAdapter Instance";
+		Map<String, HostEntry> byName = new HashMap<>();
+		Map<String, HostEntry> byMoid = new HashMap<>();
+		// Keep the per-kind name/moid maps populated even though they
+		// will only catch the display-name index — matchResource()
+		// reads from these for fall-through behaviour.
+		resourcesByName.put(resourceKind, byName);
+		resourcesByMoid.put(resourceKind, byMoid);
+		vcByHost.clear();
+		vcByVcUuid.clear();
+
+		try {
+			List<ResourceDto> dtos = suiteApiClient.getResources(
+					Arrays.asList("VMWARE"),
+					Arrays.asList(resourceKind),
+					null, null, null, null);
+
+			if (dtos == null || dtos.isEmpty()) {
+				logger.warn("ComplianceStitcher: suiteAPIClient.getResources("
+						+ resourceKind + ") returned "
+						+ (dtos == null ? "null" : "0 results")
+						+ " — adapter has no vCenter adapter instances "
+						+ "in inventory");
+				return;
+			}
+
+			logger.info("ComplianceStitcher: " + resourceKind
+					+ " — processing " + dtos.size() + " ResourceDto objects");
+
+			for (ResourceDto dto : dtos) {
+				if (dto == null) continue;
+
+				Resource resource = new Resource(dto);
+				ResourceKey key = resource.getResourceKey();
+				if (key == null) {
+					logger.warn("ComplianceStitcher: " + resourceKind
+							+ " dto has null ResourceKey");
+					continue;
+				}
+
+				String uuid = findUuid(dto);
+				String displayName = key.getResourceName();
+				String vcurl = getIdValue(key, "VCURL");
+				String vcUuid = getIdValue(key, "VMEntityVCID");
+
+				HostEntry entry = new HostEntry(
+						uuid != null ? uuid
+								: (vcurl != null ? vcurl : displayName),
+						displayName, vcurl, resource);
+
+				if (displayName != null && !displayName.isEmpty()) {
+					byName.put(displayName, entry);
+				}
+				if (vcurl != null && !vcurl.isEmpty()) {
+					vcByHost.put(vcurl, entry);
+				}
+				if (vcUuid != null && !vcUuid.isEmpty()) {
+					vcByVcUuid.put(vcUuid, entry);
+				}
+				logger.info("ComplianceStitcher: " + resourceKind
+						+ " indexed: name=" + displayName
+						+ " VCURL=" + vcurl
+						+ " VMEntityVCID=" + vcUuid
+						+ " → resourceId=" + entry.resourceId);
+			}
+		} catch (Exception e) {
+			logger.warn("ComplianceStitcher: load(" + resourceKind
+					+ ") failed: " + e.getClass().getName()
+					+ ": " + e.getMessage());
+		}
+
+		logger.info("ComplianceStitcher: loaded "
+				+ byName.size() + " " + resourceKind + " by displayName, "
+				+ vcByHost.size() + " by VCURL, "
+				+ vcByVcUuid.size() + " by VMEntityVCID");
+	}
+
+	/**
+	 * Shared loader for any VMWARE resource kind. Lifted out of the
+	 * per-host loader so VirtualMachine, VmwareDistributedVirtualSwitch,
+	 * and DistributedVirtualPortgroup can all reuse the same suiteAPI
+	 * walk → identifier-extract → name/moid index pattern.
+	 *
+	 * <p>All vim25-backed VMWARE resource kinds share the same
+	 * identity tuple ({@code VMEntityName} + {@code VMEntityObjectID}),
+	 * so the lookup key extraction is identical across kinds.
+	 * VMwareAdapter Instance is NOT a vim25 entity and uses a
+	 * dedicated loader ({@link #loadVCenterAdapterInstanceByIdentity}).
 	 */
 	private void loadResourcesForKind(String resourceKind) {
 		Map<String, HostEntry> byName = new HashMap<>();
@@ -133,8 +252,59 @@ public final class ComplianceStitcher {
 		return matchResource("VirtualMachine", name, moid);
 	}
 
-	public HostEntry matchVCenterAdapterInstance(String name, String moid) {
-		return matchResource("VMwareAdapter Instance", name, moid);
+	/**
+	 * Resolve the {@code VMwareAdapter Instance} resource by either the
+	 * configured vCenter hostname (matched against the {@code VCURL}
+	 * identifier) or the vCenter Instance UUID (matched against
+	 * {@code VMEntityVCID}, read from
+	 * {@link VSphereClient#getVCenterInstanceUuid()}). Falls back to
+	 * display-name match for environments where Ops registered the
+	 * adapter instance under a short name that happens to equal the
+	 * configured host. If exactly one VMwareAdapter Instance is
+	 * present in inventory, returns it via the singleton fallback.
+	 *
+	 * @param hostname configured vCenter FQDN (e.g. {@code config.vcenterHost})
+	 * @param vcInstanceUuid vCenter Instance UUID, or {@code null} when unknown
+	 */
+	public HostEntry matchVCenterAdapterInstance(String hostname,
+			String vcInstanceUuid) {
+		// vCenter Instance UUID is the most authoritative identity —
+		// it survives DNS / hostname renames whereas VCURL does not.
+		if (vcInstanceUuid != null && !vcInstanceUuid.isEmpty()) {
+			HostEntry m = vcByVcUuid.get(vcInstanceUuid);
+			if (m != null) return m;
+		}
+
+		if (hostname != null && !hostname.isEmpty()) {
+			// Exact-FQDN match against VCURL.
+			HostEntry m = vcByHost.get(hostname);
+			if (m != null) return m;
+
+			// FQDN ↔ shortname fuzzy match against VCURL — same dot-
+			// prefix tolerance the HostSystem matcher uses for the
+			// FQDN-vs-shortname mismatch that occurs when adapter
+			// configuration uses the FQDN but Ops registered the
+			// vCenter under a shorter or differently-cased form.
+			for (Map.Entry<String, HostEntry> e : vcByHost.entrySet()) {
+				String registered = e.getKey();
+				if (registered.equalsIgnoreCase(hostname)) return e.getValue();
+				if (registered.startsWith(hostname + ".")
+						|| hostname.startsWith(registered + ".")) {
+					return e.getValue();
+				}
+			}
+
+			// Fall through to display-name match — when the adapter
+			// instance is registered under a friendly label that
+			// happens to equal the configured host or a prefix of it.
+			HostEntry n = matchResource("VMwareAdapter Instance",
+					hostname, null);
+			if (n != null) return n;
+		}
+
+		// Singleton fallback only when exactly one VMwareAdapter
+		// Instance is present in inventory; ambiguous when >1.
+		return singletonOfKind("VMwareAdapter Instance");
 	}
 
 	public HostEntry matchDvs(String name, String moid) {

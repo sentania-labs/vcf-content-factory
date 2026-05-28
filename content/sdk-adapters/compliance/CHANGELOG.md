@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.27 (2026-05-28)
+
+- feat(adapter): build 27 — Phase 2 multi-resource stitching (VM, vCenter, DVS, DVPG)
+
 ## 1.0.0.26 (2026-05-28)
 
 - feat(adapter): build 26 — canonical compliance schema, Phase 1 working on devel

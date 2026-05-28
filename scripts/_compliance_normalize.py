@@ -307,12 +307,28 @@ def classify_parameter_kind(parameter: str, assessment_cmd: str) -> str:
     """Infer parameter_kind from the source columns.
 
     Priority order:
+      0. Multi-key parameter (parameter contains a newline) ->
+         manual_audit. A row whose `parameter` column lists multiple
+         keys (e.g. vc.smtp: ``mail.smtp.port\\nmail.smtp.username
+         \\nmail.smtp.password``) cannot be scored as a single
+         key/value lookup against an advanced-settings dictionary —
+         the canonical `expected_value` is a sentinel like
+         "Configured" / "Persistent Storage Location", not a real
+         value to compare. The Java evaluator silently skips these
+         rows (``if (param.contains("\\n")) continue``) so tagging them
+         advanced_setting at the canonical level falsely inflates the
+         per-resource control count. Treating them as manual_audit
+         keeps the canonical truth and the evaluator output in
+         agreement.
       1. Empty / 'N/A' assessment command -> manual_audit
-      2. Assessment command contains Get-AdvancedSetting -> advanced_setting
+      2. Assessment command contains Get-AdvancedSetting ->
+         advanced_setting
       3. Assessment command contains EsxCli markers -> esxcli
       4. Assessment command reads a vim property -> vim_property
       5. Otherwise -> powercli_only
     """
+    if parameter and "\n" in parameter:
+        return "manual_audit"
     cmd = (assessment_cmd or "").strip()
     if not cmd or cmd.upper() == "N/A":
         return "manual_audit"
