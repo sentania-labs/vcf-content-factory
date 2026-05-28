@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.19 (2026-05-27)
+
+- feat(framework): build 19 — pin self-provider Views at world singletons
+
 ## 1.0.0.18 (2026-05-27)
 
 - feat(adapter): build 18 — owning-adapter binding per spec §18 Pass 28

@@ -624,13 +624,17 @@ Config keys: `autoZoom`, `nodeSize`, `refreshContent`, `refreshInterval`,
 List of active alerts for selected resources. Filtered by criticality,
 alert type codes, status, and impact.
 
-Config keys: `alertAction`, `alertImpact`, `criticalityLevel`, `customFilter`,
-`depth`, `filterMode`, `mode`, `refreshContent`, `refreshInterval`,
+Config keys: `alertAction`, `alertDefinitions`, `alertImpact`, `criticalityLevel`,
+`customFilter`, `depth`, `filterMode`, `mode`, `refreshContent`, `refreshInterval`,
 `relationshipMode`, `resource`, `selfProvider`, `state`, `status`, `tagFilter`,
 `title`, `type`
 
 Alert type codes are strings like `"15_19"` (category_subtype integers).
 Criticality: 2=Warning, 3=Major, 4=Critical.
+`alertDefinitions` — array of `{"id": "<AlertDefinition-…>"}` objects that pin
+the widget to specific alert definitions; always present in wire format, often
+`[]` (observed in four corpus dashboards: VM Details.json, Dell EMC Server
+Health.json, Workbench.json, Ping Response.json).
 
 ---
 

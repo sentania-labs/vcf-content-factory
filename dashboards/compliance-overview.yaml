@@ -176,5 +176,7 @@ widgets:
     mode: all
     depth: 1
     criticality: [2, 3, 4]
+    alert_definitions:
+      - "AlertDefinition-vcfcf_compliance-vcfcf_compliance_score_degraded"
 
 interactions: []

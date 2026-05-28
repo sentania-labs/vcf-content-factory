@@ -366,4 +366,37 @@ scripts/bootstrap_references.sh --update # also git pull existing
 - **Attribution:** internal Sentania resource, no public attribution
   needed.
 
+### vmware/vcf-security-and-compliance-guidelines
+
+- **URL:** https://github.com/vmware/vcf-security-and-compliance-guidelines
+- **Local path:** `references/vcf-security-and-compliance-guidelines/`
+- **Owner:** VMware / Broadcom. Primarily driven by Bob Plankers
+  (VMware Compliance & Cybersecurity Engineer). Public repo.
+- **Scope:** Authoritative VMware Security Configuration Guide (SCG)
+  control sets for VCF and vSphere. Ships per-version CSVs of
+  hardening controls — what setting, what baseline value, what
+  PowerCLI/API to assess and remediate. Source of truth for the
+  compliance management pack's profiles directory
+  (`content/sdk-adapters/compliance/profiles/vmware_scg_*.csv`).
+- **What to grep for:**
+  - `*.csv` under product/version subdirectories (e.g. `ESXi/9.0/`,
+    `ESXi/8.0/`, `vCenter/8.0/`) for the per-version control sets
+  - Column-header conventions when porting new versions — schema
+    changed between SCG 8.x and 9.x (positional column indexing
+    broke; loader is now header-name-based to absorb future shifts)
+  - DISA STIG / PCI-DSS / Secure Controls Framework mappings if
+    we extend the compliance pak to cover those frameworks
+- **Wire format note:** CSVs use a fixed set of column names but the
+  column ORDER differs across SCG versions. Always parse by header
+  name, never by position. New columns in 9.0 include
+  `Secure Controls Framework ID`, `DISA STIG ID`,
+  `PCI DSS 4.0.1 ID` as first-class entries.
+- **Control ID convention:** 8.x uses `esxi-8.<control>`; 9.x uses
+  `esx-9.<control>` (no "i"). The `Configuration Parameter` column
+  is the stable identifier across versions.
+- **Attribution:** cite
+  `vcf-security-and-compliance-guidelines/<path>` in adapted
+  content. Public repo, VMware-by-Broadcom IP; see repo LICENSE
+  before redistribution.
+
 <!-- Add new sources below. Keep entries in the same shape. -->

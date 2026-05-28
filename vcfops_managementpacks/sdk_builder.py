@@ -672,12 +672,30 @@ def _assemble_adapters_zip(
             zf.writestr(f"{adapter_dir}/conf/resources/resources.properties", "")
 
         # conf/profiles/ — optional bundled data files (benchmark CSVs, etc.)
+        # Walk recursively so adapter authors can group files by purpose
+        # (e.g. profiles/canonical/*.csv for normalized data versus
+        # profiles/*.csv for raw source data). Relative paths are preserved.
+        #
+        # IMPORTANT: for every file at path <prefix>/a/b/c/file the platform's
+        # .upload staging extractor requires explicit zero-byte directory entries
+        # for every ancestor path: <prefix>/a/, <prefix>/a/b/, <prefix>/a/b/c/.
+        # Without these, Files.copy() fails with NoSuchFileException.
+        # We use a seen-set to write each directory entry exactly once.
         profiles_dir = project_dir / "profiles"
         if profiles_dir.is_dir():
             _add_dir(zf, f"{adapter_dir}/conf/profiles")
-            for pf in sorted(profiles_dir.iterdir()):
+            _dirs_written: set[str] = {f"{adapter_dir}/conf/profiles/"}
+            for pf in sorted(profiles_dir.rglob("*")):
                 if pf.is_file():
-                    zf.write(pf, f"{adapter_dir}/conf/profiles/{pf.name}")
+                    rel = pf.relative_to(profiles_dir).as_posix()
+                    # Emit a dir entry for every ancestor between profiles/ and file.
+                    parts = rel.split("/")
+                    for depth in range(1, len(parts)):
+                        ancestor = f"{adapter_dir}/conf/profiles/" + "/".join(parts[:depth]) + "/"
+                        if ancestor not in _dirs_written:
+                            _add_dir(zf, ancestor.rstrip("/"))
+                            _dirs_written.add(ancestor)
+                    zf.write(pf, f"{adapter_dir}/conf/profiles/{rel}")
 
         # conf/views/views.zip — belt-and-suspenders copy of rendered views
         if views_zip_bytes is not None:
@@ -696,6 +714,83 @@ def _assemble_adapters_zip(
         # conf/images/ — icons per ResourceKind and AdapterKind
         _pack_icons(zf, project, project_dir, describe_src)
 
+    return buf.getvalue()
+
+
+def _build_overview_packed(project: SdkProjectDef) -> bytes:
+    """Build overview.packed — a ZIP archive with the required directory structure.
+
+    The overview.packed file is a ZIP archive that the VCF Ops Overview tab in
+    the Solutions UI uses to render the adapter's overview page.  Per the vendor
+    8.13 specification (Solution install/uninstall §9), the structure must be:
+
+        overview/
+          light/
+            overview.html      # light-theme variant
+          dark/
+            overview.html      # dark-theme variant (mandatory — both themes required)
+
+    Both light/ and dark/ subdirectories are mandatory.  The platform renders the
+    appropriate variant based on the UI theme setting.  The HTML content can be
+    identical between variants (or vary by CSS class); the platform only checks
+    structure, not HTML semantics.
+
+    Note: despite spec/18 §A0 (Pass 29), this file does NOT gate DEPLOY_NEW_UPGRADE_CONTENT
+    or content/ import for solution paks.  Step 5 is skipped for all solution paks;
+    content delivery for SDK adapter paks flows through step 15 (APPLY_ADAPTER).
+    The overview.packed file is present for cosmetic UI completeness (certification
+    checklist requirement), not install-pipeline gating.  See spec/18 §Pass 30.
+
+    Reference size from VCFAutomation-902025137921.pak: 5,772 B.
+    """
+    light_html = (
+        "<!DOCTYPE html>\n"
+        "<html lang=\"en\" class=\"light\">\n"
+        "<head>\n"
+        "  <meta charset=\"UTF-8\">\n"
+        f"  <title>{project.name}</title>\n"
+        "  <style>\n"
+        "    body { font-family: sans-serif; margin: 2em; color: #222; background: #fff; }\n"
+        "    h1 { font-size: 1.4em; }\n"
+        "    p  { font-size: 0.95em; color: #555; }\n"
+        "  </style>\n"
+        "</head>\n"
+        "<body>\n"
+        f"  <h1>{project.name}</h1>\n"
+        f"  <p>Version {project.version}.{project.build_number}</p>\n"
+        f"  <p>{project.description.strip()}</p>\n"
+        "  <p>Vendor: VCF Content Factory</p>\n"
+        "</body>\n"
+        "</html>\n"
+    )
+    dark_html = (
+        "<!DOCTYPE html>\n"
+        "<html lang=\"en\" class=\"dark\">\n"
+        "<head>\n"
+        "  <meta charset=\"UTF-8\">\n"
+        f"  <title>{project.name}</title>\n"
+        "  <style>\n"
+        "    body { font-family: sans-serif; margin: 2em; color: #eee; background: #1a1a1a; }\n"
+        "    h1 { font-size: 1.4em; }\n"
+        "    p  { font-size: 0.95em; color: #aaa; }\n"
+        "  </style>\n"
+        "</head>\n"
+        "<body>\n"
+        f"  <h1>{project.name}</h1>\n"
+        f"  <p>Version {project.version}.{project.build_number}</p>\n"
+        f"  <p>{project.description.strip()}</p>\n"
+        "  <p>Vendor: VCF Content Factory</p>\n"
+        "</body>\n"
+        "</html>\n"
+    )
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        # Explicit directory entries required for correct extraction on the appliance
+        z.writestr("overview/", "")
+        z.writestr("overview/light/", "")
+        z.writestr("overview/dark/", "")
+        z.writestr("overview/light/overview.html", light_html)
+        z.writestr("overview/dark/overview.html", dark_html)
     return buf.getvalue()
 
 
@@ -719,6 +814,7 @@ def _generate_outer_manifest(project: SdkProjectDef) -> str:
         "vendor": "VCF Content Factory",
         "pak_icon": "default.svg",
         "license_type": "",
+        "run_scripts_on_all_nodes": "false",
         "pak_validation_script": {"script": ""},
         "adapter_pre_script": {"script": ""},
         "adapter_post_script": {"script": ""},
@@ -740,10 +836,217 @@ def _view_slug(view_name: str, view_id: str) -> str:
     return slug or view_id
 
 
+def _generate_outer_resources_properties(project: SdkProjectDef) -> str:
+    """Generate resources/resources.properties for the outer pak root.
+
+    Format matches VCFAutomation-902025137921.pak and other Broadcom-shipped paks:
+        version=1
+        DISPLAY_NAME=<human name>
+        DESCRIPTION=<description>
+        VENDOR=<vendor>
+
+    This is the localization bundle for the solution itself (shown in the
+    Solutions UI and pak installer dialogs).
+    """
+    # Escape backslash sequences in Java properties — values with special chars
+    # should be escaped, but for our controlled strings this is minimal.
+    def _prop_escape(s: str) -> str:
+        return s.replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r")
+
+    lines = [
+        "# Solution localization",
+        "version=1",
+        f"DISPLAY_NAME={_prop_escape(project.name)}",
+        f"DESCRIPTION={_prop_escape(project.description.strip())}",
+        "VENDOR=VCF Content Factory",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _generate_content_resources_properties(project_dir: Path) -> str:
+    """Generate content/resources/resources.properties from resources.properties.
+
+    Reads the project's resources/resources.properties which maps all nameKey
+    integers to display strings (and optional .description entries).  Emits
+    only the entries whose keys are numeric — these are the nameKey values
+    used in describe.xml SymptomDefinition/AlertDefinition/Recommendation
+    nameKey attributes.
+
+    Format (matches /tmp/app_osucp/content/resources/resources.properties):
+        <nameKey>=<display name>
+        <nameKey>.description=<long description>
+
+    The adapter-wide resources.properties already carries all numeric keys
+    (1–27 for resource kind labels, 100–105 for alert/symptom/rec labels).
+    We re-emit them as-is in the content/resources/ bundle so the platform's
+    content-import path has access to the same strings.
+    """
+    res_path = project_dir / "resources" / "resources.properties"
+    if not res_path.is_file():
+        return "# content resource localization\n"
+
+    raw = res_path.read_text(encoding="utf-8")
+    lines_out = ["# Content resource localization"]
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if "=" not in stripped:
+            continue
+        key, _, val = stripped.partition("=")
+        key = key.strip()
+        val = val.strip()
+        # Only emit numeric keys (nameKey integers).
+        # The base key may be "<N>" or "<N>.description" (for two-part entries).
+        # Split on "." and check whether the first segment is a pure integer.
+        base_key = key.split(".")[0]
+        try:
+            int(base_key)
+            lines_out.append(f"{key}={val}")
+        except ValueError:
+            pass  # skip non-numeric keys (e.g. VENDOR, DISPLAY_NAME, VENDOR)
+    lines_out.append("")
+    return "\n".join(lines_out)
+
+
+def _dashboard_short_name(dashboard_name: str, name_path: str) -> str:
+    """Strip the namePath/ prefix from a dashboard name to get the short display name.
+
+    The dashboard JSON carries `name: "<namePath>/<display name>"` when the
+    dashboard is placed in a folder.  The localization key in resources.properties
+    uses only the short display name (portion after the last slash).
+
+    If name_path is given and the dashboard name starts with it, strip it.
+    Otherwise strip any leading path segment.
+
+    Example:
+        dashboard_name = "[VCF Content Factory] Compliance Fleet Overview"
+        name_path      = "VCF Content Factory"
+        → "[VCF Content Factory] Compliance Fleet Overview"   (name_path not a prefix)
+
+    The namePath itself gets its own localization entry (folder label).
+    """
+    # The dashboard name in YAML does NOT include the namePath prefix.
+    # The rendered JSON prepends namePath/ but the YAML name is the plain name.
+    # We use the YAML name directly as the localization key.
+    return dashboard_name
+
+
+def _java_properties_escape_key(key: str) -> str:
+    """Escape a Java properties key (backslash-escape spaces and special chars).
+
+    Java .properties format requires spaces in keys to be backslash-escaped.
+    Equals signs and colons in keys must also be escaped.
+    """
+    key = key.replace("\\", "\\\\")
+    key = key.replace(" ", "\\ ")
+    key = key.replace("=", "\\=")
+    key = key.replace(":", "\\:")
+    return key
+
+
+def _generate_dashboard_resources_properties(dashboard, name_path: str) -> str:
+    """Generate content/dashboards/<slug>/resources/resources.properties.
+
+    Format (matches /tmp/app_osucp/content/dashboards/sdwan/resources/resources.properties):
+        <dashboard_name>=<dashboard display name>
+        <dashboard_name>.<widget_title>=<widget display name>
+        ...
+        <name_path>=<folder label>
+
+    Keys with spaces are backslash-escaped (Java .properties convention).
+
+    Args:
+        dashboard: Dashboard dataclass instance.
+        name_path: The dashboard's namePath (folder label, e.g. "VCF Content Factory").
+    """
+    lines = ["#Dashboard Localization"]
+
+    # Folder label — the namePath itself gets a top-level entry
+    if name_path:
+        escaped_folder = _java_properties_escape_key(name_path)
+        lines.append(f"{escaped_folder}={name_path}")
+        lines.append("")
+
+    # Dashboard entry — key is the dashboard name, value is the display name
+    dash_key = _java_properties_escape_key(dashboard.name)
+    lines.append(f"{dash_key}={dashboard.name}")
+
+    # Per-widget entries — key is "<dashboard_name>.<widget_title>"
+    for w in dashboard.widgets:
+        if not w.title:
+            continue
+        # Compound key: escaped dashboard name + "." + escaped widget title
+        compound_key = (
+            _java_properties_escape_key(dashboard.name)
+            + "."
+            + _java_properties_escape_key(w.title)
+        )
+        lines.append(f"{compound_key}={w.title}")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _generate_view_content_properties(view) -> str:
+    """Generate content/reports/<slug>/resources/content.properties.
+
+    Format (matches /tmp/app_osucp/content/reports/sdwan/resources/content.properties):
+        view.<viewdef_uuid>.title=<view title>
+        view.<viewdef_uuid>.desc=<view description>
+        view.<viewdef_uuid>.<attribute_key>=<column display name>
+        ...
+
+    The attribute_key used as the localizationKey in the rendered XML
+    displayName Property is the sanitized column attribute key (with
+    pipeline chars and slashes replaced for use as a property key,
+    matching the localizationKey emitted in content.xml).
+
+    The <viewdef_uuid> is the view's ``id`` field (stable uuid4).
+    """
+    uuid = view.id
+    lines = [f"view.{uuid}.title={view.name}"]
+    if view.description:
+        lines.append(f"view.{uuid}.desc={view.description.strip()}")
+    for col in view.columns:
+        # Derive the localizationKey from the attribute key.
+        # We use the same sanitization as the XML renderer will use:
+        # replace '|' with '_', replace spaces with '_', keep alphanumerics and hyphens.
+        loc_key = _attribute_to_localization_key(col.attribute)
+        lines.append(f"view.{uuid}.{loc_key}={col.display_name}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _attribute_to_localization_key(attribute: str) -> str:
+    """Convert an attribute key to a Java properties-compatible localizationKey.
+
+    Removes the 'Super Metric|' prefix, replaces '|' separators with '_',
+    replaces spaces with '_', and keeps alphanumerics, hyphens, and underscores.
+
+    Examples:
+        "VCF-CF Compliance|score"          → "VCF-CF_Compliance_score"
+        "Summary|total_hosts"              → "Summary_total_hosts"
+        "Super Metric|sm_abc123"           → "sm_abc123"
+        "VCF-CF Compliance|profile_name"   → "VCF-CF_Compliance_profile_name"
+    """
+    key = attribute
+    # Strip Super Metric| prefix
+    if key.startswith("Super Metric|"):
+        key = key[len("Super Metric|"):]
+    # Replace pipe separators and spaces
+    key = key.replace("|", "_").replace(" ", "_")
+    # Strip any remaining non-safe characters (keep alphanumerics, hyphen, underscore)
+    key = "".join(c for c in key if c.isalnum() or c in "-_")
+    return key
+
+
 # Standard content/ subdirectories that VCF Ops auto-imports during pak install.
-# Written as empty directory entries whenever bundled_content is present so the
-# platform recognises the content/ tree structure.
-_CONTENT_DIRS = [
+# Only populated subdirs are written — empty directories are not emitted so the
+# platform's SolutionManager content walker does not encounter unexpected entries.
+# This list is the FULL set of known subdirs; filtering happens at emit time.
+_ALL_CONTENT_DIRS = [
     "content/",
     "content/reports/",
     "content/dashboards/",
@@ -825,25 +1128,50 @@ def _write_outer_pak(
         zf.writestr("manifest.txt", _generate_outer_manifest(project))
         zf.writestr("eula.txt", _read_license())
         zf.writestr("default.svg", icon_bytes)
-        zf.writestr("resources/resources.properties", "")
+
+        # Outer-pak resources/resources.properties — solution localization bundle.
+        # Format: version=1 + DISPLAY_NAME + DESCRIPTION + VENDOR.
+        # Reference: /tmp/vcf_auto/resources/resources.properties.
+        outer_res_props = _generate_outer_resources_properties(project)
+        zf.writestr("resources/", "")
+        zf.writestr("resources/resources.properties", outer_res_props)
+
+        # overview.packed — the Overview-tab UI ZIP for the Solutions page.
+        # Must have overview/{light,dark}/overview.html per vendor 8.13 spec §9.
+        # Both themes are mandatory.  This is NOT an install-pipeline gate for
+        # solution paks — its purpose is purely cosmetic (certification checklist).
+        # See spec/18 §Pass 30 for the corrected analysis.
+        zf.writestr("overview.packed", _build_overview_packed(project))
         zf.writestr("adapters.zip", adapters_zip_bytes)
 
         # --- Bundled content (views + dashboards) ---
+        # Only emit populated content/ subdirs — SolutionManager may abort the
+        # content walk on encountering empty or unexpected directories.
+        # Reference: SAN MP, VCFAutomation, AppOSUCP all emit ONLY populated subdirs.
         if has_bundled_content:
-            # Write standard empty directory entries so VCF Ops recognises the
-            # content/ tree structure regardless of which content types are present.
-            for content_dir in _CONTENT_DIRS:
-                zf.writestr(content_dir, "")
+            # Always emit content/ root and content/resources/ (adapter-wide i18n)
+            zf.writestr("content/", "")
+            zf.writestr("content/resources/", "")
+            # content/resources/resources.properties — nameKey-to-display-string map
+            # sourced from the project's own resources/resources.properties.
+            # Reference: /tmp/app_osucp/content/resources/resources.properties.
+            if project_dir is not None:
+                content_res_props = _generate_content_resources_properties(project_dir)
+            else:
+                content_res_props = "# content resource localization\n"
+            zf.writestr("content/resources/resources.properties", content_res_props)
 
         if views:
             from vcfops_dashboards.render import render_views_xml
+            # Emit content/reports/ only when views are present.
+            zf.writestr("content/reports/", "")
             # Write one XML file per view under content/reports/ — this is the
             # vCommunity-compatible layout that VCF Ops auto-imports on pak install.
-            # Each file is a standalone <Content><Views><ViewDef>...</ViewDef></Views></Content>
+            # Each file is a standalone <Content><Views><ViewDef>...</ViewDef></Content>
             # document, which is exactly what render_views_xml([single_view]) produces.
-            # A resources/ subdirectory with content.properties is required (spec A3):
-            # bracket-prefix display names resolve through the i18n bundle; a missing
-            # bundle correlates with silent import failure.
+            # A populated resources/ subdirectory with content.properties is required
+            # (spec A3): bracket-prefix display names resolve through the i18n bundle;
+            # a missing or empty bundle correlates with silent import failure.
             for v in views:
                 xml_text = render_views_xml(
                     [v],
@@ -853,11 +1181,13 @@ def _write_outer_pak(
                 slug = _view_slug(v.name, v.id)
                 zf.writestr(f"content/reports/{slug}/", "")
                 zf.writestr(f"content/reports/{slug}/content.xml", xml_text)
-                # A3: resources/ subdirectory with placeholder properties file
+                # A3: resources/ subdirectory with populated content.properties.
+                # Keys: view.<uuid>.title, view.<uuid>.description, view.<uuid>.<col_key>
                 zf.writestr(f"content/reports/{slug}/resources/", "")
+                view_props = _generate_view_content_properties(v)
                 zf.writestr(
                     f"content/reports/{slug}/resources/content.properties",
-                    "# Localization placeholder\n",
+                    view_props,
                 )
                 print(
                     f"  bundled content: content/reports/{slug}/content.xml <- {v.name}",
@@ -866,11 +1196,14 @@ def _write_outer_pak(
 
         if dashboards:
             from vcfops_dashboards.render import render_dashboards_bundle_json
+            # Emit content/dashboards/ only when dashboards are present.
+            zf.writestr("content/dashboards/", "")
             # Build views_by_name from all views (bundled + any loaded for dashboards)
             views_by_name = {v.name: v for v in (views or [])}
             # Per-dashboard JSON: one file per dashboard, slug derived from dashboard name.
             # Each file contains a single-dashboard bundle envelope.
-            # A resources/ subdirectory with resources.properties is required (spec A3).
+            # A populated resources/ subdirectory with resources.properties is required
+            # (spec A3).
             _OWNER_UUID = "00000000-0000-0000-0000-000000000000"
             for d in dashboards:
                 dashboard_json = render_dashboards_bundle_json(
@@ -883,11 +1216,13 @@ def _write_outer_pak(
                 slug = slug.strip("_") or d.id
                 zf.writestr(f"content/dashboards/{slug}/", "")
                 zf.writestr(f"content/dashboards/{slug}/dashboard.json", dashboard_json)
-                # A3: resources/ subdirectory with placeholder properties file
+                # A3: resources/ subdirectory with populated resources.properties.
+                # Keys: <folder>=<folder>, <dashname>=<dashname>, <dashname>.<widget>=<widget>
                 zf.writestr(f"content/dashboards/{slug}/resources/", "")
+                dash_props = _generate_dashboard_resources_properties(d, d.name_path)
                 zf.writestr(
                     f"content/dashboards/{slug}/resources/resources.properties",
-                    "# Localization placeholder\n",
+                    dash_props,
                 )
                 print(
                     f"  bundled content: content/dashboards/{slug}/dashboard.json <- {d.name}",
@@ -1789,6 +2124,71 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
     return pak_path
 
 
+def _validate_localization_key_contract(views: list) -> List[str]:
+    """Validate that every localizationKey in each view's XML has a matching
+    properties-file entry.
+
+    For each view in ``views``:
+    1. Generates the content.properties text via _generate_view_content_properties().
+    2. Parses the ``view.<uuid>.*`` suffixes from the properties text.
+    3. Renders the view XML and extracts every ``localizationKey`` attribute value.
+    4. Asserts every XML suffix has a matching properties entry.
+
+    Returns a list of error strings (empty = all OK).
+
+    This guard catches the desc/description class of mismatch (spec/18 Pass 31)
+    at validate time, before the pak is built.  The error message names the
+    missing key so the operator knows exactly which side to fix.
+    """
+    import re as _re
+
+    errors: List[str] = []
+
+    # Lazy import — vcfops_dashboards may not be installed in all environments.
+    try:
+        from vcfops_dashboards.render import render_views_xml
+    except ImportError:
+        # Cannot check without the renderer — skip silently (consistent with
+        # how the build path handles missing vcfops_dashboards).
+        return errors
+
+    for view in views:
+        uuid = view.id
+
+        # --- Step 1 & 2: properties-file suffixes ---
+        props_text = _generate_view_content_properties(view)
+        prefix = f"view.{uuid}."
+        props_suffixes: set = set()
+        for line in props_text.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, _, _ = line.partition("=")
+            key = key.strip()
+            if key.startswith(prefix):
+                props_suffixes.add(key[len(prefix):])
+
+        # --- Step 3: localizationKey values from rendered XML ---
+        xml_text = render_views_xml([view])
+        xml_suffixes: list = _re.findall(r'localizationKey="([^"]+)"', xml_text)
+
+        # --- Step 4: cross-check ---
+        for suffix in xml_suffixes:
+            if suffix not in props_suffixes:
+                errors.append(
+                    f"[localization-key-mismatch] view '{view.name}' (uuid={uuid}): "
+                    f"view XML has localizationKey=\"{suffix}\" but "
+                    f"content.properties has no entry 'view.{uuid}.{suffix}'. "
+                    f"Present suffixes: {sorted(props_suffixes)}. "
+                    f"Fix: align the suffix in _generate_view_content_properties() "
+                    f"or the localizationKey attribute in render.py."
+                )
+
+    return errors
+
+
 def validate_sdk_project(project_dir: Path) -> List[str]:
     """Validate a Tier 2 adapter project without building.
 
@@ -1820,6 +2220,28 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
         sources = list(src_dir.rglob("*.java"))
         if not sources:
             errors.append(f"No .java files found under {src_dir}")
+
+    # --- localizationKey / properties-key contract check (spec/18 Pass 31) ---
+    # For every bundled view, assert that every localizationKey in the rendered
+    # XML has a matching entry in content.properties.  Mismatches cause
+    # "ERROR: Localization for key <suffix> is absent" at pak install time and
+    # abort the entire content tree (killing dashboard import too).
+    try:
+        _raw_adapter_yaml = {}
+        if _YAML_AVAILABLE:
+            _raw_adapter_yaml = _yaml.safe_load(adapter_yaml.read_text(encoding="utf-8")) or {}
+        _repo_root = _HERE.parent
+        bundled_views, _ = _load_bundled_content(_raw_adapter_yaml, project_dir, _repo_root)
+        if bundled_views:
+            loc_errors = _validate_localization_key_contract(bundled_views)
+            errors.extend(loc_errors)
+    except SdkBuildError as exc:
+        # bundled_content path errors (missing files, bad YAML) surface here —
+        # report them but don't abort the rest of validation.
+        errors.append(f"bundled_content load error during localization check: {exc}")
+    except Exception as exc:
+        # Catch-all so a renderer bug doesn't mask real project errors.
+        errors.append(f"localization-key check failed unexpectedly: {exc}")
 
     # Attempt compilation check if JDK is available
     javac = shutil.which("javac")

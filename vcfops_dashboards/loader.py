@@ -546,6 +546,7 @@ class AlertListConfig:
     alert_action: List = field(default_factory=list)
     mode: str = "all"
     depth: int = 1
+    alert_definitions: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -726,6 +727,10 @@ class Dashboard:
     # to True — a dashboard nobody else can see defeats the purpose
     # of the framework. Can be overridden per-dashboard via YAML.
     shared: bool = True
+    # Vendor checklist: pak-shipped dashboards must be hidden: true by default.
+    # Ops unhides a dashboard when the user explicitly opens it.
+    # Can be overridden per-dashboard via YAML hidden: false for special cases.
+    hidden: bool = True
     id: str = ""
     source_path: Path | None = None
     released: bool = False   # publish gate
@@ -1177,6 +1182,18 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
             else:
                 criticality = [int(c) for c in raw_criticality]
             raw_types = w.get("alert_types") or w.get("type_codes") or []
+            raw_alert_defs = w.get("alert_definitions") or []
+            if not isinstance(raw_alert_defs, list):
+                raise ValueError(
+                    f"Widget '{w.get('title', '?')}': alert_definitions must be a list, "
+                    f"got {type(raw_alert_defs).__name__}"
+                )
+            for i, entry in enumerate(raw_alert_defs):
+                if not isinstance(entry, str):
+                    raise ValueError(
+                        f"Widget '{w.get('title', '?')}': alert_definitions[{i}] must be "
+                        f"a string (alert definition id), got {type(entry).__name__}"
+                    )
             alert_list_config = AlertListConfig(
                 criticality=criticality,
                 alert_types=[str(t).strip() for t in raw_types],
@@ -1186,6 +1203,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 alert_action=list(w.get("alert_action") or []),
                 mode=str(w.get("mode", "all") or "all").strip(),
                 depth=int(w.get("depth", 1)),
+                alert_definitions=list(raw_alert_defs),
             )
 
         # --- Parse ProblemAlertsList config ---
@@ -1326,6 +1344,10 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
     name_path = str(data.get("name_path", "") or "").strip()
     shared_raw = data.get("shared")
     shared = True if shared_raw is None else bool(shared_raw)
+    hidden_raw = data.get("hidden")
+    # Default hidden=True per vendor checklist — pak-shipped dashboards should be
+    # hidden by default. Authors can set hidden: false to override.
+    hidden = True if hidden_raw is None else bool(hidden_raw)
     released_raw = data.get("released", False)
     released = bool(released_raw) if isinstance(released_raw, bool) else False
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
@@ -1339,6 +1361,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
         interactions=interactions,
         name_path=name_path or default_name_path,
         shared=shared,
+        hidden=hidden,
         source_path=path,
         released=released,
         version=version,

@@ -292,29 +292,84 @@ public final class ComplianceStitcher {
 
 	private void invokeAddStats(Object resourcesClient,
 			String resourceId, Object statContents) throws Exception {
+		// ResourcesClient (com.vmware.ops.api.client.controllers) exposes
+		// FOUR addStats overloads — none of them are 2-arg:
+		//   addStats(UUID, StatContents, boolean)              ← 3-arg, what we want
+		//   addStats(String, UUID, StatContents, boolean)      ← 4-arg, adapterKind variant
+		//   addStatsForResources(ResourceStatContent$ResourcesStatContents, boolean)
+		//   addStatsForResources(String, ...)
+		// The previous implementation only looked for 2-arg variants, so
+		// every stat push silently no-op'd — which is why per-host rollups
+		// (VCF-CF Compliance|score etc.) never appeared on HostSystem
+		// while per-control properties did (addProperties IS 2-arg:
+		// addProperties(UUID, PropertyContents)).
 		String[] methodNames = {"addStats", "addStatsForResource",
 				"addResourceStats"};
+		Exception lastError = null;
 		for (String name : methodNames) {
-			try {
-				for (java.lang.reflect.Method m :
-						resourcesClient.getClass().getMethods()) {
-					if (m.getName().equals(name)) {
-						Class<?>[] params = m.getParameterTypes();
-						if (params.length == 2 && params[0] == String.class) {
-							m.invoke(resourcesClient, resourceId, statContents);
-							return;
-						}
-						if (params.length == 2
-								&& params[0].getName().contains("UUID")) {
-							m.invoke(resourcesClient,
-									java.util.UUID.fromString(resourceId),
-									statContents);
-							return;
-						}
+			for (java.lang.reflect.Method m :
+					resourcesClient.getClass().getMethods()) {
+				if (!m.getName().equals(name)) continue;
+				Class<?>[] params = m.getParameterTypes();
+				try {
+					// 3-arg: (UUID, StatContents, boolean) — real signature
+					if (params.length == 3
+							&& params[0].getName().contains("UUID")
+							&& params[2] == boolean.class) {
+						m.invoke(resourcesClient,
+								java.util.UUID.fromString(resourceId),
+								statContents, Boolean.FALSE);
+						logger.info("ComplianceStitcher: addStats(UUID,"
+								+ "StatContents,bool) succeeded for "
+								+ resourceId);
+						return;
 					}
+					// 3-arg: (String, ..., StatContents) variant safeguard
+					if (params.length == 3 && params[0] == String.class
+							&& params[2] == boolean.class) {
+						m.invoke(resourcesClient, resourceId, statContents,
+								Boolean.FALSE);
+						logger.info("ComplianceStitcher: addStats(String,"
+								+ "StatContents,bool) succeeded for "
+								+ resourceId);
+						return;
+					}
+					// 2-arg fallback (in case some SDK build offers it)
+					if (params.length == 2 && params[0] == String.class) {
+						m.invoke(resourcesClient, resourceId, statContents);
+						logger.info("ComplianceStitcher: addStats(String,"
+								+ "StatContents) succeeded for "
+								+ resourceId);
+						return;
+					}
+					if (params.length == 2
+							&& params[0].getName().contains("UUID")) {
+						m.invoke(resourcesClient,
+								java.util.UUID.fromString(resourceId),
+								statContents);
+						logger.info("ComplianceStitcher: addStats(UUID,"
+								+ "StatContents) succeeded for "
+								+ resourceId);
+						return;
+					}
+				} catch (Exception e) {
+					lastError = e;
+					logger.warn("ComplianceStitcher: " + name + "("
+							+ java.util.Arrays.toString(params)
+							+ ") threw: " + e.getClass().getName()
+							+ ": " + e.getMessage());
 				}
-			} catch (Exception ignored) {}
+			}
 		}
+		// Never silently swallow — if no overload matched OR every attempt
+		// threw, surface the gap so we don't repeat the v23 mistake of
+		// thinking stats were being pushed when they weren't.
+		logger.warn("ComplianceStitcher: NO addStats overload accepted "
+				+ "the call for " + resourceId
+				+ " — per-host rollups will NOT appear on HostSystem. "
+				+ "Dumping resourcesClient API:");
+		dumpMethods(resourcesClient, "resourcesClient");
+		if (lastError != null) throw lastError;
 	}
 
 	private void setField(Object obj, String fieldName, Object value) {

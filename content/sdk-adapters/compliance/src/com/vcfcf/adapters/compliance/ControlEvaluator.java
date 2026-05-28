@@ -26,6 +26,14 @@ public final class ControlEvaluator {
 		int fail = 0;
 
 		for (BenchmarkProfile.Control control : profile.hostControls()) {
+			// Skip controls whose parameter_kind is not in the
+			// evaluable set (today: advanced_setting only). These
+			// rows ship in the profile for traceability but can't be
+			// scored against the SOAP-collected advanced settings
+			// map. See BenchmarkProfile#evaluableControls.
+			if (!control.isEvaluable()) {
+				continue;
+			}
 			String param = control.configParameter;
 			if (param == null || param.isEmpty() || "N/A".equals(param)) {
 				continue;
@@ -56,6 +64,15 @@ public final class ControlEvaluator {
 		}
 
 		int total = pass + fail;
+		// Zero-divisor contract for VCF-CF Compliance|score (fix #1):
+		// When no profile controls were evaluable against this host
+		// (total == 0 — e.g. profile loaded zero applicable controls,
+		// or vSphere returned no advanced settings), publish 100.0
+		// rather than NaN/null. Rationale: the symptom thresholds
+		// (vcfcf_compliance_score_warning <95, _critical <80) treat
+		// "no signal" as vacuously compliant rather than firing a
+		// false alert. Operators see total_count=0 if they need to
+		// distinguish "perfect" from "nothing evaluated".
 		double score = total > 0 ? ((double) pass / total) * 100.0 : 100.0;
 
 		return new ComplianceResult(hostname, pass, fail, total, score, results);

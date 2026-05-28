@@ -1,14 +1,16 @@
 name: "VCF Content Factory Compliance"
 version: "1.0.0"
-build_number: 19
+build_number: 26
 adapter_kind: "vcfcf_compliance"
 tier: 2
 description: >
-  Monitors ESXi hosts for CIS benchmark compliance by querying vCenter
-  configuration data and evaluating controls against user-selectable
-  security profiles. Pushes per-control compliance properties and
-  aggregate scores onto existing VMWARE HostSystem resources via
-  ARIA_OPS stitching. Dynamic property keys vary per benchmark profile.
+  Compliance reporting for ESXi hosts (remediation planned). Evaluates
+  host configuration against the VMware Security Configuration Guide
+  (SCG) — included profiles cover SCG ESXi 8.x/9.x and the CIS
+  Foundations Benchmark v8 L1/L2. Queries vCenter, pushes per-control
+  results and per-host aggregate scores onto existing VMWARE HostSystem
+  resources via ARIA_OPS stitching for fleet-wide compliance posture
+  monitoring in VCF Operations.
 entry_class: "com.vcfcf.adapters.compliance.ComplianceAdapter"
 released: false
 bundled_content:

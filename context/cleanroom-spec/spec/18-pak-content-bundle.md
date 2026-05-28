@@ -1,6 +1,6 @@
 # 18 — Pak Content Bundle: Dashboards, Alerts, Views, and Declarative Content
 
-**Status**: Pass 29 (2026-05-27, A7 addendum).
+**Status**: Pass 30 (2026-05-28, A0 retracted; correct content-walk mechanism documented).
 **Scope**: the declarative content that management packs ship alongside
 their adapter implementation — dashboards, alert definitions, views,
 supermetrics, custom groups, traversal specs, scorecards, and
@@ -846,3 +846,339 @@ custom groups.
    registered world-singleton name or a known-present custom group name.
    A generator that emits kind names as resource names (e.g. "HostSystem")
    is a bug, not a runtime configuration issue.
+
+---
+
+## Addendum — overview.packed gate (Pass 29 A0, 2026-05-28)
+
+### A0. `overview.packed` must be present at the outer-pak root
+
+**Finding (build 19 post-mortem)**: VCF Ops build 19 registered
+alerts, symptoms, and recommendations (installed via the describe.xml
+path, step 15 of the install orchestrator) but **zero dashboards and
+zero views** were imported despite all A1–A7 fixes being present.
+The proximate cause is step 5 of the install orchestrator:
+`DEPLOY_NEW_UPGRADE_CONTENT` checks for the presence of a file named
+`overview.packed` at the outer-pak root before processing the `content/`
+directory.  When that file is absent, the step silently returns without
+importing anything.  The describe.xml-side install (step 15) is
+independent and ran normally — which is why adapter registration,
+alerts, symptoms, and recommendations worked while all declarative
+content types failed.
+
+**Fix**: every pak produced by the SDK builder must include
+`overview.packed` as a sibling of `manifest.txt` at the outer-pak root.
+
+**Format**: `overview.packed` is a ZIP archive.  Minimum contents:
+`light/overview.html` (a small, valid HTML page).  The platform does
+not parse the HTML for correctness — the check is presence-based.
+Reference size from `VCFAutomation-902025137921.pak`: 5,772 B; a
+minimal page is fine.
+
+**Builder change** (build 20): `_write_outer_pak()` in
+`vcfops_managementpacks/sdk_builder.py` now unconditionally emits
+`overview.packed` for all SDK paks.  The HTML body is generated from
+the adapter's `name`, `version.build_number`, and `description` fields.
+
+**Sanity-check** (post-build):
+```
+unzip -p <pak> overview.packed | python3 -c "
+import sys, zipfile, io
+data = sys.stdin.buffer.read()
+z = zipfile.ZipFile(io.BytesIO(data))
+assert 'light/overview.html' in z.namelist(), 'light/overview.html missing'
+print('overview.packed OK —', z.namelist())
+"
+```
+
+---
+
+## Addendum — Pass 29 A0 retraction and correct content-walk mechanism (Pass 30, 2026-05-28)
+
+### A0 is wrong — `overview.packed` does NOT gate `content/` import for solution paks
+
+**Provenance**: build 20 post-mortem.  After adding `overview.packed` in build 20,
+dashboards and views still produced zero `ContentImport.importFile` log lines during
+the v20 install.  This invalidates the A0 hypothesis entirely.
+
+**Correct mechanism**: the `DEPLOY_NEW_UPGRADE_CONTENT` orchestrator step (step 5)
+is skipped for **every** solution pak in the corpus — including paks that install
+dashboards and views cleanly (SAN MP, VCFAutomation, AppOSUCP, SynologyDSM, etc.).
+Evidence:
+
+1. `DeployNewUpgradeContentOperation.shouldRun()` decompiled from the appliance class
+   file returns `detail.isContainsSystemUpdate()`.  `containsSystemUpdate` is true only
+   when `manifest.txt` declares a non-empty `system_update_script`.  No solution/MP
+   manifest declares this field.  It is used exclusively by OS/platform-update paks
+   (e.g. `vim-902025137884.pak`, `vcf-902025137906.pak`).
+
+2. `.results` files for SAN MP and SynologyDSM (both known to install dashboards)
+   confirm `"deploy_new_upgrade_content_result": "no results"` — the identical
+   step-5 skip outcome as our failing pak.
+
+3. Content for solution paks flows through **step 15, `APPLY_ADAPTER`**
+   (`DistTaskSolutionManagerDistributedTask`), not step 5.  The analytics log
+   shows `ContentImport.importFile` calls immediately after `Starting operation
+   APPLY_ADAPTER` for working paks.
+
+**Corrected diagnosis** (from `context/investigations/v20-step5-silent-drop.md`):
+The content-side failures correlate with content-tree structural differences, not
+orchestrator-level gating.  Top candidates (differ between our pak and working paks):
+
+1. Empty `content/` subdirectories — our v20 pak shipped empty
+   `content/alertdefs/`, `content/symptomdefs/`, `content/recommendations/`,
+   `content/supermetrics/`, `content/customgroups/`, `content/policies/`,
+   `content/traversalspecs/`, `content/files/`.  Reference paks ship ONLY
+   populated subdirs.  SolutionManager may abort the content walk on
+   unexpected empty directories.
+2. Missing or empty `content/resources/resources.properties` — importers
+   commonly key off this bundle; missing it correlates with silent drops.
+3. Missing or empty per-dashboard and per-view `resources/` bundles.
+
+**Build 21 fix**: all three structural gaps are addressed:
+- Empty `content/` subdirs are no longer emitted (only populated subdirs written).
+- `content/resources/resources.properties` is populated from the project's
+  nameKey-to-display-string map.
+- Per-dashboard `resources/resources.properties` is generated with folder label,
+  dashboard name, and widget title entries.
+- Per-view `resources/content.properties` is generated with `view.<uuid>.title`,
+  `view.<uuid>.desc`, and `view.<uuid>.<col_key>` entries.
+
+**`overview.packed` status**: the file is still emitted (it is a mandatory
+certification checklist item — the Solutions UI uses it to render the adapter's
+Overview tab).  Its internal structure is corrected to match the 8.13 spec:
+`overview/{light,dark}/overview.html` (both themes mandatory).  But it has
+no bearing on whether `content/` is imported.
+
+**Updated sanity-check**:
+```
+unzip -p <pak> overview.packed | python3 -c "
+import sys, zipfile, io
+data = sys.stdin.buffer.read()
+z = zipfile.ZipFile(io.BytesIO(data))
+names = z.namelist()
+assert 'overview/light/overview.html' in names, 'light theme missing'
+assert 'overview/dark/overview.html' in names, 'dark theme missing'
+print('overview.packed OK —', names)
+"
+```
+
+---
+
+## Addendum — content-side localization bundle contract (Pass 31, 2026-05-28)
+
+**Provenance**: builds 21 and 22 post-mortems.  Build 21 added the four
+localization bundles called out in the Pass 30 corrected diagnosis.  Content still
+did not import — analytics log showed `ERROR: Localization for key desc is absent`
+during step 15 for the view XML.  Build 22 traced the mismatch to a suffix
+collision (`description` in the properties file vs. `desc` in the XML attribute)
+and aligned both sides.  The v22 pak imported clean on devel: 1 dashboard, 1 view,
+1 alert, 2 symptoms, 3 recommendations all present in the post-install inventory.
+
+### The four-bundle contract
+
+A solution pak must ship **populated** properties files at all four of the
+following paths.  Missing any one of them causes the platform's content importer
+to abort the corresponding content tree with a silent drop (dashboard) or an
+explicit error (view/report).  The canonical reference is `VCFAutomation-902025137921.pak`
+extracted to `/tmp/vcf_auto/`.
+
+#### Bundle 1 — `resources/resources.properties` (outer pak root)
+
+**Purpose**: solution-level display metadata shown in the Solutions UI and pak
+installer dialogs.
+
+**Format**:
+```properties
+version=1
+DISPLAY_NAME=<human-readable adapter name>
+DESCRIPTION=<one-line description>
+VENDOR=<vendor name>
+```
+
+**Example** (from VCFAutomation):
+```properties
+version=1
+DISPLAY_NAME=VCF Automation
+DESCRIPTION=Monitors VCF Automation environments
+VENDOR=VMware, Inc.
+```
+
+**VCF-CF generator**: `_generate_outer_resources_properties()` in
+`vcfops_managementpacks/sdk_builder.py`.
+
+#### Bundle 2 — `content/resources/resources.properties`
+
+**Purpose**: adapter-wide nameKey-to-display-string map for the content importer.
+Every `nameKey` integer referenced in describe.xml `SymptomDefinition`,
+`AlertDefinition`, and `Recommendation` elements must appear here.
+
+**Format**:
+```properties
+<nameKey>=<display name>
+<nameKey>.description=<long description>
+```
+
+**Example** (from AppOSUCPAdapter `/tmp/app_osucp/content/resources/resources.properties`):
+```properties
+100=App OS UCP Connection Alert
+100.description=Connection to the App OS UCP target is broken
+101=App OS UCP Connection Symptom
+```
+
+**VCF-CF generator**: `_generate_content_resources_properties()` sources this from
+the project's `resources/resources.properties` (numeric keys only).
+
+#### Bundle 3 — `content/dashboards/<dir>/resources/resources.properties`
+
+**Purpose**: per-dashboard display strings consumed by the dashboard importer to
+resolve the folder label, dashboard display name, and widget titles.
+
+**Format** (Java `.properties` — spaces in keys must be backslash-escaped):
+```properties
+<namePath>=<folder label>
+
+<dashboard\ display\ name>=<dashboard display name>
+<dashboard\ display\ name>.<widget\ title>=<widget title>
+```
+
+**Example** (from AppOSUCPAdapter `/tmp/app_osucp/content/dashboards/sdwan/resources/resources.properties`):
+```properties
+SDWAN=SDWAN
+
+SDWAN\ Dashboard=SDWAN Dashboard
+SDWAN\ Dashboard.Managed\ Devices=Managed Devices
+SDWAN\ Dashboard.WAN\ Link\ Traffic=WAN Link Traffic
+```
+
+**Key encoding rule**: spaces become `\ `, forward slashes become `\/`, and
+backslashes are doubled.  This is standard Java `.properties` key encoding.
+The platform rejects keys that contain un-escaped spaces.
+
+**VCF-CF generator**: `_generate_dashboard_resources_properties()` plus
+`_java_properties_escape_key()` in `vcfops_managementpacks/sdk_builder.py`.
+
+#### Bundle 4 — `content/reports/<dir>/resources/content.properties`
+
+**Purpose**: per-view display strings consumed by the view importer.  The view
+XML (`content.xml`) carries `localizationKey` attributes on `<Title>`,
+`<Description>`, and each `<Property name="displayName">` element.  The
+platform looks up `view.<viewdef_uuid>.<localizationKey>` in this file for
+each attribute.  If any key is absent, the importer logs
+`ERROR: Localization for key <suffix> is absent` and aborts the entire content
+tree — killing dashboard import for the whole pak as well.
+
+**Format**:
+```properties
+view.<viewdef_uuid>.title=<view title>
+view.<viewdef_uuid>.desc=<view description>
+view.<viewdef_uuid>.<col_attribute_key>=<column display name>
+```
+
+**Example** (from VCFAutomation `/tmp/vcf_auto/content/reports/VCF90/resources/content.properties`):
+```properties
+view.a9a4a2bc-0e61-448c-a72c-0bebea2b7961.title=Compliance Host Overview
+view.a9a4a2bc-0e61-448c-a72c-0bebea2b7961.desc=Per-host compliance scores
+view.a9a4a2bc-0e61-448c-a72c-0bebea2b7961.VCF-CF_Compliance_score=Compliance Score (%)
+```
+
+**VCF-CF generator**: `_generate_view_content_properties()` in
+`vcfops_managementpacks/sdk_builder.py`.  The attribute key sanitization
+(`_attribute_to_localization_key()`) must produce the same suffix used in the
+view XML renderer.
+
+### The `localizationKey`-must-match-properties-suffix contract
+
+View XML elements carry a `localizationKey` attribute that tells the importer
+which properties entry to look up.  The lookup is:
+
+```
+view.<viewdef_uuid>.<localizationKey>
+```
+
+**The XML-side suffix and the properties-file suffix must be identical.**  Any
+mismatch causes `ERROR: Localization for key <suffix> is absent` and aborts
+the content import for the entire pak (not just the offending file).
+
+Two conventions exist in the corpus:
+
+| Pak | XML `localizationKey` on `<Description>` | Properties entry suffix |
+|---|---|---|
+| VCFAutomation | `desc` | `.desc` |
+| AppOSUCPAdapter | `description` | `.description` |
+
+**VCF-CF convention**: standardize on `desc` (matching VCFAutomation, which is
+the closer structural reference for our SDK adapter style).  Both sides must use
+the same suffix — the v21 mismatch (`desc` in XML, `description` in properties)
+was the bug that build 22 fixed.
+
+**Alignment rule**:
+- `vcfops_dashboards/render.py` emits `localizationKey="desc"` on `<Description>`.
+- `vcfops_managementpacks/sdk_builder.py` emits `view.<uuid>.desc=...` in content.properties.
+- Both must stay in sync.  A build-time validator enforces this (see §Pass 31
+  validator note below).
+
+**Column displayName keys** are derived by `_attribute_to_localization_key()`,
+which strips the `Super Metric|` prefix, replaces `|` with `_`, replaces spaces
+with `_`, and removes non-alphanumeric/non-hyphen characters.  The identical
+function runs in both render.py and sdk_builder.py — they must stay in sync.
+
+### Negative-case diagnostic fingerprint
+
+When content fails to import, operators should grep the following logs on the
+appliance (`vcf-lab-operations-devel.int.sentania.net`):
+
+**`/storage/vcops/log/casa/pakManager.actions.log`**
+
+- Step 5 (`DEPLOY_NEW_UPGRADE_CONTENT`) saying `should not run` — **this is
+  normal for all solution paks** (Pass 30 finding).  Do not chase this.  It is
+  not the failure signal.
+- Step 15 (`APPLY_ADAPTER`) must start and complete.  If step 15 is absent,
+  the pak failed before content ingestion.
+
+**`/storage/vcops/log/analytics-*.log` during step 15**
+
+- `LocalizationManager.setLocalization` line — indicates the localization bundle
+  was loaded.
+- `ContentImport.importFile` lock acquire/release pair — if lock hold time is
+  <100 ms and no `DashboardImporter.processDashboardsImport` lines appear between
+  acquire and release, the dashboard was silently dropped (no bundle mismatch, but
+  some other structural issue — empty dirs, missing SubjectType, etc.).
+- `ERROR: Localization for key <suffix> is absent` — the exact key suffix shown
+  is what is present in the view XML but absent from content.properties.  Chase the
+  mismatch between `localizationKey="<suffix>"` in content.xml and the properties
+  file entries.
+
+### Reference paks consulted
+
+All extracted on the devel appliance (`vcf-lab-operations-devel.int.sentania.net`)
+and on this workstation:
+
+| Alias | Pak | Location |
+|---|---|---|
+| VCFAutomation | `VCFAutomation-902025137921.pak` | `/tmp/vcf_auto/` (workstation); `/storage/db/casa/pak/dist_pak_files/NON_VA_LINUX/` (appliance) |
+| AppOSUCP | `AppOSUCPAdapter-902025137908.pak` | `/tmp/app_osucp/` (workstation) |
+| VrAdapter | `VrAdapter-902025137917.pak` | `/tmp/vradapter/` (workstation) |
+| SAN MP | `ManagementPackforStorageAreaNetwork-902025137912.pak` | `/storage/db/pakRepoLocal/` (appliance) |
+
+### Build history for this contract
+
+| Build | Change | Outcome |
+|---|---|---|
+| v20 | Added `overview.packed` (Pass 29 A0 hypothesis) | Dashboard/view still did not import; A0 retracted in Pass 30 |
+| v21 | Added all four localization bundles; fixed empty content/ subdirs | `ERROR: Localization for key desc is absent` — properties had `.description`, XML had `localizationKey="desc"` |
+| v22 | Aligned both sides to use `desc` suffix | Import clean: 1 dashboard, 1 view, 1 alert, 2 symptoms, 3 recs confirmed post-install |
+
+### Pass 31 validator note
+
+A build-time check in `validate_sdk_project()` (`vcfops_managementpacks/sdk_builder.py`)
+now enforces the contract before a pak is built.  For each view in `bundled_content`,
+it:
+
+1. Renders the view XML and collects all `localizationKey` attribute values.
+2. Generates the content.properties text and parses its `view.<uuid>.*` keys.
+3. Asserts every XML `localizationKey` suffix has a matching properties entry.
+4. Raises a named error (`localization-key-mismatch`) if any suffix is absent.
+
+This catches the desc/description class of bug at `vcfops_managementpacks validate`
+time, not at pak install time.

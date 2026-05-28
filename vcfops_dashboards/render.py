@@ -105,8 +105,37 @@ def _resolve_view_pin(
 
 # ---------------- View definition (XML) ----------------
 
-def _xml_property(name: str, value: str) -> str:
+def _xml_property(name: str, value: str, localization_key: Optional[str] = None) -> str:
+    if localization_key:
+        return (
+            f'<Property localizationKey="{escape(localization_key, {chr(34): "&quot;"})}"'
+            f' name="{escape(name, {chr(34): "&quot;"})}"'
+            f' value="{escape(value, {chr(34): "&quot;"})}"/>'
+        )
     return f'<Property name="{escape(name, {chr(34): "&quot;"})}" value="{escape(value, {chr(34): "&quot;"})}"/>'
+
+
+def _attribute_to_localization_key(attribute: str) -> str:
+    """Convert an attribute key to a Java-properties-compatible localizationKey.
+
+    The localizationKey is used in both the rendered view XML (on the
+    displayName Property element) and the content.properties bundle, so they
+    must match exactly.
+
+    Removes the 'Super Metric|' prefix, replaces '|' with '_', spaces with '_',
+    and strips non-(alphanumeric/hyphen/underscore) characters.
+
+    Examples:
+        "VCF-CF Compliance|score"       → "VCF-CF_Compliance_score"
+        "Summary|total_hosts"           → "Summary_total_hosts"
+        "Super Metric|sm_abc123"        → "sm_abc123"
+    """
+    key = attribute
+    if key.startswith("Super Metric|"):
+        key = key[len("Super Metric|"):]
+    key = key.replace("|", "_").replace(" ", "_")
+    key = "".join(c for c in key if c.isalnum() or c in "-_")
+    return key
 
 
 def _xml_buckets_control(view: ViewDef) -> str:
@@ -312,7 +341,11 @@ def _xml_attribute_item(
     if col.ascending_range is not None and not (red_is_string and not has_yellow and not has_orange):
         props.append(_xml_property("ascendingRange", "true" if col.ascending_range else "false"))
 
-    props.append(_xml_property("displayName", col.display_name))
+    # displayName carries a localizationKey so the content.properties bundle
+    # can override the label per locale.  The key matches what
+    # _generate_view_content_properties() emits (attribute → sanitized key).
+    _display_loc_key = _attribute_to_localization_key(raw)
+    props.append(_xml_property("displayName", col.display_name, localization_key=_display_loc_key))
     props += [
         _xml_property("addTimestampAsColumn", "false"),
         _xml_property("isShowRelativeTimestamp", "false"),
@@ -351,11 +384,14 @@ def _render_view_def_fragment(
         for i, c in enumerate(view.columns)
     )
 
-    # Shared header elements
+    # Shared header elements.
+    # localizationKey attributes on <Title> and <Description> match the
+    # content.properties bundle keys: view.<uuid>.title and view.<uuid>.desc.
+    # Reference: /tmp/vcf_auto/content/reports/VCF90/content.xml.
     header = (
         f'<ViewDef id="{view.id}">'
-        f"<Title>{escape(view.name)}</Title>"
-        f"<Description>{escape(view.description)}</Description>"
+        f'<Title localizationKey="title">{escape(view.name)}</Title>'
+        f'<Description localizationKey="desc">{escape(view.description)}</Description>'
         f'<SubjectType adapterKind="{escape(view.adapter_kind)}" resourceKind="{escape(view.resource_kind)}" type="descendant"/>'
         f'<SubjectType adapterKind="{escape(view.adapter_kind)}" resourceKind="{escape(view.resource_kind)}" type="self"/>'
         "<Usage>dashboard</Usage><Usage>report</Usage><Usage>details</Usage><Usage>content</Usage>"
@@ -564,6 +600,30 @@ def render_views_xml(
 
 # ---------------- Dashboard (JSON) ----------------
 
+def _gridster_coords(w: Widget) -> dict:
+    """Convert author-facing 0-based (x, y) coords to the 1-based wire format.
+
+    VCF Ops gridster uses a 1-based coordinate system: the top-left corner of
+    the 12-column grid is (x=1, y=1).  Authoring in 0-based coords is more
+    natural (row 1 starts at y=0, left edge at x=0), so we shift here.  Width
+    and height are unchanged — they are span counts, not positions.
+
+    Evidence: every widget in the corpus reference dashboards
+    (vcf_auto, app_osucp) has x >= 1 and y >= 1.  A widget placed at x=0 or
+    y=0 is treated by the Ops UI as off-grid and rendered at the bottom of the
+    dashboard regardless of its y value — the observed bug with hosts_scanned.
+
+    See context/investigations/ for the VCF Automation corpus analysis that
+    confirmed the 1-based convention.
+    """
+    return {
+        "x": w.coords["x"] + 1,
+        "y": w.coords["y"] + 1,
+        "w": w.coords["w"],
+        "h": w.coords["h"],
+    }
+
+
 def _resource_list_widget(w: Widget, kind_index: dict[tuple[str, str], int]) -> dict:
     kinds = [
         f"resourceKind:id:{kind_index[(rk.adapter_kind, rk.resource_kind)]}_::_"
@@ -572,7 +632,7 @@ def _resource_list_widget(w: Widget, kind_index: dict[tuple[str, str], int]) -> 
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": {"x": w.coords["x"], "y": w.coords["y"], "w": w.coords["w"], "h": w.coords["h"]},
+        "gridsterCoords": _gridster_coords(w),
         "type": "ResourceList",
         "title": w.title,
         "config": {
@@ -657,7 +717,7 @@ def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": {"x": w.coords["x"], "y": w.coords["y"], "w": w.coords["w"], "h": w.coords["h"]},
+        "gridsterCoords": _gridster_coords(w),
         "type": "View",
         "title": w.title,
         "config": {
@@ -741,10 +801,7 @@ def _text_display_widget(w: Widget) -> dict:
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": {
-            "x": w.coords["x"], "y": w.coords["y"],
-            "w": w.coords["w"], "h": w.coords["h"],
-        },
+        "gridsterCoords": _gridster_coords(w),
         "type": "TextDisplay",
         "title": w.title,
         "config": {
@@ -772,10 +829,7 @@ def _scoreboard_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": {
-            "x": w.coords["x"], "y": w.coords["y"],
-            "w": w.coords["w"], "h": w.coords["h"],
-        },
+        "gridsterCoords": _gridster_coords(w),
         "type": "Scoreboard",
         "title": w.title,
         "config": {
@@ -839,10 +893,7 @@ def _metric_chart_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": {
-            "x": w.coords["x"], "y": w.coords["y"],
-            "w": w.coords["w"], "h": w.coords["h"],
-        },
+        "gridsterCoords": _gridster_coords(w),
         "type": "MetricChart",
         "title": w.title,
         "config": {
@@ -882,10 +933,7 @@ def _health_chart_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": {
-            "x": w.coords["x"], "y": w.coords["y"],
-            "w": w.coords["w"], "h": w.coords["h"],
-        },
+        "gridsterCoords": _gridster_coords(w),
         "type": "HealthChart",
         "title": w.title,
         "config": {
@@ -949,10 +997,7 @@ def _pareto_analysis_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": {
-            "x": w.coords["x"], "y": w.coords["y"],
-            "w": w.coords["w"], "h": w.coords["h"],
-        },
+        "gridsterCoords": _gridster_coords(w),
         "type": "ParetoAnalysis",
         "title": w.title,
         "config": {
@@ -1007,10 +1052,7 @@ def _alert_list_widget(w: Widget) -> dict:
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": {
-            "x": w.coords["x"], "y": w.coords["y"],
-            "w": w.coords["w"], "h": w.coords["h"],
-        },
+        "gridsterCoords": _gridster_coords(w),
         "type": "AlertList",
         "title": w.title,
         "config": {
@@ -1033,6 +1075,7 @@ def _alert_list_widget(w: Widget) -> dict:
             "state": cfg.state,
             "alertImpact": cfg.alert_impact,
             "alertAction": cfg.alert_action,
+            "alertDefinitions": [{"id": d} for d in cfg.alert_definitions],
         },
         "height": 600,
     }
@@ -1088,10 +1131,7 @@ def _problem_alerts_list_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": {
-            "x": w.coords["x"], "y": w.coords["y"],
-            "w": w.coords["w"], "h": w.coords["h"],
-        },
+        "gridsterCoords": _gridster_coords(w),
         "type": "ProblemAlertsList",
         "title": w.title,
         "config": config,
@@ -1217,10 +1257,7 @@ def _heatmap_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": {
-            "x": w.coords["x"], "y": w.coords["y"],
-            "w": w.coords["w"], "h": w.coords["h"],
-        },
+        "gridsterCoords": _gridster_coords(w),
         "type": "Heatmap",
         "title": w.title,
         "config": {
@@ -1269,10 +1306,7 @@ def _property_list_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": {
-            "x": w.coords["x"], "y": w.coords["y"],
-            "w": w.coords["w"], "h": w.coords["h"],
-        },
+        "gridsterCoords": _gridster_coords(w),
         "type": "PropertyList",
         "title": w.title,
         "config": {
@@ -1350,7 +1384,11 @@ def _build_dashboard_obj(
         # `shared:` field.
         "shared": dashboard.shared,
         "temporary": False,
-        "hidden": False,
+        # Vendor requirements checklist: all pak-shipped dashboards must be
+        # hidden: true by default.  VCFAutomation, AppOSUCP, VrAdapter all set
+        # this.  Ops unhides a dashboard when the user explicitly opens it.
+        # The YAML hidden: field can override to false for special cases.
+        "hidden": getattr(dashboard, "hidden", True),
         "creationTime": now_ms,
         "autoswitchEnabled": False,
         "importAttempts": 0,

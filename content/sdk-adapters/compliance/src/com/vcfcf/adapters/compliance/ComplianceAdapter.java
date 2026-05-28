@@ -132,6 +132,17 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 							config.benchmarkProfile,
 							config.customProfilePath,
 							confDir);
+					// Fix #2: metric-tree subnamespace and profile_name
+					// must agree. Always derive both from the resolved
+					// profile (profile.name), not from the requested
+					// config.benchmarkProfile. If the loader fell back
+					// (e.g. unknown profile name), surface it.
+					if (!profile.name.equals(config.benchmarkProfile)) {
+						logWarn("Profile load divergence: requested='"
+								+ config.benchmarkProfile + "' resolved='"
+								+ profile.name + "' — metric tree and "
+								+ "profile_name will use the resolved name");
+					}
 
 					logInfo("suiteAPIClient=" + (suiteAPIClient != null)
 							+ " stitcher=" + (stitcher != null));
@@ -156,6 +167,7 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 					logInfo("vSphere SOAP: " + hosts.size() + " hosts");
 
 					int totalHosts = 0;
+					int scoredHosts = 0;
 					double scoreSum = 0;
 					int belowThreshold = 0;
 
@@ -184,8 +196,21 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 										profile, advSettings, hostName);
 
 						totalHosts++;
-						scoreSum += cr.score;
-						if (cr.score < 95.0) belowThreshold++;
+						// Only fold a host into the world average if its
+						// per-host score is REAL data (totalCount > 0).
+						// ControlEvaluator returns score=100.0 as a
+						// zero-divisor sentinel when no profile controls
+						// were evaluable against the host — folding that
+						// in produces a bogus 100 average (this is what
+						// devel showed pre-fix: avg=100 despite per-control
+						// failures). Hosts with no signal are still counted
+						// in total_hosts so operators see them, but they
+						// don't move the score needle.
+						if (cr.totalCount > 0) {
+							scoredHosts++;
+							scoreSum += cr.score;
+							if (cr.score < 95.0) belowThreshold++;
+						}
 
 						logInfo("Host " + hostName + ": score="
 								+ String.format("%.1f", cr.score)
@@ -198,7 +223,7 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 									stitcher.matchHost(hostName, hostId);
 							if (he != null) {
 								pushComplianceViaClient(he.resourceId,
-										cr, config.benchmarkProfile);
+										cr, profile.name);
 								logInfo("Pushed compliance data to "
 										+ hostName
 										+ " (resource=" + he.resourceId
@@ -211,18 +236,34 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 							"Compliance World",
 							"world_id", "compliance_world");
 					world.addData("Summary|total_hosts", (double) totalHosts);
-					world.addData("Summary|avg_host_score",
-							totalHosts > 0 ? scoreSum / totalHosts : 0.0);
-					world.addData("Summary|hosts_below_threshold",
-							(double) belowThreshold);
+					// Skip avg_host_score and hosts_below_threshold entirely
+					// when no host produced real data — publishing a sentinel
+					// (0.0 or 100.0) is indistinguishable from a real result.
+					// Operators will see the metric gap on the dashboard and
+					// know to investigate. profile_name + total_hosts still
+					// publish so they know the adapter ran.
+					if (scoredHosts > 0) {
+						world.addData("Summary|avg_host_score",
+								scoreSum / scoredHosts);
+						world.addData("Summary|hosts_below_threshold",
+								(double) belowThreshold);
+					} else {
+						logWarn("No hosts produced real compliance signal "
+								+ "(all totalCount==0); skipping "
+								+ "Summary|avg_host_score and "
+								+ "Summary|hosts_below_threshold so the "
+								+ "scoreboard reads 'no data' rather than "
+								+ "a sentinel value");
+					}
 					addProperty(world, "Summary|profile_name",
-							config.benchmarkProfile);
+							profile.name);
 					addProperty(world, "Summary|last_scan_timestamp",
 							Instant.now().toString());
 					result.add(world);
 
 					logInfo("ComplianceAdapter collection complete: "
-							+ totalHosts + " hosts evaluated");
+							+ totalHosts + " hosts seen, "
+							+ scoredHosts + " produced real signal");
 
 				} catch (InterruptedException ie) {
 					throw ie;
@@ -256,6 +297,27 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 		};
 	}
 
+	// pushComplianceViaClient — publishes two layers of compliance data
+	// onto the matched VMWARE HostSystem resource:
+	//
+	//   First-class rollups (fix #1, profile-agnostic — alerts target
+	//   these so the alert pipeline survives profile changes):
+	//     VCF-CF Compliance|score          (numeric, percentage 0..100)
+	//     VCF-CF Compliance|pass_count     (numeric)
+	//     VCF-CF Compliance|fail_count     (numeric)
+	//     VCF-CF Compliance|total_count    (numeric)
+	//     VCF-CF Compliance|profile_name   (string property)
+	//
+	//   Per-control raw data (profile-versioned subtree, for the
+	//   metric browser and drill-down views):
+	//     VCF-CF Compliance|<profile>|<control_id>|Actual       (string)
+	//     VCF-CF Compliance|<profile>|<control_id>|Expected     (string)
+	//     VCF-CF Compliance|<profile>|<control_id>|Description  (string)
+	//     VCF-CF Compliance|<profile>|<control_id>|Compliant    (numeric 0/1)
+	//
+	// The <profile> segment uses the RESOLVED profile name (see fix #2
+	// in BenchmarkLoader) so the subtree path and the profile_name
+	// rollup always agree.
 	private void pushComplianceViaClient(String resourceId,
 			ControlEvaluator.ComplianceResult cr, String profileName) {
 		long ts = System.currentTimeMillis();
