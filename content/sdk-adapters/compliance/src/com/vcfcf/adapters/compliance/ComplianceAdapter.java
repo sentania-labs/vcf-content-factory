@@ -29,6 +29,26 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	private volatile BenchmarkLoader benchmarkLoader;
 	private volatile ComplianceStitcher stitcher;
 
+	// Fix #2 (Task #17): track the profile that was active in the
+	// PREVIOUS collection cycle. When the operator switches profiles
+	// (e.g. VMware_SCG_8.0 -> VMware_SCG_9.0) the OLD profile's
+	// per-control properties (VCF-CF Compliance|VMware_SCG_8.0|...)
+	// linger on each resource until VCF Ops retention ages them out.
+	// Detecting the change here lets us either:
+	//   (a) emit a clear operator warning so the lingering keys aren't
+	//       mistaken for the new profile's signal, and / or
+	//   (b) push a NotExisting state on the OLD per-control properties
+	//       so VCF Ops cleans them up immediately.
+	// Path (b) is a TOOLSET GAP today — see the comment block in
+	// detectProfileChange() for the API surface analysis. Path (a) is
+	// always emitted on change.
+	// In-memory only: a restart resets to null and we skip cleanup
+	// on the first post-restart cycle (there is no signal that a
+	// change occurred during the gap). Persisting to the work
+	// directory would be a future enhancement; in-memory is the v1
+	// contract called out in the Fix #2 brief.
+	private volatile String previousProfileName;
+
 	public ComplianceAdapter() {
 		super();
 	}
@@ -150,6 +170,14 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 						loadStitcherResources();
 					}
 
+					// Fix #2: detect profile change BEFORE the per-kind
+					// collectors run so the warning lands in the same
+					// cycle log as the (now obsolete) old-profile
+					// properties — operator sees both signals together.
+					// The actual NotExisting push is a TOOLSET GAP today;
+					// see detectProfileChange() for the analysis.
+					detectProfileChange(profile.name, confDir);
+
 					// Phase 2: HostSystem (Phase 1, green path),
 					// VirtualMachine, VMwareAdapter Instance,
 					// VmwareDistributedVirtualSwitch, and
@@ -198,6 +226,24 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 						world.addData("Summary|vms_below_threshold",
 								(double) vmStats.belowThreshold);
 					}
+					// vCenter fleet rollups (Fix #1, world symmetry).
+					// Same no-sentinel contract as host/vm: only publish
+					// averages and below_threshold when at least one
+					// vCenter produced real signal. total_vcenters always
+					// publishes so operators see the adapter ran. Today
+					// a ComplianceAdapter targets exactly one vCenter, so
+					// total_vcenters will be 0 or 1, but emit them as
+					// fleet stats anyway so the world contract is
+					// uniform with hosts/vms (and a future multi-vCenter
+					// posture won't have to retrofit the keys).
+					world.addData("Summary|total_vcenters",
+							(double) vcStats.total);
+					if (vcStats.scored > 0) {
+						world.addData("Summary|avg_vcenter_score",
+								vcStats.scoreSum / vcStats.scored);
+						world.addData("Summary|vcenters_below_threshold",
+								(double) vcStats.belowThreshold);
+					}
 					addProperty(world, "Summary|profile_name",
 							profile.name);
 					addProperty(world, "Summary|last_scan_timestamp",
@@ -211,6 +257,16 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 							+ " vCenter, "
 							+ dvsStats.total + " DVS, "
 							+ dvpgStats.total + " DVPG");
+
+					// Fix #2: commit the current profile as "previous"
+					// at end-of-cycle so the next cycle's
+					// detectProfileChange() compares against what we
+					// just finished publishing. Only update on the
+					// success path — if collection threw earlier, the
+					// catch below re-throws and we deliberately leave
+					// previousProfileName unchanged so the next cycle
+					// re-tries the detection.
+					previousProfileName = profile.name;
 
 				} catch (InterruptedException ie) {
 					throw ie;
@@ -301,6 +357,140 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 		} catch (Exception e) {
 			logWarn("Stitcher loadDvpgResources failed: " + e.getMessage());
 		}
+	}
+
+	/**
+	 * Fix #2 (Task #17): on the first cycle after a profile switch,
+	 * detect the change and emit a clear operator warning that the
+	 * OLD profile's per-control properties (under namespace
+	 * {@code VCF-CF Compliance|<old_profile>|...}) will linger on
+	 * every stitched resource until VCF Ops retention ages them out.
+	 *
+	 * <p><b>TOOLSET GAP — cannot push state=NotExisting today.</b><br>
+	 * The Fix #2 brief specifies pushing each old per-control property
+	 * key with {@code state=NotExisting} so VCF Ops cleans them on the
+	 * next retention pass. The public Suite API {@code PropertyContent}
+	 * schema ({@code docs/operations-api.json}) defines only
+	 * {@code statKey} / {@code timestamps} / {@code data} / {@code values}
+	 * — there is no per-property state field. The {@code NOT_EXISTING}
+	 * value in {@code resource-state} applies to whole resources, not
+	 * to individual property keys. Without a property-level state
+	 * field on the addProperties payload, there is no Suite API call
+	 * that signals "this property no longer exists" without doing the
+	 * invasive thing the brief forbids (Suite API DELETE on the
+	 * property key).
+	 *
+	 * <p>Path forward: either teach the adapter SDK to flag stale keys
+	 * via the property-collection contract (so the platform's stale-
+	 * data sweep picks them up), or surface a Suite API endpoint that
+	 * accepts a property-level state. Until then, this method:
+	 * <ol>
+	 *   <li>Detects the change.</li>
+	 *   <li>Loads the OLD profile to enumerate the control keys that
+	 *       are about to go stale (proof we COULD enumerate the
+	 *       NotExisting set when the API gains the capability).</li>
+	 *   <li>Logs a single operator-facing warning that lists the
+	 *       affected namespace and resource count, so the lingering
+	 *       keys aren't mistaken for new-profile signal during the
+	 *       retention window.</li>
+	 * </ol>
+	 *
+	 * <p>The previousProfileName update happens at end-of-cycle so
+	 * this detect runs at most once per real change. If the OLD
+	 * profile CSV cannot be loaded (e.g. it was a Custom profile
+	 * whose custom_profile_path is no longer accessible), we log the
+	 * warning anyway with the key set unknown rather than failing
+	 * the cycle.
+	 */
+	private void detectProfileChange(String currentProfileName,
+			String confDir) {
+		if (previousProfileName == null) {
+			// First cycle after install or restart — there is no
+			// "previous" profile from which to clean up. Quietly
+			// initialize the tracking state.
+			return;
+		}
+		if (previousProfileName.equals(currentProfileName)) {
+			// No change. Most cycles take this branch.
+			return;
+		}
+
+		// Real change detected. Try to enumerate the old profile's
+		// per-control keys so the warning is specific.
+		java.util.List<String> oldControlKeys =
+				enumerateOldProfileControlKeys(previousProfileName,
+						confDir);
+
+		int stitchedResources = stitcher == null ? 0
+				: stitcher.countOfKind("HostSystem")
+				+ stitcher.countOfKind("VirtualMachine")
+				+ stitcher.countOfKind("VMwareAdapter Instance")
+				+ stitcher.countOfKind("VmwareDistributedVirtualSwitch")
+				+ stitcher.countOfKind("DistributedVirtualPortgroup");
+
+		logWarn("Profile change detected: previous='"
+				+ previousProfileName + "' current='"
+				+ currentProfileName + "'. "
+				+ oldControlKeys.size() + " per-control property key(s) "
+				+ "under namespace 'VCF-CF Compliance|"
+				+ previousProfileName + "|*' will linger on each of "
+				+ stitchedResources + " stitched resource(s) until VCF "
+				+ "Ops retention ages them out. TOOLSET GAP: the public "
+				+ "Suite API PropertyContent schema has no per-property "
+				+ "state field, so this adapter cannot signal "
+				+ "state=NotExisting on the old keys to trigger an "
+				+ "immediate cleanup. See detectProfileChange() in "
+				+ "ComplianceAdapter for the API-surface analysis and "
+				+ "path forward.");
+	}
+
+	/**
+	 * Best-effort enumeration of the per-control property keys that
+	 * the OLD profile pushed in its last cycle. Reads the canonical
+	 * CSV for {@code oldProfileName} from the same conf path the live
+	 * loader uses; returns an empty list when the OLD CSV can't be
+	 * located (e.g. Custom profile whose source moved).
+	 *
+	 * <p>The returned list is the set of stat keys this adapter would
+	 * mark as NotExisting if the Suite API supported per-property
+	 * state — that capability is the TOOLSET GAP called out by
+	 * {@link #detectProfileChange}.
+	 */
+	private java.util.List<String> enumerateOldProfileControlKeys(
+			String oldProfileName, String confDir) {
+		java.util.List<String> keys = new java.util.ArrayList<>();
+		if (oldProfileName == null || oldProfileName.isEmpty()) {
+			return keys;
+		}
+		if ("Custom".equalsIgnoreCase(oldProfileName)) {
+			// We don't have the OLD custom_profile_path — only the
+			// current config. Log and bail.
+			logInfo("Skipping old-profile key enumeration: previous "
+					+ "profile was 'Custom' and the old custom CSV path "
+					+ "is not retained across config changes");
+			return keys;
+		}
+		try {
+			BenchmarkLoader tmpLoader = new BenchmarkLoader();
+			BenchmarkProfile oldProfile = tmpLoader.load(oldProfileName,
+					null, confDir);
+			String prefix = "VCF-CF Compliance|" + oldProfile.name + "|";
+			for (BenchmarkProfile.Control c : oldProfile.controls) {
+				String ctrlPrefix = prefix + c.controlId;
+				// Mirror the four leaves pushComplianceViaClient
+				// emits per control: Actual / Expected / Description
+				// (properties) and Compliant (stat).
+				keys.add(ctrlPrefix + "|Actual");
+				keys.add(ctrlPrefix + "|Expected");
+				keys.add(ctrlPrefix + "|Description");
+				keys.add(ctrlPrefix + "|Compliant");
+			}
+		} catch (RuntimeException e) {
+			logWarn("Could not load old profile '" + oldProfileName
+					+ "' to enumerate stale keys: " + e.getMessage()
+					+ " — operator warning will list 0 keys");
+		}
+		return keys;
 	}
 
 	private HostStats collectHosts(BenchmarkProfile profile) throws Exception {
@@ -450,6 +640,18 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				+ cr.failCount + " fail, "
 				+ cr.totalCount + " total)");
 
+		// Fix #1: fold this vCenter into the world aggregate using the
+		// same totalCount>0 contract as host/vm — sentinel scores
+		// (score=100 from a zero-divisor) must not pollute the fleet
+		// average. total counts every vCenter the adapter evaluated;
+		// scored / scoreSum / belowThreshold gate on real signal.
+		stats.total++;
+		if (cr.totalCount > 0) {
+			stats.scored++;
+			stats.scoreSum += cr.score;
+			if (cr.score < 95.0) stats.belowThreshold++;
+		}
+
 		if (stitcher != null) {
 			// VMwareAdapter Instance has no vim25 MoRef — the matcher
 			// resolves it by either the configured vCenter FQDN
@@ -533,7 +735,18 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				ComplianceStitcher.HostEntry he =
 						stitcher.matchDvs(dvs.name, dvs.moid);
 				if (he != null) {
-					pushComplianceViaClient(he.resourceId, cr,
+					// Fix #3: explicit match-success logging at parity
+					// with HostSystem's "Pushed compliance data to ..."
+					// line. v27 verification reported nothing landing on
+					// DVS/DVPG and there was no log to distinguish
+					// match-failure from silent push-failure. Confirm
+					// the match, then push, then log the push so the
+					// next round of verification can read the operator
+					// log and tell what actually happened.
+					logInfo("DVS " + dvs.name + " (" + dvs.moid
+							+ ") matched -> resource=" + he.resourceId
+							+ "; pushing profile_name");
+					pushProfileNamePropertyOnly(he.resourceId,
 							profile.name);
 				}
 			}
@@ -575,12 +788,51 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				ComplianceStitcher.HostEntry he =
 						stitcher.matchDvpg(pg.name, pg.moid);
 				if (he != null) {
-					pushComplianceViaClient(he.resourceId, cr,
+					// Fix #3: see collectDvs — explicit match-success
+					// logging plus profile_name-only push (no sentinel
+					// score/pass/fail/total stats) so DVPG resources
+					// appear under VCF-CF Compliance without polluting
+					// the per-resource rollups with a misleading 100%.
+					logInfo("DVPG " + pg.name + " (" + pg.moid
+							+ ") matched -> resource=" + he.resourceId
+							+ "; pushing profile_name");
+					pushProfileNamePropertyOnly(he.resourceId,
 							profile.name);
 				}
 			}
 		}
 		return stats;
+	}
+
+	/**
+	 * Push ONLY the profile_name property onto a resource — no per-
+	 * control raw, no first-class rollup stats. Used for DVS / DVPG
+	 * which the adapter enumerates but cannot evaluate yet (all
+	 * controls are powercli_only). Calling the full
+	 * {@link #pushComplianceViaClient} would emit
+	 * {@code VCF-CF Compliance|score = 100.0} as a zero-divisor
+	 * sentinel onto the resource, which dashboards then average into
+	 * a misleading fleet score. Stripping back to the property alone
+	 * keeps the resource visible in the metric browser without
+	 * publishing fake compliance data.
+	 *
+	 * <p>Fix #3: previous code path called pushComplianceViaClient and
+	 * relied on the empty control list to suppress per-control
+	 * properties — but it still pushed the score=100 stat and the
+	 * three count=0 stats. v27 verification reported no
+	 * {@code profile_name} on DVS/DVPG, so this path also emits an
+	 * explicit log line per push so the operator log distinguishes
+	 * match-failure (warned by the stitcher) from push-failure.
+	 */
+	private void pushProfileNamePropertyOnly(String resourceId,
+			String profileName) {
+		long ts = System.currentTimeMillis();
+		java.util.LinkedHashMap<String, String> props =
+				new java.util.LinkedHashMap<>();
+		props.put("VCF-CF Compliance|profile_name", profileName);
+		stitcher.pushProperties(resourceId, props, ts);
+		logInfo("Pushed profile_name='" + profileName
+				+ "' to resource=" + resourceId);
 	}
 
 	private static final class HostStats {
@@ -598,7 +850,16 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	}
 
 	private static final class VCenterStats {
+		// matched stays for backward compatibility with the collection-
+		// complete log line. Fix #1 adds the same (total, scored,
+		// scoreSum, belowThreshold) fleet stats hosts and VMs publish,
+		// so the world aggregate emits total_vcenters / avg_vcenter_score
+		// / vcenters_below_threshold under the same no-sentinel contract.
 		boolean matched;
+		int total;
+		int scored;
+		double scoreSum;
+		int belowThreshold;
 	}
 
 	private static final class DvsStats {

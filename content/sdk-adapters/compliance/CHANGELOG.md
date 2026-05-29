@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.29 (2026-05-29)
+
+- fix(framework): build 29 — Heatmap empty-groupBy + AlertList pin-to-world
+
 ## 1.0.0.28 (2026-05-28)
 
 - fix(adapter): build 28 — VMwareAdapter Instance resolver + multi-line param classifier
