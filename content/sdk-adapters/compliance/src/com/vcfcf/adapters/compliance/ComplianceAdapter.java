@@ -190,6 +190,7 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 					VCenterStats vcStats = collectVCenter(profile);
 					DvsStats dvsStats = collectDvs(profile);
 					DvpgStats dvpgStats = collectDvpg(profile);
+					ClusterStats clusterStats = collectClusters(profile);
 
 					Resource world = createResource("ComplianceWorld",
 							"Compliance World",
@@ -256,7 +257,8 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 							+ (vcStats.matched ? "1" : "0")
 							+ " vCenter, "
 							+ dvsStats.total + " DVS, "
-							+ dvpgStats.total + " DVPG");
+							+ dvpgStats.total + " DVPG, "
+							+ clusterStats.total + " ClusterComputeResource");
 
 					// Fix #2: commit the current profile as "previous"
 					// at end-of-cycle so the next cycle's
@@ -356,6 +358,15 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 					+ " DVPG");
 		} catch (Exception e) {
 			logWarn("Stitcher loadDvpgResources failed: " + e.getMessage());
+		}
+		try {
+			stitcher.loadClusterResources();
+			logInfo("Stitcher loaded: "
+					+ stitcher.countOfKind("ClusterComputeResource")
+					+ " ClusterComputeResource");
+		} catch (Exception e) {
+			logWarn("Stitcher loadClusterResources failed: "
+					+ e.getMessage());
 		}
 	}
 
@@ -858,6 +869,115 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	}
 
 	/**
+	 * Phase 3 — ClusterComputeResource (vSAN) collector. Walks every
+	 * cluster in inventory, reads the small slice of vSAN configuration
+	 * the bundled vim25 jar exposes
+	 * ({@link VSphereClient#getClusterVsanConfig}), and evaluates the
+	 * cluster-level vim_property controls. Identical shape to
+	 * {@link #collectDvs} and {@link #collectDvpg}.
+	 *
+	 * <p>TOOLSET GAP — the bulk of SCG's ClusterComputeResource controls
+	 * (vSAN data-at-rest encryption, data-in-transit encryption, iSCSI
+	 * mutual CHAP, File Services NFS/SMB, network isolation, operations
+	 * reserve, automatic rebalance, auto-policy-management, vSAN Max
+	 * isolation) live on the vSAN Management SDK
+	 * ({@code com.vmware.vim.vsan.binding}) which is NOT on this
+	 * adapter's classpath. Those controls remain
+	 * {@code parameter_kind=manual_audit} in the canonical CSV and are
+	 * skipped by {@link ControlEvaluator#evaluateVimProperties}. The
+	 * controls that DO land via plain vim25 today are
+	 * {@code cluster.managed-disk-claim}
+	 * ({@code vsanConfig.autoClaimStorage}) and
+	 * {@code cluster.object-checksum}
+	 * ({@code vsanConfig.objectChecksumEnabled}). Clusters with no vSAN
+	 * surface an empty config map and get the profile-name-only push so
+	 * they still appear under VCF-CF Compliance in the metric browser.
+	 */
+	private ClusterStats collectClusters(BenchmarkProfile profile) {
+		ClusterStats stats = new ClusterStats();
+
+		java.util.List<VSphereClient.ClusterInfo> clusters;
+		try {
+			clusters = vsphere.getClusters();
+		} catch (Exception e) {
+			logWarn("Failed to enumerate ClusterComputeResource: "
+					+ e.getMessage());
+			return stats;
+		}
+		if (clusters.isEmpty()) {
+			logInfo("No ClusterComputeResource returned from vCenter SOAP");
+			return stats;
+		}
+		logInfo("vSphere SOAP: " + clusters.size()
+				+ " ClusterComputeResource");
+
+		java.util.List<BenchmarkProfile.Control> clusterControls =
+				profile.clusterControls();
+		int evaluableCount = countEvaluable(clusterControls, "vim_property");
+
+		for (VSphereClient.ClusterInfo cluster : clusters) {
+			stats.total++;
+
+			if (stitcher == null) continue;
+			ComplianceStitcher.HostEntry he =
+					stitcher.matchCluster(cluster.name, cluster.moid);
+			if (he == null) continue;
+
+			if (evaluableCount == 0) {
+				logInfo("Cluster " + cluster.name + " (" + cluster.moid
+						+ ") matched -> resource=" + he.resourceId
+						+ "; no evaluable controls, pushing profile_name");
+				pushProfileNamePropertyOnly(he.resourceId,
+						profile.name);
+				continue;
+			}
+
+			java.util.Map<String, Object> vsanCfg;
+			try {
+				vsanCfg = vsphere.getClusterVsanConfig(cluster.moRef);
+			} catch (Exception e) {
+				logWarn("Failed to read vSAN config for cluster "
+						+ cluster.name + ": " + e.getMessage());
+				pushProfileNamePropertyOnly(he.resourceId,
+						profile.name);
+				continue;
+			}
+
+			if (vsanCfg.isEmpty()) {
+				// No vSAN on this cluster — empty config map. Push
+				// profile_name only so the cluster still appears in the
+				// metric browser without polluting per-resource rollups
+				// with a sentinel score=100.
+				logInfo("Cluster " + cluster.name + " (" + cluster.moid
+						+ ") has no vsanConfigInfo (non-vSAN cluster), "
+						+ "pushing profile_name only");
+				pushProfileNamePropertyOnly(he.resourceId,
+						profile.name);
+				continue;
+			}
+
+			ControlEvaluator.ComplianceResult cr =
+					ControlEvaluator.evaluateVimProperties(
+							clusterControls, vsanCfg, cluster.name);
+
+			logInfo("Cluster " + cluster.name + " (" + cluster.moid
+					+ ") matched -> resource=" + he.resourceId
+					+ "; score=" + String.format("%.1f", cr.score)
+					+ "% (" + cr.passCount + " pass, "
+					+ cr.failCount + " fail, "
+					+ cr.totalCount + " total)");
+
+			if (cr.totalCount > 0) {
+				pushComplianceViaClient(he.resourceId, cr, profile.name);
+			} else {
+				pushProfileNamePropertyOnly(he.resourceId,
+						profile.name);
+			}
+		}
+		return stats;
+	}
+
+	/**
 	 * Translate the bare-field-name map returned by
 	 * {@link VSphereClient#getDvsSecurityPolicy(com.vmware.vim25.ManagedObjectReference)}
 	 * / {@link VSphereClient#getDvpgSecurityPolicy(com.vmware.vim25.ManagedObjectReference)}
@@ -957,6 +1077,10 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	}
 
 	private static final class DvpgStats {
+		int total;
+	}
+
+	private static final class ClusterStats {
 		int total;
 	}
 

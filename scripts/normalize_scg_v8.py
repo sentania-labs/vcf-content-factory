@@ -30,6 +30,8 @@ from _compliance_normalize import (
     build_control_id,
     classify_parameter_kind,
     classify_security_policy_param,
+    classify_vsan_cluster_expected,
+    classify_vsan_cluster_param,
     clean_priority,
     collapse_remediation,
     derive_resource_kind,
@@ -133,9 +135,23 @@ def normalize(input_path: str, output_path: str) -> int:
                     parameter = secpol
                     parameter_kind = "vim_property"
 
+            # Phase 3 — vSAN cluster-config override. See
+            # normalize_scg_v9.py for the rationale; same mechanism.
+            vsan_expected_override = None
+            if resource_kind == "ClusterComputeResource":
+                vsan_param = classify_vsan_cluster_param(
+                    source_id, title_for_secpol)
+                if vsan_param is not None:
+                    parameter = vsan_param
+                    parameter_kind = "vim_property"
+                    vsan_expected_override = (
+                        classify_vsan_cluster_expected(source_id))
+
             by_kind[parameter_kind] += 1
 
             expected = (src.get("Baseline Suggested Value") or "").strip()
+            if vsan_expected_override is not None:
+                expected = vsan_expected_override
             value_type = infer_value_type(expected)
 
             priority_raw = src.get("Implementation Priority") or ""

@@ -27,6 +27,8 @@ from _compliance_normalize import (
     build_control_id,
     classify_parameter_kind,
     classify_security_policy_param,
+    classify_vsan_cluster_expected,
+    classify_vsan_cluster_param,
     clean_priority,
     collapse_remediation,
     derive_resource_kind,
@@ -150,9 +152,33 @@ def normalize(input_path: str, output_path: str) -> int:
                     parameter = secpol
                     parameter_kind = "vim_property"
 
+            # Phase 3 — vSAN cluster-config override. When the row is a
+            # ClusterComputeResource control and matches one of the
+            # vSAN controls reachable through the bundled vim25.jar,
+            # promote it from manual_audit to vim_property and set the
+            # canonical parameter to the vsanConfig.<field> key the
+            # Java VSphereClient returns. Rows that DON'T match (the
+            # other 12 SCG vSAN controls that need the vSAN Management
+            # SDK) stay manual_audit and are skipped by the evaluator.
+            vsan_expected_override = None
+            if resource_kind == "ClusterComputeResource":
+                vsan_param = classify_vsan_cluster_param(
+                    source_id, title_for_secpol)
+                if vsan_param is not None:
+                    parameter = vsan_param
+                    parameter_kind = "vim_property"
+                    vsan_expected_override = (
+                        classify_vsan_cluster_expected(source_id))
+
             by_kind[parameter_kind] += 1
 
             expected = (src.get(COL_EXPECTED) or "").strip()
+            if vsan_expected_override is not None:
+                # Override the SCG-vocabulary expected_value with the
+                # canonical JS-boolean form the Java evaluator already
+                # understands. See classify_vsan_cluster_expected for
+                # the per-control polarity rationale.
+                expected = vsan_expected_override
             value_type = infer_value_type(expected)
 
             priority_raw = src.get(COL_PRIORITY) or ""

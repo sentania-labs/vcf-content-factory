@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.31 (2026-05-29)
+
+- feat(adapter): build 31 — DVS/DVPG security policy evaluation via vim25
+
 ## 1.0.0.30 (2026-05-29)
 
 - feat(adapter): build 30 — vCenter world aggregate + DVS/DVPG profile_name fix + profile-change scaffolding

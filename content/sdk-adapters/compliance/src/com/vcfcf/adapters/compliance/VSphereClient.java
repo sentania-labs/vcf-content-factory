@@ -272,6 +272,154 @@ public final class VSphereClient {
 	}
 
 	/**
+	 * Enumerates ClusterComputeResource inventory entries. Phase 3 (vSAN)
+	 * stitches a small subset of vSAN-related controls onto the matched
+	 * cluster, so the adapter must first walk cluster inventory the same
+	 * way it walks Host / VM / DVS / DVPG. Identical container-view
+	 * pattern; the {@code ClusterComputeResource} type filter is the
+	 * vim25 supertype that covers both regular clusters and the
+	 * {@code VsanClusterComputeResource} subtype (older bindings, rare).
+	 */
+	public List<ClusterInfo> getClusters() throws Exception {
+		ensureConnected();
+		List<ClusterInfo> result = new ArrayList<>();
+
+		ManagedObjectReference viewMgr = serviceContent.getViewManager();
+		ManagedObjectReference containerView = vimPort.createContainerView(
+				viewMgr, rootFolder,
+				java.util.Arrays.asList("ClusterComputeResource"), true);
+
+		List<ManagedObjectReference> refs = getViewMembersTyped(
+				containerView, "ClusterComputeResource");
+
+		for (ManagedObjectReference ref : refs) {
+			String name = getProperty(ref, "name");
+			if (name != null) {
+				result.add(new ClusterInfo(ref, name, ref.getValue()));
+			}
+		}
+
+		vimPort.destroyView(containerView);
+		return result;
+	}
+
+	/**
+	 * Reads a tiny slice of the cluster-level vSAN configuration that
+	 * vim25 8.0.2 exposes natively (no vSAN Management SDK on classpath).
+	 *
+	 * <p>The vim25 surface is
+	 * {@code ClusterComputeResource.configurationEx} ->
+	 * {@code ClusterConfigInfoEx.vsanConfigInfo} ->
+	 * {@code VsanClusterConfigInfo}. The plain {@code vim25.jar} on this
+	 * adapter's classpath exposes only three fields on that object:
+	 * <ul>
+	 *   <li>{@code enabled}            — is vSAN turned on for this cluster</li>
+	 *   <li>{@code defaultConfig.autoClaimStorage} — whether vSAN claims
+	 *       compatible disks automatically (the
+	 *       {@code cluster.managed-disk-claim} control reads this)</li>
+	 *   <li>{@code defaultConfig.checksumEnabled} — cluster-wide object
+	 *       checksum default (the {@code cluster.object-checksum}
+	 *       control reads this)</li>
+	 * </ul>
+	 *
+	 * <p>The other 12 ClusterComputeResource controls SCG defines for
+	 * vSAN (data-at-rest encryption, data-in-transit encryption, iSCSI
+	 * mutual CHAP, File Services NFS/SMB, network isolation, operations
+	 * reserve, automatic rebalance, auto-policy-management,
+	 * vSAN Max isolation) live on richer vSAN management interfaces
+	 * (VsanConfigSystem, VsanFileServiceConfig, etc.) that the
+	 * vSAN Management SDK jar ships but plain vim25 does not. Without
+	 * that jar on the classpath, those reads are a TOOLSET GAP and the
+	 * canonical CSV keeps them as {@code manual_audit} rows that emit
+	 * profile_name only.
+	 *
+	 * <p>Returns an empty map when {@code vsanConfigInfo} is absent
+	 * (cluster does not have vSAN turned on, or
+	 * {@code configurationEx.vsanConfigInfo} returns null). The
+	 * surrounding collector treats the empty map as a no-signal cluster
+	 * and falls back to the profile-name-only push — same contract as
+	 * DVS / DVPG when the security-policy read finds nothing.
+	 *
+	 * <p>The returned keys are already prefixed with {@code vsanConfig.}
+	 * so the canonical {@code parameter} column in the CSV can use the
+	 * same {@code <kind>.<field>} dot-path convention the
+	 * security-policy controls use ({@code securityPolicy.<field>}).
+	 * The Java evaluator's vim_property dispatcher looks the key up
+	 * directly; no rewriting in the caller.
+	 *
+	 * <p>Reflection-tolerant unwrap mirrors the DVS / DVPG security-
+	 * policy reader so minor binding differences across vim25 8.x
+	 * point releases don't break the read.
+	 */
+	public Map<String, Object> getClusterVsanConfig(
+			ManagedObjectReference clusterRef) throws Exception {
+		ensureConnected();
+		Map<String, Object> result = new HashMap<>();
+		if (clusterRef == null) return result;
+
+		// configurationEx is the rich ClusterConfigInfoEx; the older
+		// 'configuration' property is the legacy ClusterConfigInfo
+		// that does NOT carry vsanConfigInfo. Use configurationEx.
+		Object configEx = getRawProperty(clusterRef, "configurationEx");
+		if (configEx == null) return result;
+
+		Object vsanCfg = invokeGetter(configEx, "getVsanConfigInfo");
+		if (vsanCfg == null) {
+			// Cluster has no vSAN configuration object at all — typical
+			// for non-vSAN clusters in mixed environments. Leave the
+			// map empty; the collector treats this as no-signal.
+			return result;
+		}
+
+		Boolean enabled = readBoolean(vsanCfg, "isEnabled", "getEnabled");
+		if (enabled != null) {
+			result.put("vsanConfig.enabled", enabled);
+		}
+
+		Object defaultCfg = invokeGetter(vsanCfg, "getDefaultConfig");
+		if (defaultCfg != null) {
+			Boolean autoClaim = readBoolean(defaultCfg,
+					"isAutoClaimStorage", "getAutoClaimStorage");
+			if (autoClaim != null) {
+				result.put("vsanConfig.autoClaimStorage", autoClaim);
+			}
+			Boolean checksum = readBoolean(defaultCfg,
+					"isChecksumEnabled", "getChecksumEnabled");
+			if (checksum != null) {
+				result.put("vsanConfig.objectChecksumEnabled", checksum);
+			}
+		}
+
+		return result;
+	}
+
+	/**
+	 * Read a Boolean field from a JAX-WS binding object that may expose
+	 * either an {@code isX()} or {@code getX()} accessor depending on
+	 * the binding generator's treatment of {@code Boolean} vs
+	 * {@code boolean}. Returns null when neither accessor exists or
+	 * both return null.
+	 */
+	private Boolean readBoolean(Object target, String isGetter,
+			String getGetter) throws Exception {
+		Object v;
+		try {
+			v = invokeGetter(target, isGetter);
+		} catch (Exception e) {
+			v = null;
+		}
+		if (v == null) {
+			try {
+				v = invokeGetter(target, getGetter);
+			} catch (Exception e) {
+				return null;
+			}
+		}
+		if (v instanceof Boolean) return (Boolean) v;
+		return null;
+	}
+
+	/**
 	 * Enumerates DistributedVirtualPortgroup inventory entries.
 	 * Same shape and rationale as {@link #getDvSwitches()}.
 	 */
@@ -665,6 +813,19 @@ public final class VSphereClient {
 		public final String moid;
 
 		public DvpgInfo(ManagedObjectReference moRef, String name,
+				String moid) {
+			this.moRef = moRef;
+			this.name = name;
+			this.moid = moid;
+		}
+	}
+
+	public static final class ClusterInfo {
+		public final ManagedObjectReference moRef;
+		public final String name;
+		public final String moid;
+
+		public ClusterInfo(ManagedObjectReference moRef, String name,
 				String moid) {
 			this.moRef = moRef;
 			this.name = name;

@@ -472,6 +472,121 @@ def classify_security_policy_param(powercli_command: str,
     return None
 
 
+# Phase 3 — vSAN cluster-config classifier.
+#
+# SCG's vSAN controls do NOT carry PowerCLI commands in the raw source
+# CSV ("PowerCLI Command Assessment" is N/A for every vsan-*.* row).
+# So the powercli-pattern classifier classify_security_policy_param
+# can't fire for these. The only signals we have are the source ID
+# slug (vsan-9.<feature>) and the title text.
+#
+# Of the 14 SCG ClusterComputeResource controls, only TWO are reachable
+# via the vim25.jar that ships in this adapter's lib/:
+#
+#   cluster.managed-disk-claim   <- VsanClusterConfigInfo
+#                                   .defaultConfig.autoClaimStorage
+#   cluster.object-checksum      <- VsanClusterConfigInfo
+#                                   .defaultConfig.checksumEnabled
+#
+# The other 12 (encryption-rest, encryption-transit-{esa,osa},
+# force-provisioning, iscsi-mutual-chap, file-services-*,
+# network-isolation-*, operations-reserve, automatic-rebalance,
+# auto-policy-management) live on the vSAN Management SDK
+# (com.vmware.vim.vsan.binding) jar, which is NOT on this adapter's
+# classpath. They stay parameter_kind=manual_audit until the SDK
+# jar lands and the Java client grows readers for them.
+#
+# Note on canonical naming: the canonical PARAMETER value matches the
+# key the Java VSphereClient.getClusterVsanConfig() returns
+# (vsanConfig.<field>), so the evaluator's vim_property dispatcher
+# can look the key up directly with no rewriting.
+_VSAN_CLUSTER_PARAM_BY_SLUG: Dict[str, str] = {
+    # source_id slug fragment -> canonical parameter
+    "managed-disk-claim": "vsanConfig.autoClaimStorage",
+    "object-checksum": "vsanConfig.objectChecksumEnabled",
+}
+
+
+# For the two vSAN cluster controls we can read via plain vim25, the
+# SCG "Baseline Suggested Value" column uses control-specific
+# vocabulary ("Configured", "Disabled") whose polarity against the
+# underlying vim25 Boolean isn't obvious without the title context:
+#
+#   cluster.managed-disk-claim — SCG title says "vSAN must disable
+#     managed disk claims" and Suggested=Configured. The underlying
+#     vim25 field VsanClusterConfigInfo.defaultConfig.autoClaimStorage
+#     should be FALSE for the cluster to be compliant (auto-claim off).
+#
+#   cluster.object-checksum — SCG title says "vSAN must calculate
+#     object checksums to protect data integrity" but the Suggested
+#     column reads "Disabled" — which is the SCG-default profile value,
+#     NOT the desired state for the vim25 field. Reading the SCG row
+#     more closely: the row is an "Audit"-style control where the
+#     baseline IS Disabled (for OSA; ESA cannot disable). The
+#     vim25 field VsanClusterConfigInfo.defaultConfig.checksumEnabled
+#     should match what SCG calls Disabled — i.e. FALSE.
+#
+# Rather than teach the Java evaluator to invert polarity by source_id
+# (which is brittle), we rewrite the canonical expected_value here to a
+# JS-style boolean the existing evaluator already handles. The
+# evaluator's expectedAsBoolean() maps "true"/"false" directly to
+# Boolean.TRUE/FALSE so the comparison against the vim25 boolean is
+# unambiguous. The descriptive title and SCG source_ref still carry
+# the original "Configured" / "Disabled" SCG language for audit
+# traceability.
+_VSAN_CLUSTER_EXPECTED_BY_SLUG: Dict[str, str] = {
+    "managed-disk-claim": "false",
+    "object-checksum": "false",
+}
+
+
+def classify_vsan_cluster_expected(source_id: str) -> Optional[str]:
+    """When the row is a vSAN cluster control that we can read via
+    plain vim25, return the canonical expected_value (JS-boolean
+    form) that pairs with the canonical parameter from
+    {@link classify_vsan_cluster_param}. Otherwise return None.
+
+    See {@link _VSAN_CLUSTER_EXPECTED_BY_SLUG} for the polarity
+    rationale per control.
+    """
+    if not source_id:
+        return None
+    sid = source_id.lower()
+    for slug, expected in _VSAN_CLUSTER_EXPECTED_BY_SLUG.items():
+        if slug in sid:
+            return expected
+    return None
+
+
+def classify_vsan_cluster_param(source_id: str,
+                                source_title: str) -> Optional[str]:
+    """If the row is one of the vSAN cluster controls that the plain
+    vim25 surface CAN reach, return the canonical
+    {@code vsanConfig.<field>} parameter key. Otherwise return None.
+
+    Detection is by source_id slug fragment — the SCG raw CSV doesn't
+    carry PowerCLI commands for vSAN rows, so the cmdlet-pattern
+    classifier classify_security_policy_param can't fire. The slug is
+    the only reliable signal (the title text varies across SCG
+    revisions).
+
+    Only the two controls reachable via vim25's bare
+    {@code VsanClusterConfigInfo.defaultConfig} are mapped here. The
+    other 12 ClusterComputeResource controls remain manual_audit
+    until the vSAN Management SDK jar lands on the classpath.
+    """
+    if not source_id:
+        return None
+    sid = source_id.lower()
+    for slug, param in _VSAN_CLUSTER_PARAM_BY_SLUG.items():
+        # Match the slug as a substring of the source_id. The source_id
+        # format is vsan-9.managed-disk-claim etc.; substring matching
+        # tolerates an optional version digit shift.
+        if slug in sid:
+            return param
+    return None
+
+
 def collapse_remediation(text: str) -> str:
     """Collapse a multi-line PowerCLI remediation into a single line."""
     if not text:

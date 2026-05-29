@@ -77,6 +77,10 @@ public final class ComplianceStitcher {
 		loadResourcesForKind("DistributedVirtualPortgroup");
 	}
 
+	public void loadClusterResources() {
+		loadResourcesForKind("ClusterComputeResource");
+	}
+
 	/**
 	 * VMwareAdapter Instance has no MoRef-style identity tuple — the
 	 * {@code VMEntityName}/{@code VMEntityObjectID} pair the shared
@@ -313,6 +317,10 @@ public final class ComplianceStitcher {
 
 	public HostEntry matchDvpg(String name, String moid) {
 		return matchResource("DistributedVirtualPortgroup", name, moid);
+	}
+
+	public HostEntry matchCluster(String name, String moid) {
+		return matchResource("ClusterComputeResource", name, moid);
 	}
 
 	/**

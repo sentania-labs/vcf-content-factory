@@ -70,6 +70,14 @@ public final class BenchmarkProfile {
 		return result;
 	}
 
+	public List<Control> clusterControls() {
+		List<Control> result = new java.util.ArrayList<>();
+		for (Control c : controls) {
+			if (c.isClusterControl()) result.add(c);
+		}
+		return result;
+	}
+
 	/**
 	 * Controls matching a given canonical {@code resource_kind} string.
 	 * Used by the per-kind loop in {@link ComplianceAdapter} so the
@@ -201,6 +209,10 @@ public final class BenchmarkProfile {
 
 		public boolean isDvpgControl() {
 			return "DistributedVirtualPortgroup".equals(resourceKind);
+		}
+
+		public boolean isClusterControl() {
+			return "ClusterComputeResource".equals(resourceKind);
 		}
 
 		public boolean isEvaluable() {
