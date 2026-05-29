@@ -170,6 +170,7 @@ widgets:
     title: "Fleet Compliance Alerts"
     coords: {x: 6, y: 11, w: 6, h: 7}
     self_provider: true
+    pin_to_world: true
     pin:
       adapter_kind: VMWARE
       resource_kind: HostSystem

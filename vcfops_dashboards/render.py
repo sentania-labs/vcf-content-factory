@@ -1045,10 +1045,31 @@ def _alert_list_widget(w: Widget) -> dict:
     distinct from the top-level widget type field. To avoid naming collision
     the loader stores it as ``alert_types``.
 
+    ``pin_to_world`` mode (cfg.pin_to_world=True):
+        Emits selfProvider:false + resource:[{resourceId:"resource:id:0_::_",
+        resourceName:"vSphere World"}].  Required when the widget has a
+        definition pin (alertDefinitions filter) AND needs to query the full
+        fleet without an interaction-driven resource binding.  The
+        selfProvider:true + resource:[] combination silently issues zero
+        backend queries in this scenario (no heatMap.action call observed in
+        the access log).  Corpus reference: sdwan ProblemAlertsList widgets
+        use the same resource shape; adapted for AlertList per investigation
+        context/investigations/2026-05-29-compliance-dashboard-render-failures.md.
+
     Wire format reference: context/chart_widget_formats.md §AlertList.
     """
     cfg = w.alert_list_config
     assert cfg is not None
+
+    if cfg.pin_to_world:
+        # World-pinned mode: selfProvider:false, resource bound to vSphere World.
+        # This triggers real backend queries; selfProvider:true + resource:[] does not.
+        self_provider_obj = {"selfProvider": False}
+        resource_obj: list = [{"resourceId": "resource:id:0_::_", "resourceName": "vSphere World"}]
+    else:
+        self_provider_obj = {"selfProvider": w.self_provider}
+        resource_obj = []
+
     return {
         "collapsed": False,
         "id": w.widget_id,
@@ -1057,10 +1078,10 @@ def _alert_list_widget(w: Widget) -> dict:
         "title": w.title,
         "config": {
             "refreshInterval": 300,
-            "resource": [],
+            "resource": resource_obj,
             "refreshContent": {"refreshContent": False},
             "relationshipMode": {"relationshipMode": [-1, 0]},
-            "selfProvider": {"selfProvider": w.self_provider},
+            "selfProvider": self_provider_obj,
             "title": w.title,
             "mode": cfg.mode,
             "filterMode": "tagPicker",
@@ -1163,8 +1184,11 @@ def _heatmap_widget(
     4. ``groupBy.typeId`` uses ``resourceKind:id:N_::_`` and MUST appear in
        ``entries.resourceKind[]`` — the kind_index pass adds it automatically.
 
-    5. When ``group_by_kind`` is empty, ``groupBy`` is emitted as an empty
-       object ``{}`` (Ops ignores it — no grouping applied).
+    5. When ``group_by_kind`` is empty, ``groupBy`` is emitted as a
+       **self-grouping** block using the subject resource kind.  An empty
+       ``{}`` causes ``HeatMapAction.initParam`` to throw JSONException
+       because it calls ``groupBy.getString("type")`` unconditionally.
+       See lessons/heatmap-empty-groupby-crashes-renderer.md.
 
     6. ``value`` (selected tab index) is always 0; authors control default
        tab by ordering configs[].
@@ -1194,35 +1218,45 @@ def _heatmap_widget(
             "value": tab.size_by_label if tab.size_by_key is not None else "",
         }
 
-        # groupBy — empty object when no grouping kind is specified
+        # groupBy — when no grouping kind is specified, emit a self-grouping block
+        # using the subject resource kind itself.  Ops requires all 9 keys to be
+        # present; an empty {} causes HeatMapAction.initParam to throw
+        # JSONException("type not found") and the widget returns blank.
+        # Corpus reference: idps-planner "VM by Host PPS" tab uses HostSystem as
+        # both subject and groupBy (resourceKind:id:1_::_, id=004null002006VMWAREHostSystem).
+        # Fix documented in lessons/heatmap-empty-groupby-crashes-renderer.md.
         if tab.group_by_kind:
             gb_adapter = tab.group_by_adapter or tab.adapter_kind
-            gb_prefix = _ADAPTER_KIND_PREFIX.get(gb_adapter)
-            if gb_prefix is None:
-                raise ValueError(
-                    f"Heatmap groupBy: no known resourceKindId prefix for adapter kind "
-                    f"{gb_adapter!r} — extend _ADAPTER_KIND_PREFIX after harvesting "
-                    f"from an exported reference dashboard"
-                )
-            gb_key = (gb_adapter, tab.group_by_kind)
-            gb_rk_id = f"resourceKind:id:{kind_index[gb_key]}_::_"
-            # groupBy.id format: 004null + 6-digit adapter prefix + adapterKind + resourceKind
-            # This is a stable Ops-internal composite ID; the format is documented in
-            # context/chart_widget_formats.md §Heatmap / §Gotchas #7.
-            gb_id = f"004null{gb_prefix}{gb_adapter}{tab.group_by_kind}"
-            group_by: dict = {
-                "resourceKind": tab.group_by_kind,
-                "adapterKind": gb_adapter,
-                "typeId": gb_rk_id,
-                "type": "resourceKind",
-                "text": tab.group_by_text or tab.group_by_kind,
-                "originalText": tab.group_by_text or tab.group_by_kind,
-                "id": gb_id,
-                "parentText": gb_adapter,
-                "parentId": gb_adapter,
-            }
+            gb_kind = tab.group_by_kind
         else:
-            group_by = {}
+            # Self-grouping: use the subject kind as the single swim-lane group.
+            gb_adapter = tab.adapter_kind
+            gb_kind = tab.resource_kind
+        gb_prefix = _ADAPTER_KIND_PREFIX.get(gb_adapter)
+        if gb_prefix is None:
+            raise ValueError(
+                f"Heatmap groupBy: no known resourceKindId prefix for adapter kind "
+                f"{gb_adapter!r} — extend _ADAPTER_KIND_PREFIX after harvesting "
+                f"from an exported reference dashboard"
+            )
+        gb_key = (gb_adapter, gb_kind)
+        gb_rk_id = f"resourceKind:id:{kind_index[gb_key]}_::_"
+        # groupBy.id format: 004null + 6-digit adapter prefix + adapterKind + resourceKind
+        # This is a stable Ops-internal composite ID; the format is documented in
+        # context/chart_widget_formats.md §Heatmap / §Gotchas #7.
+        gb_id = f"004null{gb_prefix}{gb_adapter}{gb_kind}"
+        gb_text = (tab.group_by_text or gb_kind) if tab.group_by_kind else tab.resource_kind
+        group_by: dict = {
+            "resourceKind": gb_kind,
+            "adapterKind": gb_adapter,
+            "typeId": gb_rk_id,
+            "type": "resourceKind",
+            "text": gb_text,
+            "originalText": gb_text,
+            "id": gb_id,
+            "parentText": gb_adapter,
+            "parentId": gb_adapter,
+        }
 
         color_obj: dict = {
             "minValue": tab.color.min_value,

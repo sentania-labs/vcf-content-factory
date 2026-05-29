@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.28 (2026-05-28)
+
+- fix(adapter): build 28 — VMwareAdapter Instance resolver + multi-line param classifier
+
 ## 1.0.0.27 (2026-05-28)
 
 - feat(adapter): build 27 — Phase 2 multi-resource stitching (VM, vCenter, DVS, DVPG)

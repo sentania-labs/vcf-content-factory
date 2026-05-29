@@ -547,6 +547,13 @@ class AlertListConfig:
     mode: str = "all"
     depth: int = 1
     alert_definitions: List[str] = field(default_factory=list)
+    # When True, emit selfProvider:false + resource:[{resourceId:"resource:id:0_::_",
+    # resourceName:"vSphere World"}] instead of the standard self-provider shape.
+    # This mirrors the sdwan ProblemAlertsList corpus pattern and is required when
+    # a definition-pinned AlertList needs to query the full fleet without an
+    # interaction-driven resource binding.  See lessons/heatmap-empty-groupby-crashes-renderer.md
+    # for the AlertList counterpart.
+    pin_to_world: bool = False
 
 
 @dataclass
@@ -1204,6 +1211,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 mode=str(w.get("mode", "all") or "all").strip(),
                 depth=int(w.get("depth", 1)),
                 alert_definitions=list(raw_alert_defs),
+                pin_to_world=bool(w.get("pin_to_world", False)),
             )
 
         # --- Parse ProblemAlertsList config ---
