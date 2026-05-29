@@ -29,6 +29,7 @@ from _compliance_normalize import (
     ADAPTER_KIND,
     build_control_id,
     classify_parameter_kind,
+    classify_security_policy_param,
     clean_priority,
     collapse_remediation,
     derive_resource_kind,
@@ -118,6 +119,20 @@ def normalize(input_path: str, output_path: str) -> int:
 
             assessment = (src.get("PowerCLI Command Assessment") or "").strip()
             parameter_kind = classify_parameter_kind(parameter, assessment)
+
+            # Phase 3 / Batch 3b — DVS + DVPG security policy override.
+            # See normalize_scg_v9.py for the rationale; same mechanism.
+            title_for_secpol = (src.get("Description/Title") or "").strip()
+            if resource_kind in (
+                "DistributedVirtualSwitch",
+                "DistributedVirtualPortgroup",
+            ):
+                secpol = classify_security_policy_param(
+                    assessment, source_id, title_for_secpol)
+                if secpol is not None:
+                    parameter = secpol
+                    parameter_kind = "vim_property"
+
             by_kind[parameter_kind] += 1
 
             expected = (src.get("Baseline Suggested Value") or "").strip()

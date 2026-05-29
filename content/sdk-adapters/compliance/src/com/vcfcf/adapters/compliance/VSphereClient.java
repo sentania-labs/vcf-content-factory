@@ -300,6 +300,158 @@ public final class VSphereClient {
 	}
 
 	/**
+	 * Reads {@code DistributedVirtualSwitch.config.defaultPortConfig
+	 * .securityPolicy} and returns the three boolean security-policy
+	 * values keyed by canonical field name:
+	 * {@code allowPromiscuous}, {@code macChanges},
+	 * {@code forgedTransmits}.
+	 *
+	 * <p>The vim25 path is
+	 * {@code DistributedVirtualSwitch.config.defaultPortConfig} which
+	 * returns a {@code DVPortSetting} (typically the
+	 * {@code VMwareDVSPortSetting} subclass on vCenter-managed
+	 * switches). Its {@code securityPolicy} child is a
+	 * {@code DVSSecurityPolicy} whose three fields are
+	 * {@code BoolPolicy} wrappers (each carrying both
+	 * {@code inherited} and {@code value} children). We surface only
+	 * {@code value} here — the canonical compliance check is "is the
+	 * effective value Reject?" not "is it inherited from the parent
+	 * switch?" An inherited TRUE is still a non-compliant value when
+	 * the expected_value is Reject.
+	 *
+	 * <p>Returns an empty map if {@code config.defaultPortConfig} is
+	 * null on the DVS (rare — every operational DVS has one) or if
+	 * the {@code securityPolicy} substructure is absent. Reflection-
+	 * tolerant unwrap mirrors the
+	 * {@link #getVmExtraConfig(ManagedObjectReference)} pattern so
+	 * minor vim25 binding differences (DVSSecurityPolicy fields are
+	 * sometimes inherited from a non-public superclass) don't break
+	 * the read.
+	 */
+	public Map<String, Boolean> getDvsSecurityPolicy(
+			ManagedObjectReference dvsRef) throws Exception {
+		return readSecurityPolicy(dvsRef);
+	}
+
+	/**
+	 * Reads {@code DistributedVirtualPortgroup.config.defaultPortConfig
+	 * .securityPolicy} and returns the same {@code allowPromiscuous /
+	 * macChanges / forgedTransmits} boolean keys as
+	 * {@link #getDvsSecurityPolicy(ManagedObjectReference)}.
+	 *
+	 * <p>The DVPG-level security policy overrides the DVS-level
+	 * default when set explicitly; the public Suite API maps the
+	 * effective value to {@code config.defaultPortConfig
+	 * .securityPolicy.<field>.value}. A port group whose policy
+	 * inherits from the parent switch still exposes its effective
+	 * value here through the same path — vim25 resolves inheritance
+	 * server-side before serialization.
+	 */
+	public Map<String, Boolean> getDvpgSecurityPolicy(
+			ManagedObjectReference dvpgRef) throws Exception {
+		return readSecurityPolicy(dvpgRef);
+	}
+
+	/**
+	 * Shared reader for the DVS / DVPG security-policy path. Both
+	 * MoRef types expose
+	 * {@code config.defaultPortConfig.securityPolicy} with the same
+	 * {@code DVSSecurityPolicy} substructure (the DVPG inherits the
+	 * shape from its parent DVS in the vim25 type hierarchy), so a
+	 * single helper handles both.
+	 *
+	 * <p>Reflection-tolerant — we walk the property tree via
+	 * {@code getProperty()/get<Field>()} accessors rather than casting
+	 * to concrete classes, so the read survives the vim25 binding
+	 * variants we have seen across vCenter 7.x / 8.x / 9.x. When any
+	 * intermediate node is absent we return whatever keys we did
+	 * manage to read — partial results are useful for diagnostics
+	 * even when one field's wrapper is missing.
+	 */
+	private Map<String, Boolean> readSecurityPolicy(
+			ManagedObjectReference ref) throws Exception {
+		ensureConnected();
+		Map<String, Boolean> result = new HashMap<>();
+		if (ref == null) return result;
+
+		Object portCfg = getRawProperty(ref,
+				"config.defaultPortConfig");
+		if (portCfg == null) return result;
+
+		Object secPol = invokeGetter(portCfg, "getSecurityPolicy");
+		if (secPol == null) return result;
+
+		Boolean allowPromisc = readBoolPolicy(secPol,
+				"getAllowPromiscuous");
+		Boolean macChanges = readBoolPolicy(secPol, "getMacChanges");
+		Boolean forged = readBoolPolicy(secPol, "getForgedTransmits");
+		if (allowPromisc != null) {
+			result.put("allowPromiscuous", allowPromisc);
+		}
+		if (macChanges != null) {
+			result.put("macChanges", macChanges);
+		}
+		if (forged != null) {
+			result.put("forgedTransmits", forged);
+		}
+		return result;
+	}
+
+	/**
+	 * Read the {@code .value} child of a {@code BoolPolicy} field on
+	 * a {@code DVSSecurityPolicy}. The vim25 binding exposes each as
+	 * a {@code BoolPolicy} wrapper with {@code isInherited()} /
+	 * {@code isValue()} accessors (or {@code getInherited()} /
+	 * {@code getValue()} in older bindings). We try both shapes; null
+	 * means "not present" rather than "false".
+	 */
+	private Boolean readBoolPolicy(Object secPol, String getter) {
+		Object wrapper;
+		try {
+			wrapper = invokeGetter(secPol, getter);
+		} catch (Exception e) {
+			return null;
+		}
+		if (wrapper == null) return null;
+		// BoolPolicy.value is a Boolean. JAX-WS generates isValue() for
+		// boolean primitives and getValue() for Boolean wrappers
+		// depending on schema treatment; try both.
+		Object v;
+		try {
+			v = invokeGetter(wrapper, "isValue");
+		} catch (Exception e) {
+			v = null;
+		}
+		if (v == null) {
+			try {
+				v = invokeGetter(wrapper, "getValue");
+			} catch (Exception e) {
+				return null;
+			}
+		}
+		if (v instanceof Boolean) return (Boolean) v;
+		return null;
+	}
+
+	/**
+	 * Reflection helper — invoke a zero-arg getter by name on
+	 * {@code target}. Returns null when the getter doesn't exist
+	 * (NoSuchMethodException) so the security-policy walker can
+	 * skip absent fields rather than crashing.
+	 */
+	private Object invokeGetter(Object target, String name)
+			throws Exception {
+		if (target == null) return null;
+		try {
+			java.lang.reflect.Method m = target.getClass()
+					.getMethod(name);
+			return m.invoke(target);
+		} catch (NoSuchMethodException ignored) {
+			return null;
+		}
+	}
+
+	/**
 	 * Returns the vCenter instance UUID
 	 * ({@code ServiceContent.about.instanceUuid}) — a stable
 	 * identifier for the vCenter we are connected to, useful for

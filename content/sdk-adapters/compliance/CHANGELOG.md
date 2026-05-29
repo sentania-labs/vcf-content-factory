@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.30 (2026-05-29)
+
+- feat(adapter): build 30 — vCenter world aggregate + DVS/DVPG profile_name fix + profile-change scaffolding
+
 ## 1.0.0.29 (2026-05-29)
 
 - fix(framework): build 29 — Heatmap empty-groupBy + AlertList pin-to-world

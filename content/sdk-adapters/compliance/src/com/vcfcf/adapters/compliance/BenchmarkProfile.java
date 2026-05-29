@@ -106,9 +106,23 @@ public final class BenchmarkProfile {
 	 * a kind here without backing it with a real assessment path
 	 * reintroduces the "garbage in, score=100" failure mode that
 	 * positional indexing produced on SCG 9.0.
+	 *
+	 * <p>Phase 3 / Batch 3b: {@code vim_property} joins
+	 * {@code advanced_setting}. Today the only vim_property controls
+	 * are DVS / DVPG security-policy reads
+	 * ({@code securityPolicy.allowPromiscuous /
+	 * securityPolicy.macChanges /
+	 * securityPolicy.forgedTransmits}) backed by
+	 * {@code VSphereClient.getDvsSecurityPolicy /
+	 * getDvpgSecurityPolicy} and the
+	 * {@code ControlEvaluator.evaluateVimProperties} dispatcher.
+	 * If a future batch adds a host-side vim_property control without
+	 * extending the dispatcher, this set must stay tight enough that
+	 * the unknown control is skipped rather than silently scored.
 	 */
 	private static boolean isEvaluableKind(String parameterKind) {
-		return "advanced_setting".equals(parameterKind);
+		return "advanced_setting".equals(parameterKind)
+				|| "vim_property".equals(parameterKind);
 	}
 
 	public static final class Control {

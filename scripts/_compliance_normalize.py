@@ -345,6 +345,133 @@ def classify_parameter_kind(parameter: str, assessment_cmd: str) -> str:
     return "powercli_only"
 
 
+# Phase 3 / Batch 3b — DVS + DVPG security-policy classifier.
+#
+# SCG sources express these controls as PowerCLI cmdlet chains. Two
+# distinct shapes appear in SCG 8.0 and 9.0:
+#
+#   Standard switch / port group (Get-VirtualSwitch / Get-VirtualPortGroup):
+#     Get-VMHost -Name $ESX | Get-VirtualSwitch -Standard
+#         | Get-SecurityPolicy | select VirtualSwitch,ForgedTransmits
+#     Get-VMHost -Name $ESX | Get-VirtualPortGroup -Standard
+#         | Get-SecurityPolicy | select VirtualPortGroup,MacChanges
+#     Get-VMHost -Name $ESX | Get-VirtualPortGroup -Standard
+#         | Get-SecurityPolicy | select VirtualPortGroup,AllowPromiscuous
+#
+#   Distributed switch / port group (Get-VDSwitch / Get-VDPortgroup):
+#     Get-VDSwitch -Name $VDS | Get-VDSecurityPolicy
+#     Get-VDPortgroup -Name $VDPG | Get-VDSecurityPolicy
+#
+# The distributed-switch shape doesn't carry the specific field name
+# in the assessment command — the field is in the remediation column
+# (Set-VDSecurityPolicy -ForgedTransmits / -MacChanges / -AllowPromiscuous)
+# and/or the source_id slug. We detect from the slug as a fallback
+# so the classifier still produces a canonical parameter for those rows.
+#
+# vim25 read path (see VSphereClient.getDvsSecurityPolicy /
+# getDvpgSecurityPolicy):
+#     DistributedVirtualSwitch.config.defaultPortConfig
+#         .securityPolicy.{forgedTransmits,macChanges,allowPromiscuous}.value
+#     DistributedVirtualPortgroup.config.defaultPortConfig
+#         .securityPolicy.{forgedTransmits,macChanges,allowPromiscuous}.value
+#
+# So when the classifier matches, we override `parameter` to the
+# canonical dot-path: securityPolicy.forgedTransmits etc. The
+# Java ControlEvaluator parses that path and dispatches on the
+# trailing field name.
+#
+# The token-set per canonical field has multiple spellings so we
+# match both the cmdlet-flag spelling that appears in the assessment
+# command body (ForgedTransmits, MacChanges, AllowPromiscuous) AND
+# the slug spelling that appears in the source_id and title text
+# (forged-transmit, mac-changes, promiscuous-mode). We collapse all
+# non-alphanumerics on the comparison side so hyphenated forms match
+# the camelCase canonical key.
+_SECPOL_FIELD_MAP: Dict[str, List[str]] = {
+    "securityPolicy.forgedTransmits": [
+        "forgedtransmits",
+        "forgedtransmit",
+    ],
+    "securityPolicy.macChanges": [
+        "macchanges",
+        "macchange",
+    ],
+    "securityPolicy.allowPromiscuous": [
+        "allowpromiscuous",
+        "promiscuousmode",
+        "promiscuous",
+    ],
+}
+
+
+def _detect_security_policy_field(text: str) -> Optional[str]:
+    """Return canonical securityPolicy.<field> string for a chunk of
+    text (PowerCLI command, source_id, title), or None.
+
+    Case-insensitive, whitespace- and punctuation-tolerant. Non-
+    alphanumeric characters are stripped before matching so a slug
+    like `network-reject-mac-changes-dvportgroup` collapses to
+    `networkrejectmacchangesdvportgroup` and `macchanges` substring-
+    matches it. First field matched wins — security-policy controls
+    in SCG sources are one-field-per-row so this is unambiguous.
+    """
+    if not text:
+        return None
+    needle = re.sub(r"[^a-z0-9]", "", text.lower())
+    for canonical, tokens in _SECPOL_FIELD_MAP.items():
+        for token in tokens:
+            if token in needle:
+                return canonical
+    return None
+
+
+def classify_security_policy_param(powercli_command: str,
+                                   source_id: str,
+                                   source_title: str) -> Optional[str]:
+    """If the PowerCLI command matches a Get-SecurityPolicy /
+    Get-VDSecurityPolicy pattern, return the canonical securityPolicy.*
+    parameter key. Otherwise return None.
+
+    Detection is case-insensitive and whitespace-tolerant so the
+    multi-line continuations the SCG source ships (with embedded
+    newlines and varying spacing) all match the same pattern.
+
+    The field name (ForgedTransmits / MacChanges / AllowPromiscuous) is
+    looked up in priority order:
+      1. the PowerCLI command body (standard-switch shape carries the
+         field after `select ...`)
+      2. the source_id slug (distributed-switch shape: the assessment
+         command is bare `Get-VDSecurityPolicy` but the slug names the
+         field, e.g. `vcenter-9.network-reject-forged-transmit-dvportgroup`)
+      3. the title text as a last-ditch backstop
+    """
+    cmd = (powercli_command or "").strip()
+    if not cmd:
+        return None
+    # Whitespace-flattened lowercase view of the command for the
+    # cmdlet-shape sniff.
+    flat = re.sub(r"\s+", "", cmd).lower()
+    standard_shape = (
+        "get-securitypolicy" in flat
+        and ("get-virtualswitch" in flat
+             or "get-virtualportgroup" in flat)
+    )
+    distributed_shape = "get-vdsecuritypolicy" in flat
+    if not (standard_shape or distributed_shape):
+        return None
+    # Field detection — try each signal in turn.
+    field = _detect_security_policy_field(cmd)
+    if field is not None:
+        return field
+    field = _detect_security_policy_field(source_id or "")
+    if field is not None:
+        return field
+    field = _detect_security_policy_field(source_title or "")
+    if field is not None:
+        return field
+    return None
+
+
 def collapse_remediation(text: str) -> str:
     """Collapse a multi-line PowerCLI remediation into a single line."""
     if not text:

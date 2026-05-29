@@ -26,6 +26,7 @@ from _compliance_normalize import (
     ADAPTER_KIND,
     build_control_id,
     classify_parameter_kind,
+    classify_security_policy_param,
     clean_priority,
     collapse_remediation,
     derive_resource_kind,
@@ -130,6 +131,25 @@ def normalize(input_path: str, output_path: str) -> int:
 
             assessment = (src.get(COL_ASSESSMENT) or "").strip()
             parameter_kind = classify_parameter_kind(parameter, assessment)
+
+            # Phase 3 / Batch 3b — DVS + DVPG security policy override.
+            # When the row is a DVS or DVPG control AND the assessment
+            # command matches a Get-SecurityPolicy / Get-VDSecurityPolicy
+            # pattern, override parameter_kind to vim_property and set
+            # parameter to the canonical securityPolicy.<field> dot-path
+            # the Java evaluator dispatches on. See
+            # _compliance_normalize.classify_security_policy_param.
+            title_for_secpol = (src.get(COL_TITLE) or "").strip()
+            if resource_kind in (
+                "DistributedVirtualSwitch",
+                "DistributedVirtualPortgroup",
+            ):
+                secpol = classify_security_policy_param(
+                    assessment, source_id, title_for_secpol)
+                if secpol is not None:
+                    parameter = secpol
+                    parameter_kind = "vim_property"
+
             by_kind[parameter_kind] += 1
 
             expected = (src.get(COL_EXPECTED) or "").strip()

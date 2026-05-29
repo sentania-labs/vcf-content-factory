@@ -689,21 +689,18 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	private DvsStats collectDvs(BenchmarkProfile profile) {
 		DvsStats stats = new DvsStats();
 
-		// TOOLSET GAP — DVS/DVPG controls in SCG 9.0 are
-		// parameter_kind=powercli_only. The Java vim25 client can
-		// enumerate DVS MoRefs and read DVS/DVPG config (e.g.
-		// DistributedVirtualSwitch.config.defaultPortConfig.
-		// securityPolicy) but the canonical profile's `parameter`
-		// field is a PowerCLI cmdlet chain ("Get-VirtualSwitch |
-		// Get-SecurityPolicy"), not a settable key. Until the
-		// normalizer is taught to emit Java-addressable parameter
-		// names AND a future Phase implements a real evaluation
-		// path, every DVS control is skipped by
-		// ControlEvaluator.isEvaluable (parameter_kind !=
-		// "advanced_setting"). We still walk DVS inventory so the
-		// profile_name property publishes — that makes the resource
-		// appear under VCF-CF Compliance in the metric browser and
-		// keeps the stitching path wired for the future fix.
+		// Phase 3 / Batch 3b — DVS controls are now partially evaluable.
+		// SCG 9.0 emits 3 vim_property security-policy controls per DVS
+		// (securityPolicy.{forgedTransmits,macChanges,allowPromiscuous})
+		// backed by VSphereClient.getDvsSecurityPolicy + the
+		// ControlEvaluator.evaluateVimProperties dispatcher. Remaining
+		// DVS controls (network-reset-port, network-restrict-discovery-
+		// protocol, network-restrict-port-mirroring, etc.) stay
+		// powercli_only / manual_audit and are skipped by the
+		// evaluator. When no controls evaluate (e.g. a profile that
+		// only ships powercli rows for DVS), we still walk DVS
+		// inventory and push profile_name so the resource appears
+		// under VCF-CF Compliance in the metric browser.
 		java.util.List<VSphereClient.DvsInfo> switches;
 		try {
 			switches = vsphere.getDvSwitches();
@@ -719,36 +716,65 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 
 		java.util.List<BenchmarkProfile.Control> dvsControls =
 				profile.dvsControls();
+		int evaluableCount = countEvaluable(dvsControls, "vim_property");
 
 		for (VSphereClient.DvsInfo dvs : switches) {
 			stats.total++;
-			// Evaluator returns a zero-control sentinel score=100 with
-			// totalCount=0. Don't fold sentinels into world aggregates,
-			// but DO push the profile_name property so the DVS appears
-			// under VCF-CF Compliance in the metric browser.
-			ControlEvaluator.ComplianceResult cr =
-					ControlEvaluator.evaluateControls(
-							dvsControls,
-							new java.util.HashMap<>(), dvs.name);
 
-			if (stitcher != null) {
-				ComplianceStitcher.HostEntry he =
-						stitcher.matchDvs(dvs.name, dvs.moid);
-				if (he != null) {
-					// Fix #3: explicit match-success logging at parity
-					// with HostSystem's "Pushed compliance data to ..."
-					// line. v27 verification reported nothing landing on
-					// DVS/DVPG and there was no log to distinguish
-					// match-failure from silent push-failure. Confirm
-					// the match, then push, then log the push so the
-					// next round of verification can read the operator
-					// log and tell what actually happened.
-					logInfo("DVS " + dvs.name + " (" + dvs.moid
-							+ ") matched -> resource=" + he.resourceId
-							+ "; pushing profile_name");
-					pushProfileNamePropertyOnly(he.resourceId,
-							profile.name);
-				}
+			if (stitcher == null) continue;
+			ComplianceStitcher.HostEntry he =
+					stitcher.matchDvs(dvs.name, dvs.moid);
+			if (he == null) continue;
+
+			if (evaluableCount == 0) {
+				// No vim_property controls in this profile slice —
+				// keep the v30 profile-name-only push so the resource
+				// still appears under VCF-CF Compliance without
+				// polluting per-resource rollups with a sentinel
+				// score=100.
+				logInfo("DVS " + dvs.name + " (" + dvs.moid
+						+ ") matched -> resource=" + he.resourceId
+						+ "; no evaluable controls, pushing profile_name");
+				pushProfileNamePropertyOnly(he.resourceId,
+						profile.name);
+				continue;
+			}
+
+			java.util.Map<String, Object> secPol;
+			try {
+				java.util.Map<String, Boolean> raw =
+						vsphere.getDvsSecurityPolicy(dvs.moRef);
+				secPol = qualifySecurityPolicy(raw);
+			} catch (Exception e) {
+				logWarn("Failed to read security policy for DVS "
+						+ dvs.name + ": " + e.getMessage());
+				// Fall back to profile_name-only on read failure so
+				// the resource still surfaces and the operator log
+				// has the failure breadcrumb. Don't push sentinels.
+				pushProfileNamePropertyOnly(he.resourceId,
+						profile.name);
+				continue;
+			}
+
+			ControlEvaluator.ComplianceResult cr =
+					ControlEvaluator.evaluateVimProperties(
+							dvsControls, secPol, dvs.name);
+
+			logInfo("DVS " + dvs.name + " (" + dvs.moid
+					+ ") matched -> resource=" + he.resourceId
+					+ "; score=" + String.format("%.1f", cr.score)
+					+ "% (" + cr.passCount + " pass, "
+					+ cr.failCount + " fail, "
+					+ cr.totalCount + " total)");
+
+			if (cr.totalCount > 0) {
+				pushComplianceViaClient(he.resourceId, cr, profile.name);
+			} else {
+				// totalCount=0 means the read happened but the profile
+				// slice scored nothing (e.g. all expected_values were
+				// unparseable). Treat as no-signal — profile_name only.
+				pushProfileNamePropertyOnly(he.resourceId,
+						profile.name);
 			}
 		}
 		return stats;
@@ -757,10 +783,12 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	private DvpgStats collectDvpg(BenchmarkProfile profile) {
 		DvpgStats stats = new DvpgStats();
 
-		// TOOLSET GAP — same story as collectDvs. DVPG controls in
-		// SCG 9.0 are PowerCLI-only; we walk inventory so
-		// profile_name publishes and the stitching path is wired
-		// for the future fix, but no controls evaluate today.
+		// Phase 3 / Batch 3b — DVPG controls are now partially
+		// evaluable in the same way as DVS. SCG 9.0 emits 3
+		// vim_property security-policy controls per DVPG with the
+		// same canonical parameter keys as DVS; the read path is
+		// VSphereClient.getDvpgSecurityPolicy and the dispatcher is
+		// shared with DVS via ControlEvaluator.evaluateVimProperties.
 		java.util.List<VSphereClient.DvpgInfo> pgs;
 		try {
 			pgs = vsphere.getDvPortgroups();
@@ -776,32 +804,94 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 
 		java.util.List<BenchmarkProfile.Control> dvpgControls =
 				profile.dvpgControls();
+		int evaluableCount = countEvaluable(dvpgControls, "vim_property");
 
 		for (VSphereClient.DvpgInfo pg : pgs) {
 			stats.total++;
-			ControlEvaluator.ComplianceResult cr =
-					ControlEvaluator.evaluateControls(
-							dvpgControls,
-							new java.util.HashMap<>(), pg.name);
 
-			if (stitcher != null) {
-				ComplianceStitcher.HostEntry he =
-						stitcher.matchDvpg(pg.name, pg.moid);
-				if (he != null) {
-					// Fix #3: see collectDvs — explicit match-success
-					// logging plus profile_name-only push (no sentinel
-					// score/pass/fail/total stats) so DVPG resources
-					// appear under VCF-CF Compliance without polluting
-					// the per-resource rollups with a misleading 100%.
-					logInfo("DVPG " + pg.name + " (" + pg.moid
-							+ ") matched -> resource=" + he.resourceId
-							+ "; pushing profile_name");
-					pushProfileNamePropertyOnly(he.resourceId,
-							profile.name);
-				}
+			if (stitcher == null) continue;
+			ComplianceStitcher.HostEntry he =
+					stitcher.matchDvpg(pg.name, pg.moid);
+			if (he == null) continue;
+
+			if (evaluableCount == 0) {
+				logInfo("DVPG " + pg.name + " (" + pg.moid
+						+ ") matched -> resource=" + he.resourceId
+						+ "; no evaluable controls, pushing profile_name");
+				pushProfileNamePropertyOnly(he.resourceId,
+						profile.name);
+				continue;
+			}
+
+			java.util.Map<String, Object> secPol;
+			try {
+				java.util.Map<String, Boolean> raw =
+						vsphere.getDvpgSecurityPolicy(pg.moRef);
+				secPol = qualifySecurityPolicy(raw);
+			} catch (Exception e) {
+				logWarn("Failed to read security policy for DVPG "
+						+ pg.name + ": " + e.getMessage());
+				pushProfileNamePropertyOnly(he.resourceId,
+						profile.name);
+				continue;
+			}
+
+			ControlEvaluator.ComplianceResult cr =
+					ControlEvaluator.evaluateVimProperties(
+							dvpgControls, secPol, pg.name);
+
+			logInfo("DVPG " + pg.name + " (" + pg.moid
+					+ ") matched -> resource=" + he.resourceId
+					+ "; score=" + String.format("%.1f", cr.score)
+					+ "% (" + cr.passCount + " pass, "
+					+ cr.failCount + " fail, "
+					+ cr.totalCount + " total)");
+
+			if (cr.totalCount > 0) {
+				pushComplianceViaClient(he.resourceId, cr, profile.name);
+			} else {
+				pushProfileNamePropertyOnly(he.resourceId,
+						profile.name);
 			}
 		}
 		return stats;
+	}
+
+	/**
+	 * Translate the bare-field-name map returned by
+	 * {@link VSphereClient#getDvsSecurityPolicy(com.vmware.vim25.ManagedObjectReference)}
+	 * / {@link VSphereClient#getDvpgSecurityPolicy(com.vmware.vim25.ManagedObjectReference)}
+	 * ({@code allowPromiscuous}, {@code macChanges},
+	 * {@code forgedTransmits}) into the fully-qualified canonical
+	 * parameter keys the evaluator looks up
+	 * ({@code securityPolicy.allowPromiscuous} etc.). Keeping the
+	 * vSphere client's contract bare and qualifying here keeps the
+	 * client unaware of the canonical schema.
+	 */
+	private static java.util.Map<String, Object> qualifySecurityPolicy(
+			java.util.Map<String, Boolean> raw) {
+		java.util.Map<String, Object> qualified =
+				new java.util.HashMap<>();
+		if (raw == null) return qualified;
+		for (java.util.Map.Entry<String, Boolean> e : raw.entrySet()) {
+			qualified.put("securityPolicy." + e.getKey(), e.getValue());
+		}
+		return qualified;
+	}
+
+	/**
+	 * Count controls in {@code slice} whose parameter_kind matches
+	 * {@code kind}. Used by collectDvs / collectDvpg to decide
+	 * whether to take the full evaluation path or fall back to the
+	 * profile-name-only push.
+	 */
+	private static int countEvaluable(
+			java.util.List<BenchmarkProfile.Control> slice, String kind) {
+		int n = 0;
+		for (BenchmarkProfile.Control c : slice) {
+			if (kind.equals(c.parameterKind)) n++;
+		}
+		return n;
 	}
 
 	/**

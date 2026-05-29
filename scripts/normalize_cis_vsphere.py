@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _compliance_normalize import (
     ADAPTER_KIND,
     classify_parameter_kind,
+    classify_security_policy_param,
     clean_priority,
     collapse_remediation,
     infer_value_type,
@@ -115,6 +116,23 @@ def normalize(input_path: str, output_path: str) -> int:
 
             assessment = (src.get("PowerCLI Command Assessment") or "").strip()
             parameter_kind = classify_parameter_kind(parameter, assessment)
+
+            # Phase 3 / Batch 3b — DVS + DVPG security policy override.
+            # See normalize_scg_v9.py. CIS source is mostly metadata-only
+            # so this branch will rarely fire today, but is here so a
+            # future CIS update that populates the assessment column
+            # gets the same treatment.
+            title_for_secpol = (src.get("Description/Title") or "").strip()
+            if resource_kind in (
+                "DistributedVirtualSwitch",
+                "DistributedVirtualPortgroup",
+            ):
+                secpol = classify_security_policy_param(
+                    assessment, source_id, title_for_secpol)
+                if secpol is not None:
+                    parameter = secpol
+                    parameter_kind = "vim_property"
+
             by_kind[parameter_kind] += 1
 
             expected = (src.get("Baseline Suggested Value") or "").strip()
