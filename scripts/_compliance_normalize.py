@@ -726,6 +726,95 @@ _VIM_RECLASS_DESCRIPTION_CAVEAT: Dict[str, str] = {
 }
 
 
+# esxcli sprint (build 36) — esxcli recipe reclassifications keyed by
+# canonical control_id.
+#
+# Like _VIM_RECLASS_BY_CONTROL_ID, these are SCG controls that ship in
+# the raw source as parameter_kind=manual_audit / esxcli because their
+# only assessment hint is an esxcli command (or a multi-line `parameter`
+# the Java evaluator silently skips). Build 36 added an esxcli SOAP
+# reader that rides the existing vCenter session (no host credentials,
+# no per-host fan-out — see EsxcliSoapClient + the spike investigation
+# §0), so these controls become API-auditable via the read_recipe
+# column.
+#
+# read_recipe grammar: esxcli:<namespace.command>:<ResultField>
+#   - <namespace.command> dotted (system.syslog.config.get) maps to the
+#     ha-cli-handler moid + vim.EsxCLI.* method mechanically (spike §0.4)
+#   - <ResultField> is the PascalCase field of the get struct
+#
+# value: (parameter, esxcli_recipe, expected_override_or_None,
+#         description_caveat_or_None)
+#
+# SLICE SCOPE (build 36): ONLY syslog persistence. The SSH / firewall /
+# account / key-persistence esxcli controls are HELD for a later build
+# (design section C) and are deliberately absent here.
+#
+# What is NOT here and WHY (proven against the live struct captured from
+# vcf-lab-mgmt-esx01 — spike §2):
+#   - esx.log-audit-persistent / esx.logs-audit-persistent: the
+#     `system syslog config get` struct carries NO audit-record-
+#     persistence field (its fields are AllowVsanBacking,
+#     EnforceSSLCertificates, LocalLogOutput, LocalLogOutputIsConfigured,
+#     LocalLogOutputIsPersistent, LogLevel, RemoteHost,
+#     StrictX509Compliance). Audit-record location lives in a separate
+#     namespace (system auditrecords / the auditRecord.storageDirectory
+#     advanced setting), not in this get. We do NOT force it onto a
+#     field that does not exist — it stays manual_audit. Holding it is
+#     the build-35 discipline: never manufacture a read.
+#   - RemoteHost (remote-syslog): the remote-syslog controls
+#     (esx.logs-remote / esx.log-forwarding) are already evaluable as
+#     advanced_setting on Syslog.global.logHost via OptionManager today;
+#     reclassifying them to esxcli would be churn with no coverage gain.
+#     Held.
+#
+# The `parameter` we set is the PascalCase field name itself
+# (LocalLogOutputIsPersistent). It is the key the Java evaluator looks
+# up in the property-value map and must be UNIQUE among the host
+# control parameters; LocalLogOutputIsPersistent does not collide with
+# any advanced_setting or vim_property parameter in the SCG profiles.
+_ESXCLI_RECLASS_BY_CONTROL_ID: Dict[str, tuple] = {
+    # ESXi local-log persistence. Absorbs the parked Tier A item: a
+    # clean boolean (LocalLogOutputIsPersistent == true) is strictly
+    # better than the old ScratchConfig "not-equal /tmp/scratch" hack.
+    # control_id is identical across the 8.0 and 9.0 normalizers
+    # (esx.logs-persistent vs esx.log-persistent) so BOTH are listed.
+    "esx.logs-persistent": (
+        "LocalLogOutputIsPersistent",
+        "esxcli:system.syslog.config.get:LocalLogOutputIsPersistent",
+        "true",
+        None,
+    ),
+    "esx.log-persistent": (
+        "LocalLogOutputIsPersistent",
+        "esxcli:system.syslog.config.get:LocalLogOutputIsPersistent",
+        "true",
+        None,
+    ),
+}
+
+
+def classify_esxcli_reclass(control_id: str):
+    """If ``control_id`` is an esxcli recipe reclassification (build 36
+    esxcli sprint), return
+    ``(parameter, read_recipe, expected_override_or_None, description_caveat_or_None)``.
+    Otherwise return ``None``.
+
+    The normalizer applies this in the same slot as
+    ``classify_vim_reclass``: it overrides ``parameter``, forces
+    ``parameter_kind=esxcli``, sets ``read_recipe``, and (when an
+    override is given) replaces ``expected_value`` with the form the
+    Java evaluator can compare. esxcli became an evaluable kind in
+    build 36 (BenchmarkProfile.isEvaluableKind), evaluable iff
+    read_recipe is non-empty — exactly like vim_property.
+    """
+    entry = _ESXCLI_RECLASS_BY_CONTROL_ID.get(control_id)
+    if entry is None:
+        return None
+    parameter, read_recipe, expected_override, caveat = entry
+    return (parameter, read_recipe, expected_override, caveat)
+
+
 def classify_vim_reclass(control_id: str):
     """If ``control_id`` is an existing-style vim_property reclassification
     (build 35 coverage expansion), return

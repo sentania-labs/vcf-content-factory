@@ -53,15 +53,16 @@ reviewability.
 | 10 | `description` | string | Long description for the control |
 | 11 | `source_ref` | string | Traceability: `<source>:<original_id>` |
 | 12 | `remediation_text` | string | PowerCLI/esxcli command to fix it; symptom-message-ready |
-| 13 | `read_recipe` | string | **Optional.** `<style>:<vim_path>` read spec for a `vim_property` control. Empty for every other kind. See below. |
+| 13 | `read_recipe` | string | **Optional.** `<style>:<vim_path>` read spec for a `vim_property` or `esxcli` control. Empty for every other kind. See below. |
 
 ### `read_recipe` format (column 13)
 
-Makes `vim_property` controls **data-driven**: a new vim_property
-control whose extraction *style* already exists is added by editing
-the CSV and re-normalizing, with **no Java change**.
+Makes `vim_property` **and `esxcli`** controls **data-driven**: a new
+control whose extraction *style* already exists is added by editing the
+CSV and re-normalizing, with **no Java change**.
 
-Grammar: `<style>:<vim_path>`
+Grammar: `<style>:<vim_path>` (for `esxcli`, the style is `esxcli` and
+the remainder is `<namespace.command>:<ResultField>` — see the table).
 
 - `<vim_path>` — a vim25 property path resolvable from the control's
   resource MO. The adapter's generic reader (`VSphereClient.readByRecipe`)
@@ -77,13 +78,14 @@ Grammar: `<style>:<vim_path>`
   | `bool` | boolean via `is<Field>()` / `get<Field>()` on the parent | `configurationEx.vsanConfigInfo.enabled` |
   | `bool_policy` | unwrap a `BoolPolicy` wrapper's `.value` | `config.defaultPortConfig.securityPolicy.forgedTransmits` |
   | `string_list_join` | join a `List<String>` on `,` | `config.dateTimeInfo.ntpConfig.server` |
+  | `esxcli` | read a PascalCase result field from an esxcli `get` command over the **vCenter session** (no host creds); grammar is `esxcli:<namespace.command>:<ResultField>`. `EsxcliSoapClient` issues `RetrieveManagedMethodExecuter` + `ExecuteSoap` (`version=urn:vim25/5.0`). Returned `true`/`false` types as Boolean, else String. Build 36. | `esxcli:system.syslog.config.get:LocalLogOutputIsPersistent` |
 
 Rules:
 
 - `read_recipe` is **optional** and kept OUT of the loader's required-
   column set, so older bundled or custom CSVs still load.
-- A `vim_property` control with an **empty** `read_recipe` is
-  **non-evaluable** (informational only): it loads and appears for
+- A `vim_property` or `esxcli` control with an **empty** `read_recipe`
+  is **non-evaluable** (informational only): it loads and appears for
   traceability, and the evaluator skips it — it is *not* counted as
   unreadable (we never declared we could read it).
 - An **unknown** `<style>`, a malformed recipe, or a read that resolves
@@ -170,7 +172,7 @@ informational-only.
 |---|---|---|
 | `advanced_setting` | ESXi Advanced System Setting (e.g. `Security.AccountUnlockTime`). Read via vSphere SOAP `OptionManager.QueryOptions`. | yes |
 | `vim_property` | Vim object property (e.g. `config.defaultPortConfig.securityPolicy.forgedTransmits`). Read data-driven via the `read_recipe` column (vSphere SOAP `PropertyCollector` + reflective getter walk). | yes, **iff** `read_recipe` is non-empty (else informational) |
-| `esxcli` | esxcli-only setting. Read via `Get-EsxCli` style commands. | no (today) — adapter cannot replicate without a PowerCLI runtime |
+| `esxcli` | esxcli command result field (e.g. `system syslog config get` -> `LocalLogOutputIsPersistent`). Read data-driven via the `read_recipe` column with the `esxcli:<namespace.command>:<ResultField>` style — `EsxcliSoapClient` issues `RetrieveManagedMethodExecuter` + `ExecuteSoap` over the **existing vCenter session** (no host credentials, no per-host fan-out; build 36). | yes, **iff** `read_recipe` is non-empty (else informational) — was "no" before build 36 |
 | `powercli_only` | Requires PowerCLI-specific cmdlet that has no direct vSphere SOAP equivalent. | no |
 | `manual_audit` | Has no machine-readable assessment command. Human review only. | no |
 

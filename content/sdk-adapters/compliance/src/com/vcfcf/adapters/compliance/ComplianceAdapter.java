@@ -1079,7 +1079,13 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 			com.vmware.vim25.ManagedObjectReference moRef,
 			java.util.List<BenchmarkProfile.Control> controls,
 			String resourceName) {
-		int evaluableCount = countEvaluable(controls, "vim_property");
+		// Recipe-driven controls = vim_property + esxcli (build 36). Both
+		// are read by VSphereClient.readVimProperties / readByRecipe and
+		// scored by ControlEvaluator.evaluateVimProperties. Count both so
+		// a host whose only recipe controls are esxcli (e.g. syslog
+		// persistence) still enters the full-evaluation path.
+		int evaluableCount = countEvaluable(controls, "vim_property")
+				+ countEvaluable(controls, "esxcli");
 		if (evaluableCount == 0) {
 			return emptyResult(resourceName);
 		}

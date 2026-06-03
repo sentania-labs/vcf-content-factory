@@ -19,6 +19,13 @@ public final class VSphereClient {
 	private volatile ServiceContent serviceContent;
 	private volatile ManagedObjectReference rootFolder;
 
+	// esxcli reader (build 36) — rides THIS vCenter session (no host
+	// credentials). Rebuilt on every (re)connect so it carries the live
+	// session cookie and so its per-cycle command cache is fresh each
+	// collection cycle. Lazily constructed on first esxcli recipe read.
+	private volatile EsxcliSoapClient esxcli;
+	private volatile String sessionCookie;
+
 	public VSphereClient(String vcenterHost, String username, String password) {
 		this.vcenterUrl = "https://" + vcenterHost + "/sdk";
 		this.username = username;
@@ -46,6 +53,61 @@ public final class VSphereClient {
 		vimPort.login(serviceContent.getSessionManager(),
 				username, password, null);
 		rootFolder = serviceContent.getRootFolder();
+
+		// Capture the live vCenter session cookie so the raw-SOAP esxcli
+		// reader (which bypasses JAX-WS for the reflect/dynamic types not
+		// in the bindings) rides the SAME authenticated session. Rebuild
+		// the esxcli client on every (re)connect: it gets the fresh
+		// cookie AND a fresh per-cycle command cache.
+		this.sessionCookie = captureSessionCookie();
+		this.esxcli = new EsxcliSoapClient(vcenterUrl, sessionCookie,
+				trustAllSslFactory());
+	}
+
+	/**
+	 * Extract the {@code vmware_soap_session} cookie the JAX-WS runtime
+	 * just established (via {@code SESSION_MAINTAIN_PROPERTY}) from the
+	 * login response headers, so the raw-SOAP esxcli reader can present
+	 * the same session. Returns the {@code Set-Cookie} value verbatim
+	 * (suitable as a {@code Cookie:} request header) or null if the
+	 * runtime did not surface it — in which case the esxcli reader still
+	 * works only if the cookie reaches it another way (it does not today,
+	 * so a null cookie -> esxcli reads return command-failed/UNREADABLE,
+	 * never a false pass).
+	 */
+	private String captureSessionCookie() {
+		try {
+			Map<String, Object> respCtx =
+					((BindingProvider) vimPort).getResponseContext();
+			Object headersObj =
+					respCtx.get(MessageContext.HTTP_RESPONSE_HEADERS);
+			if (!(headersObj instanceof Map)) return null;
+			@SuppressWarnings("unchecked")
+			Map<String, List<String>> headers =
+					(Map<String, List<String>>) headersObj;
+			for (Map.Entry<String, List<String>> e : headers.entrySet()) {
+				if (e.getKey() == null) continue;
+				if (!"Set-Cookie".equalsIgnoreCase(e.getKey())) continue;
+				List<String> vals = e.getValue();
+				if (vals == null) continue;
+				for (String v : vals) {
+					if (v == null) continue;
+					// Take the cookie name=value pair (up to the first ';',
+					// dropping Path/Secure/HttpOnly attributes) for the
+					// vmware_soap_session cookie.
+					String pair = v;
+					int semi = pair.indexOf(';');
+					if (semi >= 0) pair = pair.substring(0, semi);
+					if (pair.startsWith("vmware_soap_session")) {
+						return pair.trim();
+					}
+				}
+			}
+		} catch (Exception ignored) {
+			// Cookie capture is best-effort; a failure surfaces downstream
+			// as UNREADABLE on esxcli controls, never a false pass.
+		}
+		return null;
 	}
 
 	public void disconnect() {
@@ -56,6 +118,8 @@ public final class VSphereClient {
 		}
 		vimPort = null;
 		serviceContent = null;
+		esxcli = null;
+		sessionCookie = null;
 	}
 
 	public void ensureConnected() throws Exception {
@@ -343,7 +407,14 @@ public final class VSphereClient {
 		if (moRef == null || controls == null) return result;
 
 		for (BenchmarkProfile.Control c : controls) {
-			if (!"vim_property".equals(c.parameterKind)) continue;
+			// Recipe-driven kinds: vim_property (vim25 PropertyCollector +
+			// reflective walk) and esxcli (ExecuteSoap over the vCenter
+			// session, build 36). Both consume the read_recipe column via
+			// readByRecipe; the recipe's style prefix selects the reader.
+			if (!"vim_property".equals(c.parameterKind)
+					&& !"esxcli".equals(c.parameterKind)) {
+				continue;
+			}
 			String recipe = c.readRecipe;
 			if (recipe == null || recipe.trim().isEmpty()) {
 				// Non-evaluable vim_property control (no recipe) — leave
@@ -412,6 +483,13 @@ public final class VSphereClient {
 		String path = recipe.substring(colon + 1).trim();
 		if (path.isEmpty()) return null;
 
+		// esxcli style has a THREE-part grammar
+		// (esxcli:<namespace.command>:<ResultField>) so its `path` itself
+		// carries a colon. Handle it before the generic dotted-path split.
+		if ("esxcli".equals(style)) {
+			return readEsxcliRecipe(moRef, path);
+		}
+
 		String[] segments = path.split("\\.");
 
 		switch (style) {
@@ -427,6 +505,56 @@ public final class VSphereClient {
 				// Unknown style — never guess. Null -> UNREADABLE.
 				return null;
 		}
+	}
+
+	/**
+	 * esxcli style — {@code esxcli:<namespace.command>:<ResultField>}.
+	 * Reads a PascalCase result field from an esxcli {@code get} command
+	 * over the existing vCenter session (no host credentials) via
+	 * {@link EsxcliSoapClient}. The host moid is {@code moRef.getValue()}
+	 * (this style is HostSystem-only; on any other resource the
+	 * RetrieveManagedMethodExecuter call fails and we return null ->
+	 * UNREADABLE).
+	 *
+	 * <p>Typing: a value of {@code "true"}/{@code "false"} (case-
+	 * insensitive) is returned as a {@link Boolean} so the evaluator's
+	 * boolean compare path handles it (e.g.
+	 * {@code LocalLogOutputIsPersistent}); anything else is returned as a
+	 * String. A command-failure / absent-field / parse-failure returns
+	 * {@code null} — which {@link #readVimProperties} folds to the
+	 * UNREADABLE sentinel (loud, never a false pass — the build-35
+	 * contract).
+	 */
+	private Object readEsxcliRecipe(ManagedObjectReference moRef, String path)
+			throws Exception {
+		if (esxcli == null) {
+			// Not connected / no session cookie captured — cannot read.
+			// Null -> UNREADABLE upstream, never a default.
+			return null;
+		}
+		int sep = path.lastIndexOf(':');
+		if (sep <= 0 || sep >= path.length() - 1) {
+			// Missing the :<ResultField> segment — malformed, unreadable.
+			return null;
+		}
+		String namespaceCommand = path.substring(0, sep).trim();
+		String field = path.substring(sep + 1).trim();
+		if (namespaceCommand.isEmpty() || field.isEmpty()) return null;
+
+		String hostMoid = moRef != null ? moRef.getValue() : null;
+		if (hostMoid == null || hostMoid.isEmpty()) return null;
+
+		String value = esxcli.readField(hostMoid, namespaceCommand, field);
+		if (value == null
+				|| EsxcliSoapClient.COMMAND_FAILED.equals(value)) {
+			// Field absent, or the command call itself failed. Both are
+			// UNREADABLE — never a sentinel pass.
+			return null;
+		}
+		String trimmed = value.trim();
+		if ("true".equalsIgnoreCase(trimmed)) return Boolean.TRUE;
+		if ("false".equalsIgnoreCase(trimmed)) return Boolean.FALSE;
+		return trimmed;
 	}
 
 	/**

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.0.35 (2026-06-03)
+
+- feat(adapter): build 35 — HostSystem/VM vim_property coverage expansion (+14 SCG8/+16 SCG9 reclassified) + in-pak UNAUDITED_CONTROLS.md
+
 ## 1.0.0.34 (2026-06-03)
 
 - feat(adapter): compliance adapter evaluation + canonical profile normalization

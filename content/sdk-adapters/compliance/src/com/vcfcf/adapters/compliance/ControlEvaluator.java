@@ -243,10 +243,14 @@ public final class ControlEvaluator {
 		int unreadable = 0;
 
 		for (BenchmarkProfile.Control control : controls) {
-			if (!"vim_property".equals(control.parameterKind)) {
+			// Recipe-driven kinds scored here: vim_property and esxcli
+			// (build 36). Both carry their read spec in read_recipe and
+			// are read by VSphereClient.readByRecipe into propertyValues.
+			if (!"vim_property".equals(control.parameterKind)
+					&& !"esxcli".equals(control.parameterKind)) {
 				continue;
 			}
-			// A vim_property control with no read_recipe is
+			// A recipe-driven control with no read_recipe is
 			// non-evaluable / informational — skip it entirely (it is
 			// not unreadable; we never declared we could read it).
 			if (!control.isEvaluable()) {

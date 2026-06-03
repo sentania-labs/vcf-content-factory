@@ -132,7 +132,17 @@ public final class BenchmarkProfile {
 		if ("advanced_setting".equals(parameterKind)) {
 			return true;
 		}
-		if ("vim_property".equals(parameterKind)) {
+		// vim_property and esxcli are BOTH recipe-driven: evaluable only
+		// when the control carries a non-empty read_recipe (the recipe IS
+		// the read path). esxcli became evaluable in build 36 — its
+		// read_recipe carries the esxcli:<namespace.command>:<Field> spec
+		// consumed by VSphereClient.readEsxcliRecipe, which rides the
+		// existing vCenter session (no host credentials). An esxcli
+		// control with no recipe stays non-evaluable / informational,
+		// exactly like a vim_property control without one — so a missing
+		// recipe is a coverage gap the operator sees, never a guess.
+		if ("vim_property".equals(parameterKind)
+				|| "esxcli".equals(parameterKind)) {
 			return readRecipe != null && !readRecipe.trim().isEmpty();
 		}
 		return false;

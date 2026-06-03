@@ -26,6 +26,7 @@ from _compliance_normalize import (
     ADAPTER_KIND,
     build_control_id,
     build_read_recipe,
+    classify_esxcli_reclass,
     classify_parameter_kind,
     classify_security_policy_param,
     classify_vim_reclass,
@@ -187,6 +188,23 @@ def normalize(input_path: str, output_path: str) -> int:
                 reclass_recipe = rc_recipe
                 reclass_expected = rc_expected
                 reclass_caveat = rc_caveat
+
+            # esxcli sprint (build 36) — esxcli recipe reclassification
+            # keyed by canonical control_id. Promotes the row to
+            # parameter_kind=esxcli (evaluable iff read_recipe set, like
+            # vim_property) with an esxcli:<ns.command>:<Field> recipe the
+            # EsxcliSoapClient reads over the existing vCenter session.
+            # Slice scope: syslog persistence only (see
+            # _ESXCLI_RECLASS_BY_CONTROL_ID). Applied after the vim
+            # reclass; the two control_id sets do not overlap.
+            esxcli_reclass = classify_esxcli_reclass(control_id)
+            if esxcli_reclass is not None:
+                ec_param, ec_recipe, ec_expected, ec_caveat = esxcli_reclass
+                parameter = ec_param
+                parameter_kind = "esxcli"
+                reclass_recipe = ec_recipe
+                reclass_expected = ec_expected
+                reclass_caveat = ec_caveat
 
             by_kind[parameter_kind] += 1
 
