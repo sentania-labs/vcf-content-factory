@@ -78,6 +78,7 @@ ends up holding all the context.
 | `mp-designer` | Design | `designs/` | New MP. Wizard interview against API map. |
 | `mp-author` | Author | `content/managementpacks/` | After `mp-designer` produces approved design. **Tier 1** MPB YAML spec. |
 | `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` | After `mp-designer` produces approved design. **Tier 2** Java SDK adapter source. The Java sibling to `mp-author`. **Only** agent that edits adapter Java. |
+| `sdk-adapter-reviewer` | Read-only review | `context/reviews/` | After `sdk-adapter-author` reports a build, before the install gate. Skeptical correctness/quality check on Tier 2 Java — hunts unreadable-is-compliant, stitch corruption, crash-the-cycle. Never edits source, never installs. |
 
 Agent prompts under `.claude/agents/` are authoritative for each
 agent's behavior. If "Spawn when" above ever conflicts with a
@@ -233,7 +234,9 @@ path is first-class, not a sad fallback.
 - **Management pack (Tier 2 Java SDK):** clarify target API →
   cartographer → designer → **`sdk-adapter-author`** (not `mp-author`;
   Tier 2 is Java source, not MPB YAML) → `validate-sdk` (cheap loop) →
-  `build-sdk` → `pak-compare` against closest reference (zero BLOCKING
+  `build-sdk` → **`sdk-adapter-reviewer`** (read-only correctness/quality
+  gate on the Java — APPROVE / CHANGES REQUESTED; re-brief the author on
+  any BLOCKING) → `pak-compare` against closest reference (zero BLOCKING
   is the gate) → confirm → install. There is no render-export /
   push-design / MPB UI Verify step — those are Tier 1 (YAML descriptor)
   only. The cheap loop here is `validate-sdk` (compile-check); the
