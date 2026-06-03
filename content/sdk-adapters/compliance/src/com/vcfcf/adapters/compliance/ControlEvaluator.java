@@ -9,6 +9,40 @@ import java.util.Map;
 public final class ControlEvaluator {
 
 	/**
+	 * Comparison-mode sentinel tokens carried in the {@code expected_value}
+	 * column (build 39). They select a comparison semantic other than the
+	 * default case-insensitive equality.
+	 *
+	 * <ul>
+	 *   <li>{@link #EXPECTED_NON_EMPTY} — <b>presence / non-empty</b> mode.
+	 *       Compliant iff the read value is present (non-null and, for a
+	 *       stringified list, non-empty). Used where the SCG baseline is a
+	 *       site-specific sentinel that no real value can string-equal
+	 *       (e.g. the NTP server list, baseline "Site-Specific") — plain
+	 *       equality would manufacture a permanent false fail.</li>
+	 *   <li>{@link #EXPECTED_NOT_PREFIX} — <b>not-equal</b> mode, grammar
+	 *       {@code not:<value>}. Compliant iff the read value is present
+	 *       AND is NOT equal to {@code <value>} (case-insensitive). Used
+	 *       for {@code ScratchConfig.CurrentScratchLocation != /tmp/scratch}
+	 *       (a non-persistent-location indicator).</li>
+	 * </ul>
+	 *
+	 * <p><b>Cardinal-rule invariant for both modes:</b> a missing /
+	 * unreadable / empty read is NEVER folded into a pass. Presence mode
+	 * passes only on a present value; not-equal mode passes only on a
+	 * present value that differs from {@code <value>} — a missing value is
+	 * explicitly NOT treated as "differs from X, therefore compliant".
+	 * Each comparison helper receives an already-present actual; the
+	 * absent / unreadable cases are short-circuited by the callers
+	 * ({@code actualObj == null} skip, {@code unreadableSentinel} fold)
+	 * before the mode helpers are ever consulted.
+	 */
+	static final String EXPECTED_NON_EMPTY = "(non-empty)";
+
+	/** Prefix for the not-equal comparison mode: {@code not:<value>}. */
+	static final String EXPECTED_NOT_PREFIX = "not:";
+
+	/**
 	 * Sentinel value the {@code VSphereClient} recipe reader places in
 	 * the property-value map when a control declared a {@code read_recipe}
 	 * but the read produced nothing (null / style couldn't extract /
@@ -121,6 +155,21 @@ public final class ControlEvaluator {
 			boolean compliant;
 			if (requiresAbsence(expected)) {
 				compliant = false;
+			} else if (isNonEmptyMode(expected)) {
+				// Presence / non-empty mode (build 39). We reached this
+				// branch only because actual is non-null AND non-empty
+				// (the actual==null||isEmpty branch above already handled
+				// the absent case), so a present value is compliant.
+				compliant = nonEmptyMatches(actual);
+			} else if (isNotEqualMode(expected)) {
+				// Not-equal mode (build 39): compliant iff the PRESENT
+				// value differs from the target. A missing/empty value
+				// never reaches here (the actual==null||isEmpty branch
+				// above skipped it) — so a missing value is NEVER scored
+				// as "not equal to X → pass". This preserves the cardinal
+				// unreadable-is-not-compliant rule for the advanced_setting
+				// path: absence is an exclusion (skip), never a pass.
+				compliant = notEqualMatches(actual, notEqualTarget(expected));
 			} else {
 				compliant = valuesMatch(actual, expected);
 			}
@@ -244,10 +293,15 @@ public final class ControlEvaluator {
 
 		for (BenchmarkProfile.Control control : controls) {
 			// Recipe-driven kinds scored here: vim_property and esxcli
-			// (build 36). Both carry their read spec in read_recipe and
-			// are read by VSphereClient.readByRecipe into propertyValues.
+			// (build 36) and vami_api (build 41). All carry their read spec
+			// in read_recipe and are read into propertyValues by the
+			// matching reader (VSphereClient.readByRecipe for vim_property /
+			// esxcli; VamiApiClient for vami_api). The same UNREADABLE
+			// sentinel + comparison-mode dispatch applies to all three — a
+			// failed/absent read is never folded into a pass.
 			if (!"vim_property".equals(control.parameterKind)
-					&& !"esxcli".equals(control.parameterKind)) {
+					&& !"esxcli".equals(control.parameterKind)
+					&& !"vami_api".equals(control.parameterKind)) {
 				continue;
 			}
 			// A recipe-driven control with no read_recipe is
@@ -333,6 +387,18 @@ public final class ControlEvaluator {
 	static boolean vimPropertyMatches(Object actual, String expected) {
 		if (actual == null || expected == null) return false;
 		String e = stripQuotes(expected.trim());
+		// Comparison modes (build 39) take precedence over the type-based
+		// dispatch below. The caller (evaluateVimProperties) has already
+		// short-circuited the null actual and the UNREADABLE sentinel, so
+		// any actual reaching here is a genuinely-present read value — a
+		// missing/unreadable value can NEVER reach the presence or
+		// not-equal helpers and so can never be folded into a pass.
+		if (isNonEmptyMode(expected)) {
+			return nonEmptyMatches(actual);
+		}
+		if (isNotEqualMode(expected)) {
+			return notEqualMatches(actual, notEqualTarget(expected));
+		}
 		if (actual instanceof Boolean) {
 			Boolean a = (Boolean) actual;
 			Boolean expectedBool = expectedAsBoolean(e);
@@ -377,6 +443,69 @@ public final class ControlEvaluator {
 		if ("true".equals(lower)) return Boolean.TRUE;
 		if ("false".equals(lower)) return Boolean.FALSE;
 		return null;
+	}
+
+	/**
+	 * True when {@code expected} selects the presence / non-empty
+	 * comparison mode (the {@link #EXPECTED_NON_EMPTY} sentinel,
+	 * case-insensitive, quotes stripped).
+	 */
+	static boolean isNonEmptyMode(String expected) {
+		if (expected == null) return false;
+		String e = stripQuotes(expected.trim());
+		return EXPECTED_NON_EMPTY.equalsIgnoreCase(e);
+	}
+
+	/**
+	 * True when {@code expected} selects the not-equal comparison mode
+	 * ({@code not:<value>}). The {@code <value>} part may be empty in the
+	 * raw string but {@link #notEqualTarget(String)} is what the matcher
+	 * uses.
+	 */
+	static boolean isNotEqualMode(String expected) {
+		if (expected == null) return false;
+		String e = stripQuotes(expected.trim());
+		return e.length() > EXPECTED_NOT_PREFIX.length()
+				&& e.regionMatches(true, 0, EXPECTED_NOT_PREFIX, 0,
+						EXPECTED_NOT_PREFIX.length());
+	}
+
+	/**
+	 * Extract the {@code <value>} target from a {@code not:<value>}
+	 * expected_value. Caller has already confirmed {@link #isNotEqualMode}.
+	 */
+	static String notEqualTarget(String expected) {
+		String e = stripQuotes(expected.trim());
+		return e.substring(EXPECTED_NOT_PREFIX.length()).trim();
+	}
+
+	/**
+	 * Presence / non-empty comparison. The caller guarantees {@code actual}
+	 * is the already-present read value (never null — the null / unreadable
+	 * cases are short-circuited before this is reached). Compliant iff the
+	 * stringified value is non-empty. (A {@code string_list_join} read of an
+	 * empty list already returns null upstream → UNREADABLE, so it never
+	 * reaches here; this guards the stray empty-string case.)
+	 */
+	static boolean nonEmptyMatches(Object actual) {
+		if (actual == null) return false;
+		return !String.valueOf(actual).trim().isEmpty();
+	}
+
+	/**
+	 * Not-equal comparison. The caller guarantees {@code actual} is the
+	 * already-present read value (never null / never the unreadable
+	 * sentinel — those are short-circuited upstream so a missing value is
+	 * NEVER treated as "not equal to X → compliant"). Compliant iff the
+	 * present value is NOT case-insensitively equal to {@code target}
+	 * (quotes stripped). A present-but-empty value is treated as differing
+	 * from a non-empty target.
+	 */
+	static boolean notEqualMatches(Object actual, String target) {
+		if (actual == null) return false;
+		String a = stripQuotes(String.valueOf(actual).trim());
+		String t = target == null ? "" : stripQuotes(target.trim());
+		return !a.equalsIgnoreCase(t);
 	}
 
 	static boolean valuesMatch(String actual, String expected) {
