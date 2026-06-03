@@ -31,6 +31,7 @@ from _compliance_normalize import (
     build_read_recipe,
     classify_parameter_kind,
     classify_security_policy_param,
+    classify_vim_reclass,
     classify_vsan_cluster_expected,
     classify_vsan_cluster_param,
     clean_expected_value,
@@ -149,6 +150,26 @@ def normalize(input_path: str, output_path: str) -> int:
                     vsan_expected_override = (
                         classify_vsan_cluster_expected(source_id))
 
+            # Coverage expansion (build 35) — existing-style vim_property
+            # reclassification keyed by canonical control_id. Promotes the
+            # row to vim_property, sets the unique parameter + read_recipe,
+            # and (when needed) overrides expected_value to an evaluator-
+            # comparable form. Applied AFTER the security-policy / vSAN
+            # classifiers so it can re-key DVS/DVPG controls those did not
+            # cover (reset-port, discovery-protocol, netflow, nioc,
+            # mac-learning, port-level-overrides) and the host/VM controls.
+            reclass_recipe = ""
+            reclass_expected = None
+            reclass_caveat = None
+            reclass = classify_vim_reclass(control_id)
+            if reclass is not None:
+                rc_param, rc_recipe, rc_expected, rc_caveat = reclass
+                parameter = rc_param
+                parameter_kind = "vim_property"
+                reclass_recipe = rc_recipe
+                reclass_expected = rc_expected
+                reclass_caveat = rc_caveat
+
             by_kind[parameter_kind] += 1
 
             # Collapse multi-line baseline cells to first non-empty
@@ -156,6 +177,8 @@ def normalize(input_path: str, output_path: str) -> int:
             expected = clean_expected_value(src.get("Baseline Suggested Value") or "")
             if vsan_expected_override is not None:
                 expected = vsan_expected_override
+            if reclass_expected is not None:
+                expected = reclass_expected
             value_type = infer_value_type(expected)
 
             priority_raw = src.get("Implementation Priority") or ""
@@ -165,6 +188,8 @@ def normalize(input_path: str, output_path: str) -> int:
 
             title = (src.get("Description/Title") or "").strip()
             description = (src.get("Discussion") or "").strip()
+            if reclass_caveat:
+                description = description + reclass_caveat
             remediation = collapse_remediation(
                 src.get("PowerCLI Command Remediation Example") or "")
 
@@ -181,7 +206,11 @@ def normalize(input_path: str, output_path: str) -> int:
                 "description": description,
                 "source_ref": f"{SOURCE_TOKEN}:{source_id}",
                 "remediation_text": remediation,
-                "read_recipe": build_read_recipe(parameter, parameter_kind),
+                "read_recipe": (
+                    reclass_recipe
+                    if reclass_recipe
+                    else build_read_recipe(parameter, parameter_kind)
+                ),
             })
 
         written = write_canonical(output_path, out_rows)

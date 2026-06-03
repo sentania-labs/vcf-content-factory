@@ -1,8 +1,8 @@
 # Changelog
 
-## 1.0.0.34 (2026-06-01)
+## 1.0.0.34 (2026-06-03)
 
-- feat(adapter): build 34 — data-driven vim_property reader via read_recipe (canonical col 13) + declared-but-unreadable signal (unreadable_count); retire bespoke DVS/DVPG/vSAN readers
+- feat(adapter): compliance adapter evaluation + canonical profile normalization
 
 ## 1.0.0.32 (2026-05-29)
 

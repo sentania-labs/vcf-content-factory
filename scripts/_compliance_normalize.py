@@ -559,6 +559,195 @@ def classify_vsan_cluster_expected(source_id: str) -> Optional[str]:
     return None
 
 
+# Coverage expansion (build 35) — existing-style vim_property
+# reclassifications for HostSystem, VirtualMachine, and DVS/DVPG.
+#
+# These are SCG controls the recon (scg89-audit-coverage-recon.md)
+# classified as reachable with an EXISTING read_recipe style
+# (scalar / bool / bool_policy). They ship in the SCG source CSV as
+# powercli_only / esxcli / manual_audit because the SCG remediation
+# column carries a PowerCLI/esxcli cmdlet — but the underlying state is
+# a plain vim25 property, so the data-driven reader can score them with
+# no Java per-control.
+#
+# Keyed by the CANONICAL control_id (prefix.slug) so the override is
+# version-stable: the same control_id is produced by both the 8.0 and
+# 9.0 normalizers from differing source IDs. When a control_id is in
+# this map, the normalizer promotes the row to parameter_kind=vim_property,
+# sets `parameter` to the unique vim path the evaluator looks up, sets
+# `read_recipe` to "<style>:<vim_path>", and overrides expected_value to
+# the form the Java evaluator's expectedAsBoolean() / scalar matcher can
+# compare (SCG vocabulary like "Enabled"/"Not Configured" does not
+# coerce reliably — see ControlEvaluator.expectedAsBoolean).
+#
+# A control_id is in this map ONLY when its expected state is exactly
+# comparable by the existing evaluator. NTP-source controls
+# (esx.timekeeping-sources / esx.time) are deliberately ABSENT: their
+# read_recipe (string_list_join of config.dateTimeInfo.ntpConfig.server)
+# reads correctly, but the SCG expected_value is the sentinel
+# "Site-Specific" — which the actual server list can never string-equal,
+# so reclassifying them would manufacture a permanent false "fail". They
+# need a presence/non-empty comparison mode the evaluator does not have
+# yet; they stay informational and are listed in UNAUDITED_CONTROLS.md.
+#
+# value: (parameter, read_recipe_style, vim_path, expected_override_or_None)
+_VIM_RECLASS_BY_CONTROL_ID: Dict[str, tuple] = {
+    # --- DistributedVirtualSwitch (pure CSV — collector already reads
+    #     vim props today) ---
+    "vds.network-reset-port": (
+        "config.policy.portConfigResetAtDisconnect",
+        "bool",
+        "config.policy.portConfigResetAtDisconnect",
+        "true",   # SCG "Enabled" -> reset-at-disconnect must be ON
+    ),
+    "vds.network-restrict-discovery-protocol": (
+        "config.linkDiscoveryProtocolConfig.operation",
+        "scalar",
+        "config.linkDiscoveryProtocolConfig.operation",
+        None,     # SCG expected "none" compares directly to the enum string
+    ),
+    "vds.network-restrict-netflow-usage": (
+        "config.defaultPortConfig.ipfixEnabled",
+        "bool_policy",
+        "config.defaultPortConfig.ipfixEnabled",
+        "false",  # SCG "Not Configured" -> ipfix (NetFlow) must be OFF
+    ),
+    "vds.network-nioc": (
+        "config.networkResourceManagementEnabled",
+        "bool",
+        "config.networkResourceManagementEnabled",
+        "true",   # SCG "Configured" -> NIOC must be ON (9.0 only)
+    ),
+    # --- DistributedVirtualPortgroup (pure CSV) ---
+    "dvpg.network-mac-learning": (
+        "config.defaultPortConfig.macManagementPolicy.macLearningPolicy.enabled",
+        "bool",
+        "config.defaultPortConfig.macManagementPolicy.macLearningPolicy.enabled",
+        "false",  # SCG "Disabled" -> MAC Learning must be OFF
+    ),
+    # MEDIUM / PARTIAL coverage: this single flag covers only the
+    # securityPolicy override of the ~7 per-port override flags the
+    # control intends. A `pass` here is NOT full-control fidelity. The
+    # partial-coverage caveat is appended to the description below and
+    # recorded in UNAUDITED_CONTROLS.md.
+    "dvpg.network-restrict-port-level-overrides": (
+        "config.policy.securityPolicyOverrideAllowed",
+        "bool",
+        "config.policy.securityPolicyOverrideAllowed",
+        "false",  # securityPolicyOverrideAllowed must be FALSE
+    ),
+    # --- HostSystem (needs collectHosts() vim_property extension; build 35) ---
+    "esx.lockdown-mode": (
+        "config.lockdownMode",
+        "scalar",
+        "config.lockdownMode",
+        None,     # SCG expected "lockdownNormal" compares to the enum string
+    ),
+    "esx.firewall-incoming-default": (
+        "config.firewall.defaultPolicy.incomingBlocked",
+        "bool",
+        "config.firewall.defaultPolicy.incomingBlocked",
+        "true",   # SCG "Enabled" (default-block firewall) -> incomingBlocked ON
+    ),
+    "esx.secureboot-enforcement": (
+        "config.encryptionState.requireSecureBoot",
+        "bool",
+        "config.encryptionState.requireSecureBoot",
+        "true",
+    ),
+    "esx.tpm-configuration": (
+        "config.encryptionState.mode",
+        "scalar",
+        "config.encryptionState.mode",
+        None,     # SCG expected "TPM" compares to HostEncryptionState.mode enum
+    ),
+    "esx.tpm-trusted-binaries": (
+        "config.encryptionState.requireExecuteInstalledOnly",
+        "bool",
+        "config.encryptionState.requireExecuteInstalledOnly",
+        "true",   # 9.0 only (execInstalledOnly enforcement)
+    ),
+    # --- VirtualMachine (needs collectVms() vim_property extension; build 35) ---
+    "vm.secure-boot": (
+        "config.bootOptions.efiSecureBootEnabled",
+        "bool",
+        "config.bootOptions.efiSecureBootEnabled",
+        "true",
+    ),
+    "vm.vmotion-encrypted": (
+        "config.migrateEncryption",
+        "scalar",
+        "config.migrateEncryption",
+        None,     # SCG expected "required" compares to MigrateEncryptionMode enum
+    ),
+    "vm.ft-encrypted": (
+        "config.ftEncryptionMode",
+        "scalar",
+        "config.ftEncryptionMode",
+        None,     # SCG expected "ftEncryptionRequired" compares to the enum
+    ),
+    "vm.log-enable": (
+        "config.flags.enableLogging",
+        "bool",
+        "config.flags.enableLogging",
+        "true",
+    ),
+    # PARTIAL: scalar config.version returns "vmx-NN". The evaluator does
+    # exact string equality, so this scores compliant ONLY when the VM is
+    # at exactly the SCG baseline version string ("vmx-19"), not "19 or
+    # newer". Recorded as exact-match coverage in UNAUDITED_CONTROLS.md.
+    "vm.virtual-hardware": (
+        "config.version",
+        "scalar",
+        "config.version",
+        None,     # compares to SCG baseline ("vmx-19" / "vmx-21") verbatim
+    ),
+}
+
+
+# Partial-coverage caveat appended to the control description so a `pass`
+# is never mistaken for full-control fidelity. Keyed by control_id.
+_VIM_RECLASS_DESCRIPTION_CAVEAT: Dict[str, str] = {
+    "dvpg.network-restrict-port-level-overrides": (
+        " [PARTIAL COVERAGE: this adapter checks only the "
+        "securityPolicyOverrideAllowed flag (1 of ~7 per-port override "
+        "flags the full control intends — block/teaming/vlan/shaping/"
+        "vendorConfig/ipfix/trafficFilter overrides are NOT checked). A "
+        "pass means the security-policy override is correctly disabled, "
+        "not that the whole control is satisfied. See UNAUDITED_CONTROLS.md.]"
+    ),
+    "vm.virtual-hardware": (
+        " [PARTIAL COVERAGE: this adapter reads config.version (e.g. "
+        "\"vmx-21\") and compares it for exact equality to the SCG "
+        "baseline string. It does NOT evaluate \"version N or newer\"; a "
+        "VM at a higher-than-baseline hardware version will read as "
+        "non-compliant. See UNAUDITED_CONTROLS.md.]"
+    ),
+}
+
+
+def classify_vim_reclass(control_id: str):
+    """If ``control_id`` is an existing-style vim_property reclassification
+    (build 35 coverage expansion), return
+    ``(parameter, read_recipe, expected_override_or_None, description_caveat_or_None)``.
+    Otherwise return ``None``.
+
+    The normalizer applies this AFTER the security-policy and vSAN
+    classifiers and BEFORE writing the row: it overrides ``parameter``,
+    forces ``parameter_kind=vim_property``, sets ``read_recipe``, and (when
+    an override is given) replaces ``expected_value`` with a form the Java
+    evaluator can compare. The description caveat is appended in-place when
+    present so the partial-coverage controls self-document.
+    """
+    entry = _VIM_RECLASS_BY_CONTROL_ID.get(control_id)
+    if entry is None:
+        return None
+    parameter, style, vim_path, expected_override = entry
+    read_recipe = f"{style}:{vim_path}"
+    caveat = _VIM_RECLASS_DESCRIPTION_CAVEAT.get(control_id)
+    return (parameter, read_recipe, expected_override, caveat)
+
+
 def classify_vsan_cluster_param(source_id: str,
                                 source_title: str) -> Optional[str]:
     """If the row is one of the vSAN cluster controls that the plain

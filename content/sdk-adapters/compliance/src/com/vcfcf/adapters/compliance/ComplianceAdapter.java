@@ -256,7 +256,9 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 					// (even at 0) so the world contract is uniform and a
 					// dashboard tile reads "0 = full coverage". This is
 					// NOT folded into any score.
-					int totalUnreadable = dvsStats.unreadable
+					int totalUnreadable = hostStats.unreadable
+							+ vmStats.unreadable
+							+ dvsStats.unreadable
 							+ dvpgStats.unreadable
 							+ clusterStats.unreadable;
 					world.addData("Summary|total_unreadable_controls",
@@ -561,9 +563,23 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				advSettings = new java.util.HashMap<>();
 			}
 
-			ControlEvaluator.ComplianceResult cr =
+			ControlEvaluator.ComplianceResult advCr =
 					ControlEvaluator.evaluateControls(
 							hostControls, advSettings, hostName);
+
+			// Coverage expansion (build 35): HostSystem vim_property
+			// controls (lockdown mode, default firewall policy, Secure
+			// Boot / TPM encryption state, ...) read data-driven via the
+			// read_recipe column, the SAME generic reader DVS/DVPG/cluster
+			// already use. Without this the host vim_property recipes load
+			// in the CSV but never evaluate. Reflection-tolerant; a recipe
+			// that resolves to nothing surfaces as the explicit unreadable
+			// outcome, never a sentinel pass.
+			ControlEvaluator.ComplianceResult vimCr =
+					evaluateVimForResource(hostInfo.moRef, hostControls,
+							hostName);
+			ControlEvaluator.ComplianceResult cr = mergeResults(advCr, vimCr);
+			stats.unreadable += cr.unreadableCount;
 
 			stats.total++;
 			// Only fold a host into the world average if its
@@ -628,9 +644,19 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				extra = new java.util.HashMap<>();
 			}
 
-			ControlEvaluator.ComplianceResult cr =
+			ControlEvaluator.ComplianceResult advCr =
 					ControlEvaluator.evaluateControls(
 							vmControls, extra, vm.name);
+
+			// Coverage expansion (build 35): VirtualMachine vim_property
+			// controls (Secure Boot, vMotion/FT encryption mode, diagnostic
+			// logging) read data-driven via read_recipe, additive to the
+			// existing extraConfig advanced_setting path. Same generic
+			// reader + unreadable contract as hosts.
+			ControlEvaluator.ComplianceResult vimCr =
+					evaluateVimForResource(vm.moRef, vmControls, vm.name);
+			ControlEvaluator.ComplianceResult cr = mergeResults(advCr, vimCr);
+			stats.unreadable += cr.unreadableCount;
 
 			stats.total++;
 			if (cr.totalCount > 0) {
@@ -1030,6 +1056,84 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	}
 
 	/**
+	 * Coverage expansion (build 35) — evaluate the {@code vim_property}
+	 * slice of a resource's controls via the SAME generic recipe reader
+	 * DVS / DVPG / cluster already use, so HostSystem and VirtualMachine
+	 * gain vim_property coverage by CSV edit alone going forward.
+	 *
+	 * <p>Returns an empty (zero-count) result — never null — when the
+	 * slice carries no evaluable vim_property controls or the bulk read
+	 * fails. A read failure is logged and folded to the empty result
+	 * rather than a sentinel; it does NOT abort the resource's
+	 * advanced_setting evaluation (that already ran). A recipe that
+	 * resolves to nothing on an individual control surfaces as the
+	 * explicit unreadable outcome inside
+	 * {@link ControlEvaluator#evaluateVimProperties}, never a pass.
+	 *
+	 * <p>Reflection-tolerant throughout: {@link VSphereClient#readVimProperties}
+	 * walks the vim25 graph with PropertyCollector + reflective getters and
+	 * never casts to a concrete subclass; a missing accessor yields the
+	 * UNREADABLE sentinel.
+	 */
+	private ControlEvaluator.ComplianceResult evaluateVimForResource(
+			com.vmware.vim25.ManagedObjectReference moRef,
+			java.util.List<BenchmarkProfile.Control> controls,
+			String resourceName) {
+		int evaluableCount = countEvaluable(controls, "vim_property");
+		if (evaluableCount == 0) {
+			return emptyResult(resourceName);
+		}
+		java.util.Map<String, Object> values;
+		try {
+			values = vsphere.readVimProperties(moRef, controls);
+		} catch (Exception e) {
+			logWarn("Failed to read vim properties for " + resourceName
+					+ ": " + e.getMessage()
+					+ " — vim_property controls skipped this cycle "
+					+ "(advanced_setting results preserved)");
+			return emptyResult(resourceName);
+		}
+		return ControlEvaluator.evaluateVimProperties(
+				controls, values, resourceName, VSphereClient.UNREADABLE);
+	}
+
+	/** Zero-count, score=100 sentinel result (no controls evaluated). */
+	private static ControlEvaluator.ComplianceResult emptyResult(
+			String resourceName) {
+		return new ControlEvaluator.ComplianceResult(
+				resourceName, 0, 0, 0, 0, 100.0,
+				new java.util.ArrayList<ControlEvaluator.ControlResult>());
+	}
+
+	/**
+	 * Combine the advanced_setting result and the vim_property result for
+	 * one resource into a single {@link ControlEvaluator.ComplianceResult}.
+	 *
+	 * <p>Counts sum; the per-control raw list concatenates; the score is
+	 * recomputed from the combined pass/total so a host with both kinds of
+	 * controls reports one honest score over its full evaluable surface.
+	 * The zero-divisor contract is preserved: when neither slice evaluated
+	 * anything ({@code total==0}) the score is 100.0 and the caller's
+	 * {@code totalCount>0} gate keeps it out of fleet averages. unreadable
+	 * counts sum and stay excluded from pass/fail/total — the
+	 * "unreadable is not compliant" guarantee carries through the merge.
+	 */
+	private static ControlEvaluator.ComplianceResult mergeResults(
+			ControlEvaluator.ComplianceResult a,
+			ControlEvaluator.ComplianceResult b) {
+		int pass = a.passCount + b.passCount;
+		int fail = a.failCount + b.failCount;
+		int total = a.totalCount + b.totalCount;
+		int unreadable = a.unreadableCount + b.unreadableCount;
+		java.util.List<ControlEvaluator.ControlResult> merged =
+				new java.util.ArrayList<>(a.controlResults);
+		merged.addAll(b.controlResults);
+		double score = total > 0 ? ((double) pass / total) * 100.0 : 100.0;
+		return new ControlEvaluator.ComplianceResult(
+				a.hostname, pass, fail, total, unreadable, score, merged);
+	}
+
+	/**
 	 * Count controls in {@code slice} of the given {@code kind} that are
 	 * actually EVALUABLE. For {@code vim_property} that means the control
 	 * carries a non-empty {@code read_recipe} (column 13) —
@@ -1084,6 +1188,7 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 		int scored;
 		double scoreSum;
 		int belowThreshold;
+		int unreadable;
 	}
 
 	private static final class VmStats {
@@ -1091,6 +1196,7 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 		int scored;
 		double scoreSum;
 		int belowThreshold;
+		int unreadable;
 	}
 
 	private static final class VCenterStats {
