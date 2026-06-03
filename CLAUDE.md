@@ -62,13 +62,13 @@ ends up holding all the context.
 | Agent | Posture | Writes to | Spawn when |
 |---|---|---|---|
 | `ops-recon` | Read-only against live Ops | `context/investigations/recon_log.md` on request | **Before every authoring task.** Does this exist? Is it enabled? Does a built-in cover it? |
-| `supermetric-author` | Author | `supermetrics/` | After recon. One SM per invocation. |
-| `customgroup-author` | Author | `customgroups/` | User needs a dynamic group. Static is out of scope. |
-| `view-author` | Author | `views/` | User wants a list view. Blocks if upstream SM/group missing. |
-| `dashboard-author` | Author | `dashboards/` | User wants a dashboard. Blocks if upstream views missing. |
-| `symptom-author` | Author | `symptoms/` | After recon confirms no existing symptom fits. |
-| `alert-author` | Author | `alerts/`, `recommendations/` | After recon, **and** required symptoms exist. |
-| `report-author` | Author | `reports/` | User wants a report. Blocks if upstream views missing. |
+| `supermetric-author` | Author | `content/supermetrics/` | After recon. One SM per invocation. |
+| `customgroup-author` | Author | `content/customgroups/` | User needs a dynamic group. Static is out of scope. |
+| `view-author` | Author | `content/views/` | User wants a list view. Blocks if upstream SM/group missing. |
+| `dashboard-author` | Author | `content/dashboards/` | User wants a dashboard. Blocks if upstream views missing. |
+| `symptom-author` | Author | `content/symptoms/` | After recon confirms no existing symptom fits. |
+| `alert-author` | Author | `content/alerts/`, `content/recommendations/` | After recon, **and** required symptoms exist. |
+| `report-author` | Author | `content/reports/` | User wants a report. Blocks if upstream views missing. |
 | `api-explorer` | Research | `context/`, `docs/` | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
 | `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `vcfops_*/`. |
 | `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. |
@@ -76,7 +76,8 @@ ends up holding all the context.
 | `qa-tester` | Testing | `/tmp/` | Acceptance-test a built zip. Spawn after `content-packager`. |
 | `api-cartographer` | Research | `context/api-maps/`, `docs/` | New external API for an MP. |
 | `mp-designer` | Design | `designs/` | New MP. Wizard interview against API map. |
-| `mp-author` | Author | `managementpacks/` | After `mp-designer` produces approved design. |
+| `mp-author` | Author | `content/managementpacks/` | After `mp-designer` produces approved design. **Tier 1** MPB YAML spec. |
+| `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` | After `mp-designer` produces approved design. **Tier 2** Java SDK adapter source. The Java sibling to `mp-author`. **Only** agent that edits adapter Java. |
 
 Agent prompts under `.claude/agents/` are authoritative for each
 agent's behavior. If "Spawn when" above ever conflicts with a
@@ -229,6 +230,16 @@ path is first-class, not a sad fallback.
   appear in describe.xml or template.json. Events are stripped from
   pak builds (runtime format unknown — TOOLSET GAP). See
   `context/mpb/mpb_pak_structural_reference.md`.
+- **Management pack (Tier 2 Java SDK):** clarify target API →
+  cartographer → designer → **`sdk-adapter-author`** (not `mp-author`;
+  Tier 2 is Java source, not MPB YAML) → `validate-sdk` (cheap loop) →
+  `build-sdk` → `pak-compare` against closest reference (zero BLOCKING
+  is the gate) → confirm → install. There is no render-export /
+  push-design / MPB UI Verify step — those are Tier 1 (YAML descriptor)
+  only. The cheap loop here is `validate-sdk` (compile-check); the
+  expensive loop is the pak build + install cycle. Same discipline:
+  exhaust `validate-sdk` before building a pak. The compliance adapter
+  (`content/sdk-adapters/compliance/`) is the reference implementation.
 - **Toolset gap:** punt / api-explorer / tooling → fix → re-invoke.
 - **After tooling changes:** if `tooling` modifies anything in
   `vcfops_packaging/templates/`, `vcfops_packaging/builder.py`, or
