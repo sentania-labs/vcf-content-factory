@@ -454,14 +454,21 @@ final class EsxcliSoapClient {
 
 	private static byte[] drain(InputStream is) throws Exception {
 		if (is == null) return null;
-		ByteArrayOutputStream bos = new ByteArrayOutputStream();
-		byte[] buf = new byte[8192];
-		int n;
-		while ((n = is.read(buf)) >= 0) {
-			bos.write(buf, 0, n);
+		try {
+			ByteArrayOutputStream bos = new ByteArrayOutputStream();
+			byte[] buf = new byte[8192];
+			int n;
+			while ((n = is.read(buf)) >= 0) {
+				bos.write(buf, 0, n);
+			}
+			return bos.toByteArray();
+		} finally {
+			// Close even if the read throws mid-stream, so the underlying
+			// connection's input is released rather than left dangling.
+			try {
+				is.close();
+			} catch (Exception ignored) {}
 		}
-		is.close();
-		return bos.toByteArray();
 	}
 
 	private static Document parseXml(String xml) {
