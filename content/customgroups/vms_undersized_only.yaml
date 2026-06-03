@@ -1,0 +1,15 @@
+name: "[VCF Content Factory] VMs - Undersized Only"
+description: >
+  Dynamic group of VMs currently flagged undersized by VCF Ops right-sizing
+  analysis (built-in metric summary|undersized == 1). Exists to scope the
+  Undersized VMs list view to undersized-only membership — the existing
+  instance group "Right-Sizing Candidates" is too broad (oversized OR
+  undersized OR idle). Recon confirmed 0 VMs undersized at authoring time;
+  group will populate as VMs are flagged.
+type: Environment
+auto_resolve_membership: true
+rules:
+  - resource_kind: VirtualMachine
+    adapter_kind: VMWARE
+    stat:
+      - { key: "summary|undersized", op: EQ, value: 1 }

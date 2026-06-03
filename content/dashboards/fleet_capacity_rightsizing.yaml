@@ -1,0 +1,233 @@
+id: 762fc025-1609-4e9c-9612-a5d0232b77bc
+name: "[VCF Content Factory] Fleet Capacity & Rightsizing"
+description: >
+  Fleet-level capacity and rightsizing dashboard built entirely on built-in
+  VCF Ops demand-model metrics — no super metrics required. Top-down layout:
+  a vSphere World scoreboard summarising cluster/host/VM counts and reclaimable
+  resources; a per-cluster capacity table that doubles as the primary selector;
+  three side-by-side heatmaps for CPU, memory, and storage pressure; oversized
+  and undersized VM lists (filtered to the selected cluster); and a datastore
+  reclaimable-space list (snapshots + orphaned disk). Selecting a cluster in
+  the capacity table filters the VM and datastore panels fleet-wide by default.
+
+released: false
+version: "1.0.0"
+
+widgets:
+
+  # ── Band A · Scoreboard — Fleet Summary  (y:0, x:0, w:12, h:2) ─────────────
+  # Subject = vSphere World singleton. Self-provider pinned to world so the
+  # scoreboard queries immediately on load without requiring an interaction.
+  # All seven metric keys are built-in on vSphere World (demand model confirmed).
+  # color_method: 1 = no color (informational KPI tiles).
+
+  - id: fleet_summary
+    type: Scoreboard
+    title: "Fleet Summary"
+    coords: {x: 0, y: 0, w: 12, h: 2}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    box_columns: 7
+    metrics:
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: summary|total_number_clusters
+        metric_name: "Clusters"
+        label: "Clusters"
+        color_method: 1
+
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: summary|total_number_hosts
+        metric_name: "Hosts"
+        label: "Hosts"
+        color_method: 1
+
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: summary|total_number_vms
+        metric_name: "VMs"
+        label: "VMs"
+        color_method: 1
+
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: summary|number_poweredOff_vms
+        metric_name: "Powered-off VMs"
+        label: "Powered-off VMs"
+        color_method: 1
+
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: compute_reclaimable|oversized|oversized_vcpus_toberemoved
+        metric_name: "Reclaimable vCPU"
+        label: "Reclaimable vCPU"
+        color_method: 1
+
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: compute_reclaimable|oversized|oversized_memory_toberemoved
+        metric_name: "Reclaimable Mem (GB)"
+        label: "Reclaimable Mem (GB)"
+        color_method: 1
+
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: cost|potential_savings|oversized_vms
+        metric_name: "Potential $ Savings"
+        label: "Potential $ Savings"
+        color_method: 1
+
+  # ── Band B · View — Cluster Capacity Breakdown  (y:2, x:0, w:12, h:4) ─────
+  # PRIMARY SELECTOR. Sorted ascending by capacity-remaining-pct so the most
+  # constrained cluster appears first. Sort is set at the view definition level
+  # by the view author (sort cannot be overridden at dashboard widget level).
+  # Selection drives Bands D-1, D-2, and E via interactions below.
+
+  - id: cluster_capacity_view
+    type: View
+    title: "Cluster Capacity Breakdown"
+    coords: {x: 0, y: 2, w: 12, h: 4}
+    view: "[VCF Content Factory] Cluster Capacity Breakdown"
+
+  # ── Band C · Heatmaps — CPU / Memory / Storage  (y:6, h:4) ─────────────────
+  # Three heatmaps side-by-side, each showing all ClusterComputeResource objects.
+  # No group_by specified → renderer emits self-grouping block (build 29 fix);
+  # an empty groupBy JSON object would crash HeatMapAction.initParam.
+  # All three are self-provider fleet-wide; not driven by the cluster selector.
+  # Color thresholds: green (<50%) → yellow (<70%) → orange (<85%) → red (≥85%).
+
+  - id: cpu_heatmap
+    type: Heatmap
+    title: "CPU Capacity Pressure by Cluster"
+    coords: {x: 0, y: 6, w: 4, h: 4}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    mode: all
+    depth: 10
+    configs:
+      - name: "CPU Usage %"
+        adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        size_by:
+          metric_key: cpu|demand|usableCapacity
+          label: "Usable CPU Capacity"
+        color_by:
+          metric_key: cpu|capacity_usagepct_average
+          label: "CPU Usage %"
+        group_by: {}
+        color:
+          min_value: 0
+          thresholds:
+            values: [0, 50, 70, 85]
+            colors: ["#74B43B", "#ECC33E", "#F5A623", "#DE3F30"]
+        solid_coloring: false
+        focus_on_groups: false
+
+  - id: mem_heatmap
+    type: Heatmap
+    title: "Memory Capacity Pressure by Cluster"
+    coords: {x: 4, y: 6, w: 4, h: 4}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    mode: all
+    depth: 10
+    configs:
+      - name: "Memory Usage %"
+        adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        size_by:
+          metric_key: mem|demand|usableCapacity
+          label: "Usable Memory Capacity"
+        color_by:
+          metric_key: mem|host_usagePct
+          label: "Memory Usage %"
+        group_by: {}
+        color:
+          min_value: 0
+          thresholds:
+            values: [0, 50, 70, 85]
+            colors: ["#74B43B", "#ECC33E", "#F5A623", "#DE3F30"]
+        solid_coloring: false
+        focus_on_groups: false
+
+  - id: storage_heatmap
+    type: Heatmap
+    title: "Storage Capacity Pressure by Cluster"
+    coords: {x: 8, y: 6, w: 4, h: 4}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    mode: all
+    depth: 10
+    configs:
+      - name: "Disk Usage"
+        adapter_kind: VMWARE
+        resource_kind: ClusterComputeResource
+        size_by:
+          metric_key: diskspace|total_capacity
+          label: "Total Disk Capacity"
+        color_by:
+          metric_key: diskspace|total_usage
+          label: "Disk Usage"
+        group_by: {}
+        color:
+          min_value: 0
+          thresholds:
+            values: [0, 50, 70, 85]
+            colors: ["#74B43B", "#ECC33E", "#F5A623", "#DE3F30"]
+        solid_coloring: false
+        focus_on_groups: false
+
+  # ── Band D-1 · View — Oversized VMs  (y:10, x:0, w:6, h:4) ────────────────
+  # Driven by cluster_capacity_view selection. Default (no selection) = fleet-wide.
+  # Sort by reclaimable vCPUs descending is set in the view definition.
+
+  - id: oversized_vms_view
+    type: View
+    title: "Oversized VMs — Reclaimable"
+    coords: {x: 0, y: 10, w: 6, h: 4}
+    view: "[VCF Content Factory] Oversized VMs — Reclaimable"
+
+  # ── Band D-2 · View — Undersized VMs  (y:10, x:6, w:6, h:4) ───────────────
+  # Driven by cluster_capacity_view selection. Default (no selection) = fleet-wide.
+  # Sort by vCPUs-to-add descending is set in the view definition.
+
+  - id: undersized_vms_view
+    type: View
+    title: "Undersized VMs — Add Resources"
+    coords: {x: 6, y: 10, w: 6, h: 4}
+    view: "[VCF Content Factory] Undersized VMs — Add Resources"
+
+  # ── Band E · View — Datastore Reclaimable Space  (y:14, x:0, w:12, h:4) ───
+  # Driven by cluster_capacity_view selection. Default (no selection) = fleet-wide.
+  # Sort by snapshot space descending is set in the view definition.
+
+  - id: datastore_reclaimable_view
+    type: View
+    title: "Datastore Reclaimable Space"
+    coords: {x: 0, y: 14, w: 12, h: 4}
+    view: "[VCF Content Factory] Datastore Reclaimable Space"
+
+interactions:
+  # Band B (Cluster Capacity Breakdown) selection drives Band D-1 (Oversized VMs).
+  - from: cluster_capacity_view
+    to: oversized_vms_view
+    type: resourceId
+
+  # Band B selection drives Band D-2 (Undersized VMs).
+  - from: cluster_capacity_view
+    to: undersized_vms_view
+    type: resourceId
+
+  # Band B selection drives Band E (Datastore Reclaimable Space).
+  - from: cluster_capacity_view
+    to: datastore_reclaimable_view
+    type: resourceId

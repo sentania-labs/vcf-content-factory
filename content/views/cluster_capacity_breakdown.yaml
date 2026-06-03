@@ -1,0 +1,48 @@
+id: 0a1c11af-222b-41e0-af4c-dd324d7dacc0
+name: "[VCF Content Factory] Cluster Capacity Breakdown"
+description: >
+  Per-cluster CPU, memory, and storage capacity breakdown using the demand
+  model (OnlineCapacityAnalytics). One row per ClusterComputeResource, sorted
+  ascending by overall capacity-remaining percentage so the most-constrained
+  cluster floats to the top. Acts as the primary selector in the Fleet
+  Capacity & Rightsizing dashboard (Band B).
+subject:
+  adapter_kind: VMWARE
+  resource_kind: ClusterComputeResource
+columns:
+  - attribute: OnlineCapacityAnalytics|cpu|demand|capacityRemaining
+    display_name: "CPU Remaining (MHz)"
+  - attribute: cpu|demand|usableCapacity
+    display_name: "CPU Usable (MHz)"
+  - attribute: cpu|capacity_usagepct_average
+    display_name: "CPU Usage %"
+  - attribute: OnlineCapacityAnalytics|cpu|demand|timeRemaining
+    display_name: "CPU Time Remaining (days)"
+  - attribute: OnlineCapacityAnalytics|mem|demand|capacityRemaining
+    display_name: "Mem Remaining (GB)"
+    unit: "gb"
+  - attribute: mem|demand|usableCapacity
+    display_name: "Mem Usable (GB)"
+    unit: "gb"
+  - attribute: mem|host_usagePct
+    display_name: "Mem Usage %"
+  - attribute: OnlineCapacityAnalytics|mem|demand|timeRemaining
+    display_name: "Mem Time Remaining (days)"
+  - attribute: OnlineCapacityAnalytics|diskspace|demand|capacityRemaining
+    display_name: "Disk Remaining (GB)"
+  - attribute: diskspace|total_capacity
+    display_name: "Disk Total (GB)"
+  - attribute: diskspace|total_usage
+    display_name: "Disk Used (GB)"
+  - attribute: OnlineCapacityAnalytics|diskspace|demand|timeRemaining
+    display_name: "Disk Time Remaining (days)"
+  - attribute: OnlineCapacityAnalytics|capacityRemainingPercentage
+    display_name: "Capacity Remaining %"
+    yellow_bound: 30
+    orange_bound: 20
+    red_bound: 10
+    ascending_range: true
+  - attribute: OnlineCapacityAnalytics|timeRemaining
+    display_name: "Time Remaining (days)"
+released: false
+version: "1.0.0"

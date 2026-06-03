@@ -1,0 +1,42 @@
+id: 4b12808a-1002-4146-b16f-38fc999f3634
+name: "[VCF Content Factory] Undersized VMs — Add Resources"
+description: >
+  Per-VM resource-addition list for undersized virtual machines. Shows the
+  parent cluster, vCPUs to add, and memory to add (KB source, displayed in GB)
+  for each VM flagged undersized by the VCF Ops capacity engine
+  (summary|undersized == 1). Intended as Band D-2 of the Fleet Capacity &
+  Rightsizing dashboard; receives ClusterComputeResource resourceId from the
+  upstream cluster-selector widget to scope the list to the selected cluster.
+  Sort by vCPUs to Add descending (largest need first) — apply at the dashboard
+  widget level (sort_by_column: "vCPUs to Add", sort_by_dir: desc);
+  view-level default sort is not a loader-supported field.
+  View will be empty until at least one VM is flagged undersized; this is
+  expected (recon confirmed 0 undersized VMs at authoring time).
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+
+customgroup: "[VCF Content Factory] VMs - Undersized Only"
+
+summary: false
+
+columns:
+  # Parent cluster — same relationship property used in the sibling
+  # oversized_vms_reclaimable.yaml and vm_rightsizing_candidates.yaml.
+  - attribute: summary|parentCluster
+    display_name: "Cluster"
+    unit: ""
+
+  # vCPUs the capacity engine recommends adding. Primary sort column.
+  - attribute: summary|undersized|vcpus
+    display_name: "vCPUs to Add"
+
+  # Memory to add. Source unit is KB; unit: "gb" instructs the renderer
+  # to emit preferredUnitId="gb" so VCF Ops converts KB→GB natively.
+  # Same pattern as oversized_vms_reclaimable.yaml memory column.
+  - attribute: summary|undersized|memory
+    display_name: "Memory to Add (GB)"
+    unit: "gb"
+
+released: false
+version: "1.0.0"

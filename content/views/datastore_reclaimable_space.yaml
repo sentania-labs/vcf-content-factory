@@ -1,0 +1,49 @@
+id: faabf549-64c8-4003-afcc-8966f18f3eb6
+name: "[VCF Content Factory] Datastore Reclaimable Space"
+description: >
+  Per-datastore capacity and reclaimable-space list. Columns cover total
+  capacity, used percentage, free space, snapshot space consumed, and
+  orphaned-disk space — the two primary rightsizing reclaim buckets. All
+  capacity metrics are KB-native in the VMWARE adapter; unit: "gb" instructs
+  the renderer to emit preferredUnitId="gb" so VCF Ops converts natively.
+  Sort by Snapshot Space descending (largest snapshot consumers first) —
+  apply at the dashboard widget level. Part of the Fleet Capacity &
+  Rightsizing dashboard (Band E).
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: Datastore
+
+summary: false
+
+columns:
+  # Total datastore capacity. KB-native in VMWARE adapter; emit as GB.
+  - attribute: capacity|total_capacity
+    display_name: "Total (GB)"
+    unit: "gb"
+
+  # Used percentage. Source is already a ratio/percent; no unit conversion.
+  - attribute: capacity|usedSpacePct
+    display_name: "Used %"
+    unit: "percent"
+
+  # Free / available space. KB-native; emit as GB.
+  - attribute: capacity|available_space
+    display_name: "Free (GB)"
+    unit: "gb"
+
+  # Snapshot space consumed. KB-native; emit as GB.
+  # Primary sort column — apply sort_by_column at the dashboard widget level.
+  - attribute: diskspace|snapshot
+    display_name: "Snapshot Space (GB)"
+    unit: "gb"
+
+  # Orphaned-disk reclaimable space. KB-native; emit as GB.
+  # Confirmed present in reference: reclaimable|orphaned_disk|diskspace
+  # with preferredUnitId="tb" in the VOA Datastore report — same KB source.
+  - attribute: reclaimable|orphaned_disk|diskspace
+    display_name: "Orphaned Disk (GB)"
+    unit: "gb"
+
+released: false
+version: "1.0.0"

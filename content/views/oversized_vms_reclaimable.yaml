@@ -1,0 +1,42 @@
+id: 9d8d048c-6472-4175-ae90-71d36d8bc70b
+name: "[VCF Content Factory] Oversized VMs — Reclaimable"
+description: >
+  Per-VM reclaimable-resource list for oversized virtual machines. Shows the
+  parent cluster, vCPUs to remove, and memory to reclaim (KB source, displayed
+  in GB) for each VM flagged oversized by the VCF Ops capacity engine
+  (summary|oversized == 1). Intended as Band D-1 of the Fleet Capacity &
+  Rightsizing dashboard; receives ClusterComputeResource resourceId from the
+  upstream cluster-selector widget to scope the list to the selected cluster.
+  Sort by vCPUs to Remove descending (biggest reclaim first) — apply at the
+  dashboard widget level (sort_by_column: "vCPUs to Remove",
+  sort_by_dir: desc); view-level default sort is not a loader-supported field.
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+
+customgroup: "[VCF Content Factory] VMs - Oversized Only"
+
+summary: false
+
+columns:
+  # Parent cluster — summary|parentCluster is the standard relationship
+  # property the VMWARE adapter populates for every VM; used in the sibling
+  # vm_rightsizing_candidates.yaml (same form confirmed working).
+  - attribute: summary|parentCluster
+    display_name: "Cluster"
+    unit: ""
+
+  # vCPUs the capacity engine recommends removing. Primary sort column.
+  - attribute: summary|oversized|vcpus
+    display_name: "vCPUs to Remove"
+
+  # Memory to reclaim. Source unit is KB; unit: "gb" instructs the renderer
+  # to emit preferredUnitId="gb" so VCF Ops converts KB→GB natively.
+  # Same pattern as OnlineCapacityAnalytics|mem|demand|capacityRemaining in
+  # cluster_capacity_breakdown.yaml.
+  - attribute: summary|oversized|memory
+    display_name: "Memory to Remove (GB)"
+    unit: "gb"
+
+released: false
+version: "1.0.0"

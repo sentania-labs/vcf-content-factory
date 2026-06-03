@@ -1,0 +1,14 @@
+name: "[VCF Content Factory] VMs - Oversized Only"
+description: >
+  Dynamic group of VMs currently flagged oversized by VCF Ops right-sizing
+  analysis (built-in metric summary|oversized == 1). Exists to scope the
+  Oversized VMs list view to oversized-only membership — the existing
+  instance group "Right-Sizing Candidates" is too broad (oversized OR
+  undersized OR idle). Recon confirmed 2 VMs oversized at authoring time.
+type: Environment
+auto_resolve_membership: true
+rules:
+  - resource_kind: VirtualMachine
+    adapter_kind: VMWARE
+    stat:
+      - { key: "summary|oversized", op: EQ, value: 1 }
