@@ -791,6 +791,181 @@ _ESXCLI_RECLASS_BY_CONTROL_ID: Dict[str, tuple] = {
         "true",
         None,
     ),
+
+    # ----------------------------------------------------------------
+    # Build 37 — esxcli sprint section C: SSH-daemon hardening, account
+    # shell access, key-persistence, syslog log-filter, TLS profile.
+    #
+    # Every recipe below is derived VERBATIM from the SCG SOURCE
+    # "PowerCLI Command Assessment" column (vmware_scg_8.0.csv /
+    # vmware_scg_9.0.csv) — the exact namespace.command and the exact
+    # PascalCase field the audit command selects. We do NOT guess; a
+    # control whose audit command is not a clean single-value esxcli
+    # read is HELD (see the held-controls block after this map).
+    #
+    # Two recipe shapes are used:
+    #   esxcli:<ns.command>:<Field>                       (get-struct)
+    #   esxcli:<ns.command>:<Field>[<Selector>=<Value>]   (list row)
+    # The list-row shape (build-37 EsxcliSoapClient.readRowField) selects
+    # the first ArrayOfDataObject row whose <Selector> field equals
+    # <Value> and returns that row's <Field>. UNREADABLE on miss — never
+    # a false pass (build-35 contract).
+    # ----------------------------------------------------------------
+
+    # --- SSH daemon hardening (8.0). One bulk command
+    #     `system.ssh.server.config.list` returns Key/Value rows; each
+    #     control selects its row by Key and reads Value. Cached per host
+    #     so all 11 controls cost ONE ExecuteSoap. The expected_value is
+    #     SCG's own (clean single values: no/yes/3/200//etc/issue/cipher
+    #     list) — NOT overridden. PowerCLI audit cmd proves both the row
+    #     selector field (Key) and the returned field (Value).
+    "esx.ssh-fips-ciphers": (
+        "ssh.ciphers",
+        "esxcli:system.ssh.server.config.list:Value[Key=ciphers]",
+        None,
+        None,
+    ),
+    "esx.ssh-gateway-ports": (
+        "ssh.gatewayports",
+        "esxcli:system.ssh.server.config.list:Value[Key=gatewayports]",
+        None,
+        None,
+    ),
+    "esx.ssh-host-based-auth": (
+        "ssh.hostbasedauthentication",
+        "esxcli:system.ssh.server.config.list:Value[Key=hostbasedauthentication]",
+        None,
+        None,
+    ),
+    "esx.ssh-idle-timeout-count": (
+        "ssh.clientalivecountmax",
+        "esxcli:system.ssh.server.config.list:Value[Key=clientalivecountmax]",
+        None,
+        None,
+    ),
+    "esx.ssh-idle-timeout-interval": (
+        "ssh.clientaliveinterval",
+        "esxcli:system.ssh.server.config.list:Value[Key=clientaliveinterval]",
+        None,
+        None,
+    ),
+    "esx.ssh-login-banner": (
+        "ssh.banner",
+        "esxcli:system.ssh.server.config.list:Value[Key=banner]",
+        None,
+        None,
+    ),
+    "esx.ssh-rhosts": (
+        "ssh.ignorerhosts",
+        "esxcli:system.ssh.server.config.list:Value[Key=ignorerhosts]",
+        None,
+        None,
+    ),
+    "esx.ssh-stream-local-forwarding": (
+        "ssh.allowstreamlocalforwarding",
+        "esxcli:system.ssh.server.config.list:Value[Key=allowstreamlocalforwarding]",
+        None,
+        None,
+    ),
+    "esx.ssh-tcp-forwarding": (
+        "ssh.allowtcpforwarding",
+        "esxcli:system.ssh.server.config.list:Value[Key=allowtcpforwarding]",
+        None,
+        None,
+    ),
+    "esx.ssh-tunnels": (
+        "ssh.permittunnel",
+        "esxcli:system.ssh.server.config.list:Value[Key=permittunnel]",
+        None,
+        None,
+    ),
+    "esx.ssh-user-environment": (
+        "ssh.permituserenvironment",
+        "esxcli:system.ssh.server.config.list:Value[Key=permituserenvironment]",
+        None,
+        None,
+    ),
+
+    # --- Account shell access (list-row selection on UserID, read
+    #     Shellaccess). PowerCLI audit cmd:
+    #       $ESXcli.system.account.list.Invoke()
+    #         | Where {$_.UserID -eq '<acct>'} | Select Shellaccess
+    #     control_ids differ across profiles (8.0 esx.account-dcui /
+    #     esx.account-vpxuser; 9.0 esx.disable-accounts-dcui). The
+    #     expected_value is SCG's own; NOTE the 8.0/9.0 vocabulary
+    #     diverges (false vs Disabled) — the evaluator coerces both to
+    #     a boolean-FALSE check (expectedAsBoolean handles "false" and
+    #     "disabled"), so they score equivalently IF Shellaccess returns
+    #     "true"/"false". The Shellaccess return FORMAT is unverified on
+    #     a live host — see the build-37 verification note. A wrong
+    #     format surfaces as a loud FAIL (never a false pass), correctable
+    #     on devel.
+    "esx.account-dcui": (
+        "account.dcui.shellaccess",
+        "esxcli:system.account.list:Shellaccess[UserID=dcui]",
+        None,
+        None,
+    ),
+    "esx.account-vpxuser": (
+        "account.vpxuser.shellaccess",
+        "esxcli:system.account.list:Shellaccess[UserID=vpxuser]",
+        None,
+        None,
+    ),
+    "esx.disable-accounts-dcui": (
+        "account.dcui.shellaccess",
+        "esxcli:system.account.list:Shellaccess[UserID=dcui]",
+        None,
+        None,
+    ),
+
+    # --- Key persistence (get-struct, field Enabled). 8.0 + 9.0 share
+    #     control_id esx.key-persistence. PowerCLI:
+    #       $ESXcli.system.security.keypersistence.get.invoke()
+    #         | Select-Object -ExpandProperty Enabled
+    #     SCG expected_value 'false' (clean boolean).
+    "esx.key-persistence": (
+        "keypersistence.Enabled",
+        "esxcli:system.security.keypersistence.get:Enabled",
+        None,
+        None,
+    ),
+
+    # --- Syslog log filtering (get-struct, field LogFilteringEnabled).
+    #     8.0 esx.logs-filter / 9.0 esx.log-filter. PowerCLI:
+    #       $ESXcli.system.syslog.config.logfilter.get.invoke()
+    #         | Select -ExpandProperty LogFilteringEnabled
+    #     SCG expected_value 'false' (clean boolean).
+    "esx.logs-filter": (
+        "syslog.LogFilteringEnabled",
+        "esxcli:system.syslog.config.logfilter.get:LogFilteringEnabled",
+        None,
+        None,
+    ),
+    "esx.log-filter": (
+        "syslog.LogFilteringEnabled",
+        "esxcli:system.syslog.config.logfilter.get:LogFilteringEnabled",
+        None,
+        None,
+    ),
+
+    # --- TLS server profile (get-struct, field Profile). 8.0
+    #     esx.tls-profile / 9.0 esx.tls-ciphers. PowerCLI:
+    #       $ESXcli.system.tls.server.get.invoke()
+    #         | Select-Object -ExpandProperty Profile
+    #     SCG expected_value 'NIST_2024' (clean string compare).
+    "esx.tls-profile": (
+        "tls.Profile",
+        "esxcli:system.tls.server.get:Profile",
+        None,
+        None,
+    ),
+    "esx.tls-ciphers": (
+        "tls.Profile",
+        "esxcli:system.tls.server.get:Profile",
+        None,
+        None,
+    ),
 }
 
 

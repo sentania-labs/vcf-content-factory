@@ -176,7 +176,9 @@ def normalize(input_path: str, output_path: str) -> int:
             # parameter_kind=esxcli (evaluable iff read_recipe set, like
             # vim_property) with an esxcli:<ns.command>:<Field> recipe the
             # EsxcliSoapClient reads over the existing vCenter session.
-            # Slice scope: syslog persistence only (see
+            # Build 36: syslog persistence. Build 37 (section C): SSH
+            # daemon hardening (list-row reads), account shell access,
+            # key-persistence, syslog log-filter, TLS profile (see
             # _ESXCLI_RECLASS_BY_CONTROL_ID). Applied after the vim
             # reclass; the two control_id sets do not overlap.
             esxcli_reclass = classify_esxcli_reclass(control_id)

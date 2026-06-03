@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0.37 (2026-06-03)
+
+- feat(adapter): build 37 — esxcli section C: SSH-daemon hardening (11 list-row reads), account shell access, key-persistence, syslog log-filter, TLS profile reclassified to esxcli recipes; EsxcliSoapClient ArrayOfDataObject list parsing + `<Field>[<Selector>=<Value>]` row-selector grammar
+
+## 1.0.0.36 (2026-06-03)
+
+- feat(adapter): build 36 — esxcli recipe reader via vCenter session + syslog proof slice
+
 ## 1.0.0.35 (2026-06-03)
 
 - feat(adapter): build 35 — HostSystem/VM vim_property coverage expansion (+14 SCG8/+16 SCG9 reclassified) + in-pak UNAUDITED_CONTROLS.md

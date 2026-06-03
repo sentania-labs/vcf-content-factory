@@ -538,16 +538,44 @@ public final class VSphereClient {
 			return null;
 		}
 		String namespaceCommand = path.substring(0, sep).trim();
-		String field = path.substring(sep + 1).trim();
-		if (namespaceCommand.isEmpty() || field.isEmpty()) return null;
+		String fieldSpec = path.substring(sep + 1).trim();
+		if (namespaceCommand.isEmpty() || fieldSpec.isEmpty()) return null;
 
 		String hostMoid = moRef != null ? moRef.getValue() : null;
 		if (hostMoid == null || hostMoid.isEmpty()) return null;
 
-		String value = esxcli.readField(hostMoid, namespaceCommand, field);
+		// Build 37 — row-selector grammar for `list` commands:
+		//   <ResultField>[<SelectorField>=<SelectorValue>]
+		// e.g. Value[Key=ciphers] (ssh server config list) or
+		//      Shellaccess[UserID=dcui] (account list). A field with no
+		//      bracket is a plain `get`-struct field (build-36 behavior,
+		//      unchanged).
+		String value;
+		int lb = fieldSpec.indexOf('[');
+		if (lb > 0 && fieldSpec.endsWith("]")) {
+			String field = fieldSpec.substring(0, lb).trim();
+			String selector = fieldSpec.substring(lb + 1,
+					fieldSpec.length() - 1).trim();
+			int eq = selector.indexOf('=');
+			if (eq <= 0 || eq >= selector.length() - 1) {
+				// Malformed selector (no field=value) — unreadable, never
+				// a guess.
+				return null;
+			}
+			String selectorField = selector.substring(0, eq).trim();
+			String selectorValue = selector.substring(eq + 1).trim();
+			if (field.isEmpty() || selectorField.isEmpty()
+					|| selectorValue.isEmpty()) {
+				return null;
+			}
+			value = esxcli.readRowField(hostMoid, namespaceCommand,
+					selectorField, selectorValue, field);
+		} else {
+			value = esxcli.readField(hostMoid, namespaceCommand, fieldSpec);
+		}
 		if (value == null
 				|| EsxcliSoapClient.COMMAND_FAILED.equals(value)) {
-			// Field absent, or the command call itself failed. Both are
+			// Field/row absent, or the command call itself failed. All are
 			// UNREADABLE — never a sentinel pass.
 			return null;
 		}

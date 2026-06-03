@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -57,7 +58,7 @@ import org.w3c.dom.NodeList;
  *
  * <p><b>Per-cycle, per-host, per-command cache.</b> One esxcli command
  * returns many fields, and many controls may reference the same command
- * ({@code system.syslog.config.get}). {@link #readCommandFields} caches
+ * ({@code system.syslog.config.get}). {@link #readCommandResult} caches
  * the parsed field map per (hostMoid, namespace.command) for the
  * lifetime of this client instance (one collection cycle), so multiple
  * controls cost exactly one {@code ExecuteSoap} per host per cycle. The
@@ -82,15 +83,43 @@ final class EsxcliSoapClient {
 	// cycle in VSphereClient).
 	//   hostMoid -> executer MoRef value (call 1)
 	private final Map<String, String> executerByHost = new HashMap<>();
-	//   hostMoid + "|" + namespace.command -> parsed field map
-	//   (the value is COMMAND_FAILED_MAP for a failed call, so a second
-	//   control referencing the same command does NOT re-issue the call)
-	private final Map<String, Map<String, String>> resultCache =
-			new HashMap<>();
+	//   hostMoid + "|" + namespace.command -> parsed result (struct OR
+	//   rows). A FAILED ParsedResult is cached so a second control
+	//   referencing the same command does NOT re-issue the call.
+	private final Map<String, ParsedResult> resultCache = new HashMap<>();
 
-	/** Cached marker for a failed command, distinct from an empty map. */
-	private static final Map<String, String> COMMAND_FAILED_MAP =
-			java.util.Collections.singletonMap(COMMAND_FAILED, "1");
+	/**
+	 * Parsed esxcli command result. Exactly one of {@code struct}
+	 * (a {@code get} command's single field map) or {@code rows} (a
+	 * {@code list} command's {@code ArrayOfDataObject} rows) is non-null
+	 * on success; {@code failed} is true (and both null) when the
+	 * command call itself failed (unknown command / fault / parse error).
+	 * Cached per (host, command) for the cycle.
+	 */
+	private static final class ParsedResult {
+		final boolean failed;
+		final Map<String, String> struct;          // get -> field map
+		final List<Map<String, String>> rows;       // list -> row field maps
+
+		private ParsedResult(boolean failed, Map<String, String> struct,
+				List<Map<String, String>> rows) {
+			this.failed = failed;
+			this.struct = struct;
+			this.rows = rows;
+		}
+
+		static ParsedResult ofStruct(Map<String, String> struct) {
+			return new ParsedResult(false, struct, null);
+		}
+
+		static ParsedResult ofRows(List<Map<String, String>> rows) {
+			return new ParsedResult(false, null, rows);
+		}
+
+		static ParsedResult ofFailure() {
+			return new ParsedResult(true, null, null);
+		}
+	}
 
 	EsxcliSoapClient(String sdkUrl, String sessionCookie,
 			SSLSocketFactory sslFactory) {
@@ -113,46 +142,96 @@ final class EsxcliSoapClient {
 	 *                          {@code LocalLogOutputIsPersistent}
 	 */
 	String readField(String hostMoid, String namespaceCommand, String field) {
-		Map<String, String> fields = readCommandFields(hostMoid, namespaceCommand);
-		if (fields == null || fields == COMMAND_FAILED_MAP) {
+		ParsedResult parsed = readCommandResult(hostMoid, namespaceCommand);
+		if (parsed == null || parsed.failed) {
 			return COMMAND_FAILED;
 		}
-		return fields.get(field);
+		// A get-struct exposes its fields directly; a list exposes none at
+		// the top level, so a plain field read on a list returns null (the
+		// caller must use the row-selecting overload). Build-36 callers
+		// only ever read get-struct fields, so this is unchanged for them.
+		if (parsed.struct != null) {
+			return parsed.struct.get(field);
+		}
+		return null;
 	}
 
 	/**
-	 * Read (and cache) the full field map for one esxcli {@code get}
-	 * command on one host. The first call for a given (host, command)
-	 * issues the two SOAP calls; subsequent calls within the cycle hit
-	 * the cache. Returns {@code null} / {@link #COMMAND_FAILED_MAP} on
-	 * failure (cached so it isn't retried this cycle), else a
-	 * PascalCase field -> text-value map.
+	 * Build-37 row-selecting read for {@code list} commands that return
+	 * {@code ArrayOfDataObject} rows (e.g.
+	 * {@code system.ssh.server.config.list},
+	 * {@code system.account.list}). Finds the first row whose
+	 * {@code selectorField} text equals {@code selectorValue}
+	 * (case-insensitive) and returns that row's {@code field} text.
+	 *
+	 * <p>Returns {@code null} when the command succeeded but no row
+	 * matched the selector, or the matched row lacks {@code field}, or
+	 * the command returned a get-struct rather than a list (a selector
+	 * was applied to a non-list command — a recipe authoring error,
+	 * surfaced as UNREADABLE rather than guessed). Returns
+	 * {@link #COMMAND_FAILED} when the command call itself failed.
+	 * Both null and COMMAND_FAILED fold to UNREADABLE upstream — never
+	 * a false pass (the build-35 contract).
+	 *
+	 * @param selectorField  PascalCase row field to match on, e.g.
+	 *                       {@code Key} (ssh config) / {@code UserID}
+	 *                       (accounts)
+	 * @param selectorValue  the row value to match, e.g. {@code ciphers}
+	 *                       / {@code dcui}
+	 * @param field          PascalCase row field to return, e.g.
+	 *                       {@code Value} / {@code Shellaccess}
 	 */
-	synchronized Map<String, String> readCommandFields(String hostMoid,
+	String readRowField(String hostMoid, String namespaceCommand,
+			String selectorField, String selectorValue, String field) {
+		ParsedResult parsed = readCommandResult(hostMoid, namespaceCommand);
+		if (parsed == null || parsed.failed) {
+			return COMMAND_FAILED;
+		}
+		if (parsed.rows == null) {
+			// A selector was applied to a command that did not return a
+			// list — not readable as a row. UNREADABLE upstream.
+			return null;
+		}
+		for (Map<String, String> row : parsed.rows) {
+			String sel = row.get(selectorField);
+			if (sel != null && sel.trim().equalsIgnoreCase(selectorValue)) {
+				return row.get(field);
+			}
+		}
+		// No matching row — the selector value isn't present. UNREADABLE.
+		return null;
+	}
+
+	/**
+	 * Execute (and cache) one esxcli command on one host. The first call
+	 * for a given (host, command) issues the two SOAP calls; subsequent
+	 * calls within the cycle hit the cache. Returns a FAILED
+	 * {@link ParsedResult} (cached so it isn't retried this cycle) on any
+	 * failure, else a struct ({@code get}) or rows ({@code list}) result.
+	 */
+	synchronized ParsedResult readCommandResult(String hostMoid,
 			String namespaceCommand) {
 		String cacheKey = hostMoid + "|" + namespaceCommand;
-		Map<String, String> cached = resultCache.get(cacheKey);
+		ParsedResult cached = resultCache.get(cacheKey);
 		if (cached != null) {
-			return cached == COMMAND_FAILED_MAP ? COMMAND_FAILED_MAP : cached;
+			return cached;
 		}
 
-		Map<String, String> result;
+		ParsedResult result;
 		try {
 			String executer = getExecuter(hostMoid);
 			if (executer == null) {
-				resultCache.put(cacheKey, COMMAND_FAILED_MAP);
-				return COMMAND_FAILED_MAP;
+				result = ParsedResult.ofFailure();
+			} else {
+				result = executeCommand(executer, namespaceCommand);
 			}
-			result = executeGet(executer, namespaceCommand);
 		} catch (Exception e) {
-			// Any failure -> command-failed sentinel, cached so a second
+			// Any failure -> command-failed result, cached so a second
 			// control on the same command doesn't re-issue the call.
-			resultCache.put(cacheKey, COMMAND_FAILED_MAP);
-			return COMMAND_FAILED_MAP;
+			result = ParsedResult.ofFailure();
 		}
 		if (result == null) {
-			resultCache.put(cacheKey, COMMAND_FAILED_MAP);
-			return COMMAND_FAILED_MAP;
+			result = ParsedResult.ofFailure();
 		}
 		resultCache.put(cacheKey, result);
 		return result;
@@ -183,26 +262,33 @@ final class EsxcliSoapClient {
 		return executer;
 	}
 
-	// ----- Call 2: ExecuteSoap (no-arg get) -------------------------------
+	// ----- Call 2: ExecuteSoap (no-arg get OR list) -----------------------
 
 	/**
-	 * Execute an esxcli {@code get} command via {@code ExecuteSoap} and
-	 * parse the inner {@code <obj>} into a PascalCase field map. Returns
-	 * {@code null} on a SOAP fault, an esxcli-level {@code <fault>}, or a
-	 * missing/empty {@code <response>}.
+	 * Execute an esxcli {@code get} or {@code list} command via
+	 * {@code ExecuteSoap} and parse the inner {@code <obj>} into either a
+	 * struct field map ({@code get}) or a list of row field maps
+	 * ({@code list} -> {@code ArrayOfDataObject}). Returns a FAILED
+	 * {@link ParsedResult} on a SOAP fault, an esxcli-level
+	 * {@code <fault>}, or a missing/empty {@code <response>}.
 	 *
 	 * <p>moid / method / version derivation (spike §0.4), mechanical:
 	 * for command parts {@code [p0 ... pN]},
 	 * {@code namespace = p0..p(N-1)}; {@code moid = "ha-cli-handler-" +
 	 * namespace joined by "-"}; {@code method = "vim.EsxCLI." +
 	 * p0..pN joined by "."}; {@code version = "urn:vim25/5.0"}.
+	 *
+	 * <p>Build 37 only handles NO-ARG commands ({@code get} / {@code
+	 * list} with no key). Argument-bearing commands (e.g. firewall
+	 * {@code allowedip.list} with a {@code rulesetid}) are not issued by
+	 * any current recipe; see the held-controls note in the build log.
 	 */
-	private Map<String, String> executeGet(String executer,
+	private ParsedResult executeCommand(String executer,
 			String namespaceCommand) throws Exception {
 		String[] parts = namespaceCommand.split("\\.");
 		if (parts.length < 2) {
 			// Need at least <namespace>.<command>.
-			return null;
+			return ParsedResult.ofFailure();
 		}
 		StringBuilder nsDashes = new StringBuilder();
 		for (int i = 0; i < parts.length - 1; i++) {
@@ -220,42 +306,89 @@ final class EsxcliSoapClient {
 				+ "<moid>" + xmlEscape(moid) + "</moid>"
 				+ "<version>" + xmlEscape(version) + "</version>"
 				+ "<method>" + xmlEscape(method) + "</method>"
-				// <argument> omitted for a no-arg get (spike §0.2).
+				// <argument> omitted for a no-arg get/list (spike §0.2).
 				+ "</ExecuteSoap>";
 
 		Document resp = post(body, "urn:vim25/ExecuteSoap");
-		if (resp == null) return null;
+		if (resp == null) return ParsedResult.ofFailure();
 
 		Element returnval = firstChildByLocalName(resp.getDocumentElement(),
 				"returnval");
-		if (returnval == null) return null;
+		if (returnval == null) return ParsedResult.ofFailure();
 
 		// An esxcli-level error comes back as <fault> inside returnval
 		// (faultMsg / faultDetail); treat as command-failed.
 		Element fault = firstChildByLocalName(returnval, "fault");
 		if (fault != null) {
-			return null;
+			return ParsedResult.ofFailure();
 		}
 
 		Element response = firstChildByLocalName(returnval, "response");
-		if (response == null) return null;
+		if (response == null) return ParsedResult.ofFailure();
 		String innerXml = textOf(response);
-		if (innerXml == null || innerXml.trim().isEmpty()) return null;
+		if (innerXml == null || innerXml.trim().isEmpty()) {
+			return ParsedResult.ofFailure();
+		}
 
 		// The text content of <response> IS the (already-unescaped by the
 		// XML parser) inner <obj> document. Parse it as a standalone doc.
 		// It carries an xsi:type without a namespace declaration for the
 		// xsi prefix, so parse non-namespace-aware and read by local name.
 		Document inner = parseXml(innerXml.trim());
-		if (inner == null) return null;
+		if (inner == null) return ParsedResult.ofFailure();
 		Element obj = inner.getDocumentElement();
-		if (obj == null) return null;
+		if (obj == null) return ParsedResult.ofFailure();
+
+		// Disambiguate get vs list by the inner obj's xsi:type
+		// (spike §0.3): "ArrayOfDataObject" -> list of <DataObject> rows;
+		// anything else -> a single get struct.
+		String xsiType = obj.getAttribute("xsi:type");
+		boolean isList = xsiType != null
+				&& xsiType.contains("ArrayOfDataObject");
+		// Defensive: even without the attribute, if the obj's element
+		// children are ALL <DataObject>, treat it as a list.
+		if (!isList && hasDataObjectChildren(obj)) {
+			isList = true;
+		}
+
+		if (isList) {
+			List<Map<String, String>> rows = new ArrayList<>();
+			NodeList children = obj.getChildNodes();
+			for (int i = 0; i < children.getLength(); i++) {
+				Node n = children.item(i);
+				if (n.getNodeType() != Node.ELEMENT_NODE) continue;
+				Element row = (Element) n;
+				// Each row is a <DataObject> (some bindings drop the
+				// element name to the row's own type — accept any element
+				// child as a row when we've decided this is a list).
+				rows.add(parseFieldMap(row));
+			}
+			return ParsedResult.ofRows(rows);
+		}
 
 		// get -> single struct: PascalCase fields are direct children.
-		// (list -> ArrayOfDataObject is out of scope for this slice; the
-		//  syslog proof uses get only.)
-		Map<String, String> fields = new HashMap<>();
+		return ParsedResult.ofStruct(parseFieldMap(obj));
+	}
+
+	/** True iff every element child of {@code obj} is a {@code DataObject}. */
+	private static boolean hasDataObjectChildren(Element obj) {
 		NodeList children = obj.getChildNodes();
+		boolean sawElement = false;
+		for (int i = 0; i < children.getLength(); i++) {
+			Node n = children.item(i);
+			if (n.getNodeType() != Node.ELEMENT_NODE) continue;
+			sawElement = true;
+			if (!"DataObject".equals(localName((Element) n))) {
+				return false;
+			}
+		}
+		return sawElement;
+	}
+
+	/** Parse direct element children of {@code parent} into a field map. */
+	private static Map<String, String> parseFieldMap(Element parent) {
+		Map<String, String> fields = new HashMap<>();
+		NodeList children = parent.getChildNodes();
 		for (int i = 0; i < children.getLength(); i++) {
 			Node n = children.item(i);
 			if (n.getNodeType() != Node.ELEMENT_NODE) continue;
