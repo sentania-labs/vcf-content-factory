@@ -26,10 +26,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _compliance_normalize import (
     ADAPTER_KIND,
+    build_read_recipe,
     classify_parameter_kind,
     classify_security_policy_param,
     classify_vsan_cluster_expected,
     classify_vsan_cluster_param,
+    clean_expected_value,
     clean_priority,
     collapse_remediation,
     infer_value_type,
@@ -149,7 +151,9 @@ def normalize(input_path: str, output_path: str) -> int:
 
             by_kind[parameter_kind] += 1
 
-            expected = (src.get("Baseline Suggested Value") or "").strip()
+            # Collapse multi-line baseline cells to first non-empty
+            # line — see normalize_scg_v9.py for the rationale.
+            expected = clean_expected_value(src.get("Baseline Suggested Value") or "")
             if vsan_expected_override is not None:
                 expected = vsan_expected_override
             value_type = infer_value_type(expected)
@@ -175,6 +179,7 @@ def normalize(input_path: str, output_path: str) -> int:
                 "description": description,
                 "source_ref": f"{SOURCE_TOKEN}:{source_id}",
                 "remediation_text": remediation,
+                "read_recipe": build_read_recipe(parameter, parameter_kind),
             })
 
         written = write_canonical(output_path, out_rows)

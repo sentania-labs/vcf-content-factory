@@ -33,7 +33,8 @@ re-normalized. The adapter loads only from `profiles/canonical/`.
 
 ## Columns
 
-The canonical CSV has exactly these 12 columns, in this order. The
+The canonical CSV has these 13 columns, in this order. Columns 1–12
+are required; column 13 (`read_recipe`) is optional (see below). The
 loader looks columns up by header name, so column order in the file
 is informational — but normalizers produce them in this order for
 reviewability.
@@ -44,7 +45,7 @@ reviewability.
 | 2 | `priority` | enum | `P0` / `P1` / `P2` |
 | 3 | `resource_kind` | string | VCF Ops resource kind for stitching (e.g. `HostSystem`) |
 | 4 | `adapter_kind` | string | VCF Ops adapter kind for stitching (e.g. `VMWARE`) |
-| 5 | `parameter` | string | The thing being read (advanced setting key, vim property path, etc.) |
+| 5 | `parameter` | string | The thing being read (advanced setting key, vim property logical key, etc.). For `vim_property` this is the canonical logical key the evaluator looks up (e.g. `securityPolicy.forgedTransmits`); the vim25 path lives in `read_recipe`. |
 | 6 | `parameter_kind` | enum | How to read it. See enum below. |
 | 7 | `value_type` | enum | `integer` / `string` / `boolean` |
 | 8 | `expected_value` | string | Baseline value (always a string in the CSV; parsed per `value_type`) |
@@ -52,6 +53,65 @@ reviewability.
 | 10 | `description` | string | Long description for the control |
 | 11 | `source_ref` | string | Traceability: `<source>:<original_id>` |
 | 12 | `remediation_text` | string | PowerCLI/esxcli command to fix it; symptom-message-ready |
+| 13 | `read_recipe` | string | **Optional.** `<style>:<vim_path>` read spec for a `vim_property` control. Empty for every other kind. See below. |
+
+### `read_recipe` format (column 13)
+
+Makes `vim_property` controls **data-driven**: a new vim_property
+control whose extraction *style* already exists is added by editing
+the CSV and re-normalizing, with **no Java change**.
+
+Grammar: `<style>:<vim_path>`
+
+- `<vim_path>` — a vim25 property path resolvable from the control's
+  resource MO. The adapter's generic reader (`VSphereClient.readByRecipe`)
+  has PropertyCollector resolve the longest leading prefix it can, then
+  walks the remaining segments with reflective zero-arg getters. Never
+  casts to a concrete vim25 subclass.
+- `<style>` — closed extraction-style set (adding a style is the only
+  thing that ever needs Java):
+
+  | style | meaning | example path |
+  |---|---|---|
+  | `scalar` | direct scalar / String / Number / Boolean at the path | `config.product.version` |
+  | `bool` | boolean via `is<Field>()` / `get<Field>()` on the parent | `configurationEx.vsanConfigInfo.enabled` |
+  | `bool_policy` | unwrap a `BoolPolicy` wrapper's `.value` | `config.defaultPortConfig.securityPolicy.forgedTransmits` |
+  | `string_list_join` | join a `List<String>` on `,` | `config.dateTimeInfo.ntpConfig.server` |
+
+Rules:
+
+- `read_recipe` is **optional** and kept OUT of the loader's required-
+  column set, so older bundled or custom CSVs still load.
+- A `vim_property` control with an **empty** `read_recipe` is
+  **non-evaluable** (informational only): it loads and appears for
+  traceability, and the evaluator skips it — it is *not* counted as
+  unreadable (we never declared we could read it).
+- An **unknown** `<style>`, a malformed recipe, or a read that resolves
+  to null makes the control **unreadable** (see "Unreadable outcome"
+  below) — never a silent skip and never a guess.
+
+The bundled normalizers own the vim-path knowledge for the shipped
+profiles via the `_READ_RECIPE_BY_PARAMETER` map in
+`scripts/_compliance_normalize.py`. Custom-profile authors supply
+`read_recipe` directly in their CSV.
+
+### Unreadable outcome
+
+`vim_property` controls have three outcomes, not two:
+
+- **pass** / **fail** — value read and compared (as today).
+- **unreadable** — `read_recipe` present and evaluable, but the read
+  resolved to null / the style couldn't extract / the style is unknown.
+
+Unreadable controls are **excluded from pass, fail, and the score
+denominator** — they are not failures (we don't know), and per the
+cardinal rule they are **never compliant / never a sentinel pass**. A
+per-resource `VCF-CF Compliance|unreadable_count` stat and a world
+`Summary|total_unreadable_controls` aggregate surface them as a
+*profile/coverage* signal, distinct from non-compliance. The
+zero-divisor contract is unchanged: no evaluable controls →
+score=100.0 with `total_count=0`, and callers refuse to fold a
+`total_count==0` result into rollups.
 
 ### `control_id` format
 
@@ -109,16 +169,18 @@ informational-only.
 | Value | Meaning | Evaluable in adapter? |
 |---|---|---|
 | `advanced_setting` | ESXi Advanced System Setting (e.g. `Security.AccountUnlockTime`). Read via vSphere SOAP `OptionManager.QueryOptions`. | yes |
-| `vim_property` | Vim object property (e.g. `config.dateTimeInfo.ntpServers`). Read via vSphere SOAP `PropertyCollector`. | yes (future) |
+| `vim_property` | Vim object property (e.g. `config.defaultPortConfig.securityPolicy.forgedTransmits`). Read data-driven via the `read_recipe` column (vSphere SOAP `PropertyCollector` + reflective getter walk). | yes, **iff** `read_recipe` is non-empty (else informational) |
 | `esxcli` | esxcli-only setting. Read via `Get-EsxCli` style commands. | no (today) — adapter cannot replicate without a PowerCLI runtime |
 | `powercli_only` | Requires PowerCLI-specific cmdlet that has no direct vSphere SOAP equivalent. | no |
 | `manual_audit` | Has no machine-readable assessment command. Human review only. | no |
 
-The "evaluable" flag is *derived* from `parameter_kind`; there is no
-separate column. The loader records all rows in the profile; the
-evaluator skips rows whose `parameter_kind` is not in the evaluable
-set. Today only `advanced_setting` is evaluated — the rest ship in
-the profile for traceability and future expansion.
+The "evaluable" flag is *derived*; there is no separate column.
+`advanced_setting` is always evaluable; `vim_property` is evaluable
+only when `read_recipe` is non-empty (the recipe IS the read path).
+The loader records all rows in the profile; the evaluator skips rows
+that are not evaluable. The remaining kinds (`esxcli`, `powercli_only`,
+`manual_audit`) ship in the profile for traceability and future
+expansion.
 
 ### `value_type` enum
 
@@ -177,11 +239,14 @@ unmapped Component values).
 1. Reads the first non-blank line as the header row.
 2. Builds a `Map<String, Integer>` of column name → index.
 3. Hard-fails (throws `RuntimeException`) if any of the 12 required
-   columns is missing. The caller (`ComplianceAdapter`) wraps this
-   into a `CollectionException` and the adapter goes Down with a
-   descriptive message.
+   columns (1–12) is missing. The caller (`ComplianceAdapter`) wraps
+   this into a `CollectionException` and the adapter goes Down with a
+   descriptive message. Column 13 (`read_recipe`) is **optional** — its
+   absence does not fail the loader; every `vim_property` control then
+   loads as non-evaluable / informational.
 4. For each data row, builds a `BenchmarkProfile.Control` by header
-   lookup. No positional indexing.
+   lookup. No positional indexing. The optional `read_recipe` column is
+   read by name when present, defaulted to empty when absent.
 
 The cache key in `BenchmarkLoader.load` includes the resolved profile
 name; when the configured profile changes, the cache is rebuilt.

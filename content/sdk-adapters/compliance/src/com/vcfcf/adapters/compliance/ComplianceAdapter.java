@@ -245,6 +245,34 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 						world.addData("Summary|vcenters_below_threshold",
 								(double) vcStats.belowThreshold);
 					}
+					// Declared-but-unreadable rollup. Controls that carry
+					// a read_recipe but read back nothing across all
+					// DVS / DVPG / cluster resources this cycle. A
+					// non-zero value tells the operator the active
+					// profile declares vim_property controls this adapter
+					// could not assess (typo'd path, absent field, vSAN
+					// surface this jar can't reach) — a coverage problem,
+					// distinct from non-compliance. Always published
+					// (even at 0) so the world contract is uniform and a
+					// dashboard tile reads "0 = full coverage". This is
+					// NOT folded into any score.
+					int totalUnreadable = dvsStats.unreadable
+							+ dvpgStats.unreadable
+							+ clusterStats.unreadable;
+					world.addData("Summary|total_unreadable_controls",
+							(double) totalUnreadable);
+					if (totalUnreadable > 0) {
+						logWarn("Profile '" + profile.name + "' declares "
+								+ totalUnreadable + " vim_property control "
+								+ "instance(s) this adapter could not read "
+								+ "this cycle (declared-but-unreadable). "
+								+ "These are excluded from every compliance "
+								+ "score; see per-resource "
+								+ "VCF-CF Compliance|unreadable_count and the "
+								+ "(unreadable) per-control entries. This is a "
+								+ "coverage signal, not non-compliance.");
+					}
+
 					addProperty(world, "Summary|profile_name",
 							profile.name);
 					addProperty(world, "Summary|last_scan_timestamp",
@@ -700,10 +728,11 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	private DvsStats collectDvs(BenchmarkProfile profile) {
 		DvsStats stats = new DvsStats();
 
-		// Phase 3 / Batch 3b — DVS controls are now partially evaluable.
-		// SCG 9.0 emits 3 vim_property security-policy controls per DVS
-		// (securityPolicy.{forgedTransmits,macChanges,allowPromiscuous})
-		// backed by VSphereClient.getDvsSecurityPolicy + the
+		// Phase 3 — DVS controls are partially evaluable. SCG 9.0 emits
+		// 3 vim_property security-policy controls per DVS
+		// (securityPolicy.{forgedTransmits,macChanges,allowPromiscuous}),
+		// read data-driven via the read_recipe column
+		// (VSphereClient.readVimProperties) + the
 		// ControlEvaluator.evaluateVimProperties dispatcher. Remaining
 		// DVS controls (network-reset-port, network-restrict-discovery-
 		// protocol, network-restrict-port-mirroring, etc.) stay
@@ -753,11 +782,9 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 
 			java.util.Map<String, Object> secPol;
 			try {
-				java.util.Map<String, Boolean> raw =
-						vsphere.getDvsSecurityPolicy(dvs.moRef);
-				secPol = qualifySecurityPolicy(raw);
+				secPol = vsphere.readVimProperties(dvs.moRef, dvsControls);
 			} catch (Exception e) {
-				logWarn("Failed to read security policy for DVS "
+				logWarn("Failed to read vim properties for DVS "
 						+ dvs.name + ": " + e.getMessage());
 				// Fall back to profile_name-only on read failure so
 				// the resource still surfaces and the operator log
@@ -769,24 +796,19 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 
 			ControlEvaluator.ComplianceResult cr =
 					ControlEvaluator.evaluateVimProperties(
-							dvsControls, secPol, dvs.name);
+							dvsControls, secPol, dvs.name,
+							VSphereClient.UNREADABLE);
 
 			logInfo("DVS " + dvs.name + " (" + dvs.moid
 					+ ") matched -> resource=" + he.resourceId
 					+ "; score=" + String.format("%.1f", cr.score)
 					+ "% (" + cr.passCount + " pass, "
 					+ cr.failCount + " fail, "
-					+ cr.totalCount + " total)");
+					+ cr.totalCount + " total, "
+					+ cr.unreadableCount + " unreadable)");
 
-			if (cr.totalCount > 0) {
-				pushComplianceViaClient(he.resourceId, cr, profile.name);
-			} else {
-				// totalCount=0 means the read happened but the profile
-				// slice scored nothing (e.g. all expected_values were
-				// unparseable). Treat as no-signal — profile_name only.
-				pushProfileNamePropertyOnly(he.resourceId,
-						profile.name);
-			}
+			stats.unreadable += cr.unreadableCount;
+			pushOrProfileName(he.resourceId, cr, profile.name);
 		}
 		return stats;
 	}
@@ -794,12 +816,12 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	private DvpgStats collectDvpg(BenchmarkProfile profile) {
 		DvpgStats stats = new DvpgStats();
 
-		// Phase 3 / Batch 3b — DVPG controls are now partially
-		// evaluable in the same way as DVS. SCG 9.0 emits 3
-		// vim_property security-policy controls per DVPG with the
-		// same canonical parameter keys as DVS; the read path is
-		// VSphereClient.getDvpgSecurityPolicy and the dispatcher is
-		// shared with DVS via ControlEvaluator.evaluateVimProperties.
+		// Phase 3 — DVPG controls are partially evaluable in the same
+		// way as DVS. SCG 9.0 emits 3 vim_property security-policy
+		// controls per DVPG with the same canonical parameter keys and
+		// read_recipe values as DVS; the read path is the shared
+		// data-driven VSphereClient.readVimProperties and the dispatcher
+		// is shared with DVS via ControlEvaluator.evaluateVimProperties.
 		java.util.List<VSphereClient.DvpgInfo> pgs;
 		try {
 			pgs = vsphere.getDvPortgroups();
@@ -836,11 +858,9 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 
 			java.util.Map<String, Object> secPol;
 			try {
-				java.util.Map<String, Boolean> raw =
-						vsphere.getDvpgSecurityPolicy(pg.moRef);
-				secPol = qualifySecurityPolicy(raw);
+				secPol = vsphere.readVimProperties(pg.moRef, dvpgControls);
 			} catch (Exception e) {
-				logWarn("Failed to read security policy for DVPG "
+				logWarn("Failed to read vim properties for DVPG "
 						+ pg.name + ": " + e.getMessage());
 				pushProfileNamePropertyOnly(he.resourceId,
 						profile.name);
@@ -849,21 +869,19 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 
 			ControlEvaluator.ComplianceResult cr =
 					ControlEvaluator.evaluateVimProperties(
-							dvpgControls, secPol, pg.name);
+							dvpgControls, secPol, pg.name,
+							VSphereClient.UNREADABLE);
 
 			logInfo("DVPG " + pg.name + " (" + pg.moid
 					+ ") matched -> resource=" + he.resourceId
 					+ "; score=" + String.format("%.1f", cr.score)
 					+ "% (" + cr.passCount + " pass, "
 					+ cr.failCount + " fail, "
-					+ cr.totalCount + " total)");
+					+ cr.totalCount + " total, "
+					+ cr.unreadableCount + " unreadable)");
 
-			if (cr.totalCount > 0) {
-				pushComplianceViaClient(he.resourceId, cr, profile.name);
-			} else {
-				pushProfileNamePropertyOnly(he.resourceId,
-						profile.name);
-			}
+			stats.unreadable += cr.unreadableCount;
+			pushOrProfileName(he.resourceId, cr, profile.name);
 		}
 		return stats;
 	}
@@ -871,10 +889,11 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	/**
 	 * Phase 3 — ClusterComputeResource (vSAN) collector. Walks every
 	 * cluster in inventory, reads the small slice of vSAN configuration
-	 * the bundled vim25 jar exposes
-	 * ({@link VSphereClient#getClusterVsanConfig}), and evaluates the
-	 * cluster-level vim_property controls. Identical shape to
-	 * {@link #collectDvs} and {@link #collectDvpg}.
+	 * the bundled vim25 jar exposes — data-driven via the read_recipe
+	 * column ({@link VSphereClient#readVimProperties}, after a
+	 * {@link VSphereClient#hasVsanConfig} non-vSAN short-circuit) — and
+	 * evaluates the cluster-level vim_property controls. Identical shape
+	 * to {@link #collectDvs} and {@link #collectDvpg}.
 	 *
 	 * <p>TOOLSET GAP — the bulk of SCG's ClusterComputeResource controls
 	 * (vSAN data-at-rest encryption, data-in-transit encryption, iSCSI
@@ -932,22 +951,27 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				continue;
 			}
 
-			java.util.Map<String, Object> vsanCfg;
+			// Non-vSAN clusters have no vsanConfigInfo object at all. The
+			// retired getClusterVsanConfig returned an empty map for them
+			// and the collector pushed profile_name only — the vSAN
+			// controls are genuinely N/A on a non-vSAN cluster, not a
+			// coverage gap. Preserve that: short-circuit BEFORE the
+			// generic recipe read so we don't surface a misleading
+			// unreadable_count on every non-vSAN cluster. (Byte-identical
+			// pass/fail/score to the bespoke path either way — the
+			// difference is purely whether non-vSAN clusters get an
+			// unreadable signal, and N/A should not.)
+			boolean vsanPresent;
 			try {
-				vsanCfg = vsphere.getClusterVsanConfig(cluster.moRef);
+				vsanPresent = vsphere.hasVsanConfig(cluster.moRef);
 			} catch (Exception e) {
-				logWarn("Failed to read vSAN config for cluster "
+				logWarn("Failed to probe vSAN config for cluster "
 						+ cluster.name + ": " + e.getMessage());
 				pushProfileNamePropertyOnly(he.resourceId,
 						profile.name);
 				continue;
 			}
-
-			if (vsanCfg.isEmpty()) {
-				// No vSAN on this cluster — empty config map. Push
-				// profile_name only so the cluster still appears in the
-				// metric browser without polluting per-resource rollups
-				// with a sentinel score=100.
+			if (!vsanPresent) {
 				logInfo("Cluster " + cluster.name + " (" + cluster.moid
 						+ ") has no vsanConfigInfo (non-vSAN cluster), "
 						+ "pushing profile_name only");
@@ -956,60 +980,70 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				continue;
 			}
 
+			java.util.Map<String, Object> vsanCfg;
+			try {
+				vsanCfg = vsphere.readVimProperties(
+						cluster.moRef, clusterControls);
+			} catch (Exception e) {
+				logWarn("Failed to read vSAN config for cluster "
+						+ cluster.name + ": " + e.getMessage());
+				pushProfileNamePropertyOnly(he.resourceId,
+						profile.name);
+				continue;
+			}
+
 			ControlEvaluator.ComplianceResult cr =
 					ControlEvaluator.evaluateVimProperties(
-							clusterControls, vsanCfg, cluster.name);
+							clusterControls, vsanCfg, cluster.name,
+							VSphereClient.UNREADABLE);
 
 			logInfo("Cluster " + cluster.name + " (" + cluster.moid
 					+ ") matched -> resource=" + he.resourceId
 					+ "; score=" + String.format("%.1f", cr.score)
 					+ "% (" + cr.passCount + " pass, "
 					+ cr.failCount + " fail, "
-					+ cr.totalCount + " total)");
+					+ cr.totalCount + " total, "
+					+ cr.unreadableCount + " unreadable)");
 
-			if (cr.totalCount > 0) {
-				pushComplianceViaClient(he.resourceId, cr, profile.name);
-			} else {
-				pushProfileNamePropertyOnly(he.resourceId,
-						profile.name);
-			}
+			stats.unreadable += cr.unreadableCount;
+			pushOrProfileName(he.resourceId, cr, profile.name);
 		}
 		return stats;
 	}
 
 	/**
-	 * Translate the bare-field-name map returned by
-	 * {@link VSphereClient#getDvsSecurityPolicy(com.vmware.vim25.ManagedObjectReference)}
-	 * / {@link VSphereClient#getDvpgSecurityPolicy(com.vmware.vim25.ManagedObjectReference)}
-	 * ({@code allowPromiscuous}, {@code macChanges},
-	 * {@code forgedTransmits}) into the fully-qualified canonical
-	 * parameter keys the evaluator looks up
-	 * ({@code securityPolicy.allowPromiscuous} etc.). Keeping the
-	 * vSphere client's contract bare and qualifying here keeps the
-	 * client unaware of the canonical schema.
+	 * Push compliance data when a resource produced any real signal —
+	 * scored controls ({@code totalCount > 0}) OR declared-but-unreadable
+	 * controls ({@code unreadableCount > 0}). The unreadable case still
+	 * pushes the rollup (with a zero-divisor score=100 that callers
+	 * refuse to fold, totalCount=0, and a non-zero unreadable_count) so
+	 * the operator sees the coverage gap. A resource with neither falls
+	 * back to profile_name only, exactly as before.
 	 */
-	private static java.util.Map<String, Object> qualifySecurityPolicy(
-			java.util.Map<String, Boolean> raw) {
-		java.util.Map<String, Object> qualified =
-				new java.util.HashMap<>();
-		if (raw == null) return qualified;
-		for (java.util.Map.Entry<String, Boolean> e : raw.entrySet()) {
-			qualified.put("securityPolicy." + e.getKey(), e.getValue());
+	private void pushOrProfileName(String resourceId,
+			ControlEvaluator.ComplianceResult cr, String profileName) {
+		if (cr.totalCount > 0 || cr.unreadableCount > 0) {
+			pushComplianceViaClient(resourceId, cr, profileName);
+		} else {
+			pushProfileNamePropertyOnly(resourceId, profileName);
 		}
-		return qualified;
 	}
 
 	/**
-	 * Count controls in {@code slice} whose parameter_kind matches
-	 * {@code kind}. Used by collectDvs / collectDvpg to decide
-	 * whether to take the full evaluation path or fall back to the
-	 * profile-name-only push.
+	 * Count controls in {@code slice} of the given {@code kind} that are
+	 * actually EVALUABLE. For {@code vim_property} that means the control
+	 * carries a non-empty {@code read_recipe} (column 13) —
+	 * {@link BenchmarkProfile.Control#isEvaluable()} enforces it. A
+	 * vim_property control with no recipe is non-evaluable / informational
+	 * and must not flip a resource into the full-evaluation path. Used by
+	 * collectDvs / collectDvpg / collectClusters to decide between the
+	 * full evaluation and the profile-name-only fallback.
 	 */
 	private static int countEvaluable(
 			java.util.List<BenchmarkProfile.Control> slice, String kind) {
 		int n = 0;
 		for (BenchmarkProfile.Control c : slice) {
-			if (kind.equals(c.parameterKind)) n++;
+			if (kind.equals(c.parameterKind) && c.isEvaluable()) n++;
 		}
 		return n;
 	}
@@ -1074,14 +1108,17 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 
 	private static final class DvsStats {
 		int total;
+		int unreadable;
 	}
 
 	private static final class DvpgStats {
 		int total;
+		int unreadable;
 	}
 
 	private static final class ClusterStats {
 		int total;
+		int unreadable;
 	}
 
 	// pushComplianceViaClient — publishes two layers of compliance data
@@ -1093,6 +1130,9 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 	//     VCF-CF Compliance|pass_count     (numeric)
 	//     VCF-CF Compliance|fail_count     (numeric)
 	//     VCF-CF Compliance|total_count    (numeric)
+	//     VCF-CF Compliance|unreadable_count (numeric — controls that
+	//       declared a read_recipe but read back nothing; excluded from
+	//       score/pass/fail/total, a profile-coverage signal)
 	//     VCF-CF Compliance|profile_name   (string property)
 	//
 	//   Per-control raw data (profile-versioned subtree, for the
@@ -1131,6 +1171,8 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 		stats.put("VCF-CF Compliance|pass_count", (double) cr.passCount);
 		stats.put("VCF-CF Compliance|fail_count", (double) cr.failCount);
 		stats.put("VCF-CF Compliance|total_count", (double) cr.totalCount);
+		stats.put("VCF-CF Compliance|unreadable_count",
+				(double) cr.unreadableCount);
 
 		stitcher.pushProperties(resourceId, props, ts);
 		stitcher.pushStats(resourceId, stats, ts);

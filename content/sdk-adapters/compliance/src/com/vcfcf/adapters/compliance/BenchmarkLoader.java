@@ -50,6 +50,16 @@ public final class BenchmarkLoader {
 			"remediation_text"
 	);
 
+	/**
+	 * Canonical column 13 — {@code read_recipe}. Optional by contract
+	 * (see CANONICAL_SCHEMA.md): a CSV without it still loads, and every
+	 * vim_property control then reads as non-evaluable / informational.
+	 * Kept out of {@link #REQUIRED_COLUMNS} so older bundled or custom
+	 * CSVs do not hard-fail the loader. When the header IS present, the
+	 * loader populates it by name like every other column.
+	 */
+	static final String READ_RECIPE_COLUMN = "read_recipe";
+
 	private volatile BenchmarkProfile cachedProfile;
 	private volatile String cachedProfileKey;
 
@@ -219,6 +229,10 @@ public final class BenchmarkLoader {
 		int idxDescription = headerMap.get("description");
 		int idxSourceRef = headerMap.get("source_ref");
 		int idxRemediationText = headerMap.get("remediation_text");
+		// Optional column: -1 when absent, in which case field() returns
+		// "" and every vim_property control loads as non-evaluable.
+		Integer idxReadRecipeBox = headerMap.get(READ_RECIPE_COLUMN);
+		int idxReadRecipe = idxReadRecipeBox != null ? idxReadRecipeBox : -1;
 
 		List<BenchmarkProfile.Control> controls = new ArrayList<>();
 		for (int i = 1; i < records.size(); i++) {
@@ -241,7 +255,8 @@ public final class BenchmarkLoader {
 					field(fields, idxTitle),
 					field(fields, idxDescription),
 					field(fields, idxSourceRef),
-					field(fields, idxRemediationText)
+					field(fields, idxRemediationText),
+					field(fields, idxReadRecipe)
 			));
 		}
 		return controls;

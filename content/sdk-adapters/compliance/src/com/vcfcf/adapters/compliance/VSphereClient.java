@@ -304,93 +304,353 @@ public final class VSphereClient {
 	}
 
 	/**
-	 * Reads a tiny slice of the cluster-level vSAN configuration that
-	 * vim25 8.0.2 exposes natively (no vSAN Management SDK on classpath).
+	 * Generic, recipe-driven vim_property reader (canonical column 13).
 	 *
-	 * <p>The vim25 surface is
-	 * {@code ClusterComputeResource.configurationEx} ->
-	 * {@code ClusterConfigInfoEx.vsanConfigInfo} ->
-	 * {@code VsanClusterConfigInfo}. The plain {@code vim25.jar} on this
-	 * adapter's classpath exposes only three fields on that object:
+	 * <p>This is the data-driven replacement for the three bespoke
+	 * readers ({@code readSecurityPolicy}, {@code getClusterVsanConfig}).
+	 * Given a resource MoRef and a list of that resource's vim_property
+	 * controls (each carrying a {@code read_recipe} of the form
+	 * {@code <style>:<vim_path>}), it returns a map keyed by the
+	 * control's canonical {@code parameter} -> the typed value read from
+	 * vim25 (or {@link #UNREADABLE} when the recipe resolved to nothing
+	 * or its style was unknown).
+	 *
+	 * <p>Contract — three result states per control, mirroring the
+	 * "unreadable is not compliant" rule:
 	 * <ul>
-	 *   <li>{@code enabled}            — is vSAN turned on for this cluster</li>
-	 *   <li>{@code defaultConfig.autoClaimStorage} — whether vSAN claims
-	 *       compatible disks automatically (the
-	 *       {@code cluster.managed-disk-claim} control reads this)</li>
-	 *   <li>{@code defaultConfig.checksumEnabled} — cluster-wide object
-	 *       checksum default (the {@code cluster.object-checksum}
-	 *       control reads this)</li>
+	 *   <li>recipe resolves to a typed value -> that value (Boolean /
+	 *       String / Number) is placed in the map under the parameter
+	 *       key. The evaluator compares it.</li>
+	 *   <li>recipe present + evaluable but the read found null / the
+	 *       style could not extract / the style is unknown -> the
+	 *       sentinel {@link #UNREADABLE} object is placed in the map.
+	 *       The evaluator counts it as unreadable (excluded from
+	 *       pass/fail/denominator), NEVER as a pass.</li>
+	 *   <li>recipe empty / control not vim_property -> the key is absent
+	 *       from the map (the control is non-evaluable; the evaluator
+	 *       skips it entirely).</li>
 	 * </ul>
 	 *
-	 * <p>The other 12 ClusterComputeResource controls SCG defines for
-	 * vSAN (data-at-rest encryption, data-in-transit encryption, iSCSI
-	 * mutual CHAP, File Services NFS/SMB, network isolation, operations
-	 * reserve, automatic rebalance, auto-policy-management,
-	 * vSAN Max isolation) live on richer vSAN management interfaces
-	 * (VsanConfigSystem, VsanFileServiceConfig, etc.) that the
-	 * vSAN Management SDK jar ships but plain vim25 does not. Without
-	 * that jar on the classpath, those reads are a TOOLSET GAP and the
-	 * canonical CSV keeps them as {@code manual_audit} rows that emit
-	 * profile_name only.
-	 *
-	 * <p>Returns an empty map when {@code vsanConfigInfo} is absent
-	 * (cluster does not have vSAN turned on, or
-	 * {@code configurationEx.vsanConfigInfo} returns null). The
-	 * surrounding collector treats the empty map as a no-signal cluster
-	 * and falls back to the profile-name-only push — same contract as
-	 * DVS / DVPG when the security-policy read finds nothing.
-	 *
-	 * <p>The returned keys are already prefixed with {@code vsanConfig.}
-	 * so the canonical {@code parameter} column in the CSV can use the
-	 * same {@code <kind>.<field>} dot-path convention the
-	 * security-policy controls use ({@code securityPolicy.<field>}).
-	 * The Java evaluator's vim_property dispatcher looks the key up
-	 * directly; no rewriting in the caller.
-	 *
-	 * <p>Reflection-tolerant unwrap mirrors the DVS / DVPG security-
-	 * policy reader so minor binding differences across vim25 8.x
-	 * point releases don't break the read.
+	 * <p>Reflection-tolerant throughout — never casts to a concrete
+	 * vim25 subclass. A missing accessor anywhere in the walk yields
+	 * null, which surfaces as {@link #UNREADABLE}, never an exception.
 	 */
-	public Map<String, Object> getClusterVsanConfig(
-			ManagedObjectReference clusterRef) throws Exception {
+	public Map<String, Object> readVimProperties(
+			ManagedObjectReference moRef,
+			List<BenchmarkProfile.Control> controls) throws Exception {
 		ensureConnected();
 		Map<String, Object> result = new HashMap<>();
-		if (clusterRef == null) return result;
+		if (moRef == null || controls == null) return result;
 
-		// configurationEx is the rich ClusterConfigInfoEx; the older
-		// 'configuration' property is the legacy ClusterConfigInfo
-		// that does NOT carry vsanConfigInfo. Use configurationEx.
-		Object configEx = getRawProperty(clusterRef, "configurationEx");
-		if (configEx == null) return result;
-
-		Object vsanCfg = invokeGetter(configEx, "getVsanConfigInfo");
-		if (vsanCfg == null) {
-			// Cluster has no vSAN configuration object at all — typical
-			// for non-vSAN clusters in mixed environments. Leave the
-			// map empty; the collector treats this as no-signal.
-			return result;
-		}
-
-		Boolean enabled = readBoolean(vsanCfg, "isEnabled", "getEnabled");
-		if (enabled != null) {
-			result.put("vsanConfig.enabled", enabled);
-		}
-
-		Object defaultCfg = invokeGetter(vsanCfg, "getDefaultConfig");
-		if (defaultCfg != null) {
-			Boolean autoClaim = readBoolean(defaultCfg,
-					"isAutoClaimStorage", "getAutoClaimStorage");
-			if (autoClaim != null) {
-				result.put("vsanConfig.autoClaimStorage", autoClaim);
+		for (BenchmarkProfile.Control c : controls) {
+			if (!"vim_property".equals(c.parameterKind)) continue;
+			String recipe = c.readRecipe;
+			if (recipe == null || recipe.trim().isEmpty()) {
+				// Non-evaluable vim_property control (no recipe) — leave
+				// the key absent so the evaluator skips it. Not an
+				// unreadable: we never declared we could read it.
+				continue;
 			}
-			Boolean checksum = readBoolean(defaultCfg,
-					"isChecksumEnabled", "getChecksumEnabled");
-			if (checksum != null) {
-				result.put("vsanConfig.objectChecksumEnabled", checksum);
+			Object value;
+			try {
+				value = readByRecipe(moRef, recipe.trim());
+			} catch (Exception e) {
+				// Defensive — readByRecipe is already null-on-miss, but
+				// any unexpected reflective failure becomes unreadable,
+				// never a throw that aborts the whole collection cycle.
+				value = null;
 			}
+			result.put(c.parameter,
+					value != null ? value : UNREADABLE);
 		}
-
 		return result;
+	}
+
+	/**
+	 * Sentinel placed in the {@link #readVimProperties} result map when
+	 * a control declared a recipe but the read could not produce a
+	 * value. Distinct from "key absent" (non-evaluable, no recipe) and
+	 * from a real {@code Boolean.FALSE}. The evaluator treats this as
+	 * the explicit {@code unreadable} outcome.
+	 */
+	public static final Object UNREADABLE = new Object() {
+		@Override public String toString() { return "(unreadable)"; }
+	};
+
+	/**
+	 * Read one recipe ({@code <style>:<vim_path>}) against a resource
+	 * MoRef and return the typed value, or null when the read finds
+	 * nothing / the style is unknown.
+	 *
+	 * <p>The walk reproduces exactly what the retired bespoke readers
+	 * did, generically:
+	 * <ol>
+	 *   <li>PropertyCollector resolves the longest leading prefix of the
+	 *       path it can ({@link #getRawPropertyLongestPrefix}). For the
+	 *       security-policy recipe this resolves
+	 *       {@code config.defaultPortConfig}; for the vSAN recipe,
+	 *       {@code configurationEx}.</li>
+	 *   <li>Remaining segments are walked with reflective zero-arg
+	 *       {@code get<Segment>()} getters
+	 *       ({@link #invokeGetter}).</li>
+	 *   <li>The {@code <style>} extractor is applied to the final node:
+	 *       {@code bool_policy} unwraps a BoolPolicy {@code .value};
+	 *       {@code bool} reads {@code is<Seg>()/get<Seg>()};
+	 *       {@code scalar} returns the node as-is; {@code string_list_join}
+	 *       joins a {@code List} on ",".</li>
+	 * </ol>
+	 */
+	Object readByRecipe(ManagedObjectReference moRef, String recipe)
+			throws Exception {
+		int colon = recipe.indexOf(':');
+		if (colon <= 0 || colon >= recipe.length() - 1) {
+			// Malformed recipe (no style or no path) — unknown style,
+			// treat as unreadable rather than guessing.
+			return null;
+		}
+		String style = recipe.substring(0, colon).trim();
+		String path = recipe.substring(colon + 1).trim();
+		if (path.isEmpty()) return null;
+
+		String[] segments = path.split("\\.");
+
+		switch (style) {
+			case "scalar":
+				return readScalarRecipe(moRef, segments);
+			case "bool":
+				return readBoolRecipe(moRef, segments);
+			case "bool_policy":
+				return readBoolPolicyRecipe(moRef, segments);
+			case "string_list_join":
+				return readStringListJoinRecipe(moRef, segments);
+			default:
+				// Unknown style — never guess. Null -> UNREADABLE.
+				return null;
+		}
+	}
+
+	/**
+	 * Walk to the node identified by the FULL segment path, returning
+	 * the node object (or null on any missing accessor). Used by the
+	 * scalar / string_list_join styles where the final segment IS the
+	 * value node. PropertyCollector resolves the longest prefix it can;
+	 * the rest is a reflective getter walk.
+	 */
+	private Object walkToNode(ManagedObjectReference moRef, String[] segments)
+			throws Exception {
+		int[] consumed = new int[1];
+		Object node = getRawPropertyLongestPrefix(moRef, segments, consumed);
+		for (int i = consumed[0]; i < segments.length; i++) {
+			if (node == null) return null;
+			node = invokeGetter(node, getterName(segments[i]));
+		}
+		return node;
+	}
+
+	private Object readScalarRecipe(ManagedObjectReference moRef,
+			String[] segments) throws Exception {
+		return walkToNode(moRef, segments);
+	}
+
+	/**
+	 * bool style — walk to the PARENT of the final segment, then read
+	 * the final segment as a boolean via {@code is<Field>()/get<Field>()}.
+	 * Reproduces the vSAN reader: {@code configurationEx} (PropertyCollector)
+	 * -> getVsanConfigInfo [-> getDefaultConfig] -> isEnabled/getEnabled
+	 * (or isChecksumEnabled/getChecksumEnabled, etc.).
+	 */
+	private Boolean readBoolRecipe(ManagedObjectReference moRef,
+			String[] segments) throws Exception {
+		Object parent = walkToParent(moRef, segments);
+		if (parent == null) return null;
+		String field = segments[segments.length - 1];
+		return readBoolean(parent, "is" + capitalize(field),
+				"get" + capitalize(field));
+	}
+
+	/**
+	 * bool_policy style — walk to the PARENT of the final segment
+	 * (a DVSSecurityPolicy), then unwrap the final segment's BoolPolicy
+	 * wrapper to its {@code .value}. Reproduces readSecurityPolicy:
+	 * {@code config.defaultPortConfig} (PropertyCollector) ->
+	 * getSecurityPolicy -> get<Field> (BoolPolicy) -> isValue/getValue.
+	 */
+	private Boolean readBoolPolicyRecipe(ManagedObjectReference moRef,
+			String[] segments) throws Exception {
+		Object parent = walkToParent(moRef, segments);
+		if (parent == null) return null;
+		String field = segments[segments.length - 1];
+		return readBoolPolicy(parent, "get" + capitalize(field));
+	}
+
+	private String readStringListJoinRecipe(ManagedObjectReference moRef,
+			String[] segments) throws Exception {
+		Object node = walkToNode(moRef, segments);
+		if (node == null) return null;
+		if (node instanceof List) {
+			List<?> list = (List<?>) node;
+			if (list.isEmpty()) return null;
+			StringBuilder sb = new StringBuilder();
+			for (int i = 0; i < list.size(); i++) {
+				if (i > 0) sb.append(',');
+				sb.append(String.valueOf(list.get(i)));
+			}
+			return sb.toString();
+		}
+		// Some bindings wrap the list in an ArrayOfX with a getX()
+		// accessor; reflectively pull a List out if present.
+		Object inner = firstListAccessor(node);
+		if (inner instanceof List) {
+			List<?> list = (List<?>) inner;
+			if (list.isEmpty()) return null;
+			StringBuilder sb = new StringBuilder();
+			for (int i = 0; i < list.size(); i++) {
+				if (i > 0) sb.append(',');
+				sb.append(String.valueOf(list.get(i)));
+			}
+			return sb.toString();
+		}
+		return null;
+	}
+
+	/**
+	 * Walk to the parent node of the final path segment. PropertyCollector
+	 * resolves the longest prefix; remaining intermediate segments (all
+	 * but the last) are walked reflectively.
+	 */
+	private Object walkToParent(ManagedObjectReference moRef,
+			String[] segments) throws Exception {
+		int[] consumed = new int[1];
+		// CAP at segments.length - 1: PropertyCollector must NOT be
+		// allowed to consume the final (leaf) segment for the
+		// bool / bool_policy styles, because the leaf is a boolean or a
+		// BoolPolicy wrapper that the style extractor reads via a
+		// reflective accessor on its PARENT. If PropertyCollector
+		// resolved the leaf directly we'd lose the wrapper and the
+		// extractor would null out (false unreadable). Capping the
+		// probe to the parent depth guarantees the walk reaches exactly
+		// the node the retired bespoke readers reflected from:
+		//   bool_policy -> the DVSSecurityPolicy (parent of <field>)
+		//   bool        -> the VsanClusterConfigInfo[.defaultConfig]
+		//                  (parent of <field>)
+		Object node = getRawPropertyLongestPrefix(moRef, segments,
+				segments.length - 1, consumed);
+		// Walk reflective getters for every intermediate segment up to,
+		// but not including, the final one.
+		for (int i = consumed[0]; i < segments.length - 1; i++) {
+			if (node == null) return null;
+			node = invokeGetter(node, getterName(segments[i]));
+		}
+		return node;
+	}
+
+	/**
+	 * Try PropertyCollector against progressively shorter dotted
+	 * prefixes of {@code segments} (longest first, but no longer than
+	 * {@code maxLen} segments) and return the first non-null value,
+	 * writing the number of segments consumed into {@code consumedOut[0]}.
+	 * Returns null with consumed=0 when no prefix resolves (the caller
+	 * then treats it as unreadable).
+	 *
+	 * <p>Longest-first matters: {@code config.defaultPortConfig}
+	 * resolves as a single PropertyCollector path on a DVS. We want the
+	 * deepest node PropertyCollector WILL hand back (within the cap),
+	 * then reflect the rest — which is exactly what the bespoke readers
+	 * did (PropertyCollector for {@code config.defaultPortConfig} /
+	 * {@code configurationEx}; reflective getters for the tail).
+	 */
+	private Object getRawPropertyLongestPrefix(ManagedObjectReference moRef,
+			String[] segments, int[] consumedOut) throws Exception {
+		return getRawPropertyLongestPrefix(moRef, segments,
+				segments.length, consumedOut);
+	}
+
+	private Object getRawPropertyLongestPrefix(ManagedObjectReference moRef,
+			String[] segments, int maxLen, int[] consumedOut)
+			throws Exception {
+		int start = Math.min(maxLen, segments.length);
+		for (int len = start; len >= 1; len--) {
+			StringBuilder p = new StringBuilder();
+			for (int i = 0; i < len; i++) {
+				if (i > 0) p.append('.');
+				p.append(segments[i]);
+			}
+			Object v;
+			try {
+				v = getRawProperty(moRef, p.toString());
+			} catch (Exception e) {
+				v = null;
+			}
+			if (v != null) {
+				consumedOut[0] = len;
+				return v;
+			}
+		}
+		consumedOut[0] = 0;
+		return null;
+	}
+
+	private static String getterName(String segment) {
+		return "get" + capitalize(segment);
+	}
+
+	private static String capitalize(String s) {
+		if (s == null || s.isEmpty()) return s;
+		return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+	}
+
+	/**
+	 * Reflectively find the first zero-arg getter on {@code node} that
+	 * returns a {@code List} — used by string_list_join to peel an
+	 * ArrayOfX wrapper. Returns null when none is found.
+	 */
+	private Object firstListAccessor(Object node) {
+		if (node == null) return null;
+		for (java.lang.reflect.Method m : node.getClass().getMethods()) {
+			if (m.getParameterTypes().length != 0) continue;
+			if (!m.getName().startsWith("get")) continue;
+			if (!List.class.isAssignableFrom(m.getReturnType())) continue;
+			try {
+				return m.invoke(node);
+			} catch (Exception ignored) {
+				return null;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Probe whether a cluster has a vSAN configuration object at all.
+	 *
+	 * <p>The bulk vSAN read is now data-driven via
+	 * {@link #readVimProperties} + the {@code bool:configurationEx.
+	 * vsanConfigInfo.*} recipes (canonical column 13). But the collector
+	 * still needs to distinguish a NON-vSAN cluster — where the
+	 * vsanConfig controls are genuinely N/A and should be skipped
+	 * silently — from a vSAN cluster where a field read back null (a
+	 * real coverage gap that should surface as unreadable). The retired
+	 * {@code getClusterVsanConfig} made that distinction by returning an
+	 * empty map when {@code configurationEx.vsanConfigInfo} was absent;
+	 * this probe preserves it.
+	 *
+	 * <p>vim25 surface:
+	 * {@code ClusterComputeResource.configurationEx} (a
+	 * {@code ClusterConfigInfoEx}) -> {@code getVsanConfigInfo()}. Returns
+	 * {@code false} when either is null (non-vSAN cluster, or
+	 * configurationEx absent), {@code true} when the vSAN config object
+	 * is present. Reflection-tolerant; never casts.
+	 */
+	public boolean hasVsanConfig(ManagedObjectReference clusterRef)
+			throws Exception {
+		ensureConnected();
+		if (clusterRef == null) return false;
+		// configurationEx is the rich ClusterConfigInfoEx; the older
+		// 'configuration' property is the legacy ClusterConfigInfo that
+		// does NOT carry vsanConfigInfo. Use configurationEx.
+		Object configEx = getRawProperty(clusterRef, "configurationEx");
+		if (configEx == null) return false;
+		Object vsanCfg = invokeGetter(configEx, "getVsanConfigInfo");
+		return vsanCfg != null;
 	}
 
 	/**
@@ -447,103 +707,12 @@ public final class VSphereClient {
 		return result;
 	}
 
-	/**
-	 * Reads {@code DistributedVirtualSwitch.config.defaultPortConfig
-	 * .securityPolicy} and returns the three boolean security-policy
-	 * values keyed by canonical field name:
-	 * {@code allowPromiscuous}, {@code macChanges},
-	 * {@code forgedTransmits}.
-	 *
-	 * <p>The vim25 path is
-	 * {@code DistributedVirtualSwitch.config.defaultPortConfig} which
-	 * returns a {@code DVPortSetting} (typically the
-	 * {@code VMwareDVSPortSetting} subclass on vCenter-managed
-	 * switches). Its {@code securityPolicy} child is a
-	 * {@code DVSSecurityPolicy} whose three fields are
-	 * {@code BoolPolicy} wrappers (each carrying both
-	 * {@code inherited} and {@code value} children). We surface only
-	 * {@code value} here — the canonical compliance check is "is the
-	 * effective value Reject?" not "is it inherited from the parent
-	 * switch?" An inherited TRUE is still a non-compliant value when
-	 * the expected_value is Reject.
-	 *
-	 * <p>Returns an empty map if {@code config.defaultPortConfig} is
-	 * null on the DVS (rare — every operational DVS has one) or if
-	 * the {@code securityPolicy} substructure is absent. Reflection-
-	 * tolerant unwrap mirrors the
-	 * {@link #getVmExtraConfig(ManagedObjectReference)} pattern so
-	 * minor vim25 binding differences (DVSSecurityPolicy fields are
-	 * sometimes inherited from a non-public superclass) don't break
-	 * the read.
-	 */
-	public Map<String, Boolean> getDvsSecurityPolicy(
-			ManagedObjectReference dvsRef) throws Exception {
-		return readSecurityPolicy(dvsRef);
-	}
-
-	/**
-	 * Reads {@code DistributedVirtualPortgroup.config.defaultPortConfig
-	 * .securityPolicy} and returns the same {@code allowPromiscuous /
-	 * macChanges / forgedTransmits} boolean keys as
-	 * {@link #getDvsSecurityPolicy(ManagedObjectReference)}.
-	 *
-	 * <p>The DVPG-level security policy overrides the DVS-level
-	 * default when set explicitly; the public Suite API maps the
-	 * effective value to {@code config.defaultPortConfig
-	 * .securityPolicy.<field>.value}. A port group whose policy
-	 * inherits from the parent switch still exposes its effective
-	 * value here through the same path — vim25 resolves inheritance
-	 * server-side before serialization.
-	 */
-	public Map<String, Boolean> getDvpgSecurityPolicy(
-			ManagedObjectReference dvpgRef) throws Exception {
-		return readSecurityPolicy(dvpgRef);
-	}
-
-	/**
-	 * Shared reader for the DVS / DVPG security-policy path. Both
-	 * MoRef types expose
-	 * {@code config.defaultPortConfig.securityPolicy} with the same
-	 * {@code DVSSecurityPolicy} substructure (the DVPG inherits the
-	 * shape from its parent DVS in the vim25 type hierarchy), so a
-	 * single helper handles both.
-	 *
-	 * <p>Reflection-tolerant — we walk the property tree via
-	 * {@code getProperty()/get<Field>()} accessors rather than casting
-	 * to concrete classes, so the read survives the vim25 binding
-	 * variants we have seen across vCenter 7.x / 8.x / 9.x. When any
-	 * intermediate node is absent we return whatever keys we did
-	 * manage to read — partial results are useful for diagnostics
-	 * even when one field's wrapper is missing.
-	 */
-	private Map<String, Boolean> readSecurityPolicy(
-			ManagedObjectReference ref) throws Exception {
-		ensureConnected();
-		Map<String, Boolean> result = new HashMap<>();
-		if (ref == null) return result;
-
-		Object portCfg = getRawProperty(ref,
-				"config.defaultPortConfig");
-		if (portCfg == null) return result;
-
-		Object secPol = invokeGetter(portCfg, "getSecurityPolicy");
-		if (secPol == null) return result;
-
-		Boolean allowPromisc = readBoolPolicy(secPol,
-				"getAllowPromiscuous");
-		Boolean macChanges = readBoolPolicy(secPol, "getMacChanges");
-		Boolean forged = readBoolPolicy(secPol, "getForgedTransmits");
-		if (allowPromisc != null) {
-			result.put("allowPromiscuous", allowPromisc);
-		}
-		if (macChanges != null) {
-			result.put("macChanges", macChanges);
-		}
-		if (forged != null) {
-			result.put("forgedTransmits", forged);
-		}
-		return result;
-	}
+	// DVS / DVPG security-policy reads and the cluster vSAN read are no
+	// longer bespoke: they are driven by the canonical read_recipe
+	// column via readVimProperties + readByRecipe above (bool_policy
+	// for the securityPolicy.* fields, bool for vsanConfig.*). The
+	// reflective primitives those recipes use — readBoolPolicy,
+	// readBoolean, invokeGetter, getRawProperty — are retained below.
 
 	/**
 	 * Read the {@code .value} child of a {@code BoolPolicy} field on

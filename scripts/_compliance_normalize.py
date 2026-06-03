@@ -31,6 +31,7 @@ CANONICAL_HEADER: List[str] = [
     "description",
     "source_ref",
     "remediation_text",
+    "read_recipe",
 ]
 
 # Component name -> (resource_kind, object_type_prefix). Match the
@@ -585,6 +586,92 @@ def classify_vsan_cluster_param(source_id: str,
         if slug in sid:
             return param
     return None
+
+
+# Phase 3 / Batch 3c — canonical column 13: read_recipe.
+#
+# read_recipe = "<style>:<vim_path>" carries the full vim25 read spec
+# for a vim_property control, so a NEW vim_property control whose
+# extraction *style* already exists becomes pure CSV data — no Java
+# change. See CANONICAL_SCHEMA.md (column 13) and
+# VSphereClient.readByRecipe for the consuming end.
+#
+# Closed style set (adding a style is the only thing that needs Java):
+#   scalar           — direct scalar/String/Number/Boolean at the path
+#   bool             — boolean via isX()/getX() at the trailing segment
+#   bool_policy      — unwrap a BoolPolicy wrapper's .value
+#   string_list_join — join a List<String> on ","
+#
+# This map translates the canonical logical `parameter` key (the key
+# the evaluator looks up) to its read_recipe. It owns the vim-path
+# knowledge for the BUNDLED profiles; a custom-profile author supplies
+# read_recipe directly in their CSV. Keys not in the map get an empty
+# read_recipe (the control loads as non-evaluable/informational).
+#
+# The paths reproduce EXACTLY what the bespoke readers walked, so the
+# generic reader is byte-identical:
+#   bespoke readSecurityPolicy: config.defaultPortConfig ->
+#       getSecurityPolicy -> get<Field> (BoolPolicy) -> .value
+#   bespoke getClusterVsanConfig: configurationEx -> getVsanConfigInfo
+#       -> isEnabled/getEnabled, and -> getDefaultConfig ->
+#       isAutoClaimStorage / isChecksumEnabled
+_READ_RECIPE_BY_PARAMETER: Dict[str, str] = {
+    # DVS / DVPG security policy — BoolPolicy wrappers under
+    # config.defaultPortConfig.securityPolicy.
+    "securityPolicy.allowPromiscuous":
+        "bool_policy:config.defaultPortConfig.securityPolicy.allowPromiscuous",
+    "securityPolicy.macChanges":
+        "bool_policy:config.defaultPortConfig.securityPolicy.macChanges",
+    "securityPolicy.forgedTransmits":
+        "bool_policy:config.defaultPortConfig.securityPolicy.forgedTransmits",
+    # vSAN cluster config — plain booleans under
+    # configurationEx.vsanConfigInfo[.defaultConfig]. The trailing
+    # segment maps to is<Field>()/get<Field>(); the bespoke reader used
+    # the defaultConfig.checksumEnabled field for object-checksum, so
+    # the canonical key vsanConfig.objectChecksumEnabled maps to the
+    # checksumEnabled vim field.
+    "vsanConfig.enabled":
+        "bool:configurationEx.vsanConfigInfo.enabled",
+    "vsanConfig.autoClaimStorage":
+        "bool:configurationEx.vsanConfigInfo.defaultConfig.autoClaimStorage",
+    "vsanConfig.objectChecksumEnabled":
+        "bool:configurationEx.vsanConfigInfo.defaultConfig.checksumEnabled",
+}
+
+
+def build_read_recipe(parameter: str, parameter_kind: str) -> str:
+    """Return the read_recipe for a control, or '' when none applies.
+
+    Only vim_property controls carry a recipe. A vim_property control
+    whose canonical parameter is not in the bundled map gets an empty
+    recipe — it loads as non-evaluable (informational) rather than
+    being silently skipped or guessed. Non-vim_property kinds always
+    get an empty recipe (read_recipe is meaningless for them).
+    """
+    if parameter_kind != "vim_property":
+        return ""
+    if not parameter:
+        return ""
+    return _READ_RECIPE_BY_PARAMETER.get(parameter.strip(), "")
+
+
+def clean_expected_value(text: str) -> str:
+    """Collapse a multi-line SCG 'Baseline Suggested Value' to its
+    first non-empty line.
+
+    SCG occasionally embeds a clarifying prose continuation in the
+    expected-value cell (e.g. ``allow:hd\\nonce the guest OS is
+    installed`` for vm.efi-boot-types). The actual baseline IS the
+    first line; the continuation is documentation that breaks the
+    Java evaluator's equality compare. Take line one, strip, return.
+    """
+    if not text:
+        return ""
+    for line in text.replace("\r", "").split("\n"):
+        s = line.strip()
+        if s:
+            return s
+    return ""
 
 
 def collapse_remediation(text: str) -> str:

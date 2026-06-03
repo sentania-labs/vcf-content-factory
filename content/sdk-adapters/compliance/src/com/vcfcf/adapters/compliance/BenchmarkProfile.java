@@ -115,22 +115,27 @@ public final class BenchmarkProfile {
 	 * reintroduces the "garbage in, score=100" failure mode that
 	 * positional indexing produced on SCG 9.0.
 	 *
-	 * <p>Phase 3 / Batch 3b: {@code vim_property} joins
-	 * {@code advanced_setting}. Today the only vim_property controls
-	 * are DVS / DVPG security-policy reads
-	 * ({@code securityPolicy.allowPromiscuous /
-	 * securityPolicy.macChanges /
-	 * securityPolicy.forgedTransmits}) backed by
-	 * {@code VSphereClient.getDvsSecurityPolicy /
-	 * getDvpgSecurityPolicy} and the
-	 * {@code ControlEvaluator.evaluateVimProperties} dispatcher.
-	 * If a future batch adds a host-side vim_property control without
-	 * extending the dispatcher, this set must stay tight enough that
-	 * the unknown control is skipped rather than silently scored.
+	 * <p>{@code advanced_setting} is evaluable unconditionally (the bulk
+	 * {@code queryOptions(null)} read backs it). {@code vim_property} is
+	 * evaluable only when the control carries a non-empty
+	 * {@code read_recipe} (canonical column 13) — the recipe is the
+	 * data-driven read spec the generic {@code VSphereClient.readByRecipe}
+	 * reader consumes. A vim_property control with no recipe is
+	 * non-evaluable / informational: it loads for traceability but is
+	 * skipped by the evaluator. This is what makes a new vim_property
+	 * control pure CSV data (a recipe whose style already exists scores
+	 * with zero Java change) while keeping the "unreadable is not
+	 * compliant" guarantee — an absent recipe is never guessed.
 	 */
-	private static boolean isEvaluableKind(String parameterKind) {
-		return "advanced_setting".equals(parameterKind)
-				|| "vim_property".equals(parameterKind);
+	private static boolean isEvaluableKind(String parameterKind,
+			String readRecipe) {
+		if ("advanced_setting".equals(parameterKind)) {
+			return true;
+		}
+		if ("vim_property".equals(parameterKind)) {
+			return readRecipe != null && !readRecipe.trim().isEmpty();
+		}
+		return false;
 	}
 
 	public static final class Control {
@@ -147,6 +152,11 @@ public final class BenchmarkProfile {
 		public final String descriptionText;
 		public final String sourceRef;
 		public final String remediationText;
+		// Canonical column 13. read_recipe = "<style>:<vim_path>" for a
+		// vim_property control; empty for every other kind and for
+		// vim_property controls whose extraction is not yet declared.
+		// See CANONICAL_SCHEMA.md and VSphereClient.readByRecipe.
+		public final String readRecipe;
 
 		// Legacy aliases (kept so ControlEvaluator + the adapter's
 		// push loop keep compiling without churn). New code should
@@ -167,7 +177,7 @@ public final class BenchmarkProfile {
 				String adapterKind, String parameter, String parameterKind,
 				String valueType, String expectedValue, String title,
 				String descriptionText, String sourceRef,
-				String remediationText) {
+				String remediationText, String readRecipe) {
 			this.controlId = controlId != null ? controlId : "";
 			this.priority = priority != null ? priority : "P2";
 			this.resourceKind = resourceKind != null ? resourceKind : "";
@@ -182,6 +192,7 @@ public final class BenchmarkProfile {
 			this.sourceRef = sourceRef != null ? sourceRef : "";
 			this.remediationText = remediationText != null
 					? remediationText : "";
+			this.readRecipe = readRecipe != null ? readRecipe : "";
 
 			// Mirror canonical fields onto legacy aliases.
 			this.scgId = this.controlId;
@@ -216,7 +227,21 @@ public final class BenchmarkProfile {
 		}
 
 		public boolean isEvaluable() {
-			return isEvaluableKind(parameterKind);
+			return isEvaluableKind(parameterKind, readRecipe);
+		}
+
+		/**
+		 * True when this control declares a vim_property read it cannot
+		 * (yet) satisfy from a recipe — i.e. a {@code vim_property}
+		 * control with an empty {@code read_recipe}. Such controls are
+		 * non-evaluable, but the distinction matters: a missing recipe
+		 * is a profile/coverage gap the operator should see, not a pass.
+		 * (Used only for diagnostics; the evaluator keys off the recipe
+		 * directly.)
+		 */
+		public boolean isVimPropertyWithoutRecipe() {
+			return "vim_property".equals(parameterKind)
+					&& (readRecipe == null || readRecipe.trim().isEmpty());
 		}
 	}
 }

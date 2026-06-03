@@ -8,10 +8,25 @@ import java.util.Map;
 
 public final class ControlEvaluator {
 
+	/**
+	 * Sentinel value the {@code VSphereClient} recipe reader places in
+	 * the property-value map when a control declared a {@code read_recipe}
+	 * but the read produced nothing (null / style couldn't extract /
+	 * unknown style). Mirrors {@code VSphereClient.UNREADABLE}; compared
+	 * by reference. An unreadable control is NEVER compliant and is
+	 * excluded from pass / fail / the score denominator — it is surfaced
+	 * via {@code unreadableCount} as a profile/coverage signal instead.
+	 *
+	 * <p>Held as an {@code Object} the caller passes in (so this class
+	 * has no compile dependency on VSphereClient) — see
+	 * {@link #evaluateVimProperties(java.util.List, java.util.Map,
+	 * String, Object)}.
+	 */
+
 	public static ComplianceResult evaluate(BenchmarkProfile profile,
 			SimpleJson hostDetail, String hostname) {
 		if (hostDetail == null || hostDetail.isNull()) {
-			return new ComplianceResult(hostname, 0, 0, 0, 100.0,
+			return new ComplianceResult(hostname, 0, 0, 0, 0, 100.0,
 					new ArrayList<>());
 		}
 		Map<String, String> settings = new java.util.HashMap<>();
@@ -74,12 +89,41 @@ public final class ControlEvaluator {
 			if (param.contains("\n")) continue;
 
 			String actual = advancedSettings.get(param);
-			if (actual == null) {
+			String expected = control.suggestedValue;
+
+			// SCG 'or Undefined' / 'Not Present' semantics. When the
+			// VMX/host advanced setting key isn't carried in the
+			// extraConfig / OptionManager output for this resource,
+			// the SCG expected_value tells us whether absence is the
+			// compliant state. ~15 of 16 SCG 9.0 VM advanced_setting
+			// controls qualify the expected as 'X or Undefined' /
+			// 'Not Present' — i.e. the platform default IS the
+			// hardened state. Without this branch every unset key got
+			// silently skipped and total_count came out at 1 (only
+			// vm.vmrc-lock, which is the one VM control that requires
+			// explicit configuration).
+			if (actual == null || actual.isEmpty()) {
+				if (allowsUndefined(expected)) {
+					results.add(new ControlResult(
+							control.scgId,
+							"(undefined)",
+							expected,
+							true,
+							control.description
+					));
+					pass++;
+				}
 				continue;
 			}
 
-			String expected = control.suggestedValue;
-			boolean compliant = valuesMatch(actual, expected);
+			// Bare 'Not Present' (without 'X or' prefix) means the key
+			// must be absent — its presence at any value is non-compliant.
+			boolean compliant;
+			if (requiresAbsence(expected)) {
+				compliant = false;
+			} else {
+				compliant = valuesMatch(actual, expected);
+			}
 
 			results.add(new ControlResult(
 					control.scgId,
@@ -99,8 +143,42 @@ public final class ControlEvaluator {
 		int total = pass + fail;
 		double score = total > 0 ? ((double) pass / total) * 100.0 : 100.0;
 
-		return new ComplianceResult(resourceName, pass, fail, total, score,
-				results);
+		// advanced_setting controls have no unreadable outcome: an absent
+		// key is handled by the allowsUndefined / requiresAbsence
+		// semantics above, never an unreadable signal. unreadableCount=0.
+		return new ComplianceResult(resourceName, pass, fail, total, 0,
+				score, results);
+	}
+
+	/**
+	 * True when the SCG expected_value qualifies "key is unset/absent"
+	 * as a compliant state. Matches two idioms in Bob's SCG CSVs:
+	 *
+	 * <ul>
+	 *   <li>{@code "X or Undefined"} / {@code "X or Not Present"} —
+	 *       the key may either be missing or equal to X.</li>
+	 *   <li>Bare {@code "Not Present"} — the key MUST be missing
+	 *       (presence at any value is non-compliant).</li>
+	 * </ul>
+	 */
+	static boolean allowsUndefined(String expected) {
+		if (expected == null) return false;
+		String e = expected.trim().toLowerCase();
+		if (e.isEmpty()) return false;
+		if (e.equals("not present")) return true;
+		if (e.endsWith(" or undefined")) return true;
+		if (e.endsWith(" or not present")) return true;
+		return false;
+	}
+
+	/**
+	 * True when the SCG expected_value is bare {@code "Not Present"} —
+	 * the only compliant state is absence. Presence at any value
+	 * (the actual is non-null) is non-compliant.
+	 */
+	static boolean requiresAbsence(String expected) {
+		if (expected == null) return false;
+		return "not present".equals(expected.trim().toLowerCase());
 	}
 
 	/**
@@ -130,16 +208,48 @@ public final class ControlEvaluator {
 	 * {@link #evaluateControls(java.util.List, java.util.Map, String)}:
 	 * no evaluable vim_property controls -> score=100.0, totalCount=0
 	 * so the caller can refuse to fold a sentinel into a fleet average.
+	 *
+	 * <p><b>Unreadable outcome.</b> A value equal (by reference) to
+	 * {@code unreadableSentinel} means the control declared a recipe but
+	 * the read produced nothing. Such controls are counted in
+	 * {@code unreadableCount}, are NEVER compliant, and are EXCLUDED from
+	 * pass, fail, and the score denominator (total). They are recorded as
+	 * a {@link ControlResult} with {@code compliant=false} and
+	 * {@code actual="(unreadable)"} so the per-control raw push surfaces
+	 * them in the metric browser, but they do not move the score.
 	 */
 	public static ComplianceResult evaluateVimProperties(
 			List<BenchmarkProfile.Control> controls,
 			Map<String, Object> propertyValues, String resourceName) {
+		return evaluateVimProperties(controls, propertyValues, resourceName,
+				null);
+	}
+
+	/**
+	 * Recipe-aware overload — {@code unreadableSentinel} is the object
+	 * {@code VSphereClient.UNREADABLE} the reader stored in
+	 * {@code propertyValues} for declared-but-unreadable controls.
+	 * Passing {@code null} disables the unreadable path (a value of
+	 * {@code null} in the map is then treated as "skip", preserving the
+	 * legacy two-arg behavior).
+	 */
+	public static ComplianceResult evaluateVimProperties(
+			List<BenchmarkProfile.Control> controls,
+			Map<String, Object> propertyValues, String resourceName,
+			Object unreadableSentinel) {
 		List<ControlResult> results = new ArrayList<>();
 		int pass = 0;
 		int fail = 0;
+		int unreadable = 0;
 
 		for (BenchmarkProfile.Control control : controls) {
 			if (!"vim_property".equals(control.parameterKind)) {
+				continue;
+			}
+			// A vim_property control with no read_recipe is
+			// non-evaluable / informational — skip it entirely (it is
+			// not unreadable; we never declared we could read it).
+			if (!control.isEvaluable()) {
 				continue;
 			}
 			String param = control.configParameter;
@@ -149,6 +259,22 @@ public final class ControlEvaluator {
 			if (param.contains("\n")) continue;
 
 			Object actualObj = propertyValues.get(param);
+
+			// Declared-but-unreadable: recipe present but the read found
+			// nothing. Never compliant, excluded from pass/fail/total,
+			// surfaced via unreadableCount + a (unreadable) ControlResult.
+			if (unreadableSentinel != null && actualObj == unreadableSentinel) {
+				unreadable++;
+				results.add(new ControlResult(
+						control.scgId,
+						"(unreadable)",
+						control.suggestedValue,
+						false,
+						control.description
+				));
+				continue;
+			}
+
 			if (actualObj == null) {
 				continue;
 			}
@@ -174,8 +300,8 @@ public final class ControlEvaluator {
 		int total = pass + fail;
 		double score = total > 0 ? ((double) pass / total) * 100.0 : 100.0;
 
-		return new ComplianceResult(resourceName, pass, fail, total, score,
-				results);
+		return new ComplianceResult(resourceName, pass, fail, total,
+				unreadable, score, results);
 	}
 
 	/**
@@ -252,7 +378,7 @@ public final class ControlEvaluator {
 	static boolean valuesMatch(String actual, String expected) {
 		if (actual == null || expected == null) return false;
 		String a = stripQuotes(actual.trim());
-		String e = stripQuotes(expected.trim());
+		String e = stripQuotes(stripUndefinedSuffix(expected.trim()));
 		if (a.equalsIgnoreCase(e)) return true;
 
 		try {
@@ -262,6 +388,26 @@ public final class ControlEvaluator {
 		} catch (NumberFormatException ignored) {}
 
 		return false;
+	}
+
+	/**
+	 * Strip Bob's SCG "X or Undefined" / "X or Not Present" qualifier
+	 * so the case-insensitive equality compare in {@link #valuesMatch}
+	 * sees a clean expected value when the key IS present in
+	 * extraConfig. The {@link #allowsUndefined} path handles the
+	 * actual-absent half of the OR.
+	 */
+	static String stripUndefinedSuffix(String expected) {
+		if (expected == null) return null;
+		String e = expected.trim();
+		String lower = e.toLowerCase();
+		if (lower.endsWith(" or undefined")) {
+			return e.substring(0, e.length() - " or undefined".length()).trim();
+		}
+		if (lower.endsWith(" or not present")) {
+			return e.substring(0, e.length() - " or not present".length()).trim();
+		}
+		return e;
 	}
 
 	private static String stripQuotes(String s) {
@@ -277,15 +423,21 @@ public final class ControlEvaluator {
 		public final int passCount;
 		public final int failCount;
 		public final int totalCount;
+		// Declared-but-unreadable controls — recipe present but the read
+		// produced nothing. Excluded from pass/fail/totalCount; surfaced
+		// as a coverage signal (VCF-CF Compliance|unreadable_count).
+		public final int unreadableCount;
 		public final double score;
 		public final List<ControlResult> controlResults;
 
 		public ComplianceResult(String hostname, int passCount, int failCount,
-				int totalCount, double score, List<ControlResult> controlResults) {
+				int totalCount, int unreadableCount, double score,
+				List<ControlResult> controlResults) {
 			this.hostname = hostname;
 			this.passCount = passCount;
 			this.failCount = failCount;
 			this.totalCount = totalCount;
+			this.unreadableCount = unreadableCount;
 			this.score = score;
 			this.controlResults = controlResults;
 		}

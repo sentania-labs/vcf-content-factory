@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.0.34 (2026-06-01)
+
+- feat(adapter): build 34 — data-driven vim_property reader via read_recipe (canonical col 13) + declared-but-unreadable signal (unreadable_count); retire bespoke DVS/DVPG/vSAN readers
+
+## 1.0.0.32 (2026-05-29)
+
+- feat(adapter): build 32 — ClusterComputeResource vSAN evaluation (2 of 14)
+
 ## 1.0.0.31 (2026-05-29)
 
 - feat(adapter): build 31 — DVS/DVPG security policy evaluation via vim25

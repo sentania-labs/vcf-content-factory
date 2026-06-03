@@ -25,10 +25,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _compliance_normalize import (
     ADAPTER_KIND,
     build_control_id,
+    build_read_recipe,
     classify_parameter_kind,
     classify_security_policy_param,
     classify_vsan_cluster_expected,
     classify_vsan_cluster_param,
+    clean_expected_value,
     clean_priority,
     collapse_remediation,
     derive_resource_kind,
@@ -172,7 +174,13 @@ def normalize(input_path: str, output_path: str) -> int:
 
             by_kind[parameter_kind] += 1
 
-            expected = (src.get(COL_EXPECTED) or "").strip()
+            # clean_expected_value() collapses multi-line cells (e.g.
+            # vm.efi-boot-types: 'allow:hd\nonce the guest OS is
+            # installed') to the first non-empty line — the baseline
+            # value, without the SCG documentation continuation that
+            # would otherwise break the Java evaluator's equality
+            # compare.
+            expected = clean_expected_value(src.get(COL_EXPECTED) or "")
             if vsan_expected_override is not None:
                 # Override the SCG-vocabulary expected_value with the
                 # canonical JS-boolean form the Java evaluator already
@@ -203,6 +211,7 @@ def normalize(input_path: str, output_path: str) -> int:
                 "description": description,
                 "source_ref": f"{SOURCE_TOKEN}:{source_id}",
                 "remediation_text": remediation,
+                "read_recipe": build_read_recipe(parameter, parameter_kind),
             })
 
         written = write_canonical(output_path, out_rows)
