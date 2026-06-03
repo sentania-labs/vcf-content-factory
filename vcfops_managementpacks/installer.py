@@ -106,26 +106,35 @@ def _resolve_credentials(
     user: Optional[str],
     password: Optional[str],
     profile: Optional[str] = None,
-) -> Tuple[str, str, str]:
-    """Resolve host/user/password from args then the active credential profile.
+) -> Tuple[str, str, str, bool]:
+    """Resolve host/user/password/verify_ssl from args then the active credential profile.
 
     Resolution order:
       1. Explicit CLI flags (--host / --user / --password) — highest priority.
       2. Active credential profile (VCFOPS_<PROFILE>_* env vars, resolved via
          --profile flag > VCFOPS_PROFILE env var > "devel" default).
 
-    Returns (host, user, password).  Calls _abort() if any required value
-    is missing after all sources are tried.
+    Returns (host, user, password, verify_ssl).  Calls _abort() if any
+    required value is missing after all sources are tried.
+
+    verify_ssl reflects the profile's VCFOPS_<PROFILE>_VERIFY_SSL setting
+    (parsed by resolve_profile_credentials — falsey values "false" / "0" /
+    "no" / "off" all map to False).  The caller is responsible for combining
+    this with any explicit --skip-ssl-verify CLI flag; the canonical merge is:
+        effective_skip = skip_ssl_verify_flag or (not verify_ssl)
+    which means the CLI flag can only force-skip, never force-verify.
     """
     from vcfops_common._env import load_dotenv, resolve_profile_credentials
     load_dotenv()
 
     # Resolve profile credentials as the fallback layer.
+    profile_verify_ssl = True  # safe default: verify unless told otherwise
     try:
         creds = resolve_profile_credentials(profile, default="devel")
         profile_host = creds.host
         profile_user = creds.user
         profile_password = creds.password
+        profile_verify_ssl = creds.verify_ssl
     except ValueError as e:
         _warn(f"Could not resolve profile credentials: {e}")
         profile_host = profile_user = profile_password = ""
@@ -149,7 +158,7 @@ def _resolve_credentials(
             f"  Use --profile to select a different credential profile."
         )
 
-    return host, user, password
+    return host, user, password, profile_verify_ssl
 
 
 # ---------------------------------------------------------------------------
@@ -763,7 +772,13 @@ def install_pak(
     if not p.is_file():
         _abort(f"Not a file: {pak_path}")
 
-    host, user, password = _resolve_credentials(host, user, password, profile=profile)
+    host, user, password, profile_verify_ssl = _resolve_credentials(
+        host, user, password, profile=profile
+    )
+    # CLI --skip-ssl-verify forces skip; profile VERIFY_SSL=false also forces skip.
+    # An explicit CLI flag takes precedence but the profile fills in when no flag
+    # was passed.  Default (no flag, no profile setting) is to verify SSL.
+    effective_verify_ssl = not (skip_ssl_verify or not profile_verify_ssl)
 
     # Pre-flight: parse manifest.txt to get declared name + version
     _info(f"[1/6] Parsing manifest from {p.name} ...")
@@ -784,7 +799,7 @@ def install_pak(
         host=host,
         user=user,
         password=password,
-        verify_ssl=not skip_ssl_verify,
+        verify_ssl=effective_verify_ssl,
     )
     try:
         ui.login()
@@ -922,7 +937,13 @@ def uninstall_pak(
 
     Credentials resolve order: CLI flags > active credential profile env vars.
     """
-    host, user, password = _resolve_credentials(host, user, password, profile=profile)
+    host, user, password, profile_verify_ssl = _resolve_credentials(
+        host, user, password, profile=profile
+    )
+    # CLI --skip-ssl-verify forces skip; profile VERIFY_SSL=false also forces skip.
+    # An explicit CLI flag takes precedence but the profile fills in when no flag
+    # was passed.  Default (no flag, no profile setting) is to verify SSL.
+    effective_verify_ssl = not (skip_ssl_verify or not profile_verify_ssl)
 
     # Step 1: UI session login
     _info(f"[1/5] Authenticating to /ui/ as {user!r} ...")
@@ -930,7 +951,7 @@ def uninstall_pak(
         host=host,
         user=user,
         password=password,
-        verify_ssl=not skip_ssl_verify,
+        verify_ssl=effective_verify_ssl,
     )
     try:
         ui.login()

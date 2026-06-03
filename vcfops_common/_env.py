@@ -164,7 +164,11 @@ def resolve_profile_credentials(
     password = _get("PASSWORD")
     auth_source = _get("AUTH_SOURCE", required=False) or "Local"
     verify_ssl_raw = _get("VERIFY_SSL", required=False)
-    verify_ssl = verify_ssl_raw.lower() != "false" if verify_ssl_raw else True
+    verify_ssl = (
+        verify_ssl_raw.lower() not in ("false", "0", "no", "off")
+        if verify_ssl_raw
+        else True
+    )
 
     return ProfileCredentials(
         host=host,
