@@ -969,6 +969,380 @@ _ESXCLI_RECLASS_BY_CONTROL_ID: Dict[str, tuple] = {
 }
 
 
+# Build 38 — service_state vim_property reclassifications.
+#
+# ESXi services can be read directly from HostSystem.config.service.service[]
+# via a new read_recipe style: service_state:<key>:running. The recipe
+# selects the HostServiceInfo element whose key== matches <key> and returns
+# the running boolean. Because the state is a plain vim25 property on
+# HostConfigInfo, the parameter_kind is vim_property (not a new kind).
+#
+# All service controls follow the same pattern:
+#   - parameter: service.<key>.running  (unique per-service key)
+#   - read_recipe: service_state:<key>:running
+#   - expected: "false" (service should be stopped) or "true" (ntpd)
+#   - value_type: boolean (inferred from "true"/"false" override)
+#
+# Keyed by canonical control_id, shared across 8.0 and 9.0 where the same
+# control_id appears in both profiles.
+_SERVICE_STATE_RECLASS_BY_CONTROL_ID: Dict[str, tuple] = {
+    # --- Build 38: SCG 8.0 service deactivation controls ---
+    # esx.deactivate-cim — CIM broker (sfcbd-watchdog). SCG: "Stopped".
+    "esx.deactivate-cim": (
+        "service.sfcbd-watchdog.running",
+        "service_state:sfcbd-watchdog:running",
+        "false",
+    ),
+    # esx.deactivate-shell — TSM (ESXi Shell). SCG: "Stopped".
+    # Shared key across 8.0 (esxi-8.deactivate-shell) and 9.0
+    # (esx-9.deactivate-shell); both normalizers produce esx.deactivate-shell.
+    "esx.deactivate-shell": (
+        "service.TSM.running",
+        "service_state:TSM:running",
+        "false",
+    ),
+    # esx.deactivate-slp — SLP daemon. SCG: "Stopped". 8.0 only.
+    "esx.deactivate-slp": (
+        "service.slpd.running",
+        "service_state:slpd:running",
+        "false",
+    ),
+    # esx.deactivate-snmp — SNMP daemon. SCG: "Stopped". 8.0 only;
+    # 9.0 uses esx.snmp.
+    "esx.deactivate-snmp": (
+        "service.snmpd.running",
+        "service_state:snmpd:running",
+        "false",
+    ),
+    # esx.deactivate-ssh — TSM-SSH (SSH daemon). SCG: "Stopped". 8.0 only;
+    # 9.0 uses esx.ssh.
+    "esx.deactivate-ssh": (
+        "service.TSM-SSH.running",
+        "service_state:TSM-SSH:running",
+        "false",
+    ),
+    # esx.timekeeping-services — ntpd. SCG: "Running". 8.0 only;
+    # 9.0 uses esx.time.
+    "esx.timekeeping-services": (
+        "service.ntpd.running",
+        "service_state:ntpd:running",
+        "true",
+    ),
+    # --- Build 38: SCG 9.0 service controls (different slugs) ---
+    # esx.snmp — SNMP daemon. 9.0 slug for esx.deactivate-snmp (8.0).
+    "esx.snmp": (
+        "service.snmpd.running",
+        "service_state:snmpd:running",
+        "false",
+    ),
+    # esx.ssh — SSH daemon. 9.0 slug for esx.deactivate-ssh (8.0).
+    "esx.ssh": (
+        "service.TSM-SSH.running",
+        "service_state:TSM-SSH:running",
+        "false",
+    ),
+    # esx.time — ntpd. 9.0 slug for esx.timekeeping-services (8.0).
+    "esx.time": (
+        "service.ntpd.running",
+        "service_state:ntpd:running",
+        "true",
+    ),
+}
+
+
+def classify_service_state_reclass(control_id: str):
+    """If ``control_id`` is a build-38 service_state vim_property
+    reclassification, return
+    ``(parameter, read_recipe, expected_override)``.
+    Otherwise return ``None``.
+
+    The normalizer applies this after the esxcli reclass (the two
+    control_id sets do not overlap). It promotes the row to
+    parameter_kind=vim_property with a service_state recipe the Java
+    VSphereClient.readServiceState() dispatches on.
+    """
+    entry = _SERVICE_STATE_RECLASS_BY_CONTROL_ID.get(control_id)
+    if entry is None:
+        return None
+    return entry  # (parameter, read_recipe, expected_override)
+
+
+# Build 38/39/40 — vim_property reclassifications keyed by SOURCE_ID.
+#
+# Used only when a control_id is shared by two source rows and only ONE of
+# them should be reclassified (the other stays at its naturally-derived kind).
+# Currently covers:
+#
+#   dvpg.network-vgt — produced by BOTH the ESXi-sourced standard-switch row
+#   (esxi-8.network-vgt / esx-9.network-vgt, stays powercli_only) AND the
+#   vCenter-sourced distributed-switch row (vcenter-8.network-vgt /
+#   vcenter-9.network-vgt, promoted to vim_property). Control_id is identical
+#   for both; source_id distinguishes them.
+#
+# value: (parameter, read_recipe_style, vim_path, expected_override_or_None)
+# (same shape as _VIM_RECLASS_BY_CONTROL_ID so the same unpacking applies)
+_VIM_RECLASS_BY_SOURCE_ID: Dict[str, tuple] = {
+    # vcenter-8.network-vgt / vcenter-9.network-vgt
+    # Build 40: DVPG VGT check — vlan_id_not recipe reads the vlan object's
+    # type/id and returns true when VLAN 4095 (VGT) is NOT configured.
+    "vcenter-8.network-vgt": (
+        "config.defaultPortConfig.vlan.notVgt",
+        "vlan_id_not",
+        "config.defaultPortConfig.vlan",
+        "true",
+    ),
+    "vcenter-9.network-vgt": (
+        "config.defaultPortConfig.vlan.notVgt",
+        "vlan_id_not",
+        "config.defaultPortConfig.vlan",
+        "true",
+    ),
+}
+
+
+def classify_source_id_vim_reclass(source_id: str):
+    """If ``source_id`` is a vim_property reclassification keyed by source_id
+    (build 40 dvpg.network-vgt distributed-switch rows), return
+    ``(parameter, read_recipe, expected_override_or_None, caveat_or_None)``.
+    Otherwise return ``None``.
+
+    Applied AFTER classify_vim_reclass in the normalizer so it can
+    selectively override one of two rows that share a control_id.
+    """
+    entry = _VIM_RECLASS_BY_SOURCE_ID.get(source_id)
+    if entry is None:
+        return None
+    parameter, style, vim_path, expected_override = entry
+    read_recipe = f"{style}:{vim_path}"
+    return (parameter, read_recipe, expected_override, None)
+
+
+# Build 39/40/41 — generic control overrides for advanced_setting and
+# vami_api reclassifications keyed by canonical control_id.
+#
+# These controls cannot use the vim_property or esxcli reclass maps because
+# their target parameter_kind is neither vim_property nor esxcli:
+#
+#   advanced_setting reclassifications (build 39):
+#     esx.logs-audit-persistent / esx.log-audit-persistent — source has a
+#     multi-key parameter (ScratchConfig.CurrentScratchLocation\n
+#     Syslog.global.auditRecord.storageDirectory). The normalizer promotes
+#     multi-key parameters to manual_audit unconditionally (priority 0 in
+#     classify_parameter_kind). The reclassification singles out the one key
+#     that IS evaluable (ScratchConfig.CurrentScratchLocation) and replaces
+#     the expected "Persistent Storage Location" sentinel with the NOT-
+#     comparison form the Java evaluator supports: "not:/tmp/scratch".
+#
+#     vc.vpxuser-length — source Assessment is "N/A" (→ manual_audit) but
+#     the parameter is a single clean Get-AdvancedSetting key, so it is
+#     evaluable as advanced_setting with expected "32".
+#
+#   vami_api reclassifications (build 41):
+#     12 vCenter controls whose assessment uses the VAMI CIS REST API
+#     (com.vmware.appliance.*). The parameter_kind becomes "vami_api" and
+#     the read_recipe grammar is "vami:<path>:<field>" where <path> uses
+#     forward slashes (matching the VAMI URL path fragment) and <field> is
+#     the JSON key in the response body. The Java VamiApiClient dispatches
+#     on this recipe at runtime; the kind is evaluable iff read_recipe is
+#     non-empty (same contract as vim_property and esxcli).
+#
+# value: (parameter, parameter_kind, expected_override_or_None, read_recipe_or_None)
+_CONTROL_OVERRIDE_BY_CONTROL_ID: Dict[str, tuple] = {
+    # -----------------------------------------------------------------------
+    # Build 39 — advanced_setting reclassifications
+    # -----------------------------------------------------------------------
+
+    # ESXi local audit-record scratch location. The source row has a
+    # two-key parameter (with embedded newline) so the classifier promotes
+    # it to manual_audit. We single out ScratchConfig.CurrentScratchLocation
+    # and use the NOT-comparison sentinel "not:/tmp/scratch" so the Java
+    # evaluator's notCompare() path fires. The second key
+    # (Syslog.global.auditRecord.storageDirectory) is informational-only and
+    # cannot be evaluated by a simple key/value lookup — it stays absent from
+    # the canonical row (the NOTE is in the description). 8.0 slug.
+    "esx.logs-audit-persistent": (
+        "ScratchConfig.CurrentScratchLocation",
+        "advanced_setting",
+        "not:/tmp/scratch",
+        None,
+    ),
+    # 9.0 slug for the same control.
+    "esx.log-audit-persistent": (
+        "ScratchConfig.CurrentScratchLocation",
+        "advanced_setting",
+        "not:/tmp/scratch",
+        None,
+    ),
+    # vpxuser password length. Source Assessment is "N/A" (manual_audit) but
+    # the parameter is a single clean advanced-setting key. Reclassify to
+    # advanced_setting so the evaluator can compare the integer value.
+    # 9.0 only (8.0 does not have this control).
+    "vc.vpxuser-length": (
+        "config.vpxd.hostPasswordLength",
+        "advanced_setting",
+        None,
+        None,
+    ),
+
+    # -----------------------------------------------------------------------
+    # Build 40 — vim_property list/device recipes
+    # -----------------------------------------------------------------------
+
+    # vds.network-restrict-port-mirroring — list_empty recipe: the Java
+    # VsphereClient.readListEmpty() checks whether the vspanSession list on
+    # the DVS config is empty (no port-mirror sessions configured). The
+    # canonical parameter serves as the unique key; the recipe carries the
+    # actual vim path. Both 8.0 and 9.0 produce the same control_id.
+    "vds.network-restrict-port-mirroring": (
+        "config.vspanSession.empty",
+        "vim_property",
+        "true",
+        "list_empty:config.vspanSession",
+    ),
+
+    # vm.pci-passthrough — vm_hardware_device_absent recipe: checks whether
+    # any device in config.hardware.device[] is an instance of
+    # VirtualPCIPassthrough. Canonical expected "true" means no such device
+    # is present. Both 8.0 and 9.0 produce this control_id.
+    "vm.pci-passthrough": (
+        "config.hardware.device.absent.VirtualPCIPassthrough",
+        "vim_property",
+        "true",
+        "vm_hardware_device_absent:config.hardware.device.VirtualPCIPassthrough",
+    ),
+
+    # -----------------------------------------------------------------------
+    # Build 39 — vim_property with string_list_join recipe
+    # -----------------------------------------------------------------------
+
+    # esx.timekeeping-sources — NTP server list. The Java reader joins the
+    # List<String> from config.dateTimeInfo.ntpConfig.server on "," and
+    # compares the result against the expected value. The SCG baseline is
+    # site-specific ("Site-Specific or:"), which cannot be string-compared.
+    # The hand-edited canonical replaces it with "(non-empty)" — a sentinel
+    # the Java evaluator's nonEmptyCompare() path handles. 8.0 only;
+    # 9.0 uses esx.time which is covered by the service_state map.
+    "esx.timekeeping-sources": (
+        "config.dateTimeInfo.ntpConfig.server",
+        "vim_property",
+        "(non-empty)",
+        "string_list_join:config.dateTimeInfo.ntpConfig.server",
+    ),
+
+    # -----------------------------------------------------------------------
+    # Build 41 — vami_api reclassifications (6 controls in 8.0, 6 in 9.0)
+    # -----------------------------------------------------------------------
+
+    # vc.vami-access-ssh (8.0) / vc.ssh (9.0)
+    # VAMI GET /api/appliance/access/ssh -> {"enabled": bool}
+    "vc.vami-access-ssh": (
+        "vami.access.ssh.enabled",
+        "vami_api",
+        "false",
+        "vami:access/ssh:enabled",
+    ),
+    "vc.ssh": (
+        "vami.access.ssh.enabled",
+        "vami_api",
+        "false",
+        "vami:access/ssh:enabled",
+    ),
+
+    # vc.vami-syslog (8.0) / vc.log-forwarding (9.0)
+    # VAMI GET /api/appliance/logging/forwarding -> list of forwarders.
+    # "(non-empty)" expected — VamiApiClient checks list is non-empty.
+    "vc.vami-syslog": (
+        "vami.logging.forwarding",
+        "vami_api",
+        "(non-empty)",
+        "vami:logging/forwarding:(list)",
+    ),
+    "vc.log-forwarding": (
+        "vami.logging.forwarding",
+        "vami_api",
+        "(non-empty)",
+        "vami:logging/forwarding:(list)",
+    ),
+
+    # vc.vami-time (8.0) / vc.time (9.0)
+    # VAMI GET /api/appliance/ntp -> list of NTP servers.
+    # "(non-empty)" expected.
+    "vc.vami-time": (
+        "vami.ntp.servers",
+        "vami_api",
+        "(non-empty)",
+        "vami:ntp:(list)",
+    ),
+    "vc.time": (
+        "vami.ntp.servers",
+        "vami_api",
+        "(non-empty)",
+        "vami:ntp:(list)",
+    ),
+
+    # vc.fips-enable (8.0 + 9.0)
+    # VAMI GET /api/appliance/system/security/global-fips -> {"enabled": bool}
+    "vc.fips-enable": (
+        "vami.system.security.global-fips.enabled",
+        "vami_api",
+        "true",
+        "vami:system/security/global-fips:enabled",
+    ),
+
+    # vc.tls-profile (8.0) / vc.tls-ciphers (9.0)
+    # VAMI GET /api/appliance/tls/profiles/global -> {"profile": "NIST_2024"}
+    "vc.tls-profile": (
+        "vami.tls.profiles.global.profile",
+        "vami_api",
+        "NIST_2024",
+        "vami:tls/profiles/global:profile",
+    ),
+    "vc.tls-ciphers": (
+        "vami.tls.profiles.global.profile",
+        "vami_api",
+        "NIST_2024",
+        "vami:tls/profiles/global:profile",
+    ),
+
+    # vc.vami-administration-password-expiration (8.0) / vc.vami-password-max-age (9.0)
+    # VAMI GET /api/appliance/local-accounts/policy -> {"max_days": int}
+    # SCG baseline: password expiration disabled (max_days = -1).
+    "vc.vami-administration-password-expiration": (
+        "vami.local-accounts.policy.max-days",
+        "vami_api",
+        "-1",
+        "vami:local-accounts/policy:max_days",
+    ),
+    "vc.vami-password-max-age": (
+        "vami.local-accounts.policy.max-days",
+        "vami_api",
+        "-1",
+        "vami:local-accounts/policy:max_days",
+    ),
+}
+
+
+def classify_control_override(control_id: str):
+    """If ``control_id`` has a build-39/40/41 control override (advanced_setting
+    or vami_api reclassification, or vim_property list/device recipe), return
+    ``(parameter, parameter_kind, expected_override_or_None, read_recipe_or_None)``.
+    Otherwise return ``None``.
+
+    Applied AFTER all other reclassifiers (vim, esxcli, service_state,
+    source_id_vim). The parameter_kind field in the tuple IS the final kind
+    — the caller sets parameter_kind directly (unlike vim/esxcli which
+    hard-code their kind inside their respective classifier functions).
+
+    For vami_api controls, read_recipe is the vami:<path>:<field> recipe
+    string; for advanced_setting controls read_recipe is None (no recipe
+    needed — the evaluator looks up the key directly in the advanced-settings
+    map). For vim_property list/device controls read_recipe carries the
+    non-standard recipe style (list_empty, vm_hardware_device_absent,
+    vlan_id_not) and build_read_recipe() is NOT called afterward.
+    """
+    return _CONTROL_OVERRIDE_BY_CONTROL_ID.get(control_id)
+
+
 def classify_esxcli_reclass(control_id: str):
     """If ``control_id`` is an esxcli recipe reclassification (build 36
     esxcli sprint), return
