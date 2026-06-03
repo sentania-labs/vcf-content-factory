@@ -145,6 +145,15 @@ public final class BenchmarkProfile {
 				|| "esxcli".equals(parameterKind)) {
 			return readRecipe != null && !readRecipe.trim().isEmpty();
 		}
+		// vami_api (build 41) is recipe-driven exactly like vim_property /
+		// esxcli: evaluable only when the control carries a non-empty
+		// read_recipe (the vami:<appliance-path>:<json-field> spec consumed
+		// by VamiApiClient over the vCenter Appliance REST session). A
+		// vami_api control with no recipe stays non-evaluable / informational
+		// — never a guess.
+		if ("vami_api".equals(parameterKind)) {
+			return readRecipe != null && !readRecipe.trim().isEmpty();
+		}
 		return false;
 	}
 

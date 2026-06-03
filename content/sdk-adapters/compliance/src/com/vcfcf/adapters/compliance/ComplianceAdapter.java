@@ -258,6 +258,7 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 					// NOT folded into any score.
 					int totalUnreadable = hostStats.unreadable
 							+ vmStats.unreadable
+							+ vcStats.unreadable
 							+ dvsStats.unreadable
 							+ dvpgStats.unreadable
 							+ clusterStats.unreadable;
@@ -696,9 +697,20 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				profile.vCenterControls();
 		String resourceName = config.vcenterHost;
 
-		ControlEvaluator.ComplianceResult cr =
+		ControlEvaluator.ComplianceResult advCr =
 				ControlEvaluator.evaluateControls(
 						vcControls, vcSettings, resourceName);
+
+		// Build 41 — VAMI REST slice. vami_api controls
+		// (VCenterAdapterInstance) read /api/appliance/... fields over a
+		// dedicated REST session, additive to the advanced_setting path.
+		// Same generic evaluator + UNREADABLE contract as the vim_property
+		// slice: a failed/absent REST read folds to UNREADABLE, never a
+		// pass. mergeResults recomputes the score over the combined surface.
+		ControlEvaluator.ComplianceResult vamiCr =
+				evaluateVamiForVCenter(vcControls, resourceName);
+		ControlEvaluator.ComplianceResult cr =
+				mergeResults(advCr, vamiCr);
 		logInfo("vCenter " + resourceName + ": score="
 				+ String.format("%.1f", cr.score)
 				+ "% (" + cr.passCount + " pass, "
@@ -711,6 +723,7 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 		// average. total counts every vCenter the adapter evaluated;
 		// scored / scoreSum / belowThreshold gate on real signal.
 		stats.total++;
+		stats.unreadable += cr.unreadableCount;
 		if (cr.totalCount > 0) {
 			stats.scored++;
 			stats.scoreSum += cr.score;
@@ -1103,6 +1116,94 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 				controls, values, resourceName, VSphereClient.UNREADABLE);
 	}
 
+	/**
+	 * Build 41 — evaluate the {@code vami_api} slice of the vCenter
+	 * controls via the VAMI REST reader, returning a result keyed exactly
+	 * like the {@code vim_property} slice (so {@link #mergeResults} folds it
+	 * into the vCenter rollup).
+	 *
+	 * <p>A fresh {@link VamiApiClient} is constructed per call (per cycle)
+	 * so its failed-session and per-path caches reset between cycles, the
+	 * same lifetime discipline the esxcli client uses. The reader opens its
+	 * OWN REST session (NOT the SOAP cookie) lazily on the first read; if no
+	 * vami_api control is evaluable, no session is ever opened.
+	 *
+	 * <p>The value map passed to {@link ControlEvaluator#evaluateVimProperties}
+	 * is keyed by each control's canonical {@code parameter} (the logical
+	 * key). A {@link VamiApiClient#FAILED} read (no session, non-200, 404,
+	 * timeout, parse error, or absent field) is mapped to
+	 * {@link VSphereClient#UNREADABLE} so the evaluator counts it as
+	 * declared-but-unreadable — excluded from pass/fail/score, surfaced via
+	 * unreadable_count. A successful read becomes the typed value (Boolean
+	 * for ssh/fips enabled, joined String for the ntp/syslog lists, String
+	 * for the TLS profile, numeric String for max_days). <b>Cardinal trap:
+	 * only a present value passes; everything else is UNREADABLE, never a
+	 * "disabled → compliant" pass.</b>
+	 *
+	 * <p>Returns an empty (zero-count) result when the slice carries no
+	 * evaluable vami_api controls.
+	 */
+	private ControlEvaluator.ComplianceResult evaluateVamiForVCenter(
+			java.util.List<BenchmarkProfile.Control> controls,
+			String resourceName) {
+		int evaluableCount = countEvaluable(controls, "vami_api");
+		if (evaluableCount == 0) {
+			return emptyResult(resourceName);
+		}
+
+		VamiApiClient client = new VamiApiClient(
+				config.baseUrl(), config.username, config.password,
+				config.allowInsecure);
+
+		java.util.Map<String, Object> values =
+				new java.util.HashMap<>();
+		for (BenchmarkProfile.Control c : controls) {
+			if (!"vami_api".equals(c.parameterKind) || !c.isEvaluable()) {
+				continue;
+			}
+			String[] parsed = parseVamiRecipe(c.readRecipe);
+			if (parsed == null) {
+				// Malformed recipe — declared but unreadable (never a guess).
+				values.put(c.configParameter, VSphereClient.UNREADABLE);
+				continue;
+			}
+			Object read = client.readField(parsed[0], parsed[1]);
+			if (read == VamiApiClient.FAILED || read == null) {
+				// Failed GET / absent field / empty list -> UNREADABLE.
+				values.put(c.configParameter, VSphereClient.UNREADABLE);
+			} else {
+				values.put(c.configParameter, read);
+			}
+		}
+
+		return ControlEvaluator.evaluateVimProperties(
+				controls, values, resourceName, VSphereClient.UNREADABLE);
+	}
+
+	/**
+	 * Parse a {@code vami:<appliance-path>:<json-field>} recipe into
+	 * {@code [appliancePath, jsonField]}. The appliance-path is everything
+	 * after {@code vami:} up to the LAST colon; the json-field is the
+	 * remainder (so a dotted nested field works, and an appliance path that
+	 * itself contains no colon is the common case). Returns {@code null} on
+	 * a malformed recipe (wrong style / missing field) — the caller folds a
+	 * null to UNREADABLE, never a guess.
+	 */
+	private static String[] parseVamiRecipe(String recipe) {
+		if (recipe == null) return null;
+		String r = recipe.trim();
+		if (!r.startsWith("vami:")) return null;
+		String rest = r.substring("vami:".length());
+		int lastColon = rest.lastIndexOf(':');
+		if (lastColon <= 0 || lastColon >= rest.length() - 1) {
+			return null;
+		}
+		String appliancePath = rest.substring(0, lastColon).trim();
+		String field = rest.substring(lastColon + 1).trim();
+		if (appliancePath.isEmpty() || field.isEmpty()) return null;
+		return new String[]{appliancePath, field};
+	}
+
 	/** Zero-count, score=100 sentinel result (no controls evaluated). */
 	private static ControlEvaluator.ComplianceResult emptyResult(
 			String resourceName) {
@@ -1216,6 +1317,9 @@ public final class ComplianceAdapter extends VcfCfAdapter<ComplianceConfig> {
 		int scored;
 		double scoreSum;
 		int belowThreshold;
+		// Build 41 — declared-but-unreadable vami_api controls this cycle.
+		// Folded into Summary|total_unreadable_controls, never into a score.
+		int unreadable;
 	}
 
 	private static final class DvsStats {

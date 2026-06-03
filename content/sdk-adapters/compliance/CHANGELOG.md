@@ -1,8 +1,24 @@
 # Changelog
 
+## 1.0.0.41 (2026-06-03)
+
+- feat(adapter): build 41 — VAMI appliance REST reader (vami_api kind) for vCenter SSH/password-policy controls; failed/non-200/absent-field reads fold to UNREADABLE
+
+## 1.0.0.40 (2026-06-03)
+
+- feat(adapter): build 40 — vm_hardware_device_absent / list_empty / vlan_id_not filter styles via vim25; confirmed-read vs failed-fetch distinction (empty ≠ unreadable)
+
+## 1.0.0.39 (2026-06-03)
+
+- feat(adapter): build 39 — not: and (non-empty) advanced_setting comparison modes; absent/unreadable short-circuits before mode helpers
+
+## 1.0.0.38 (2026-06-03)
+
+- feat(adapter): build 38 — service_state recipe reader (esxcli HostService running/policy) for ESXi service-state controls
+
 ## 1.0.0.37 (2026-06-03)
 
-- feat(adapter): build 37 — esxcli section C: SSH-daemon hardening (11 list-row reads), account shell access, key-persistence, syslog log-filter, TLS profile reclassified to esxcli recipes; EsxcliSoapClient ArrayOfDataObject list parsing + `<Field>[<Selector>=<Value>]` row-selector grammar
+- feat(adapter): build 37 — esxcli SSH/firewall/account cluster + list/row-select reader
 
 ## 1.0.0.36 (2026-06-03)
 
