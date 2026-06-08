@@ -503,7 +503,12 @@ def _load_bundled_content(
     objects.  Returns ``([], [])`` when the key is absent or empty.
 
     Paths in ``bundled_content.views`` and ``bundled_content.dashboards`` are
-    relative to the repo root (the same convention used in bundle manifests).
+    relative to the adapter project directory (where adapter.yaml lives),
+    NOT the factory repo root.  Typically these will be
+    ``views/<file>.yaml`` and ``dashboards/<file>.yaml`` sibling directories
+    inside the adapter project.  The ``repo_root`` parameter is accepted for
+    backward-compatibility but is unused; callers should pass ``project_dir``
+    for both arguments.
 
     Raises:
         SdkBuildError: if a listed path does not exist or fails to load.
@@ -521,11 +526,11 @@ def _load_bundled_content(
 
     views = []
     for rel in (bundled.get("views") or []):
-        path = (repo_root / rel).resolve()
+        path = (project_dir / rel).resolve()
         if not path.is_file():
             raise SdkBuildError(
                 f"bundled_content.views: path not found: {path} "
-                f"(resolved from '{rel}' relative to {repo_root})"
+                f"(resolved from '{rel}' relative to {project_dir})"
             )
         try:
             v = load_view(path)
@@ -537,11 +542,11 @@ def _load_bundled_content(
 
     dashboards = []
     for rel in (bundled.get("dashboards") or []):
-        path = (repo_root / rel).resolve()
+        path = (project_dir / rel).resolve()
         if not path.is_file():
             raise SdkBuildError(
                 f"bundled_content.dashboards: path not found: {path} "
-                f"(resolved from '{rel}' relative to {repo_root})"
+                f"(resolved from '{rel}' relative to {project_dir})"
             )
         try:
             d = load_dashboard(path)
@@ -2015,9 +2020,8 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
     # content load errors fail fast, before the expensive Java build steps.
     import yaml as _yaml_mod
     _raw_adapter_yaml = _yaml_mod.safe_load(adapter_yaml.read_text(encoding="utf-8"))
-    _repo_root = _HERE.parent
     bundled_views, bundled_dashboards = _load_bundled_content(
-        _raw_adapter_yaml, project_dir, _repo_root
+        _raw_adapter_yaml, project_dir, project_dir
     )
     if bundled_views or bundled_dashboards:
         print(
@@ -2230,8 +2234,7 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
         _raw_adapter_yaml = {}
         if _YAML_AVAILABLE:
             _raw_adapter_yaml = _yaml.safe_load(adapter_yaml.read_text(encoding="utf-8")) or {}
-        _repo_root = _HERE.parent
-        bundled_views, _ = _load_bundled_content(_raw_adapter_yaml, project_dir, _repo_root)
+        bundled_views, _ = _load_bundled_content(_raw_adapter_yaml, project_dir, project_dir)
         if bundled_views:
             loc_errors = _validate_localization_key_contract(bundled_views)
             errors.extend(loc_errors)

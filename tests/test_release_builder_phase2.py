@@ -326,263 +326,274 @@ class TestBundleHeadline:
 
 
 # ---------------------------------------------------------------------------
-# SDK MP headline — README inclusion
+# SDK MP headline — pointer model
 # ---------------------------------------------------------------------------
 
-class TestSdkMpHeadlineReadme:
-    """Unit tests for _build_sdk_mp_headline README inclusion.
+class TestSdkMpPointer:
+    """Unit tests for _build_sdk_mp_headline pointer model.
 
-    build_sdk_pak() calls the real Java compiler and is not suitable for
-    CI unit tests.  We patch it to write a minimal stub .pak so that the
-    zipfile-wrapping logic in _build_sdk_mp_headline can be exercised in
-    isolation.
+    The new implementation does NOT call build_sdk_pak.  Instead it:
+      1. Looks up the adapter in the managed-paks registry.
+      2. Emits a small pointer-zip containing pointer.json.
+      3. Raises ValueError for unregistered adapters.
+
+    Tests use a fixture registry file (no real Java compilation needed,
+    and no external repos need to exist — this is a pure unit test).
+
+    Note: full end-to-end publish verification (registry lookup via real
+    context/managed_paks.md pointing at live sentania-labs repos) cannot
+    be automated until Workstream D (de-track migration) is complete and
+    the external repos exist.
     """
 
-    def _fake_build_sdk_pak(self, tmp_dir: Path, adapter_kind: str = "test_adapter") -> "Callable":
-        """Return a patched build_sdk_pak that writes a stub .pak to output_dir."""
-        def _build(project_dir: Path, output_dir: Path = None) -> Path:
-            dest = (output_dir or tmp_dir) / f"vcfcf_{adapter_kind}.1.0.0.1.pak"
-            with zipfile.ZipFile(dest, "w") as zf:
-                zf.writestr("manifest.txt", '{"name": "stub"}')
-            return dest
-        return _build
+    # Fixture registry content with one live entry.
+    _FIXTURE_REGISTRY = """\
+# Managed paks (SDK adapter registry)
 
-    def test_readme_included_when_present(self, tmp_path):
-        """If project_dir/README.md exists, it must appear as README.md in the zip root."""
-        import vcfops_managementpacks.sdk_builder as _sdk_mod
+## Paks
+
+<!--
+Template block — skipped by parser.
+
+### template-entry
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-template
+- **Target:** `content/sdk-adapters/template-entry/`
+- **adapter_kind:** vcfcf_template
+-->
+
+### test-pak
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-test-pak
+- **Target:** `content/sdk-adapters/test-pak/`
+- **adapter_kind:** vcfcf_test_pak
+- **Owner:** sentania-labs. Public repo.
+- **Notes:** Fixture entry for unit tests.
+"""
+
+    def _write_registry(self, tmp_path: Path) -> Path:
+        """Write the fixture registry to a temp file and return its path."""
+        reg = tmp_path / "managed_paks.md"
+        reg.write_text(self._FIXTURE_REGISTRY)
+        return reg
+
+    def _make_adapter_yaml(self, tmp_path: Path, name: str) -> Path:
+        """Create a minimal adapter project dir and return the adapter.yaml path."""
+        project_dir = tmp_path / name
+        project_dir.mkdir()
+        adapter_yaml = project_dir / "adapter.yaml"
+        adapter_yaml.write_text(f"adapter_kind: vcfcf_{name.replace('-', '_')}\n")
+        return adapter_yaml
+
+    # ------------------------------------------------------------------
+    # Pointer record shape
+    # ------------------------------------------------------------------
+
+    def test_pointer_zip_created(self, tmp_path):
+        """_build_sdk_mp_headline must produce a zip file."""
+        import vcfops_packaging.managed_paks as _mp_mod
         from vcfops_packaging.release_builder import _build_sdk_mp_headline
 
-        project_dir = tmp_path / "my-adapter"
-        project_dir.mkdir()
-        readme = project_dir / "README.md"
-        readme.write_text("# My Adapter\n\nInstallation instructions here.\n")
-        adapter_yaml = project_dir / "adapter.yaml"
-        adapter_yaml.write_text("name: My Adapter\n")
-
+        reg = self._write_registry(tmp_path)
+        adapter_yaml = self._make_adapter_yaml(tmp_path, "test-pak")
         tmp_out = tmp_path / "out"
         tmp_out.mkdir()
 
-        # Patch at the import site used by _build_sdk_mp_headline.
-        # The function does `from vcfops_managementpacks.sdk_builder import build_sdk_pak`
-        # on every call, so mutating the module attribute is the correct patch point.
-        original = _sdk_mod.build_sdk_pak
+        original_default = _mp_mod._DEFAULT_REGISTRY_PATH
         try:
-            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "my_adapter")
+            _mp_mod._DEFAULT_REGISTRY_PATH = reg
             zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
         finally:
-            _sdk_mod.build_sdk_pak = original
+            _mp_mod._DEFAULT_REGISTRY_PATH = original_default
 
-        assert zip_path.exists(), f"Output zip not created: {zip_path}"
-        with zipfile.ZipFile(zip_path) as zf:
-            members = zf.namelist()
-        assert "README.md" in members, (
-            f"README.md missing from SDK pak zip. Members: {members}"
-        )
-        # Verify it is at the zip root (no subdirectory prefix)
-        assert members.count("README.md") == 1
+        assert zip_path.exists(), f"Pointer zip not created: {zip_path}"
+        assert zip_path.suffix == ".zip", f"Expected .zip extension, got {zip_path.suffix}"
 
-    def test_no_readme_when_absent(self, tmp_path):
-        """If project_dir/README.md does not exist, no README.md in the zip."""
-        import vcfops_managementpacks.sdk_builder as _sdk_mod
+    def test_pointer_zip_contains_pointer_json(self, tmp_path):
+        """The pointer zip must contain a single file 'pointer.json'."""
+        import vcfops_packaging.managed_paks as _mp_mod
         from vcfops_packaging.release_builder import _build_sdk_mp_headline
 
-        project_dir = tmp_path / "bare-adapter"
-        project_dir.mkdir()
-        adapter_yaml = project_dir / "adapter.yaml"
-        adapter_yaml.write_text("name: Bare Adapter\n")
-
+        reg = self._write_registry(tmp_path)
+        adapter_yaml = self._make_adapter_yaml(tmp_path, "test-pak")
         tmp_out = tmp_path / "out"
         tmp_out.mkdir()
 
-        original = _sdk_mod.build_sdk_pak
+        original_default = _mp_mod._DEFAULT_REGISTRY_PATH
         try:
-            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "bare_adapter")
+            _mp_mod._DEFAULT_REGISTRY_PATH = reg
             zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
         finally:
-            _sdk_mod.build_sdk_pak = original
-
-        assert zip_path.exists(), f"Output zip not created: {zip_path}"
-        with zipfile.ZipFile(zip_path) as zf:
-            members = zf.namelist()
-        assert "README.md" not in members, (
-            f"README.md should not be present when absent from project_dir. Members: {members}"
-        )
-
-    def test_readme_content_preserved(self, tmp_path):
-        """README.md bytes in the zip must match the source file exactly."""
-        import vcfops_managementpacks.sdk_builder as _sdk_mod
-        from vcfops_packaging.release_builder import _build_sdk_mp_headline
-
-        project_dir = tmp_path / "content-adapter"
-        project_dir.mkdir()
-        readme_text = "# Content Adapter\n\nDetailed docs.\n"
-        (project_dir / "README.md").write_text(readme_text)
-        adapter_yaml = project_dir / "adapter.yaml"
-        adapter_yaml.write_text("name: Content Adapter\n")
-
-        tmp_out = tmp_path / "out"
-        tmp_out.mkdir()
-
-        original = _sdk_mod.build_sdk_pak
-        try:
-            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "content_adapter")
-            zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
-        finally:
-            _sdk_mod.build_sdk_pak = original
-
-        with zipfile.ZipFile(zip_path) as zf:
-            extracted = zf.read("README.md").decode("utf-8")
-        assert extracted == readme_text, (
-            f"README.md content mismatch.\nExpected: {readme_text!r}\nGot: {extracted!r}"
-        )
-
-    def test_changelog_included_when_present(self, tmp_path):
-        """If project_dir/CHANGELOG.md exists, it must appear as CHANGELOG.md in the zip root."""
-        import vcfops_managementpacks.sdk_builder as _sdk_mod
-        from vcfops_packaging.release_builder import _build_sdk_mp_headline
-
-        project_dir = tmp_path / "changelog-adapter"
-        project_dir.mkdir()
-        (project_dir / "CHANGELOG.md").write_text("## v1.0.0\n\n- Initial release\n")
-        adapter_yaml = project_dir / "adapter.yaml"
-        adapter_yaml.write_text("name: Changelog Adapter\n")
-
-        tmp_out = tmp_path / "out"
-        tmp_out.mkdir()
-
-        original = _sdk_mod.build_sdk_pak
-        try:
-            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "changelog_adapter")
-            zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
-        finally:
-            _sdk_mod.build_sdk_pak = original
+            _mp_mod._DEFAULT_REGISTRY_PATH = original_default
 
         with zipfile.ZipFile(zip_path) as zf:
             members = zf.namelist()
-        assert "CHANGELOG.md" in members, (
-            f"CHANGELOG.md missing from SDK pak zip. Members: {members}"
+        assert members == ["pointer.json"], (
+            f"Expected ['pointer.json'] in pointer zip, got {members}"
         )
-        assert members.count("CHANGELOG.md") == 1
 
-    def test_no_changelog_when_absent(self, tmp_path):
-        """If project_dir/CHANGELOG.md does not exist, no CHANGELOG.md in the zip."""
-        import vcfops_managementpacks.sdk_builder as _sdk_mod
+    def test_pointer_json_fields(self, tmp_path):
+        """pointer.json must contain all required fields with correct values."""
+        import json
+        import vcfops_packaging.managed_paks as _mp_mod
         from vcfops_packaging.release_builder import _build_sdk_mp_headline
 
-        project_dir = tmp_path / "no-changelog-adapter"
-        project_dir.mkdir()
-        adapter_yaml = project_dir / "adapter.yaml"
-        adapter_yaml.write_text("name: No Changelog Adapter\n")
-
+        reg = self._write_registry(tmp_path)
+        adapter_yaml = self._make_adapter_yaml(tmp_path, "test-pak")
         tmp_out = tmp_path / "out"
         tmp_out.mkdir()
 
-        original = _sdk_mod.build_sdk_pak
+        original_default = _mp_mod._DEFAULT_REGISTRY_PATH
         try:
-            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "no_changelog_adapter")
+            _mp_mod._DEFAULT_REGISTRY_PATH = reg
             zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
         finally:
-            _sdk_mod.build_sdk_pak = original
+            _mp_mod._DEFAULT_REGISTRY_PATH = original_default
 
         with zipfile.ZipFile(zip_path) as zf:
-            members = zf.namelist()
-        assert "CHANGELOG.md" not in members, (
-            f"CHANGELOG.md should not be present when absent from project_dir. Members: {members}"
-        )
+            data = json.loads(zf.read("pointer.json").decode("utf-8"))
 
-    def test_changelog_content_preserved(self, tmp_path):
-        """CHANGELOG.md bytes in the zip must match the source file exactly."""
-        import vcfops_managementpacks.sdk_builder as _sdk_mod
+        assert data["type"] == "sdk-pak-pointer", f"Wrong type: {data['type']!r}"
+        assert data["adapter_name"] == "test-pak", f"Wrong adapter_name: {data['adapter_name']!r}"
+        assert data["adapter_kind"] == "vcfcf_test_pak", (
+            f"Wrong adapter_kind: {data['adapter_kind']!r}"
+        )
+        assert data["remote"] == (
+            "https://github.com/sentania-labs/vcf-content-factory-sdk-test-pak"
+        ), f"Wrong remote: {data['remote']!r}"
+        assert data["latest_release_url"] == (
+            "https://github.com/sentania-labs/vcf-content-factory-sdk-test-pak/releases/latest"
+        ), f"Wrong latest_release_url: {data['latest_release_url']!r}"
+        assert data["api_latest_url"] == (
+            "https://api.github.com/repos/sentania-labs/"
+            "vcf-content-factory-sdk-test-pak/releases/latest"
+        ), f"Wrong api_latest_url: {data['api_latest_url']!r}"
+        assert data["asset_glob"] == "*.pak", f"Wrong asset_glob: {data['asset_glob']!r}"
+
+    def test_pointer_latest_release_url_is_latest(self, tmp_path):
+        """latest_release_url must end with '/releases/latest' (version-free pointer)."""
+        import json
+        import vcfops_packaging.managed_paks as _mp_mod
         from vcfops_packaging.release_builder import _build_sdk_mp_headline
 
-        project_dir = tmp_path / "changelog-content-adapter"
-        project_dir.mkdir()
-        changelog_text = "## v1.0.0\n\n- Initial release\n## v0.9.0\n\n- Beta\n"
-        (project_dir / "CHANGELOG.md").write_text(changelog_text)
-        adapter_yaml = project_dir / "adapter.yaml"
-        adapter_yaml.write_text("name: Changelog Content Adapter\n")
-
+        reg = self._write_registry(tmp_path)
+        adapter_yaml = self._make_adapter_yaml(tmp_path, "test-pak")
         tmp_out = tmp_path / "out"
         tmp_out.mkdir()
 
-        original = _sdk_mod.build_sdk_pak
+        original_default = _mp_mod._DEFAULT_REGISTRY_PATH
         try:
-            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "changelog_content_adapter")
+            _mp_mod._DEFAULT_REGISTRY_PATH = reg
             zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
         finally:
-            _sdk_mod.build_sdk_pak = original
+            _mp_mod._DEFAULT_REGISTRY_PATH = original_default
 
         with zipfile.ZipFile(zip_path) as zf:
-            extracted = zf.read("CHANGELOG.md").decode("utf-8")
-        assert extracted == changelog_text, (
-            f"CHANGELOG.md content mismatch.\nExpected: {changelog_text!r}\nGot: {extracted!r}"
+            data = json.loads(zf.read("pointer.json").decode("utf-8"))
+
+        url = data["latest_release_url"]
+        assert url.endswith("/releases/latest"), (
+            f"latest_release_url must end with '/releases/latest', got: {url!r}"
+        )
+        # Must not contain a version number — pointer stays version-free.
+        assert "/releases/tag/" not in url, (
+            f"latest_release_url must not pin a specific tag: {url!r}"
         )
 
-    def test_license_md_included(self, tmp_path):
-        """Repo-root LICENSE must appear as LICENSE.md in the zip root."""
-        import vcfops_managementpacks.sdk_builder as _sdk_mod
+    # ------------------------------------------------------------------
+    # Unregistered adapter error path
+    # ------------------------------------------------------------------
+
+    def test_unregistered_adapter_raises(self, tmp_path):
+        """An adapter not in the registry must raise ValueError with a clear message."""
+        import vcfops_packaging.managed_paks as _mp_mod
         from vcfops_packaging.release_builder import _build_sdk_mp_headline
 
-        repo_root = REPO_ROOT
-        license_src = repo_root / "LICENSE"
-        if not license_src.exists():
-            pytest.skip("Repo root LICENSE file not present; cannot test LICENSE.md inclusion")
-
-        project_dir = tmp_path / "license-adapter"
-        project_dir.mkdir()
-        adapter_yaml = project_dir / "adapter.yaml"
-        adapter_yaml.write_text("name: License Adapter\n")
-
+        reg = self._write_registry(tmp_path)
+        # Use an adapter name NOT present in the fixture registry.
+        adapter_yaml = self._make_adapter_yaml(tmp_path, "not-registered")
         tmp_out = tmp_path / "out"
         tmp_out.mkdir()
 
-        original = _sdk_mod.build_sdk_pak
+        original_default = _mp_mod._DEFAULT_REGISTRY_PATH
         try:
-            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "license_adapter")
-            zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
+            _mp_mod._DEFAULT_REGISTRY_PATH = reg
+            with pytest.raises(ValueError) as exc_info:
+                _build_sdk_mp_headline(adapter_yaml, tmp_out)
         finally:
-            _sdk_mod.build_sdk_pak = original
+            _mp_mod._DEFAULT_REGISTRY_PATH = original_default
 
-        with zipfile.ZipFile(zip_path) as zf:
-            members = zf.namelist()
-        assert "LICENSE.md" in members, (
-            f"LICENSE.md missing from SDK pak zip. Members: {members}"
+        msg = str(exc_info.value)
+        assert "not-registered" in msg, (
+            f"Error message must name the adapter; got: {msg!r}"
         )
-        assert members.count("LICENSE.md") == 1
+        assert "managed_paks.md" in msg, (
+            f"Error message must reference the registry file; got: {msg!r}"
+        )
+        # Must not mention any fallback to a local build.
+        assert "local build" not in msg.lower() or "do not" in msg.lower(), (
+            f"Error message must not suggest a local build fallback."
+        )
 
-    def test_license_md_content_matches_repo_root(self, tmp_path):
-        """LICENSE.md bytes in the zip must match the repo-root LICENSE file exactly."""
-        import vcfops_managementpacks.sdk_builder as _sdk_mod
+    def test_unregistered_adapter_does_not_produce_zip(self, tmp_path):
+        """A failing (unregistered) adapter must not write any zip to tmp_out."""
+        import vcfops_packaging.managed_paks as _mp_mod
         from vcfops_packaging.release_builder import _build_sdk_mp_headline
 
-        repo_root = REPO_ROOT
-        license_src = repo_root / "LICENSE"
-        if not license_src.exists():
-            pytest.skip("Repo root LICENSE file not present; cannot test LICENSE.md content")
-
-        expected_bytes = license_src.read_bytes()
-
-        project_dir = tmp_path / "license-content-adapter"
-        project_dir.mkdir()
-        adapter_yaml = project_dir / "adapter.yaml"
-        adapter_yaml.write_text("name: License Content Adapter\n")
-
+        reg = self._write_registry(tmp_path)
+        adapter_yaml = self._make_adapter_yaml(tmp_path, "also-not-registered")
         tmp_out = tmp_path / "out"
         tmp_out.mkdir()
 
-        original = _sdk_mod.build_sdk_pak
+        original_default = _mp_mod._DEFAULT_REGISTRY_PATH
         try:
-            _sdk_mod.build_sdk_pak = self._fake_build_sdk_pak(tmp_out, "license_content_adapter")
+            _mp_mod._DEFAULT_REGISTRY_PATH = reg
+            with pytest.raises(ValueError):
+                _build_sdk_mp_headline(adapter_yaml, tmp_out)
+        finally:
+            _mp_mod._DEFAULT_REGISTRY_PATH = original_default
+
+        zips = list(tmp_out.glob("*.zip"))
+        assert not zips, f"No zip should be written on failure; found: {zips}"
+
+    # ------------------------------------------------------------------
+    # No sdk_builder import
+    # ------------------------------------------------------------------
+
+    def test_no_sdk_builder_import(self, tmp_path):
+        """_build_sdk_mp_headline must not import vcfops_managementpacks.sdk_builder."""
+        import sys
+        import vcfops_packaging.managed_paks as _mp_mod
+        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+
+        reg = self._write_registry(tmp_path)
+        adapter_yaml = self._make_adapter_yaml(tmp_path, "test-pak")
+        tmp_out = tmp_path / "out"
+        tmp_out.mkdir()
+
+        # Remove sdk_builder from sys.modules to ensure it is not imported.
+        sdk_key = "vcfops_managementpacks.sdk_builder"
+        was_loaded = sdk_key in sys.modules
+        sys.modules.pop(sdk_key, None)
+
+        original_default = _mp_mod._DEFAULT_REGISTRY_PATH
+        try:
+            _mp_mod._DEFAULT_REGISTRY_PATH = reg
             zip_path = _build_sdk_mp_headline(adapter_yaml, tmp_out)
         finally:
-            _sdk_mod.build_sdk_pak = original
+            _mp_mod._DEFAULT_REGISTRY_PATH = original_default
 
-        with zipfile.ZipFile(zip_path) as zf:
-            extracted_bytes = zf.read("LICENSE.md")
-        assert extracted_bytes == expected_bytes, (
-            f"LICENSE.md content mismatch: zip has {len(extracted_bytes)} bytes, "
-            f"repo root LICENSE has {len(expected_bytes)} bytes"
+        # sdk_builder must still be absent — the new code does not import it.
+        assert sdk_key not in sys.modules, (
+            f"_build_sdk_mp_headline must not import sdk_builder; "
+            f"but it appeared in sys.modules after the call."
         )
+        assert zip_path.exists(), f"Pointer zip must still be produced: {zip_path}"
+
+        # Restore original state if it was loaded before.
+        if was_loaded:
+            import importlib
+            importlib.import_module(sdk_key)
 
 
 # ---------------------------------------------------------------------------

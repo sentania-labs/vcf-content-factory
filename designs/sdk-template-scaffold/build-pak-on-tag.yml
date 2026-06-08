@@ -1,0 +1,92 @@
+# Canonical per-pak CI workflow for an independent SDK adapter repo.
+#
+# This file is the SOURCE OF TRUTH for the workflow that ships in
+# sentania-labs/vcf-content-factory-sdk-template and every pak instantiated
+# from it. It lives in the factory (under designs/) so it stays diffable and
+# can be updated centrally; copy it to `.github/workflows/build-pak-on-tag.yml`
+# in the pak repo.
+#
+# Contract: push a `v*` tag on the pak repo -> a headless runner pulls the
+# published sdk-buildkit tarball from the factory repo's Releases, builds the
+# .pak deterministically (no agent, no factory checkout), gates on pak-compare,
+# and attaches the .pak to this tag's GitHub Release.
+name: build-pak-on-tag
+
+on:
+  push:
+    tags:
+      - 'v*'          # pak release tags (factory's buildkit uses sdk-buildkit-v*, a different repo)
+
+permissions:
+  contents: write     # needed to create/upload the Release in THIS repo
+
+env:
+  # Which buildkit to pin. Use a full version (vX.Y.Z) for explicit opt-in,
+  # or the floating major tag (v1) to auto-follow compatible buildkit updates.
+  BUILDKIT_TAG: sdk-buildkit-v1
+  BUILDKIT_REPO: sentania-labs/vcf-content-factory
+
+jobs:
+  build:
+    # Self-hosted runner (the sentania-labs image). Adjust labels to match your
+    # runner pool. To use GitHub-hosted runners instead, switch to `ubuntu-latest`.
+    runs-on: [self-hosted, Linux, X64, generic]
+
+    steps:
+      - name: Checkout adapter source
+        uses: actions/checkout@v4
+
+      # The sentania-labs runner image ships NO JDK. build-sdk needs javac+jar.
+      # If you bake a JDK into the runner image, delete this step.
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # The kit is pure stdlib + pyyaml. The image has python3 + pip on PATH.
+      - name: Ensure PyYAML
+        run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
+
+      - name: Download sdk-buildkit from factory releases
+        env:
+          # The factory repo is public, so the job's github.token can read its
+          # release assets across repos — no PAT needed.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p _kit_dl
+          gh release download "$BUILDKIT_TAG" \
+            --repo "$BUILDKIT_REPO" \
+            --pattern 'sdk-buildkit-*.tgz' \
+            --dir _kit_dl
+          mkdir -p _kit
+          tar xzf _kit_dl/sdk-buildkit-*.tgz -C _kit
+          echo "Kit version: $(cat _kit/sdk_buildkit/VERSION 2>/dev/null || echo unknown)"
+
+      - name: Build the .pak (deterministic, headless)
+        run: |
+          set -euo pipefail
+          PYTHONPATH=_kit python3 -m sdk_buildkit build-sdk "$GITHUB_WORKSPACE" --output dist
+          ls -l dist/*.pak
+
+      - name: Gate on pak-compare (zero BLOCKING)
+        run: |
+          set -euo pipefail
+          PYTHONPATH=_kit python3 -m sdk_buildkit pak-compare dist/*.pak \
+            --reference-dir _kit/sdk_buildkit/reference_paks | tee compare.txt
+          if grep -qiE '\bBLOCKING\b' compare.txt && \
+             ! grep -qiE '0 +BLOCKING|BLOCKING: *0' compare.txt; then
+            echo "::error::pak-compare reported BLOCKING findings — failing the release."
+            exit 1
+          fi
+
+      - name: Publish .pak to the tag's Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "${GITHUB_REF_NAME}" dist/*.pak \
+            --title "${GITHUB_REF_NAME}" \
+            --notes "Automated SDK pak build for ${GITHUB_REF_NAME} (buildkit ${BUILDKIT_TAG})." \
+            || gh release upload "${GITHUB_REF_NAME}" dist/*.pak --clobber

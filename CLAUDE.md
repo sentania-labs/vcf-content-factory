@@ -77,7 +77,7 @@ ends up holding all the context.
 | `api-cartographer` | Research | `context/api-maps/`, `docs/` | New external API for an MP. |
 | `mp-designer` | Design | `designs/` | New MP. Wizard interview against API map. |
 | `mp-author` | Author | `content/managementpacks/` | After `mp-designer` produces approved design. **Tier 1** MPB YAML spec. |
-| `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` | After `mp-designer` produces approved design. **Tier 2** Java SDK adapter source. The Java sibling to `mp-author`. **Only** agent that edits adapter Java. |
+| `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` (each an independent repo, gitignored) | After `mp-designer` produces approved design. **Tier 2** Java SDK adapter source. The Java sibling to `mp-author`. **Only** agent that edits adapter Java. Commits go to the pak's **own** remote; a real release is a `v*` tag on that repo, not a factory `/publish`. |
 | `sdk-adapter-reviewer` | Read-only review | `context/reviews/` | After `sdk-adapter-author` reports a build, before the install gate. Skeptical correctness/quality check on Tier 2 Java — hunts unreadable-is-compliant, stitch corruption, crash-the-cycle. Never edits source, never installs. |
 
 Agent prompts under `.claude/agents/` are authoritative for each
@@ -243,6 +243,18 @@ path is first-class, not a sad fallback.
   expensive loop is the pak build + install cycle. Same discipline:
   exhaust `validate-sdk` before building a pak. The compliance adapter
   (`content/sdk-adapters/compliance/`) is the reference implementation.
+  **SDK paks are not stored in this repo.** Each adapter is its own
+  independent git repo (in the `sentania-labs` org, named
+  `vcf-content-factory-sdk-<name>`), cloned into the gitignored
+  `content/sdk-adapters/<name>/` by `scripts/bootstrap_managed_paks.sh`
+  from the `context/managed_paks.md` registry. Authoring/validate/review
+  happen in-tree exactly as above and `build-sdk` is still the local dev
+  preview — but the **official** release is the pak's own CI building the
+  `.pak` on a `v*` git tag (no agent, no factory checkout: a runner pulls
+  the published `sdk-buildkit` tarball and runs it). A factory `/publish`
+  that references an SDK pak emits a **pointer** to that pak's latest
+  GitHub Release, never a built/mirrored binary. New pak = instantiate the
+  `…-sdk-template` repo + add one line to `context/managed_paks.md`.
 - **Toolset gap:** punt / api-explorer / tooling → fix → re-invoke.
 - **After tooling changes:** if `tooling` modifies anything in
   `vcfops_packaging/templates/`, `vcfops_packaging/builder.py`, or

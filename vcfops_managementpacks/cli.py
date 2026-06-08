@@ -424,6 +424,32 @@ def cmd_validate_sdk(args) -> int:
     return 0
 
 
+def cmd_build_buildkit(args) -> int:
+    """build-buildkit — assemble a portable sdk-buildkit tarball."""
+    from .buildkit import assemble_buildkit, BUILDKIT_VERSION
+    from pathlib import Path as _Path
+
+    output_dir = _Path(args.output)
+    version = args.version or BUILDKIT_VERSION
+    reference_pak = _Path(args.reference_pak) if args.reference_pak else None
+
+    try:
+        tarball = assemble_buildkit(
+            output_dir=output_dir,
+            version=version,
+            reference_pak=reference_pak,
+            verbose=True,
+        )
+        print(f"Built: {tarball}")
+        return 0
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"ERROR building buildkit: {exc}", file=sys.stderr)
+        return 1
+
+
 def cmd_scaffold_sdk(args) -> int:
     """scaffold-sdk <name> — generate an empty Tier 2 adapter project skeleton."""
     from .sdk_builder import scaffold_sdk_project, SdkBuildError
@@ -867,6 +893,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="base directory for the new project (default: content/sdk-adapters/)",
     )
     pssdk.set_defaults(func=cmd_scaffold_sdk)
+
+    # ------------------------------------------------------------------
+    # build-buildkit subcommand
+    # ------------------------------------------------------------------
+    pbk = sub.add_parser(
+        "build-buildkit",
+        help=(
+            "assemble a portable sdk-buildkit tarball (sdk-buildkit-vX.Y.Z.tgz) "
+            "that CI runners can use to build Tier 2 adapter paks without a "
+            "factory checkout or LLM"
+        ),
+    )
+    pbk.add_argument(
+        "--output", "-o",
+        default="dist",
+        help="output directory for the tarball (default: dist/)",
+    )
+    pbk.add_argument(
+        "--version",
+        default=None,
+        metavar="VERSION",
+        help=(
+            "kit version to stamp into VERSION and the tarball name "
+            "(default: the BUILDKIT_VERSION constant in buildkit.py)"
+        ),
+    )
+    pbk.add_argument(
+        "--reference-pak",
+        dest="reference_pak",
+        default=None,
+        metavar="PAK_PATH",
+        help=(
+            "path to a .pak file to bundle as the pak-compare reference "
+            "(default: auto-selected from dist/, preferring the compliance pak)"
+        ),
+    )
+    pbk.set_defaults(func=cmd_build_buildkit)
 
     # ------------------------------------------------------------------
     # pak-compare subcommand

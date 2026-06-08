@@ -1,0 +1,113 @@
+# publish-buildkit.yml
+#
+# Triggered by pushing a tag of the form sdk-buildkit-vX.Y.Z
+# (e.g. git tag sdk-buildkit-v0.1.0 && git push origin sdk-buildkit-v0.1.0).
+#
+# Workflow steps:
+#   1. Check out the factory repo.
+#   2. Set up Python 3.11.
+#   3. Install PyYAML (the only non-stdlib dependency needed at build time).
+#   4. Build a compliance .pak (so there is a reference pak to bundle).
+#   5. Run build-buildkit to assemble the tarball.
+#   6. Create a GitHub Release and attach the tarball.
+#
+# Version tag convention:
+#   sdk-buildkit-vX.Y.Z  — explicit version; consumers can pin this exactly.
+#   sdk-buildkit-v1      — floating major tag; maintained manually after each
+#                          compatible minor/patch release so consumers can follow
+#                          compatible updates without editing their workflow pins.
+#   To advance the floating major tag after a release:
+#     git tag -f sdk-buildkit-v1 sdk-buildkit-v0.1.0
+#     git push origin sdk-buildkit-v1 --force
+#
+# Per-pak CI usage (in the adapter repo's .github/workflows/build-pak-on-tag.yml):
+#   - uses: gh release download sdk-buildkit-v0.1.0   # pin to exact version
+#   - uses: gh release download sdk-buildkit-v1       # follow floating major tag
+#   Then: tar xzf sdk-buildkit-*.tgz && python3 -m sdk_buildkit build-sdk .
+
+name: Publish sdk-buildkit
+
+on:
+  push:
+    tags:
+      - "sdk-buildkit-v*"
+
+permissions:
+  contents: write   # needed for gh release create
+
+jobs:
+  publish-buildkit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out factory repo
+        uses: actions/checkout@v4
+        with:
+          # Fetch full history so the builder can generate CHANGELOG from git log
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install pyyaml
+
+      - name: Set up JDK 17 (required to build the reference pak)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Build compliance reference pak
+        # Build the compliance pak so build-buildkit can auto-select it.
+        # If the build fails (e.g. due to missing adapter source) the workflow
+        # fails here — the reference pak is required for the gate check in CI.
+        run: |
+          python3 -m vcfops_managementpacks build-sdk \
+            content/sdk-adapters/compliance \
+            --output dist/
+
+      - name: Extract version from tag
+        id: ver
+        run: |
+          # Tag is sdk-buildkit-vX.Y.Z; strip the prefix to get X.Y.Z
+          VERSION="${GITHUB_REF_NAME#sdk-buildkit-v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tarball=sdk-buildkit-${VERSION}.tgz" >> "$GITHUB_OUTPUT"
+
+      - name: Assemble buildkit tarball
+        run: |
+          python3 -m vcfops_managementpacks build-buildkit \
+            --output dist/ \
+            --version "${{ steps.ver.outputs.version }}"
+
+      - name: Create GitHub Release and attach tarball
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            "dist/${{ steps.ver.outputs.tarball }}" \
+            --repo "${{ github.repository }}" \
+            --title "sdk-buildkit v${{ steps.ver.outputs.version }}" \
+            --notes "Portable Tier 2 SDK adapter build toolchain.
+
+## Usage
+
+Download and extract the kit, then run the builder:
+
+\`\`\`bash
+gh release download ${{ github.ref_name }} \
+  --repo sentania-labs/vcf-content-factory \
+  --pattern '*.tgz'
+tar xzf sdk-buildkit-${{ steps.ver.outputs.version }}.tgz
+python3 -m sdk_buildkit build-sdk <adapter_dir>
+\`\`\`
+
+## Version pinning
+
+- **Exact pin**: use tag \`${{ github.ref_name }}\`
+- **Floating major**: use tag \`sdk-buildkit-v$(echo '${{ steps.ver.outputs.version }}' | cut -d. -f1)\`
+
+See the factory repo README for the per-pak CI workflow template.
+"

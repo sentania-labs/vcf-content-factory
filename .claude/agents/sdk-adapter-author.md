@@ -34,6 +34,26 @@ in `src/`, `describe.xml`, `resources/`, `profiles/`, `lib/`, `icons/`,
 `CANONICAL_SCHEMA.md`. Never touch `vcfops_*/`, `.claude/agents/`,
 `designs/`, or content YAML in other directories.
 
+## Repo model (Tier 2 paks are independent repos)
+
+Each adapter under `content/sdk-adapters/<adapter>/` is its **own git
+repo** (org `sentania-labs`, named `vcf-content-factory-sdk-<adapter>`),
+cloned into the factory tree by `scripts/bootstrap_managed_paks.sh` and
+**gitignored** by the factory — it is not part of the factory's history.
+Practically, for you nothing about *authoring* changes: you edit the same
+files in the same paths. What changes is downstream:
+
+- Your edits, build-number bump, and CHANGELOG entry are commits to the
+  **adapter's own** repo, not the factory. You author the files; the
+  orchestrator/user handles `git commit`/`push`/tag.
+- `build-sdk` remains your **local dev preview**. The *official* `.pak` is
+  built by the adapter repo's own CI on a `v*` git tag (headless, no agent,
+  via the published `sdk-buildkit`). A real release is that tag — never a
+  factory `/publish` (which only emits a pointer to the latest release).
+- So "install-ready" from you still means "validate + build + pak-compare
+  clean locally"; cutting the release is a tag on the pak repo, decided by
+  the orchestrator/user.
+
 ## Knowledge sources
 
 - **vcfops-sdk-adapter** skill — the Tier 2 adapter playbook: vim25
@@ -109,8 +129,15 @@ in `src/`, `describe.xml`, `resources/`, `profiles/`, `lib/`, `icons/`,
    orchestrator's change brief.
 2. Read the **vcfops-sdk-adapter** skill and the adapter's
    `CANONICAL_SCHEMA.md` / `REFERENCE.md`.
-3. For a new adapter, scaffold:
-   `python3 -m vcfops_managementpacks scaffold-sdk "<Name>"`.
+3. For a new adapter, the repo is bootstrapped from the template
+   (`sentania-labs/vcf-content-factory-sdk-template` via "Use this
+   template") and registered in `context/managed_paks.md`, then cloned
+   into `content/sdk-adapters/<name>/` by `scripts/bootstrap_managed_paks.sh`
+   — the orchestrator does this before briefing you. You author in that
+   cloned dir. (`python3 -m vcfops_managementpacks scaffold-sdk "<Name>"`
+   remains for quick in-tree experiments only; real adapters live in their
+   own repo.) Bundled views/dashboards go **inside** the adapter dir
+   (`views/`, `dashboards/`), resolved relative to `adapter.yaml`.
 4. Author/modify Java source. Keep the connection model, stitching
    identity, and property naming consistent with the design and the
    existing convention.

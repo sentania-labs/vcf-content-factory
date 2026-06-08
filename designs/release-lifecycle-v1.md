@@ -135,7 +135,8 @@ vcf-content-factory-bundles/
 | `supermetrics/` | supermetric | `supermetrics/` |
 | `customgroups/` | customgroup | `customgroups/` |
 | `reports/` | report | `reports/` |
-| `managementpacks/` | managementpack | `management-packs/` (deferred v1) |
+| `managementpacks/` | managementpack | `management-packs/` (Tier 1 MPB paks) |
+| `content/sdk-adapters/<name>/` | sdk-pak-pointer | `management-packs/` (pointer to external release) |
 
 Symptoms and alerts: don't get their own discrete-release subdir in v1.
 They're never useful standalone — they ship inside bundles. If someone
@@ -515,3 +516,78 @@ in git history.
 Note: the architecture diagram in §D above still shows the legacy
 `-<version>` suffix.  Treat that diagram as historical; the actual
 implementation follows versionless naming as described here.
+
+## Addendum 2026-06-08 — SDK pak pointer model
+
+**SDK adapter paks are pointers to external GitHub Releases, not built
+or mirrored by the factory.**
+
+Each SDK adapter (Tier 2 Java SDK) lives in its own independent git repo
+under the `sentania-labs` org (e.g.
+`sentania-labs/vcf-content-factory-sdk-compliance`).  The adapter's own
+CI builds and attaches the `.pak` to a GitHub Release on a `v*` tag.
+The factory's `/publish` does **not** compile or mirror the pak — it
+emits a small pointer record that tells consumers where the real artifact
+lives.
+
+### Registry
+
+`context/managed_paks.md` is the canonical registry of published SDK paks.
+Each entry names the pak's remote repo and the factory-relative target
+directory (`content/sdk-adapters/<name>/`).  The registry is SHA-free and
+version-free; "latest release" is always derived at publish time as
+`<remote>/releases/latest`.
+
+### Pointer record format
+
+When `/publish` processes a headline whose source is
+`content/sdk-adapters/<name>/adapter.yaml`, `_build_sdk_mp_headline()`
+in `release_builder.py`:
+
+1. Looks up the adapter in `context/managed_paks.md` by its directory name.
+2. Fails loudly with a `ValueError` if the adapter is not registered
+   (the signal that de-track migration has not been done for this adapter).
+3. Writes a **pointer zip** to the build staging area.  The zip contains
+   a single file, `pointer.json`:
+
+```json
+{
+  "type": "sdk-pak-pointer",
+  "adapter_name": "<name>",
+  "adapter_kind": "<vcfcf_name>",
+  "remote": "https://github.com/sentania-labs/vcf-content-factory-sdk-<name>",
+  "latest_release_url": "https://github.com/sentania-labs/vcf-content-factory-sdk-<name>/releases/latest",
+  "api_latest_url": "https://api.github.com/repos/sentania-labs/vcf-content-factory-sdk-<name>/releases/latest",
+  "asset_glob": "*.pak"
+}
+```
+
+The pointer zip lands in `management-packs/` in the dist repo (same
+subdir as Tier 1 MPB paks) via the existing `release_types.py` mapping.
+
+### README generation
+
+`readme_gen._render_release_catalog()` detects pointer zips (presence of
+`pointer.json` with `"type": "sdk-pak-pointer"`) and emits a
+`[GitHub Release](<latest_release_url>)` link in the Download column
+instead of a local download link.  The Install column reads
+"See GitHub Release page".
+
+### What this is NOT
+
+- The factory does not compile or sign the pak.
+- The factory does not store a version pin.  The pointer always follows
+  the latest release of the pak's own repo.
+- `sdk_builder.build_sdk_pak()` is not imported or called anywhere in
+  the publish path.  It remains available for local *dev builds* only
+  (`python3 -m vcfops_managementpacks build-sdk <adapter-dir>`).
+
+### Pre-conditions for publish
+
+An SDK adapter can only be published once:
+1. Its repo exists at the registered remote (Workstream D de-track migration).
+2. At least one `v*` tag has been pushed to trigger the pak's CI, which
+   attaches the `.pak` to the GitHub Release.
+3. The adapter's entry has been added to `context/managed_paks.md`.
+
+Without all three, `/publish` will hit the `ValueError` guard and abort.

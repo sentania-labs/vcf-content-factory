@@ -198,39 +198,83 @@ def _build_sdk_mp_headline(
     source_path: Path,
     tmp_dir: Path,
 ) -> Path:
-    """Build a Tier 2 SDK management pack headline.
+    """Emit a release pointer for a Tier 2 SDK management pack headline.
 
-    Calls sdk_builder.build_sdk_pak() to compile and package the adapter,
-    then wraps the .pak in a zip for the release pipeline.
+    Instead of compiling the adapter locally (which requires a JDK and the
+    full factory buildkit), this function resolves the adapter's entry in the
+    managed-paks registry (``context/managed_paks.md``) and writes a small
+    **pointer record** zip to ``tmp_dir``.  The zip contains a single file,
+    ``pointer.json``, which carries:
 
-    Unlike Tier 1 MPs, there is no exchange JSON — SDK paks are
-    self-contained.
+    .. code-block:: json
+
+        {
+            "type": "sdk-pak-pointer",
+            "adapter_name": "<name>",
+            "adapter_kind": "<adapter_kind>",
+            "remote": "https://github.com/<owner>/<repo>",
+            "latest_release_url": "https://github.com/<owner>/<repo>/releases/latest",
+            "api_latest_url": "https://api.github.com/repos/<owner>/<repo>/releases/latest",
+            "asset_glob": "*.pak"
+        }
+
+    The pointer zip is treated as the distribution artifact: it lands in
+    ``management-packs/`` in the dist repo, and the README generator links
+    directly to ``latest_release_url`` rather than to the zip.
+
+    This function does NOT import or call ``sdk_builder`` / ``build_sdk_pak``,
+    and does NOT require the runtime JARs to be present.
+
+    Args:
+        source_path:  Path to ``content/sdk-adapters/<name>/adapter.yaml``
+                      (or any file inside the adapter project directory).
+        tmp_dir:      Temporary directory to write the pointer zip into.
+
+    Returns:
+        Path to the pointer zip written inside ``tmp_dir``.
+
+    Raises:
+        ValueError: if the adapter is not found in the managed-paks registry
+            (signal that the pak has not been extracted and registered yet).
     """
+    import json
     import zipfile
-    from vcfops_managementpacks.sdk_builder import build_sdk_pak
+
+    from .managed_paks import (
+        lookup_by_adapter_name,
+        derived_latest_release_url,
+        derived_api_latest_url,
+    )
 
     # source_path points to content/sdk-adapters/<name>/adapter.yaml
-    project_dir = source_path.parent
-    pak_path = build_sdk_pak(project_dir, output_dir=tmp_dir)
+    # (or similar); the adapter name is the direct parent directory name.
+    adapter_name = source_path.parent.name
 
-    # Wrap in a zip for the release pipeline
-    repo_root = Path(__file__).parent.parent
-    zip_name = f"{pak_path.stem}.zip"
+    pak = lookup_by_adapter_name(adapter_name)
+    if pak is None:
+        raise ValueError(
+            f"SDK adapter {adapter_name!r} is not registered in context/managed_paks.md. "
+            f"This means the adapter has not been extracted to its own remote repo and "
+            f"registered in the managed-paks registry yet. "
+            f"Complete Workstream D (de-track migration) before publishing this adapter. "
+            f"Do NOT fall back to a local build — add the registry entry instead."
+        )
+
+    pointer = {
+        "type": "sdk-pak-pointer",
+        "adapter_name": pak.name,
+        "adapter_kind": pak.adapter_kind,
+        "remote": pak.remote,
+        "latest_release_url": derived_latest_release_url(pak),
+        "api_latest_url": derived_api_latest_url(pak),
+        "asset_glob": "*.pak",
+    }
+
+    pointer_json = json.dumps(pointer, indent=2) + "\n"
+    zip_name = f"{pak.adapter_kind}-pointer.zip"
     zip_path = tmp_dir / zip_name
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(pak_path, pak_path.name)
-        readme = project_dir / "README.md"
-        if readme.exists():
-            zf.write(readme, "README.md")
-        changelog = project_dir / "CHANGELOG.md"
-        if changelog.exists():
-            zf.write(changelog, "CHANGELOG.md")
-        reference = project_dir / "REFERENCE.md"
-        if reference.exists():
-            zf.write(reference, "REFERENCE.md")
-        license_src = repo_root / "LICENSE"
-        if license_src.exists():
-            zf.write(license_src, "LICENSE.md")
+        zf.writestr("pointer.json", pointer_json)
 
     return zip_path
 
