@@ -59,12 +59,20 @@ from .release_types import headline_to_dir
 
 @dataclass
 class ReleaseArtifact:
-    """One built distribution zip for a single release headline."""
-    zip_path: Path           # absolute path to the built zip on disk
-    dest_subdir: str         # "dashboards" / "bundles" / "views" / ...
+    """One built distribution zip for a single release headline.
+
+    For SDK pointer releases (``is_sdk_pointer=True``), no zip is built or
+    copied to the distribution repo.  The artifact contributes a README entry
+    only.  ``zip_path`` is ``None`` and ``pointer_info`` carries the registry
+    data needed to render the README row.
+    """
+    zip_path: "Path | None"  # None for sdk-pointer releases
+    dest_subdir: str         # "dashboards" / "bundles" / "views" / "management-packs" / ...
     headline_source: str     # the source YAML path that drove this artifact
     release_name: str
     release_version: str
+    is_sdk_pointer: bool = False   # True iff this is a Tier 2 SDK adapter pointer
+    pointer_info: "dict | None" = None  # populated when is_sdk_pointer=True
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +104,11 @@ _PARENT_DIR_TO_DISCRETE_TYPE: dict[str, str] = {
     "customgroups": "customgroup",
     "reports":      "report",
 }
+
+
+def _is_sdk_adapter_source(source_path: Path) -> bool:
+    """Return True iff source_path is under content/sdk-adapters/<name>/."""
+    return source_path.parent.parent.name == "sdk-adapters"
 
 
 def _read_name_from_yaml(path: Path) -> str:
@@ -194,52 +207,35 @@ def _build_component_headline(
     return built
 
 
-def _build_sdk_mp_headline(
-    source_path: Path,
-    tmp_dir: Path,
-) -> Path:
-    """Emit a release pointer for a Tier 2 SDK management pack headline.
+def _resolve_sdk_mp_pointer(source_path: Path) -> dict:
+    """Resolve the registry entry for a Tier 2 SDK management pack headline.
 
-    Instead of compiling the adapter locally (which requires a JDK and the
-    full factory buildkit), this function resolves the adapter's entry in the
-    managed-paks registry (``context/managed_paks.md``) and writes a small
-    **pointer record** zip to ``tmp_dir``.  The zip contains a single file,
-    ``pointer.json``, which carries:
-
-    .. code-block:: json
-
-        {
-            "type": "sdk-pak-pointer",
-            "adapter_name": "<name>",
-            "adapter_kind": "<adapter_kind>",
-            "remote": "https://github.com/<owner>/<repo>",
-            "latest_release_url": "https://github.com/<owner>/<repo>/releases/latest",
-            "api_latest_url": "https://api.github.com/repos/<owner>/<repo>/releases/latest",
-            "asset_glob": "*.pak"
-        }
-
-    The pointer zip is treated as the distribution artifact: it lands in
-    ``management-packs/`` in the dist repo, and the README generator links
-    directly to ``latest_release_url`` rather than to the zip.
-
-    This function does NOT import or call ``sdk_builder`` / ``build_sdk_pak``,
-    and does NOT require the runtime JARs to be present.
+    Looks up the adapter in ``context/managed_paks.md`` by directory name and
+    returns a pointer-info dict with all fields needed for README generation.
+    No zip or binary is produced.
 
     Args:
         source_path:  Path to ``content/sdk-adapters/<name>/adapter.yaml``
                       (or any file inside the adapter project directory).
-        tmp_dir:      Temporary directory to write the pointer zip into.
 
     Returns:
-        Path to the pointer zip written inside ``tmp_dir``.
+        Pointer-info dict::
+
+            {
+                "type": "sdk-pak-pointer",
+                "adapter_name": "<name>",
+                "adapter_kind": "<vcfcf_name>",
+                "remote": "https://github.com/sentania-labs/vcf-content-factory-sdk-<name>",
+                "latest_release_url": "https://github.com/.../releases/latest",
+                "api_latest_url": "https://api.github.com/repos/.../releases/latest",
+                "asset_glob": "*.pak"
+            }
 
     Raises:
-        ValueError: if the adapter is not found in the managed-paks registry
-            (signal that the pak has not been extracted and registered yet).
+        ValueError: if the adapter is not found in the managed-paks registry.
+            This is a hard failure — add the registry entry in
+            ``context/managed_paks.md`` before publishing.
     """
-    import json
-    import zipfile
-
     from .managed_paks import (
         lookup_by_adapter_name,
         derived_latest_release_url,
@@ -260,7 +256,7 @@ def _build_sdk_mp_headline(
             f"Do NOT fall back to a local build — add the registry entry instead."
         )
 
-    pointer = {
+    return {
         "type": "sdk-pak-pointer",
         "adapter_name": pak.name,
         "adapter_kind": pak.adapter_kind,
@@ -270,12 +266,25 @@ def _build_sdk_mp_headline(
         "asset_glob": "*.pak",
     }
 
-    pointer_json = json.dumps(pointer, indent=2) + "\n"
-    zip_name = f"{pak.adapter_kind}-pointer.zip"
+
+# Keep the old name as a deprecated alias for any external callers.
+# Internal publish path no longer calls it.
+def _build_sdk_mp_headline(source_path: Path, tmp_dir: Path) -> Path:  # pragma: no cover
+    """Deprecated — use ``_resolve_sdk_mp_pointer`` instead.
+
+    Previously wrote a pointer zip to ``tmp_dir``.  The publish pipeline no
+    longer produces a zip for SDK MP releases; this shim is preserved only for
+    callers that were written against the old signature.  It will be removed in
+    a future cleanup.
+    """
+    import json
+    import zipfile
+
+    pointer = _resolve_sdk_mp_pointer(source_path)
+    zip_name = f"{pointer['adapter_kind']}-pointer.zip"
     zip_path = tmp_dir / zip_name
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("pointer.json", pointer_json)
-
+        zf.writestr("pointer.json", json.dumps(pointer, indent=2) + "\n")
     return zip_path
 
 
@@ -410,6 +419,25 @@ def build_release(
             bundle_data = _load_bundle_data_if_bundle(source_path)
             dest_subdir = headline_to_dir(source_prefix + "/dummy.yaml", bundle_data=bundle_data)
 
+        # -----------------------------------------------------------------------
+        # SDK adapter headlines: pointer-only release — no zip produced.
+        # The artifact carries pointer_info from the registry; the publish
+        # orchestrator and README generator consume it directly.  Nothing is
+        # written to output_dir for these releases.
+        # -----------------------------------------------------------------------
+        if source_prefix == "sdk-adapters":
+            pointer_info = _resolve_sdk_mp_pointer(source_path)
+            artifacts.append(ReleaseArtifact(
+                zip_path=None,
+                dest_subdir=dest_subdir,
+                headline_source=source_str,
+                release_name=release.name,
+                release_version=release.version,
+                is_sdk_pointer=True,
+                pointer_info=pointer_info,
+            ))
+            continue
+
         final_filename = _zip_filename(release.name, release.version)
         final_path = output_dir / final_filename
 
@@ -427,8 +455,6 @@ def build_release(
                 built_path = _build_component_headline(source_path, source_prefix, tmp_dir)
             elif source_prefix == "managementpacks":
                 built_path = _build_mp_headline(source_path, tmp_dir)
-            elif source_prefix == "sdk-adapters":
-                built_path = _build_sdk_mp_headline(source_path, tmp_dir)
             else:
                 raise ValueError(
                     f"unsupported headline source prefix {source_prefix!r} "

@@ -667,12 +667,20 @@ def _all_headline_paths(releases) -> set[str]:
     Each element is in the form  "<subdir>/<slug>.zip" (versionless),
     e.g. "dashboards/demand-driven-capacity-v2.zip" or
     "ThirdPartyContent/dashboards/idps-planner.zip".
+
+    SDK pointer releases (Tier 2 SDK adapter headlines) are intentionally
+    excluded: they produce no zip in the dist repo.  Any previously-routed SDK
+    MP zips in ``management-packs/`` are therefore NOT in the known set and
+    will be caught by the stale-zip sweep and moved to ``retired/``.
     """
-    from .release_builder import _artifact_dest_subdir, _zip_filename
+    from .release_builder import _artifact_dest_subdir, _zip_filename, _is_sdk_adapter_source
     known = set()
     for r in releases:
         for a in r.artifacts:
             if a.headline:
+                if _is_sdk_adapter_source(a.source_path):
+                    # SDK pointer — no zip expected in the dist repo.
+                    continue
                 subdir = _artifact_dest_subdir(a)
                 filename = _zip_filename(r.name)
                 known.add(f"{subdir}/{filename}")
@@ -1061,13 +1069,22 @@ def _publish_inner(
                     for art in artifacts:
                         if art.dest_subdir != subdir:
                             continue
-                        dest_dir = dist_repo / art.dest_subdir
-                        dest_dir.mkdir(parents=True, exist_ok=True)
-                        dest_file = dest_dir / art.zip_path.name
-                        _copy_if_changed(art.zip_path, dest_file)
-                        result.built.append(dest_file)
-                        built_names.append(release.name)
-                        built_this_release = True
+                        if art.is_sdk_pointer:
+                            # SDK pointer release: no zip to copy.  The release
+                            # is published as a README entry only.  Record it in
+                            # built_names so the README and commit message include it,
+                            # but do NOT write any file to the dist repo.
+                            result.built.append(dest_path)
+                            built_names.append(release.name)
+                            built_this_release = True
+                        else:
+                            dest_dir = dist_repo / art.dest_subdir
+                            dest_dir.mkdir(parents=True, exist_ok=True)
+                            dest_file = dest_dir / art.zip_path.name
+                            _copy_if_changed(art.zip_path, dest_file)
+                            result.built.append(dest_file)
+                            built_names.append(release.name)
+                            built_this_release = True
                 else:
                     # Dry-run: record the would-be path.
                     result.built.append(dest_path)

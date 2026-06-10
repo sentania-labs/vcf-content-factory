@@ -591,3 +591,40 @@ An SDK adapter can only be published once:
 3. The adapter's entry has been added to `context/managed_paks.md`.
 
 Without all three, `/publish` will hit the `ValueError` guard and abort.
+
+## Addendum 2026-06-10 — SDK pointer model: no zip in dist repo
+
+**Supersedes the "pointer zip" mechanism described in the 2026-06-08 addendum.**
+
+The factory no longer writes any zip or binary to the bundles dist repo for
+SDK adapter releases.  The 2026-06-08 design described a `pointer.json` zip
+landing in `management-packs/` — that approach was revised before
+implementation because storing even a tiny zip in the dist repo still creates
+a file that can go stale and still requires the retire-and-sweep machinery.
+
+**Current implementation (2026-06-10):**
+
+- `release_builder.build_release()` returns a `ReleaseArtifact` with
+  `is_sdk_pointer=True` and `zip_path=None` for SDK adapter headlines.  No
+  file is written to the staging directory.
+- `publish.py` skips the zip-copy step for pointer artifacts; the release name
+  is still added to `built_names` so the commit message and README include it.
+- `publish._all_headline_paths()` excludes SDK adapter sources from the
+  "known filenames" set, so existing SDK MP zips in `management-packs/` are
+  caught by the stale-zip sweep and moved to `retired/management-packs/` on
+  the next publish.
+- `readme_gen._render_release_catalog()` detects SDK adapter artifacts by
+  source path (`grandparent == "sdk-adapters"`), looks up the registry in
+  `context/managed_paks.md`, and renders the release in a dedicated
+  **"SDK Adapter Management Packs"** subsection under Management Packs.  Each
+  row links the name to the pak's GitHub repo page and provides a
+  `[Download latest](<remote>/releases/latest)` link.  No version is pinned.
+
+**Retirement of previously-hosted zips:**
+On the next `/publish`, the stale-zip sweep moves
+`management-packs/{synology-diskstation,unifi-controller}-managementpack.zip`
+to `retired/management-packs/` automatically.  No `deprecates:` entry is
+needed in the release manifests — the sweep handles it because these filenames
+are no longer in the "known filenames" set.
+
+See `designs/release-sdk-pointer-v1.md` for the design rationale.

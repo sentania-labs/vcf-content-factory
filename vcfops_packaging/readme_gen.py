@@ -472,6 +472,14 @@ def _extract_pointer_latest_url(zip_path: Path) -> "Optional[str]":
     A pointer zip contains a ``pointer.json`` member with
     ``{"type": "sdk-pak-pointer", "latest_release_url": "..."}`` at its root.
     Any zip that is absent, unreadable, or lacks that structure returns None.
+
+    .. deprecated::
+        The publish pipeline no longer writes pointer zips to the dist repo.
+        SDK MP rows are now rendered via ``_resolve_sdk_pointer_for_artifact``
+        which reads the registry directly.  This function is retained as a
+        fallback for reading any legacy pointer zips that may still exist in
+        the dist repo's ``management-packs/`` directory until the stale-zip
+        sweep retires them.
     """
     import json
     import zipfile as _zf
@@ -489,6 +497,81 @@ def _extract_pointer_latest_url(zip_path: Path) -> "Optional[str]":
         return data.get("latest_release_url") or None
     except Exception:
         return None
+
+
+def _is_sdk_adapter_artifact(artifact) -> bool:
+    """Return True iff this release artifact's source is under sdk-adapters/."""
+    try:
+        return artifact.source_path.parent.parent.name == "sdk-adapters"
+    except Exception:
+        return False
+
+
+def _resolve_sdk_pointer_for_artifact(artifact) -> "Optional[dict]":
+    """Look up managed-paks registry for an SDK adapter artifact.
+
+    Returns the pointer-info dict (same shape as ``_resolve_sdk_mp_pointer``)
+    or None if the adapter is not registered.  Does NOT raise — the caller
+    falls back to the normal table row if None is returned.
+    """
+    try:
+        from .managed_paks import (
+            lookup_by_adapter_name,
+            derived_latest_release_url,
+            derived_api_latest_url,
+        )
+        adapter_name = artifact.source_path.parent.name
+        pak = lookup_by_adapter_name(adapter_name)
+        if pak is None:
+            return None
+        return {
+            "type": "sdk-pak-pointer",
+            "adapter_name": pak.name,
+            "adapter_kind": pak.adapter_kind,
+            "remote": pak.remote,
+            "latest_release_url": derived_latest_release_url(pak),
+            "api_latest_url": derived_api_latest_url(pak),
+            "asset_glob": "*.pak",
+        }
+    except Exception:
+        return None
+
+
+def _render_sdk_mp_table(rows: list[dict]) -> str:
+    """Render the SDK adapter management-packs subsection table.
+
+    Each row has: name, released, description, repo, latest_release_url.
+
+    Schema: Name | Released | Description | Download
+    - Name links to the pak's GitHub repo page (living README lives there).
+    - Download links to releases/latest (always the current pak).
+    No version column — "latest" is evergreen by design.
+    Returns empty string if rows is empty.
+    """
+    if not rows:
+        return ""
+    lines = [
+        "| Name | Released | Description | Download |",
+        "|---|---|---|---|",
+    ]
+    for row in rows:
+        raw_name = str(row.get("name", "")).replace("|", "\\|")
+        released = str(row.get("released", "")).replace("|", "\\|")
+        description = str(row.get("description", "")).replace("|", "\\|")
+        repo = str(row.get("repo", ""))
+        latest = str(row.get("latest_release_url", ""))
+        # Name links to the pak repo page (primary — GitHub renders the pak README there).
+        if repo:
+            name_cell = f"[{raw_name}]({repo})"
+        else:
+            name_cell = raw_name
+        # Download links to releases/latest (evergreen — never pins a version).
+        if latest:
+            download_cell = f"[Download latest]({latest})"
+        else:
+            download_cell = "_not registered_"
+        lines.append(f"| {name_cell} | {released} | {description} | {download_cell} |")
+    return "\n".join(lines) + "\n"
 
 
 def _render_release_catalog(dist_repo: Path, releases: list) -> str:
@@ -514,9 +597,12 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
         for dep_path in r.deprecates:
             deprecated_manifest_paths.add(dep_path.resolve())
 
-    # Group releases by subdir — factory-native and third-party separately.
+    # Group releases by subdir — factory-native, third-party, and SDK MPs separately.
+    # SDK adapter (Tier 2) pointer releases are tracked separately from Tier 1
+    # management-packs so they can be rendered in a dedicated README subsection.
     by_subdir: dict[str, list] = {s: [] for s in _SUBDIR_ORDER}
     by_third_party: dict[str, list] = {s: [] for s in _THIRD_PARTY_SUBDIR_ORDER}
+    sdk_mp_rows: list[dict] = []  # SDK pointer releases — README entry only
 
     for r in releases:
         # Skip releases that are deprecated by another manifest — they belong
@@ -528,7 +614,8 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
                 continue
             subdir = _artifact_dest_subdir(a)
 
-            # Versionless consumer artifact filename.
+            # Versionless consumer artifact filename (used for mtime lookup on
+            # normal artifacts; SDK pointers have no on-disk zip).
             filename = _zip_filename(r.name)
             zip_path = dist_repo / subdir / filename
 
@@ -554,14 +641,40 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
             if first_sentence and not first_sentence.endswith("."):
                 first_sentence += "."
 
-            # Download / install columns.
-            # For SDK pak pointers: link directly to the pak's GitHub Release
-            # page rather than to the pointer zip in the dist repo.
+            # SDK adapter (Tier 2) releases are pointer-only: no zip lives in
+            # the dist repo.  Build a dedicated row for the SDK MPs subsection,
+            # using registry data for the repo page and latest-release links.
+            if _is_sdk_adapter_artifact(a):
+                _ptr = _resolve_sdk_pointer_for_artifact(a)
+                if _ptr is not None:
+                    _repo_url = _ptr["remote"]
+                    _latest_url = _ptr["latest_release_url"]
+                    sdk_mp_rows.append({
+                        "name": r.name,
+                        "released": released_date,
+                        "description": first_sentence,
+                        "repo": _repo_url,
+                        "latest_release_url": _latest_url,
+                    })
+                else:
+                    # Registry lookup failed — add a degraded row so the release
+                    # still appears rather than silently disappearing.
+                    sdk_mp_rows.append({
+                        "name": r.name,
+                        "released": released_date,
+                        "description": first_sentence,
+                        "repo": "",
+                        "latest_release_url": "",
+                    })
+                break  # one entry per release
+
+            # Non-SDK artifact: check for a legacy pointer zip on disk
+            # (backward-compat fallback until the stale-zip sweep retires it).
             zip_path_on_disk = dist_repo / subdir / filename
-            _latest_url = _extract_pointer_latest_url(zip_path_on_disk)
-            if _latest_url is not None:
-                # Pointer zip: link out to the external GitHub Release.
-                download_cell = f"[GitHub Release]({_latest_url})"
+            _latest_url_legacy = _extract_pointer_latest_url(zip_path_on_disk)
+            if _latest_url_legacy is not None:
+                # Legacy pointer zip still present (pre-retirement).
+                download_cell = f"[GitHub Release]({_latest_url_legacy})"
                 install_cell = "See GitHub Release page"
             else:
                 # Normal artifact: local download + install script.
@@ -613,6 +726,19 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
             parts.append(table)
         else:
             parts.append("_No releases yet._\n")
+
+        # SDK MP subsection — appended immediately after the Management Packs
+        # Tier 1 table so it reads as "Management Packs → SDK Adapters".
+        if subdir == "management-packs" and sdk_mp_rows:
+            parts.append("\n### SDK Adapter Management Packs\n")
+            parts.append(
+                "_These management packs are built and released independently "
+                "by their own CI pipeline. The pak binary lives on the pak's own "
+                "GitHub repo — click the pak name or 'Download latest' to get the "
+                "current release. No version is pinned here; the link always "
+                "resolves to the latest published release._\n"
+            )
+            parts.append(_render_sdk_mp_table(sdk_mp_rows))
 
     # Render third-party section (only if any third-party releases exist).
     has_third_party = any(rows for rows in by_third_party.values())
