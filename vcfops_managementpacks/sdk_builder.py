@@ -30,15 +30,23 @@ Pak structure produced (SDK format — differs from MPB Tier 1):
           describe.xml
           resources/resources.properties
         lib/
-          vcfcf-adapter-base.jar                      [framework; NOT SDK JARs]
-          aria-ops-core-<ver>.jar                     [bundled; NOT on shared classpath]
+          vcfcf-adapter-base.jar                      [framework]
+          aria-ops-core-<ver>.jar                     [v1 adapters only — see below]
           [project lib/*.jar if any]
 
 Key design decisions:
-  - vrops-adapters-sdk-*.jar and alive_common/alive_platform are on the
-    appliance shared classpath (spec/13) — NOT bundled in lib/.
-  - aria-ops-core is NOT on the shared classpath — MUST bundle it.
+  - vrops-adapters-sdk-*.jar resolves from the appliance classpath at runtime
+    (proven by C2 install test, build 42, devel + prod, 2026-06-09 — see
+    context/investigations/c2_no_sdk_jar_install_test.md).  It is kept on the
+    javac compile classpath but is NEVER bundled in pak lib/.
+  - aria-ops-core is NOT on the appliance shared classpath.  It must be bundled
+    for any adapter whose compiled classes reference com.vmware.tvs.* (v1 adapters
+    that have not yet been migrated to framework v2).  v2 adapters that extend
+    VcfCfAdapter directly have no TVS dependency and do NOT bundle aria-ops-core.
+    This is auto-detected by scanning the compiled class bytecode.  See
+    _needs_aria_ops_core() for the detection logic.
   - vcfcf-adapter-base.jar ships in the pak's lib/ (our framework).
+  - alive_common.jar / alive_platform.jar are on the shared classpath — NOT bundled.
   - No design.json, no template.json, no adapters: field in manifest (Tier 1 only).
   - Outer pak manifest uses adapter_kinds: [...] (no adapters: key).
 """
@@ -89,15 +97,20 @@ def _read_license() -> str:
     )
     return ""
 
-# JARs that ship in every pak's lib/ — framework + aria-ops-core + SDK
-# vrops-adapters-sdk IS on the shared classpath but working SDK paks (HPE
-# SimpliVity, Pure Storage) all bundle it in lib/ — the platform appears
-# to need it inside the pak for adapter-kind registration during install.
+# JARs that ship in every pak's lib/ — framework only by default.
+# vrops-adapters-sdk is on the appliance shared classpath and is NEVER bundled
+# (proven by C2 test — see context/investigations/c2_no_sdk_jar_install_test.md).
+# aria-ops-core is conditionally bundled for v1 adapters that reference
+# com.vmware.tvs.* — detected automatically at build time via _needs_aria_ops_core().
 _FRAMEWORK_JAR_PATTERN = "vcfcf-adapter-base.jar"
 _ARIA_OPS_CORE_PATTERN = "aria-ops-core-*.jar"
 _SDK_JAR_PATTERN = "vrops-adapters-sdk-*.jar"
 
-# JARs that are on the appliance shared classpath — compile against, DON'T bundle
+# JARs that are on the appliance shared classpath — compile against, NEVER bundle.
+# vrops-adapters-sdk is included here: it is kept on the javac classpath (Layer 1
+# of the three-layer stack) but resolves from the appliance at runtime.
+# TODO: aria-ops-core can be removed from the compile classpath once all v1
+#       adapters (synology, unifi, compliance) have been migrated to framework v2.
 _SHARED_CLASSPATH_PATTERNS = [
     "alive_common.jar",
     "alive_platform.jar",
@@ -155,6 +168,19 @@ def _build_classpath(project_dir: Path) -> str:
 
     Compile against all runtime JARs (including SDK JARs that won't be bundled).
     The shared-classpath distinction only matters at packaging time.
+
+    SDK JAR injection (kit / CI mode):
+      When running outside the factory (e.g. from the sdk-buildkit tarball in CI)
+      the adapter_runtime/ directory only contains vcfcf-adapter-base.jar — no
+      Broadcom JARs (they cannot ship in a public toolchain tarball; see the
+      redistribution survey at context/cleanroom-spec/analysis/sdk-survey/).
+      In that case the SDK JAR must be supplied via the VCFCF_SDK_JAR environment
+      variable or the --sdk-jar CLI flag (which sets the same env var before calling
+      this function).  A clear error is raised when the SDK JAR is absent from both
+      adapter_runtime/ and the env var.
+
+      Factory / local-dev mode: VCFCF_SDK_JAR is optional — the jar is already in
+      adapter_runtime/ and will be found by the glob below.
     """
     jars: List[Path] = []
 
@@ -164,6 +190,42 @@ def _build_classpath(project_dir: Path) -> str:
     # Also adapter_runtime/lib/*.jar (Tier 1 libs — compile harmless, not bundled)
     for jar in sorted((_ADAPTER_RUNTIME_DIR / "lib").glob("*.jar") if (_ADAPTER_RUNTIME_DIR / "lib").is_dir() else []):
         jars.append(jar)
+
+    # VCFCF_SDK_JAR: allow consumers (CI / sdk-buildkit) to inject the Broadcom
+    # SDK jar via env var when it is not present in adapter_runtime/.
+    sdk_jar_env = os.environ.get("VCFCF_SDK_JAR", "").strip()
+    if sdk_jar_env:
+        sdk_jar_path = Path(sdk_jar_env)
+        if not sdk_jar_path.is_file():
+            raise SdkBuildError(
+                f"VCFCF_SDK_JAR is set to {sdk_jar_env!r} but the file does not exist.\n"
+                "Obtain vrops-adapters-sdk-2.2.jar from your VCF Ops appliance:\n"
+                "  scp root@<appliance>:/usr/lib/vmware-vcops/common-lib/vrops-adapters-sdk-2.2.jar .\n"
+                "  (also at: /usr/lib/vmware-vcops/suite-api/WEB-INF/lib/vrops-adapters-sdk.jar)\n"
+                "Then set VCFCF_SDK_JAR to the local path."
+            )
+        # Only add if not already on the classpath (avoid duplicates in factory mode).
+        if sdk_jar_path not in jars:
+            jars.insert(0, sdk_jar_path)
+    else:
+        # Check whether the SDK jar is already covered by adapter_runtime/ globs.
+        has_sdk = any(
+            "vrops-adapters-sdk" in j.name for j in jars
+        )
+        if not has_sdk:
+            raise SdkBuildError(
+                "vrops-adapters-sdk-*.jar not found in adapter_runtime/ and "
+                "VCFCF_SDK_JAR is not set.\n"
+                "This JAR is a Broadcom internal build artifact that cannot ship "
+                "in a public toolchain tarball.\n"
+                "Obtain it from your VCF Ops appliance and set VCFCF_SDK_JAR:\n"
+                "  export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk-2.2.jar\n"
+                "Or copy the file from the appliance:\n"
+                "  scp root@<appliance>:/usr/lib/vmware-vcops/common-lib/vrops-adapters-sdk-2.2.jar .\n"
+                "  export VCFCF_SDK_JAR=$(pwd)/vrops-adapters-sdk-2.2.jar\n"
+                "The jar is also available at:\n"
+                "  /usr/lib/vmware-vcops/suite-api/WEB-INF/lib/vrops-adapters-sdk.jar"
+            )
 
     # Project-local lib/ (optional vendor JARs)
     project_lib = project_dir / "lib"
@@ -235,23 +297,60 @@ def _package_adapter_jar(jar_tool: str, build_dir: Path, jar_path: Path) -> None
         raise SdkBuildError(f"jar packaging failed:\n{result.stderr}\n{result.stdout}")
 
 
-def _collect_lib_jars(project_dir: Path) -> List[Path]:
+def _needs_aria_ops_core(build_dir: Path) -> bool:
+    """Return True if the compiled classes reference com/vmware/tvs (v1 adapters).
+
+    Scans every .class file in build_dir for the UTF-8 byte sequence
+    b'com/vmware/tvs' — this is the constant-pool string prefix for all
+    aria-ops-core types (com.vmware.tvs.vrealize.adapter.core.*).
+    v2 adapters that extend VcfCfAdapter directly have no such reference
+    and return False; v1 adapters that still use UnlicensedAdapter or any
+    other TVS type return True.
+
+    This is the gating condition for bundling aria-ops-core in lib/:
+      - True  → bundle aria-ops-core (v1 adapter; TVS types needed at runtime)
+      - False → do NOT bundle (v2 adapter; no TVS dependency)
+
+    Uses a raw byte scan rather than full class-file parsing — the UTF-8
+    string constants in a .class constant pool are stored as raw bytes
+    preceded by a CONSTANT_Utf8 tag (0x01), so a substring search is
+    sufficient and avoids any additional dependency.
+    """
+    tvs_marker = b"com/vmware/tvs"
+    for class_file in build_dir.rglob("*.class"):
+        try:
+            data = class_file.read_bytes()
+            if tvs_marker in data:
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def _collect_lib_jars(project_dir: Path, build_dir: Optional[Path] = None) -> List[Path]:
     """Collect JARs to bundle in the pak's <adapter>/lib/ directory.
 
-    Bundle:
-      - vcfcf-adapter-base.jar (our framework)
-      - aria-ops-core-*.jar (UnlicensedAdapter SPI)
-      - vrops-adapters-sdk-*.jar (also on shared classpath, but working
-        SDK paks all bundle it — platform needs it in lib/ for adapter
-        kind registration during install)
+    Always bundle:
+      - vcfcf-adapter-base.jar (our framework; never on appliance classpath)
       - project lib/*.jar (optional vendor JARs)
 
-    Do NOT bundle:
-      - alive_common.jar / alive_platform.jar (on shared classpath)
+    Conditionally bundle:
+      - aria-ops-core-*.jar — ONLY if compiled classes reference com.vmware.tvs.*
+        (v1 adapters not yet migrated to framework v2).  Detected automatically
+        via _needs_aria_ops_core(build_dir).  When build_dir is not supplied
+        (e.g. dry-run callers), aria-ops-core is bundled conservatively to avoid
+        producing a broken pak for v1 adapters.
+        Once all adapters are migrated to v2, this conditional can be removed.
+
+    Never bundle:
+      - vrops-adapters-sdk-*.jar — resolves from the appliance shared classpath
+        at runtime (proven by C2 test, build 42, 2026-06-09).  Still on the
+        javac compile classpath for Layer 1 SPI access.
+      - alive_common.jar / alive_platform.jar — on the appliance shared classpath.
     """
     lib_jars: List[Path] = []
 
-    # Framework JAR
+    # Framework JAR — always bundled
     fw_jars = _find_jars(_ADAPTER_RUNTIME_DIR, _FRAMEWORK_JAR_PATTERN)
     if not fw_jars:
         raise SdkBuildError(
@@ -261,25 +360,38 @@ def _collect_lib_jars(project_dir: Path) -> List[Path]:
         )
     lib_jars.extend(fw_jars)
 
-    # aria-ops-core (required for UnlicensedAdapter; not on shared classpath)
-    core_jars = _find_jars(_ADAPTER_RUNTIME_DIR, _ARIA_OPS_CORE_PATTERN)
-    if not core_jars:
-        print(
-            "  WARNING: aria-ops-core-*.jar not found in adapter_runtime/. "
-            "The pak may fail to load on the appliance.",
-            file=sys.stderr,
-        )
-    lib_jars.extend(core_jars)
+    # aria-ops-core — bundle only for v1 adapters (com.vmware.tvs.* reference detected)
+    # Conservative fallback: if build_dir is unknown, bundle to avoid breaking v1 paks.
+    if build_dir is not None:
+        bundle_aria = _needs_aria_ops_core(build_dir)
+        if bundle_aria:
+            print(
+                "  lib/: aria-ops-core detected as required (v1 adapter — "
+                "com.vmware.tvs.* reference found in compiled classes); bundling.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                "  lib/: aria-ops-core NOT required (v2 adapter — no com.vmware.tvs.* "
+                "reference in compiled classes); omitting from lib/.",
+                file=sys.stderr,
+            )
+    else:
+        bundle_aria = True  # conservative fallback
 
-    # vrops-adapters-sdk (on shared classpath but must be in pak for install)
-    sdk_jars = _find_jars(_ADAPTER_RUNTIME_DIR, _SDK_JAR_PATTERN)
-    if not sdk_jars:
-        print(
-            "  WARNING: vrops-adapters-sdk-*.jar not found in adapter_runtime/. "
-            "The platform may reject the adapter during install.",
-            file=sys.stderr,
-        )
-    lib_jars.extend(sdk_jars)
+    if bundle_aria:
+        core_jars = _find_jars(_ADAPTER_RUNTIME_DIR, _ARIA_OPS_CORE_PATTERN)
+        if not core_jars:
+            print(
+                "  WARNING: aria-ops-core-*.jar not found in adapter_runtime/ "
+                "but the adapter requires it (v1 — TVS reference detected). "
+                "The pak may fail to load on the appliance.",
+                file=sys.stderr,
+            )
+        lib_jars.extend(core_jars)
+
+    # vrops-adapters-sdk is NEVER bundled — resolves from appliance classpath.
+    # (C2 test confirmed: install + collection succeed without it in lib/.)
 
     # Project-local vendor JARs
     project_lib = project_dir / "lib"
@@ -596,7 +708,7 @@ def _assemble_adapters_zip(
             views.zip                  [optional; present when views_zip_bytes given]
         lib/
           vcfcf-adapter-base.jar
-          aria-ops-core-*.jar
+          aria-ops-core-*.jar   [v1 adapters only — conditionally included by _collect_lib_jars]
           [project lib/*.jar]
 
     Note: declarative content (dashboards, views) is NOT written inside
@@ -2080,8 +2192,10 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
         print(f"  adapter JAR: {adapter_jar.name} "
               f"({adapter_jar.stat().st_size:,} bytes)", file=sys.stderr)
 
-        # Step 7+8: collect lib JARs (framework + aria-ops-core + project deps)
-        lib_jars = _collect_lib_jars(project_dir)
+        # Step 7+8: collect lib JARs (framework + conditional aria-ops-core + project deps)
+        # Pass build_dir so _needs_aria_ops_core() can scan compiled classes and gate
+        # aria-ops-core bundling on whether the adapter uses com.vmware.tvs.* (v1 only).
+        lib_jars = _collect_lib_jars(project_dir, build_dir=build_dir)
         print(
             f"  lib/ deps: {len(lib_jars)} JAR(s): "
             f"{[j.name for j in lib_jars]}",
