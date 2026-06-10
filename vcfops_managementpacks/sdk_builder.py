@@ -79,7 +79,121 @@ from .sdk_project import SdkProjectDef, SdkProjectError, load_sdk_project
 
 _HERE = Path(__file__).parent
 _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"
+_ADAPTER_FRAMEWORK_SRC_DIR = _HERE / "adapter_framework" / "src"
 _LICENSE_PATH = _HERE.parent / "LICENSE"
+
+
+def _ensure_framework_jar() -> None:
+    """Compile the framework source into vcfcf-adapter-base.jar if needed.
+
+    In the factory the jar is pre-built and committed to adapter_runtime/.
+    In the sdk-buildkit tarball the jar is NOT shipped (to avoid stale-binary
+    drift) — instead adapter_framework/src/ is bundled and compiled here on
+    first use against the consumer-supplied SDK jar (VCFCF_SDK_JAR / --sdk-jar).
+
+    This is a no-op when adapter_runtime/vcfcf-adapter-base.jar already exists
+    (factory mode or a previous build in the same consumer session).
+
+    Raises SdkBuildError if the source tree is present but compilation fails,
+    or if neither the jar nor the source tree can be found.
+    """
+    output_jar = _ADAPTER_RUNTIME_DIR / "vcfcf-adapter-base.jar"
+    if output_jar.is_file():
+        return  # already present — nothing to do
+
+    src_dir = _ADAPTER_FRAMEWORK_SRC_DIR
+    if not src_dir.is_dir():
+        raise SdkBuildError(
+            f"vcfcf-adapter-base.jar not found at {output_jar} and framework "
+            f"source tree not found at {src_dir}.\n"
+            "This indicates a corrupt or incomplete sdk-buildkit installation.\n"
+            "Re-download the kit: "
+            "gh release download sdk-buildkit-v1 --repo sentania-labs/vcf-content-factory "
+            "--pattern 'sdk-buildkit-*.tgz'"
+        )
+
+    # Locate all .java sources under adapter_framework/src/
+    sources = sorted(src_dir.rglob("*.java"))
+    if not sources:
+        raise SdkBuildError(
+            f"Framework source tree at {src_dir} contains no .java files.\n"
+            "Re-download the sdk-buildkit tarball."
+        )
+
+    # Determine the compile classpath — SDK jar only (matches build-framework.sh)
+    sdk_jar_env = os.environ.get("VCFCF_SDK_JAR", "").strip()
+    if sdk_jar_env:
+        sdk_jar_path = Path(sdk_jar_env)
+        if not sdk_jar_path.is_file():
+            raise SdkBuildError(
+                f"VCFCF_SDK_JAR={sdk_jar_env!r} — file not found.\n"
+                "Cannot compile framework source without the SDK jar."
+            )
+        fw_classpath = str(sdk_jar_path)
+    else:
+        # Check adapter_runtime/ for the SDK jar (factory/local-dev mode)
+        sdk_jars = sorted(_ADAPTER_RUNTIME_DIR.glob("vrops-adapters-sdk-*.jar"))
+        if not sdk_jars:
+            raise SdkBuildError(
+                "Cannot compile framework source: vrops-adapters-sdk-*.jar not found "
+                "in adapter_runtime/ and VCFCF_SDK_JAR is not set.\n"
+                "Supply the SDK jar via --sdk-jar or VCFCF_SDK_JAR before building."
+            )
+        fw_classpath = str(sdk_jars[0])
+
+    javac = shutil.which("javac")
+    if javac is None:
+        raise SdkBuildError(
+            "javac not found on PATH — cannot compile framework source.\n"
+            "Install JDK 11+:\n"
+            "  Ubuntu/Debian: sudo apt-get install -y openjdk-17-jdk\n"
+            "  RHEL/CentOS:   sudo dnf install -y java-17-openjdk-devel"
+        )
+
+    jar_tool = shutil.which("jar")
+    if jar_tool is None:
+        raise SdkBuildError(
+            "jar tool not found on PATH — cannot package framework jar.\n"
+            "Ensure the JDK bin directory (which contains 'jar') is on PATH."
+        )
+
+    print(
+        f"  framework: compiling {len(sources)} source file(s) from {src_dir} ...",
+        file=sys.stderr,
+    )
+
+    with tempfile.TemporaryDirectory(prefix="vcfcf-framework-build-") as tmpdir:
+        build_dir = Path(tmpdir) / "classes"
+        build_dir.mkdir()
+
+        cmd = [
+            javac,
+            "-source", "11", "-target", "11",
+            "-cp", fw_classpath,
+            "-d", str(build_dir),
+        ] + [str(s) for s in sources]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise SdkBuildError(
+                f"Framework compilation failed:\n{result.stderr}\n{result.stdout}\n"
+                "If errors mention com.vmware.tvs.* or alive* symbols this is a "
+                "clean-room wall violation — report as a TOOLSET GAP."
+            )
+
+        # Package the compiled classes into vcfcf-adapter-base.jar
+        _ADAPTER_RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+        cmd_jar = [jar_tool, "cf", str(output_jar), "-C", str(build_dir), "."]
+        result_jar = subprocess.run(cmd_jar, capture_output=True, text=True)
+        if result_jar.returncode != 0:
+            raise SdkBuildError(
+                f"Framework jar packaging failed:\n{result_jar.stderr}\n{result_jar.stdout}"
+            )
+
+    sz = output_jar.stat().st_size
+    print(
+        f"  framework: built {output_jar.name} ({sz // 1024} KB)",
+        file=sys.stderr,
+    )
 
 
 def _read_license() -> str:
@@ -2198,6 +2312,10 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
     javac = _detect_jdk()
     jar_tool = _detect_jar_tool()
 
+    # Step 2b: ensure vcfcf-adapter-base.jar exists (compile from source if
+    # running from the sdk-buildkit tarball where no pre-built jar ships)
+    _ensure_framework_jar()
+
     # Step 3: build classpath
     classpath = _build_classpath(project_dir)
 
@@ -2394,6 +2512,7 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
     javac = shutil.which("javac")
     if javac and not errors:
         try:
+            _ensure_framework_jar()
             classpath = _build_classpath(project_dir)
             sources = _find_sources(project_dir)
             with tempfile.TemporaryDirectory(prefix="vcfcf-validate-") as tmpdir:

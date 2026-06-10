@@ -18,18 +18,20 @@ Kit contents (assembled under a temp dir, then tarballed):
     dashboard_render.py         — copy of vcfops_dashboards/render.py (imports patched)
     dashboard_yaml_utils.py     — copy of vcfops_dashboards/yaml_utils.py
     sm_loader.py                — copy of vcfops_supermetrics/loader.py
-    adapter_runtime/            — JARs
-    templates/icons/            — SVG icon assets
+    adapter_framework/src/       — framework Java source (compiled at build-sdk time)
+    adapter_runtime/             — empty directory (jar compiled into here on first use)
+    templates/icons/             — SVG icon assets
     reference_paks/             — one reference .pak for pak-compare
     LICENSE
     VERSION
 
 Path relocation in the kit's sdk_builder.py:
-  _HERE               = Path(__file__).parent
-  _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"
-  _LICENSE_PATH        = _HERE / "LICENSE"
-  _REFERENCES_DIR      = _HERE / "reference_paks"
-  templates/icons      = _HERE / "templates" / "icons"
+  _HERE                    = Path(__file__).parent
+  _ADAPTER_RUNTIME_DIR      = _HERE / "adapter_runtime"
+  _ADAPTER_FRAMEWORK_SRC_DIR = _HERE / "adapter_framework" / "src"
+  _LICENSE_PATH             = _HERE / "LICENSE"
+  _REFERENCES_DIR           = _HERE / "reference_paks"
+  templates/icons           = _HERE / "templates" / "icons"
 
 repo_root handling:
   In the factory, _load_bundled_content resolves bundled_content paths against
@@ -57,7 +59,7 @@ from typing import Optional
 # Version constant — bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "0.1.0"
+BUILDKIT_VERSION = "0.2.0"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfops_managementpacks/)
@@ -191,9 +193,12 @@ Run as:
 
 ## Consumer contract
 
-This kit is JAR-FREE with respect to Broadcom platform JARs.  It ships
-only vcfcf-adapter-base.jar (the VCF Content Factory framework, built and
-owned by this project).
+This kit is fully JAR-FREE.  No pre-built jars ship at all — not even
+vcfcf-adapter-base.jar.  Instead the VCF Content Factory framework source
+is bundled in adapter_framework/src/ and compiled automatically on first
+use (during build-sdk or validate-sdk) against the consumer-supplied
+vrops-adapters-sdk-2.2.jar.  This means the framework jar is always fresh
+and in sync with the source — there is no stale-binary failure class.
 
 Adapters are compiled against vrops-adapters-sdk-2.2.jar which YOU must
 supply — it is a Broadcom internal build artifact with no public
@@ -224,7 +229,7 @@ JAR is absent from both adapter_runtime/ and the env var.
 ## Other requirements
 
 - Python 3.9+ with PyYAML
-- JDK 11+ on PATH (javac, jar)
+- JDK 11+ on PATH (javac, jar) — used both to compile the framework and the adapter
 - No factory checkout, no LLM, no other network access required.
 """
 '''
@@ -563,51 +568,51 @@ def assemble_buildkit(
                 _log(f"  wrote {dest_name}")
 
         # -----------------------------------------------------------------
-        # 3. adapter_runtime/ — OUR jars only; NO Broadcom jars
+        # 3a. adapter_runtime/ — empty stub; NO jars of any kind.
         #
         # The buildkit tarball is a public artifact.  Broadcom platform JARs
         # (vrops-adapters-sdk, alive_*, aria-ops-core, mpb_adapter*,
-        # vmware-ops-api-stubs) cannot ship in a public toolchain tarball — they
-        # are internal build artifacts with no public redistribution channel.
-        # See the redistribution survey:
-        #   context/cleanroom-spec/analysis/sdk-survey/
-        #     third-party-broadcom-jar-redistribution-survey-2026-06-09.md
-        #   §"Distributing the JARs outside a pak"
+        # vmware-ops-api-stubs) cannot ship — they are internal build artifacts
+        # with no public redistribution channel.
         #
-        # Only vcfcf-adapter-base.jar (our framework, which we own and built)
-        # is copied.  The consumer must supply vrops-adapters-sdk-2.2.jar via
-        # VCFCF_SDK_JAR env var or --sdk-jar flag at build time.
+        # vcfcf-adapter-base.jar is NOT shipped either.  Instead the framework
+        # source tree (adapter_framework/src/) is bundled (step 3b below) and
+        # compiled by the consumer's build-sdk / validate-sdk against the
+        # consumer-supplied --sdk-jar.  This eliminates stale-binary drift
+        # entirely: the jar is always built fresh from source.
+        #
+        # The no-Broadcom-jar guarantee is enforced by the CI workflow's
+        # "Verify tarball contains no Broadcom JARs" step which scans the tarball
+        # after assembly.
         # -----------------------------------------------------------------
-        _BROADCOM_JAR_PATTERNS = (
-            "vrops-adapters-sdk",
-            "alive_common",
-            "alive_platform",
-            "aria-ops-core",
-            "mpb_adapter",
-            "vmware-ops-api-stubs",
-        )
-        runtime_src = _HERE / "adapter_runtime"
         runtime_dst = kit_dir / "adapter_runtime"
         runtime_dst.mkdir()
-        copied_jars = []
-        skipped_jars = []
-        for jar in sorted(runtime_src.glob("*.jar")):
-            if any(jar.name.startswith(pat) for pat in _BROADCOM_JAR_PATTERNS):
-                skipped_jars.append(jar.name)
-            else:
-                shutil.copy2(str(jar), str(runtime_dst / jar.name))
-                copied_jars.append(jar.name)
-        # Also copy adapter_runtime/lib/ if present (non-Broadcom only)
-        lib_src = runtime_src / "lib"
-        if lib_src.is_dir():
-            lib_dst = runtime_dst / "lib"
-            lib_dst.mkdir()
-            for jar in sorted(lib_src.glob("*.jar")):
-                if not any(jar.name.startswith(pat) for pat in _BROADCOM_JAR_PATTERNS):
-                    shutil.copy2(str(jar), str(lib_dst / jar.name))
-        _log(f"  copied adapter_runtime/ ({len(copied_jars)} JAR(s): {', '.join(copied_jars)})")
-        if skipped_jars:
-            _log(f"  excluded Broadcom JARs: {', '.join(skipped_jars)}")
+        _log("  created adapter_runtime/ (empty — framework jar compiled from source at build time)")
+
+        # -----------------------------------------------------------------
+        # 3b. adapter_framework/src/ — framework Java source tree.
+        #
+        # The consumer's build-sdk / validate-sdk compiles this against the
+        # consumer-supplied SDK jar and produces vcfcf-adapter-base.jar in
+        # adapter_runtime/ on first use (_ensure_framework_jar() in sdk_builder.py).
+        # -----------------------------------------------------------------
+        fw_src = _HERE / "adapter_framework" / "src"
+        if not fw_src.is_dir():
+            raise FileNotFoundError(
+                f"Framework source tree not found at {fw_src}.\n"
+                "The adapter_framework/src/ directory is required to assemble the "
+                "buildkit.  Ensure the factory repo is complete and "
+                "adapter_framework/src/**/*.java files are present."
+            )
+        fw_java_files = list(fw_src.rglob("*.java"))
+        if not fw_java_files:
+            raise FileNotFoundError(
+                f"Framework source tree at {fw_src} contains no .java files.\n"
+                "Ensure adapter_framework/src/**/*.java files are present."
+            )
+        fw_dst = kit_dir / "adapter_framework" / "src"
+        shutil.copytree(str(fw_src), str(fw_dst))
+        _log(f"  copied adapter_framework/src/ ({len(fw_java_files)} .java file(s))")
 
         # -----------------------------------------------------------------
         # 4. templates/icons/ SVG assets
