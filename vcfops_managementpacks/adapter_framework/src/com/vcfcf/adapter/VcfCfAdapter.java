@@ -919,12 +919,54 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     /**
      * Return the adapter-specific logger, lazily created on first call.
      *
-     * <p>Named after the concrete class; pinned to INFO level to prevent
-     * the WARN root logger from silently filtering INFO messages. The platform
-     * file appender ({@code <AdapterName>_<instanceId>.log}) is attached
-     * when both {@code adapterDir} and {@code instanceId} are non-null
-     * (the live-collection path). In the no-arg describe path, the root
-     * Log4j context is used (acceptable — nothing important is logged then).
+     * <p>Named after the concrete class; pinned to INFO level so messages
+     * are not swallowed by the WARN root logger.
+     *
+     * <h4>Visibility rule (bytecode-determined)</h4>
+     * <p>The platform file appender that writes to
+     * {@code <adaptersHome>/<adapterName>_<instanceId>.log} is attached by
+     * {@code AdapterLoggerFactoryImpl} <em>only when</em> {@code adapterDir}
+     * and {@code instanceId} are both non-null — they are available only on
+     * the live-collection path (the three-arg or two-arg constructor). In the
+     * no-arg describe path the factory is constructed with all three args
+     * null and falls back to the bare Log4j root context; nothing important
+     * is logged there, so this is acceptable.
+     *
+     * <p>When an appender is present the factory creates a per-logger
+     * {@code LoggerConfig} whose name is {@code "(instanceId) className"}.
+     * That logger config is wired to the instance file appender with an
+     * effective level of {@code max(sdkLoggerConfig.levelForAdapterLog,
+     * rootLevel)} — where {@code levelForAdapterLog} is the level written by
+     * {@code logging.properties} (typically {@code INFO} or {@code WARN}).
+     * The {@link com.integrien.alive.common.adapter3.Logger#setLevel} call
+     * translates the {@code CustomLevel} to a Log4j level and invokes
+     * {@code Configurator.setLevel(loggerName, level)} — which patches the
+     * live {@code LoggerConfig} in the running Log4j context, overriding the
+     * {@code logging.properties} floor. <strong>Without the {@code setLevel}
+     * call, a WARN root threshold silently drops INFO messages even when the
+     * adapter appender is correctly attached.</strong>
+     *
+     * <p>The root logger threshold (typically WARN in the 9.1 collector JVM)
+     * is irrelevant once a per-instance logger config is registered — Log4j
+     * routes by the most-specific matching name, and the adapter's
+     * {@code "(instanceId) className"} config takes precedence. The intermittent
+     * visibility seen in build 45 post-46 (INFO lines disappearing) is most
+     * likely a logger config reload race: {@code AdapterLoggerContext} watches
+     * {@code logging.properties} for changes and calls {@code updateLoggers()}
+     * after each reload, which re-registers all cached logger configs at their
+     * original levels. A {@code setLevel} call that raced with a reload would
+     * be lost until the next call. <strong>Residual check for live instance:</strong>
+     * tail {@code collector.log} while triggering a reload (save
+     * {@code logging.properties} on the appliance) and observe whether the
+     * INFO lines reappear after ~30 s — if they do, the race is confirmed.
+     * The {@link #componentLogger(Class)} method is not susceptible to this
+     * race because it calls {@code setLevel} <em>every time it is invoked by
+     * the adapter</em>, which is at configure time (after any reload that
+     * would have occurred during a previous cycle).
+     *
+     * <p><strong>Do not shadow this method in adapter subclasses.</strong>
+     * Use {@link #componentLogger(Class)} to obtain leveled loggers for
+     * helper classes. See {@code context/framework_v2_migration.md}.
      */
     private com.integrien.alive.common.adapter3.Logger adapterLogger() {
         com.integrien.alive.common.adapter3.Logger l = adapterLogger;
@@ -939,6 +981,62 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 }
             }
         }
+        return l;
+    }
+
+    /**
+     * Return a logger for a helper or component class, wired identically to
+     * the adapter's own logger.
+     *
+     * <p>Use this method whenever a helper class (HTTP client, SOAP client,
+     * stitcher helper, etc.) needs a {@link com.integrien.alive.common.adapter3.Logger}
+     * to pass to its constructor. <strong>Never hand-roll a logger handle in
+     * adapter subclasses</strong> — the factory, naming convention, and level
+     * discipline must be identical to the base's own logger or INFO messages
+     * will be silently filtered.
+     *
+     * <h4>Correct usage pattern</h4>
+     * <pre>{@code
+     * // In configureAdapter():
+     * vSphereClient  = new VSphereClient(host, componentLogger(VSphereClient.class));
+     * soapClient     = new EsxcliSoapClient(url, cookie, ssl);      // no logger arg
+     * stitcher       = SuiteApiStitcher.create(this, componentLogger(SuiteApiStitcher.class));
+     * }</pre>
+     *
+     * <h4>Visibility contract (bytecode-verified)</h4>
+     * <p>The returned handle is obtained from the same
+     * {@link com.integrien.alive.common.adapter3.AdapterLoggerFactoryImpl} as
+     * the base's own logger. The factory names the logger config
+     * {@code "(instanceId) com.example.HelperClass"} — the same pattern as
+     * the adapter's own {@code "(instanceId) com.example.MyAdapter"} — and
+     * wires it to the same rolling file appender
+     * ({@code <adapterName>_<instanceId>.log}). The {@code setLevel(INFO)}
+     * call overrides the {@code logging.properties} floor so INFO messages
+     * are not silently filtered by the WARN root threshold.
+     *
+     * <h4>Migration note</h4>
+     * <p>Any adapter that was shadowing {@code adapterLogger()} (i.e.,
+     * declaring a private method of the same name that called
+     * {@code getAdapterLoggerFactory().getLogger(cls)}) must:
+     * <ol>
+     *   <li>Delete the shadow method.</li>
+     *   <li>Replace all call sites with {@code componentLogger(HelperClass.class)}.</li>
+     *   <li>Rebuild against the updated {@code vcfcf-adapter-base.jar}.</li>
+     * </ol>
+     * The shadow was necessary in v1 because the base's {@code adapterLogger()}
+     * was private. It is now a footgun: it often omitted {@code setLevel},
+     * causing silent INFO filtering (compliance build 45), and it bypasses
+     * the framework's double-checked-lock caching (compliance build 46). Both
+     * failure modes are eliminated by this method.
+     *
+     * @param component the helper or component class for which a logger is needed
+     * @return a leveled logger, routed to the adapter instance's log file
+     */
+    protected com.integrien.alive.common.adapter3.Logger componentLogger(
+            Class<?> component) {
+        com.integrien.alive.common.adapter3.Logger l =
+                getAdapterLoggerFactory().getLogger(component);
+        l.setLevel(com.integrien.alive.common.adapter3.Logger.CustomLevel.INFO);
         return l;
     }
 

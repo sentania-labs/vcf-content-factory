@@ -275,9 +275,14 @@ registers new resources via `adapter.registerNewResource()`. For new
 resources discovered during collect, call `adapter.registerNewResource(key)`
 from within `collect()`.
 
-### Logging — UNCHANGED
+### Logging — UPDATED (componentLogger added)
 
-Use `logInfo()` / `logWarn()` / `logError()` helpers on `VcfCfAdapter`.
+Use `logInfo()` / `logWarn()` / `logError()` helpers on `VcfCfAdapter`
+for adapter-level messages. For helper/component classes that accept a
+`Logger` parameter, use `componentLogger(HelperClass.class)` — never
+shadow the base's private `adapterLogger()`. See §15 in
+`context/framework_v2_migration.md` for the full rule and migration
+steps.
 
 ### String properties — UNCHANGED
 
@@ -393,9 +398,9 @@ the admin has approved the cert via the platform UI.
 **Adapter opt-in (zero transport code required):**
 ```java
 // In configureAdapter():
-stitcher = SuiteApiStitcher.create(this, adapterLogger());
+stitcher = SuiteApiStitcher.create(this, componentLogger(SuiteApiStitcher.class));
 // — or remote-collector fallback:
-stitcher = SuiteApiStitcher.createExplicit(this, adapterLogger(), host, user, pass);
+stitcher = SuiteApiStitcher.createExplicit(this, componentLogger(SuiteApiStitcher.class), host, user, pass);
 
 // In collect():
 stitcher.pushProperties(foreignResourceUuid, props, System.currentTimeMillis());
@@ -412,6 +417,7 @@ Empirical basis: `context/investigations/suiteapi_ambient_auth_devel_2026_06_09.
 
 | Date | Change |
 |---|---|
+| 2026-06-10 | **`componentLogger(Class)` public accessor added (task #15 — shadow-logger footgun)**: `VcfCfAdapter.componentLogger(Class<?> component)` is now a `protected` method that returns a `Logger` handle wired identically to the base's own private `adapterLogger()` — same factory, same `setLevel(INFO)` discipline, same `(instanceId) className` naming that routes to the adapter instance's file appender. Adapter subclasses must never shadow `adapterLogger()` or hand-roll a logger handle via `getAdapterLoggerFactory()`. The correct pattern is `componentLogger(HelperClass.class)` in `configureAdapter()`. `SuiteApiStitcher` Javadoc examples updated to use `componentLogger`. Visibility rule and migration note documented in `context/framework_v2_migration.md` §15. `vcfcf-adapter-base.jar` rebuilt (clean, SDK-only). **Adapter adoption for synology/unifi:** both adapters must replace any shadow `adapterLogger()` methods and all `getAdapterLoggerFactory().getLogger(cls)` call sites with `componentLogger(cls)` before their v2 migration builds. Compliance (build 46) has no framework-method shadow to remove — its `adapterLogger()` shadow is in `ComplianceAdapter.java` and is the target of the pending compliance v2 fixup. |
 | 2026-06-10 | **`SuiteApiStitchClient` SSL fix — trust-all for localhost Suite API (bug #3)**: `SuiteApiStitchClient.Builder.build()` was calling `adapter.getPlatformSslContext()` which wraps `CustomTrustManager`. `CustomTrustManager.checkServerTrusted()` throws `CustomCertificateException` unconditionally for any unknown cert (including the platform's own self-signed localhost cert), then fires `handleUnknownCertificate` as a side-effect notification. `java.net.http.HttpClient` receives the exception directly — no intercept, no retry — resulting in `SSLHandshakeException`/"PKIX path building failed" every cycle (credentials resolved correctly; SSL was the only failure). Fix: replaced `getPlatformSslContext()` with `VcfCfAdapter.insecureSslContext()` in the stitch client's SSL block. Trust-all is appropriate for the localhost Suite API endpoint (loopback isolation, platform's own self-signed cert). Does not affect `HttpClientBuilder.platformSsl(this)` for target-system connections. **Adapter adoption:** none — rebuild against updated `vcfcf-adapter-base.jar` only. See `lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`. |
 | 2026-06-10 | **`onDescribe()` controller-side NPE fix (build 44 root cause)**: `VcfCfAdapter.onDescribe()` was calling `getAdapterKind()` which returns null during controller-side bare instantiation (no platform injection). Fix: added `private final String adapterKindKey` field + two keyed constructors (`VcfCfAdapter(String adapterKindKey)` and `VcfCfAdapter(String adapterKindKey, String adapterDir, Integer instanceId)`). `onDescribe()` now resolves kind from `adapterKindKey` first, falls back to `getAdapterKind()`, and throws an actionable message listing both sources if both are null — never reaches `getAdapterDescribeFile(null, …)`. **Adapter adoption required:** subclass constructors must call the keyed super variants (see `context/framework_v2_migration.md` §3). `vcfcf-adapter-base.jar` rebuilt (clean, SDK-only). Lesson codified: `lessons/controller-describe-bare-instantiation.md`. |
 | 2026-06-09 | **Framework default `onDescribe()`**: `VcfCfAdapter.onDescribe()` is now provided by the framework. Loads `describe.xml` via `getAdapterDescribeFile(getAdapterKind(), "describe.xml")`; throws `RuntimeException` with path in message on failure (no silent null). Subclass overrides still win (non-final). Tracked gap in `context/framework_v2_migration.md` §3 closed. `vcfcf-adapter-base.jar` rebuilt (clean, SDK-only). Existing adapters (compliance) that hand-roll `onDescribe()` continue to work without change — their override takes precedence. |

@@ -24,10 +24,10 @@ import java.util.Map;
  *         // Read adapter config, set this.config, build this.httpClient …
  *
  *         // Opt into ambient stitching:
- *         stitcher = SuiteApiStitcher.create(this, adapterLogger());
+ *         stitcher = SuiteApiStitcher.create(this, componentLogger(SuiteApiStitcher.class));
  *         // — or, for remote collectors with explicit Suite API creds:
  *         stitcher = SuiteApiStitcher.createExplicit(
- *             this, adapterLogger(),
+ *             this, componentLogger(SuiteApiStitcher.class),
  *             getIdentifier(rc, "suiteApiHost"),
  *             getCredentialField(rc, "suiteApiUser"),
  *             getCredentialField(rc, "suiteApiPassword"));

@@ -567,12 +567,37 @@ different text = new event.
 
 ---
 
-## 15. Logging (unchanged)
+## 15. Logging
 
-Use `logInfo()` / `logWarn()` / `logError()` on the adapter instance.
-From within SPI implementations, the adapter is available as the
-`adapter` parameter (cast to `VcfCfAdapter` to access log methods if
-needed, or pass a logger reference to the SPI object's constructor).
+Use `logInfo()` / `logWarn()` / `logError()` on the adapter instance
+for messages that belong to the adapter itself (configure, collect
+lifecycle, errors). From within SPI implementations, the adapter is
+available as the `adapter` parameter (cast to `VcfCfAdapter` to access
+log methods if needed, or pass a logger reference to the SPI object's
+constructor).
+
+**For helper/component class loggers — use `componentLogger(Class)`:**
+
+```java
+// In configureAdapter():
+vSphereClient = new VSphereClient(host, componentLogger(VSphereClient.class));
+stitcher      = SuiteApiStitcher.create(this, componentLogger(SuiteApiStitcher.class));
+```
+
+**Never shadow `adapterLogger()` in adapter subclasses.** The base's
+`adapterLogger()` is private. If you have a private `adapterLogger()`
+in your adapter that calls `getAdapterLoggerFactory().getLogger(cls)`,
+delete it and replace all call sites with
+`componentLogger(HelperClass.class)`. The shadow footgun:
+
+| Risk | What happens |
+|---|---|
+| Omit `setLevel` (build 45) | WARN root threshold silently drops INFO — helper-client breadcrumbs invisible |
+| Include `setLevel` but race a `logging.properties` reload | Level reverts until next `configure` cycle |
+| Break the double-checked-lock cache | Extra `getLogger` calls per collect cycle |
+
+`componentLogger` eliminates all three: same factory, same level
+discipline, called at configure time (after any reload).
 
 ---
 
