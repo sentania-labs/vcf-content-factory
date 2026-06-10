@@ -11,13 +11,14 @@
 # .pak deterministically (no agent, no factory checkout), gates on pak-compare,
 # and attaches the .pak to this tag's GitHub Release.
 #
-# Required secret: SDK_RUNTIME_TOKEN
-#   A fine-grained read-only PAT scoped to sentania-labs/vcf-content-factory-sdk-runtime
-#   with Contents: read permission. The Broadcom SDK jar (vrops-adapters-sdk-2.2.jar) is
-#   stored as a private release asset on that repo (tag sdk-2.2) and is never bundled in
-#   the factory or buildkit (C2 redistribution constraint). Mint the PAT at
-#   https://github.com/settings/tokens?type=beta and add it as a repo (or org) Actions
-#   secret named SDK_RUNTIME_TOKEN before tagging a release.
+# Required secret: SDK_RUNTIME_SSH_KEY
+#   A read-only ed25519 deploy key for sentania-labs/vcf-content-factory-sdk-runtime.
+#   The Broadcom SDK jar (vrops-adapters-sdk-2.2.jar) is committed at the repo root of
+#   that private repo and is never bundled in the factory or buildkit (C2 redistribution
+#   constraint). The jar is fetched via a shallow git clone using this deploy key.
+#   Setup: generate an ed25519 keypair, add the PUBLIC half as a read-only deploy key on
+#   sentania-labs/vcf-content-factory-sdk-runtime, and store the PRIVATE half as a repo
+#   (or org) Actions secret named SDK_RUNTIME_SSH_KEY before tagging a release.
 name: build-pak-on-tag
 
 on:
@@ -72,28 +73,30 @@ jobs:
           tar xzf _kit_dl/sdk-buildkit-*.tgz -C _kit
           echo "Kit version: $(cat _kit/sdk_buildkit/VERSION 2>/dev/null || echo unknown)"
 
-      - name: Fetch Broadcom SDK jar (private release asset)
+      - name: Fetch Broadcom SDK jar (private runtime repo via deploy key)
         env:
-          SDK_RUNTIME_TOKEN: ${{ secrets.SDK_RUNTIME_TOKEN }}
-          GH_TOKEN: ${{ secrets.SDK_RUNTIME_TOKEN }}
+          SDK_RUNTIME_SSH_KEY: ${{ secrets.SDK_RUNTIME_SSH_KEY }}
         run: |
           set -euo pipefail
-          if [ -z "${SDK_RUNTIME_TOKEN:-}" ]; then
-            echo "::error::SDK_RUNTIME_TOKEN secret is not set — mint a fine-grained read-only PAT for sentania-labs/vcf-content-factory-sdk-runtime (Contents: read) and add it as a repo or org Actions secret."
+          if [ -z "${SDK_RUNTIME_SSH_KEY:-}" ]; then
+            echo "::error::SDK_RUNTIME_SSH_KEY secret is not set — generate an ed25519 keypair, add the public half as a read-only deploy key on sentania-labs/vcf-content-factory-sdk-runtime, and store the private half as SDK_RUNTIME_SSH_KEY Actions secret."
             exit 1
           fi
-          mkdir -p _sdk_jar
-          gh release download sdk-2.2 \
-            --repo sentania-labs/vcf-content-factory-sdk-runtime \
-            --pattern 'vrops-adapters-sdk-*.jar' \
-            --dir _sdk_jar
-          echo "SDK jar: $(ls _sdk_jar/vrops-adapters-sdk-*.jar)"
+          KEY_FILE="$RUNNER_TEMP/sdk_runtime_key"
+          KNOWN_HOSTS="$RUNNER_TEMP/sdk_runtime_known_hosts"
+          printf '%s\n' "$SDK_RUNTIME_SSH_KEY" > "$KEY_FILE"
+          chmod 600 "$KEY_FILE"
+          ssh-keyscan github.com > "$KNOWN_HOSTS" 2>/dev/null
+          GIT_SSH_COMMAND="ssh -i $KEY_FILE -o IdentitiesOnly=yes -o UserKnownHostsFile=$KNOWN_HOSTS" \
+            git clone --depth 1 git@github.com:sentania-labs/vcf-content-factory-sdk-runtime.git _sdk_runtime
+          rm -f "$KEY_FILE"
+          ls _sdk_runtime/vrops-adapters-sdk-*.jar
 
       - name: Build the .pak (deterministic, headless)
         run: |
           set -euo pipefail
           PYTHONPATH=_kit python3 -m sdk_buildkit build-sdk "$GITHUB_WORKSPACE" \
-            --sdk-jar _sdk_jar/vrops-adapters-sdk-2.2.jar \
+            --sdk-jar _sdk_runtime/vrops-adapters-sdk-2.2.jar \
             --output dist
           ls -l dist/*.pak
 
