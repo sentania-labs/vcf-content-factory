@@ -2239,6 +2239,21 @@ def _generate_docs(project_dir: Path, version_string: str) -> None:
             print(f"  docs: warning — README.md generation failed: {exc}",
                   file=sys.stderr)
 
+    # 4. Generate docs/ docset (inventory-tree diagram, per-kind tables, README).
+    # Policy mirrors the docset design: regenerate/scaffold as appropriate.
+    try:
+        from .docs_gen import generate_docset, DocsGenError
+        results = generate_docset(project_dir, verbose=False)
+        for rel_path, status in results.items():
+            if status.startswith("skipped"):
+                print(f"  docs: {rel_path} — {status}", file=sys.stderr)
+            else:
+                print(f"  docs: wrote {rel_path} ({status})", file=sys.stderr)
+    except DocsGenError as exc:
+        print(f"  docs: warning — docs/ generation failed: {exc}", file=sys.stderr)
+    except Exception as exc:
+        print(f"  docs: warning — docs/ generation error: {exc}", file=sys.stderr)
+
 
 def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
     """End-to-end Tier 2 SDK adapter build pipeline.

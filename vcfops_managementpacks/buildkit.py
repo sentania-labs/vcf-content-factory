@@ -79,6 +79,7 @@ _FACTORY_SOURCES = {
     "dashboard_render.py": _REPO_ROOT / "vcfops_dashboards" / "render.py",
     "dashboard_yaml_utils.py": _REPO_ROOT / "vcfops_dashboards" / "yaml_utils.py",
     "sm_loader.py": _REPO_ROOT / "vcfops_supermetrics" / "loader.py",
+    "docs_gen.py": _HERE / "docs_gen.py",
 }
 
 # ---------------------------------------------------------------------------

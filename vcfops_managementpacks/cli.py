@@ -480,6 +480,37 @@ def cmd_scaffold_sdk(args) -> int:
         return 1
 
 
+def cmd_docs_gen(args) -> int:
+    """docs-gen <adapter_dir> — generate/refresh the docs/ docset for a Tier 2 adapter."""
+    from .docs_gen import generate_docset, DocsGenError
+
+    project_dir = Path(args.project_dir).resolve()
+    if not project_dir.is_dir():
+        print(f"ERROR: not a directory: {project_dir}", file=sys.stderr)
+        return 1
+    if not (project_dir / "adapter.yaml").is_file():
+        print(
+            f"ERROR: adapter.yaml not found in {project_dir}. "
+            "Pass the path to a Tier 2 adapter project directory.",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        results = generate_docset(project_dir, verbose=True)
+    except DocsGenError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"ERROR generating docset: {exc}", file=sys.stderr)
+        return 1
+
+    print(f"\ndocs-gen complete ({project_dir.name}):")
+    for rel_path, status in results.items():
+        print(f"  {rel_path}: {status}")
+    return 0
+
+
 def cmd_install(args) -> int:
     """Install a .pak file onto a live VCF Ops instance.
 
@@ -931,6 +962,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="base directory for the new project (default: content/sdk-adapters/)",
     )
     pssdk.set_defaults(func=cmd_scaffold_sdk)
+
+    # ------------------------------------------------------------------
+    # docs-gen subcommand
+    # ------------------------------------------------------------------
+    pdg = sub.add_parser(
+        "docs-gen",
+        help=(
+            "generate or refresh the docs/ docset for a Tier 2 SDK adapter project. "
+            "Regenerates: inventory-tree.md, inventory-tree.excalidraw, "
+            "inventory-tree.svg, docs/README.md. "
+            "Scaffolds if missing: overview.md, installing.md."
+        ),
+    )
+    pdg.add_argument(
+        "project_dir",
+        metavar="PROJECT_DIR",
+        help="path to the Tier 2 adapter project directory (contains adapter.yaml)",
+    )
+    pdg.set_defaults(func=cmd_docs_gen)
 
     # ------------------------------------------------------------------
     # build-buildkit subcommand
