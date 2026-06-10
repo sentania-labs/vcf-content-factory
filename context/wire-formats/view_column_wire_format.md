@@ -502,6 +502,37 @@ for changing the displayed numeric value are:
   SM-driven Target Memory columns that already divide in their
   formulas.
 
+## displayName and localizationKey
+
+**Real exports do NOT carry a `localizationKey` attribute on the `displayName`
+Property.** This was confirmed by exhaustive grep across every brockpeterson
+reference pack (80+ inner zips) and the AriaOperationsContent extracts: every
+reference uses the plain form:
+
+```xml
+<Property name="displayName" value="CPU Demand Max"/>
+```
+
+Never:
+
+```xml
+<Property localizationKey="..." name="displayName" value="CPU Demand Max"/>
+```
+
+The factory renderer formerly emitted `localizationKey` derived from the
+metric attribute key (e.g. `cpu_demandPct`), which caused a three-way
+collision when the same metric appeared in AVG, MAX, and P95 columns — all
+three shared `localizationKey="cpu_demandPct"`, making them indistinguishable
+in any environment that resolves the key over the value attribute.
+
+The factory's `content.properties` files are shipped empty, so the key never
+resolved to anything in practice. The fix (2026-06-10, Codex P2 / PR #15
+finding): drop `localizationKey` from `displayName` entirely, matching real
+exports. The `_attribute_to_localization_key()` helper in `render.py` is now
+unreferenced on this code path (it still applies to `<Title>` and
+`<Description>` at view level, which use static `"title"` / `"desc"` keys
+that do not collide).
+
 ## Limitations
 
 Things VCF Ops does NOT support on list view columns, documented so

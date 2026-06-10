@@ -341,11 +341,15 @@ def _xml_attribute_item(
     if col.ascending_range is not None and not (red_is_string and not has_yellow and not has_orange):
         props.append(_xml_property("ascendingRange", "true" if col.ascending_range else "false"))
 
-    # displayName carries a localizationKey so the content.properties bundle
-    # can override the label per locale.  The key matches what
-    # _generate_view_content_properties() emits (attribute → sanitized key).
-    _display_loc_key = _attribute_to_localization_key(raw)
-    props.append(_xml_property("displayName", col.display_name, localization_key=_display_loc_key))
+    # displayName is emitted as a plain name/value Property with no
+    # localizationKey.  Real VCF Ops exports (brockpeterson_operations_dashboards,
+    # AriaOperationsContent — every reference checked) never carry a
+    # localizationKey on displayName.  Emitting one caused collision for
+    # transformed columns of the same metric (e.g. cpu|demandPct → AVG, MAX,
+    # P95 all resolved to "cpu_demandPct"), making them indistinguishable in
+    # environments that honour localizationKey.  The factory's content.properties
+    # files are empty, so the key served no purpose anyway.
+    props.append(_xml_property("displayName", col.display_name))
     props += [
         _xml_property("addTimestampAsColumn", "false"),
         _xml_property("isShowRelativeTimestamp", "false"),
