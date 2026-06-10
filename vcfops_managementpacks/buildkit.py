@@ -189,8 +189,43 @@ Run as:
     python3 -m sdk_buildkit validate-sdk <adapter_dir>
     python3 -m sdk_buildkit pak-compare <factory.pak> <reference.pak>
 
-This package is self-contained: it needs only stdlib + PyYAML + a JDK on
-PATH.  No factory checkout, no LLM, no network access required.
+## Consumer contract
+
+This kit is JAR-FREE with respect to Broadcom platform JARs.  It ships
+only vcfcf-adapter-base.jar (the VCF Content Factory framework, built and
+owned by this project).
+
+Adapters are compiled against vrops-adapters-sdk-2.2.jar which YOU must
+supply — it is a Broadcom internal build artifact with no public
+redistribution channel and cannot ship in a public toolchain tarball.
+
+### How to obtain vrops-adapters-sdk-2.2.jar
+
+Option 1 — copy from your VCF Ops appliance (any 9.x instance):
+    scp root@<appliance>:/usr/lib/vmware-vcops/common-lib/vrops-adapters-sdk-2.2.jar .
+    # also available at:
+    # /usr/lib/vmware-vcops/suite-api/WEB-INF/lib/vrops-adapters-sdk.jar
+
+Option 2 — Broadcom TAP / partner SDK portal (if enrolled).
+
+### Providing the JAR to the build
+
+Set the VCFCF_SDK_JAR environment variable:
+    export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk-2.2.jar
+    python3 -m sdk_buildkit build-sdk <adapter_dir>
+
+Or use the --sdk-jar flag:
+    python3 -m sdk_buildkit build-sdk <adapter_dir> --sdk-jar /path/to/vrops-adapters-sdk-2.2.jar
+
+In CI, store the JAR as a secret-gated artifact and expose its path via
+VCFCF_SDK_JAR.  The build fails with a clear actionable message when the
+JAR is absent from both adapter_runtime/ and the env var.
+
+## Other requirements
+
+- Python 3.9+ with PyYAML
+- JDK 11+ on PATH (javac, jar)
+- No factory checkout, no LLM, no other network access required.
 """
 '''
 
@@ -203,8 +238,24 @@ _KIT_MAIN = '''\
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
+
+
+_SDK_JAR_HELP = (
+    "Path to vrops-adapters-sdk-2.2.jar (Broadcom; not shipped in this kit — "
+    "see the consumer contract in __init__.py). "
+    "Alternatively set the VCFCF_SDK_JAR environment variable. "
+    "Required when running outside the VCF Content Factory repo."
+)
+
+
+def _apply_sdk_jar(args) -> None:
+    """Set VCFCF_SDK_JAR env var from --sdk-jar flag if supplied."""
+    sdk_jar = getattr(args, "sdk_jar", None)
+    if sdk_jar:
+        os.environ["VCFCF_SDK_JAR"] = str(sdk_jar)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -229,6 +280,13 @@ def _build_parser() -> argparse.ArgumentParser:
         default="dist",
         help="output directory for the .pak file (default: dist/)",
     )
+    pbsdk.add_argument(
+        "--sdk-jar",
+        dest="sdk_jar",
+        default=None,
+        metavar="JAR_PATH",
+        help=_SDK_JAR_HELP,
+    )
 
     # ----- validate-sdk -----
     pvsdk = sub.add_parser(
@@ -239,6 +297,13 @@ def _build_parser() -> argparse.ArgumentParser:
         "project_dir",
         metavar="PROJECT_DIR",
         help="path to the Tier 2 adapter project directory",
+    )
+    pvsdk.add_argument(
+        "--sdk-jar",
+        dest="sdk_jar",
+        default=None,
+        metavar="JAR_PATH",
+        help=_SDK_JAR_HELP,
     )
 
     # ----- pak-compare -----
@@ -280,6 +345,7 @@ def main() -> int:
     args = _build_parser().parse_args()
 
     if args.cmd == "build-sdk":
+        _apply_sdk_jar(args)
         from .sdk_builder import build_sdk_pak, SdkBuildError
         from .sdk_project import SdkProjectError
         project_dir = Path(args.project_dir)
@@ -296,6 +362,7 @@ def main() -> int:
             return 1
 
     elif args.cmd == "validate-sdk":
+        _apply_sdk_jar(args)
         from .sdk_builder import validate_sdk_project
         project_dir = Path(args.project_dir)
         try:
@@ -496,13 +563,51 @@ def assemble_buildkit(
                 _log(f"  wrote {dest_name}")
 
         # -----------------------------------------------------------------
-        # 3. adapter_runtime/ JARs
+        # 3. adapter_runtime/ — OUR jars only; NO Broadcom jars
+        #
+        # The buildkit tarball is a public artifact.  Broadcom platform JARs
+        # (vrops-adapters-sdk, alive_*, aria-ops-core, mpb_adapter*,
+        # vmware-ops-api-stubs) cannot ship in a public toolchain tarball — they
+        # are internal build artifacts with no public redistribution channel.
+        # See the redistribution survey:
+        #   context/cleanroom-spec/analysis/sdk-survey/
+        #     third-party-broadcom-jar-redistribution-survey-2026-06-09.md
+        #   §"Distributing the JARs outside a pak"
+        #
+        # Only vcfcf-adapter-base.jar (our framework, which we own and built)
+        # is copied.  The consumer must supply vrops-adapters-sdk-2.2.jar via
+        # VCFCF_SDK_JAR env var or --sdk-jar flag at build time.
         # -----------------------------------------------------------------
+        _BROADCOM_JAR_PATTERNS = (
+            "vrops-adapters-sdk",
+            "alive_common",
+            "alive_platform",
+            "aria-ops-core",
+            "mpb_adapter",
+            "vmware-ops-api-stubs",
+        )
         runtime_src = _HERE / "adapter_runtime"
         runtime_dst = kit_dir / "adapter_runtime"
-        shutil.copytree(str(runtime_src), str(runtime_dst))
-        jar_count = sum(1 for _ in runtime_dst.rglob("*.jar"))
-        _log(f"  copied adapter_runtime/ ({jar_count} JARs)")
+        runtime_dst.mkdir()
+        copied_jars = []
+        skipped_jars = []
+        for jar in sorted(runtime_src.glob("*.jar")):
+            if any(jar.name.startswith(pat) for pat in _BROADCOM_JAR_PATTERNS):
+                skipped_jars.append(jar.name)
+            else:
+                shutil.copy2(str(jar), str(runtime_dst / jar.name))
+                copied_jars.append(jar.name)
+        # Also copy adapter_runtime/lib/ if present (non-Broadcom only)
+        lib_src = runtime_src / "lib"
+        if lib_src.is_dir():
+            lib_dst = runtime_dst / "lib"
+            lib_dst.mkdir()
+            for jar in sorted(lib_src.glob("*.jar")):
+                if not any(jar.name.startswith(pat) for pat in _BROADCOM_JAR_PATTERNS):
+                    shutil.copy2(str(jar), str(lib_dst / jar.name))
+        _log(f"  copied adapter_runtime/ ({len(copied_jars)} JAR(s): {', '.join(copied_jars)})")
+        if skipped_jars:
+            _log(f"  excluded Broadcom JARs: {', '.join(skipped_jars)}")
 
         # -----------------------------------------------------------------
         # 4. templates/icons/ SVG assets

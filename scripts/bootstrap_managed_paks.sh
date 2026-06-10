@@ -98,7 +98,7 @@ for i in "${!URLS[@]}"; do
             cloned=$((cloned + 1))
         else
             echo "    WARNING: git clone failed for $name" >&2
-            ((failed++))
+            failed=$((failed + 1))
         fi
     fi
 done

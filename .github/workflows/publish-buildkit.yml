@@ -1,39 +1,45 @@
 # publish-buildkit.yml
 #
-# Triggered by pushing a tag of the form sdk-buildkit-vX.Y.Z
-# (e.g. git tag sdk-buildkit-v0.1.0 && git push origin sdk-buildkit-v0.1.0).
+# Triggered by pushing a tag of the exact form sdk-buildkit-vX.Y.Z
+# (three-component semver only — e.g. git tag sdk-buildkit-v0.2.0 &&
+# git push origin sdk-buildkit-v0.2.0).
+#
+# The floating major tag sdk-buildkit-v1 is maintained IN this workflow
+# (scarguard pattern) so consumers never have to force-push it manually:
+#   - On every versioned release the workflow clobbers the tarball on the
+#     sdk-buildkit-v1 release and re-points the tag to the current commit.
+#
+# Consumer contract:
+#   Pin to exact version:    gh release download sdk-buildkit-v0.2.0 ...
+#   Follow floating major:   gh release download sdk-buildkit-v1     ...
+#   (sdk-buildkit-v1 always points at the latest backwards-compatible release.)
 #
 # Workflow steps:
 #   1. Check out the factory repo.
 #   2. Set up Python 3.11.
 #   3. Install PyYAML (the only non-stdlib dependency needed at build time).
-#   4. Build a compliance .pak (so there is a reference pak to bundle).
-#   5. Run build-buildkit to assemble the tarball.
-#   6. Create a GitHub Release and attach the tarball.
+#   4. Download the latest released compliance pak from its own repo
+#      (sentania-labs/vcf-content-factory-sdk-compliance) as the reference pak.
+#      This avoids compiling anything here — adapter source lives in each
+#      adapter's own repo; Broadcom JARs are not available in public CI and
+#      must not ship in the buildkit tarball.
+#   5. Run build-buildkit to assemble the tarball (jar-free, see buildkit.py).
+#   6. Create the versioned GitHub Release and attach the tarball.
+#   7. Maintain the floating sdk-buildkit-v1 release (clobber tarball + retag).
 #
-# Version tag convention:
-#   sdk-buildkit-vX.Y.Z  — explicit version; consumers can pin this exactly.
-#   sdk-buildkit-v1      — floating major tag; maintained manually after each
-#                          compatible minor/patch release so consumers can follow
-#                          compatible updates without editing their workflow pins.
-#   To advance the floating major tag after a release:
-#     git tag -f sdk-buildkit-v1 sdk-buildkit-v0.1.0
-#     git push origin sdk-buildkit-v1 --force
-#
-# Per-pak CI usage (in the adapter repo's .github/workflows/build-pak-on-tag.yml):
-#   - uses: gh release download sdk-buildkit-v0.1.0   # pin to exact version
-#   - uses: gh release download sdk-buildkit-v1       # follow floating major tag
-#   Then: tar xzf sdk-buildkit-*.tgz && python3 -m sdk_buildkit build-sdk .
+# Note: no JDK setup step — nothing compiles in this workflow.
 
 name: Publish sdk-buildkit
 
 on:
   push:
     tags:
-      - "sdk-buildkit-v*"
+      # Strict three-component semver only — floating major tags (sdk-buildkit-v1)
+      # must NOT re-trigger this workflow; they are maintained below.
+      - "sdk-buildkit-v[0-9]+.[0-9]+.[0-9]+"
 
 permissions:
-  contents: write   # needed for gh release create
+  contents: write   # needed for gh release create / edit / upload
 
 jobs:
   publish-buildkit:
@@ -53,28 +59,33 @@ jobs:
       - name: Install Python dependencies
         run: pip install pyyaml
 
-      - name: Set up JDK 17 (required to build the reference pak)
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Build compliance reference pak
-        # Build the compliance pak so build-buildkit can auto-select it.
-        # If the build fails (e.g. due to missing adapter source) the workflow
-        # fails here — the reference pak is required for the gate check in CI.
+      - name: Download compliance reference pak
+        # Fetch the latest released compliance pak from its own repo.
+        # This pak is used as the pak-compare reference bundled inside the kit.
+        # We do NOT compile anything here — adapter source lives in its own repo
+        # and Broadcom JARs are not available in public CI (and must not ship
+        # in the buildkit tarball per the redistribution survey 2026-06-09).
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python3 -m vcfops_managementpacks build-sdk \
-            content/sdk-adapters/compliance \
-            --output dist/
+          mkdir -p dist/
+          gh release download \
+            --repo sentania-labs/vcf-content-factory-sdk-compliance \
+            --pattern '*.pak' \
+            --dir dist/
+          echo "Downloaded reference pak(s):"
+          ls -lh dist/*.pak
 
       - name: Extract version from tag
         id: ver
         run: |
           # Tag is sdk-buildkit-vX.Y.Z; strip the prefix to get X.Y.Z
           VERSION="${GITHUB_REF_NAME#sdk-buildkit-v}"
+          MAJOR="$(echo "$VERSION" | cut -d. -f1)"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "major=${MAJOR}" >> "$GITHUB_OUTPUT"
           echo "tarball=sdk-buildkit-${VERSION}.tgz" >> "$GITHUB_OUTPUT"
+          echo "floating_tag=sdk-buildkit-v${MAJOR}" >> "$GITHUB_OUTPUT"
 
       - name: Assemble buildkit tarball
         run: |
@@ -82,32 +93,108 @@ jobs:
             --output dist/ \
             --version "${{ steps.ver.outputs.version }}"
 
-      - name: Create GitHub Release and attach tarball
+      - name: Verify tarball contains no Broadcom JARs
+        # Hard gate: the kit must not ship any Broadcom platform jars.
+        # Forbidden: vrops-adapters-sdk, alive_*, aria-ops-core, mpb_adapter*, vmware-ops-api-stubs
+        run: |
+          TARBALL="dist/${{ steps.ver.outputs.tarball }}"
+          echo "Checking tarball contents for Broadcom JARs..."
+          BROADCOM_COUNT=$(tar tzf "$TARBALL" | grep -cE \
+            'vrops-adapters-sdk|alive_common|alive_platform|aria-ops-core|mpb_adapter|vmware-ops-api-stubs' \
+            || true)
+          if [ "$BROADCOM_COUNT" -gt 0 ]; then
+            echo "ERROR: Tarball contains ${BROADCOM_COUNT} Broadcom JAR(s) — aborting."
+            tar tzf "$TARBALL" | grep -E 'vrops-adapters-sdk|alive_common|alive_platform|aria-ops-core|mpb_adapter|vmware-ops-api-stubs'
+            exit 1
+          fi
+          echo "OK: no Broadcom JARs found in tarball."
+          echo "Tarball contents:"
+          tar tzf "$TARBALL"
+
+      - name: Create versioned GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          FLOATING="${{ steps.ver.outputs.floating_tag }}"
           gh release create "${{ github.ref_name }}" \
             "dist/${{ steps.ver.outputs.tarball }}" \
             --repo "${{ github.repository }}" \
             --title "sdk-buildkit v${{ steps.ver.outputs.version }}" \
-            --notes "Portable Tier 2 SDK adapter build toolchain.
+            --notes "Portable Tier 2 SDK adapter build toolchain (jar-free).
 
-## Usage
+## Consumer contract
 
-Download and extract the kit, then run the builder:
+The kit compiles adapters against \`vrops-adapters-sdk-2.2.jar\` which
+**you must supply** — it is a Broadcom internal build artifact with no
+public redistribution channel and must not ship in a public toolchain
+tarball (see redistribution survey 2026-06-09).
 
-\`\`\`bash
-gh release download ${{ github.ref_name }} \
-  --repo sentania-labs/vcf-content-factory \
-  --pattern '*.tgz'
-tar xzf sdk-buildkit-${{ steps.ver.outputs.version }}.tgz
-python3 -m sdk_buildkit build-sdk <adapter_dir>
+**How to obtain the SDK JAR (pick one):**
+1. Extract from your VCF Ops appliance:
+   \`scp root@<appliance>:/usr/lib/vmware-vcops/common-lib/vrops-adapters-sdk-2.2.jar .\`
+   (also present at \`/usr/lib/vmware-vcops/suite-api/WEB-INF/lib/vrops-adapters-sdk.jar\`)
+2. Pull from the Broadcom TAP / partner SDK portal (if you have access).
+
+**CI usage (adapter repo's build workflow):**
+
+\`\`\`yaml
+- name: Download sdk-buildkit
+  env:
+    GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
+  run: |
+    gh release download ${{ steps.ver.outputs.floating_tag }} \\
+      --repo sentania-labs/vcf-content-factory \\
+      --pattern '*.tgz'
+    tar xzf sdk-buildkit-*.tgz
+
+- name: Build adapter pak
+  env:
+    VCFCF_SDK_JAR: \${{ secrets.VCFCF_SDK_JAR_PATH }}   # path to vrops-adapters-sdk-2.2.jar
+  run: python3 -m sdk_buildkit build-sdk .
 \`\`\`
 
 ## Version pinning
-
-- **Exact pin**: use tag \`${{ github.ref_name }}\`
-- **Floating major**: use tag \`sdk-buildkit-v$(echo '${{ steps.ver.outputs.version }}' | cut -d. -f1)\`
-
-See the factory repo README for the per-pak CI workflow template.
+- **Exact pin**: \`${{ github.ref_name }}\`
+- **Floating major**: \`${{ steps.ver.outputs.floating_tag }}\`
+  (always points at the latest backwards-compatible release of this major)
 "
+
+      - name: Maintain floating major release (${{ steps.ver.outputs.floating_tag }})
+        # Scarguard pattern: keep sdk-buildkit-v1 (or vN) pointing at this commit
+        # so consumers that pin the floating major get the latest kit automatically.
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          FLOATING="${{ steps.ver.outputs.floating_tag }}"
+          TARBALL="dist/${{ steps.ver.outputs.tarball }}"
+
+          # Re-point the floating tag to this commit (force-create locally,
+          # then force-push — safe because this is a managed floating pointer,
+          # not a version record).
+          git tag -f "$FLOATING" "${{ github.sha }}"
+          git push origin "$FLOATING" --force
+
+          # Create-or-update the floating release:
+          # Try to upload (clobber) onto an existing release; if the release
+          # does not exist yet, create it.
+          if gh release view "$FLOATING" --repo "${{ github.repository }}" > /dev/null 2>&1; then
+            echo "Floating release ${FLOATING} exists — clobbering tarball."
+            gh release upload "$FLOATING" "$TARBALL" \
+              --repo "${{ github.repository }}" \
+              --clobber
+            # Also update the release title/notes to reflect the new version.
+            gh release edit "$FLOATING" \
+              --repo "${{ github.repository }}" \
+              --title "sdk-buildkit ${FLOATING} (→ v${{ steps.ver.outputs.version }})" \
+              --notes "Floating major pointer — always the latest backwards-compatible release.
+Currently: v${{ steps.ver.outputs.version }} (${{ github.ref_name }}).
+Pin to \`${{ github.ref_name }}\` for a reproducible exact version."
+          else
+            echo "Floating release ${FLOATING} does not exist — creating."
+            gh release create "$FLOATING" "$TARBALL" \
+              --repo "${{ github.repository }}" \
+              --title "sdk-buildkit ${FLOATING} (→ v${{ steps.ver.outputs.version }})" \
+              --notes "Floating major pointer — always the latest backwards-compatible release.
+Currently: v${{ steps.ver.outputs.version }} (${{ github.ref_name }}).
+Pin to \`${{ github.ref_name }}\` for a reproducible exact version."
+          fi
