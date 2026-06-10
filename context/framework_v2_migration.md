@@ -634,3 +634,161 @@ If `javac` reports a missing symbol:
 - `com.vmware.tvs.*` → clean-room wall violation; report as TOOLSET GAP.
 - `com.integrien.*` → symbol is in vrops-adapters-sdk-2.2.jar; add jar to CP.
 - `com.vcfcf.*` → symbol is in vcfcf-adapter-base.jar; rebuild framework if needed.
+
+---
+
+## 18. Multi-resource collect idiom
+
+### When to use which idiom
+
+The framework calls the collector's `collect(rc)` and
+`collectRelationships(config, rc)` **once per discovered resource** per
+cycle. Two idioms follow from this:
+
+**Single-synthetic-world** (used by compliance and most adapters whose
+API naturally returns one blob of results):
+
+- One `collect()` call reaches the API and pushes all metrics directly.
+- The "world" resource is the only resource kind; there is nothing to
+  dispatch on.
+
+**Multi-resource** (used by adapters — like Synology — whose single shared
+API response feeds many discovered resources):
+
+- One shared API call per cycle feeds many `collect(rc)` calls.
+- A per-cycle **snapshot cache** holds the API responses; each
+  `collect(rc)` dispatches on `rc.getResourceKind()` and serves from
+  the snapshot.
+- Relationships are built once and emitted only on the World/root
+  resource's `collectRelationships` call.
+
+Use the multi-resource idiom when:
+1. Two or more resource kinds share a common API response (fetching it
+   once per resource would be redundant and rate-limit-hostile).
+2. The discovered resource tree has more than one kind (pool, disk,
+   volume, etc.).
+
+Use single-world when the adapter has exactly one resource that reports
+all metrics.
+
+### Canonical pattern (Synology build 14)
+
+```java
+// -----------------------------------------------------------------------
+// Snapshot field — volatile for cross-thread read visibility
+// -----------------------------------------------------------------------
+private volatile Snapshot snapshot;
+private static final long MIN_REFRESH_INTERVAL_MS = 60_000L;
+
+// -----------------------------------------------------------------------
+// currentSnapshot() — synchronized to make the check-then-refresh atomic.
+// A refresh failure propagates out (never silently returns empty data).
+// -----------------------------------------------------------------------
+private synchronized Snapshot currentSnapshot() throws Exception {
+    Snapshot s = this.snapshot;
+    long now = System.currentTimeMillis();
+    if (s == null || (now - s.builtAt) >= MIN_REFRESH_INTERVAL_MS) {
+        api.ensureSession();
+        s = Snapshot.build(api, this);    // throws on REST/session failure
+        this.snapshot = s;
+    }
+    return s;
+}
+
+// -----------------------------------------------------------------------
+// getCollector — per-resource dispatch, topology anchored on World
+// -----------------------------------------------------------------------
+@Override
+protected VcfCfCollector<MyConfig> getCollector() {
+    return new VcfCfCollector<MyConfig>() {
+
+        @Override
+        public void collect(MyConfig cfg, ManagedHttpClient http,
+                ResourceConfig rc, List<MetricData> out, AdapterBase adapter)
+                throws InterruptedException, Exception {
+            Snapshot snap = currentSnapshot();       // shared across all rc calls
+            dispatchCollect(rc, snap, out);          // switch on rc.getResourceKind()
+        }
+
+        @Override
+        public Relationships collectRelationships(MyConfig cfg,
+                ResourceConfig rc) {
+            // Emit the full topology ONCE, anchored on the root resource.
+            // Non-root resources return null (no-op).
+            if (!"MyWorldKind".equals(rc.getResourceKind())) {
+                return null;
+            }
+            try {
+                return buildRelationships(currentSnapshot());
+            } catch (Exception e) {
+                logWarn("Relationship build failed: " + e.getMessage());
+                return null;
+            }
+        }
+    };
+}
+```
+
+Reset `this.snapshot = null` in `configureAdapter()` so the first collect
+of a new cycle forces a fresh pull against the reconfigured endpoint.
+
+### Concurrency caveat
+
+The framework may invoke `collect(rc)` for multiple resources
+concurrently within one cycle. The `currentSnapshot()` accessor must be
+thread-safe. The Synology pattern achieves this with two layers:
+
+- The `snapshot` field is `volatile` so all threads see the latest
+  reference without a lock for reads.
+- `currentSnapshot()` itself is `synchronized` so the check-then-refresh
+  sequence is atomic — only one thread performs the API pull; the rest
+  wait on the monitor and receive the already-built snapshot.
+
+Do not relax either: `volatile`-only allows the check-then-refresh race;
+`synchronized`-only without `volatile` allows a thread outside the method
+to read a stale reference.
+
+### Honesty requirement — failed refresh must be loud
+
+A snapshot refresh that fails (REST error, session expired, network down)
+must **throw out of `currentSnapshot()`** so the framework marks the
+resource ERROR/DOWN. Never catch the exception inside `currentSnapshot()`
+and return a partial or empty snapshot — that would make a broken source
+look healthy. Cross-reference:
+`lessons/unreadable-is-not-compliant.md`.
+
+Per-endpoint sub-failures within an otherwise-healthy snapshot (e.g. an
+optional UPS endpoint returning 404) may be caught locally and the
+affected sub-resource skipped — with a WARN log so the operator can
+see it. The Synology UPS handling is the canonical example: the
+`try/catch` in `Snapshot.build()` logs an INFO breadcrumb and leaves
+`s.ups = null`; the collector checks for null and skips cleanly. This is
+acceptable because UPS is genuinely optional and its absence is not a
+data-quality failure.
+
+---
+
+## 19. §15 exemplar note — componentLogger
+
+**Synology build 14** is the clean exemplar for `componentLogger(Class)`:
+it contains no private `adapterLogger()` shadow anywhere. Every helper
+that needs a logger receives `componentLogger(HelperClass.class)` wired
+in `configureAdapter()`.
+
+**Compliance** still carries its historical private `adapterLogger()`
+shadow (introduced before `componentLogger` was public). It is the
+target of the pending compliance v2 fixup and will be cleaned up on the
+next touch. Until then, treat compliance as the negative example for §15
+and synology as the positive one.
+
+---
+
+## 20. Typed config POJOs carry from v1 to v2 unmodified
+
+Config POJOs (e.g. `SynologyConfig`, `ComplianceConfig`) use plain
+`public final` fields and a single constructor that converts raw
+`String` identifiers from the platform. They contain no SPI, no TVS
+imports, and no framework types — so they compile cleanly against either
+v1 or v2 and require no changes during migration. Carry them forward
+as-is. The `getIdentifier()` / `getCredentialField()` call sites in
+`configureAdapter()` that build the POJO are likewise unchanged.
