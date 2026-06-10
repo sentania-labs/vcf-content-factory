@@ -72,41 +72,55 @@ public MyAdapter(String adapterDir, Integer instanceId) {
 
 ---
 
-## 3. onDescribe (new — must implement)
+## 3. onDescribe (provided by the framework; override only if needed)
 
 **v1:** `UnlicensedAdapter` provided `onDescribe()` automatically, loading
 `describe.xml` from `getAdapterDirectory()`. No adapter code required.
 
-**v2:** `VcfCfAdapter` does NOT provide a default `onDescribe()`. It is an
-abstract method on `AdapterBase` and every v2 adapter must implement it.
+**v2:** `VcfCfAdapter` provides a default `onDescribe()` implementation.
+Adapters do not need to implement it unless they require custom describe
+handling (e.g., programmatic describe construction or a non-standard file
+location).
 
-**Working pattern (from the migrated compliance adapter):**
+**What the framework default does:**
 ```java
-import com.integrien.alive.common.adapter3.describe.AdapterDescribe;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
+@Override
+public AdapterDescribe onDescribe() {
+    String kind = getAdapterKind();
+    Path describeFile = getAdapterDescribeFile(kind, "describe.xml");
+    try (InputStream is = Files.newInputStream(describeFile)) {
+        return AdapterDescribe.make(is);
+    } catch (Exception e) {
+        throw new RuntimeException(
+                "VcfCfAdapter.onDescribe: failed to load describe.xml from "
+                + describeFile + " (adapterKind=" + kind + "): "
+                + e.getMessage(), e);
+    }
+}
+```
 
+`getAdapterDescribeFile(kind, "describe.xml")` resolves to
+`<adaptersHome>/<adapterKind>/conf/describe.xml` — the SDK's own
+canonical path for describe files. The adapter kind is obtained from
+`getAdapterKind()` (runtime value from the platform config, not a
+compile-time constant — see `lessons/sdk-constants-are-display-names.md`).
+
+On any failure the method throws a `RuntimeException` with the resolved
+path in the message; it never silently returns `null`.
+
+**Override pattern (only when custom handling is required):**
+```java
 @Override
 public AdapterDescribe onDescribe() {
     Path describeFile = getAdapterDescribeFile(ADAPTER_KIND, "describe.xml");
     try (InputStream is = Files.newInputStream(describeFile)) {
         return AdapterDescribe.make(is);
     } catch (Exception e) {
-        logError("onDescribe: failed to load describe.xml from "
-                + describeFile + ": " + e.getMessage(), e);
-        return null;
+        throw new RuntimeException(
+                "onDescribe: failed to load " + describeFile, e);
     }
 }
 ```
-
-`getAdapterDescribeFile(kind, "describe.xml")` resolves to
-`<adaptersHome>/<ADAPTER_KIND>/conf/describe.xml` — the SDK's own
-canonical path for describe files.
-
-> **Framework gap (tracked):** a default `onDescribe()` using this
-> pattern belongs in `VcfCfAdapter` so adapters need not repeat it.
-> Until that lands, implement the pattern above in every v2 adapter.
 
 ---
 

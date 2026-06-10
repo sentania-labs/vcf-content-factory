@@ -7,6 +7,7 @@ import com.vcfcf.adapter.spi.VcfCfTester;
 
 import com.integrien.alive.common.adapter3.AdapterBase;
 import com.integrien.alive.common.adapter3.AdapterStatus;
+import com.integrien.alive.common.adapter3.describe.AdapterDescribe;
 import com.integrien.alive.common.adapter3.DiscoveryParam;
 import com.integrien.alive.common.adapter3.DiscoveryResult;
 import com.integrien.alive.common.adapter3.MetricData;
@@ -22,6 +23,9 @@ import com.integrien.alive.common.adapter3.config.ResourceConfig;
 import com.integrien.alive.common.adapter3.config.ResourceIdentifierConfig;
 import com.integrien.alive.common.util.CommonConstants.ResourceStatusEnum;
 
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -64,7 +68,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <ol>
  *   <li>{@link #configureAdapter(ResourceStatus, ResourceConfig)} — read config,
  *       populate {@link #config}, build {@link #httpClient}.</li>
- *   <li>{@link #onDescribe()} — return the adapter's {@code AdapterDescribe}.</li>
+ *   <li>{@link #onDescribe()} — provided by the framework (loads
+ *       {@code describe.xml} via {@link AdapterBase#getAdapterDescribeFile}).
+ *       Override only if custom describe handling is needed.</li>
  *   <li>{@link #getTester()} — return a {@link VcfCfTester} (nullable).</li>
  *   <li>{@link #getDiscoverer()} — return a {@link VcfCfDiscoverer}.</li>
  *   <li>{@link #getCollector()} — return a {@link VcfCfCollector}.</li>
@@ -232,6 +238,48 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     // -----------------------------------------------------------------------
     // AdapterBase required + optional overrides — lifecycle orchestration
     // -----------------------------------------------------------------------
+
+    /**
+     * Load and return the adapter's {@link AdapterDescribe} from
+     * {@code describe.xml}.
+     *
+     * <p>The default implementation resolves the file using
+     * {@link AdapterBase#getAdapterDescribeFile(String, String)} with the
+     * adapter kind returned by {@link AdapterBase#getAdapterKind()}. The
+     * canonical path is {@code <adaptersHome>/<adapterKind>/conf/describe.xml}.
+     *
+     * <p>If the file is missing or cannot be parsed the method throws a
+     * {@link RuntimeException} with the resolved path in the message, so the
+     * failure is immediately actionable rather than producing a silent NPE or
+     * an unconfigured adapter.
+     *
+     * <p>Override this method only when custom describe handling is required
+     * (e.g., programmatic describe construction or a non-standard file location).
+     * Normal adapters should rely on this default.
+     *
+     * <p><strong>Note on adapter kind:</strong> {@link AdapterBase#getAdapterKind()}
+     * returns the kind value from the live adapter config, which is populated by
+     * the platform before {@code onDescribe()} is called. Do not derive the kind
+     * from {@code CommonConstants} — those fields are display-name strings, not
+     * filesystem paths (see {@code lessons/sdk-constants-are-display-names.md}).
+     *
+     * @return the populated {@link AdapterDescribe}; never {@code null}
+     * @throws RuntimeException if describe.xml is missing, unreadable, or
+     *         cannot be parsed — the exception message contains the resolved path
+     */
+    @Override
+    public AdapterDescribe onDescribe() {
+        String kind = getAdapterKind();
+        Path describeFile = getAdapterDescribeFile(kind, "describe.xml");
+        try (InputStream is = Files.newInputStream(describeFile)) {
+            return AdapterDescribe.make(is);
+        } catch (Exception e) {
+            throw new RuntimeException(
+                    "VcfCfAdapter.onDescribe: failed to load describe.xml from "
+                    + describeFile + " (adapterKind=" + kind + "): "
+                    + e.getMessage(), e);
+        }
+    }
 
     /**
      * {@inheritDoc}
