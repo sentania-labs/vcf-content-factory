@@ -446,3 +446,26 @@ that differs from wld01-esx03 (its cluster peer, which collects cleanly).
 ```
 
 *Addendum appended by ops-recon. Read-only GET-only against VCF Ops devel. No writes to VCF Ops.*
+
+---
+
+## Final verdict addendum (2026-06-10, build 48)
+
+The esx04 regression was root-caused (`compliance_esx04_partial_collection_2026_06_10.md`)
+and fixed in builds 47/48 (reviews: CHANGES REQUESTED → APPROVE). Build 48
+verified on devel across 4 cycles (07:28–07:43Z):
+
+- 7 healthy hosts: 61.9048 / total=42 / unreadable=3, zero drift, byte-parity
+  with baseline.
+- wld01-esx04 (persistently notResponding in vCenter — lab-side host issue,
+  independently confirmed by the native adapter's isConnectedOrNotIssueCount):
+  NO fresh score pushed (absent, not 0, not sentinel 100), total_count=0,
+  unreadable_count=49, loud WARN naming host+state each cycle. The two
+  forbidden shapes (fresh score=100; partial total 1–41) confirmed absent.
+- Full 42-control evaluation on esx04 will be observable whenever the host
+  reconnects; the disconnected shape is the defined honest behavior.
+
+**GOLDEN COMPARISON: PASS** — parity on all comparable hosts, 4 enumerated
+improvements, and the one regression resolved into strictly-more-honest
+behavior than the v1 baseline (v1 would have scored a half-connected host).
+Compliance build 48 is ACCEPTED on devel.
