@@ -102,6 +102,9 @@ All components compile against `vrops-adapters-sdk-2.2.jar` only.
 | `MetricPusher` | `com.vcfcf.adapter.metric` | Fluent helper for pushing metrics and properties. Uses `new MetricKey(true, key)` for properties (bug fix vs v1). |
 | `DescribeBuilder` | `com.vcfcf.adapter.describe` | describe.xml XML generator. No SDK dependency. |
 | `SimpleJson` | `com.vcfcf.adapter.json` | Zero-dep recursive-descent JSON parser. |
+| `AmbientCredential` | `com.vcfcf.adapter.stitch` | Reads `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`; decrypts via SDK `Crypt.getDefaultCrypt().decrypt()` — the only FIPS-safe path under `-Dorg.bouncycastle.fips.approved_only=true` (9.1+). Path derived from `CommonConstants.VCOPS` at runtime, falling back to the known default. Never hand-roll the cipher. |
+| `SuiteApiStitchClient` | `com.vcfcf.adapter.stitch` | Framework REST transport for Suite API stitching. Token acquire/release lifecycle per push call. Credential resolution: explicit adapter-config fields > ambient `maintenanceuser.properties` > fail with actionable message. Platform SSL via `VcfCfAdapter.getPlatformSslContext()`. `java.net.http` / source-11 baseline. |
+| `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. |
 
 ## Pak format — hard-won lessons (2026-05-19)
 
@@ -346,10 +349,52 @@ marketplace, Broadcom re-signs with their trusted key.
 
 Tracking: `designs/tier2-mp-architecture-plan.md`.
 
+## Ambient Suite API stitching transport
+
+Added in the same session as v2, under `com.vcfcf.adapter.stitch`:
+
+**Credential resolution order (implemented in `SuiteApiStitchClient.Builder`):**
+1. Explicit — `host`/`username`/`password` from adapter config. Use for remote collectors.
+2. Ambient — read `maintenanceuser.properties` (same path on 9.0.2 and 9.1), decrypt via SDK `Crypt`. Targets `https://localhost/suite-api/`.
+3. Neither resolves — `IllegalStateException` with actionable message.
+
+**FIPS constraint (hard rule):** The 9.1 collector JVM runs
+`-Dorg.bouncycastle.fips.approved_only=true`. Never hand-roll the cipher.
+Always use `Crypt.getDefaultCrypt().decrypt(encryptedPassword)` from
+`com.integrien.alive.common.security.Crypt` (ships in `vrops-adapters-sdk.jar`).
+The class is `@Deprecated` in the SDK jar but is still the only supported
+decryption path for this credential file. `@SuppressWarnings("deprecation")`
+is applied at the call site in `AmbientCredential.decryptWithPlatformCrypt()`.
+
+**Token lifecycle:** acquire → push → release per call (proven-safe pattern from v1).
+Release is always in a `finally` block — cooperative cancellation is honoured.
+
+**SSL:** `VcfCfAdapter.getPlatformSslContext()` (platform trust store, trusts
+the localhost self-signed cert). Do not use `allowInsecure` for the Suite API path.
+
+**Adapter opt-in (zero transport code required):**
+```java
+// In configureAdapter():
+stitcher = SuiteApiStitcher.create(this, adapterLogger());
+// — or remote-collector fallback:
+stitcher = SuiteApiStitcher.createExplicit(this, adapterLogger(), host, user, pass);
+
+// In collect():
+stitcher.pushProperties(foreignResourceUuid, props, System.currentTimeMillis());
+
+// In onDiscard():
+if (stitcher != null) stitcher.discard();
+super.onDiscard();
+```
+
+Empirical basis: `context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md`
+(devel 9.0.2 + prod 9.1 confirmation). Remote-collector caveat documented in that file.
+
 ## Changelog
 
 | Date | Change |
 |---|---|
+| 2026-06-09 | **Ambient Suite API transport**: `AmbientCredential`, `SuiteApiStitchClient`, `SuiteApiStitcher` added to `com.vcfcf.adapter.stitch`. Adapters opt in via `SuiteApiStitcher.create(this, logger)`. FIPS constraint documented: use SDK `Crypt` only. |
 | 2026-06-09 | **v2 rehome**: `VcfCfAdapter` now extends `AdapterBase` directly. `aria-ops-core` (`com.vmware.tvs.*`) eliminated from compile classpath and runtime. New SPI: `VcfCfTester`, `VcfCfDiscoverer`, `VcfCfCollector` (all under `com.vcfcf.adapter.spi`). `RelationshipBuilder` rebuilt on SDK `Relationships` API. `ForeignResourceResolver` decoupled from TVS via `SuiteApiBridge` functional interface. `HttpClientBuilder` default SSL changed to platform trust store. `MetricPusher.property()` bug fixed (was using `isProperty=false`). Build script narrowed to SDK jar only. See `context/framework_v2_migration.md` for adapter migration guide. |
 | 2026-05-19 | Pak format hard-won lessons documented after 42 install attempts. |
 | 2026-05-16 | Pass 23 field evidence added to spec/01. Per-instance single-thread collect confirmed. |
