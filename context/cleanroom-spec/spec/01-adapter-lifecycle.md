@@ -407,52 +407,6 @@ return `true` to opt-in:
 *Observed in vim: `isResourceRenameAllowed(ResourceKey)` overridden.*
 *Not observed elsewhere yet.*
 
-### CRITICAL: `getAutoDiscoveryEnabled()` on `UnlicensedAdapter` — Pass 24
-
-**Confirmed 2026-05-19** via bytecode RE of
-`aria-ops-core-8.0.0.jar:UnlicensedAdapter.processMetrics()`.
-
-`getAutoDiscoveryEnabled()` is NOT an `AdapterBase` flag — it is an
-abstract method on `UnlicensedAdapter` that governs whether new resources
-returned by `LiveCollector.getCurrentMetrics()` are registered on-the-fly
-during collection.
-
-The gate in `processMetrics()` (pseudocode):
-
-```java
-for Resource r in liveCollectionResult:
-    if isNewResource(r):
-        if autoDiscoveryEnabled OR r.overridesAutoDiscovery():
-            addCollectedResource(r)   // adds to CollectResult.DiscoveryResult → visible in UI
-        // else: silently skip — the resource is never registered
-    else:
-        processDataForResource(r)     // emit metrics for already-known resource
-```
-
-**Consequence of `getAutoDiscoveryEnabled() = false`** (the
-`UnlicensedAdapter` default): every resource from `getCurrentMetrics()` is
-"new" on the first collection cycle. All of them are silently dropped. On
-every subsequent cycle they are still new (never registered). Result: the
-platform shows `Number of Objects Collected = 1` (adapter instance only)
-and `Number of New Objects = 0` indefinitely, despite collection running
-on schedule.
-
-**The fix**: adapters that discover resources through `getCurrentMetrics()`
-(i.e., the adapter re-creates resource objects in the live collector rather
-than waiting for an explicit `discover()` call) MUST override
-`getAutoDiscoveryEnabled()` to return `true`. This is the universal pattern
-for self-discovering adapters.
-
-**`needRediscovery()` is a different mechanism**: it causes
-`internalDiscover()` to run at the top of each `onCollect()` cycle (calling
-`Discoverer.getResources()`). Use it when you need the explicit Discoverer
-path to run every cycle — for example, to detect disappearing resources and
-emit state-change transitions. It is NOT a substitute for
-`getAutoDiscoveryEnabled()`; the `processMetrics()` gate still applies.
-
-**VCF-CF policy**: `VcfCfAdapter.getAutoDiscoveryEnabled()` returns `true`.
-All Tier 2 adapters inherit this and do not need to override it.
-
 ## Open / pending — RESOLVED in Pass 21
 
 - **CONFIRMED — Concurrency model of `collect()` is at-most-one** per
