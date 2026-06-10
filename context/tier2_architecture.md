@@ -102,7 +102,7 @@ All components compile against `vrops-adapters-sdk-2.2.jar` only.
 | `MetricPusher` | `com.vcfcf.adapter.metric` | Fluent helper for pushing metrics and properties. Uses `new MetricKey(true, key)` for properties (bug fix vs v1). |
 | `DescribeBuilder` | `com.vcfcf.adapter.describe` | describe.xml XML generator. No SDK dependency. |
 | `SimpleJson` | `com.vcfcf.adapter.json` | Zero-dep recursive-descent JSON parser. |
-| `AmbientCredential` | `com.vcfcf.adapter.stitch` | Reads `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`; decrypts via SDK `Crypt.getDefaultCrypt().decrypt()` — the only FIPS-safe path under `-Dorg.bouncycastle.fips.approved_only=true` (9.1+). Path derived from `CommonConstants.VCOPS` at runtime, falling back to the known default. Never hand-roll the cipher. |
+| `AmbientCredential` | `com.vcfcf.adapter.stitch` | Reads `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`; decrypts via SDK `Crypt.getDefaultCrypt().decrypt()` — the only FIPS-safe path under `-Dorg.bouncycastle.fips.approved_only=true` (9.1+). Path resolution order: (1) system property `vcfcf.suiteapi.credential.path` if set; (2) hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`. **`CommonConstants.VCOPS` is NOT used** — it is a product display-name string (`"VCF Ops"`), not a filesystem path. See `lessons/sdk-constants-are-display-names.md`. Never hand-roll the cipher. |
 | `SuiteApiStitchClient` | `com.vcfcf.adapter.stitch` | Framework REST transport for Suite API stitching. Token acquire/release lifecycle per push call. Credential resolution: explicit adapter-config fields > ambient `maintenanceuser.properties` > fail with actionable message. Platform SSL via `VcfCfAdapter.getPlatformSslContext()`. `java.net.http` / source-11 baseline. |
 | `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. |
 
@@ -355,7 +355,7 @@ Added in the same session as v2, under `com.vcfcf.adapter.stitch`:
 
 **Credential resolution order (implemented in `SuiteApiStitchClient.Builder`):**
 1. Explicit — `host`/`username`/`password` from adapter config. Use for remote collectors.
-2. Ambient — read `maintenanceuser.properties` (same path on 9.0.2 and 9.1), decrypt via SDK `Crypt`. Targets `https://localhost/suite-api/`.
+2. Ambient — read `maintenanceuser.properties` via `AmbientCredential.load()` (path resolution: system property `vcfcf.suiteapi.credential.path` → hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`), decrypt via SDK `Crypt`. Targets `https://localhost/suite-api/`. **Do not derive path from `CommonConstants.VCOPS`** — that field is the display name `"VCF Ops"`, not a filesystem path (live bug: build 43, 2026-06-10; see `lessons/sdk-constants-are-display-names.md`).
 3. Neither resolves — `IllegalStateException` with actionable message.
 
 **FIPS constraint (hard rule):** The 9.1 collector JVM runs
@@ -394,6 +394,7 @@ Empirical basis: `context/investigations/suiteapi_ambient_auth_devel_2026_06_09.
 
 | Date | Change |
 |---|---|
+| 2026-06-10 | **AmbientCredential path-resolution bug fix**: `CommonConstants.VCOPS` (`"VCF Ops"` — a display name, not a path) removed from path derivation. New resolution order: system property `vcfcf.suiteapi.credential.path` → hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`. Failure message now lists all candidates tried. `vcfcf-adapter-base.jar` rebuilt (clean, SDK-only). Compliance needs pak rebuild only — no adapter source change. |
 | 2026-06-09 | **Ambient Suite API transport**: `AmbientCredential`, `SuiteApiStitchClient`, `SuiteApiStitcher` added to `com.vcfcf.adapter.stitch`. Adapters opt in via `SuiteApiStitcher.create(this, logger)`. FIPS constraint documented: use SDK `Crypt` only. |
 | 2026-06-09 | **v2 rehome**: `VcfCfAdapter` now extends `AdapterBase` directly. `aria-ops-core` (`com.vmware.tvs.*`) eliminated from compile classpath and runtime. New SPI: `VcfCfTester`, `VcfCfDiscoverer`, `VcfCfCollector` (all under `com.vcfcf.adapter.spi`). `RelationshipBuilder` rebuilt on SDK `Relationships` API. `ForeignResourceResolver` decoupled from TVS via `SuiteApiBridge` functional interface. `HttpClientBuilder` default SSL changed to platform trust store. `MetricPusher.property()` bug fixed (was using `isProperty=false`). Build script narrowed to SDK jar only. See `context/framework_v2_migration.md` for adapter migration guide. |
 | 2026-05-19 | Pak format hard-won lessons documented after 42 install attempts. |

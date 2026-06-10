@@ -1,13 +1,14 @@
 package com.vcfcf.adapter.stitch;
 
 import com.integrien.alive.common.security.Crypt;
-import com.integrien.alive.common.util.CommonConstants;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Properties;
 
 /**
@@ -16,11 +17,29 @@ import java.util.Properties;
  * {@link Crypt} — the only FIPS-safe decryption path on 9.1 collectors.
  *
  * <h3>File path resolution</h3>
- * <p>The path is derived from {@link CommonConstants#VCOPS} (the runtime-resolved
- * platform user-dir root) if available, falling back to the known default
- * {@code /usr/lib/vmware-vcops/user/conf/maintenanceuser.properties}.
- * Both 9.0.2 and 9.1 resolve to the same path (confirmed READ-ONLY;
- * see {@code context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md}).
+ * <p>Candidates are tried in order; first readable hit wins:
+ * <ol>
+ *   <li>System property {@code vcfcf.suiteapi.credential.path} — explicit
+ *       override, useful in test harnesses or non-standard deployments.</li>
+ *   <li>Hard-wired default
+ *       {@code /usr/lib/vmware-vcops/user/conf/maintenanceuser.properties} —
+ *       empirically confirmed on VCF Ops 9.0.2 (devel) and 9.1 (prod).
+ *       See {@code context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md}.</li>
+ * </ol>
+ * <p><strong>Why {@code CommonConstants.VCOPS} is NOT used for path
+ * derivation:</strong> {@code CommonConstants.VCOPS} is a <em>product
+ * display-name</em> constant (value {@code "VCF Ops"}, built by concatenating
+ * {@code productNamePrefix} + {@code " Ops"} in the static initializer —
+ * confirmed by {@code javap -c} on {@code vrops-adapters-sdk-2.2.jar}).
+ * Appending {@code "/conf/maintenanceuser.properties"} to it produces the
+ * nonsense relative path {@code "VCF Ops/conf/maintenanceuser.properties"},
+ * which is the live bug that blocked compliance build 43 on devel 9.0.2.
+ * Similarly, {@code USER_CONF}, {@code ALIVE_BASE}, and every
+ * other path-looking field in {@code CommonConstants} carries its own field
+ * name as its literal value (e.g. {@code USER_CONF = "USER_CONF"}) — none
+ * of these are filesystem paths. The SDK exposes no install-directory or
+ * user-directory path constant; use the empirically proven hard-wired default.
+ * See {@code lessons/sdk-constants-are-display-names.md}.
  *
  * <h3>File format (keys only — no secret values)</h3>
  * <pre>
@@ -37,8 +56,8 @@ import java.util.Properties;
  *
  * <h3>Failure cases</h3>
  * <ul>
- *   <li>File absent or unreadable (e.g. remote collector) — throws
- *       {@link IOException} with a clear message. The caller (
+ *   <li>All candidate paths absent or unreadable (e.g. remote collector) —
+ *       throws {@link IOException} listing every path tried. The caller (
  *       {@link SuiteApiStitchClient.Builder}) must then fall back to
  *       explicit credential fields.</li>
  *   <li>Malformed file (missing keys, empty username) — throws
@@ -49,8 +68,21 @@ import java.util.Properties;
 public final class AmbientCredential {
 
     /**
-     * Known-good default path, confirmed on VCF Ops 9.0.2 and 9.1.
-     * Used as fallback when {@link CommonConstants#VCOPS} is null or empty.
+     * System property that, when set, overrides the credential file path
+     * (candidate 1 in resolution order). Intended for test harnesses and
+     * non-standard deployments.
+     */
+    static final String SYSPROP_CREDENTIAL_PATH = "vcfcf.suiteapi.credential.path";
+
+    /**
+     * Empirically proven default path for the maintenance-user properties file.
+     * Confirmed on VCF Ops 9.0.2 (devel, April 2026) and 9.1 (prod, 2026-06-09).
+     * See {@code context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md}.
+     *
+     * <p>This is the fallback when no override system property is set. The SDK
+     * {@code CommonConstants} class exposes no install-directory path constant
+     * that could replace this literal (confirmed by {@code javap} inspection —
+     * see class Javadoc for details).
      */
     static final String DEFAULT_PROPS_PATH =
             "/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties";
@@ -99,35 +131,78 @@ public final class AmbientCredential {
     /**
      * Load and decrypt the maintenance-user credential.
      *
-     * <p>Derives the properties file path from {@link CommonConstants#VCOPS}
-     * if that field is non-null and non-empty; otherwise falls back to
-     * {@link #DEFAULT_PROPS_PATH}. Both resolve to the same path on all
-     * observed VCF Ops versions (9.0.2 and 9.1).
-     *
-     * <p>If the file does not exist, is unreadable, or is malformed, an
-     * {@link IOException} is thrown with an actionable error message so the
-     * caller can surface a useful error or activate the explicit-credential
-     * fallback.
+     * <p>Candidates are tried in order (see class Javadoc for the resolution
+     * chain). The first candidate that exists <em>and</em> is readable wins.
+     * If all candidates fail the existence+readability check, an
+     * {@link IOException} is thrown listing every path tried.
      *
      * @return loaded and decrypted credential
-     * @throws IOException      if the file is absent, unreadable, or malformed
+     * @throws IOException      if no candidate is accessible, or the file is
+     *                          malformed
      * @throws RuntimeException if Crypt decryption fails
      */
     public static AmbientCredential load() throws IOException {
-        Path path = resolvePropertiesPath();
+        List<String> candidates = buildCandidates();
+        List<String> tried = new ArrayList<>();
 
-        if (!Files.exists(path)) {
-            throw new IOException(
-                    "AmbientCredential: maintenance credential file not found: " + path
-                    + " — this node may be a remote collector; "
-                    + "supply explicit Suite API credentials instead");
-        }
-        if (!Files.isReadable(path)) {
-            throw new IOException(
-                    "AmbientCredential: maintenance credential file not readable: " + path
-                    + " — check file permissions (expected owner-readable by collector user)");
+        for (String candidate : candidates) {
+            Path path = Paths.get(candidate);
+            tried.add(candidate);
+
+            if (!Files.exists(path)) {
+                continue;
+            }
+            if (!Files.isReadable(path)) {
+                // File is present but unreadable — record and skip; don't
+                // fall through to a lower-priority candidate that might not
+                // be the intended file.
+                throw new IOException(
+                        "AmbientCredential: maintenance credential file exists but is not"
+                        + " readable: " + path
+                        + " — check file permissions (expected owner-readable by collector user)");
+            }
+
+            // Found a readable candidate — load it.
+            return loadFromPath(path);
         }
 
+        // All candidates exhausted.
+        throw new IOException(
+                "AmbientCredential: maintenance credential file not found at any candidate"
+                + " path. Paths tried: " + tried
+                + " — this node may be a remote collector;"
+                + " supply explicit Suite API credentials instead");
+    }
+
+    // -----------------------------------------------------------------------
+    // Internal helpers
+    // -----------------------------------------------------------------------
+
+    /**
+     * Build the ordered list of candidate paths to try.
+     *
+     * <p>Resolution order:
+     * <ol>
+     *   <li>System property {@value #SYSPROP_CREDENTIAL_PATH} (if set and non-blank)</li>
+     *   <li>Hard-wired default {@value #DEFAULT_PROPS_PATH}</li>
+     * </ol>
+     */
+    static List<String> buildCandidates() {
+        List<String> candidates = new ArrayList<>();
+
+        String override = System.getProperty(SYSPROP_CREDENTIAL_PATH);
+        if (override != null && !override.trim().isEmpty()) {
+            candidates.add(override.trim());
+        }
+
+        candidates.add(DEFAULT_PROPS_PATH);
+        return candidates;
+    }
+
+    /**
+     * Load and decrypt from a confirmed-readable {@link Path}.
+     */
+    private static AmbientCredential loadFromPath(Path path) throws IOException {
         Properties props = new Properties();
         try (InputStream in = Files.newInputStream(path)) {
             props.load(in);
@@ -161,10 +236,6 @@ public final class AmbientCredential {
         return new AmbientCredential(username, plainPassword);
     }
 
-    // -----------------------------------------------------------------------
-    // Internal helpers
-    // -----------------------------------------------------------------------
-
     /**
      * Decrypt the maintenance password using the platform's {@link Crypt}.
      *
@@ -182,26 +253,5 @@ public final class AmbientCredential {
     @SuppressWarnings("deprecation")
     private static String decryptWithPlatformCrypt(String encryptedPassword) {
         return Crypt.getDefaultCrypt().decrypt(encryptedPassword);
-    }
-
-    /**
-     * Derive the properties file path.
-     *
-     * <p>Prefers {@code CommonConstants.VCOPS + "/conf/maintenanceuser.properties"}
-     * (SDK-derived, adapts automatically if the platform ever moves the user dir).
-     * Falls back to {@link #DEFAULT_PROPS_PATH} if {@code VCOPS} is null, empty,
-     * or inaccessible.
-     */
-    static Path resolvePropertiesPath() {
-        try {
-            String vcopsDir = CommonConstants.VCOPS;
-            if (vcopsDir != null && !vcopsDir.trim().isEmpty()) {
-                return Paths.get(vcopsDir.trim(), "conf", "maintenanceuser.properties");
-            }
-        } catch (Exception ignored) {
-            // CommonConstants static initializer failed (not running in-collector);
-            // fall through to the known default.
-        }
-        return Paths.get(DEFAULT_PROPS_PATH);
     }
 }
