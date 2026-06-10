@@ -808,3 +808,228 @@ imports, and no framework types — so they compile cleanly against either
 v1 or v2 and require no changes during migration. Carry them forward
 as-is. The `getIdentifier()` / `getCredentialField()` call sites in
 `configureAdapter()` that build the POJO are likewise unchanged.
+
+---
+
+## 21. HTTP auth strategy matrix
+
+Three proven auth shapes exist across the three v2 adapters. Choose the
+shape that matches your target API's auth mechanism. All three use
+`ManagedHttpClient` for cancellation/timeout handling (see §21.4 below)
+and observe the same redaction rule (§21.5).
+
+### 21.1 Basic auth + raw SOAP session (compliance)
+
+**Exemplar:** `content/sdk-adapters/compliance/src/.../VSphereClient.java`
+
+**When to use:** the target API speaks SOAP (or a custom HTTP protocol)
+where session management is fully hand-built. The adapter owns the
+entire transport layer — no `HttpClientBuilder` auth strategy is used.
+VSphereClient issues a `Login` SOAP operation that returns a session
+cookie (`vmware_soap_session=...`), then sends that cookie on every
+subsequent call.
+
+**How credentials enter:** `configureAdapter()` reads `username` and
+`password` from `getCredentialField(resourceConfig, "username"/"password")`
+and `vcenter_host` from `getIdentifier(resourceConfig, "vcenter_host")`.
+They are passed directly into `new VSphereClient(host, username, password, logger)`.
+The POJO (`ComplianceConfig`) holds them as `public final` fields; the
+adapter never logs them.
+
+**Session lifecycle:**
+```java
+// connect(): RetrieveServiceContent (no cookie) then Login (returns Set-Cookie)
+vsphere.connect();
+// Every subsequent call: sends Cookie: vmware_soap_session=<value>
+// Keepalive via CurrentTime — cheap call; reconnect on any failure
+vsphere.ensureConnected();
+// Teardown in onDiscard():
+if (vsphere != null) vsphere.disconnect();  // sends Logout SOAP, clears cookie
+```
+
+The `post()` method sets `connectTimeout(30 000 ms)` and
+`readTimeout(120 000 ms)` directly on `HttpURLConnection`. These are
+fixed constants in `VSphereClient` — not wired through `ManagedHttpClient`
+(VSphereClient predates the framework HTTP layer and speaks SOAP over raw
+`HttpURLConnection`).
+
+**Cancellation:** `HttpURLConnection.setReadTimeout(120 000)` provides a
+wall-clock bound per call. There is no framework-level cancellation hook
+because `ManagedHttpClient` is not used; if the SOAP server hangs beyond
+the read timeout the thread will unblock with a `SocketTimeoutException`.
+
+### 21.2 Query-param session token (synology)
+
+**Exemplar:** `content/sdk-adapters/synology/src/.../SynologyApiClient.java`
+
+**When to use:** the target API authenticates via a session ID appended
+as a query parameter (e.g. `&_sid=<token>`) to every request. The DSM
+Web API documents `_sid` as the standard mechanism; a Cookie header may
+also work but is not the documented path. Because `SessionCookieAuth` adds
+a `Cookie` header, not a query parameter, this shape manages the session
+ID entirely within the client class rather than using an `HttpClientBuilder`
+auth strategy — as the `SynologyApiClient` class comment notes, this is a
+known framework gap (a `QueryParamAuth` strategy does not yet exist).
+
+**How credentials enter:** `configureAdapter()` reads `username`, `password`,
+`host`, `port` via `getCredentialField`/`getIdentifier`, builds a
+`SynologyConfig` POJO, then constructs:
+```java
+this.api = new SynologyApiClient(httpClient, cfg.username, cfg.password,
+        componentLogger(SynologyApiClient.class));
+```
+The `ManagedHttpClient` is built without an auth strategy:
+```java
+HttpClientBuilder.builder().baseUrl(cfg.baseUrl()).timeout(Duration.ofSeconds(30)).build()
+```
+
+**Session lifecycle:**
+```java
+// login(): POST /webapi/entry.cgi?api=SYNO.API.Auth&method=login&account=...&passwd=...
+// Returns JSON with data.sid; stored as this.sid
+api.ensureSession();   // calls login() if sid == null
+
+// Every authenticated call appends: &_sid=<sid>
+// On error codes 106/107/119 (session expired): invalidateSession() + login() + retry
+
+// Teardown in onDiscard():
+SynologyApiClient a = this.api;
+if (a != null) a.logout();   // POST .../logout&session=...; sets sid = null
+```
+
+**Redaction requirement:** `_sid`, `passwd`, and `account` must never
+appear in thrown messages or log lines. `SynologyApiClient.redact(String)`
+strips all three from any path/query string before it reaches a log or
+exception:
+```java
+static String redact(String path) {
+    return path
+        .replaceAll("(?i)(_sid=)[^&]*", "$1<redacted>")
+        .replaceAll("(?i)(passwd=)[^&]*", "$1<redacted>")
+        .replaceAll("(?i)(account=)[^&]*", "$1<redacted>");
+}
+```
+Apply `redact()` to any string derived from a URL or query before passing
+it to `log.*()` or `throw new IOException(...)`. The HTTP status code and
+the api/version/method path portion are left intact for diagnostics.
+
+**Cancellation/timeout:** `ManagedHttpClient` is wired with
+`.timeout(Duration.ofSeconds(30))` in `buildHttpClient`. The framework
+honours the timeout per-request; if the session refresh also hangs the
+same timeout applies (each `callRaw` call goes through `ManagedHttpClient`).
+
+### 21.3 Session-cookie header auth (unifi)
+
+**Exemplar:** `content/sdk-adapters/unifi/src/.../UniFiApiClient.java`
+
+**When to use:** the target API issues a session token in a `Set-Cookie`
+response header after a credential `POST`, and expects that cookie
+re-presented on every subsequent request. UniFi OS sets a `TOKEN` cookie;
+classic UniFi controllers set `unifises`. The framework `SessionCookieAuth`
+strategy handles this natively: it calls a login closure on first use or
+after a 401, stores the returned token, and adds `Cookie: TOKEN=<value>` to
+every request transparently.
+
+**How credentials enter:** `configureAdapter()` reads `username`, `password`,
+`host`, `port` via `getCredentialField`/`getIdentifier`, builds a `UniFiConfig`
+POJO, then calls `buildHttpClient(cfg)`:
+```java
+// Raw client — no auth strategy, used only for the login round-trip
+ManagedHttpClient rawHttp = baseBuilder(cfg).build();
+
+// Login closure: POST /api/auth/login, JSON body, extract TOKEN/unifises cookie
+SessionCookieAuth auth = new SessionCookieAuth("TOKEN",
+    () -> UniFiApiClient.login(rawHttp,
+            componentLogger(UniFiApiClient.class),
+            cfg.username, cfg.password));
+
+// Authenticated client — auth strategy attached; TOKEN cookie added automatically
+this.httpClient = baseBuilder(cfg).auth(auth).build();
+this.api = new UniFiApiClient(this.httpClient, componentLogger(UniFiApiClient.class));
+```
+
+**Session lifecycle:** `SessionCookieAuth` is automatic — the framework
+calls the login closure when no cookie is present or on a 401. The adapter
+does not call `login()` directly in `configureAdapter()`. In `onDiscard()`:
+```java
+SuiteApiStitcher st = this.suiteStitcher;
+if (st != null) st.discard();
+super.onDiscard();   // always last
+// Note: UniFiAdapter does not explicitly logout the session; the TOKEN
+// expires server-side. If an explicit logout is needed, call
+// rawHttp.post("/api/auth/logout", ...) before super.onDiscard().
+```
+
+**Cookie extraction:** `UniFiApiClient.login()` checks both `TOKEN` and
+`unifises` in the response `set-cookie` headers to support both UniFi OS
+and classic controllers:
+```java
+String token = extractCookie(resp, "TOKEN");
+if (token == null) token = extractCookie(resp, "unifises");
+```
+
+**Redaction requirement:** `TOKEN`, `unifises`, and `"password"` JSON field
+values must never appear in log lines or exception messages.
+`UniFiApiClient.redact(String)` strips all three:
+```java
+static String redact(String s) {
+    return s
+        .replaceAll("(?i)(TOKEN=)[^;&\\s]*", "$1<redacted>")
+        .replaceAll("(?i)(unifises=)[^;&\\s]*", "$1<redacted>")
+        .replaceAll("(?i)(\"password\"\\s*:\\s*\")[^\"]*", "$1<redacted>")
+        .replaceAll("(?i)(password=)[^&\\s]*", "$1<redacted>");
+}
+```
+On login failure the adapter throws with only the HTTP status code — never
+the request body (plaintext password) or any cookie value.
+
+**Cancellation/timeout:** `ManagedHttpClient` is wired with
+`.timeout(Duration.ofSeconds(30))` and a `RetryPolicy` (3 attempts,
+1 000 ms base delay) in `baseBuilder`. Both the login round-trip (`rawHttp`)
+and authenticated calls (`this.httpClient`) use the same timeout.
+
+### 21.4 Cancellation and timeout handling (all shapes)
+
+`ManagedHttpClient` (shapes 21.2 and 21.3) respects a `.timeout(Duration)`
+set at build time. The framework propagates `InterruptedException` from
+`http.get(...)` / `http.post(...)` so the collector can respond to a
+cycle cancellation signal — always declare `throws InterruptedException` on
+methods that call `ManagedHttpClient`. Do not swallow `InterruptedException`:
+re-interrupt the thread or let it propagate:
+```java
+} catch (InterruptedException e) {
+    Thread.currentThread().interrupt();
+    throw e;   // or wrap in a RuntimeException and rethrow
+}
+```
+
+For raw-SOAP adapters (shape 21.1) the timeout is set per-connection via
+`HttpURLConnection.setConnectTimeout` / `setReadTimeout`. There is no
+framework-level interrupt hook; a hung SOAP call will unblock only when
+the socket timeout fires.
+
+### 21.5 Redaction rule (all shapes)
+
+Credential values — passwords, session tokens, session IDs — must **never**
+appear in thrown exception messages, log lines, or any string that could
+reach `collector.log` or a test-connection error dialog. The rule
+(`rules/no-secrets-on-disk.md`) is enforced at code-review time.
+
+**Log the mechanism and principal name, not the value:**
+```java
+// CORRECT
+log.info("Synology login succeeded, session=" + SESSION_NAME);
+log.info("UniFi session acquired");
+log.warn("Logout failed (non-fatal): " + redact(e.getMessage()));
+
+// WRONG — never log or throw credential values
+log.info("Logged in with password=" + password);
+throw new IOException("Login failed, token=" + token);
+```
+
+Each adapter provides a `static String redact(String)` helper that
+strips its specific secret-bearing parameters before any string derived
+from a URL, cookie header, or exception message reaches a log call or
+is used as an exception message. Apply `redact()` defensively — any
+path segment or response body fragment that could carry a credential
+must pass through it first.

@@ -10,6 +10,14 @@
 # published sdk-buildkit tarball from the factory repo's Releases, builds the
 # .pak deterministically (no agent, no factory checkout), gates on pak-compare,
 # and attaches the .pak to this tag's GitHub Release.
+#
+# Required secret: SDK_RUNTIME_TOKEN
+#   A fine-grained read-only PAT scoped to sentania-labs/vcf-content-factory-sdk-runtime
+#   with Contents: read permission. The Broadcom SDK jar (vrops-adapters-sdk-2.2.jar) is
+#   stored as a private release asset on that repo (tag sdk-2.2) and is never bundled in
+#   the factory or buildkit (C2 redistribution constraint). Mint the PAT at
+#   https://github.com/settings/tokens?type=beta and add it as a repo (or org) Actions
+#   secret named SDK_RUNTIME_TOKEN before tagging a release.
 name: build-pak-on-tag
 
 on:
@@ -64,10 +72,29 @@ jobs:
           tar xzf _kit_dl/sdk-buildkit-*.tgz -C _kit
           echo "Kit version: $(cat _kit/sdk_buildkit/VERSION 2>/dev/null || echo unknown)"
 
+      - name: Fetch Broadcom SDK jar (private release asset)
+        env:
+          SDK_RUNTIME_TOKEN: ${{ secrets.SDK_RUNTIME_TOKEN }}
+          GH_TOKEN: ${{ secrets.SDK_RUNTIME_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SDK_RUNTIME_TOKEN:-}" ]; then
+            echo "::error::SDK_RUNTIME_TOKEN secret is not set — mint a fine-grained read-only PAT for sentania-labs/vcf-content-factory-sdk-runtime (Contents: read) and add it as a repo or org Actions secret."
+            exit 1
+          fi
+          mkdir -p _sdk_jar
+          gh release download sdk-2.2 \
+            --repo sentania-labs/vcf-content-factory-sdk-runtime \
+            --pattern 'vrops-adapters-sdk-*.jar' \
+            --dir _sdk_jar
+          echo "SDK jar: $(ls _sdk_jar/vrops-adapters-sdk-*.jar)"
+
       - name: Build the .pak (deterministic, headless)
         run: |
           set -euo pipefail
-          PYTHONPATH=_kit python3 -m sdk_buildkit build-sdk "$GITHUB_WORKSPACE" --output dist
+          PYTHONPATH=_kit python3 -m sdk_buildkit build-sdk "$GITHUB_WORKSPACE" \
+            --sdk-jar _sdk_jar/vrops-adapters-sdk-2.2.jar \
+            --output dist
           ls -l dist/*.pak
 
       - name: Gate on pak-compare (zero BLOCKING)

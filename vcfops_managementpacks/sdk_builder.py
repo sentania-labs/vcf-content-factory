@@ -1992,12 +1992,19 @@ def _generate_readme_md(
 def _generate_docs(project_dir: Path, version_string: str) -> None:
     """Generate REFERENCE.md, CHANGELOG.md, and (if absent) README.md.
 
-    Always overwrites:
+    Only writes if absent (non-destructive — preserves hand-authored content):
       - REFERENCE.md  — metric/property reference from describe.xml + resources.properties
       - CHANGELOG.md  — git commit history grouped by build number
+      - README.md     — quick-start template
 
-    Only writes if absent:
-      - README.md  — quick-start template
+    Neither REFERENCE.md nor CHANGELOG.md is bundled into the .pak; they are
+    documentation that lives in the adapter repo. Authors hand-edit them (e.g.
+    curating entries, adding context), so overwriting on every build would
+    discard that work. The generated content is written to
+    REFERENCE.generated.md / CHANGELOG.generated.md alongside the hand-authored
+    files so the author can diff and merge when the describe.xml or git history
+    changes. When no hand-authored file exists the generated file is written
+    directly as REFERENCE.md / CHANGELOG.md (first-run bootstrap).
 
     Args:
         project_dir:     adapter project directory (contains adapter.yaml, describe.xml)
@@ -2054,24 +2061,47 @@ def _generate_docs(project_dir: Path, version_string: str) -> None:
         )
         return
 
-    # 1. Generate REFERENCE.md (always overwrite)
+    # 1. Generate REFERENCE.md — non-destructive.
+    # If a hand-authored REFERENCE.md already exists, write generated content
+    # to REFERENCE.generated.md so the author can diff/merge. On first run
+    # (file absent) write directly as REFERENCE.md.
     try:
         ref_content = _generate_reference_md(project_dir, project_name, version_string)
         ref_path = project_dir / "REFERENCE.md"
-        ref_path.write_text(ref_content, encoding="utf-8")
-        print(f"  docs: wrote {ref_path}", file=sys.stderr)
+        if ref_path.is_file():
+            gen_path = project_dir / "REFERENCE.generated.md"
+            gen_path.write_text(ref_content, encoding="utf-8")
+            print(
+                f"  docs: REFERENCE.md exists (hand-authored) — generated content"
+                f" written to {gen_path.name} for review",
+                file=sys.stderr,
+            )
+        else:
+            ref_path.write_text(ref_content, encoding="utf-8")
+            print(f"  docs: wrote {ref_path}", file=sys.stderr)
     except Exception as exc:
         print(f"  docs: warning — REFERENCE.md generation failed: {exc}",
               file=sys.stderr)
 
-    # 2. Generate CHANGELOG.md (always overwrite)
+    # 2. Generate CHANGELOG.md — non-destructive.
+    # Same policy: preserve hand-authored CHANGELOG.md; write generated content
+    # to CHANGELOG.generated.md when the primary file already exists.
     try:
         cl_content = _generate_changelog_md(
             project_dir, current_version, current_build
         )
         cl_path = project_dir / "CHANGELOG.md"
-        cl_path.write_text(cl_content, encoding="utf-8")
-        print(f"  docs: wrote {cl_path}", file=sys.stderr)
+        if cl_path.is_file():
+            gen_path = project_dir / "CHANGELOG.generated.md"
+            gen_path.write_text(cl_content, encoding="utf-8")
+            print(
+                f"  docs: CHANGELOG.md exists (hand-authored) — generated content"
+                f" written to {gen_path.name} for review",
+                file=sys.stderr,
+            )
+        else:
+            cl_path.write_text(cl_content, encoding="utf-8")
+            print(f"  docs: wrote {cl_path}", file=sys.stderr)
     except Exception as exc:
         print(f"  docs: warning — CHANGELOG.md generation failed: {exc}",
               file=sys.stderr)
