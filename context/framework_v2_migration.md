@@ -3,8 +3,11 @@
 **Purpose:** mechanical guide for `sdk-adapter-author` to migrate
 compliance, synology, and unifi adapters from framework v1 to v2.
 After migration each adapter must compile cleanly against
-`vcfcf-adapter-base.jar + vrops-adapters-sdk-2.2.jar` only — no
-`aria-ops-core` on the classpath.
+`vcfcf-adapter-base.jar + vrops-adapters-sdk-2.2.jar`. Note on
+`aria-ops-core`: it remains on the **compile** classpath because
+`sdk_builder.py` globs the entire `adapter_runtime/` directory; it is
+harmless for v2 adapters and is correctly omitted from the v2 pak at
+packaging time. See §16 for compile verification details.
 
 ---
 
@@ -69,7 +72,45 @@ public MyAdapter(String adapterDir, Integer instanceId) {
 
 ---
 
-## 3. configureAdapter (replaces configure)
+## 3. onDescribe (new — must implement)
+
+**v1:** `UnlicensedAdapter` provided `onDescribe()` automatically, loading
+`describe.xml` from `getAdapterDirectory()`. No adapter code required.
+
+**v2:** `VcfCfAdapter` does NOT provide a default `onDescribe()`. It is an
+abstract method on `AdapterBase` and every v2 adapter must implement it.
+
+**Working pattern (from the migrated compliance adapter):**
+```java
+import com.integrien.alive.common.adapter3.describe.AdapterDescribe;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
+@Override
+public AdapterDescribe onDescribe() {
+    Path describeFile = getAdapterDescribeFile(ADAPTER_KIND, "describe.xml");
+    try (InputStream is = Files.newInputStream(describeFile)) {
+        return AdapterDescribe.make(is);
+    } catch (Exception e) {
+        logError("onDescribe: failed to load describe.xml from "
+                + describeFile + ": " + e.getMessage(), e);
+        return null;
+    }
+}
+```
+
+`getAdapterDescribeFile(kind, "describe.xml")` resolves to
+`<adaptersHome>/<ADAPTER_KIND>/conf/describe.xml` — the SDK's own
+canonical path for describe files.
+
+> **Framework gap (tracked):** a default `onDescribe()` using this
+> pattern belongs in `VcfCfAdapter` so adapters need not repeat it.
+> Until that lands, implement the pattern above in every v2 adapter.
+
+---
+
+## 4. configureAdapter (replaces configure)
 
 **v1:**
 ```java
@@ -88,9 +129,11 @@ protected void configureAdapter(ResourceStatus status, ResourceConfig rc) {
 ```
 
 **What changes:** method name only (`configure` → `configureAdapter`).
-The method signature and body are identical. Remove the `@Override`
-annotation if it no longer resolves (it will once the v2 JAR is on
-the classpath).
+The method signature and body are identical. Keep `@Override` —
+`configureAdapter` is declared `abstract` in `VcfCfAdapter` and the
+annotation is correct. The v1 confusion arose because the old TVS
+`configure()` was not abstract in `UnlicensedAdapter`; the v2 method
+is.
 
 ### SSL in configureAdapter
 
@@ -116,7 +159,7 @@ this.httpClient = HttpClientBuilder.builder()
 
 ---
 
-## 4. getTester (new signature)
+## 5. getTester (new signature)
 
 **v1:**
 ```java
@@ -150,9 +193,17 @@ Key changes:
 - `param.setLocalizedMsg(...)` is available for i18n error messages.
 - Return `null` to skip the test (passes always).
 
+> **Raw-type note (applies to §5, §6, §7):** `VcfCfAdapter` declares
+> `getTester()`, `getDiscoverer()`, and `getCollector()` as raw types
+> with `@SuppressWarnings("rawtypes")` for binary compatibility. Your
+> overrides with the parameterized form (`VcfCfTester<MyConfig>`, etc.)
+> compile correctly — the parameterized return is a covariant refinement
+> the compiler accepts. Do not let the raw declaration in the base class
+> tempt you into dropping the type parameter from your overrides.
+
 ---
 
-## 5. getDiscoverer (new signature)
+## 6. getDiscoverer (new signature)
 
 **v1:**
 ```java
@@ -199,7 +250,7 @@ This is unchanged in v2.
 
 ---
 
-## 6. getLiveDataCollector → getCollector (major rename + reshape)
+## 7. getLiveDataCollector → getCollector (major rename + reshape)
 
 **v1 (three separate methods):**
 ```java
@@ -269,7 +320,7 @@ Key changes:
 
 ---
 
-## 7. getHistoricalDataCollector
+## 8. getHistoricalDataCollector
 
 **v1:**
 ```java
@@ -287,7 +338,7 @@ parameter from the adapter's own state.
 
 ---
 
-## 8. getAutoDiscoveryEnabled
+## 9. getAutoDiscoveryEnabled
 
 **v1:**
 ```java
@@ -308,7 +359,7 @@ implement `VcfCfCollector.rediscover()`.
 
 ---
 
-## 9. needRediscovery
+## 10. needRediscovery
 
 **v1:**
 ```java
@@ -325,7 +376,7 @@ protected boolean needRediscovery(ResourceConfig adapterInst,
 
 ---
 
-## 10. Resource API (no more aria-ops-core Resource)
+## 11. Resource API (no more aria-ops-core Resource)
 
 **v1 (aria-ops-core Resource):**
 ```java
@@ -357,7 +408,40 @@ return rb.build(); // returns Relationships, not ResourceCollection
 
 ---
 
-## 11. ForeignResourceResolver (Suite API stitching)
+## 12. ForeignResourceResolver and Suite API stitching
+
+### Primary stitching path — SuiteApiStitcher (ambient transport)
+
+For adapters that push properties or stats onto a foreign VCF Ops
+resource (e.g. a `VMWARE/HostSystem`), the v2 primary path is
+`SuiteApiStitcher`. See the **"Ambient Suite API stitching transport"**
+section in `context/tier2_architecture.md` for the full contract.
+
+```java
+// In configureAdapter():
+stitcher = SuiteApiStitcher.create(this, adapterLogger());
+// or, for remote collectors with explicit Suite API creds:
+stitcher = SuiteApiStitcher.createExplicit(
+    this, adapterLogger(), host, user, password);
+
+// In collect():
+stitcher.pushProperties(foreignResourceUuid, props, System.currentTimeMillis());
+```
+
+Release in `onDiscard()`:
+```java
+@Override
+public void onDiscard() {
+    if (stitcher != null) stitcher.discard();
+    super.onDiscard();
+}
+```
+
+### Cross-MP UUID lookup — ForeignResourceResolver
+
+`ForeignResourceResolver` is for **cross-MP resource UUID lookup** (e.g.
+resolving a Datastore UUID from an identifier value). It is not the
+stitching transport.
 
 **v1:**
 ```java
@@ -367,7 +451,7 @@ ForeignResourceResolver resolver =
 
 **v2:**
 ```java
-// Wire in the Suite API client via the bridge interface.
+// Wire in the Suite API client via the SuiteApiBridge functional interface.
 // The lambda calls your pak-bundled Suite API client.
 ForeignResourceResolver resolver = new ForeignResourceResolver(
     (adapterKind, resourceKind) -> {
@@ -380,11 +464,12 @@ ForeignResourceResolver resolver = new ForeignResourceResolver(
 );
 ```
 
-If the adapter does not do cross-MP stitching, no change is needed.
+If the adapter does not do cross-MP stitching or UUID lookup, no change is
+needed.
 
 ---
 
-## 12. Relationship emission (onCollect path)
+## 13. Relationship emission (onCollect path)
 
 **v1:**
 ```java
@@ -413,7 +498,7 @@ The `rel.add()` requirement (v1 silent loss bug) is eliminated.
 
 ---
 
-## 13. Event emission (unchanged API, simplified path)
+## 14. Event emission (unchanged API, simplified path)
 
 **v1 (in LiveCollector.getEvents):**
 ```java
@@ -435,7 +520,7 @@ different text = new event.
 
 ---
 
-## 14. Logging (unchanged)
+## 15. Logging (unchanged)
 
 Use `logInfo()` / `logWarn()` / `logError()` on the adapter instance.
 From within SPI implementations, the adapter is available as the
@@ -444,7 +529,7 @@ needed, or pass a logger reference to the SPI object's constructor).
 
 ---
 
-## 15. Semantic changes adapter authors must know
+## 16. Semantic changes adapter authors must know
 
 | Topic | v1 behavior | v2 behavior |
 |---|---|---|
@@ -454,16 +539,23 @@ needed, or pass a logger reference to the SPI object's constructor).
 | Relationship max | `maximumRelationshipsPerCollection` field on UnlicensedAdapter | `VcfCfAdapter.MAX_RELATIONSHIPS_PER_CYCLE` constant (default 100 000); override `getMaxRelationshipsPerCycle()`. |
 | MetricDataCache | Auto-created and auto-flushed by UnlicensedAdapter | Auto-created in `onConfigure` and auto-flushed at end of `onCollect`. Constructor params `(1000, 100)` are [INFER] — see spec/19 §8. |
 | SSL | `insecureSslContext()` embedded in HttpClientBuilder (inline, always insecure) | JVM default trust store when no SSL configured; `platformSsl(this)` for platform trust; `allowInsecure(true)` for explicit lab opt-out. |
-| SuiteAPIClient | Injected as field `suiteAPIClient` on UnlicensedAdapter | Not injected. Pass via `ForeignResourceResolver.SuiteApiBridge` when needed (optional, not required on collect path). |
+| SuiteAPIClient | Injected as field `suiteAPIClient` on UnlicensedAdapter | Not injected. Primary stitching path is `SuiteApiStitcher` (ambient transport — see "Ambient Suite API stitching transport" in `context/tier2_architecture.md`). `ForeignResourceResolver.SuiteApiBridge` is for cross-MP UUID lookup only. Neither is required on the collect path. |
 | onDiscard | Call `super.onDiscard()` first | Same — call `super.onDiscard()` first. |
 
 ---
 
-## 16. Compile verification after migration
+## 17. Compile verification after migration
 
-The adapter must compile with:
+The adapter must compile cleanly. `sdk_builder.py` automatically builds
+the classpath from `adapter_runtime/` (which includes
+`vcfcf-adapter-base.jar`, `vrops-adapters-sdk-2.2.jar`, and
+`aria-ops-core-*.jar` for v1 compatibility) plus the project's `lib/*.jar`.
+`aria-ops-core` is on the **compile** classpath but is correctly excluded
+from the v2 pak at packaging time — its presence at compile time is harmless.
+
+Effective compile classpath (managed by the builder):
 ```
-javac -cp vcfcf-adapter-base.jar:vrops-adapters-sdk-2.2.jar[:<vendor jars>] ...
+vcfcf-adapter-base.jar : vrops-adapters-sdk-2.2.jar [: aria-ops-core-*.jar] [: <vendor jars>]
 ```
 
 If `javac` reports a missing symbol:
