@@ -2,7 +2,6 @@ package com.vcfcf.adapter.stitch;
 
 import com.integrien.alive.common.adapter3.Logger;
 import com.vcfcf.adapter.VcfCfAdapter;
-import com.vcfcf.adapter.http.HttpClientBuilder;
 import com.vcfcf.adapter.json.SimpleJson;
 
 import javax.net.ssl.SSLContext;
@@ -45,10 +44,29 @@ import java.util.Map;
  * release per collection cycle; short-lived tokens are the proven-safe pattern).
  *
  * <h3>SSL</h3>
- * <p>Uses {@link VcfCfAdapter#getPlatformSslContext()} when an adapter instance
- * is provided so the platform's certificate management is honoured. The localhost
- * Suite API presents the platform self-signed cert, which {@code platformSsl}
- * trusts. The insecure opt-out is not used here.
+ * <p>Uses a trust-all {@link SSLContext} (via
+ * {@link VcfCfAdapter#insecureSslContext()}) for all Suite API calls.
+ *
+ * <p><strong>Rationale (live-proven on devel + prod, build 45, 2026-06-10):</strong>
+ * The platform's {@link com.integrien.alive.common.adapter3.CustomTrustManager}
+ * is a TOFU (Trust-On-First-Use) manager: {@code checkServerTrusted} throws
+ * {@code CustomCertificateException} unconditionally for any unknown cert, then
+ * fires {@code handleUnknownCertificate} as a side-effect notification. With the
+ * old {@code URLConnection}/{@code getSocketFactory()} path the platform catches
+ * that exception and retries. {@code java.net.http.HttpClient} receives the
+ * exception directly — no retry — so {@code SSLHandshakeException} /
+ * "PKIX path building failed" results every cycle even though the TOFU
+ * notification fired (visible in appliance logs immediately after each failure).
+ * The JVM default truststore likewise has no knowledge of the platform's
+ * self-signed cert. Both alternatives always fail.
+ *
+ * <p>A trust-all context is appropriate here because: (a) the endpoint is always
+ * the platform's own node ({@code https://localhost/suite-api}); (b) the cert is
+ * always the platform's own self-signed cert; (c) loopback-network isolation
+ * provides equivalent transport security for this hop. For remote-collector
+ * deployments (non-localhost endpoints) the same trust-all is used until a
+ * production remote-collector scenario is first deployed — document it in
+ * {@code context/investigations/} at that time.
  *
  * <h3>Logging</h3>
  * <p>Credential values are never logged. Only the mechanism chosen
@@ -163,11 +181,13 @@ public final class SuiteApiStitchClient {
         private Builder() {}
 
         /**
-         * Supply the adapter instance so the builder can obtain the platform
-         * SSL context via {@link VcfCfAdapter#getPlatformSslContext()}.
+         * Supply the adapter instance.
          *
-         * <p>Strongly recommended. Without this, the JVM default trust store
-         * is used, which may not trust the platform self-signed cert.
+         * <p>Retained for future extensibility (e.g. per-adapter logging
+         * context or config inspection). The SSL context used for Suite API
+         * calls is <strong>not</strong> derived from the adapter —
+         * {@link VcfCfAdapter#insecureSslContext()} is always used for the
+         * localhost Suite API endpoint (see class Javadoc, SSL section).
          *
          * @param adapter the adapter instance ({@code this} in configureAdapter)
          */
@@ -266,14 +286,35 @@ public final class SuiteApiStitchClient {
             }
 
             // --- SSL context --------------------------------------------------
-            // Platform SSL is required: the Suite API at localhost presents
-            // the platform self-signed cert. getPlatformSslContext() trusts it.
-            SSLContext sslContext = null;
-            if (adapter != null) {
-                sslContext = adapter.getPlatformSslContext();
-            }
-            // If adapter is null, JVM default trust store is used. The caller
-            // was warned in the adapter() javadoc.
+            // The Suite API at localhost presents the platform's own self-signed
+            // certificate. The platform's CustomTrustManager (used by
+            // getPlatformSslContext()) is a TOFU manager: its checkServerTrusted()
+            // throws CustomCertificateException unconditionally for any cert not
+            // already in the platform's trusted store, then fires
+            // handleUnknownCertificate() as a side-effect. With the old
+            // URLConnection / getSocketFactory() path, the platform intercepts
+            // the exception and retries after registering the cert. java.net.http
+            // .HttpClient receives the exception directly — no intercept, no
+            // retry — so SSLHandshakeException / PKIX path building failed is
+            // the result even though CustomTrustManager's TOFU notification DID
+            // fire (visible in logs immediately after each failure).
+            //
+            // The JVM default truststore likewise fails: it has no knowledge of
+            // the platform's self-signed cert.
+            //
+            // The correct context for localhost Suite API calls is a trust-all
+            // SSLContext. This is not a general opt-out: the endpoint is always
+            // https://localhost/suite-api (the platform's own node); the cert is
+            // always the platform's self-signed cert; there is no third-party
+            // cert to validate. Network-level isolation (loopback) provides the
+            // equivalent of transport security for this hop.
+            //
+            // For explicit-credential remote collectors (non-localhost endpoints),
+            // the same trust-all is used for now — a proper PKI trust path for
+            // remote Suite API endpoints is a future enhancement when the remote-
+            // collector scenario is first deployed in production. Document any
+            // production remote-collector use in context/investigations/.
+            SSLContext sslContext = VcfCfAdapter.insecureSslContext();
 
             return new SuiteApiStitchClient(
                     sslContext, suiteApiBase, username, password, mechanism, logger);

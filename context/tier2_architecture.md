@@ -369,8 +369,26 @@ is applied at the call site in `AmbientCredential.decryptWithPlatformCrypt()`.
 **Token lifecycle:** acquire → push → release per call (proven-safe pattern from v1).
 Release is always in a `finally` block — cooperative cancellation is honoured.
 
-**SSL:** `VcfCfAdapter.getPlatformSslContext()` (platform trust store, trusts
-the localhost self-signed cert). Do not use `allowInsecure` for the Suite API path.
+**SSL:** `VcfCfAdapter.insecureSslContext()` (trust-all) is used for all Suite
+API calls — see rationale below.
+
+**Why NOT `getPlatformSslContext()` for Suite API calls:** The platform's
+`CustomTrustManager` is a TOFU manager. Its `checkServerTrusted()` throws
+`CustomCertificateException` unconditionally for any cert not already in the
+platform trust store, then fires `handleUnknownCertificate` as a side-effect.
+Old `URLConnection`/`getSocketFactory()` paths intercept the exception and retry
+after cert registration. `java.net.http.HttpClient` receives the exception
+directly — no intercept, no retry — so `SSLHandshakeException` / "PKIX path
+building failed" results every cycle even though the TOFU notification fired
+(confirmed in appliance logs, devel + prod, build 45, 2026-06-10). The JVM
+default truststore likewise has no knowledge of the platform's self-signed cert.
+
+Trust-all is appropriate for the localhost Suite API endpoint: the endpoint is
+always the platform's own node; the cert is always the platform's own self-signed
+cert; loopback-network isolation provides equivalent transport security for this
+hop. This does NOT affect `HttpClientBuilder.platformSsl(this)` — that path is
+correct and unchanged for target-system (vCenter, NAS, etc.) connections where
+the admin has approved the cert via the platform UI.
 
 **Adapter opt-in (zero transport code required):**
 ```java
@@ -394,6 +412,7 @@ Empirical basis: `context/investigations/suiteapi_ambient_auth_devel_2026_06_09.
 
 | Date | Change |
 |---|---|
+| 2026-06-10 | **`SuiteApiStitchClient` SSL fix — trust-all for localhost Suite API (bug #3)**: `SuiteApiStitchClient.Builder.build()` was calling `adapter.getPlatformSslContext()` which wraps `CustomTrustManager`. `CustomTrustManager.checkServerTrusted()` throws `CustomCertificateException` unconditionally for any unknown cert (including the platform's own self-signed localhost cert), then fires `handleUnknownCertificate` as a side-effect notification. `java.net.http.HttpClient` receives the exception directly — no intercept, no retry — resulting in `SSLHandshakeException`/"PKIX path building failed" every cycle (credentials resolved correctly; SSL was the only failure). Fix: replaced `getPlatformSslContext()` with `VcfCfAdapter.insecureSslContext()` in the stitch client's SSL block. Trust-all is appropriate for the localhost Suite API endpoint (loopback isolation, platform's own self-signed cert). Does not affect `HttpClientBuilder.platformSsl(this)` for target-system connections. **Adapter adoption:** none — rebuild against updated `vcfcf-adapter-base.jar` only. See `lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`. |
 | 2026-06-10 | **`onDescribe()` controller-side NPE fix (build 44 root cause)**: `VcfCfAdapter.onDescribe()` was calling `getAdapterKind()` which returns null during controller-side bare instantiation (no platform injection). Fix: added `private final String adapterKindKey` field + two keyed constructors (`VcfCfAdapter(String adapterKindKey)` and `VcfCfAdapter(String adapterKindKey, String adapterDir, Integer instanceId)`). `onDescribe()` now resolves kind from `adapterKindKey` first, falls back to `getAdapterKind()`, and throws an actionable message listing both sources if both are null — never reaches `getAdapterDescribeFile(null, …)`. **Adapter adoption required:** subclass constructors must call the keyed super variants (see `context/framework_v2_migration.md` §3). `vcfcf-adapter-base.jar` rebuilt (clean, SDK-only). Lesson codified: `lessons/controller-describe-bare-instantiation.md`. |
 | 2026-06-09 | **Framework default `onDescribe()`**: `VcfCfAdapter.onDescribe()` is now provided by the framework. Loads `describe.xml` via `getAdapterDescribeFile(getAdapterKind(), "describe.xml")`; throws `RuntimeException` with path in message on failure (no silent null). Subclass overrides still win (non-final). Tracked gap in `context/framework_v2_migration.md` §3 closed. `vcfcf-adapter-base.jar` rebuilt (clean, SDK-only). Existing adapters (compliance) that hand-roll `onDescribe()` continue to work without change — their override takes precedence. |
 | 2026-06-10 | **AmbientCredential path-resolution bug fix**: `CommonConstants.VCOPS` (`"VCF Ops"` — a display name, not a path) removed from path derivation. New resolution order: system property `vcfcf.suiteapi.credential.path` → hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`. Failure message now lists all candidates tried. `vcfcf-adapter-base.jar` rebuilt (clean, SDK-only). Compliance needs pak rebuild only — no adapter source change. |
