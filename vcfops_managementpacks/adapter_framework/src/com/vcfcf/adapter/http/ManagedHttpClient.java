@@ -21,6 +21,18 @@ import java.util.logging.Logger;
  * <p>Instances are created by {@link HttpClientBuilder#build()} — do not
  * construct directly.
  *
+ * <h3>Auth-failure single-retry</h3>
+ * <p>After every HTTP response, {@link #checkAuthRetry} consults the active
+ * {@link AuthStrategy}. If the strategy's
+ * {@link AuthStrategy#shouldRetryAfterStatus(int)} returns {@code true} for
+ * the response status code (typically 401 for session-cookie strategies),
+ * the client calls {@link AuthStrategy#invalidateAuth()} and replays the
+ * request exactly once with a fresh credential.  A second auth failure on
+ * the retry propagates immediately — there is no retry loop.
+ *
+ * <p>Stateless strategies ({@code BasicAuth}, {@code BearerAuth}) inherit
+ * the default {@code shouldRetryAfterStatus → false} and are unaffected.
+ *
  * <h3>DNS round-robin handling</h3>
  * <p>{@code java.net.http.HttpClient} resolves the hostname once and reuses
  * the cached IP for the lifetime of the client.  When a hostname maps to
@@ -30,10 +42,16 @@ import java.util.logging.Logger;
  * <p>When the initial {@link RetryPolicy} execution throws a
  * {@link ConnectException}, {@link #sendWithRoundRobin} resolves the hostname
  * to all its IPs via {@link InetAddress#getAllByName} and retries the request
- * against each IP in turn, substituting the IP into the URL and setting a
- * {@code Host} header so TLS SNI and virtual-host routing still work.  The
- * first IP that does not throw {@code ConnectException} wins; if all IPs fail
- * the original exception is re-thrown.
+ * against each IP in turn, substituting the raw IP into the URL.  The
+ * {@code Host} header is intentionally NOT set — {@code java.net.http.HttpClient}
+ * treats {@code Host} as a restricted header and throws
+ * {@link IllegalArgumentException} if set explicitly; the JDK derives the
+ * correct {@code Host} value from the request URI automatically.  SNI is
+ * therefore based on the IP-form URI; adapters that require SNI against a
+ * multi-homed host should configure DNS so the primary hostname resolves to
+ * a single reachable address.  The first IP that does not throw
+ * {@code ConnectException} wins; if all IPs fail the original exception is
+ * re-thrown.
  */
 public final class ManagedHttpClient {
 
@@ -71,11 +89,13 @@ public final class ManagedHttpClient {
 				.timeout(timeout);
 		applyDefaults(rb);
 		HttpRequest req = rb.build();
+		HttpResponse<T> resp;
 		try {
-			return retryPolicy.execute(() -> httpClient.send(req, bodyHandler));
+			resp = retryPolicy.execute(() -> httpClient.send(req, bodyHandler));
 		} catch (ConnectException ce) {
-			return sendWithRoundRobin(req, bodyHandler, ce);
+			resp = sendWithRoundRobin(req, bodyHandler, ce);
 		}
+		return checkAuthRetry(resp, req, bodyHandler);
 	}
 
 	/**
@@ -96,11 +116,13 @@ public final class ManagedHttpClient {
 				.timeout(timeout);
 		applyDefaults(rb);
 		HttpRequest req = rb.build();
+		HttpResponse<T> resp;
 		try {
-			return retryPolicy.execute(() -> httpClient.send(req, bodyHandler));
+			resp = retryPolicy.execute(() -> httpClient.send(req, bodyHandler));
 		} catch (ConnectException ce) {
-			return sendWithRoundRobin(req, bodyHandler, ce);
+			resp = sendWithRoundRobin(req, bodyHandler, ce);
 		}
+		return checkAuthRetry(resp, req, bodyHandler);
 	}
 
 	/**
@@ -117,11 +139,13 @@ public final class ManagedHttpClient {
 				.timeout(timeout);
 		applyDefaults(rb);
 		HttpRequest req = rb.build();
+		HttpResponse<T> resp;
 		try {
-			return retryPolicy.execute(() -> httpClient.send(req, bodyHandler));
+			resp = retryPolicy.execute(() -> httpClient.send(req, bodyHandler));
 		} catch (ConnectException ce) {
-			return sendWithRoundRobin(req, bodyHandler, ce);
+			resp = sendWithRoundRobin(req, bodyHandler, ce);
 		}
+		return checkAuthRetry(resp, req, bodyHandler);
 	}
 
 	/** Release any resources (called from adapter's onDiscard). */
@@ -141,15 +165,78 @@ public final class ManagedHttpClient {
 	}
 
 	/**
+	 * Single-retry-on-auth-failure: if the auth strategy signals that the
+	 * response status warrants a retry (e.g. 401 for an expired session
+	 * cookie), invalidate the credential and replay the original request
+	 * once with a fresh credential.
+	 *
+	 * <p>The retry is performed by rebuilding the request from the same URI
+	 * and method as {@code original} so that the new {@link #apply} call
+	 * injects the refreshed credential.  A second auth-failure response on
+	 * the retry is returned directly — there is no loop.
+	 *
+	 * <p>Synology's {@code SynologyApiClient} manages its own {@code _sid}
+	 * query-param session and does NOT use an {@link AuthStrategy} (the HTTP
+	 * client for Synology is built with no auth strategy). This method is
+	 * therefore a no-op for Synology — it only fires when an
+	 * {@link AuthStrategy} is present and opts in via
+	 * {@link AuthStrategy#shouldRetryAfterStatus(int)}.
+	 *
+	 * @param resp     the response from the initial attempt
+	 * @param original the request template used for the initial attempt
+	 * @param bh       the body handler for the retry
+	 * @return {@code resp} unchanged if no retry is warranted; otherwise the
+	 *         response from the single retry attempt
+	 */
+	private <T> HttpResponse<T> checkAuthRetry(HttpResponse<T> resp,
+			HttpRequest original, HttpResponse.BodyHandler<T> bh)
+			throws IOException, InterruptedException {
+		if (auth == null || !auth.shouldRetryAfterStatus(resp.statusCode())) {
+			return resp;
+		}
+		LOG.warning(() -> "Auth failure (HTTP " + resp.statusCode()
+				+ ") — invalidating credential and retrying once");
+		auth.invalidateAuth();
+
+		// Rebuild the request so the next applyDefaults injects a fresh credential.
+		HttpRequest.Builder rb = HttpRequest.newBuilder()
+				.uri(original.uri())
+				.timeout(timeout);
+		String method = original.method();
+		if ("GET".equals(method)) {
+			rb.GET();
+		} else if ("POST".equals(method)) {
+			rb.POST(original.bodyPublisher().orElse(
+					HttpRequest.BodyPublishers.noBody()));
+		} else if ("DELETE".equals(method)) {
+			rb.DELETE();
+		} else {
+			rb.method(method, original.bodyPublisher().orElse(
+					HttpRequest.BodyPublishers.noBody()));
+		}
+		// Re-apply Content-Type and any default headers from the original.
+		original.headers().map().forEach((name, values) -> {
+			// Skip the Cookie header — auth.apply() will add a fresh one below.
+			if ("Cookie".equalsIgnoreCase(name)) return;
+			for (String value : values) {
+				rb.header(name, value);
+			}
+		});
+		applyDefaults(rb);
+		HttpRequest retryReq = rb.build();
+		return httpClient.send(retryReq, bh);
+	}
+
+	/**
 	 * DNS round-robin fallback: resolve the hostname in {@code originalReq} to
 	 * all its IPs and try each in turn.
 	 *
 	 * <p>The original {@link HttpRequest} is used as a template; its URI is
-	 * rewritten to use the raw IP while a {@code Host} header preserving the
-	 * original hostname is injected so that TLS SNI and virtual-host routing
-	 * continue to work.  Auth and default headers are already baked into the
-	 * original request so they are carried over automatically via
-	 * {@link HttpRequest#headers()}.
+	 * rewritten to substitute the raw IP address for the hostname.  Auth and
+	 * default headers are already baked into the original request and are
+	 * carried over automatically via {@link HttpRequest#headers()}.  No
+	 * {@code Host} header is set — {@code java.net.http.HttpClient} treats
+	 * {@code Host} as a restricted header and derives it from the request URI.
 	 *
 	 * @param originalReq the request that triggered the ConnectException
 	 * @param bodyHandler response body handler
@@ -201,10 +288,12 @@ public final class ManagedHttpClient {
 				continue;
 			}
 
-			// Copy the original request, rewrite the URI, and force the Host header.
+			// Copy the original request and rewrite the URI to use the resolved IP.
+			// Do NOT set a Host header: java.net.http.HttpClient treats "Host" as a
+			// restricted header name and throws IllegalArgumentException if set
+			// explicitly. The JDK derives the correct Host value from the request URI.
 			HttpRequest.Builder rb = HttpRequest.newBuilder(originalReq, (n, v) -> true)
-					.uri(ipUri)
-					.header("Host", port > 0 ? hostname + ":" + port : hostname);
+					.uri(ipUri);
 
 			HttpRequest ipReq = rb.build();
 

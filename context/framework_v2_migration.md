@@ -926,9 +926,22 @@ same timeout applies (each `callRaw` call goes through `ManagedHttpClient`).
 response header after a credential `POST`, and expects that cookie
 re-presented on every subsequent request. UniFi OS sets a `TOKEN` cookie;
 classic UniFi controllers set `unifises`. The framework `SessionCookieAuth`
-strategy handles this natively: it calls a login closure on first use or
-after a 401, stores the returned token, and adds `Cookie: TOKEN=<value>` to
-every request transparently.
+strategy handles this natively: it acquires the token lazily on first use,
+caches it, and adds `Cookie: TOKEN=<value>` to every request transparently.
+
+**Automatic single-retry on 401 (framework-level, build 2026-06-10):**
+`SessionCookieAuth` implements `AuthStrategy.shouldRetryAfterStatus(int)` —
+returns `true` for 401 and 403. `ManagedHttpClient` checks the response
+status after every request; when the strategy signals a retry the framework
+calls `auth.invalidateAuth()` (nulls the cached token), then replays the
+request once with a fresh token acquired by the next `apply()` call.  A
+second auth failure on the retry propagates immediately — no retry loop.
+
+This mirrors the proven Synology 106/107/119 re-login pattern (§21.2) but
+operates at the HTTP layer, so every adapter using `SessionCookieAuth` gets
+expired-session recovery without adapter-level code.  Stateless strategies
+(`BasicAuth`, `BearerAuth`) return `false` from `shouldRetryAfterStatus`
+and are unaffected.
 
 **How credentials enter:** `configureAdapter()` reads `username`, `password`,
 `host`, `port` via `getCredentialField`/`getIdentifier`, builds a `UniFiConfig`
@@ -949,8 +962,9 @@ this.api = new UniFiApiClient(this.httpClient, componentLogger(UniFiApiClient.cl
 ```
 
 **Session lifecycle:** `SessionCookieAuth` is automatic — the framework
-calls the login closure when no cookie is present or on a 401. The adapter
-does not call `login()` directly in `configureAdapter()`. In `onDiscard()`:
+acquires the token lazily on first use, and on a 401/403 invalidates and
+re-acquires it exactly once. The adapter does not call `login()` directly
+in `configureAdapter()`. In `onDiscard()`:
 ```java
 SuiteApiStitcher st = this.suiteStitcher;
 if (st != null) st.discard();

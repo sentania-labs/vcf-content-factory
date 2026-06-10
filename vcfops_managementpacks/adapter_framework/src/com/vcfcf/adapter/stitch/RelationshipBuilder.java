@@ -127,7 +127,7 @@ public final class RelationshipBuilder {
         if (existing != null) {
             return existing;
         }
-        ResourceKey key = new ResourceKey(adapterKind, resourceKind, name);
+        ResourceKey key = new ResourceKey(name, resourceKind, adapterKind);
         key.addIdentifier(new ResourceIdentifierConfig(idKey, idValue, true));
         keyCache.put(cacheKey, key);
         return key;

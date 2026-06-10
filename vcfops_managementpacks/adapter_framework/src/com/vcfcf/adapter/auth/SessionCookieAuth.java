@@ -10,13 +10,24 @@ import java.util.concurrent.atomic.AtomicReference;
  * The session token is acquired lazily on the first call to {@link #apply}
  * by invoking the {@link SessionProvider} supplied at construction time.
  *
- * <p>The canonical use case is Synology DSM, which requires authenticating
- * via {@code SYNO.API.Auth} to obtain a {@code sid} session token before
- * any data collection calls can proceed.
+ * <p>The canonical use case is UniFi OS, which issues a {@code TOKEN}
+ * session cookie after a credential POST and expires it after an
+ * implementation-defined interval.
  *
  * <p>The token is cached in an {@link AtomicReference} and reused for the
  * lifetime of the adapter instance. Call {@link #invalidate()} from
  * {@code onConfigure()} when credentials change.
+ *
+ * <h3>Automatic single-retry on 401</h3>
+ * <p>This strategy overrides {@link AuthStrategy#shouldRetryAfterStatus}
+ * to return {@code true} for HTTP 401 (and 403, which some UniFi OS
+ * builds return for an expired session). On such a response
+ * {@link com.vcfcf.adapter.http.ManagedHttpClient} calls
+ * {@link #invalidateAuth()}, then replays the request once; the next
+ * {@link #apply} call re-acquires a fresh token via the
+ * {@link SessionProvider}. A second auth failure on the retry propagates
+ * loudly — there is no retry loop. See
+ * {@code context/framework_v2_migration.md §21.3}.
  */
 public final class SessionCookieAuth implements AuthStrategy {
 
@@ -50,9 +61,39 @@ public final class SessionCookieAuth implements AuthStrategy {
 		builder.header("Cookie", cookieName + "=" + token);
 	}
 
-	/** Discard the cached token so the next call re-authenticates. */
+	/**
+	 * Discard the cached token so the next call to {@link #apply} re-authenticates.
+	 *
+	 * <p>Call from {@code onConfigure()} when credentials change. The framework
+	 * also calls this automatically (via {@link #invalidateAuth()}) when a
+	 * 401/403 response is received, before replaying the request once.
+	 */
 	public void invalidate() {
 		cachedToken.set(null);
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>Returns {@code true} for HTTP 401 and 403 — both indicate an
+	 * expired or rejected session cookie. The framework will call
+	 * {@link #invalidateAuth()} and replay the request exactly once.
+	 */
+	@Override
+	public boolean shouldRetryAfterStatus(int statusCode) {
+		return statusCode == 401 || statusCode == 403;
+	}
+
+	/**
+	 * {@inheritDoc}
+	 *
+	 * <p>Delegates to {@link #invalidate()} — nulls the cached token so
+	 * the next {@link #apply} call re-acquires a fresh one via the
+	 * {@link SessionProvider}.
+	 */
+	@Override
+	public void invalidateAuth() {
+		invalidate();
 	}
 
 	@Override

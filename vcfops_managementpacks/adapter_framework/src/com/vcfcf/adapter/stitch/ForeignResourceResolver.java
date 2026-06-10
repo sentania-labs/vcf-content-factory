@@ -236,8 +236,9 @@ public final class ForeignResourceResolver {
                     total++;
 
                     // Build a ResourceKey from the entry's identifier list.
+                    // Correct order: ResourceKey(resourceName, resourceKind, adapterKind)
                     ResourceKey key = new ResourceKey(
-                            e.adapterKind, e.resourceKind, e.name);
+                            e.name, e.resourceKind, e.adapterKind);
                     String idValue = null;
                     for (String[] id : e.identifiers) {
                         if (id == null || id.length < 2) continue;
