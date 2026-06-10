@@ -599,6 +599,22 @@ delete it and replace all call sites with
 `componentLogger` eliminates all three: same factory, same level
 discipline, called at configure time (after any reload).
 
+**Hot-reload classloader behavior — per-adapter log file appender
+(proven, synology build 16, devel 9.0.2, 2026-06-10):**
+
+When a pak is hot-reloaded (re-installed without collector restart), the
+logging factory re-initializes and the per-adapter file appender
+**detaches**. Log output from the new build is absorbed by the root logger
+(`collector.log`) only until the adapter completes its first `configure`
+cycle, at which point `componentLogger` re-wires the appender. The gap is
+the window between pak load and the first completed configure.
+
+Operational consequence: `collector.log` is the authoritative source for
+post-reload diagnostics. Per-adapter logs resume silently once configure
+completes — if they appear empty post-install, check `collector.log` first.
+A collector restart eliminates the gap (appender wires correctly at startup).
+See also the Logging authoring contract note in `context/tier2_architecture.md`.
+
 ---
 
 ## 16. Semantic changes adapter authors must know

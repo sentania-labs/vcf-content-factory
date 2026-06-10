@@ -266,6 +266,32 @@ v1: `resource.addChild()` / `resource.addParent()` (aria-ops-core Resource).
 v2: `RelationshipBuilder.build()` returns a `Relationships` object;
 pass it to `adapter.addRelationshipsToCurrentCycle(rels)`.
 
+### setRelationships on a foreign resource — per-adapter scoping proven (VCF Ops 9.0.2)
+
+**Proven behavior (devel 9.0.2, synology build 16, 2026-06-10):**
+When a non-owning adapter emits `setRelationships(foreignParent, {ownChildren})`
+via `RelationshipBuilder.build()`, the platform **scopes the replacement to
+the reporting adapter's edges only** — it does NOT clobber the owning
+adapter's edges on the same parent.
+
+Evidence: the `vcf-lab-wld01-cl01-iscsi` VMWARE Datastore retained all 22 of
+its VMWARE-collected children (HostSystem, VM, Pods, etc.) after the Synology
+adapter's build-16 collect pushed a `SynologyIscsiLun` child edge onto it via
+`parentForeign(datastoreKey)` + `RelationshipBuilder.build()`. The Datastore
+gained the new LUN child edge while the existing VMWARE child set was
+undisturbed. This closed synology-build-16 WARNING-1
+(`context/reviews/synology-build-16.md`).
+
+**Design implication:** adapters that cross-link to foreign resources via
+`parentForeign` + full-set `build()` do NOT need a delta/labeled emission
+workaround (`addRelationships`, `setGenericRelationships(…, label)`) to
+preserve the owning adapter's edges. The full-set form is safe against foreign
+parents on this platform version.
+
+**Open residual:** behavior is confirmed on 9.0.2 only. Not yet verified on
+9.1. Flag as an acceptance criterion on the first build-16 equivalent install
+on 9.1. See `lessons/setrelationships-foreign-adapter-scoped.md`.
+
 ### Auto-discovery behavior — changed in v2
 
 v1: controlled by `getAutoDiscoveryEnabled()` gate in UnlicensedAdapter.
@@ -283,6 +309,28 @@ for adapter-level messages. For helper/component classes that accept a
 shadow the base's private `adapterLogger()`. See §15 in
 `context/framework_v2_migration.md` for the full rule and migration
 steps.
+
+**Per-adapter log file appender — classloader behavior on hot-reload
+(proven empirically, synology build 16, devel 9.0.2, 2026-06-10):**
+
+The platform wires each adapter instance's `componentLogger` handles to a
+per-adapter file appender at adapter load time. When an adapter pak is
+hot-reloaded (re-installed without collector restart), the logging factory
+re-initializes and the **old file appender detaches** — new log calls from
+the freshly loaded adapter class are not written to the adapter's log file
+until the adapter completes its first `configure` cycle (which re-fires
+`componentLogger` wiring). During the gap between pak load and the first
+completed configure cycle the messages are absorbed by the root logger only
+(typically `collector.log`).
+
+**Operational rule:** `collector.log` is authoritative for diagnosing issues
+in the window immediately after a hot-reload. Per-adapter log files resume
+only once the collector has completed a full configure cycle on the new build.
+If per-adapter logs appear silent post-install, check `collector.log` for the
+INSTALL and first configure/collect breadcrumbs before assuming a logging bug.
+A collector restart eliminates the gap entirely — the appender wires correctly
+at startup. Cross-reference: `context/framework_v2_migration.md` §15
+(reload-race note).
 
 ### String properties — UNCHANGED
 
@@ -417,6 +465,8 @@ Empirical basis: `context/investigations/suiteapi_ambient_auth_devel_2026_06_09.
 
 | Date | Change |
 |---|---|
+| 2026-06-10 | **`setRelationships` on foreign resource is per-adapter scoped (9.0.2 proven)**: synology build-16 devel install confirmed the wld01 iSCSI VMWARE Datastore retained all 22 VMWARE-collected children (HostSystem/VM/Pods/etc.) while gaining the SynologyIscsiLun child edge — closing synology-build-16 WARNING-1. Full-set `parentForeign`+`build()` is safe against foreign parents; no delta/labeled workaround needed. 9.1 unverified (open residual). See "setRelationships on a foreign resource" authoring contract note above and `lessons/setrelationships-foreign-adapter-scoped.md`. |
+| 2026-06-10 | **Per-adapter log file appender detaches on hot-reload**: appender re-wires after first configure cycle completes post-reload; `collector.log` is authoritative during the gap. Collector restart eliminates the gap. See Logging authoring contract note above and `context/framework_v2_migration.md` §15. |
 | 2026-06-10 | **Multi-resource collect idiom documented** (synology build 14 exemplar): per-cycle snapshot cache pattern, `synchronized currentSnapshot()` thread-safety contract, topology-anchored-on-World relationship emission, and honesty requirement for failed refresh. See `context/framework_v2_migration.md` §18. |
 | 2026-06-10 | **`componentLogger(Class)` public accessor added (task #15 — shadow-logger footgun)**: `VcfCfAdapter.componentLogger(Class<?> component)` is now a `protected` method that returns a `Logger` handle wired identically to the base's own private `adapterLogger()` — same factory, same `setLevel(INFO)` discipline, same `(instanceId) className` naming that routes to the adapter instance's file appender. Adapter subclasses must never shadow `adapterLogger()` or hand-roll a logger handle via `getAdapterLoggerFactory()`. The correct pattern is `componentLogger(HelperClass.class)` in `configureAdapter()`. `SuiteApiStitcher` Javadoc examples updated to use `componentLogger`. Visibility rule and migration note documented in `context/framework_v2_migration.md` §15. `vcfcf-adapter-base.jar` rebuilt (clean, SDK-only). **Adapter adoption for synology/unifi:** both adapters must replace any shadow `adapterLogger()` methods and all `getAdapterLoggerFactory().getLogger(cls)` call sites with `componentLogger(cls)` before their v2 migration builds. Compliance (build 46) has no framework-method shadow to remove — its `adapterLogger()` shadow is in `ComplianceAdapter.java` and is the target of the pending compliance v2 fixup. |
 | 2026-06-10 | **`SuiteApiStitchClient` SSL fix — trust-all for localhost Suite API (bug #3)**: `SuiteApiStitchClient.Builder.build()` was calling `adapter.getPlatformSslContext()` which wraps `CustomTrustManager`. `CustomTrustManager.checkServerTrusted()` throws `CustomCertificateException` unconditionally for any unknown cert (including the platform's own self-signed localhost cert), then fires `handleUnknownCertificate` as a side-effect notification. `java.net.http.HttpClient` receives the exception directly — no intercept, no retry — resulting in `SSLHandshakeException`/"PKIX path building failed" every cycle (credentials resolved correctly; SSL was the only failure). Fix: replaced `getPlatformSslContext()` with `VcfCfAdapter.insecureSslContext()` in the stitch client's SSL block. Trust-all is appropriate for the localhost Suite API endpoint (loopback isolation, platform's own self-signed cert). Does not affect `HttpClientBuilder.platformSsl(this)` for target-system connections. **Adapter adoption:** none — rebuild against updated `vcfcf-adapter-base.jar` only. See `lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`. |
