@@ -3,11 +3,7 @@ package com.vcfcf.adapter.stitch;
 import com.integrien.alive.common.adapter3.Logger;
 import com.integrien.alive.common.adapter3.ResourceKey;
 import com.integrien.alive.common.adapter3.config.ResourceIdentifierConfig;
-import com.vmware.ops.api.model.resource.ResourceDto;
-import com.vmware.tvs.vrealize.adapter.core.data.Resource;
-import com.vmware.tvs.vrealize.adapter.core.extensions.suiteapi.SuiteAPIClient;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -15,91 +11,138 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Universal cross-management-pack resource lookup.
+ * v2 — Cross-management-pack resource lookup.
  *
- * <p>Any adapter that needs to create relationships to resources owned by a
- * different adapter kind (VMWARE Datastores, HostSystems, VMs, or any other
- * MP) uses this class instead of hand-rolling the Suite API query pattern.
+ * <p>v2 removes the {@code aria-ops-core} compile dependency
+ * ({@code SuiteAPIClient}, {@code ResourceDto}).
+ * This class now operates through a pluggable {@link SuiteApiBridge} functional
+ * interface so adapters that carry a Suite API client can wire it in without
+ * forcing the framework to compile against any TVS / Suite-API artifact.
  *
- * <p>Modelled after Pure Storage's {@code VSphereResourceUtil} and the
- * {@code SuiteAPIClient.addVmParentBy*()} helpers, but generalised to any
- * adapter kind and any resource kind.
+ * <p>The Suite API is an <em>optional extension</em> (spec/19 §10) — it is not
+ * required on the collect path. Adapters that do cross-MP stitching (e.g.,
+ * Datastore or HostSystem relationships) use this class; adapters that do not
+ * need foreign resources simply never instantiate it.
  *
  * <h3>Usage</h3>
  * <pre>{@code
- * // Construct once per collection cycle (or share across cycles with cache).
- * ForeignResourceResolver resolver =
- *     new ForeignResourceResolver(suiteAPIClient, logger);
+ * // Wire in the Suite API client from your adapter's configure() step:
+ * ForeignResourceResolver resolver = new ForeignResourceResolver(
+ *     (adapterKinds, resourceKinds) -> {
+ *         // Call your Suite API client here and return a list of
+ *         // ForeignResourceResolver.ResourceEntry objects.
+ *         return myClient.listResources(adapterKinds, resourceKinds);
+ *     },
+ *     logInfo -> logAdapter.info(logInfo));
  *
- * // Single lookup — cache is populated on first call per (ak, rk, id).
+ * // Single lookup:
  * ResourceKey dsKey = resolver.findByIdentifier(
- *     "VMWARE", "Datastore", "DataStrorePath", "10.0.0.1/volume1/share1");
- * if (dsKey != null) {
- *     myResource.addParent(new Resource(dsKey));
- * }
+ *     "VMWARE", "Datastore", "DataStrorePath", "10.0.0.1/vol/share");
  *
- * // Bulk load — cheaper when stitching many resources at once.
+ * // Bulk load:
  * Map<String, ResourceKey> allDatastores =
  *     resolver.loadAll("VMWARE", "Datastore", "DataStrorePath");
  * }</pre>
  *
  * <h3>Caching</h3>
- * Results are cached by (adapterKind, resourceKind, identifierName) tuple.
- * The cache expires after {@link #DEFAULT_CACHE_TTL_SECONDS} (300 s) by
- * default.  Call {@link #setCacheTtlSeconds(int)} to override or
- * {@link #invalidateCache()} to flush manually (e.g. on re-discovery).
- *
- * <h3>ResourceDto → ResourceKey conversion</h3>
- * The conversion follows the Pure Storage {@code VSphereResourceUtil.mapResources()}
- * pattern: the {@link com.vmware.tvs.vrealize.adapter.core.data.Resource}
- * wrapper constructor translates the DTO-side identifier list into SDK
- * {@link ResourceIdentifierConfig} objects and builds the SDK
- * {@link ResourceKey} automatically.  We then extract identifiers from that
- * key to populate the lookup map.
+ * Results are cached by (adapterKind, resourceKind, identifierName) tuple
+ * for {@link #DEFAULT_CACHE_TTL_SECONDS} (300 s). Override with
+ * {@link #setCacheTtlSeconds(int)} or flush with {@link #invalidateCache()}.
  *
  * <h3>Thread safety</h3>
- * The cache is backed by a {@link ConcurrentHashMap}; cache entries carry a
- * timestamp and are re-fetched lazily on expiry.  Concurrent callers may
- * both trigger a re-fetch on the first miss, but the result is idempotent.
+ * Cache backed by {@link ConcurrentHashMap}; concurrent re-fetches on expiry
+ * are idempotent.
  */
-public class ForeignResourceResolver {
+public final class ForeignResourceResolver {
 
     /** Default cache TTL: 5 minutes. */
     public static final int DEFAULT_CACHE_TTL_SECONDS = 300;
 
-    private final SuiteAPIClient suiteApiClient;
-    private final Logger logger;
-
-    /** Milliseconds at which each cache entry expires. */
-    private volatile long cacheTtlMs;
+    // -----------------------------------------------------------------------
+    // SPI bridge — adapter supplies the actual Suite API call
+    // -----------------------------------------------------------------------
 
     /**
-     * Cache: (adapterKind + ":" + resourceKind + ":" + identifierName)
-     * → snapshot of (identifierValue → ResourceKey) + expiry timestamp.
+     * Lightweight data record representing one foreign resource.
+     * Populated by the adapter's {@link SuiteApiBridge} implementation.
      */
-    private final ConcurrentHashMap<String, CacheEntry> cache = new ConcurrentHashMap<>();
+    public static final class ResourceEntry {
+        /** Adapter kind of this resource (e.g., {@code "VMWARE"}). */
+        public final String adapterKind;
+        /** Resource kind of this resource (e.g., {@code "Datastore"}). */
+        public final String resourceKind;
+        /** Display name. */
+        public final String name;
+        /** List of identifiers: each element is {@code [key, value, isUnique]}. */
+        public final List<String[]> identifiers;
+
+        /**
+         * @param adapterKind  adapter kind
+         * @param resourceKind resource kind
+         * @param name         display name
+         * @param identifiers  list of {@code [key, value, isUnique]} triples
+         */
+        public ResourceEntry(String adapterKind, String resourceKind,
+                String name, List<String[]> identifiers) {
+            this.adapterKind = adapterKind;
+            this.resourceKind = resourceKind;
+            this.name = name;
+            this.identifiers = identifiers != null ? identifiers : Collections.emptyList();
+        }
+    }
+
+    /**
+     * Functional interface through which the adapter provides Suite API access.
+     *
+     * <p>Implement this using whatever Suite API client artifact is available in
+     * the adapter's pak (e.g., a bundled {@code vcops-suiteapi-client.jar}).
+     * The framework does not compile against any Suite API artifact — this
+     * interface is the clean boundary.
+     */
+    @FunctionalInterface
+    public interface SuiteApiBridge {
+        /**
+         * List all resources of the given adapter/resource kind.
+         *
+         * @param adapterKind  the adapter kind to query
+         * @param resourceKind the resource kind to query
+         * @return list of entries; may be empty, must not be {@code null}
+         * @throws Exception on Suite API failure
+         */
+        List<ResourceEntry> listResources(String adapterKind, String resourceKind)
+                throws Exception;
+    }
+
+    // -----------------------------------------------------------------------
+    // Fields
+    // -----------------------------------------------------------------------
+
+    private final SuiteApiBridge bridge;
+    private final Logger logger;
+    private volatile long cacheTtlMs;
+    private final ConcurrentHashMap<String, CacheEntry> cache =
+            new ConcurrentHashMap<>();
 
     // -----------------------------------------------------------------------
     // Constructor
     // -----------------------------------------------------------------------
 
     /**
-     * Create a resolver backed by the given Suite API client.
+     * Create a resolver backed by the given Suite API bridge.
      *
-     * @param suiteApiClient the {@link SuiteAPIClient} from
-     *     {@code UnlicensedAdapter.suiteAPIClient}
-     * @param logger         the adapter instance logger
+     * @param bridge the Suite API bridge provided by the adapter
+     * @param logger the adapter instance logger
      */
-    public ForeignResourceResolver(SuiteAPIClient suiteApiClient, Logger logger) {
-        if (suiteApiClient == null) {
+    public ForeignResourceResolver(SuiteApiBridge bridge, Logger logger) {
+        if (bridge == null) {
             throw new IllegalArgumentException(
-                    "ForeignResourceResolver: suiteApiClient must not be null");
+                    "ForeignResourceResolver: bridge must not be null");
         }
         if (logger == null) {
             throw new IllegalArgumentException(
                     "ForeignResourceResolver: logger must not be null");
         }
-        this.suiteApiClient = suiteApiClient;
+        this.bridge = bridge;
         this.logger = logger;
         this.cacheTtlMs = DEFAULT_CACHE_TTL_SECONDS * 1000L;
     }
@@ -111,20 +154,16 @@ public class ForeignResourceResolver {
     /**
      * Find a single resource by one of its identifier values.
      *
-     * <p>Calls {@link #loadAll(String, String, String)} (which returns a
-     * cached map on subsequent calls within the TTL) and performs a map
-     * lookup.
-     *
      * @param adapterKind     the adapter kind key, e.g. {@code "VMWARE"}
      * @param resourceKind    the resource kind key, e.g. {@code "Datastore"}
-     * @param identifierName  the identifier field name to index on,
-     *                        e.g. {@code "DataStrorePath"}
+     * @param identifierName  the identifier field name to index on
      * @param identifierValue the value to look up
      * @return the matching {@link ResourceKey}, or {@code null} if not found
      */
     public ResourceKey findByIdentifier(String adapterKind, String resourceKind,
-                                        String identifierName, String identifierValue) {
-        Map<String, ResourceKey> index = loadAll(adapterKind, resourceKind, identifierName);
+            String identifierName, String identifierValue) {
+        Map<String, ResourceKey> index = loadAll(adapterKind, resourceKind,
+                identifierName);
         ResourceKey key = index.get(identifierValue);
         if (key == null) {
             logger.debug("ForeignResourceResolver: no match for "
@@ -138,41 +177,23 @@ public class ForeignResourceResolver {
      * Load all resources of the given kind and index them by the specified
      * identifier field.
      *
-     * <p>On the first call (and after cache expiry) this fetches all
-     * resources from the Suite API via
-     * {@link SuiteAPIClient#getResources(List, List, List, List, List, List)}.
-     * The response is converted to SDK {@link ResourceKey} objects using the
-     * {@link Resource#Resource(ResourceDto)} constructor (which replicates the
-     * Pure Storage {@code mapResources()} pattern), then indexed by the
-     * requested identifier name.
-     *
-     * <p>Resources that do not carry the requested identifier are silently
-     * skipped; the entry is not added to the returned map.
-     *
-     * @param adapterKind    the adapter kind key, e.g. {@code "VMWARE"}
-     * @param resourceKind   the resource kind key, e.g. {@code "Datastore"}
+     * @param adapterKind    the adapter kind key
+     * @param resourceKind   the resource kind key
      * @param identifierName the identifier field to use as the map key
      * @return an unmodifiable map of identifierValue → {@link ResourceKey};
      *         never {@code null}, may be empty
      */
     public Map<String, ResourceKey> loadAll(String adapterKind, String resourceKind,
-                                            String identifierName) {
+            String identifierName) {
         String cacheKey = adapterKind + ":" + resourceKind + ":" + identifierName;
         CacheEntry entry = cache.get(cacheKey);
-
         if (entry == null || entry.isExpired()) {
             entry = fetchAndCache(cacheKey, adapterKind, resourceKind, identifierName);
         }
-
         return entry.index;
     }
 
-    /**
-     * Clear all cached entries immediately.
-     *
-     * <p>The next call to {@link #loadAll} or {@link #findByIdentifier}
-     * will re-fetch from the Suite API.
-     */
+    /** Clear all cached entries immediately. */
     public void invalidateCache() {
         cache.clear();
         logger.info("ForeignResourceResolver: cache invalidated");
@@ -182,12 +203,12 @@ public class ForeignResourceResolver {
      * Override the cache TTL.
      *
      * @param seconds cache lifetime in seconds; must be &gt; 0
-     * @throws IllegalArgumentException if {@code seconds} is not positive
      */
     public void setCacheTtlSeconds(int seconds) {
         if (seconds <= 0) {
             throw new IllegalArgumentException(
-                    "ForeignResourceResolver: cacheTtlSeconds must be > 0, got " + seconds);
+                    "ForeignResourceResolver: cacheTtlSeconds must be > 0, got "
+                    + seconds);
         }
         this.cacheTtlMs = seconds * 1000L;
         logger.info("ForeignResourceResolver: cache TTL set to " + seconds + "s");
@@ -197,80 +218,34 @@ public class ForeignResourceResolver {
     // Internal helpers
     // -----------------------------------------------------------------------
 
-    /**
-     * Fetch resources from the Suite API, build the identifier index, and
-     * store the result in the cache.
-     *
-     * <p>Uses {@link SuiteAPIClient#getResources(List, List, List, List, List, List)}
-     * with {@code null} for resource-name filter, state filter,
-     * data-collection-status filter, and UUID filter — meaning all resources
-     * of the requested kind are returned (up to the Suite API's internal page
-     * limit, which is typically 10 000).
-     *
-     * <p>ResourceDto → ResourceKey conversion follows the Pure Storage
-     * {@code VSphereResourceUtil.mapResources()} pattern:
-     * <ol>
-     *   <li>Wrap each {@link ResourceDto} in a
-     *       {@link Resource#Resource(ResourceDto)} to let aria-ops-core map
-     *       the DTO-side identifiers into SDK
-     *       {@link ResourceIdentifierConfig} objects.</li>
-     *   <li>Call {@link Resource#getResourceKey()} to obtain the SDK
-     *       {@link ResourceKey} (with all identifiers preserved).</li>
-     *   <li>Scan {@link ResourceKey#getIdentifiers()} for the requested
-     *       identifier name; if found, add to the index.</li>
-     * </ol>
-     */
     private CacheEntry fetchAndCache(String cacheKey,
-                                     String adapterKind, String resourceKind,
-                                     String identifierName) {
+            String adapterKind, String resourceKind, String identifierName) {
         logger.info("ForeignResourceResolver: loading "
                 + adapterKind + "/" + resourceKind
-                + " (identifier=" + identifierName + ") from Suite API");
+                + " (identifier=" + identifierName + ")");
 
         Map<String, ResourceKey> index = new HashMap<>();
         int total = 0;
         int matched = 0;
 
         try {
-            List<ResourceDto> dtos = suiteApiClient.getResources(
-                    Arrays.asList(adapterKind),   // adapterKinds
-                    Arrays.asList(resourceKind),  // resourceKinds
-                    null,                         // resource name filter (all)
-                    null,                         // ResourceState filter (all)
-                    null,                         // ResourceDataCollectionStatus filter (all)
-                    null                          // UUID filter (all)
-            );
-
-            if (dtos != null) {
-                for (ResourceDto dto : dtos) {
-                    if (dto == null) continue;
+            List<ResourceEntry> entries = bridge.listResources(adapterKind, resourceKind);
+            if (entries != null) {
+                for (ResourceEntry e : entries) {
+                    if (e == null) continue;
                     total++;
 
-                    /*
-                     * Convert DTO → SDK ResourceKey.
-                     *
-                     * Resource(ResourceDto) is the same conversion path used
-                     * internally by SuiteAPIClient.convertResourceDtoToResource().
-                     * It iterates dto.getResourceKey().getResourceIdentifiers()
-                     * and builds ResourceIdentifierConfig(name, value,
-                     * isUniquelyIdentifying) for each one.
-                     */
-                    Resource resource = new Resource(dto);
-                    ResourceKey key = resource.getResourceKey();
-                    if (key == null) continue;
-
-                    /*
-                     * Scan the SDK identifiers for the one we were asked to
-                     * index on.  A resource that does not carry the requested
-                     * identifier name is skipped silently (warn is overkill
-                     * for the normal case where some resources omit optional
-                     * identifiers).
-                     */
+                    // Build a ResourceKey from the entry's identifier list.
+                    ResourceKey key = new ResourceKey(
+                            e.adapterKind, e.resourceKind, e.name);
                     String idValue = null;
-                    for (ResourceIdentifierConfig id : key.getIdentifiers()) {
-                        if (identifierName.equals(id.getKey())) {
-                            idValue = id.getValue();
-                            break;
+                    for (String[] id : e.identifiers) {
+                        if (id == null || id.length < 2) continue;
+                        boolean isUnique = id.length >= 3 && Boolean.parseBoolean(id[2]);
+                        key.addIdentifier(new ResourceIdentifierConfig(
+                                id[0], id[1], isUnique));
+                        if (identifierName.equals(id[0])) {
+                            idValue = id[1];
                         }
                     }
 
@@ -280,16 +255,15 @@ public class ForeignResourceResolver {
                     }
                 }
             }
-
         } catch (Exception e) {
             logger.warn("ForeignResourceResolver: Suite API query failed for "
                     + adapterKind + "/" + resourceKind + ": " + e.getMessage(), e);
-            // Return an empty (but cached) entry so we don't hammer the API
-            // on every collection cycle when the target adapter is unavailable.
+            // Return a (short-lived) empty entry to avoid hammering the API.
         }
 
-        logger.info("ForeignResourceResolver: loaded " + adapterKind + "/" + resourceKind
-                + " — " + total + " total, " + matched + " indexed by " + identifierName);
+        logger.info("ForeignResourceResolver: loaded " + adapterKind + "/"
+                + resourceKind + " — " + total + " total, " + matched
+                + " indexed by " + identifierName);
 
         CacheEntry entry = new CacheEntry(
                 Collections.unmodifiableMap(index),
@@ -303,9 +277,7 @@ public class ForeignResourceResolver {
     // -----------------------------------------------------------------------
 
     private static final class CacheEntry {
-        /** Unmodifiable identifier → ResourceKey index. */
         final Map<String, ResourceKey> index;
-        /** Absolute expiry time in epoch milliseconds. */
         final long expiresAtMs;
 
         CacheEntry(Map<String, ResourceKey> index, long expiresAtMs) {

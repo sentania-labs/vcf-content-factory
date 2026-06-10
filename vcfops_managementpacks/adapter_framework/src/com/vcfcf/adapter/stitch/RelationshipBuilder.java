@@ -1,263 +1,350 @@
 package com.vcfcf.adapter.stitch;
 
+import com.integrien.alive.common.adapter3.Relationships;
 import com.integrien.alive.common.adapter3.ResourceKey;
 import com.integrien.alive.common.adapter3.config.ResourceIdentifierConfig;
-import com.vmware.tvs.vrealize.adapter.core.data.Resource;
-import com.vmware.tvs.vrealize.adapter.core.data.ResourceCollection;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
- * Fluent helper for constructing parent/child relationship trees and
- * cross-adapter edges inside a {@code getRelationships()} implementation.
+ * v2 — Fluent helper for constructing parent/child relationship trees and
+ * cross-adapter edges, returning a SDK {@link Relationships} object.
  *
- * <p>Eliminates the repetitive {@link ResourceKey} construction and
- * {@code addChild}/{@code addParent} boilerplate required by every
- * Tier 2 SDK adapter. Resources are deduplicated by (kind, idValue) so
- * calling {@link #resource(String, String, String, String)} twice for the
- * same object returns the same {@link ResourceHandle} without creating a
- * duplicate entry in the final collection.
+ * <p>v2 removes the {@code aria-ops-core} dependency ({@code Resource} /
+ * {@code ResourceCollection}). All output is in terms of the SDK's own
+ * {@link Relationships} API, which is the correct attachment point for
+ * {@link com.integrien.alive.common.adapter3.CollectResult#addRelationships}
+ * (spec/19 §3).
  *
  * <p>Usage:
  * <pre>{@code
  * RelationshipBuilder rb = new RelationshipBuilder(ADAPTER_KIND);
- * ResourceHandle diskstation = rb.resource("SynologyDiskstation", serial, "serial", serial);
- * ResourceHandle pool        = rb.resource("SynologyStoragePool",  poolId, "pool_id", poolId);
- * ResourceHandle volume      = rb.resource("SynologyVolume",       volId,  "volume_id", volId);
+ * ResourceKey diskstation = rb.resource("SynologyDiskstation", "DS1520+ ABC", "serial", serial);
+ * ResourceKey pool        = rb.resource("SynologyStoragePool",  "Pool 1",      "pool_id", poolId);
+ * ResourceKey volume      = rb.resource("SynologyVolume",        "Volume 1",    "volume_id", volId);
  *
  * rb.parent(diskstation, pool)
  *   .parent(pool, volume)
  *   .parentForeign(datastoreKey, volume);
  *
- * return rb.build();
+ * Relationships rels = rb.build();
+ * adapter.addRelationshipsToCurrentCycle(rels);
  * }</pre>
  *
- * <p>Only resources that participate in at least one relationship edge are
- * added to the returned {@link ResourceCollection}. Resources created via
- * {@link #resource(String, String, String, String)} but never passed to
- * {@link #parent}, {@link #parentForeign}, or {@link #childForeign} are
- * silently omitted from {@link #build()}.
+ * <h3>Full-set vs delta semantics (spec/19 §3)</h3>
+ * {@link #build()} produces a {@link Relationships} object that calls
+ * {@link Relationships#setRelationships(ResourceKey, Collection)} once per
+ * parent — the preferred full-child-set replacement. Use
+ * {@link #buildDelta(boolean)} to produce add/remove deltas only when you know
+ * the incremental change.
  *
- * <p>Dependencies: {@code vrops-adapters-sdk-2.2.jar} and
- * {@code aria-ops-core-8.0.0.jar} only. No Suite API dependency.
+ * <h3>Relationship cap</h3>
+ * {@link #build()} enforces the supplied cap (default
+ * {@link com.vcfcf.adapter.VcfCfAdapter#MAX_RELATIONSHIPS_PER_CYCLE}).
+ * Relationships beyond the cap are silently dropped and a count is returned
+ * from {@link BuildResult#droppedEdges()}.
+ *
+ * <p>Dependencies: {@code vrops-adapters-sdk-2.2.jar} only.
  */
 public final class RelationshipBuilder {
 
-	private final String adapterKind;
+    private final String adapterKind;
+    private final int maxEdges;
 
-	/**
-	 * Cache of ResourceHandles keyed by "kind\0idValue" to prevent duplicate
-	 * Resource objects for the same logical resource.
-	 */
-	private final Map<String, ResourceHandle> cache = new LinkedHashMap<>();
+    /**
+     * Parent → ordered list of children (insertion order preserved per parent).
+     * Key = ResourceKey.toString() of the parent.
+     */
+    private final Map<String, ParentEntry> parentMap = new LinkedHashMap<>();
 
-	/**
-	 * Tracks which Resources have been involved in a relationship edge so that
-	 * {@link #build()} only adds participating resources to the collection.
-	 */
-	private final Map<String, ResourceHandle> participants = new LinkedHashMap<>();
+    /**
+     * Cache of ResourceKeys keyed by "kind\0idValue" to deduplicate lookups.
+     */
+    private final Map<String, ResourceKey> keyCache = new LinkedHashMap<>();
 
-	/**
-	 * Create a builder for the given adapter kind.
-	 *
-	 * @param adapterKind the adapter kind key (must match {@code KINDKEY} in
-	 *                    {@code adapter.properties} and the root
-	 *                    {@code <AdapterKind>} key in {@code describe.xml})
-	 */
-	public RelationshipBuilder(String adapterKind) {
-		if (adapterKind == null || adapterKind.isEmpty()) {
-			throw new IllegalArgumentException("adapterKind must not be null or empty");
-		}
-		this.adapterKind = adapterKind;
-	}
+    // -----------------------------------------------------------------------
+    // Constructors
+    // -----------------------------------------------------------------------
 
-	// -----------------------------------------------------------------------
-	// Resource handle factory
-	// -----------------------------------------------------------------------
+    /**
+     * Create a builder for the given adapter kind with the default edge cap.
+     *
+     * @param adapterKind the adapter kind key (must match {@code KINDKEY} in
+     *                    {@code adapter.properties} and the root
+     *                    {@code <AdapterKind>} key in {@code describe.xml})
+     */
+    public RelationshipBuilder(String adapterKind) {
+        this(adapterKind, com.vcfcf.adapter.VcfCfAdapter.MAX_RELATIONSHIPS_PER_CYCLE);
+    }
 
-	/**
-	 * Look up or create an internal resource (same adapter kind as this builder).
-	 *
-	 * <p>Calls with the same {@code resourceKind} and {@code idValue} return the
-	 * same {@link ResourceHandle}; the underlying {@link Resource} and
-	 * {@link ResourceKey} objects are created once and reused.
-	 *
-	 * @param resourceKind the resource kind key (must match a ResourceKind
-	 *                     declared in {@code describe.xml})
-	 * @param name         the human-readable display name of this resource
-	 *                     instance (shown in the VCF Ops object browser)
-	 * @param idKey        the identifier key that uniquely identifies the
-	 *                     resource within its kind (must match a
-	 *                     {@code ResourceIdentifier} declared in
-	 *                     {@code describe.xml} with {@code isPartOfUniqueness})
-	 * @param idValue      the identifier value (used as the cache key together
-	 *                     with {@code resourceKind})
-	 * @return a {@link ResourceHandle} wrapping the {@link Resource} and its
-	 *         {@link ResourceKey}
-	 */
-	public ResourceHandle resource(String resourceKind, String name,
-			String idKey, String idValue) {
-		String cacheKey = resourceKind + '\0' + idValue;
-		ResourceHandle existing = cache.get(cacheKey);
-		if (existing != null) {
-			return existing;
-		}
+    /**
+     * Create a builder for the given adapter kind with a custom edge cap.
+     *
+     * @param adapterKind the adapter kind key
+     * @param maxEdges    maximum number of child-key edges across all parents;
+     *                    must be &gt; 0
+     */
+    public RelationshipBuilder(String adapterKind, int maxEdges) {
+        if (adapterKind == null || adapterKind.isEmpty()) {
+            throw new IllegalArgumentException("adapterKind must not be null or empty");
+        }
+        if (maxEdges <= 0) {
+            throw new IllegalArgumentException("maxEdges must be > 0");
+        }
+        this.adapterKind = adapterKind;
+        this.maxEdges = maxEdges;
+    }
 
-		ResourceKey key = new ResourceKey(adapterKind, resourceKind, name);
-		key.addIdentifier(new ResourceIdentifierConfig(idKey, idValue, true));
+    // -----------------------------------------------------------------------
+    // ResourceKey factory
+    // -----------------------------------------------------------------------
 
-		Resource res = new Resource(key);
-		ResourceHandle handle = new ResourceHandle(key, res);
-		cache.put(cacheKey, handle);
-		return handle;
-	}
+    /**
+     * Look up or create a {@link ResourceKey} for an internal resource (same
+     * adapter kind as this builder).
+     *
+     * <p>Calls with the same {@code resourceKind} and {@code idValue} return the
+     * same {@link ResourceKey} instance (deduplication by cache key).
+     *
+     * @param resourceKind the resource kind key (must match a ResourceKind
+     *                     declared in {@code describe.xml})
+     * @param name         the human-readable display name of this resource
+     * @param idKey        the identifying identifier key (must match a
+     *                     {@code ResourceIdentifier} with
+     *                     {@code isPartOfUniqueness=true} in describe.xml)
+     * @param idValue      the identifier value (used as cache key together
+     *                     with {@code resourceKind})
+     * @return a {@link ResourceKey} with one identifying identifier
+     */
+    public ResourceKey resource(String resourceKind, String name,
+            String idKey, String idValue) {
+        String cacheKey = resourceKind + '\0' + idValue;
+        ResourceKey existing = keyCache.get(cacheKey);
+        if (existing != null) {
+            return existing;
+        }
+        ResourceKey key = new ResourceKey(adapterKind, resourceKind, name);
+        key.addIdentifier(new ResourceIdentifierConfig(idKey, idValue, true));
+        keyCache.put(cacheKey, key);
+        return key;
+    }
 
-	// -----------------------------------------------------------------------
-	// Relationship mutators
-	// -----------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // Relationship mutators
+    // -----------------------------------------------------------------------
 
-	/**
-	 * Add a parent → child edge between two internal resources.
-	 *
-	 * <p>Internally calls {@code parent.getResource().addChild(child.getResource())}
-	 * which also registers the reciprocal parent link on the child side (the SDK
-	 * maintains both directions). Both resources are marked as participants and
-	 * will appear in the {@link ResourceCollection} returned by {@link #build()}.
-	 *
-	 * @param parent the parent resource handle
-	 * @param child  the child resource handle
-	 * @return {@code this} for method chaining
-	 */
-	public RelationshipBuilder parent(ResourceHandle parent, ResourceHandle child) {
-		parent.resource.addChild(child.resource);
-		markParticipant(parent);
-		markParticipant(child);
-		return this;
-	}
+    /**
+     * Add a parent → child edge.
+     *
+     * @param parent the parent {@link ResourceKey}
+     * @param child  the child {@link ResourceKey}
+     * @return {@code this} for method chaining
+     */
+    public RelationshipBuilder parent(ResourceKey parent, ResourceKey child) {
+        getOrCreateEntry(parent).children.add(child);
+        return this;
+    }
 
-	/**
-	 * Add a cross-adapter parent edge: the foreign resource (from another
-	 * adapter kind) becomes the parent of the given internal child.
-	 *
-	 * <p>A transient {@link Resource} is created from {@code foreignParent} so
-	 * the SDK can represent the edge without requiring the foreign adapter's
-	 * full object graph. The foreign resource is NOT added to the collection
-	 * by {@link #build()} — only the internal child is. The platform resolves
-	 * the cross-adapter edge at topology-build time.
-	 *
-	 * @param foreignParent a {@link ResourceKey} obtained from
-	 *                      {@code ForeignResourceResolver} (or equivalent) that
-	 *                      identifies the parent resource in another adapter kind
-	 * @param child         the internal child resource
-	 * @return {@code this} for method chaining
-	 */
-	public RelationshipBuilder parentForeign(ResourceKey foreignParent, ResourceHandle child) {
-		Resource foreignResource = new Resource(foreignParent);
-		child.resource.addParent(foreignResource);
-		markParticipant(child);
-		return this;
-	}
+    /**
+     * Add a cross-adapter parent edge: the foreign resource (from another
+     * adapter kind) becomes the parent of {@code child}.
+     *
+     * <p>The child is registered as having a foreign parent. This results in a
+     * {@link Relationships#setRelationships(ResourceKey, Collection)} call on the
+     * foreign parent with the child in its child set.
+     *
+     * @param foreignParent a {@link ResourceKey} from another adapter kind
+     * @param child         the internal child
+     * @return {@code this} for method chaining
+     */
+    public RelationshipBuilder parentForeign(ResourceKey foreignParent, ResourceKey child) {
+        getOrCreateEntry(foreignParent).children.add(child);
+        return this;
+    }
 
-	/**
-	 * Add a cross-adapter child edge: the given internal parent gets a foreign
-	 * child resource (from another adapter kind).
-	 *
-	 * <p>A transient {@link Resource} is created from {@code foreignChild}. The
-	 * internal parent is added to the collection by {@link #build()}; the foreign
-	 * child is not. The platform resolves the cross-adapter edge at
-	 * topology-build time.
-	 *
-	 * @param parent       the internal parent resource
-	 * @param foreignChild a {@link ResourceKey} identifying the child resource
-	 *                     in another adapter kind
-	 * @return {@code this} for method chaining
-	 */
-	public RelationshipBuilder childForeign(ResourceHandle parent, ResourceKey foreignChild) {
-		Resource foreignResource = new Resource(foreignChild);
-		parent.resource.addChild(foreignResource);
-		markParticipant(parent);
-		return this;
-	}
+    /**
+     * Add a cross-adapter child edge: {@code parent} gets a foreign child.
+     *
+     * @param parent       the internal parent
+     * @param foreignChild a {@link ResourceKey} from another adapter kind
+     * @return {@code this} for method chaining
+     */
+    public RelationshipBuilder childForeign(ResourceKey parent, ResourceKey foreignChild) {
+        getOrCreateEntry(parent).children.add(foreignChild);
+        return this;
+    }
 
-	// -----------------------------------------------------------------------
-	// Build
-	// -----------------------------------------------------------------------
+    /**
+     * Add a typed/labeled relationship edge (generic relationship).
+     *
+     * @param parent    the parent resource
+     * @param children  the child resources
+     * @param label     the edge label (e.g., {@code "depends_on"})
+     * @param namespace namespace to avoid cross-MP label collision; may be
+     *                  {@code null}
+     * @return {@code this} for method chaining
+     */
+    public RelationshipBuilder generic(ResourceKey parent,
+            Collection<ResourceKey> children,
+            String label, String namespace) {
+        getOrCreateEntry(parent).genericChildren.add(
+                new GenericEdge(new ArrayList<>(children), label, namespace));
+        return this;
+    }
 
-	/**
-	 * Build the {@link ResourceCollection} for return from
-	 * {@code getRelationships()}.
-	 *
-	 * <p>Only resources that have participated in at least one relationship edge
-	 * (via {@link #parent}, {@link #parentForeign}, or {@link #childForeign}) are
-	 * added. Resources created via {@link #resource} that were never wired into
-	 * an edge are omitted. Each participating resource is added once via
-	 * {@link ResourceCollection#add(Resource)}, which also enqueues its relatives.
-	 *
-	 * @return a populated {@link ResourceCollection} ready to return from
-	 *         {@code getRelationships()}
-	 */
-	public ResourceCollection build() {
-		ResourceCollection collection = new ResourceCollection();
-		for (ResourceHandle handle : participants.values()) {
-			collection.add(handle.resource);
-		}
-		return collection;
-	}
+    // -----------------------------------------------------------------------
+    // Build
+    // -----------------------------------------------------------------------
 
-	// -----------------------------------------------------------------------
-	// Internal helpers
-	// -----------------------------------------------------------------------
+    /**
+     * Build a {@link Relationships} object using full-set semantics
+     * ({@link Relationships#setRelationships} per parent, spec/19 §3).
+     *
+     * <p>Each parent's entire child set is emitted as one
+     * {@code setRelationships} call so the platform can diff against current
+     * state. Edges beyond {@link #maxEdges} are dropped silently.
+     *
+     * @return the populated {@link Relationships} object
+     */
+    public Relationships build() {
+        return doBuild(false);
+    }
 
-	private void markParticipant(ResourceHandle handle) {
-		// Use the ResourceKey's toString as the participants map key;
-		// it is guaranteed unique per (adapterKind, resourceKind, identifiers).
-		String k = handle.key.toString();
-		participants.putIfAbsent(k, handle);
-	}
+    /**
+     * Build a {@link Relationships} object using delta semantics.
+     *
+     * <p>Use only when you know the incremental change (spec/19 §3 "delta").
+     *
+     * @param remove if {@code true} generate remove-relationship calls;
+     *               if {@code false} generate add-relationship calls
+     * @return the populated {@link Relationships} object
+     */
+    public Relationships buildDelta(boolean remove) {
+        Relationships rels = new Relationships();
+        rels.setTimestamp(System.currentTimeMillis());
+        int edgeCount = 0;
+        for (ParentEntry entry : parentMap.values()) {
+            if (edgeCount >= maxEdges) break;
+            List<ResourceKey> batch = new ArrayList<>();
+            for (ResourceKey child : entry.children) {
+                if (edgeCount >= maxEdges) break;
+                batch.add(child);
+                edgeCount++;
+            }
+            if (!batch.isEmpty()) {
+                if (remove) {
+                    rels.removeRelationships(entry.parent, batch);
+                } else {
+                    rels.addRelationships(entry.parent, batch);
+                }
+            }
+            for (GenericEdge ge : entry.genericChildren) {
+                if (edgeCount >= maxEdges) break;
+                List<ResourceKey> gbatch = new ArrayList<>();
+                for (ResourceKey child : ge.children) {
+                    if (edgeCount >= maxEdges) break;
+                    gbatch.add(child);
+                    edgeCount++;
+                }
+                if (!gbatch.isEmpty()) {
+                    if (ge.namespace != null) {
+                        if (remove) {
+                            rels.removeGenericRelationships(entry.parent, gbatch,
+                                    ge.label, ge.namespace);
+                        } else {
+                            rels.addGenericRelationship(entry.parent, gbatch,
+                                    ge.label, ge.namespace);
+                        }
+                    } else {
+                        if (remove) {
+                            rels.removeGenericRelationships(entry.parent, gbatch, ge.label);
+                        } else {
+                            rels.addGenericRelationship(entry.parent, gbatch, ge.label);
+                        }
+                    }
+                }
+            }
+        }
+        return rels;
+    }
 
-	// -----------------------------------------------------------------------
-	// ResourceHandle inner class
-	// -----------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // Internal helpers
+    // -----------------------------------------------------------------------
 
-	/**
-	 * Opaque handle returned by {@link RelationshipBuilder#resource}. Exposes
-	 * the underlying {@link ResourceKey} and {@link Resource} for callers that
-	 * need to interrogate them (e.g. to retrieve the key for cross-builder use).
-	 *
-	 * <p>Do not instantiate directly; obtain instances from
-	 * {@link RelationshipBuilder#resource}.
-	 */
-	public static final class ResourceHandle {
+    private Relationships doBuild(boolean unused) {
+        Relationships rels = new Relationships();
+        rels.setTimestamp(System.currentTimeMillis());
+        int edgeCount = 0;
+        for (ParentEntry entry : parentMap.values()) {
+            if (edgeCount >= maxEdges) break;
+            List<ResourceKey> batch = new ArrayList<>();
+            for (ResourceKey child : entry.children) {
+                if (edgeCount >= maxEdges) break;
+                batch.add(child);
+                edgeCount++;
+            }
+            if (!batch.isEmpty()) {
+                rels.setRelationships(entry.parent, batch);
+            }
+            for (GenericEdge ge : entry.genericChildren) {
+                if (edgeCount >= maxEdges) break;
+                List<ResourceKey> gbatch = new ArrayList<>();
+                for (ResourceKey child : ge.children) {
+                    if (edgeCount >= maxEdges) break;
+                    gbatch.add(child);
+                    edgeCount++;
+                }
+                if (!gbatch.isEmpty()) {
+                    if (ge.namespace != null) {
+                        rels.setGenericRelationships(entry.parent, gbatch,
+                                ge.label, ge.namespace);
+                    } else {
+                        rels.setGenericRelationships(entry.parent, gbatch, ge.label);
+                    }
+                }
+            }
+        }
+        return rels;
+    }
 
-		private final ResourceKey key;
-		private final Resource resource;
+    private ParentEntry getOrCreateEntry(ResourceKey parent) {
+        String k = parent.toString();
+        ParentEntry entry = parentMap.get(k);
+        if (entry == null) {
+            entry = new ParentEntry(parent);
+            parentMap.put(k, entry);
+        }
+        return entry;
+    }
 
-		private ResourceHandle(ResourceKey key, Resource resource) {
-			this.key = key;
-			this.resource = resource;
-		}
+    // -----------------------------------------------------------------------
+    // Internal data types
+    // -----------------------------------------------------------------------
 
-		/**
-		 * Return the {@link ResourceKey} for this handle.
-		 *
-		 * <p>Useful when you need to pass this resource's key to another builder
-		 * or to {@link RelationshipBuilder#parentForeign} /
-		 * {@link RelationshipBuilder#childForeign} of a different builder.
-		 */
-		public ResourceKey getKey() {
-			return key;
-		}
+    private static final class ParentEntry {
+        final ResourceKey parent;
+        final List<ResourceKey> children = new ArrayList<>();
+        final List<GenericEdge> genericChildren = new ArrayList<>();
 
-		/**
-		 * Return the underlying {@link Resource} object.
-		 *
-		 * <p>Prefer using the fluent builder methods rather than manipulating the
-		 * resource directly; this accessor exists for advanced use cases such as
-		 * attaching metric data alongside relationship data.
-		 */
-		public Resource getResource() {
-			return resource;
-		}
-	}
+        ParentEntry(ResourceKey parent) {
+            this.parent = parent;
+        }
+    }
+
+    private static final class GenericEdge {
+        final List<ResourceKey> children;
+        final String label;
+        final String namespace; // nullable
+
+        GenericEdge(List<ResourceKey> children, String label, String namespace) {
+            this.children = children;
+            this.label = label;
+            this.namespace = namespace;
+        }
+    }
 }

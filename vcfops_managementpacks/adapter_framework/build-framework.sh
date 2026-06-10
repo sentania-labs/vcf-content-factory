@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
-# build-framework.sh — build the vcfcf-adapter-base.jar framework JAR.
+# build-framework.sh — build the vcfcf-adapter-base.jar framework JAR (v2).
 #
-# Run this once after any change to adapter_framework/src/**/*.java.
+# v2: classpath is vrops-adapters-sdk-2.2.jar ONLY.
+# aria-ops-core, alive_common, alive_platform are NOT on the compile classpath.
+# The framework now extends AdapterBase directly (com.integrien.alive.common.adapter3)
+# and defines its own SPI types under com.vcfcf.adapter.spi.*
+#
+# If javac reports a "cannot find symbol" for any com.vmware.tvs.* class, STOP —
+# that is a clean-room wall violation and must be reported as a TOOLSET GAP rather
+# than silently re-adding the aria-ops-core dependency.
+#
+# Run once after any change to adapter_framework/src/**/*.java.
 # The resulting JAR is placed in adapter_runtime/vcfcf-adapter-base.jar
-# and is used as a compile-time and runtime dependency by all Tier 2
-# SDK adapters built by sdk_builder.py.
+# and used as compile-time dependency by all Tier 2 SDK adapters.
 #
 # Usage:
 #   cd vcfops_managementpacks/
@@ -12,11 +20,7 @@
 #
 # Requirements:
 #   - javac (JDK 11 or newer; JDK 17 recommended)
-#   - JARs in adapter_runtime/:
-#       aria-ops-core-8.0.0.jar
-#       alive_common.jar
-#       alive_platform.jar
-#       vrops-adapters-sdk-2.2.jar
+#   - adapter_runtime/vrops-adapters-sdk-2.2.jar
 #
 # Output:
 #   adapter_runtime/vcfcf-adapter-base.jar
@@ -30,6 +34,7 @@ SRC_DIR="$SCRIPT_DIR/src"
 RUNTIME_DIR="$ROOT/adapter_runtime"
 BUILD_DIR="/tmp/vcfcf-framework-build"
 OUTPUT_JAR="$RUNTIME_DIR/vcfcf-adapter-base.jar"
+SDK_JAR="$RUNTIME_DIR/vrops-adapters-sdk-2.2.jar"
 
 # ---- Preflight checks -------------------------------------------------------
 
@@ -48,24 +53,27 @@ fi
 
 echo "Using: $(javac -version 2>&1)"
 
-# ---- Build classpath --------------------------------------------------------
-
-# Collect all JARs in adapter_runtime/ as compile-time classpath
-CP=""
-for jar in "$RUNTIME_DIR"/*.jar; do
-    [ -f "$jar" ] || continue
-    # Skip the framework JAR itself (we're building it)
-    [[ "$(basename "$jar")" == "vcfcf-adapter-base.jar" ]] && continue
-    CP="${CP}:${jar}"
-done
-CP="${CP#:}"  # strip leading colon
-
-if [ -z "$CP" ]; then
-    echo "ERROR: no JARs found in $RUNTIME_DIR — cannot build classpath." >&2
-    echo "  Required: aria-ops-core-8.0.0.jar, alive_common.jar, alive_platform.jar," >&2
-    echo "            vrops-adapters-sdk-2.2.jar" >&2
+if [ ! -f "$SDK_JAR" ]; then
+    echo "ERROR: SDK JAR not found: $SDK_JAR" >&2
     exit 1
 fi
+
+# ---- Classpath verification -------------------------------------------------
+# v2 compile classpath: vrops-adapters-sdk-2.2.jar ONLY.
+# We explicitly do NOT include aria-ops-core, alive_common, or alive_platform.
+# If compilation fails for any com.vmware.tvs.* or alive* symbol, it is a
+# clean-room wall violation — do not add those JARs; report it instead.
+
+CP="$SDK_JAR"
+
+echo "Compile classpath (v2 — SDK only):"
+echo "  $SDK_JAR"
+echo ""
+echo "NOT on classpath (eliminated in v2):"
+echo "  aria-ops-core-*.jar   (com.vmware.tvs.* — removed)"
+echo "  alive_common.jar      (no longer needed)"
+echo "  alive_platform.jar    (no longer needed)"
+echo ""
 
 # ---- Compile ----------------------------------------------------------------
 
@@ -88,9 +96,31 @@ echo "Compiling (source/target 11) ..."
 javac -source 11 -target 11 \
     -cp "$CP" \
     -d "$BUILD_DIR" \
-    $SOURCES
+    $SOURCES 2>&1
 
-echo "Compilation successful"
+COMPILE_STATUS=$?
+
+if [ $COMPILE_STATUS -ne 0 ]; then
+    echo "" >&2
+    echo "COMPILATION FAILED." >&2
+    echo "If error is 'cannot find symbol' for com.vmware.tvs.* or alive*:" >&2
+    echo "  → clean-room wall violation — do NOT add aria-ops-core to the classpath." >&2
+    echo "    Report this as a TOOLSET GAP instead." >&2
+    rm -rf "$BUILD_DIR"
+    exit $COMPILE_STATUS
+fi
+
+echo "Compilation successful — no aria-ops-core symbols referenced."
+
+# ---- Verify no TVS residue --------------------------------------------------
+# Check that no class in the compiled output references com.vmware.tvs
+TVS_REFS=$(grep -r --include="*.class" -l "tvs" "$BUILD_DIR" 2>/dev/null || true)
+if [ -n "$TVS_REFS" ]; then
+    echo "WARNING: compiled classes may contain com.vmware.tvs references:" >&2
+    echo "$TVS_REFS" >&2
+    echo "Inspect with: javap -c <classfile> | grep tvs" >&2
+    # Not fatal — constant-pool strings can contain 'tvs' in log messages.
+fi
 
 # ---- Package ----------------------------------------------------------------
 
@@ -102,4 +132,7 @@ echo "Built: $OUTPUT_JAR ($(du -h "$OUTPUT_JAR" | cut -f1))"
 # ---- Cleanup ----------------------------------------------------------------
 rm -rf "$BUILD_DIR"
 
-echo "Done."
+echo ""
+echo "v2 framework built successfully."
+echo "Compile classpath: vrops-adapters-sdk-2.2.jar only."
+echo "alive_common.jar, alive_platform.jar, aria-ops-core-*.jar: NOT required."

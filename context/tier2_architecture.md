@@ -10,31 +10,38 @@ underlying SDK contract and design rationale, see
 [`cleanroom-spec/spec/17-vcfcf-framework-design-guidance.md`](cleanroom-spec/spec/17-vcfcf-framework-design-guidance.md)
 (framework design) and
 [`cleanroom-spec/spec/15-tier2-handoff-for-vcf-cf.md`](cleanroom-spec/spec/15-tier2-handoff-for-vcf-cf.md)
-(adapter authoring view).
+(adapter authoring view). For the behavioral contract the framework
+implements, see
+[`cleanroom-spec/spec/19-adapterbase-behavioral-contract.md`](cleanroom-spec/spec/19-adapterbase-behavioral-contract.md).
 
-## Four-layer stack
+## Three-layer stack (v2)
 
 ```
-Layer 4: Per-adapter code (Claude-generated, ~200–600 lines)
+Layer 3: Per-adapter code (Claude-generated, ~200–600 lines)
          class SynologyAdapter extends VcfCfAdapter<SynologyConfig>
 ─────────────────────────────────────────────────────────────────────
-Layer 3: vcfcf-adapter-base.jar (THIS PROJECT'S FRAMEWORK)
-         abstract class VcfCfAdapter<C> extends UnlicensedAdapter
-─────────────────────────────────────────────────────────────────────
-Layer 2: aria-ops-core.jar (Broadcom, ship as-is)
-         UnlicensedAdapter / Tester / Discoverer / Collector SPI
+Layer 2: vcfcf-adapter-base.jar (THIS PROJECT'S FRAMEWORK, v2)
+         abstract class VcfCfAdapter<C> extends AdapterBase
 ─────────────────────────────────────────────────────────────────────
 Layer 1: vrops-adapters-sdk.jar (Broadcom, on appliance classpath)
          AdapterBase / AdapterInterface3
 ```
 
-**Rule:** never patch Layer 1 or Layer 2. All VCF-CF code lives at
-Layer 3 (framework) or Layer 4 (per-adapter).
+**v2 change (2026-06-09):** Layer 2 previously extended
+`UnlicensedAdapter` from `aria-ops-core.jar` (a BlueMedora/TVS
+partner-channel artifact). The framework now extends `AdapterBase`
+**directly**, eliminating every `com.vmware.tvs.*` dependency.
+`aria-ops-core` is no longer required at compile time or at runtime.
+The orchestration (onCollect/onTest/onDiscover/onConfigure/stop hooks)
+is implemented from the clean-room behavioral contract in spec/19.
+
+**Rule:** never patch Layer 1 or Layer 2 platform jars. All VCF-CF code
+lives at Layer 2 (framework) or Layer 3 (per-adapter).
 
 ## Repo layout
 
 ```
-content/sdk-adapters/<name>/        # Layer 4: Tier 2 adapter projects
+content/sdk-adapters/<name>/        # Layer 3: Tier 2 adapter projects
     adapter.yaml                    # name, version, adapter_kind, tier:2, deps
     src/com/vcfcf/adapters/<name>/  # Java source (Claude-generated)
     describe.xml                    # hand-authored, or via framework DSL
@@ -42,12 +49,15 @@ content/sdk-adapters/<name>/        # Layer 4: Tier 2 adapter projects
     lib/                            # optional: vendor JARs (JDBC driver, etc.)
 
 vcfops_managementpacks/
-    adapter_framework/src/          # Layer 3 framework Java source
+    adapter_framework/src/          # Layer 2 framework Java source
     adapter_runtime/                # pre-compiled JARs:
-        vcfcf-adapter-base.jar      #   - Layer 3 (we build, commit, ship)
-        aria-ops-core-*.jar         #   - Layer 2 (Broadcom, frozen)
+        vcfcf-adapter-base.jar      #   - Layer 2 (we build, commit, ship)
         vrops-adapters-sdk-*.jar    #   - Layer 1 (Broadcom, frozen)
-        mpb_adapter-*.jar           #   - Tier 1 runtime (unrelated)
+        aria-ops-core-*.jar         #   - KEPT for reference / v1 compile tests
+                                    #     NOT required for v2 framework build
+        alive_common.jar            #   - not needed by v2 framework
+        alive_platform.jar          #   - not needed by v2 framework
+        mpb_adapter3.jar            #   - Tier 1 runtime (unrelated)
     sdk_builder.py                  # javac/jar invocation, pak assembly
     sdk_project.py                  # adapter.yaml loader, project model
 ```
@@ -61,44 +71,42 @@ unchanged. Tier 1 and Tier 2 coexist.
   (`javac`, `jar`). Tier 1 stays zero-dependency.
 - Python tooling owns build orchestration: detect JDK, build
   classpath, invoke `javac`, package adapter JAR, assemble pak.
-- No `pom.xml`, no Gradle wrapper. Classpath is the four JARs in
-  `adapter_runtime/` plus any per-project `lib/*.jar`.
+- No `pom.xml`, no Gradle wrapper. Compile classpath is
+  `vcfcf-adapter-base.jar` + `vrops-adapters-sdk-2.2.jar` + `aria-ops-core-*.jar`
+  (kept for v1 adapter compilation until all v1 adapters migrate) + any
+  per-project `lib/*.jar`. Only `vcfcf-adapter-base.jar` and conditionally
+  `aria-ops-core` (v1 only) are bundled into the pak's `lib/`;
+  `vrops-adapters-sdk` is never bundled (resolves from appliance classpath).
 - The framework JAR (`vcfcf-adapter-base.jar`) is built **once by us**
   and committed; users never compile it.
 - Build command: `python3 -m vcfops_managementpacks build-sdk <project-dir>`.
 - Auto-detect: bare `build <arg>` routes to Tier 1 if `arg` ends in
   `.yaml`, Tier 2 if it's a directory with `adapter.yaml`.
 
-## Framework JAR scope (MVP — Phase 1)
+## Framework scope (v2)
 
-Aligned with the cleanroom design guide (spec/17 §2) but trimmed to
-what Synology actually needs first:
+All components compile against `vrops-adapters-sdk-2.2.jar` only.
 
-| Component | What it does |
-|---|---|
-| `VcfCfAdapter<C>` | Abstract base. Typed config binding, lifecycle defaults, hooks the aria-ops-core SPI. |
-| `HttpClientBuilder` | Fluent builder over a stdlib HTTP client (java.net.http). Base URL, SSL, default headers. |
-| `AuthStrategy` (SPI) + `BasicAuth`, `BearerAuth`, `SessionCookieAuth` | Auth plug-in. Note: Synology uses query-param auth (`_sid=`), not cookies — the adapter manages the session ID directly. SessionCookieAuth is available for APIs that use cookie-based sessions. |
-| `RetryPolicy` | Exponential backoff + jitter. Default 3 attempts, retry on 5xx/429/IOException. Required because the platform doesn't retry `collect()` (Pass 23). |
-| `ManagedHttpClient` + DNS round-robin | stdlib HTTP client wrapper with base URL, SSL, default headers. On `ConnectException`, resolves all IPs via `InetAddress.getAllByName()` and cycles through them — survives multi-IP hostnames with a dead IP. |
-| `MetricPusher` | One-liner helpers: `push(resource).metric(key, value).property(key, value)`. (Note: Synology adapter uses `Resource.addData()` directly instead — MetricPusher is available but not required.) |
-
-**Explicitly deferred** to future framework versions (don't build
-until a second adapter needs them):
-
-- OAuth2 client-credentials with refresh
-- Kerberos / SPNEGO, AWS SigV4, mTLS
-- Cursor / Link-header pagination
-- Cross-MP attachment helpers (`ForeignResources` DSL)
-- Relationship fluent builder over the 18-method API
-- Action annotation dispatcher
-- `<CustomGroupMetrics>`, capacity / policy describe surfaces
+| Component | Package | What it does |
+|---|---|---|
+| `VcfCfAdapter<C>` | `com.vcfcf.adapter` | Abstract base. Extends AdapterBase directly. Typed config binding, full lifecycle orchestration (onCollect/onTest/onDiscover/onConfigure), MetricDataCache, cancellation, platform SSL. |
+| `VcfCfTester<C>` | `com.vcfcf.adapter.spi` | SPI: adapter-supplied connectivity test. Throws on failure; message is surfaced via TestParam (§5). |
+| `VcfCfDiscoverer<C>` | `com.vcfcf.adapter.spi` | SPI: adapter-supplied resource enumeration. Populates DiscoveryResult directly (§6). |
+| `VcfCfCollector<C>` | `com.vcfcf.adapter.spi` | SPI: adapter-supplied per-resource data gather. Provides collect/collectEvents/collectRelationships/rediscover/mapCollectException. |
+| `HttpClientBuilder` | `com.vcfcf.adapter.http` | Fluent builder over stdlib HTTP client. Default: JVM trust store. `platformSsl(this)` for platform trust; `allowInsecure(true)` as explicit lab opt-out. |
+| `ManagedHttpClient` | `com.vcfcf.adapter.http` | HTTP wrapper with base URL, auth, retry, DNS round-robin. |
+| `AuthStrategy` + `BasicAuth`, `BearerAuth`, `SessionCookieAuth` | `com.vcfcf.adapter.auth` | Auth plug-in SPI and implementations. |
+| `RetryPolicy` | `com.vcfcf.adapter.retry` | Exponential backoff + jitter. Default 3 attempts, 500ms base, 200ms jitter. |
+| `RelationshipBuilder` | `com.vcfcf.adapter.stitch` | Fluent builder producing a `Relationships` object. Full-set semantics (`setRelationships`) by default; delta via `buildDelta()`. No aria-ops-core dependency. |
+| `ForeignResourceResolver` | `com.vcfcf.adapter.stitch` | Cross-MP resource lookup through a `SuiteApiBridge` functional interface. No TVS/aria-ops-core compile dependency. Optional — only for adapters that do cross-MP stitching. |
+| `MetricPusher` | `com.vcfcf.adapter.metric` | Fluent helper for pushing metrics and properties. Uses `new MetricKey(true, key)` for properties (bug fix vs v1). |
+| `DescribeBuilder` | `com.vcfcf.adapter.describe` | describe.xml XML generator. No SDK dependency. |
+| `SimpleJson` | `com.vcfcf.adapter.json` | Zero-dep recursive-descent JSON parser. |
 
 ## Pak format — hard-won lessons (2026-05-19)
 
 These were discovered empirically by installing SDK paks on VCF Ops
-9.0.2 and diagnosing failures via appliance logs. Each row cost at
-least one failed install attempt.
+9.0.2 and diagnosing failures via appliance logs.
 
 | Aspect | Requirement | What happens if wrong |
 |---|---|---|
@@ -108,13 +116,13 @@ least one failed install attempt.
 | Inner `adapters.zip` | Must duplicate `manifest.txt`, `eula.txt`, `default.svg` from outer pak | Validate phase rejects missing files |
 | `eula.txt` | Non-empty (MIT license text) | UI shows blank EULA page |
 | ZIP directory entries | Explicit zero-byte directory entries required for every subdirectory in `adapters.zip` | `SyncAdapters.extractFiles()` throws `NoSuchFileException` — parent dirs don't exist |
-| `vrops-adapters-sdk.jar` | **Must bundle in `<adapter>/lib/`** despite being on shared classpath | `installSolution` task fails in 14ms with empty errorMessages |
-| `aria-ops-core.jar` | Must bundle in `<adapter>/lib/` | Adapter class can't load at runtime |
+| `vrops-adapters-sdk.jar` | **Do NOT bundle in `<adapter>/lib/`** — resolves from the appliance shared classpath at runtime. Keep on `javac` compile classpath only. Historical note: this row previously stated "must bundle" citing a 14ms `installSolution` failure. That failure was **misattributed** — it was the missing-directory-entries structural bug of the same era (a true classpath problem surfaces as `NoClassDefFoundError` during collection, not a 14ms install rejection). Disproven by C2 install test: build 42, devel + prod, 2026-06-09 — install succeeded, full collection cycle ran, zero classloading errors in adapter logs. See `context/investigations/c2_no_sdk_jar_install_test.md`. | No failure — the appliance ships the SDK jar on its own classpath; the adapter resolves it cleanly at runtime. |
+| `aria-ops-core.jar` | **v1 adapters: must bundle in `<adapter>/lib/`** — not on the appliance shared classpath. **v2 adapters: do NOT bundle** — framework v2 eliminated all `com.vmware.tvs.*` dependencies. Auto-detected at build time by scanning compiled class bytecode for `com/vmware/tvs` references (`sdk_builder._needs_aria_ops_core()`). This row becomes fully obsolete once all adapters (synology, unifi, compliance as of 2026-06-09) are migrated to framework v2. | v1: runtime `NoClassDefFoundError` for `com.vmware.tvs.*` types. v2: no impact — no TVS types referenced. |
 | Adapter JAR | `<adapter_kind>.jar` at root of `adapters.zip`, contains `adapter.properties` (ENTRYCLASS + KINDKEY) | Adapter kind not registered |
 | Icons | SVG format at `conf/images/{AdapterKind,ResourceKind,TraversalSpec}/` | Generic icons in UI |
 | Build number | Must increment on each rebuild — same version = platform skips JAR replacement | "Folder digests are not different" — old buggy JARs persist |
 
-### Pak structure (canonical)
+### Pak structure (canonical, v2)
 
 ```
 vcfcf_<adapter_kind>.<version>.<build>.pak        [outer ZIP]
@@ -145,12 +153,20 @@ vcfcf_<adapter_kind>.<version>.<build>.pak        [outer ZIP]
     <adapter_kind>/conf/images/TraversalSpec/default.svg
     <adapter_kind>/lib/                            [dir entry]
     <adapter_kind>/lib/vcfcf-adapter-base.jar
-    <adapter_kind>/lib/aria-ops-core-*.jar
-    <adapter_kind>/lib/vrops-adapters-sdk-*.jar
+    <adapter_kind>/lib/aria-ops-core-*.jar         [v1 adapters only — omitted for v2]
     <adapter_kind>/lib/[project vendor JARs]
+    # vrops-adapters-sdk-*.jar is NOT bundled — resolves from appliance classpath
     <adapter_kind>/work/                           [dir entry]
     <adapter_kind>/doc/                            [dir entry]
 ```
+
+**C2 shape (2026-06-09 onwards):** `vrops-adapters-sdk-*.jar` is no longer bundled
+— it resolves from the appliance shared classpath at runtime (proven by C2 test,
+see `context/investigations/c2_no_sdk_jar_install_test.md`).
+`aria-ops-core-*.jar` is bundled only for v1 adapters (detected automatically by
+scanning compiled class bytecode for `com/vmware/tvs` references). v2 adapters
+get neither. `vcfcf-adapter-base.jar` + optional project vendor JARs are always
+bundled.
 
 ### Tier 1 vs Tier 2 comparison
 
@@ -188,210 +204,121 @@ SDK behavior:
 |---|---|
 | What's the adapter lifecycle / SPI? | `spec/01-adapter-lifecycle.md` |
 | What does describe.xml allow? | `spec/02a-describe-xsd-canonical.md` |
+| Full behavioral contract (v2 orchestrator target)? | `spec/19-adapterbase-behavioral-contract.md` |
 | How does relationships emission work? | `spec/07-relationships-cross-mp.md` |
 | Pak layout / classloading? | `spec/13-classloading-and-classpath.md` |
 | Install / signing on the appliance? | `spec/16-platform-install-and-signing.md` |
 | Why these framework choices? | `spec/17-vcfcf-framework-design-guidance.md` |
 | What does an authored Tier 2 adapter look like? | `spec/15-tier2-handoff-for-vcf-cf.md` |
 
-## configure() vs onConfigure() — confirmed call chain
+## configure() vs onConfigure() — v2 call chain
 
-This was investigated against JAR bytecode (aria-ops-core-8.0.0.jar,
-vrops-adapters-sdk-2.2.jar). Key findings:
+In v2, adapter authors implement **`configureAdapter(ResourceStatus,
+ResourceConfig)`** instead of v1's `configure(ResourceStatus,
+ResourceConfig)`. The orchestration:
 
-- `UnlicensedAdapter.configure(ResourceStatus, ResourceConfig)` is declared
-  **abstract**. It IS the hook that adapter subclasses must implement.
-  There is no `super.configure()` to call — doing so would cause a compile
-  error.
+1. `AdapterBase.configure(AdapterConfig)` (final — platform calls this)
+2. → `VcfCfAdapter.onConfigure(ResourceStatus, ResourceConfig)` (our override)
+3. → resets abort flag, closes old HTTP client
+4. → `configureAdapter(ResourceStatus, ResourceConfig)` (adapter author's code)
+5. → creates new `MetricDataCache` instance
 
-- `UnlicensedAdapter.onConfigure(ResourceStatus, ResourceConfig)` is called
-  by the framework (via `AdapterBase.configureBase(AdapterStatus, ResourceConfig)`)
-  **before** our hook. `onConfigure()` does internal setup: nulls the
-  tester/discoverer/collector fields, creates the work directory, and
-  initialises the SuiteAPI client. It then calls `configure()`.
+The logger field notes from v1 still apply: use `logInfo()` / `logWarn()`
+/ `logError()` helpers on `VcfCfAdapter`. Do NOT use the inherited Log4j
+path directly.
 
-- The `logger` field in `UnlicensedAdapter` is a **constructor-injected**
-  field, not set during `onConfigure()`. It is available when `configure()`
-  is called.
+## Adapter authoring contract — critical rules (v2)
 
-- **Do NOT log through the inherited `logger` field.** That logger is
-  registered under `com.vmware.tvs.vrealize.adapter.core.UnlicensedAdapter`
-  and its appender-level filter is derived from the root Log4j logger, which
-  sits at WARN in production. INFO messages are silently dropped.
+These requirements are unchanged from v1 except where noted.
 
-  The correct pattern (already implemented in `VcfCfAdapter`) is to obtain a
-  logger via `getAdapterLoggerFactory().getLogger(getClass())` on first use
-  and then pin it to INFO with `setLevel(Logger.CustomLevel.INFO)`. This
-  gives a logger named after the concrete adapter class, attached to the
-  right `SynologyAdapter_3008.log` file, with INFO messages passing through.
-  The `VcfCfAdapter.logInfo()/logWarn()/logError()` helpers do this
-  automatically via the lazily-initialised `adapterLogger` field — use those
-  helpers; do not call the inherited `logger` directly.
-
-- **Wire-format discovery (AdapterLoggerFactoryImpl internals):**
-  `AdapterLoggerFactoryImpl(adapterName, adapterDir, instanceId)` creates the
-  file appender at `<ADAPTERS_LOG>/<adapterName>/<adapterName>_<instanceId>.log`
-  only when all three arguments are non-null. In the no-arg describe path
-  `adapterDir` is null so the appender is skipped — that is expected.
-  In the live-collection path all three are set, so the file IS created;
-  the problem was purely the WARN-level appender filter.
-  `Logger.setLevel(CustomLevel.INFO)` calls
-  `Configurator.setLevel(loggerName, Level.INFO)` which overrides the
-  LoggerConfig level at runtime.
-
-- If `configure()` receives a `ResourceConfig` with an empty
-  `getResourceIdentifiers()` list, the cause is NOT a missing
-  `super.configure()` call. The most likely cause is a platform
-  serialisation failure (e.g., the adapter instance's describe.xml
-  identifiers don't match the stored config on the server, or the
-  adapter was added before the current describe.xml was installed).
-  Use `System.err.println()` debug output to confirm — the collector
-  process captures stderr and it should appear in appliance logs.
-
-## Compile-time stub JAR: `vmware-ops-api-stubs.jar`
-
-The aria-ops-core `Resource` class has a field of type
-`com.vmware.ops.api.model.resource.ResourceDto`. This class lives on the
-appliance's runtime classpath but is NOT in any of the four staged SDK JARs
-(the `alive_platform.jar` in `adapter_runtime/` uses the
-`com.vmware.vcops.platform.api.*` namespace, not `com.vmware.ops.api.*`).
-
-**Resolution**: a minimal stub JAR `adapter_runtime/vmware-ops-api-stubs.jar`
-provides this class for compile-time resolution. It is:
-- Included in the compile classpath by `sdk_builder.py`
-- NOT bundled in the pak's `lib/` (the real class is on the appliance classpath)
-- Gitignored along with all of `adapter_runtime/`
-
-The stub must be regenerated if new `com.vmware.ops.api.*` types become
-needed for compilation. Source: `adapter_framework/build-framework.sh`
-contains generation instructions in its comments.
-
-## Adapter kind naming convention
-
-SDK adapter kind keys do NOT include the `vcfcf_` prefix in their value —
-the prefix is added by the pak filename builder. Example:
-- `adapter_kind: hello_world` → pak file: `vcfcf_hello_world.1.0.0.1.pak`
-- `adapter_kind: synology` → pak file: `vcfcf_synology.1.0.0.1.pak`
-
-This differs from Tier 1 where `adapter_kind` IS prefixed
-(`mpb_vcf_content_factory_*`).
-
-## Adapter authoring contract — critical rules
-
-These are the non-obvious requirements discovered during the Synology
-adapter build. Every Tier 2 adapter must follow these or it will fail
-silently on the appliance.
-
-### Constructors (both required)
+### Constructors (both required — UNCHANGED)
 
 ```java
 public MyAdapter() { super(); }
-public MyAdapter(String adapterDir, Integer instanceId) { super(adapterDir, instanceId); }
+public MyAdapter(String adapterDir, Integer instanceId) {
+    super(adapterDir, instanceId);
+}
 ```
 
-- **No-arg**: analytics engine calls `Class.newInstance()` for describe
-  generation. Without it: `InstantiationException`, adapter kind not
-  registered, `apply_adapter` phase fails.
-- **Two-arg**: collector calls `Constructor(String, Integer)` for
-  instance startup. Without it: `NoSuchMethodException`, adapter
-  instance won't start.
+### SPI methods replace v1 abstract methods
 
-### Auto-discovery must be enabled
+v1 required: `configure()`, `getTester()`, `getDiscoverer()`,
+`getLiveDataCollector()`, `getHistoricalDataCollector()`,
+`getAutoDiscoveryEnabled()`, `needRediscovery()`.
 
-`getAutoDiscoveryEnabled()` must return `true` (the `VcfCfAdapter`
-default). If `false`, `UnlicensedAdapter.processMetrics()` silently
-drops every new resource returned by `getCurrentMetrics()`. The
-adapter collects but discovers nothing — perpetual "1 object, 0 new
-objects."
+v2 requires: `configureAdapter()`, `getTester()`, `getDiscoverer()`,
+`getCollector()` (consolidates live+historical), `onDescribe()`.
 
-### Logging
+See `context/framework_v2_migration.md` for the full import/API mapping.
 
-Use the `logInfo()` / `logWarn()` / `logError()` helpers on
-`VcfCfAdapter`. They use `getAdapterLoggerFactory().getLogger()` with
-an explicit INFO level override. Do NOT use:
-- The inherited `logger` field (WARN-filtered, INFO is silent)
-- `java.util.logging.Logger` (goes to collector-wrapper.log, not adapter log)
-- `System.err.println` (goes to collector-wrapper.log — useful for
-  debug only, remove before shipping)
+### Per-resource status required every cycle — NEW in v2
 
-### JSON parsing
+The orchestrator calls `setResourceStatus()` automatically based on
+whether `collect()` succeeds or throws. For custom status semantics,
+override `VcfCfCollector.mapCollectException(Exception)`.
+
+### Relationship API changed — v2
+
+v1: `resource.addChild()` / `resource.addParent()` (aria-ops-core Resource).
+v2: `RelationshipBuilder.build()` returns a `Relationships` object;
+pass it to `adapter.addRelationshipsToCurrentCycle(rels)`.
+
+### Auto-discovery behavior — changed in v2
+
+v1: controlled by `getAutoDiscoveryEnabled()` gate in UnlicensedAdapter.
+v2: the orchestrator always calls `collectResult.addNewResource()` when
+`VcfCfCollector.needsRediscovery()` returns true and `rediscover()`
+registers new resources via `adapter.registerNewResource()`. For new
+resources discovered during collect, call `adapter.registerNewResource(key)`
+from within `collect()`.
+
+### Logging — UNCHANGED
+
+Use `logInfo()` / `logWarn()` / `logError()` helpers on `VcfCfAdapter`.
+
+### String properties — UNCHANGED
+
+Use `pushStringProperty(rc, key, value)` on `VcfCfAdapter`, or
+`MetricPusher.ResourceContext.property(key, value)` — both use
+`new MetricKey(true, key)` correctly.
+
+### JSON parsing — UNCHANGED
 
 `com.vcfcf.adapter.json.SimpleJson` is included in the framework JAR.
-Zero-dependency recursive-descent parser. Sufficient for REST API
-responses. For adapters needing full Jackson/Gson, bundle in `lib/`.
 
-### String properties: use `addProperty()`, never `resource.addData(key, stringValue)`
-
-`VcfCfAdapter` exposes a `protected static void addProperty(Resource r, String key, String value)` helper.
-**Always use this helper — never call `resource.addData(String, String)` for string properties.**
-
-Root cause: the convenience overload `Resource.addData(String, String)` delegates to
-`MetricKey.parseMetricKey(String)`, which hardcodes `isProperty = false`. A `MetricKey`
-with `isProperty = false` is treated as a numeric metric by the platform. The string
-value is silently discarded at collection time — properties never appear in the UI
-and no error is raised. The `addProperty` helper constructs `new MetricKey(true, key)`
-explicitly to set the property flag correctly.
-
-Numeric metrics (double values) continue to use `resource.addData(String, double)` —
-that overload is unaffected.
-
-### Resource naming: use human-readable names
-
-The `ResourceKey(name, kind, adapterKind)` name is the display label
-in the VCF Ops tree. Always derive human-readable names from the API:
-
-- Storage pools: `"Storage Pool " + num_id` (not `reuse_1`)
-- Volumes: `"Volume " + num_id` (not `volume_1`)
-- Disks: `disk.name` field (e.g., "Drive 4", not `sata1`)
-- SSD Cache: `"SSD Cache (Volume N)"` (not `alloc_cache_1_1`)
-- DiskStation: `model + " " + serial` (e.g., "DS1520+ 20B0RYRXRF3KF")
-
-The stable identifier goes in the `ResourceIdentifier` field, not
-the name. Changing names creates new resources (old ones age out).
-
-### World objects
-
-A "World" resource (like vSphere World) serves as a top-down
-traversal entry point. Use a fixed identifier across all adapter
-instances (e.g., `world_id=synology_world`) so the platform merges
-them into one World that aggregates all DiskStations. Include it in
-every TraversalSpec path as the first child after the adapter
-instance root. No metrics needed — it's a container.
-
-### Relationship `rel.add()` requirement
-
-Calling `parentRes.addChild(childRes)` sets up the relationship on
-the Java object, but the platform only sees it if the parent (or
-child) is added to the `ResourceCollection` returned from
-`getRelationships()`. Missing `rel.add()` causes silent relationship
-loss — the most common cause of objects appearing flat in the tree.
-
-### Rebuild the framework JAR after changes
-
-The SDK builder compiles against `adapter_runtime/vcfcf-adapter-base.jar`.
-After any change to `adapter_framework/src/**/*.java`, run:
+### Rebuild the framework JAR after changes — UNCHANGED
 
 ```
 cd vcfops_managementpacks/
 ./adapter_framework/build-framework.sh
 ```
 
-Without this, adapters get "cannot find symbol" on new framework methods.
+v2 builds with SDK jar only. If you see `cannot find symbol` for
+`com.vmware.tvs.*`, that is a clean-room wall violation — do not add
+`aria-ops-core` back; report it as a TOOLSET GAP.
 
-### Auth patterns
+### SSL — CHANGED in v2
 
-Synology uses `_sid` as a query parameter, not a cookie or header.
-The `SessionCookieAuth` strategy doesn't fit. The adapter manages
-auth directly by appending `&_sid=<token>` to every request URL.
-Consider adding a `QueryParamAuth` strategy to the framework.
+v1: `HttpClientBuilder.allowInsecure(true)` was the only option, calling
+an inline `insecureSslContext()`.
 
-## Framework helpers (Layer 3)
+v2 recommended (production): `HttpClientBuilder.platformSsl(this)` —
+uses `AdapterBase.getAdapterTrustManager()` / `getKeyManagers()`,
+honoring the platform's certificate management.
 
-| Component | Package | Purpose |
-|---|---|---|
-| `SimpleJson` | `com.vcfcf.adapter.json` | Zero-dep recursive-descent JSON parser |
-| `ForeignResourceResolver` | `com.vcfcf.adapter.stitch` | Cross-MP resource lookup via Suite API. Caches by (adapterKind, resourceKind, identifierName). Used for Datastore/Host/VM stitching. |
-| `RelationshipBuilder` | `com.vcfcf.adapter.stitch` | Fluent parent/child + cross-adapter relationship construction for `getRelationships()` |
+v2 lab opt-out: `HttpClientBuilder.allowInsecure(true)` still works
+but is now an explicit, documented opt-out (calls
+`VcfCfAdapter.insecureSslContext()`).
+
+### ForeignResourceResolver — API changed in v2
+
+v1: `new ForeignResourceResolver(suiteAPIClient, logger)` — required
+an aria-ops-core `SuiteAPIClient`.
+
+v2: `new ForeignResourceResolver(bridge, logger)` where `bridge` is a
+`ForeignResourceResolver.SuiteApiBridge` functional interface. The adapter
+supplies the lambda that calls its pak-bundled Suite API client. The
+framework no longer compiles against any TVS or Suite-API artifact.
 
 ## Pak signing roadmap
 
@@ -403,32 +330,26 @@ corpus, see `cleanroom-spec/spec/16-platform-install-and-signing.md`).
 **Future — self-signed:** generate a VCF Content Factory keypair, sign
 paks with it, include `signature.mf` + `signature.cert`. The appliance
 will report `signed: true, signatureValid: true, certificateUntrusted:
-true` — proves provenance but doesn't achieve platform trust. Users
-who care can verify the cert manually. Design the `--sign` step as a
-pluggable hook in `sdk_builder.py` (no-op today).
+true` — proves provenance but doesn't achieve platform trust.
 
 **Future — marketplace:** for paks promoted through the VMware/Broadcom
-marketplace, Broadcom re-signs with their trusted key. The appliance
-reports `certificateUntrusted: false`. This is the Broadcom-side
-process; the factory's job is to produce a pak that passes marketplace
-review. Scott will work internally on the marketplace submission
-pipeline once the content generation workflow is proven.
-
-**The three tiers:**
-
-| Tier | Signature | Platform trust | Distribution |
-|---|---|---|---|
-| Unsigned | none | accepted (no gate) | GitHub, direct download, bundle pipeline |
-| Self-signed | VCF-CF keypair | `certificateUntrusted: true` (accepted, not trusted) | Same, but with provenance proof |
-| Marketplace | Broadcom key | `certificateUntrusted: false` (fully trusted) | VMware marketplace |
+marketplace, Broadcom re-signs with their trusted key.
 
 ## Implementation status
 
 - Phase 1 (framework + tooling skeleton): **COMPLETE**
 - Phase 2 (Synology adapter): **IN PROGRESS** — build 1.0.0.7
-  installed on devel, 22 objects discovered, 278 metrics collected,
-  internal parent/child relationships working. Remaining: cross-MP
-  Datastore stitching via ForeignResourceResolver (build 8).
-- Phase 3 (polish, agent prompts, promotion docs): not started.
+  installed on devel, 22 objects discovered, 278 metrics collected.
+  Pending: migration to v2 framework.
+- Phase 3 (framework v2 migration — compliance, synology, unifi): IN PROGRESS.
+  Framework v2 JAR built; adapters to be migrated serially by sdk-adapter-author.
 
 Tracking: `designs/tier2-mp-architecture-plan.md`.
+
+## Changelog
+
+| Date | Change |
+|---|---|
+| 2026-06-09 | **v2 rehome**: `VcfCfAdapter` now extends `AdapterBase` directly. `aria-ops-core` (`com.vmware.tvs.*`) eliminated from compile classpath and runtime. New SPI: `VcfCfTester`, `VcfCfDiscoverer`, `VcfCfCollector` (all under `com.vcfcf.adapter.spi`). `RelationshipBuilder` rebuilt on SDK `Relationships` API. `ForeignResourceResolver` decoupled from TVS via `SuiteApiBridge` functional interface. `HttpClientBuilder` default SSL changed to platform trust store. `MetricPusher.property()` bug fixed (was using `isProperty=false`). Build script narrowed to SDK jar only. See `context/framework_v2_migration.md` for adapter migration guide. |
+| 2026-05-19 | Pak format hard-won lessons documented after 42 install attempts. |
+| 2026-05-16 | Pass 23 field evidence added to spec/01. Per-instance single-thread collect confirmed. |
