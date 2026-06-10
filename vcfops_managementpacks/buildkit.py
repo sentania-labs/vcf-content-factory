@@ -1,0 +1,664 @@
+"""buildkit.py — Assemble a portable sdk-buildkit tarball.
+
+The kit is a self-contained Python package (sdk_buildkit) that can build
+Tier 2 SDK adapter .pak files without a factory checkout and without any
+LLM / agent involvement.  CI runners pull the tarball, extract it, and run:
+
+    python3 -m sdk_buildkit build-sdk <adapter_dir>
+
+Kit contents (assembled under a temp dir, then tarballed):
+  sdk_buildkit/
+    __init__.py
+    __main__.py                 — exposes build-sdk / validate-sdk / pak-compare
+    sdk_builder.py              — copy of vcfops_managementpacks/sdk_builder.py (paths relocated)
+    sdk_project.py              — copy (no path changes needed)
+    pak_compare.py              — copy (no path changes needed)
+    provenance.py               — copy of vcfops_common/provenance.py (pure stdlib)
+    dashboard_loader.py         — copy of vcfops_dashboards/loader.py (imports patched)
+    dashboard_render.py         — copy of vcfops_dashboards/render.py (imports patched)
+    dashboard_yaml_utils.py     — copy of vcfops_dashboards/yaml_utils.py
+    sm_loader.py                — copy of vcfops_supermetrics/loader.py
+    adapter_runtime/            — JARs
+    templates/icons/            — SVG icon assets
+    reference_paks/             — one reference .pak for pak-compare
+    LICENSE
+    VERSION
+
+Path relocation in the kit's sdk_builder.py:
+  _HERE               = Path(__file__).parent
+  _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"
+  _LICENSE_PATH        = _HERE / "LICENSE"
+  _REFERENCES_DIR      = _HERE / "reference_paks"
+  templates/icons      = _HERE / "templates" / "icons"
+
+repo_root handling:
+  In the factory, _load_bundled_content resolves bundled_content paths against
+  _HERE.parent (the factory root).  In the kit, there is no factory root —
+  adapters carry their own view/dashboard YAML.  The kit's build-sdk passes
+  project_dir as repo_root so that bundled_content: paths are relative to the
+  adapter's own directory.
+
+Bundled-content closure:
+  vcfops_dashboards.loader imports vcfops_common.provenance.  vcfops_common's
+  __init__.py imports requests (network client), which is NOT available in CI.
+  The kit ships provenance.py directly (pure stdlib) and patches the loader
+  import accordingly.  See provenance.py docstring for details.
+"""
+from __future__ import annotations
+
+import re
+import shutil
+import tarfile
+import tempfile
+from pathlib import Path
+from typing import Optional
+
+# ---------------------------------------------------------------------------
+# Version constant — bump when kit contents change in a meaningful way
+# ---------------------------------------------------------------------------
+
+BUILDKIT_VERSION = "0.1.0"
+
+# ---------------------------------------------------------------------------
+# Source paths (relative to this file's parent = vcfops_managementpacks/)
+# ---------------------------------------------------------------------------
+
+_HERE = Path(__file__).parent
+_REPO_ROOT = _HERE.parent
+
+# Source files to copy into sdk_buildkit/
+_FACTORY_SOURCES = {
+    # dest name inside sdk_buildkit → source path
+    "sdk_builder.py": _HERE / "sdk_builder.py",
+    "sdk_project.py": _HERE / "sdk_project.py",
+    "pak_compare.py": _HERE / "pak_compare.py",
+    "provenance.py": _REPO_ROOT / "vcfops_common" / "provenance.py",
+    "dashboard_loader.py": _REPO_ROOT / "vcfops_dashboards" / "loader.py",
+    "dashboard_render.py": _REPO_ROOT / "vcfops_dashboards" / "render.py",
+    "dashboard_yaml_utils.py": _REPO_ROOT / "vcfops_dashboards" / "yaml_utils.py",
+    "sm_loader.py": _REPO_ROOT / "vcfops_supermetrics" / "loader.py",
+}
+
+# ---------------------------------------------------------------------------
+# Import-rewrite rules
+# ---------------------------------------------------------------------------
+
+# Each entry is a list of (pattern, replacement) applied in order to the
+# Python source text of a specific file.  Replacements make every cross-file
+# import self-contained within the sdk_buildkit package.
+
+_IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
+    # sdk_builder.py: rewrite intra-package imports and vcfops_dashboards refs
+    "sdk_builder.py": [
+        # from .sdk_project import ... → from .sdk_project import ...
+        # (already relative; keep as-is — no change needed)
+        # from .pak_compare import ... → from .pak_compare import ...
+        # (already relative; keep as-is — no change needed)
+        # from vcfops_dashboards.loader import load_view, load_dashboard
+        (
+            r"from vcfops_dashboards\.loader import load_view, load_dashboard",
+            "from .dashboard_loader import load_view, load_dashboard",
+        ),
+        # from vcfops_dashboards.render import render_views_xml
+        (
+            r"from vcfops_dashboards\.render import render_views_xml",
+            "from .dashboard_render import render_views_xml",
+        ),
+        # from vcfops_dashboards.render import render_dashboards_bundle_json
+        (
+            r"from vcfops_dashboards\.render import render_dashboards_bundle_json",
+            "from .dashboard_render import render_dashboards_bundle_json",
+        ),
+        # Relocate path constants:
+        #   _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"  (no change; _HERE is already right)
+        #   _LICENSE_PATH = _HERE.parent / "LICENSE"  → _HERE / "LICENSE"
+        (
+            r'_LICENSE_PATH = _HERE\.parent / "LICENSE"',
+            '_LICENSE_PATH = _HERE / "LICENSE"',
+        ),
+        #   _REFERENCES_DIR = _HERE.parent / "tmp" / "reference_paks"  → _HERE / "reference_paks"
+        (
+            r'_REFERENCES_DIR = _HERE\.parent / "tmp" / "reference_paks"',
+            '_REFERENCES_DIR = _HERE / "reference_paks"',
+        ),
+        # icons path: _HERE / "templates" / "icons" — same structure; no change needed
+        # but sdk_builder also does _HERE.parent / "dist" for default output_dir:
+        (
+            r'output_dir = _HERE\.parent / "dist"',
+            'output_dir = Path.cwd() / "dist"',
+        ),
+        # repo_root for bundled_content: factory uses _HERE.parent; kit uses project_dir
+        (
+            r'    _repo_root = _HERE\.parent\n    bundled_views, bundled_dashboards = _load_bundled_content\(',
+            '    _repo_root = project_dir\n    bundled_views, bundled_dashboards = _load_bundled_content(',
+        ),
+        # validate_sdk_project also sets _repo_root = _HERE.parent
+        (
+            r'        _repo_root = _HERE\.parent\n        bundled_views, _ = _load_bundled_content\(',
+            '        _repo_root = project_dir\n        bundled_views, _ = _load_bundled_content(',
+        ),
+    ],
+    # dashboard_loader.py: rewrite vcfops_dashboards.yaml_utils and vcfops_common.provenance
+    "dashboard_loader.py": [
+        # from vcfops_dashboards.yaml_utils import strict_load as _strict_load
+        (
+            r"from vcfops_dashboards\.yaml_utils import strict_load as _strict_load",
+            "from .dashboard_yaml_utils import strict_load as _strict_load",
+        ),
+        # from vcfops_common.provenance import provenance_from_path
+        (
+            r"from vcfops_common\.provenance import provenance_from_path",
+            "from .provenance import provenance_from_path",
+        ),
+    ],
+    # dashboard_render.py: rewrite .loader import (it's a relative import within
+    # vcfops_dashboards, which becomes .dashboard_loader in the kit)
+    "dashboard_render.py": [
+        # from .loader import (...)  →  from .dashboard_loader import (...)
+        (
+            r"from \.loader import \(",
+            "from .dashboard_loader import (",
+        ),
+        # from .loader import BucketsConfig  (inline import in function body)
+        (
+            r"from \.loader import BucketsConfig",
+            "from .dashboard_loader import BucketsConfig",
+        ),
+        # from vcfops_supermetrics.loader import load_file as _sm_load_file
+        (
+            r"from vcfops_supermetrics\.loader import load_file as _sm_load_file",
+            "from .sm_loader import load_file as _sm_load_file",
+        ),
+        # from vcfops_supermetrics.loader import load_dir as _sm_load_dir
+        (
+            r"from vcfops_supermetrics\.loader import load_dir as _sm_load_dir",
+            "from .sm_loader import load_dir as _sm_load_dir",
+        ),
+    ],
+}
+
+# ---------------------------------------------------------------------------
+# __init__.py content
+# ---------------------------------------------------------------------------
+
+_KIT_INIT = '''\
+"""sdk_buildkit — Portable Tier 2 SDK adapter build toolchain.
+
+Run as:
+    python3 -m sdk_buildkit build-sdk <adapter_dir>
+    python3 -m sdk_buildkit validate-sdk <adapter_dir>
+    python3 -m sdk_buildkit pak-compare <factory.pak> <reference.pak>
+
+## Consumer contract
+
+This kit is JAR-FREE with respect to Broadcom platform JARs.  It ships
+only vcfcf-adapter-base.jar (the VCF Content Factory framework, built and
+owned by this project).
+
+Adapters are compiled against vrops-adapters-sdk-2.2.jar which YOU must
+supply — it is a Broadcom internal build artifact with no public
+redistribution channel and cannot ship in a public toolchain tarball.
+
+### How to obtain vrops-adapters-sdk-2.2.jar
+
+Option 1 — copy from your VCF Ops appliance (any 9.x instance):
+    scp root@<appliance>:/usr/lib/vmware-vcops/common-lib/vrops-adapters-sdk-2.2.jar .
+    # also available at:
+    # /usr/lib/vmware-vcops/suite-api/WEB-INF/lib/vrops-adapters-sdk.jar
+
+Option 2 — Broadcom TAP / partner SDK portal (if enrolled).
+
+### Providing the JAR to the build
+
+Set the VCFCF_SDK_JAR environment variable:
+    export VCFCF_SDK_JAR=/path/to/vrops-adapters-sdk-2.2.jar
+    python3 -m sdk_buildkit build-sdk <adapter_dir>
+
+Or use the --sdk-jar flag:
+    python3 -m sdk_buildkit build-sdk <adapter_dir> --sdk-jar /path/to/vrops-adapters-sdk-2.2.jar
+
+In CI, store the JAR as a secret-gated artifact and expose its path via
+VCFCF_SDK_JAR.  The build fails with a clear actionable message when the
+JAR is absent from both adapter_runtime/ and the env var.
+
+## Other requirements
+
+- Python 3.9+ with PyYAML
+- JDK 11+ on PATH (javac, jar)
+- No factory checkout, no LLM, no other network access required.
+"""
+'''
+
+# ---------------------------------------------------------------------------
+# __main__.py content
+# ---------------------------------------------------------------------------
+
+_KIT_MAIN = '''\
+"""Entry point: python3 -m sdk_buildkit <subcommand> [args ...]"""
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from pathlib import Path
+
+
+_SDK_JAR_HELP = (
+    "Path to vrops-adapters-sdk-2.2.jar (Broadcom; not shipped in this kit — "
+    "see the consumer contract in __init__.py). "
+    "Alternatively set the VCFCF_SDK_JAR environment variable. "
+    "Required when running outside the VCF Content Factory repo."
+)
+
+
+def _apply_sdk_jar(args) -> None:
+    """Set VCFCF_SDK_JAR env var from --sdk-jar flag if supplied."""
+    sdk_jar = getattr(args, "sdk_jar", None)
+    if sdk_jar:
+        os.environ["VCFCF_SDK_JAR"] = str(sdk_jar)
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(
+        prog="sdk_buildkit",
+        description="Portable Tier 2 SDK adapter build toolchain.",
+    )
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    # ----- build-sdk -----
+    pbsdk = sub.add_parser(
+        "build-sdk",
+        help="compile and package a Tier 2 SDK adapter project into a .pak",
+    )
+    pbsdk.add_argument(
+        "project_dir",
+        metavar="PROJECT_DIR",
+        help="path to the Tier 2 adapter project directory (contains adapter.yaml)",
+    )
+    pbsdk.add_argument(
+        "--output", "-o",
+        default="dist",
+        help="output directory for the .pak file (default: dist/)",
+    )
+    pbsdk.add_argument(
+        "--sdk-jar",
+        dest="sdk_jar",
+        default=None,
+        metavar="JAR_PATH",
+        help=_SDK_JAR_HELP,
+    )
+
+    # ----- validate-sdk -----
+    pvsdk = sub.add_parser(
+        "validate-sdk",
+        help="validate adapter.yaml schema and compile-check a Tier 2 SDK adapter",
+    )
+    pvsdk.add_argument(
+        "project_dir",
+        metavar="PROJECT_DIR",
+        help="path to the Tier 2 adapter project directory",
+    )
+    pvsdk.add_argument(
+        "--sdk-jar",
+        dest="sdk_jar",
+        default=None,
+        metavar="JAR_PATH",
+        help=_SDK_JAR_HELP,
+    )
+
+    # ----- pak-compare -----
+    ppc = sub.add_parser(
+        "pak-compare",
+        help="structurally compare a factory-built .pak against a reference .pak",
+    )
+    ppc.add_argument(
+        "factory_pak",
+        metavar="FACTORY_PAK",
+        help="path to the factory-built .pak file",
+    )
+    ref_group = ppc.add_mutually_exclusive_group(required=True)
+    ref_group.add_argument(
+        "reference_pak",
+        metavar="REFERENCE_PAK",
+        nargs="?",
+        default=None,
+        help="path to the reference .pak file",
+    )
+    ref_group.add_argument(
+        "--reference-dir",
+        dest="reference_dir",
+        default=None,
+        metavar="DIR",
+        help="compare against all .pak files in DIR",
+    )
+    ppc.add_argument(
+        "--output", "-o",
+        default=None,
+        metavar="FILE",
+        help="write the full report to FILE in addition to stdout",
+    )
+
+    return p
+
+
+def main() -> int:
+    args = _build_parser().parse_args()
+
+    if args.cmd == "build-sdk":
+        _apply_sdk_jar(args)
+        from .sdk_builder import build_sdk_pak, SdkBuildError
+        from .sdk_project import SdkProjectError
+        project_dir = Path(args.project_dir)
+        output_dir = Path(args.output)
+        try:
+            pak_path = build_sdk_pak(project_dir, output_dir)
+            print(f"Built: {pak_path}")
+            return 0
+        except (SdkBuildError, SdkProjectError) as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        except Exception as exc:
+            print(f"ERROR building SDK pak: {exc}", file=sys.stderr)
+            return 1
+
+    elif args.cmd == "validate-sdk":
+        _apply_sdk_jar(args)
+        from .sdk_builder import validate_sdk_project
+        project_dir = Path(args.project_dir)
+        try:
+            errors = validate_sdk_project(project_dir)
+        except Exception as exc:
+            print(f"ERROR during validate-sdk: {exc}", file=sys.stderr)
+            return 1
+        if errors:
+            print(f"INVALID: {len(errors)} error(s) in {project_dir}:", file=sys.stderr)
+            for err in errors:
+                print(f"  {err}", file=sys.stderr)
+            return 1
+        print(f"OK: {project_dir} is a valid Tier 2 SDK adapter project")
+        return 0
+
+    elif args.cmd == "pak-compare":
+        from .pak_compare import compare_paks, compare_pak_directory, format_report
+        factory = Path(args.factory_pak)
+        if not factory.exists():
+            print(f"ERROR: factory pak not found: {factory}", file=sys.stderr)
+            return 1
+
+        output_file = getattr(args, "output", None)
+        out_lines: list = []
+
+        def _emit(text: str) -> None:
+            print(text, end="")
+            if output_file:
+                out_lines.append(text)
+
+        if args.reference_dir:
+            ref_dir = Path(args.reference_dir)
+            if not ref_dir.is_dir():
+                print(f"ERROR: --reference-dir not a directory: {ref_dir}", file=sys.stderr)
+                return 1
+            results = compare_pak_directory(factory, ref_dir)
+            if not results:
+                print(f"No .pak files found in {ref_dir}", file=sys.stderr)
+                return 1
+            _emit(f"\\n=== PAK COMPARE: {factory.name} vs {ref_dir} ===\\n")
+            for ref_path, result in results:
+                _emit(format_report(result))
+        else:
+            ref = Path(args.reference_pak)
+            if not ref.exists():
+                print(f"ERROR: reference pak not found: {ref}", file=sys.stderr)
+                return 1
+            result = compare_paks(factory, ref)
+            _emit(format_report(result))
+
+        if output_file:
+            Path(output_file).write_text("".join(out_lines))
+            print(f"Report written to: {output_file}", file=sys.stderr)
+        return 0
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+'''
+
+# ---------------------------------------------------------------------------
+# Reference pak selection
+# ---------------------------------------------------------------------------
+
+def _pick_reference_pak() -> Optional[Path]:
+    """Return the best available reference pak from dist/.
+
+    Preference order:
+    1. The compliance sdk pak (highest value, exercises bundled content).
+    2. Any other sdk pak in dist/.
+    3. Any pak in dist/.
+
+    Returns None if no suitable pak is found.
+    """
+    dist = _REPO_ROOT / "dist"
+    if not dist.is_dir():
+        return None
+
+    # Prefer the latest compliance pak (highest build number)
+    compliance_paks = sorted(
+        dist.glob("vcfcf_sdk_compliance.*.pak"),
+        key=lambda p: [int(x) if x.isdigit() else 0 for x in p.stem.split(".")],
+        reverse=True,
+    )
+    if compliance_paks:
+        return compliance_paks[0]
+
+    # Any SDK pak
+    sdk_paks = sorted(dist.glob("vcfcf_sdk_*.pak"), reverse=True)
+    if sdk_paks:
+        return sdk_paks[0]
+
+    # Any pak at all
+    any_paks = sorted(dist.glob("*.pak"), reverse=True)
+    if any_paks:
+        return any_paks[0]
+
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Text-rewrite helper
+# ---------------------------------------------------------------------------
+
+def _apply_rewrites(text: str, rules: list[tuple[str, str]]) -> str:
+    """Apply a list of (regex_pattern, replacement) substitutions to text."""
+    for pattern, replacement in rules:
+        text = re.sub(pattern, replacement, text)
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Main assembly function
+# ---------------------------------------------------------------------------
+
+def assemble_buildkit(
+    output_dir: Path,
+    version: str = BUILDKIT_VERSION,
+    reference_pak: Optional[Path] = None,
+    verbose: bool = True,
+) -> Path:
+    """Assemble the sdk-buildkit tarball.
+
+    Args:
+        output_dir:    Directory where the tarball will be written.
+        version:       Version string to stamp into the kit (default: BUILDKIT_VERSION).
+        reference_pak: Explicit path to a .pak to bundle as the comparison reference.
+                       When None, auto-selected from dist/ by _pick_reference_pak().
+        verbose:       Print progress messages to stdout.
+
+    Returns:
+        Path to the produced .tgz file.
+
+    Raises:
+        FileNotFoundError: if a required source file is missing.
+        ValueError: if no reference pak can be found.
+    """
+    import sys
+
+    def _log(msg: str) -> None:
+        if verbose:
+            print(msg, file=sys.stderr)
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Validate source files exist
+    for dest_name, src_path in _FACTORY_SOURCES.items():
+        if not src_path.is_file():
+            raise FileNotFoundError(
+                f"buildkit source file not found: {src_path} (for {dest_name})"
+            )
+
+    # Select reference pak
+    if reference_pak is None:
+        reference_pak = _pick_reference_pak()
+    if reference_pak is None:
+        raise ValueError(
+            "No reference .pak found. Build at least one adapter pak first "
+            "(python3 -m vcfops_managementpacks build-sdk content/sdk-adapters/compliance) "
+            "or pass --reference-pak explicitly."
+        )
+    if not reference_pak.is_file():
+        raise FileNotFoundError(f"Reference pak not found: {reference_pak}")
+
+    _log(f"Assembling sdk-buildkit v{version} ...")
+    _log(f"  reference pak: {reference_pak.name}")
+
+    tarball_name = f"sdk-buildkit-{version}.tgz"
+    tarball_path = output_dir / tarball_name
+
+    with tempfile.TemporaryDirectory(prefix="sdk-buildkit-") as tmpdir:
+        kit_dir = Path(tmpdir) / "sdk_buildkit"
+        kit_dir.mkdir()
+
+        # -----------------------------------------------------------------
+        # 1. __init__.py and __main__.py
+        # -----------------------------------------------------------------
+        (kit_dir / "__init__.py").write_text(_KIT_INIT, encoding="utf-8")
+        _log("  wrote __init__.py")
+        (kit_dir / "__main__.py").write_text(_KIT_MAIN, encoding="utf-8")
+        _log("  wrote __main__.py")
+
+        # -----------------------------------------------------------------
+        # 2. Python source files (with import rewrites)
+        # -----------------------------------------------------------------
+        for dest_name, src_path in _FACTORY_SOURCES.items():
+            source_text = src_path.read_text(encoding="utf-8")
+            rules = _IMPORT_REWRITES.get(dest_name, [])
+            if rules:
+                patched_text = _apply_rewrites(source_text, rules)
+                (kit_dir / dest_name).write_text(patched_text, encoding="utf-8")
+                _log(f"  wrote {dest_name} (patched {len(rules)} import rule(s))")
+            else:
+                (kit_dir / dest_name).write_bytes(src_path.read_bytes())
+                _log(f"  wrote {dest_name}")
+
+        # -----------------------------------------------------------------
+        # 3. adapter_runtime/ — OUR jars only; NO Broadcom jars
+        #
+        # The buildkit tarball is a public artifact.  Broadcom platform JARs
+        # (vrops-adapters-sdk, alive_*, aria-ops-core, mpb_adapter*,
+        # vmware-ops-api-stubs) cannot ship in a public toolchain tarball — they
+        # are internal build artifacts with no public redistribution channel.
+        # See the redistribution survey:
+        #   context/cleanroom-spec/analysis/sdk-survey/
+        #     third-party-broadcom-jar-redistribution-survey-2026-06-09.md
+        #   §"Distributing the JARs outside a pak"
+        #
+        # Only vcfcf-adapter-base.jar (our framework, which we own and built)
+        # is copied.  The consumer must supply vrops-adapters-sdk-2.2.jar via
+        # VCFCF_SDK_JAR env var or --sdk-jar flag at build time.
+        # -----------------------------------------------------------------
+        _BROADCOM_JAR_PATTERNS = (
+            "vrops-adapters-sdk",
+            "alive_common",
+            "alive_platform",
+            "aria-ops-core",
+            "mpb_adapter",
+            "vmware-ops-api-stubs",
+        )
+        runtime_src = _HERE / "adapter_runtime"
+        runtime_dst = kit_dir / "adapter_runtime"
+        runtime_dst.mkdir()
+        copied_jars = []
+        skipped_jars = []
+        for jar in sorted(runtime_src.glob("*.jar")):
+            if any(jar.name.startswith(pat) for pat in _BROADCOM_JAR_PATTERNS):
+                skipped_jars.append(jar.name)
+            else:
+                shutil.copy2(str(jar), str(runtime_dst / jar.name))
+                copied_jars.append(jar.name)
+        # Also copy adapter_runtime/lib/ if present (non-Broadcom only)
+        lib_src = runtime_src / "lib"
+        if lib_src.is_dir():
+            lib_dst = runtime_dst / "lib"
+            lib_dst.mkdir()
+            for jar in sorted(lib_src.glob("*.jar")):
+                if not any(jar.name.startswith(pat) for pat in _BROADCOM_JAR_PATTERNS):
+                    shutil.copy2(str(jar), str(lib_dst / jar.name))
+        _log(f"  copied adapter_runtime/ ({len(copied_jars)} JAR(s): {', '.join(copied_jars)})")
+        if skipped_jars:
+            _log(f"  excluded Broadcom JARs: {', '.join(skipped_jars)}")
+
+        # -----------------------------------------------------------------
+        # 4. templates/icons/ SVG assets
+        # -----------------------------------------------------------------
+        icons_src = _HERE / "templates" / "icons"
+        icons_dst = kit_dir / "templates" / "icons"
+        icons_dst.mkdir(parents=True)
+        for svg in sorted(icons_src.glob("*.svg")):
+            shutil.copy2(str(svg), str(icons_dst / svg.name))
+        icon_count = sum(1 for _ in icons_dst.glob("*.svg"))
+        _log(f"  copied templates/icons/ ({icon_count} SVG files)")
+
+        # -----------------------------------------------------------------
+        # 5. reference_paks/ — the bundled reference pak
+        # -----------------------------------------------------------------
+        ref_paks_dst = kit_dir / "reference_paks"
+        ref_paks_dst.mkdir()
+        shutil.copy2(str(reference_pak), str(ref_paks_dst / reference_pak.name))
+        _log(f"  copied reference_paks/{reference_pak.name}")
+
+        # -----------------------------------------------------------------
+        # 6. LICENSE
+        # -----------------------------------------------------------------
+        license_src = _REPO_ROOT / "LICENSE"
+        if license_src.is_file():
+            shutil.copy2(str(license_src), str(kit_dir / "LICENSE"))
+            _log("  copied LICENSE")
+        else:
+            # Write a placeholder so the builder's _read_license() doesn't warn
+            (kit_dir / "LICENSE").write_text(
+                "MIT License — see factory repo for full text.\n", encoding="utf-8"
+            )
+            _log("  wrote LICENSE placeholder (source not found)")
+
+        # -----------------------------------------------------------------
+        # 7. VERSION
+        # -----------------------------------------------------------------
+        (kit_dir / "VERSION").write_text(f"{version}\n", encoding="utf-8")
+        _log(f"  wrote VERSION ({version})")
+
+        # -----------------------------------------------------------------
+        # 8. Pack into tarball
+        # -----------------------------------------------------------------
+        # The tarball contains sdk_buildkit/ at the top level so that
+        # tar xzf sdk-buildkit-N.tgz && python3 -m sdk_buildkit works
+        # from the extraction directory.
+        with tarfile.open(str(tarball_path), "w:gz") as tf:
+            tf.add(str(kit_dir), arcname="sdk_buildkit")
+
+        _log(f"  packed tarball: {tarball_path}")
+
+    size_kb = tarball_path.stat().st_size // 1024
+    _log(f"Done: {tarball_path}  ({size_kb:,} KB)")
+    return tarball_path

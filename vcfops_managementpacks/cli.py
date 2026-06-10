@@ -380,6 +380,20 @@ def cmd_build(args) -> int:
     return 0
 
 
+def _apply_sdk_jar_flag(args) -> None:
+    """If --sdk-jar was supplied, set VCFCF_SDK_JAR in the environment.
+
+    This allows sdk_builder._build_classpath to pick up the JAR path without
+    requiring callers to export the env var manually.  The env var approach keeps
+    the injection point in one place (sdk_builder) and avoids threading a new
+    parameter through every call stack.
+    """
+    import os as _os
+    sdk_jar = getattr(args, "sdk_jar", None)
+    if sdk_jar:
+        _os.environ["VCFCF_SDK_JAR"] = str(sdk_jar)
+
+
 def _cmd_build_sdk_inner(project_dir: Path, output_dir: Path) -> int:
     """Inner helper: build a Tier 2 SDK adapter pak from project_dir."""
     from .sdk_builder import build_sdk_pak, SdkBuildError
@@ -399,11 +413,13 @@ def _cmd_build_sdk_inner(project_dir: Path, output_dir: Path) -> int:
 
 def cmd_build_sdk(args) -> int:
     """build-sdk <dir> — compile and package a Tier 2 SDK adapter project."""
+    _apply_sdk_jar_flag(args)
     return _cmd_build_sdk_inner(Path(args.project_dir), Path(args.output))
 
 
 def cmd_validate_sdk(args) -> int:
     """validate-sdk <dir> — validate adapter.yaml schema and compile-check source."""
+    _apply_sdk_jar_flag(args)
     from .sdk_builder import validate_sdk_project, SdkBuildError
     from .sdk_project import SdkProjectError
 
@@ -422,6 +438,32 @@ def cmd_validate_sdk(args) -> int:
 
     print(f"OK: {project_dir} is a valid Tier 2 SDK adapter project")
     return 0
+
+
+def cmd_build_buildkit(args) -> int:
+    """build-buildkit — assemble a portable sdk-buildkit tarball."""
+    from .buildkit import assemble_buildkit, BUILDKIT_VERSION
+    from pathlib import Path as _Path
+
+    output_dir = _Path(args.output)
+    version = args.version or BUILDKIT_VERSION
+    reference_pak = _Path(args.reference_pak) if args.reference_pak else None
+
+    try:
+        tarball = assemble_buildkit(
+            output_dir=output_dir,
+            version=version,
+            reference_pak=reference_pak,
+            verbose=True,
+        )
+        print(f"Built: {tarball}")
+        return 0
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        print(f"ERROR building buildkit: {exc}", file=sys.stderr)
+        return 1
 
 
 def cmd_scaffold_sdk(args) -> int:
@@ -839,6 +881,18 @@ def build_parser() -> argparse.ArgumentParser:
         default="dist",
         help="output directory for the .pak file (default: dist/)",
     )
+    pbsdk.add_argument(
+        "--sdk-jar",
+        dest="sdk_jar",
+        default=None,
+        metavar="JAR_PATH",
+        help=(
+            "path to vrops-adapters-sdk-2.2.jar (Broadcom; not shipped in the "
+            "buildkit tarball). Alternatively set VCFCF_SDK_JAR env var. "
+            "In the factory, the jar is already in adapter_runtime/ and this "
+            "flag is not needed."
+        ),
+    )
     pbsdk.set_defaults(func=cmd_build_sdk)
 
     pvsdk = sub.add_parser(
@@ -849,6 +903,16 @@ def build_parser() -> argparse.ArgumentParser:
         "project_dir",
         metavar="PROJECT_DIR",
         help="path to the Tier 2 adapter project directory",
+    )
+    pvsdk.add_argument(
+        "--sdk-jar",
+        dest="sdk_jar",
+        default=None,
+        metavar="JAR_PATH",
+        help=(
+            "path to vrops-adapters-sdk-2.2.jar. Alternatively set VCFCF_SDK_JAR. "
+            "Not needed in the factory (jar is in adapter_runtime/)."
+        ),
     )
     pvsdk.set_defaults(func=cmd_validate_sdk)
 
@@ -867,6 +931,43 @@ def build_parser() -> argparse.ArgumentParser:
         help="base directory for the new project (default: content/sdk-adapters/)",
     )
     pssdk.set_defaults(func=cmd_scaffold_sdk)
+
+    # ------------------------------------------------------------------
+    # build-buildkit subcommand
+    # ------------------------------------------------------------------
+    pbk = sub.add_parser(
+        "build-buildkit",
+        help=(
+            "assemble a portable sdk-buildkit tarball (sdk-buildkit-vX.Y.Z.tgz) "
+            "that CI runners can use to build Tier 2 adapter paks without a "
+            "factory checkout or LLM"
+        ),
+    )
+    pbk.add_argument(
+        "--output", "-o",
+        default="dist",
+        help="output directory for the tarball (default: dist/)",
+    )
+    pbk.add_argument(
+        "--version",
+        default=None,
+        metavar="VERSION",
+        help=(
+            "kit version to stamp into VERSION and the tarball name "
+            "(default: the BUILDKIT_VERSION constant in buildkit.py)"
+        ),
+    )
+    pbk.add_argument(
+        "--reference-pak",
+        dest="reference_pak",
+        default=None,
+        metavar="PAK_PATH",
+        help=(
+            "path to a .pak file to bundle as the pak-compare reference "
+            "(default: auto-selected from dist/, preferring the compliance pak)"
+        ),
+    )
+    pbk.set_defaults(func=cmd_build_buildkit)
 
     # ------------------------------------------------------------------
     # pak-compare subcommand

@@ -466,6 +466,31 @@ def _load_bundle_yaml_for_release(artifact) -> dict:
         return {}
 
 
+def _extract_pointer_latest_url(zip_path: Path) -> "Optional[str]":
+    """If ``zip_path`` is a pointer zip, return its ``latest_release_url``; else None.
+
+    A pointer zip contains a ``pointer.json`` member with
+    ``{"type": "sdk-pak-pointer", "latest_release_url": "..."}`` at its root.
+    Any zip that is absent, unreadable, or lacks that structure returns None.
+    """
+    import json
+    import zipfile as _zf
+    if not zip_path.exists():
+        return None
+    try:
+        with _zf.ZipFile(zip_path, "r") as zf:
+            if "pointer.json" not in zf.namelist():
+                return None
+            data = json.loads(zf.read("pointer.json").decode("utf-8"))
+        if not isinstance(data, dict):
+            return None
+        if data.get("type") != "sdk-pak-pointer":
+            return None
+        return data.get("latest_release_url") or None
+    except Exception:
+        return None
+
+
 def _render_release_catalog(dist_repo: Path, releases: list) -> str:
     """Render the full release-catalog AUTO section body.
 
@@ -529,18 +554,23 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
             if first_sentence and not first_sentence.endswith("."):
                 first_sentence += "."
 
-            # Download link: subdir-prefixed path so it resolves from the
-            # dist-repo root (README lives at the root, zip lives at
-            # <subdir>/<filename>).
-            zip_url = f"{subdir}/{filename}"
-            download_cell = f"[Download]({zip_url})"
-
-            # Install column: MP releases install via the VCF Ops UI, not
-            # the install script.
-            if subdir == "management-packs" or subdir.endswith("/management-packs"):
-                install_cell = "UI: Administration → Solutions"
+            # Download / install columns.
+            # For SDK pak pointers: link directly to the pak's GitHub Release
+            # page rather than to the pointer zip in the dist repo.
+            zip_path_on_disk = dist_repo / subdir / filename
+            _latest_url = _extract_pointer_latest_url(zip_path_on_disk)
+            if _latest_url is not None:
+                # Pointer zip: link out to the external GitHub Release.
+                download_cell = f"[GitHub Release]({_latest_url})"
+                install_cell = "See GitHub Release page"
             else:
-                install_cell = "`python3 install.py`"
+                # Normal artifact: local download + install script.
+                zip_url = f"{subdir}/{filename}"
+                download_cell = f"[Download]({zip_url})"
+                if subdir == "management-packs" or subdir.endswith("/management-packs"):
+                    install_cell = "UI: Administration → Solutions"
+                else:
+                    install_cell = "`python3 install.py`"
 
             if subdir in by_third_party:
                 # Third-party row — load license + author from bundle YAML.

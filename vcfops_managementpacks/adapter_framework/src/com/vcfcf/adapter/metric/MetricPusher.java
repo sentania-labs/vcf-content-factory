@@ -79,11 +79,17 @@ public final class MetricPusher {
 		/**
 		 * Add a string property.
 		 *
+		 * <p><strong>Uses {@code new MetricKey(true, key)}</strong> to set
+		 * {@code isProperty=true}. The convenience overload
+		 * {@code new MetricKey(key)} hardcodes {@code isProperty=false}; the
+		 * platform silently discards string values on non-property MetricKeys.
+		 *
 		 * @param key   the property key (pipe-delimited, matching describe.xml)
 		 * @param value the string value
 		 */
 		public ResourceContext property(String key, String value) {
-			MetricData md = new MetricData(new MetricKey(key), System.currentTimeMillis(), value);
+			MetricData md = new MetricData(new MetricKey(true, key),
+					System.currentTimeMillis(), value);
 			properties.add(md);
 			return this;
 		}
@@ -91,11 +97,15 @@ public final class MetricPusher {
 		/**
 		 * Add a numeric property (isProperty=true in describe.xml).
 		 *
+		 * <p>Uses {@code new MetricKey(true, key)} so the platform treats this
+		 * as a property (change-only delivery) rather than a per-cycle metric.
+		 *
 		 * @param key   the property key
 		 * @param value the numeric value
 		 */
 		public ResourceContext numericProperty(String key, double value) {
-			MetricData md = new MetricData(new MetricKey(key), System.currentTimeMillis(), value);
+			MetricData md = new MetricData(new MetricKey(true, key),
+					System.currentTimeMillis(), value);
 			properties.add(md);
 			return this;
 		}

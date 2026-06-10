@@ -1,127 +1,153 @@
 package com.vcfcf.adapter.http;
 
+import com.vcfcf.adapter.VcfCfAdapter;
 import com.vcfcf.adapter.auth.AuthStrategy;
 import com.vcfcf.adapter.retry.RetryPolicy;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
-import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Fluent builder for a pre-configured {@link HttpClient} with auth, retry,
- * default headers, and optional SSL trust configuration.
+ * Fluent builder for a pre-configured {@link ManagedHttpClient} with auth,
+ * retry, default headers, and SSL trust configuration.
+ *
+ * <h3>SSL (cert item)</h3>
+ * <p>By default, no custom SSL context is set — the JVM's default trust store
+ * is used. To use the platform's trust store (recommended for production,
+ * ensures user-trusted certs from VCF Ops certificate management are honoured),
+ * call {@link #platformSsl(VcfCfAdapter)}. To skip certificate verification
+ * in lab environments with self-signed certs, call {@link #allowInsecure(boolean)}
+ * — this is an explicit, documented opt-out, not the default.
  *
  * <p>Usage:
  * <pre>{@code
+ * // Production — platform trust store:
  * ManagedHttpClient client = HttpClientBuilder.builder()
  *     .baseUrl("https://my-nas.local:5001")
- *     .allowInsecure(true)               // self-signed cert in lab
+ *     .platformSsl(this)                    // 'this' = the VcfCfAdapter instance
  *     .auth(new BasicAuth("admin", "secret"))
- *     .defaultHeader("Accept", "application/json")
- *     .retryPolicy(RetryPolicy.DEFAULT)
- *     .timeout(Duration.ofSeconds(30))
  *     .build();
  *
- * HttpResponse<String> resp = client.get("/api/data", HttpResponse.BodyHandlers.ofString());
+ * // Lab — self-signed cert opt-out:
+ * ManagedHttpClient client = HttpClientBuilder.builder()
+ *     .baseUrl("https://my-nas.local:5001")
+ *     .allowInsecure(true)                  // explicit opt-out
+ *     .build();
  * }</pre>
  *
- * <p>The underlying {@link HttpClient} is a stdlib-only client (java.net.http).
- * No Apache HttpClient or other third-party HTTP library is used.
+ * <p>The underlying HTTP transport is {@code java.net.http.HttpClient} (stdlib
+ * only). No Apache HttpClient or other third-party HTTP library is required.
  */
 public final class HttpClientBuilder {
 
-	private String baseUrl = "";
-	private boolean allowInsecure = false;
-	private AuthStrategy auth = null;
-	private RetryPolicy retryPolicy = RetryPolicy.DEFAULT;
-	private Duration timeout = Duration.ofSeconds(30);
-	private final List<String[]> defaultHeaders = new ArrayList<>();
+    private String baseUrl = "";
+    private SSLContext sslContext = null;        // null → JVM default
+    private AuthStrategy auth = null;
+    private RetryPolicy retryPolicy = RetryPolicy.DEFAULT;
+    private Duration timeout = Duration.ofSeconds(30);
+    private final List<String[]> defaultHeaders = new ArrayList<>();
 
-	private HttpClientBuilder() {}
+    private HttpClientBuilder() {}
 
-	/** Create a new builder. */
-	public static HttpClientBuilder builder() {
-		return new HttpClientBuilder();
-	}
+    /** Create a new builder. */
+    public static HttpClientBuilder builder() {
+        return new HttpClientBuilder();
+    }
 
-	/**
-	 * Base URL prepended to every relative path passed to {@code get()} /
-	 * {@code post()} etc. (e.g. {@code "https://my-nas.local:5001"}).
-	 */
-	public HttpClientBuilder baseUrl(String url) {
-		this.baseUrl = url;
-		return this;
-	}
+    /**
+     * Base URL prepended to every relative path in {@code get()} / {@code post()}.
+     * Example: {@code "https://my-nas.local:5001"}.
+     */
+    public HttpClientBuilder baseUrl(String url) {
+        this.baseUrl = url;
+        return this;
+    }
 
-	/**
-	 * When {@code true}, disable SSL certificate verification.
-	 * Use ONLY in lab/dev environments with self-signed certs.
-	 */
-	public HttpClientBuilder allowInsecure(boolean insecure) {
-		this.allowInsecure = insecure;
-		return this;
-	}
+    /**
+     * Use the platform's trust store for SSL certificate verification.
+     *
+     * <p>Preferred for production adapters. Calls
+     * {@link VcfCfAdapter#getPlatformSslContext()} to obtain an
+     * {@link SSLContext} backed by the VCF Ops certificate management
+     * framework, ensuring user-added trusted certs are honoured.
+     *
+     * @param adapter the {@link VcfCfAdapter} instance ({@code this} in your
+     *                {@code configureAdapter()} implementation)
+     */
+    public HttpClientBuilder platformSsl(VcfCfAdapter<?> adapter) {
+        this.sslContext = adapter.getPlatformSslContext();
+        return this;
+    }
 
-	/** Auth strategy applied to every request (e.g. {@link com.vcfcf.adapter.auth.BasicAuth}). */
-	public HttpClientBuilder auth(AuthStrategy strategy) {
-		this.auth = strategy;
-		return this;
-	}
+    /**
+     * Disable SSL certificate verification.
+     *
+     * <p><strong>Explicit opt-out — use ONLY in lab/dev environments with
+     * self-signed certificates.</strong> Do not use in production adapters.
+     * If both {@link #platformSsl} and {@link #allowInsecure(boolean)} are
+     * called, the last call wins.
+     *
+     * @param insecure {@code true} to trust all certificates without verification
+     */
+    public HttpClientBuilder allowInsecure(boolean insecure) {
+        if (insecure) {
+            this.sslContext = VcfCfAdapter.insecureSslContext();
+        }
+        return this;
+    }
 
-	/** Retry policy for transient failures. Default: {@link RetryPolicy#DEFAULT}. */
-	public HttpClientBuilder retryPolicy(RetryPolicy policy) {
-		this.retryPolicy = policy;
-		return this;
-	}
+    /**
+     * Supply a pre-built {@link SSLContext} directly.
+     *
+     * <p>Advanced use only. Prefer {@link #platformSsl(VcfCfAdapter)} for
+     * production adapters.
+     */
+    public HttpClientBuilder sslContext(SSLContext ctx) {
+        this.sslContext = ctx;
+        return this;
+    }
 
-	/** Per-request connect+read timeout. Default: 30 seconds. */
-	public HttpClientBuilder timeout(Duration d) {
-		this.timeout = d;
-		return this;
-	}
+    /** Auth strategy applied to every request. */
+    public HttpClientBuilder auth(AuthStrategy strategy) {
+        this.auth = strategy;
+        return this;
+    }
 
-	/** Add a default header sent with every request. */
-	public HttpClientBuilder defaultHeader(String name, String value) {
-		this.defaultHeaders.add(new String[]{name, value});
-		return this;
-	}
+    /** Retry policy for transient failures. Default: {@link RetryPolicy#DEFAULT}. */
+    public HttpClientBuilder retryPolicy(RetryPolicy policy) {
+        this.retryPolicy = policy;
+        return this;
+    }
 
-	/** Build the {@link ManagedHttpClient}. */
-	public ManagedHttpClient build() {
-		HttpClient.Builder clientBuilder = HttpClient.newBuilder()
-				.connectTimeout(timeout)
-				.followRedirects(HttpClient.Redirect.NORMAL);
+    /** Per-request connect+read timeout. Default: 30 seconds. */
+    public HttpClientBuilder timeout(Duration d) {
+        this.timeout = d;
+        return this;
+    }
 
-		if (allowInsecure) {
-			clientBuilder.sslContext(insecureSslContext());
-		}
+    /** Add a default header sent with every request. */
+    public HttpClientBuilder defaultHeader(String name, String value) {
+        this.defaultHeaders.add(new String[]{name, value});
+        return this;
+    }
 
-		HttpClient httpClient = clientBuilder.build();
-		return new ManagedHttpClient(httpClient, baseUrl, auth, retryPolicy, timeout,
-				List.copyOf(defaultHeaders));
-	}
+    /** Build the {@link ManagedHttpClient}. */
+    public ManagedHttpClient build() {
+        HttpClient.Builder clientBuilder = HttpClient.newBuilder()
+                .connectTimeout(timeout)
+                .followRedirects(HttpClient.Redirect.NORMAL);
 
-	private static SSLContext insecureSslContext() {
-		try {
-			SSLContext ctx = SSLContext.getInstance("TLS");
-			ctx.init(null, new TrustManager[]{new X509TrustManager() {
-				public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-				public void checkClientTrusted(X509Certificate[] c, String a) {}
-				public void checkServerTrusted(X509Certificate[] c, String a) {}
-			}}, null);
-			return ctx;
-		} catch (NoSuchAlgorithmException | KeyManagementException e) {
-			throw new RuntimeException("Failed to create insecure SSL context", e);
-		}
-	}
+        if (sslContext != null) {
+            clientBuilder.sslContext(sslContext);
+        }
+        // If sslContext is null, java.net.http.HttpClient uses the JVM default
+        // trust store — acceptable for adapters talking to publicly-trusted endpoints.
+
+        HttpClient httpClient = clientBuilder.build();
+        return new ManagedHttpClient(httpClient, baseUrl, auth, retryPolicy,
+                timeout, List.copyOf(defaultHeaders));
+    }
 }

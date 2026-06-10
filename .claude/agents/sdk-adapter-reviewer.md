@@ -36,6 +36,14 @@ top of it, never inside it:
   them.** A reviewer that edits the code it reviews is no longer an
   independent check.
 
+**Repo model:** the adapter under `content/sdk-adapters/<adapter>/` is its
+own independent, gitignored git repo (`sentania-labs/vcf-content-factory-sdk-<adapter>`).
+You still gate the **pre-release** state: the author's local `build-sdk`
+output, before a `v*` tag cuts the official CI-built `.pak`. Your review is
+the static check that should pass *before* anyone tags a release. Your
+report stays in the **factory** repo (`context/reviews/`, not the adapter
+repo) so it remains diffable here.
+
 You are **read-only on all adapter source.** You MAY run `Bash` to
 compile-check and to independently re-run `validate-sdk` / `build-sdk` /
 `pak-compare` — to verify the author's claims with your own eyes, not take

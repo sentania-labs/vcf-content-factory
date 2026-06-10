@@ -40,6 +40,27 @@ Before beginning any design work:
 See `context/tier_decision_framework.md` for the full trigger table
 with concrete examples of each trigger.
 
+### Tier 2 delivery model (note in the design)
+
+A Tier 2 SDK adapter is **not** authored inside the factory repo — it
+lives in its **own** git repo (org `sentania-labs`, named
+`vcf-content-factory-sdk-<name>`). A new adapter is bootstrapped by:
+
+1. Instantiating the GitHub template repo
+   `sentania-labs/vcf-content-factory-sdk-template` ("Use this template")
+   → it ships the skeleton layout + the `build-pak-on-tag` CI.
+2. Adding one entry to `context/managed_paks.md` (name / remote /
+   `content/sdk-adapters/<name>/`) so the factory's bootstrap clones it
+   into the (gitignored) tree for authoring.
+3. `sdk-adapter-author` then authors in that cloned dir; the official
+   `.pak` is built by the pak repo's CI on a `v*` tag, not the factory.
+
+When you route a design to Tier 2, name the target repo
+(`vcf-content-factory-sdk-<name>`) in the design artifact so the
+orchestrator knows to instantiate + register it before authoring. Bundled
+dashboards/views ship **inside** that repo (co-located under its `views/`
+and `dashboards/`), not in the factory.
+
 ## Hard rules
 
 1. **Write only to `designs/`.** Never touch content YAML,

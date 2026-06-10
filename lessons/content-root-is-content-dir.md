@@ -47,13 +47,21 @@ There are genuinely **two** dashboard directories, with different jobs:
 | Location | Purpose | Install path |
 |---|---|---|
 | `content/dashboards/` | Factory content | content-import zip |
-| `dashboards/` (repo root) | Dashboards embedded **inside an SDK-adapter pak** (e.g. `content/sdk-adapters/compliance/adapter.yaml` bundles `dashboards/compliance-overview.yaml`) | pak build/bundling |
+| `dashboards/` (repo root) | Dashboards bundled **inside a Tier 1 MP pak** (e.g. the mssql/oracle MPs) | pak build/bundling |
 
-The repo-root `dashboards/` holds **real, git-tracked, in-use** pak content
-(`compliance-overview`, `mssql-query-performance`, `oracle-query-performance`).
-A `glob` for `dashboards/*.yaml` therefore returns legitimate-looking siblings
-at the WRONG path for a content-import dashboard. **Do not delete the repo-root
-`dashboards/` files** — they are live pak content, not cruft.
+The repo-root `dashboards/` holds **real, git-tracked, in-use** Tier 1 MP pak
+content (`mssql-query-performance`, `oracle-query-performance`). A `glob` for
+`dashboards/*.yaml` therefore returns legitimate-looking siblings at the WRONG
+path for a content-import dashboard. **Do not delete the repo-root `dashboards/`
+files** — they are live pak content, not cruft.
+
+**Update (2026-06-08):** Tier **2** SDK-adapter bundled content no longer lives
+at the repo root. Each SDK adapter is now its own independent repo (cloned into
+the gitignored `content/sdk-adapters/<name>/`), and its bundled views/dashboards
+live **inside that adapter dir** (`content/sdk-adapters/<name>/views|dashboards/`),
+resolved relative to `adapter.yaml` — not the factory root. Compliance's
+`compliance-host-overview` / `compliance-overview` moved into the compliance repo
+accordingly; only the Tier 1 mssql/oracle files remain at the repo root.
 
 ## Fix
 
@@ -61,9 +69,9 @@ at the WRONG path for a content-import dashboard. **Do not delete the repo-root
   (`.claude/agents/{view,dashboard,customgroup}-author.md` updated; the
   dashboard prompt now carries the two-location table explicitly).
 - CLAUDE.md roster "Writes to" column corrected to `content/<type>/`.
-- SDK-adapter-bundled dashboards remain the SDK-adapter author's job and live
-  under the adapter tree / repo-root `dashboards/` — that exception is called
-  out in the dashboard-author prompt.
+- SDK-adapter-bundled (Tier 2) dashboards live **inside the adapter's own repo**
+  (`content/sdk-adapters/<name>/dashboards|views/`), resolved relative to
+  `adapter.yaml`. Tier 1 MP-bundled dashboards remain at the repo root.
 
 ## Tells / how to catch it fast
 

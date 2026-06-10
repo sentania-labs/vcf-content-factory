@@ -133,20 +133,37 @@ def _read_from_adapters_zip(adapters_zip_bytes: Optional[bytes], member: str) ->
 
 
 def _detect_adapter_dir(adapters_inventory: Set[str]) -> Optional[str]:
-    """Infer the adapter directory name (e.g. 'mpb_synology_nas_adapter3').
+    """Infer the adapter directory name from the adapters.zip member list.
 
-    Looks for the pattern '<something>_adapter3/' as a prefix across members.
-    Falls back to any directory ending in '_adapter3'.
+    Tier 1 (MPB) paks use a '<something>_adapter3/' top-level directory.
+    Tier 2 (SDK) paks use a '<adapterkind>/' top-level directory that does NOT
+    end in '_adapter3', but always contains '<adapterkind>/conf/describe.xml'.
+
+    Detection order:
+      1. Look for any top-level dir prefix ending in '_adapter3'  (Tier 1).
+      2. Look for any entry of the form '<name>/conf/describe.xml'  (Tier 2).
     """
+    # --- Tier 1: MPB adapter3 layout ---
     candidates: Set[str] = set()
     for name in adapters_inventory:
         parts = name.split("/")
         if len(parts) >= 2 and parts[0].endswith("_adapter3"):
             candidates.add(parts[0])
-    if not candidates:
-        return None
-    # If there's only one, return it.  If multiple, pick shortest (most likely base).
-    return sorted(candidates, key=len)[0]
+    if candidates:
+        # If there's only one, return it.  If multiple, pick shortest (most likely base).
+        return sorted(candidates, key=len)[0]
+
+    # --- Tier 2: SDK adapter layout — find '<adapterkind>/conf/describe.xml' ---
+    sdk_candidates: Set[str] = set()
+    for name in adapters_inventory:
+        parts = name.split("/")
+        # Expecting exactly '<adapterkind>/conf/describe.xml' (3 parts, no trailing /)
+        if len(parts) == 3 and parts[1] == "conf" and parts[2] == "describe.xml":
+            sdk_candidates.add(parts[0])
+    if sdk_candidates:
+        return sorted(sdk_candidates, key=len)[0]
+
+    return None
 
 
 # ---------------------------------------------------------------------------

@@ -8,6 +8,15 @@
 
 Today `/publish` pushes directly to `main` of the distribution repo
 (`sentania-labs/vcf-content-factory-bundles`). That's fast, but assumes:
+
+> **SDK pak note (2026-06-08):** SDK adapter headlines (source path
+> `content/sdk-adapters/<name>/`) emit a pointer record zip instead of
+> a compiled `.pak`.  The pointer lands in `management-packs/` with a
+> `[GitHub Release]` link in the dist-repo README.  The PR body, branch
+> naming, and commit message logic are unchanged — an SDK pointer is
+> treated as a normal build artifact by the PR / push orchestration.
+> See `designs/release-lifecycle-v1.md` Addendum 2026-06-08 for full
+> details.
 - The runner has push access to the dist repo.
 - No human review is wanted between build and ship.
 - Branch protection isn't enforced on the dist repo.

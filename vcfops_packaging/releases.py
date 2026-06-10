@@ -180,6 +180,20 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
         candidate = repo_root / p
         if candidate.exists():
             return candidate
+        # Provide a specific actionable message for SDK adapter sources that are
+        # missing because their repo has not been cloned yet.  On a clean checkout
+        # content/sdk-adapters/ is gitignored — each adapter lives in its own
+        # independent repo.  Running bootstrap_managed_paks.sh populates them.
+        ref_parts = Path(ref).parts
+        if len(ref_parts) >= 2 and ref_parts[0] == "content" and ref_parts[1] == "sdk-adapters":
+            raise ReleaseValidationError(
+                f"{path}: artifact source not found: {ref!r} (tried {candidate}).\n"
+                "  This source is under content/sdk-adapters/ which is gitignored — "
+                "each SDK adapter lives in its own independent repo.\n"
+                "  Clone all managed pak repos by running:\n"
+                "    bash scripts/bootstrap_managed_paks.sh\n"
+                "  (Repos are public; no authentication required.)"
+            )
         raise ReleaseValidationError(
             f"{path}: artifact source not found: {ref!r} (tried {candidate})"
         )

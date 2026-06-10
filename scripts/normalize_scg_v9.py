@@ -26,9 +26,12 @@ from _compliance_normalize import (
     ADAPTER_KIND,
     build_control_id,
     build_read_recipe,
+    classify_control_override,
     classify_esxcli_reclass,
     classify_parameter_kind,
     classify_security_policy_param,
+    classify_service_state_reclass,
+    classify_source_id_vim_reclass,
     classify_vim_reclass,
     classify_vsan_cluster_expected,
     classify_vsan_cluster_param,
@@ -207,6 +210,45 @@ def normalize(input_path: str, output_path: str) -> int:
                 reclass_recipe = ec_recipe
                 reclass_expected = ec_expected
                 reclass_caveat = ec_caveat
+
+            # service_state sprint (build 38) — vim_property reclassification
+            # for ESX service running-state controls keyed by control_id.
+            # Promotes powercli_only / manual_audit rows to vim_property with
+            # a service_state:<key>:running recipe.
+            svc_reclass = classify_service_state_reclass(control_id)
+            if svc_reclass is not None:
+                sv_param, sv_recipe, sv_expected = svc_reclass
+                parameter = sv_param
+                parameter_kind = "vim_property"
+                reclass_recipe = sv_recipe
+                reclass_expected = sv_expected
+                reclass_caveat = None
+
+            # source_id vim_property reclassification (build 40) — for rows
+            # whose control_id is shared with another row that should NOT be
+            # reclassified (dvpg.network-vgt vc-row vs ESX-row). Keyed by
+            # source_id so only the distributed-switch row is promoted.
+            sid_reclass = classify_source_id_vim_reclass(source_id)
+            if sid_reclass is not None:
+                si_param, si_recipe, si_expected, si_caveat = sid_reclass
+                parameter = si_param
+                parameter_kind = "vim_property"
+                reclass_recipe = si_recipe
+                reclass_expected = si_expected
+                reclass_caveat = si_caveat
+
+            # Generic control override (build 39/40/41) — advanced_setting,
+            # vami_api, and vim_property list/device recipe reclassifications
+            # keyed by control_id. Applied last; wins over all prior
+            # classifiers for its control_ids.
+            ctrl_override = classify_control_override(control_id)
+            if ctrl_override is not None:
+                co_param, co_kind, co_expected, co_recipe = ctrl_override
+                parameter = co_param
+                parameter_kind = co_kind
+                reclass_expected = co_expected
+                reclass_recipe = co_recipe or ""
+                reclass_caveat = None
 
             by_kind[parameter_kind] += 1
 

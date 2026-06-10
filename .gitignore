@@ -35,6 +35,11 @@ vcfops_managementpacks/adapter_runtime.stubs.bak/
 # Local clones of external reference sources (see context/reference_sources.md)
 references/
 
+# SDK adapter paks are independently-versioned repos cloned here by
+# scripts/bootstrap_managed_paks.sh (see context/managed_paks.md). They are
+# NOT stored in the factory — each is its own repo with its own CI release.
+content/sdk-adapters/
+
 # Session scratchpads — workspace files, not part of the repo
 tmp/
 status.md
