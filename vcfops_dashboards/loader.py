@@ -734,10 +734,12 @@ class Dashboard:
     # to True — a dashboard nobody else can see defeats the purpose
     # of the framework. Can be overridden per-dashboard via YAML.
     shared: bool = True
-    # Vendor checklist: pak-shipped dashboards must be hidden: true by default.
-    # Ops unhides a dashboard when the user explicitly opens it.
-    # Can be overridden per-dashboard via YAML hidden: false for special cases.
-    hidden: bool = True
+    # Whether the dashboard is hidden in the Ops sidebar by default.
+    # Factory dashboards default to visible (hidden: false) so users can find
+    # them without extra configuration. Pak-shipped dashboards that must be
+    # hidden on import (e.g. compliance) should set hidden: true explicitly
+    # in their YAML.
+    hidden: bool = False
     id: str = ""
     source_path: Path | None = None
     released: bool = False   # publish gate
@@ -1353,9 +1355,10 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
     shared_raw = data.get("shared")
     shared = True if shared_raw is None else bool(shared_raw)
     hidden_raw = data.get("hidden")
-    # Default hidden=True per vendor checklist — pak-shipped dashboards should be
-    # hidden by default. Authors can set hidden: false to override.
-    hidden = True if hidden_raw is None else bool(hidden_raw)
+    # Default hidden=False so factory dashboards are visible immediately after
+    # import. Pak-shipped dashboards that need to be hidden on import (e.g.
+    # compliance) must set hidden: true explicitly in their YAML.
+    hidden = False if hidden_raw is None else bool(hidden_raw)
     released_raw = data.get("released", False)
     released = bool(released_raw) if isinstance(released_raw, bool) else False
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
