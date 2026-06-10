@@ -1,6 +1,7 @@
 package com.vcfcf.adapter;
 
 import com.vcfcf.adapter.http.ManagedHttpClient;
+import com.vcfcf.adapter.spi.ResourceSink;
 import com.vcfcf.adapter.spi.VcfCfCollector;
 import com.vcfcf.adapter.spi.VcfCfDiscoverer;
 import com.vcfcf.adapter.spi.VcfCfTester;
@@ -313,9 +314,27 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * Return the {@link VcfCfDiscoverer} for this adapter.
      *
      * <p>Called during {@link #onDiscover(DiscoveryParam)}.
+     *
+     * <p><strong>Default implementation (collect-path discovery opt-in):</strong>
+     * When the adapter overrides {@link #enumerateResources(ResourceSink)} and
+     * opts into collect-path discovery via {@link #discoverOnCollect()}, the
+     * framework provides a default discoverer that calls
+     * {@code enumerateResources(dr::addResource)} — so the adapter need not
+     * override {@code getDiscoverer()} separately.
+     *
+     * <p>Adapters that have their own {@code getDiscoverer()} implementation
+     * (the pre-existing pattern) are unaffected — their override takes precedence.
+     *
+     * <p>Adapters that <em>only</em> override {@link #enumerateResources} and
+     * {@link #discoverOnCollect()} may leave {@code getDiscoverer()} un-overridden
+     * and get the install-time discover path for free through this default.
      */
-    @SuppressWarnings("rawtypes")
-    protected abstract VcfCfDiscoverer getDiscoverer();
+    @SuppressWarnings("unchecked")
+    protected VcfCfDiscoverer getDiscoverer() {
+        return (cfg, http, param, dr) -> {
+            enumerateResources(dr::addResource);
+        };
+    }
 
     /**
      * Return the {@link VcfCfCollector} for this adapter.
@@ -336,6 +355,123 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      */
     protected int getMaxRelationshipsPerCycle() {
         return MAX_RELATIONSHIPS_PER_CYCLE;
+    }
+
+    // -----------------------------------------------------------------------
+    // Collect-path discovery opt-in (VCF Ops 9.0.2 onDiscover() gap)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Whether this adapter wants the framework to drive resource discovery from
+     * the collect path every cycle.
+     *
+     * <p><strong>Background (VCF Ops 9.0.2).</strong> On VCF Ops 9.0.2 the
+     * server's "Auto Discover" task never invokes {@code onDiscover()} for
+     * adapter3-path adapters. Fresh instances sit at zero resources indefinitely
+     * unless the adapter registers resources from within the collect cycle via
+     * {@link AdapterBase}'s {@code collectResult.addNewResource}. This method is
+     * the one-line opt-in that tells the framework to do exactly that.
+     *
+     * <p><strong>When to return {@code true}.</strong> Return {@code true} for any
+     * adapter that must work on fresh instances in VCF Ops 9.0.2+. In practice,
+     * this means every adapter that discovers more than zero resources should opt in
+     * — there is no cost to doing so (the platform de-duplicates already-known
+     * resources by their identifying identifiers, so re-registering on every cycle
+     * is safe and cheap).
+     *
+     * <p><strong>What the framework does when {@code true}.</strong> At the top of
+     * every {@code onCollect()} cycle — before the per-resource collect loop — the
+     * framework calls {@link #enumerateResources(ResourceSink)} with
+     * {@link #registerNewResource(ResourceConfig)} as the sink. Any enumeration
+     * failure propagates loud (the cycle logs the exception and aborts rediscovery;
+     * it does NOT silently register nothing). This mirrors the behavior of
+     * {@link VcfCfCollector#needsRediscovery(Object)} /
+     * {@link VcfCfCollector#rediscover} but is driven by the framework without
+     * requiring the adapter to implement those collector methods.
+     *
+     * <p><strong>Default: {@code false}.</strong> Adapters that do not override this
+     * method are unaffected — no rediscovery is injected into their collect cycle.
+     *
+     * <p><strong>Opt-in recipe (one line):</strong>
+     * <pre>{@code
+     * @Override protected boolean discoverOnCollect() { return true; }
+     * }</pre>
+     *
+     * <p><strong>Cooperative cancellation.</strong> {@link #enumerateResources}
+     * is expected to honor {@link InterruptedException}; the framework propagates
+     * it cleanly and aborts the cycle without registering a partial resource set.
+     *
+     * @return {@code true} to enable collect-path rediscovery via
+     *         {@link #enumerateResources(ResourceSink)}; {@code false} (default)
+     *         to leave collect-path behavior unchanged
+     * @see #enumerateResources(ResourceSink)
+     */
+    protected boolean discoverOnCollect() {
+        return false;
+    }
+
+    /**
+     * Enumerate all resources managed by this adapter and deliver each one to
+     * {@code sink}.
+     *
+     * <p>This is the <strong>shared enumeration body</strong> that the framework
+     * calls from two paths when the adapter opts in via {@link #discoverOnCollect()}:
+     *
+     * <ol>
+     *   <li><strong>Install-time discovery</strong> ({@code onDiscover()} path):
+     *       {@link #getDiscoverer()}'s default implementation calls
+     *       {@code enumerateResources(dr::addResource)}, feeding each resource into
+     *       the {@code DiscoveryResult}.</li>
+     *   <li><strong>Collect-path registration</strong> ({@code onCollect()} path):
+     *       when {@link #discoverOnCollect()} returns {@code true}, the framework
+     *       calls {@code enumerateResources(this::registerNewResource)} at the top of
+     *       every collect cycle, registering new resources via the cycle's embedded
+     *       {@code DiscoveryResult}.</li>
+     * </ol>
+     *
+     * <p><strong>One body, two callers.</strong> Holding the enumeration here
+     * guarantees the two paths can never drift — the cardinal requirement proven by
+     * the UniFi build-4 dual-path discovery fix.
+     *
+     * <p><strong>Failure posture.</strong> A failed enumeration must throw an
+     * {@link Exception} (not catch-and-return-empty). The framework treats a thrown
+     * exception as a loud rediscovery failure: it logs the exception and continues
+     * the collect cycle with the existing resource set. This satisfies the
+     * "unreadable is NOT invisible" requirement — a failed API call must never
+     * silently register zero resources.
+     *
+     * <p><strong>Cooperative cancellation.</strong> Check
+     * {@link #isAbortRequested()} and throw {@link InterruptedException} if the
+     * thread is interrupted, so the framework can abort the cycle cleanly.
+     *
+     * <p><strong>Bare-instantiation safety.</strong> The framework never calls
+     * {@code enumerateResources} during the controller-side describe phase (where
+     * the adapter is instantiated bare with no injected state). It is safe to
+     * reference {@code this.config}, {@code this.httpClient}, or other fields set in
+     * {@link #configureAdapter} from within this method.
+     *
+     * <p><strong>Default behavior.</strong> Throws {@link UnsupportedOperationException}
+     * with an actionable message. This default is exercised only if the adapter calls
+     * {@link #discoverOnCollect()} returning {@code true} without overriding this
+     * method — which is a programming error; the message identifies it clearly.
+     * Adapters that override {@link #getDiscoverer()} directly and do not use the
+     * collect-path opt-in never trigger this default.
+     *
+     * @param sink receives each enumerated resource; must not be {@code null}
+     * @throws InterruptedException if cooperative cancellation is detected
+     * @throws Exception on any enumeration failure (propagates as loud failure)
+     * @see #discoverOnCollect()
+     * @see ResourceSink
+     */
+    protected void enumerateResources(ResourceSink sink)
+            throws InterruptedException, Exception {
+        throw new UnsupportedOperationException(
+                "VcfCfAdapter.enumerateResources: this adapter has discoverOnCollect()=true "
+                + "but has not overridden enumerateResources(ResourceSink). "
+                + "Either override enumerateResources(sink) with the shared enumeration body, "
+                + "or set discoverOnCollect() back to false and hand-roll "
+                + "VcfCfCollector.needsRediscovery() / rediscover() instead. "
+                + "See context/framework_v2_migration.md §22.");
     }
 
     // -----------------------------------------------------------------------
@@ -533,7 +669,8 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             return;
         }
 
-        // §1 step 1: optional top-of-cycle rediscovery.
+        // §1 step 1a: collector-driven top-of-cycle rediscovery (VcfCfCollector
+        // needsRediscovery/rediscover pattern — hand-rolled by the adapter).
         if (collector.needsRediscovery(config)) {
             try {
                 collector.rediscover(config, httpClient, adapterInstance, this);
@@ -544,6 +681,29 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             } catch (Exception e) {
                 logWarn("onCollect: rediscovery failed (non-fatal): "
                         + e.getMessage(), e);
+                // Not fatal — continue with existing resource set.
+            }
+        }
+
+        // §1 step 1b: framework-driven collect-path discovery opt-in.
+        // When discoverOnCollect() returns true, the framework calls
+        // enumerateResources(this::registerNewResource) at the top of every cycle
+        // so that fresh instances (where onDiscover() was never called on VCF Ops
+        // 9.0.2) receive their resource set on the first collect.
+        // Failure posture: loud (propagates InterruptedException to abort cycle;
+        // other exceptions are logged WARN and collection continues with the
+        // existing resource set — same non-fatal posture as step 1a above).
+        if (discoverOnCollect()) {
+            try {
+                enumerateResources(this::registerNewResource);
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                logWarn("onCollect: interrupted during collect-path discovery "
+                        + "(discoverOnCollect) — aborting cycle");
+                return;
+            } catch (Exception e) {
+                logWarn("onCollect: collect-path discovery (discoverOnCollect) "
+                        + "failed (non-fatal): " + e.getMessage(), e);
                 // Not fatal — continue with existing resource set.
             }
         }

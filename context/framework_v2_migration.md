@@ -1033,3 +1033,166 @@ from a URL, cookie header, or exception message reaches a log call or
 is used as an exception message. Apply `redact()` defensively — any
 path segment or response body fragment that could carry a credential
 must pass through it first.
+
+---
+
+## 22. Collect-path discovery (VCF Ops 9.0.2 onDiscover() gap)
+
+### Problem
+
+On VCF Ops 9.0.2 the server's "Auto Discover" task **never invokes
+`onDiscover()`** for adapter3-path collectors. A fresh adapter instance
+heartbeats GREEN but discovers zero resources indefinitely — the platform
+never calls the discoverer registered in `getDiscoverer()`. Proven live on
+devel, VCF Ops 9.0.2, UniFi build 4.
+
+### The generalised fix (framework v2, from build-framework task #18)
+
+The framework now provides a one-line opt-in that drives resource discovery
+from the collect path, eliminating the dependency on `onDiscover()` ever
+firing. The underlying pattern is exactly the UniFi build-4 dual-path
+discovery fix; the framework lifts it out of the adapter and makes it
+reusable.
+
+### Opt-in recipe (one line in the adapter)
+
+```java
+@Override protected boolean discoverOnCollect() { return true; }
+```
+
+That is all. No changes to `getDiscoverer()`, no hand-rolled
+`needsRediscovery`/`rediscover`.
+
+### When to use
+
+**Always, for any adapter that must work on fresh instances.** If your
+adapter discovers resources (i.e. it returns more than zero resources from
+`getDiscoverer()`), add this one-line override. The platform de-duplicates
+already-known resources by their identifying identifiers, so re-registering
+on every cycle is safe and costs only a trivial dedup check per resource.
+There is no downside.
+
+### What the framework does
+
+When `discoverOnCollect()` returns `true`, `onCollect()` calls
+`enumerateResources(this::registerNewResource)` at the top of every
+collect cycle (before the per-resource loop). New resources ride the
+cycle's embedded `DiscoveryResult` and are visible in VCF Ops from the
+cycle they are first seen. The `onDiscover()` path remains wired for
+forward compatibility and for platforms that do call it — resources
+are de-duplicated by the platform in both paths.
+
+### Adoption recipe for adapters that already hand-roll the unifi pattern
+
+An adapter that currently hand-rolls `needsRediscovery`/`rediscover` using
+a shared `enumerateResources(sink)` body (the UniFi build-4 shape) can
+migrate to the framework-driven path. The result is **shorter code** with
+**no behavior change**.
+
+**Before (hand-rolled, UniFi build-4 shape):**
+
+```java
+// In getDiscoverer():
+@Override
+protected VcfCfDiscoverer<MyConfig> getDiscoverer() {
+    return (cfg, http, param, dr) -> {
+        logInfo("discover (onDiscover path): starting resource enumeration");
+        enumerateResources(dr::addResource);
+    };
+}
+
+// In getCollector():
+@Override
+protected VcfCfCollector<MyConfig> getCollector() {
+    return new VcfCfCollector<MyConfig>() {
+        @Override
+        public boolean needsRediscovery(MyConfig cfg) {
+            return true;
+        }
+        @Override
+        public void rediscover(MyConfig cfg, ManagedHttpClient http,
+                ResourceConfig adapterInst, AdapterBase adapter)
+                throws InterruptedException, Exception {
+            logInfo("rediscover (collect-path discovery): starting enumeration");
+            enumerateResources(MyAdapter.this::registerNewResource);
+        }
+        // ... collect(), collectRelationships(), etc.
+    };
+}
+
+// The shared body:
+private void enumerateResources(ResourceSink sink) throws ... { ... }
+
+@FunctionalInterface
+private interface ResourceSink { void accept(ResourceConfig rc); }
+```
+
+**After (framework-driven opt-in):**
+
+1. **Delete** the private `ResourceSink` interface — use
+   `com.vcfcf.adapter.spi.ResourceSink` from the framework.
+2. **Change** `enumerateResources` from `private` to `protected` and
+   update its signature to use the framework's `ResourceSink`.
+3. **Add** the one-line opt-in.
+4. **Delete** `needsRediscovery()` and `rediscover()` from the collector.
+5. **Optionally delete** `getDiscoverer()` — the framework default calls
+   `enumerateResources(dr::addResource)` automatically.
+
+```java
+import com.vcfcf.adapter.spi.ResourceSink;
+
+// One-line opt-in:
+@Override protected boolean discoverOnCollect() { return true; }
+
+// Shared enumeration body — changed from private to protected,
+// ResourceSink type changed from private inner interface to framework type:
+@Override
+protected void enumerateResources(ResourceSink sink)
+        throws InterruptedException, Exception {
+    // ... same body as before, no changes ...
+}
+
+// getDiscoverer() can now be DELETED — the framework default wires
+// enumerateResources(dr::addResource) automatically.
+
+// In getCollector(), DELETE needsRediscovery() and rediscover() overrides.
+// Keep collect(), collectRelationships(), etc. unchanged.
+```
+
+**Net change:** delete `getDiscoverer()`, delete `needsRediscovery()`,
+delete `rediscover()`, delete the private `ResourceSink` inner interface,
+change `enumerateResources` visibility from `private` to `protected` and
+update its `ResourceSink` import, add one `@Override` method. The
+enumeration body itself is unchanged.
+
+### Failure posture
+
+A failed `enumerateResources` call (exception thrown) is treated as a
+non-fatal rediscovery failure: the framework logs it WARN and continues the
+collect cycle with the existing resource set. The adapter must throw rather
+than catch-and-return-empty — "unreadable is NOT invisible" applies here
+too. An adapter that swallows an API failure inside `enumerateResources` and
+returns normally will register zero resources on that cycle, which is exactly
+the silent failure mode this feature is designed to prevent.
+
+### Cooperative cancellation
+
+`enumerateResources` is expected to honour `InterruptedException`. If the
+adapter checks `isAbortRequested()` in its enumeration loop and throws
+`InterruptedException` when interrupted, the framework propagates it cleanly
+and aborts the cycle without registering a partial resource set.
+
+### Bare-instantiation safety
+
+The framework never calls `enumerateResources` during the controller-side
+describe phase (bare instantiation, no platform injection). Instance fields
+(`this.config`, `this.httpClient`, etc.) set in `configureAdapter` are safe
+to reference from `enumerateResources`.
+
+### Affected builds (adoption targets)
+
+| Adapter | Next build | Action |
+|---------|-----------|--------|
+| UniFi   | build 5   | Adopt framework opt-in; delete hand-rolled needsRediscovery/rediscover |
+| Compliance | build 49 | Add `discoverOnCollect() { return true; }` + `enumerateResources` |
+| Synology | build 17 | Add `discoverOnCollect() { return true; }` + `enumerateResources` |
