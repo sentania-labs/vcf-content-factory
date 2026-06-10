@@ -69,12 +69,39 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   <li>{@link #configureAdapter(ResourceStatus, ResourceConfig)} — read config,
  *       populate {@link #config}, build {@link #httpClient}.</li>
  *   <li>{@link #onDescribe()} — provided by the framework (loads
- *       {@code describe.xml} via {@link AdapterBase#getAdapterDescribeFile}).
- *       Override only if custom describe handling is needed.</li>
+ *       {@code describe.xml} from the filesystem path derived from the
+ *       adapter kind key stored at construction time). Override only if
+ *       custom describe handling is needed.</li>
  *   <li>{@link #getTester()} — return a {@link VcfCfTester} (nullable).</li>
  *   <li>{@link #getDiscoverer()} — return a {@link VcfCfDiscoverer}.</li>
  *   <li>{@link #getCollector()} — return a {@link VcfCfCollector}.</li>
  * </ol>
+ *
+ * <h3>Constructor contract (adapter authors must follow)</h3>
+ * <p>Adapter subclasses MUST supply the adapter kind key to the framework
+ * at construction time by calling the two-argument and three-argument
+ * super-constructors:
+ * <pre>{@code
+ * private static final String ADAPTER_KIND = "my_adapter_kind";
+ *
+ * public MyAdapter() {
+ *     super(ADAPTER_KIND);          // kind stored; used by onDescribe()
+ * }
+ * public MyAdapter(String adapterDir, Integer instanceId) {
+ *     super(ADAPTER_KIND, adapterDir, instanceId);
+ * }
+ * }</pre>
+ * The kind key must exactly match the {@code key} attribute on the
+ * {@code <AdapterKind>} element in {@code describe.xml} and the filename
+ * component in the pak layout ({@code <adaptersHome>/<key>/conf/describe.xml}).
+ * <strong>Do not derive the key from any {@code CommonConstants} field</strong>
+ * — those are display-name strings, not filesystem tokens. See
+ * {@code lessons/sdk-constants-are-display-names.md}.
+ *
+ * <p>The no-arg constructor inherited from the platform interface is still
+ * supported for binary compatibility with any bare-reflection caller, but
+ * it stores a {@code null} kind key and will fail in {@code onDescribe()} with
+ * an actionable message listing what was tried. Prefer the keyed constructors.
  *
  * <h3>MetricDataCache constructor params — [INFER] note</h3>
  * {@code MetricDataCache(owner, p1, p2)}: the two {@code int} parameters are
@@ -103,6 +130,25 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * {@link #getMaxRelationshipsPerCycle()} to reduce it.
      */
     public static final int MAX_RELATIONSHIPS_PER_CYCLE = 100_000;
+
+    // -----------------------------------------------------------------------
+    // Adapter kind key — stored at construction time for controller-side use
+    // -----------------------------------------------------------------------
+
+    /**
+     * The adapter kind key provided by the subclass at construction time.
+     *
+     * <p>This is the authoritative source for the kind used in
+     * {@link #onDescribe()}, and is set before any platform injection
+     * occurs. It must exactly match the {@code key} attribute on the
+     * {@code <AdapterKind>} element in {@code describe.xml}.
+     *
+     * <p>Null when the no-arg or two-arg constructor is used without a kind key
+     * (legacy path, kept for binary compatibility). In that case
+     * {@code onDescribe()} falls back to {@link AdapterBase#getAdapterKind()}
+     * and fails with an actionable message if that is also null.
+     */
+    private final String adapterKindKey;
 
     // -----------------------------------------------------------------------
     // Instance state (per-instance, set in onConfigure → configureAdapter)
@@ -144,32 +190,89 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     private volatile com.integrien.alive.common.adapter3.Logger adapterLogger;
 
     // -----------------------------------------------------------------------
-    // Constructors (both required by the platform)
+    // Constructors
     // -----------------------------------------------------------------------
 
     /**
-     * No-arg constructor required by the analytics engine.
+     * No-arg constructor (legacy / binary-compatibility path).
      *
      * <p>The platform calls {@code Class.newInstance()} (no-arg reflection)
      * during {@code describe()} generation. Without this constructor the engine
      * throws {@code InstantiationException} and the adapter kind is not registered.
+     *
+     * <p><strong>Prefer {@link #VcfCfAdapter(String)} from subclass no-arg
+     * constructors.</strong> When this constructor is used, {@code onDescribe()}
+     * has no statically-stored kind key and will fail with an actionable message
+     * if {@link AdapterBase#getAdapterKind()} also returns null (which it does
+     * during controller-side bare instantiation).
      */
     public VcfCfAdapter() {
         super();
+        this.adapterKindKey = null;
     }
 
     /**
-     * Two-arg constructor required for live-collection instantiation.
+     * Kind-keyed no-arg constructor for the controller-side describe path.
+     *
+     * <p><strong>Subclass no-arg constructors MUST call this</strong> so the
+     * framework can resolve {@code describe.xml} during controller-side bare
+     * instantiation (where the platform has NOT yet injected config and
+     * {@link AdapterBase#getAdapterKind()} returns null).
+     *
+     * <pre>{@code
+     * private static final String ADAPTER_KIND = "my_adapter_kind";
+     *
+     * public MyAdapter() { super(ADAPTER_KIND); }
+     * }</pre>
+     *
+     * @param adapterKindKey the adapter kind key, matching the {@code key}
+     *        attribute on {@code <AdapterKind>} in {@code describe.xml} and the
+     *        pak filesystem directory name. Must not be null or empty.
+     */
+    protected VcfCfAdapter(String adapterKindKey) {
+        super();
+        this.adapterKindKey = adapterKindKey;
+    }
+
+    /**
+     * Two-arg constructor (legacy / binary-compatibility path for live collection).
      *
      * <p>The collector process instantiates adapter classes via
      * {@code Constructor(String, Integer)}. Without this constructor the adapter
      * instance fails to start with {@code NoSuchMethodException}.
+     *
+     * <p><strong>Prefer {@link #VcfCfAdapter(String, String, Integer)} from
+     * subclass two-arg constructors</strong> so the kind key is always stored.
      *
      * @param adapterDir        the adapter directory path supplied by the platform
      * @param adapterInstanceId the adapter instance ID supplied by the platform
      */
     public VcfCfAdapter(String adapterDir, Integer adapterInstanceId) {
         super(adapterDir, adapterInstanceId);
+        this.adapterKindKey = null;
+    }
+
+    /**
+     * Kind-keyed three-arg constructor for live-collection instantiation.
+     *
+     * <p><strong>Subclass two-arg constructors MUST call this</strong> so the
+     * kind key is available throughout the adapter lifecycle.
+     *
+     * <pre>{@code
+     * public MyAdapter(String adapterDir, Integer instanceId) {
+     *     super(ADAPTER_KIND, adapterDir, instanceId);
+     * }
+     * }</pre>
+     *
+     * @param adapterKindKey    the adapter kind key — same value as passed to
+     *        {@link #VcfCfAdapter(String)}
+     * @param adapterDir        the adapter directory path supplied by the platform
+     * @param adapterInstanceId the adapter instance ID supplied by the platform
+     */
+    protected VcfCfAdapter(String adapterKindKey, String adapterDir,
+            Integer adapterInstanceId) {
+        super(adapterDir, adapterInstanceId);
+        this.adapterKindKey = adapterKindKey;
     }
 
     // -----------------------------------------------------------------------
@@ -245,39 +348,77 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      *
      * <p>The default implementation resolves the file using
      * {@link AdapterBase#getAdapterDescribeFile(String, String)} with the
-     * adapter kind returned by {@link AdapterBase#getAdapterKind()}. The
-     * canonical path is {@code <adaptersHome>/<adapterKind>/conf/describe.xml}.
+     * adapter kind key. The canonical path is
+     * {@code <adaptersHome>/<adapterKindKey>/conf/describe.xml}.
      *
-     * <p>If the file is missing or cannot be parsed the method throws a
-     * {@link RuntimeException} with the resolved path in the message, so the
-     * failure is immediately actionable rather than producing a silent NPE or
-     * an unconfigured adapter.
+     * <h4>Kind key resolution order</h4>
+     * <ol>
+     *   <li>The value stored in {@link #adapterKindKey} at construction time
+     *       (set by {@link #VcfCfAdapter(String)} and
+     *       {@link #VcfCfAdapter(String, String, Integer)}). This is the safe
+     *       path: it works during controller-side bare instantiation where
+     *       the platform has NOT yet injected config.</li>
+     *   <li>If {@code adapterKindKey} is null (legacy constructor path),
+     *       falls back to {@link AdapterBase#getAdapterKind()}, which reads
+     *       from the injected adapter-instance config. This returns null
+     *       during controller-side bare instantiation — see LESSON below.</li>
+     *   <li>If both are null, throws {@link RuntimeException} with an
+     *       actionable message describing what was tried. Never silently
+     *       returns null or NPEs downstream.</li>
+     * </ol>
+     *
+     * <p><strong>LESSON (controller-side bare instantiation):</strong>
+     * During pak install the controller instantiates the adapter class
+     * bare (no-arg reflection, no platform injection) and calls
+     * {@code describe()}. {@link AdapterBase#getAdapterKind()} is null at
+     * that point because it reads from the injected adapter-instance config,
+     * which does not exist yet. This is the root cause of the build 44
+     * NPE chain:
+     * {@code "VcfCfAdapter.onDescribe: failed to load describe.xml from null"
+     * → "Cannot invoke AdapterDescribe.getKey() because conf is null"
+     * → "DistributedTaskInstallUninstallAdapters failed"}.
+     * Build 43 was immune because its {@code onDescribe()} used the static
+     * {@code ADAPTER_KIND} constant directly. This framework default replicates
+     * that safety via the constructor-stored kind key.
+     * See {@code lessons/controller-describe-bare-instantiation.md}.
      *
      * <p>Override this method only when custom describe handling is required
      * (e.g., programmatic describe construction or a non-standard file location).
      * Normal adapters should rely on this default.
      *
-     * <p><strong>Note on adapter kind:</strong> {@link AdapterBase#getAdapterKind()}
-     * returns the kind value from the live adapter config, which is populated by
-     * the platform before {@code onDescribe()} is called. Do not derive the kind
-     * from {@code CommonConstants} — those fields are display-name strings, not
-     * filesystem paths (see {@code lessons/sdk-constants-are-display-names.md}).
-     *
      * @return the populated {@link AdapterDescribe}; never {@code null}
-     * @throws RuntimeException if describe.xml is missing, unreadable, or
-     *         cannot be parsed — the exception message contains the resolved path
+     * @throws RuntimeException if the kind key is unresolvable, or if
+     *         describe.xml is missing, unreadable, or cannot be parsed —
+     *         the exception message lists what was tried
      */
     @Override
     public AdapterDescribe onDescribe() {
-        String kind = getAdapterKind();
+        // Resolution order: constructor-stored key → injected getAdapterKind()
+        String kind = this.adapterKindKey;
+        String kindSource = "constructor-stored adapterKindKey";
+        if (kind == null || kind.isEmpty()) {
+            kind = getAdapterKind();
+            kindSource = "getAdapterKind() [injected — null during controller-side describe]";
+        }
+        if (kind == null || kind.isEmpty()) {
+            throw new RuntimeException(
+                    "VcfCfAdapter.onDescribe: adapter kind key is unresolvable. "
+                    + "Tried: (1) constructor-stored adapterKindKey=null, "
+                    + "(2) getAdapterKind()=null (no platform injection during "
+                    + "controller-side describe phase). "
+                    + "Fix: call super(ADAPTER_KIND) from your adapter's no-arg "
+                    + "constructor and super(ADAPTER_KIND, adapterDir, instanceId) "
+                    + "from your two-arg constructor. "
+                    + "See lessons/controller-describe-bare-instantiation.md.");
+        }
         Path describeFile = getAdapterDescribeFile(kind, "describe.xml");
         try (InputStream is = Files.newInputStream(describeFile)) {
             return AdapterDescribe.make(is);
         } catch (Exception e) {
             throw new RuntimeException(
                     "VcfCfAdapter.onDescribe: failed to load describe.xml from "
-                    + describeFile + " (adapterKind=" + kind + "): "
-                    + e.getMessage(), e);
+                    + describeFile + " (adapterKind=" + kind
+                    + ", source=" + kindSource + "): " + e.getMessage(), e);
         }
     }
 

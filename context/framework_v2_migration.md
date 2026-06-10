@@ -72,41 +72,65 @@ public MyAdapter(String adapterDir, Integer instanceId) {
 
 ---
 
-## 3. onDescribe (provided by the framework; override only if needed)
+## 3. onDescribe (provided by the framework; adapter constructor required)
 
 **v1:** `UnlicensedAdapter` provided `onDescribe()` automatically, loading
-`describe.xml` from `getAdapterDirectory()`. No adapter code required.
+`describe.xml` from `getAdapterDirectory()` (abstract, subclass returned a
+static kind string). No adapter code required beyond implementing the abstract
+method.
 
 **v2:** `VcfCfAdapter` provides a default `onDescribe()` implementation.
-Adapters do not need to implement it unless they require custom describe
-handling (e.g., programmatic describe construction or a non-standard file
-location).
+Adapters do not need to implement it, **but they MUST supply the adapter
+kind key via the constructor.** This is mandatory — failure to do so causes
+an NPE / adapter-not-found failure during pak install (build 44 root cause;
+see `lessons/controller-describe-bare-instantiation.md`).
+
+**Why:** During pak install the controller instantiates the adapter class
+bare (no-arg reflection) and calls `describe()`. At that point the platform
+has NOT injected any config, so `getAdapterKind()` returns null.
+The framework default `onDescribe()` resolves the kind key from the value
+stored at construction time, avoiding the null dereference.
+
+**Required constructor pattern (all adapter subclasses):**
+```java
+private static final String ADAPTER_KIND = "my_adapter_kind";
+
+public MyAdapter() {
+    super(ADAPTER_KIND);                    // kind stored for onDescribe()
+}
+public MyAdapter(String adapterDir, Integer instanceId) {
+    super(ADAPTER_KIND, adapterDir, instanceId);
+}
+```
+
+The kind key must match the `key` attribute on `<AdapterKind>` in
+`describe.xml` and the directory name in the pak layout
+(`<adaptersHome>/<key>/conf/describe.xml`).
 
 **What the framework default does:**
 ```java
 @Override
 public AdapterDescribe onDescribe() {
-    String kind = getAdapterKind();
+    // 1. Use constructor-stored kind key (safe under bare instantiation)
+    // 2. Fall back to getAdapterKind() (only non-null when platform injects config)
+    // 3. If both null: throw RuntimeException with actionable message
+    String kind = this.adapterKindKey != null ? this.adapterKindKey : getAdapterKind();
     Path describeFile = getAdapterDescribeFile(kind, "describe.xml");
     try (InputStream is = Files.newInputStream(describeFile)) {
         return AdapterDescribe.make(is);
     } catch (Exception e) {
-        throw new RuntimeException(
-                "VcfCfAdapter.onDescribe: failed to load describe.xml from "
-                + describeFile + " (adapterKind=" + kind + "): "
-                + e.getMessage(), e);
+        throw new RuntimeException(/* path + source in message */);
     }
 }
 ```
 
 `getAdapterDescribeFile(kind, "describe.xml")` resolves to
-`<adaptersHome>/<adapterKind>/conf/describe.xml` — the SDK's own
-canonical path for describe files. The adapter kind is obtained from
-`getAdapterKind()` (runtime value from the platform config, not a
-compile-time constant — see `lessons/sdk-constants-are-display-names.md`).
+`<adaptersHome>/<kind>/conf/describe.xml` — the SDK's own canonical path
+for describe files. `getAdaptersHome()` reads the `ADAPTER_HOME` system
+property, which the platform sets for both the collector and the controller.
 
 On any failure the method throws a `RuntimeException` with the resolved
-path in the message; it never silently returns `null`.
+path and kind source in the message; it never silently returns `null`.
 
 **Override pattern (only when custom handling is required):**
 ```java
@@ -121,6 +145,15 @@ public AdapterDescribe onDescribe() {
     }
 }
 ```
+
+When overriding, always use the static `ADAPTER_KIND` constant directly —
+never call `getAdapterKind()` in the describe path.
+
+**Migration from build 44 breakage:** any adapter that was migrated to v2
+before this fix (calling the no-arg `super()` from its no-arg constructor)
+must update its constructors to the keyed pattern above. The compliance
+adapter is the reference — see its `public ComplianceAdapter()` and
+`public ComplianceAdapter(String, Integer)` constructors.
 
 ---
 
