@@ -116,48 +116,19 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           FLOATING="${{ steps.ver.outputs.floating_tag }}"
+          # Build release notes from the checked-in template, substituting version
+          # placeholders. The template lives at .github/release-notes-buildkit.md
+          # to keep multi-line markdown out of this YAML file entirely.
+          sed \
+            -e 's/@FLOATING_TAG@/${{ steps.ver.outputs.floating_tag }}/g' \
+            -e 's/@REF_NAME@/${{ github.ref_name }}/g' \
+            -e 's/@VERSION@/${{ steps.ver.outputs.version }}/g' \
+            .github/release-notes-buildkit.md > /tmp/release-notes.md
           gh release create "${{ github.ref_name }}" \
             "dist/${{ steps.ver.outputs.tarball }}" \
             --repo "${{ github.repository }}" \
             --title "sdk-buildkit v${{ steps.ver.outputs.version }}" \
-            --notes "Portable Tier 2 SDK adapter build toolchain (jar-free).
-
-## Consumer contract
-
-The kit compiles adapters against \`vrops-adapters-sdk-2.2.jar\` which
-**you must supply** — it is a Broadcom internal build artifact with no
-public redistribution channel and must not ship in a public toolchain
-tarball (see redistribution survey 2026-06-09).
-
-**How to obtain the SDK JAR (pick one):**
-1. Extract from your VCF Ops appliance:
-   \`scp root@<appliance>:/usr/lib/vmware-vcops/common-lib/vrops-adapters-sdk-2.2.jar .\`
-   (also present at \`/usr/lib/vmware-vcops/suite-api/WEB-INF/lib/vrops-adapters-sdk.jar\`)
-2. Pull from the Broadcom TAP / partner SDK portal (if you have access).
-
-**CI usage (adapter repo's build workflow):**
-
-\`\`\`yaml
-- name: Download sdk-buildkit
-  env:
-    GH_TOKEN: \${{ secrets.GITHUB_TOKEN }}
-  run: |
-    gh release download ${{ steps.ver.outputs.floating_tag }} \\
-      --repo sentania-labs/vcf-content-factory \\
-      --pattern '*.tgz'
-    tar xzf sdk-buildkit-*.tgz
-
-- name: Build adapter pak
-  env:
-    VCFCF_SDK_JAR: \${{ secrets.VCFCF_SDK_JAR_PATH }}   # path to vrops-adapters-sdk-2.2.jar
-  run: python3 -m sdk_buildkit build-sdk .
-\`\`\`
-
-## Version pinning
-- **Exact pin**: \`${{ github.ref_name }}\`
-- **Floating major**: \`${{ steps.ver.outputs.floating_tag }}\`
-  (always points at the latest backwards-compatible release of this major)
-"
+            --notes-file /tmp/release-notes.md
 
       - name: Maintain floating major release (${{ steps.ver.outputs.floating_tag }})
         # Scarguard pattern: keep sdk-buildkit-v1 (or vN) pointing at this commit
@@ -174,6 +145,11 @@ tarball (see redistribution survey 2026-06-09).
           git tag -f "$FLOATING" "${{ github.sha }}"
           git push origin "$FLOATING" --force
 
+          FLOAT_NOTES="$(printf 'Floating major pointer \xe2\x80\x94 always the latest backwards-compatible release.\nCurrently: v%s (%s).\nPin to `%s` for a reproducible exact version.' \
+            '${{ steps.ver.outputs.version }}' \
+            '${{ github.ref_name }}' \
+            '${{ github.ref_name }}')"
+
           # Create-or-update the floating release:
           # Try to upload (clobber) onto an existing release; if the release
           # does not exist yet, create it.
@@ -186,15 +162,11 @@ tarball (see redistribution survey 2026-06-09).
             gh release edit "$FLOATING" \
               --repo "${{ github.repository }}" \
               --title "sdk-buildkit ${FLOATING} (→ v${{ steps.ver.outputs.version }})" \
-              --notes "Floating major pointer — always the latest backwards-compatible release.
-Currently: v${{ steps.ver.outputs.version }} (${{ github.ref_name }}).
-Pin to \`${{ github.ref_name }}\` for a reproducible exact version."
+              --notes "$FLOAT_NOTES"
           else
             echo "Floating release ${FLOATING} does not exist — creating."
             gh release create "$FLOATING" "$TARBALL" \
               --repo "${{ github.repository }}" \
               --title "sdk-buildkit ${FLOATING} (→ v${{ steps.ver.outputs.version }})" \
-              --notes "Floating major pointer — always the latest backwards-compatible release.
-Currently: v${{ steps.ver.outputs.version }} (${{ github.ref_name }}).
-Pin to \`${{ github.ref_name }}\` for a reproducible exact version."
+              --notes "$FLOAT_NOTES"
           fi
