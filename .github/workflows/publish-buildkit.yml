@@ -69,7 +69,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p dist/
-          gh release download \
+          # Pinned to v1.0.0.50 (current latest as of 2026-06-12).
+          # To update: check sentania-labs/vcf-content-factory-sdk-compliance releases,
+          # bump the tag here, and open a PR so the change is reviewed before taking effect.
+          gh release download v1.0.0.50 \
             --repo sentania-labs/vcf-content-factory-sdk-compliance \
             --pattern '*.pak' \
             --dir dist/
