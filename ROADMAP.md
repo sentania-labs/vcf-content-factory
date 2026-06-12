@@ -148,14 +148,6 @@ manual-UI MPB tasks tracked under `memory/project_mpb_manual_ui_tasks_pending.md
   product decision; fix belongs in the renderer (`vcfops_managementpacks/render_export.py`),
   not the test. Do NOT change the test — it is the spec.
 
-- **JMESPath malformed-predicate validation on Python 3.11:** The validator's
-  malformed-predicate detection (`[?x='y']` single-equals, `[?x=='y'` unclosed bracket)
-  raises `ManagementPackValidationError` on Python 3.12 but not on 3.11. Root cause
-  not yet diagnosed (regex engine divergence vs. string parsing difference). CI is
-  pinned to 3.12 (matching local dev). A future fix should ensure consistent
-  rejection across both versions. Tracked tests: `test_malformed_predicate_single_equals_rejected`,
-  `test_malformed_predicate_unclosed_bracket_rejected` in `TestGapFJMESPathPredicates`.
-
 ### PropertyList dashboard widget
 Highest-value remaining widget gap. 47 live observed uses on the
 survey instance. Structurally reuses Scoreboard's `MetricSpec`

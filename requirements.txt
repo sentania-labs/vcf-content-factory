@@ -1,2 +1,6 @@
 requests>=2.31
 PyYAML>=6.0
+# Soft dependency of the managementpacks loader: validates [?...] filter
+# predicates in metric source paths. Without it the Gap F validator silently
+# skips (warn-only), so malformed predicates pass validation.
+jmespath>=1.0

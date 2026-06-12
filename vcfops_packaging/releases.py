@@ -61,11 +61,18 @@ RELEASE_TYPE_SUFFIXES = frozenset({
     "recommendation",
 })
 
-#: Release manifest names that predate the convention and are permanently
-#: grandfathered.  The WARN check skips these.
+#: Release manifest names that predate the convention (or shipped before the
+#: convention was enforced) and are permanently grandfathered.  The WARN check
+#: skips these.  Shipped release names are part of the distribution contract —
+#: renaming one changes artifact paths in the distribution repo.
 _LEGACY_RELEASE_NAMES: frozenset[str] = frozenset({
     "demand-driven-capacity-v2",
     "idps-planner",
+    # 3.5 bump of the grandfathered idps-planner line (shipped 2026-04-28).
+    "idps-planner-3.5",
+    # Shipped 2026-05-07 without a type suffix; grandfathered rather than
+    # renamed because the release is already published.
+    "storage-path-monitoring",
 })
 
 
