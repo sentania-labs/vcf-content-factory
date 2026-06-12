@@ -604,6 +604,21 @@ def render_views_xml(
 
 # ---------------- Dashboard (JSON) ----------------
 
+def _gridster_coords(w: Widget) -> dict:
+    """Convert author-facing 0-based (x, y) coords to the 1-based wire format.
+
+    VCF Ops gridster uses a 1-based coordinate system: the top-left corner of
+    the 12-column grid is (x=1, y=1).  Authoring in 0-based coords is more
+    natural (row 1 starts at y=0, left edge at x=0), so we shift here.  Width
+    and height are unchanged — they are span counts, not positions.
+    """
+    return {
+        "x": w.coords["x"] + 1,
+        "y": w.coords["y"] + 1,
+        "w": w.coords["w"],
+        "h": w.coords["h"],
+    }
+
 
 def _resource_list_widget(w: Widget, kind_index: dict[tuple[str, str], int]) -> dict:
     kinds = [
@@ -613,7 +628,7 @@ def _resource_list_widget(w: Widget, kind_index: dict[tuple[str, str], int]) -> 
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _gridster_coords(w),
         "type": "ResourceList",
         "title": w.title,
         "config": {
@@ -698,7 +713,7 @@ def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _gridster_coords(w),
         "type": "View",
         "title": w.title,
         "config": {
@@ -782,7 +797,7 @@ def _text_display_widget(w: Widget) -> dict:
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _gridster_coords(w),
         "type": "TextDisplay",
         "title": w.title,
         "config": {
@@ -810,7 +825,7 @@ def _scoreboard_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _gridster_coords(w),
         "type": "Scoreboard",
         "title": w.title,
         "config": {
@@ -874,7 +889,7 @@ def _metric_chart_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _gridster_coords(w),
         "type": "MetricChart",
         "title": w.title,
         "config": {
@@ -914,7 +929,7 @@ def _health_chart_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _gridster_coords(w),
         "type": "HealthChart",
         "title": w.title,
         "config": {
@@ -978,7 +993,7 @@ def _pareto_analysis_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _gridster_coords(w),
         "type": "ParetoAnalysis",
         "title": w.title,
         "config": {
@@ -1054,7 +1069,7 @@ def _alert_list_widget(w: Widget) -> dict:
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _gridster_coords(w),
         "type": "AlertList",
         "title": w.title,
         "config": {
@@ -1133,7 +1148,7 @@ def _problem_alerts_list_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _gridster_coords(w),
         "type": "ProblemAlertsList",
         "title": w.title,
         "config": config,
@@ -1272,7 +1287,7 @@ def _heatmap_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _gridster_coords(w),
         "type": "Heatmap",
         "title": w.title,
         "config": {
@@ -1321,7 +1336,7 @@ def _property_list_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _gridster_coords(w),
         "type": "PropertyList",
         "title": w.title,
         "config": {
