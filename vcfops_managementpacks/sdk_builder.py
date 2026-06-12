@@ -2525,7 +2525,15 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
 
     # Attempt compilation check if JDK is available
     javac = shutil.which("javac")
-    if javac and not errors:
+    # The Broadcom SDK jar cannot be redistributed (adapter_runtime/ jars are
+    # gitignored), so public CI checkouts have javac but no jar — the compile
+    # check is structurally impossible there, same as a missing JDK. Skip it;
+    # build-sdk still hard-fails without the jar. An explicitly set (but bogus)
+    # VCFCF_SDK_JAR is a user error and still surfaces as a compile-check error.
+    _sdk_jar_present = bool(os.environ.get("VCFCF_SDK_JAR", "").strip()) or bool(
+        sorted(_ADAPTER_RUNTIME_DIR.glob("vrops-adapters-sdk-*.jar"))
+    )
+    if javac and _sdk_jar_present and not errors:
         try:
             _ensure_framework_jar()
             classpath = _build_classpath(project_dir)
@@ -2537,6 +2545,12 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
     elif not javac:
         print(
             "  validate-sdk: javac not on PATH — skipping compile check",
+            file=sys.stderr,
+        )
+    elif not _sdk_jar_present:
+        print(
+            "  validate-sdk: vrops-adapters-sdk-*.jar not in adapter_runtime/ "
+            "and VCFCF_SDK_JAR not set — skipping compile check",
             file=sys.stderr,
         )
 

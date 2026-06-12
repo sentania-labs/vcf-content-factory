@@ -139,6 +139,15 @@ manual-UI MPB tasks tracked under `memory/project_mpb_manual_ui_tasks_pending.md
 
 ## Next Up
 
+### Known gaps (surfaced by CI gate — ci/round1-test-gate)
+
+- **buildNumber in exchange JSON (`render_mpb_exchange_json`):** The exchange
+  format renderer does not emit `buildNumber` at `design.buildNumber`.
+  `TestBuildNumberExport` (4 tests) documents the expected behaviour and is
+  currently skipped. Whether `buildNumber` belongs in the exchange dict is a
+  product decision; fix belongs in the renderer (`vcfops_managementpacks/render_export.py`),
+  not the test. Do NOT change the test — it is the spec.
+
 ### PropertyList dashboard widget
 Highest-value remaining widget gap. 47 live observed uses on the
 survey instance. Structurally reuses Scoreboard's `MetricSpec`

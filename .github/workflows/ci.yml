@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # Fork-gate: do not run on PRs from outside the org (prevents RCE on runners)
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.owner.login == 'sentania-labs'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+
+      - name: Bootstrap SDK adapter repos
+        run: bash scripts/bootstrap_managed_paks.sh
+
+      - name: Run pytest (all tests)
+        run: |
+          python3 -m pytest tests/ --collect-only -q 2>&1 | tee /tmp/collect.txt
+          python3 -m pytest tests/ -v --tb=short
+
+      - name: Validate content corpus
+        run: |
+          python3 -m vcfops_supermetrics validate
+          python3 -m vcfops_dashboards validate
+          python3 -m vcfops_customgroups validate
+          python3 -m vcfops_symptoms validate
+          python3 -m vcfops_alerts validate
+          python3 -m vcfops_reports validate
+          python3 -m vcfops_managementpacks validate
