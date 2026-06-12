@@ -15,3 +15,4 @@ Read every rule at session start. Rules are absolute — obey without question.
 | RULE-009 | No destructive actions on production instances | [no-destructive-on-prod.md](no-destructive-on-prod.md) |
 | RULE-010 | Never write framework output to docs/ | [docs-immutable.md](docs-immutable.md) |
 | RULE-011 | Wireframe + plan-mode approval before dashboard authoring | [wireframe-before-dashboard.md](wireframe-before-dashboard.md) |
+| RULE-012 | No release while a blocking defect is open in `context/defects.md` | [release-gate-defects.md](release-gate-defects.md) |
