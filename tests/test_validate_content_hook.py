@@ -15,6 +15,10 @@ WORKSPACE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOOK = os.path.join(WORKSPACE_ROOT, "scripts", "validate-content.py")
 ALERTS_DIR = os.path.join(WORKSPACE_ROOT, "content", "alerts")
 REFERENCE_VALID_ALERT = os.path.join(ALERTS_DIR, "vm_cpu_usage_alert.yaml")
+MANAGEMENTPACKS_DIR = os.path.join(WORKSPACE_ROOT, "content", "managementpacks")
+REFERENCE_VALID_MP = os.path.join(MANAGEMENTPACKS_DIR, "cloudflare.yaml")
+VIEWS_DIR = os.path.join(WORKSPACE_ROOT, "content", "views")
+REFERENCE_VALID_VIEW = os.path.join(VIEWS_DIR, "cluster_capacity_breakdown.yaml")
 
 
 def run_hook(stdin_bytes: bytes) -> subprocess.CompletedProcess:
@@ -57,6 +61,68 @@ def test_valid_yaml_silent_pass():
     os.close(fd)
     try:
         shutil.copyfile(REFERENCE_VALID_ALERT, path)
+        result = run_hook(hook_input(path))
+        assert result.returncode == 0
+        assert result.stdout == b""
+    finally:
+        os.unlink(path)
+
+
+def test_invalid_managementpack_yaml_blocked_with_message():
+    fd, path = tempfile.mkstemp(
+        prefix="test_bad_hook_", suffix=".yaml", dir=MANAGEMENTPACKS_DIR
+    )
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write("bad: yaml: content: [unclosed")
+        result = run_hook(hook_input(path))
+        assert result.returncode == 0
+        decision = json.loads(result.stdout)
+        assert decision["decision"] == "block"
+        assert "vcfops_managementpacks" in decision["reason"]
+    finally:
+        os.unlink(path)
+
+
+def test_valid_managementpack_yaml_silent_pass():
+    fd, path = tempfile.mkstemp(
+        prefix="test_valid_hook_", suffix=".yaml", dir=MANAGEMENTPACKS_DIR
+    )
+    os.close(fd)
+    try:
+        shutil.copyfile(REFERENCE_VALID_MP, path)
+        result = run_hook(hook_input(path))
+        assert result.returncode == 0
+        assert result.stdout == b""
+    finally:
+        os.unlink(path)
+
+
+def test_invalid_view_yaml_blocked_with_message():
+    # Views validate whole-corpus via vcfops_dashboards, so a syntactically
+    # broken file makes the loader fail regardless of which path triggered it.
+    fd, path = tempfile.mkstemp(
+        prefix="test_bad_hook_", suffix=".yaml", dir=VIEWS_DIR
+    )
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write("bad: yaml: content: [unclosed")
+        result = run_hook(hook_input(path))
+        assert result.returncode == 0
+        decision = json.loads(result.stdout)
+        assert decision["decision"] == "block"
+        assert "vcfops_dashboards" in decision["reason"]
+    finally:
+        os.unlink(path)
+
+
+def test_valid_view_yaml_silent_pass():
+    fd, path = tempfile.mkstemp(
+        prefix="test_valid_hook_", suffix=".yaml", dir=VIEWS_DIR
+    )
+    os.close(fd)
+    try:
+        shutil.copyfile(REFERENCE_VALID_VIEW, path)
         result = run_hook(hook_input(path))
         assert result.returncode == 0
         assert result.stdout == b""

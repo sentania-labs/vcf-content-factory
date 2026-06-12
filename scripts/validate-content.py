@@ -17,15 +17,18 @@ WORKSPACE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CONTENT_ROOT = os.path.join(WORKSPACE_ROOT, "content") + os.sep
 
 # Map from content subdirectory name to vcfops package name.
-# Subdirectories with no validate CLI (managementpacks, recommendations,
-# sdk-adapters, views) are intentionally absent — those paths skip silently.
+# Subdirectories with no validate CLI (recommendations, sdk-adapters) are
+# intentionally absent — those paths skip silently. Recommendations have no
+# standalone validator; they are cross-checked during vcfops_alerts validate.
 PACKAGE_MAP = {
     "alerts": ("vcfops_alerts", True),  # True = accepts file path arg
     "customgroups": ("vcfops_customgroups", True),
+    "managementpacks": ("vcfops_managementpacks", True),
     "reports": ("vcfops_reports", True),
     "supermetrics": ("vcfops_supermetrics", True),
     "symptoms": ("vcfops_symptoms", True),
     "dashboards": ("vcfops_dashboards", False),  # validates the whole corpus
+    "views": ("vcfops_dashboards", False),  # views load with dashboards corpus
 }
 
 
