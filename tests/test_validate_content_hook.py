@@ -4,12 +4,23 @@
 # The hook derives its workspace root from its own location, so temp content
 # files must live under the real <workspace>/content/ tree for the hook to
 # engage; tempfile keeps names unique and try/finally keeps the tree clean.
+#
+# PARALLEL SAFETY: these tests temporarily write files into the real content/
+# subdirectories and then invoke validators that scan those same directories.
+# If another xdist worker is running validator-based publish tests at the same
+# time, the temp file can appear in that worker's validator scan and cause a
+# "duplicate name" failure.  The real_corpus xdist_group colocates all
+# corpus-touching tests on a single worker so they run sequentially.
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+
+import pytest
+
+pytestmark = [pytest.mark.slow, pytest.mark.xdist_group("real_corpus")]
 
 WORKSPACE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HOOK = os.path.join(WORKSPACE_ROOT, "scripts", "validate-content.py")

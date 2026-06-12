@@ -25,6 +25,12 @@ from typing import Any
 import pytest
 import yaml
 
+# Tests in this file copy the entire content/ corpus into a temp directory
+# and run validators against it.  Each test is slow (several seconds for the
+# copy + validator pass).  No real_corpus group needed — each test uses its
+# own factory copy, so they are safe to run concurrently with other workers.
+pytestmark = pytest.mark.slow
+
 REPO_ROOT = Path(__file__).parent.parent
 
 

@@ -48,6 +48,13 @@ from typing import List
 import pytest
 import yaml
 
+# Several tests in this file call publish(factory_repo=REPO_ROOT) which runs
+# the full validator suite against the real content/ corpus.  Mark the whole
+# file slow (zip-building tests dominate) and colocate on one xdist worker so
+# those publish calls never race with hook tests that write files into the
+# same corpus directories.
+pytestmark = [pytest.mark.slow, pytest.mark.xdist_group("real_corpus")]
+
 REPO_ROOT = Path(__file__).parent.parent
 
 
