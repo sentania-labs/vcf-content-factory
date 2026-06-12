@@ -20,6 +20,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt pytest
 
+      - name: Bootstrap SDK adapter repos
+        run: bash scripts/bootstrap_managed_paks.sh
+
       - name: Run pytest (all tests)
         run: |
           python3 -m pytest tests/ --collect-only -q 2>&1 | tee /tmp/collect.txt
