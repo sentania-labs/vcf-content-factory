@@ -251,7 +251,10 @@ path is first-class, not a sad fallback.
   happen in-tree exactly as above and `build-sdk` is still the local dev
   preview — but the **official** release is the pak's own CI building the
   `.pak` on a `v*` git tag (no agent, no factory checkout: a runner pulls
-  the published `sdk-buildkit` tarball and runs it). A factory `/publish`
+  the published `sdk-buildkit` tarball and runs it). **Before any v\* tag
+  is pushed, `python3 -m vcfops_packaging defect-gate --pak <name>` must
+  pass** — an open blocking defect in `context/defects.md` refuses the
+  release (RULE-012, `rules/release-gate-defects.md`). A factory `/publish`
   that references an SDK pak emits a **pointer** to that pak's latest
   GitHub Release, never a built/mirrored binary. New pak = instantiate the
   `…-sdk-template` repo + add one line to `context/managed_paks.md`.
