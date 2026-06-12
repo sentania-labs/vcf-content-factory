@@ -688,6 +688,112 @@ def _all_headline_paths(releases) -> set[str]:
 
 
 # ---------------------------------------------------------------------------
+# RULE-012 Defect gate
+# ---------------------------------------------------------------------------
+
+def _gate_publish(releases, factory_repo: Path) -> None:
+    """Check every release in the publish set against the defect registry.
+
+    Raises :class:`PublishError` if:
+    - Any open blocking defect affects a release's headline artifact.
+    - The defect registry is malformed.
+
+    When the registry is absent from ``factory_repo/context/defects.md`` the
+    gate vacuously passes and prints a clearly visible WARNING.  It never falls
+    back to the package-relative copy — that would couple test fixtures and any
+    other factory checkout to this repo's live defect state.
+
+    Applies in both dry-run and real mode — dry-run must also refuse
+    (it is the preview of the real behaviour).
+
+    For sdk-adapter headline sources the gate token is the adapter directory
+    name (the managed-pak name registered in context/managed_paks.md).
+    For all other headline sources the gate token is ``<parent-dir>/<stem>``
+    where parent-dir is the source type directory name (e.g. ``dashboards``,
+    ``bundles``) and stem is the filename stem.
+
+    TOOLSET GAP note: bundle sources (``bundles/<slug>.yaml``) may internally
+    reference Tier 1 management pack YAMLs via their ``managementpacks:``
+    field, but there is no reliable path from those entries to managed-pak
+    names in ``context/managed_paks.md`` without a separate lookup table.
+    The gate checks bundle slugs (as ``bundle/<slug>`` tokens) but does NOT
+    cascade into managed paks referenced inside the bundle.  Register a
+    separate DEF-NNN with ``Affects: <pak-name>`` to gate a managed pak
+    independently of the bundle that ships it.
+    """
+    from .defects import (
+        gate_pak,
+        gate_item,
+        format_defect_line,
+        DefectRegistryError,
+    )
+    from .release_builder import _is_sdk_adapter_source
+
+    # The defect registry must live in the factory repo.  If it is absent
+    # (e.g. a test fixture that copies only content/ without context/) the gate
+    # vacuously passes with a visible warning rather than falling back to the
+    # package-relative copy.  Falling back to the package-relative copy would
+    # couple any checkout — including test fixtures — to THIS repo's live defect
+    # state, which causes spurious failures when the live registry is malformed.
+    registry_path = factory_repo / "context" / "defects.md"
+    if not registry_path.exists():
+        print(
+            f"WARNING: no defect registry at {registry_path} "
+            f"— RULE-012 gate vacuously passes",
+            flush=True,
+        )
+        return
+
+    try:
+        # Accumulate all blockers across all releases before raising, so the
+        # error message names every blocked release at once.
+        all_blockers: list[tuple[str, object]] = []  # (release_name, DefectEntry)
+
+        for release in releases:
+            for artifact in release.artifacts:
+                if not artifact.headline:
+                    continue
+
+                source_path = artifact.source_path
+
+                if _is_sdk_adapter_source(source_path):
+                    # SDK adapter: gate by managed-pak name (adapter dir name).
+                    pak_name = source_path.parent.name
+                    blockers = gate_pak(pak_name, registry_path)
+                    for b in blockers:
+                        all_blockers.append((release.name, b))
+                else:
+                    # Content item: gate by <parent-dir>/<stem>.
+                    # parent-dir is the type directory name (e.g. "dashboards",
+                    # "bundles", "managementpacks").
+                    type_dir = source_path.parent.name
+                    slug = source_path.stem
+                    blockers = gate_item(type_dir, slug, registry_path)
+                    for b in blockers:
+                        all_blockers.append((release.name, b))
+
+        if not all_blockers:
+            return  # All clear.
+
+        # Format refusal message naming all defect ids and releases.
+        lines = []
+        for release_name, entry in all_blockers:
+            lines.append(f"  {format_defect_line(entry)}  [blocks: {release_name}]")
+        defect_ids = sorted({e.id for _, e in all_blockers})
+        raise PublishError(
+            f"RULE-012: {len(all_blockers)} open blocking defect(s) prevent publish:\n"
+            + "\n".join(lines)
+            + f"\n\nDefect ids: {', '.join(defect_ids)}"
+            + f"\nSee context/defects.md to review or close these defects."
+        )
+
+    except DefectRegistryError as exc:
+        raise PublishError(
+            f"RULE-012: defect registry malformed: {exc}"
+        ) from exc
+
+
+# ---------------------------------------------------------------------------
 # Per-release build
 # ---------------------------------------------------------------------------
 
@@ -1033,6 +1139,16 @@ def _publish_inner(
 
     # Build the set of all expected zip filenames for idempotence and stale sweep.
     known_filenames = _all_headline_paths(releases)
+
+    # -----------------------------------------------------------------------
+    # Step 4b: RULE-012 Defect gate — refuse before building anything.
+    # Runs in both dry-run and real mode (dry-run must also refuse — it is the
+    # preview of the real behaviour).  Checks every headline artifact:
+    #   - sdk-adapter sources  → gate by pak name (adapter directory name)
+    #   - all other sources    → gate by <content_type>/<slug> token
+    # A malformed registry is a hard stop (exit 1 analogue — raises PublishError).
+    # -----------------------------------------------------------------------
+    _gate_publish(releases, factory_repo)
 
     # -----------------------------------------------------------------------
     # Step 5: Per-release build + idempotence routing
