@@ -17,6 +17,18 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/validate-content.py",
+            "timeout": 30000
+          }
+        ]
+      }
     ]
   }
 }
