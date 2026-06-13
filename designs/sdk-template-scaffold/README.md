@@ -15,6 +15,10 @@ be maintained centrally and PR'd.
   and attaches the `.pak` to the tag's GitHub Release.
 - `repo-README.md` (below, as the template repo's own README) — what a pak
   author reads after `Use this template`.
+- `BUILDING_FROM_SOURCE.md` — the canonical "Building from source" README
+  section for pak repos: interactive builds from a bare pak clone (buildkit
+  tarball + self-sourced Broadcom SDK jar) and fork-CI rewiring. Copy the
+  marked block into each pak README under `## Building from source`.
 
 ## Anatomy of a pak repo (instantiated from the template)
 

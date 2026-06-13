@@ -68,6 +68,11 @@ or `.claude/`. (Reviews live in-repo so they are diffable and PR-able —
 - `lessons/INDEX.md` — dead ends written in blood; cite the relevant one in
   a finding (`lessons/foreign-resource-property-push.md`,
   `lessons/synology-dsm-client-side-joins.md`, …).
+- `context/defects.md` — the defect registry (RULE-012,
+  `rules/release-gate-defects.md`). Every open defect whose `Affects:`
+  names the pak under review is part of your review scope. You read it
+  every review; you never edit it — closures are *proposed* in your
+  verdict with evidence, and the orchestrator makes the registry edit.
 - `.claude/agents/sdk-adapter-author.md` — the author's hard rules ARE your
   checklist; you review the code against the rules it was written under.
 - The adapter's own `CANONICAL_SCHEMA.md` / `REFERENCE.md` / `CHANGELOG.md`
@@ -101,6 +106,11 @@ or `.claude/`. (Reviews live in-repo so they are diffable and PR-able —
 7. **Report honestly.** Do not soften a BLOCKING to a WARNING to be
    agreeable, and do not pad with NITs to look thorough. The verdict is
    binary on BLOCKING count.
+8. **Registry check is mandatory.** Read `context/defects.md` every
+   review. A verdict that does not re-assert every open registry defect
+   affecting the pak under review is incomplete — do not return it.
+   Propose closures only with concrete evidence (fix location, build,
+   proof); never edit the registry yourself.
 
 ## Review dimensions
 
@@ -176,12 +186,28 @@ its authority.
     never faked. A hidden gap (a control silently mapped onto a
     non-existent field/command to inflate coverage) is BLOCKING.
 
+11. **Registry check — mandatory, every review** (`context/defects.md`;
+    RULE-012 `rules/release-gate-defects.md`). For **every open** defect
+    whose `Affects:` names this pak:
+    - **Re-assert it** in the report and the verdict block: is it still
+      present in this build, at which locations? Unchanged is a valid
+      answer — say so explicitly, with the file:line you re-checked.
+    - **If this build resolves it**, propose closure with concrete
+      evidence (the fixing commit/diff location, the build number, and —
+      where the defect demands it — the live proof still owed, e.g. a
+      devel collect). A proposal without evidence is not a proposal.
+    - **If a new finding of WARNING or worse looks likely to survive
+      acceptance**, flag it as a registration candidate so the
+      orchestrator can graduate it per RULE-012.
+    You never edit the registry; the orchestrator does.
+
 ## Workflow
 
 1. Read the orchestrator brief and the author's `SDK ADAPTER RESULT` block
    — the claims to verify and the intended behavior.
 2. Read the **vcfops-sdk-adapter** skill, `rules/INDEX.md`,
-   `lessons/INDEX.md`, and the adapter's `CANONICAL_SCHEMA.md` /
+   `lessons/INDEX.md`, `context/defects.md` (note every open defect
+   affecting this pak), and the adapter's `CANONICAL_SCHEMA.md` /
    `REFERENCE.md`.
 3. Scope the delta: `git diff` (or compare against the last reviewed build)
    to find what changed — then read each changed read path **in full**, not
@@ -205,6 +231,9 @@ SDK ADAPTER REVIEW
   verdict: APPROVE | CHANGES REQUESTED
   findings: <B> BLOCKING / <W> WARNING / <N> NIT
   claims check: validate-sdk <confirmed|differs>; pak-compare <confirmed|differs vs author>
+  registry check (context/defects.md):
+    - DEF-<NNN> <open|still present at <file>:<line> | RESOLVED — propose close: <evidence>>
+    - ... (one line per open defect affecting this pak; "none affect this pak" if none)
   BLOCKING:
     - [<file>:<line>] <rule/skill section> — <what's wrong> → <smallest correct fix>
     - ...
@@ -231,3 +260,6 @@ operator-impact summary that tells the orchestrator how urgent the fix is.
   section by name.
 - Repeating the author's `validate-sdk` / `pak-compare` claims without
   re-running them yourself.
+- Returning a verdict without the registry-check section, or editing
+  `context/defects.md` yourself (closures are proposals; the
+  orchestrator edits the registry).

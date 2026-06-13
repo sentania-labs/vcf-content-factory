@@ -265,6 +265,36 @@ Tier 2 Phase 1 is complete (framework JAR + builder + hello-world
 adapter); Synology and Dell PowerEdge are queued as the first real
 Tier 2 adapters.
 
+## Building SDK paks interactively
+
+Two builder personas, two paths:
+
+**From a factory clone (this repo).** The session-start bootstrap
+clones each registered pak repo into the gitignored
+`content/sdk-adapters/<name>/` (registry:
+`context/managed_paks.md`). The interactive dev loop is:
+
+```bash
+python3 -m vcfops_managementpacks validate-sdk content/sdk-adapters/<name>  # cheap loop
+python3 -m vcfops_managementpacks build-sdk    content/sdk-adapters/<name>  # dev-preview .pak
+```
+
+You'll need a JDK 11+ and the Broadcom adapter SDK jar, which has no
+public redistribution channel — extract it from your own VCF Ops
+appliance (see the consumer contract in
+[designs/sdk-template-scaffold/BUILDING_FROM_SOURCE.md](designs/sdk-template-scaffold/BUILDING_FROM_SOURCE.md)).
+
+**From a bare pak repo clone or fork (no factory).** Each pak repo's
+README has a "Building from source" section: pull the portable
+`sdk-buildkit` tarball from this repo's Releases, supply your own
+appliance-extracted SDK jar, `python3 -m sdk_buildkit build-sdk .`.
+Forks must also rewire the CI workflow's runner and jar sourcing —
+that section covers it.
+
+Either way, what you build interactively is a **dev preview**. The
+official artifact is always the pak repo's own CI build on a `v*`
+tag — no developer machine, no agent, in the release path.
+
 ---
 
 ## The full picture

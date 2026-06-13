@@ -561,3 +561,156 @@ The adapter describe says the keys exist; the live instance simply isn't publish
 exposes individual session resources. The DPA "blocked sessions list" panel cannot be replicated
 as a ResourceList drill-down. A list view of wait types/groups can serve as a partial substitute.
 
+
+---
+
+## 2026-06-12 — Fleet Capacity self-provider fix (ops-recon)
+
+**Target:** `[VCF Content Factory] Fleet Capacity & Rightsizing`
+Dashboard UUID `762fc025-1609-4e9c-9612-a5d0232b77bc`,
+repo file `content/dashboards/fleet_capacity_rightsizing.yaml`,
+widget id `cluster_capacity_view` ("Cluster Capacity Breakdown").
+
+**Context:** User manually fixed the deployed widget on devel to add
+`selfProvider = true` with a vSphere World resource pin. The repo YAML
+had no `self_provider:` key on this widget. This entry captures the
+deployed wire format so dashboard-author can reproduce it.
+
+**Source:** Live content-zip export from
+`vcf-lab-operations-devel.int.sentania.net`, CUSTOM DASHBOARDS scope,
+extracted from `dashboards/29c1613f-3bbe-4aa0-8236-2c74db22c661` inner
+zip → `dashboard/dashboard.json`.
+
+---
+
+### Deployed widget JSON — "Cluster Capacity Breakdown"
+
+Widget instance UUID (assigned at install, stable on this instance):
+`87769840-31eb-598e-b738-b0c8d07009c5`
+
+```json
+{
+  "collapsed": false,
+  "id": "87769840-31eb-598e-b738-b0c8d07009c5",
+  "gridsterCoords": {
+    "w": 12,
+    "x": 1,
+    "h": 4,
+    "y": 5
+  },
+  "type": "View",
+  "title": "Cluster Capacity Breakdown",
+  "config": {
+    "refreshInterval": 300,
+    "resource": {
+      "resourceId": "resource:id:0_::_",
+      "traversalSpecId": "",
+      "resourceName": "vSphere World",
+      "resourceKindId": "002006VMWAREvSphere World",
+      "id": "Ext.vcops.chrome.model.Resource-1"
+    },
+    "traversalSpecId": null,
+    "refreshContent": {
+      "refreshContent": false
+    },
+    "isUpdatedView": true,
+    "chartViewItems": [],
+    "selectFirstRow": {
+      "selectFirstRow": true
+    },
+    "selfProvider": {
+      "selfProvider": true
+    },
+    "title": "Cluster Capacity Breakdown",
+    "viewDefinitionId": "0a1c11af-222b-41e0-af4c-dd324d7dacc0"
+  },
+  "height": 210,
+  "states": [...]
+}
+```
+
+### Key provider fields (what changed vs. original install)
+
+| Field | Before fix | After fix (deployed) |
+|---|---|---|
+| `config.selfProvider.selfProvider` | `false` | `true` |
+| `config.resource` | `null` | object with `resourceId: "resource:id:0_::_"`, `resourceName: "vSphere World"`, `resourceKindId: "002006VMWAREvSphere World"` |
+| `config.traversalSpecId` | `""` or absent | `null` |
+
+The deployed wire format for `selfProvider` on a View widget is:
+
+```json
+"selfProvider": { "selfProvider": true }
+```
+
+The deployed wire format for the resource pin (vSphere World singleton):
+
+```json
+"resource": {
+  "resourceId": "resource:id:0_::_",
+  "traversalSpecId": "",
+  "resourceName": "vSphere World",
+  "resourceKindId": "002006VMWAREvSphere World",
+  "id": "Ext.vcops.chrome.model.Resource-1"
+}
+```
+
+`resourceId: "resource:id:0_::_"` is the stable synthetic ID the Ops
+renderer emits for vSphere World (the fleet root singleton). Same pattern
+used by `fleet_summary` (Scoreboard widget). Compare to the Scoreboard
+widget's `pin:` which maps to `adapter_kind: VMWARE / resource_kind: vSphere
+World` in the repo YAML.
+
+### Comparison: Oversized VMs (receiver widget — no selfProvider)
+
+For reference, View widgets that are pure interaction receivers have:
+
+```json
+"selfProvider": { "selfProvider": false },
+"resource": null
+```
+
+### Interactions wiring — UNCHANGED
+
+The deployed `widgetInteractions` for this dashboard:
+
+```json
+[
+  {
+    "widgetIdProvider": "87769840-31eb-598e-b738-b0c8d07009c5",
+    "type": "resourceId",
+    "widgetIdReceiver": "84cae449-4cb9-5365-8511-4a8bc0994117"
+  },
+  {
+    "widgetIdProvider": "87769840-31eb-598e-b738-b0c8d07009c5",
+    "type": "resourceId",
+    "widgetIdReceiver": "8ac13273-e766-594f-b59d-50ef527cd2fa"
+  },
+  {
+    "widgetIdProvider": "87769840-31eb-598e-b738-b0c8d07009c5",
+    "type": "resourceId",
+    "widgetIdReceiver": "8ad16f3b-4685-5298-86a9-3977e4c841cd"
+  }
+]
+```
+
+Three receivers match the repo YAML (`oversized_vms_view`,
+`undersized_vms_view`, `datastore_reclaimable_view`). The user's fix
+did NOT touch interactions — only the provider config on the source widget.
+
+### What dashboard-author must add to the repo YAML
+
+On the `cluster_capacity_view` widget, add:
+
+```yaml
+self_provider: true
+pin:
+  adapter_kind: VMWARE
+  resource_kind: vSphere World
+```
+
+This is the same YAML pattern used by `fleet_summary` and the three
+heatmaps in this dashboard. The renderer already knows how to translate
+`self_provider: true` + `pin:` → the wire block above (confirmed by
+how `fleet_summary` renders correctly in the deployed dashboard).
+
