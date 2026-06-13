@@ -16,6 +16,7 @@ These files cost almost nothing to scan and prevent re-deriving known knowledge.
 | `tier_decision_framework.md` | Tier 1 vs. Tier 2 full trigger table and decision flow |
 | `api_pattern_catalog.md` | Recognized API shapes with default object models and known gaps |
 | `repo_layout.md` | Directory map of the repo |
+| `defects.md` | Defect registry — open blocking defects gate releases (RULE-012) |
 
 ---
 

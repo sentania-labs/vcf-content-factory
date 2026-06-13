@@ -81,15 +81,21 @@ widgets:
         color_method: 1
 
   # ── Band B · View — Cluster Capacity Breakdown  (y:2, x:0, w:12, h:4) ─────
-  # PRIMARY SELECTOR. Sorted ascending by capacity-remaining-pct so the most
-  # constrained cluster appears first. Sort is set at the view definition level
-  # by the view author (sort cannot be overridden at dashboard widget level).
-  # Selection drives Bands D-1, D-2, and E via interactions below.
+  # PRIMARY SELECTOR, self-provider, fleet-wide. Self-provider pinned to
+  # vSphere World so the view loads fleet-wide on open without requiring an
+  # upstream interaction. Sorted ascending by capacity-remaining-pct so the
+  # most constrained cluster appears first. Sort is set at the view definition
+  # level by the view author (sort cannot be overridden at dashboard widget
+  # level). Selection drives Bands D-1, D-2, and E via interactions below.
 
   - id: cluster_capacity_view
     type: View
     title: "Cluster Capacity Breakdown"
     coords: {x: 0, y: 2, w: 12, h: 4}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
     view: "[VCF Content Factory] Cluster Capacity Breakdown"
 
   # ── Band C · Heatmaps — CPU / Memory / Storage  (y:6, h:4) ─────────────────
