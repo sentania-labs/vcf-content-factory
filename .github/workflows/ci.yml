@@ -12,6 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history so the framework-review reminder can diff a PR
+          # against its base (merge-base needs reachable history).
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -24,6 +28,18 @@ jobs:
 
       - name: Bootstrap SDK adapter repos
         run: bash scripts/bootstrap_managed_paks.sh
+
+      - name: Framework-review reminder (non-blocking, P4)
+        # Nudge only — emits a ::warning:: when a PR changes vcfops_*/ with
+        # no context/reviews/framework/ doc. The real gate is the
+        # orchestrator spawning `framework-reviewer` before the PR
+        # (CLAUDE.md / designs/framework-reviewer-v1.md). Never fails the
+        # build: a doc-existence gate would be rubber-stampable and could
+        # wedge legitimate hotfixes.
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --quiet origin "${{ github.event.pull_request.base.ref }}" || true
+          bash scripts/check_framework_review.sh "origin/${{ github.event.pull_request.base.ref }}"
 
       - name: Run pytest (all tests)
         # pytest.ini sets addopts=-m "not slow" for fast local runs.
