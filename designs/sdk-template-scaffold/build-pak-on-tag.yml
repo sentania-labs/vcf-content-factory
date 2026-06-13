@@ -45,6 +45,32 @@ jobs:
       - name: Checkout adapter source
         uses: actions/checkout@v4
 
+      # Defect gate (factory RULE-012). Runs FIRST — before any expensive
+      # setup/build — so a v* tag fails fast and never produces a .pak while
+      # an open *blocking* defect names this pak in the factory registry.
+      # Fetches the single self-contained gate script + the live registry
+      # from factory main (public repo, no auth); no factory checkout, no
+      # pip install. The pak name is derived from the repo name
+      # (vcf-content-factory-sdk-<name> -> <name>); override DEFECT_PAK_NAME
+      # below if your repo is named differently.
+      - name: Defect gate (RULE-012)
+        env:
+          DEFECT_PAK_NAME: ""   # leave empty to derive from the repo name
+        run: |
+          set -euo pipefail
+          NAME="${DEFECT_PAK_NAME:-}"
+          if [ -z "$NAME" ]; then
+            NAME="${GITHUB_REPOSITORY##*/}"          # owner/vcf-content-factory-sdk-foo -> vcf-content-factory-sdk-foo
+            NAME="${NAME#vcf-content-factory-sdk-}"   # -> foo
+          fi
+          RAW="https://raw.githubusercontent.com/sentania-labs/vcf-content-factory/main"
+          curl -fsSL "$RAW/vcfops_packaging/defects.py" -o defects.py
+          curl -fsSL "$RAW/context/defects.md" -o defects.md
+          echo "Gating pak '$NAME' against the live factory defect registry..."
+          python3 defects.py --pak "$NAME" --registry defects.md
+          # exit 0 = clear; 2 = blocked (defect lines printed above); 1 = bad registry.
+          # Any non-zero propagates via set -e and fails the build before it starts.
+
       # The sentania-labs runner image ships NO JDK. build-sdk needs javac+jar.
       # If you bake a JDK into the runner image, delete this step.
       - name: Set up JDK 17

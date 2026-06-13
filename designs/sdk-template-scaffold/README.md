@@ -45,8 +45,12 @@ view/dashboard YAML — it cannot reference the factory's root `views/` or
    `python3 -m vcfops_managementpacks build-sdk content/sdk-adapters/<name>`.
    The `sdk-adapter-author` / `sdk-adapter-reviewer` agents operate here.
 2. **Commit + push** to this pak repo's `main`.
-3. **Release** = push a `v*` tag. CI builds the official `.pak` and publishes it
-   as a Release asset. This — not a dev build, not a factory `/publish` — is the
+3. **Release** = push a `v*` tag. CI first runs the **defect gate**
+   (RULE-012): it fetches the live factory defect registry and **fails the
+   build before it starts** if an open *blocking* defect names this pak —
+   so a `.pak` is never produced while a known-blocking defect is open. If
+   the gate passes, CI builds the official `.pak` and publishes it as a
+   Release asset. This — not a dev build, not a factory `/publish` — is the
    shippable artifact.
 4. The factory references the pak by **pointer** to `…/releases/latest`; it
    never rebuilds or mirrors the binary.
@@ -54,9 +58,11 @@ view/dashboard YAML — it cannot reference the factory's root `views/` or
 ## Runner requirements
 
 The CI workflow needs, on the runner: a **JDK 11+** (`javac`/`jar`), `python3`
-+ pip (for `pyyaml`), `gh`, and `tar`. The sentania-labs runner image currently
-lacks a JDK — either bake `default-jdk` into the image (then drop the
-`setup-java` step) or keep the `actions/setup-java` step in the workflow.
++ pip (for `pyyaml`), `gh`, `curl` (the defect gate fetches the registry), and
+`tar`. The sentania-labs runner image currently lacks a JDK — either bake
+`default-jdk` into the image (then drop the `setup-java` step) or keep the
+`actions/setup-java` step in the workflow. The defect-gate step needs only
+`python3` + `curl` (the gate script is pure stdlib).
 
 ## Buildkit pinning
 
