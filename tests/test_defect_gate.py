@@ -20,6 +20,13 @@ Coverage:
   Publish gate:
     - _gate_publish raises PublishError naming defect ids.
     - _gate_publish passes when all defects are closed or tracked.
+  Standalone entrypoint (defects.py __main__):
+    - --pak synology --registry context/defects.md → exit 2, names DEF-001.
+    - --pak compliance → exit 0.
+    - --all → exit 2, lists DEF-001 + DEF-002.
+    - missing registry path → exit 1.
+    - bare-copy invocation (file copied outside the package, run with a clean
+      cwd) → identical result to the in-package run (proves curl-and-run).
 """
 from __future__ import annotations
 
@@ -778,3 +785,136 @@ class TestGatePublish:
             f"Error must name the fixture defect DEF-001; got:\n{msg}"
         )
         assert "RULE-012" in msg
+
+
+# ---------------------------------------------------------------------------
+# Standalone entrypoint: python3 vcfops_packaging/defects.py
+# ---------------------------------------------------------------------------
+
+class TestStandaloneEntrypoint:
+    """Verify the __main__ block in defects.py.
+
+    Tests use subprocess so they exercise the real script execution path,
+    not the import path.  This is the load-bearing proof for the curl-and-run
+    contract.
+    """
+
+    _DEFECTS_SCRIPT = REPO_ROOT / "vcfops_packaging" / "defects.py"
+    _REAL_REGISTRY = REPO_ROOT / "context" / "defects.md"
+
+    def _run_script(self, script_path: Path, argv: list, cwd: Path | None = None):
+        """Run defects.py as a bare script; return (returncode, stdout, stderr)."""
+        import subprocess
+        result = subprocess.run(
+            [sys.executable, str(script_path)] + argv,
+            capture_output=True,
+            text=True,
+            cwd=str(cwd or REPO_ROOT),
+        )
+        return result.returncode, result.stdout, result.stderr
+
+    # --- In-package invocations -------------------------------------------------
+
+    def test_pak_synology_exits_2_names_def001(self):
+        """--pak synology with the real registry → exit 2, names DEF-001."""
+        rc, out, err = self._run_script(
+            self._DEFECTS_SCRIPT,
+            ["--pak", "synology", "--registry", str(self._REAL_REGISTRY)],
+        )
+        assert rc == 2, f"Expected exit 2 for synology; got {rc}\nstdout: {out}\nstderr: {err}"
+        assert "DEF-001" in out, f"Output must name DEF-001; got:\n{out}"
+        assert "RULE-012" in out, f"Output must name RULE-012; got:\n{out}"
+
+    def test_pak_compliance_exits_0(self):
+        """--pak compliance → exit 0 (no open blockers)."""
+        rc, out, err = self._run_script(
+            self._DEFECTS_SCRIPT,
+            ["--pak", "compliance", "--registry", str(self._REAL_REGISTRY)],
+        )
+        assert rc == 0, f"Expected exit 0 for compliance; got {rc}\nstdout: {out}\nstderr: {err}"
+        assert "compliance" in out, f"Output must mention pak name; got:\n{out}"
+
+    def test_all_exits_2_lists_def001_and_def002(self):
+        """--all → exit 2, lists both DEF-001 and DEF-002."""
+        rc, out, err = self._run_script(
+            self._DEFECTS_SCRIPT,
+            ["--all", "--registry", str(self._REAL_REGISTRY)],
+        )
+        assert rc == 2, f"Expected exit 2 for --all; got {rc}\nstdout: {out}\nstderr: {err}"
+        assert "DEF-001" in out, f"Output must list DEF-001; got:\n{out}"
+        assert "DEF-002" in out, f"Output must list DEF-002; got:\n{out}"
+
+    def test_missing_registry_exits_1(self, tmp_path):
+        """--registry pointing at a nonexistent path → exit 1, clear error."""
+        missing = tmp_path / "no_such_dir" / "defects.md"
+        rc, out, err = self._run_script(
+            self._DEFECTS_SCRIPT,
+            ["--pak", "synology", "--registry", str(missing)],
+        )
+        assert rc == 1, f"Expected exit 1 for missing registry; got {rc}\nstdout: {out}\nstderr: {err}"
+        combined = out + err
+        assert any(kw in combined.lower() for kw in ("not found", "registry", "error")), (
+            f"Error must mention the missing registry; got:\n{combined}"
+        )
+
+    # --- Bare-copy invocation: the load-bearing curl-and-run proof --------------
+
+    def test_bare_copy_matches_in_package_run(self, tmp_path):
+        """Copy defects.py and defects.md to a clean temp dir; run it there.
+
+        The pak-repo CI workflow does:
+          curl .../defects.py -o defects.py
+          curl .../context/defects.md -o defects.md
+          python3 defects.py --pak <name> --registry defects.md
+
+        This test reproduces that exactly.  The copy of defects.py has no
+        vcfops_packaging on sys.path (the cwd is the temp dir, not the factory
+        repo), and there is no __init__.py or package structure present.
+
+        The exit code and DEF-001 mention must match the in-package run.
+        """
+        import shutil
+
+        # Drop the two files into a completely empty temp dir.
+        script_copy = tmp_path / "defects.py"
+        registry_copy = tmp_path / "defects.md"
+        shutil.copy2(str(self._DEFECTS_SCRIPT), str(script_copy))
+        shutil.copy2(str(self._REAL_REGISTRY), str(registry_copy))
+
+        # Run from the temp dir; cwd has NO factory repo structure.
+        rc, out, err = self._run_script(
+            script_copy,
+            ["--pak", "synology", "--registry", str(registry_copy)],
+            cwd=tmp_path,
+        )
+
+        # Must match the in-package run: exit 2, names DEF-001 and RULE-012.
+        assert rc == 2, (
+            f"Bare-copy run must exit 2 (synology blocked by DEF-001); "
+            f"got {rc}\nstdout: {out}\nstderr: {err}"
+        )
+        assert "DEF-001" in out, (
+            f"Bare-copy run output must name DEF-001; got:\n{out}"
+        )
+        assert "RULE-012" in out, (
+            f"Bare-copy run output must name RULE-012; got:\n{out}"
+        )
+
+    def test_bare_copy_compliance_exits_0(self, tmp_path):
+        """Bare-copy run for compliance → exit 0 (matches in-package result)."""
+        import shutil
+
+        script_copy = tmp_path / "defects.py"
+        registry_copy = tmp_path / "defects.md"
+        shutil.copy2(str(self._DEFECTS_SCRIPT), str(script_copy))
+        shutil.copy2(str(self._REAL_REGISTRY), str(registry_copy))
+
+        rc, out, err = self._run_script(
+            script_copy,
+            ["--pak", "compliance", "--registry", str(registry_copy)],
+            cwd=tmp_path,
+        )
+        assert rc == 0, (
+            f"Bare-copy run must exit 0 for compliance; "
+            f"got {rc}\nstdout: {out}\nstderr: {err}"
+        )

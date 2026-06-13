@@ -10,9 +10,16 @@ be maintained centrally and PR'd.
 
 - `build-pak-on-tag.yml` — the per-pak CI workflow. Copy to
   `.github/workflows/build-pak-on-tag.yml` in each pak repo. On a `v*` tag it
-  pulls the published `sdk-buildkit` tarball from the factory's Releases, builds
-  the `.pak` headlessly (no agent, no factory checkout), gates on `pak-compare`,
-  and attaches the `.pak` to the tag's GitHub Release.
+  runs the **defect gate** (RULE-012; vendored `ci/defect_gate.py` vs the live
+  registry), pulls the published `sdk-buildkit` tarball from the factory's
+  Releases, builds the `.pak` headlessly (no agent, no factory checkout), gates
+  on `pak-compare`, and attaches the `.pak` to the tag's GitHub Release.
+- `ci/defect_gate.py` — **vendored** copy of the factory's
+  `vcfops_packaging/defects.py`, committed into each pak repo so the gate runs
+  *local, reviewable* code (never fetched-and-executed from a mutable ref — that
+  would run arbitrary factory-main code on a secret-bearing runner). Re-vendor
+  when the gate's parser changes; only the registry DATA (`defects.md`) is
+  fetched live.
 - `repo-README.md` (below, as the template repo's own README) — what a pak
   author reads after `Use this template`.
 - `BUILDING_FROM_SOURCE.md` — the canonical "Building from source" README
@@ -30,6 +37,7 @@ vcf-content-factory-sdk-<name>/
 ├─ profiles/  resources/  icons/  lib/
 ├─ views/      <name>-*.yaml         # bundled_content, CO-LOCATED here (NOT factory-root)
 ├─ dashboards/ <name>-*.yaml         # bundled_content, CO-LOCATED here
+├─ ci/defect_gate.py                 # vendored RULE-012 gate (copy of factory defects.py)
 └─ .github/workflows/build-pak-on-tag.yml
 ```
 
@@ -45,8 +53,12 @@ view/dashboard YAML — it cannot reference the factory's root `views/` or
    `python3 -m vcfops_managementpacks build-sdk content/sdk-adapters/<name>`.
    The `sdk-adapter-author` / `sdk-adapter-reviewer` agents operate here.
 2. **Commit + push** to this pak repo's `main`.
-3. **Release** = push a `v*` tag. CI builds the official `.pak` and publishes it
-   as a Release asset. This — not a dev build, not a factory `/publish` — is the
+3. **Release** = push a `v*` tag. CI first runs the **defect gate**
+   (RULE-012): it fetches the live factory defect registry and **fails the
+   build before it starts** if an open *blocking* defect names this pak —
+   so a `.pak` is never produced while a known-blocking defect is open. If
+   the gate passes, CI builds the official `.pak` and publishes it as a
+   Release asset. This — not a dev build, not a factory `/publish` — is the
    shippable artifact.
 4. The factory references the pak by **pointer** to `…/releases/latest`; it
    never rebuilds or mirrors the binary.
@@ -54,9 +66,11 @@ view/dashboard YAML — it cannot reference the factory's root `views/` or
 ## Runner requirements
 
 The CI workflow needs, on the runner: a **JDK 11+** (`javac`/`jar`), `python3`
-+ pip (for `pyyaml`), `gh`, and `tar`. The sentania-labs runner image currently
-lacks a JDK — either bake `default-jdk` into the image (then drop the
-`setup-java` step) or keep the `actions/setup-java` step in the workflow.
++ pip (for `pyyaml`), `gh`, `curl` (the defect gate fetches the registry), and
+`tar`. The sentania-labs runner image currently lacks a JDK — either bake
+`default-jdk` into the image (then drop the `setup-java` step) or keep the
+`actions/setup-java` step in the workflow. The defect-gate step needs only
+`python3` + `curl` (the gate script is pure stdlib).
 
 ## Buildkit pinning
 

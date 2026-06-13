@@ -414,3 +414,106 @@ def format_defect_line(entry: DefectEntry) -> str:
         f"{entry.id}  {entry.title}  "
         f"(first seen {entry.first_seen}, source {entry.source})"
     )
+
+
+# ---------------------------------------------------------------------------
+# Standalone entrypoint
+#
+# This block makes defects.py runnable as a bare script with no package
+# install — intended for pak-repo CI that curl's this file alongside
+# context/defects.md and invokes:
+#
+#   python3 defects.py --pak <name> [--registry <path>]
+#   python3 defects.py --all        [--registry <path>]
+#
+# The block must NOT use package-relative imports.  All logic it needs
+# (gate_pak, gate_all, format_defect_line, DefectRegistryError) is
+# defined above in this same file and is therefore available both when
+# the file is run as a script and when it is imported as a module.
+#
+# Exit codes (match cmd_defect_gate in cli.py):
+#   0 — no open blocking defects affect the named pak / no open blockers at all
+#   1 — malformed or missing registry (hard error)
+#   2 — one or more open blocking defects found
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import argparse as _argparse
+    import sys as _sys
+
+    # Default registry: sibling of THIS file, so `curl defects.py` + `curl
+    # defects.md` into the same directory and run without --registry works.
+    _DEFAULT_REGISTRY = Path(__file__).parent / "defects.md"
+
+    _p = _argparse.ArgumentParser(
+        prog="defects.py",
+        description=(
+            "Defect gate for pak-repo CI. "
+            "Reads a defect registry and exits 0 (clean), 1 (bad registry), "
+            "or 2 (open blocking defects found)."
+        ),
+    )
+    _mode = _p.add_mutually_exclusive_group(required=True)
+    _mode.add_argument(
+        "--pak",
+        metavar="NAME",
+        default=None,
+        help="check a managed pak by name (e.g. synology, unifi, compliance)",
+    )
+    _mode.add_argument(
+        "--all",
+        action="store_true",
+        default=False,
+        help="list every open blocking defect across all artifacts",
+    )
+    _p.add_argument(
+        "--registry",
+        metavar="PATH",
+        default=str(_DEFAULT_REGISTRY),
+        help=(
+            "path to defects.md registry "
+            f"(default: {_DEFAULT_REGISTRY})"
+        ),
+    )
+
+    _args = _p.parse_args()
+    _registry_path = Path(_args.registry)
+
+    try:
+        if _args.all:
+            _blockers = gate_all(_registry_path)
+            if not _blockers:
+                print("no open blocking defects")
+                _sys.exit(0)
+            for _entry in _blockers:
+                print(format_defect_line(_entry))
+            print(
+                f"\n{len(_blockers)} open blocking defect(s) found. "
+                f"See RULE-012 and context/defects.md."
+            )
+            _sys.exit(2)
+        else:
+            _pak_name = _args.pak
+            _blockers = gate_pak(_pak_name, _registry_path)
+            if not _blockers:
+                print(f"no open blocking defects affecting {_pak_name}")
+                _sys.exit(0)
+            for _entry in _blockers:
+                print(format_defect_line(_entry))
+            print(
+                f"\n{len(_blockers)} open blocking defect(s) block release of {_pak_name!r}. "
+                f"Refused by RULE-012. See context/defects.md."
+            )
+            _sys.exit(2)
+
+    except FileNotFoundError as _exc:
+        print(f"ERROR: registry not found: {_registry_path}", file=_sys.stderr)
+        print(f"  ({_exc})", file=_sys.stderr)
+        _sys.exit(1)
+    except DefectRegistryError as _exc:
+        print(
+            f"ERROR: defect registry malformed: {_registry_path}",
+            file=_sys.stderr,
+        )
+        print(f"  {_exc}", file=_sys.stderr)
+        _sys.exit(1)
