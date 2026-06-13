@@ -72,7 +72,7 @@ ends up holding all the context.
 | `api-explorer` | Research | `context/`, `docs/` | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
 | `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `vcfops_*/`. |
 | `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. |
-| `content-packager` | Build | `dist/` | Distributable bundle, **or** rebuild after tooling change. |
+| `content-packager` | Build | `bundles/`, `dist/` | Authors bundle manifests in `bundles/`; builds distributable zips into `dist/`. Rebuild after a tooling change. |
 | `qa-tester` | Testing | `/tmp/` | Acceptance-test a built zip. Spawn after `content-packager`. |
 | `api-cartographer` | Research | `context/api-maps/`, `docs/` | New external API for an MP. |
 | `mp-designer` | Design | `designs/` | New MP. Wizard interview against API map. |

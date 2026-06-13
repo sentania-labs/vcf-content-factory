@@ -282,7 +282,7 @@ Does the child data belong on the SAME logical object instance as the parent row
 
 ## 6. Worked example — Synology MP Strategy C
 
-This is the final architecture for `managementpacks/synology_nas.yaml`
+This is the final architecture for `content/managementpacks/synology_nas.yaml`
 (v2), summarized for the relationship perspective.
 
 ### 6.1 Object model

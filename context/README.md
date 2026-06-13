@@ -45,6 +45,8 @@ These files cost almost nothing to scan and prevent re-deriving known knowledge.
 | `mp_icon_library.md` | Per-ResourceKind SVG hints |
 | `mp_format_comparison_2026_05_15.md` | Format comparison (MPB vs factory) |
 | `mp_schema_vs_existing_mp.md` | Schema vs existing MP comparison |
+| `mpb_import_investigation.md` | MPB design.json import investigation |
+| `reference-mpb-research.md` | MPB JSON schema reference (the target format MP YAML compiles to) |
 | `wire_reference/` | Reference wire format artifacts (describe.xml, export.json, template.json) |
 
 ### `wire-formats/` — Wire format documentation
@@ -61,6 +63,11 @@ These files cost almost nothing to scan and prevent re-deriving known knowledge.
 ### `tier2_architecture.md`
 Tier 2 (Java SDK) framework architecture — read when working on SDK adapters.
 
+### `framework_v2_migration.md`
+Tier 2 framework v2 migration record (componentLogger, keyed constructors,
+the SPI reshape) — cross-referenced throughout `tier2_architecture.md` and the
+SDK adapter reviews.
+
 ---
 
 ## Read for content authoring
@@ -69,6 +76,7 @@ Tier 2 (Java SDK) framework architecture — read when working on SDK adapters.
 | File | Purpose |
 |---|---|
 | `supermetric_authoring.md` | Super metric DSL rules and style |
+| `view_dashboard_design_guide.md` | View + dashboard design/layout guide |
 | `customgroup_authoring.md` | Dynamic custom group authoring |
 | `management_pack_authoring.md` | MP authoring conventions |
 | `mp_chain_authoring.md` | MPB chaining YAML authoring grammar |
