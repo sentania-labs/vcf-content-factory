@@ -55,11 +55,16 @@ TP_ROOT = REPO_ROOT / "third_party" / "idps-planner"
 TP_VIEW_PATH = TP_ROOT / "views" / "IDPS Planner - Cluster Selection.yaml"
 TP_SM_PATH = TP_ROOT / "supermetrics" / "IDPS Net Receive All VMs.yaml"
 
-# Require these fixtures to exist.
-pytestmark = pytest.mark.skipif(
-    not TP_VIEW_PATH.exists(),
-    reason="third_party/idps-planner fixtures not found",
-)
+# Require these fixtures to exist; also mark slow + real_corpus: two tests call
+# publish(factory_repo=REPO_ROOT) which runs validators against the real corpus.
+pytestmark = [
+    pytest.mark.skipif(
+        not TP_VIEW_PATH.exists(),
+        reason="third_party/idps-planner fixtures not found",
+    ),
+    pytest.mark.slow,
+    pytest.mark.xdist_group("real_corpus"),
+]
 
 
 # ---------------------------------------------------------------------------

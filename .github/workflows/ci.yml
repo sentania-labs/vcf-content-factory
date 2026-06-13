@@ -18,15 +18,21 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest
+        # Test deps (pytest, pytest-xdist pin) live in requirements-dev.txt
+        # so local and CI environments install the identical toolchain.
+        run: pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Bootstrap SDK adapter repos
         run: bash scripts/bootstrap_managed_paks.sh
 
       - name: Run pytest (all tests)
+        # pytest.ini sets addopts=-m "not slow" for fast local runs.
+        # CI must run the FULL suite, so we override addopts to clear the
+        # default marker filter and add -n auto for parallel execution.
+        # -m "" means "no marker filter" (run everything including slow).
         run: |
           python3 -m pytest tests/ --collect-only -q 2>&1 | tee /tmp/collect.txt
-          python3 -m pytest tests/ -v --tb=short
+          python3 -m pytest tests/ -v --tb=short -n auto --dist=loadgroup --override-ini="addopts=" -m ""
 
       - name: Validate content corpus
         run: |

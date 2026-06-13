@@ -27,6 +27,13 @@ from unittest.mock import MagicMock, patch, call
 import pytest
 import yaml
 
+# All tests in this file call publish(factory_repo=REPO_ROOT) which runs the
+# full validator suite against the real content/ corpus.  Mark them slow
+# (zip-building + validator overhead) and colocate on one xdist worker so they
+# never run concurrently with hook tests that write temporary files into the
+# same corpus directories.
+pytestmark = [pytest.mark.slow, pytest.mark.xdist_group("real_corpus")]
+
 REPO_ROOT = Path(__file__).parent.parent
 
 

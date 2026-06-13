@@ -1,0 +1,4 @@
+# Test/dev dependencies — not needed to drive the factory, only to run
+# its test suite. Runtime deps live in requirements.txt.
+pytest
+pytest-xdist==3.6.1

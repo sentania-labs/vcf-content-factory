@@ -38,6 +38,12 @@ from typing import List
 import pytest
 import yaml
 
+# Tests in this file call build_release() which constructs full content-import
+# zips from real YAML.  Each zip build takes a few seconds; the whole file is
+# ~2.5 min serial.  No validators are run against the real corpus, so these
+# tests are safe to parallelize — they just need the slow marker.
+pytestmark = pytest.mark.slow
+
 REPO_ROOT = Path(__file__).parent.parent
 
 
