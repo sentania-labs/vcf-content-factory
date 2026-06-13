@@ -38,8 +38,15 @@ if [ -z "${FRAMEWORK_HITS}" ]; then
   exit 0
 fi
 
-# Did the same change add/modify a framework review doc?
-REVIEW_HITS="$(printf '%s\n' "${CHANGED}" | grep -E '^context/reviews/framework/.+\.md$' | grep -v '/README\.md$' || true)"
+# Did the same change leave a framework review doc in place? A diff lists
+# DELETED/renamed-away report paths too, so a PR that deletes or renames a
+# report would otherwise satisfy this check via the stale old path. Count
+# only review docs that still EXIST in the post-change tree. [Codex PR-17]
+REVIEW_HITS=""
+for f in $(printf '%s\n' "${CHANGED}" | grep -E '^context/reviews/framework/.+\.md$' | grep -v '/README\.md$' || true); do
+  [ -f "${f}" ] && REVIEW_HITS="${REVIEW_HITS} ${f}"
+done
+REVIEW_HITS="${REVIEW_HITS# }"
 
 if [ -n "${REVIEW_HITS}" ]; then
   echo "check-framework-review: vcfops_*/ change has a framework review doc:"
