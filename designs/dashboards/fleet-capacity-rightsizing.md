@@ -90,3 +90,21 @@ Recon: ops-recon agent a64d3889c4a779a10. Fleet = 1 vSphere World, 2 clusters,
 - Storage heatmap color: confirm a cluster disk usage % key; else color by
   `diskspace|total_usage` sized by `diskspace|total_capacity`.
 - At 2 clusters heatmaps show 2 tiles each — thin now, scales with the fleet. By design.
+
+---
+
+## Correction — 2026-06-12 (self-provider on Band B)
+
+**User report (verbatim):** "when you installed it - you didn't configure
+the cluster capacity breakdown as a self-provider. I updated the version
+deployed to Devel, but you'll need to update the design"
+
+The Band B "Cluster Capacity Breakdown" View widget (`cluster_capacity_view`)
+shipped without provider config; as a non-self-provider with no resource
+binding it rendered empty until driven. The user fixed the deployed copy on
+devel directly. ops-recon extracted the deployed wire config
+(`context/investigations/recon_log.md`, entry "2026-06-12 — Fleet Capacity
+self-provider fix"): `selfProvider: true` + vSphere World resource pin.
+Repo fix: add `self_provider: true` and
+`pin: {adapter_kind: VMWARE, resource_kind: vSphere World}` to the widget —
+the same pattern Band A `fleet_summary` already uses. Interactions unchanged.
