@@ -11,6 +11,14 @@ adoption. **NOT a hard cutover off 9.0.x** (9.0.x is still supported).
 - **HTML what's-new** (curated delta index):
   `https://techdocs.broadcom.com/us/en/vmware-cis/vcf/vcf-9-0-and-later/9-1/release-notes/vmware-cloud-foundation-9-1-0-0-release-notes/what-s-new/whats-new-vcf-ops.html`
 - **VCF 9.1 release-notes landing**: build `25377994`, release date 12 May 2026.
+- **Committed prod OpenAPI specs** (`docs/operations-api-9.1.json` public 343
+  paths, `docs/internal-api-9.1.json` internal 217 paths): fetched read-only
+  from the prod instance, confirmed **VCF Operations 9.1.0.0, build `25435105`**
+  via `/suite-api/api/versions/current`. This is a different 9.1.0.0 patch build
+  than the GA what's-new's `25377994` — both are 9.1.0.0; the specs reflect the
+  actual prod instance, the right ground truth for prod-accurate authoring. **All
+  spec-based claims below are reconciled against these committed files** (this
+  supersedes any PDF prose where they conflict — e.g. `receiverAddress`).
 - **VCF 9.1 PDF** `docs/vmware-cloud-foundation-9-1.pdf` (9,279 pp),
   extracted to `/tmp/vcf91.txt` (687,364 lines). Cited as `PDF:<line>`
   (pdftotext line numbers, stable for this extract; the PDF prints a
@@ -35,14 +43,18 @@ Where a claim cannot be confirmed from what was obtained, it is marked
    → DEFER to design**: investigate whether the wizard emits a design.json the
    factory's render-export/push-design loop can drive, or whether it's UI-only.
 
-2. **Two VCF Operations Suite-API contract changes the factory must absorb**
-   (`PDF:31476`). Nothing deleted/deprecated, but two breaking-for-clients
-   updates: (a) `POST /suite-api/api/alertplugins/{pluginId}/test` now requires
-   a new `receiverAddress` request parameter; (b) `GET
-   /suite-api/api/resources/{id}/relationships` no longer *requires* the
-   `relationshipType` query parameter. These are **version-conditioned**: a
-   9.0.x client omitting `receiverAddress` was fine; a 9.1 test-alert call needs
-   it. **ADOPT NOW** as version-guarded behavior (see Version-awareness below).
+2. **Two VCF Operations Suite-API contract changes — both non-breaking**
+   (`PDF:31476`, reconciled against the committed `docs/operations-api-9.1.json`).
+   (a) `POST /suite-api/api/alertplugins/{pluginId}/test` gains a
+   `receiverAddress` parameter — but the spec declares it **`required: false`**
+   (default `""`), so the PDF's "must supply" prose overstates it: it is
+   **optional and email-plugin-specific**. (b) `GET
+   /suite-api/api/resources/{id}/relationships` **relaxes** the
+   `relationshipType` query parameter from required (9.0) to optional (9.1) —
+   confirmed in both committed specs. Neither breaks a 9.0.x client: (a) is a
+   new optional field, (b) is a relaxation. **WATCH**, not adopt-now — the
+   factory has no caller for either today; keep sending `relationshipType`
+   where it already does (required on 9.0.x, harmless on 9.1).
 
 3. **Public Findings / Diagnostics REST API** (`PDF:5503`) and **Real-Time
    Metrics APIs (VODAP), Prometheus-compatible, PromQL** (`PDF:5790`). New
@@ -84,14 +96,21 @@ Where a claim cannot be confirmed from what was obtained, it is marked
   in-product MPB (introduced 9.0). The factory already targets in-product MPB,
   so no change; just don't reintroduce a standalone-appliance assumption.
 
-**Bottom line:** The factory's core content schemas (super metrics, views,
-dashboards, custom groups, symptoms, alerts, reports) show **no schema delta**
-in 9.1 — the doc TOC structure for "Configuring Super Metrics", view, and
-dashboard authoring is unchanged (`PDF:2137`, `PDF:313173`). So there is no
-forced content rewrite. The adoptable surface is **APIs and the MP authoring
-lane**, and the only mandatory absorption is the two Suite-API contract tweaks
-— both naturally version-guardable behind the existing
-`/suite-api/api/versions/current` anchor.
+**Bottom line:** The factory's core content-definition schemas (super metrics,
+views, dashboards, custom groups, symptoms, alerts, reports) show **no breaking
+property changes** in 9.1 — checked property-by-property against the committed
+9.1 OpenAPI spec (`docs/operations-api-9.1.json`), not just the doc TOC: no
+properties added or removed on `symptom-definition`, `alert-definition`,
+`recommendation`, or `report-definition`, so **no forced content rewrite**. Two
+caveats keep this from being "no delta at all": (1) 9.1 **deprecates**
+`symptom-definition.realtimeMonitoringEnabled` (`operations-api-9.1.json`:
+`deprecated: true`; absent in 9.0) — existing content still validates, but new
+symptom authoring should avoid that field; (2) the public API surface is
+**+93 paths (250→343, 0 removed)** — purely additive, so no call the factory
+makes today breaks. The adoptable surface is **APIs and the MP authoring lane**;
+there is **no mandatory content rewrite** and (per item 2) no *mandatory* API
+absorption either — the API additions are naturally version-guardable behind
+the existing `/suite-api/api/versions/current` anchor.
 
 ---
 
@@ -100,19 +119,22 @@ lane**, and the only mandatory absorption is the two Suite-API contract tweaks
 ### C1 — Suite-API contract: `alertplugins/{id}/test` adds `receiverAddress`
 
 - **What's new in 9.1:** `POST /suite-api/api/alertplugins/{pluginId}/test`
-  now includes a newly added `receiverAddress` request parameter; "Test-alert
-  workflows must be updated to supply this address." (`PDF:31476`). Nothing
-  deleted/deprecated in the VCF Operations API.
-- **Factory relevance:** The factory authors alerts and (via content-installer)
-  may exercise alert-plugin test flows. Any tooling that calls the test
-  endpoint must supply `receiverAddress` on 9.1.
-- **Verdict: ADOPT NOW** (as a version-guarded contract). Low effort, additive.
-- **Version-awareness:** **Needs a version guard.** On 9.0.x the field was
-  absent/ignored; on 9.1 it is expected. Guard on
-  `/suite-api/api/versions/current` (`major/minor` → 9.1 ⇒ include
-  `receiverAddress`). Do **not** unconditionally send it without confirming
-  9.0.x tolerates the extra field — **UNVERIFIED** whether 9.0.x rejects
-  unknown params. Safer: send only when version ≥ 9.1.
+  gains a `receiverAddress` request parameter. The PDF prose says "Test-alert
+  workflows must be updated to supply this address" (`PDF:31476`) — **but the
+  committed 9.1 spec declares it `required: false` with default `""`**
+  (`docs/operations-api-9.1.json`, the `receiverAddress` parameter). So it is
+  **optional and email-plugin-specific**, not a blanket requirement; the PDF
+  prose overstates it. Nothing deleted/deprecated.
+- **Factory relevance:** Low. The factory authors alert *definitions*; it does
+  not drive the alert-plugin *test* flow today. If tooling ever does, supply
+  `receiverAddress` only when testing an email plugin.
+- **Verdict: WATCH** (corrected down from ADOPT NOW after the spec reconcile).
+  Optional param, no factory caller today — nothing to absorb until the factory
+  actually exercises plugin tests.
+- **Version-awareness:** Minimal. The parameter simply does not exist on 9.0.x,
+  so omit it there; on 9.1 include it only when testing an email plugin. **No
+  mandatory version-gate** — it is optional on the wire (`required: false`) and
+  unused by the factory today.
 
 ### C2 — Suite-API contract: `resources/{id}/relationships` drops required `relationshipType`
 
@@ -121,8 +143,10 @@ lane**, and the only mandatory absorption is the two Suite-API contract tweaks
 - **Factory relevance:** Recon/ops-recon and SDK-adapter stitch verification
   read relationships. A 9.0.x caller that always passed `relationshipType`
   still works on 9.1 (param is optional, not removed).
-- **Verdict: ADOPT NOW (no-op for existing callers).** Existing callers that
-  pass the param continue to work; new callers may omit it on 9.1.
+- **Verdict: NO ACTION (no-op for existing callers).** Existing callers that
+  pass the param continue to work unchanged; new callers may omit it on 9.1.
+  Nothing to adopt — this is why item 2 of the executive summary rates the
+  pair WATCH rather than adopt-now.
 - **Version-awareness:** **No guard needed** if the factory keeps passing the
   param. Backward-compatible. Only relevant if someone *relies* on omitting it
   — then it's 9.1-only.
