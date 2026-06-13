@@ -79,6 +79,7 @@ ends up holding all the context.
 | `mp-author` | Author | `content/managementpacks/` | After `mp-designer` produces approved design. **Tier 1** MPB YAML spec. |
 | `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` (each an independent repo, gitignored) | After `mp-designer` produces approved design. **Tier 2** Java SDK adapter source. The Java sibling to `mp-author`. **Only** agent that edits adapter Java. Commits go to the pak's **own** remote; a real release is a `v*` tag on that repo, not a factory `/publish`. |
 | `sdk-adapter-reviewer` | Read-only review | `context/reviews/` | After `sdk-adapter-author` reports a build, before the install gate. Skeptical correctness/quality check on Tier 2 Java — hunts unreadable-is-compliant, stitch corruption, crash-the-cycle. Never edits source, never installs. |
+| `framework-reviewer` | Read-only review | `context/reviews/framework/` | After `tooling` touches `vcfops_*/`, **before the PR**. Skeptical correctness/regression gate on framework Python — the `vcfops_*/` sibling of `sdk-adapter-reviewer`. **Blanket:** every `vcfops_*/` diff. Re-runs validate/tests/render-regression; hunts global-default-leak / key-collision / silent-downgrade. Never edits source, never installs. |
 
 Agent prompts under `.claude/agents/` are authoritative for each
 agent's behavior. If "Spawn when" above ever conflicts with a
@@ -174,9 +175,18 @@ file (not a skill) because it runs before any skill could load.
    with each other or with a deferred author — they write to
    non-content directories.
 
-9. **Tooling changes go through the `tooling` agent.** The same
-   discipline that keeps you out of `supermetrics/` keeps you out
-   of `vcfops_*/`.
+9. **Tooling changes go through the `tooling` agent, then the
+   `framework-reviewer` gate.** The same discipline that keeps you
+   out of `supermetrics/` keeps you out of `vcfops_*/`. And the same
+   discipline that gives Tier 2 Java a skeptical review before it
+   ships gives framework Python one too: after `tooling` reports a
+   `vcfops_*/` change and **before you open the PR**, spawn
+   `framework-reviewer`. Scope is **blanket** — every `vcfops_*/`
+   diff, no exceptions. A **CHANGES REQUESTED** verdict (≥1 BLOCKING)
+   blocks the PR; re-brief `tooling` and re-review until APPROVE. This
+   is the framework-code sibling of the `sdk-adapter-reviewer` gate
+   (RULE-013). The framework is the product — it gets at least the
+   protection the content does.
 
 ## When the toolset is inadequate
 
@@ -259,6 +269,10 @@ path is first-class, not a sad fallback.
   GitHub Release, never a built/mirrored binary. New pak = instantiate the
   `…-sdk-template` repo + add one line to `context/managed_paks.md`.
 - **Toolset gap:** punt / api-explorer / tooling → fix → re-invoke.
+- **Framework changes (`vcfops_*/`):** tooling → **`framework-reviewer`**
+  (blanket, every diff; CHANGES REQUESTED blocks the PR — RULE-013) →
+  open PR. The pre-PR, factory-owned regression gate; complements Codex's
+  post-PR pass, does not replace it.
 - **After tooling changes:** if `tooling` modifies anything in
   `vcfops_packaging/templates/`, `vcfops_packaging/builder.py`, or
   `vcfops_dashboards/render.py`, **all distribution zips are
