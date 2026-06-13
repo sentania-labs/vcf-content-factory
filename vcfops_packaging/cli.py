@@ -486,6 +486,103 @@ def cmd_check_staleness(args) -> int:
         return 1
 
 
+def cmd_defect_gate(args) -> int:
+    """Run the defect gate and exit 0 (clean), 1 (malformed registry), or 2 (blocked).
+
+    Three usage modes (exactly one must be provided):
+      --pak <name>       check a managed pak by name
+      --all              check every artifact for open blocking defects
+      <type> <name>      check a content item by type and slug (filename stem)
+
+    The <type>/<slug> form matches the Affects: token in context/defects.md
+    exactly.  Pass the slug (filename stem of the source YAML), not the
+    display name.
+    """
+    from .defects import (
+        gate_pak, gate_item, gate_all, format_defect_line,
+        DefectRegistryError,
+    )
+
+    # Validate that exactly one mode was selected.
+    has_all = getattr(args, "all", False)
+    pak_name = getattr(args, "pak", None)
+    content_type = getattr(args, "content_type", None)
+    item_name = getattr(args, "item_name", None)
+    has_item = bool(content_type or item_name)
+
+    # Count active modes.
+    n_modes = sum([bool(has_all), bool(pak_name), has_item])
+    if n_modes == 0:
+        print(
+            "ERROR: specify one of: --pak <name>, --all, or <type> <name>",
+            file=sys.stderr,
+        )
+        return 1
+    if n_modes > 1:
+        print(
+            "ERROR: --pak, --all, and <type> <name> are mutually exclusive",
+            file=sys.stderr,
+        )
+        return 1
+    if has_item and not (content_type and item_name):
+        print(
+            "ERROR: <type> <name> requires both arguments",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        # --- --all mode ---
+        if has_all:
+            blockers = gate_all()
+            if not blockers:
+                print("no open blocking defects")
+                return 0
+            for entry in blockers:
+                print(format_defect_line(entry))
+            print(
+                f"\n{len(blockers)} open blocking defect(s) found. "
+                f"See RULE-012 and context/defects.md."
+            )
+            return 2
+
+        # --- --pak <name> mode ---
+        if pak_name:
+            blockers = gate_pak(pak_name)
+            if not blockers:
+                print(f"no open blocking defects affecting {pak_name}")
+                return 0
+            for entry in blockers:
+                print(format_defect_line(entry))
+            print(
+                f"\n{len(blockers)} open blocking defect(s) block release of {pak_name!r}. "
+                f"Refused by RULE-012. See context/defects.md."
+            )
+            return 2
+
+        # --- <type> <name> mode (content item) ---
+        # content_type and item_name are both non-None here (validated above).
+        blockers = gate_item(content_type, item_name)
+        token = f"{content_type}/{item_name}"
+        if not blockers:
+            print(f"no open blocking defects affecting {token}")
+            return 0
+        for entry in blockers:
+            print(format_defect_line(entry))
+        print(
+            f"\n{len(blockers)} open blocking defect(s) block release of {token!r}. "
+            f"Refused by RULE-012. See context/defects.md."
+        )
+        return 2
+
+    except FileNotFoundError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    except DefectRegistryError as exc:
+        print(f"ERROR: defect registry malformed: {exc}", file=sys.stderr)
+        return 1
+
+
 def cmd_sync(args) -> int:
     # Import here to avoid pulling in requests at module import time
     from .syncer import sync_bundle, sync_all_bundles, uninstall_bundle
@@ -704,6 +801,25 @@ def cmd_release(args) -> int:
                 )
                 return 1
             deprecates_paths.append(f"releases/{dep_slug}.yaml")
+
+        # --- RULE-012: Defect gate for sdk-adapter (gate by pak name = dir name) ---
+        from .defects import gate_pak as _gate_pak, format_defect_line as _fmt_defect
+        from .defects import DefectRegistryError as _DefectRegistryError
+        try:
+            _sdk_pak_name = source_path.parent.name  # e.g. "synology", "unifi"
+            _sdk_blockers = _gate_pak(_sdk_pak_name)
+            if _sdk_blockers:
+                for _e in _sdk_blockers:
+                    print(_fmt_defect(_e), file=sys.stderr)
+                print(
+                    f"\n{len(_sdk_blockers)} open blocking defect(s) block release of "
+                    f"{_sdk_pak_name!r}. Refused by RULE-012. See context/defects.md.",
+                    file=sys.stderr,
+                )
+                return 2
+        except (FileNotFoundError, _DefectRegistryError) as _exc:
+            print(f"ERROR: defect gate failed: {_exc}", file=sys.stderr)
+            return 1
 
         try:
             source_rel = str(source_path.relative_to(repo_root))
@@ -994,6 +1110,49 @@ def cmd_release(args) -> int:
             )
             return 1
         deprecates_paths.append(f"releases/{dep_slug}.yaml")
+
+    # -----------------------------------------------------------------------
+    # RULE-012: Defect gate — refuse before writing anything on disk.
+    # For sdk-adapter type the gate was already run above (in the sdk-adapter
+    # branch).  Here we gate the general content types.
+    # For bundle type we also gate by the bundle slug (checked against
+    # Affects: tokens in the defect registry).
+    # TOOLSET GAP: bundles can reference content/managementpacks/*.yaml via
+    # their managementpacks: field, but those are Tier 1 MP YAML files — not
+    # the same as Tier 2 SDK adapter names registered in managed_paks.md.
+    # There is no reliable path from a bundle's managementpacks: entry to a
+    # managed-pak name without a separate lookup table.  The gate therefore
+    # checks the bundle slug itself (as a factory:<slug> or bundle/<slug>
+    # token if registered) but does NOT automatically cascade to managed paks
+    # referenced inside the bundle.  Register a separate DEF-NNN with
+    # Affects: <pak-name> to gate the pak independently.
+    # -----------------------------------------------------------------------
+    from .defects import gate_item as _gate_item, format_defect_line as _fmt_dl
+    from .defects import DefectRegistryError as _DRE
+    try:
+        _gate_blockers: list = []
+        if content_type == "sdk-adapter":
+            # Already handled in the sdk-adapter branch above.
+            pass
+        elif content_type == "bundle":
+            # Gate the bundle slug as a content item.
+            _gate_blockers = _gate_item("bundle", source_path.stem)
+        else:
+            # Gate by <content_type>/<slug> (slug = filename stem of source YAML).
+            _gate_blockers = _gate_item(content_type, source_path.stem)
+
+        if _gate_blockers:
+            for _e in _gate_blockers:
+                print(_fmt_dl(_e), file=sys.stderr)
+            print(
+                f"\n{len(_gate_blockers)} open blocking defect(s) block this release. "
+                f"Refused by RULE-012. See context/defects.md.",
+                file=sys.stderr,
+            )
+            return 2
+    except (FileNotFoundError, _DRE) as _exc:
+        print(f"ERROR: defect gate failed: {_exc}", file=sys.stderr)
+        return 1
 
     # -----------------------------------------------------------------------
     # Build release manifest dict.
@@ -1458,6 +1617,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="overwrite existing bundles/<name>.yaml if it already exists",
     )
     pbun.set_defaults(func=cmd_bundle)
+
+    # -----------------------------------------------------------------------
+    # defect-gate [--pak <name> | --all | <type> <name>]
+    # -----------------------------------------------------------------------
+    pdg = sub.add_parser(
+        "defect-gate",
+        help=(
+            "check context/defects.md for open blocking defects. "
+            "Exit 0 = clean; exit 2 = blocked; exit 1 = malformed registry.\n"
+            "Usage forms:\n"
+            "  defect-gate --pak <name>       check a managed pak\n"
+            "  defect-gate --all              check every artifact\n"
+            "  defect-gate <type> <name>      check a content item by type and slug"
+        ),
+    )
+    pdg.add_argument(
+        "--pak",
+        metavar="NAME",
+        default=None,
+        help="check a managed pak by name (e.g. synology, unifi, compliance)",
+    )
+    pdg.add_argument(
+        "--all",
+        action="store_true",
+        default=False,
+        help="list every open blocking defect across all artifacts",
+    )
+    pdg.add_argument(
+        "content_type",
+        nargs="?",
+        default=None,
+        metavar="type",
+        help="content type for item check (e.g. dashboard, view)",
+    )
+    pdg.add_argument(
+        "item_name",
+        nargs="?",
+        default=None,
+        metavar="name",
+        help="slug (filename stem) of the content item",
+    )
+    pdg.set_defaults(func=cmd_defect_gate)
 
     # -----------------------------------------------------------------------
     # publish

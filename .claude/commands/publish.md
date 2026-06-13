@@ -130,6 +130,12 @@ If the CLI exits non-zero, surface the error verbatim. Common cases:
   be open. Tell the user to check the dist repo and retry.
 - **`--push` + `--auto-merge` together.** These are mutually exclusive.
   Tell the user to pick one.
+- **Defect gate refusal** (RULE-012). A release in the publish set has
+  an open `blocking` defect in `context/defects.md`; the CLI refuses
+  (in `--dry-run` too) and names the defect ids. Surface the ids and
+  point the user at the registry; do not bypass. The CLI does not yet
+  cascade to managed paks a bundle emits pointers to — per RULE-012 §3
+  the orchestrator runs `defect-gate --pak <name>` for those manually.
 
 ### 4. Do not chain into other commands
 
