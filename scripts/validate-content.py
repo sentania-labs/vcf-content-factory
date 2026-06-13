@@ -12,7 +12,14 @@ import os
 import subprocess
 import sys
 
-WORKSPACE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# VCFCF_CONTENT_ROOT overrides the workspace root so tests (and any other
+# caller) can point the hook at a temporary directory instead of the real
+# content/ tree.  Unset → derive from __file__ as before.
+_env_root = os.environ.get("VCFCF_CONTENT_ROOT", "").strip()
+if _env_root:
+    WORKSPACE_ROOT = os.path.realpath(_env_root)
+else:
+    WORKSPACE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 CONTENT_ROOT = os.path.join(WORKSPACE_ROOT, "content") + os.sep
 

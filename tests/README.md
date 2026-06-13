@@ -76,14 +76,12 @@ Files currently marked `slow` at module level:
 ### `real_corpus`
 
 An `xdist_group` marker.  Tests that **read** the real `content/` corpus through
-subprocess validators (`publish(factory_repo=REPO_ROOT)`) and tests that
-**write** temporary files into those same directories
-(`test_validate_content_hook.py`) must not run concurrently.
+subprocess validators (`publish(factory_repo=REPO_ROOT)`) must not run
+concurrently.
 
 `xdist_group("real_corpus")` colocates all affected tests on a single xdist
-worker where they execute sequentially, preventing the race where a
-hook-test's temporary YAML file appears in a concurrent validator scan and
-causes a "duplicate name" failure.
+worker where they execute sequentially, preventing races where concurrent
+validator scans interfere with each other.
 
 Files that carry both `slow` and `real_corpus`:
 
@@ -91,7 +89,12 @@ Files that carry both `slow` and `real_corpus`:
 - `test_publish_pr_mode_v4.py`
 - `test_third_party_routing.py`
 - `test_third_party_component_routing_phase5.py`
-- `test_validate_content_hook.py`
+
+`test_validate_content_hook.py` is marked `slow` but **NOT** `real_corpus`.
+It is hermetic: it sets `VCFCF_CONTENT_ROOT` to a `tmp_path`-based copy of
+the corpus for every test, so it never reads from or writes to the real
+`content/` directories.  It is safe to run on any xdist worker in parallel
+with other workers.
 
 `test_cli_phase4.py` and `test_release_builder_phase2.py` are marked `slow`
 but **not** `real_corpus` because they operate on private temp-directory copies
@@ -104,6 +107,9 @@ All tests that do NOT carry `real_corpus` are designed to be fixture-isolated:
 - Publish/release tests create temporary git repos via `tmp_path`.
 - `test_cli_phase4.py` copies the entire corpus into a temp directory for each
   test class.
+- `test_validate_content_hook.py` builds a `tmp_path` workspace and sets
+  `VCFCF_CONTENT_ROOT` so the hook subprocess resolves all `content/…` paths
+  against that temp tree — the real `content/` directories are never touched.
 - No test mutates `content/`, `releases/`, or any shared repository state
   outside of the `real_corpus` group.
 
@@ -122,5 +128,5 @@ python3 -m pytest tests/ -v --tb=short -n auto --dist=loadgroup --override-ini="
 `-m ""` explicitly matches all tests regardless of marker.  
 `-n auto` parallelises across available CPUs.  
 `--dist=loadgroup` ensures `xdist_group("real_corpus")` tests are colocated on
-one worker so the hook tests and publish tests (both scan the real content/
-corpus) never execute concurrently.
+one worker so the publish tests (which scan the real content/ corpus) never
+execute concurrently.
