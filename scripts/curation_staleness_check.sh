@@ -44,21 +44,34 @@
     last_run="$(grep -E '^last_run=' "$MARKER" 2>/dev/null | head -1 | cut -d= -f2-)"
   fi
 
-  days=0
+  # Elapsed time since last curation. Use python3 (required by the factory's
+  # validators, so always present) for the timestamp math — portable across
+  # GNU and BSD/macOS, unlike `date -d` which is GNU-only. Compare elapsed
+  # SECONDS directly against the threshold (no truncate-to-whole-days, so
+  # "> 7 days" fires at 7d+1s, not 8d).
+  elapsed=-1
   if [ -n "$last_run" ]; then
-    last_epoch="$(date -d "$last_run" +%s 2>/dev/null || echo "")"
-    now_epoch="$(date +%s 2>/dev/null || echo "")"
-    if [ -n "$last_epoch" ] && [ -n "$now_epoch" ]; then
-      days=$(( (now_epoch - last_epoch) / 86400 ))
-    fi
+    elapsed="$(python3 - "$last_run" <<'PY' 2>/dev/null || echo -1
+import sys, datetime
+try:
+    t = datetime.datetime.strptime(sys.argv[1].strip(), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    print(int(datetime.datetime.now(datetime.timezone.utc).timestamp() - t.timestamp()))
+except Exception:
+    print(-1)
+PY
+)"
+    case "$elapsed" in (*[!0-9-]*|"") elapsed=-1;; esac
   fi
+  threshold_secs=$(( THRESHOLD_DAYS * 86400 ))
 
   # --- decide whether curation is due ---
   due_reason=""
-  if [ -z "$last_run" ]; then
-    due_reason="no prior curation recorded"
-  elif [ "$days" -gt "$THRESHOLD_DAYS" ]; then
-    due_reason="${days}d since last curation (>${THRESHOLD_DAYS}d)"
+  if [ -z "$last_run" ] || [ "$elapsed" -lt 0 ]; then
+    # No marker, or an unparseable timestamp — treat as due (fail toward
+    # auditing, never toward silently skipping the calendar trigger).
+    due_reason="no parseable last-curation timestamp"
+  elif [ "$elapsed" -gt "$threshold_secs" ]; then
+    due_reason="~$(( elapsed / 86400 ))d since last curation (>${THRESHOLD_DAYS}d)"
   elif [ "$sessions" -gt "$THRESHOLD_SESSIONS" ]; then
     due_reason="${sessions} sessions since last curation (>${THRESHOLD_SESSIONS})"
   fi
