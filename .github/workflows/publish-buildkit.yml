@@ -18,9 +18,11 @@
 #   1. Check out the factory repo.
 #   2. Set up Python 3.11.
 #   3. Install PyYAML (the only non-stdlib dependency needed at build time).
-#   4. Download the latest released compliance pak from its own repo
-#      (sentania-labs/vcf-content-factory-sdk-compliance) as the reference pak.
-#      This avoids compiling anything here — adapter source lives in each
+#   4. Download a PINNED released compliance pak from its own repo
+#      (sentania-labs/vcf-content-factory-sdk-compliance) as the reference pak —
+#      pinned by tag in the "Download compliance reference pak" step (NOT
+#      "latest"), so a bad upstream release can't silently shift the pak-compare
+#      gate. This avoids compiling anything here — adapter source lives in each
 #      adapter's own repo; Broadcom JARs are not available in public CI and
 #      must not ship in the buildkit tarball.
 #   5. Run build-buildkit to assemble the tarball (jar-free, see buildkit.py).
