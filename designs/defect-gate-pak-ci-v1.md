@@ -56,23 +56,46 @@ the build, with no factory checkout:
    `build-pak-on-tag.yml`, before `build-sdk`:
    - derive the managed-pak name from the repo name
      (`vcf-content-factory-sdk-<name>` → `<name>`);
-   - `curl` `defects.py` + `defects.md` from
+   - run the **vendored, in-repo** `ci/defect_gate.py` (a committed copy
+     of the factory gate script) against the **live** registry it fetches
+     from main: `python3 ci/defect_gate.py --pak <name> --registry defects.md`
+     where only `defects.md` is `curl`'d from
      `raw.githubusercontent.com/sentania-labs/vcf-content-factory/main/`;
-   - run `python3 defects.py --pak <name> --registry defects.md`;
    - on non-zero exit, **fail the build** with the printed defect lines,
      so the `.pak` is never produced/attached while a blocking defect is
      open.
    The canonical source is `designs/sdk-template-scaffold/build-pak-on-tag.yml`;
    the change propagates to the 4 pak repos + the template (same flow as
-   the README propagation).
+   the README propagation), and propagation **also vendors
+   `ci/defect_gate.py`** (a copy of `vcfops_packaging/defects.py`) into
+   each repo.
 
-## Why fetch from `main`, not pin
+## Code is vendored; only the registry is fetched live
 
-The registry is the *live* truth — a defect closed on main should
-immediately unblock the next tag; a defect opened on main should
-immediately block. Pinning would let a pak release against a stale
-registry. (Mirrors `managed_paks.md`'s "latest release derived, not
-pinned" stance.) The factory repo is public, so the `curl` needs no auth.
+The split matters for security (Codex PR-18 P1):
+
+- **The gate CODE is vendored, never fetched-and-executed from a mutable
+  ref.** Fetching `defects.py` from factory `main` and running it on a
+  pak's self-hosted release runner — which later holds
+  `SDK_RUNTIME_SSH_KEY` — would let any factory-main commit execute
+  arbitrary code across the repo trust boundary (tamper with the
+  artifact, capture the deploy key, persist into later steps). Instead
+  each pak repo carries a committed, reviewable `ci/defect_gate.py` and
+  runs that. This mirrors the factory's existing posture for the
+  `sdk-buildkit`: executable toolchain is consumed as a pinned/vendored
+  artifact, **never** fetched live from main.
+- **The registry DATA (`context/defects.md`) is fetched live from main.**
+  It is inert markdown, parsed locally by the vendored gate, never
+  executed — so a defect closed on main immediately unblocks the next
+  tag and one opened on main immediately blocks, with no stale-registry
+  window and no code crossing the boundary. The factory repo is public,
+  so the `curl` needs no auth.
+- **Drift is handled by re-vendoring.** When the gate's parser changes,
+  `ci/defect_gate.py` is re-propagated alongside the workflow (the
+  parser format is stable, so this is rare). The registry schema and the
+  vendored parser are versioned together. A missing `ci/defect_gate.py`
+  makes the step hard-fail (it refuses to fetch+execute remote code as a
+  fallback).
 
 ## Boundaries / who does what
 
@@ -82,8 +105,11 @@ pinned" stance.) The factory repo is public, so the `curl` needs no auth.
   registered).
 - orchestrator → the canonical `build-pak-on-tag.yml` gate step
   (infra, `designs/sdk-template-scaffold/`).
-- `sdk-adapter-author` → propagate the workflow change to the 4 pak
-  repos + template (direct pushes, docs/infra-only, no version bump).
+- `sdk-adapter-author` → propagate to the 4 pak repos + template (direct
+  pushes, infra-only, no version bump): copy the updated
+  `build-pak-on-tag.yml` **and** vendor `ci/defect_gate.py` (a copy of
+  `vcfops_packaging/defects.py`) into each repo. Post-merge only (main
+  must carry the standalone `defects.py` first).
 
 ## Acceptance (negative proof)
 

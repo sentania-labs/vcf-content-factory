@@ -10,9 +10,16 @@ be maintained centrally and PR'd.
 
 - `build-pak-on-tag.yml` — the per-pak CI workflow. Copy to
   `.github/workflows/build-pak-on-tag.yml` in each pak repo. On a `v*` tag it
-  pulls the published `sdk-buildkit` tarball from the factory's Releases, builds
-  the `.pak` headlessly (no agent, no factory checkout), gates on `pak-compare`,
-  and attaches the `.pak` to the tag's GitHub Release.
+  runs the **defect gate** (RULE-012; vendored `ci/defect_gate.py` vs the live
+  registry), pulls the published `sdk-buildkit` tarball from the factory's
+  Releases, builds the `.pak` headlessly (no agent, no factory checkout), gates
+  on `pak-compare`, and attaches the `.pak` to the tag's GitHub Release.
+- `ci/defect_gate.py` — **vendored** copy of the factory's
+  `vcfops_packaging/defects.py`, committed into each pak repo so the gate runs
+  *local, reviewable* code (never fetched-and-executed from a mutable ref — that
+  would run arbitrary factory-main code on a secret-bearing runner). Re-vendor
+  when the gate's parser changes; only the registry DATA (`defects.md`) is
+  fetched live.
 - `repo-README.md` (below, as the template repo's own README) — what a pak
   author reads after `Use this template`.
 - `BUILDING_FROM_SOURCE.md` — the canonical "Building from source" README
@@ -30,6 +37,7 @@ vcf-content-factory-sdk-<name>/
 ├─ profiles/  resources/  icons/  lib/
 ├─ views/      <name>-*.yaml         # bundled_content, CO-LOCATED here (NOT factory-root)
 ├─ dashboards/ <name>-*.yaml         # bundled_content, CO-LOCATED here
+├─ ci/defect_gate.py                 # vendored RULE-012 gate (copy of factory defects.py)
 └─ .github/workflows/build-pak-on-tag.yml
 ```
 
