@@ -80,6 +80,7 @@ ends up holding all the context.
 | `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` (each an independent repo, gitignored) | After `mp-designer` produces approved design. **Tier 2** Java SDK adapter source. The Java sibling to `mp-author`. **Only** agent that edits adapter Java. Commits go to the pak's **own** remote; a real release is a `v*` tag on that repo, not a factory `/publish`. |
 | `sdk-adapter-reviewer` | Read-only review | `context/reviews/` | After `sdk-adapter-author` reports a build, before the install gate. Skeptical correctness/quality check on Tier 2 Java — hunts unreadable-is-compliant, stitch corruption, crash-the-cycle. Never edits source, never installs. |
 | `framework-reviewer` | Read-only review | `context/reviews/framework/` | After `tooling` touches `vcfops_*/`, **before the PR**. Skeptical correctness/regression gate on framework Python — the `vcfops_*/` sibling of `sdk-adapter-reviewer`. **Blanket:** every `vcfops_*/` diff. Re-runs validate/tests/render-regression; hunts global-default-leak / key-collision / silent-downgrade. Never edits source, never installs. |
+| `curator` | Read-only audit | `context/curation/<date>-report.md` | When the SessionStart staleness hook says curation is due (or on request). Librarian over the governance corpus (rules/, lessons/, context/, `.claude/agents/`, CLAUDE.md, skills) — hunts SUPERSEDED / DRIFT / CONTRADICTION / INDEX-ROT / DEAD-REF / STALE-FACT / DUPLICATION / PROMPT-ROSTER-SKEW. Reports only; never edits the corpus, never installs. Spawn **in the background**. |
 
 Agent prompts under `.claude/agents/` are authoritative for each
 agent's behavior. If "Spawn when" above ever conflicts with a
@@ -187,6 +188,19 @@ file (not a skill) because it runs before any skill could load.
    is the framework-code sibling of the `sdk-adapter-reviewer` gate
    (RULE-013). The framework is the product — it gets at least the
    protection the content does.
+
+10. **Curation trigger — heed the staleness nudge.** The SessionStart
+    hook `scripts/curation_staleness_check.sh` emits a "CURATION DUE"
+    `additionalContext` when the governance corpus is overdue
+    (`last_run > 7 days` OR `sessions_since > 10`). When you see it:
+    spawn the `curator` agent **in the background** (read-only; it writes
+    `context/curation/<date>-report.md`) and tell the user it's running —
+    do not block their current task. When the curator completes, **reset
+    the marker**: set `context/curation/.last-run`'s `last_run` to today
+    and zero `context/curation/.sessions-since`. The hook only informs;
+    it never launches the agent — that's your job. The corpus growing is
+    the product, so its rot is a product defect; the curator is how it
+    gets caught. (Design: `designs/curator-v1.md`.)
 
 ## When the toolset is inadequate
 
