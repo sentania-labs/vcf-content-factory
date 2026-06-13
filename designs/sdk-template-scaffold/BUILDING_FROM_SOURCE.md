@@ -24,6 +24,10 @@ build the `.pak` — the toolchain is a portable tarball. You need:
 
 - **JDK 11+** (`javac` + `jar` on PATH)
 - **python3** with `pyyaml` (`python3 -m pip install pyyaml`)
+- **The GitHub CLI** (`gh`) — used to download the build toolchain
+  below. The factory repo is public, so no `gh auth login` is needed
+  for the download (authenticate only if you hit anonymous API rate
+  limits). No `gh`? See the `curl` alternative under step 1.
 - **The Broadcom adapter SDK jar** (`vrops-adapters-sdk-2.2.jar`).
   This is a Broadcom build artifact with no public redistribution
   channel — it is **never** bundled in the toolchain or this repo.
@@ -46,6 +50,8 @@ Then, from the root of this repo:
 gh release download sdk-buildkit-v1 \
   --repo sentania-labs/vcf-content-factory \
   --pattern 'sdk-buildkit-*.tgz'
+# No gh? The asset is public — fetch it with curl instead:
+#   curl -sL https://github.com/sentania-labs/vcf-content-factory/releases/download/sdk-buildkit-v1/sdk-buildkit-v1.tgz -o sdk-buildkit-v1.tgz
 tar xzf sdk-buildkit-*.tgz
 
 # 2. Point the kit at your SDK jar and build
@@ -74,7 +80,12 @@ before your own `v*` tags will build:
    jar from a private repo via an `SDK_RUNTIME_SSH_KEY` deploy-key
    secret you won't have. Replace that step with your own source —
    e.g. store the appliance-extracted jar in your own private repo or
-   an Actions secret/artifact store — and point `VCFCF_SDK_JAR` at it.
-   Do **not** commit the jar to a public repo (no redistribution).
+   an Actions secret/artifact store. Then **also update the
+   `--sdk-jar` argument** on the `build-sdk` line of the workflow to
+   point at wherever your replacement step puts the jar. The explicit
+   `--sdk-jar` flag overrides `VCFCF_SDK_JAR`, so setting the env var
+   alone is not enough — if you leave `--sdk-jar _sdk_runtime/...` in
+   place the build will look for the upstream path and fail. Do **not**
+   commit the jar to a public repo (no redistribution).
 
 <!-- COPY TO HERE -->
