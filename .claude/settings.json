@@ -14,6 +14,11 @@
             "type": "command",
             "command": "scripts/bootstrap_managed_paks.sh 2>/dev/null || true",
             "timeout": 60000
+          },
+          {
+            "type": "command",
+            "command": "scripts/curation_staleness_check.sh 2>/dev/null || true",
+            "timeout": 15000
           }
         ]
       }

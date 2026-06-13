@@ -50,3 +50,6 @@ memory/sessions/
 # Local PKA comm zone (not shared)
 .pka/
 .claude/scheduled_tasks.lock
+
+# Curation velocity counter — per-checkout, not shared (see designs/curator-v1.md)
+context/curation/.sessions-since
