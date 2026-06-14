@@ -402,9 +402,14 @@ current, not embedded in a stable reference doc (see
 - **Per-adapter build state:** the SDK reviews
   (`context/reviews/<adapter>-build-<N>.md`) and the transient
   `context/session-handoff.md`.
-- **Plan of record:** `designs/tier2-mp-architecture-plan.md`.
+- **Current (v2) design surface:** `designs/vcfcf-base-v2-adapterbase-rehome.md`
+  plus the per-adapter v2 migration designs under `designs/sdk-adapters/`.
+- **Historical:** `designs/tier2-mp-architecture-plan.md` is the **v1**
+  implementation plan — it predates this framework and still describes the
+  retired `UnlicensedAdapter` / `aria-ops-core` design. Read it for history,
+  **not** as a current target.
 
-v2 is the current framework; everything below describes it.
+This document describes the **v2** framework.
 
 ## Ambient Suite API stitching transport
 

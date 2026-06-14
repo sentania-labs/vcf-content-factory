@@ -1,5 +1,13 @@
 # Plan: Tier 2 Management Pack Architecture
 
+> **⚠️ HISTORICAL (v1) — superseded.** This is the original Tier 2 plan. It
+> describes the **v1** design that compiles/runs against `UnlicensedAdapter`
+> and `aria-ops-core.jar` — both **retired** in the v2 framework (which
+> eliminated the `aria-ops-core` dependency). Read this for history only.
+> Current architecture: `context/tier2_architecture.md`; current v2 design:
+> `designs/vcfcf-base-v2-adapterbase-rehome.md` + the per-adapter migration
+> designs under `designs/sdk-adapters/`. Do **not** implement against this plan.
+
 ## Context
 
 The VCF Content Factory's Tier 1 MPs (MPB-based) are early beta. Tier 1 limits have been hit concretely: Cloudflare (no dynamic timestamps, JMESPath filter gaps) and Synology (data model doesn't fit MPB's chained-collection pattern). Tier 2 adds native Java SDK adapters that can run custom collection logic — the thing MPB fundamentally can't do.
