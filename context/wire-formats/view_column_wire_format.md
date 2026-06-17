@@ -293,6 +293,25 @@ are "cell is red if value equals `redBound`, neutral otherwise".
 The `ascendingRange` Property is irrelevant for string matches and
 is not emitted on these columns.
 
+#### ascending_range derivation (reverse-parser)
+
+Some source XMLs omit `ascendingRange` even when all three numeric bounds are
+present (observed in vCommunity View - Set 3.xml and View - Set 4.xml, 4 total
+columns).  When the reverse parsers (`reverse.py` and `reverse_local.py`)
+encounter this, they derive `ascending_range` from the bound ordering — the
+same ordering that the forward renderer encodes and the loader's validation
+check (line ~351) enforces:
+
+| Bound ordering | Derived value | Semantics |
+|---|---|---|
+| `yellow < orange < red` | `False` | Higher is worse (CPU%, latency) |
+| `yellow > orange > red` | `True` | Lower is worse (free capacity, headroom) |
+| Ambiguous | `False` + WARN | Review reversed YAML |
+
+This is the canonical reverse-parser rule.  If a third case surfaces
+(e.g., non-strictly-ordered bounds), a UserWarning is emitted and the
+default `False` is used; the YAML author should correct after review.
+
 The bounds Property elements sit **after** `isProperty` and
 **before** `displayName` in the observed emission order:
 

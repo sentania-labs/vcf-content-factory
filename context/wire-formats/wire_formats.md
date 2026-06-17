@@ -453,3 +453,136 @@ No GET-by-key, no PUT/PATCH, no `/internal/*` equivalent.
 Cross-reference from a group instance:
 `resourceKey.resourceKindKey == <type.key>`,
 `resourceKey.adapterKindKey == "Container"`.
+
+## Pre-install dashboard JSON quirks (local reverse-port)
+
+The original `VCFOperationsvCommunity` MP source files (under
+`references/vmbro_vcf_operations_vcommunity/`) are **pre-install** — they
+have not been processed by the VCF Ops content-import pipeline.  Several
+fields that the pipeline normalises are present in their raw form and differ
+from live content-zip exports:
+
+### Boolean-as-string in metric bounds
+
+Scoreboard and MetricChart widget configs carry metric bound fields
+(`yellowBound`, `orangeBound`, `redBound`) that the importer expects to be
+numeric or absent.  In pre-install source files some entries carry
+`"redBound": "false"` — a JSON `false` value that was serialised to a string
+literal during the MP's authoring toolchain.
+
+**This is NOT a valid threshold.** The value means "no red threshold",
+equivalent to `null`.
+
+`reverse.py`'s `_parse_metric_specs_from_wire()` now handles this
+gracefully: any non-numeric non-null bound value is treated as `None`
+(absent) rather than raising `ValueError`.  Confirmed instances:
+- `Cluster Performance 2.0.json` → Scoreboard widgets for
+  `configuration|dasConfig|enabled` and `configuration|drsconfig|enabled`
+  carry `"redBound": "false"` with valid `yellowBound`/`orangeBound` of `"1"`.
+
+### Views spread across multiple XML files
+
+The reference tree contains several overlapping XML files:
+- `View - Collection01.xml` — master list (179 ViewDefs total, first seen)
+- `View - Set 1.xml`, `View - Set 2.xml`, `View - Set 3.xml`,
+  `View - Set 4.xml` — subsets that repeat views from Collection01
+
+The `reverse-local` command merges all files; duplicate UUIDs are silently
+overwritten (last file wins alphabetically).  This is expected MP packaging
+behaviour, not a data error.
+
+### Missing view XMLs
+
+Three views referenced in `Cluster Performance 2.0.json` and six views in
+`Input dashboards.json` are not present in the reference tree (no matching
+`<ViewDef>` element).  These are:
+- `d8a3767e` (vSphere Clusters list)
+- `12fd58e7` (Resource Pools by CPU Shares)
+- `421ac1e1` (Resource Pools by Memory Shares)
+- + 6 storage/compute capacity views in Input dashboards
+
+The `reverse-local` command emits WARN per missing UUID and continues; View
+widgets for these UUIDs use the UUID string as the `view:` value (a
+placeholder requiring manual authoring).  Round-trip diff for affected
+dashboards reports PARTIAL with a clear explanation.
+
+---
+
+## PropertyList widget (dashboard JSON)
+
+Source: `references/vmbro_vcf_operations_vcommunity/Management Pack/content/dashboards/ESXi Host Details Dashboard.json`, `VM Details.json`.
+
+```json
+{
+  "type": "PropertyList",
+  "config": {
+    "visualTheme": 0,
+    "depth": 1,
+    "refreshInterval": 300,
+    "metric": { /* standard resourceKindMetrics[] envelope */ },
+    "resource": [],
+    "refreshContent": {"refreshContent": true},
+    "relationshipMode": {"relationshipMode": 0},
+    "selfProvider": {"selfProvider": false},
+    "showMetricFullName": {"metricFullName": true},
+    "resInteractionMode": null,
+    "customFilter": {"filter": [], "excludedResources": null, "includedResources": null},
+    "title": "..."
+  }
+}
+```
+
+**Quirks:**
+- `metric` uses the same `resourceKindMetrics[]` envelope as Scoreboard/MetricChart.
+  `isStringMetric: true` is set on property-type metric entries (e.g. `runtime|powerState`).
+- `relationshipMode` is a **wrapped object** `{"relationshipMode": 0}`, NOT a bare integer 0.
+  The forward renderer previously emitted the bare integer — fixed in 2026-06.
+- `showMetricFullName` inner key is `metricFullName` (not `showMetricFullName`).
+- `selfProvider` is always `false` in all observed instances; no self-provider mode seen.
+
+---
+
+## ResourceRelationshipAdvanced widget (dashboard JSON)
+
+Source: `references/vmbro_vcf_operations_vcommunity/Management Pack/content/dashboards/vSphere Resource Management.json`, `VM Performance 2.0.json`.
+
+```json
+{
+  "type": "ResourceRelationshipAdvanced",
+  "config": {
+    "resourceId": null,
+    "refreshInterval": 300,
+    "traversalSpecId": "",
+    "refreshContent": {"refreshContent": false},
+    "resourceName": null,
+    "title": "...",
+    "filterMode": "tagPicker",
+    "tagFilter": {
+      "path": ["/source/kind/kind:resourceKind:id:0_::_", "..."],
+      "value": {
+        "kind": ["resourceKind:id:0_::_", "..."],
+        "bus": [], "adapterKind": [], "exclaim": false,
+        "healthRange": [], "maintenanceSchedule": [], "adapterInstance": [],
+        "collector": [], "tier": [], "state": [], "tag": [], "day": [], "status": []
+      }
+    },
+    "paginationNumber": 5,
+    "depth": "0,2",
+    "customFilter": {"filter": [], "excludedResources": null, "includedResources": null},
+    "selectFirstRow": {"selectFirstRow": true},
+    "selfProvider": {"selfProvider": false}
+  },
+  "states": [ /* UI persistence artefact; ignored on import */ ]
+}
+```
+
+**Quirks:**
+- `depth` is a **string** in the wire format (e.g. `"0,2"` or `"2,1"`), not an integer.
+  This is unique among all widget types.  The YAML dataclass stores it as a string.
+- `tagFilter` shape is identical to ResourceList — `tagFilter.value.kind[]` holds
+  `resourceKind:id:N_::_` synthetic refs from `entries.resourceKind[]`.
+- `states[]` appears at the top-level widget object (not in `config`); it is a UI
+  persistence cookie set by the Ops client and is ignored on import.  The factory
+  forward renderer omits it (consistent with all other widget types).
+- Interaction-driven only in all observed instances (`selfProvider.selfProvider: false`).
+  A self-provider mode may be possible but was not observed.

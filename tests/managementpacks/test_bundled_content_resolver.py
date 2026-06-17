@@ -43,6 +43,23 @@ _MINIMAL_VIEW_YAML = textwrap.dedent("""\
         transformation: AVG
 """)
 
+# A view with a BARE name (no "[VCF Content Factory] " prefix) — mirrors
+# third-party ported content such as "ESXi Host Details vCommunity".
+_BARE_NAME_VIEW_YAML = textwrap.dedent("""\
+    id: bbbbbbbb-cccc-dddd-eeee-ffffffffffff
+    name: "ESXi Host Details vCommunity"
+    description: "Ported view with original third-party name (no factory prefix)."
+    subject:
+      adapter_kind: VMWARE
+      resource_kind: HostSystem
+    summary: false
+    columns:
+      - attribute: cpu|usage_average
+        display_name: "CPU Usage"
+        unit: percent
+        transformation: AVG
+""")
+
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------
@@ -96,7 +113,7 @@ class TestNoBundledContent:
             "build_number": 1,
         }
         project_dir = _make_adapter_dir(tmp_path)
-        views, dashboards = _load_bundled_content(raw, project_dir, project_dir)
+        views, dashboards, *_ = _load_bundled_content(raw, project_dir, project_dir)
         assert views == []
         assert dashboards == []
 
@@ -106,7 +123,7 @@ class TestNoBundledContent:
             "bundled_content": None,
         }
         project_dir = _make_adapter_dir(tmp_path)
-        views, dashboards = _load_bundled_content(raw, project_dir, project_dir)
+        views, dashboards, *_ = _load_bundled_content(raw, project_dir, project_dir)
         assert views == []
         assert dashboards == []
 
@@ -116,7 +133,7 @@ class TestNoBundledContent:
             "bundled_content": {},
         }
         project_dir = _make_adapter_dir(tmp_path)
-        views, dashboards = _load_bundled_content(raw, project_dir, project_dir)
+        views, dashboards, *_ = _load_bundled_content(raw, project_dir, project_dir)
         assert views == []
         assert dashboards == []
 
@@ -140,7 +157,7 @@ class TestViewResolvesRelativeToProjectDir:
                 "views": ["views/test_view.yaml"],
             }
         }
-        views, dashboards = _load_bundled_content(raw, project_dir, project_dir)
+        views, dashboards, *_ = _load_bundled_content(raw, project_dir, project_dir)
         assert len(views) == 1
         assert dashboards == []
         assert views[0].name == "[VCF Content Factory] Bundled Test View"
@@ -241,3 +258,79 @@ class TestValidateSdkProjectUsesProjectDir:
         assert any("missing_view.yaml" in e for e in bundled_errors), (
             f"Expected 'missing_view.yaml' in error message, got: {bundled_errors}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Test 4 — bare-named (no prefix) bundled views load via _load_bundled_content
+#           but are rejected by the non-bundled load_view path
+# ---------------------------------------------------------------------------
+
+
+class TestBareNamePrefixEnforcement:
+    """Prefix enforcement is relaxed for bundled_content views/dashboards
+    but unchanged for the standard (content-import-zip) load paths.
+
+    Fixes the vCommunity port gap: third-party ported views keep their
+    original names (e.g. "ESXi Host Details vCommunity") inside an SDK pak;
+    the "[VCF Content Factory] " prefix convention only applies to factory
+    content-import-zip content.
+    """
+
+    def test_bare_named_view_loads_via_bundled_content(self, tmp_path: Path) -> None:
+        """A bundled view with no factory prefix must load successfully."""
+        project_dir = _make_adapter_dir(tmp_path)
+        views_dir = project_dir / "views"
+        views_dir.mkdir()
+        (views_dir / "esxi_host_details.yaml").write_text(
+            _BARE_NAME_VIEW_YAML, encoding="utf-8"
+        )
+
+        raw = {
+            "bundled_content": {
+                "views": ["views/esxi_host_details.yaml"],
+            }
+        }
+        views, dashboards, *_ = _load_bundled_content(raw, project_dir, project_dir)
+        assert len(views) == 1
+        assert dashboards == []
+        assert views[0].name == "ESXi Host Details vCommunity"
+
+    def test_prefixed_view_still_loads_via_bundled_content(self, tmp_path: Path) -> None:
+        """A bundled view WITH the factory prefix also loads — enforcement OFF
+        means both bare and prefixed names are accepted, not that prefixed names
+        are rejected.
+        """
+        project_dir = _make_adapter_dir(tmp_path)
+        views_dir = project_dir / "views"
+        views_dir.mkdir()
+        (views_dir / "prefixed_view.yaml").write_text(
+            _MINIMAL_VIEW_YAML, encoding="utf-8"
+        )
+
+        raw = {
+            "bundled_content": {
+                "views": ["views/prefixed_view.yaml"],
+            }
+        }
+        views, dashboards, *_ = _load_bundled_content(raw, project_dir, project_dir)
+        assert len(views) == 1
+        assert views[0].name == "[VCF Content Factory] Bundled Test View"
+
+    def test_bare_named_view_rejected_by_standard_load_view(self) -> None:
+        """load_view() with its default (enforce_framework_prefix=True) must
+        still reject a bare name — the non-bundled path is unchanged.
+        """
+        import tempfile
+        from vcfops_dashboards.loader import load_view
+
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".yaml", delete=False, encoding="utf-8"
+        ) as fh:
+            fh.write(_BARE_NAME_VIEW_YAML)
+            bare_path = Path(fh.name)
+
+        try:
+            with pytest.raises(Exception, match=r"\[VCF Content Factory\]"):
+                load_view(bare_path)  # enforce_framework_prefix=True by default
+        finally:
+            bare_path.unlink(missing_ok=True)

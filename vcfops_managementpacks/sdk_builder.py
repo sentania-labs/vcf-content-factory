@@ -56,6 +56,7 @@ import glob
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -725,23 +726,29 @@ def _load_bundled_content(
 ):
     """Parse the optional ``bundled_content`` key from a raw adapter.yaml dict.
 
-    Returns a tuple ``(views, dashboards)`` where each is a list of loaded
-    objects.  Returns ``([], [])`` when the key is absent or empty.
+    Returns a tuple ``(views, dashboards, supermetrics, symptoms, alerts, reports)``
+    where each is a list of loaded objects.  Returns ``([], [], [], [], [], [])``
+    when the key is absent or empty.
 
-    Paths in ``bundled_content.views`` and ``bundled_content.dashboards`` are
-    relative to the adapter project directory (where adapter.yaml lives),
-    NOT the factory repo root.  Typically these will be
-    ``views/<file>.yaml`` and ``dashboards/<file>.yaml`` sibling directories
-    inside the adapter project.  The ``repo_root`` parameter is accepted for
-    backward-compatibility but is unused; callers should pass ``project_dir``
-    for both arguments.
+    Paths in all ``bundled_content.*`` sub-keys are relative to the adapter
+    project directory (where adapter.yaml lives), NOT the factory repo root.
+    The ``repo_root`` parameter is accepted for backward-compatibility but is
+    unused; callers should pass ``project_dir`` for both arguments.
+
+    Accepted sub-keys:
+      views:        list of paths → ViewDef objects (vcfops_dashboards)
+      dashboards:   list of paths → Dashboard objects (vcfops_dashboards)
+      supermetrics: list of paths → SuperMetricDef objects (vcfops_supermetrics)
+      symptoms:     list of paths → SymptomDef objects (vcfops_symptoms)
+      alerts:       list of paths → AlertDef objects (vcfops_alerts)
+      reports:      list of paths → ReportDef objects (vcfops_reports)
 
     Raises:
         SdkBuildError: if a listed path does not exist or fails to load.
     """
     bundled = raw.get("bundled_content") or {}
     if not bundled:
-        return [], []
+        return [], [], [], [], [], []
 
     try:
         from vcfops_dashboards.loader import load_view, load_dashboard
@@ -759,7 +766,7 @@ def _load_bundled_content(
                 f"(resolved from '{rel}' relative to {project_dir})"
             )
         try:
-            v = load_view(path)
+            v = load_view(path, enforce_framework_prefix=False)
         except Exception as exc:
             raise SdkBuildError(
                 f"bundled_content.views: failed to load {path}: {exc}"
@@ -775,24 +782,99 @@ def _load_bundled_content(
                 f"(resolved from '{rel}' relative to {project_dir})"
             )
         try:
-            d = load_dashboard(path)
+            d = load_dashboard(path, enforce_framework_prefix=False)
         except Exception as exc:
             raise SdkBuildError(
                 f"bundled_content.dashboards: failed to load {path}: {exc}"
             ) from exc
         dashboards.append(d)
 
-    return views, dashboards
+    # --- Super Metrics ---
+    supermetrics = []
+    for rel in (bundled.get("supermetrics") or []):
+        path = (project_dir / rel).resolve()
+        if not path.is_file():
+            raise SdkBuildError(
+                f"bundled_content.supermetrics: path not found: {path} "
+                f"(resolved from '{rel}' relative to {project_dir})"
+            )
+        try:
+            from vcfops_supermetrics.loader import load_file as _load_sm
+            sm = _load_sm(path, enforce_framework_prefix=False)
+        except Exception as exc:
+            raise SdkBuildError(
+                f"bundled_content.supermetrics: failed to load {path}: {exc}"
+            ) from exc
+        supermetrics.append(sm)
+
+    # --- Symptoms ---
+    symptoms = []
+    for rel in (bundled.get("symptoms") or []):
+        path = (project_dir / rel).resolve()
+        if not path.is_file():
+            raise SdkBuildError(
+                f"bundled_content.symptoms: path not found: {path} "
+                f"(resolved from '{rel}' relative to {project_dir})"
+            )
+        try:
+            from vcfops_symptoms.loader import load_file as _load_sym
+            sym = _load_sym(path, enforce_framework_prefix=False)
+        except Exception as exc:
+            raise SdkBuildError(
+                f"bundled_content.symptoms: failed to load {path}: {exc}"
+            ) from exc
+        symptoms.append(sym)
+
+    # --- Alerts ---
+    alerts = []
+    for rel in (bundled.get("alerts") or []):
+        path = (project_dir / rel).resolve()
+        if not path.is_file():
+            raise SdkBuildError(
+                f"bundled_content.alerts: path not found: {path} "
+                f"(resolved from '{rel}' relative to {project_dir})"
+            )
+        try:
+            from vcfops_alerts.loader import load_file as _load_alert
+            alert = _load_alert(path, enforce_framework_prefix=False)
+        except Exception as exc:
+            raise SdkBuildError(
+                f"bundled_content.alerts: failed to load {path}: {exc}"
+            ) from exc
+        alerts.append(alert)
+
+    # --- Reports ---
+    reports = []
+    for rel in (bundled.get("reports") or []):
+        path = (project_dir / rel).resolve()
+        if not path.is_file():
+            raise SdkBuildError(
+                f"bundled_content.reports: path not found: {path} "
+                f"(resolved from '{rel}' relative to {project_dir})"
+            )
+        try:
+            from vcfops_reports.loader import load_file as _load_report
+            report = _load_report(path, enforce_framework_prefix=False)
+        except Exception as exc:
+            raise SdkBuildError(
+                f"bundled_content.reports: failed to load {path}: {exc}"
+            ) from exc
+        reports.append(report)
+
+    return views, dashboards, supermetrics, symptoms, alerts, reports
 
 
-def _build_views_zip_bytes(views: list) -> bytes:
+def _build_views_zip_bytes(views: list, sm_scope: Optional[List[Path]] = None) -> bytes:
     """Render ``views`` (list of ViewDef) to a zip containing content.xml.
 
     Returns the zip bytes.  The zip structure mirrors what the VCF Ops
     content importer expects inside a views import payload.
+
+    ``sm_scope``: when provided, restricts SM name resolution to only these
+    YAML files (same scoped-resolution contract used at pak build time).
     """
     from vcfops_dashboards.render import render_views_xml
-    xml_text = render_views_xml(views)
+    xml_text = render_views_xml(views, sm_scope=sm_scope)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("content.xml", xml_text)
@@ -1277,6 +1359,17 @@ def _attribute_to_localization_key(attribute: str) -> str:
 # Only populated subdirs are written — empty directories are not emitted so the
 # platform's SolutionManager content walker does not encounter unexpected entries.
 # This list is the FULL set of known subdirs; filtering happens at emit time.
+#
+# Emit status (as of this version):
+#   content/             — written when any bundled content or content/files is present
+#   content/reports/     — written when bundled views OR reports are present
+#                          (views → subdir pattern; reports → flat .xml pattern)
+#   content/dashboards/  — written when bundled dashboards are present
+#   content/files/       — written when project_dir/content/files/ is non-empty
+#                          (SolutionConfig XMLs, custom XML; see _write_outer_pak)
+#   content/resources/   — written alongside bundled views/dashboards (adapter i18n)
+#   All others           — currently DEAD (not emitted by _write_outer_pak);
+#                          listed here as documentation of the full known set.
 _ALL_CONTENT_DIRS = [
     "content/",
     "content/reports/",
@@ -1292,6 +1385,59 @@ _ALL_CONTENT_DIRS = [
     "content/resources/",
 ]
 
+# Regex matching @supermetric:"<name>" or @supermetric:'<name>' inside a formula.
+# Capture group 1 is the bare SM name.
+_SM_CROSSREF_RE = re.compile(r'''@supermetric:["']([^"']+)["']''')
+
+
+def _resolve_sm_formula(
+    formula: str,
+    sm_name: str,
+    sm_name_to_uuid: Dict[str, str],
+) -> str:
+    """Resolve ``@supermetric:"<name>"`` cross-reference tokens in a formula string.
+
+    Replaces each ``@supermetric:"<name>"`` (or single-quoted variant) with the
+    wire token ``Super Metric|sm_<uuid>`` where ``<uuid>`` is the bundled SM
+    whose ``name`` matches ``<name>`` exactly.
+
+    This mirrors the native VCF Ops wire format for SM-to-SM references inside
+    an ``attribute=`` clause (e.g. ``attribute=Super Metric|sm_b6f20136-...``).
+    The token form ``Super Metric|sm_<uuid>`` is confirmed by the vCommunity
+    source pak — the original ``describe.xml``-referenced SM formulas use exactly
+    this prefix.
+
+    Args:
+        formula:          Raw formula string from the YAML ``formula:`` field.
+        sm_name:          Display name of the SM being emitted (for error messages).
+        sm_name_to_uuid:  Mapping of bundled SM display name → UUID (id field).
+
+    Returns:
+        Formula with all ``@supermetric:`` tokens replaced.
+
+    Raises:
+        SdkBuildError: If a token references an SM name not found in
+            ``sm_name_to_uuid``.  An unresolved token is a hard build error —
+            VCF Ops cannot parse ``@supermetric:`` and the pak would be corrupt.
+
+    Already-resolved ``Super Metric|sm_<uuid>`` tokens are left untouched
+    (idempotent), so this function is safe to call on already-resolved formulas.
+    """
+    def _replace(m: re.Match) -> str:
+        ref_name = m.group(1)
+        uuid = sm_name_to_uuid.get(ref_name)
+        if uuid is None:
+            raise SdkBuildError(
+                f"Super metric '{sm_name}': formula references "
+                f"@supermetric:\"{ref_name}\" but that SM is not in the "
+                f"bundled supermetrics list.  Add a path for '{ref_name}' "
+                f"to bundled_content.supermetrics in adapter.yaml, or "
+                f"remove the cross-reference from the formula."
+            )
+        return f"Super Metric|sm_{uuid}"
+
+    return _SM_CROSSREF_RE.sub(_replace, formula)
+
 
 def _write_outer_pak(
     project: SdkProjectDef,
@@ -1303,6 +1449,10 @@ def _write_outer_pak(
     views_zip_bytes: Optional[bytes] = None,
     owning_adapter_kind: Optional[str] = None,
     owning_resource_kind: Optional[str] = None,
+    supermetrics: Optional[list] = None,
+    symptoms: Optional[list] = None,
+    alerts: Optional[list] = None,
+    reports: Optional[list] = None,
 ) -> Path:
     """Write the outer .pak ZIP to output_dir and return the path.
 
@@ -1311,15 +1461,25 @@ def _write_outer_pak(
     Falls back to templates/icons/default.svg when no project icon mapping
     exists.
 
-    When ``views`` and/or ``dashboards`` are supplied (from ``bundled_content``
-    in adapter.yaml), their rendered payloads are written into the pak's
-    ``content/`` tree so the platform installs them automatically.
+    When ``views``, ``dashboards``, ``supermetrics``, ``symptoms``, and/or
+    ``alerts`` are supplied (from ``bundled_content`` in adapter.yaml), their
+    rendered payloads are written into the pak's ``content/`` tree so the
+    platform installs them automatically.
 
     Views layout (VMware first-party pattern — content.xml inside subdirectory):
       content/reports/<slug>/content.xml   [standalone <Content><Views>...</Views></Content>]
 
     Dashboard layout (VMware first-party pattern — dashboard.json inside subdirectory):
       content/dashboards/<slug>/dashboard.json   [{"uuid":..., "entries":..., "dashboards":[...]}]
+
+    Super metric layout (one JSON file per SM):
+      content/supermetrics/<display_name>.json   [{<uuid>: {name, formula, ...}}]
+
+    Symptom layout (one XML file per symptom):
+      content/symptomdefs/<safe_name>.xml   [<alertContent><SymptomDefinitions>...]
+
+    Alert layout (one XML file per alert, includes symptom inline):
+      content/alertdefs/<safe_name>.xml   [<alertContent><AlertDefinitions><SymptomDefinitions>...]
 
     Standard empty directories are also written whenever bundled_content is
     present so the platform recognises the full content/ tree structure.
@@ -1333,11 +1493,32 @@ def _write_outer_pak(
     the outer pak.  The views.zip lives only inside adapters.zip at
     ``<adapter>/conf/views/views.zip`` as a belt-and-suspenders copy.
 
+    Alert→symptom cross-reference validation:
+    When both ``alerts`` and ``symptoms`` are supplied, every symptom referenced
+    by an alert's SymptomSet must appear in the ``symptoms`` list.  If a
+    reference is missing, SdkBuildError is raised with an actionable message
+    naming the missing symptom and the alert that requires it.  This catches
+    YAML authoring errors before the pak is built.
+
     Args:
         owning_adapter_kind: Passed to the dashboard renderer to populate
             ``entries.adapterKind`` and ``dashboards[].adapterName`` (spec A1).
         owning_resource_kind: Passed to the view renderer to emit the
             owning-adapter ``<SubjectType>`` on each ViewDef (spec A2).
+        supermetrics: List of SuperMetricDef objects to emit as JSON in
+            ``content/supermetrics/``.
+        symptoms: List of SymptomDef objects to emit as XML in
+            ``content/symptomdefs/``.
+        alerts: List of AlertDef objects to emit as XML in
+            ``content/alertdefs/``.  Each alert XML includes its referenced
+            symptoms inline.
+        reports: List of ReportDef objects to emit as XML in
+            ``content/reports/<safe_name>.xml`` (flat layout matching the
+            vCommunity reference pak — each file is a standalone
+            ``<Content><Reports><ReportDef>...</ReportDef></Reports></Content>``
+            document).  Dashboard and view UUIDs embedded in report sections
+            are emitted verbatim (cross-instance references — not resolved
+            against bundled content).
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     pak_path = output_dir / project.pak_filename
@@ -1353,7 +1534,54 @@ def _write_outer_pak(
         default_svg = _HERE / "templates" / "icons" / "default.svg"
         icon_bytes = default_svg.read_bytes() if default_svg.is_file() else b""
 
-    has_bundled_content = bool(views or dashboards)
+    # Normalise optional lists to empty lists for boolean checks below.
+    supermetrics = supermetrics or []
+    symptoms = symptoms or []
+    alerts = alerts or []
+    reports = reports or []
+
+    # --- Alert→symptom cross-reference validation ---
+    # Every symptom referenced by any alert must appear in the bundled symptoms
+    # list.  Both sides derive SymptomDefinition IDs from the same formula
+    # (_symptom_id in vcfops_alerts/render.py), so the IDs are consistent by
+    # construction — what we validate here is that the referenced name exists
+    # so the render doesn't produce a dangling ref.
+    if alerts:
+        from vcfops_alerts.render import _symptom_id as _compute_symptom_id
+        symptom_names: set = {s.name for s in symptoms}
+        for alert in alerts:
+            sets = (alert.symptom_sets or {}).get("sets") or []
+            for s in sets:
+                for sym_ref in (s.get("symptoms") or []):
+                    sym_name = sym_ref.get("name", "")
+                    if sym_name and sym_name not in symptom_names:
+                        # Determine the slug-form ID the renderer would generate
+                        # as a fallback hint (actual ID may be SymptomDefinition-<uuid>
+                        # if the symptom YAML carries an id: field).
+                        expected_id = _compute_symptom_id(alert.adapter_kind, sym_name)
+                        raise SdkBuildError(
+                            f"Alert '{alert.name}' references symptom "
+                            f"'{sym_name}' (SymptomDefinition-<uuid> or fallback "
+                            f"'{expected_id}') "
+                            f"but that symptom is not listed in "
+                            f"bundled_content.symptoms.  Add the symptom YAML "
+                            f"path to bundled_content.symptoms in adapter.yaml, "
+                            f"or remove the reference from the alert."
+                        )
+
+    has_bundled_content = bool(views or dashboards or supermetrics or symptoms or alerts or reports)
+
+    # Build sm_scope (list of SM source paths) for the view renderer's scoped
+    # mode when supermetrics are bundled.  The view renderer will load these
+    # YAML files and build its own name→uuid map so that supermetric:"<name>"
+    # column references resolve to the correct "Super Metric|sm_<uuid>"
+    # attributeKey.  Both sides derive the UUID from the same YAML id: field —
+    # consistent by construction.  When no supermetrics are bundled, pass
+    # sm_scope=None so the renderer falls back to its normal unscoped mode
+    # (scanning the full supermetrics/ dir, if any).
+    _sm_scope: Optional[List[Path]] = None
+    if supermetrics:
+        _sm_scope = [sm.source_path for sm in supermetrics if sm.source_path is not None]
 
     with zipfile.ZipFile(pak_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("manifest.txt", _generate_outer_manifest(project))
@@ -1375,7 +1603,7 @@ def _write_outer_pak(
         zf.writestr("overview.packed", _build_overview_packed(project))
         zf.writestr("adapters.zip", adapters_zip_bytes)
 
-        # --- Bundled content (views + dashboards) ---
+        # --- Bundled content (views, dashboards, supermetrics, symptoms, alerts) ---
         # Only emit populated content/ subdirs — SolutionManager may abort the
         # content walk on encountering empty or unexpected directories.
         # Reference: SAN MP, VCFAutomation, AppOSUCP all emit ONLY populated subdirs.
@@ -1392,6 +1620,71 @@ def _write_outer_pak(
                 content_res_props = "# content resource localization\n"
             zf.writestr("content/resources/resources.properties", content_res_props)
 
+        # --- Super Metrics ---
+        # Emit one JSON file per SM at content/supermetrics/<display_name>.json.
+        # File format matches the reference pack JSONs (vmbro_vcf_operations_vcommunity):
+        #   {<uuid>: {resourceKinds, modificationTime, name, formula,
+        #             description, unitId, modifiedBy}}
+        # The UUID is the top-level key and matches the "sm_<uuid>" reference used
+        # in view attributeKey fields (e.g. "Super Metric|sm_<uuid>").
+        #
+        # modificationTime is required by the importer's CREATE path: the deserializer
+        # calls readLong() on this field and fails with "For input string: ''" when it is
+        # absent.  Existing SMs update by name and survive the missing field; NEW SMs
+        # fail to create.  Use 0 — a valid long, parseable, and treated as "epoch zero"
+        # by the platform (confirmed by live install 1.0.0.6 on devel, 2026-06-12).
+        # modifiedBy uses an empty string (not present at import time; server assigns it).
+        #
+        # SM-to-SM cross-reference resolution:
+        # Factory SM YAML uses @supermetric:"<name>" tokens inside formulas when
+        # one SM references another.  VCF Ops cannot parse this token — the native
+        # wire format for an attribute= SM reference is "Super Metric|sm_<uuid>".
+        # We resolve every @supermetric: token before writing the JSON payload.
+        # An unresolved token is a hard build error (see _resolve_sm_formula).
+        if supermetrics:
+            zf.writestr("content/supermetrics/", "")
+            # Build name→uuid lookup from the full bundled SM list so that every
+            # @supermetric:"<name>" token in any formula can be resolved.
+            _sm_name_to_uuid: Dict[str, str] = {sm.name: sm.id for sm in supermetrics}
+            _sm_seen_names: set[str] = set()
+            for sm in supermetrics:
+                resolved_formula = _resolve_sm_formula(
+                    sm.formula, sm.name, _sm_name_to_uuid
+                )
+                sm_payload = {
+                    sm.id: {
+                        "resourceKinds": sm.resource_kinds,
+                        "modificationTime": 0,
+                        "name": sm.name,
+                        "formula": resolved_formula,
+                        "description": sm.description,
+                        "unitId": sm.unit_id,
+                        "modifiedBy": "",
+                    }
+                }
+                # Derive a filesystem-safe filename from the SM display name.
+                safe_name = sm.name.replace("/", "_").replace("\\", "_")
+                safe_name = "".join(
+                    c for c in safe_name if c.isalnum() or c in " _-."
+                ).strip()
+                safe_name = safe_name or sm.id
+                # Deduplicate: if two display names sanitize to the same string,
+                # append a counter suffix so the second file is not silently lost.
+                if safe_name in _sm_seen_names:
+                    suffix = 2
+                    while f"{safe_name}-{suffix}" in _sm_seen_names:
+                        suffix += 1
+                    safe_name = f"{safe_name}-{suffix}"
+                _sm_seen_names.add(safe_name)
+                zf.writestr(
+                    f"content/supermetrics/{safe_name}.json",
+                    json.dumps(sm_payload, indent=2, ensure_ascii=False),
+                )
+                print(
+                    f"  bundled content: content/supermetrics/{safe_name}.json <- {sm.name}",
+                    file=sys.stderr,
+                )
+
         if views:
             from vcfops_dashboards.render import render_views_xml
             # Emit content/reports/ only when views are present.
@@ -1403,9 +1696,14 @@ def _write_outer_pak(
             # A populated resources/ subdirectory with content.properties is required
             # (spec A3): bracket-prefix display names resolve through the i18n bundle;
             # a missing or empty bundle correlates with silent import failure.
+            # sm_scope is passed so view columns using supermetric:"<name>" syntax
+            # resolve to the correct "Super Metric|sm_<uuid>" attributeKey from the
+            # bundled SM YAML files.  When sm_scope is None (no bundled SMs), the
+            # renderer falls back to its normal directory scan.
             for v in views:
                 xml_text = render_views_xml(
                     [v],
+                    sm_scope=_sm_scope,
                     owning_adapter_kind=owning_adapter_kind,
                     owning_resource_kind=owning_resource_kind,
                 )
@@ -1459,6 +1757,202 @@ def _write_outer_pak(
                     f"  bundled content: content/dashboards/{slug}/dashboard.json <- {d.name}",
                     file=sys.stderr,
                 )
+
+        # --- Symptoms ---
+        # Emit one XML file per symptom at content/symptomdefs/<safe_name>.xml.
+        # Format: <alertContent><SymptomDefinitions>...</SymptomDefinitions></alertContent>
+        # Exactly the format render_alert_content_xml() produces when called with
+        # symptoms only (alerts=[], recommendations=[]).
+        if symptoms:
+            from vcfops_alerts.render import render_alert_content_xml
+            zf.writestr("content/symptomdefs/", "")
+            _sym_seen_names: set[str] = set()
+            for sym in symptoms:
+                xml_text = render_alert_content_xml(
+                    symptoms=[sym],
+                    alerts=[],
+                    recommendations=[],
+                )
+                # Derive a filesystem-safe name: keep alphanumerics, spaces, hyphens.
+                safe_name = "".join(
+                    c for c in sym.name if c.isalnum() or c in " -."
+                ).strip()
+                safe_name = safe_name or sym.name.replace("/", "_")
+                # Deduplicate: if two symptom names sanitize to the same string,
+                # append a counter suffix so the second file is not silently lost.
+                if safe_name in _sym_seen_names:
+                    suffix = 2
+                    while f"{safe_name}-{suffix}" in _sym_seen_names:
+                        suffix += 1
+                    safe_name = f"{safe_name}-{suffix}"
+                _sym_seen_names.add(safe_name)
+                zf.writestr(
+                    f"content/symptomdefs/{safe_name}.xml",
+                    xml_text,
+                )
+                print(
+                    f"  bundled content: content/symptomdefs/{safe_name}.xml <- {sym.name}",
+                    file=sys.stderr,
+                )
+
+        # --- Alerts ---
+        # Emit one XML file per alert at content/alertdefs/<safe_name>.xml.
+        # Format: <alertContent><AlertDefinitions>...</AlertDefinitions>
+        #                       <SymptomDefinitions>...</SymptomDefinitions></alertContent>
+        # The alert XML includes the symptoms it references inline so the platform
+        # can register them when importing this file in isolation.  Cross-reference
+        # consistency (SymptomDefinition IDs) is guaranteed because both sides
+        # derive the ID from _symptom_id(adapter_kind, name) — same formula.
+        if alerts:
+            from vcfops_alerts.render import render_alert_content_xml
+            # Build a name→SymptomDef lookup for finding referenced symptoms.
+            symptom_by_name = {s.name: s for s in symptoms}
+            zf.writestr("content/alertdefs/", "")
+            _alert_seen_names: set[str] = set()
+            for alert in alerts:
+                # Collect the symptoms referenced by this specific alert.
+                referenced_syms = []
+                sets = (alert.symptom_sets or {}).get("sets") or []
+                seen_sym_names: set = set()
+                for s in sets:
+                    for sym_ref in (s.get("symptoms") or []):
+                        sym_name = sym_ref.get("name", "")
+                        if sym_name and sym_name not in seen_sym_names:
+                            sym_obj = symptom_by_name.get(sym_name)
+                            if sym_obj is not None:
+                                referenced_syms.append(sym_obj)
+                            seen_sym_names.add(sym_name)
+                xml_text = render_alert_content_xml(
+                    symptoms=referenced_syms,
+                    alerts=[alert],
+                    recommendations=[],
+                )
+                safe_name = "".join(
+                    c for c in alert.name if c.isalnum() or c in " -."
+                ).strip()
+                safe_name = safe_name or alert.name.replace("/", "_")
+                # Deduplicate: if two alert names sanitize to the same string,
+                # append a counter suffix so the second file is not silently lost.
+                if safe_name in _alert_seen_names:
+                    suffix = 2
+                    while f"{safe_name}-{suffix}" in _alert_seen_names:
+                        suffix += 1
+                    safe_name = f"{safe_name}-{suffix}"
+                _alert_seen_names.add(safe_name)
+                zf.writestr(
+                    f"content/alertdefs/{safe_name}.xml",
+                    xml_text,
+                )
+                print(
+                    f"  bundled content: content/alertdefs/{safe_name}.xml <- {alert.name}",
+                    file=sys.stderr,
+                )
+
+        # --- Reports ---
+        # Emit one XML file per report at content/reports/<safe_name>.xml (flat layout).
+        # Layout matches the vCommunity reference pak (confirmed against
+        # references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/):
+        #   content/reports/Report - VOA - Capacity.xml
+        #   content/reports/ESXi Host Details vCommunity.xml
+        #   … (no subdirectory per report; each file is a standalone
+        #      <Content><Reports><ReportDef>...</ReportDef></Reports></Content> document)
+        # Views in the same content/reports/ dir use the subdirectory pattern
+        # (content/reports/<slug>/content.xml); reports use the flat pattern.
+        # Dashboard/view UUIDs embedded in report sections (ContentKey elements)
+        # are emitted verbatim — they are cross-instance references that must
+        # not be resolved against bundled content (the importer resolves them
+        # against the live instance at import time).
+        if reports:
+            from vcfops_reports.render import render_report_xml
+            # Emit content/reports/ dir entry — only once; views may have
+            # already written it.  ZipFile silently de-dupes same-path entries
+            # in successive writes but we guard anyway for clarity.
+            if not views:
+                zf.writestr("content/reports/", "")
+            _report_seen_names: set[str] = set()
+            for rpt in reports:
+                xml_text = render_report_xml([rpt])
+                # Derive a filesystem-safe name from the report title.
+                # Keep alphanumerics, spaces, hyphens, periods — same policy
+                # as symptoms/alerts.
+                safe_name = "".join(
+                    c for c in rpt.name if c.isalnum() or c in " -."
+                ).strip()
+                safe_name = safe_name or rpt.id
+                # Deduplicate: if two report names sanitize to the same string,
+                # append a counter suffix so the second file is not silently lost.
+                if safe_name in _report_seen_names:
+                    suffix = 2
+                    while f"{safe_name}-{suffix}" in _report_seen_names:
+                        suffix += 1
+                    safe_name = f"{safe_name}-{suffix}"
+                _report_seen_names.add(safe_name)
+                zf.writestr(
+                    f"content/reports/{safe_name}.xml",
+                    xml_text,
+                )
+                print(
+                    f"  bundled content: content/reports/{safe_name}.xml <- {rpt.name}",
+                    file=sys.stderr,
+                )
+
+        # --- content/files/ — SolutionConfig XMLs and other config files ---
+        # VCF Ops SolutionManager imports every file under content/files/ into
+        # the central configuration-file store at pak install time.  These files
+        # are NOT content objects (views/dashboards) so they exist independently
+        # of bundled_content and are written unconditionally when present.
+        #
+        # Copy pattern mirrors conf/profiles/ (lines 915-929): walk recursively,
+        # preserve relative directory structure, emit explicit dir entries for
+        # every ancestor so the platform's Files.copy() does not fail with
+        # NoSuchFileException on subdirectory creation.
+        #
+        # The content/ root dir entry must be written exactly once; guard with a
+        # flag so we don't emit a duplicate when has_bundled_content is also True.
+        _content_root_written = has_bundled_content  # already written above if True
+        _files_written_count = 0
+        if project_dir is not None:
+            content_files_dir = project_dir / "content" / "files"
+            if content_files_dir.is_dir():
+                _cf_dirs_written: set[str] = set()
+                for cf in sorted(content_files_dir.rglob("*")):
+                    if cf.is_file():
+                        rel = cf.relative_to(content_files_dir).as_posix()
+                        # Ensure content/ root is present exactly once.
+                        if not _content_root_written:
+                            zf.writestr("content/", "")
+                            _content_root_written = True
+                        # Emit content/files/ dir entry once.
+                        if "content/files/" not in _cf_dirs_written:
+                            zf.writestr("content/files/", "")
+                            _cf_dirs_written.add("content/files/")
+                        # Emit a dir entry for every ancestor between files/ and file.
+                        parts = rel.split("/")
+                        for depth in range(1, len(parts)):
+                            ancestor = "content/files/" + "/".join(parts[:depth]) + "/"
+                            if ancestor not in _cf_dirs_written:
+                                zf.writestr(ancestor, "")
+                                _cf_dirs_written.add(ancestor)
+                        zf.write(cf, f"content/files/{rel}")
+                        _files_written_count += 1
+                        print(
+                            f"  content/files/{rel}",
+                            file=sys.stderr,
+                        )
+
+        # Safety assertion: if the project has a non-empty content/files/ tree
+        # in-tree but the pak ended up with zero content/files entries, the build
+        # must fail loudly rather than ship a silent-drop pak.
+        if project_dir is not None:
+            _cf_src = project_dir / "content" / "files"
+            if _cf_src.is_dir() and any(_cf_src.rglob("*")):
+                if _files_written_count == 0:
+                    raise SdkBuildError(
+                        f"content/files/ directory exists in {project_dir} and is "
+                        "non-empty, but zero files were written to the pak. This "
+                        "indicates a builder bug — aborting to prevent a silent-drop "
+                        "pak from reaching the install pipeline."
+                    )
 
     return pak_path
 
@@ -2291,13 +2785,17 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
     # content load errors fail fast, before the expensive Java build steps.
     import yaml as _yaml_mod
     _raw_adapter_yaml = _yaml_mod.safe_load(adapter_yaml.read_text(encoding="utf-8"))
-    bundled_views, bundled_dashboards = _load_bundled_content(
+    bundled_views, bundled_dashboards, bundled_supermetrics, bundled_symptoms, bundled_alerts, bundled_reports = _load_bundled_content(
         _raw_adapter_yaml, project_dir, project_dir
     )
-    if bundled_views or bundled_dashboards:
+    if bundled_views or bundled_dashboards or bundled_supermetrics or bundled_symptoms or bundled_alerts or bundled_reports:
         print(
             f"  bundled content: {len(bundled_views)} view(s), "
-            f"{len(bundled_dashboards)} dashboard(s)",
+            f"{len(bundled_dashboards)} dashboard(s), "
+            f"{len(bundled_supermetrics)} supermetric(s), "
+            f"{len(bundled_symptoms)} symptom(s), "
+            f"{len(bundled_alerts)} alert(s), "
+            f"{len(bundled_reports)} report(s)",
             file=sys.stderr,
         )
 
@@ -2306,7 +2804,7 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
     # owning_resource_kind — the type=1 "World" ResourceKind from describe.xml.
     # Both are required for spec A1 (dashboard JSON) and A2 (view SubjectType).
     _describe_xml_path = project_dir / "describe.xml"
-    _owning_adapter_kind: Optional[str] = project.adapter_kind if (bundled_views or bundled_dashboards) else None
+    _owning_adapter_kind: Optional[str] = project.adapter_kind if (bundled_views or bundled_dashboards or bundled_supermetrics or bundled_symptoms or bundled_alerts or bundled_reports) else None
     _owning_resource_kind: Optional[str] = None
     if _owning_adapter_kind and _describe_xml_path.is_file():
         _owning_resource_kind = _find_world_resource_kind(_describe_xml_path)
@@ -2374,9 +2872,15 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
         print("  assembling adapters.zip ...", file=sys.stderr)
         # Render views.zip for the conf/views/ slot inside adapters.zip.
         # NOTE: content/ is no longer written inside adapters.zip (spec A4).
+        # Build sm_scope from bundled SM source paths so that view columns
+        # using supermetric:"<name>" resolve against adapter-local SMs, not
+        # the factory-level content/supermetrics/ tree.
+        _sdk_sm_scope: Optional[List[Path]] = None
+        if bundled_supermetrics:
+            _sdk_sm_scope = [sm.source_path for sm in bundled_supermetrics if sm.source_path is not None]
         _views_zip_bytes: Optional[bytes] = None
         if bundled_views:
-            _views_zip_bytes = _build_views_zip_bytes(bundled_views)
+            _views_zip_bytes = _build_views_zip_bytes(bundled_views, sm_scope=_sdk_sm_scope)
         adapters_zip_bytes = _assemble_adapters_zip(
             project, project_dir, adapter_jar, lib_jars,
             views_zip_bytes=_views_zip_bytes,
@@ -2395,6 +2899,10 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
             views_zip_bytes=_views_zip_bytes,
             owning_adapter_kind=_owning_adapter_kind,
             owning_resource_kind=_owning_resource_kind,
+            supermetrics=bundled_supermetrics,
+            symptoms=bundled_symptoms,
+            alerts=bundled_alerts,
+            reports=bundled_reports,
         )
 
     print(f"Built: {pak_path}", file=sys.stderr)
@@ -2405,7 +2913,7 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
     return pak_path
 
 
-def _validate_localization_key_contract(views: list) -> List[str]:
+def _validate_localization_key_contract(views: list, sm_scope: Optional[List[Path]] = None) -> List[str]:
     """Validate that every localizationKey in each view's XML has a matching
     properties-file entry.
 
@@ -2414,6 +2922,14 @@ def _validate_localization_key_contract(views: list) -> List[str]:
     2. Parses the ``view.<uuid>.*`` suffixes from the properties text.
     3. Renders the view XML and extracts every ``localizationKey`` attribute value.
     4. Asserts every XML suffix has a matching properties entry.
+
+    ``sm_scope``: when provided, passed to ``render_views_xml`` so that view
+    columns using the ``supermetric:"<name>"`` cross-reference form can be
+    resolved to ``Super Metric|sm_<uuid>`` using only the bundled SM YAMLs.
+    This is the same scoped-resolution path used at build time (step 10 of
+    _build_sdk_pak_inner).  Without it, the renderer falls back to the
+    factory-level ``content/supermetrics/`` tree, which does not contain
+    adapter-local SMs and causes spurious resolution errors here.
 
     Returns a list of error strings (empty = all OK).
 
@@ -2452,7 +2968,9 @@ def _validate_localization_key_contract(views: list) -> List[str]:
                 props_suffixes.add(key[len(prefix):])
 
         # --- Step 3: localizationKey values from rendered XML ---
-        xml_text = render_views_xml([view])
+        # Pass sm_scope so that view columns using supermetric:"<name>" resolve
+        # against bundled SM YAMLs, not the factory-level content/supermetrics/.
+        xml_text = render_views_xml([view], sm_scope=sm_scope)
         xml_suffixes: list = _re.findall(r'localizationKey="([^"]+)"', xml_text)
 
         # --- Step 4: cross-check ---
@@ -2511,9 +3029,15 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
         _raw_adapter_yaml = {}
         if _YAML_AVAILABLE:
             _raw_adapter_yaml = _yaml.safe_load(adapter_yaml.read_text(encoding="utf-8")) or {}
-        bundled_views, _ = _load_bundled_content(_raw_adapter_yaml, project_dir, project_dir)
+        bundled_views, _bdc_dash, _bdc_sms, _bdc_syms, _bdc_alerts, _bdc_reports = _load_bundled_content(_raw_adapter_yaml, project_dir, project_dir)
         if bundled_views:
-            loc_errors = _validate_localization_key_contract(bundled_views)
+            # Build sm_scope from bundled SM source paths so that view columns
+            # using supermetric:"<name>" resolve against adapter-local SMs, not
+            # the factory-level content/supermetrics/ tree.
+            _val_sm_scope: Optional[List[Path]] = None
+            if _bdc_sms:
+                _val_sm_scope = [sm.source_path for sm in _bdc_sms if sm.source_path is not None]
+            loc_errors = _validate_localization_key_contract(bundled_views, sm_scope=_val_sm_scope)
             errors.extend(loc_errors)
     except SdkBuildError as exc:
         # bundled_content path errors (missing files, bad YAML) surface here —

@@ -1,8 +1,10 @@
 """Load and validate symptom definition YAML definitions.
 
-Symptom definitions are identified by name (not UUID) — the VCF Ops API
-assigns the id server-side on create.  Sync matches by name.  Do not
-include an `id:` field in YAML.
+Symptom definitions are identified by name (not UUID) for the VCF Ops API
+sync path (the API assigns the id server-side on create; sync matches by
+name).  However, an optional ``id:`` field IS accepted for third-party /
+ported content whose original UUID must be preserved for pak content-import
+to resolve cross-references (e.g. symptomdef XML ``id="SymptomDefinition-<uuid>"``).
 
 YAML schema (see .claude/agents/symptom-author.md for the full spec):
 
@@ -43,6 +45,7 @@ Condition type mapping to API wire types:
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
@@ -106,6 +109,12 @@ PROPERTY_OPERATORS = {
 DYNAMIC_DIRECTIONS = {"ABOVE", "BELOW", "ABNORMAL"}
 
 
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+    re.IGNORECASE,
+)
+
+
 @dataclass
 class SymptomDef:
     name: str
@@ -118,6 +127,7 @@ class SymptomDef:
     description: str = ""
     source_path: Optional[Path] = None
     version: str = "1.0.0"  # internal semver (released not applicable to symptoms)
+    id: Optional[str] = None  # UUID preserved from original for pak content-import
 
     def validate(self, enforce_framework_prefix: bool = True) -> None:
         if not self.name or not self.name.strip():
@@ -138,6 +148,11 @@ class SymptomDef:
             raise SymptomValidationError(
                 f"{self.name}: severity must be one of "
                 f"{sorted(set(SEVERITY_MAP))}; got {self.severity!r}"
+            )
+        if self.id is not None and not _UUID_RE.match(self.id):
+            raise SymptomValidationError(
+                f"{self.name}: id must be a UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx); "
+                f"got {self.id!r}"
             )
         if self.wait_cycles < 1:
             raise SymptomValidationError(
@@ -290,6 +305,9 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Sympto
 
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
 
+    raw_id = data.get("id")
+    sym_id: Optional[str] = str(raw_id).strip() if raw_id is not None else None
+
     sd = SymptomDef(
         name=str(data.get("name", "")).strip(),
         adapter_kind=str(data.get("adapter_kind", "") or "").strip(),
@@ -301,6 +319,7 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Sympto
         description=str(data.get("description", "") or "").strip(),
         source_path=path,
         version=version,
+        id=sym_id,
     )
     sd.validate(enforce_framework_prefix=enforce_framework_prefix)
     return sd

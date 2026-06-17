@@ -130,16 +130,11 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             r'output_dir = _HERE\.parent / "dist"',
             'output_dir = Path.cwd() / "dist"',
         ),
-        # repo_root for bundled_content: factory uses _HERE.parent; kit uses project_dir
-        (
-            r'    _repo_root = _HERE\.parent\n    bundled_views, bundled_dashboards = _load_bundled_content\(',
-            '    _repo_root = project_dir\n    bundled_views, bundled_dashboards = _load_bundled_content(',
-        ),
-        # validate_sdk_project also sets _repo_root = _HERE.parent
-        (
-            r'        _repo_root = _HERE\.parent\n        bundled_views, _ = _load_bundled_content\(',
-            '        _repo_root = project_dir\n        bundled_views, _ = _load_bundled_content(',
-        ),
+        # NOTE: Two rewrite rules that patched `_repo_root = _HERE.parent` were
+        # removed here.  That variable was eliminated from sdk_builder.py before
+        # the 5-tuple _load_bundled_content() refactor; both call sites now pass
+        # project_dir directly.  Dead rewrites are removed rather than kept as
+        # silent no-ops (see assertion in _apply_rewrites below).
     ],
     # dashboard_loader.py: rewrite vcfops_dashboards.yaml_utils and vcfops_common.provenance
     "dashboard_loader.py": [
@@ -476,9 +471,23 @@ def _pick_reference_pak() -> Optional[Path]:
 # ---------------------------------------------------------------------------
 
 def _apply_rewrites(text: str, rules: list[tuple[str, str]]) -> str:
-    """Apply a list of (regex_pattern, replacement) substitutions to text."""
+    """Apply a list of (regex_pattern, replacement) substitutions to text.
+
+    Raises AssertionError if any rule matches zero times — a silent no-op
+    rewrite indicates the source file has drifted away from the rule's target
+    and the rule must be updated or deleted.
+    """
     for pattern, replacement in rules:
-        text = re.sub(pattern, replacement, text)
+        new_text, n = re.subn(pattern, replacement, text)
+        if n == 0:
+            raise AssertionError(
+                f"buildkit rewrite rule matched zero times — rule is stale or dead.\n"
+                f"  pattern:     {pattern!r}\n"
+                f"  replacement: {replacement!r}\n"
+                "Update or remove this rule in vcfops_managementpacks/buildkit.py "
+                "_IMPORT_REWRITES."
+            )
+        text = new_text
     return text
 
 

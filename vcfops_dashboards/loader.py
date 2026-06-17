@@ -670,9 +670,37 @@ class ProblemAlertsListConfig:
 
 
 @dataclass
+class ResourceRelationshipAdvancedConfig:
+    """Type-specific config for a ResourceRelationshipAdvanced widget.
+
+    Displays a relationship graph (topology tree) rooted at the selected
+    resource, showing ancestors and/or descendants to a configurable depth.
+    Typically interaction-driven (receives a resource selection from another
+    widget such as ResourceList or View).
+
+    Fields:
+        resource_kinds:   List of resource kinds whose resources are eligible
+                          as root nodes for the graph.  Each entry maps to one
+                          ``resourceKind:id:N_::_`` synthetic ref in the wire
+                          ``tagFilter.value.kind[]``.  When empty the widget
+                          accepts any resource pushed via interaction.
+        depth:            Traversal depth expressed as "<up>,<down>" string, e.g.
+                          "0,2" (0 ancestors, 2 descendants) or "2,1".
+                          Default "2,1".
+        pagination_number: Number of rows per page. Default 5.
+        self_provider:    When True the widget is self-provider (does not wait
+                          for an incoming interaction). Default False.
+    """
+    resource_kinds: List[WidgetResourceKindRef] = field(default_factory=list)
+    depth: str = "2,1"
+    pagination_number: int = 5
+    self_provider: bool = False
+
+
+@dataclass
 class Widget:
     local_id: str  # author-supplied short id used for interaction wiring
-    type: str  # ResourceList | View | TextDisplay | Scoreboard | MetricChart | HealthChart | ParetoAnalysis | AlertList | ProblemAlertsList
+    type: str  # ResourceList | View | TextDisplay | Scoreboard | MetricChart | HealthChart | ParetoAnalysis | AlertList | ProblemAlertsList | PropertyList | ResourceRelationshipAdvanced
     title: str
     coords: dict  # {x, y, w, h}
     # ResourceList only:
@@ -695,6 +723,7 @@ class Widget:
     problems_alerts_list_config: ProblemAlertsListConfig | None = None
     heatmap_config: HeatmapConfig | None = None
     property_list_config: PropertyListConfig | None = None
+    resource_relationship_advanced_config: ResourceRelationshipAdvancedConfig | None = None
     # Optional traversal mode for MetricChart widgets.
     # Maps to a scalar integer in config.relationshipMode (NOT an array).
     # ``None`` (default) → 0 — no traversal.
@@ -762,7 +791,7 @@ class Dashboard:
         _supported_types = (
             "ResourceList", "View", "TextDisplay", "Scoreboard", "MetricChart",
             "HealthChart", "ParetoAnalysis", "AlertList", "ProblemAlertsList",
-            "Heatmap", "PropertyList",
+            "Heatmap", "PropertyList", "ResourceRelationshipAdvanced",
         )
         seen: set[str] = set()
         for w in self.widgets:
@@ -787,7 +816,11 @@ class Dashboard:
                         f"dashboard {self.name}: widget {w.local_id}: "
                         f"View requires 'view' (the view definition name)"
                     )
-                if w.view_name not in known_views:
+                # External view passthrough: a raw UUID that does not match any
+                # bundled view is treated as an EXTERNAL reference (a platform-
+                # or other-MP-provided view resolved at install time).  Only bare
+                # names that fail to match are authoring mistakes.
+                if w.view_name not in known_views and not _UUID_RE.match(w.view_name):
                     raise DashboardValidationError(
                         f"dashboard {self.name}: widget {w.local_id}: "
                         f"unknown view '{w.view_name}'"
@@ -1290,6 +1323,25 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 show_metric_full_name=bool(raw_pl.get("show_metric_full_name", True)),
             )
 
+        # --- Parse ResourceRelationshipAdvanced config ---
+        resource_relationship_advanced_config = None
+        if widget_type == "ResourceRelationshipAdvanced":
+            raw_rra = w.get("resource_relationship_advanced") or {}
+            rra_rks_raw = raw_rra.get("resource_kinds") or []
+            rra_rks = [
+                WidgetResourceKindRef(
+                    adapter_kind=str(rk["adapter_kind"]).strip(),
+                    resource_kind=str(rk["resource_kind"]).strip(),
+                )
+                for rk in rra_rks_raw
+            ]
+            resource_relationship_advanced_config = ResourceRelationshipAdvancedConfig(
+                resource_kinds=rra_rks,
+                depth=str(raw_rra.get("depth", "2,1")).strip(),
+                pagination_number=int(raw_rra.get("pagination_number", 5)),
+                self_provider=bool(raw_rra.get("self_provider", False)),
+            )
+
         # --- Parse ParetoAnalysis config ---
         pareto_analysis_config = None
         if widget_type == "ParetoAnalysis":
@@ -1337,6 +1389,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 problems_alerts_list_config=problems_alerts_list_config,
                 heatmap_config=heatmap_config,
                 property_list_config=property_list_config,
+                resource_relationship_advanced_config=resource_relationship_advanced_config,
                 relationship_mode=relationship_mode,
             )
         )
