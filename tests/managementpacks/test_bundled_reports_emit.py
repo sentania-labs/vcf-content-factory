@@ -299,7 +299,8 @@ class TestReportEmit:
 
 
 class TestLoadBundledContentReportsTuple:
-    """_load_bundled_content returns a 6-tuple; reports element is [] when absent."""
+    """_load_bundled_content returns a 7-tuple; reports and recommendations
+    elements are [] when absent."""
 
     def _make_adapter_dir(self, tmp_path: Path) -> Path:
         adapter_dir = tmp_path / "my_adapter"
@@ -310,15 +311,16 @@ class TestLoadBundledContentReportsTuple:
         raw = {"bundled_content": {"views": []}}
         project_dir = self._make_adapter_dir(tmp_path)
         result = _load_bundled_content(raw, project_dir, project_dir)
-        assert len(result) == 6, f"Expected 6-tuple; got {len(result)}-tuple"
-        views, dashboards, supermetrics, symptoms, alerts, reports = result
+        assert len(result) == 7, f"Expected 7-tuple; got {len(result)}-tuple"
+        views, dashboards, supermetrics, symptoms, alerts, reports, recommendations = result
         assert reports == [], f"Expected reports=[], got {reports!r}"
+        assert recommendations == [], f"Expected recommendations=[], got {recommendations!r}"
 
-    def test_no_bundled_content_returns_six_empty_lists(self, tmp_path: Path) -> None:
+    def test_no_bundled_content_returns_seven_empty_lists(self, tmp_path: Path) -> None:
         raw = {}
         project_dir = self._make_adapter_dir(tmp_path)
         result = _load_bundled_content(raw, project_dir, project_dir)
-        assert len(result) == 6, f"Expected 6-tuple; got {len(result)}-tuple"
+        assert len(result) == 7, f"Expected 7-tuple; got {len(result)}-tuple"
         for i, item in enumerate(result):
             assert item == [], f"Element {i} should be []; got {item!r}"
 
@@ -330,8 +332,8 @@ class TestLoadBundledContentReportsTuple:
 
         raw = {"bundled_content": {"reports": ["reports/r.yaml"]}}
         result = _load_bundled_content(raw, project_dir, project_dir)
-        assert len(result) == 6
-        _, _, _, _, _, reports = result
+        assert len(result) == 7
+        _, _, _, _, _, reports, _ = result
         assert len(reports) == 1
         assert reports[0].id == _REPORT_UUID
 

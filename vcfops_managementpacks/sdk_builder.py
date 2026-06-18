@@ -726,8 +726,8 @@ def _load_bundled_content(
 ):
     """Parse the optional ``bundled_content`` key from a raw adapter.yaml dict.
 
-    Returns a tuple ``(views, dashboards, supermetrics, symptoms, alerts, reports)``
-    where each is a list of loaded objects.  Returns ``([], [], [], [], [], [])``
+    Returns a tuple ``(views, dashboards, supermetrics, symptoms, alerts, reports, recommendations)``
+    where each is a list of loaded objects.  Returns ``([], [], [], [], [], [], [])``
     when the key is absent or empty.
 
     Paths in all ``bundled_content.*`` sub-keys are relative to the adapter
@@ -736,19 +736,20 @@ def _load_bundled_content(
     unused; callers should pass ``project_dir`` for both arguments.
 
     Accepted sub-keys:
-      views:        list of paths → ViewDef objects (vcfops_dashboards)
-      dashboards:   list of paths → Dashboard objects (vcfops_dashboards)
-      supermetrics: list of paths → SuperMetricDef objects (vcfops_supermetrics)
-      symptoms:     list of paths → SymptomDef objects (vcfops_symptoms)
-      alerts:       list of paths → AlertDef objects (vcfops_alerts)
-      reports:      list of paths → ReportDef objects (vcfops_reports)
+      views:           list of paths → ViewDef objects (vcfops_dashboards)
+      dashboards:      list of paths → Dashboard objects (vcfops_dashboards)
+      supermetrics:    list of paths → SuperMetricDef objects (vcfops_supermetrics)
+      symptoms:        list of paths → SymptomDef objects (vcfops_symptoms)
+      alerts:          list of paths → AlertDef objects (vcfops_alerts)
+      reports:         list of paths → ReportDef objects (vcfops_reports)
+      recommendations: list of paths → Recommendation objects (vcfops_alerts)
 
     Raises:
         SdkBuildError: if a listed path does not exist or fails to load.
     """
     bundled = raw.get("bundled_content") or {}
     if not bundled:
-        return [], [], [], [], [], []
+        return [], [], [], [], [], [], []
 
     try:
         from vcfops_dashboards.loader import load_view, load_dashboard
@@ -861,7 +862,25 @@ def _load_bundled_content(
             ) from exc
         reports.append(report)
 
-    return views, dashboards, supermetrics, symptoms, alerts, reports
+    # --- Recommendations ---
+    recommendations = []
+    for rel in (bundled.get("recommendations") or []):
+        path = (project_dir / rel).resolve()
+        if not path.is_file():
+            raise SdkBuildError(
+                f"bundled_content.recommendations: path not found: {path} "
+                f"(resolved from '{rel}' relative to {project_dir})"
+            )
+        try:
+            from vcfops_alerts.loader import load_recommendation_file as _load_rec
+            rec = _load_rec(path, enforce_framework_prefix=False)
+        except Exception as exc:
+            raise SdkBuildError(
+                f"bundled_content.recommendations: failed to load {path}: {exc}"
+            ) from exc
+        recommendations.append(rec)
+
+    return views, dashboards, supermetrics, symptoms, alerts, reports, recommendations
 
 
 def _build_views_zip_bytes(views: list, sm_scope: Optional[List[Path]] = None) -> bytes:
@@ -1453,6 +1472,7 @@ def _write_outer_pak(
     symptoms: Optional[list] = None,
     alerts: Optional[list] = None,
     reports: Optional[list] = None,
+    recommendations: Optional[list] = None,
 ) -> Path:
     """Write the outer .pak ZIP to output_dir and return the path.
 
@@ -1519,6 +1539,12 @@ def _write_outer_pak(
             document).  Dashboard and view UUIDs embedded in report sections
             are emitted verbatim (cross-instance references — not resolved
             against bundled content).
+        recommendations: List of Recommendation objects whose definitions are
+            referenced by one or more bundled alerts.  When an alert's
+            ``recommendations:`` list names a recommendation that is in this
+            list, the Recommendation element is included inline in the alert's
+            XML.  If an alert references a recommendation name that is NOT in
+            this list, SdkBuildError is raised (fail-loud; no silent drop).
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     pak_path = output_dir / project.pak_filename
@@ -1539,6 +1565,7 @@ def _write_outer_pak(
     symptoms = symptoms or []
     alerts = alerts or []
     reports = reports or []
+    recommendations = recommendations or []
 
     # --- Alert→symptom cross-reference validation ---
     # Every symptom referenced by any alert must appear in the bundled symptoms
@@ -1569,7 +1596,27 @@ def _write_outer_pak(
                             f"or remove the reference from the alert."
                         )
 
-    has_bundled_content = bool(views or dashboards or supermetrics or symptoms or alerts or reports)
+    # --- Alert→recommendation cross-reference validation ---
+    # Every [VCF Content Factory] recommendation referenced by any bundled alert
+    # must appear in the bundled recommendations list.  Non-factory-prefix names
+    # are treated as built-in references and are not validated here (same policy
+    # as resolve_alert_recommendations in vcfops_alerts/loader.py).
+    if alerts:
+        recommendation_by_name = {r.name: r for r in recommendations}
+        for alert in alerts:
+            for rec_ref in (getattr(alert, "recommendations", None) or []):
+                rec_name = rec_ref.name if hasattr(rec_ref, "name") else str(rec_ref)
+                if rec_name.startswith("[VCF Content Factory]") and rec_name not in recommendation_by_name:
+                    raise SdkBuildError(
+                        f"Alert '{alert.name}' references recommendation "
+                        f"'{rec_name}' but that recommendation is not listed in "
+                        f"bundled_content.recommendations in adapter.yaml.  "
+                        f"Add the recommendation YAML path to "
+                        f"bundled_content.recommendations, or remove the reference "
+                        f"from the alert."
+                    )
+
+    has_bundled_content = bool(views or dashboards or supermetrics or symptoms or alerts or reports or recommendations)
 
     # Build sm_scope (list of SM source paths) for the view renderer's scoped
     # mode when supermetrics are bundled.  The view renderer will load these
@@ -1807,6 +1854,8 @@ def _write_outer_pak(
             from vcfops_alerts.render import render_alert_content_xml
             # Build a name→SymptomDef lookup for finding referenced symptoms.
             symptom_by_name = {s.name: s for s in symptoms}
+            # Build a name→Recommendation lookup for referenced recommendations.
+            recommendation_by_name = {r.name: r for r in recommendations}
             zf.writestr("content/alertdefs/", "")
             _alert_seen_names: set[str] = set()
             for alert in alerts:
@@ -1822,10 +1871,23 @@ def _write_outer_pak(
                             if sym_obj is not None:
                                 referenced_syms.append(sym_obj)
                             seen_sym_names.add(sym_name)
+                # Collect the recommendations referenced by this specific alert.
+                # The cross-ref validation above already guaranteed all
+                # [VCF Content Factory] names resolve; non-factory names are
+                # built-in refs that are not in our bundled list (skip them).
+                referenced_recs = []
+                seen_rec_names: set = set()
+                for rec_ref in (getattr(alert, "recommendations", None) or []):
+                    rec_name = rec_ref.name if hasattr(rec_ref, "name") else str(rec_ref)
+                    if rec_name not in seen_rec_names:
+                        rec_obj = recommendation_by_name.get(rec_name)
+                        if rec_obj is not None:
+                            referenced_recs.append(rec_obj)
+                        seen_rec_names.add(rec_name)
                 xml_text = render_alert_content_xml(
                     symptoms=referenced_syms,
                     alerts=[alert],
-                    recommendations=[],
+                    recommendations=referenced_recs,
                 )
                 safe_name = "".join(
                     c for c in alert.name if c.isalnum() or c in " -."
@@ -2785,17 +2847,18 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
     # content load errors fail fast, before the expensive Java build steps.
     import yaml as _yaml_mod
     _raw_adapter_yaml = _yaml_mod.safe_load(adapter_yaml.read_text(encoding="utf-8"))
-    bundled_views, bundled_dashboards, bundled_supermetrics, bundled_symptoms, bundled_alerts, bundled_reports = _load_bundled_content(
+    bundled_views, bundled_dashboards, bundled_supermetrics, bundled_symptoms, bundled_alerts, bundled_reports, bundled_recommendations = _load_bundled_content(
         _raw_adapter_yaml, project_dir, project_dir
     )
-    if bundled_views or bundled_dashboards or bundled_supermetrics or bundled_symptoms or bundled_alerts or bundled_reports:
+    if bundled_views or bundled_dashboards or bundled_supermetrics or bundled_symptoms or bundled_alerts or bundled_reports or bundled_recommendations:
         print(
             f"  bundled content: {len(bundled_views)} view(s), "
             f"{len(bundled_dashboards)} dashboard(s), "
             f"{len(bundled_supermetrics)} supermetric(s), "
             f"{len(bundled_symptoms)} symptom(s), "
             f"{len(bundled_alerts)} alert(s), "
-            f"{len(bundled_reports)} report(s)",
+            f"{len(bundled_reports)} report(s), "
+            f"{len(bundled_recommendations)} recommendation(s)",
             file=sys.stderr,
         )
 
@@ -2804,7 +2867,7 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
     # owning_resource_kind — the type=1 "World" ResourceKind from describe.xml.
     # Both are required for spec A1 (dashboard JSON) and A2 (view SubjectType).
     _describe_xml_path = project_dir / "describe.xml"
-    _owning_adapter_kind: Optional[str] = project.adapter_kind if (bundled_views or bundled_dashboards or bundled_supermetrics or bundled_symptoms or bundled_alerts or bundled_reports) else None
+    _owning_adapter_kind: Optional[str] = project.adapter_kind if (bundled_views or bundled_dashboards or bundled_supermetrics or bundled_symptoms or bundled_alerts or bundled_reports or bundled_recommendations) else None
     _owning_resource_kind: Optional[str] = None
     if _owning_adapter_kind and _describe_xml_path.is_file():
         _owning_resource_kind = _find_world_resource_kind(_describe_xml_path)
@@ -2903,6 +2966,7 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
             symptoms=bundled_symptoms,
             alerts=bundled_alerts,
             reports=bundled_reports,
+            recommendations=bundled_recommendations,
         )
 
     print(f"Built: {pak_path}", file=sys.stderr)
@@ -3029,7 +3093,7 @@ def validate_sdk_project(project_dir: Path) -> List[str]:
         _raw_adapter_yaml = {}
         if _YAML_AVAILABLE:
             _raw_adapter_yaml = _yaml.safe_load(adapter_yaml.read_text(encoding="utf-8")) or {}
-        bundled_views, _bdc_dash, _bdc_sms, _bdc_syms, _bdc_alerts, _bdc_reports = _load_bundled_content(_raw_adapter_yaml, project_dir, project_dir)
+        bundled_views, _bdc_dash, _bdc_sms, _bdc_syms, _bdc_alerts, _bdc_reports, _bdc_recs = _load_bundled_content(_raw_adapter_yaml, project_dir, project_dir)
         if bundled_views:
             # Build sm_scope from bundled SM source paths so that view columns
             # using supermetric:"<name>" resolve against adapter-local SMs, not

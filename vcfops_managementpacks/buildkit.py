@@ -18,6 +18,11 @@ Kit contents (assembled under a temp dir, then tarballed):
     dashboard_render.py         — copy of vcfops_dashboards/render.py (imports patched)
     dashboard_yaml_utils.py     — copy of vcfops_dashboards/yaml_utils.py
     sm_loader.py                — copy of vcfops_supermetrics/loader.py
+    symptoms_loader.py          — copy of vcfops_symptoms/loader.py
+    alerts_loader.py            — copy of vcfops_alerts/loader.py
+    alerts_render.py            — copy of vcfops_alerts/render.py (imports patched)
+    reports_loader.py           — copy of vcfops_reports/loader.py
+    reports_render.py           — copy of vcfops_reports/render.py (imports patched)
     adapter_framework/src/       — framework Java source (compiled at build-sdk time)
     adapter_runtime/             — empty directory (jar compiled into here on first use)
     templates/icons/             — SVG icon assets
@@ -32,6 +37,10 @@ Path relocation in the kit's sdk_builder.py:
   _LICENSE_PATH             = _HERE / "LICENSE"
   _REFERENCES_DIR           = _HERE / "reference_paks"
   templates/icons           = _HERE / "templates" / "icons"
+
+Import rewrites also applied to:
+  alerts_render.py  — vcfops_symptoms.loader / vcfops_alerts.loader → flat kit names
+  reports_render.py — relative .loader → reports_loader (flat kit name)
 
 repo_root handling:
   In the factory, _load_bundled_content resolves bundled_content paths against
@@ -79,6 +88,11 @@ _FACTORY_SOURCES = {
     "dashboard_render.py": _REPO_ROOT / "vcfops_dashboards" / "render.py",
     "dashboard_yaml_utils.py": _REPO_ROOT / "vcfops_dashboards" / "yaml_utils.py",
     "sm_loader.py": _REPO_ROOT / "vcfops_supermetrics" / "loader.py",
+    "symptoms_loader.py": _REPO_ROOT / "vcfops_symptoms" / "loader.py",
+    "alerts_loader.py": _REPO_ROOT / "vcfops_alerts" / "loader.py",
+    "alerts_render.py": _REPO_ROOT / "vcfops_alerts" / "render.py",
+    "reports_loader.py": _REPO_ROOT / "vcfops_reports" / "loader.py",
+    "reports_render.py": _REPO_ROOT / "vcfops_reports" / "render.py",
     "docs_gen.py": _HERE / "docs_gen.py",
 }
 
@@ -91,7 +105,7 @@ _FACTORY_SOURCES = {
 # import self-contained within the sdk_buildkit package.
 
 _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
-    # sdk_builder.py: rewrite intra-package imports and vcfops_dashboards refs
+    # sdk_builder.py: rewrite intra-package imports and vcfops_* refs
     "sdk_builder.py": [
         # from .sdk_project import ... → from .sdk_project import ...
         # (already relative; keep as-is — no change needed)
@@ -111,6 +125,46 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from vcfops_dashboards\.render import render_dashboards_bundle_json",
             "from .dashboard_render import render_dashboards_bundle_json",
+        ),
+        # from vcfops_supermetrics.loader import load_file as _load_sm  (inline in _load_bundled_content)
+        (
+            r"from vcfops_supermetrics\.loader import load_file as _load_sm",
+            "from .sm_loader import load_file as _load_sm",
+        ),
+        # from vcfops_symptoms.loader import load_file as _load_sym
+        (
+            r"from vcfops_symptoms\.loader import load_file as _load_sym",
+            "from .symptoms_loader import load_file as _load_sym",
+        ),
+        # from vcfops_alerts.loader import load_file as _load_alert
+        (
+            r"from vcfops_alerts\.loader import load_file as _load_alert",
+            "from .alerts_loader import load_file as _load_alert",
+        ),
+        # from vcfops_alerts.loader import load_recommendation_file as _load_rec
+        (
+            r"from vcfops_alerts\.loader import load_recommendation_file as _load_rec",
+            "from .alerts_loader import load_recommendation_file as _load_rec",
+        ),
+        # from vcfops_alerts.render import _symptom_id as _compute_symptom_id
+        (
+            r"from vcfops_alerts\.render import _symptom_id as _compute_symptom_id",
+            "from .alerts_render import _symptom_id as _compute_symptom_id",
+        ),
+        # from vcfops_alerts.render import render_alert_content_xml
+        (
+            r"from vcfops_alerts\.render import render_alert_content_xml",
+            "from .alerts_render import render_alert_content_xml",
+        ),
+        # from vcfops_reports.loader import load_file as _load_report
+        (
+            r"from vcfops_reports\.loader import load_file as _load_report",
+            "from .reports_loader import load_file as _load_report",
+        ),
+        # from vcfops_reports.render import render_report_xml
+        (
+            r"from vcfops_reports\.render import render_report_xml",
+            "from .reports_render import render_report_xml",
         ),
         # Relocate path constants:
         #   _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"  (no change; _HERE is already right)
@@ -135,6 +189,19 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         # the 5-tuple _load_bundled_content() refactor; both call sites now pass
         # project_dir directly.  Dead rewrites are removed rather than kept as
         # silent no-ops (see assertion in _apply_rewrites below).
+    ],
+    # sm_loader.py: rewrite vcfops_common.provenance (inline import at load_file time).
+    # vcfops_common is flattened to provenance.py in the kit; sm_loader.py line ~211
+    # executes `from vcfops_common.provenance import provenance_from_path` at runtime
+    # (inside load_file, not at module import time), so the try/except in alerts_render
+    # does NOT guard it.  Without this rule any adapter bundling supermetrics raises
+    # ModuleNotFoundError on a clean CI runner where vcfops_common is not on sys.path.
+    "sm_loader.py": [
+        # from vcfops_common.provenance import provenance_from_path
+        (
+            r"from vcfops_common\.provenance import provenance_from_path",
+            "from .provenance import provenance_from_path",
+        ),
     ],
     # dashboard_loader.py: rewrite vcfops_dashboards.yaml_utils and vcfops_common.provenance
     "dashboard_loader.py": [
@@ -171,6 +238,31 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from vcfops_supermetrics\.loader import load_dir as _sm_load_dir",
             "from .sm_loader import load_dir as _sm_load_dir",
+        ),
+    ],
+    # alerts_render.py: rewrite vcfops_symptoms.loader and vcfops_alerts.loader
+    # imports to the flat kit module names.  These are guarded by try/except in
+    # the source so they do not raise at import time, but the kit must still
+    # provide the modules so that runtime calls work correctly.
+    "alerts_render.py": [
+        # from vcfops_symptoms.loader import SymptomDef
+        (
+            r"from vcfops_symptoms\.loader import SymptomDef",
+            "from .symptoms_loader import SymptomDef",
+        ),
+        # from vcfops_alerts.loader import AlertDef, Recommendation
+        (
+            r"from vcfops_alerts\.loader import AlertDef, Recommendation",
+            "from .alerts_loader import AlertDef, Recommendation",
+        ),
+    ],
+    # reports_render.py: rewrite relative .loader import (vcfops_reports package
+    # relative import → flat kit module name).
+    "reports_render.py": [
+        # from .loader import ReportDef, Section, _STATIC_CONTENT_KEYS
+        (
+            r"from \.loader import ReportDef, Section, _STATIC_CONTENT_KEYS",
+            "from .reports_loader import ReportDef, Section, _STATIC_CONTENT_KEYS",
         ),
     ],
 }
