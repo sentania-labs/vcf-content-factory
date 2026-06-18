@@ -393,14 +393,23 @@ marketplace, Broadcom re-signs with their trusted key.
 
 ## Implementation status
 
-- Phase 1 (framework + tooling skeleton): **COMPLETE**
-- Phase 2 (Synology adapter): **IN PROGRESS** — build 1.0.0.7
-  installed on devel, 22 objects discovered, 278 metrics collected.
-  Pending: migration to v2 framework.
-- Phase 3 (framework v2 migration — compliance, synology, unifi): IN PROGRESS.
-  Framework v2 JAR built; adapters to be migrated serially by sdk-adapter-author.
+This is an **architecture** doc: it describes how the Tier 2 framework
+works, which is durable. It deliberately does **not** track per-adapter
+build numbers or phase status — that rots fast and belongs where it stays
+current, not embedded in a stable reference doc (see
+`lessons/no-volatile-status-in-reference-docs.md`):
 
-Tracking: `designs/tier2-mp-architecture-plan.md`.
+- **Per-adapter build state:** the SDK reviews
+  (`context/reviews/<adapter>-build-<N>.md`) and the transient
+  `context/session-handoff.md`.
+- **Current (v2) design surface:** `designs/vcfcf-base-v2-adapterbase-rehome.md`
+  plus the per-adapter v2 migration designs under `designs/sdk-adapters/`.
+- **Historical:** `designs/tier2-mp-architecture-plan.md` is the **v1**
+  implementation plan — it predates this framework and still describes the
+  retired `UnlicensedAdapter` / `aria-ops-core` design. Read it for history,
+  **not** as a current target.
+
+This document describes the **v2** framework.
 
 ## Ambient Suite API stitching transport
 
