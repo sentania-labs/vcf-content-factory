@@ -48,6 +48,8 @@ from .loader import (
     MetricSpec,
     ParetoAnalysisConfig,
     ProblemAlertsListConfig,
+    PropertyListConfig,
+    ResourceRelationshipAdvancedConfig,
     ScoreboardConfig,
     TextDisplayConfig,
     ViewDef,
@@ -375,14 +377,46 @@ def _parse_column_value_to_dataclass(value_elem) -> Optional[ViewColumn]:
 
     ascending_raw = props.get("ascendingRange")
     ascending: Optional[bool] = None
+    red_is_string = red is not None and not isinstance(red, (int, float))
     if ascending_raw is not None:
         # Suppress ascending_range for property-match coloring (string-only red_bound
         # with no yellow/orange bounds).  This mirrors the forward renderer logic in
         # render.py which skips ascendingRange emission for this case, and the validator
         # which rejects ascending_range in this configuration.
-        red_is_string = red is not None and not isinstance(red, (int, float))
         if not (red_is_string and yellow is None and orange is None):
             ascending = ascending_raw.lower() == "true"
+    else:
+        # ascendingRange is absent from the wire.  When all three numeric bounds are
+        # present the loader requires ascending_range — derive it from bound ordering,
+        # which is the same signal the forward renderer encodes:
+        #   yellow < orange < red  →  False  (higher-is-worse: CPU %, latency)
+        #   yellow > orange > red  →  True   (lower-is-worse: free capacity, headroom)
+        # This inverts the ordering check in loader.py §_validate_view_column.
+        # See context/wire-formats/view_column_wire_format.md §ascending_range derivation.
+        all_numeric = (
+            yellow is not None and orange is not None and red is not None
+            and isinstance(yellow, (int, float))
+            and isinstance(orange, (int, float))
+            and isinstance(red, (int, float))
+        )
+        if all_numeric:
+            y, o, r = float(yellow), float(orange), float(red)  # type: ignore[arg-type]
+            if y < o and o < r:
+                # Higher-is-worse ordering (most common for utilisation/latency metrics).
+                ascending = False
+            elif y > o and o > r:
+                # Lower-is-worse ordering (capacity / headroom metrics).
+                ascending = True
+            else:
+                # Ambiguous ordering — default to higher-is-worse and warn so the
+                # human can review the reversed YAML rather than silently misclassify.
+                ascending = False
+                _warn(
+                    f"column {display_name!r}: all three numeric bounds are set but "
+                    f"ascendingRange is absent and ordering is ambiguous "
+                    f"(yellow={y}, orange={o}, red={r}); defaulting to "
+                    "ascending_range=False (higher-is-worse) — review reversed YAML"
+                )
 
     return ViewColumn(
         attribute=attr_yaml,
@@ -470,6 +504,22 @@ def _parse_metric_specs_from_wire(
         yellow = entry.get("yellowBound")
         orange = entry.get("orangeBound")
         red = entry.get("redBound")
+
+        def _to_bound(v):
+            """Convert a metric bound value to float or None.
+
+            Source files (pre-install) may carry non-numeric sentinel values
+            such as ``"false"`` (a JSON ``false`` that was serialised to
+            string by the exporter).  Treat any non-numeric non-null value
+            as absent rather than raising ValueError.
+            """
+            if v is None:
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
         specs.append(MetricSpec(
             adapter_kind=adapter_kind,
             resource_kind=resource_kind,
@@ -478,10 +528,11 @@ def _parse_metric_specs_from_wire(
             unit_id=str(entry.get("metricUnitId") or "").strip() if entry.get("metricUnitId") else "",
             unit=str(entry.get("unit") or "").strip() if entry.get("unit") else "",
             color_method=color_method,
-            yellow_bound=float(yellow) if yellow is not None else None,
-            orange_bound=float(orange) if orange is not None else None,
-            red_bound=float(red) if red is not None else None,
+            yellow_bound=_to_bound(yellow),
+            orange_bound=_to_bound(orange),
+            red_bound=_to_bound(red),
             label=str(entry.get("label") or "").strip(),
+            is_string_metric=bool(entry.get("isStringMetric", False)),
         ))
     return specs
 
@@ -784,6 +835,107 @@ def _parse_heatmap_config(
     return HeatmapConfig(tabs=tabs, mode=mode, depth=depth)
 
 
+def _parse_property_list_config(
+    cfg: dict,
+    dash_name: str,
+    local_id: str,
+    kind_lookup: dict[int, dict] | None = None,
+) -> PropertyListConfig:
+    """Parse a PropertyList widget config into a PropertyListConfig dataclass.
+
+    Wire format (source: ESXi Host Details Dashboard.json, VM Details.json):
+    - ``config.metric`` follows the standard ``resourceKindMetrics[]`` envelope
+      used by Scoreboard and MetricChart.  ``is_string_metric`` is significant
+      for property-type metrics (``isStringMetric: true`` in the wire).
+    - ``config.visualTheme``: integer, 0 = default.
+    - ``config.depth``: integer, default 1.
+    - ``config.showMetricFullName``: object ``{"metricFullName": <bool>}``.
+    - ``config.relationshipMode``: wrapped ``{"relationshipMode": 0}`` (integer
+      always 0 in all observed instances).
+
+    The ``is_string_metric`` field on each MetricSpec maps to ``isStringMetric``
+    in the ``resourceKindMetrics[]`` entry.  ``_parse_metric_specs_from_wire``
+    already handles this via the ``isStringMetric`` wire key.
+    """
+    specs = _parse_metric_specs_from_wire(cfg.get("metric") or {}, local_id, kind_lookup)
+    if not specs:
+        _warn(f"dashboard '{dash_name}': PropertyList widget '{local_id}' has no parseable metrics")
+    visual_theme_raw = cfg.get("visualTheme", 0)
+    try:
+        visual_theme = int(visual_theme_raw)
+    except (TypeError, ValueError):
+        visual_theme = 0
+    depth_raw = cfg.get("depth", 1)
+    try:
+        depth = int(depth_raw)
+    except (TypeError, ValueError):
+        depth = 1
+    show_full_name_raw = cfg.get("showMetricFullName") or {}
+    if isinstance(show_full_name_raw, dict):
+        show_metric_full_name = bool(show_full_name_raw.get("metricFullName", True))
+    else:
+        show_metric_full_name = bool(show_full_name_raw)
+    return PropertyListConfig(
+        properties=specs,
+        visual_theme=visual_theme,
+        depth=depth,
+        show_metric_full_name=show_metric_full_name,
+    )
+
+
+def _parse_resource_relationship_advanced_config(
+    cfg: dict,
+    dash_name: str,
+    local_id: str,
+    kind_lookup: dict[int, dict] | None = None,
+) -> ResourceRelationshipAdvancedConfig:
+    """Parse a ResourceRelationshipAdvanced widget config into a dataclass.
+
+    Wire format (source: vSphere Resource Management.json, VM Performance 2.0.json):
+    - ``config.tagFilter.value.kind[]``: list of ``resourceKind:id:N_::_``
+      synthetic refs identifying which resource kinds are eligible as root nodes.
+      Resolved via kind_lookup the same way as ResourceList.
+    - ``config.depth``: string ``"<up>,<down>"`` (e.g. ``"0,2"`` or ``"2,1"``).
+    - ``config.paginationNumber``: integer, default 5.
+    - ``config.selfProvider.selfProvider``: bool.
+
+    Quirks:
+    - ``depth`` is a STRING in the wire format (e.g. ``"0,2"``), not an integer.
+      This is unique among widget types.  The dataclass stores it as a string.
+    - The ``states[]`` array that some widgets carry at the top level is an
+      Ops UI persistence artefact; it is ignored on import and skipped here.
+    """
+    tag_filter = cfg.get("tagFilter") or {}
+    tv = tag_filter.get("value") or {}
+    kinds_raw = tv.get("kind") or []
+    resource_kinds: list[WidgetResourceKindRef] = []
+    seen_rk_keys: set[tuple[str, str]] = set()
+    for k in kinds_raw:
+        context = f"dashboard '{dash_name}': ResourceRelationshipAdvanced widget '{local_id}'"
+        ak, rk = _resolve_rk_id(str(k), kind_lookup or {}, context)
+        if ak is not None and (ak, rk) not in seen_rk_keys:
+            seen_rk_keys.add((ak, rk))
+            resource_kinds.append(WidgetResourceKindRef(adapter_kind=ak, resource_kind=rk))
+    depth_raw = cfg.get("depth", "2,1")
+    depth = str(depth_raw).strip() if depth_raw is not None else "2,1"
+    pagination_number_raw = cfg.get("paginationNumber", 5)
+    try:
+        pagination_number = int(pagination_number_raw)
+    except (TypeError, ValueError):
+        pagination_number = 5
+    self_provider_raw = cfg.get("selfProvider") or {}
+    if isinstance(self_provider_raw, dict):
+        self_provider = bool(self_provider_raw.get("selfProvider", False))
+    else:
+        self_provider = bool(self_provider_raw)
+    return ResourceRelationshipAdvancedConfig(
+        resource_kinds=resource_kinds,
+        depth=depth,
+        pagination_number=pagination_number,
+        self_provider=self_provider,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Dashboard JSON -> Dashboard dataclass (Phase 1: structural only)
 # ---------------------------------------------------------------------------
@@ -792,6 +944,7 @@ def _parse_heatmap_config(
 _SUPPORTED_WIDGET_TYPES = frozenset({
     "ResourceList", "View", "TextDisplay", "Scoreboard", "MetricChart",
     "HealthChart", "ParetoAnalysis", "AlertList", "ProblemAlertsList", "Heatmap",
+    "PropertyList", "ResourceRelationshipAdvanced",
 })
 
 
@@ -881,6 +1034,8 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
         alert_list_config = None
         problems_alerts_list_config = None
         heatmap_config = None
+        property_list_config = None
+        resource_relationship_advanced_config = None
         self_provider = bool((cfg.get("selfProvider") or {}).get("selfProvider", False))
         pin = None
 
@@ -1011,6 +1166,14 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
         elif wtype == "Heatmap":
             heatmap_config = _parse_heatmap_config(cfg, display_name, local_id, kind_lookup)
 
+        elif wtype == "PropertyList":
+            property_list_config = _parse_property_list_config(cfg, display_name, local_id, kind_lookup)
+
+        elif wtype == "ResourceRelationshipAdvanced":
+            resource_relationship_advanced_config = _parse_resource_relationship_advanced_config(
+                cfg, display_name, local_id, kind_lookup
+            )
+
         widget = Widget(
             local_id=local_id,
             type=wtype,
@@ -1028,6 +1191,8 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
             alert_list_config=alert_list_config,
             problems_alerts_list_config=problems_alerts_list_config,
             heatmap_config=heatmap_config,
+            property_list_config=property_list_config,
+            resource_relationship_advanced_config=resource_relationship_advanced_config,
             dashboard_name=display_name,
         )
         widgets.append(widget)

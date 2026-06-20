@@ -28,7 +28,7 @@ from .loader import (
     HealthChartConfig, ParetoAnalysisConfig,
     AlertListConfig, ProblemAlertsListConfig,
     HeatmapConfig, HeatmapTab, HeatmapColorThreshold,
-    PropertyListConfig,
+    PropertyListConfig, ResourceRelationshipAdvancedConfig,
 )
 
 
@@ -392,10 +392,20 @@ def _render_view_def_fragment(
     # localizationKey attributes on <Title> and <Description> match the
     # content.properties bundle keys: view.<uuid>.title and view.<uuid>.desc.
     # Reference: /tmp/vcf_auto/content/reports/VCF90/content.xml.
+    # Only emit localizationKey="desc" when the view has a non-empty description.
+    # An empty description has no content.properties entry (see
+    # _generate_view_content_properties in sdk_builder.py) so emitting the key
+    # causes a localization-key-mismatch validation error.  The rendered XML still
+    # always carries a <Description> element (required by the importer) — it just
+    # has no localizationKey attribute when the description is blank.
+    if view.description:
+        desc_elem = f'<Description localizationKey="desc">{escape(view.description)}</Description>'
+    else:
+        desc_elem = f'<Description>{escape(view.description)}</Description>'
     header = (
         f'<ViewDef id="{view.id}">'
         f'<Title localizationKey="title">{escape(view.name)}</Title>'
-        f'<Description localizationKey="desc">{escape(view.description)}</Description>'
+        + desc_elem +
         f'<SubjectType adapterKind="{escape(view.adapter_kind)}" resourceKind="{escape(view.resource_kind)}" type="descendant"/>'
         f'<SubjectType adapterKind="{escape(view.adapter_kind)}" resourceKind="{escape(view.resource_kind)}" type="self"/>'
         "<Usage>dashboard</Usage><Usage>report</Usage><Usage>details</Usage><Usage>content</Usage>"
@@ -643,7 +653,7 @@ def _resource_list_widget(w: Widget, kind_index: dict[tuple[str, str], int]) -> 
     }
 
 
-def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int],
+def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, str], int],
                   resource_index: dict[tuple[str, str], int]) -> dict:
     # A self-provider View widget enumerates its own subject set instead
     # of waiting for an incoming interaction. Ops requires the widget to
@@ -659,6 +669,32 @@ def _view_widget(w: Widget, view: ViewDef, kind_index: dict[tuple[str, str], int
     # for `resourceKindId` values. A dashboard that emits a wrong
     # prefix (e.g. `000000`) installs cleanly but the widget fails to
     # render at view time with no diagnostic.
+    # External view passthrough: when `view` is a raw UUID string (not a bundled
+    # ViewDef), the platform resolves it at install time.  Emit the UUID verbatim
+    # as viewDefinitionId; self-provider pinning is not applicable for external
+    # views (the platform owns the view's subject), so resource is set to None.
+    if isinstance(view, str):
+        return {
+            "collapsed": False,
+            "id": w.widget_id,
+            "gridsterCoords": w.coords,
+            "type": "View",
+            "title": w.title,
+            "config": {
+                "refreshInterval": 300,
+                "resource": None,
+                "traversalSpecId": None,
+                "refreshContent": {"refreshContent": False},
+                "isUpdatedView": True,
+                "chartViewItems": [],
+                "selectFirstRow": {"selectFirstRow": True},
+                "selfProvider": {"selfProvider": False},
+                "title": w.title,
+                "viewDefinitionId": view,
+            },
+            "height": 600,
+        }
+
     if w.self_provider and w.pin:
         # Resolve the pin to a container resource that will exist on the
         # target instance.  For leaf kinds (e.g. VMWARE/HostSystem) the
@@ -1328,17 +1364,76 @@ def _property_list_widget(
             "visualTheme": cfg.visual_theme,
             "depth": cfg.depth,
             "refreshInterval": 300,
-            "relationshipMode": 0,
-            "resInteractionMode": None,
+            "metric": metric_obj,
             "resource": [],
             "refreshContent": {"refreshContent": True},
-            "selfProvider": {"selfProvider": False},
-            "showMetricFullName": {"metricFullName": cfg.show_metric_full_name},
+            "relationshipMode": {"relationshipMode": 0},
             "customFilter": {
                 "filter": [], "excludedResources": None, "includedResources": None,
             },
+            "selfProvider": {"selfProvider": False},
             "title": w.title,
-            "metric": metric_obj,
+            "showMetricFullName": {"metricFullName": cfg.show_metric_full_name},
+            "resInteractionMode": None,
+        },
+        "height": 600,
+    }
+
+
+def _resource_relationship_advanced_widget(
+    w: Widget,
+    kind_index: dict[tuple[str, str], int],
+) -> dict:
+    """Render a ResourceRelationshipAdvanced (topology tree) widget.
+
+    Displays a relationship graph rooted at the selected resource.
+    The ``tagFilter`` shape mirrors ResourceList — ``tagFilter.value.kind[]``
+    holds ``resourceKind:id:N_::_`` synthetic refs from the kind_index table.
+    When ``resource_kinds`` is empty the filter lists are also empty (the
+    widget accepts any resource pushed via interaction).
+
+    ``depth`` is a ``"<up>,<down>"`` string (e.g. ``"0,2"`` or ``"2,1"``).
+
+    Wire format reference: references/vmbro_vcf_operations_vcommunity/
+    Management Pack/content/dashboards/vSphere Resource Management.json
+    and VM Performance 2.0.json.
+    """
+    cfg = w.resource_relationship_advanced_config
+    assert cfg is not None
+    kinds = [
+        f"resourceKind:id:{kind_index[(rk.adapter_kind, rk.resource_kind)]}_::_"
+        for rk in cfg.resource_kinds
+    ]
+    return {
+        "collapsed": False,
+        "id": w.widget_id,
+        "gridsterCoords": w.coords,
+        "type": "ResourceRelationshipAdvanced",
+        "title": w.title,
+        "config": {
+            "resourceId": None,
+            "refreshInterval": 300,
+            "traversalSpecId": "",
+            "refreshContent": {"refreshContent": False},
+            "resourceName": None,
+            "title": w.title,
+            "filterMode": "tagPicker",
+            "tagFilter": {
+                "path": [f"/source/kind/kind:{k}" for k in kinds],
+                "value": {
+                    "bus": [], "adapterKind": [], "kind": kinds,
+                    "exclaim": False, "healthRange": [], "maintenanceSchedule": [],
+                    "adapterInstance": [], "collector": [], "tier": [],
+                    "state": [], "tag": [], "day": [], "status": [],
+                },
+            },
+            "paginationNumber": cfg.pagination_number,
+            "depth": cfg.depth,
+            "customFilter": {
+                "filter": [], "excludedResources": None, "includedResources": None,
+            },
+            "selectFirstRow": {"selectFirstRow": True},
+            "selfProvider": {"selfProvider": cfg.self_provider},
         },
         "height": 600,
     }
@@ -1356,7 +1451,19 @@ def _build_dashboard_obj(
         if w.type == "ResourceList":
             widgets_json.append(_resource_list_widget(w, kind_index))
         elif w.type == "View":
-            widgets_json.append(_view_widget(w, views_by_name[w.view_name], kind_index, resource_index))
+            # Resolve to a bundled ViewDef when available; fall back to the raw
+            # UUID for external (platform/other-MP) views.  A bare name that
+            # isn't bundled cannot reach here — loader.validate() already rejects
+            # that case as an authoring error.
+            _view_ref: "ViewDef | str" = views_by_name.get(w.view_name, w.view_name)
+            if _view_ref is w.view_name and _view_ref not in views_by_name:
+                import sys as _sys
+                print(
+                    f"  INFO: dashboard {w.dashboard_name!r} widget {w.local_id!r}: "
+                    f"external view UUID {w.view_name!r} — emitted verbatim",
+                    file=_sys.stderr,
+                )
+            widgets_json.append(_view_widget(w, _view_ref, kind_index, resource_index))
         elif w.type == "TextDisplay":
             widgets_json.append(_text_display_widget(w))
         elif w.type == "Scoreboard":
@@ -1375,6 +1482,8 @@ def _build_dashboard_obj(
             widgets_json.append(_heatmap_widget(w, kind_index))
         elif w.type == "PropertyList":
             widgets_json.append(_property_list_widget(w, kind_index))
+        elif w.type == "ResourceRelationshipAdvanced":
+            widgets_json.append(_resource_relationship_advanced_widget(w, kind_index))
 
     widget_id_by_local = {w.local_id: w.widget_id for w in dashboard.widgets}
     interactions_json = [
@@ -1504,6 +1613,11 @@ def render_dashboards_bundle_json(
             elif w.type == "PropertyList" and w.property_list_config:
                 for spec in w.property_list_config.properties:
                     key = (spec.adapter_kind, spec.resource_kind)
+                    if key not in kind_index:
+                        kind_index[key] = len(kind_index)
+            elif w.type == "ResourceRelationshipAdvanced" and w.resource_relationship_advanced_config:
+                for rk in w.resource_relationship_advanced_config.resource_kinds:
+                    key = (rk.adapter_kind, rk.resource_kind)
                     if key not in kind_index:
                         kind_index[key] = len(kind_index)
     # Build resource index for self-provider pinned View and ProblemAlertsList

@@ -81,7 +81,26 @@ def _slug(name: str) -> str:
     return slug
 
 
-def _symptom_id(adapter_kind: str, name: str) -> str:
+def _symptom_id(adapter_kind: str, name: str, uuid: Optional[str] = None) -> str:
+    """Return the canonical SymptomDefinition id attribute value.
+
+    When ``uuid`` is supplied (i.e. the SymptomDef carries an ``id:`` field
+    from its source YAML), the id is ``SymptomDefinition-<uuid>`` — matching
+    the VCF Ops importer's corpus convention (original vmbro pack and every
+    built-in symptomdef use this form).
+
+    When ``uuid`` is absent (factory-authored symptoms that do not carry a
+    pre-existing UUID), fall back to the derived slug form
+    ``SymptomDefinition-<adapter>-<slug>`` so existing factory alerts and
+    tests continue to work without change.
+
+    The UUID form is required for pak content-import: the importer resolves
+    symptomdef XML by the declared ``id``; a slug-based id is unresolvable
+    and aborts the entire content/ tree (see
+    ``context/investigations/sdk_pak_content_import_gap.md``).
+    """
+    if uuid:
+        return f"SymptomDefinition-{uuid}"
     return f"SymptomDefinition-{adapter_kind}-{_slug(name)}"
 
 
@@ -91,6 +110,46 @@ def _alert_id(adapter_kind: str, name: str) -> str:
 
 def _rec_key(adapter_kind: str, name: str) -> str:
     return f"Recommendation-df-{adapter_kind}-{_slug(name)}"
+
+
+# ---------------------------------------------------------------------------
+# Operator translation: YAML API-style names -> XML symbol form
+# ---------------------------------------------------------------------------
+
+# The VCF Ops content-import XML format uses symbolic operator strings, NOT the
+# REST API enum names (NOT_EQ, GT, LT, etc.).  The importer rejects the API-style
+# names with "Invalid operator:<name>".
+#
+# Reference: both symptomdefs in
+#   references/vmbro_vcf_operations_vcommunity/Management Pack/content/symptomdefs/
+# use operator="!=" for NOT_EQ; alertdefs in the same pack use "&lt;" (decoded: "<")
+# for LT and "&gt;=" (decoded: ">=") for GT_EQ.  ElementTree serializes "<" and ">="
+# as "&lt;" / "&gt;=" automatically — we just supply the unescaped character.
+#
+# Mapping covers every operator the loader permits (STATIC_OPERATORS and
+# PROPERTY_OPERATORS in vcfops_symptoms/loader.py).  Any unmapped operator passes
+# through unchanged so future additions don't silently corrupt existing output.
+_XML_OPERATOR_MAP: dict[str, str] = {
+    "EQ": "==",
+    "NOT_EQ": "!=",
+    "GT": ">",
+    "GT_EQ": ">=",
+    "LT": "<",
+    "LT_EQ": "<=",
+    "CONTAINS": "contains",
+    "NOT_CONTAINS": "notContains",
+    "STARTS_WITH": "startsWith",
+    "NOT_STARTS_WITH": "notStartsWith",
+    "ENDS_WITH": "endsWith",
+    "NOT_ENDS_WITH": "notEndsWith",
+    "REGEX": "regex",
+    "NOT_REGEX": "notRegex",
+}
+
+
+def _xml_operator(op: str) -> str:
+    """Translate a YAML/API operator name to the XML symbol form the importer accepts."""
+    return _XML_OPERATOR_MAP.get(op, op)
 
 
 # ---------------------------------------------------------------------------
@@ -107,7 +166,7 @@ def _add_condition_element(parent: ET.Element, cond: dict) -> None:
 
     if ctype == "metric_static":
         attribs["key"] = key
-        attribs["operator"] = operator
+        attribs["operator"] = _xml_operator(operator)
         attribs["value"] = str(cond.get("value", ""))
         attribs["type"] = "metric"
 
@@ -119,7 +178,7 @@ def _add_condition_element(parent: ET.Element, cond: dict) -> None:
 
     elif ctype == "property":
         attribs["key"] = key
-        attribs["operator"] = operator
+        attribs["operator"] = _xml_operator(operator)
         attribs["value"] = str(cond.get("value", ""))
         attribs["type"] = "property"
 
@@ -147,7 +206,8 @@ def _render_symptom_definition(parent: ET.Element, sym, all_sym_names: set) -> N
     adapter_kind = sym.adapter_kind
     resource_kind = sym.resource_kind
     name = sym.name
-    sid = _symptom_id(adapter_kind, name)
+    sym_uuid = getattr(sym, "id", None)
+    sid = _symptom_id(adapter_kind, name, uuid=sym_uuid)
 
     attribs = {
         "adapterKind": adapter_kind,
@@ -223,11 +283,13 @@ def _render_alert_definition(
             # Find the adapter_kind for this symptom by matching name to the
             # loaded symptom objects; fall back to the alert's adapter_kind.
             sym_adapter = adapter_kind
+            sym_uuid = None
             for sym_obj in symptom_objs:
                 if sym_obj.name == sym_name:
                     sym_adapter = sym_obj.adapter_kind
+                    sym_uuid = getattr(sym_obj, "id", None)
                     break
-            ref = _symptom_id(sym_adapter, sym_name)
+            ref = _symptom_id(sym_adapter, sym_name, uuid=sym_uuid)
             ET.SubElement(state_elem, "SymptomSet", {
                 "aggregation": "any",
                 "applyOn": "self",

@@ -984,6 +984,8 @@ def _metric_spec_to_yaml(spec) -> dict:
             d["red_bound"] = spec.red_bound
     if spec.label:
         d["label"] = spec.label
+    if spec.is_string_metric:
+        d["is_string_metric"] = True
     return d
 
 
@@ -1210,6 +1212,38 @@ def _widget_to_yaml_dict(widget, view_name_map: dict) -> dict:
                 "review before re-install"
             )
             d["configs"] = []
+
+    elif w.type == "PropertyList":
+        cfg = w.property_list_config
+        if cfg:
+            d["property_list"] = {
+                "properties": [_metric_spec_to_yaml(s) for s in cfg.properties],
+                "visual_theme": cfg.visual_theme,
+                "depth": cfg.depth,
+                "show_metric_full_name": cfg.show_metric_full_name,
+            }
+        else:
+            _warn(f"widget '{w.local_id}' (PropertyList): no config; emitting empty property_list")
+            d["property_list"] = {"properties": []}
+
+    elif w.type == "ResourceRelationshipAdvanced":
+        cfg = w.resource_relationship_advanced_config
+        if cfg:
+            d["resource_relationship_advanced"] = {
+                "resource_kinds": [
+                    {"adapter_kind": rk.adapter_kind, "resource_kind": rk.resource_kind}
+                    for rk in cfg.resource_kinds
+                ],
+                "depth": cfg.depth,
+                "pagination_number": cfg.pagination_number,
+                "self_provider": cfg.self_provider,
+            }
+        else:
+            _warn(
+                f"widget '{w.local_id}' (ResourceRelationshipAdvanced): no config; "
+                "emitting empty resource_relationship_advanced"
+            )
+            d["resource_relationship_advanced"] = {"resource_kinds": [], "depth": "2,1"}
 
     else:
         # Unknown/unsupported widget type — best-effort passthrough

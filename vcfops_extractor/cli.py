@@ -117,6 +117,86 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     _add_dashboard_flags(dash_p)
 
+    # --- reverse-local -----------------------------------------------------
+    rl_p = sub.add_parser(
+        "reverse-local",
+        help="Reverse-port local MP source files (dashboard JSON + view XML) to factory YAML",
+        description=(
+            "Convert original MP dashboard JSON and view XML source files into\n"
+            "factory-shape YAML without touching a live VCF Ops instance.\n"
+            "\n"
+            "SM UUID->name resolution is driven by the ported SM YAML files\n"
+            "(--sm-dir), so @supermetric:\"<name>\" cross-references are emitted\n"
+            "rather than raw sm_<uuid> tokens.\n"
+            "\n"
+            "Unsupported widget types (PropertyList, ResourceRelationshipAdvanced)\n"
+            "emit WARN per dashboard and are skipped — results are still written\n"
+            "with the remaining supported widgets.\n"
+            "\n"
+            "After writing YAML, a structural round-trip diff is run:\n"
+            "  MATCH      — rendered JSON matches source JSON structure\n"
+            "  PARTIAL    — rendered differs (divergences listed)\n"
+            "  UNSUPPORTED — no supported widgets could be rendered\n"
+            "\n"
+            "Examples:\n"
+            "  python -m vcfops_extractor reverse-local \\\n"
+            "    --dashboard-json 'references/vmbro_vcf_operations_vcommunity/Management Pack/content/dashboards/Cluster Performance 2.0.json' \\\n"
+            "    --view-xml-dir 'references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports' \\\n"
+            "    --sm-dir content/sdk-adapters/vcommunity/supermetrics \\\n"
+            "    --output-views content/sdk-adapters/vcommunity/views \\\n"
+            "    --output-dashboards content/sdk-adapters/vcommunity/dashboards\n"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    rl_p.add_argument(
+        "--dashboard-json", metavar="PATH", required=True,
+        help=(
+            "Path to source dashboard JSON file.  May contain one or many "
+            "dashboards in the '{entries, dashboards[]}' content-zip shape, or "
+            "a single bare dashboard object."
+        ),
+    )
+    rl_p.add_argument(
+        "--view-xml-dir", metavar="DIR", required=True,
+        help=(
+            "Directory containing source view XML files.  Each file may contain "
+            "many <ViewDef> elements; all are scanned and merged into a single "
+            "UUID->ViewDef map."
+        ),
+    )
+    rl_p.add_argument(
+        "--sm-dir", metavar="DIR", required=True,
+        help=(
+            "Directory of ported SM YAML files used to build the UUID->name map "
+            "for rewriting sm_<uuid> view column attributes to "
+            "@supermetric:\"<name>\".  Point at the pak's supermetrics/ subdir."
+        ),
+    )
+    rl_p.add_argument(
+        "--output-views", metavar="DIR", required=True,
+        help="Directory where emitted view YAML files are written.",
+    )
+    rl_p.add_argument(
+        "--output-dashboards", metavar="DIR", required=True,
+        help="Directory where emitted dashboard YAML files are written.",
+    )
+    rl_p.add_argument(
+        "--name-path", metavar="FOLDER", default=None,
+        help=(
+            "Override the name_path (UI folder) in emitted dashboard YAML. "
+            "Pass '' to suppress the name_path field entirely. "
+            "Default: preserve the source JSON's namePath / folder prefix."
+        ),
+    )
+    rl_p.add_argument(
+        "--no-diff", action="store_true",
+        help="Skip the round-trip diff check (faster; use when views are incomplete).",
+    )
+    rl_p.add_argument(
+        "--dry-run", action="store_true",
+        help="Parse and plan without writing any files.",
+    )
+
     # --- list-dashboards ---------------------------------------------------
     list_p = sub.add_parser(
         "list-dashboards",
@@ -352,6 +432,23 @@ def cmd_extract_dashboard(args) -> int:
     )
 
 
+def cmd_reverse_local(args) -> int:
+    """Handler for: python -m vcfops_extractor reverse-local ..."""
+    from pathlib import Path
+    from .reverse_local import reverse_local_port
+
+    return reverse_local_port(
+        source_dashboard_json=Path(args.dashboard_json),
+        source_view_xml_dir=Path(args.view_xml_dir),
+        sm_yaml_dir=Path(args.sm_dir),
+        output_views_dir=Path(args.output_views),
+        output_dashboards_dir=Path(args.output_dashboards),
+        name_path_override=args.name_path,  # None means "preserve source"
+        dry_run=args.dry_run,
+        run_diff=not args.no_diff,
+    )
+
+
 def cmd_list_dashboards(args) -> int:
     """Handler for: python -m vcfops_extractor list-dashboards ..."""
     from .extractor import list_dashboards
@@ -376,6 +473,8 @@ def main() -> None:
 
     if args.subcommand == "list-dashboards":
         sys.exit(cmd_list_dashboards(args))
+    elif args.subcommand == "reverse-local":
+        sys.exit(cmd_reverse_local(args))
     elif args.subcommand == "extract":
         if args.extract_type == "dashboard":
             sys.exit(cmd_extract_dashboard(args))
