@@ -2,17 +2,25 @@
 
 Coverage:
   Parser:
-    - Happy path against the real seeded context/defects.md (DEF-001/002/003).
+    - Happy path against the real context/defects.md.  The real-corpus tests
+      assert *which* known DEF ids are present and what their properties are —
+      they do NOT hardcode the total entry count so that adding a new defect
+      to the registry does not break CI.  The current known entries are
+      DEF-001 (blocking/open/synology), DEF-002 (blocking/open/unifi),
+      DEF-003 (blocking/closed/synology), DEF-004 (blocking/open/vcommunity-os).
     - Malformed entries: bad severity, waived status, closed-without-evidence,
       duplicate id, missing required fields.
   Gate helpers:
     - gate_pak: affected pak (DEF-001 blocks synology), unaffected pak,
       closed defect (DEF-003 does NOT gate synology by itself).
     - gate_item: affected item and unaffected item.
-    - gate_all: exit 2 when any open blocking defect exists.
+    - gate_all: exit 2 when any open blocking defect exists; known open
+      blockers include DEF-001, DEF-002, DEF-004; DEF-003 is closed and
+      must not appear.
   CLI (defect-gate subcommand):
     - --pak <name>: exit 2 when blocked (synology), exit 0 when clean (compliance, vcommunity).
     - --pak unifi: exit 2 (DEF-002).
+    - --pak vcommunity-os: exit 2 (DEF-004).
     - --all: exit 2 when open blockers exist.
     - malformed registry: exit 1 with error.
   Release refusal:
@@ -59,21 +67,31 @@ def _write_registry(tmp_path: Path, content: str) -> Path:
 # ---------------------------------------------------------------------------
 
 class TestRealRegistry:
-    """Parse the actual context/defects.md seeded with DEF-001/002/003."""
+    """Parse the actual context/defects.md.
+
+    Invariant: assert specific DEF ids and their properties, not the total
+    count of registry entries.  That way adding a new defect filing does not
+    break CI.  The currently known entries are DEF-001..DEF-004; new entries
+    can be added without touching these tests.
+    """
 
     def test_registry_exists(self):
         assert REAL_REGISTRY.exists(), (
             f"context/defects.md not found at {REAL_REGISTRY}"
         )
 
-    def test_load_three_entries(self):
+    def test_load_known_entries(self):
+        """All four currently known DEF ids are present; registry has at least 4 entries."""
         from vcfops_packaging.defects import load_registry
         entries = load_registry(REAL_REGISTRY)
         ids = [e.id for e in entries]
         assert "DEF-001" in ids
         assert "DEF-002" in ids
         assert "DEF-003" in ids
-        assert len(entries) == 3, f"Expected 3 entries, got {len(ids)}: {ids}"
+        assert "DEF-004" in ids
+        assert len(entries) >= 4, (
+            f"Registry must have at least 4 entries; got {len(ids)}: {ids}"
+        )
 
     def test_def001_fields(self):
         from vcfops_packaging.defects import load_registry
@@ -101,6 +119,15 @@ class TestRealRegistry:
             "DEF-003 is closed and must have non-empty closing_evidence"
         )
         assert d3.affects == "synology"
+
+    def test_def004_fields(self):
+        from vcfops_packaging.defects import load_registry
+        entries = {e.id: e for e in load_registry(REAL_REGISTRY)}
+        d4 = entries["DEF-004"]
+        assert d4.severity == "blocking"
+        assert d4.status == "open"
+        assert d4.affects == "vcommunity-os"
+        assert d4.title  # non-empty
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +304,14 @@ class TestGatePak:
             f"vcommunity must be clean; blockers: {[b.id for b in blockers]}"
         )
 
+    def test_vcommunity_os_is_blocked(self):
+        from vcfops_packaging.defects import gate_pak
+        blockers = gate_pak("vcommunity-os", REAL_REGISTRY)
+        ids = [b.id for b in blockers]
+        assert "DEF-004" in ids, (
+            f"DEF-004 must block vcommunity-os; blocking entries: {ids}"
+        )
+
     def test_closed_def003_does_not_gate_synology(self):
         """DEF-003 is closed; it must not appear in the blocker list."""
         from vcfops_packaging.defects import gate_pak
@@ -347,18 +382,28 @@ class TestGateItem:
 
 
 class TestGateAll:
-    """gate_all() returns every open blocking defect."""
+    """gate_all() returns every open blocking defect.
 
-    def test_gate_all_real_registry_returns_two(self):
+    Invariant: assert which known DEF ids are / are not present, not the
+    total count.  Adding a new open blocking defect to the registry must not
+    break CI.  Currently known open blockers: DEF-001, DEF-002, DEF-004.
+    DEF-003 is closed and must never appear.
+    """
+
+    def test_gate_all_real_registry_open_blockers(self):
         from vcfops_packaging.defects import gate_all
         blockers = gate_all(REAL_REGISTRY)
         ids = [b.id for b in blockers]
-        # DEF-001 (synology) and DEF-002 (unifi) are open blocking;
-        # DEF-003 is closed.
-        assert "DEF-001" in ids
-        assert "DEF-002" in ids
-        assert "DEF-003" not in ids
-        assert len(blockers) == 2, f"Expected 2 open blockers; got: {ids}"
+        # Known open blockers — all must be present.
+        assert "DEF-001" in ids, f"DEF-001 must be an open blocker; got: {ids}"
+        assert "DEF-002" in ids, f"DEF-002 must be an open blocker; got: {ids}"
+        assert "DEF-004" in ids, f"DEF-004 must be an open blocker; got: {ids}"
+        # Closed defect must never appear as a blocker.
+        assert "DEF-003" not in ids, f"Closed DEF-003 must not appear in blockers; got: {ids}"
+        # Registry-wide count is not asserted — new filings must not break CI.
+        assert len(blockers) >= 3, (
+            f"At least 3 open blockers expected (DEF-001/002/004); got: {ids}"
+        )
 
     def test_gate_all_empty_registry(self, tmp_path):
         from vcfops_packaging.defects import gate_all
@@ -403,6 +448,12 @@ class TestCLIDefectGate:
     def test_pak_vcommunity_exits_0(self, capsys):
         rc = self._run(["defect-gate", "--pak", "vcommunity"])
         assert rc == 0, f"Expected exit 0 for vcommunity (no open blockers); got {rc}"
+
+    def test_pak_vcommunity_os_exits_2(self, capsys):
+        rc = self._run(["defect-gate", "--pak", "vcommunity-os"])
+        assert rc == 2, f"Expected exit 2 for vcommunity-os (DEF-004 open); got {rc}"
+        captured = capsys.readouterr()
+        assert "DEF-004" in captured.out
 
     def test_all_exits_2_when_open_blockers(self, capsys):
         rc = self._run(["defect-gate", "--all"])

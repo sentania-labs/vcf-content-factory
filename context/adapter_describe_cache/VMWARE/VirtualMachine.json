@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-05-16T03:38:01Z",
+  "fetched_at": "2026-06-17T14:21:19Z",
   "metrics": {
     "Guest OS Services|mkInComingConnectionCount": {
       "default_monitored": true,
@@ -98,10 +98,6 @@
       "default_monitored": true,
       "name": "Super Metrics|Share per vCPU"
     },
-    "Super Metric|sm_9ee466de-616a-41a9-b573-e8513e646ea3": {
-      "default_monitored": true,
-      "name": "Super Metrics|vSphere VM Performance"
-    },
     "Super Metric|sm_bc4ac034-0b17-4c82-a573-bb2c1400b09f": {
       "default_monitored": true,
       "name": "Super Metrics|[VCF Content Factory] VM - Target Memory GB (oversized)"
@@ -113,10 +109,6 @@
     "Super Metric|sm_f4184f6d-e711-4dc2-93ca-941754a135e7": {
       "default_monitored": true,
       "name": "Super Metrics|Share per GB of Memory"
-    },
-    "Super Metric|sm_fe9d28a7-e971-4ff5-aa62-a1c8e7b6c386": {
-      "default_monitored": true,
-      "name": "Super Metrics|[Custom] VM Snapshot Exceeds Allocated Space"
     },
     "System Attributes|active_alarms": {
       "default_monitored": false,
@@ -4491,5 +4483,5 @@
     }
   },
   "resource_kind": "VirtualMachine",
-  "source": "https://vcf-lab-operations.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/VirtualMachine/statkeys"
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/VirtualMachine/statkeys"
 }

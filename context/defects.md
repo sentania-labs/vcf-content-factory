@@ -103,3 +103,26 @@ reused. Field lines are `- **Field:** value` (parsed by
   `lessons/setrelationships-foreign-adapter-scoped.md`. Residual: 9.1
   unverified (re-open or re-prove at the first 9.1 target).
 - **Related:** DEF-002
+
+### DEF-004
+
+- **Title:** vcommunity-os: in-guest collection (services / event logs / CSV OS-info) returns empty — primary surface non-functional on devel
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** vcommunity-os
+- **First-seen:** build 11 / split fork (2026-06-23)
+- **Source:** `context/investigations/vcommunity-windows-services-empty-2026-06-23.md`
+- **Summary:** The guest-ops half of the vCommunity split — services,
+  in-guest CSV OS-info, and event logs collected via vCenter
+  GuestOperationsManager — returns empty on the hardened devel DCs, so
+  the pak's primary surface does not function. Privilege/logon was
+  ELIMINATED as the cause (domain-admin swap changed nothing); leading
+  theory is in-guest PowerShell execution-policy / ConstrainedLanguage on
+  the hardened hosts. The pak is intentionally parked (installed,
+  uninstanced) pending diagnosis. Gates any `v*` release of
+  `vcommunity-os` (RULE-012): the pak must not ship while its core
+  collection is non-functional. Closes when a devel collect against a
+  representative Windows guest returns non-empty service/event/OS-info
+  data and the root cause is codified.
+- **Related:** `designs/managementpacks/vcommunity-three-adapter-split.md`,
+  vcommunity-os pak README

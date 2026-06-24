@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-05-16T03:38:00Z",
+  "fetched_at": "2026-06-17T14:21:18Z",
   "metrics": {
     "Guest OS Services|mkInComingConnectionCount": {
       "default_monitored": true,
@@ -3486,5 +3486,5 @@
     }
   },
   "resource_kind": "Pod",
-  "source": "https://vcf-lab-operations.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/Pod/statkeys"
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/Pod/statkeys"
 }
