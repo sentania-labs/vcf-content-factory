@@ -96,6 +96,23 @@ it is not a published pak.
   moved to `vcommunity-os`; this entry retires once vsphere+os reach
   devel parity.
 
+### vcommunity-vsphere
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-vcommunity-vsphere
+- **Target:** `content/sdk-adapters/vcommunity-vsphere/`
+- **adapter_kind:** vcfcf_vcommunity_vsphere
+- **Owner:** sentania-labs. Public repo.
+- **Notes:** vSphere half of the vCommunity three-adapter split (Onur
+  Yuzseven / vmbro/VCF-Operations-vCommunity, CC) — the large-majority
+  surface: full vSphere/vCenter read (clusters, hosts, VMs) plus the
+  passive Tools-path `Guest OS|Operating System|*` keys, stitched onto
+  VMWARE Cluster/Host/VM via the vim25 vCenter session. Ships the central
+  SolutionConfig check lists (incl. `Critical Business Applications`).
+  Reviewer APPROVE 0 BLOCKING; migrated onto devel, GREEN. This is the
+  primary split artifact; the unified `vcommunity` entry retires once
+  vsphere+os reach devel parity.
+  Design: `designs/managementpacks/vcommunity-three-adapter-split.md`.
+
 ### vcommunity-os
 
 - **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-vcommunity-os
