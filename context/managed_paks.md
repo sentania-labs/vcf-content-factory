@@ -81,6 +81,37 @@ The hello-world adapter is intentionally absent — it seeds the template repo,
 it is not a published pak.
 -->
 
+### vcommunity
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-vcommunity
+- **Target:** `content/sdk-adapters/vcommunity/`
+- **adapter_kind:** vcfcf_vcommunity
+- **Owner:** sentania-labs. Public repo.
+- **Notes:** Native Java SDK rewrite of vmbro/VCF-Operations-vCommunity
+  (Onur Yuzseven, CC) — vSphere enrichment stitched onto VMWARE
+  Cluster/Host/VM under the `vCommunity|` namespace; central
+  SolutionConfig check lists; Windows guest-ops monitoring.
+  Design: `designs/managementpacks/vcommunity-sdk.md`.
+  **Being split** (`vcommunity-three-adapter-split.md`): guest-OS surface
+  moved to `vcommunity-os`; this entry retires once vsphere+os reach
+  devel parity.
+
+### vcommunity-os
+
+- **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-vcommunity-os
+- **Target:** `content/sdk-adapters/vcommunity-os/`
+- **adapter_kind:** vcfcf_vcommunity_os
+- **Owner:** sentania-labs. Public repo.
+- **Notes:** Guest-OS half of the vCommunity three-adapter split (Onur
+  Yuzseven / vmbro/VCF-Operations-vCommunity, CC). Windows guest-ops —
+  services, in-guest CSV OS-info, event logs — stitched onto VMWARE
+  VirtualMachine via its OWN vCenter session + GuestOperationsManager.
+  Ships the 2 Windows SolutionConfig check lists. **In-guest collection
+  is a KNOWN-OPEN, intentionally-shelved blocker** (execution-policy /
+  ConstrainedLanguage theory; privilege ELIMINATED) — see README +
+  `context/investigations/vcommunity-windows-services-empty-2026-06-23.md`.
+  Design: `designs/managementpacks/vcommunity-three-adapter-split.md`.
+
 ### compliance
 
 - **Remote:** https://github.com/sentania-labs/vcf-content-factory-sdk-compliance
