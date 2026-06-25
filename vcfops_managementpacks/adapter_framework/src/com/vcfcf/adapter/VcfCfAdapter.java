@@ -24,8 +24,6 @@ import com.integrien.alive.common.adapter3.config.ResourceConfig;
 import com.integrien.alive.common.adapter3.config.ResourceIdentifierConfig;
 import com.integrien.alive.common.util.CommonConstants.ResourceStatusEnum;
 
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -522,6 +520,27 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * (e.g., programmatic describe construction or a non-standard file location).
      * Normal adapters should rely on this default.
      *
+     * <h4>Localization</h4>
+     * <p>The SDK's {@link AdapterDescribe#make(String)} overload (file-path form)
+     * automatically loads the localized-names bundle from
+     * {@code <conf>/resources/resources.properties} (and locale variants) that
+     * sits next to {@code describe.xml}. This is the SDK's intended mechanism:
+     * {@code AdapterDescribe} internally computes
+     * {@code resourcesPath = describeFile.getParent() + File.separator + "resources"}
+     * and passes it to its two-arg {@code loadDescribe(Node, resourcesPath)} method,
+     * which calls {@link com.integrien.alive.common.adapter3.describe.MultiLanguageDescriptionsDescribeLoader#load(String)}.
+     *
+     * <p>The {@link AdapterDescribe#make(java.io.InputStream)} overload (stream form)
+     * calls the single-arg {@code loadDescribe(Node)} which delegates to the two-arg
+     * form with {@code null} as the resources path — so no localization bundle is
+     * loaded. That was the v1→v2 regression (build 43): switching to the stream
+     * overload silently dropped the resources bundle, leaving the platform with bare
+     * integer {@code nameKey}s and no localized strings at install time.
+     *
+     * <p>If {@code resources.properties} is absent the SDK logs a warning and
+     * continues — the returned {@link AdapterDescribe} carries no localized names,
+     * which is the same behavior as before the fix. No exception is thrown.
+     *
      * @return the populated {@link AdapterDescribe}; never {@code null}
      * @throws RuntimeException if the kind key is unresolvable, or if
      *         describe.xml is missing, unreadable, or cannot be parsed —
@@ -547,15 +566,20 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                     + "from your two-arg constructor. "
                     + "See lessons/controller-describe-bare-instantiation.md.");
         }
+        // Use make(String) — the file-path overload — so the SDK automatically
+        // loads <conf>/resources/resources.properties alongside describe.xml.
+        // make(InputStream) passes null for the resources path and skips the
+        // localization bundle entirely (v1→v2 regression, build 43).
         Path describeFile = getAdapterDescribeFile(kind, "describe.xml");
-        try (InputStream is = Files.newInputStream(describeFile)) {
-            return AdapterDescribe.make(is);
-        } catch (Exception e) {
+        AdapterDescribe describe = AdapterDescribe.make(describeFile.toString());
+        if (describe == null) {
             throw new RuntimeException(
                     "VcfCfAdapter.onDescribe: failed to load describe.xml from "
                     + describeFile + " (adapterKind=" + kind
-                    + ", source=" + kindSource + "): " + e.getMessage(), e);
+                    + ", source=" + kindSource + "): AdapterDescribe.make returned null "
+                    + "(file missing, unreadable, or XML invalid)");
         }
+        return describe;
     }
 
     /**

@@ -116,11 +116,11 @@ public AdapterDescribe onDescribe() {
     // 3. If both null: throw RuntimeException with actionable message
     String kind = this.adapterKindKey != null ? this.adapterKindKey : getAdapterKind();
     Path describeFile = getAdapterDescribeFile(kind, "describe.xml");
-    try (InputStream is = Files.newInputStream(describeFile)) {
-        return AdapterDescribe.make(is);
-    } catch (Exception e) {
-        throw new RuntimeException(/* path + source in message */);
-    }
+    // make(String) — file-path overload — loads <conf>/resources/resources.properties
+    // automatically. make(InputStream) skips the resources bundle (v1→v2 regression).
+    AdapterDescribe describe = AdapterDescribe.make(describeFile.toString());
+    if (describe == null) throw new RuntimeException(/* path + source in message */);
+    return describe;
 }
 ```
 
@@ -129,7 +129,28 @@ public AdapterDescribe onDescribe() {
 for describe files. `getAdaptersHome()` reads the `ADAPTER_HOME` system
 property, which the platform sets for both the collector and the controller.
 
-On any failure the method throws a `RuntimeException` with the resolved
+**Localization — IMPORTANT (v1→v2 regression, fixed by the `make(String)` overload swap):**
+`AdapterDescribe.make(String)` (file-path overload) internally computes
+`resourcesPath = describeFile.getParent() + File.separator + "resources"` and
+passes it to the two-arg `loadDescribe(Node, resourcesPath)` method, which calls
+`MultiLanguageDescriptionsDescribeLoader.load(resourcesPath)` to populate the
+`namesMap` from `conf/resources/resources.properties` (and locale variants).
+
+`AdapterDescribe.make(InputStream)` (stream overload) passes `null` for the
+resources path — no localization bundle is loaded. Using the stream overload was
+the v1→v2 regression: the platform registered the adapter kind / resource kinds /
+identifiers with bare integer `nameKey`s and no localized strings, causing the
+Accounts UI and `AdapterKindRetriever` to fall back to raw keys
+(`localized name not found for adapter kind … nameKey = 1`).
+
+**The fix:** always call `AdapterDescribe.make(describeFile.toString())`. If
+`resources.properties` is absent, the SDK logs an error (at ERROR level) and
+continues without throwing — the returned `AdapterDescribe` carries no localized
+names, identical to the old stream-only behavior. Absent resources is safe;
+wrong overload is not.
+
+On any failure `make(String)` returns `null` (it logs the error internally). The
+framework converts a `null` return to a `RuntimeException` with the resolved
 path and kind source in the message; it never silently returns `null`.
 
 **Override pattern (only when custom handling is required):**
@@ -137,17 +158,17 @@ path and kind source in the message; it never silently returns `null`.
 @Override
 public AdapterDescribe onDescribe() {
     Path describeFile = getAdapterDescribeFile(ADAPTER_KIND, "describe.xml");
-    try (InputStream is = Files.newInputStream(describeFile)) {
-        return AdapterDescribe.make(is);
-    } catch (Exception e) {
-        throw new RuntimeException(
-                "onDescribe: failed to load " + describeFile, e);
-    }
+    // MUST use make(String) — not make(InputStream) — to load resources.properties
+    AdapterDescribe describe = AdapterDescribe.make(describeFile.toString());
+    if (describe == null) throw new RuntimeException(
+            "onDescribe: failed to load " + describeFile);
+    return describe;
 }
 ```
 
 When overriding, always use the static `ADAPTER_KIND` constant directly —
-never call `getAdapterKind()` in the describe path.
+never call `getAdapterKind()` in the describe path. And always use
+`AdapterDescribe.make(String)`, never `make(InputStream)`.
 
 **Migration from build 44 breakage:** any adapter that was migrated to v2
 before this fix (calling the no-arg `super()` from its no-arg constructor)
