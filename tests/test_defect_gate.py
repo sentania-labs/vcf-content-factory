@@ -6,21 +6,24 @@ Coverage:
       assert *which* known DEF ids are present and what their properties are —
       they do NOT hardcode the total entry count so that adding a new defect
       to the registry does not break CI.  The current known entries are
-      DEF-001 (blocking/open/synology), DEF-002 (blocking/open/unifi),
+      DEF-001 (blocking/closed/synology), DEF-002 (blocking/open/unifi),
       DEF-003 (blocking/closed/synology), DEF-004 (blocking/open/vcommunity-os).
+      Current open blockers: DEF-002, DEF-004.  DEF-001 and DEF-003 are closed.
     - Malformed entries: bad severity, waived status, closed-without-evidence,
       duplicate id, missing required fields.
   Gate helpers:
-    - gate_pak: affected pak (DEF-001 blocks synology), unaffected pak,
-      closed defect (DEF-003 does NOT gate synology by itself).
+    - gate_pak: synology is now CLEAN (DEF-001 closed in v1.0.0.19); unifi
+      blocked by DEF-002; vcommunity-os blocked by DEF-004; closed DEF-003
+      does NOT gate synology.
     - gate_item: affected item and unaffected item.
     - gate_all: exit 2 when any open blocking defect exists; known open
-      blockers include DEF-001, DEF-002, DEF-004; DEF-003 is closed and
+      blockers are DEF-002, DEF-004; DEF-001 and DEF-003 are closed and
       must not appear.
   CLI (defect-gate subcommand):
-    - --pak <name>: exit 2 when blocked (synology), exit 0 when clean (compliance, vcommunity).
+    - --pak synology: exit 0 (DEF-001 closed — proves closed defects do not block).
     - --pak unifi: exit 2 (DEF-002).
     - --pak vcommunity-os: exit 2 (DEF-004).
+    - --pak compliance / vcommunity: exit 0 (clean).
     - --all: exit 2 when open blockers exist.
     - malformed registry: exit 1 with error.
   Release refusal:
@@ -28,13 +31,15 @@ Coverage:
   Publish gate:
     - _gate_publish raises PublishError naming defect ids.
     - _gate_publish passes when all defects are closed or tracked.
+    - _gate_publish passes for synology (DEF-001 closed) — real-corpus proof.
   Standalone entrypoint (defects.py __main__):
-    - --pak synology --registry context/defects.md → exit 2, names DEF-001.
+    - --pak synology --registry context/defects.md → exit 0 (DEF-001 closed).
     - --pak compliance → exit 0.
-    - --all → exit 2, lists DEF-001 + DEF-002.
+    - --all → exit 2, lists DEF-002 + DEF-004 (current open blockers).
     - missing registry path → exit 1.
     - bare-copy invocation (file copied outside the package, run with a clean
-      cwd) → identical result to the in-package run (proves curl-and-run).
+      cwd) — uses unifi (DEF-002 open) to prove the gate fires; synology proves
+      closed defects do not block (proves curl-and-run).
 """
 from __future__ import annotations
 
@@ -72,7 +77,10 @@ class TestRealRegistry:
     Invariant: assert specific DEF ids and their properties, not the total
     count of registry entries.  That way adding a new defect filing does not
     break CI.  The currently known entries are DEF-001..DEF-004; new entries
-    can be added without touching these tests.
+    can be added without touching these tests.  Current state: DEF-001 closed
+    (synology v1.0.0.19, 2026-06-26); DEF-002 open (unifi); DEF-003 closed
+    (synology setRelationships proof); DEF-004 open (vcommunity-os in-guest).
+    Update this comment when the live corpus changes.
     """
 
     def test_registry_exists(self):
@@ -94,11 +102,21 @@ class TestRealRegistry:
         )
 
     def test_def001_fields(self):
+        """DEF-001 was closed in synology v1.0.0.19 (2026-06-26).
+
+        Asserting closed + closing_evidence is the correct invariant: it
+        verifies the closed-entry schema (evidence required) rather than
+        the ephemeral open/closed state.  If DEF-001 is ever re-opened,
+        update this test to assert status == 'open' again.
+        """
         from vcfops_packaging.defects import load_registry
         entries = {e.id: e for e in load_registry(REAL_REGISTRY)}
         d1 = entries["DEF-001"]
         assert d1.severity == "blocking"
-        assert d1.status == "open"
+        assert d1.status == "closed"
+        assert d1.closing_evidence.strip(), (
+            "DEF-001 is closed and must carry non-empty Closing-evidence"
+        )
         assert d1.affects == "synology"
         assert d1.title  # non-empty
 
@@ -274,12 +292,19 @@ class TestMalformedEntries:
 class TestGatePak:
     """gate_pak() against the real registry."""
 
-    def test_synology_is_blocked(self):
+    def test_synology_is_clean_def001_closed(self):
+        """DEF-001 was closed in synology v1.0.0.19; synology must now be clean.
+
+        This is the real-corpus proof that a closed blocking defect does NOT
+        gate the pak.  DEF-003 (also synology, also closed) likewise must not
+        appear.  If a new open blocking defect is filed against synology, update
+        this test.
+        """
         from vcfops_packaging.defects import gate_pak
         blockers = gate_pak("synology", REAL_REGISTRY)
         ids = [b.id for b in blockers]
-        assert "DEF-001" in ids, (
-            f"DEF-001 must block synology; blocking entries: {ids}"
+        assert blockers == [], (
+            f"DEF-001 is closed; synology must have no open blockers; got: {ids}"
         )
 
     def test_unifi_is_blocked(self):
@@ -386,8 +411,9 @@ class TestGateAll:
 
     Invariant: assert which known DEF ids are / are not present, not the
     total count.  Adding a new open blocking defect to the registry must not
-    break CI.  Currently known open blockers: DEF-001, DEF-002, DEF-004.
-    DEF-003 is closed and must never appear.
+    break CI.  Current open blockers: DEF-002 (unifi), DEF-004 (vcommunity-os).
+    DEF-001 (synology, closed v1.0.0.19) and DEF-003 (synology, closed) must
+    never appear.  Update this comment and assertions when the live corpus changes.
     """
 
     def test_gate_all_real_registry_open_blockers(self):
@@ -395,14 +421,16 @@ class TestGateAll:
         blockers = gate_all(REAL_REGISTRY)
         ids = [b.id for b in blockers]
         # Known open blockers — all must be present.
-        assert "DEF-001" in ids, f"DEF-001 must be an open blocker; got: {ids}"
+        # NOTE: this set tracks the live corpus; update when a defect is
+        # opened or closed.  Current open blockers: DEF-002, DEF-004.
         assert "DEF-002" in ids, f"DEF-002 must be an open blocker; got: {ids}"
         assert "DEF-004" in ids, f"DEF-004 must be an open blocker; got: {ids}"
-        # Closed defect must never appear as a blocker.
+        # Closed defects must never appear as blockers.
+        assert "DEF-001" not in ids, f"Closed DEF-001 must not appear in blockers; got: {ids}"
         assert "DEF-003" not in ids, f"Closed DEF-003 must not appear in blockers; got: {ids}"
         # Registry-wide count is not asserted — new filings must not break CI.
-        assert len(blockers) >= 3, (
-            f"At least 3 open blockers expected (DEF-001/002/004); got: {ids}"
+        assert len(blockers) >= 2, (
+            f"At least 2 open blockers expected (DEF-002/004); got: {ids}"
         )
 
     def test_gate_all_empty_registry(self, tmp_path):
@@ -424,12 +452,19 @@ class TestCLIDefectGate:
         args = parser.parse_args(argv)
         return args.func(args)
 
-    def test_pak_synology_exits_2(self, capsys):
+    def test_pak_synology_exits_0_def001_closed(self, capsys):
+        """DEF-001 is closed; synology must now exit 0 (no open blockers).
+
+        This is the real-corpus proof that closing a blocking defect restores
+        clean status for the affected pak.  Exit-2 coverage for real open
+        blockers is provided by test_pak_unifi_exits_2 and
+        test_pak_vcommunity_os_exits_2.
+        """
         rc = self._run(["defect-gate", "--pak", "synology"])
-        assert rc == 2, f"Expected exit 2 for synology (DEF-001 open); got {rc}"
+        assert rc == 0, f"Expected exit 0 for synology (DEF-001 closed); got {rc}"
         captured = capsys.readouterr()
         out = captured.out
-        assert "DEF-001" in out
+        assert "synology" in out
 
     def test_pak_unifi_exits_2(self, capsys):
         rc = self._run(["defect-gate", "--pak", "unifi"])
@@ -456,12 +491,18 @@ class TestCLIDefectGate:
         assert "DEF-004" in captured.out
 
     def test_all_exits_2_when_open_blockers(self, capsys):
+        """--all must exit 2 and list the current open blockers.
+
+        Current open blockers: DEF-002 (unifi), DEF-004 (vcommunity-os).
+        DEF-001 (synology) was closed in v1.0.0.19 and must NOT appear.
+        NOTE: this set tracks the live corpus; update when a defect changes state.
+        """
         rc = self._run(["defect-gate", "--all"])
-        assert rc == 2, f"Expected exit 2 (DEF-001, DEF-002 open); got {rc}"
+        assert rc == 2, f"Expected exit 2 (DEF-002, DEF-004 open); got {rc}"
         captured = capsys.readouterr()
         out = captured.out
-        assert "DEF-001" in out
         assert "DEF-002" in out
+        assert "DEF-004" in out
 
     def test_malformed_registry_exits_1(self, tmp_path, monkeypatch, capsys):
         """A malformed registry must exit 1, not silently pass or exit 2."""
@@ -563,14 +604,19 @@ class TestCLIDefectGate:
 class TestReleaseRefusal:
     """cmd_release must refuse and name defect ids when an open blocking defect exists."""
 
-    def test_sdk_adapter_release_refused_for_synology(self, tmp_path, capsys):
-        """Attempting to release a synology sdk-adapter is refused by DEF-001."""
-        # Create a minimal fake adapter.yaml in a synology dir.
-        adapter_dir = tmp_path / "content" / "sdk-adapters" / "synology"
+    def test_sdk_adapter_release_refused_for_unifi(self, tmp_path, capsys):
+        """Attempting to release a unifi sdk-adapter is refused by DEF-002.
+
+        Retargeted from synology after DEF-001 was closed in v1.0.0.19.
+        DEF-002 (unifi LLDP stitch unproven on devel) is the current open
+        blocking defect that gates the unifi pak.
+        """
+        # Create a minimal fake adapter.yaml in a unifi dir.
+        adapter_dir = tmp_path / "content" / "sdk-adapters" / "unifi"
         adapter_dir.mkdir(parents=True)
         adapter_yaml = adapter_dir / "adapter.yaml"
         adapter_yaml.write_text(
-            "name: VCF Content Factory Synology Adapter\ndescription: Test.\n",
+            "name: VCF Content Factory UniFi Adapter\ndescription: Test.\n",
             encoding="utf-8",
         )
 
@@ -607,11 +653,11 @@ class TestReleaseRefusal:
             os.chdir(orig_cwd)
 
         # Exit 2 = refused by gate.
-        assert rc == 2, f"Expected exit 2 (synology blocked by DEF-001); got {rc}"
+        assert rc == 2, f"Expected exit 2 (unifi blocked by DEF-002); got {rc}"
         captured = capsys.readouterr()
         combined = captured.out + captured.err
-        assert "DEF-001" in combined, (
-            f"Refusal must name DEF-001; got output:\n{combined}"
+        assert "DEF-002" in combined, (
+            f"Refusal must name DEF-002; got output:\n{combined}"
         )
 
 
@@ -640,9 +686,15 @@ class TestGatePublish:
             manifest_path=source_path.parent / "release.yaml",
         )
 
-    def test_raises_for_synology_sdk_adapter(self, tmp_path):
-        """A synology sdk-adapter release triggers _gate_publish to raise."""
-        from vcfops_packaging.publish import _gate_publish, PublishError
+    def test_synology_passes_def001_closed(self, tmp_path):
+        """A synology sdk-adapter release now passes _gate_publish (DEF-001 closed).
+
+        DEF-001 (synology credential-leak) was closed in v1.0.0.19 on 2026-06-26.
+        This is the real-corpus proof that closing a blocking defect clears the
+        gate for the affected pak.  For a raise-on-open-blocker real-corpus test,
+        see test_raises_for_unifi_sdk_adapter (DEF-002 still open).
+        """
+        from vcfops_packaging.publish import _gate_publish
 
         # Build a fake adapter source path under content/sdk-adapters/synology/
         adapter_dir = tmp_path / "content" / "sdk-adapters" / "synology"
@@ -652,16 +704,8 @@ class TestGatePublish:
 
         release = self._make_mock_release(adapter_yaml, "synology-managementpack")
 
-        # factory_repo: defects.py will look for context/defects.md relative
-        # to the package, so we use REPO_ROOT as factory_repo.
-        with pytest.raises(PublishError) as exc_info:
-            _gate_publish([release], REPO_ROOT)
-
-        msg = str(exc_info.value)
-        assert "DEF-001" in msg, (
-            f"PublishError must name DEF-001; got:\n{msg}"
-        )
-        assert "RULE-012" in msg
+        # Must NOT raise — DEF-001 is closed.
+        _gate_publish([release], REPO_ROOT)
 
     def test_raises_for_unifi_sdk_adapter(self, tmp_path):
         """A unifi sdk-adapter release triggers _gate_publish to raise."""
@@ -866,15 +910,19 @@ class TestStandaloneEntrypoint:
 
     # --- In-package invocations -------------------------------------------------
 
-    def test_pak_synology_exits_2_names_def001(self):
-        """--pak synology with the real registry → exit 2, names DEF-001."""
+    def test_pak_synology_exits_0_def001_closed(self):
+        """--pak synology with the real registry → exit 0 (DEF-001 closed).
+
+        DEF-001 was closed in synology v1.0.0.19 (2026-06-26).  This proves
+        the standalone entrypoint correctly reads the closed status and does NOT
+        block the pak.  For exit-2 coverage see test_pak_unifi_exits_2.
+        """
         rc, out, err = self._run_script(
             self._DEFECTS_SCRIPT,
             ["--pak", "synology", "--registry", str(self._REAL_REGISTRY)],
         )
-        assert rc == 2, f"Expected exit 2 for synology; got {rc}\nstdout: {out}\nstderr: {err}"
-        assert "DEF-001" in out, f"Output must name DEF-001; got:\n{out}"
-        assert "RULE-012" in out, f"Output must name RULE-012; got:\n{out}"
+        assert rc == 0, f"Expected exit 0 for synology (DEF-001 closed); got {rc}\nstdout: {out}\nstderr: {err}"
+        assert "synology" in out, f"Output must mention pak name; got:\n{out}"
 
     def test_pak_compliance_exits_0(self):
         """--pak compliance → exit 0 (no open blockers)."""
@@ -885,15 +933,19 @@ class TestStandaloneEntrypoint:
         assert rc == 0, f"Expected exit 0 for compliance; got {rc}\nstdout: {out}\nstderr: {err}"
         assert "compliance" in out, f"Output must mention pak name; got:\n{out}"
 
-    def test_all_exits_2_lists_def001_and_def002(self):
-        """--all → exit 2, lists both DEF-001 and DEF-002."""
+    def test_all_exits_2_lists_def002_and_def004(self):
+        """--all → exit 2, lists DEF-002 and DEF-004 (current open blockers).
+
+        DEF-001 (synology) was closed in v1.0.0.19 — it must NOT appear.
+        NOTE: this set tracks the live corpus; update when a defect changes state.
+        """
         rc, out, err = self._run_script(
             self._DEFECTS_SCRIPT,
             ["--all", "--registry", str(self._REAL_REGISTRY)],
         )
         assert rc == 2, f"Expected exit 2 for --all; got {rc}\nstdout: {out}\nstderr: {err}"
-        assert "DEF-001" in out, f"Output must list DEF-001; got:\n{out}"
         assert "DEF-002" in out, f"Output must list DEF-002; got:\n{out}"
+        assert "DEF-004" in out, f"Output must list DEF-004; got:\n{out}"
 
     def test_missing_registry_exits_1(self, tmp_path):
         """--registry pointing at a nonexistent path → exit 1, clear error."""
@@ -922,7 +974,9 @@ class TestStandaloneEntrypoint:
         vcfops_packaging on sys.path (the cwd is the temp dir, not the factory
         repo), and there is no __init__.py or package structure present.
 
-        The exit code and DEF-001 mention must match the in-package run.
+        Uses unifi (DEF-002 open) so the gate fires.  Synology (DEF-001 closed)
+        is the real-corpus proof that closed defects do not block — covered by
+        test_pak_synology_exits_0_def001_closed above.
         """
         import shutil
 
@@ -935,17 +989,17 @@ class TestStandaloneEntrypoint:
         # Run from the temp dir; cwd has NO factory repo structure.
         rc, out, err = self._run_script(
             script_copy,
-            ["--pak", "synology", "--registry", str(registry_copy)],
+            ["--pak", "unifi", "--registry", str(registry_copy)],
             cwd=tmp_path,
         )
 
-        # Must match the in-package run: exit 2, names DEF-001 and RULE-012.
+        # Must match the in-package run: exit 2, names DEF-002 and RULE-012.
         assert rc == 2, (
-            f"Bare-copy run must exit 2 (synology blocked by DEF-001); "
+            f"Bare-copy run must exit 2 (unifi blocked by DEF-002); "
             f"got {rc}\nstdout: {out}\nstderr: {err}"
         )
-        assert "DEF-001" in out, (
-            f"Bare-copy run output must name DEF-001; got:\n{out}"
+        assert "DEF-002" in out, (
+            f"Bare-copy run output must name DEF-002; got:\n{out}"
         )
         assert "RULE-012" in out, (
             f"Bare-copy run output must name RULE-012; got:\n{out}"
