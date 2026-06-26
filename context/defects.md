@@ -48,10 +48,22 @@ reused. Field lines are `- **Field:** value` (parsed by
 
 - **Title:** Synology: plaintext password and `_sid` reachable from the on-disk adapter log via exception paths
 - **Severity:** blocking
-- **Status:** open
+- **Status:** closed
 - **Affects:** synology
 - **First-seen:** build 14 (2026-06-10)
 - **Source:** `context/reviews/synology-build-14.md` (WARNING-2)
+- **Closing-evidence:** synology build 19 (`1.0.0.19`), 2026-06-26.
+  `SynologyApiClient.callRaw` now wraps `http.get(path,…)` in try/catch and
+  rethrows a **standalone** `IOException` built from the `endpoint` label +
+  `redact(e.getMessage())` — no chained cause (so `getCause().getMessage()`
+  cannot resurface the URI), and `redact()` strips `_sid`/`account`/`passwd`.
+  The HTTP-status throw and the `_sid`-bearing logout WARN were redacted in
+  build 18; the login/collect **transport-exception** path (connect/SSL/timeout
+  — the plaintext-password carrier) was the last gap, now closed. Full-adapter
+  grep confirms no throw / log / Test-connection path emits a raw path or
+  secret. Statically provable (no live trigger owed). Certified by
+  `sdk-adapter-reviewer`: `context/reviews/synology-build-19.md` (APPROVE,
+  0 BLOCKING). Rule: `rules/no-secrets-on-disk.md`.
 - **Summary:** `SynologyApiClient.callRaw` throws `"HTTP <code> from <path>"`
   where the path carries `_sid=` on every call and `account=` /
   `passwd=<URL-encoded plaintext password>` on the login call; the
