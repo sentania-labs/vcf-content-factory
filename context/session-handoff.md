@@ -64,10 +64,11 @@ parked on a credential/log blocker only Scott can clear.
 
 ## Durable state / facts a fresh session must not re-derive
 
-- **Defect registry is LIVE on main.** DEF-001 (synology secret-in-path)
-  and DEF-002 (unifi foreign-HostSystem edge, unproven on devel) are
-  **open/blocking** → a synology or unifi `v\*` tag is refused until they
-  close. DEF-003 (synology edge) closed via build-16 9.0.2 proof.
+- **Defect registry is LIVE on main.** DEF-002 (unifi foreign-HostSystem
+  edge, unproven on devel) and DEF-004 (vcommunity-os in-guest collection)
+  are **open/blocking** → a unifi or vcommunity-os `v\*` tag is refused until
+  they close. DEF-001 (synology secret-in-path) closed via synology 1.0.0.19
+  (2026-06-26); DEF-003 (synology edge) closed via build-16 9.0.2 proof.
 - **Two new governance conventions** (from this session): (1) the committed
   OpenAPI spec **supersedes PDF prose** where they conflict (9.1 review);
   (2) **no volatile status in reference docs** — versions/phase/counts live

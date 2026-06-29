@@ -2,7 +2,7 @@
 
 **Found:** sdk-adapter-reviewer, vcommunity build 1 (the review's one
 substantive correctness WARNING). **Fixed:** vcommunity build 2, 2026-06-10.
-**Same defect in the compliance adapter's stitcher — fix queued.**
+**Same defect was in the compliance stitcher — fixed in compliance build 51 (2026-06-10), same scoping pattern.**
 
 ## What was wrong
 
@@ -70,8 +70,9 @@ not authoring discipline.
 - `context/reviews/vcommunity-build-1.md` — the WARNING and honest
   disposition (reference-parity argument for WARNING-not-BLOCKING)
 - `content/sdk-adapters/vcommunity/src/com/vcfcf/adapters/vcommunity/VCommunityStitcher.java` — fix site (build 2)
-- `content/sdk-adapters/compliance/` — `ComplianceStitcher` carries the same
-  defect; fix queued. Until then it is NOT the pattern to copy for stitching
-  identity.
+- `content/sdk-adapters/compliance/` — `ComplianceStitcher` **had** the same
+  defect; **fixed in build 51** (2026-06-10) via the same `setOwningVcUuid` +
+  `VMEntityVCID` scoping. It is now the proven reference idiom for stitching
+  identity (per `.claude/agents/sdk-adapter-reviewer.md`).
 - `.claude/skills/vcfops-sdk-adapter/SKILL.md` § *ARIA_OPS stitching identity
   — the MOID trap* — the standing identity rule this enforces
