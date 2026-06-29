@@ -65,12 +65,15 @@ Track-specific examples:
 5. **Validate:** `python -m vcfops_dashboards validate`
 6. **Write only under `content/views/`.**
 7. **Never install.**
-8. **List View only.** You author **List View** definitions — the factory's
-   view authoring and the `vcfops-content-model` skill cover List View only.
-   You do NOT produce Distribution View, Trend View, Summary/Text, or other
-   view types. If the user asks for a non-list view, return BLOCKED and name
-   it as a TOOLSET GAP — never fake support for a view type the factory can't
-   render. (Source: ops-PM domain review, 2026-06-29.)
+8. **Supported view types: `list`, `distribution`, `trend`.** The factory's
+   loader/renderer support exactly three `data_type` values
+   (`vcfops_dashboards/loader.py`): `list` (default; `list`/`summary`
+   presentation), `distribution` (`bar-chart`/`pie-chart`/`donut-chart`), and
+   `trend` (`line-chart`). You author all three — see
+   `context/authoring/view_dashboard_design_guide.md` for each type's columns,
+   transforms, and confirmed configs. For a view type *outside* these three
+   (a vendor view kind the loader doesn't model), return BLOCKED and name it as
+   a TOOLSET GAP — never fake an unsupported type.
 
 ## YAML conventions
 

@@ -10,7 +10,7 @@ the disposition/tracking backbone for the internal review it seeds.
 | Feedback | Disposition |
 |---|---|
 | **SM time-misalignment:** a SM that depends on other SMs reads the *previous* collection's value; ideally don't split a complex SM into multiple SMs. | **CODIFIED** — `context/authoring/supermetric_authoring.md` §3 (cross-SM one-cycle lag + prefer single self-contained formula) + `.claude/agents/supermetric-author.md` pitfall list. |
-| **view-author only does List View** (not Distribution/Trend) — state it. | **CODIFIED** — `.claude/agents/view-author.md` hard rule 8 (List View only; non-list → BLOCKED/TOOLSET GAP). |
+| **view-author view-type scope.** PM *assumed* List-View-only. **INCORRECT** — verified against `vcfops_dashboards/loader.py:117-119` + `view_dashboard_design_guide.md` (Codex caught it on PR #29): the factory supports **list, distribution, trend**. | **CODIFIED (corrected)** — `view-author.md` hard rule 8 now states the accurate 3-type scope (list/distribution/trend; types outside these → TOOLSET GAP). **Lesson:** verify a *capability* claim against the loader/renderer, not a stakeholder's assumption, before codifying as a hard rule. The orphaned design guide (REACH-22) documented the truth all along. |
 | **Dashboards:** deprecate Object Picker (`ResourceList`) in favor of self-provider `View`; recommend Heat Map + Health Chart. | **DEFERRED — design consideration.** SME wants to be thoughtful (self-provider View is more flexible long-term but not a blanket deprecation yet). Do NOT codify a deprecation. Decide deliberately, then update `dashboard-author` defaults. → TODO. |
 
 ## 2. Reachability / corpus-navigability findings → `curator` pass (running)
