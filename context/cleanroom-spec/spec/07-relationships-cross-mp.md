@@ -95,7 +95,7 @@ class Relationships implements Serializable {
 
 - **For Mode B (runtime-pushed) adapters**: generate `set...` calls per collection cycle for stable relationship sets (the platform diffs); use `add`/`remove` only for incremental updates between cycles.
 - **For mixed Mode A + Mode B**: declared relationships from `<TraversalSpec>` form the base; pushed `Relationships` augment with dynamic edges (the union).
-- **For cross-MP relationships**: pass a `ResourceKey(adapterKind="VMWARE", resourceKind="VirtualMachine", identifiers=...)` as parent or child. Platform de-dupes by identity — same recipe as cross-MP metric attachment.
+- **For cross-MP relationships**: pass a `ResourceKey(adapterKind="VMWARE", resourceKind="VirtualMachine", identifiers=...)` as parent or child — **either direction persists** (confirmed below). Platform de-dupes by identity — same recipe as cross-MP metric attachment. **The foreign `ResourceKey` MUST carry the resource's real _uniqueness-bearing_ identifier set:** propagate each identifier's actual `isPartOfUniqueness` flag (from `resourceKey.resourceIdentifiers[].identifierType.isPartOfUniqueness`); **never hardcode all identifiers to unique.** Over-marking a non-uniqueness identifier (e.g. a VMWARE `Datastore`'s `DataStrorePath`/`VMEntityName` — only `VMEntityObjectID`+`VMEntityVCID` are uniqueness-bearing) yields a key that cannot bind, and the edge is **silently dropped** (emitted every cycle, processed by analytics, never persisted, zero log trace). See `lessons/cross-mp-foreign-key-uniqueness-flags.md`.
 - **For labeled relationships** (e.g., your adapter models a graph with distinct edge types): use `Generic` variants with a label namespace specific to your adapter kind, to avoid collision with other adapters using similar labels.
 
 ### Practical guidance
@@ -112,6 +112,20 @@ class Relationships implements Serializable {
   `STORAGE_DEVICES::Mount::child`) only stitch when both adapters
   actually have matching ResourceKey identities — declaration is
   pre-registration of the shape, not the actual relationship.
+
+> **EMPIRICALLY CONFIRMED (VCF-CF, 2026-06-29, VCF Ops 9.0.2).** A runtime-pushed
+> cross-MP edge persists **in either direction** (foreign resource as parent OR
+> child) — direction is a non-constraint. The binding requirement is that the
+> foreign `ResourceKey` carry the resource's real *uniqueness-bearing* identifier
+> set (see the cross-MP relationships bullet above); a key that over-marks
+> non-uniqueness identifiers is silently dropped. A declarative `<ResourcePath>`
+> is **not** required for the runtime edge to persist (TraversalSpec is
+> UI-navigation only). This resolves the parent-or-child question and open
+> questions #3 (cardinality) and #7 (no per-MP security gate). Positive control:
+> first-party `VirtualAndPhysicalSANAdapter` (vSAN) holds VMWARE
+> `Datastore`/`HostSystem` as both parents and children on the same appliance.
+> Evidence: synology `1.0.0.19`, `context/reviews/synology-build-19.md`;
+> `lessons/cross-mp-foreign-key-uniqueness-flags.md`.
 
 ## Concepts
 
@@ -367,9 +381,9 @@ Datastore, NSX Tier-0/Tier-1, etc.)
 
 1. **Mechanism for synthesizing a `ResourceConfig` for a foreign ResourceKey** that this adapter doesn't own. Likely a SuiteAPI lookup or a static constructor — needs confirmation.
 2. **Behavior when the foreign resource isn't yet discovered** by its owning adapter — does the metric attach to an orphan record, queue, or get dropped?
-3. **Cross-MP relationship cardinality** — can a single child have parents in multiple adapter kinds simultaneously? Likely yes; needs evidence.
+3. **Cross-MP relationship cardinality** — can a single child have parents in multiple adapter kinds simultaneously? **RESOLVED (2026-06-29): yes** — a VMWARE Datastore retained its VMWARE host/VM parents and simultaneously gained a synology parent. See the *EMPIRICALLY CONFIRMED* note in §"Tier 2 generator guidance".
 4. **`filterType` values beyond `GENERIC_RELATION`**
 5. **`usedFor` values beyond `ALL`**
 6. **Whether ResourcePath can express more than two-level joins** (the observed paths are linear chains of `||` segments; n-way joins TBD).
-7. **Security model** — are there any per-MP capability gates on cross-MP push? Current evidence says no.
+7. **Security model** — are there any per-MP capability gates on cross-MP push? **RESOLVED (2026-06-29): no** — the only constraint on a cross-MP relationship write is identity correctness (the uniqueness-bearing identifier set); no per-MP capability gate observed.
 8. **HostSystem, Datastore, NSX kinds** — inventory their identifier shapes (next-priority foreign-attachment targets).

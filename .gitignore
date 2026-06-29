@@ -43,6 +43,10 @@ content/sdk-adapters/
 # Session scratchpads — workspace files, not part of the repo
 tmp/
 status.md
+# Agent build/extract scratch that leaks into the repo root (pak unzip, jar checks)
+scratch_*/
+scratchpad/
+.review-passed
 
 # Memory layer — sessions are per-user and don't travel
 memory/sessions/
