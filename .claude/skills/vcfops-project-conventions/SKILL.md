@@ -127,8 +127,8 @@ Use names in YAML, never raw UUIDs:
 ## Source of truth
 
 This repo's `docs/` directory: DSL references, OpenAPI specs,
-extracted markdown. Plus existing YAML under `supermetrics/`,
-`views/`, `dashboards/`, `customgroups/`, `symptoms/`, `alerts/`,
-`reports/`.
+extracted markdown. Plus existing YAML under `content/supermetrics/`,
+`content/views/`, `content/dashboards/`, `content/customgroups/`,
+`content/symptoms/`, `content/alerts/`, `content/reports/`.
 
 Do NOT invent functions, operators, metric keys, or API endpoints.

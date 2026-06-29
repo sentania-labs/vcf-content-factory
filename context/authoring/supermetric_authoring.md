@@ -19,7 +19,7 @@ in a cluster"), do not over-clarify — proceed and show the result.
 
 ## 2. Author the YAML
 
-Place under `supermetrics/<short_snake_case>.yaml`:
+Place under `content/supermetrics/<short_snake_case>.yaml`:
 
 ```yaml
 id: <uuid4>                          # set on first validate, never touched again
@@ -154,7 +154,7 @@ metric to `ClusterComputeResource`). When in doubt, ask.
 - **Aliasing**: `${...} as alias` lets you reuse a resource entry.
   Alias is case-insensitive, cannot start with a digit, cannot use
   `()[]+-*/%|&!=<>,.?:$`, and each name can be used at most once.
-  See `supermetrics/datastore_vm_iops_ratio.yaml`.
+  See `content/supermetrics/datastore_vm_iops_ratio.yaml`.
 - **Ternary**: `cond ? a : b`, e.g.
   `${this, metric=cpu|demandmhz} as a != 0 ? 1/a : -1`.
 
@@ -167,7 +167,7 @@ yourself before proposing to install it.
 ## 4. Validate locally
 
 ```bash
-python -m vcfops_supermetrics validate supermetrics/<file>.yaml
+python -m vcfops_supermetrics validate content/supermetrics/<file>.yaml
 ```
 
 Fix any error and re-run until clean. Do not edit the loader to make

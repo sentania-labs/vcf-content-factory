@@ -20,10 +20,12 @@ that's the adapter author's job, not yours.) See lesson
 
 - **vcfops-content-model** — view structure, cross-references.
 - **vcfops-api** — wire formats (view XML in `context/wire-formats/wire_formats.md`,
-  `context/view_column_wire_format.md`).
+  `context/wire-formats/view_column_wire_format.md`).
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:
+- `context/authoring/view_dashboard_design_guide.md` (list/distribution/trend
+  view types, the column transform enum, confirmed widget configs)
 - `context/wire-formats/wire_formats.md` §view definition XML
 - existing `content/views/*.yaml` (idiom)
 - relevant `supermetrics/*.yaml` (for column references)

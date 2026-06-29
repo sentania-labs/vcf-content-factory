@@ -27,10 +27,12 @@ Ignore them. Always target `content/dashboards/`. See lesson
 - **vcfops-content-model** — dashboard structure, widget types,
   interaction wiring.
 - **vcfops-api** — wire formats (`context/wire-formats/wire_formats.md`
-  §dashboard JSON, `context/chart_widget_formats.md`).
+  §dashboard JSON).
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:
+- `context/authoring/view_dashboard_design_guide.md` (list/distribution/trend
+  view types, the column transform enum, confirmed widget configs)
 - existing `content/dashboards/*.yaml` (idiom)
 - referenced `content/views/*.yaml` (confirm existence)
 
@@ -93,7 +95,8 @@ Track-specific examples:
 - **AlertList** — live alert table filtered by resource
 - **ProblemAlertsList** — top-N active alerts by criticality
 
-Read existing `content/dashboards/*.yaml` and `context/chart_widget_formats.md`
+Read existing `content/dashboards/*.yaml` and
+`context/authoring/view_dashboard_design_guide.md`
 for YAML examples of each type.
 
 ## Interaction wiring

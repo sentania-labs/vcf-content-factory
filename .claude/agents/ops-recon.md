@@ -36,8 +36,8 @@ Also read:
 2. **Existing instance content** — `/api/supermetrics`,
    `/api/resources/groups`, `/api/symptomdefinitions`,
    `/api/alertdefinitions`, `/api/reportdefinitions`.
-3. **Existing repo YAML** — unsynced content in `supermetrics/`,
-   `views/`, `dashboards/`, etc.
+3. **Existing repo YAML** — unsynced content in `content/supermetrics/`,
+   `content/views/`, `content/dashboards/`, etc.
 4. **Allowlisted reference sources** — grep local clones under
    `references/` per `context/reference_sources.md`.
 

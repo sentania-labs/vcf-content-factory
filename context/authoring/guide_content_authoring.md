@@ -181,5 +181,5 @@ exists for the pak runtime event format.
 Run `pak-compare` against the closest MPB reference pak after every
 build. Zero BLOCKINGs = safe to install. The tool checks manifest,
 describe.xml, export.json, and template.json structure against a
-reference. See `context/mpb_pak_structural_reference.md` for the
+reference. See `context/mpb/mpb_pak_structural_reference.md` for the
 reference inventory.
