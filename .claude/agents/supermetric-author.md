@@ -15,7 +15,8 @@ Read them if you need to refresh on any topic:
 
 - **vcfops-supermetric-dsl** — the formula DSL, functions,
   operators, where clauses, and critical pitfalls (string &&
-  silent failure, instanced metrics, powerState).
+  silent failure, instanced metrics, powerState, cross-SM
+  one-cycle lag — see `context/authoring/supermetric_authoring.md` §3).
 - **vcfops-content-model** — how SMs relate to views/dashboards,
   UUID contract, cross-reference syntax.
 - **vcfops-api** — authentication, import/export, enable path.

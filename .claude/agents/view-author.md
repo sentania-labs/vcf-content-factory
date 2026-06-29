@@ -63,6 +63,12 @@ Track-specific examples:
 5. **Validate:** `python -m vcfops_dashboards validate`
 6. **Write only under `content/views/`.**
 7. **Never install.**
+8. **List View only.** You author **List View** definitions — the factory's
+   view authoring and the `vcfops-content-model` skill cover List View only.
+   You do NOT produce Distribution View, Trend View, Summary/Text, or other
+   view types. If the user asks for a non-list view, return BLOCKED and name
+   it as a TOOLSET GAP — never fake support for a view type the factory can't
+   render. (Source: ops-PM domain review, 2026-06-29.)
 
 ## YAML conventions
 

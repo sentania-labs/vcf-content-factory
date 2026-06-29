@@ -122,6 +122,20 @@ metric to `ClusterComputeResource`). When in doubt, ask.
   and enabled in the same policy. See `vks_vmservice_vcpu.yaml`,
   `vks_cp_vcpu.yaml` for working examples of this pattern.
 
+  **Cross-SM time-misalignment (one-cycle lag).** A super metric that
+  references another super metric (`${this, metric=Super Metric|sm_<uuid>}`)
+  reads that upstream SM's value from the **previous collection cycle**, not
+  the current one — the platform does not guarantee the upstream SM is
+  recomputed before the dependent SM within the same cycle. A chain of
+  dependent SMs is therefore **time-skewed by one collection per hop**, and the
+  skew is invisible: it imports, validates, and produces plausible-but-lagged
+  values. **Prefer a single self-contained formula** over splitting one logical
+  metric into a chain of dependent SMs when the inputs must be time-aligned.
+  Use the cross-SM subtraction pattern above only when one formula genuinely
+  cannot express the result (e.g. two mutually-exclusive `where` filters), and
+  treat the one-cycle lag as a known, accepted trade-off. (Source: ops-PM
+  domain review, 2026-06-29.)
+
   **Also: `summary|runtime|powerState` is a string property**
   (`"Powered On"`), not a numeric metric. Do not use it in
   `where=(${metric=...}==1)`. Use `sys|poweredOn` (numeric,
