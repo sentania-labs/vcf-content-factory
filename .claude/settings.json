@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 scripts/validate-content.py",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/validate-content.py\"",
             "timeout": 30000
           }
         ]

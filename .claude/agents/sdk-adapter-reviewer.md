@@ -146,12 +146,21 @@ its authority.
    parses only the canonical schema, never raw vendor formats. Positional
    parsing is BLOCKING (a reordered source silently scores garbage).
 
-5. **Stitching identity — the MOID trap** (skill § *ARIA_OPS stitching
-   identity*; `lessons/foreign-resource-property-push.md`,
-   `lessons/synology-dsm-client-side-joins.md`). Foreign-resource joins use
-   a stable key (`instanceUuid` + MOID, or FQDN) — **never bare MOID**.
-   Getting this wrong is silent data corruption onto the wrong host. →
-   always BLOCKING.
+5. **Stitching identity — the MOID trap & the uniqueness-flag trap** (skill §
+   *ARIA_OPS stitching identity*; `lessons/foreign-resource-property-push.md`,
+   `lessons/synology-dsm-client-side-joins.md`,
+   `lessons/cross-mp-foreign-key-uniqueness-flags.md`). Foreign-resource joins
+   use a stable key (`instanceUuid` + MOID, or FQDN) — **never bare MOID**.
+   Getting this wrong is silent data corruption onto the wrong host. **And any
+   foreign `ResourceKey` built for a cross-MP relationship or attachment must
+   carry the foreign resource's real _uniqueness-bearing_ identifier set —
+   propagate each identifier's actual `isPartOfUniqueness` flag (from the Suite
+   API `resourceIdentifiers[].identifierType.isPartOfUniqueness`), never hardcode
+   all-`true`.** An over-marked key (extra non-uniqueness identifiers flagged
+   unique) cannot bind: the edge is emitted every cycle yet silently never
+   persists, zero log trace (synology .18–.21 → fixed 1.0.0.19). Flag any
+   foreign-key construction that hardcodes the uniqueness flag instead of reading
+   it from the source. → always BLOCKING.
 
 6. **Logging quality.** Leveled appropriately (skips / null-reads at debug,
    real failures at warn/error *with resource context*); no log spam inside
