@@ -937,16 +937,30 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     // -----------------------------------------------------------------------
 
     /**
-     * Build an {@link javax.net.ssl.SSLContext} backed by the platform's trust
-     * store via {@link AdapterBase#getSocketFactory()}.
+     * Build an {@link javax.net.ssl.SSLContext} backed by the platform's
+     * {@link com.integrien.alive.common.adapter3.CustomTrustManager} (the TOFU trust manager,
+     * accessed via {@link AdapterBase#getAdapterTrustManager()}).
      *
      * <p>This is the <strong>required</strong> way to obtain SSL context for
      * {@link com.vcfcf.adapter.http.HttpClientBuilder}. It ensures the platform's
      * certificate management (user-trusted certs, renewal URLs) is honoured.
      * The cert certification item forbids using {@link #insecureSslContext()} as
-     * the default path.
+     * the default path for target-system connections.
      *
-     * @return a platform-managed {@link javax.net.ssl.SSLContext}
+     * <p><strong>TOFU constraint:</strong> {@code CustomTrustManager} throws
+     * {@code CustomCertificateException} on first contact with any cert not already
+     * approved in the platform's trust store, then fires a side-effect notification.
+     * The platform's {@code URLConnection}/{@code getSocketFactory()} path intercepts
+     * that exception and retries after cert registration. {@code java.net.http.HttpClient}
+     * does not — so this context must only be used with {@code HttpClientBuilder}, never
+     * raw with {@code java.net.http.HttpClient}. Also, do <strong>not</strong> use this
+     * for the loopback Suite API transport — use {@link #openPlatformConnection(String)}
+     * instead, which uses {@link AdapterBase#getSocketFactory()} (the platform
+     * {@code CustomSSLSocketFactory}, which carries the TOFU-survival intercept).
+     *
+     * @return an {@link javax.net.ssl.SSLContext} built from {@code getAdapterTrustManager()}
+     *         and {@code getKeyManagers()} — suitable for use with {@code HttpClientBuilder}
+     *         on target-system endpoints where the admin has already approved the cert
      * @throws RuntimeException if context construction fails
      */
     public javax.net.ssl.SSLContext getPlatformSslContext() {
@@ -963,11 +977,93 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
+     * Open an HTTPS connection to {@code url} wired with the platform's
+     * {@code CustomSSLSocketFactory} and a peer-gated hostname verifier —
+     * the universal Suite API transport for both loopback and remote endpoints.
+     *
+     * <p><strong>TLS halves and why each was chosen:</strong>
+     * <ul>
+     *   <li><strong>Trust (CA) half — {@code getSocketFactory()}:</strong> The platform
+     *       {@code CustomSSLSocketFactory} carries the TOFU-survival intercept: when
+     *       {@code CustomTrustManager.checkServerTrusted()} throws on first contact with
+     *       an unknown cert (e.g. an operator-replaced org-CA cert), the socket factory's
+     *       intercept registers the cert and retries the handshake. This is the path the
+     *       OG {@code UnlicensedAdapter}/{@code SuiteAPIClient} used. Do NOT use
+     *       {@link #getPlatformSslContext()} here — that builds an {@code SSLContext} from
+     *       {@code getAdapterTrustManager()} (= {@code CustomTrustManager}) wrapped in a
+     *       vanilla JSSE factory that has no intercept; the exception propagates as fatal
+     *       {@code SSLHandshakeException/PKIX} (confirmed devel+prod, build 45, 2026-06-10;
+     *       see {@code lessons/suite-api-stitch-ssl-tofu-vs-java-http.md}).</li>
+     *   <li><strong>Hostname half — peer-gated:</strong> The method resolves the URL host
+     *       via {@code InetAddress.getByName()} and checks
+     *       {@code InetAddress.isLoopbackAddress()}.
+     *       <ul>
+     *         <li>Loopback peer ({@code 127.0.0.0/8} or {@code ::1}) → installs an all-true
+     *             hostname verifier. Safe: only traffic to the local node is accepted.
+     *             Avoids dependency on whether the operator cert has a {@code localhost} SAN
+     *             (confirmed absent on org-CA-signed prod certs; see
+     *             {@code specs/20-suiteapi-client-behavioral-contract.md} §5). Matches the
+     *             SDK-injected {@code SuiteAPIClient} Noop-class loopback hostname posture.</li>
+     *         <li>Non-loopback peer → no override; JDK default strict hostname check
+     *             applies. The remote Suite API node is expected to carry a cert whose SAN
+     *             matches the configured FQDN.</li>
+     *         <li>Fail closed: if {@code getByName} throws (unresolvable host), the
+     *             hostname verifier is not overridden and JDK strict verification applies.</li>
+     *       </ul>
+     *   </li>
+     * </ul>
+     *
+     * <p>This is the public equivalent of the package-private
+     * {@code AdapterBase.getConnection(url, getVerifier())} — which callers in other
+     * packages cannot reach — using the two public accessors that replicate both halves.
+     *
+     * <p>For target-system connections (vCenter, NAS appliances, etc.) use
+     * {@link com.vcfcf.adapter.http.HttpClientBuilder#platformSsl(VcfCfAdapter)} instead.
+     *
+     * @param url the full HTTPS URL to open (must use the {@code https} scheme;
+     *            a non-https URL is rejected with an {@link java.io.IOException})
+     * @return an {@link javax.net.ssl.HttpsURLConnection} configured with the platform
+     *         socket factory and a peer-gated hostname verifier
+     * @throws java.io.IOException if the URL scheme is not https, or if the connection
+     *         cannot be opened
+     */
+    public java.net.URLConnection openPlatformConnection(String url)
+            throws java.io.IOException {
+        java.net.URL u = new java.net.URL(url);
+        java.net.URLConnection conn = u.openConnection();
+        if (!(conn instanceof javax.net.ssl.HttpsURLConnection)) {
+            throw new java.io.IOException(
+                    "VcfCfAdapter.openPlatformConnection: expected an https URL but got "
+                    + u.getProtocol() + " for " + url
+                    + " — only the https Suite API endpoint is supported");
+        }
+        javax.net.ssl.HttpsURLConnection https = (javax.net.ssl.HttpsURLConnection) conn;
+        // Trust half: platform CustomSSLSocketFactory carries the TOFU-survival intercept.
+        // Do NOT use getPlatformSslContext() here — its vanilla JSSE factory omits the intercept.
+        https.setSSLSocketFactory(getSocketFactory());
+        // Hostname half: resolve peer; loopback → all-true; non-loopback → JDK strict (no override).
+        // Fail closed: if getByName throws, leave the JDK default strict verifier in place.
+        try {
+            java.net.InetAddress peer = java.net.InetAddress.getByName(u.getHost());
+            if (peer.isLoopbackAddress()) {
+                https.setHostnameVerifier((h, s) -> true);
+            }
+            // else: do not override — JDK default strict hostname verification applies.
+        } catch (java.net.UnknownHostException ignored) {
+            // Unresolvable host: fail closed — strict JDK hostname verification applies.
+        }
+        return https;
+    }
+
+    /**
      * Build an insecure (trust-all) {@link javax.net.ssl.SSLContext}.
      *
      * <p><strong>Explicit, documented opt-out.</strong> Use ONLY in lab / dev
      * environments with self-signed certificates. Do not use as the default path.
      * In production adapters use {@link #getPlatformSslContext()} instead.
+     * Do NOT use this for the loopback Suite API transport — use
+     * {@link #openPlatformConnection(String)} instead, which also handles the
+     * hostname-verifier gap that {@code java.net.http.HttpClient} cannot.
      *
      * @return an SSLContext that trusts all certificates without validation
      * @throws RuntimeException if context construction fails
