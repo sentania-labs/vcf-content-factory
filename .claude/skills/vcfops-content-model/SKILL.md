@@ -46,7 +46,7 @@ Key facts:
 - Rules use AND within a single rule, OR across multiple rules.
 - Each rule selects one `(resourceKind, adapterKind)` pair.
 - `autoResolveMembership: true` for dynamic evaluation.
-- For rule grammar details, read `references/content-relationships.md`.
+- For rule grammar details, read `context/wire-formats/customgroup_relationship_grammar.md`.
 
 ### List views
 
@@ -143,7 +143,7 @@ For name-owned types, renaming creates a new object on sync.
 ## Cross-reference syntax
 
 For detailed syntax and resolution rules, read
-`references/content-relationships.md`.
+`context/authoring/uuids_and_cross_references.md`.
 
 Quick reference:
 
@@ -171,6 +171,6 @@ require policy enablement.
 
 ## Reference files
 
-- `references/content-relationships.md` — Full cross-reference
+- `context/authoring/uuids_and_cross_references.md` — Full cross-reference
   syntax, resolution rules, and dependency ordering for all
   content types.

@@ -20,10 +20,12 @@ that's the adapter author's job, not yours.) See lesson
 
 - **vcfops-content-model** — view structure, cross-references.
 - **vcfops-api** — wire formats (view XML in `context/wire-formats/wire_formats.md`,
-  `context/view_column_wire_format.md`).
+  `context/wire-formats/view_column_wire_format.md`).
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:
+- `context/authoring/view_dashboard_design_guide.md` (list/distribution/trend
+  view types, the column transform enum, confirmed widget configs)
 - `context/wire-formats/wire_formats.md` §view definition XML
 - existing `content/views/*.yaml` (idiom)
 - relevant `supermetrics/*.yaml` (for column references)
@@ -63,6 +65,15 @@ Track-specific examples:
 5. **Validate:** `python -m vcfops_dashboards validate`
 6. **Write only under `content/views/`.**
 7. **Never install.**
+8. **Supported view types: `list`, `distribution`, `trend`.** The factory's
+   loader/renderer support exactly three `data_type` values
+   (`vcfops_dashboards/loader.py`): `list` (default; `list`/`summary`
+   presentation), `distribution` (`bar-chart`/`pie-chart`/`donut-chart`), and
+   `trend` (`line-chart`). You author all three — see
+   `context/authoring/view_dashboard_design_guide.md` for each type's columns,
+   transforms, and confirmed configs. For a view type *outside* these three
+   (a vendor view kind the loader doesn't model), return BLOCKED and name it as
+   a TOOLSET GAP — never fake an unsupported type.
 
 ## YAML conventions
 

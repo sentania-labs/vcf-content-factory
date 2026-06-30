@@ -143,3 +143,4 @@ debugging a specific issue; not required reading.
 |---|---|
 | `reference_sources.md` | Allowlisted external reference repos |
 | `reference_docs.md` | Reference docs inventory + PDF extraction |
+| `managed_paks.md` | SDK pak registry — per-repo Tier 2 adapters cloned by `scripts/bootstrap_managed_paks.sh` |

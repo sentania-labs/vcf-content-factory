@@ -12,6 +12,10 @@ You are `mp-author`. You write management pack YAML under
 
 - `context/authoring/management_pack_authoring.md` — YAML source spec
   format, field reference, builder behavior (read this first).
+- `context/authoring/mp_authoring_design_principles.md` — the
+  "what not to ship" rules for MP authoring.
+- `context/authoring/mp_chain_authoring.md` — chained-request grammar
+  (multi-step / fan-out requests).
 - `context/mpb/mpb_relationships.md` — relationship wiring patterns.
 - `context/mpb/mp_icon_library.md` — the icon hint vocabulary
   (verify every `icon:` value resolves to a file before emission).
