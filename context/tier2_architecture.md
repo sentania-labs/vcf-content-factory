@@ -103,7 +103,7 @@ All components compile against `vrops-adapters-sdk-2.2.jar` only.
 | `DescribeBuilder` | `com.vcfcf.adapter.describe` | describe.xml XML generator. No SDK dependency. |
 | `SimpleJson` | `com.vcfcf.adapter.json` | Zero-dep recursive-descent JSON parser. |
 | `AmbientCredential` | `com.vcfcf.adapter.stitch` | Reads `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`; decrypts via SDK `Crypt.getDefaultCrypt().decrypt()` — the only FIPS-safe path under `-Dorg.bouncycastle.fips.approved_only=true` (9.1+). Path resolution order: (1) system property `vcfcf.suiteapi.credential.path` if set; (2) hard-wired default `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`. **`CommonConstants.VCOPS` is NOT used** — it is a product display-name string (`"VCF Ops"`), not a filesystem path. See `lessons/sdk-constants-are-display-names.md`. Never hand-roll the cipher. |
-| `SuiteApiStitchClient` | `com.vcfcf.adapter.stitch` | Framework REST transport for Suite API stitching. Token acquire/release lifecycle per push call. Credential resolution: explicit adapter-config fields > ambient `maintenanceuser.properties` > fail with actionable message. Platform SSL via `VcfCfAdapter.getPlatformSslContext()`. `java.net.http` / source-11 baseline. |
+| `SuiteApiStitchClient` | `com.vcfcf.adapter.stitch` | Framework REST transport for Suite API stitching. Token cached per instance; re-acquired on 401; released on `discard()`. Credential resolution: explicit adapter-config fields > ambient `maintenanceuser.properties` > fail with actionable message. Loopback transport via `VcfCfAdapter.openPlatformConnection` (platform trust + hostname verifier, `HttpsURLConnection`); explicit/remote transport via `java.net.http.HttpClient`. source-11 baseline. |
 | `SuiteApiStitcher` | `com.vcfcf.adapter.stitch` | Thin facade adapter authors hold as a field. Factory methods: `SuiteApiStitcher.create(adapter, logger)` (ambient) and `SuiteApiStitcher.createExplicit(adapter, logger, host, user, pass)` (remote-collector fallback). No transport code required in the adapter. |
 
 ## Pak format — hard-won lessons (2026-05-19)
@@ -428,29 +428,42 @@ The class is `@Deprecated` in the SDK jar but is still the only supported
 decryption path for this credential file. `@SuppressWarnings("deprecation")`
 is applied at the call site in `AmbientCredential.decryptWithPlatformCrypt()`.
 
-**Token lifecycle:** acquire → push → release per call (proven-safe pattern from v1).
-Release is always in a `finally` block — cooperative cancellation is honoured.
+**Token lifecycle:** A bearer token is acquired lazily on the first call and cached
+for the lifetime of the `SuiteApiStitchClient` instance. On HTTP 401, the token
+is re-acquired and the failed request is retried exactly once (per
+`specs/20-suiteapi-client-behavioral-contract.md` §1/§2). The cached token is
+released in `discard()` — failures are logged WARN and swallowed (the platform's
+token TTL is the safety net, per §3). Release is always attempted even on the
+cancellation path.
 
-**SSL:** `VcfCfAdapter.insecureSslContext()` (trust-all) is used for all Suite
-API calls — see rationale below.
+**SSL / hostname verification — loopback vs explicit:**
 
-**Why NOT `getPlatformSslContext()` for Suite API calls:** The platform's
-`CustomTrustManager` is a TOFU manager. Its `checkServerTrusted()` throws
-`CustomCertificateException` unconditionally for any cert not already in the
-platform trust store, then fires `handleUnknownCertificate` as a side-effect.
-Old `URLConnection`/`getSocketFactory()` paths intercept the exception and retry
-after cert registration. `java.net.http.HttpClient` receives the exception
-directly — no intercept, no retry — so `SSLHandshakeException` / "PKIX path
-building failed" results every cycle even though the TOFU notification fired
-(confirmed in appliance logs, devel + prod, build 45, 2026-06-10). The JVM
-default truststore likewise has no knowledge of the platform's self-signed cert.
+The Suite API transport selects its TLS posture based on the **resolved peer**
+(`InetAddress.isLoopbackAddress()` on the configured host — NOT the config string
+`"localhost"`):
 
-Trust-all is appropriate for the localhost Suite API endpoint: the endpoint is
-always the platform's own node; the cert is always the platform's own self-signed
-cert; loopback-network isolation provides equivalent transport security for this
-hop. This does NOT affect `HttpClientBuilder.platformSsl(this)` — that path is
-correct and unchanged for target-system (vCenter, NAS, etc.) connections where
-the admin has approved the cert via the platform UI.
+- **Loopback (`127.0.0.0/8`):** `VcfCfAdapter.openPlatformConnection(url)` —
+  an `HttpsURLConnection` wired with `AdapterBase.getSocketFactory()` (the platform
+  `CustomSSLSocketFactory`, which carries the TOFU-survival intercept for unknown certs)
+  and an all-true hostname verifier (safe: peer is already loopback-gated). Do NOT
+  use `getAdapterTrustManager()` here — it is the strict `CustomTrustManager` (TOFU
+  manager that always throws for unknown certs); building an `SSLContext` from it via a
+  vanilla JSSE factory drops the intercept and reproduces the original PKIX failure
+  (see `lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`). Gating on the resolved
+  peer prevents the relaxation from leaking to a resolver-redirectable hostname.
+  (Fixes `certificate_unknown(46)` on production appliances whose operator-replaced
+  org-CA cert has no `localhost` SAN — stock devel cert hid this; see
+  `specs/20-suiteapi-client-behavioral-contract.md` §5 and
+  `designs/suite-api-stitcher-tls-auth-cleanup-v1.md`.)
+
+- **Explicit/remote (non-loopback):** `java.net.http.HttpClient` with a
+  trust-all SSLContext — unchanged from the previous release. The remote URL
+  must target the primary/analytics Suite API FQDN; pointing it at
+  `localhost`-on-collector yields HTTP 403 (Suite API not served on collectors).
+
+`HttpClientBuilder.platformSsl(this)` is correct and unchanged for target-system
+(vCenter, NAS, etc.) connections — this SSL note applies only to the Suite API
+stitching transport.
 
 **Adapter opt-in (zero transport code required):**
 ```java
@@ -478,6 +491,7 @@ Empirical basis: `context/investigations/suiteapi_ambient_auth_devel_2026_06_09.
 | 2026-06-10 | **Per-adapter log file appender detaches on hot-reload**: appender re-wires after first configure cycle completes post-reload; `collector.log` is authoritative during the gap. Collector restart eliminates the gap. See Logging authoring contract note above and `context/framework_v2_migration.md` §15. |
 | 2026-06-10 | **Multi-resource collect idiom documented** (synology build 14 exemplar): per-cycle snapshot cache pattern, `synchronized currentSnapshot()` thread-safety contract, topology-anchored-on-World relationship emission, and honesty requirement for failed refresh. See `context/framework_v2_migration.md` §18. |
 | 2026-06-10 | **`componentLogger(Class)` public accessor added (task #15 — shadow-logger footgun)**: `VcfCfAdapter.componentLogger(Class<?> component)` is now a `protected` method that returns a `Logger` handle wired identically to the base's own private `adapterLogger()` — same factory, same `setLevel(INFO)` discipline, same `(instanceId) className` naming that routes to the adapter instance's file appender. Adapter subclasses must never shadow `adapterLogger()` or hand-roll a logger handle via `getAdapterLoggerFactory()`. The correct pattern is `componentLogger(HelperClass.class)` in `configureAdapter()`. `SuiteApiStitcher` Javadoc examples updated to use `componentLogger`. Visibility rule and migration note documented in `context/framework_v2_migration.md` §15. `vcfcf-adapter-base.jar` rebuilt (clean, SDK-only). **Adapter adoption for synology/unifi:** both adapters must replace any shadow `adapterLogger()` methods and all `getAdapterLoggerFactory().getLogger(cls)` call sites with `componentLogger(cls)` before their v2 migration builds. Compliance (build 46) has no framework-method shadow to remove — its `adapterLogger()` shadow is in `ComplianceAdapter.java` and is the target of the pending compliance v2 fixup. |
+| 2026-06-30 | **`SuiteApiStitchClient` loopback transport fix (prod `certificate_unknown(46)`)**: `java.net.http.HttpClient` performs hostname verification against the cert SAN independently of the trust manager and cannot accept a custom `HostnameVerifier`. On production appliances whose operator-replaced cert has no `localhost` SAN (standard org-PKI practice), the loopback Suite API call fails with `certificate_unknown(46)` — devel's stock VCOps self-signed cert has `localhost` in the SAN and hid this. Fix: added `VcfCfAdapter.openPlatformConnection(String)` (SSL integration section) — an `HttpsURLConnection` wired with `AdapterBase.getSocketFactory()` (the platform `CustomSSLSocketFactory`, which carries the TOFU-survival intercept for unknown certs) and an all-true hostname verifier. Do NOT use `getAdapterTrustManager()` here — it is the strict TOFU `CustomTrustManager` (always throws for unknown certs; vanilla JSSE factory drops the intercept and reproduces a PKIX failure). `SuiteApiStitchClient` now selects the loopback transport (`openPlatformConnection`, `HttpsURLConnection`) when the resolved Suite API host is a loopback address (`InetAddress.isLoopbackAddress()` — not the string `"localhost"`), and keeps the explicit/remote path (`java.net.http.HttpClient`) for non-loopback URLs. Token lifecycle also brought to spec: cached per instance, lazy acquire, single retry on 401, released on `discard()`. `getPlatformSslContext()` javadoc corrected (body uses `getAdapterTrustManager()`, not `getSocketFactory()`). `VcfCfAdapter.insecureSslContext()` remains defined but is no longer the loopback Suite API transport path. Unit test added (`adapter_framework/test/`). `BUILDKIT_VERSION` bumped to `0.2.1`. **Adapter adoption:** rebuild all stitching paks against the updated buildkit. See `designs/suite-api-stitcher-tls-auth-cleanup-v1.md` and `specs/20-suiteapi-client-behavioral-contract.md` §5. |
 | 2026-06-10 | **`SuiteApiStitchClient` SSL fix — trust-all for localhost Suite API (bug #3)**: `SuiteApiStitchClient.Builder.build()` was calling `adapter.getPlatformSslContext()` which wraps `CustomTrustManager`. `CustomTrustManager.checkServerTrusted()` throws `CustomCertificateException` unconditionally for any unknown cert (including the platform's own self-signed localhost cert), then fires `handleUnknownCertificate` as a side-effect notification. `java.net.http.HttpClient` receives the exception directly — no intercept, no retry — resulting in `SSLHandshakeException`/"PKIX path building failed" every cycle (credentials resolved correctly; SSL was the only failure). Fix: replaced `getPlatformSslContext()` with `VcfCfAdapter.insecureSslContext()` in the stitch client's SSL block. Trust-all is appropriate for the localhost Suite API endpoint (loopback isolation, platform's own self-signed cert). Does not affect `HttpClientBuilder.platformSsl(this)` for target-system connections. **Adapter adoption:** none — rebuild against updated `vcfcf-adapter-base.jar` only. See `lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`. |
 | 2026-06-10 | **`onDescribe()` controller-side NPE fix (build 44 root cause)**: `VcfCfAdapter.onDescribe()` was calling `getAdapterKind()` which returns null during controller-side bare instantiation (no platform injection). Fix: added `private final String adapterKindKey` field + two keyed constructors (`VcfCfAdapter(String adapterKindKey)` and `VcfCfAdapter(String adapterKindKey, String adapterDir, Integer instanceId)`). `onDescribe()` now resolves kind from `adapterKindKey` first, falls back to `getAdapterKind()`, and throws an actionable message listing both sources if both are null — never reaches `getAdapterDescribeFile(null, …)`. **Adapter adoption required:** subclass constructors must call the keyed super variants (see `context/framework_v2_migration.md` §3). `vcfcf-adapter-base.jar` rebuilt (clean, SDK-only). Lesson codified: `lessons/controller-describe-bare-instantiation.md`. |
 | 2026-06-09 | **Framework default `onDescribe()`**: `VcfCfAdapter.onDescribe()` is now provided by the framework. Loads `describe.xml` via `getAdapterDescribeFile(getAdapterKind(), "describe.xml")`; throws `RuntimeException` with path in message on failure (no silent null). Subclass overrides still win (non-final). Tracked gap in `context/framework_v2_migration.md` §3 closed. `vcfcf-adapter-base.jar` rebuilt (clean, SDK-only). Existing adapters (compliance) that hand-roll `onDescribe()` continue to work without change — their override takes precedence. |

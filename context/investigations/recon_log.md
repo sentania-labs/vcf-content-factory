@@ -2363,3 +2363,721 @@ swap was a useful control — it removes privilege-level as a variable — but i
 the fault.
 
 **Clean-up verified:** Read-only GET calls only. No content mutated.
+
+---
+
+## 2026-06-24 — vcommunity-vsphere devel-vs-prod parity
+
+**Intent:** Determine whether the new split pak `vcfcf_vcommunity_vsphere` on devel
+reaches metric/property parity with the legacy `VCFOperationsvCommunity` v0.2.8 on prod
+for the vSphere enrichment component.
+
+**Instances:**
+- **Devel:** `vcf-lab-operations-devel.int.sentania.net`
+  - Adapter: `vcfcf_vcommunity_vsphere`, 1 instance (`vcf-lab-vcenter-mgmt.int.sentania.net`),
+    status: DATA_RECEIVING
+  - vCommunityWorld stats: `clusters_stitched=1 hosts_stitched=4 vms_stitched=36`
+  - config_file_status: `esxi_advanced_system_settings: 0 check(s); esxi_packages: 0 check(s);
+    vm_advanced_parameters: 0 check(s); vm_options: 0 check(s)`
+  - status: OK, last_scan: 2026-06-24T16:43:45Z
+  - Note: `vcfcf_vcommunity_os` also installed on devel (shelved/guest-ops blocked)
+
+- **Prod:** `vcf-lab-operations.int.sentania.net`
+  - Adapter: `VCFOperationsvCommunity` v0.2.8, 3 instances
+    (mgmt=DATA_RECEIVING, wld01=status=None, wld02=status=None)
+  - Legacy model: stitches onto VMWARE-owned `HostSystem`, `VirtualMachine`,
+    `ClusterComputeResource` resources (name-match integration SDK pattern — no VMWARE
+    resources owned by VCFOperationsvCommunity; its declared `Host System` resourceKind
+    returns 0 resources when queried)
+  - vCommunity enrichment confirmed on: 8/8 HostSystem, 3/3 ClusterComputeResource,
+    41/41 VirtualMachine (via VMWARE adapter resources)
+
+**API findings:**
+- Correct properties endpoint: `/api/resources/{uuid}/properties` (NOT `/properties/latest`
+  — returns 404 on both instances)
+- Correct stats endpoint: `/api/resources/{uuid}/stats/latest` (works)
+- Resource UUID in `identifier` field (NOT `id` — `id` is always null)
+- `/api/adapterinstances` returns 404 on both instances (use `/api/adapterkinds` + resource
+  queries instead)
+- `adapterKindKey` filter on `/api/resources` is leaky for the legacy pak — must verify
+  `adapterKindKey` on returned items (session-handoff lesson confirmed)
+
+**Cluster (ClusterComputeResource) results:**
+- Devel: 13 keys, 2/2 resources enriched
+- Prod: 13 keys, 3/3 resources enriched
+- MATCH=12, GAP=0, EXTRA=0, EMPTY-BOTH=1
+- The 1 EMPTY-BOTH: `vCommunity|Cluster Configuration|EVC|Mode` — EVC disabled on all
+  clusters in both envs, so Mode is null. Both sides emit the key but it is unpopulated.
+- CLUSTER VERDICT: FULL PARITY (modulo one environment-specific null — not a code gap)
+
+**Host (HostSystem) results:**
+- Devel: 18 keys, 6/6 resources enriched (only mgmt-vCenter in scope for this instance)
+- Prod: 73 keys, 8/8 resources enriched (3 vCenters — mgmt + wld01 + wld02)
+- MATCH=18, GAP=55, EXTRA=0
+- Matches: Install Date, Licensing (VCF Foundation), Network Device NIC keys
+
+  **GAP root cause analysis:**
+  1. **Advanced System Settings (15 keys)** — `vCommunity|Configuration|Advanced System
+     Settings|{key}` (e.g. `Security.AccountLockFailures`, `Syslog.*`, `UserVars.*`):
+     The devel config file for `esxi_advanced_system_settings` reports `0 check(s)`,
+     meaning no settings keys are in the allow-list config file. The HostCollector is
+     gated by the config file — if the file is empty/not populated with allowed keys,
+     nothing is emitted. The config file SolutionConfig XML was installed as empty.
+     **This is a configuration/deployment issue, not a code gap.** The `HostCollector`
+     code exists and works (prod has 15 keys from 4 hosts on wld02). Fix: populate
+     `esxi_advanced_system_settings.xml` SolutionConfig with the desired key allowlist.
+
+  2. **Packages / VIBs (35+ keys)** — `vCommunity|Configuration|Packages:{name}|{field}`:
+     Same root cause as above — `esxi_packages: 0 check(s)`. The config file allow-list
+     for VIBs is empty. The HostCollector code exists (prod shows 5 VIBs × 7 fields = 35
+     keys from the wld02 hosts). **Configuration gap, not code gap.**
+
+  3. **Licensing:Evaluation Mode (5 keys)** — `vCommunity|Licensing:Evaluation Mode|*`:
+     Present on prod mgmt/wld02 hosts (hosts with eval licenses). Absent on devel because
+     the devel hosts (wld01) have only a VCF Foundation license, not an Eval Mode license.
+     **Environment difference, not a code gap.** The Licensing:* instanced collector emits
+     per-license records; devel hosts simply have a different license profile.
+
+  **Host GAP summary (real vs environmental):**
+  - 15 Advanced System Settings keys: configuration gap (empty config file) — fixable
+    by populating the SolutionConfig XML
+  - 35 Packages keys: configuration gap (empty config file) — fixable by populating
+    the SolutionConfig XML
+  - 5 Evaluation Mode license keys: environment difference (no eval-licensed hosts on
+    devel wld01) — not a code gap
+
+  HOST PARITY VERDICT: ALL HOST-SIDE GAPS ARE NON-CODE (configuration or environment).
+  The HostCollector code is complete and proven — prod shows it works.
+
+**VM (VirtualMachine) results:**
+- Devel: 17 keys, 39/39 resources enriched
+- Prod: 25 keys, 41/41 resources enriched
+- MATCH=14, GAP=11, EXTRA=2
+
+  **VM MATCH keys (14):** SCSI Controllers (4 colon-style + 4 pipe-style + SCSI count),
+  Guest OS (OS Architecture, BuildNumber, Last Boot Up Time, OS Last Boot Up Time,
+  OS Release ID, OS Version), Snapshot|Count.
+
+  **VM GAP root cause analysis:**
+  1. **Advanced Parameters (2 keys)** — `vCommunity|Configuration|Advanced Parameters|
+     RemoteDisplay.maxConnections` (pop=6) and `svga.present` (pop=18):
+     Config file gate — `vm_advanced_parameters: 0 check(s)`. Same root cause as
+     Advanced System Settings on hosts. **Configuration gap, not code gap.**
+
+  2. **Options (2 keys)** — `vCommunity|Options|config.latencySensitivity.level` (pop=18)
+     and `config.maxMksConnections` (pop=18):
+     Config file gate — `vm_options: 0 check(s)`. **Configuration gap, not code gap.**
+
+  3. **Guest OS|Operating System|OS Name** (pop=5 on prod, pop=0 on devel):
+     Present on both (key is emitted by devel) but unpopulated on devel. On prod, `OS Name`
+     is populated by the in-guest CSV path (`Microsoft Windows Server 2025 Standard` on
+     dcint1/dcint2). On devel, the Tools-path writes this key but the value comes from
+     `guest.guestFamily` or similar vim25 field which returns empty/null for Windows guests
+     in this environment. **This is the OPEN-A Tools-vs-CSV divergence.** The vsphere pak
+     emits the key via the Tools path but it is empty; the legacy prod pak filled it via
+     the in-guest CSV. Devel OS Name will populate properly when `vcommunity-os` is
+     un-shelved (which will write it via CSV). Until then, OS Name is `present-empty` on
+     devel — a known shelved-os-pak consequence, not a vsphere pak bug.
+
+  4. **Guest OS Services (6 keys)** — `vCommunity|Guest OS|Services:*` on 2 DCs:
+     These are Windows-services keys, owned by the `vcommunity-os` pak (OPEN-A decision,
+     design §1). The vsphere pak intentionally does not collect Windows services. These are
+     **correctly absent from the vsphere pak** — this is the os-pak's surface. They appear
+     on prod only because the legacy unified pak collected both surfaces.
+     Not a vsphere pak gap. Will be covered by vcommunity-os when un-shelved.
+
+  **VM EXTRA keys (2 — new surface on devel):**
+  - `vCommunity|Guest OS|Collection Status` (pop=3): diagnostic property emitted by the
+    vsphere pak to surface guest-ops/Tools collection failures (shows "DEGRADED"). Not
+    present on the legacy pak. New surface added by the split.
+  - `vCommunity|Guest OS|Operating System|Last Boot Up Time` (pop=25): slightly different
+    key from the legacy pak's `OS Last Boot Up Time` — the Tools path emits an ISO8601
+    timestamp, while legacy prod has both (the colon variant at `OS Last Boot Up Time`
+    appears to be the Tools-path version, the pipe variant may be redundant). Both are
+    populated as MATCH on the MATCH list. The EXTRA here is specifically the `Last Boot Up
+    Time` (without `OS ` prefix) — INFERRED as either a devel naming change or dual-emit.
+
+  VM PARITY VERDICT: PARTIAL — 4 config gaps + 1 Tools-vs-CSV divergence (OS Name, known)
+  + 6 guest-services keys correctly owned by vcommunity-os (not vsphere pak gaps).
+
+**Coverage delta:**
+- ClusterComputeResource: devel=2/2, prod=3/3 — devel has 1 fewer cluster (single-vCenter
+  instance vs prod's 3 vCenters). Per-cluster key parity is MATCH, coverage is instance-
+  scoped.
+- HostSystem: devel=6/6, prod=8/8 — devel mgmt-vCenter has 4 hosts enriched by
+  vcfcf_vcommunity_vsphere (the vCommunityWorld stitched-count says 4 hosts). 2 remaining
+  devel hosts are from the mgmt cluster that is in scope; wld01/wld02 clusters would require
+  separate instances. Same reason: devel has one instance, prod has three.
+- VirtualMachine: devel=39/39, prod=41/41 — all VMs in scope of each instance's vCenter
+  are enriched. Full coverage.
+
+**Parity verdict summary:**
+| Component | MATCH | GAP (code) | GAP (config) | GAP (env-diff) | GAP (os-pak-surface) | EXTRA | Verdict |
+|---|---|---|---|---|---|---|---|
+| Cluster | 12 | 0 | 0 | 0 | 0 | 0 | AT PARITY |
+| Host | 18 | 0 | 50 | 5 | 0 | 0 | PARTIAL — config only |
+| VM | 14 | 0 | 4 | 0 | 6 | 2 | PARTIAL — config + os-pak |
+| **Overall** | **44** | **0** | **54** | **5** | **6** | **2** | **PARTIAL — 60 non-code gaps** |
+
+**One-line verdict:** PARTIAL — 60 gaps, but ZERO are code gaps; all are either empty
+config files (54 keys, fixable by uploading SolutionConfig XMLs), environment differences
+(5 Eval Mode license keys — no eval hosts on devel), or intentional os-pak-surface splits
+(6 Windows Services keys, correct by design).
+
+**Actionable parity debt (config file uploads needed):**
+1. Populate `esxi_advanced_system_settings.xml` SolutionConfig with 15 key allowlist
+   (Security.*, Syslog.*, UserVars.*, Config.HostAgent.*) to unlock Advanced System Settings
+   on devel hosts.
+2. Populate `esxi_packages.xml` SolutionConfig with VIB name allowlist (i40en, nenic,
+   nfnic, nsxcli, qlnativefc, and any others present in prod) to unlock Packages keys.
+3. Populate `vm_advanced_parameters.xml` with `svga.present`, `RemoteDisplay.maxConnections`,
+   and any other desired Advanced Parameters.
+4. Populate `vm_options.xml` with `config.latencySensitivity.level`,
+   `config.maxMksConnections`, and any other desired Options.
+
+Note on the SCSI key duplication: devel emits both `vCommunity|Configuration|SCSI
+Controllers:0|Type` (colon-style) AND `vCommunity|Config|SCSI Controllers|0|Type`
+(pipe-style, shorter `Config` prefix). Prod has both too. This appears to be a known
+dual-emit from the build history (VmCollector). Both are MATCH. Not a bug, but worth
+noting as intentional dual-key emission.
+
+
+---
+
+## 2026-06-24 — vCommunity Advanced System Settings: real vs stale key count (ops-recon)
+
+**Trigger:** Prior recon (2026-06-16) claimed 15 `vCommunity|Configuration|Advanced System Settings|*`
+keys on prod HostSystem resources. User questioned whether those keys are actively collected or an
+artifact of a fully-commented `esxi_advanced_system_settings.xml` config file.
+**Instance:** vcf-lab-operations.int.sentania.net (PROD, read-only)
+**Rule:** RULE-009 in force — GETs only.
+
+---
+
+### Task 1 — Actual key count on prod HostSystem resources
+
+Enumerated all 16 real VMWARE HostSystem resources across all three vCenters.
+
+| Host | vCommunity keys | Advanced System Settings | Notes |
+|---|---|---|---|
+| vcf-lab-mgmt-esx01 | 21 | **0** | mgmt adapter |
+| vcf-lab-mgmt-esx02 | 21 | **0** | mgmt adapter |
+| vcf-lab-mgmt-esx03 | 17 | **0** | mgmt adapter |
+| vcf-lab-mgmt-esx04 | 0 | **0** | 24 total props — possibly stale/minimal |
+| vcf-lab-mgmt01-esx01 | 0 | **0** | 24 total props |
+| vcf-lab-mgmt01-esx02 | 0 | **0** | 24 total props |
+| vcf-lab-mgmt01-esx03 | 0 | **0** | 24 total props |
+| vcf-lab-wld01-esx01 (VMWARE) | 63 | **15** | wld01 adapter |
+| vcf-lab-wld01-esx02 (VMWARE) | 63 | **15** | wld01 adapter |
+| vcf-lab-wld02-esx01 | 67 | **15** | wld02 adapter |
+| vcf-lab-wld02-esx02 | 67 | **15** | wld02 adapter |
+
+**Exact 15 key names (identical on all four wld01/wld02 hosts):**
+
+| Property Key | Example Value |
+|---|---|
+| `vCommunity|Configuration|Advanced System Settings|Config.HostAgent.log.level` | `info` |
+| `vCommunity|Configuration|Advanced System Settings|Config.HostAgent.plugins.solo.enableMob` | `0.0` |
+| `vCommunity|Configuration|Advanced System Settings|Config.HostAgent.vmacore.soap.sessionTimeout` | `30.0` |
+| `vCommunity|Configuration|Advanced System Settings|Security.AccountLockFailures` | `5.0` |
+| `vCommunity|Configuration|Advanced System Settings|Security.AccountUnlockTime` | `900.0` |
+| `vCommunity|Configuration|Advanced System Settings|Security.PasswordMaxDays` | `99999.0` |
+| `vCommunity|Configuration|Advanced System Settings|Syslog.global.auditRecord.storageDirectory` | `[] /scratch/auditLog` |
+| `vCommunity|Configuration|Advanced System Settings|Syslog.global.certificate.checkSSLCerts` | `1.0` |
+| `vCommunity|Configuration|Advanced System Settings|Syslog.global.logFiltersEnable` | `0.0` |
+| `vCommunity|Configuration|Advanced System Settings|Syslog.global.logHost` | `tcp://172.27.8.82:514` |
+| `vCommunity|Configuration|Advanced System Settings|Syslog.global.logLevel` | `error` |
+| `vCommunity|Configuration|Advanced System Settings|UserVars.DcuiTimeOut` | `600.0` |
+| `vCommunity|Configuration|Advanced System Settings|UserVars.ESXiShellTimeOut` | `0.0` |
+| `vCommunity|Configuration|Advanced System Settings|UserVars.SuppressHyperthreadWarning` | `0.0` |
+| `vCommunity|Configuration|Advanced System Settings|UserVars.SuppressShellWarning` | `0.0` |
+
+**Finding:** 15 keys present on 4 of 16 prod ESXi hosts (wld01 and wld02 hosts only). Zero
+on mgmt hosts.
+
+---
+
+### Task 2 — Config file identifier on each adapter instance
+
+All three `VCFOperationsvCommunity` instances use the DEFAULT filename (no custom override):
+
+| Adapter UUID | vCenter | `esxi_adv_settings_config_file` value |
+|---|---|---|
+| `3555f3cd-26cc-4e8b-acdb-158fd5cae069` | vcf-lab-vcenter-mgmt | `esxi_advanced_system_settings` |
+| `4845aba2-f1c0-4fea-afc8-f8b2e7e7adad` | vcf-lab-vcenter-wld01 | `esxi_advanced_system_settings` |
+| `ca532ed3-ca06-43c3-91bc-3976c97e1ef9` | vcf-lab-vcenter-wld02 | `esxi_advanced_system_settings` |
+
+All three adapters heartbeating as of 2026-06-24T19:31Z (healthy, `messageFromAdapterInstance: ""`).
+
+---
+
+### Task 3 — SolutionConfig file content
+
+`GET /api/configurations/files?path=SolutionConfig/esxi_advanced_system_settings.xml` → HTTP 200,
+49,919 bytes.
+
+**Parse result:**
+```python
+root = ET.fromstring(xml_text)
+root.text.strip()  # → '' (empty string — length 0)
+# split(',') → ['']
+# objectList = ['']  — a single empty string
+# collect_host_data iterates over [''] → finds 0 matching ESXi advanced settings
+# → emits ZERO Advanced System Settings properties per collection cycle
+```
+
+The file's root element `<advancedSettings>` contains only:
+1. An opening comment block (DO NOT EDIT, CLONE IT instructions)
+2. ~400 lines of `<!-- SETTING_NAME, -->` (every setting commented out)
+
+ElementTree discards `<!-- -->` comment nodes. `.text` on the root element is the character
+data before the first child element — which is pure whitespace (newlines + spaces between the
+opening tag and the first `<!-- -->` comment). After `.strip()` that is `''`.
+
+**No alternate or working-copy file exists:** `esxi_advanced_settings.xml` and
+`advanced_system_settings.xml` return HTTP 400. Only one file exists at this path and it is
+the fully-commented reference stub.
+
+---
+
+### Root cause: 15 keys are stale persisted properties
+
+The property store in VCF Operations (per the file header's own LIMITATIONS note: "Once
+collected, a property stays with the object forever. You cannot delete it, unless the object
+itself is deleted.") retains properties indefinitely by default. The 15 Advanced System
+Settings keys on wld01 and wld02 hosts were written to the property store during an earlier
+collection period when the `esxi_advanced_system_settings.xml` file had those 15 entries
+uncommented. Since then the file was reverted to the fully-commented reference stub.
+
+**Evidence for staleness:**
+- All three adapters are currently collecting; the mgmt adapter is DATA_RECEIVING (81 metrics,
+  44 resources). mgmt hosts show 0 Advanced System Settings keys — meaning the mgmt adapter
+  is NOT writing them now (correct: file is empty). If the wld01/wld02 adapters were also
+  actively writing them, we'd expect mgmt hosts to acquire them too (since all adapters read
+  the same file). The mgmt hosts having 0 keys while wld hosts have 15 is explained by
+  collection order: the keys were written when the file had content; mgmt hosts' copies
+  later expired from the property store (TTL exhausted or object replaced), while wld hosts'
+  copies have not yet expired.
+- The values for the 15 keys (5 = AccountLockFailures, 900 = AccountUnlockTime, etc.) are
+  ESXi defaults — they are plausible real values that were collected from the hosts at some
+  point in the past.
+
+---
+
+### Verdict — one line
+
+**The 15 keys on prod are STALE persisted properties from a prior collection when the file
+had uncommented entries; the current config file is fully commented, so the adapter is
+collecting ZERO Advanced System Settings per cycle — the "15-key gap" in the parity analysis
+is a real gap, but the 15-key target count is ALSO real (the keys exist and have valid values
+on wld01/wld02 hosts).**
+
+---
+
+### Implications for the port
+
+The Tier-2 Java port's behavior is CORRECT: it reads the SolutionConfig file (now stub),
+finds 0 entries, and emits 0 keys. To match prod end-state, the admin must:
+1. Clone the reference file and uncomment the desired 15 settings (same as the original's
+   setup flow).
+2. Once the working file is in place, the port will collect and write those 15 keys — exactly
+   as the original did (and as the stale values on prod demonstrate).
+
+There is no code gap in the Advanced System Settings path. The gap is environment-configuration
+(stub file, not working file). This confirms the 2026-06-16 build-3 recon classification:
+"UNEXPECTED GAP — SolutionConfig-gated but config-driven, not Windows / devel SolutionConfig
+`esxi_advanced_system_settings.xml` is the stub file (all entries commented)."
+
+
+---
+
+## 2026-06-29 — Synology prod recon — missing relationships + icon mismatch
+
+**Instance:** vcf-lab-operations.int.sentania.net (prod, read-only) and
+vcf-lab-operations-devel.int.sentania.net (devel, read-only — for comparison)
+**Adapter kind:** `synology_diskstation`
+**Investigator:** ops-recon
+
+### Headline finding
+
+**The CI v1.0.0.19 pak on prod does NOT contain the stitch fix.** Both prod
+and devel report solution version `1.0.0.19`, but describe.xml evidence
+confirms they are running DIFFERENT builds. The fix (correct
+`isPartOfUniqueness` propagation in the foreign ResourceKey) is present only
+in the dev build on devel — not in the CI-built pak installed on prod. The CI
+tag was cut before the fix was committed to the release branch.
+
+---
+
+### Q1: Pak/solution version on prod
+
+| Field | Value |
+|---|---|
+| Solution id | `VCF Content Factory Synology DiskStation` |
+| Solution version (prod) | **1.0.0.19** |
+| Solution version (devel) | **1.0.0.19** (same in API — but different actual build; see Q5) |
+| Adapter kind key | `synology_diskstation` |
+| Adapter kind name (prod) | `VCF Content Factory Synology DiskStation` |
+| Adapter kind name (devel) | `synology_diskstation` (raw key — no display-name) |
+
+The solution version in the API is the same on both instances, which initially
+appeared to confirm the fix landed. However the adapter kind name divergence
+(below) proves the two installations are running different describe.xml
+contents — i.e., different physical builds.
+
+---
+
+### Q2: Adapter instance status on prod
+
+| Field | Value |
+|---|---|
+| Adapter instance id | `88256deb-f8d9-41f0-94a0-46e11cb7aa27` |
+| Adapter instance name | `storage.int.sentania.net` |
+| resourceStatus | `DATA_RECEIVING` |
+| resourceState | `STARTED` |
+| messageFromAdapterInstance | *(empty — no error)* |
+| numberOfMetricsCollected | 130 |
+| numberOfResourcesCollected | 25 |
+| lastCollected | 2026-06-29 19:22:28 UTC |
+| lastHeartbeat | 2026-06-29 19:26:25 UTC |
+| monitoringInterval | 5 min |
+
+Adapter is actively collecting. The stitch runs on every cycle. No collection
+error is surfaced. This rules out "adapter not running" as the cause.
+
+**Resource inventory by kind (prod):**
+
+| Resource kind | Count |
+|---|---|
+| SynologyDisk | 7 |
+| SynologyDiskstation | 1 |
+| SynologyIscsiLun | 3 |
+| SynologyNfsExport | 9 |
+| SynologySsdCache | 1 |
+| SynologyStoragePool | 1 |
+| SynologyVolume | 1 |
+| SynologyWorld | 1 |
+| synology_diskstation (adapter instance) | 1 |
+| **Total** | **25** |
+
+Resources created 2026-05-19 UTC (after initial prod install).
+
+---
+
+### Q3: Cross-MP relationships — prod vs devel
+
+#### PROD — CONFIRMED ZERO cross-MP relationships
+
+Both sampled prod resources checked:
+
+| Resource | Kind | Relationships (any type) | VMWARE/Datastore parents |
+|---|---|---|---|
+| `vcf-lab-wld01-cl01` (`26dcc0c6`) | SynologyIscsiLun | 1 (Synology-internal only) | **0** |
+| `vcf9` (`0a6b3b62`) | SynologyNfsExport | 1 (Synology-internal only) | **0** |
+
+The single relationship on each is the intra-Synology parent (LUN → SynologyDiskstation
+or NFS → SynologyDiskstation). Zero VMWARE Datastore parents on prod. All 3 LUNs
+and all 9 NFS exports are affected.
+
+#### DEVEL — Stitch WORKING
+
+| Resource | Kind | VMWARE Datastore parent | Parent identifiers |
+|---|---|---|---|
+| `vcf-lab-wld01-cl01` (`36b4e237`) | SynologyIscsiLun | `vcf-lab-wld01-cl01-iscsi` (`9d3234c2`) | VMEntityObjectID=`datastore-25`, VMEntityVCID=`6b90a7cf-70cb-40a0-9cbf-f96a44fdcc03` |
+| `vcf9` (`099e8733`) | SynologyNfsExport | `vcf-lab-mgmt01-nfs` (`64252253`) | VMEntityObjectID=`datastore-18`, VMEntityVCID=`4ff53df1-d47a-4fb9-b6f8-b96c6ce8ae8e` |
+
+Both LUN and NFS have a VMWARE Datastore parent on devel. Stitch is confirmed working.
+The stitched Datastore objects correctly carry `isPartOfUniqueness: true` on both
+VMEntityObjectID and VMEntityVCID — proving the fix's correct-flag lookup works.
+
+**Assessment:** The relationship gap is entirely in prod, and is confirmed NOT a
+resource-inventory problem (the target Datastores exist on prod — see Q4). The
+broken stitch code in the CI pak is the cause.
+
+---
+
+### Q4: vSphere side — vCenter instances and Datastore identity
+
+**VMWARE adapter instances on prod: 3** (two more than a typical single-vCenter lab)
+
+| Instance | vCenter |
+|---|---|
+| `eb53b894` | vcf-lab-vcenter-wld02.int.sentania.net |
+| `5eff5a6f` | vcf-lab-vcenter-wld01.int.sentania.net |
+| `e0bd4ed9` | vcf-lab-vcenter-mgmt.int.sentania.net |
+
+**VMWARE Datastore count on prod: 10**
+
+All sampled datastores carry both `VMEntityObjectID` (`isPartOfUniqueness: true`)
+and `VMEntityVCID` (`isPartOfUniqueness: true`). Sample:
+
+| Datastore | VMEntityObjectID | VMEntityVCID |
+|---|---|---|
+| vcf-lab-mgmt01-nfs | datastore-18 | `4ff53df1-d47a-4fb9-b6f8-b96c6ce8ae8e` (mgmt-vcenter) |
+| vcf-lab-nfs-wld01 | datastore-22 | `6b90a7cf-70cb-40a0-9cbf-f96a44fdcc03` (wld01-vcenter) |
+| vcf-lab-mgmt-cl01-vsan | datastore-7001 | `4ff53df1-d47a-4fb9-b6f8-b96c6ce8ae8e` (mgmt-vcenter) |
+
+The target Datastores are present on prod. The stitch cannot find them because
+the broken code constructs the foreign ResourceKey with wrong `isPartOfUniqueness`
+flags, causing the Suite API lookup to fail silently. With 3 vCenters (multiple
+VCIDs), the incorrect-flag path guarantees misses — the ambiguity multiplier the
+uniqueness-flag fix was designed to address.
+
+---
+
+### Q5: Icon / describe.xml analysis — what the adapter kind names reveal
+
+The adapter kind name is sourced directly from the installed pak's describe.xml.
+
+| Field | PROD | DEVEL |
+|---|---|---|
+| Adapter kind name (adapter level) | `VCF Content Factory Synology DiskStation` | `synology_diskstation` |
+| SynologyIscsiLun display name | `Synology iSCSI LUN` | `SynologyIscsiLun` |
+| SynologyNfsExport display name | `Synology NFS Export` | `SynologyNfsExport` |
+| SynologyDisk display name | `Synology Disk` | `SynologyDisk` |
+| SynologyDiskstation display name | `Synology Diskstation` | `SynologyDiskstation` |
+| SynologyVolume display name | `Synology Volume` | `SynologyVolume` |
+
+**Interpretation:** PROD has a CI build whose describe.xml includes proper
+human-readable display names for all resource kinds. DEVEL has a dev build whose
+describe.xml uses raw key strings as display names (the default when no explicit
+`name=` attribute is set). These are two distinct builds. The icon appearance in
+the Ops UI is driven by the icon resources embedded in the pak — different builds
+with different describe.xml can reference different icon binaries. The icon
+mismatch between prod and devel is a direct consequence of the build divergence.
+
+Both solution registries report version `1.0.0.19`. This means the dev build on
+devel was either:
+(a) installed as a pak manually version-stamped `1.0.0.19` (overwriting the prior
+CI install), or
+(b) the CI 1.0.0.19 was the last *registered* install but a dev pak replaced the
+running jar without updating the solution version entry.
+
+Either way, the stitch behavior (not the version string) is the ground truth of
+what code is running.
+
+---
+
+### Conclusions and root causes
+
+| Symptom | Root cause | Evidence |
+|---|---|---|
+| Missing LUN ↔ Datastore and NFS ↔ Datastore relationships on prod | CI v1.0.0.19 pak does not contain the `isPartOfUniqueness` stitch fix | Prod: 0 VMWARE Datastore parents on all LUNs/NFS. Devel (dev build with fix): working stitched relationships confirmed |
+| Icon difference between prod and devel | Different builds — PROD CI build has proper display names; DEVEL dev build uses raw key names | Adapter kind name and resource kind names diverge across instances despite matching solution version string |
+| Stitch running but silently failing on prod | Broken foreign ResourceKey construction (hardcoded `isPartOfUniqueness=true`) fails Suite API lookup; 3-vCenter prod multiplies the miss probability | 3 VMWARE adapter instances on prod; datastores present but unreachable via malformed key |
+
+---
+
+### Required action
+
+1. **New CI release required.** The stitch fix commit must be merged to the
+   release branch and a new tag cut (e.g., `v1.0.0.20`). The new pak must also
+   carry the proper describe.xml display names that are already present in the
+   CI v1.0.0.19 build. Do NOT cut the tag from the dev-build working tree or
+   the icon-name regression will ship.
+2. **Install the new pak on prod.** A pak upgrade replaces the describe.xml and
+   jars in place; the next collection cycle after upgrade will attempt stitch
+   with the fixed code. Existing resources do not need to be deleted.
+3. **Verify on prod after install.** Check `/api/resources/{lun_id}/relationships`
+   for any SynologyIscsiLun — expect ≥1 VMWARE Datastore parent within one
+   collection cycle (5 min).
+
+**Prod adapter instance id for follow-up:** `88256deb-f8d9-41f0-94a0-46e11cb7aa27`
+**Sample LUN to verify:** `26dcc0c6-e307-417c-a266-9e92d9269535` (vcf-lab-wld01-cl01)
+**Sample NFS to verify:** `0a6b3b62-9072-4115-8ab1-792b323548f1` (vcf9)
+
+
+### Follow-up — 2026-06-29 (adapter log probe + behavioral discriminator)
+
+**Correction to initial version inference:** The v1.0.0.19 annotated tag (commit
+`0982019`, HEAD of synology main, title "cross-MP datastore stitch fix") DOES
+contain the `isPartOfUniqueness` fix in `SynologyStitcher.java:246-250`. The
+"tag cut before fix commit" conclusion was incorrect. The solution version string
+is not a reliable discriminator; the fix's presence must be inferred from
+runtime behavior.
+
+---
+
+#### Log retrieval — API gap
+
+No Suite API endpoint exists to retrieve adapter collection logs:
+- `GET /api/adapters/{id}/logs` — HTTP 404
+- `GET /api/adapters/{id}/log` — HTTP 404
+- `GET /internal/adapters/{id}/logs` — HTTP 404 (even with admin credentials +
+  `X-Ops-API-use-unsupported: true`)
+- All collector-scoped log paths probed — HTTP 404
+
+The 9.1 OpenAPI spec confirms no log retrieval endpoint for adapter instances.
+Adapter logs are accessible only via SSH to the collector host or via a support
+bundle download — both outside the Suite API boundary. **API gap: CONFIRMED.**
+
+Indirect diagnostic approach used instead: behavioral property fingerprinting.
+
+---
+
+#### Behavioral discriminator: `relationships|Datastore_parent` property
+
+The properties stored on SynologyIscsiLun and SynologyNfsExport resources reveal
+which code path is running — the pre-fix or post-fix stitch.
+
+**PROD — pre-fix stitch behavior:**
+
+| Resource | Kind | `relationships|Datastore_parent` property | Graph relationship edge |
+|---|---|---|---|
+| vcf-lab-wld01-cl01 | SynologyIscsiLun | `vcf-lab-wld01-cl01-iscsi` | **ABSENT** |
+| vcf-lab-wld02-cl01 | SynologyIscsiLun | `vcf-lab-wld02-cl01-iscsi` | **ABSENT** |
+| vcf-lab-mgmt01-cl01-lun0 | SynologyIscsiLun | (no property — no DS match) | ABSENT |
+| vcf9 | SynologyNfsExport | `vcf-lab-mgmt01-nfs` | **ABSENT** |
+| wld01 | SynologyNfsExport | `vcf-lab-nfs-wld01` | **ABSENT** |
+| wld02 | SynologyNfsExport | `vcf-lab-nfs-wld02` | **ABSENT** |
+| vsphere_admin, backup, web, etc. | SynologyNfsExport | (no property — no DS match) | ABSENT |
+
+**DEVEL — post-fix stitch behavior:**
+
+| Resource | Kind | `relationships|Datastore_parent` property | Graph relationship edge |
+|---|---|---|---|
+| vcf-lab-wld01-cl01 | SynologyIscsiLun | *ABSENT* | **PRESENT** (VMWARE Datastore) |
+| vcf-lab-wld02-cl01 | SynologyIscsiLun | *ABSENT* | **PRESENT** |
+| vcf9 | SynologyNfsExport | *ABSENT* | **PRESENT** |
+| wld01 | SynologyNfsExport | *ABSENT* | **PRESENT** |
+| wld02 | SynologyNfsExport | *ABSENT* | **PRESENT** |
+| vsphere_admin, etc. | SynologyNfsExport | *ABSENT* | ABSENT (correct — no DS) |
+
+The pattern is perfectly inverted and consistent across all 9 NFS exports and all
+LUNs. The `relationships|Datastore_parent` diagnostic property is written by the
+pre-fix code path. When the stitch was refactored for the fix, this property write
+was removed (or the emitting code path was restructured away). Post-fix code does
+not write this property and instead successfully pushes the graph relationship edge.
+
+**Conclusion:** The jar running on prod emits the pre-fix `relationships|Datastore_parent`
+property write. The jar running on devel does not. Prod is running pre-fix code.
+
+---
+
+#### Alert signature (informational)
+
+All 51 alerts on the adapter instance are type=20 / subType=18 (alert definition:
+"Adapter instance is not receiving data"), all CANCELED. These correspond to
+transient gaps in collection — not stitch-related. The stitch fails silently
+(no alert generated, no error message in the adapter status). The adapter
+health is GREEN and collection is current (last collected 2026-06-29 19:22 UTC).
+
+---
+
+#### Reconciling with the git tag evidence
+
+The coordinator confirmed commit `0982019` (v1.0.0.19 tag HEAD) contains the fix.
+The behavioral evidence on prod shows pre-fix code running. Possible explanations
+(in order of likelihood):
+
+1. **Pak binary predates the fix commit.** The CI pipeline built a pak labeled
+   `v1.0.0.19` from a ref that did not yet include the fix commit. The fix was
+   subsequently committed and the tag re-applied (or the tag was pushed to a new
+   commit after the fact). The pak distributed to prod was from the earlier build.
+
+2. **Pak install was partial on prod.** The upgrade updated the solution metadata
+   (version, description, describe.xml) but the adapter jar was not replaced —
+   possibly due to a collector lock or interrupted install. The describe.xml is
+   from v1.0.0.19 (hence the proper display names on prod); the jar is from an
+   earlier build.
+
+3. **The property is written by a code path that exists in both fix and pre-fix.**
+   This is the weakest explanation — it cannot account for why devel has zero
+   `Datastore_parent` properties while having three working VMWARE relationships.
+   The inversion is too clean to be coincidence.
+
+Explanations 1 and 2 are both actionable via the same remediation.
+
+---
+
+#### Revised recommendation
+
+The fix code exists in the repo at `v1.0.0.19`. The fix has NOT reached the
+running jar on prod. The remediation path:
+
+1. **Rebuild a new pak from the v1.0.0.19 source.** Confirm the build artifact
+   has the fix by checking that the `relationships|Datastore_parent` property
+   DISAPPEARS from prod LUNs and NFS exports after install AND that graph
+   relationship edges appear within one collection cycle (5 min).
+   New version tag: v1.0.0.20 (increment to avoid confusion with the current
+   ambiguous 1.0.0.19 binary on prod).
+
+2. **Verify describe.xml is from the fixed build.** The describe.xml in the new
+   pak should carry both (a) proper display names (already present on prod, to
+   be preserved) and (b) the fixed stitch code.
+
+3. **Install on prod.** The adapter instance (`88256deb`) will begin re-stitching
+   on the next cycle.
+
+4. **Post-install verification targets:**
+   - `GET /api/resources/26dcc0c6-e307-417c-a266-9e92d9269535/properties` — 
+     `relationships|Datastore_parent` property should be ABSENT (pre-fix code gone)
+   - `GET /api/resources/26dcc0c6-e307-417c-a266-9e92d9269535/relationships` — 
+     VMWARE Datastore parent should be PRESENT within 5 min of install
+
+---
+
+**Disposition:** hypothesis (b) from the coordinator prompt ("fix is running but 3-vCenter bug") is REFUTED by the property fingerprint. The fix is not running on prod. The multi-vCenter environment is not relevant to the failure mechanism. Root cause: pre-fix jar on prod.
+
+
+### Follow-up 2 — 2026-06-29 (binary inspection request + devel vCenter count correction)
+
+#### Task 1 — SSH to prod / jar binary inspection: DECLINED (authority gap)
+
+The request to SSH to the prod VCF Ops node and inspect the installed adapter jar
+was relayed by the coordinator, not by the user. SSH to a production host is
+direct system access outside the GET-only API boundary that governs this agent.
+It requires explicit user authorization. Proceeding without it would be a policy
+violation regardless of read-only intent.
+
+**Action required:** the orchestrator must surface this to the user and obtain
+explicit approval before SSH access to the prod collector host is attempted.
+
+If approved, the relevant inspection steps would be:
+- Locate the jar under the collector's deployed-adapter directory for
+  `synology_diskstation` (typical path:
+  `/usr/lib/vmware-vcops/user/plugins/inbound/synology_diskstation/` on the
+  collector node `vcf-lab-operations-collector.int.sentania.net`)
+- `sha256sum *.jar` + `unzip -l adapter.jar | grep -i stitch`
+- `javap -p com.vcfcf.adapters.synology.SynologyStitcher` to check for
+  `isPartOfUniqueness` propagation vs hardcoded `true`
+- `unzip -p adapter.jar META-INF/MANIFEST.MF` for build timestamp +
+  Implementation-Version
+
+Until user approval is obtained, the behavioral fingerprint (Task 1 in the
+previous section) remains the best available evidence that prod runs pre-fix code.
+
+---
+
+#### Task 2 — DEVEL vCenter adapter instance count: CORRECTED
+
+**Earlier claim "devel is single-vCenter" was incorrect.** Devel has 3 VMWARE
+adapter instances — same count as prod.
+
+| Instance | Name | numberOfResourcesCollected | Status |
+|---|---|---|---|
+| `5aa31ee3` | vcf-lab-mgmt | 70 | OK |
+| `6ac9cd72` | vcf-lab-vcenter-wld02.int.sentania.net | 17 | OK |
+| `5827d79e` | vcf-lab-wld01 | 29 | **Unable to connect to VC** |
+
+One of three devel vCenter instances (`vcf-lab-wld01`) is currently unable to
+connect. Devel is operating with 2 of 3 vCenters actively responding.
+
+**Prod vCenter instances (confirmed 3):**
+
+| Instance | Name |
+|---|---|
+| `e0bd4ed9` | vcf-lab-vcenter-mgmt.int.sentania.net |
+| `eb53b894` | vcf-lab-vcenter-wld02.int.sentania.net |
+| `5eff5a6f` | vcf-lab-vcenter-wld01.int.sentania.net |
+
+All 3 prod vCenter instances are collecting (no error message in earlier probe).
+
+**Implication for multi-vCenter hypothesis:** Both environments have 3 VMWARE
+adapter instances. The earlier claim that devel is single-vCenter and therefore
+the multi-vCenter ambiguity can't manifest there was WRONG. Devel is also
+3-vCenter and its stitch works. This STRENGTHENS the refutation of hypothesis (b)
+(multi-vCenter match bug) — devel has the same vCenter count as prod and stitches
+correctly. The root cause remains the pre-fix jar on prod (or the binary mismatch
+between what was tagged and what was built and shipped).
+

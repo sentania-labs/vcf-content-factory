@@ -6,6 +6,11 @@ import com.vcfcf.adapter.json.SimpleJson;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,9 +23,34 @@ import java.util.Map;
  * Framework-level Suite API REST transport for property/stats stitching.
  *
  * <p>Generalised from the compliance adapter's dead-code
- * {@code SuiteApiPropertyPusher}. Upgraded to use {@link java.net.http.HttpClient}
- * (source-11 baseline) with platform SSL, and wired to the ambient
- * maintenance-credential path.
+ * {@code SuiteApiPropertyPusher}. Supports two transport modes:
+ *
+ * <dl>
+ *   <dt>Loopback transport (ambient path)</dt>
+ *   <dd>When the resolved Suite API host is a loopback address
+ *   ({@code 127.0.0.0/8}), connections are opened via
+ *   {@link VcfCfAdapter#openPlatformConnection(String)} — an
+ *   {@code HttpsURLConnection} wired with the platform {@code CustomSSLSocketFactory}
+ *   ({@code AdapterBase.getSocketFactory()}, carrying the TOFU-survival intercept)
+ *   and an all-true hostname verifier (safe: peer is already loopback-gated). This
+ *   matches the trust/hostname posture of the SDK-injected {@code SuiteAPIClient}.
+ *   The previous {@code java.net.http.HttpClient} + {@code insecureSslContext()} path
+ *   fixed CA trust but could not inject a {@code HostnameVerifier}, failing with
+ *   {@code certificate_unknown(46)} on production appliances whose operator-replaced
+ *   cert has no {@code localhost} SAN (see §5 of
+ *   {@code specs/20-suiteapi-client-behavioral-contract.md}).
+ *   Gating is on the <em>resolved peer</em> ({@code InetAddress.isLoopbackAddress()}),
+ *   not the config string {@code "localhost"}, to prevent the relaxation from leaking
+ *   to a resolver-redirectable hostname.</dd>
+ *
+ *   <dt>Explicit/remote transport</dt>
+ *   <dd>When the resolved host is not a loopback address (remote-collector
+ *   deployment with an explicit Suite API FQDN), connections use
+ *   {@code java.net.http.HttpClient} with a trust-all SSLContext. This path
+ *   is unchanged from the previous release. The explicit URL must target the
+ *   primary/analytics Suite API node — pointing it at {@code localhost} on
+ *   a collector yields HTTP 403 (suite-api not served on collectors).</dd>
+ * </dl>
  *
  * <h3>Credential resolution order</h3>
  * <ol>
@@ -29,7 +59,7 @@ import java.util.Map;
  *       (adapter-config fallback for remote collectors).</li>
  *   <li><strong>Ambient</strong> — credentials read from the platform's
  *       {@code maintenanceuser.properties}; Suite API endpoint defaults to
- *       {@code https://localhost/suite-api/} (all-in-one / cloud-proxy nodes).
+ *       {@code https://localhost/suite-api/} (primary/analytics node only).
  *       Password decrypted by {@link com.integrien.alive.common.security.Crypt}
  *       — the only FIPS-safe path under
  *       {@code -Dorg.bouncycastle.fips.approved_only=true}.</li>
@@ -37,36 +67,14 @@ import java.util.Map;
  *       {@link IllegalStateException} with an actionable message.</li>
  * </ol>
  *
- * <h3>Token lifecycle</h3>
- * <p>A token is acquired before each stitching push and released in a
- * {@code finally} block — cooperative cancellation is honoured. This mirrors
- * the pattern observed in the v1 aria-ops-core stitcher (acquire → push →
- * release per collection cycle; short-lived tokens are the proven-safe pattern).
- *
- * <h3>SSL</h3>
- * <p>Uses a trust-all {@link SSLContext} (via
- * {@link VcfCfAdapter#insecureSslContext()}) for all Suite API calls.
- *
- * <p><strong>Rationale (live-proven on devel + prod, build 45, 2026-06-10):</strong>
- * The platform's {@link com.integrien.alive.common.adapter3.CustomTrustManager}
- * is a TOFU (Trust-On-First-Use) manager: {@code checkServerTrusted} throws
- * {@code CustomCertificateException} unconditionally for any unknown cert, then
- * fires {@code handleUnknownCertificate} as a side-effect notification. With the
- * old {@code URLConnection}/{@code getSocketFactory()} path the platform catches
- * that exception and retries. {@code java.net.http.HttpClient} receives the
- * exception directly — no retry — so {@code SSLHandshakeException} /
- * "PKIX path building failed" results every cycle even though the TOFU
- * notification fired (visible in appliance logs immediately after each failure).
- * The JVM default truststore likewise has no knowledge of the platform's
- * self-signed cert. Both alternatives always fail.
- *
- * <p>A trust-all context is appropriate here because: (a) the endpoint is always
- * the platform's own node ({@code https://localhost/suite-api}); (b) the cert is
- * always the platform's own self-signed cert; (c) loopback-network isolation
- * provides equivalent transport security for this hop. For remote-collector
- * deployments (non-localhost endpoints) the same trust-all is used until a
- * production remote-collector scenario is first deployed — document it in
- * {@code context/investigations/} at that time.
+ * <h3>Token lifecycle (per spec §1/§2/§3)</h3>
+ * <p>A bearer token is acquired lazily on the first call and cached for the
+ * lifetime of this instance. On HTTP 401, the token is re-acquired and the
+ * failed request is retried exactly once. The cached token is released in
+ * {@link #discard()} — errors during release are swallowed and logged (the
+ * platform's token TTL is the safety net). This matches the
+ * {@code RestClientProxy} ({@code SuiteAPIClient}) behavioral contract:
+ * per-instance caching, single 401 retry, close-time release.
  *
  * <h3>Logging</h3>
  * <p>Credential values are never logged. Only the mechanism chosen
@@ -74,13 +82,13 @@ import java.util.Map;
  *
  * <h3>Usage</h3>
  * <pre>{@code
- * // Ambient (standard all-in-one node — no adapter config fields needed):
+ * // Ambient (standard primary-node — no adapter config fields needed):
  * SuiteApiStitchClient client = SuiteApiStitchClient.builder()
  *     .adapter(this)
  *     .logger(loggerInstance)
  *     .build();
  *
- * // Explicit (remote collector fallback):
+ * // Explicit (remote collector fallback; host must be the primary FQDN):
  * SuiteApiStitchClient client = SuiteApiStitchClient.builder()
  *     .adapter(this)
  *     .explicitCredentials("vcf-ops.example.com", "svcUser", "svcPass")
@@ -98,7 +106,7 @@ import java.util.Map;
  */
 public final class SuiteApiStitchClient {
 
-    /** Default Suite API base URL for all-in-one / cloud-proxy nodes. */
+    /** Default Suite API base URL for the primary/analytics node. */
     static final String DEFAULT_SUITE_API_BASE = "https://localhost/suite-api";
 
     /** Auth source for the maintenance account — always LOCAL. */
@@ -110,8 +118,25 @@ public final class SuiteApiStitchClient {
     // Instance fields
     // -----------------------------------------------------------------------
 
-    /** Raw java.net.http client (carries per-call OpsToken). */
+    /**
+     * Adapter instance, non-null when {@code isLoopback=true}.
+     * Used to call {@link VcfCfAdapter#openPlatformConnection(String)} for
+     * the loopback Suite API transport.
+     */
+    private final VcfCfAdapter<?> adapter;
+
+    /**
+     * {@code java.net.http.HttpClient} for the explicit/remote path.
+     * {@code null} when {@code isLoopback=true} (URLConnection path instead).
+     */
     private final HttpClient rawHttpClient;
+
+    /**
+     * {@code true} when the Suite API base URL resolves to a loopback address.
+     * Selects the URLConnection transport ({@code openPlatformConnection}) over
+     * the {@code java.net.http.HttpClient} transport.
+     */
+    private final boolean isLoopback;
 
     /** Resolved Suite API base URL (no trailing slash). */
     private final String suiteApiBase;
@@ -130,30 +155,46 @@ public final class SuiteApiStitchClient {
 
     private final Logger logger;
 
+    /**
+     * Cached bearer token. {@code null} until first use; re-nulled on 401 to
+     * force re-acquisition. Volatile so reads in {@link #ensureToken()} before
+     * the synchronized block see a fresh value.
+     */
+    private volatile String cachedToken = null;
+
+    /** Guard for token acquire / invalidate operations. */
+    private final Object tokenLock = new Object();
+
+    // -----------------------------------------------------------------------
+    // Private exception — distinguishes 401 for the single-retry path
+    // -----------------------------------------------------------------------
+
+    /** Thrown by {@code rawPost}/{@code rawGet} on HTTP 401 only. */
+    private static final class Suite401Exception extends IOException {
+        Suite401Exception(String message) { super(message); }
+    }
+
     // -----------------------------------------------------------------------
     // Constructor (private — use Builder)
     // -----------------------------------------------------------------------
 
     private SuiteApiStitchClient(
-            SSLContext sslContext,
+            VcfCfAdapter<?> adapter,
+            HttpClient rawHttpClient,
+            boolean isLoopback,
             String suiteApiBase,
             String resolvedUsername,
             String resolvedPassword,
             String mechanism,
             Logger logger) {
+        this.adapter = adapter;
+        this.rawHttpClient = rawHttpClient;
+        this.isLoopback = isLoopback;
         this.suiteApiBase = suiteApiBase;
         this.resolvedUsername = resolvedUsername;
         this.resolvedPassword = resolvedPassword;
         this.mechanism = mechanism;
         this.logger = logger;
-
-        HttpClient.Builder hcb = HttpClient.newBuilder()
-                .connectTimeout(REQUEST_TIMEOUT)
-                .followRedirects(HttpClient.Redirect.NORMAL);
-        if (sslContext != null) {
-            hcb.sslContext(sslContext);
-        }
-        this.rawHttpClient = hcb.build();
     }
 
     // -----------------------------------------------------------------------
@@ -181,13 +222,9 @@ public final class SuiteApiStitchClient {
         private Builder() {}
 
         /**
-         * Supply the adapter instance.
-         *
-         * <p>Retained for future extensibility (e.g. per-adapter logging
-         * context or config inspection). The SSL context used for Suite API
-         * calls is <strong>not</strong> derived from the adapter —
-         * {@link VcfCfAdapter#insecureSslContext()} is always used for the
-         * localhost Suite API endpoint (see class Javadoc, SSL section).
+         * Supply the adapter instance. Required for the loopback transport path
+         * — the adapter's {@link VcfCfAdapter#openPlatformConnection(String)}
+         * is called for every loopback Suite API call.
          *
          * @param adapter the adapter instance ({@code this} in configureAdapter)
          */
@@ -202,6 +239,11 @@ public final class SuiteApiStitchClient {
          * <p>Use when the adapter config exposes Suite API credential fields
          * (remote-collector fallback — {@code maintenanceuser.properties}
          * may be absent on a remote collector / cloud proxy).
+         *
+         * <p><strong>The {@code host} must be the primary/analytics Suite API
+         * FQDN.</strong> Pointing explicit credentials at {@code localhost} on a
+         * remote collector still yields HTTP 403 — the global VMWARE inventory
+         * is not served on collector nodes (spec §4).
          *
          * @param host     Suite API hostname (e.g. {@code "vcf-ops.example.com"});
          *                 used to build {@code https://<host>/suite-api}
@@ -231,7 +273,9 @@ public final class SuiteApiStitchClient {
          *
          * @return a configured client
          * @throws IllegalArgumentException if {@code logger} was not set
-         * @throws IllegalStateException    if no credentials can be resolved
+         * @throws IllegalStateException    if no credentials can be resolved, or
+         *                                  if the loopback path was selected but
+         *                                  {@code adapter} was not supplied
          */
         public SuiteApiStitchClient build() {
             if (logger == null) {
@@ -261,7 +305,7 @@ public final class SuiteApiStitchClient {
                         + " endpoint=" + suiteApiBase);
 
             } else {
-                // Ambient maintenance credentials (all-in-one / cloud-proxy standard path).
+                // Ambient maintenance credentials (primary-node standard path).
                 AmbientCredential cred;
                 try {
                     cred = AmbientCredential.load();
@@ -285,43 +329,73 @@ public final class SuiteApiStitchClient {
                         + " endpoint=" + suiteApiBase);
             }
 
-            // --- SSL context --------------------------------------------------
-            // The Suite API at localhost presents the platform's own self-signed
-            // certificate. The platform's CustomTrustManager (used by
-            // getPlatformSslContext()) is a TOFU manager: its checkServerTrusted()
-            // throws CustomCertificateException unconditionally for any cert not
-            // already in the platform's trusted store, then fires
-            // handleUnknownCertificate() as a side-effect. With the old
-            // URLConnection / getSocketFactory() path, the platform intercepts
-            // the exception and retries after registering the cert. java.net.http
-            // .HttpClient receives the exception directly — no intercept, no
-            // retry — so SSLHandshakeException / PKIX path building failed is
-            // the result even though CustomTrustManager's TOFU notification DID
-            // fire (visible in logs immediately after each failure).
-            //
-            // The JVM default truststore likewise fails: it has no knowledge of
-            // the platform's self-signed cert.
-            //
-            // The correct context for localhost Suite API calls is a trust-all
-            // SSLContext. This is not a general opt-out: the endpoint is always
-            // https://localhost/suite-api (the platform's own node); the cert is
-            // always the platform's self-signed cert; there is no third-party
-            // cert to validate. Network-level isolation (loopback) provides the
-            // equivalent of transport security for this hop.
-            //
-            // For explicit-credential remote collectors (non-localhost endpoints),
-            // the same trust-all is used for now — a proper PKI trust path for
-            // remote Suite API endpoints is a future enhancement when the remote-
-            // collector scenario is first deployed in production. Document any
-            // production remote-collector use in context/investigations/.
-            SSLContext sslContext = VcfCfAdapter.insecureSslContext();
+            // --- Transport selection ------------------------------------------
+            // Gate on the RESOLVED peer, not the config string "localhost".
+            // This prevents trust-all from leaking to a resolver-redirectable name.
+            boolean loopback = SuiteApiStitchClient.isLoopbackUrl(suiteApiBase);
+
+            if (loopback && adapter == null) {
+                throw new IllegalStateException(
+                        "SuiteApiStitchClient: loopback Suite API transport requires the "
+                        + "adapter instance — call .adapter(this) on the builder. "
+                        + "See SuiteApiStitcher.create().");
+            }
+
+            HttpClient client = null;
+            if (!loopback) {
+                // Explicit/remote path: java.net.http.HttpClient with trust-all SSL.
+                // The remote Suite API URL carries a real cert (or is admin-approved);
+                // trust-all is the existing behaviour for this path, unchanged.
+                SSLContext sslContext = VcfCfAdapter.insecureSslContext();
+                client = HttpClient.newBuilder()
+                        .connectTimeout(REQUEST_TIMEOUT)
+                        .followRedirects(HttpClient.Redirect.NORMAL)
+                        .sslContext(sslContext)
+                        .build();
+            }
+
+            if (loopback) {
+                // One INFO line per spec §5 requirement.
+                logger.info("SuiteApiStitchClient: loopback Suite API hop via "
+                        + "openPlatformConnection (CustomSSLSocketFactory/getSocketFactory "
+                        + "+ all-true loopback hostname verifier, peer gated to "
+                        + "isLoopbackAddress)"
+                        + " mechanism=" + mechanism
+                        + " principal=" + username);
+            }
 
             return new SuiteApiStitchClient(
-                    sslContext, suiteApiBase, username, password, mechanism, logger);
+                    loopback ? adapter : null,
+                    client,
+                    loopback,
+                    suiteApiBase,
+                    username, password, mechanism, logger);
         }
 
         private static boolean isNonBlank(String s) {
             return s != null && !s.trim().isEmpty();
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Package-visible statics (for unit tests in com.vcfcf.adapter.stitch)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Resolve the host in {@code url} to an {@link InetAddress} and check
+     * {@link InetAddress#isLoopbackAddress()}.
+     *
+     * <p>Returns {@code false} on any resolution failure (fail-open: unknown
+     * hosts are treated as non-loopback so the explicit/strict path is used).
+     * Visible to unit tests in the same package.
+     */
+    static boolean isLoopbackUrl(String url) {
+        try {
+            String host = URI.create(url).getHost();
+            if (host == null) return false;
+            return InetAddress.getByName(host).isLoopbackAddress();
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -332,9 +406,10 @@ public final class SuiteApiStitchClient {
     /**
      * Push string properties onto a foreign resource.
      *
-     * <p>A Suite API token is acquired before the push and released in a
-     * {@code finally} block. This mirrors the v1 stitcher token lifecycle
-     * (short-lived, per-call, always released).
+     * <p>The cached bearer token is used. If the Suite API returns HTTP 401,
+     * the token is re-acquired and the push is retried exactly once. Failures
+     * are logged at WARN and swallowed — a stitching failure must not abort
+     * the adapter's primary collect cycle.
      *
      * @param resourceId VCF Ops resource UUID (from {@link ForeignResourceResolver})
      * @param properties map of statKey → string value; no-op if empty
@@ -345,23 +420,27 @@ public final class SuiteApiStitchClient {
             long timestamp) {
         if (properties == null || properties.isEmpty()) return;
 
-        String tok = null;
+        String body = buildPropertiesJson(properties, timestamp);
+        String path = "/api/resources/" + resourceId + "/properties";
         try {
-            tok = acquireToken();
-            String body = buildPropertiesJson(properties, timestamp);
-            rawPost("/api/resources/" + resourceId + "/properties", body, tok);
+            String tok = ensureToken();
+            try {
+                rawPost(path, body, tok);
+            } catch (Suite401Exception e) {
+                tok = reAcquireToken(tok);
+                rawPost(path, body, tok);
+            }
         } catch (Exception e) {
             logger.warn("SuiteApiStitchClient: pushProperties failed for resource="
                     + resourceId + ": " + e.getMessage(), e);
-        } finally {
-            releaseToken(tok);
         }
     }
 
     /**
      * Push numeric statistics onto a foreign resource.
      *
-     * <p>Token lifecycle is identical to {@link #pushProperties}.
+     * <p>Token lifecycle and error handling are identical to
+     * {@link #pushProperties}.
      *
      * @param resourceId VCF Ops resource UUID
      * @param stats      map of statKey → double value; no-op if empty
@@ -372,23 +451,27 @@ public final class SuiteApiStitchClient {
             long timestamp) {
         if (stats == null || stats.isEmpty()) return;
 
-        String tok = null;
+        String body = buildStatsJson(stats, timestamp);
+        String path = "/api/resources/" + resourceId + "/stats";
         try {
-            tok = acquireToken();
-            String body = buildStatsJson(stats, timestamp);
-            rawPost("/api/resources/" + resourceId + "/stats", body, tok);
+            String tok = ensureToken();
+            try {
+                rawPost(path, body, tok);
+            } catch (Suite401Exception e) {
+                tok = reAcquireToken(tok);
+                rawPost(path, body, tok);
+            }
         } catch (Exception e) {
             logger.warn("SuiteApiStitchClient: pushStats failed for resource="
                     + resourceId + ": " + e.getMessage(), e);
-        } finally {
-            releaseToken(tok);
         }
     }
 
     /**
      * Perform an authenticated GET against the Suite API.
      *
-     * <p>Acquires and releases a token around the single GET call.
+     * <p>The cached bearer token is used. If the Suite API returns HTTP 401,
+     * the token is re-acquired and the GET is retried exactly once.
      *
      * @param path path relative to the Suite API base (e.g.
      *             {@code "/api/resources?adapterKind=VMWARE"})
@@ -397,26 +480,32 @@ public final class SuiteApiStitchClient {
      * @throws InterruptedException if the calling thread is interrupted
      */
     public String get(String path) throws IOException, InterruptedException {
-        String tok = null;
+        String tok = ensureToken();
         try {
-            tok = acquireToken();
             return rawGet(path, tok);
-        } finally {
-            releaseToken(tok);
+        } catch (Suite401Exception e) {
+            tok = reAcquireToken(tok);
+            return rawGet(path, tok);
         }
     }
 
     /**
-     * Release the underlying HTTP client resources.
+     * Release the cached bearer token and underlying HTTP resources.
      *
      * <p>Call from the adapter's {@code onDiscard()} method, alongside
      * releasing the {@link com.vcfcf.adapter.http.ManagedHttpClient}.
+     * Token release failure is swallowed and logged at WARN — the platform's
+     * token TTL is the safety net (per spec §3 cancellation contract).
      */
     public void discard() {
-        // java.net.http.HttpClient does not implement Closeable in Java 11.
-        // Nothing to explicitly close — GC reclaims the connection pool.
-        // This method exists as a lifecycle hook for future extensibility
-        // and to make the discard pattern visible to adapter authors.
+        String tok;
+        synchronized (tokenLock) {
+            tok = this.cachedToken;
+            this.cachedToken = null;
+        }
+        releaseToken(tok); // null-safe, swallows all exceptions
+        // java.net.http.HttpClient has no explicit close in Java 11.
+        // URLConnection connections are per-request; nothing to close here.
     }
 
     // -----------------------------------------------------------------------
@@ -424,35 +513,76 @@ public final class SuiteApiStitchClient {
     // -----------------------------------------------------------------------
 
     /**
-     * POST to {@code /api/auth/token/acquire} with the resolved credentials
-     * and return the bearer token string.
+     * Return the cached bearer token, acquiring a new one lazily if absent.
+     * Thread-safe: double-checked with {@link #tokenLock}.
+     */
+    private String ensureToken() throws IOException, InterruptedException {
+        String tok = this.cachedToken;
+        if (tok != null) return tok;
+        synchronized (tokenLock) {
+            tok = this.cachedToken;
+            if (tok == null) {
+                tok = acquireToken();
+                this.cachedToken = tok;
+            }
+            return tok;
+        }
+    }
+
+    /**
+     * Invalidate the cached token (if it still matches {@code oldToken}) and
+     * acquire a fresh one. Only re-acquires if not already refreshed by a
+     * concurrent caller. Single retry on 401 per spec §1.
+     */
+    private String reAcquireToken(String oldToken) throws IOException, InterruptedException {
+        synchronized (tokenLock) {
+            if (oldToken != null && oldToken.equals(this.cachedToken)) {
+                this.cachedToken = null;
+            }
+            String tok = this.cachedToken;
+            if (tok == null) {
+                tok = acquireToken();
+                this.cachedToken = tok;
+            }
+            return tok;
+        }
+    }
+
+    /**
+     * POST to {@code /api/auth/token/acquire} and return the bearer token.
+     * Selects the loopback (URLConnection) or explicit (HttpClient) transport.
      */
     private String acquireToken() throws IOException, InterruptedException {
         String body = "{\"username\":" + jsonStr(resolvedUsername)
                 + ",\"password\":" + jsonStr(resolvedPassword)
                 + ",\"authSource\":" + jsonStr(AUTH_SOURCE) + "}";
 
-        byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(suiteApiBase + "/api/auth/token/acquire"))
-                .timeout(REQUEST_TIMEOUT)
-                .header("Content-Type", "application/json")
-                .header("Accept", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
-                .build();
-
-        HttpResponse<String> resp = rawHttpClient.send(
-                req, HttpResponse.BodyHandlers.ofString());
-
-        int status = resp.statusCode();
-        if (status < 200 || status >= 300) {
-            throw new IOException(
-                    "Suite API token/acquire failed: HTTP " + status
-                    + " mechanism=" + mechanism
-                    + " principal=" + resolvedUsername);
+        String responseBody;
+        if (isLoopback) {
+            responseBody = urlConnRequest("POST",
+                    suiteApiBase + "/api/auth/token/acquire", body, null);
+        } else {
+            byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(suiteApiBase + "/api/auth/token/acquire"))
+                    .timeout(REQUEST_TIMEOUT)
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
+                    .build();
+            HttpResponse<String> resp = rawHttpClient.send(
+                    req, HttpResponse.BodyHandlers.ofString());
+            int status = resp.statusCode();
+            if (status < 200 || status >= 300) {
+                throw new IOException(
+                        "Suite API token/acquire failed: HTTP " + status
+                        + " mechanism=" + mechanism
+                        + " principal=" + resolvedUsername);
+            }
+            responseBody = resp.body();
         }
 
-        SimpleJson parsed = SimpleJson.parse(resp.body());
+        SimpleJson parsed = SimpleJson.parse(responseBody);
         String token = parsed.get("token").asString(null);
         if (token == null || token.isEmpty()) {
             throw new IOException(
@@ -466,22 +596,27 @@ public final class SuiteApiStitchClient {
     /**
      * POST to {@code /api/auth/token/release} to invalidate the token.
      *
-     * <p>Safe to call with a {@code null} token. Exceptions are swallowed and
-     * logged at WARN — this is always called from a {@code finally} block and
-     * must never mask the original exception.
+     * <p>Safe to call with a {@code null} token. All exceptions are swallowed
+     * and logged at WARN — this is always called from {@link #discard()} and
+     * must never mask the adapter lifecycle.
      */
     private void releaseToken(String token) {
         if (token == null) return;
         try {
             String body = "{\"token\":" + jsonStr(token) + "}";
-            byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
-            HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(suiteApiBase + "/api/auth/token/release"))
-                    .timeout(REQUEST_TIMEOUT)
-                    .header("Content-Type", "application/json")
-                    .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
-                    .build();
-            rawHttpClient.send(req, HttpResponse.BodyHandlers.discarding());
+            if (isLoopback) {
+                urlConnRequest("POST",
+                        suiteApiBase + "/api/auth/token/release", body, null);
+            } else {
+                byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+                HttpRequest req = HttpRequest.newBuilder()
+                        .uri(URI.create(suiteApiBase + "/api/auth/token/release"))
+                        .timeout(REQUEST_TIMEOUT)
+                        .header("Content-Type", "application/json")
+                        .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
+                        .build();
+                rawHttpClient.send(req, HttpResponse.BodyHandlers.discarding());
+            }
         } catch (Exception e) {
             logger.warn("SuiteApiStitchClient: token release failed (non-fatal): "
                     + e.getMessage());
@@ -489,63 +624,163 @@ public final class SuiteApiStitchClient {
     }
 
     // -----------------------------------------------------------------------
-    // Raw HTTP helpers (carry per-call OpsToken)
+    // Raw HTTP helpers — transport dispatch
     // -----------------------------------------------------------------------
 
+    /**
+     * POST {@code body} to {@code apiPath} with the given {@code opsToken}.
+     * Dispatches to the loopback (URLConnection) or explicit (HttpClient)
+     * transport based on {@link #isLoopback}.
+     *
+     * @throws Suite401Exception on HTTP 401 (caller must single-retry)
+     * @throws IOException       on other HTTP or network error
+     */
     private void rawPost(String apiPath, String body, String opsToken)
             throws IOException, InterruptedException {
-        byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(suiteApiBase + apiPath))
-                .timeout(REQUEST_TIMEOUT)
-                .header("Content-Type", "application/json")
-                .header("Accept", "application/json")
-                .header("Authorization", "OpsToken " + opsToken)
-                .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
-                .build();
-
-        HttpResponse<Void> resp = rawHttpClient.send(
-                req, HttpResponse.BodyHandlers.discarding());
-
-        int status = resp.statusCode();
-        if (status == 401) {
-            throw new IOException(
-                    "Suite API POST " + apiPath
-                    + " returned 401 — token expired or credential invalid"
-                    + " mechanism=" + mechanism
-                    + " principal=" + resolvedUsername);
-        }
-        if (status < 200 || status >= 300) {
-            throw new IOException(
-                    "Suite API POST " + apiPath + " HTTP " + status);
+        if (isLoopback) {
+            urlConnRequest("POST", suiteApiBase + apiPath, body, opsToken);
+        } else {
+            byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(suiteApiBase + apiPath))
+                    .timeout(REQUEST_TIMEOUT)
+                    .header("Content-Type", "application/json")
+                    .header("Accept", "application/json")
+                    .header("Authorization", "OpsToken " + opsToken)
+                    .POST(HttpRequest.BodyPublishers.ofByteArray(bodyBytes))
+                    .build();
+            HttpResponse<Void> resp = rawHttpClient.send(
+                    req, HttpResponse.BodyHandlers.discarding());
+            int status = resp.statusCode();
+            if (status == 401) {
+                throw new Suite401Exception(
+                        "Suite API POST " + apiPath
+                        + " returned 401 — token expired or credential invalid"
+                        + " mechanism=" + mechanism
+                        + " principal=" + resolvedUsername);
+            }
+            if (status < 200 || status >= 300) {
+                throw new IOException(
+                        "Suite API POST " + apiPath + " HTTP " + status);
+            }
         }
     }
 
+    /**
+     * GET {@code apiPath} with the given {@code opsToken} and return the body.
+     * Dispatches to the loopback (URLConnection) or explicit (HttpClient)
+     * transport based on {@link #isLoopback}.
+     *
+     * @throws Suite401Exception on HTTP 401 (caller must single-retry)
+     * @throws IOException       on other HTTP or network error
+     */
     private String rawGet(String apiPath, String opsToken)
             throws IOException, InterruptedException {
-        HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create(suiteApiBase + apiPath))
-                .timeout(REQUEST_TIMEOUT)
-                .header("Accept", "application/json")
-                .header("Authorization", "OpsToken " + opsToken)
-                .GET()
-                .build();
-
-        HttpResponse<String> resp = rawHttpClient.send(
-                req, HttpResponse.BodyHandlers.ofString());
-
-        int status = resp.statusCode();
-        if (status == 401) {
-            throw new IOException(
-                    "Suite API GET " + apiPath
-                    + " returned 401 mechanism=" + mechanism
-                    + " principal=" + resolvedUsername);
+        if (isLoopback) {
+            return urlConnRequest("GET", suiteApiBase + apiPath, null, opsToken);
+        } else {
+            HttpRequest req = HttpRequest.newBuilder()
+                    .uri(URI.create(suiteApiBase + apiPath))
+                    .timeout(REQUEST_TIMEOUT)
+                    .header("Accept", "application/json")
+                    .header("Authorization", "OpsToken " + opsToken)
+                    .GET()
+                    .build();
+            HttpResponse<String> resp = rawHttpClient.send(
+                    req, HttpResponse.BodyHandlers.ofString());
+            int status = resp.statusCode();
+            if (status == 401) {
+                throw new Suite401Exception(
+                        "Suite API GET " + apiPath
+                        + " returned 401 mechanism=" + mechanism
+                        + " principal=" + resolvedUsername);
+            }
+            if (status < 200 || status >= 300) {
+                throw new IOException(
+                        "Suite API GET " + apiPath + " HTTP " + status);
+            }
+            return resp.body();
         }
-        if (status < 200 || status >= 300) {
-            throw new IOException(
-                    "Suite API GET " + apiPath + " HTTP " + status);
+    }
+
+    // -----------------------------------------------------------------------
+    // URLConnection transport (loopback path)
+    // -----------------------------------------------------------------------
+
+    /**
+     * Execute an HTTP request via the platform-connection loopback transport.
+     *
+     * <p>Opens the connection through
+     * {@link VcfCfAdapter#openPlatformConnection(String)}, which sets the
+     * platform trust manager and hostname verifier on the underlying
+     * {@code HttpsURLConnection}. This is the cert-item compliant replacement
+     * for {@code java.net.http.HttpClient} + {@code insecureSslContext()} on
+     * the loopback hop.
+     *
+     * @param method   {@code "GET"} or {@code "POST"}
+     * @param fullUrl  full URL including base (e.g.
+     *                 {@code "https://localhost/suite-api/api/auth/token/acquire"})
+     * @param body     request body bytes for POST, or {@code null} for GET
+     * @param opsToken {@code OpsToken} header value, or {@code null} to omit
+     *                 the {@code Authorization} header (used for token acquire/release)
+     * @return response body as String (empty string if the server sends no body)
+     * @throws Suite401Exception on HTTP 401
+     * @throws IOException       on other HTTP or connection error
+     * @throws InterruptedException if the thread is interrupted before the call
+     */
+    private String urlConnRequest(String method, String fullUrl, String body, String opsToken)
+            throws IOException, InterruptedException {
+        if (Thread.currentThread().isInterrupted()) {
+            throw new InterruptedException(
+                    "SuiteApiStitchClient: thread interrupted before "
+                    + method + " " + fullUrl);
         }
-        return resp.body();
+        java.net.URLConnection rawConn = adapter.openPlatformConnection(fullUrl);
+        HttpURLConnection conn = (HttpURLConnection) rawConn;
+        try {
+            conn.setRequestMethod(method);
+            conn.setConnectTimeout((int) REQUEST_TIMEOUT.toMillis());
+            conn.setReadTimeout((int) REQUEST_TIMEOUT.toMillis());
+            conn.setRequestProperty("Accept", "application/json");
+            if (body != null) {
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type", "application/json");
+            }
+            if (opsToken != null) {
+                conn.setRequestProperty("Authorization", "OpsToken " + opsToken);
+            }
+            if (body != null) {
+                byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+                try (OutputStream os = conn.getOutputStream()) {
+                    os.write(bodyBytes);
+                }
+            }
+            int status = conn.getResponseCode();
+            if (status == 401) {
+                throw new Suite401Exception(
+                        "Suite API " + method + " " + fullUrl
+                        + " returned 401 — token expired or credential invalid"
+                        + " mechanism=" + mechanism
+                        + " principal=" + resolvedUsername);
+            }
+            if (status < 200 || status >= 300) {
+                throw new IOException(
+                        "Suite API " + method + " " + fullUrl + " HTTP " + status);
+            }
+            // Read response body. Callers that do not need it ignore the return value.
+            InputStream is = conn.getInputStream();
+            if (is == null) return "";
+            try (InputStreamReader reader =
+                    new InputStreamReader(is, StandardCharsets.UTF_8)) {
+                char[] buf = new char[8192];
+                StringBuilder sb = new StringBuilder();
+                int n;
+                while ((n = reader.read(buf)) != -1) sb.append(buf, 0, n);
+                return sb.toString();
+            }
+        } finally {
+            conn.disconnect();
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -582,7 +817,7 @@ public final class SuiteApiStitchClient {
 
     /**
      * JSON-encode a string value (double-quoted, minimal escaping).
-     * Returns {@code null} for a null input.
+     * Returns {@code "null"} for a null input.
      */
     static String jsonStr(String s) {
         if (s == null) return "null";

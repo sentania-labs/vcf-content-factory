@@ -55,8 +55,11 @@ import java.util.Map;
  * The client handles:
  * <ul>
  *   <li>Credential resolution (ambient → explicit → fail-with-message).</li>
- *   <li>Token acquire / release lifecycle per push call.</li>
- *   <li>Platform SSL ({@link VcfCfAdapter#getPlatformSslContext()}).</li>
+ *   <li>Token lifecycle: cached per-instance, re-acquired on HTTP 401,
+ *       released on {@link #discard()} (per spec §1/§2/§3).</li>
+ *   <li>Loopback TLS via {@link VcfCfAdapter#openPlatformConnection(String)}
+ *       (platform trust manager + hostname verifier, matching the SDK-injected
+ *       {@code SuiteAPIClient}'s Noop-class loopback trust posture).</li>
  *   <li>JSON serialisation of property and stat payloads.</li>
  * </ul>
  *
