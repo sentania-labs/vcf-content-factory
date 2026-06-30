@@ -43,7 +43,7 @@ jobs:
 
     steps:
       - name: Checkout adapter source
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       # Defect gate (factory RULE-012). Runs FIRST — before any expensive
       # setup/build — so a v* tag fails fast and never produces a .pak while
@@ -88,7 +88,7 @@ jobs:
       # The sentania-labs runner image ships NO JDK. build-sdk needs javac+jar.
       # If you bake a JDK into the runner image, delete this step.
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: temurin
           java-version: '17'
