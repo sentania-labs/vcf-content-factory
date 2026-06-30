@@ -978,8 +978,8 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
 
     /**
      * Open an HTTPS connection to {@code url} wired with the platform's
-     * {@code CustomSSLSocketFactory} (from {@link AdapterBase#getSocketFactory()}) and
-     * an all-accepting hostname verifier — the required loopback Suite API transport.
+     * {@code CustomSSLSocketFactory} and a peer-gated hostname verifier —
+     * the universal Suite API transport for both loopback and remote endpoints.
      *
      * <p><strong>TLS halves and why each was chosen:</strong>
      * <ul>
@@ -994,28 +994,36 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      *       vanilla JSSE factory that has no intercept; the exception propagates as fatal
      *       {@code SSLHandshakeException/PKIX} (confirmed devel+prod, build 45, 2026-06-10;
      *       see {@code lessons/suite-api-stitch-ssl-tofu-vs-java-http.md}).</li>
-     *   <li><strong>Hostname half — {@code (h,s) -> true}:</strong> The peer is already
-     *       gated to a resolved loopback address ({@code InetAddress.isLoopbackAddress()})
-     *       before this method is called. Accepting any hostname on loopback is strictly safe
-     *       and avoids dependency on {@link #getVerifier()}'s permissiveness against a
-     *       no-{@code localhost}-SAN cert, which is unconfirmed against an org-CA-signed
-     *       prod cert. This matches the SDK-injected {@code SuiteAPIClient}'s Noop-class
-     *       loopback hostname posture.</li>
+     *   <li><strong>Hostname half — peer-gated:</strong> The method resolves the URL host
+     *       via {@code InetAddress.getByName()} and checks
+     *       {@code InetAddress.isLoopbackAddress()}.
+     *       <ul>
+     *         <li>Loopback peer ({@code 127.0.0.0/8} or {@code ::1}) → installs an all-true
+     *             hostname verifier. Safe: only traffic to the local node is accepted.
+     *             Avoids dependency on whether the operator cert has a {@code localhost} SAN
+     *             (confirmed absent on org-CA-signed prod certs; see
+     *             {@code specs/20-suiteapi-client-behavioral-contract.md} §5). Matches the
+     *             SDK-injected {@code SuiteAPIClient} Noop-class loopback hostname posture.</li>
+     *         <li>Non-loopback peer → no override; JDK default strict hostname check
+     *             applies. The remote Suite API node is expected to carry a cert whose SAN
+     *             matches the configured FQDN.</li>
+     *         <li>Fail closed: if {@code getByName} throws (unresolvable host), the
+     *             hostname verifier is not overridden and JDK strict verification applies.</li>
+     *       </ul>
+     *   </li>
      * </ul>
      *
-     * <p>This is the equivalent of the package-private
+     * <p>This is the public equivalent of the package-private
      * {@code AdapterBase.getConnection(url, getVerifier())} — which callers in other
      * packages cannot reach — using the two public accessors that replicate both halves.
      *
-     * <p>Only call this from within the loopback transport gate in
-     * {@link com.vcfcf.adapter.stitch.SuiteApiStitchClient}. For target-system connections
-     * (vCenter, NAS appliances, etc.) use
-     * {@link com.vcfcf.adapter.http.HttpClientBuilder#platformSsl(VcfCfAdapter)}.
+     * <p>For target-system connections (vCenter, NAS appliances, etc.) use
+     * {@link com.vcfcf.adapter.http.HttpClientBuilder#platformSsl(VcfCfAdapter)} instead.
      *
      * @param url the full HTTPS URL to open (must use the {@code https} scheme;
      *            a non-https URL is rejected with an {@link java.io.IOException})
      * @return an {@link javax.net.ssl.HttpsURLConnection} configured with the platform
-     *         socket factory and an all-true loopback hostname verifier
+     *         socket factory and a peer-gated hostname verifier
      * @throws java.io.IOException if the URL scheme is not https, or if the connection
      *         cannot be opened
      */
@@ -1027,14 +1035,23 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
             throw new java.io.IOException(
                     "VcfCfAdapter.openPlatformConnection: expected an https URL but got "
                     + u.getProtocol() + " for " + url
-                    + " — only the https loopback Suite API endpoint is supported");
+                    + " — only the https Suite API endpoint is supported");
         }
         javax.net.ssl.HttpsURLConnection https = (javax.net.ssl.HttpsURLConnection) conn;
         // Trust half: platform CustomSSLSocketFactory carries the TOFU-survival intercept.
         // Do NOT use getPlatformSslContext() here — its vanilla JSSE factory omits the intercept.
         https.setSSLSocketFactory(getSocketFactory());
-        // Hostname half: all-true is safe — caller is already gated to isLoopbackAddress().
-        https.setHostnameVerifier((h, s) -> true);
+        // Hostname half: resolve peer; loopback → all-true; non-loopback → JDK strict (no override).
+        // Fail closed: if getByName throws, leave the JDK default strict verifier in place.
+        try {
+            java.net.InetAddress peer = java.net.InetAddress.getByName(u.getHost());
+            if (peer.isLoopbackAddress()) {
+                https.setHostnameVerifier((h, s) -> true);
+            }
+            // else: do not override — JDK default strict hostname verification applies.
+        } catch (java.net.UnknownHostException ignored) {
+            // Unresolvable host: fail closed — strict JDK hostname verification applies.
+        }
         return https;
     }
 

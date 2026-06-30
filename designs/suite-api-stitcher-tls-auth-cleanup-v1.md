@@ -52,6 +52,37 @@ required because it is the only one that carries the hostname verifier. Explicit
 > all-true verifier is preferred over `getVerifier()`: `getVerifier()` permissiveness is a live-only
 > unknown, and accepting any hostname on a resolved-loopback peer is strictly safe.
 
+## 0.1 Scope expansion (2026-06-30, post-Codex P2 on PR #30) — unify BOTH Suite API paths on TOFU
+
+Codex P2 on PR #30: `openPlatformConnection()` was **public and unconditionally** disabled hostname
+verification (the loopback assumption lived only in javadoc + the caller's `isLoopbackUrl` gate). A
+future/remote caller could leak platform credentials over a relaxed TLS connection to a non-loopback
+host. Valid — and it surfaced the deeper "needle": the framework Suite API transport runs against a
+**localhost** endpoint on the primary node *and* a **Cloud Proxy / remote** endpoint off-primary, and
+the original fix only addressed the loopback half. The explicit/remote path was still on
+`java.net.http.HttpClient` + trust-all `SSLContext`.
+
+**Decision (SME): fix both — shipping the guard without the CP path "doesn't materially improve the
+product."** The reference-correct, zero-CA-store mechanism is the platform **`getSocketFactory()`
+`CustomSSLSocketFactory` (TOFU)** — the same one every BlueMedora/native pak and the OG `SuiteAPIClient`
+use for all outbound HTTPS (`lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`; spec §20:304 "the
+platform supplies the trust store; the adapter requests it"). TOFU is a *third* option between
+trust-all and an adapter-managed CA store: the platform owns the store and the first-use registration.
+
+**Unified posture — one helper, peer-aware, for both Suite API paths:**
+
+| Peer | Trust (CA) | Hostname |
+|---|---|---|
+| **localhost** (ambient maint-user) | `getSocketFactory()` TOFU | relaxed `(h,s)->true` (cert may lack `localhost` SAN) |
+| **CP / remote** (explicit creds) | `getSocketFactory()` TOFU | **strict** (JDK default — do NOT relax) |
+
+- `openPlatformConnection()` becomes **self-gating**: resolves the peer, relaxes the verifier ONLY when
+  `isLoopbackAddress()`, strict otherwise, **fail-closed** on an unresolvable host. Closes the P2.
+- `SuiteApiStitchClient` routes **both** ambient and explicit paths through `openPlatformConnection`;
+  the `java.net.http.HttpClient` + `insecureSslContext()` Suite API transport is **retired entirely**.
+  Ambient-vs-explicit now differs only in **credentials**, not transport. No trust-all anywhere in the
+  Suite API path; no adapter-managed CA store.
+
 **Structural root cause (spec §5):** reference MPs (mongodb) **do not re-implement the Suite API
 transport** — they consume the **SDK-injected `SuiteAPIClient`**, so the platform owns loopback trust
 (`Noop`-class) and auth (ambient-on-primary / explicit-off-primary). Framework v2 chose to

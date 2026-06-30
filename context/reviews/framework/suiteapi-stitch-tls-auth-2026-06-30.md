@@ -230,3 +230,97 @@ buildkit → pak → install loop on the prod appliance.
 
 **Verdict: APPROVE** — 0 BLOCKING. The PR may open. The one remaining unknown is inherent to the
 fix (live appliance trust behavior), not a code defect.
+
+---
+
+# Revision 3 re-review — 2026-06-30 — verdict: APPROVE
+
+Substantial follow-up (Codex P2 + remote-path threading) — full re-review, not a delta. The
+previously-untouched `java.net.http` remote path is **retired entirely**; all Suite API calls now
+flow through `openPlatformConnection` → `urlConnRequest`. Re-read source and binary; ran tests.
+
+## Gating items — all verified
+
+1. **Unified transport preserves every semantic through the collapse** (source-read +
+   `SuiteApiStitchClient.java`):
+   - Token lifecycle intact: `ensureToken()` double-checked lock, `reAcquireToken(old)` refresh-once,
+     single 401 retry in `get`/`pushProperties`/`pushStats` (one re-execute, second 401 propagates /
+     is WARN-swallowed by push) — no loop.
+   - `discard()` nulls under lock + `releaseToken` swallows. JSON build/`jsonStr` unchanged.
+   - `urlConnRequest` maps 401→`Suite401Exception`, non-2xx→`IOException`, 2xx→full body read
+     (null-`InputStream`→`""`), `finally conn.disconnect()`, interrupt check at entry.
+   - Connect **and** read timeouts set (`REQUEST_TIMEOUT`); headers (Accept always, Content-Type
+     on body, Authorization on opsToken) match the retired path. **Paging is caller-supplied in the
+     request path and passed through `suiteApiBase + apiPath` unchanged** — not lost.
+   Nothing was lost removing the `HttpClient` path.
+
+2. **Posture correct per peer** (`VcfCfAdapter.openPlatformConnection`, source + bytecode):
+   `https.setSSLSocketFactory(getSocketFactory())` (TOFU `CustomSSLSocketFactory`) on **all** paths;
+   the all-true verifier is installed **only inside `if (peer.isLoopbackAddress())`**; non-loopback →
+   no override → JDK strict; `UnknownHostException` → caught, no override → **fail-closed strict**.
+   - **No path gives a non-loopback peer the all-true verifier** (verified in source and in the jar:
+     the `setHostnameVerifier` invokedynamic at bc#73-78 sits under the `isLoopbackAddress` branch at
+     bc#65).
+   - **No `insecureSslContext()`/trust-all anywhere in the Suite API transport** — source grep shows
+     only retired-path javadoc; `SuiteApiStitchClient.class` has **0** `java.net.http`/trust-all refs.
+
+3. **Breaking change is safe.** `build()` now throws `IllegalArgumentException` if `adapter == null`
+   (unconditional, lines 259-261). Both `SuiteApiStitcher.create()` (line 109) **and**
+   `createExplicit()` (line 144) pass `.adapter(adapter)`. All 6 real callers use
+   `SuiteApiStitcher.create(this, …)` with a non-null `this`; none call the builder directly or
+   `createExplicit` with a null adapter. **No caller can newly throw.**
+
+4. **Jar matches source** (`vcfcf-adapter-base.jar`, rebuilt mtime 15:29):
+   - `openPlatformConnection` bytecode: `getSocketFactory():CustomSSLSocketFactory →
+     setSSLSocketFactory` (bc#48-51), `InetAddress.getByName → isLoopbackAddress` (bc#58-65),
+     `invokedynamic verify → setHostnameVerifier` under the branch (bc#73-78),
+     `UnknownHostException` in the exception table — and **0** `getAdapterTrustManager`/
+     `SSLContext.getInstance` in the method.
+   - `SuiteApiStitchClient.class`: **0** `java/net/http/HttpClient|HttpRequest|HttpResponse` /
+     `HttpClient.send` (case-sensitive); the only "Http*" refs are `java/net/HttpURLConnection`
+     transport methods. (A case-insensitive grep falsely flagged 31 — all `setRequestMethod`/
+     `getResponseCode`-style `HttpURLConnection` methods; resolved, not stale.)
+   - Test re-run by me: **18/18 pass** (adds non-loopback FQDN + IP `8.8.8.8` → strict).
+
+5. **Standard hunts on the full delta:**
+   - **global-default-leak:** none — no global/standalone content-import path here.
+   - **key/label collision:** N/A.
+   - **silent-downgrade:** none — the remote/CP posture change (trust-all → TOFU+JDK-strict) is a
+     security **upgrade** and a **loud** failure mode (handshake/hostname rejection), aligned with the
+     cert-item rule and spec §5. See WARNING below for the one behavioral consequence.
+   - validate chain green; all 6 Tier 2 adapters recompile; the 4 adapters using
+     `insecureSslContext`/`getPlatformSslContext` for **target-system** (vCenter/NAS) connections are
+     out of scope and unaffected (`insecureSslContext()` still exists as the documented lab opt-out).
+
+## WARNING (non-gating — advisory for first remote-collector deployment)
+
+- **[VcfCfAdapter.java:1043-1054 / SuiteApiStitchClient remote path]** — dimension 8, spec §5. The
+  remote/explicit Suite API path's TLS posture changed from trust-all to **TOFU trust + JDK-strict
+  hostname**. This is intended and more correct, but it is a real behavior change: a remote-collector
+  deployment whose primary Suite API cert is **not TOFU-approvable or whose SAN does not match the
+  configured FQDN** would now **fail loudly** where the old trust-all silently connected. Currently
+  **dormant** — every shipping adapter uses the ambient/loopback `create()` path; no caller exercises
+  `createExplicit()`. → No code change needed; flag for whoever first wires remote-collector explicit
+  credentials (the URL must target the primary FQDN with a SAN-matching, TOFU-registerable cert).
+
+## NIT (non-gating)
+
+- Redirect handling on the remote path changes from `java.net.http` `Redirect.NORMAL` to
+  `HttpURLConnection` default (both follow same-protocol redirects); loopback unaffected.
+- `InetAddress.getByName` resolves the host twice (once for verifier gating in
+  `openPlatformConnection`, once at connect). Negligible.
+- The test's 401-single-retry case remains a structural assertion, not an executed stub-transport
+  exercise of `reAcquireToken`.
+
+## What remains provable ONLY on a live appliance
+
+- **Loopback (ambient):** that the `CustomSSLSocketFactory` TOFU intercept registers-and-retries the
+  operator org-CA cert (no `localhost` SAN) on the first prod-primary collect cycle and the Suite API
+  call then succeeds. (As before.)
+- **Remote/CP (now also):** if anyone exercises `createExplicit()`, that the remote primary's cert is
+  both TOFU-registerable (trust half) **and** SAN-matches the configured FQDN (JDK strict hostname
+  half). Cannot be proven statically — needs a live remote-collector deployment. Dormant today.
+
+**Verdict: APPROVE** — 0 BLOCKING. The PR may open. Recommend `qa-tester`/live verification on
+prod-primary after the affected paks re-tag against `sdk-buildkit-v1` 0.2.1, and an explicit
+remote-collector live test before that path is relied upon.

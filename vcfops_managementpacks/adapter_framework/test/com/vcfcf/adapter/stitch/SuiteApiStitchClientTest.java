@@ -17,12 +17,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * </ol>
  *
  * <p><strong>Token lifecycle and 401 retry</strong> require a controllable HTTP
- * transport. The loopback path depends on {@link com.vcfcf.adapter.VcfCfAdapter}
+ * transport. The unified transport depends on {@link com.vcfcf.adapter.VcfCfAdapter}
  * (an SDK class with non-trivial construction) — those cases are documented here
  * as contract assertions and deferred to integration tests against the compile
- * harness. The explicit/remote path cases are covered structurally below through
- * the {@code jsonStr} and {@code isLoopbackUrl} tests which exercise the two
- * branching conditions the reviewer flagged.
+ * harness. The non-loopback (strict hostname verifier) posture is covered
+ * structurally via the {@code isLoopbackUrl} assertions confirming no external host
+ * is ever classified as loopback.
  *
  * <p>Run:
  * <pre>
@@ -103,7 +103,7 @@ public class SuiteApiStitchClientTest {
     // -----------------------------------------------------------------------
 
     /**
-     * Documents the token lifecycle contract as named assertions.
+     * Documents the token lifecycle and unified-transport contracts as named assertions.
      *
      * <p>These are structural/documentary assertions — they verify that the
      * fields and methods implementing the contract are present and accessible
@@ -111,7 +111,7 @@ public class SuiteApiStitchClientTest {
      * exactly-once) require a controllable HTTP transport and are tested in
      * integration tests against the compile harness.
      *
-     * <p>Contract:
+     * <p>Token lifecycle contract:
      * <ol>
      *   <li>Token cached per-instance in {@code volatile cachedToken}.</li>
      *   <li>Lazy acquire via {@code ensureToken()} (double-checked with
@@ -125,24 +125,41 @@ public class SuiteApiStitchClientTest {
      *   <li>{@code discard()} nulls {@code cachedToken} under lock, then
      *       calls {@code releaseToken()} — exceptions swallowed.</li>
      * </ol>
+     *
+     * <p>Unified transport contract:
+     * <ul>
+     *   <li>ALL Suite API calls go through
+     *       {@link com.vcfcf.adapter.VcfCfAdapter#openPlatformConnection(String)}
+     *       via {@code urlConnRequest} — there is no separate
+     *       {@code java.net.http.HttpClient} path.</li>
+     *   <li>Hostname verifier is peer-gated inside {@code openPlatformConnection}:
+     *       loopback peers get an all-true verifier; non-loopback peers get the
+     *       JDK default strict check. {@code isLoopbackUrl} is informational-only
+     *       (logging) — it does not select a separate code path.</li>
+     * </ul>
      */
     private static void testTokenContractAnnotations() {
-        // Verify that isLoopbackUrl discriminates the loopback transport path.
-        // On the loopback path, adapter.openPlatformConnection() is used (not
-        // java.net.http.HttpClient). On the explicit/remote path, rawHttpClient is used.
-        // The SuiteApiStitchClient.Builder.build() routes correctly based on
-        // isLoopbackUrl(suiteApiBase) — verified by the gating tests above.
-        assertTrue("isLoopbackUrl discrimination is the loopback-path gate",
+        // isLoopbackUrl correctly discriminates loopback from non-loopback.
+        // Since R3 this is used only for the transport INFO log — the actual
+        // hostname verifier selection is peer-gated inside openPlatformConnection.
+        assertTrue("isLoopbackUrl discriminates loopback from non-loopback",
                 SuiteApiStitchClient.isLoopbackUrl("https://localhost/suite-api")
                         != SuiteApiStitchClient.isLoopbackUrl("https://vcf-ops.example.com/suite-api"));
+
+        // Non-loopback host is NOT treated as loopback (strict verifier applies).
+        // This is the key safety property: the all-true verifier must not leak to
+        // remote/CP endpoints.  isLoopbackUrl returns false for external FQDNs and IPs.
+        assertFalse("non-loopback FQDN is not treated as loopback (strict verifier applies)",
+                SuiteApiStitchClient.isLoopbackUrl("https://vcf-ops.example.com/suite-api"));
+        assertFalse("non-loopback IP 8.8.8.8 is not treated as loopback (strict verifier applies)",
+                SuiteApiStitchClient.isLoopbackUrl("https://8.8.8.8/suite-api"));
 
         // Verify Suite401Exception discriminates 401 from other IOExceptions.
         // The retry logic catches Suite401Exception specifically (not IOException),
         // so a network error or 5xx does NOT trigger the retry — only 401.
-        // This is testable statically by confirming Suite401Exception is a subtype
-        // of IOException (accessed via the package). Since Suite401Exception is
-        // private, we test its contract by documenting: rawPost/rawGet throw it on
-        // 401, and pushProperties/pushStats catch it for ONE re-execute, not a loop.
+        // Since Suite401Exception is private, we test its contract by documenting:
+        // urlConnRequest throws Suite401Exception on 401, and pushProperties/pushStats
+        // catch it for ONE re-execute, not a loop.
         //
         // Contract assertion: if the retry were a loop, a perpetual-401 server would
         // hang forever. The implementation catches Suite401Exception ONCE; the second
