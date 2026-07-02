@@ -138,3 +138,108 @@ reused. Field lines are `- **Field:** value` (parsed by
   data and the root cause is codified.
 - **Related:** `designs/managementpacks/vcommunity-three-adapter-split.md`,
   vcommunity-os pak README
+
+### DEF-005
+
+- **Title:** Framework stitcher: strict-TOFU loopback Suite API transport
+  PKIX-fails every cycle — cross-MP stitch reads zero datastores
+- **Severity:** blocking
+- **Status:** closed
+- **Closing-evidence:** build 24 (BC-mirror transport), 2026-07-02.
+  Devel (9.0.2 analytics): 7+ consecutive clean cycles, `loadDatastores`
+  "loaded 10 VMWARE Datastores", zero PKIX (00:18–00:49Z log capture).
+  Prod (9.1 primary): identity line `mechanism=ambient
+  principal=automationAdmin`, 10 datastores loaded, 5 foreign
+  Datastore edges live via API, no clobber; pre-install baseline on
+  the same box failed every cycle with `certificate_unknown(46)`.
+  Reviews: `context/reviews/framework/bc-mirror-transport-v1.md`/`-v2.md`.
+  Residual (FIPS cluster-truststore parity) documented as TODO in
+  `VcfCfAdapter.openPlatformConnection()`. The remaining CP-resident
+  gap is a distinct defect → DEF-006.
+- **Affects:** synology
+- **First-seen:** build 23 devel install (2026-07-01) — latent in every
+  build ≥ 20 (first live install since the transport rework; builds
+  20–22 were local-only)
+- **Source:** `context/investigations/synology-b23-devel-pkix-2026-07-01.md`
+- **Summary:** The TLS/TOFU transport rework (PRs #29/#30) routed the
+  loopback Suite API call through the platform's strict
+  `CustomTrustManager`, assuming the platform's non-disruptive
+  certificate handler would persist unknown certs (TOFU). Live devel
+  disproves it: the handler fails every cycle ("Adapter certificate
+  renewal url set is empty") because framework adapters declare no
+  cert-renewal URL set, so trust never persists and `loadDatastores`
+  PKIX-fails forever. Build 19 worked only because it trusted the
+  loopback connection outright. Vendor ground truth
+  (`context/api-surface/casa-injected-vs-raw-client.md` §3): the
+  aria-ops-core `SuiteAPIClient` used by every shipping Broadcom pak
+  sets `verify("false")` + `ignoreHostName(true)` non-FIPS, cluster
+  truststore under FIPS — none use the strict path. Fix: mirror the BC
+  behavior exactly, no invention. The same framework transport ships in
+  every Tier 2 pak built from current main (unifi, compliance,
+  vcommunity*) — verify per pak as each rebuilds. Closes when a devel
+  collect under the fixed transport loads datastores and writes the
+  stitch.
+- **Related:** `designs/suite-api-stitcher-tls-auth-cleanup-v1.md`
+  (premise contradicted by live evidence),
+  `lessons/suite-api-stitch-ssl-tofu-vs-java-http.md` (vindicated),
+  DEF-006 (successor: CP-resident gap)
+
+### DEF-006
+
+- **Title:** CP-resident cross-MP stitch: no credentialed ambient path
+  works from a Cloud Proxy — automationAdmin 401s at token acquire
+- **Severity:** blocking
+- **Status:** closed
+- **Closing-evidence:** build 26 (ambient identity v3 — platform-injected
+  per-instance credential first), 2026-07-02. Prod: the synology
+  instance on the NEW Cloud Proxy (collector 3, `collector01`,
+  rebuilt after the original CP crashed) wrote **6** Synology→VMWARE
+  Datastore edges from a provably virgin baseline (fresh proxy +
+  never-collected instance; 0 edges pre-recovery → 6 post: 2 iSCSI
+  LUN + 4 NFS incl. the never-before-stitched `relationship`
+  datastore), no clobber (every datastore's VMWARE relationship
+  counts unchanged, each +1 synology), sustained 5-min cadence.
+  Devel: direct log quote of the identity flip —
+  `credential mechanism=ambient file=instance
+  principal=816c72ef-84b2-4caf-848c-4b09a6517648` followed by
+  `loaded 11 VMWARE Datastores`. Contract:
+  `context/api-surface/per-instance-suiteapi-credential-contract.md`;
+  live mechanism discovery:
+  `context/investigations/oracle-stitch-autopsy-2026-07-02.md`;
+  reviews: `context/reviews/framework/ambient-credential-v3-*.md`.
+  **Residual (evidentiary, not functional):** the CP-side
+  `file=instance` log line is unquoted — the new proxy refuses SSH;
+  enable SSH on collector01 + one cycle to capture it. The
+  title's premise ("no credentialed ambient path works") was
+  corrected by the autopsy: the platform-injected per-instance
+  credential IS the working ambient path; our framework simply never
+  read it before v3.
+- **Affects:** synology
+- **First-seen:** build 24 on prod CP (2026-07-02), after the user moved
+  the adapter instance to collector 2
+- **Source:** prod CP adapter log 2026-07-02 03:03Z: `Suite API POST
+  https://localhost/suite-api/api/auth/token/acquire returned 401 —
+  token expired or credential invalid mechanism=ambient
+  principal=automationAdmin`
+- **Summary:** With DEF-005's transport fixed (zero PKIX) and the
+  identity fix selecting `automationAdmin` correctly, the CP's local
+  `automationuser.properties` secret does not authenticate against the
+  cluster (401 at token acquire; the maintenance fallback's
+  `cloudproxy_<uuid>` authenticates but 403s on reads — both live-
+  proven). No credentialed ambient path works from a CP. This gap is
+  industry-wide: aria-ops-core's ambient path reads the maintenance
+  file (bytecode) and would 403 identically; no shipping third-party
+  pak solves it. The failure mode is loud (WARN per cycle) and
+  harmless (additive verb — zero edges pushed, nothing cleared; own-
+  adapter collection unaffected). The prod CP instance is deliberately
+  left in this state as the standing live repro. Candidate fixes under
+  investigation: (a) descriptor-declared traversal + reported
+  `relationships|Datastore_parent` property (the mechanism Oracle
+  provably uses from this same CP with zero API calls — see
+  `context/api-maps/tvs-declarative-stitching.md`; binding-value scan
+  in flight), (b) CaSA node-certificate door (cleanroom build-spec
+  pending). Closes when a collect executed ON the CP results in the
+  Synology→VMWARE Datastore edge existing, via either mechanism.
+- **Related:** DEF-005, `context/api-maps/tvs-declarative-stitching.md`,
+  `context/api-maps/tvs-cross-mp-stitching.md`,
+  `context/investigations/cp-auth-door-probe-2026-07-01.md`

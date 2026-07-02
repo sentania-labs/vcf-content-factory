@@ -1,7 +1,7 @@
 ---
 name: sdk-adapter-author
 description: Authors Tier 2 Java SDK management pack adapters under content/sdk-adapters/. Owns adapter Java source, describe.xml, profiles, and adapter.yaml. Compiles and packages via vcfops_managementpacks build-sdk, gates on pak-compare. Does NOT edit vcfops_*/ build machinery (that's tooling), does NOT author content YAML (that's the content authors), and does NOT install. Spawn after mp-designer produces an approved Tier 2 design — the Java sibling to mp-author.
-model: opus
+model: sonnet
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 

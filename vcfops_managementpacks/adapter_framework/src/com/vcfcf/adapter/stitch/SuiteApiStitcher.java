@@ -89,13 +89,19 @@ public final class SuiteApiStitcher {
     // -----------------------------------------------------------------------
 
     /**
-     * Create a stitcher using ambient maintenance credentials (standard path
-     * for all-in-one nodes and cloud-proxy nodes co-located with the Suite API).
+     * Create a stitcher using ambient credentials (standard path for
+     * all-in-one nodes and cloud-proxy nodes co-located with the Suite API).
      *
-     * <p>Reads {@code maintenanceuser.properties}, decrypts via the SDK
-     * {@link com.integrien.alive.common.security.Crypt}, and targets
-     * {@code https://localhost/suite-api}. This is the zero-config path —
-     * no adapter config fields are required.
+     * <p>Identity v3 order: prefers the platform-injected per-instance
+     * credential ({@code adapter.getAdapterConfig().getAdapterCredentials()},
+     * when present), then {@code automationuser.properties} ({@code
+     * automationAdmin}, preferred over maintenance on every node role
+     * including a Cloud Proxy), falling back to
+     * {@code maintenanceuser.properties} only if both prior sources are
+     * absent/unreadable (see {@link AmbientCredential}). File-based passwords
+     * decrypt via the SDK {@link com.integrien.alive.common.security.Crypt};
+     * targets {@code https://localhost/suite-api}. This is the zero-config
+     * path — no adapter config fields are required.
      *
      * @param adapter the adapter instance ({@code this} in configureAdapter)
      * @param logger  the adapter-specific logger

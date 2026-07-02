@@ -411,9 +411,23 @@ def _cmd_build_sdk_inner(project_dir: Path, output_dir: Path) -> int:
         return 1
 
 
+def _apply_release_flag(args) -> None:
+    """If --release was supplied, set VCFCF_RELEASE_BUILD in the environment.
+
+    Mirrors _apply_sdk_jar_flag's env-var injection pattern: sdk_builder
+    reads VCFCF_RELEASE_BUILD to decide between the default 0.0.0.<build>
+    dev-preview version stamp and the real adapter.yaml release version.
+    Explicit opt-in only — the flag is never set implicitly.
+    """
+    import os as _os
+    if getattr(args, "release", False):
+        _os.environ["VCFCF_RELEASE_BUILD"] = "1"
+
+
 def cmd_build_sdk(args) -> int:
     """build-sdk <dir> — compile and package a Tier 2 SDK adapter project."""
     _apply_sdk_jar_flag(args)
+    _apply_release_flag(args)
     return _cmd_build_sdk_inner(Path(args.project_dir), Path(args.output))
 
 
@@ -922,6 +936,18 @@ def build_parser() -> argparse.ArgumentParser:
             "buildkit tarball). Alternatively set VCFCF_SDK_JAR env var. "
             "In the factory, the jar is already in adapter_runtime/ and this "
             "flag is not needed."
+        ),
+    )
+    pbsdk.add_argument(
+        "--release",
+        action="store_true",
+        default=False,
+        help=(
+            "explicit release opt-in: stamp the pak's real adapter.yaml "
+            "version instead of the default 0.0.0.<build_number> dev-preview "
+            "line. Reserved for the tag-triggered CI release path — never "
+            "pass this for a hand-built / local dev build. Equivalent to "
+            "setting VCFCF_RELEASE_BUILD=1."
         ),
     )
     pbsdk.set_defaults(func=cmd_build_sdk)
