@@ -126,32 +126,38 @@ public class SuiteApiStitchClientTest {
      *       calls {@code releaseToken()} — exceptions swallowed.</li>
      * </ol>
      *
-     * <p>Unified transport contract:
+     * <p>Unified transport contract (updated per DEF-005, 2026-07-01):
      * <ul>
      *   <li>ALL Suite API calls go through
      *       {@link com.vcfcf.adapter.VcfCfAdapter#openPlatformConnection(String)}
      *       via {@code urlConnRequest} — there is no separate
      *       {@code java.net.http.HttpClient} path.</li>
-     *   <li>Hostname verifier is peer-gated inside {@code openPlatformConnection}:
-     *       loopback peers get an all-true verifier; non-loopback peers get the
-     *       JDK default strict check. {@code isLoopbackUrl} is informational-only
-     *       (logging) — it does not select a separate code path.</li>
+     *   <li>{@code openPlatformConnection} no longer peer-gates the hostname
+     *       verifier. Per DEF-005 ("mirror the BC behavior, don't invent new
+     *       ways of doing things") it mirrors the vendor
+     *       {@code aria-ops-core SuiteAPIClient} non-FIPS posture exactly:
+     *       trust-all + ignore-hostname, unconditionally, for both loopback
+     *       and remote endpoints — see
+     *       {@code com.vcfcf.adapter.VcfCfAdapterTest} for direct coverage of
+     *       the extracted {@code applyBcMirrorTransport} helper.
+     *       {@code isLoopbackUrl} here is informational-only (logging); it
+     *       has never selected a separate code path since this change.</li>
      * </ul>
      */
     private static void testTokenContractAnnotations() {
-        // isLoopbackUrl correctly discriminates loopback from non-loopback.
-        // Since R3 this is used only for the transport INFO log — the actual
-        // hostname verifier selection is peer-gated inside openPlatformConnection.
+        // isLoopbackUrl still correctly discriminates loopback from non-loopback
+        // for the (informational-only) transport INFO log.
         assertTrue("isLoopbackUrl discriminates loopback from non-loopback",
                 SuiteApiStitchClient.isLoopbackUrl("https://localhost/suite-api")
                         != SuiteApiStitchClient.isLoopbackUrl("https://vcf-ops.example.com/suite-api"));
 
-        // Non-loopback host is NOT treated as loopback (strict verifier applies).
-        // This is the key safety property: the all-true verifier must not leak to
-        // remote/CP endpoints.  isLoopbackUrl returns false for external FQDNs and IPs.
-        assertFalse("non-loopback FQDN is not treated as loopback (strict verifier applies)",
+        // Non-loopback host is NOT treated as loopback by isLoopbackUrl (log labeling
+        // only — since DEF-005 this no longer selects the hostname-verifier posture;
+        // both loopback and non-loopback get the same BC-mirror trust-all/ignore-hostname
+        // transport). isLoopbackUrl returns false for external FQDNs and IPs.
+        assertFalse("non-loopback FQDN is not treated as loopback (log-label only)",
                 SuiteApiStitchClient.isLoopbackUrl("https://vcf-ops.example.com/suite-api"));
-        assertFalse("non-loopback IP 8.8.8.8 is not treated as loopback (strict verifier applies)",
+        assertFalse("non-loopback IP 8.8.8.8 is not treated as loopback (log-label only)",
                 SuiteApiStitchClient.isLoopbackUrl("https://8.8.8.8/suite-api"));
 
         // Verify Suite401Exception discriminates 401 from other IOExceptions.

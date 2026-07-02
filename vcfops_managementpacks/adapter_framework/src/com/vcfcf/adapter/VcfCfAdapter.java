@@ -182,6 +182,16 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     private final AtomicBoolean abortRequested = new AtomicBoolean(false);
 
     /**
+     * Guards the FIPS-approved-only stopgap WARN in
+     * {@link #openPlatformConnection(String)} so it logs once per adapter
+     * instance rather than once per Suite API request (token acquire, each
+     * datastore page, each stitch write). Same instance-scoped once-flag
+     * shape as {@link #abortRequested}. (DEF-005 FIPS branch — NIT fix,
+     * `context/reviews/framework/bc-mirror-transport-v1.md`.)
+     */
+    private final AtomicBoolean fipsGapWarnLogged = new AtomicBoolean(false);
+
+    /**
      * Adapter-instance-scoped logger obtained lazily from the platform's
      * {@code AdapterLoggerFactory}. Named after the concrete class; pinned
      * to INFO level so messages are not swallowed by the WARN root logger.
@@ -954,9 +964,12 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * that exception and retries after cert registration. {@code java.net.http.HttpClient}
      * does not — so this context must only be used with {@code HttpClientBuilder}, never
      * raw with {@code java.net.http.HttpClient}. Also, do <strong>not</strong> use this
-     * for the loopback Suite API transport — use {@link #openPlatformConnection(String)}
-     * instead, which uses {@link AdapterBase#getSocketFactory()} (the platform
-     * {@code CustomSSLSocketFactory}, which carries the TOFU-survival intercept).
+     * for the Suite API transport — use {@link #openPlatformConnection(String)}
+     * instead, which mirrors the vendor {@code SuiteAPIClient} non-FIPS transport
+     * (trust-all + ignore-hostname) rather than the platform's strict TOFU
+     * {@code CustomTrustManager}, which cannot self-heal for framework adapters
+     * (see the {@link #openPlatformConnection(String)} javadoc and
+     * {@code context/defects.md} DEF-005).
      *
      * @return an {@link javax.net.ssl.SSLContext} built from {@code getAdapterTrustManager()}
      *         and {@code getKeyManagers()} — suitable for use with {@code HttpClientBuilder}
@@ -977,53 +990,84 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
-     * Open an HTTPS connection to {@code url} wired with the platform's
-     * {@code CustomSSLSocketFactory} and a peer-gated hostname verifier —
-     * the universal Suite API transport for both loopback and remote endpoints.
+     * Open an HTTPS connection to {@code url} for the Suite API transport,
+     * wired to mirror the vendor {@code aria-ops-core}
+     * {@code SuiteAPIClient.getClientConfigBuilder()} transport
+     * <strong>exactly</strong> — trust-all + ignore-hostname in non-FIPS
+     * mode, the same posture every shipping Broadcom pak uses for this hop.
      *
-     * <p><strong>TLS halves and why each was chosen:</strong>
-     * <ul>
-     *   <li><strong>Trust (CA) half — {@code getSocketFactory()}:</strong> The platform
-     *       {@code CustomSSLSocketFactory} carries the TOFU-survival intercept: when
-     *       {@code CustomTrustManager.checkServerTrusted()} throws on first contact with
-     *       an unknown cert (e.g. an operator-replaced org-CA cert), the socket factory's
-     *       intercept registers the cert and retries the handshake. This is the path the
-     *       OG {@code UnlicensedAdapter}/{@code SuiteAPIClient} used. Do NOT use
-     *       {@link #getPlatformSslContext()} here — that builds an {@code SSLContext} from
-     *       {@code getAdapterTrustManager()} (= {@code CustomTrustManager}) wrapped in a
-     *       vanilla JSSE factory that has no intercept; the exception propagates as fatal
-     *       {@code SSLHandshakeException/PKIX} (confirmed devel+prod, build 45, 2026-06-10;
-     *       see {@code lessons/suite-api-stitch-ssl-tofu-vs-java-http.md}).</li>
-     *   <li><strong>Hostname half — peer-gated:</strong> The method resolves the URL host
-     *       via {@code InetAddress.getByName()} and checks
-     *       {@code InetAddress.isLoopbackAddress()}.
-     *       <ul>
-     *         <li>Loopback peer ({@code 127.0.0.0/8} or {@code ::1}) → installs an all-true
-     *             hostname verifier. Safe: only traffic to the local node is accepted.
-     *             Avoids dependency on whether the operator cert has a {@code localhost} SAN
-     *             (confirmed absent on org-CA-signed prod certs; see
-     *             {@code specs/20-suiteapi-client-behavioral-contract.md} §5). Matches the
-     *             SDK-injected {@code SuiteAPIClient} Noop-class loopback hostname posture.</li>
-     *         <li>Non-loopback peer → no override; JDK default strict hostname check
-     *             applies. The remote Suite API node is expected to carry a cert whose SAN
-     *             matches the configured FQDN.</li>
-     *         <li>Fail closed: if {@code getByName} throws (unresolvable host), the
-     *             hostname verifier is not overridden and JDK strict verification applies.</li>
-     *       </ul>
-     *   </li>
-     * </ul>
+     * <h3>Why this mirrors BC instead of using the platform TOFU trust manager</h3>
+     * <p>An earlier implementation routed this hop through the platform's
+     * {@code CustomSSLSocketFactory} ({@code getSocketFactory()}), betting that
+     * its TOFU-survival intercept would register and persist an unknown cert
+     * on first contact. Live devel evidence falsified that bet: the platform's
+     * asynchronous {@code NonDisruptiveCertificateHandler} errors on every
+     * attempt with {@code "Adapter certificate renewal url set is empty"}
+     * because framework ({@code com.vcfcf}) adapters declare no
+     * certificate-renewal URL set — so trust never persists and every cycle
+     * PKIX-fails ({@code context/investigations/synology-b23-devel-pkix-2026-07-01.md},
+     * {@code context/defects.md} DEF-005). {@code lessons/suite-api-stitch-ssl-tofu-vs-java-http.md}
+     * predicted exactly this failure mode and is vindicated by that live run.
+     *
+     * <p>The vendor ground truth (bytecode-proven,
+     * {@code context/api-surface/casa-injected-vs-raw-client.md} §3): the
+     * {@code SuiteAPIClient} used by every shipping Broadcom pak —
+     * Oracle/PureStorage/NetApp included — sets, verbatim, non-FIPS →
+     * {@code verify("false")} + {@code ignoreHostName(true)}; FIPS →
+     * {@code useClusterTruststore}. It is server-trust only: no client
+     * keystore, no CaSA, no cert-renewal registration. This method mirrors
+     * that behavior directly rather than inventing a new transport posture.
+     *
+     * <h3>Non-FIPS branch (implemented)</h3>
+     * <p>{@link #insecureSslContext()} (trust-all {@code X509TrustManager}) +
+     * an all-true {@link javax.net.ssl.HostnameVerifier} — unconditionally,
+     * for both loopback (ambient) and explicit/remote (collector) Suite API
+     * endpoints, exactly matching the vendor's unconditional
+     * {@code verify("false")}/{@code ignoreHostName(true)}. (Earlier revisions
+     * of this method peer-gated the hostname verifier — relaxed only for a
+     * resolved-loopback peer, strict otherwise. That peer-gating was this
+     * framework's own invention, not present in the vendor client, and is
+     * removed here per the "mirror BC exactly" directive that closed
+     * DEF-005.)
+     *
+     * <h3>FIPS branch — TODO, documented gap</h3>
+     * <p>The vendor's FIPS branch calls {@code useClusterTruststore(...)},
+     * gated by a reflective read of
+     * {@code com.vmware.tvs.vrealize.adapter.core.configuration.Constants
+     * .FIPS_MODE_ENABLED} — a field that lives in {@code aria-ops-core}, the
+     * dependency this framework deliberately does not pull in at compile or
+     * run time (see the "Layer 1 only" note on this class's javadoc). Without
+     * that class this framework cannot detect FIPS mode the same way the
+     * vendor does, and even if it could, it has no documented source for the
+     * cluster truststore file the vendor branch loads. Inventing a substitute
+     * detection/truststore scheme was explicitly out of scope for the DEF-005
+     * fix ("mirror the BC behavior don't invent new ways of doing things").
+     *
+     * <p>As a best-effort, non-invented signal, {@link #isFipsApprovedOnly()}
+     * reads the same JVM launch flag
+     * ({@code -Dorg.bouncycastle.fips.approved_only=true}) this framework's
+     * own {@code AmbientCredential} decrypt path already keys off of
+     * (9.1+; {@code context/tier2_architecture.md} "FIPS constraint"). When
+     * that flag is set, this method logs a WARN identifying the gap and then
+     * falls through to the same non-FIPS trust-all mirror above — a
+     * documented stopgap, not a claim of FIPS parity. This is still strictly
+     * better than the strict-TOFU path DEF-005 replaces (that path has no
+     * FIPS carve-out either and PKIX-fails on every mode). Re-open DEF-005's
+     * FIPS half if/when a cluster-truststore source becomes reachable from
+     * this framework's position.
      *
      * <p>This is the public equivalent of the package-private
      * {@code AdapterBase.getConnection(url, getVerifier())} — which callers in other
-     * packages cannot reach — using the two public accessors that replicate both halves.
+     * packages cannot reach.
      *
      * <p>For target-system connections (vCenter, NAS appliances, etc.) use
-     * {@link com.vcfcf.adapter.http.HttpClientBuilder#platformSsl(VcfCfAdapter)} instead.
+     * {@link com.vcfcf.adapter.http.HttpClientBuilder#platformSsl(VcfCfAdapter)} instead —
+     * this method is the Suite API hop only; target-system TLS is unaffected.
      *
      * @param url the full HTTPS URL to open (must use the {@code https} scheme;
      *            a non-https URL is rejected with an {@link java.io.IOException})
-     * @return an {@link javax.net.ssl.HttpsURLConnection} configured with the platform
-     *         socket factory and a peer-gated hostname verifier
+     * @return an {@link javax.net.ssl.HttpsURLConnection} configured with the
+     *         BC-mirror trust-all + ignore-hostname transport
      * @throws java.io.IOException if the URL scheme is not https, or if the connection
      *         cannot be opened
      */
@@ -1038,21 +1082,69 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                     + " — only the https Suite API endpoint is supported");
         }
         javax.net.ssl.HttpsURLConnection https = (javax.net.ssl.HttpsURLConnection) conn;
-        // Trust half: platform CustomSSLSocketFactory carries the TOFU-survival intercept.
-        // Do NOT use getPlatformSslContext() here — its vanilla JSSE factory omits the intercept.
-        https.setSSLSocketFactory(getSocketFactory());
-        // Hostname half: resolve peer; loopback → all-true; non-loopback → JDK strict (no override).
-        // Fail closed: if getByName throws, leave the JDK default strict verifier in place.
-        try {
-            java.net.InetAddress peer = java.net.InetAddress.getByName(u.getHost());
-            if (peer.isLoopbackAddress()) {
-                https.setHostnameVerifier((h, s) -> true);
+        if (isFipsApprovedOnly()) {
+            // TODO(DEF-005 FIPS branch): see javadoc above — no cluster-truststore
+            // source is reachable from this framework's position without adding an
+            // aria-ops-core dependency this project deliberately avoids. Falls
+            // through to the non-FIPS mirror below as a documented stopgap.
+            //
+            // This method is called on every Suite API request (token acquire, each
+            // datastore page, each stitch write) — gate the WARN to once per adapter
+            // instance so FIPS deployments don't get an identical WARN spammed on
+            // every cycle forever.
+            if (fipsGapWarnLogged.compareAndSet(false, true)) {
+                logWarn("VcfCfAdapter.openPlatformConnection: FIPS-approved-only mode detected "
+                        + "but the vendor's useClusterTruststore mirror is not implemented "
+                        + "(see TODO in source, DEF-005 FIPS branch) — falling through to the "
+                        + "non-FIPS trust-all/ignore-hostname mirror as a documented stopgap. "
+                        + "(Logged once per adapter instance.)");
             }
-            // else: do not override — JDK default strict hostname verification applies.
-        } catch (java.net.UnknownHostException ignored) {
-            // Unresolvable host: fail closed — strict JDK hostname verification applies.
         }
+        applyBcMirrorTransport(https);
         return https;
+    }
+
+    /**
+     * Apply the BC-mirror non-FIPS Suite API transport (trust-all +
+     * ignore-hostname) to an already-opened {@link javax.net.ssl.HttpsURLConnection}.
+     *
+     * <p>Extracted from {@link #openPlatformConnection(String)} as a
+     * standalone static helper — it touches no instance/platform state — so
+     * it is directly unit-testable without instantiating a live
+     * {@link AdapterBase} subclass (which requires the collector's log4j-core
+     * runtime classpath, unavailable outside the appliance).
+     *
+     * <p>Mirrors {@code aria-ops-core SuiteAPIClient.getClientConfigBuilder()}'s
+     * non-FIPS branch exactly: {@code verify("false")} + {@code ignoreHostName(true)}
+     * — trust-all, hostname-unchecked, unconditionally (no loopback/remote
+     * peer-gating — the vendor does not gate either; see DEF-005).
+     *
+     * @param https the connection to configure
+     */
+    static void applyBcMirrorTransport(javax.net.ssl.HttpsURLConnection https) {
+        https.setSSLSocketFactory(insecureSslContext().getSocketFactory());
+        https.setHostnameVerifier((h, s) -> true);
+    }
+
+    /**
+     * Whether the collector JVM is running with BouncyCastle FIPS
+     * approved-only mode enabled.
+     *
+     * <p>Reads the same JVM launch flag
+     * ({@code -Dorg.bouncycastle.fips.approved_only}) this framework's
+     * {@code AmbientCredential} decrypt path already keys off of (9.1+) — the
+     * only FIPS signal reachable from this framework's position (bare
+     * {@link AdapterBase}, no {@code aria-ops-core} dependency; see the
+     * "Layer 1 only" note in this class's javadoc). Not a novel detection
+     * scheme: it is the pre-existing, documented FIPS constraint this
+     * codebase already relies on elsewhere
+     * ({@code context/tier2_architecture.md} "FIPS constraint").
+     *
+     * @return {@code true} if {@code -Dorg.bouncycastle.fips.approved_only=true}
+     *         was passed to this JVM; {@code false} otherwise (including if unset)
+     */
+    static boolean isFipsApprovedOnly() {
+        return Boolean.getBoolean("org.bouncycastle.fips.approved_only");
     }
 
     /**

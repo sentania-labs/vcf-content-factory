@@ -351,6 +351,19 @@ def _apply_sdk_jar(args) -> None:
         os.environ["VCFCF_SDK_JAR"] = str(sdk_jar)
 
 
+def _apply_release_flag(args) -> None:
+    """If --release was supplied, set VCFCF_RELEASE_BUILD in the environment.
+
+    Mirrors vcfops_managementpacks/cli.py's _apply_release_flag exactly
+    (inlined here rather than imported: cli.py is not bundled into the
+    sdk_buildkit tarball — see buildkit.py's _FACTORY_SOURCES — so the kit's
+    __main__.py must carry its own copy of this env-var injection). Explicit
+    opt-in only — the flag is never set implicitly.
+    """
+    if getattr(args, "release", False):
+        os.environ["VCFCF_RELEASE_BUILD"] = "1"
+
+
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="sdk_buildkit",
@@ -379,6 +392,17 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="JAR_PATH",
         help=_SDK_JAR_HELP,
+    )
+    pbsdk.add_argument(
+        "--release",
+        action="store_true",
+        default=False,
+        help=(
+            "explicit opt-in for the 1.x release version line; CI-only, "
+            "never pass by hand. Equivalent to setting VCFCF_RELEASE_BUILD=1. "
+            "Reserved for the tag-triggered CI release path — never pass "
+            "this for a hand-built / local dev build."
+        ),
     )
 
     # ----- validate-sdk -----
@@ -439,6 +463,7 @@ def main() -> int:
 
     if args.cmd == "build-sdk":
         _apply_sdk_jar(args)
+        _apply_release_flag(args)
         from .sdk_builder import build_sdk_pak, SdkBuildError
         from .sdk_project import SdkProjectError
         project_dir = Path(args.project_dir)

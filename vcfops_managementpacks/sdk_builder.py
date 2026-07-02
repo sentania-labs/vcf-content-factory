@@ -84,6 +84,15 @@ _ADAPTER_FRAMEWORK_SRC_DIR = _HERE / "adapter_framework" / "src"
 _LICENSE_PATH = _HERE.parent / "LICENSE"
 
 
+def _find_stale_framework_sources(output_jar: Path, sources: List[Path]) -> List[Path]:
+    """Return the subset of ``sources`` newer (by mtime) than ``output_jar``.
+
+    Empty list means the jar is up to date with every source file.
+    """
+    jar_mtime = output_jar.stat().st_mtime
+    return [s for s in sources if s.stat().st_mtime > jar_mtime]
+
+
 def _ensure_framework_jar() -> None:
     """Compile the framework source into vcfcf-adapter-base.jar if needed.
 
@@ -92,34 +101,62 @@ def _ensure_framework_jar() -> None:
     drift) — instead adapter_framework/src/ is bundled and compiled here on
     first use against the consumer-supplied SDK jar (VCFCF_SDK_JAR / --sdk-jar).
 
-    This is a no-op when adapter_runtime/vcfcf-adapter-base.jar already exists
-    (factory mode or a previous build in the same consumer session).
+    This is a no-op ONLY when adapter_runtime/vcfcf-adapter-base.jar already
+    exists AND no file under adapter_framework/src/ is newer than it (fresh
+    jar — factory mode with a jar built from the current source, or a
+    previous build in the same consumer session).
+
+    If the jar exists but is STALE (any .java file under
+    adapter_framework/src/ has a newer mtime), it is rebuilt from the
+    current source tree — a silent no-op on stale input would ship a pak
+    that carries an old framework binary despite reviewed source changes
+    (the silent-downgrade failure mode; see synology build 23 containment
+    proof). If the source tree is not present in this context (e.g. a
+    runtime-only distribution that ships the jar but not adapter_framework/
+    src/), staleness cannot be checked and the existing jar is used as-is.
 
     Raises SdkBuildError if the source tree is present but compilation fails,
-    or if neither the jar nor the source tree can be found.
+    or if neither the jar nor the source tree can be found, or if the jar is
+    stale and cannot be rebuilt (e.g. no SDK jar / no javac available).
     """
     output_jar = _ADAPTER_RUNTIME_DIR / "vcfcf-adapter-base.jar"
-    if output_jar.is_file():
-        return  # already present — nothing to do
-
     src_dir = _ADAPTER_FRAMEWORK_SRC_DIR
-    if not src_dir.is_dir():
-        raise SdkBuildError(
-            f"vcfcf-adapter-base.jar not found at {output_jar} and framework "
-            f"source tree not found at {src_dir}.\n"
-            "This indicates a corrupt or incomplete sdk-buildkit installation.\n"
-            "Re-download the kit: "
-            "gh release download sdk-buildkit-v1 --repo sentania-labs/vcf-content-factory "
-            "--pattern 'sdk-buildkit-*.tgz'"
-        )
 
-    # Locate all .java sources under adapter_framework/src/
-    sources = sorted(src_dir.rglob("*.java"))
-    if not sources:
-        raise SdkBuildError(
-            f"Framework source tree at {src_dir} contains no .java files.\n"
-            "Re-download the sdk-buildkit tarball."
+    if output_jar.is_file():
+        if not src_dir.is_dir():
+            # No source tree to check staleness against (e.g. a runtime-only
+            # distribution). Use the jar as shipped.
+            return
+        sources = sorted(src_dir.rglob("*.java"))
+        if not sources:
+            return
+        stale = _find_stale_framework_sources(output_jar, sources)
+        if not stale:
+            return  # jar is fresh — nothing to do
+        print(
+            f"  framework: {output_jar.name} is STALE — "
+            f"{len(stale)} source file(s) newer than the jar "
+            f"(e.g. {stale[0].relative_to(src_dir)}); rebuilding...",
+            file=sys.stderr,
         )
+    else:
+        if not src_dir.is_dir():
+            raise SdkBuildError(
+                f"vcfcf-adapter-base.jar not found at {output_jar} and framework "
+                f"source tree not found at {src_dir}.\n"
+                "This indicates a corrupt or incomplete sdk-buildkit installation.\n"
+                "Re-download the kit: "
+                "gh release download sdk-buildkit-v1 --repo sentania-labs/vcf-content-factory "
+                "--pattern 'sdk-buildkit-*.tgz'"
+            )
+
+        # Locate all .java sources under adapter_framework/src/
+        sources = sorted(src_dir.rglob("*.java"))
+        if not sources:
+            raise SdkBuildError(
+                f"Framework source tree at {src_dir} contains no .java files.\n"
+                "Re-download the sdk-buildkit tarball."
+            )
 
     # Determine the compile classpath — SDK jar only (matches build-framework.sh)
     sdk_jar_env = os.environ.get("VCFCF_SDK_JAR", "").strip()
@@ -237,6 +274,65 @@ _REFERENCES_DIR = _HERE.parent / "tmp" / "reference_paks"
 
 class SdkBuildError(RuntimeError):
     """Raised when the SDK build fails for a recoverable reason."""
+
+
+# ---------------------------------------------------------------------------
+# Version-line guardrail (RULE: hand-built paks are always 0.x)
+# ---------------------------------------------------------------------------
+#
+# Every version surface in a built pak (filename, outer/inner manifest.txt
+# "version", conf/version.txt Major/Minor/Implementation-Version, and the
+# overview.packed "Version x.y.z.n" HTML blurbs) is derived from
+# SdkProjectDef.version + SdkProjectDef.build_number.  To guarantee a
+# hand-built / local dev preview pak is never version-indistinguishable
+# from a CI release build, the default build overwrites project.version
+# with "0.0.0" (build_number is left untouched, so the stamp is always
+# "0.0.0.<build_number>") — regardless of what adapter.yaml declares.
+# The real adapter.yaml version is used ONLY when the caller explicitly
+# opts in to a release build, via the VCFCF_RELEASE_BUILD env var (set by
+# the --release CLI flag, mirroring the existing VCFCF_SDK_JAR convention
+# in cli.py's _apply_sdk_jar_flag) — never by default.
+_RELEASE_BUILD_ENV = "VCFCF_RELEASE_BUILD"
+_RELEASE_BUILD_TRUE_VALUES = {"1", "true", "yes"}
+
+
+def _is_release_build() -> bool:
+    """Return True only when the release opt-in env var is explicitly set."""
+    return os.environ.get(_RELEASE_BUILD_ENV, "").strip().lower() in _RELEASE_BUILD_TRUE_VALUES
+
+
+def _stamp_build_version(project: SdkProjectDef, release_build: bool) -> str:
+    """Stamp project.version in place per the dev-preview/release convention.
+
+    Mutates ``project.version`` (SdkProjectDef is not frozen) so every
+    downstream consumer — pak_filename, _generate_outer_manifest,
+    _generate_version_txt, _build_overview_packed — picks up the correct
+    line automatically without threading a new parameter through each of
+    them individually. Returns the declared (adapter.yaml) version for
+    logging/reporting purposes.
+
+    Logs exactly one INFO line stating which line was stamped and why.
+    """
+    declared_version = project.version
+    if release_build:
+        print(
+            f"  INFO: version stamp -> release build -> "
+            f"{project.version}.{project.build_number} "
+            f"(VCFCF_RELEASE_BUILD opt-in active; using adapter.yaml version)",
+            file=sys.stderr,
+        )
+        return declared_version
+
+    project.version = "0.0.0"
+    print(
+        f"  INFO: version stamp -> dev preview -> "
+        f"0.0.0.{project.build_number} "
+        f"(adapter.yaml declares {declared_version}; hand-built paks are "
+        f"always version line 0.x — pass --release / set "
+        f"{_RELEASE_BUILD_ENV}=1 for a CI release build)",
+        file=sys.stderr,
+    )
+    return declared_version
 
 
 def _find_jars(directory: Path, pattern: str) -> List[Path]:
@@ -2840,8 +2936,12 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
 
     # Step 1: load adapter.yaml
     project = load_sdk_project(adapter_yaml)
-    print(f"  name={project.name}  version={project.version}.{project.build_number}  "
+    print(f"  name={project.name}  declared_version={project.version}.{project.build_number}  "
           f"kind={project.adapter_kind}", file=sys.stderr)
+
+    # Step 1a: stamp the effective build version (dev preview 0.0.0.N by
+    # default; adapter.yaml's real version only on explicit release opt-in).
+    _stamp_build_version(project, _is_release_build())
 
     # Step 1b: parse bundled_content (optional) — must happen before compile so
     # content load errors fail fast, before the expensive Java build steps.

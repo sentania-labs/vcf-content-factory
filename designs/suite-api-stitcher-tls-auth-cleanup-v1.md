@@ -5,7 +5,31 @@ gate to follow). Chosen fix: **Option 2 via a `VcfCfAdapter` shim helper.** Prod
 changed (S1 declined), so we go straight to the code fix.
 **Date:** 2026-06-29 (spec §5 landed); 2026-06-30 (root-cause correction + decision)
 
-## 0. Decision & corrected root cause (2026-06-30)
+> **CORRECTION (2026-07-01) — §0's TOFU-survival premise falsified live; DEF-005.**
+> §0 below bet that the platform `CustomSSLSocketFactory` returned by
+> `getSocketFactory()` carries a working TOFU-survival intercept that persists
+> trust for an unknown cert on first contact. Live devel evidence contradicts
+> this: `context/investigations/synology-b23-devel-pkix-2026-07-01.md` shows
+> the loopback Suite API hop PKIX-failing on **every** cycle under that
+> implementation, because the platform's `NonDisruptiveCertificateHandler`
+> errors every time with `"Adapter certificate renewal url set is empty"` —
+> framework (`com.vcfcf`) adapters declare no cert-renewal URL set, so the
+> intercept fires but trust never persists. Filed as `context/defects.md`
+> DEF-005 (blocking). The transport (`VcfCfAdapter.openPlatformConnection`)
+> has been changed to **mirror the Broadcom vendor behavior exactly** instead:
+> trust-all + ignore-hostname in non-FIPS mode (the same posture
+> `aria-ops-core SuiteAPIClient.getClientConfigBuilder()` uses for every
+> shipping Broadcom pak — `context/api-surface/casa-injected-vs-raw-client.md`
+> §3), with the earlier loopback/remote peer-gating removed (the vendor does
+> not peer-gate either) and the FIPS branch left as a documented TODO (no
+> `aria-ops-core` dependency available to replicate `useClusterTruststore`).
+> The rest of this design (§0.1 Cloud-Proxy scope expansion, §1–§5) is
+> superseded by the DEF-005 fix for the trust/hostname mechanism specifically;
+> the identity/credential-resolution material elsewhere in this design is
+> unaffected. See `lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`
+> (addendum, same date) for the vindicated generalizable rule.
+
+## 0. Decision & corrected root cause (2026-06-30) — superseded by the 2026-07-01 correction above
 
 **Corrected root cause — it is NOT CA trust, it is hostname verification.** The framework *already*
 uses a trust-all `insecureSslContext()` for Suite API calls, so CA validation is already bypassed

@@ -21,25 +21,40 @@ import java.util.Map;
  * <p>Generalised from the compliance adapter's dead-code
  * {@code SuiteApiPropertyPusher}. All HTTP calls go through
  * {@link VcfCfAdapter#openPlatformConnection(String)} — an
- * {@code HttpsURLConnection} wired with the platform {@code CustomSSLSocketFactory}
- * ({@code AdapterBase.getSocketFactory()}, carrying the TOFU-survival intercept)
- * and a peer-gated hostname verifier: loopback peers get an all-true verifier;
- * non-loopback peers get the JDK default strict check. This unified posture
- * eliminates the previous {@code java.net.http.HttpClient} +
- * {@code insecureSslContext()} path, which could not inject a
- * {@code HostnameVerifier} and failed with {@code certificate_unknown(46)} on
- * production appliances whose operator-replaced cert has no {@code localhost} SAN
- * (see §5 of {@code specs/20-suiteapi-client-behavioral-contract.md}).
+ * {@code HttpsURLConnection} wired to mirror the vendor
+ * {@code aria-ops-core SuiteAPIClient.getClientConfigBuilder()} transport
+ * <strong>exactly</strong> (see
+ * {@code context/api-surface/casa-injected-vs-raw-client.md} §3): trust-all +
+ * ignore-hostname in non-FIPS mode (server-trust only — no client keystore, no
+ * CaSA, no cert-renewal registration), with a documented-TODO FIPS branch (see
+ * {@link VcfCfAdapter#openPlatformConnection(String)}). This replaced an
+ * earlier attempt to route the loopback hop through the platform's strict TOFU
+ * {@code CustomTrustManager} (via {@code getSocketFactory()}), which PKIX-fails
+ * every cycle on live devel because framework adapters declare no
+ * cert-renewal URL set for the platform's non-disruptive certificate handler
+ * to persist trust against — see
+ * {@code context/investigations/synology-b23-devel-pkix-2026-07-01.md} and
+ * {@code context/defects.md} DEF-005. It also eliminates the earlier
+ * {@code java.net.http.HttpClient} + {@code insecureSslContext()} path, which
+ * could not inject a {@code HostnameVerifier} and failed with
+ * {@code certificate_unknown(46)} on production appliances whose
+ * operator-replaced cert has no {@code localhost} SAN (see §5 of
+ * {@code specs/20-suiteapi-client-behavioral-contract.md}).
  *
  * <p>The credential mechanism still determines the Suite API endpoint:
  * <ul>
- *   <li><strong>Ambient</strong> — {@code maintenanceuser.properties}; endpoint
- *       defaults to {@code https://localhost/suite-api/} (resolves to loopback →
+ *   <li><strong>Ambient</strong> — identity v3 order: the platform-injected
+ *       per-instance credential ({@code adapter.getAdapterConfig()
+ *       .getAdapterCredentials()}, when present), then
+ *       {@code automationuser.properties} ({@code automationAdmin}), then
+ *       {@code maintenanceuser.properties} only if both prior sources are
+ *       absent/unreadable — see {@link AmbientCredential}; endpoint defaults
+ *       to {@code https://localhost/suite-api/} (resolves to loopback →
  *       all-true hostname verifier).</li>
  *   <li><strong>Explicit</strong> — adapter-config host/username/password;
  *       endpoint is {@code https://<host>/suite-api/} (resolves to non-loopback →
  *       JDK strict hostname verification). Use on remote collectors where
- *       {@code maintenanceuser.properties} may be absent. The explicit URL must
+ *       neither ambient source may be present. The explicit URL must
  *       target the primary/analytics Suite API node — pointing at {@code localhost}
  *       on a collector yields HTTP 403 (suite-api not served on collectors).</li>
  * </ul>
@@ -49,12 +64,22 @@ import java.util.Map;
  *   <li><strong>Explicit</strong> — {@code host}, {@code username},
  *       {@code password} supplied via {@link Builder#explicitCredentials}
  *       (adapter-config fallback for remote collectors).</li>
- *   <li><strong>Ambient</strong> — credentials read from the platform's
- *       {@code maintenanceuser.properties}; Suite API endpoint defaults to
- *       {@code https://localhost/suite-api/} (primary/analytics node only).
- *       Password decrypted by {@link com.integrien.alive.common.security.Crypt}
- *       — the only FIPS-safe path under
- *       {@code -Dorg.bouncycastle.fips.approved_only=true}.</li>
+ *   <li><strong>Ambient</strong> — identity v3: (a) the platform-injected
+ *       per-instance credential read via the SDK-public
+ *       {@code AdapterBase.getAdapterConfig().getAdapterCredentials()} chain
+ *       (see {@code context/api-surface/
+ *       per-instance-suiteapi-credential-contract.md}), preferred
+ *       unconditionally when present; (b) {@code automationuser.properties}
+ *       ({@code automationAdmin}); (c) {@code maintenanceuser.properties}
+ *       only if (a) and (b) are both absent/unreadable ({@link
+ *       AmbientCredential#load(com.integrien.alive.common.adapter3.config.AdapterConfig)}).
+ *       Suite API endpoint defaults to {@code https://localhost/suite-api/}
+ *       (primary/analytics node only). File-based password decrypted by
+ *       {@link com.integrien.alive.common.security.Crypt} — the only
+ *       FIPS-safe path under
+ *       {@code -Dorg.bouncycastle.fips.approved_only=true} (the injected
+ *       credential arrives already plaintext in the deserialized config, no
+ *       decryption needed).</li>
  *   <li>If neither resolves, {@link Builder#build()} throws
  *       {@link IllegalStateException} with an actionable message.</li>
  * </ol>
@@ -285,10 +310,12 @@ public final class SuiteApiStitchClient {
                         + " endpoint=" + suiteApiBase);
 
             } else {
-                // Ambient maintenance credentials (primary-node standard path).
+                // Ambient credentials — identity v3 order: platform-injected
+                // per-instance credential (adapter.getAdapterConfig()) first,
+                // then automation.properties, then maintenance.properties.
                 AmbientCredential cred;
                 try {
-                    cred = AmbientCredential.load();
+                    cred = AmbientCredential.load(safeGetAdapterConfig(adapter));
                 } catch (IOException e) {
                     throw new IllegalStateException(
                             "SuiteApiStitchClient: cannot resolve Suite API credentials. "
@@ -305,28 +332,39 @@ public final class SuiteApiStitchClient {
                 suiteApiBase = DEFAULT_SUITE_API_BASE;
                 mechanism = "ambient";
                 logger.info("SuiteApiStitchClient: credential mechanism=ambient"
+                        + " file=" + cred.getSourceLabel()
                         + " principal=" + username
                         + " endpoint=" + suiteApiBase);
+
+                // WARNING-1 breadcrumb (ambient-credential-v3-instance-first
+                // review): an AdapterConfig was present but the "instance"
+                // source lost — record why, once, at INFO. This is the
+                // diagnostic the identity-v3 change exists to surface; a
+                // swallowed reason nobody can see defeats the point. Sanitized
+                // by AmbientCredential#getInjectedFailureReason() — exception
+                // class name (+ message only for a LinkageError, which is
+                // just the missing class name) or "credentials null/blank".
+                // Never the password, never a raw exception message.
+                if (cred.getInjectedFailureReason() != null) {
+                    logger.info("SuiteApiStitchClient: instance-credential not used"
+                            + " reason=" + cred.getInjectedFailureReason());
+                }
             }
 
             // --- Transport log ------------------------------------------------
             // All calls go through openPlatformConnection (unified transport).
-            // isLoopbackUrl is informational only — the peer-gating in
-            // openPlatformConnection itself determines the hostname verifier posture.
+            // isLoopbackUrl is informational only (logged for operational
+            // clarity) — since DEF-005 the transport no longer peer-gates:
+            // it mirrors the vendor aria-ops-core SuiteAPIClient non-FIPS
+            // posture (trust-all + ignore-hostname) for loopback and remote
+            // Suite API endpoints alike, exactly as every shipping Broadcom
+            // pak does. See openPlatformConnection() for the FIPS branch note.
             boolean loopback = SuiteApiStitchClient.isLoopbackUrl(suiteApiBase);
-            if (loopback) {
-                logger.info("SuiteApiStitchClient: transport=openPlatformConnection loopback"
-                        + " (CustomSSLSocketFactory/getSocketFactory"
-                        + " + peer-gated all-true hostname verifier)"
-                        + " mechanism=" + mechanism
-                        + " principal=" + username);
-            } else {
-                logger.info("SuiteApiStitchClient: transport=openPlatformConnection remote"
-                        + " (CustomSSLSocketFactory/getSocketFactory"
-                        + " + JDK strict hostname verifier)"
-                        + " mechanism=" + mechanism
-                        + " principal=" + username);
-            }
+            logger.info("SuiteApiStitchClient: transport=openPlatformConnection"
+                    + (loopback ? " loopback" : " remote")
+                    + " (BC-mirror: trust-all + ignore-hostname, non-FIPS)"
+                    + " mechanism=" + mechanism
+                    + " principal=" + username);
 
             return new SuiteApiStitchClient(
                     adapter,
@@ -336,6 +374,36 @@ public final class SuiteApiStitchClient {
 
         private static boolean isNonBlank(String s) {
             return s != null && !s.trim().isEmpty();
+        }
+
+        /**
+         * Read {@code adapter.getAdapterConfig()} defensively for the
+         * injected-credential probe (identity v3). Returns {@code null} on
+         * any failure — including a null {@code adapter} or the platform not
+         * yet having injected config (early lifecycle / test harness) —
+         * rather than throwing, so {@link AmbientCredential#load(
+         * com.integrien.alive.common.adapter3.config.AdapterConfig)} sees an
+         * absent source and falls through to the file-based candidates.
+         */
+        private static com.integrien.alive.common.adapter3.config.AdapterConfig
+                safeGetAdapterConfig(VcfCfAdapter<?> adapter) {
+            if (adapter == null) {
+                return null;
+            }
+            try {
+                return adapter.getAdapterConfig();
+            } catch (Exception | LinkageError e) {
+                // Narrowed from catch (Throwable) — mirrors
+                // AmbientCredential.tryInjectedCredential's defensive posture
+                // (see its javadoc: a NoClassDefFoundError surfaced live
+                // while probing this same accessor chain during identity v3
+                // testing). Honors the documented crash-the-cycle case
+                // (Exception, LinkageError) while letting
+                // VirtualMachineError/ThreadDeath propagate. Absent/
+                // unreadable source falls through; nothing throws out of
+                // construction.
+                return null;
+            }
         }
     }
 
@@ -584,11 +652,12 @@ public final class SuiteApiStitchClient {
      * Execute an HTTP request via the platform connection transport.
      *
      * <p>Opens the connection through
-     * {@link VcfCfAdapter#openPlatformConnection(String)}, which applies the
-     * platform {@code CustomSSLSocketFactory} (TOFU-survival intercept) and a
-     * peer-gated hostname verifier on the underlying {@code HttpsURLConnection}.
-     * Used for all Suite API calls — both loopback (ambient) and
-     * explicit/remote (collector) endpoints.
+     * {@link VcfCfAdapter#openPlatformConnection(String)}, which mirrors the
+     * vendor {@code SuiteAPIClient} non-FIPS transport (trust-all +
+     * ignore-hostname) on the underlying {@code HttpsURLConnection}. Used for
+     * all Suite API calls — both loopback (ambient) and explicit/remote
+     * (collector) endpoints; per DEF-005 the transport no longer peer-gates
+     * (see {@link VcfCfAdapter#openPlatformConnection(String)}).
      *
      * @param method   {@code "GET"} or {@code "POST"}
      * @param fullUrl  full URL including base (e.g.
