@@ -3081,3 +3081,398 @@ the multi-vCenter ambiguity can't manifest there was WRONG. Devel is also
 correctly. The root cause remains the pre-fix jar on prod (or the binary mismatch
 between what was tagged and what was built and shipped).
 
+---
+
+## 2026-06-30 — Cloud Proxy suite-api access mechanism
+
+**Question:** Can a CP-resident adapter read cluster-wide VMWARE inventory
+(HostSystems, VMs, Datastores) without operator-supplied credentials? If yes,
+what is the mechanism?
+
+**Prod instance:** vcf-lab-operations.int.sentania.net  
+**Cloud Proxy:** vcf-lab-operations-collector.int.sentania.net (collector id=2, uuId=`d1312c3f-f806-477f-929b-96d012bdb3a4`, nodeIdentifier=`9017a996-596d-41da-b782-0e3ec924b775`, type=`UNIFIED_CLOUD_PROXY`)
+
+---
+
+### 1. CP Registration
+
+`/api/collectorgroups` returns ONE group ("Default collector group"), `collectorId: [1]`
+only. The CP (id=2) is NOT in any collector group — it is a directly-registered
+UNIFIED_CLOUD_PROXY node.
+
+`/api/collectors` confirms:
+- Collector id=1: `VCF Operations Collector-vcf-lab-operations` — type=`INTERNAL`, local=true (analytics/primary node, 172.27.8.41)
+- Collector id=2: `vcf-lab-operations-collector.int.sentania.net` — type=`UNIFIED_CLOUD_PROXY`, local=false (172.27.8.51), 25 adapter instances
+
+The CP has its own nodeIdentifier (`9017a996-...`) which is its registered service
+identity in the cluster.
+
+---
+
+### 2. Adapters running on the CP (collector id=2)
+
+All 25 adapter instances confirmed running on the CP via `/api/adapters/{id}`:
+
+| Adapter Kind | Name | Credentials |
+|---|---|---|
+| `VMWARE` | vcf-lab-vcenter-mgmt | `a9b653f0` (vCenter creds) |
+| `VMWARE` | vcf-lab-vcenter-wld01 | `4578254c` (vCenter creds) |
+| `VMWARE` | vcf-lab-vcenter-wld02 | `bb194409` (vCenter creds) |
+| `VCFOperationsvCommunity` | vcenter-mgmt/wld01/wld02 | `125703fb` (shared creds) |
+| `NSXTAdapter` | nsxmgr-mgmt/wld01/wld02 | operator NSX creds |
+| `VirtualAndPhysicalSANAdapter` | vcenter-mgmt/wld01 vSAN | same as VMWARE creds |
+| `VcfAdapter` | sentania.net - VCF Lab | `8afc7423` |
+| `VMSP` | vcf-lab-services-runtime | `c5e866fc` |
+| `SqlServerAdapter` | mssqldemo | `be5efc9d` |
+| `OracleDBAdapter` | FREEPDB1 | `076dcfea` |
+| `synology_diskstation` | storage.int.sentania.net | `2c0d8fd8` |
+| **`VMWARE_INFRA_MANAGEMENT`** | Infrastructure Management Adapter | **null (no creds)** |
+| **`VMWARE_INFRA_HEALTH`** | Infrastructure Health Adapter | **null (no creds)** |
+| **`ManagementPackBuilderAdapter`** | MPB d1312c3f-... | **null (no creds)** |
+| **`vCenter Operations Adapter`** | VCF Operations Adapter | **null (no creds)** |
+| **`APPOSUCP`** | Application Monitoring Adapter | **null (no creds)** |
+| **`VMWARE_INFRA_MANAGEMENT`** | vcf-lab-idb.int.sentania.net | `4028de05` |
+| **`VCF_UNIFIED_CONFIG`** | Configuration Management | **null (no creds)** |
+| **`LogAssistAdapter`** | Log Assist | **null (no creds)** |
+| **`DiagnosticsAdapter`** | VCF Diagnostics | **null (no creds)** |
+
+**Key pattern:** all adapters that connect to external systems (vCenter, NSX, SQL,
+Synology) carry operator credentials. The self-aware infrastructure adapters
+(VMWARE_INFRA_MANAGEMENT, VMWARE_INFRA_HEALTH, MPB, vCenter Operations Adapter)
+carry NO credentials.
+
+---
+
+### 3. Proof: VMWARE_INFRA_MANAGEMENT stitches VMWARE resources without credentials
+
+`VMWARE_INFRA_MANAGEMENT` (adapter id `bca42bec`, collector id=2, **credentialInstanceId=null**) manages 29 resources confirmed via `/api/adapters/bca42bec-.../resources`:
+
+Resources include:
+
+| adapterKind | resourceKind | Example name |
+|---|---|---|
+| `VMWARE` | `HostSystem` | vcf-lab-wld02-esx02, vcf-lab-wld01-esx01, vcf-lab-mgmt-esx01–04 (8 hosts total) |
+| `VMWARE` | `VMwareAdapter Instance` | vcf-lab-vcenter-mgmt, wld01, wld02 |
+| `VMWARE_INFRA_HEALTH` | `VC_APP`, `NSX_T_APP`, `SDDC_MANAGER_APP`, `ARIA_LOGS_APP` | all production VCs and NSX managers |
+| `NSXTAdapter` | `NSXTAdapterInstance` | all 3 NSX managers |
+| `VcfAdapter` | `VcfAdapterInstance` | VCF Lab |
+| `VMSP` | `VMSP_CLUSTER` | vcf-lab-services-runtime |
+| `VMWARE_INFRA_MANAGEMENT` | `VMWARE_INFRA_MANAGEMENT_INSTANCE` | self |
+
+Live stats confirmed on those HostSystem resources (via `/api/resources/{id}/stats/latest`):
+- `vcf-lab-wld02-esx02.int.sentania.net`: `datastore:Aggregate of all instances|totalWriteLatency_average = 0.0667`
+- `System Attributes|alert_count_warning = 1.0`
+
+This is ACTIVE, LIVE data — the no-credential adapter is collecting and stitching
+real cluster metrics onto VMWARE HostSystem objects every 5 minutes.
+
+The adapter's only configuration identifier is:
+- `CLUSTER_ID = 0bcff539-b5e4-4b86-9084-15f109997f43` (the cluster UUID, not a
+  vCenter credential)
+- `COLLECTOR_UUID = 9017a996-596d-41da-b782-0e3ec924b775` (the CP's own node ID)
+
+---
+
+### 4. The CaSA mechanism
+
+The `vCenter Operations Adapter` running on the CP (adapter id=`9822cc41`, no creds)
+creates a `vC-Ops-CaSA` resource for the CP itself:
+- Resource: `VCF Operations CaSA-vcf-lab-operations-collector.int.sentania.net`
+  (NODEID=`9017a996-596d-41da-b782-0e3ec924b775`, resourceHealth=GREEN)
+
+CaSA = **Cluster Aware Service API**. This is a local reverse-proxy service running
+on the CP that routes suite-api requests to the primary analytics node using the CP's
+registered node certificate (mutual TLS), bypassing the user-credential stack entirely.
+
+The CP's `CLUSTER_ID` is the signal to CaSA for which cluster to route to. An adapter
+running on the CP that knows the `CLUSTER_ID` can call CaSA at its local endpoint
+(not `localhost/suite-api`) to get authenticated, read-only access to the cluster's
+full resource inventory.
+
+**Why the prior test got 403:** The test called `localhost/suite-api` using the ambient
+`cloudproxy_<uuid>` maintenance account. That account is NOT in `/api/auth/users`
+(system-level, invisible to admin APIs) and has no read role on the public suite-api.
+CaSA is a separate local service — calling `localhost/suite-api` with a user credential
+is the wrong path.
+
+---
+
+### 5. Cloudproxy service identity
+
+The `cloudproxy_<uuid>` account does NOT appear in `/api/auth/users` (5 visible users:
+claude, navani, sadmin, admin, vcf). It is a system-level service account below the
+user management tier, used for node-to-node internal communication, not for suite-api
+user auth. The 403 on `localhost/suite-api` with that identity is expected behavior —
+it has no role grant on the public API, and that endpoint is the wrong one anyway.
+
+The CP's registered `nodeIdentifier = 9017a996-596d-41da-b782-0e3ec924b775` is the
+identity used by CaSA for cluster auth.
+
+---
+
+### Verdict
+
+**YES — CP-resident adapters CAN read cluster-wide VMWARE inventory without
+operator-supplied credentials.**
+
+The prior conclusion ("CP adapters can't stitch ambiently") is REFUTED by live
+evidence:
+- `VMWARE_INFRA_MANAGEMENT` (no credentials, collector id=2) is actively stitching
+  metrics onto 8 VMWARE `HostSystem` resources and live data is confirmed.
+
+**Mechanism: CaSA (Cluster Aware Service API)**
+- CaSA runs as a local service on the CP (separate from `localhost/suite-api`)
+- It authenticates to the cluster using the CP's node certificate / nodeIdentifier
+- Adapters call CaSA with a `CLUSTER_ID` to get proxied, authenticated access to the
+  cluster suite-api — no operator vCenter or vROps credentials needed
+- The MPB adapter instance (`41154f7f`, no creds) running on the CP has access to the
+  same CaSA path — an MPB-based adapter can use CaSA to enumerate VMWARE resources
+
+**What still requires operator credentials:**
+- The `VMWARE` adapter (raw vCenter collection: VMs, datastores, hosts from vCenter
+  directly) — requires vCenter credentials because it talks to vCenter API, not suite-api
+- External third-party APIs (NSX, SQL, etc.)
+
+**What does NOT require operator credentials on the CP:**
+- Reading cluster inventory from suite-api (HostSystems, VMs, Datastores, etc.) — via CaSA
+- Stitching metrics onto existing VMWARE resources — proven by VMWARE_INFRA_MANAGEMENT
+- Self-registration and heartbeat — via node certificate
+
+**Implication for custom adapter on CP:** A Tier-1 MPB adapter or Tier-2 Java SDK
+adapter running on the CP can call CaSA to enumerate VMWARE objects (VMs, Datastores,
+HostSystems) without any operator-configured credentials. The CaSA endpoint is the
+correct ambient authentication path — not `localhost/suite-api`, not the primary node's
+`https://vcf-lab-operations.../suite-api` (which returns 401 without explicit auth).
+
+
+---
+
+## 2026-07-01 — Compliance pack prod config — node + foreign-push verification
+
+**Task:** Determine whether the vcfcf_compliance adapter is working on prod, specifically
+whether it successfully pushes metrics/properties onto foreign VMWARE HostSystem resources
+(ARIA_OPS stitch), and which collector node it runs on.
+
+**Instance:** vcf-lab-operations.int.sentania.net (prod, read-only)
+
+---
+
+### 1. Adapter kind and instance
+
+| Field | Value |
+|---|---|
+| Adapter kind key | `vcfcf_compliance` |
+| Display name | VCF Content Factory Compliance |
+| Instance name | `dfddf` |
+| Instance resource id | `feccc1fa-65fc-470a-9998-26e34e6828cb` |
+| vcenter_host | `vcf-lab-vcenter-mgmt.int.sentania.net` |
+| benchmark_profile | `VMware_SCG_9.0` |
+| allowInsecure | `true` |
+| credentialInstanceId | `67ca034d-3305-4dff-b7e5-706647aab12b` (carries vCenter credentials) |
+
+### 2. Collector node
+
+| Field | Value |
+|---|---|
+| `System Properties|host_collector_id` | `1.0` |
+| Collector id | 1 |
+| Collector name | VCF Operations Collector-vcf-lab-operations |
+| Collector type | INTERNAL (primary/analytics node) |
+| Collector hostName | 172.27.8.41 |
+| Cloud Proxy (id=2) | vcf-lab-operations-collector.int.sentania.net — **compliance is NOT here** |
+
+The compliance adapter runs on the **primary/analytics node (collector id=1)**,
+NOT on the Cloud Proxy (collector id=2).
+
+### 3. Collection status
+
+| Field | Value |
+|---|---|
+| resourceStatus | **DOWN** |
+| resourceHealth | **RED (25.0)** |
+| statusMessage | `Compliance collection failed: Error while searching for service [javax.xml.ws.spi.Provider]` |
+| Last collection timestamp | `1782907925010` ms ≈ 2026-07-01T12:12:05Z |
+| `Instance Attributes|collected_resources` | 1.0 (only the adapter instance itself) |
+| `Instance Attributes|collected_metrics` | 0.0 |
+| `Instance Attributes|observations` | 0.0 |
+
+The adapter is actively cycling (last cycle at 2026-07-01T12:12:05Z — seconds before
+recon) but failing every cycle with the JAX-WS provider error.
+
+### 4. Foreign-object push / ARIA_OPS stitch result
+
+Checked all 10 VMWARE HostSystem resources on prod for `VCF-CF Compliance|*` statkeys
+and properties.
+
+**Result: ZERO hosts carry any VCF-CF Compliance metrics or properties.**
+
+No `VCF-CF Compliance|score`, `VCF-CF Compliance|pass_count`,
+`VCF-CF Compliance|fail_count`, `VCF-CF Compliance|total_count`,
+`VCF-CF Compliance|unreadable_count`, or `VCF-CF Compliance|profile_name` appear on any
+HostSystem resource. The ARIA_OPS foreign-push has NEVER landed because every collection
+cycle fails before the stitch phase is reached.
+
+### 5. Root cause
+
+The installed pak uses JAX-WS (`javax.xml.ws.spi.Provider`) for vSphere SOAP
+communication — this is the v1 transport. The JAX-WS service provider is NOT available
+in the VCF Operations 9.1 collector JVM, so every cycle fails immediately.
+
+The repo source (`ComplianceAdapter.java`, `VSphereClient.java`) has already fixed this:
+the vSphere transport is now raw SOAP over `java.net.HttpURLConnection` + JDK DOM
+(no JAX-WS). This fix is documented in `ComplianceAdapter.java` Javadoc ("the JAX-WS
+path failed every cycle on 9.1 — see `prod_91_jaxws_provider_failure.md`"). However,
+the v2 (fixed) pak has NOT been installed on prod — the instance is still running the
+pre-fix build.
+
+### 6. Cloud Proxy transport fix relevance
+
+The Cloud Proxy transport fix (investigated for the Synology stitch — 2026-06-29 entry
+above) is **NOT applicable to compliance**:
+
+- Compliance is on the PRIMARY node (collector 1), not the Cloud Proxy.
+- Compliance's stitch transport uses the framework `SuiteApiStitcher` with ambient
+  maintenance credentials (proven working on devel and prod in prior sessions).
+- The failure is in the vSphere data collection phase (JAX-WS), not in the stitch
+  transport phase.
+- Once the fixed pak (v2) is installed, the stitch will run against the primary node's
+  own Suite API — no Cloud Proxy path involved.
+
+### Headline verdict
+
+**Does compliance successfully modify foreign VMWARE HostSystem objects on prod? NO.**
+**Which collector node? PRIMARY/analytics (collector id=1).**
+**Cloud Proxy fix load-bearing? NO — compliance is not on the Cloud Proxy.**
+**Cause of failure? Installed pak is pre-fix (JAX-WS); v2 source is fixed but not yet installed on prod.**
+
+
+---
+
+## 2026-07-01 — Oracle management pack relationship freshness (prod)
+
+**Requested by:** orchestrator (ops-recon spawn). **Intent:** determine whether the
+parent/child relationships contributed by the Oracle management pack(s) on prod are
+fresh (actively maintained) or stale (not refreshed / dangling).
+
+### 1. Installed Oracle paks/adapters
+
+Two Oracle-named adapter kinds exist on the instance (`/suite-api/api/adapterkinds`,
+cross-checked against `/suite-api/api/solutions`):
+
+| Adapter kind key | Display name | Pak version | Instances configured |
+|---|---|---|---|
+| `OracleDBAdapter` | Oracle Database | `9.0.0.0100.25232927` (solution `OracleDatabase`, "Oracle Database Management Pack", vendor VMware Inc.) | **1** |
+| `OEM_ADAPTER` | Oracle Enterprise Manager | `9.0.0.20231005.113304` ("VMware Aria Operations Management Pack for Oracle Enterprise Manager") | **0** — kind registered, no adapter instances configured. Excluded from the rest of this recon; nothing to be fresh or stale. |
+
+The single `OracleDBAdapter` instance (id `48fb5d76-80f0-4062-b32b-c11ff824ee2b`,
+resource name `FREEPDB1`, host `oracledemo.int.sentania.net:1521`, service name
+`FREEPDB1`) runs on **collector id=2** (`vcf-lab-operations-collector`, the
+`UNIFIED_CLOUD_PROXY`) — consistent with the 2026-06-30 CaSA finding that this CP runs
+the full reference-adapter fleet.
+
+### 2. Resource kinds / collection state
+
+Verified live via `POST /api/resources/query {"adapterInstanceId":["48fb5d76-…"]}` —
+`numberOfResourcesCollected` on the adapter instance record (44) matches exactly:
+
+- `oracledatabase_adapter_instance` ×1, `oracle_database_traversal_tag` ×1,
+  `oracle_database_oracle_database_instance` ×1, `_database` ×1, `_pdb` ×1,
+  `_service` ×2, `_tablespace` ×4, `_database_file` ×5, `_control_file` ×2,
+  `_redo_log_file` ×3, `_event_wait_group` ×11, `_query` ×11, `_vms_tag` ×1.
+
+**All 44 resources report `resourceStatus: DATA_RECEIVING`, `resourceState: STARTED`.**
+Adapter instance: `lastHeartbeat` = 2026-07-01 17:50:48 UTC, `lastCollected` =
+2026-07-01 17:48:45 UTC — both ~2–3 min before the recon run (17:51 UTC). 5-minute
+monitoring interval, 681 metrics/cycle. **Adapter is actively collecting, not stalled.**
+
+### 3. Relationship graph
+
+Walked `GET /api/resources/{id}/relationships` (relationshipType=ALL) for all 44
+resources:
+
+- **42 of 44 have ≥1 relationship edge.** 2 orphans (0 edges each): one
+  `oracle_database_oracle_database_query` resource and the
+  `.../temp01.dbf` `oracle_database_oracle_database_database_file` resource — both
+  minor leaf-level query/file resources, not structurally significant (not the
+  instance/database/PDB backbone).
+- 97 directed edges total across the 42 connected resources — normal tree/mesh shape
+  (instance → database → PDB → tablespace/service/file/redo-log/control-file →
+  query/event-wait-group).
+- **Cross-MP stitch confirmed live:** 3 foreign (non-`OracleDBAdapter`) edges, all to
+  `VMWARE::VirtualMachine "oracledemo"`:
+  - `oracle_database_oracle_database_instance "FREE"` → VM `oracledemo`
+  - `oracle_database_vms_tag "Oracle Database Instances on VMware"` → VM `oracledemo`
+  - `oracledatabase_adapter_instance` → `Container::Universe` (platform housekeeping
+    edge, not domain-relevant)
+
+Confirmed the target VM (`VMWARE::VirtualMachine "oracledemo"`, id
+`3fd10bba-41d8-4b4b-bafb-2c050544096a`) still exists and is **not dangling**: its
+owning `VMWARE` adapter instance (`e0bd4ed9-…`, `vcf-lab-vcenter-mgmt.int.sentania.net`)
+shows `resourceStatus: DATA_RECEIVING` with `lastCollected` = 2026-07-01 17:49:25 UTC
+(current). (Note: the VM's overall `resourceHealth` is RED and one *unrelated* adapter,
+`NETWORK_INSIGHT`, shows `NO_DATA_RECEIVING` for it — that's a Network Insight data gap
+on that VM, not a signal about the Oracle stitch or the VMWARE adapter's freshness.)
+
+### 4. Fresh vs. stale determination — **FRESH**
+
+**No API surface exposes a per-relationship-edge "last updated" timestamp.**
+Confirmed against the OpenAPI spec (`docs/operations-api.json`,
+`#/components/schemas/resource-relation`): the `GET .../relationships` response only
+carries `creationTime` on the *related resource* (when that resource was first
+discovered), not on the edge itself. **This is an API GAP** — flagging per the ops-recon
+contract rather than guessing at an edge timestamp that doesn't exist.
+
+Proxy signals used instead, all pointing the same direction:
+
+1. **Adapter is live-collecting right now** — heartbeat/lastCollected within ~3 minutes
+   of the recon query, 5-minute interval honored.
+2. **New leaf resources are still being discovered and immediately wired into the
+   graph.** Several `oracle_database_oracle_database_query` resources have
+   `creationTime` of 2026-07-01 15:41, 16:43, and 17:28/17:43 (i.e. within the last
+   several hours, including the collection cycle just before this recon run) and each
+   of those newly-discovered resources already has its relationship edge back to the
+   `FREE` instance populated. Since relationship discovery happens on the same
+   collection cycle as resource discovery in this adapter, a freshly-created resource
+   with a populated edge is strong evidence the relationship-build logic ran on the
+   current cycle, not a one-time snapshot from initial setup (2026-05-19/20).
+3. **All 44 resources are `DATA_RECEIVING`** — no `NO_DATA_RECEIVING`/`NOT_COLLECTING`
+   states that would indicate a half-abandoned resource whose relationships might have
+   gone stale independent of the adapter.
+4. **The cross-MP stitch target (VMWARE VM `oracledemo`) is not dangling** — it's a
+   live, currently-collecting resource on the VMWARE adapter, so the edge points at a
+   real, current object rather than a resource that's been deleted/recreated since the
+   edge was last written.
+
+### Verdict
+
+- **`OracleDBAdapter` (Oracle Database MP) relationships: FRESH.** Evidence: adapter
+  actively collecting (heartbeat/lastCollected ~2–3 min old), 42/44 resources have
+  populated relationship edges, edges on newly-discovered resources (created within the
+  last few hours) are already populated, cross-MP edge to `VMWARE::VirtualMachine
+  oracledemo` resolves to a live, currently-collecting VM. No evidence of dangling
+  endpoints or abandoned edges.
+- **`OEM_ADAPTER` (Oracle Enterprise Manager MP): INCONCLUSIVE / N/A** — pak installed,
+  adapter kind registered, but **zero adapter instances configured**. No resources, no
+  relationships, nothing to assess.
+- **2 orphaned leaf resources (unrelated to the FRESH/STALE call):** one SQL query
+  resource and one database-file resource have 0 relationship edges. Minor — leaf-level
+  telemetry resources, not part of the instance/database/PDB parent-child backbone, and
+  don't change the overall verdict.
+- **TOOLSET GAP:** Suite API has no endpoint that returns a relationship edge's own
+  last-modified/last-discovery timestamp (verified against
+  `#/components/schemas/resource-relation` in `docs/operations-api.json`). Freshness
+  above is INFERRED from adapter collection state + resource creation-time correlation,
+  not read directly off an edge timestamp.
+
+**Recommendation:** no authoring action needed — this was a pure investigation, no
+content gap identified.
+
+---
+**CORRECTION (2026-07-02) to the 2026-07-01 Oracle entry §3/§4:** the claim
+that OracleDBAdapter makes "zero Suite API calls" and that its VM stitch is
+platform-side describe.xml traversal was a log-level artifact (stitch lines
+log at DEBUG; the observation window fell on DB-unreachable cycles that skip
+the relationship phase). Live DEBUG capture proved Oracle performs a
+per-cycle Suite API read authenticated as the platform-injected per-instance
+credential (token user = adapter instance UUID). See
+`context/investigations/oracle-stitch-autopsy-2026-07-02.md`.

@@ -133,9 +133,16 @@ jobs:
           ls _sdk_runtime/vrops-adapters-sdk-*.jar
 
       - name: Build the .pak (deterministic, headless)
+        # --release is the explicit opt-in for the factory's version-line
+        # guardrail: only the tag-triggered CI release path stamps the real
+        # adapter.yaml version. Every other build path (hand-built / local
+        # dev preview) defaults to 0.0.0.<build_number> so a dev pak is never
+        # version-indistinguishable from a release. Do not pass --release
+        # outside of this workflow.
         run: |
           set -euo pipefail
           PYTHONPATH=_kit python3 -m sdk_buildkit build-sdk "$GITHUB_WORKSPACE" \
+            --release \
             --sdk-jar _sdk_runtime/vrops-adapters-sdk-2.2.jar \
             --output dist
           ls -l dist/*.pak

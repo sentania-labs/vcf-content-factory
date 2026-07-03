@@ -7,20 +7,30 @@ Coverage:
       they do NOT hardcode the total entry count so that adding a new defect
       to the registry does not break CI.  The current known entries are
       DEF-001 (blocking/closed/synology), DEF-002 (blocking/open/unifi),
-      DEF-003 (blocking/closed/synology), DEF-004 (blocking/open/vcommunity-os).
-      Current open blockers: DEF-002, DEF-004.  DEF-001 and DEF-003 are closed.
+      DEF-003 (blocking/closed/synology), DEF-004 (blocking/open/vcommunity-os),
+      DEF-005 (blocking/closed/synology, filed 2026-07-01, closed
+      2026-07-02 — framework stitcher strict-TOFU loopback Suite API
+      transport PKIX-fails every cycle; closed via BC-mirror transport
+      fix), DEF-006 (blocking/closed/synology, filed 2026-07-02, closed
+      2026-07-02 (build 26) — CP-resident cross-MP stitch: no credentialed
+      ambient path works from a Cloud Proxy; closed via ambient identity
+      v3, platform-injected per-instance credential).
+      Current open blockers: DEF-002, DEF-004.  DEF-001, DEF-003, DEF-005,
+      and DEF-006 are all closed.
     - Malformed entries: bad severity, waived status, closed-without-evidence,
       duplicate id, missing required fields.
   Gate helpers:
-    - gate_pak: synology is now CLEAN (DEF-001 closed in v1.0.0.19); unifi
-      blocked by DEF-002; vcommunity-os blocked by DEF-004; closed DEF-003
-      does NOT gate synology.
+    - gate_pak: synology is clean (DEF-001/DEF-003/DEF-005/DEF-006, all
+      synology, are closed and do not gate); unifi blocked by DEF-002;
+      vcommunity-os blocked by DEF-004.
     - gate_item: affected item and unaffected item.
     - gate_all: exit 2 when any open blocking defect exists; known open
-      blockers are DEF-002, DEF-004; DEF-001 and DEF-003 are closed and
-      must not appear.
+      blockers are DEF-002, DEF-004; DEF-001, DEF-003, DEF-005, and
+      DEF-006 are closed and must not appear.
   CLI (defect-gate subcommand):
-    - --pak synology: exit 0 (DEF-001 closed — proves closed defects do not block).
+    - --pak synology: exit 0 (clean — DEF-001/DEF-003/DEF-005/DEF-006 all
+      closed; DEF-005 then DEF-006 each gated synology for one round in
+      turn before closing).
     - --pak unifi: exit 2 (DEF-002).
     - --pak vcommunity-os: exit 2 (DEF-004).
     - --pak compliance / vcommunity: exit 0 (clean).
@@ -31,15 +41,33 @@ Coverage:
   Publish gate:
     - _gate_publish raises PublishError naming defect ids.
     - _gate_publish passes when all defects are closed or tracked.
-    - _gate_publish passes for synology (DEF-001 closed) — real-corpus proof.
+    - _gate_publish passes for synology now that DEF-005 and DEF-006 (the
+      two defects that successively gated it) are both closed — real-corpus
+      proof that a pak clears once its last open blocker closes.
   Standalone entrypoint (defects.py __main__):
-    - --pak synology --registry context/defects.md → exit 0 (DEF-001 closed).
+    - --pak synology --registry context/defects.md → exit 0 (clean;
+      DEF-001/DEF-003/DEF-005/DEF-006 all closed).
     - --pak compliance → exit 0.
     - --all → exit 2, lists DEF-002 + DEF-004 (current open blockers).
     - missing registry path → exit 1.
     - bare-copy invocation (file copied outside the package, run with a clean
-      cwd) — uses unifi (DEF-002 open) to prove the gate fires; synology proves
-      closed defects do not block (proves curl-and-run).
+      cwd) — uses unifi (DEF-002 open) to prove the gate fires (proves
+      curl-and-run).
+
+  NOTE (2026-07-02): DEF-005 was filed open/blocking against synology on
+  2026-07-01 after the BC-mirror transport review (context/reviews/
+  framework/bc-mirror-transport-v1.md, BLOCKING item), then closed on
+  2026-07-02 with live-devel and prod closing evidence (build 24,
+  BC-mirror transport). The same closing round filed a new open blocker,
+  DEF-006 (CP-resident cross-MP stitch: no credentialed ambient path from
+  a Cloud Proxy). DEF-006 in turn closed on 2026-07-02 (build 26, ambient
+  identity v3 — platform-injected per-instance credential; live prod
+  closing evidence — see context/defects.md). Tests below were updated to
+  prove "synology is clean again" now that DEF-001, DEF-003, DEF-005, and
+  DEF-006 have all closed, per this file's own standing instruction to
+  update on status changes. This lineage (DEF-005 -> DEF-006 -> closed)
+  is intentionally kept in the docstrings rather than deleted so the
+  history of successive blockers on the same pak reads coherently.
 """
 from __future__ import annotations
 
@@ -293,18 +321,30 @@ class TestGatePak:
     """gate_pak() against the real registry."""
 
     def test_synology_is_clean_def001_closed(self):
-        """DEF-001 was closed in synology v1.0.0.19; synology must now be clean.
+        """DEF-001 was closed in synology v1.0.0.19; DEF-003 is also closed.
 
-        This is the real-corpus proof that a closed blocking defect does NOT
-        gate the pak.  DEF-003 (also synology, also closed) likewise must not
-        appear.  If a new open blocking defect is filed against synology, update
-        this test.
+        DEF-005 (framework stitcher: strict-TOFU loopback Suite API transport
+        PKIX-fails every cycle) was filed open/blocking against synology on
+        2026-07-01 (build 23 devel install), then closed on 2026-07-02 (build
+        24, BC-mirror transport, live-devel and prod closing evidence) — see
+        context/defects.md. That same closing round filed DEF-006 (CP-resident
+        cross-MP stitch: no credentialed ambient path works from a Cloud
+        Proxy) open/blocking against synology. DEF-006 itself has now closed
+        (build 26, ambient identity v3 — platform-injected per-instance
+        credential; 2026-07-02, live prod closing evidence of a Synology→
+        VMWARE Datastore edge written from a provably virgin baseline) — see
+        context/defects.md. With DEF-001, DEF-003, DEF-005, and DEF-006 all
+        closed, synology carries zero open blocking defects and is clean
+        again. Per this test's own standing instruction ("if a new open
+        blocking defect is filed against synology, update this test"), the
+        assertion below reflects that current state.
         """
         from vcfops_packaging.defects import gate_pak
         blockers = gate_pak("synology", REAL_REGISTRY)
         ids = [b.id for b in blockers]
-        assert blockers == [], (
-            f"DEF-001 is closed; synology must have no open blockers; got: {ids}"
+        assert ids == [], (
+            f"synology has zero open blocking defects (DEF-001/DEF-003/"
+            f"DEF-005/DEF-006 all closed); expected no blockers; got: {ids}"
         )
 
     def test_unifi_is_blocked(self):
@@ -453,15 +493,17 @@ class TestCLIDefectGate:
         return args.func(args)
 
     def test_pak_synology_exits_0_def001_closed(self, capsys):
-        """DEF-001 is closed; synology must now exit 0 (no open blockers).
+        """DEF-001 and DEF-005 were closed, then DEF-006 (CP-resident
+        cross-MP stitch, filed 2026-07-02) gated the pak for one round.
 
-        This is the real-corpus proof that closing a blocking defect restores
-        clean status for the affected pak.  Exit-2 coverage for real open
-        blockers is provided by test_pak_unifi_exits_2 and
-        test_pak_vcommunity_os_exits_2.
+        DEF-006 has since closed too (build 26, ambient identity v3 —
+        platform-injected per-instance credential; live prod closing
+        evidence, 2026-07-02 — see context/defects.md). With all four
+        synology-affecting defects (DEF-001, DEF-003, DEF-005, DEF-006)
+        closed, synology must exit 0 again, not 2.
         """
         rc = self._run(["defect-gate", "--pak", "synology"])
-        assert rc == 0, f"Expected exit 0 for synology (DEF-001 closed); got {rc}"
+        assert rc == 0, f"Expected exit 0 for synology (DEF-006 closed); got {rc}"
         captured = capsys.readouterr()
         out = captured.out
         assert "synology" in out
@@ -687,12 +729,17 @@ class TestGatePublish:
         )
 
     def test_synology_passes_def001_closed(self, tmp_path):
-        """A synology sdk-adapter release now passes _gate_publish (DEF-001 closed).
+        """DEF-001 and DEF-005 (synology credential-leak; framework stitcher
+        strict-TOFU loopback Suite API transport PKIX-fails every cycle) are
+        both closed. DEF-006 (CP-resident cross-MP stitch: no credentialed
+        ambient path works from a Cloud Proxy, filed 2026-07-02) gated the
+        pak for one round, then closed itself (build 26, ambient identity
+        v3 — platform-injected per-instance credential; live prod closing
+        evidence, 2026-07-02 — see context/defects.md).
 
-        DEF-001 (synology credential-leak) was closed in v1.0.0.19 on 2026-06-26.
-        This is the real-corpus proof that closing a blocking defect clears the
-        gate for the affected pak.  For a raise-on-open-blocker real-corpus test,
-        see test_raises_for_unifi_sdk_adapter (DEF-002 still open).
+        With DEF-001, DEF-003, DEF-005, and DEF-006 all closed, synology
+        carries zero open blocking defects and _gate_publish must pass
+        (not raise).
         """
         from vcfops_packaging.publish import _gate_publish
 
@@ -704,7 +751,7 @@ class TestGatePublish:
 
         release = self._make_mock_release(adapter_yaml, "synology-managementpack")
 
-        # Must NOT raise — DEF-001 is closed.
+        # Must not raise — DEF-001/DEF-003/DEF-005/DEF-006 are all closed.
         _gate_publish([release], REPO_ROOT)
 
     def test_raises_for_unifi_sdk_adapter(self, tmp_path):
@@ -911,17 +958,25 @@ class TestStandaloneEntrypoint:
     # --- In-package invocations -------------------------------------------------
 
     def test_pak_synology_exits_0_def001_closed(self):
-        """--pak synology with the real registry → exit 0 (DEF-001 closed).
+        """--pak synology with the real registry → exit 0 (all clear).
 
-        DEF-001 was closed in synology v1.0.0.19 (2026-06-26).  This proves
-        the standalone entrypoint correctly reads the closed status and does NOT
-        block the pak.  For exit-2 coverage see test_pak_unifi_exits_2.
+        DEF-001 was closed in synology v1.0.0.19 (2026-06-26), and DEF-005
+        (framework stitcher strict-TOFU loopback Suite API transport
+        PKIX-fails every cycle) was filed open/blocking against synology on
+        2026-07-01 then closed on 2026-07-02 (build 24, BC-mirror transport).
+        That same closing round filed DEF-006 (CP-resident cross-MP stitch:
+        no credentialed ambient path works from a Cloud Proxy) open/blocking
+        against synology — see context/defects.md. DEF-006 has since closed
+        too (build 26, ambient identity v3 — platform-injected per-instance
+        credential; live prod closing evidence, 2026-07-02). With DEF-001,
+        DEF-003, DEF-005, and DEF-006 all closed, the standalone entrypoint
+        must report synology clean again.
         """
         rc, out, err = self._run_script(
             self._DEFECTS_SCRIPT,
             ["--pak", "synology", "--registry", str(self._REAL_REGISTRY)],
         )
-        assert rc == 0, f"Expected exit 0 for synology (DEF-001 closed); got {rc}\nstdout: {out}\nstderr: {err}"
+        assert rc == 0, f"Expected exit 0 for synology (DEF-006 closed); got {rc}\nstdout: {out}\nstderr: {err}"
         assert "synology" in out, f"Output must mention pak name; got:\n{out}"
 
     def test_pak_compliance_exits_0(self):
@@ -974,9 +1029,12 @@ class TestStandaloneEntrypoint:
         vcfops_packaging on sys.path (the cwd is the temp dir, not the factory
         repo), and there is no __init__.py or package structure present.
 
-        Uses unifi (DEF-002 open) so the gate fires.  Synology (DEF-001 closed)
-        is the real-corpus proof that closed defects do not block — covered by
-        test_pak_synology_exits_0_def001_closed above.
+        Uses unifi (DEF-002 open) so the gate fires.  Synology carried its own
+        open blockers in turn (DEF-005, then DEF-006, CP-resident cross-MP
+        stitch) — both now closed, covered by
+        test_pak_synology_exits_0_def001_closed above — so unifi is used here
+        to keep this specific test's fixture set (DEF-002) stable regardless
+        of synology's current state.
         """
         import shutil
 

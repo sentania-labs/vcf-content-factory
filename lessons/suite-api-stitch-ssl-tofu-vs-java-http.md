@@ -77,3 +77,52 @@ is called.
 - `vcfops_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitchClient.java` — fix site
 - SDK class: `com.integrien.alive.common.adapter3.CustomTrustManager`
   (in `vrops-adapters-sdk-2.2.jar`) — confirmed by `javap` inspection
+
+## Addendum (2026-07-01) — vindicated live; DEF-005
+
+A later revision (2026-06-30, `designs/suite-api-stitcher-tls-auth-cleanup-v1.md`
+§0) tried to have it both ways: route the loopback hop back through the
+platform's strict TOFU `CustomTrustManager` via `getSocketFactory()`, betting
+that `getSocketFactory()`'s socket factory (unlike `getPlatformSslContext()`'s
+vanilla JSSE factory) carries a working TOFU-survival intercept — register the
+unknown cert on first contact, then transparently retry.
+
+**Live devel proved that bet wrong.** `context/investigations/synology-b23-devel-pkix-2026-07-01.md`:
+the intercept *does* fire (the platform's `NonDisruptiveCertificateHandler`
+starts on every cycle), but it **always errors** —
+`"Adapter certificate renewal url set is empty"` — because framework
+(`com.vcfcf`) adapters declare no certificate-renewal URL set in their
+describe/definition. With no renewal URL, the handler can never persist the
+cert, so the *next* cycle re-encounters an "unknown" cert and PKIX-fails
+again. Forever. Build 19 (pre-rework, `insecureSslContext()` trust-all) never
+hit this because it bypassed `CustomTrustManager` entirely — it isn't that
+devel's cert became trusted, it's that the strict trust manager was never
+consulted.
+
+**This vindicates this lesson's original generalizable rule.** Strict-TOFU on
+the loopback Suite API hop cannot self-heal for framework adapters — not
+because of a hostname-verifier gap (that was the 2026-06-30 correction's
+finding, and it's still true), but because the *persistence* half of TOFU
+depends on a platform capability (adapter-declared cert-renewal URL set) that
+this framework's adapters do not — and, per the vendor ground truth below,
+should not need to — have.
+
+**Filed as `context/defects.md` DEF-005 (blocking)** and fixed by mirroring
+the Broadcom vendor transport exactly instead of re-deriving a TOFU posture:
+`context/api-surface/casa-injected-vs-raw-client.md` §3 shows (bytecode-proven)
+that `aria-ops-core SuiteAPIClient.getClientConfigBuilder()` — the client used
+by every shipping Broadcom pak — sets `verify("false")` + `ignoreHostName(true)`
+in non-FIPS mode, `useClusterTruststore` under FIPS. No pak, including the
+first-party ones, uses the strict TOFU path for this hop. Directive: "mirror
+the BC behavior, don't invent new ways of doing things." The fix site
+(`VcfCfAdapter.openPlatformConnection`) now applies that trust-all +
+ignore-hostname posture unconditionally (no loopback/remote peer-gating — the
+vendor doesn't gate either), with the FIPS branch left as a documented TODO
+(no `aria-ops-core` dependency available to this framework to replicate
+`useClusterTruststore`).
+
+**Updated generalizable rule:** for the loopback (and CP/remote) Suite API
+hop, do not re-derive a trust posture from platform primitives — mirror the
+vendor `SuiteAPIClient` transport exactly. TOFU via `CustomTrustManager` is
+not a safe substitute: its persistence depends on a certificate-renewal URL
+set this framework's adapters do not declare.
