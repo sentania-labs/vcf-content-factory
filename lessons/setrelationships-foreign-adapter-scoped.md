@@ -1,6 +1,18 @@
 # setRelationships on a foreign resource is scoped per-reporting-adapter
 
-## Rule
+> **SUPERSEDED (2026-07-02) — historical record only.** The framework no
+> longer emits full-set `setRelationships` onto foreign parents at all:
+> since the write-verb split (`designs/stitcher-identity-and-additive-foreign-v1.md`,
+> user decision "Option 2"), `RelationshipBuilder.parentForeign` emits
+> **additively** — matching all 8 shipping vendor paks and removing any
+> dependence on the per-adapter-scoping behavior this lesson proved (which
+> was 9.0.2-only; 9.1 was never verified and no longer needs to be). The
+> scoping *observation* below remains true and historically useful, but
+> the "do not add delta workarounds / full-set is safe" guidance is
+> **obsolete — do not follow it.** Current guidance:
+> `lessons/cross-mp-stitch-cp-identity-and-edge-mechanics.md`.
+
+## Rule (superseded — see banner)
 
 On VCF Ops 9.0.2, when a non-owning adapter emits
 `setRelationships(foreignParent, {ownChildren})` via

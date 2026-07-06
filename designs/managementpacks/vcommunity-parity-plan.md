@@ -139,3 +139,43 @@ defect gate checks before a `v*` tag → v1 ships at like-for-like.
 - Content cross-refs resolve at author time → the Phase 2 ordering is strict.
 - A real collector defect that survives a build acceptance graduates to a
   `DEF-` entry per RULE-012 (none yet — the NXDOMAIN bug was config, not code).
+
+## Connection / UX parity gaps (captured 2026-06-24, Scott)
+
+Surfaced while reviewing the devel install's **Accounts → adapter config**
+screen. These are describe/localization/structure gaps, distinct from the
+metric-key parity above. **Prod `VCFOperationsvCommunity` is the reference for
+the desired labels and basic-vs-advanced split.**
+
+1. **Pak/instance display name shows the raw kind key.** Accounts lists the
+   adapter as `vcfcf_vcommunity_vsphere` instead of a friendly name. NOTE: the
+   in-tree source is already correct — `resources/resources.properties` maps
+   `1=` / `5=` → "VCF Content Factory vCommunity vSphere", and that file landed
+   in **build 1**, which is the build installed on devel. So this is NOT a
+   source-authoring gap and NOT a stale install — the built `.pak` is not
+   surfacing the localization (likely a packaging/layout issue: where
+   `build-sdk` places `resources.properties` vs where VCF Ops reads it).
+   → investigation (api-explorer/tooling), then rebuild — not a re-author.
+
+2. **Connection parameter labels show raw keys.** Fields render as `host`,
+   `esxi_adv_settings_config_file`, `esxi_vib_driver_config_file`,
+   `vm_adv_settings_config_file`, `vm_configuration_config_file`, etc., instead
+   of the friendly strings already present in `resources.properties`
+   (`6=vCenter Server`, `8=ESXi Advanced System Settings Config File`, …). Same
+   root cause as #1 — the nameKey→string mapping isn't resolving in the built
+   pak. One fix clears both.
+
+3. **Config-file params should be Advanced Settings, not basic.** The four
+   SolutionConfig file-name fields (`esxi_adv_settings_config_file`,
+   `esxi_vib_driver_config_file`, `vm_adv_settings_config_file`,
+   `vm_configuration_config_file`) already ship sane `default=` values and are
+   `required="false"` — they should live under the collapsible **Advanced
+   Settings** section so the basic connect form is just vCenter Server +
+   credential, matching prod. OPEN QUESTION: a grep of every reference
+   `describe.xml` finds NO functional "advanced" attribute — only section
+   *comments*. The legacy prod pak is Python Integration SDK (declares advanced
+   flags in adapter.py), a different mechanism than Tier-2 describe.xml. So
+   whether Tier-2 describe can push identifiers into the Advanced Settings
+   collapsible is UNKNOWN → candidate TOOLSET GAP; determine the SDK mechanism
+   (api-cartographer/api-explorer) with prod's UX as the behavioral target
+   before authoring.

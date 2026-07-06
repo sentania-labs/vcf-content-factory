@@ -195,7 +195,24 @@ its authority.
     never faked. A hidden gap (a control silently mapped onto a
     non-existent field/command to inflate coverage) is BLOCKING.
 
-11. **Registry check — mandatory, every review** (`context/defects.md`;
+11. **Docs parity — the shipped docs must state what the pak actually
+    does.** The docs are part of the deliverable; a capability the docs
+    don't mention is invisible to an operator browsing the pak repo.
+    Check every user-visible behavior the build adds or changes —
+    **cross-MP relationships/stitches above all** (they never appear in
+    `describe.xml`, so the generated `docs/README.md` /
+    `docs/inventory-tree.md` cannot pick them up automatically) —
+    against ALL doc surfaces: the landing `docs/README.md`, the
+    inventory tree, and `overview.md`. Buried-but-present (overview
+    only, landing README silent) is a WARNING; absent everywhere is a
+    WARNING; docs that *contradict* actual behavior are BLOCKING.
+    Origin: unifi v1.1.0.11 shipped with the HostSystem→UniFiSwitchPort
+    stitch documented only in overview.md — the landing README and
+    inventory tree never mentioned relationships at all, and the same
+    gap existed in synology. The user caught it post-release; you
+    should have.
+
+12. **Registry check — mandatory, every review** (`context/defects.md`;
     RULE-012 `rules/release-gate-defects.md`). For **every open** defect
     whose `Affects:` names this pak:
     - **Re-assert it** in the report and the verdict block: is it still
