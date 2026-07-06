@@ -79,7 +79,7 @@ reused. Field lines are `- **Field:** value` (parsed by
 
 - **Title:** UniFi: full-set `setRelationships` onto foreign VMWARE HostSystem unproven on devel (LLDP stitch never exercised)
 - **Severity:** blocking
-- **Status:** open
+- **Status:** closed
 - **Affects:** unifi
 - **First-seen:** build 3 (2026-06-10)
 - **Source:** `context/reviews/unifi-build-3.md` (WARNING-1)
@@ -94,6 +94,23 @@ reused. Field lines are `- **Field:** value` (parsed by
   retains its pre-existing VMWARE children AND gains the UniFiSwitchPort
   child. If children are clobbered, switch to a labeled generic edge
   (`setGenericRelationships`).
+- **Closing-evidence:** Devel proof, unifi build 9 (`0.0.0.9`, commit
+  `3bb262a`), 2026-07-06. First build whose stitch ever matched a host
+  (builds ≤8 matched zero: the controller-side per-port `lldp_table`
+  does not exist on Network App 10.2.105 — see
+  `context/investigations/unifi-lldp-switchport-esxi-2026-07-05.md`;
+  build 9 inverted the join to vCenter-side
+  `net:vmnic*|discoveryProtocol|lldp` properties per
+  `designs/managementpacks/unifi-switchport-host-stitch-v2.md`). Post-
+  install collect: all 8 VMWARE HostSystems gained UniFiSwitchPort
+  children (15 vmnic edges) via additive `parentForeign` →
+  `addRelationships`, and every host retained its pre-existing VMWARE
+  children — Datastore/StoragePool counts exact vs. baseline; mgmt-host
+  VM children total 30 before and after (15+4+2+9 → 12+4+4+10, DRS
+  drift between hosts, not loss). Write verb had already moved from
+  full-set to additive in build 8 (`context/reviews/unifi-build-8.md`);
+  build 9 supplied the live exercise. Residual: 9.1 unverified (same as
+  DEF-003).
 - **Related:** DEF-003, `lessons/setrelationships-foreign-adapter-scoped.md`
 
 ### DEF-003
@@ -243,3 +260,114 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **Related:** DEF-005, `context/api-maps/tvs-declarative-stitching.md`,
   `context/api-maps/tvs-cross-mp-stitching.md`,
   `context/investigations/cp-auth-door-probe-2026-07-01.md`
+
+### DEF-007
+
+- **Title:** UniFi: collect stalls silently on UNIFIED_CLOUD_PROXY
+  collector — resourceState FAILED, empty adapter message, no events
+- **Severity:** blocking
+- **Status:** closed
+- **Affects:** unifi
+- **First-seen:** build 11 (`0.0.0.11`), 2026-07-06 — first-ever CP-hop
+  collect attempted for this adapter
+- **Source:** PROD CP verification run (content-installer report,
+  2026-07-06)
+- **Summary:** With the unifi adapter instance re-pointed from internal
+  collector 6 to "VCF Lab CP Group 1" (UNIFIED_CLOUD_PROXY, collectors
+  [3,4]) on PROD, `lastCollected` froze for 30+ minutes while
+  `lastHeartbeat` kept ticking; `resourceState: FAILED`,
+  `messageFromAdapterInstance` and `statusMessage` empty, no
+  events/alerts on the resource — a silent stall, not a thrown adapter
+  error. Reverting to collector 6 restored collection within one cycle
+  (STARTED/GREEN, fresh collect) and the full 16-edge vmnic stitch works
+  there, so the failure is CP-placement-specific. **Not** a framework
+  ambient-identity/BC-mirror regression per se: synology proved that
+  exact CP path live (DEF-006 closing evidence, same collector 3).
+  Candidate causes, unverified: (a) the CP appliance cannot reach
+  unifi.int.sentania.net:443 (network/VLAN reachability from the proxy
+  segment), (b) a hang (not exception) somewhere in the collect path
+  with no effective timeout — crash-the-cycle guards catch throws, not
+  hangs, (c) CP-resident Suite API stitch call behaving differently
+  than synology's. Diagnosis needs CP collector-side adapter logs
+  and/or a reachability probe from the proxy. Closes when a unifi
+  collect executed ON a UNIFIED_CLOUD_PROXY collector completes
+  (lastCollected advances, resources collected) with the stitch intact,
+  or the root cause is identified and fixed/documented as environmental.
+- **Update (2026-07-06 retest, user re-pointed instance to collector 3;
+  SSH to CP appliances now enabled):** reproduced, and the mechanism is
+  narrowed — candidates (a) network reachability and (b) adapter hang
+  are both ELIMINATED. CP-side log
+  (`/storage/log/vcops/log/adapters/UniFiAdapter/UniFiAdapter_665552.log`
+  on 172.27.8.52) shows the adapter executing perfectly on the CP: four
+  consecutive on-cadence cycles (19:15-19:30Z), UniFi login OK, full
+  enumerate, `vmnic->port stitch: 20 edges (10 hosts, 20 vmnics w/ LLDP,
+  0 ambiguous, 0 unmatched, 0 conflicted)`, no errors; the CP's
+  `collector.log` confirms each cycle's payload stored to the forward
+  file queue (airId 665552 in every batch). Yet the central node never
+  ingests: `lastCollected` and live stat timestamps frozen at the
+  pre-move value for 19+ minutes, `resourceStatus: NONE`. **The break is
+  between the CP's file-queue forwarder and central analytics ingestion,
+  not in adapter code.** Separately, yesterday's original stall now has
+  a root-cause candidate: the central analytics log shows the 0.0.0.11
+  pak reinstall was pushed at 18:13Z while the instance was live on the
+  CP; the old build had been collecting fine on the CP (3 clean cycles,
+  0 edges — old dead LLDP code), and after the live reload the CP-side
+  adapter never emitted another line under the new build — a
+  reload-in-place-on-CP silent death, whereas every cold start (revert
+  to collector 6 at 18:34Z, CP retest at 19:15Z) came up instantly.
+  Possibly relevant contrast: synology's DEF-006 CP proof was on an
+  instance *created* on the CP, not *moved* to it — a mid-life collector
+  move may leave central-side data routing stale. Benign-noise note:
+  `ServiceAccountsService.getServiceAccountCredentials` ERROR for
+  unifi_controller fires on both working and broken attempts — weak as
+  a culprit. Next candidate diagnostics: stop/start (bounce) the adapter
+  instance in place on the CP to force re-registration; or compare
+  central-side ingestion routing for airId 665552 vs a working CP
+  instance (synology).
+- **Update 2 (2026-07-06 deep-dive; adapter exonerated, reframed as
+  platform issue):** user's own stop/start of the instance on collector
+  3 did NOT restore ingestion (fresh cold start confirmed in CP log at
+  19:39:59Z, stitch clean, lastCollected still frozen at 19:14:30Z).
+  The killer discriminator: **five unrelated adapter instances on
+  collector 4** (synology_diskstation, NSXTAdapter x2, VMSP,
+  VirtualAndPhysicalSANAdapter/vSAN) show the IDENTICAL signature
+  (STARTED / resourceStatus NONE / empty message / frozen
+  lastCollected), all orphaned within a 34-second span at
+  **2026-07-04T19:19:10-19:19:44Z** — coinciding with an Analytics
+  service shutdown/restart on the central node (ThreadPoolExecutor
+  Terminated at 19:24:19Z, "AnalyticsService has been stopped"
+  19:25:17Z; the cohort froze minutes before the explicit stop lines).
+  Meanwhile the majority of instances on BOTH CP collectors ingest
+  fine continuously. Best-supported hypothesis: **VCF Ops platform
+  resource-cache / lastCollected-tracking orphaning**, triggered by at
+  least two event types — (1) an Analytics engine restart (the 07-04
+  collector-4 cohort), (2) adapter-instance (re)assignment onto a CP
+  (unifi, both times). The orphaned instance keeps heartbeating and
+  collecting locally (CP adapter log rich and clean; forward file
+  queue draining healthily at /storage/db/vcops/fq-data) but central
+  tracking never updates and never self-heals — adapter-level bounce
+  does not clear it; moving unifi back to internal collector 6 did.
+  **Not a unifi adapter defect** — adapter code fully exonerated by
+  CP-local logs (perfect cycles, 20-edge stitch, 0 conflicted). Open
+  question / next diagnostic: whether an Analytics service restart (or
+  another cache-reconciliation action) on the central node unfreezes
+  the orphaned cohort — restart authority is the user's. Note: the
+  collector-4 cohort is a live ~2-day prod monitoring gap independent
+  of unifi.
+- **Closing-evidence:** PROD proof, 2026-07-06 20:06-20:11Z, after the
+  user rebooted both analytics nodes. Root cause was the platform
+  resource-cache orphaning documented in Update 2 — NOT the unifi
+  adapter (exonerated by CP-local logs: perfect cycles, 20-vmnic/16-edge
+  stitch, 0 conflicted, healthy forward queue). Post-reboot, ALL six
+  orphaned instances unfroze within one collect cycle: unifi on CP
+  collector 3 (`lastCollected` 19:14:30Z frozen → 20:06:36Z, 128
+  resources) AND the five collector-4 victims frozen since 07-04
+  (synology 20:06:39Z, NSXT wld01/wld02 20:07:17/18Z, VMSP 20:06:42Z,
+  vSAN 20:06:55Z). Sustained: Port 9 stat timestamps advanced again at
+  20:11:33Z (second CP cycle), 16 unique HostSystem→UniFiSwitchPort
+  edges intact. Closing criterion — a collect executed ON a
+  UNIFIED_CLOUD_PROXY collector completing with the stitch intact —
+  met and sustained. Remediation for recurrence: restart/reboot the
+  analytics service/nodes; adapter-level bounces do not clear it.
+- **Related:** DEF-006 (CP ambient path, closed via synology),
+  `context/reviews/unifi-build-11.md`
