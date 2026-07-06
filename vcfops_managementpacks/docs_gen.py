@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -377,6 +378,23 @@ def _render_tree_md(model: AdapterDocModel) -> str:
     return "\n".join(lines)
 
 
+def _escape_md_table_cell(value: str) -> str:
+    """Make a raw string safe to embed as a single markdown table cell.
+
+    Adapter-authored values (e.g. VCF Ops stat keys like
+    ``relationships|Datastore_parent``) may legitimately contain a literal
+    ``|``, which markdown table syntax treats as a column separator, or
+    embedded newlines, which break the row entirely. Escape ``|`` and
+    collapse any run of newline/carriage-return characters to a single
+    space so every rendered cell stays on one line with the correct
+    column count.
+    """
+    if not value:
+        return value
+    collapsed = re.sub(r"[\r\n]+", " ", value)
+    return collapsed.replace("|", "\\|")
+
+
 def _format_cross_mp_endpoint(label: str, is_foreign: bool, foreign_adapter_kind: str) -> str:
     """Render one edge endpoint, visually distinguishing foreign kinds.
 
@@ -385,6 +403,8 @@ def _format_cross_mp_endpoint(label: str, is_foreign: bool, foreign_adapter_kind
     tree. Own-adapter endpoints render as inline code, matching the
     inventory table style.
     """
+    label = _escape_md_table_cell(label)
+    foreign_adapter_kind = _escape_md_table_cell(foreign_adapter_kind)
     if is_foreign:
         annotation = f"(foreign, {foreign_adapter_kind})" if foreign_adapter_kind else "(foreign)"
         return f"*{label}* {annotation}"
@@ -414,7 +434,7 @@ def _render_cross_mp_edges_md(model: AdapterDocModel, heading_level: str = "##")
         child_cell = _format_cross_mp_endpoint(
             edge.child, child_is_foreign, edge.foreign_adapter_kind
         )
-        desc_cell = edge.description or "—"
+        desc_cell = _escape_md_table_cell(edge.description) if edge.description else "—"
         rows.append(f"| {parent_cell} | {child_cell} | {desc_cell} |")
 
     table_md = "\n".join(rows)

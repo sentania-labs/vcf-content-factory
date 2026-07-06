@@ -15,6 +15,7 @@ Covers:
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -165,6 +166,64 @@ class TestCrossMpEdgesRendered:
         readme = generate_readme_md(model)
         assert "`TestSwitch`" in readme
         assert "*VMWARE VirtualMachine* (foreign, VMWARE)" in readme
+
+
+class TestCrossMpEdgesTableCellEscaping:
+    """Raw `|` and embedded newlines in adapter.yaml values must not corrupt
+    the rendered markdown table (P2 fix, docs_gen.py:418).
+
+    A literal `|` (e.g. a VCF Ops stat key like
+    `relationships|Datastore_parent`) must be escaped so it isn't mistaken
+    for a column separator, and embedded newlines must collapse to a
+    single space so the row stays on one line.
+    """
+
+    def test_pipe_and_newline_values_stay_on_one_row(self, tmp_path: Path) -> None:
+        stanza = """cross_mp_edges:
+  - parent: "relationships|Datastore_parent"
+    child: TestSwitchPort
+    direction: parent_foreign
+    foreign_adapter_kind: "VMWARE|ext"
+    description: "Multi\\nline description with | pipe"
+"""
+        project_dir = _make_project(tmp_path, stanza)
+        model = build_doc_model(project_dir)
+        assert len(model.cross_mp_edges) == 1
+        # Confirm the raw model values really do contain the hazards under test.
+        assert "|" in model.cross_mp_edges[0].parent
+        assert "\n" in model.cross_mp_edges[0].description
+
+        readme = generate_readme_md(model)
+
+        # Locate the rendered table row for this edge.
+        table_rows = [
+            line for line in readme.splitlines()
+            if line.startswith("| ") and "Datastore_parent" in line
+        ]
+        assert len(table_rows) == 1
+        row = table_rows[0]
+
+        # The row must be exactly one line (no raw newline broke it apart)
+        # and must have the correct column count. Escaped pipes ("\|") in
+        # cell content must not be mistaken for column separators, so only
+        # count "|" characters that aren't preceded by a backslash.
+        raw_pipe_positions = [i for i, ch in enumerate(row) if ch == "|"]
+        escaped_pipe_positions = {
+            m.start() for m in re.finditer(r"\\\|", row)
+        }
+        column_separator_pipes = [
+            i for i in raw_pipe_positions if (i - 1) not in escaped_pipe_positions
+        ]
+        assert len(column_separator_pipes) == 4  # | c1 | c2 | c3 |
+
+        # Escaped pipes survive in the rendered text.
+        assert "relationships\\|Datastore_parent" in row
+        assert "VMWARE\\|ext" in row
+        assert "Multi line description with \\| pipe" in row
+
+        # No raw newline anywhere in the row.
+        assert "\n" not in row
+        assert "\r" not in row
 
 
 class TestCrossMpEdgesInvalid:
