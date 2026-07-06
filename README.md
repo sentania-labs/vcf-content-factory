@@ -136,6 +136,9 @@ in detail with worked examples for each content type.
 
 ## Where to go next
 
+- **[STRUCTURE.md](STRUCTURE.md)** — the map: what every top-level
+  directory and root document is, who writes it, and whether you may
+  edit it (the mutable/immutable model behind RULE-010).
 - **[Getting_Started.md](Getting_Started.md)** — first conversation,
   example prompts for each content type, how to talk to the framework.
 - **[HOW_IT_WORKS.md](HOW_IT_WORKS.md)** — the orchestrator + agents
