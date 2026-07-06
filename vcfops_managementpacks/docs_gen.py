@@ -27,6 +27,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +38,8 @@ try:
     _YAML_AVAILABLE = True
 except ImportError:
     _YAML_AVAILABLE = False
+
+from .sdk_project import CrossMpEdgeInfo, _parse_cross_mp_edges
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +79,7 @@ class AdapterDocModel:
     traversal_name: str
     edges: List[TraversalEdge]              # parent→child pairs, in describe.xml order
     config_fields: List[IdentifierInfo]     # from adapter-instance ResourceIdentifiers
+    cross_mp_edges: List[CrossMpEdgeInfo] = field(default_factory=list)  # runtime-only, from adapter.yaml
     # derived
     kind_map: Dict[str, KindInfo] = field(default_factory=dict)
 
@@ -250,6 +254,11 @@ def build_doc_model(project_dir: Path) -> AdapterDocModel:
 
     kind_map = {k.key: k for k in kinds}
 
+    # Same validation as validate-sdk (SdkProjectError is a ValueError subclass,
+    # caught by generate_docset's except (ValueError, RuntimeError) below) —
+    # docs-gen refuses to silently drop a malformed stanza.
+    cross_mp_edges = _parse_cross_mp_edges(raw, str(adapter_yaml))
+
     return AdapterDocModel(
         adapter_kind=adapter_kind,
         adapter_name=adapter_name,
@@ -259,6 +268,7 @@ def build_doc_model(project_dir: Path) -> AdapterDocModel:
         traversal_name=traversal_name,
         edges=edges,
         config_fields=config_fields,
+        cross_mp_edges=cross_mp_edges,
         kind_map=kind_map,
     )
 
@@ -368,6 +378,81 @@ def _render_tree_md(model: AdapterDocModel) -> str:
     return "\n".join(lines)
 
 
+def _escape_md_table_cell(value: str) -> str:
+    """Make a raw string safe to embed as a single markdown table cell.
+
+    Adapter-authored values (e.g. VCF Ops stat keys like
+    ``relationships|Datastore_parent``) may legitimately contain a literal
+    ``|``, which markdown table syntax treats as a column separator, or
+    embedded newlines, which break the row entirely. Escape ``|`` and
+    collapse any run of newline/carriage-return characters to a single
+    space so every rendered cell stays on one line with the correct
+    column count.
+    """
+    if not value:
+        return value
+    collapsed = re.sub(r"[\r\n]+", " ", value)
+    return collapsed.replace("|", "\\|")
+
+
+def _format_cross_mp_endpoint(label: str, is_foreign: bool, foreign_adapter_kind: str) -> str:
+    """Render one edge endpoint, visually distinguishing foreign kinds.
+
+    Foreign endpoints render in italics with a "(foreign[, <adapter kind>])"
+    annotation so they can't be confused with this adapter's own containment
+    tree. Own-adapter endpoints render as inline code, matching the
+    inventory table style.
+    """
+    label = _escape_md_table_cell(label)
+    foreign_adapter_kind = _escape_md_table_cell(foreign_adapter_kind)
+    if is_foreign:
+        annotation = f"(foreign, {foreign_adapter_kind})" if foreign_adapter_kind else "(foreign)"
+        return f"*{label}* {annotation}"
+    return f"`{label}`"
+
+
+def _render_cross_mp_edges_md(model: AdapterDocModel, heading_level: str = "##") -> str:
+    """Render the "Cross-MP Relationships" section as a markdown table.
+
+    Returns "" if there are no cross_mp_edges (callers must skip the section
+    entirely in that case to keep byte-identical output for packs without
+    stitches).
+    """
+    if not model.cross_mp_edges:
+        return ""
+
+    rows = [
+        "| Parent | Child | Description |",
+        "|--------|-------|-------------|",
+    ]
+    for edge in model.cross_mp_edges:
+        parent_is_foreign = edge.direction == "parent_foreign"
+        child_is_foreign = edge.direction == "child_foreign"
+        parent_cell = _format_cross_mp_endpoint(
+            edge.parent, parent_is_foreign, edge.foreign_adapter_kind
+        )
+        child_cell = _format_cross_mp_endpoint(
+            edge.child, child_is_foreign, edge.foreign_adapter_kind
+        )
+        desc_cell = _escape_md_table_cell(edge.description) if edge.description else "—"
+        rows.append(f"| {parent_cell} | {child_cell} | {desc_cell} |")
+
+    table_md = "\n".join(rows)
+
+    return "\n".join([
+        f"{heading_level} Cross-MP Relationships",
+        "",
+        "These edges are created at collection time via the Suite API and "
+        "never appear in `describe.xml` — they are declared explicitly in "
+        "`adapter.yaml` (`cross_mp_edges`) so this generated docset doesn't "
+        "silently omit them. *Italic* endpoints belong to a foreign "
+        "management pack; `code` endpoints are owned by this adapter.",
+        "",
+        table_md,
+        "",
+    ])
+
+
 def generate_inventory_tree_md(model: AdapterDocModel) -> str:
     """Generate docs/inventory-tree.md content."""
     parents_map = _parents_map(model)
@@ -429,6 +514,10 @@ def generate_inventory_tree_md(model: AdapterDocModel) -> str:
         table_md,
         "",
     ]
+
+    cross_mp_section = _render_cross_mp_edges_md(model)
+    if cross_mp_section:
+        parts += [cross_mp_section]
 
     return "\n".join(parts)
 
@@ -955,6 +1044,24 @@ When adding a new adapter instance in VCF Operations, you will be prompted for:
 
 def generate_readme_md(model: AdapterDocModel) -> str:
     """Generate docs/README.md index content."""
+    contents_rows = [
+        "| Section | Description |",
+        "|---------|-------------|",
+        "| [Overview](overview.md) | What's in the pack, resource kinds, cross-adapter notes |",
+        "| [Installing & Configuring](installing.md) | Prerequisites, configuration fields, step-by-step guide |",
+        "| [Inventory Tree](inventory-tree.md) | Traversal spec, per-kind table with identifying keys |",
+        "| [Metrics Reference](../REFERENCE.md) | Full metrics and properties reference (generated) |",
+    ]
+
+    cross_mp_line = ""
+    cross_mp_section = ""
+    if model.cross_mp_edges:
+        cross_mp_line = (
+            f"- **Cross-MP relationships:** {len(model.cross_mp_edges)} "
+            f"(see [Cross-MP Relationships](#cross-mp-relationships) below)\n"
+        )
+        cross_mp_section = "\n" + _render_cross_mp_edges_md(model)
+
     return f"""# {model.adapter_name} — Documentation
 
 > Generated index. The SVG diagram and per-kind table are regenerated on every
@@ -962,24 +1069,19 @@ def generate_readme_md(model: AdapterDocModel) -> str:
 
 ## Contents
 
-| Section | Description |
-|---------|-------------|
-| [Overview](overview.md) | What's in the pack, resource kinds, cross-adapter notes |
-| [Installing & Configuring](installing.md) | Prerequisites, configuration fields, step-by-step guide |
-| [Inventory Tree](inventory-tree.md) | Traversal spec, per-kind table with identifying keys |
-| [Metrics Reference](../REFERENCE.md) | Full metrics and properties reference (generated) |
+{chr(10).join(contents_rows)}
 
 ## Inventory Tree
 
 ![Inventory Tree](inventory-tree.svg)
-
+{cross_mp_section}
 ## Quick Reference
 
 - **Adapter kind:** `{model.adapter_kind}`
 - **Version:** {model.adapter_version}
 - **Traversal spec:** {model.traversal_name or "(none)"}
 - **Resource kinds:** {len([k for k in model.kinds if not k.is_adapter_instance])}
-"""
+{cross_mp_line}"""
 
 
 # ---------------------------------------------------------------------------
