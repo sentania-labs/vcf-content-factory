@@ -10,6 +10,14 @@ Schema (all fields):
     dependencies:  list  — optional list of vendor JAR names from project lib/
     entry_class:   str   — optional fully-qualified entry class override;
                            default: derived as com.vcfcf.adapters.<adapter_kind>.<CamelCase>Adapter
+    cross_mp_edges: list — optional; documents runtime-only cross-MP relationship
+                           edges (e.g. LLDP/foreign-adapter stitching) that never
+                           appear in describe.xml. See CrossMpEdgeInfo below for
+                           the per-entry schema. Consumed by docs_gen.py to render
+                           a "Cross-MP relationships" section into the generated
+                           docs/README.md and docs/inventory-tree.md, since those
+                           surfaces are otherwise derived solely from describe.xml
+                           and would silently omit runtime-only stitched edges.
 """
 from __future__ import annotations
 
@@ -29,6 +37,134 @@ class SdkProjectError(ValueError):
 
 
 @dataclass
+class CrossMpEdgeInfo:
+    """One entry of the optional ``cross_mp_edges`` adapter.yaml stanza.
+
+    Documents a runtime-only relationship edge between this adapter's own
+    resource kind and a resource kind owned by a *different* (foreign)
+    management pack — e.g. unifi's per-vmnic LLDP join onto VMWARE
+    HostSystem, or synology's datastore/LUN attachment onto VMWARE
+    Datastore. These edges are created via the Suite API at collection
+    time; they are never expressed in describe.xml (which only knows
+    about this adapter's own ResourceKinds/TraversalSpec), so without this
+    stanza the generated docset has no way to mention them.
+
+    Fields:
+        parent:               display label of the edge's parent endpoint
+                               (e.g. "VMWARE HostSystem").
+        child:                display label of the edge's child endpoint
+                               (e.g. "UniFiSwitchPort").
+        direction:            "parent_foreign" (default) — the parent
+                               endpoint belongs to a foreign adapter kind,
+                               child is owned by this adapter — or
+                               "child_foreign" — the reverse.
+        foreign_adapter_kind: adapter kind of the foreign endpoint (e.g.
+                               "VMWARE"), used for the "(foreign, X)"
+                               annotation. Optional; omitted from the
+                               annotation if blank.
+        description:          free-text one-liner describing the edge
+                               (transport, cardinality, additive/optional
+                               nature, etc).
+    """
+
+    parent: str
+    child: str
+    direction: str = "parent_foreign"
+    foreign_adapter_kind: str = ""
+    description: str = ""
+
+
+_CROSS_MP_EDGE_ALLOWED_KEYS = {
+    "parent", "child", "direction", "foreign_adapter_kind", "description",
+}
+_CROSS_MP_EDGE_REQUIRED_KEYS = {"parent", "child"}
+_CROSS_MP_EDGE_DIRECTIONS = {"parent_foreign", "child_foreign"}
+
+
+def _parse_cross_mp_edges(raw: dict, where: str) -> List[CrossMpEdgeInfo]:
+    """Parse and validate the optional ``cross_mp_edges`` adapter.yaml stanza.
+
+    Schema (list of mappings):
+        cross_mp_edges:
+          - parent: "VMWARE HostSystem"        # required, non-empty str
+            child: UniFiSwitchPort             # required, non-empty str
+            direction: parent_foreign          # optional; parent_foreign (default) | child_foreign
+            foreign_adapter_kind: VMWARE        # optional str
+            description: "Per-vmnic LLDP join via Suite API; additive, optional"
+
+    Returns an empty list if the key is absent (zero-churn default).
+
+    Raises:
+        SdkProjectError: on unknown keys, missing required fields, or bad
+                         types/values — same error class as the rest of
+                         adapter.yaml schema validation, so validate-sdk
+                         surfaces a clear message.
+    """
+    entries = raw.get("cross_mp_edges")
+    if entries is None:
+        return []
+    if not isinstance(entries, list):
+        raise SdkProjectError(
+            f"{where}: 'cross_mp_edges' must be a list; got {type(entries).__name__}"
+        )
+
+    edges: List[CrossMpEdgeInfo] = []
+    for i, entry in enumerate(entries):
+        entry_where = f"{where}: cross_mp_edges[{i}]"
+        if not isinstance(entry, dict):
+            raise SdkProjectError(
+                f"{entry_where}: must be a mapping; got {type(entry).__name__}"
+            )
+
+        unknown = set(entry.keys()) - _CROSS_MP_EDGE_ALLOWED_KEYS
+        if unknown:
+            raise SdkProjectError(
+                f"{entry_where}: unknown key(s) {sorted(unknown)}; "
+                f"allowed keys are {sorted(_CROSS_MP_EDGE_ALLOWED_KEYS)}"
+            )
+
+        missing = _CROSS_MP_EDGE_REQUIRED_KEYS - set(entry.keys())
+        if missing:
+            raise SdkProjectError(
+                f"{entry_where}: missing required field(s) {sorted(missing)}"
+            )
+
+        parent = entry["parent"]
+        child = entry["child"]
+        if not isinstance(parent, str) or not parent.strip():
+            raise SdkProjectError(f"{entry_where}: 'parent' must be a non-empty string")
+        if not isinstance(child, str) or not child.strip():
+            raise SdkProjectError(f"{entry_where}: 'child' must be a non-empty string")
+
+        direction = entry.get("direction", "parent_foreign")
+        if not isinstance(direction, str) or direction not in _CROSS_MP_EDGE_DIRECTIONS:
+            raise SdkProjectError(
+                f"{entry_where}: 'direction' must be one of "
+                f"{sorted(_CROSS_MP_EDGE_DIRECTIONS)}; got {direction!r}"
+            )
+
+        foreign_adapter_kind = entry.get("foreign_adapter_kind", "")
+        if not isinstance(foreign_adapter_kind, str):
+            raise SdkProjectError(
+                f"{entry_where}: 'foreign_adapter_kind' must be a string"
+            )
+
+        description = entry.get("description", "")
+        if not isinstance(description, str):
+            raise SdkProjectError(f"{entry_where}: 'description' must be a string")
+
+        edges.append(CrossMpEdgeInfo(
+            parent=parent.strip(),
+            child=child.strip(),
+            direction=direction,
+            foreign_adapter_kind=foreign_adapter_kind.strip(),
+            description=description.strip(),
+        ))
+
+    return edges
+
+
+@dataclass
 class SdkProjectDef:
     """In-memory representation of an adapter.yaml file."""
 
@@ -41,6 +177,7 @@ class SdkProjectDef:
     dependencies: List[str]
     entry_class: str
     source_path: Path
+    cross_mp_edges: List[CrossMpEdgeInfo] = field(default_factory=list)
 
     @property
     def pak_filename(self) -> str:
@@ -170,6 +307,8 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
             f"{where}: 'entry_class' must be a string; got {type(entry_class).__name__}"
         )
 
+    cross_mp_edges = _parse_cross_mp_edges(raw, where)
+
     return SdkProjectDef(
         name=name,
         version=version,
@@ -180,4 +319,5 @@ def load_sdk_project(path: Path) -> SdkProjectDef:
         dependencies=dependencies,
         entry_class=entry_class,
         source_path=path,
+        cross_mp_edges=cross_mp_edges,
     )
