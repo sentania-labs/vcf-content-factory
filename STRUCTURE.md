@@ -63,6 +63,19 @@ not the axis that matters — RULE-010 protects *immutability*.
 (README pointers only). Authored content lives under `content/`. These
 stubs are retained only until links to them are audited out.
 
+## Layout history (why it looks like this)
+
+The 2026-07 top-level reorg (PM fresh-eyes review 2026-06-29) ran in
+earned steps: step 1 = this map + RULE-015 + guard scripts (zero moves);
+step 2 = `docs/` + `references/` grouped under `reference/` (RULE-016/017).
+The planned step 3 (`knowledge/` grouping of `rules/`/`lessons/`/
+`context/`/`designs/`) was **considered and declined** (2026-07-07):
+~300-file sweep plus a cross-repo break — every SDK pak's release CI
+fetches `context/defects.md` from factory main by raw URL — for one
+word of grouping. If it is ever revisited, the pak repos need a
+fallback-URL transition first. `scripts/path_reference_audit.sh` in CI
+is the safety net for any future move.
+
 ## Rules of thumb
 
 - If you corrected it, it belongs in `rules/`, `lessons/`, or `context/` — never under `reference/`.
