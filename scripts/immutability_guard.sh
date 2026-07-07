@@ -13,6 +13,33 @@
 # extracts, newly-bootstrapped reference repos force-added, etc.) are
 # allowed — only touching or removing what's already there is blocked.
 #
+# Rename policy (RULE-016: immutability is about bytes, not tree
+# layout — dead-path detection after a move is path_reference_audit.sh's
+# job, not this guard's):
+#   - ALLOWED:  pure renames (similarity index R100, i.e. zero content
+#               change AND unchanged file mode) whose DESTINATION is
+#               under reference/ — whether the source was outside
+#               reference/ (a move IN, additive) or already inside it
+#               (restructuring within the immutable root). Git reports
+#               these as "R100\t<old>\t<new>".
+#   - REFUSED:  any rename with content modification (R<100, e.g. R087)
+#               touching reference/ on either side; plain modifications
+#               (M) of tracked files under reference/; deletions (D) of
+#               tracked files under reference/; renames whose SOURCE is
+#               under reference/ but whose destination is NOT — that's
+#               a deletion from the immutable root wearing a rename
+#               mask; and R100 renames touching reference/ whose file
+#               MODE changed (e.g. a chmod riding along with a `git mv`)
+#               — R100 only certifies byte-identical content, not an
+#               unchanged mode, so a mode change there is a modification
+#               wearing a rename mask and is refused just like a plain M.
+#   All `git diff` invocations below use --raw --find-renames (not
+#   --name-status) so the src/dst file modes are available for the
+#   R100 mode check above; --find-renames is passed explicitly — this
+#   policy does NOT rely on the ambient `diff.renames` git config. With
+#   that config false, an unpatched invocation would show a pure
+#   in-reference/ rename as D+A and falsely refuse it.
+#
 # This script does not (yet) run automatically as a git hook — see
 # CLAUDE.md RULE-010/RULE-013 and the reorg TODO's "New HOOKS" section
 # for how it will be wired into .git/hooks/pre-commit. Until then,
@@ -37,7 +64,7 @@ set -euo pipefail
 SCRIPT_NAME="$(basename "$0")"
 
 usage() {
-  sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,60p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 IMMUTABLE_DIRS=("reference/")
@@ -68,11 +95,11 @@ REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 cd "${REPO_ROOT}"
 
 if [[ -n "${RANGE}" ]]; then
-  DIFF_OUTPUT="$(git diff --name-status "${RANGE}")"
+  DIFF_OUTPUT="$(git diff --find-renames --raw "${RANGE}")"
 elif [[ $# -eq 2 ]]; then
-  DIFF_OUTPUT="$(git diff --name-status "$1" "$2")"
+  DIFF_OUTPUT="$(git diff --find-renames --raw "$1" "$2")"
 elif [[ $# -eq 0 ]]; then
-  DIFF_OUTPUT="$(git diff --cached --name-status)"
+  DIFF_OUTPUT="$(git diff --find-renames --cached --raw)"
 else
   echo "${SCRIPT_NAME}: expected 0 or 2 positional refs, or --range REF1..REF2." >&2
   usage >&2
@@ -95,10 +122,16 @@ under_immutable() {
 
 declare -a OFFENDERS=()
 
-while IFS=$'\t' read -r status path path2; do
-  [[ -z "${status}" ]] && continue
+# --raw lines look like:
+#   :100644 100644 <sha1> <sha2> M\tpath
+#   :100644 100755 <sha1> <sha2> R100\told\tnew
+# i.e. a space-separated meta field, then a tab, then path(s).
+while IFS=$'\t' read -r meta path path2; do
+  [[ -z "${meta}" ]] && continue
 
-  # Renames/copies are reported as "R100\told\tnew" (tab-separated old/new).
+  # meta = ":srcmode dstmode srcsha dstsha status[score]"
+  read -r src_mode dst_mode _srcsha _dstsha status <<< "${meta#:}"
+
   code="${status:0:1}"
 
   case "${code}" in
@@ -118,14 +151,44 @@ while IFS=$'\t' read -r status path path2; do
       ;;
     R)
       # Rename: old path effectively disappears, new path appears.
-      # Treat as a modification of the OLD path if it was immutable —
-      # renaming/moving a vendor file out from under its committed path
-      # is exactly the kind of drift RULE-010 exists to prevent.
-      if under_immutable "${path}"; then
-        OFFENDERS+=("R (renamed away)	${path}")
-      fi
+      # status carries a similarity score, e.g. "R100" (pure rename,
+      # byte-identical content) or "R087" (renamed AND edited).
+      similarity="${status:1}"
+      src_immutable=0
+      dst_immutable=0
+      under_immutable "${path}" && src_immutable=1
       if [[ -n "${path2}" ]] && under_immutable "${path2}"; then
-        OFFENDERS+=("R (renamed in, content changed)	${path2}")
+        dst_immutable=1
+      fi
+
+      if [[ "${similarity}" == "100" ]]; then
+        # Pure rename, zero content change. Immutability is about
+        # bytes, not tree layout (RULE-016) — allow moves/restructures
+        # whose destination lands under reference/, whether the
+        # source came from outside (addition-shaped) or from inside
+        # it (restructuring within the immutable root).
+        if [[ "${src_immutable}" -eq 1 && "${dst_immutable}" -eq 0 ]]; then
+          # Source under reference/, destination is not: a deletion
+          # from the immutable root wearing a rename mask. Refuse.
+          OFFENDERS+=("R100 (moved out of reference/, deletion in disguise)	${path} -> ${path2}")
+        elif [[ "${src_immutable}" -eq 1 || "${dst_immutable}" -eq 1 ]] && [[ "${src_mode}" != "${dst_mode}" ]]; then
+          # R100 only certifies byte-identical content — it says
+          # nothing about file mode. A chmod riding along with the
+          # rename is a modification of tracked reference/ material
+          # wearing a rename mask. Refuse.
+          OFFENDERS+=("R100 (mode change ${src_mode} -> ${dst_mode} under reference/ is a modification)	${path} -> ${path2}")
+        fi
+        # dst_immutable (src outside or inside) with dst under
+        # reference/, mode unchanged: allowed, no offense recorded.
+      else
+        # Rename with content modification. Refuse if either side
+        # touches reference/ — same bar as a plain M/D.
+        if [[ "${src_immutable}" -eq 1 ]]; then
+          OFFENDERS+=("${status} (renamed away, content changed)	${path}")
+        fi
+        if [[ "${dst_immutable}" -eq 1 ]]; then
+          OFFENDERS+=("${status} (renamed in, content changed)	${path2}")
+        fi
       fi
       ;;
     *)

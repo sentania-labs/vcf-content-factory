@@ -59,3 +59,17 @@ jobs:
           python3 -m vcfops_alerts validate
           python3 -m vcfops_reports validate
           python3 -m vcfops_managementpacks validate
+
+      - name: Path reference audit (RULE-015)
+        # Every path cited by the governance corpus must resolve — committed,
+        # registry-fetchable, or a documented standing exception (warnings).
+        # Exit 2 = dead reference shipped; fails the build.
+        run: bash scripts/path_reference_audit.sh
+
+      - name: Immutability guard (RULE-016)
+        # reference/** is read-only: refuse PRs that modify or delete vendor
+        # material. Additions and pure renames into/within reference/ pass.
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --quiet origin "${{ github.event.pull_request.base.ref }}" || true
+          bash scripts/immutability_guard.sh --range "origin/${{ github.event.pull_request.base.ref }}...HEAD"
