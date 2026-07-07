@@ -68,7 +68,7 @@ per-instance fanout. For VirtualMachine, the adapter populates:
 - `datastore|*`, `guestfilesystem|*`, `net|*`: same instancing pattern
   is likely to apply (verify per case).
 
-Documentation files like `docs/vcf9/metrics-properties.md` describe
+Documentation files like `reference/docs/vcf9/metrics-properties.md` describe
 metrics by their **bare** key. They do not flag instancing. So docs
 agree with `statkeys` but neither tells the truth about what to put in
 a view.

@@ -2,8 +2,8 @@
 # bootstrap_references.sh — Clone or update allowlisted reference repos.
 #
 # Reads context/reference_sources.md for repo URLs and local paths,
-# clones any that are missing under references/, and optionally
-# updates existing clones with git pull.
+# clones any that are missing under reference/references/, and
+# optionally updates existing clones with git pull.
 #
 # Usage:
 #   scripts/bootstrap_references.sh          # clone missing only
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-REFERENCES_DIR="${REPO_ROOT}/references"
+REFERENCES_DIR="${REPO_ROOT}/reference/references"
 SOURCES_FILE="${REPO_ROOT}/context/reference_sources.md"
 
 UPDATE_EXISTING=false
@@ -30,7 +30,7 @@ mkdir -p "$REFERENCES_DIR"
 # Parse URL and local path pairs from the sources file.
 # Format in the markdown:
 #   - **URL:** https://github.com/<owner>/<repo>
-#   - **Local path:** `references/<slug>/`
+#   - **Local path:** `reference/references/<slug>/`
 declare -a URLS=()
 declare -a PATHS=()
 
@@ -38,7 +38,7 @@ current_url=""
 while IFS= read -r line; do
     if [[ "$line" =~ \*\*URL:\*\*[[:space:]]+(https://[^[:space:]]+) ]]; then
         current_url="${BASH_REMATCH[1]}"
-    elif [[ "$line" =~ \*\*Local\ path:\*\*[[:space:]]+\`references/([^/\`]+)/?\` ]]; then
+    elif [[ "$line" =~ \*\*Local\ path:\*\*[[:space:]]+\`reference/references/([^/\`]+)/?\` ]]; then
         if [[ -n "$current_url" ]]; then
             URLS+=("$current_url")
             PATHS+=("${BASH_REMATCH[1]}")
@@ -69,22 +69,22 @@ for i in "${!URLS[@]}"; do
         if $UPDATE_EXISTING; then
             echo "  Updating: $slug"
             if git -C "$target" pull --quiet 2>/dev/null; then
-                ((updated++))
+                updated=$((updated + 1))
             else
                 echo "    WARNING: git pull failed for $slug" >&2
-                ((failed++))
+                failed=$((failed + 1))
             fi
         else
             echo "  Exists:   $slug (use --update to pull)"
-            ((skipped++))
+            skipped=$((skipped + 1))
         fi
     else
         echo "  Cloning:  $slug <- $url"
         if git clone --quiet "$url" "$target" 2>/dev/null; then
-            ((cloned++))
+            cloned=$((cloned + 1))
         else
             echo "    WARNING: git clone failed for $slug" >&2
-            ((failed++))
+            failed=$((failed + 1))
         fi
     fi
 done

@@ -12,11 +12,11 @@ strip policy codified in render_export.py's header:
 
 ## References used for this audit
 
-1. `references/jcox-au_vmware/unifi_MP_Builder_Design.json` — **primary ground truth**
+1. `reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json` — **primary ground truth**
    Multi-level cross-type chaining, populated chainingSettings.params, many
    expression patterns the Synology sample lacks.
 2. `tmp/reference_paks/Ubiquiti_UniFi-1.0.0.7_MP_Builder_Design.json` — confirms jcox
-3. `references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
+3. `reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
    — 29 requests, 5 with chainingSettings, confirms params[] shape
 4. Previous Synology DSM MP.json sample (no longer available at original path) —
    motivated most of the strips that were subsequently reverted
@@ -50,7 +50,7 @@ not an exchange-format restriction.
   `_rewrite_chain_tokens` (path/params/body rewrite) and
   `_build_chaining_settings` (chainingSettings.params[].key).
 
-**Evidence:** references/jcox-au_vmware/unifi_MP_Builder_Design.json — every
+**Evidence:** reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json — every
 chained request (7 total) has populated params[].
 
 ---
@@ -80,7 +80,7 @@ absence there did not mean MPB rejects the fields.
 **Fix applied:** Removed `_DML_DROP = {"label", "parentListId"}` filter.
 `dmls = list(raw_dmls)` — DMLs passed through unchanged.
 
-**Evidence:** references/jcox-au_vmware/unifi_MP_Builder_Design.json — all
+**Evidence:** reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json — all
 DML entries have label and parentListId.
 
 ---
@@ -111,7 +111,7 @@ Same over-strip-from-one-sample error as 1.2.
 **Fix applied:** `_strip_internal_object_info()` now returns `dict(ioi)` directly
 without any field removal.
 
-**Evidence:** references/jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14).
+**Evidence:** reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json (2026-05-14).
 
 ---
 
@@ -361,7 +361,7 @@ objectBinding:
       label: <identifier_metric_label>  (e.g. "Device ID")
 ```
 
-Evidence from `references/jcox-au_vmware/unifi_MP_Builder_Design.json`:
+Evidence from `reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json`:
 - `get-devices-all` (listId=data.*, chain-parent AND primary equivalent):
   objectBinding=ATTRIBUTE_TO_PROPERTY,
   matchExpression.label="id" originType=ATTRIBUTE,
@@ -404,7 +404,7 @@ the "Attribute linking request to object" error.
 
 A single chained secondary (Synology `volume_util`) was tolerated because there
 is no ambiguity, but the extra binding is still incorrect per the jcox reference
-design: ALL chained secondaries in `references/jcox-au_vmware/unifi_MP_Builder_Design.json`
+design: ALL chained secondaries in `reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json`
 have `objectBinding=null`.  MPB derives the per-row object link from
 `chainingSettings.parentRequestId` alone; the secondary's own objectBinding is
 irrelevant and, with two or more secondaries, harmful.
@@ -464,7 +464,7 @@ Synology imported cleanly with the old non-null binding, and will continue to
 import cleanly with null (MPB accepts null on a secondary when the primary
 binding is present).
 
-**Evidence:** `references/jcox-au_vmware/unifi_MP_Builder_Design.json` —
+**Evidence:** `reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json` —
 confirmed by inspection that every secondary metricSet has `objectBinding=null`.
 No exception to this pattern was found in the reference file.  The file contains
 6 objects; the 3 with chained secondaries all show null binding on every secondary
@@ -503,7 +503,7 @@ violating rule 1.
 Additionally, the previous Case 4 (primary identity binding) pointed at the identifier
 metric (`device_id`) in the PRIMARY's own metrics array, violating rule 3 (foreign-metric).
 
-**The jcox idiom (from `references/jcox-au_vmware/unifi_MP_Builder_Design.json`):**
+**The jcox idiom (from `reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json`):**
 
 `UniFi - Devices` has 2 metricSets:
 - `[0] get-device-statistics` (secondary, `listId=base`): `objectBinding=null`.  Carries
@@ -860,7 +860,7 @@ all data.
 Pattern V was identified from the vrealize.it vSAN default storage policy MP:
 
 ```
-references/vrealize_it_vsan_default_policy/vSAN default storage policy.json
+reference/references/vrealize_it_vsan_default_policy/vSAN default storage policy.json
 ```
 
 In that MP, the `Get Datastore default policy` request has:

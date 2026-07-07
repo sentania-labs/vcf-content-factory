@@ -6,8 +6,8 @@ prevents a documented failure mode.
 ## API investigation
 
 ### Grep both OpenAPI specs
-Always search both `docs/operations-api.json` (public) and
-`docs/internal-api.json` (internal, 180 extra paths under
+Always search both `reference/docs/operations-api.json` (public) and
+`reference/docs/internal-api.json` (internal, 180 extra paths under
 `/internal/*`). Internal endpoints require
 `X-Ops-API-use-unsupported: true`.
 
@@ -19,14 +19,14 @@ know" over reasoning from incomplete data.
 ## Wire format ground truth
 
 ### Reference repos are ground truth for UI import
-The `references/` directory contains community packages authored for
+The `reference/references/` directory contains community packages authored for
 drag-drop use. Check them before designing any wire format. Key
 patterns: super metrics = bare `supermetric.json`; views =
 `Views.zip`; dashboards = `Dashboard-*.zip`; alerts = `.xml` with
 `<alertContent>` root.
 
-### Check references/ before UI claims
-Before asserting what the VCF Ops UI supports, inspect `references/`
+### Check reference/references/ before UI claims
+Before asserting what the VCF Ops UI supports, inspect `reference/references/`
 first. Community packages there are ground truth for what formats and
 structures the UI dialogs accept.
 

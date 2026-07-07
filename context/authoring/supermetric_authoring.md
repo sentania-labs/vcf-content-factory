@@ -48,7 +48,7 @@ kind of interest — the object whose behavior the metric describes
 (a "VM snapshot" metric defaults to `VirtualMachine`, a "cluster CPU"
 metric to `ClusterComputeResource`). When in doubt, ask.
 
-## 3. DSL rules (from `docs/vcf9/supermetrics.md`)
+## 3. DSL rules (from `reference/docs/vcf9/supermetrics.md`)
 
 - **Looping functions**: `avg`, `sum`, `min`, `max`, `count`,
   `combine`. They take a single resource entry.

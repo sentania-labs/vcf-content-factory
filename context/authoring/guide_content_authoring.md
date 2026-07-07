@@ -71,7 +71,7 @@ per-component alerting."
 When a recon call would answer the question, run recon. Don't ask
 the user "what's the resource kind for VMs?" — the orchestrator
 already ran ops-recon, the answer is in the brief. Don't ask
-"does this property exist?" — search `docs/vcf9/metrics-properties.md`
+"does this property exist?" — search `reference/docs/vcf9/metrics-properties.md`
 or call the live `/statkeys` endpoint.
 
 ### Batch the real ambiguities

@@ -5,7 +5,7 @@ Report definitions are created/updated exclusively via content-zip import
 /api/reportdefinitions — the public API is read-only for definitions.
 
 The internal API has no relevant report-definition endpoints either
-(confirmed by grepping docs/internal-api.json for "report").
+(confirmed by grepping reference/docs/internal-api.json for "report").
 
 Delete limitation:
     There is no DELETE on /api/reportdefinitions and no internal API
@@ -87,7 +87,7 @@ def delete_report(client: VCFOpsClient, report_id: str) -> None:
     Report definitions can only be removed through the VCF Operations web UI
     (Admin > Content > Reports).
 
-    This limitation is documented in context/reports_api_surface.md.
+    This limitation is documented in context/api-surface/reports_api_surface.md.
     """
     raise NotImplementedError(
         "The VCF Operations API has no DELETE endpoint for report definitions. "

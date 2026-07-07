@@ -17,7 +17,7 @@ answers the orchestrator uses to decide whether authoring is needed.
 
 Also read:
 - `context/reference_sources.md` (allowlisted external repos)
-- `docs/vcf9/metrics-properties.md` (metric vocabulary)
+- `reference/docs/vcf9/metrics-properties.md` (metric vocabulary)
 
 ## Hard rules
 
@@ -32,14 +32,14 @@ Also read:
 ## What you check (in order)
 
 1. **Built-in metric** — does a native Ops metric already answer
-   the question? Check `/statkeys` and `docs/vcf9/metrics-properties.md`.
+   the question? Check `/statkeys` and `reference/docs/vcf9/metrics-properties.md`.
 2. **Existing instance content** — `/api/supermetrics`,
    `/api/resources/groups`, `/api/symptomdefinitions`,
    `/api/alertdefinitions`, `/api/reportdefinitions`.
 3. **Existing repo YAML** — unsynced content in `content/supermetrics/`,
    `content/views/`, `content/dashboards/`, etc.
 4. **Allowlisted reference sources** — grep local clones under
-   `references/` per `context/reference_sources.md`.
+   `reference/references/` per `context/reference_sources.md`.
 
 Mark matches as EXACT, PARTIAL, or INSPIRATION.
 

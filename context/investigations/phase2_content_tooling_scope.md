@@ -12,7 +12,7 @@ All conclusions are based on read-only inspection of:
 - `vcfops_symptoms/loader.py`
 - `vcfops_alerts/render.py`
 - `vcfops_reports/loader.py`, `render.py`
-- `references/vmbro_vcf_operations_vcommunity/Management Pack/content/`
+- `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/`
 - `lessons/pak-content-bundling.md`
 - `lessons/pak-content-localization-bundles.md`
 
@@ -61,7 +61,7 @@ list (sdk_builder.py:1290) names `"content/supermetrics/"` as a known directory 
 commented "currently DEAD (not emitted by _write_outer_pak)".
 
 **The gap.**
-The reference pak (`references/vmbro_vcf_operations_vcommunity/Management Pack/content/supermetrics/`)
+The reference pak (`reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/supermetrics/`)
 ships super metrics as individual JSON files, one per SM, each at
 `content/supermetrics/<Display Name>.json`. Each file has exactly one top-level key: the SM's
 UUID. The value carries `name`, `formula`, `description`, `unitId`, `resourceKinds`, and
@@ -104,7 +104,7 @@ The reference pak proves the answer empirically:
 
 - Each SM JSON file uses the SM's UUID as the JSON top-level key.
 - Views reference SMs in `attributeKey` as `"Super Metric|sm_<uuid>"`.
-  In `references/…/content/reports/View - Set 1.xml`:
+  In `reference/references/…/content/reports/View - Set 1.xml`:
   `<Property name="attributeKey" value="Super Metric|sm_77c9b561-8a30-496c-80bc-4b049bd63b96"/>`
 - The SM JSON at `content/supermetrics/Share per vCPU.json` uses that exact UUID as its top-level key:
   `{"77c9b561-8a30-496c-80bc-4b049bd63b96": {...}}`
@@ -214,7 +214,7 @@ The sdk_builder has NO path to emit symptoms into the pak's `content/` tree. The
 "currently DEAD."
 
 **The reference pak format.**
-`references/…/content/symptomdefs/ESXi Host NIC Disconnected Symptom.xml` is a standalone
+`reference/references/…/content/symptomdefs/ESXi Host NIC Disconnected Symptom.xml` is a standalone
 `<alertContent><SymptomDefinitions>` XML file — exactly the format that
 `render_alert_content_xml()` already produces. There is one XML file per symptom.
 
@@ -239,7 +239,7 @@ The sdk_builder has NO path to emit alerts into the pak. `"content/alertdefs/"` 
 `_ALL_CONTENT_DIRS` as "currently DEAD."
 
 **The reference pak format.**
-`references/…/content/alertdefs/ESXi Host NIC Disconnected Alert.xml` is a standalone
+`reference/references/…/content/alertdefs/ESXi Host NIC Disconnected Alert.xml` is a standalone
 `<alertContent>` file containing BOTH `<AlertDefinitions>` and `<SymptomDefinitions>`. The
 vCommunity pak ships alerts and symptoms in separate files: alert XML files reference
 symptom IDs that were registered by the `content/symptomdefs/` files.

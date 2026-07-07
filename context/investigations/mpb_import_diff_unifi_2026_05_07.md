@@ -1,7 +1,7 @@
 # MPB import diff: factory UniFi Integration export vs jcox reference (2026-05-07)
 
 Static diff of `tmp/unifi_integration_export.json` (factory-rendered,
-fails on import) against `references/jcox-au_vmware/unifi_MP_Builder_Design.json`
+fails on import) against `reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json`
 (known-working MPB UI export). Cross-referenced against
 `context/mpb_wire_reference/synology_nas_working_export.json` (factory-rendered,
 known-working import) and three other reference packs (phpIPAM, Rubrik,
@@ -27,7 +27,7 @@ this value. The full evidence table:
 | **Our UniFi Integration** | **`TOKEN`** | **fails** |
 
 The HoL GitLab-Basic design
-(`references/hol-2501-lab-files/HOL-2501-12/Module 2/GitLab-Basic.json`)
+(`reference/references/hol-2501-lab-files/HOL-2501-12/Module 2/GitLab-Basic.json`)
 is especially relevant: it uses `credentialType: "CUSTOM"` with a
 single credential injected via `Authorization: Bearer ...` global
 header and `sessionSettings: null` -- functionally identical to our

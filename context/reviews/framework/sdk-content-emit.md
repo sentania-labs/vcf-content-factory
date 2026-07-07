@@ -80,7 +80,7 @@ non-blocking findings below.
    scoped mode builds `sm_map[sm.name] = sm.id` from the bundled SM YAML and
    emits `Super Metric|sm_{sm.id}`; the JSON file is keyed by the SAME `sm.id`
    (a bare uuid4, matching the known-good reference key format —
-   `references/brockpeterson_operations_supermetrics/*.json` are bare-UUID
+   `reference/references/brockpeterson_operations_supermetrics/*.json` are bare-UUID
    keyed). An unresolved ref raises `ValueError` rather than emitting a
    dangling key. No "installs clean, no data" path.
 

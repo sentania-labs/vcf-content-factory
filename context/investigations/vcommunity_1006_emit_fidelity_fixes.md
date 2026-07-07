@@ -19,7 +19,7 @@ content importer expects symbolic operators, not API enum names.
 
 ### Reference ground truth
 Both symptomdefs in
-`references/vmbro_vcf_operations_vcommunity/Management Pack/content/symptomdefs/`:
+`reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/symptomdefs/`:
 ```xml
 <Condition ... operator="!=" ... value="Running" valueType="string"/>
 ```
@@ -72,7 +72,7 @@ Existing SMs update by name (not CREATE) and are unaffected.  Only SMs that
 do not exist on the target instance hit the CREATE path and fail.
 
 ### Reference ground truth
-`references/vmbro_vcf_operations_vcommunity/Management Pack/content/supermetrics/Total Non-default Settings.json`:
+`reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/supermetrics/Total Non-default Settings.json`:
 ```json
 {"f30f298c-385f-4ef8-b511-4092a348a346": {
    "resourceKinds": [...],

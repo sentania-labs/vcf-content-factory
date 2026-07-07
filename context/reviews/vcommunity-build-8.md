@@ -4,7 +4,7 @@
 - **Build reviewed:** 8 (`dist/vcfcf_sdk_vcommunity.1.0.0.8.pak`, reproduced locally)
 - **Reviewer:** `sdk-adapter-reviewer`
 - **Scope:** the build 7→8 diff only (4 files): `VCommunityVSphereClient.java` (broad `guest` read), `VmCollector.java` (gate-skip WARN), `adapter.yaml` (7→8), `CHANGELOG.md`. Prior-build clearances stand (see build-6 review).
-- **Ground truth:** prod original `references/vmbro_vcf_operations_vcommunity/Management Pack/app/` — gate predicate `properties/vm/vmService.py:131`, `events/vm/collect_windows_event_logs.py:135`, `properties/vm/vmOSInformation.py:133`; live evidence `context/investigations/recon_log.md` (2026-06-22 entries).
+- **Ground truth:** prod original `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/app/` — gate predicate `properties/vm/vmService.py:131`, `events/vm/collect_windows_event_logs.py:135`, `properties/vm/vmOSInformation.py:133`; live evidence `context/investigations/recon_log.md` (2026-06-22 entries).
 - **Verdict:** **APPROVE** (zero BLOCKING)
 - **Findings:** 0 BLOCKING / 1 WARNING / 2 NIT
 

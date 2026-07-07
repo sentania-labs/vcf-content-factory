@@ -1,12 +1,12 @@
 """Render a ManagementPackDef into MPB design JSON.
 
 Wire format derived from:
-  - references/sentania_aria_operations_dsm_mp/Management Pack JSON/Synology DSM MP.json
+  - reference/references/sentania_aria_operations_dsm_mp/Management Pack JSON/Synology DSM MP.json
     (Scott's build-8 ground truth — CUSTOM auth, globalHeaders, sessionVariables)
-  - references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json
+  - reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json
     (only reference with populated relationships + events)
-  - context/mp_schema_vs_existing_mp.md (full cross-check document)
-  - docs/reference-mpb-research.md (baseline research)
+  - context/mpb/mp_schema_vs_existing_mp.md (full cross-check document)
+  - context/mpb/reference-mpb-research.md (baseline research)
 
 Key wire-format facts encoded here:
   - All IDs are UUID5 strings (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx), derived
@@ -1821,7 +1821,7 @@ def _render_one_object(
             #     originType = METRIC
             #
             # Ground truth: vSAN default storage policy MP
-            #   (references/vrealize_it_vsan_default_policy/vSAN default storage policy.json)
+            #   (reference/references/vrealize_it_vsan_default_policy/vSAN default storage policy.json)
             #   Request "Get Datastore default policy":
             #     chainingSettings.params[0].id = "w3ovEMMMaQF6VvGf7cqRha", key = "datastore"
             #   Object objectBinding.matchExpression.expressionParts[0]:

@@ -47,7 +47,7 @@ against.
 
 1. **Check for API documentation** — Postman collections, OpenAPI
    specs, Swagger endpoints, API info/discovery endpoints.
-   Check `references/` for existing collections or docs.
+   Check `reference/references/` for existing collections or docs.
 2. **Enumerate available endpoints** — use the API's discovery
    mechanism. For Synology: `SYNO.API.Info query`. For standard
    REST: try `/api`, `/swagger.json`, `/openapi.json`, `/.well-known`.

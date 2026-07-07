@@ -2,16 +2,16 @@
 # immutability_guard.sh — RULE-010 generalization, pre-commit shape.
 #
 # Spec: memory/environment/TODO-top-level-reorg.md "New HOOKS" §2;
-# durable-output map: STRUCTURE.md's authorship x mutability grid — docs/
-# and references/ are "vendor / third-party, immutable (never edit;
+# durable-output map: STRUCTURE.md's authorship x mutability grid — reference/
+# (which holds docs/ and references/, now reference/docs/ and
+# reference/references/) is "vendor / third-party, immutable (never edit;
 # RULE-010)". This script hardens that boundary at commit time: it does
 # NOT relax RULE-010, it enforces it mechanically.
 #
 # Refuses MODIFICATIONS or DELETIONS (not additions) of tracked files
-# under docs/ and references/. New files landing under those paths
-# (fresh vendor extracts, newly-bootstrapped reference repos force-added,
-# etc.) are allowed — only touching or removing what's already there is
-# blocked.
+# under reference/. New files landing under that path (fresh vendor
+# extracts, newly-bootstrapped reference repos force-added, etc.) are
+# allowed — only touching or removing what's already there is blocked.
 #
 # This script does not (yet) run automatically as a git hook — see
 # CLAUDE.md RULE-010/RULE-013 and the reorg TODO's "New HOOKS" section
@@ -28,7 +28,7 @@
 #   -h, --help                show this help and exit.
 #
 # Exit codes:
-#   0   no modifications/deletions under docs/ or references/.
+#   0   no modifications/deletions under reference/.
 #   1   usage error.
 #   2   at least one offending path found — refused.
 
@@ -40,7 +40,7 @@ usage() {
   sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'
 }
 
-IMMUTABLE_DIRS=("docs/" "references/")
+IMMUTABLE_DIRS=("reference/")
 
 RANGE=""
 
@@ -103,7 +103,7 @@ while IFS=$'\t' read -r status path path2; do
 
   case "${code}" in
     A)
-      # Pure addition — allowed, even under docs/ or references/.
+      # Pure addition — allowed, even under reference/.
       continue
       ;;
     C)
@@ -139,13 +139,13 @@ while IFS=$'\t' read -r status path path2; do
 done <<< "${DIFF_OUTPUT}"
 
 if [[ ${#OFFENDERS[@]} -eq 0 ]]; then
-  echo "${SCRIPT_NAME}: clear — no modifications/deletions under docs/ or references/."
+  echo "${SCRIPT_NAME}: clear — no modifications/deletions under reference/."
   exit 0
 fi
 
 echo "${SCRIPT_NAME}: REFUSED (RULE-010)." >&2
-echo "The following changes modify or delete tracked files under docs/ or" >&2
-echo "references/. Those paths are immutable vendor/third-party material —" >&2
+echo "The following changes modify or delete tracked files under reference/." >&2
+echo "That path is immutable vendor/third-party material —" >&2
 echo "corrections belong in context/ (cite the source path), never here." >&2
 echo >&2
 for o in "${OFFENDERS[@]}"; do

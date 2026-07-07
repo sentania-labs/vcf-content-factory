@@ -30,7 +30,7 @@ See §"Superseded docs" at the bottom for the exact corrections needed.
      login at `POST /admin/login.action`.
    - `/suite-api/api/*` and `/suite-api/internal/*` — REST (public
      and unsupported), authenticated with an `OpsToken` bearer
-     token. This is the contract the OpenAPI specs in `docs/*.json`
+     token. This is the contract the OpenAPI specs in `reference/docs/*.json`
      describe.
    - `/vcf-operations/*` — the new "VCF merged console" root. On
      this lab it is an Apache reverse-proxy alias for the Ops
@@ -401,8 +401,8 @@ console — it does not own content management.
 
 ## `/suite-api/` REST — verified coverage
 
-From the OpenAPI specs in `docs/operations-api.json` (250 paths) and
-`docs/internal-api.json` (180 paths). The specs both declare base
+From the OpenAPI specs in `reference/docs/operations-api.json` (250 paths) and
+`reference/docs/internal-api.json` (180 paths). The specs both declare base
 URL `/suite-api` — so paths are `/suite-api/api/*` (public) and
 `/suite-api/internal/*` (unsupported).
 

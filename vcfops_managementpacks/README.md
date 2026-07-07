@@ -79,7 +79,7 @@ To bootstrap a workstation so `build` can run:
 1. Acquire any working MPB-generated `.pak` file from a VCF Ops
    solution you are entitled to use (example: Dale Hassinger's
    GitHub MP at
-   `references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/Management-Packs/GitHub/GitHub-1.0.0.2.pak`).
+   `reference/references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/Management-Packs/GitHub/GitHub-1.0.0.2.pak`).
 
 2. Extract `adapters.zip` from the `.pak`:
 

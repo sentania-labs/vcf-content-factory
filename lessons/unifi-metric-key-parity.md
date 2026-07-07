@@ -63,7 +63,7 @@ how we proved key parity worked — identical registered keys on both sides.
 
 For capability questions, the three-question form proved reliable:
 1. **What does the runtime parse?** (cleanroom corpus)
-2. **Is there a reference pak doing X?** (grep references/)
+2. **Is there a reference pak doing X?** (grep reference/references/)
 3. **What's the idiomatic pattern?** (implies the answer to Q1+Q2)
 
 All three agreed before making a decision.

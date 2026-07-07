@@ -17,7 +17,7 @@ transport. It is a **v1-scope fix**, with one empirical check flagged below.
 
 ## 1. How the original sends one event
 
-`references/.../app/events/vm/collect_windows_event_logs.py:183` — per CSV row:
+`reference/references/.../app/events/vm/collect_windows_event_logs.py:183` — per CSV row:
 
 ```python
 vm_obj.with_event(

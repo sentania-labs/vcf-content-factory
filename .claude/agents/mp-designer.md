@@ -17,7 +17,7 @@ and produce a design artifact that `mp-author` turns into YAML.
   (read this before designing any object hierarchy).
 - `context/mpb/mp_icon_library.md` — the icon hint vocabulary
   (read this before assigning icons to object types).
-- `references/` — existing MP examples (Dale, Brock, Scott's
+- `reference/references/` — existing MP examples (Dale, Brock, Scott's
   Synology) for design patterns.
 - `context/api-maps/<target>.md` — the API map from
   `api-cartographer` for the target system.

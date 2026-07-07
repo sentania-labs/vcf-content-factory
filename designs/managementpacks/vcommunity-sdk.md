@@ -563,7 +563,7 @@ Strengthening this pipeline is a co-equal goal. **All ported content
 keeps `vCommunity|...` attribute paths verbatim** and resource kind
 `VMWARE / ClusterComputeResource|HostSystem|VirtualMachine`.
 
-### Inventory (from `references/.../content/`)
+### Inventory (from `reference/references/.../content/`)
 | Type | Count | Source dir | Factory loader | Status |
 |---|---|---|---|---|
 | Super metrics | 57 | `supermetrics/*.json` | `vcfops_supermetrics` | **Partial** — see GAP #2 |

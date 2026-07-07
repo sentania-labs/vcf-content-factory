@@ -58,7 +58,7 @@ Suite API bearer token; `admin` = `/admin/` JSESSIONID; `ui` =
 | POST | `/suite-api/internal/pak*` (many variants) | token + unsupported | 404 | None exist. |
 
 **Zero pak references in either OpenAPI spec.** Grepped
-`docs/operations-api.json` and `docs/internal-api.json` for
+`reference/docs/operations-api.json` and `reference/docs/internal-api.json` for
 `pak|uploadPak|managementpack|management_pack` → only one match in a
 docstring for a widget config enum that mentions "Management Packs
 Configuration" as a folder name; no endpoints.

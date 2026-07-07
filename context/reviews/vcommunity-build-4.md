@@ -42,7 +42,7 @@ The six new map keys in `vmGuestOsInfo` (src `VCommunityVSphereClient.java`
 :587-600) are byte-identical to the prod original's canonical names,
 cross-checked against BOTH:
 
-- the property *definitions*: `references/vmbro_vcf_operations_vcommunity/
+- the property *definitions*: `reference/references/vmbro_vcf_operations_vcommunity/
   Management Pack/app/adapter.py:211-216`
 - the property *push* on the Windows-CSV path: `.../app/properties/vm/
   vmOSInformation.py:171-176`

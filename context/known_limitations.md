@@ -55,7 +55,7 @@ re-import via a distribution package or content-zip.
 
 ## 4. Reference source clones
 
-Recon checks allowlisted external repos under `references/`
+Recon checks allowlisted external repos under `reference/references/`
 (gitignored). Fresh setups won't have these clones. Run
 `scripts/bootstrap_references.sh` to populate them, or expect recon
 to report missing-clone gaps.

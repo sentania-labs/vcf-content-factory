@@ -17,7 +17,7 @@ zip, installing it, verifying it works, and uninstalling it.
 
 Also read:
 - The bundle manifest YAML for the package being tested.
-- `docs/operations-api.json` and `docs/internal-api.json` for
+- `reference/docs/operations-api.json` and `reference/docs/internal-api.json` for
   verification endpoints.
 
 ## Hard rules

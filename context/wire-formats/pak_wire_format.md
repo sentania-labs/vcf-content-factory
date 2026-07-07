@@ -7,7 +7,7 @@ Documented from reverse-engineering two reference paks:
 - `GitHub-1.0.0.2.pak` (mpb_github_adapter3)
 - `Broadcom Security Advisories-1.0.1.6.pak` (mpb_broadcom_security_advisories_adapter3)
 
-Both are in `references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/Management-Packs/`.
+Both are in `reference/references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/Management-Packs/`.
 
 ## Top-level .pak ZIP layout
 

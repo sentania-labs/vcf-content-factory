@@ -419,7 +419,7 @@ pattern in a shared helper is part of axis 2.2's remediation.
 
 Current choice: `ops-recon.md:32-42` defines check order as built-in
 metric → existing instance content → existing repo YAML → allowlisted
-reference sources under `references/`.
+reference sources under `reference/references/`.
 
 Missing from that list:
 
@@ -653,7 +653,7 @@ Gaps identified:
    poll at `.claude/agents/qa-tester.md:30`. A "post-install observation"
    agent could cover longer-horizon validation. Not urgent.
 3. **No dedicated reference-source maintainer.** Pattern-like role for
-   "when did we last pull references/?" doesn't exist — currently
+   "when did we last pull reference/references/?" doesn't exist — currently
    covered by the orchestrator running `bootstrap_references.sh --update`
    on demand.
 

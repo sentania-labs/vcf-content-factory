@@ -12,7 +12,7 @@
 - **tests:** 430 passed, 4 skipped, 162 deselected, 103 warnings. Targeted content-emit + reverse round-trip suites: 63 passed.
 - **render-regression:** clean — emitted view XML carries zero `displayName` localizationKeys (6c59f6b preserved); empty-description views emit `<Description>` with no `localizationKey` AND no `.desc` properties entry (symmetric, localization tree intact).
 - **SDK build:** `build-sdk content/sdk-adapters/vcommunity` → `vcfcf_sdk_vcommunity.1.0.0.7.pak`. Inventory matches the brief exactly: **37 SM JSON (all with modificationTime), 96 view XML, 12 dashboard JSON, 2 symptomdef (UUID ids + `!=`), 6 solutionconfig.** No `content/alertdefs/` dir (vcommunity bundles no alerts) — "only emit populated subdirs" holds.
-- **pak-compare:** n/a (reference_paks dir absent); compared key emitted artifacts directly against `references/vmbro_vcf_operations_vcommunity/` source pak instead (SM JSON keying, formula tokens, RRA depth — all match).
+- **pak-compare:** n/a (reference_paks dir absent); compared key emitted artifacts directly against `reference/references/vmbro_vcf_operations_vcommunity/` source pak instead (SM JSON keying, formula tokens, RRA depth — all match).
 
 ## Hunt results (every named failure mode)
 

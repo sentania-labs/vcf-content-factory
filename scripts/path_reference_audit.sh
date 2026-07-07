@@ -62,20 +62,21 @@
 #                  subdir, not the factory root's)
 #        b. REGISTRY-MANAGED: `content/sdk-adapters/<name>/...` is
 #           valid iff `<name>` is a registered entry in
-#           `context/managed_paks.md`; `references/<name>/...` is
-#           valid iff `<name>` is a registered entry in
+#           `context/managed_paks.md`; `reference/references/<name>/...`
+#           is valid iff `<name>` is a registered entry in
 #           `context/reference_sources.md` (its `**Local path:**`
 #           field). Both roots are gitignored clones (bootstrap-cloned
 #           by `scripts/bootstrap_managed_paks.sh` /
 #           `scripts/bootstrap_references.sh`) that may be entirely
 #           absent from disk — the registry, not the filesystem, is
 #           the source of truth. A `content/sdk-adapters/<name>` or
-#           `references/<name>` citation whose `<name>` is NOT
-#           registered is a REAL finding, reported distinctly as an
+#           `reference/references/<name>` citation whose `<name>` is
+#           NOT registered is a REAL finding, reported distinctly as an
 #           "unregistered managed root" (not a generic dead reference).
-#           Standing exception: `references/tvs/` is a documented
-#           RULE-015 local-only artifact not yet in the reference
-#           registry — citations to it emit a WARNING, not a failure.
+#           Standing exception: `reference/references/tvs/` is a
+#           documented RULE-015 local-only artifact not yet in the
+#           reference registry — citations to it emit a WARNING, not a
+#           failure.
 #        c. Bonus, best-effort only (does not gate validity): for
 #           `docs/`, `dashboards/`, `views/` prefixes specifically —
 #           agent prompts describing SDK-adapter conventions use these
@@ -171,7 +172,7 @@ fi
 
 # --- Gitignore literal patterns (parsed FIRST — feeds both the top-level
 # anchor list below and the registry-duality check further down) -----------
-# Only LITERAL (non-glob) patterns qualify; `references/` and
+# Only LITERAL (non-glob) patterns qualify; `reference/references/` and
 # `content/sdk-adapters/` are deliberately EXCLUDED from GITIGNORE_DIR_LITERALS
 # even though they're literal directory patterns too — those two roots get
 # the stricter, registry-gated check in citation_is_valid() instead of a
@@ -191,7 +192,7 @@ if [[ -f .gitignore ]]; then
     if [[ "${line}" == */ ]]; then
       dirpat="${line%/}"
       case "${dirpat}" in
-        references|content/sdk-adapters) continue ;;
+        reference/references|content/sdk-adapters) continue ;;
       esac
       GITIGNORE_DIR_LITERALS+=("${dirpat}")
     else
@@ -204,9 +205,10 @@ fi
 # Filesystem-discovered top-level entries UNION the first path segment of
 # every literal .gitignore pattern — the latter half is what keeps this
 # anchor list stable across environments: a purely-gitignored root like
-# `references/` (no committed file ever puts it on disk) must still anchor
-# candidate extraction on a checkout where nothing has been bootstrapped
-# yet, exactly as it does on a checkout where it's been cloned.
+# `reference/references/` (no committed file ever puts it on disk) must
+# still anchor candidate extraction on a checkout where nothing has been
+# bootstrapped yet, exactly as it does on a checkout where it's been
+# cloned.
 declare -a TOPLEVEL=()
 while IFS= read -r -d '' f; do
   TOPLEVEL+=("${f}")
@@ -271,7 +273,7 @@ fi
 declare -A REFERENCE_SLUGS=()
 if [[ -f context/reference_sources.md ]]; then
   while IFS= read -r line; do
-    if [[ "${line}" =~ \*\*Local[[:space:]]path:\*\*[[:space:]]+\`references/([^/\`]+)/?\` ]]; then
+    if [[ "${line}" =~ \*\*Local[[:space:]]path:\*\*[[:space:]]+\`reference/references/([^/\`]+)/?\` ]]; then
       REFERENCE_SLUGS["${BASH_REMATCH[1]}"]=1
     fi
   done < context/reference_sources.md
@@ -344,7 +346,7 @@ citation_is_valid() {
   CITATION_MSG=""
 
   # A bare mention of a top-level directory itself (no sub-path —
-  # `dist/`, `bundles/`, `references/`) names the convention/location,
+  # `dist/`, `bundles/`, `reference/`) names the convention/location,
   # not a specific asset inside it — valid regardless of whether that
   # directory is tracked, gitignored-but-currently-cloned, or a build
   # output that doesn't exist until the build runs. (Mirrors rule #2's
@@ -354,9 +356,13 @@ citation_is_valid() {
     return 0
   fi
   # Same idea for the two-segment registry root itself
-  # (`content/sdk-adapters/`, no `<name>` suffix).
+  # (`content/sdk-adapters/`, `reference/references/`, no `<name>`
+  # suffix) — `reference/references` is gitignored (not tracked), so it
+  # needs this explicit pass the same way `content/sdk-adapters` does;
+  # `reference/docs` doesn't need it since that subtree is committed and
+  # the COMMITTED check below already covers a bare mention of it.
   case "${cand}" in
-    content/sdk-adapters|content/sdk-adapters/)
+    content/sdk-adapters|content/sdk-adapters/|reference/references|reference/references/)
       return 0
       ;;
   esac
@@ -393,14 +399,14 @@ citation_is_valid() {
       CITATION_MSG="unregistered managed root — \`${name}\` is not listed in context/managed_paks.md"
       return 2
       ;;
-    references/?*)
-      local rname="${cand#references/}"
+    reference/references/?*)
+      local rname="${cand#reference/references/}"
       rname="${rname%%/*}"
       if [[ -n "${REFERENCE_SLUGS[${rname}]:-}" ]]; then
         return 0
       fi
       if [[ "${rname}" == "tvs" ]]; then
-        CITATION_MSG="RULE-015 standing exception: references/tvs is a documented local-only artifact (rules/cited-artifacts-reproducible.md), not yet in context/reference_sources.md"
+        CITATION_MSG="RULE-015 standing exception: reference/references/tvs is a documented local-only artifact (rules/cited-artifacts-reproducible.md), not yet in context/reference_sources.md"
         return 3
       fi
       CITATION_MSG="unregistered managed root — \`${rname}\` is not listed in context/reference_sources.md"

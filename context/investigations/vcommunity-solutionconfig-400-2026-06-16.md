@@ -54,7 +54,7 @@ lowercase/underscore so `enc()` (URLEncoder) is a no-op:
 
 ### 2. Spec confirms shape + the 400 idiom
 
-`docs/operations-api.json` → `GET /api/configurations/files`:
+`reference/docs/operations-api.json` → `GET /api/configurations/files`:
 - `path` query param, **required**, format `{configFileType}/{fileName}`,
   allowed `configFileType` includes `SolutionConfig`. → port's shape is correct.
 - `200` produces `*/*` (raw file body). `400` = "Request parameter is invalid".
@@ -119,7 +119,7 @@ installed and are simply **missing on devel**.
 
 The source XMLs do exist in-tree, unused by the build:
 `content/sdk-adapters/vcommunity/content/files/solutionconfig/{6 files}.xml`
-(byte-compatible with `references/vmbro_vcf_operations_vcommunity/.../solutionconfig/`).
+(byte-compatible with `reference/references/vmbro_vcf_operations_vcommunity/.../solutionconfig/`).
 
 ## The fix
 

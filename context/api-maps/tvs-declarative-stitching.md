@@ -8,9 +8,9 @@ descriptor-declared, Cloud-Proxy-immune way to stitch Synology volumes
 to `VMWARE::Datastore`?
 
 **Method:** static `unzip` of pak → `adapters.zip` → `conf/describe.xml`
-+ `conf/scripts/*.sdm` for **every** pak in `references/tvs/` (48 paks).
++ `conf/scripts/*.sdm` for **every** pak in `reference/references/tvs/` (48 paks).
 Extraction to scratchpad only. No live instance touched, nothing in
-`references/` modified. Companion to `context/api-maps/tvs-cross-mp-stitching.md`
+`reference/references/` modified. Companion to `context/api-maps/tvs-cross-mp-stitching.md`
 (which read the **jars**); this file reads the **declarative layer** that
 prior RE under-examined. Grammar cross-checked against
 `~/specs/07-relationships-cross-mp.md`, `~/specs/02a-describe-xsd-canonical.md`,

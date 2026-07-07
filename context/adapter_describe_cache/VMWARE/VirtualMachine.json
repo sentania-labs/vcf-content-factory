@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-06-17T14:21:19Z",
+  "fetched_at": "2026-07-07T15:21:04Z",
   "metrics": {
     "Guest OS Services|mkInComingConnectionCount": {
       "default_monitored": true,
@@ -97,6 +97,10 @@
     "Super Metric|sm_77c9b561-8a30-496c-80bc-4b049bd63b96": {
       "default_monitored": true,
       "name": "Super Metrics|Share per vCPU"
+    },
+    "Super Metric|sm_9ee466de-616a-41a9-b573-e8513e646ea3": {
+      "default_monitored": true,
+      "name": "Super Metrics|vSphere VM Performance"
     },
     "Super Metric|sm_bc4ac034-0b17-4c82-a573-bb2c1400b09f": {
       "default_monitored": true,

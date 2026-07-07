@@ -10,12 +10,12 @@
 - **Last updated:** 2026-05-13
 - **Update history:**
   - 2026-05-13 — Initial mapping. Full OpenAPI 3.1.0 spec analysis
-    (`docs/vsphere-data-api-openapi.json`) combined with live response
+    (`reference/docs/vsphere-data-api-openapi.json`) combined with live response
     data provided by the orchestrator from same-day probes. All 4
     endpoints documented. Object model, metric/property classification,
     join keys, and gaps identified.
 - **Evidence basis:** OpenAPI 3.1.0 spec at
-  `docs/vsphere-data-api-openapi.json` (committed to repo) + live API
+  `reference/docs/vsphere-data-api-openapi.json` (committed to repo) + live API
   responses provided by orchestrator (probed 2026-05-13 against
   `vsphere-data-api.int.sentania.net`). No direct live calls made by
   this agent session; all response data comes from the orchestrator's
@@ -31,7 +31,7 @@
 - **Auth type:** NONE [observed 2026-05-13] — no authentication required
 - **Auth flow:** N/A — all endpoints are unauthenticated
 - **Session maintenance:** N/A
-- **OpenAPI spec:** Available (3.1.0), saved at `docs/vsphere-data-api-openapi.json` [observed 2026-05-13]
+- **OpenAPI spec:** Available (3.1.0), saved at `reference/docs/vsphere-data-api-openapi.json` [observed 2026-05-13]
 - **Framework:** FastAPI (Python), inferred from OpenAPI `openapi: 3.1.0` output, `422` validation error schemas, and `operationId` naming convention [inferred from pattern]
 
 ## Endpoints

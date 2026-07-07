@@ -9,7 +9,7 @@ implementation order with draft YAML schemas.
 - Live-instance survey from 2026-04-09 in
   `context/widget_types_survey.md` (231 dashboards, 2,019 widgets).
 - Reference-repo resurvey run 2026-04-11 over 131 `dashboard.json`
-  files extracted from `references/` (AriaOperationsContent,
+  files extracted from `reference/references/` (AriaOperationsContent,
   brockpeterson_operations_dashboards, tkopton_aria_operations_content,
   dalehassinger_unlocking_the_potential) + 2 `dashboard.json` files
   from a fresh lab export via

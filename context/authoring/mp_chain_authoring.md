@@ -368,7 +368,7 @@ Pattern V (PARAMETER origin) resolves from the URL substitution value, not the r
 body.  It works regardless of whether the API echoes the identifier.  Pattern B also works
 for Synology (response echoes `volume_id`), so Pattern V is strictly more universal.
 
-**Ground truth:** `references/vrealize_it_vsan_default_policy/vSAN default storage policy.json`
+**Ground truth:** `reference/references/vrealize_it_vsan_default_policy/vSAN default storage policy.json`
 — `Get Datastore default policy` request has `chainingSettings.params[0].id = "w3ovEMMMaQF6VvGf7cqRha"`,
 key = `datastore`.  The object's `objectBinding.matchExpression.expressionParts[0]` has
 `originType = "PARAMETER"`, `originId = "w3ovEMMMaQF6VvGf7cqRha"`.

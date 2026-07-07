@@ -11,8 +11,8 @@ working in this repo.
    situation, heed it.
 3. `context/README.md` — Documentation and specs. Reference
    when doing work.
-4. `references/` — Known-good examples. Grep when authoring.
-5. `docs/` — Immutable vendor source material. Read-only.
+4. `reference/references/` — Known-good examples. Grep when authoring.
+5. `reference/docs/` — Immutable vendor source material. Read-only.
 6. `Memory.md` + `memory/` — Soul + per-user state. Advisory.
 
 If a context file contradicts a rule, the rule wins.
@@ -69,12 +69,12 @@ ends up holding all the context.
 | `symptom-author` | Author | `content/symptoms/` | After recon confirms no existing symptom fits. |
 | `alert-author` | Author | `content/alerts/`, `content/recommendations/` | After recon, **and** required symptoms exist. |
 | `report-author` | Author | `content/reports/` | User wants a report. Blocks if upstream views missing. |
-| `api-explorer` | Research | `context/`, `docs/` | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
+| `api-explorer` | Research | `context/`, `reference/docs/` | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
 | `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `vcfops_*/`. |
 | `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. |
 | `content-packager` | Build | `bundles/`, `dist/` | Authors bundle manifests in `bundles/`; builds distributable zips into `dist/`. Rebuild after a tooling change. |
 | `qa-tester` | Testing | `/tmp/` | Acceptance-test a built zip. Spawn after `content-packager`. |
-| `api-cartographer` | Research | `context/api-maps/`, `docs/` | New external API for an MP. |
+| `api-cartographer` | Research | `context/api-maps/`, `reference/docs/` | New external API for an MP. |
 | `mp-designer` | Design | `designs/` | New MP. Wizard interview against API map. |
 | `mp-author` | Author | `content/managementpacks/` | After `mp-designer` produces approved design. **Tier 1** MPB YAML spec. |
 | `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` (each an independent repo, gitignored) | After `mp-designer` produces approved design. **Tier 2** Java SDK adapter source. The Java sibling to `mp-author`. **Only** agent that edits adapter Java. Commits go to the pak's **own** remote; a real release is a `v*` tag on that repo, not a factory `/publish`. |
@@ -103,7 +103,7 @@ file (not a skill) because it runs before any skill could load.
    language plus the specific questions you want answered. Recon
    checks, in order: built-in metrics, existing instance content,
    existing repo YAML, and allowlisted external reference repos
-   (`context/reference_sources.md`, grepped from `references/`).
+   (`context/reference_sources.md`, grepped from `reference/references/`).
    If recon finds an exact match anywhere, tell the user and stop —
    prefer adapt-and-import over authoring from scratch.
 
@@ -212,7 +212,7 @@ Agent prompts forbid silent workarounds. When an agent returns a
 1. **Punt to the user** — trim or defer the request. Default when
    the gap is large or the fix is ambiguous.
 2. **Spawn `api-explorer`** when the gap is "we don't understand
-   the format." Output goes to `context/` or `docs/`.
+   the format." Output goes to `context/` or `reference/docs/`.
 3. **Spawn `tooling`** to make the repo change. Brief it with the
    specific gap, the working wire format, and what the loader/
    renderer needs to produce. Then re-invoke the blocked author.

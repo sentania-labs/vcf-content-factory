@@ -199,11 +199,11 @@ the bundle root is community-native format for hand-import.
 
 ## Reference specimens
 
-1. `references/AriaOperationsContent/App Infra Cluster Insights/CustomGroup.json`
+1. `reference/references/AriaOperationsContent/App Infra Cluster Insights/CustomGroup.json`
    — `ResourceNameRule` with `CONTAINS` operator
-2. `references/AriaOperationsContent/Hosts in A Group Dashboard/CustomGroup-2024-12-02 11-36-04 AM.json`
+2. `reference/references/AriaOperationsContent/Hosts in A Group Dashboard/CustomGroup-2024-12-02 11-36-04 AM.json`
    — `RelationshipRule` with `EQUALS` operator, multi-locale `customGroupTypes`
-3. `references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/Dashboards/Aria-Appliances-Observability/Aria-Appliances-Custom Group.json`
+3. `reference/references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/Dashboards/Aria-Appliances-Observability/Aria-Appliances-Custom Group.json`
    — `StringMetricPropertyRule` (isProperty: true) + `NumericMetricPropertyRule`
      (isProperty: false), multiple `ruleGroups` (OR semantics)
 

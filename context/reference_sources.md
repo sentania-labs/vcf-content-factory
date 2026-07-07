@@ -13,7 +13,7 @@ and more correct than authoring from scratch.
    in this file. New sources are added here by the orchestrator
    after the user approves them; agents do not add entries on
    their own.
-2. **Local clones only.** Sources are cloned under `references/`
+2. **Local clones only.** Sources are cloned under `reference/references/`
    (gitignored). Agents grep the local clone; no WebFetch round
    trips. If a listed source is missing locally, ops-recon reports
    that as a gap and continues with the remaining sources — it
@@ -31,17 +31,17 @@ and more correct than authoring from scratch.
 ## Clone convention
 
 ```
-references/
+reference/references/
   <source-slug>/        # git clone or extracted archive
 ```
 
 The directory is gitignored. Populate with:
 
 ```bash
-mkdir -p references
-git clone <url> references/<slug>
+mkdir -p reference/references
+git clone <url> reference/references/<slug>
 # or refresh:
-cd references/<slug> && git pull
+cd reference/references/<slug> && git pull
 ```
 
 Automate with:
@@ -56,7 +56,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### sentania/AriaOperationsContent
 
 - **URL:** https://github.com/sentania/AriaOperationsContent
-- **Local path:** `references/AriaOperationsContent/`
+- **Local path:** `reference/references/AriaOperationsContent/`
 - **Owner:** user (sentania). Public repo.
 - **Scope:** Working content bundles for VCF Operations —
   dashboards, views, super metrics, and policies packaged as
@@ -85,7 +85,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### brockpeterson/operations_supermetrics
 
 - **URL:** https://github.com/brockpeterson/operations_supermetrics
-- **Local path:** `references/brockpeterson_operations_supermetrics/`
+- **Local path:** `reference/references/brockpeterson_operations_supermetrics/`
 - **Owner:** Brock Peterson (Broadcom/VCF field). Public repo.
 - **Scope:** Curated VCF Operations super metrics.
 - **What to grep for:** formula DSL examples, metric keys, resource
@@ -96,7 +96,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### brockpeterson/operations_dashboards
 
 - **URL:** https://github.com/brockpeterson/operations_dashboards
-- **Local path:** `references/brockpeterson_operations_dashboards/`
+- **Local path:** `reference/references/brockpeterson_operations_dashboards/`
 - **Owner:** Brock Peterson. Public repo.
 - **Scope:** VCF Operations dashboards (most-starred repo in the set
   — 31★). Likely includes widget layouts, ResourceList pickers, view
@@ -108,7 +108,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### brockpeterson/operations_reports
 
 - **URL:** https://github.com/brockpeterson/operations_reports
-- **Local path:** `references/brockpeterson_operations_reports/`
+- **Local path:** `reference/references/brockpeterson_operations_reports/`
 - **Owner:** Brock Peterson. Public repo.
 - **Scope:** VCF Operations report definitions. Reports are not yet
   a first-class authoring target in this repo, but the bundles may
@@ -118,7 +118,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### brockpeterson/operations_alerts
 
 - **URL:** https://github.com/brockpeterson/operations_alerts
-- **Local path:** `references/brockpeterson_operations_alerts/`
+- **Local path:** `reference/references/brockpeterson_operations_alerts/`
 - **Owner:** Brock Peterson. Public repo.
 - **Scope:** VCF Operations alert definitions / symptom + alert
   templates. Alerts are not yet a first-class authoring target here,
@@ -129,7 +129,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### tkopton/aria-operations-content
 
 - **URL:** https://github.com/tkopton/aria-operations-content
-- **Local path:** `references/tkopton_aria_operations_content/`
+- **Local path:** `reference/references/tkopton_aria_operations_content/`
 - **Owner:** Thomas Kopton. Public repo, no explicit license.
 - **Scope:** Aria/VCF Operations content — dashboards, views, super
   metrics, and related bundles.
@@ -142,7 +142,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### dalehassinger/unlocking-the-potential
 
 - **URL:** https://github.com/dalehassinger/unlocking-the-potential
-- **Local path:** `references/dalehassinger_unlocking_the_potential/`
+- **Local path:** `reference/references/dalehassinger_unlocking_the_potential/`
 - **Owner:** Dale Hassinger. Public repo, companion code to his blog.
 - **Scope:** Multi-product; the relevant subtree is
   `VMware-Aria-Operations/` which contains `Dashboards/`, `Views/`,
@@ -153,7 +153,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 - **What to grep for:** super metric JSON exports, dashboard/view
   bundles, **and MPB JSON design files** under `Management-Packs/`.
   Restrict greps to
-  `references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/`.
+  `reference/references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/`.
 - **MPB designs:** `Management-Packs/` contains complete MPB JSON
   design files for GitHub, Security Advisories, FastAPI, ServiceNow,
   and vCommunity management packs. These are ground-truth examples
@@ -166,7 +166,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### johnddias/vrops-super-metric-numa-optimize
 
 - **URL:** https://github.com/johnddias/vrops-super-metric-numa-optimize
-- **Local path:** `references/johnddias_vrops_super_metric_numa_optimize/`
+- **Local path:** `reference/references/johnddias_vrops_super_metric_numa_optimize/`
 - **Owner:** John Dias. Public repo.
 - **Scope:** Focused bundle — `NUMA Optimization.json` super metric
   export implementing VM NUMA/CPU sizing logic based on the VMware
@@ -179,7 +179,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### sentania/Aria-Operations-DSM-Management-Pack
 
 - **URL:** https://github.com/sentania/Aria-Operations-DSM-Management-Pack
-- **Local path:** `references/sentania_aria_operations_dsm_mp/`
+- **Local path:** `reference/references/sentania_aria_operations_dsm_mp/`
 - **Owner:** user (sentania). Public repo.
 - **Scope:** Synology DSM management pack for VCF Operations — MPB
   JSON design, Postman collection, and API exploration notes for the
@@ -200,7 +200,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### brockpeterson/operations_management_packs
 
 - **URL:** https://github.com/brockpeterson/operations_management_packs
-- **Local path:** `references/brockpeterson_operations_management_packs/`
+- **Local path:** `reference/references/brockpeterson_operations_management_packs/`
 - **Owner:** Brock Peterson (Broadcom/VCF field). Public repo.
 - **Scope:** VCF Operations management packs — `.pak` files and/or
   MPB JSON designs for third-party integrations (Rubrik, etc.).
@@ -216,7 +216,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### vmware-aria-hol/hol-2501-lab-files
 
 - **URL:** https://github.com/vmware-aria-hol/hol-2501-lab-files
-- **Local path:** `references/hol-2501-lab-files/`
+- **Local path:** `reference/references/hol-2501-lab-files/`
 - **Owner:** VMware Aria Hands-On-Labs. Public repo.
 - **Scope (MPB-only, NOT a VCF Ops content reference):** This is
   **not** a VCF Ops content reference — ops-recon should NOT grep
@@ -239,8 +239,8 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### jcox-au/vmware (phpIPAM + UniFi MPB paks)
 
 - **URL:** https://github.com/jcox-au/vmware
-- **Local path:** `references/jcox-au_vmware/` (design JSONs);
-  `tmp/reference_paks/` (paks, not in references/ because gitignored
+- **Local path:** `reference/references/jcox-au_vmware/` (design JSONs);
+  `tmp/reference_paks/` (paks, not in reference/references/ because gitignored
   binaries)
 - **Owner:** jcox-au (Gibson Virtualization). Public repo.
 - **Scope:** Two complete MPB management packs with .pak files,
@@ -274,7 +274,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### vmbro/VCF-Operations-Hardware-vCommunity
 
 - **URL:** https://github.com/vmbro/VCF-Operations-Hardware-vCommunity
-- **Local path:** `references/vmbro_vcf_operations_hardware_vcommunity/`
+- **Local path:** `reference/references/vmbro_vcf_operations_hardware_vcommunity/`
 - **Owner:** Onur Yuzseven. Public repo.
 - **Stance:** **How it works — NOT what we copy.** Onur uses the
   Python Integration SDK (Docker-per-pak runtime). We are explicitly
@@ -306,7 +306,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### vmbro/VCF-Operations-vCommunity
 
 - **URL:** https://github.com/vmbro/VCF-Operations-vCommunity
-- **Local path:** `references/vmbro_vcf_operations_vcommunity/`
+- **Local path:** `reference/references/vmbro_vcf_operations_vcommunity/`
 - **Owner:** Onur Yuzseven. Public repo.
 - **Stance:** **How it works — NOT what we copy.** Same Docker /
   Python Integration SDK reservation as the Hardware repo. Reference
@@ -369,7 +369,7 @@ scripts/bootstrap_references.sh --update # also git pull existing
 ### vmware/vcf-security-and-compliance-guidelines
 
 - **URL:** https://github.com/vmware/vcf-security-and-compliance-guidelines
-- **Local path:** `references/vcf-security-and-compliance-guidelines/`
+- **Local path:** `reference/references/vcf-security-and-compliance-guidelines/`
 - **Owner:** VMware / Broadcom. Primarily driven by Bob Plankers
   (VMware Compliance & Cybersecurity Engineer). Public repo.
 - **Scope:** Authoritative VMware Security Configuration Guide (SCG)

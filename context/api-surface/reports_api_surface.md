@@ -132,8 +132,8 @@ as content type `REPORT_SCHEDULES` (separate from `REPORT_DEFINITIONS`).
 
 ## Reference Examples
 
-- `references/brockpeterson_operations_reports/` — 5 report+view bundles
-- `references/AriaOperationsContent/Cost Reporting/` — dashboard + report + views bundle
+- `reference/references/brockpeterson_operations_reports/` — 5 report+view bundles
+- `reference/references/AriaOperationsContent/Cost Reporting/` — dashboard + report + views bundle
 
 ## Dependency Chain
 

@@ -2009,7 +2009,7 @@ def _write_outer_pak(
         # --- Reports ---
         # Emit one XML file per report at content/reports/<safe_name>.xml (flat layout).
         # Layout matches the vCommunity reference pak (confirmed against
-        # references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/):
+        # reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/):
         #   content/reports/Report - VOA - Capacity.xml
         #   content/reports/ESXi Host Details vCommunity.xml
         #   … (no subdirectory per report; each file is a standalone

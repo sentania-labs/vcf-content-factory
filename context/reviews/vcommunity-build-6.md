@@ -3,7 +3,7 @@
 - **Adapter:** `content/sdk-adapters/vcommunity` (uncommitted working tree; HEAD is build 3, working tree is cumulative 3→6 — review-before-commit gate)
 - **Build reviewed:** 6 (`vcfcf_sdk_vcommunity.1.0.0.6.pak`)
 - **Reviewer:** `sdk-adapter-reviewer`
-- **Ground truth:** the prod original `references/vmbro_vcf_operations_vcommunity/Management Pack/` — `app/adapter.py` (credential/identifier/enum definitions) + `app/constants/main.py` (key constants) + `content/symptomdefs/` (symptom UUIDs). The original is a Python/Cloud-native MP with **no static describe.xml** (it builds the describe at runtime via `AdapterDefinition`), so the credential/config keys come from `adapter.py`, not a describe.xml.
+- **Ground truth:** the prod original `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/` — `app/adapter.py` (credential/identifier/enum definitions) + `app/constants/main.py` (key constants) + `content/symptomdefs/` (symptom UUIDs). The original is a Python/Cloud-native MP with **no static describe.xml** (it builds the describe at runtime via `AdapterDefinition`), so the credential/config keys come from `adapter.py`, not a describe.xml.
 - **Reference impl:** `content/sdk-adapters/compliance/` (pak-compare baseline)
 - **Verdict:** **APPROVE** (zero BLOCKING)
 - **Findings:** 0 BLOCKING / 0 WARNING / 2 NIT
@@ -45,7 +45,7 @@ The no-arg constructor supplies the static `ADAPTER_KIND="vcfcf_vcommunity"` (`V
 The new config-summary log line (`VCommunityAdapter.java:118-122`) logs `winCred=<boolean>` (presence only, via `hasWindowsCredential()`) — never a credential value. No `log*` / exception / URL construction line touches `password`/`winPass`/`winPassword`. The credential rework introduced no leak.
 
 ## B — Content-import fix (symptomdef ID → UUID) — VERIFIED SAFE
-- Symptom YAMLs carry the original's UUIDs as `id:`: `symptoms/esxi-host-nic-disconnected.yaml:1` = `c8d1e671-d0ea-489f-acc4-46e34cc246b6`; `symptoms/windows-service-down.yaml:1` = `7675759b-2ca0-4847-87ed-e3e23acdf7a5`. Both match the original `references/.../symptomdefs/*.xml` exactly (`SymptomDefinition-c8d1e671-...` NIC HostSystem; `SymptomDefinition-7675759b-...` Windows Service VirtualMachine).
+- Symptom YAMLs carry the original's UUIDs as `id:`: `symptoms/esxi-host-nic-disconnected.yaml:1` = `c8d1e671-d0ea-489f-acc4-46e34cc246b6`; `symptoms/windows-service-down.yaml:1` = `7675759b-2ca0-4847-87ed-e3e23acdf7a5`. Both match the original `reference/references/.../symptomdefs/*.xml` exactly (`SymptomDefinition-c8d1e671-...` NIC HostSystem; `SymptomDefinition-7675759b-...` Windows Service VirtualMachine).
 - The emitter consumes `id:` — the built pak's `content/symptomdefs/*.xml` carry `id="SymptomDefinition-c8d1e671-..."` and `id="SymptomDefinition-7675759b-..."`. An alertdef referencing these UUIDs would resolve to the same symptomdef on import.
 
 ## NIT

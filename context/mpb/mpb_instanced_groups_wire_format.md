@@ -138,7 +138,7 @@ Audit across all four MPB design samples on disk:
 | `tmp/reference_paks/Ubiquiti_UniFi-1.0.0.7_MP_Builder_Design.json` (UI export) | 317 | 0 | 0 |
 | `tmp/reference_paks/phpIPAM-1.0.0.11_MP_Builder_Design.json` (UI export) | 683 | 0 | 0 |
 | `tmp/reference_paks/vSAN default storage policy.json` (UI export) | 57 | 0 | 0 |
-| `references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json` (UI export) | 286 | 0 | 0 |
+| `reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json` (UI export) | 286 | 0 | 0 |
 | `mpb_rubrik_adapter3/conf/design.json` (in-pak) | — | 0 | 0 |
 | `mpb_ubiquiti_unifi_adapter3/conf/design.json` (in-pak) | — | 0 | 0 |
 
@@ -346,9 +346,9 @@ Read-only extraction; no writes outside `context/`.
 
 Paks examined (uncompressed into `/tmp/instanced_recon/` as
 working scratch; safe to delete):
-- `references/hol-2501-lab-files/HOL-2501-02/Module 1/vmware-mpforphysicalsan-8.12.0-21592050.pak`
-- `references/hol-2501-lab-files/HOL-2501-02/Module 2/vmware-mpforkubernetes-2.2.0-24050822.pak`
-- `references/brockpeterson_operations_management_packs/Rubrik-1.1.0.25.pak`
+- `reference/references/hol-2501-lab-files/HOL-2501-02/Module 1/vmware-mpforphysicalsan-8.12.0-21592050.pak`
+- `reference/references/hol-2501-lab-files/HOL-2501-02/Module 2/vmware-mpforkubernetes-2.2.0-24050822.pak`
+- `reference/references/brockpeterson_operations_management_packs/Rubrik-1.1.0.25.pak`
 - `tmp/reference_paks/Ubiquiti_UniFi-1.0.0.7.pak`
 - `tmp/reference_paks/PureStorageAdapter-3.2.0_signed.pak`
 - `tmp/reference_paks/HPESimplivityVropsMP-1.5.0.2.pak`
@@ -357,7 +357,7 @@ Standalone design files audited:
 - `tmp/reference_paks/Ubiquiti_UniFi-1.0.0.7_MP_Builder_Design.json`
 - `tmp/reference_paks/phpIPAM-1.0.0.11_MP_Builder_Design.json`
 - `tmp/reference_paks/vSAN default storage policy.json`
-- `references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
+- `reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
 
 Spec context consulted:
 - `context/cleanroom-spec/spec/02-describe-xml.md`

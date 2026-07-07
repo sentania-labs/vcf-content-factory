@@ -2,7 +2,7 @@
 
 The produced XML matches the shape observed in
 ``tmp/Alert Definition-2026-04-11 03-54-10 PM.xml`` and the community
-packages in references/AriaOperationsContent.
+packages in reference/references/AriaOperationsContent.
 
 Root element: ``<alertContent>``
 Children:
@@ -121,7 +121,7 @@ def _rec_key(adapter_kind: str, name: str) -> str:
 # names with "Invalid operator:<name>".
 #
 # Reference: both symptomdefs in
-#   references/vmbro_vcf_operations_vcommunity/Management Pack/content/symptomdefs/
+#   reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/symptomdefs/
 # use operator="!=" for NOT_EQ; alertdefs in the same pack use "&lt;" (decoded: "<")
 # for LT and "&gt;=" (decoded: ">=") for GT_EQ.  ElementTree serializes "<" and ">="
 # as "&lt;" / "&gt;=" automatically — we just supply the unescaped character.

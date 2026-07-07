@@ -4,12 +4,12 @@ Report definitions are packaged as ``reports.zip`` containing a single
 ``content.xml``.  The outer content-zip structure is the same as the
 dashboards import path (marker file + configuration.json).
 
-Wire format reference: context/reports_api_surface.md
+Wire format reference: context/api-surface/reports_api_surface.md
 
 The minimal shape emitted here was established from the reports_api_surface.md
 documentation and confirmed against the reference bundles at
-references/brockpeterson_operations_reports/ and
-references/AriaOperationsContent/Cost Reporting/.
+reference/references/brockpeterson_operations_reports/ and
+reference/references/AriaOperationsContent/Cost Reporting/.
 """
 from __future__ import annotations
 

@@ -47,7 +47,7 @@ renderer was authored. New references downloaded today (jcox-au's
 Unifi + phpipam, vrealize.it's vSAN-policy) confirm two more wire
 patterns we hadn't yet seen.
 
-**Reference-pack catalog.** ~7 reference packs in `references/`
+**Reference-pack catalog.** ~7 reference packs in `reference/references/`
 (Rubrik, Synology DSM, GitLab-Basic, Unifi, phpIPAM, vSAN-policy, plus
 3 non-MPB VMware adapter packs). They're mined reactively, one shape
 at a time, when bugs hit. No structured catalog, no normalized index,
@@ -235,9 +235,9 @@ renderer rewrite.
 
 #### 3c. Reference-pack parsed catalog
 
-Turn `references/` from "dead JSON files" into "queryable knowledge
+Turn `reference/references/` from "dead JSON files" into "queryable knowledge
 base." Build a tool (`vcfops_managementpacks/catalog.py` maybe) that:
-- Scans every MPB design JSON in `references/`
+- Scans every MPB design JSON in `reference/references/`
 - Normalizes envelope shape (some have `type` at top-level, some don't)
 - Indexes by axis: auth type, paging style, chain shape,
   objectBinding pattern, world/singleton/list ratio, identifier
@@ -362,7 +362,7 @@ not flagged above.
   investigation
 - `context/mp_chain_authoring.md` — chain grammar (one of two new
   YAML grammars added today)
-- `references/jcox-au_vmware/` — Unifi + phpIPAM (downloaded today,
+- `reference/references/jcox-au_vmware/` — Unifi + phpIPAM (downloaded today,
   not yet folded into wire-format docs)
-- `references/vrealize_it_vsan_default_policy/` — vSAN policy stitching
+- `reference/references/vrealize_it_vsan_default_policy/` — vSAN policy stitching
   pattern (downloaded today, not yet folded)

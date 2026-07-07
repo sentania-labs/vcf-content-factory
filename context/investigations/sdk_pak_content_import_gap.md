@@ -89,7 +89,7 @@ tree down with it**.
 
 **(a) Original vmbro `VCFOperationsvCommunity` (Python Integration SDK,
 Track B).** Source tree at
-`references/vmbro_vcf_operations_vcommunity/Management Pack/`. It is *source*
+`reference/references/vmbro_vcf_operations_vcommunity/Management Pack/`. It is *source*
 (not a built pak): `content/` with `alertdefs/ customgroups/ dashboards/
 files/ policies/ recommendations/ reports/ resources/ supermetrics/
 symptomdefs/ traversalspecs/`. Two structural differences from our output

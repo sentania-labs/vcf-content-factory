@@ -48,6 +48,6 @@ properties. Live object queries may miss unpolled metrics. Pull
 describe data via Suite API during recon.
 
 ### Recon must check describe cache
-Searching only `docs/vcf9/metrics-properties.md` misses keys in live
+Searching only `reference/docs/vcf9/metrics-properties.md` misses keys in live
 adapter describe. Grep both `metrics-properties.md` AND
 `context/adapter_describe_cache/<ADAPTER>/<ResourceKind>.json`.

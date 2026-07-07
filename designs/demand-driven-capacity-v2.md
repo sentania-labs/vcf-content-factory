@@ -145,7 +145,7 @@ the datacenter, view the stats, scan right to see the explanation".)
   Overcommit Ratio", `default_monitored: true`). Found in
   `context/adapter_describe_cache/VMWARE/ClusterComputeResource.json:1409`.
   Initial recon missed it because the markdown extract at
-  `docs/vcf9/metrics-properties.md` doesn't list it; user push-back
+  `reference/docs/vcf9/metrics-properties.md` doesn't list it; user push-back
   ("what about CPU|Current Overcommit ratio?") corrected the omission.
   No super metric needed.
 - **Thresholds**: yellow 4.0 / orange 6.0 / red 8.0, descending range

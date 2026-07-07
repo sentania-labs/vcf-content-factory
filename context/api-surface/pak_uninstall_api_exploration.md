@@ -47,7 +47,7 @@ against.** Any wrapper around `mainAction=remove` must check
 ## Test fixture
 
 - **Pak used**: `Broadcom Security Advisories-1.0.1.6.pak` from
-  `references/dalehassinger_unlocking_the_potential/.../Security-Advisories/`.
+  `reference/references/dalehassinger_unlocking_the_potential/.../Security-Advisories/`.
   22 MB, unsigned (requires `ignoreSignatureChecking=true`), registers
   adapter kind `mpb_broadcom_security_advisories`.
 - **Why**: Broadcom-authored, polls public security-advisory API only,

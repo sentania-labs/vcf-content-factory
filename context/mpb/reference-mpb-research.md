@@ -557,7 +557,7 @@ that MPB creates. The describe.xml document defines the adapter's object model
 
 ### API Workflow for Adapter Instance Lifecycle
 
-From `docs/vcf9/suite-api.md`, the documented workflow for configuring an
+From `reference/docs/vcf9/suite-api.md`, the documented workflow for configuring an
 adapter instance:
 
 1. **`GET /api/solutions`** — find the installed solution and its adapter kind keys
@@ -587,21 +587,21 @@ adapter instance:
 
 ### What exists
 
-- `docs/vcf9/suite-api.md` — Documents adapter instance configuration
+- `reference/docs/vcf9/suite-api.md` — Documents adapter instance configuration
   workflow with examples (vCenter adapter). Covers solutions, adapter kinds,
   resource kinds, adapter instances, monitoring state.
-- `docs/vcf9/policies.md` — Mentions management packs in context of policy
+- `reference/docs/vcf9/policies.md` — Mentions management packs in context of policy
   overrides for specific adapter solutions.
-- `docs/vcf9/metrics-properties.md` — References adapter instances in context
+- `reference/docs/vcf9/metrics-properties.md` — References adapter instances in context
   of collection intervals and metric availability.
-- `docs/vcf9/dashboards.md` — References "Management Packs Configuration"
+- `reference/docs/vcf9/dashboards.md` — References "Management Packs Configuration"
   page for adapter-specific XML config files.
-- `docs/vcf9/alerts-actions.md` — References management pack adapters in
+- `reference/docs/vcf9/alerts-actions.md` — References management pack adapters in
   symptom definitions.
 
 ### What's missing
 
-- **No dedicated MPB documentation** in `docs/vcf9/`. The VCF 9.0 docs cover
+- **No dedicated MPB documentation** in `reference/docs/vcf9/`. The VCF 9.0 docs cover
   adapter instance management but not the Management Pack Builder tool itself.
 - **No describe.xml schema reference.** The internal API mentions describe.xml
   but the full schema (resource kinds, stat keys, property keys) is not
@@ -611,7 +611,7 @@ adapter instance:
   lifecycle (create/update/delete) is not covered.
 - **No `.pak` file format specification.** The manifest schema, required
   scripts, and content structure are only inferable from the reference examples.
-- **The VCF 9.0 PDF (`docs/vmware-cloud-foundation-9-0.pdf`) is 8285 pages
+- **The VCF 9.0 PDF (`reference/docs/vmware-cloud-foundation-9-0.pdf`) is 8285 pages
   and too large for text extraction.** It likely contains MPB documentation
   but cannot be searched with current tooling.
 

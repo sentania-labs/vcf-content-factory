@@ -6,7 +6,7 @@ VMWARE-owned resources (Datastore / VirtualMachine), and what does that imply
 for our creds-free, Cloud-Proxy-safe Synology / Oracle Tier-2 SDK adapters?
 
 **Method:** `unzip` + `javap -p -c` (bytecode, not just class topology) on 8
-priority paks from `references/tvs/` — PureStorage FlashArray 4.3.0 (the
+priority paks from `reference/references/tvs/` — PureStorage FlashArray 4.3.0 (the
 spec's "direct Synology template"), Dell EMC Isilon 4.3.2, Dell EMC VNX Block
 4.1.0, NetApp E-Series 6.1.0, HPE Nimble 5.2.0, NetApp FAS-AFF 4.3.0, Oracle
 Database 9.1.0 — plus MSSQL 4.0.0 and MongoDB 4.0.0 for DB-adapter contrast.
