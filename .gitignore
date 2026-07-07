@@ -33,7 +33,7 @@ vcfops_managementpacks/adapter_runtime/
 vcfops_managementpacks/adapter_runtime.stubs.bak/
 
 # Local clones of external reference sources (see context/reference_sources.md)
-references/
+/references/
 
 # SDK adapter paks are independently-versioned repos cloned here by
 # scripts/bootstrap_managed_paks.sh (see context/managed_paks.md). They are
