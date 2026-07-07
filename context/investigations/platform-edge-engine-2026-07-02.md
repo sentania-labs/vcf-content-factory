@@ -12,13 +12,13 @@ devel-appliance counterpart to a parallel Oracle-live/prod-CP autopsy
 owned by another agent. **Nothing here touches prod.** All platform
 bytecode was read on the devel appliance
 (`vcf-lab-operations-devel.int.sentania.net`, key-based root SSH,
-read-only); all vendor-pak bytecode was read from local `references/tvs/`
+read-only); all vendor-pak bytecode was read from local `reference/references/tvs/`
 copies. No config changed anywhere (not even log levels). No lab objects
 created.
 
 **Method:** `scp` five platform jars off devel to scratchpad; local
 `javap -p -c` (bytecode, JDK 17). Vendor paks unpacked from
-`references/tvs/` to scratchpad; `javap -c` on `aria-ops-core-7.1.0.jar`
+`reference/references/tvs/` to scratchpad; `javap -c` on `aria-ops-core-7.1.0.jar`
 and the Nimble collector. Jars read:
 
 | jar (devel path `/usr/lib/vmware-vcops/common/lib/`) | role |
@@ -275,9 +275,9 @@ through `RelationshipManager`.
 
 ## Q2 — Pure / storage degraded path (bytecode-quoted failure branch)
 
-Source: `references/tvs/PureStorageFlashArray-4.3.0_…pak` →
+Source: `reference/references/tvs/PureStorageFlashArray-4.3.0_…pak` →
 `aria-ops-core-7.1.0.jar`; and
-`references/tvs/HPENimble-5.2.0_…pak` → `nimblestorage_adapter3.jar`.
+`reference/references/tvs/HPENimble-5.2.0_…pak` → `nimblestorage_adapter3.jar`.
 
 ### The lookup (aria-ops-core `ResourceDtoClient.getResources(RelationshipInfo, String)`)
 

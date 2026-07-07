@@ -34,7 +34,7 @@ from .loader import (
 
 # Stable per-adapter-kind prefix used in `resourceKindId` fields inside
 # dashboard widget configs. Harvested from reference bundles under
-# `references/` — the value is the same on every Ops instance for a
+# `reference/references/` — the value is the same on every Ops instance for a
 # given adapter. Extend as new adapter kinds get pinned; there is no
 # API to derive these at runtime (checked /api/adapterkinds and
 # /api/adapterkinds/*/resourcekinds; no numeric id is exposed).
@@ -1342,7 +1342,7 @@ def _property_list_widget(
       observed across 47 live + 67 reference samples.
     - Uses ``showMetricFullName: {"metricFullName": <bool>}`` (inner key is
       ``metricFullName``, not ``showMetricFullName`` — verified from reference
-      exports in ``references/vmbro_vcf_operations_vcommunity/``).
+      exports in ``reference/references/vmbro_vcf_operations_vcommunity/``).
     - ``relationshipMode`` is a plain integer ``0``, not wrapped in an object
       (verified from reference samples).
     - String properties use ``isStringMetric: true`` on their metric entries;
@@ -1394,7 +1394,7 @@ def _resource_relationship_advanced_widget(
 
     ``depth`` is a ``"<up>,<down>"`` string (e.g. ``"0,2"`` or ``"2,1"``).
 
-    Wire format reference: references/vmbro_vcf_operations_vcommunity/
+    Wire format reference: reference/references/vmbro_vcf_operations_vcommunity/
     Management Pack/content/dashboards/vSphere Resource Management.json
     and VM Performance 2.0.json.
     """

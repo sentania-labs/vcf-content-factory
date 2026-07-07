@@ -147,7 +147,7 @@ instance pin.
 
 A misspelled metric key is accepted at import time and produces no
 data forever. Always ground keys against the live `/statkeys`
-endpoint or `docs/vcf9/metrics-properties.md`.
+endpoint or `reference/docs/vcf9/metrics-properties.md`.
 
 ### 5. metric= accepts both metrics and properties
 

@@ -8,7 +8,7 @@ datastore's friendly name?
 **Method:** `unzip` of each pak → `adapters.zip` → adapter jar + DP jar
 + `aria-ops-core-7.1.0.jar`; `javap -p -c` bytecode disassembly of the
 relationship engine and each vendor's stitch config. Extraction to
-scratchpad only; `references/` untouched (git clean, verified); no live
+scratchpad only; `reference/references/` untouched (git clean, verified); no live
 calls (the live Oracle evidence is already captured in
 `context/investigations/recon_log.md` / prior maps). Builds on
 `tvs-cross-mp-stitching.md` (jar layer) and `tvs-declarative-stitching.md`

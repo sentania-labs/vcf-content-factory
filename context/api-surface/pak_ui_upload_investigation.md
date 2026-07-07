@@ -11,7 +11,7 @@ forbidden further live probes until he authorizes the next one).
 **Scope constraint honored.** This investigation consulted only
 static sources: repo docs, prior `context/*.md` exploration logs,
 the `vcfops_managementpacks/installer.py` source, and the three
-reference clones under `references/` that contain UI-relevant JS.
+reference clones under `reference/references/` that contain UI-relevant JS.
 No requests were made against the live instance.
 
 ## Executive summary (what we can and cannot conclude statically)

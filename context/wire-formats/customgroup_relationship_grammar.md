@@ -133,7 +133,7 @@ rule engine walks.
    local/shared) and 0 otherwise. The formula would traverse from
    VM to its datastores via the DSL's relationship functions
    (`${adapterkind=VMWARE&resourcekind=Datastore&..}` child
-   syntax — needs confirmation in `docs/vcf9/` DSL reference),
+   syntax — needs confirmation in `reference/docs/vcf9/` DSL reference),
    grab `config|backing_type` or equivalent, and emit a boolean.
    Then the custom group uses a `propertyConditionRules` /
    `statConditionRules` condition on that super metric: no

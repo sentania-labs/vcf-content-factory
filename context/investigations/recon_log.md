@@ -411,10 +411,10 @@ Returns nothing. Repo currently has zero dashboards, views, or supermetrics. Con
 
 ### Q4 — Reference Sources
 
-**`references/AriaOperationsContent/`** — No SQL/Oracle/DPA-themed bundle directories found.
+**`reference/references/AriaOperationsContent/`** — No SQL/Oracle/DPA-themed bundle directories found.
 All bundles are vSphere-centric (VM Encryption, Rightsize, License, Portgroup). Zero match.
 
-**`references/brockpeterson_operations_dashboards/`** — MATCH (HIGH VALUE):
+**`reference/references/brockpeterson_operations_dashboards/`** — MATCH (HIGH VALUE):
 `Legacy MSSQL Dashboards.zip` contains 7 dashboard JSONs:
   - `MS-SQL-DBA-Overview.json` — 13 widgets; ResourceList picker (SqlServer instances), scalar
     tiles for `buffer|buffer_cache_hit_ratio`, `general|sql_version`, `mac_addrs|mac_addr`,
@@ -438,10 +438,10 @@ All bundles are vSphere-centric (VM Encryption, Rightsize, License, Portgroup). 
   describe cache and may be from an older adapter version. Usable as layout/wiring templates.
   Attribution: `brockpeterson/operations_dashboards/Legacy MSSQL Dashboards.zip`.
 
-**`references/tkopton_aria_operations_content/`** — No SQL/Oracle/DPA content found.
+**`reference/references/tkopton_aria_operations_content/`** — No SQL/Oracle/DPA content found.
 All bundles are vSphere, NSX, energy, sustainability themes. Zero match.
 
-**`references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/`** — No SQL/Oracle
+**`reference/references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/`** — No SQL/Oracle
 dashboards in Dashboards/ or Views/. Management-Packs/ contains FastAPI, ServiceNow, GitHub,
 vCommunity MPs — none database-related. Zero match.
 
@@ -755,24 +755,24 @@ Both returned HTTP 200, Content-Type: application/json, no auth required (public
 
 | File | Bytes | info.title | info.version | openapi | paths |
 |------|-------|------------|--------------|---------|-------|
-| `docs/operations-api-9.1.json` | 2,834,482 | VMware Cloud Foundation Operations API | (empty) | 3.0.1 | 343 |
-| `docs/internal-api-9.1.json` | 1,832,807 | VMware Cloud Foundation Operations API | (empty) | 3.0.1 | 217 |
+| `reference/docs/operations-api-9.1.json` | 2,834,482 | VMware Cloud Foundation Operations API | (empty) | 3.0.1 | 343 |
+| `reference/docs/internal-api-9.1.json` | 1,832,807 | VMware Cloud Foundation Operations API | (empty) | 3.0.1 | 217 |
 
 Both specs contain only the `/suite-api` relative server URL — no host, no credentials.
 Secret scan (token/password patterns): clean.
 
 ### Comparison to 9.0 baseline
 
-- `docs/operations-api.json` (9.0.x baseline): 250 paths
-- `docs/operations-api-9.1.json` (9.1): **343 paths** (+93)
-- `docs/internal-api.json` (9.0.x baseline): paths not recorded at time of capture
-- `docs/internal-api-9.1.json` (9.1): **217 paths**
+- `reference/docs/operations-api.json` (9.0.x baseline): 250 paths
+- `reference/docs/operations-api-9.1.json` (9.1): **343 paths** (+93)
+- `reference/docs/internal-api.json` (9.0.x baseline): paths not recorded at time of capture
+- `reference/docs/internal-api-9.1.json` (9.1): **217 paths**
 
 ### vSphere Data API
 
 Not served by this instance. `swagger-configs` lists only two specs (public + internal).
 Candidates under `/suite-api/doc/openapi/v3/vsphere*` all returned 404. No 9.1 fetch possible
-from PROD. The existing `docs/vsphere-data-api-openapi.json` (8820 bytes, format is not plain JSON
+from PROD. The existing `reference/docs/vsphere-data-api-openapi.json` (8820 bytes, format is not plain JSON
 — parse error, may be YAML or truncated) remains the only reference.
 
 ---
@@ -3416,7 +3416,7 @@ on that VM, not a signal about the Oracle stitch or the VMWARE adapter's freshne
 ### 4. Fresh vs. stale determination — **FRESH**
 
 **No API surface exposes a per-relationship-edge "last updated" timestamp.**
-Confirmed against the OpenAPI spec (`docs/operations-api.json`,
+Confirmed against the OpenAPI spec (`reference/docs/operations-api.json`,
 `#/components/schemas/resource-relation`): the `GET .../relationships` response only
 carries `creationTime` on the *related resource* (when that resource was first
 discovered), not on the edge itself. **This is an API GAP** — flagging per the ops-recon
@@ -3460,7 +3460,7 @@ Proxy signals used instead, all pointing the same direction:
   don't change the overall verdict.
 - **TOOLSET GAP:** Suite API has no endpoint that returns a relationship edge's own
   last-modified/last-discovery timestamp (verified against
-  `#/components/schemas/resource-relation` in `docs/operations-api.json`). Freshness
+  `#/components/schemas/resource-relation` in `reference/docs/operations-api.json`). Freshness
   above is INFERRED from adapter collection state + resource creation-time correlation,
   not read directly off an edge timestamp.
 

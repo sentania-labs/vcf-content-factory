@@ -15,7 +15,7 @@ else.
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:
-- `docs/vcf9/alerts-actions.md` (alert reference)
+- `reference/docs/vcf9/alerts-actions.md` (alert reference)
 - existing `content/alerts/*.yaml` and `content/symptoms/*.yaml` (idiom)
 
 ## Interview discipline — infer, don't interview

@@ -215,8 +215,8 @@ will follow the same path depends on questions in the Open Questions section.
   - Any known Suite API or Internal API DELETE call
 
 - **No DELETE endpoint** for adapter kinds exists in either:
-  - Public API (`docs/operations-api.json`)
-  - Internal API (`docs/internal-api.json`)
+  - Public API (`reference/docs/operations-api.json`)
+  - Internal API (`reference/docs/internal-api.json`)
 
   The adapter kinds appear to be persisted to disk (likely in the Cassandra
   datastore or a flat-file registry) and survive all runtime resets. This

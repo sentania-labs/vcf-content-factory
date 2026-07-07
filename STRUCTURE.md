@@ -39,13 +39,14 @@ not the axis that matters — RULE-010 protects *immutability*.
 | `.github/` | CI workflows. Cannot move. |
 | `diagrams/` | Authored diagrams (excalidraw etc.). |
 
-## Directories — vendor / third-party, immutable (never edit; RULE-010)
+## Directories — vendor / third-party, immutable (never edit; RULE-010/RULE-016)
 
 | Path | What it is |
 |---|---|
-| `docs/` | Vendor source material (VCF Ops API docs, extracts). Read-only. Corrections/digests go in `context/` and cite the source path. |
-| `references/` | Known-good external example repos + reference paks. Bootstrap-fetched via `context/reference_sources.md`; some items (e.g. `references/tvs/` Broadcom paks) are local-only downloads — anything *cited* must be committed or registry-fetchable. |
-| `third_party/` | Redistributed third-party content items (content-adjacent, shipped by us, authored by others — attribution required). |
+| `reference/` | The immutable root — everything under it is externally authored and read-only (RULE-016). Additions allowed, modifications never. |
+| `reference/docs/` | Vendor source material (VCF Ops API docs, extracts — verbatim extracts go under `reference/docs/extracted/`, RULE-017). Corrections/digests go in `context/` and cite the source path. |
+| `reference/references/` | Known-good external example repos + reference paks. Gitignored; bootstrap-fetched via `context/reference_sources.md`; some items (e.g. `reference/references/tvs/` Broadcom paks) are local-only downloads — anything *cited* must be committed or registry-fetchable (RULE-015). |
+| `third_party/` | Redistributed third-party content items — deliberately **not** under `reference/`: it is content-adjacent (shipped by us, machine-routed by `vcfops_packaging`'s release builder), authored by others, attribution required. |
 
 ## Local state (gitignored; never travels, never in context/)
 
@@ -64,7 +65,7 @@ stubs are retained only until links to them are audited out.
 
 ## Rules of thumb
 
-- If you corrected it, it belongs in `rules/`, `lessons/`, or `context/` — never in `docs/`/`references/`.
+- If you corrected it, it belongs in `rules/`, `lessons/`, or `context/` — never under `reference/`.
 - If it's cited by path anywhere in the corpus, it must be committed or deterministically re-fetchable.
 - If it's local-only, it lives in `memory/` or a scratch dir — never in `context/`.
 - Knowledge precedence when things conflict: `rules/` > `lessons/` > `context/` (see CLAUDE.md).

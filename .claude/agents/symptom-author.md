@@ -14,8 +14,8 @@ You are `symptom-author`. You write symptom definition YAML under
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:
-- `docs/vcf9/alerts-actions.md` (symptom reference)
-- `docs/vcf9/metrics-properties.md` (metric vocabulary)
+- `reference/docs/vcf9/alerts-actions.md` (symptom reference)
+- `reference/docs/vcf9/metrics-properties.md` (metric vocabulary)
 - existing `content/symptoms/*.yaml` (idiom)
 
 ## Interview discipline — infer, don't interview

@@ -124,7 +124,7 @@ class TestSymptomOperatorTranslation:
     def test_operator_matches_reference_verbatim(self):
         """The NOT_EQ output must match the vCommunity reference symptomdef exactly.
 
-        Reference: references/vmbro_vcf_operations_vcommunity/Management Pack/
+        Reference: reference/references/vmbro_vcf_operations_vcommunity/Management Pack/
                    content/symptomdefs/Windows Service Down Symptom.xml
           <Condition ... operator="!=" ... value="Running" valueType="string"/>
         """
@@ -251,7 +251,7 @@ class TestSMJsonIncludesModificationTime:
         """Key order should place resourceKinds first, modificationTime second.
 
         Matches reference:
-          references/vmbro_vcf_operations_vcommunity/.../supermetrics/*.json
+          reference/references/vmbro_vcf_operations_vcommunity/.../supermetrics/*.json
           which opens each object with resourceKinds, modificationTime, name, ...
         This is cosmetic (JSON order has no semantic meaning) but confirms
         the emit code was updated in the right place.

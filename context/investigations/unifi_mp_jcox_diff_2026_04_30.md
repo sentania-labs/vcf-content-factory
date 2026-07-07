@@ -1,7 +1,7 @@
 # UniFi MP — factory v1 vs jcox-au reference diff
 
 Comparison of `tmp/unifi_v1.json` (factory render, 2026-04-30) against
-`references/jcox-au_vmware/unifi_MP_Builder_Design.json` (community
+`reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json` (community
 reference, untouched during design/authoring per Phase 1.5 calibration
 discipline).
 
@@ -157,7 +157,7 @@ v2 roadmap conversation.
 ## Diff metadata
 
 - Render: `tmp/unifi_v1.json` (185,536 bytes, 2026-04-30)
-- Reference: `references/jcox-au_vmware/unifi_MP_Builder_Design.json`
+- Reference: `reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json`
 - Compared by: orchestrator (post-render diff stage)
 - Calibration discipline: jcox reference NOT consulted during
   design or authoring; opened only at this diff stage

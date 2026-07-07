@@ -64,7 +64,7 @@ A good codification entry has all of:
    zero data" is information; "doesn't work" is not.
 4. **A pointer back to the source of truth** if there is one
    (DSL doc section, OpenAPI path, an export specimen under
-   `references/`).
+   `reference/references/`).
 
 Bad codification is just a war story. Good codification is a rule
 the next session can apply without re-reading the war story.

@@ -111,7 +111,7 @@ the hunk.
   ones especially (`heatmap-empty-groupby-crashes-renderer.md`,
   `pak-content-localization-bundles.md`, `content-root-is-content-dir.md`,
   `unifi-metric-key-parity.md`). Cite the relevant one in a finding.
-- `references/` — known-good reference packs. The ground truth a renderer
+- `reference/references/` — known-good reference packs. The ground truth a renderer
   change must still match (e.g. "80+ reference views use plain
   `displayName`, no `localizationKey`").
 - `tests/` + the `vcfops_* validate` chain — the executable contracts you

@@ -2,16 +2,19 @@
 
 The directory map for the VCF Content Factory. Read this on demand
 when you need to know where something lives or where something new
-should go.
+should go. `STRUCTURE.md` (repo root) is the authoritative two-axis
+map (authorship × mutability); this file is the deeper per-package
+detail.
 
-## Top-level directories
+## Top-level
 
 ```
-docs/                        OpenAPI specs + extracted VCF 9 markdown; PDFs gitignored
 ADMIN.md                     Human-facing concept walkthrough
 CLAUDE.md                    Orchestrator rules (always loaded)
 README.md                    Project intro
 ROADMAP.md                   What's done / in progress / next
+STRUCTURE.md                 Authoritative directory map
+reference/                   Immutable external material (RULE-016) — see Knowledge below
 ```
 
 ## Python packages
@@ -48,15 +51,17 @@ vcfops_<type>/
 Authored content. Each directory has its own author agent.
 
 ```
-supermetrics/                Super metric YAML
-customgroups/                Custom group YAML
-views/                       List view YAML
-dashboards/                  Dashboard YAML
-symptoms/                    Symptom definition YAML
-alerts/                      Alert definition YAML
-recommendations/             Remediation recommendation YAML
-reports/                     Report definition YAML
-managementpacks/             Management pack YAML (MPB builder input)
+content/
+  supermetrics/              Super metric YAML
+  customgroups/              Custom group YAML
+  views/                     List view YAML
+  dashboards/                Dashboard YAML
+  symptoms/                  Symptom definition YAML
+  alerts/                    Alert definition YAML
+  recommendations/           Remediation recommendation YAML
+  reports/                   Report definition YAML
+  managementpacks/           Management pack YAML (MPB builder input)
+  sdk-adapters/              Tier 2 SDK adapter repos (gitignored; bootstrap-cloned)
 ```
 
 ## Distribution
@@ -74,11 +79,13 @@ context/                     Topical background — read on demand
   README.md                  Index of context files
   rules_*.md                 Hard-won operational rules by category
   *.md                       Topical references (wire formats, API surface, etc.)
-docs/                        Source-of-truth references
-  vcf9/                      Extracted VCF 9 documentation markdown
-  operations-api.json        Public Suite API OpenAPI spec
-  internal-api.json          Internal (unsupported) API OpenAPI spec
-references/                  Allowlisted external reference clones (gitignored;
+reference/                   Immutable external material (RULE-016; never edit)
+  docs/                      Vendor source-of-truth references
+    vcf9/                    Extracted VCF 9 documentation markdown
+    extracted/               Verbatim vendor extracts (RULE-017)
+    operations-api.json      Public Suite API OpenAPI spec
+    internal-api.json        Internal (unsupported) API OpenAPI spec
+  references/                Allowlisted external reference clones (gitignored;
                              populate via scripts/bootstrap_references.sh)
 ```
 

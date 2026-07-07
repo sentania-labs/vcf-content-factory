@@ -457,7 +457,7 @@ Cross-reference from a group instance:
 ## Pre-install dashboard JSON quirks (local reverse-port)
 
 The original `VCFOperationsvCommunity` MP source files (under
-`references/vmbro_vcf_operations_vcommunity/`) are **pre-install** — they
+`reference/references/vmbro_vcf_operations_vcommunity/`) are **pre-install** — they
 have not been processed by the VCF Ops content-import pipeline.  Several
 fields that the pipeline normalises are present in their raw form and differ
 from live content-zip exports:
@@ -510,7 +510,7 @@ dashboards reports PARTIAL with a clear explanation.
 
 ## PropertyList widget (dashboard JSON)
 
-Source: `references/vmbro_vcf_operations_vcommunity/Management Pack/content/dashboards/ESXi Host Details Dashboard.json`, `VM Details.json`.
+Source: `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/dashboards/ESXi Host Details Dashboard.json`, `VM Details.json`.
 
 ```json
 {
@@ -544,7 +544,7 @@ Source: `references/vmbro_vcf_operations_vcommunity/Management Pack/content/dash
 
 ## ResourceRelationshipAdvanced widget (dashboard JSON)
 
-Source: `references/vmbro_vcf_operations_vcommunity/Management Pack/content/dashboards/vSphere Resource Management.json`, `VM Performance 2.0.json`.
+Source: `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/dashboards/vSphere Resource Management.json`, `VM Performance 2.0.json`.
 
 ```json
 {

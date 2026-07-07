@@ -17,7 +17,7 @@ designed for the MPB UI import action. This file was rendered from
 MPB UI.
 
 The MPB import endpoint is **entirely undocumented** -- it appears in
-neither `docs/internal-api.json` nor `docs/operations-api.json`. All
+neither `reference/docs/internal-api.json` nor `reference/docs/operations-api.json`. All
 knowledge comes from empirical probing documented in
 `context/mpb_api_surface.md`.
 
@@ -235,8 +235,8 @@ Priority order:
 |---|---|
 | `/tmp/vsphere_storage_paths_design.json` | The failing factory-rendered export |
 | `context/mpb_wire_reference/synology_nas_working_export.json` | Known-working pak-embedded export (NOT MPB UI format) |
-| `references/jcox-au_vmware/unifi_MP_Builder_Design.json` | Known-working genuine MPB UI export |
-| `references/jcox-au_vmware/phpipam_MP_Builder_Design.json` | Known-working genuine MPB UI export |
-| `references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json` | Known-working genuine MPB UI export |
+| `reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json` | Known-working genuine MPB UI export |
+| `reference/references/jcox-au_vmware/phpipam_MP_Builder_Design.json` | Known-working genuine MPB UI export |
+| `reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json` | Known-working genuine MPB UI export |
 | `context/mpb_import_diff_unifi_2026_05_07.md` | Prior investigation (UniFi import failure) |
 | `context/mpb_api_surface.md` | Empirically confirmed MPB API surface |

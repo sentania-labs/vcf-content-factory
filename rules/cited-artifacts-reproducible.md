@@ -22,7 +22,7 @@ Consequences:
   be redistributed or re-fetched (licensing), the citing document must
   say so explicitly ("local-only artifact; not reproducible — findings
   summarized here in full").
-- Known standing exception to fix or annotate: `references/tvs/`
+- Known standing exception to fix or annotate: `reference/references/tvs/`
   (Broadcom TVS paks — manual downloads, cited by
   `context/api-maps/tvs-*.md` and used as pak-compare references).
   Any new citation of a TVS pak must carry the local-only disclaimer
@@ -33,6 +33,6 @@ Consequences:
 Origin: the top-level reorg review of 2026-07-06 (working from the
 ops-PM fresh-eyes review, `context/reviews/pm-feedback-2026-06-29.md`,
 whose open hole #1 was exactly this class of citation), confirmed live
-the same day when `references/tvs/` paks were load-bearing for a design
+the same day when `reference/references/tvs/` paks were load-bearing for a design
 decision (switch-port naming convention) while absent from every fetch
 registry.

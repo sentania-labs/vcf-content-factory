@@ -83,7 +83,7 @@ connection-param set and compliance's, not anything new this build introduced.
 The author claims there is **no schema-valid way** to attach help text to a
 connection identifier/credential field, so the tooltips were dropped (not
 re-expressed). I verified this against the canonical schema
-(`references/vmbro_vcf_operations_vcommunity/Management Pack/conf/describeSchema.xsd`):
+(`reference/references/vmbro_vcf_operations_vcommunity/Management Pack/conf/describeSchema.xsd`):
 
 - `ResourceIdentifierType` (line 318): `<xs:sequence>` permits **only**
   `<enum>` (minOccurs=0, maxOccurs=unbounded). Attributes: `dispOrder`, `key`,

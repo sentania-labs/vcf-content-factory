@@ -13,9 +13,9 @@ STRIP RULE POLICY (codified 2026-05-14 after audit of e135142 over-strip pattern
 
     Ground-truth references (treat as authoritative — if a field appears in ANY of
     these, it is NOT forbidden by MPB):
-      1. references/jcox-au_vmware/unifi_MP_Builder_Design.json  ← primary
+      1. reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json  ← primary
       2. tmp/reference_paks/Ubiquiti_UniFi-1.0.0.7_MP_Builder_Design.json
-      3. references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json
+      3. reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json
 
     When adding a NEW strip rule: record the positive evidence inline as a comment.
     Do not add new strip rules on the basis of absence-in-one-sample alone.

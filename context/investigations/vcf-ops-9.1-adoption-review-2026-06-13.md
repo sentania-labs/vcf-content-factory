@@ -11,15 +11,15 @@ adoption. **NOT a hard cutover off 9.0.x** (9.0.x is still supported).
 - **HTML what's-new** (curated delta index):
   `https://techdocs.broadcom.com/us/en/vmware-cis/vcf/vcf-9-0-and-later/9-1/release-notes/vmware-cloud-foundation-9-1-0-0-release-notes/what-s-new/whats-new-vcf-ops.html`
 - **VCF 9.1 release-notes landing**: build `25377994`, release date 12 May 2026.
-- **Committed prod OpenAPI specs** (`docs/operations-api-9.1.json` public 343
-  paths, `docs/internal-api-9.1.json` internal 217 paths): fetched read-only
+- **Committed prod OpenAPI specs** (`reference/docs/operations-api-9.1.json` public 343
+  paths, `reference/docs/internal-api-9.1.json` internal 217 paths): fetched read-only
   from the prod instance, confirmed **VCF Operations 9.1.0.0, build `25435105`**
   via `/suite-api/api/versions/current`. This is a different 9.1.0.0 patch build
   than the GA what's-new's `25377994` — both are 9.1.0.0; the specs reflect the
   actual prod instance, the right ground truth for prod-accurate authoring. **All
   spec-based claims below are reconciled against these committed files** (this
   supersedes any PDF prose where they conflict — e.g. `receiverAddress`).
-- **VCF 9.1 PDF** `docs/vmware-cloud-foundation-9-1.pdf` (9,279 pp),
+- **VCF 9.1 PDF** `reference/docs/vmware-cloud-foundation-9-1.pdf` (9,279 pp),
   extracted to `/tmp/vcf91.txt` (687,364 lines). Cited as `PDF:<line>`
   (pdftotext line numbers, stable for this extract; the PDF prints a
   page footer near each cited block — e.g. the API contract block prints
@@ -44,7 +44,7 @@ Where a claim cannot be confirmed from what was obtained, it is marked
    factory's render-export/push-design loop can drive, or whether it's UI-only.
 
 2. **Two VCF Operations Suite-API contract changes — both non-breaking**
-   (`PDF:31476`, reconciled against the committed `docs/operations-api-9.1.json`).
+   (`PDF:31476`, reconciled against the committed `reference/docs/operations-api-9.1.json`).
    (a) `POST /suite-api/api/alertplugins/{pluginId}/test` gains a
    `receiverAddress` parameter — but the spec declares it **`required: false`**
    (default `""`), so the PDF's "must supply" prose overstates it: it is
@@ -99,7 +99,7 @@ Where a claim cannot be confirmed from what was obtained, it is marked
 **Bottom line:** The factory's core content-definition schemas (super metrics,
 views, dashboards, custom groups, symptoms, alerts, reports) show **no breaking
 property changes** in 9.1 — checked property-by-property against the committed
-9.1 OpenAPI spec (`docs/operations-api-9.1.json`), not just the doc TOC: no
+9.1 OpenAPI spec (`reference/docs/operations-api-9.1.json`), not just the doc TOC: no
 properties added or removed on `symptom-definition`, `alert-definition`,
 `recommendation`, or `report-definition`, so **no forced content rewrite**. Two
 caveats keep this from being "no delta at all": (1) 9.1 **deprecates**
@@ -122,7 +122,7 @@ the existing `/suite-api/api/versions/current` anchor.
   gains a `receiverAddress` request parameter. The PDF prose says "Test-alert
   workflows must be updated to supply this address" (`PDF:31476`) — **but the
   committed 9.1 spec declares it `required: false` with default `""`**
-  (`docs/operations-api-9.1.json`, the `receiverAddress` parameter). So it is
+  (`reference/docs/operations-api-9.1.json`, the `receiverAddress` parameter). So it is
   **optional and email-plugin-specific**, not a blanket requirement; the PDF
   prose overstates it. Nothing deleted/deprecated.
 - **Factory relevance:** Low. The factory authors alert *definitions*; it does

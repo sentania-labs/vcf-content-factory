@@ -71,8 +71,8 @@ in `context/mpb_api_surface.md`):
 | `POST` | `/internal/mpbuilder/designs/{id}/install` | Triggers pak build + install. Body params silently ignored; query-string params silently ignored. No knob exposed. |
 | `POST` | `/internal/mpbuilder/designs/{id}/jobs` (`COLLECTION_PREVIEW`) | Returns inferred attributes from a live source response. Not key-related. |
 
-OpenAPI coverage check: `docs/internal-api.json` and
-`docs/operations-api.json` contain **zero** matches for
+OpenAPI coverage check: `reference/docs/internal-api.json` and
+`reference/docs/operations-api.json` contain **zero** matches for
 `mpbuilder`. The `/internal/mpbuilder/*` namespace is undocumented
 in shipped specs. No `preserveKey`, `useExplicitKey`,
 `keyDerivation`, `metricKey`, `derivedKey`, or `deriveKey` strings

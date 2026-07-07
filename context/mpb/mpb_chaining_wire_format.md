@@ -17,7 +17,7 @@ MPB UI after Scott hand-built a chained request. Captured at
 (`"Volumes by Pool"`) is the only chained request.
 
 **Cross-validation.**
-`references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
+`reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
 (29 requests, 5 with non-null `chainingSettings`). Rubrik provides the
 ground-truth LIST-object-with-chained-secondary-metricSet example that is
 missing from Scott's Synology capture.
@@ -471,5 +471,5 @@ exact surface is mp-designer's call.
   — Broadcom's UI narrative for MPB chaining.
 - Captured evidence: `/tmp/mpb_chain_export/Synology DSM MP.json`
   (request index 9, parent request index 4).
-- Cross-validation: `references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
+- Cross-validation: `reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
   (requests 14, 15, 17, 18, 19).

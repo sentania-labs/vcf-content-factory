@@ -10,8 +10,8 @@ endpoints require the unsupported header:
 Missing header → 404. Wrong header → same. Treat this entire
 namespace as `/internal/*` per CLAUDE.md §7.
 
-**OpenAPI coverage**: neither `docs/internal-api.json` nor
-`docs/operations-api.json` documents any of this. The MPB API is
+**OpenAPI coverage**: neither `reference/docs/internal-api.json` nor
+`reference/docs/operations-api.json` documents any of this. The MPB API is
 undocumented in the shipped specs. Everything below is empirically
 confirmed on `vcf-lab-operations-devel.int.sentania.net` on
 2026-04-17.

@@ -1,7 +1,7 @@
 """Tests for bundled_content.reports emit path in sdk_builder.py.
 
 Layout confirmed from the vCommunity reference pak:
-  references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/
+  reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/
   - Report XMLs are FLAT files directly in content/reports/ (no subdirectory).
   - Each file: <Content><Reports><ReportDef ...>...</ReportDef></Reports></Content>
   - No separate resources/content.properties per report (unlike views).

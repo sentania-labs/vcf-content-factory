@@ -73,7 +73,7 @@ byte-size match in the rebuilt pak).
 Authority: `context/cleanroom-spec/spec/18-pak-content-bundle.md` §9
 (`content/files/solutionconfig/`) and the canonical `content/` tree (lines
 56-88), plus the ground-truth reference pak
-`references/vmbro_vcf_operations_vcommunity/Management Pack/content/files/`.
+`reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/files/`.
 
 - Emitted layout `content/files/solutionconfig/<name>.xml` matches spec §9 and
   the reference pak exactly.

@@ -267,7 +267,7 @@ Management-Packs/GitHub/GitHub-MP-Builder.json`
 - MPB 2.0 is a separate OVA (~2 GB), deploys to vCenter, static IP
 - Default creds: admin/admin (change on first login)
 - MPB 2.0 is NOT an in-place upgrade from 1.x — fresh deploy only
-- Full docs in `docs/vmware-cloud-foundation-9-0.pdf` (8285 pages)
+- Full docs in `reference/docs/vmware-cloud-foundation-9-0.pdf` (8285 pages)
 
 ### Minimum Viable MP — API Calls
 
@@ -376,8 +376,8 @@ directly.
 
 ## References
 
-- `docs/Synology_File_Station_API_Guide.pdf` — File Station API (60 pages)
-- `docs/vmware-cloud-foundation-9-0.pdf` — VCF 9 docs incl. MP Builder (8285 pages)
+- `reference/docs/Synology_File_Station_API_Guide.pdf` — File Station API (60 pages)
+- `reference/docs/vmware-cloud-foundation-9-0.pdf` — VCF 9 docs incl. MP Builder (8285 pages)
 - [synology-api Python library](https://github.com/N4S4/synology-api) — community wrapper, 300+ APIs
 - [kwent/syno definitions](https://github.com/kwent/syno/tree/master/definitions) — extracted DSM API schema files
 - `/usr/syno/synoman/webapi/*.lib` — authoritative API definitions on-NAS (178 files)

@@ -4,17 +4,17 @@
 - **Our authored YAML** — `managementpacks/synology_dsm.yaml` (aspirational, Phase 3
   output; 7 object types, 7 relationships, 9 events, full metric coverage)
 - **Existing MP JSON** (authoritative wire format, build 8, working on instance) —
-  `references/sentania_aria_operations_dsm_mp/Management Pack JSON/Synology DSM MP.json`
+  `reference/references/sentania_aria_operations_dsm_mp/Management Pack JSON/Synology DSM MP.json`
 - **Postman collection** (API-exploration artifact) —
-  `references/sentania_aria_operations_dsm_mp/API Exploration/Synology.postman_collection.json`
+  `reference/references/sentania_aria_operations_dsm_mp/API Exploration/Synology.postman_collection.json`
 - **Research baseline** — `context/mpb/reference-mpb-research.md`
 - **Our loader schema** — `vcfops_managementpacks/loader.py`
 
 **Cross-check reference MPs used**
-- Rubrik — `references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
+- Rubrik — `reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
   (the only reference MP with events AND relationships populated)
 - FastAPI, GitHub, Security Advisories — Dale Hassinger's
-  `references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/Management-Packs/`
+  `reference/references/dalehassinger_unlocking_the_potential/VMware-Aria-Operations/Management-Packs/`
 
 Existing MP top-level totals: **9 requests, 4 object types, 1 relationship, 0
 events, 0 content**. Our YAML plans: **9 top-level requests (de-duplicated count

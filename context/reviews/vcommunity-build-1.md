@@ -4,7 +4,7 @@
 - **Build reviewed:** 1 (`vcfcf_sdk_vcommunity.1.0.0.1.pak`)
 - **Reviewer:** `sdk-adapter-reviewer`
 - **Design:** `designs/managementpacks/vcommunity-sdk.md` (APPROVED)
-- **Ground truth:** `references/vmbro_vcf_operations_vcommunity/Management Pack/` (Python source)
+- **Ground truth:** `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/` (Python source)
 - **Reference impl:** `content/sdk-adapters/compliance/`
 - **Verdict:** **APPROVE** (zero BLOCKING)
 - **Findings:** 0 BLOCKING / 1 WARNING / 3 NIT

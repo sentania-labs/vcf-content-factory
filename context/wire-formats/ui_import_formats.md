@@ -18,7 +18,7 @@ test envelopes, POSTing them, and reading back the resulting state.
 
 **There is no per-object REST import endpoint for dashboards, views,
 reports, symptoms, alerts, or recommendations.** Confirmed by
-grepping both `docs/operations-api.json` and `docs/internal-api.json`
+grepping both `reference/docs/operations-api.json` and `reference/docs/internal-api.json`
 for multipart/form-data POST endpoints. The only content-zip surface
 is:
 
@@ -115,7 +115,7 @@ wrong and may confuse admins who inspect the inner JSON.
 
 ### Dashboard.zip community wire shape (reference-compatible)
 
-From `references/AriaOperationsContent/*` dashboard zips:
+From `reference/references/AriaOperationsContent/*` dashboard zips:
 
 ```
 Dashboard-<name>.zip
@@ -134,7 +134,7 @@ changes needed beyond keeping the nil UUID swap.
 
 ### Reports drop-in shape
 
-From `references/brockpeterson_operations_reports/*.zip`:
+From `reference/references/brockpeterson_operations_reports/*.zip`:
 
 Two community conventions exist:
 

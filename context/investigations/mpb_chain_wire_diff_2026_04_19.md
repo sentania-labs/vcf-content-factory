@@ -6,7 +6,7 @@ render-export output against known-good HoL-2501-12 Module 5
 chainingSettings wire format we have access to.
 
 ## Artifacts
-- Reference (good): `references/hol-2501-lab-files/HOL-2501-12/Module 5/GitLab-Basic.json`
+- Reference (good): `reference/references/hol-2501-lab-files/HOL-2501-12/Module 5/GitLab-Basic.json`
   chained request: `getBranches` → `getProjects`.
 - Ours (INVALID): `managementpacks/synology_dsm_chain1.yaml`
   chained request: `volume_util` → `get_volumes`.

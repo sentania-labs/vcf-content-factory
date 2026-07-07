@@ -12,12 +12,12 @@
   - `context/exports/working_views.xml` — prior lab export, 4828
     lines, 928 views' worth. Contains one hand-crafted view that
     happens to exercise `PERCENTILE`, `AVG`, and `TRANSFORM_EXPRESSION`.
-  - `references/brockpeterson_operations_dashboards/*.zip` — extracted
+  - `reference/references/brockpeterson_operations_dashboards/*.zip` — extracted
     to `/tmp/view_research/extracted_views/` during investigation.
     Three bundles examined: `Cluster Capacity Details v6.1`,
     `ESXi Host Capacity Details v6`, `VM Details v4.2` (from the VM
     Rightsizing Details v5 distribution), plus Environment Capacity v2.
-  - `references/AriaOperationsContent/**/*.zip` — extracted to
+  - `reference/references/AriaOperationsContent/**/*.zip` — extracted to
     `/tmp/view_research/aria_extracted/`. The
     `[Custom] Performance Datastore` view is a particularly rich
     threshold example.

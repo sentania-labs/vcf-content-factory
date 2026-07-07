@@ -60,7 +60,7 @@ to VCF Ops idioms where DPA's exact widget type doesn't translate.
    is slow, not just that the instance is."
 
 3. **Reference dashboards exist but are stale.**
-   `references/brockpeterson_operations_dashboards/Legacy MSSQL Dashboards.zip`
+   `reference/references/brockpeterson_operations_dashboards/Legacy MSSQL Dashboards.zip`
    (extracted to `/tmp/mssql_ref/mssql_extracted/`) has a useful
    layout/interaction pattern reference, especially
    `MS-SQL-DBA-Overview.json` and `MS-SQL-Query-Analysis.json`. Several

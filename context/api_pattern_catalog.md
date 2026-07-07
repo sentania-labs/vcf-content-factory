@@ -109,7 +109,7 @@ wall by construction.
 
 ### Reference
 
-- `references/vmbro_vcf_operations_hardware_vcommunity/` — Onur's
+- `reference/references/vmbro_vcf_operations_hardware_vcommunity/` — Onur's
   Python adapter, canonical hardware-MP design for this API shape.
 - `context/lessons_dell_redfish_2026_05_18.md` — full empirical
   writeup of what fails and why.
@@ -171,7 +171,7 @@ the gap blocks everything.
 
 ### Reference
 
-- `references/sentania_aria_operations_dsm_mp/` — sentania's
+- `reference/references/sentania_aria_operations_dsm_mp/` — sentania's
   Synology DSM MPB design as starting point. 4 object types, 9
   requests, 1 declared relationship in current state.
 
@@ -224,7 +224,7 @@ relationships work out of the box without any extraction tricks.
 
 ### Reference
 
-- `references/jcox-au_vmware/unifi_MP_Builder_Design.json` —
+- `reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json` —
   working MPB-authored design with 3 functional relationships.
   Canonical reference for `field_match` relationship authoring.
 

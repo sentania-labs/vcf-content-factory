@@ -336,7 +336,7 @@ verbatim from the prod original."
 **Why this is the suspect, with mechanism:** there is **no precedent anywhere in
 the corpus** for the `<int>.description` convention — no reference/VMware
 describe bundle uses it (grep of all `*.properties` under
-`references/`, `context/`, `docs/` returned zero hits), and the cleanroom
+`reference/references/`, `context/`, `reference/docs/` returned zero hits), and the cleanroom
 describe spec documents help/description text via a `<Description nameKey="N"/>`
 child element pointing at *its own integer key* (e.g. recommendations,
 spec/02a-describe-xsd-canonical.md:187, spec/08:265) — **not** via a dotted

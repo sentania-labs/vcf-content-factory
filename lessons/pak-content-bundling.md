@@ -160,7 +160,7 @@ resource that will always exist when the owning adapter is installed
 - NSX-T pak: `/storage/db/casa/pak/dist_pak_files/VA_LINUX/NSXTAdapter-*.pak`
 - vSphere pak: `/storage/db/casa/pak/dist_pak_files/VA_LINUX/VMwarevSphere-*.pak`
 - vSAN pak: `/storage/db/casa/pak/dist_pak_files/VA_LINUX/ManagementPackforStorageAreaNetwork-*.pak`
-- vCommunity: `references/vmbro_vcf_operations_vcommunity/Management Pack/content/`
+- vCommunity: `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/`
 - VCFAutomation (devel): `vault/workspaces/vcf-mp-cleanroom/inputs/from-devel/paks/VCFAutomation-*.pak`
 - AppOSUCP (devel): `vault/workspaces/vcf-mp-cleanroom/inputs/from-devel/paks/AppOSUCPAdapter-*.pak`
 - VrAdapter (devel): `vault/workspaces/vcf-mp-cleanroom/inputs/from-devel/paks/VrAdapter-*.pak`

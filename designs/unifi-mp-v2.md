@@ -15,7 +15,7 @@ rule). v1's object model, grammar, and framework-vs-target review are
 re-derived here against current substrate.
 
 **Calibration discipline.** The community-authored
-`references/jcox-au_vmware/unifi_MP_Builder_Design.json` is the post-render
+`reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json` is the post-render
 diff anchor and was **not** consulted during this design pass.
 
 **Target MP filename:** `content/managementpacks/unifi_network.yaml`

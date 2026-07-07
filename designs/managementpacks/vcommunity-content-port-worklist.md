@@ -4,7 +4,7 @@ Inventory of the original `VCFOperationsvCommunity` MP content, captured
 for the `vcfcf_vcommunity` SDK pak parity port. Read-only design capture —
 no content authored here.
 
-**Source tree:** `references/vmbro_vcf_operations_vcommunity/Management Pack/content/`
+**Source tree:** `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/`
 **Source MP:** "VCF Operations vCommunity" (Onur Yuzseven, Broadcom) —
 `resources/resources.properties` is the only localization bundle; it carries
 `DISPLAY_NAME` / `DESCRIPTION` / `VENDOR` strings only (no per-object label

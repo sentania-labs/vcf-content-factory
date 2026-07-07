@@ -69,7 +69,7 @@ sibling; meta-structures (`bundles/`, `releases/`) at top-level too:
   decomposition would erase that signal.
 - **Top-level is uncluttered but explicit.** Four content-related
   directories at root, each with a single job. Framework
-  infrastructure (`vcfops_*/`, `docs/`, `context/`, `designs/`,
+  infrastructure (`vcfops_*/`, `reference/docs/`, `context/`, `designs/`,
   `scripts/`, `tests/`, etc.) sits alongside.
 - **Symmetric type subdirs WHERE the structure repeats.** Inside
   `content/` and inside any `third_party/<project>/`, the type words

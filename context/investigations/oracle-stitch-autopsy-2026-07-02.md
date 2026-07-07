@@ -8,9 +8,9 @@ Database pak create its `oracle_database_oracle_database_instance "FREE"`
 that mechanism transfer to a Synology `VMWARE::Datastore` stitch?
 
 **Method:** (1) Static `unzip` + `javap -p -c` on
-`references/tvs/OracleDatabase-9.1.0_b20240520.165914.pak` (contrast:
+`reference/references/tvs/OracleDatabase-9.1.0_b20240520.165914.pak` (contrast:
 `OracleDatabase-7.0_3.0.0_b20200917.104035.pak`), scratchpad only,
-`references/` untouched. (2) Live read-only Suite API dump on prod primary
+`reference/references/` untouched. (2) Live read-only Suite API dump on prod primary
 `172.27.8.41`. (3) Live on prod CP `172.27.8.51` (collector, instance
 `664864`): **one permitted write** — a scoped DEBUG logger added to
 `.../conf/collector/log4j2.properties`, recorded, then removed (md5
@@ -341,7 +341,7 @@ not exist; Oracle reads.
   returning the level to `rootLogger WARN`.
 - **No resources created/modified/deleted** on either node. Suite API
   calls were read-only (`token/acquire`, GET resources/relationships/
-  properties). Scratchpad extraction only; `references/` untouched.
+  properties). Scratchpad extraction only; `reference/references/` untouched.
 - **Clean-up verified: yes.**
 
 ## Flags / limits

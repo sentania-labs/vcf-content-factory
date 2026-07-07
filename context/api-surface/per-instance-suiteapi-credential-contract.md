@@ -28,7 +28,7 @@ bytecode quote`, or explicitly labeled **INFERENCE**.
 Jars (`vcfops_managementpacks/adapter_runtime/`): `aria-ops-core-8.0.0.jar`,
 `vrops-adapters-sdk-2.2.jar`, `alive_platform.jar`, `alive_common.jar`;
 plus `aria-ops-core-7.1.1.jar` extracted from
-`references/tvs/OracleDatabase-9.1.0…pak` for version contrast. Tool:
+`reference/references/tvs/OracleDatabase-9.1.0…pak` for version contrast. Tool:
 `javap -p -c` / `-p`. Scratchpad-only extraction; **no lab objects
 created, nothing to clean up.**
 

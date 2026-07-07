@@ -32,7 +32,7 @@ Example: `[VCF Content Factory] Cluster - Avg Powered-On VM CPU Usage (%)`
 ## Never fabricate
 
 - **Metric keys**: Must be grounded in existing YAML,
-  `docs/vcf9/metrics-properties.md`, recon results, or a key the
+  `reference/docs/vcf9/metrics-properties.md`, recon results, or a key the
   user provided.
 - **Property keys**: Same grounding requirement.
 - **Attribute names**: Same.
@@ -126,7 +126,7 @@ Use names in YAML, never raw UUIDs:
 
 ## Source of truth
 
-This repo's `docs/` directory: DSL references, OpenAPI specs,
+This repo's `reference/docs/` directory: DSL references, OpenAPI specs,
 extracted markdown. Plus existing YAML under `content/supermetrics/`,
 `content/views/`, `content/dashboards/`, `content/customgroups/`,
 `content/symptoms/`, `content/alerts/`, `content/reports/`.

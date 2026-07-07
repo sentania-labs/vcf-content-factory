@@ -63,7 +63,7 @@ the README.
 
 1. **Recon** — query the live Ops instance. Does this exist?
    Is there a built-in? Can we adapt existing content?
-2. **Reuse check** — scan references/ and existing repo content.
+2. **Reuse check** — scan reference/references/ and existing repo content.
    Adapt-and-import beats authoring from scratch.
 3. **Design** — for MPs: interview, API map, object model, tier
    routing. For content: clarify intent, capture in designs/.

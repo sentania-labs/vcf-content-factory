@@ -18,7 +18,7 @@ Before writing YAML, pin down:
    `(adapterKind, resourceKind)` selector. VirtualMachine/VMWARE,
    Datastore/VMWARE, HostSystem/VMWARE, etc. Must come from a
    real adapter, never invented. Grep existing specimens or
-   `docs/vcf9/metrics-properties.md` if unsure.
+   `reference/docs/vcf9/metrics-properties.md` if unsure.
 3. **Rule semantics** — within one rule group, all condition
    rules are AND'd. Across rule groups in `rules[]`, results are
    OR'd (union). If the user says "VMs that match A AND B", one

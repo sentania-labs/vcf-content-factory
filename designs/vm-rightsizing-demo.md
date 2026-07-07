@@ -29,7 +29,7 @@
 | Name prefix | `[VCF Content Factory]` on both view and dashboard | Factory identity convention per `project_naming_convention.md` |
 | Dashboard folder | `VCF Content Factory` | Factory default per `feedback_dashboard_pin_and_sharing.md` |
 | Sharing | shared=true | Default for factory dashboards |
-| Recon | Skip live (lab in stuck state) | Offline recon only: repo YAML + `docs/vcf9/metrics-properties.md` for built-in metric keys |
+| Recon | Skip live (lab in stuck state) | Offline recon only: repo YAML + `reference/docs/vcf9/metrics-properties.md` for built-in metric keys |
 
 ## Dashboard Mockup
 

@@ -28,8 +28,8 @@ Also read on every invocation:
 - `context/authoring/supermetric_authoring.md` (step-by-step
   request→YAML, loader rules, and pitfalls incl. the cross-SM
   one-cycle lag)
-- `docs/vcf9/supermetrics.md` (DSL reference — most authoritative)
-- `docs/vcf9/metrics-properties.md` (metric key vocabulary)
+- `reference/docs/vcf9/supermetrics.md` (DSL reference — most authoritative)
+- `reference/docs/vcf9/metrics-properties.md` (metric key vocabulary)
 - existing files under `content/supermetrics/` (idiom)
 
 ## Interview discipline — infer, don't interview

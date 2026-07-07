@@ -25,7 +25,7 @@ You are `mp-author`. You write management pack YAML under
   primary input).
 - `context/api-maps/<target>.md` — the API map (for JSON path
   resolution).
-- `references/` — existing MP examples for patterns.
+- `reference/references/` — existing MP examples for patterns.
 - existing `content/managementpacks/*.yaml` — follow established idiom.
 
 ## Hard rules

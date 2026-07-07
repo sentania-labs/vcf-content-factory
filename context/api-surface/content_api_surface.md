@@ -1,13 +1,13 @@
 # VCF Ops content-management API surface
 
-A map of what exists on the public API (`docs/operations-api.json`),
-the internal API (`docs/internal-api.json`), and the content
+A map of what exists on the public API (`reference/docs/operations-api.json`),
+the internal API (`reference/docs/internal-api.json`), and the content
 import/export zip mechanism.
 
 ## Two specs ship with Ops
 
-- `docs/operations-api.json` — the supported public contract.
-- `docs/internal-api.json` — `/internal/...` endpoints, require the
+- `reference/docs/operations-api.json` — the supported public contract.
+- `reference/docs/internal-api.json` — `/internal/...` endpoints, require the
   `X-Ops-API-use-unsupported: true` header. Broadcom reserves the
   right to change these without notice.
 

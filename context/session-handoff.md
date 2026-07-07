@@ -32,11 +32,11 @@ parked on a credential/log blocker only Scott can clear.
   parallel), **SDK build-from-source docs** (#15), **Fleet self-provider**
   (#14), **Ford-quote removal** (#13).
 - **9.1 update bundle** (#22): `context/investigations/vcf-ops-9.1-adoption-review-2026-06-13.md`
-  + prod 9.1 OpenAPI specs `docs/operations-api-9.1.json` (343 paths) /
-  `docs/internal-api-9.1.json` (217), saved version-suffixed beside the
+  + prod 9.1 OpenAPI specs `reference/docs/operations-api-9.1.json` (343 paths) /
+  `reference/docs/internal-api-9.1.json` (217), saved version-suffixed beside the
   9.0.x baselines. Prod confirmed 9.1.0.0 build 25435105.
 - **Curation pass + mechanical fixes** (#21) and **doc-hygiene** (#23):
-  fixed corrupt `docs/vsphere-data-api-openapi.json` (missing `}`, invalid
+  fixed corrupt `reference/docs/vsphere-data-api-openapi.json` (missing `}`, invalid
   since first commit), de-staled `tier2_architecture.md`, codified
   `lessons/no-volatile-status-in-reference-docs.md`.
 
@@ -79,7 +79,7 @@ parked on a credential/log blocker only Scott can clear.
   (`symptom-definition.realtimeMonitoringEnabled`). `setRelationships`
   scoping + SSL-TOFU: **9.1 UNVERIFIED** (docs silent — lessons' residual
   flags stay correct). FIPS on-by-default-can't-disable is the 9.1 landmine.
-- **VCF 9.1 PDF** at `docs/vmware-cloud-foundation-9-1.pdf` (178MB, 9279pp,
+- **VCF 9.1 PDF** at `reference/docs/vmware-cloud-foundation-9-1.pdf` (178MB, 9279pp,
   gitignored); pdftotext extract recipe in the 9.1 review doc.
 
 ## Working-tree state (uncommitted, deliberately left)

@@ -65,7 +65,7 @@ Scope clarification turns (2026-06-10):
 
 - Native **Tier 2 Java SDK** rewrite of
   `vmbro/VCF-Operations-vCommunity` (Onur Yuzseven, CC-licensed,
-  mirrored at `references/vmbro_vcf_operations_vcommunity/`). The
+  mirrored at `reference/references/vmbro_vcf_operations_vcommunity/`). The
   whole point is killing the Python Integration SDK's
   Docker-on-Cloud-Proxy runtime; the adapter runs natively in the
   collector like the compliance adapter does.

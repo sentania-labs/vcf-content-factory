@@ -7,7 +7,7 @@ Empirically verified against lab VCF Ops on 2026-04-08 using super metric
 `PUT /internal/supermetrics/assign/default` which has the same body and
 no query params.
 
-## Spec ground truth (`docs/internal-api.json`)
+## Spec ground truth (`reference/docs/internal-api.json`)
 
 - Path: `/internal/supermetrics/assign`
 - Method: `PUT`

@@ -3,7 +3,7 @@
 - **Date:** 2026-06-22
 - **Mode:** DIAGNOSIS ONLY (read-only; no Java edited, no build, no install)
 - **Adapter:** `content/sdk-adapters/vcommunity` (`vcfcf_vcommunity` build 1.0.0.9)
-- **Original:** `references/vmbro_vcf_operations_vcommunity/Management Pack/`
+- **Original:** `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/`
 - **Symptom:** all 3 Windows VMs pass the gate; `windows_service_list: 0 check(s)`,
   OsInfoRow null, zero service rows. No fault logged.
 

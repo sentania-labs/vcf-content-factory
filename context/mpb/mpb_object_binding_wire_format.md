@@ -19,7 +19,7 @@ factory-rendered `tmp/synology_rendered_v2.json` (Synology MP). 18
 distinct objectBinding shapes were uploaded, the server's stored form
 read back, and the per-section status errors compared. All test
 designs were deleted after observation. Cross-referenced against
-`references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
+`reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
 (authoritative third-party MPB pack with non-null bindings) and
 `context/mpb_wire_reference/synology_nas_working_export.json` (known-
 working community Synology pack — zero objectBindings).
@@ -595,10 +595,10 @@ schema or post-load validator covers MP designs):
 - [`context/mpb_chaining_wire_format.md`](./mpb_chaining_wire_format.md) — sibling reference for `chainingSettings`. §6 + §7 overlap with §3 of this doc.
 - [`context/mpb_synology_import_diff_2026_04_29.md`](./mpb_synology_import_diff_2026_04_29.md) — static diff that surfaced the original "type stripped to null" symptom.
 - [`context/mpb_wire_reference/synology_nas_working_export.json`](./mpb_wire_reference/synology_nas_working_export.json) — community-known-working Synology export. Zero `objectBinding` blocks.
-- `references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json` — Rubrik MP, only third-party MPB design with non-null `objectBinding` blocks. All bindings are stitching to Aria-native VirtualMachine.
-- `references/jcox-au_vmware/unifi_MP_Builder_Design.json` — Unifi MP, ATTRIBUTE_TO_PROPERTY with `me-part: ATTRIBUTE` and `ome-part: METRIC`. Captures peer-to-peer same-object metricSet stitching by metric value (added 2026-04-29).
-- `references/jcox-au_vmware/phpipam_MP_Builder_Design.json` — phpIPAM MP, all-null bindings even on multi-list objects. Confirms null-everywhere is valid for the no-chain case (added 2026-04-29).
-- `references/vrealize_it_vsan_default_policy/vSAN default storage policy.json` — vSAN default storage policy MP, ATTRIBUTE_TO_PROPERTY with `me-part: PARAMETER` and `ome-part: ARIA_OPS_METRIC`. Confirms PARAMETER+ARIA_OPS_METRIC stitch pattern WITH companion ome (added 2026-04-29).
+- `reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json` — Rubrik MP, only third-party MPB design with non-null `objectBinding` blocks. All bindings are stitching to Aria-native VirtualMachine.
+- `reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json` — Unifi MP, ATTRIBUTE_TO_PROPERTY with `me-part: ATTRIBUTE` and `ome-part: METRIC`. Captures peer-to-peer same-object metricSet stitching by metric value (added 2026-04-29).
+- `reference/references/jcox-au_vmware/phpipam_MP_Builder_Design.json` — phpIPAM MP, all-null bindings even on multi-list objects. Confirms null-everywhere is valid for the no-chain case (added 2026-04-29).
+- `reference/references/vrealize_it_vsan_default_policy/vSAN default storage policy.json` — vSAN default storage policy MP, ATTRIBUTE_TO_PROPERTY with `me-part: PARAMETER` and `ome-part: ARIA_OPS_METRIC`. Confirms PARAMETER+ARIA_OPS_METRIC stitch pattern WITH companion ome (added 2026-04-29).
 - `tmp/objbind/probe.py`, `probe_advanced.py`, `probe_validation.py`, `probe_working.py` — empirical probes used in original 2026-04-29 round.
 - `tmp/objbind/results.jsonl`, `results_adv.jsonl` — raw probe results.
 - `tmp/objbind2/probe.py`, `probe2.py`, `results2.json` — second-round import-time probes (verify-time round, 2026-04-29).
@@ -962,7 +962,7 @@ are all MP-owned-only and do not stitch onto Aria natives.
 
 ### 11.1 The reference
 
-`references/jcox-au_vmware/unifi_MP_Builder_Design.json` — "UniFi -
+`reference/references/jcox-au_vmware/unifi_MP_Builder_Design.json` — "UniFi -
 Devices" object, ms[1] (`get-device-statistics`). This is the
 authoritative working example of a chained-secondary metricSet
 binding on an MP-owned list object. Confirmed identical shape on
