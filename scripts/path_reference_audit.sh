@@ -41,22 +41,52 @@
 #   4. A candidate immediately preceded by "e.g." on the same line is
 #      skipped — illustrative examples ("e.g., `content/managementpacks/
 #      synology_nas.yaml`") name a plausible file, not an asserted one.
-#   5. Existence is checked several ways before a candidate is declared
-#      dead, because "repo-relative" in this corpus sometimes means
-#      relative to the CITING FILE's own directory, not the repo root:
-#        a. literal path from the repo root
-#        b. same, with a `.md` or `.py` extension appended (docs drop
-#           extensions in prose; `vcfops_dashboards/render` for
-#           `vcfops_dashboards/render.py` is a real example)
-#        c. relative to the directory the citing file lives in (a
-#           `.claude/skills/<skill>/SKILL.md` citing `references/foo.md`
-#           means ITS OWN `references/` subdir, not the factory root's)
-#        d. for `docs/`, `references/`, `dashboards/`, `views/` prefixes
-#           specifically: also tried under every currently-cloned
-#           `content/sdk-adapters/<pak>/` (agent prompts describing SDK-
-#           adapter conventions use these bare names generically — e.g.
-#           `docs/README.md` and `dashboards/compliance-overview.yaml`
-#           are real inside a pak checkout, never at the factory root)
+#   5. Validity is checked per RULE-015's actual duality
+#      (rules/cited-artifacts-reproducible.md) — a citation is valid
+#      iff its target is EITHER (a) a COMMITTED path or (b) under a
+#      REGISTRY-MANAGED root. Bare filesystem existence is NOT the
+#      test — a fresh clone (no gitignored adapter/reference clones on
+#      disk) must audit identically to a fully-bootstrapped checkout.
+#        a. COMMITTED: checked via `git ls-files` (tracked FILE, or a
+#           tracked-DIRECTORY prefix match), never bare `[[ -e ... ]]`.
+#           Tried three ways, because "repo-relative" in this corpus
+#           sometimes means relative to the CITING FILE's own
+#           directory, not the repo root:
+#             i.   literal path from the repo root
+#             ii.  same, with a `.md` or `.py` extension appended (docs
+#                  drop extensions in prose; `vcfops_dashboards/render`
+#                  for `vcfops_dashboards/render.py` is a real example)
+#             iii. relative to the directory the citing file lives in
+#                  (a `.claude/skills/<skill>/SKILL.md` citing
+#                  `references/foo.md` means ITS OWN `references/`
+#                  subdir, not the factory root's)
+#        b. REGISTRY-MANAGED: `content/sdk-adapters/<name>/...` is
+#           valid iff `<name>` is a registered entry in
+#           `context/managed_paks.md`; `references/<name>/...` is
+#           valid iff `<name>` is a registered entry in
+#           `context/reference_sources.md` (its `**Local path:**`
+#           field). Both roots are gitignored clones (bootstrap-cloned
+#           by `scripts/bootstrap_managed_paks.sh` /
+#           `scripts/bootstrap_references.sh`) that may be entirely
+#           absent from disk — the registry, not the filesystem, is
+#           the source of truth. A `content/sdk-adapters/<name>` or
+#           `references/<name>` citation whose `<name>` is NOT
+#           registered is a REAL finding, reported distinctly as an
+#           "unregistered managed root" (not a generic dead reference).
+#           Standing exception: `references/tvs/` is a documented
+#           RULE-015 local-only artifact not yet in the reference
+#           registry — citations to it emit a WARNING, not a failure.
+#        c. Bonus, best-effort only (does not gate validity): for
+#           `docs/`, `dashboards/`, `views/` prefixes specifically —
+#           agent prompts describing SDK-adapter conventions use these
+#           bare names generically (e.g. `docs/README.md` and
+#           `dashboards/compliance-overview.yaml` are real inside a pak
+#           checkout, never at the factory root). Accepted whenever the
+#           managed-pak registry itself is non-empty (i.e. "an SDK
+#           adapter repo" is a real concept in this factory at all) —
+#           deliberately NOT checked against any specific locally-cloned
+#           pak, so the result never depends on which paks happen to be
+#           bootstrapped on a given checkout.
 #   6. Two-segment candidates (`A/B`) that still fail all of #5 are
 #      treated as a prose "A or B" idiom, not a path, and are NOT
 #      reported, when either:
@@ -139,7 +169,44 @@ if [[ ${#TARGET_FILES[@]} -eq 0 ]]; then
   exit 0
 fi
 
+# --- Gitignore literal patterns (parsed FIRST — feeds both the top-level
+# anchor list below and the registry-duality check further down) -----------
+# Only LITERAL (non-glob) patterns qualify; `references/` and
+# `content/sdk-adapters/` are deliberately EXCLUDED from GITIGNORE_DIR_LITERALS
+# even though they're literal directory patterns too — those two roots get
+# the stricter, registry-gated check in citation_is_valid() instead of a
+# blanket "gitignored so it's fine" pass.
+declare -A GITIGNORE_FILE_LITERALS=()
+declare -a GITIGNORE_DIR_LITERALS=()
+declare -A GITIGNORE_TOPLEVEL_ROOTS=()
+if [[ -f .gitignore ]]; then
+  while IFS= read -r line; do
+    case "${line}" in
+      ''|\#*) continue ;;
+      *'*'*|*'?'*|*'['*|'!'*) continue ;;
+    esac
+    line="${line#/}"   # leading slash anchors to repo root; same top-level segment
+    [[ -z "${line}" ]] && continue
+    GITIGNORE_TOPLEVEL_ROOTS["${line%%/*}"]=1
+    if [[ "${line}" == */ ]]; then
+      dirpat="${line%/}"
+      case "${dirpat}" in
+        references|content/sdk-adapters) continue ;;
+      esac
+      GITIGNORE_DIR_LITERALS+=("${dirpat}")
+    else
+      GITIGNORE_FILE_LITERALS["${line}"]=1
+    fi
+  done < .gitignore
+fi
+
 # --- Known top-level entries (what a path token is allowed to start with) --
+# Filesystem-discovered top-level entries UNION the first path segment of
+# every literal .gitignore pattern — the latter half is what keeps this
+# anchor list stable across environments: a purely-gitignored root like
+# `references/` (no committed file ever puts it on disk) must still anchor
+# candidate extraction on a checkout where nothing has been bootstrapped
+# yet, exactly as it does on a checkout where it's been cloned.
 declare -a TOPLEVEL=()
 while IFS= read -r -d '' f; do
   TOPLEVEL+=("${f}")
@@ -148,6 +215,12 @@ done < <(find . -maxdepth 1 -mindepth 1 ! -name '.git' -printf '%f\0')
 declare -A TOPLEVEL_SET=()
 for t in "${TOPLEVEL[@]}"; do
   TOPLEVEL_SET["${t}"]=1
+done
+for t in "${!GITIGNORE_TOPLEVEL_ROOTS[@]}"; do
+  if [[ -z "${TOPLEVEL_SET[${t}]:-}" ]]; then
+    TOPLEVEL_SET["${t}"]=1
+    TOPLEVEL+=("${t}")
+  fi
 done
 
 # Root-level FILES only (a subset of TOPLEVEL) — the whitelist for bare
@@ -171,13 +244,37 @@ for t in "${TOPLEVEL[@]}"; do
   fi
 done
 
-# Currently-cloned SDK adapter checkouts (gitignored, bootstrap-cloned —
-# see context/managed_paks.md). Used only for rule #5d.
-declare -a SDK_ADAPTER_DIRS=()
-if [[ -d content/sdk-adapters ]]; then
-  while IFS= read -r -d '' d; do
-    SDK_ADAPTER_DIRS+=("${d}")
-  done < <(find content/sdk-adapters -mindepth 1 -maxdepth 1 -type d -print0 2>/dev/null)
+# --- Registry-managed roots (RULE-015 rule #5b) ------------------------------
+# Parsed from the registries themselves — never from what's cloned on disk —
+# so a fresh, un-bootstrapped clone audits identically to a fully-cloned one.
+
+declare -A MANAGED_PAK_NAMES=()
+if [[ -f context/managed_paks.md ]]; then
+  in_comment=false
+  while IFS= read -r line; do
+    # Same HTML-comment-skipping convention as
+    # scripts/bootstrap_managed_paks.sh — the templated example entry
+    # lives inside a `<!-- ... -->` block and must not be registered.
+    if [[ "${line}" == *"<!--"* ]]; then
+      in_comment=true
+    fi
+    if ${in_comment}; then
+      [[ "${line}" == *"-->"* ]] && in_comment=false
+      continue
+    fi
+    if [[ "${line}" =~ \*\*Target:\*\*[[:space:]]+\`content/sdk-adapters/([^/\`]+)/?\` ]]; then
+      MANAGED_PAK_NAMES["${BASH_REMATCH[1]}"]=1
+    fi
+  done < context/managed_paks.md
+fi
+
+declare -A REFERENCE_SLUGS=()
+if [[ -f context/reference_sources.md ]]; then
+  while IFS= read -r line; do
+    if [[ "${line}" =~ \*\*Local[[:space:]]path:\*\*[[:space:]]+\`references/([^/\`]+)/?\` ]]; then
+      REFERENCE_SLUGS["${BASH_REMATCH[1]}"]=1
+    fi
+  done < context/reference_sources.md
 fi
 
 # --- Extraction + verification ----------------------------------------------
@@ -213,33 +310,119 @@ strip_trailing_punct() {
   printf '%s' "${p}"
 }
 
-path_exists_anywhere() {
-  # Rule #5: literal, extension-tolerant, citing-dir-relative, and
-  # sdk-adapter-relative existence check. Args: candidate, citing_file.
+is_git_tracked() {
+  # Rule #5a: COMMITTED check via `git ls-files` — never bare
+  # filesystem existence. A tracked FILE (literal, or with a `.md`/
+  # `.py` extension appended) or a tracked-DIRECTORY prefix match both
+  # count. Deterministic on any checkout regardless of local clones.
+  local p="$1"
+  git ls-files --error-unmatch -- "${p}" >/dev/null 2>&1 && return 0
+  git ls-files --error-unmatch -- "${p}.md" >/dev/null 2>&1 && return 0
+  git ls-files --error-unmatch -- "${p}.py" >/dev/null 2>&1 && return 0
+  if git ls-files -- "${p}/" 2>/dev/null | grep -q .; then
+    return 0
+  fi
+  return 1
+}
+
+# Populated by citation_is_valid() on rc 2/3 for the caller to report.
+CITATION_MSG=""
+
+citation_is_valid() {
+  # RULE-015 duality. Args: candidate, citing_file.
+  #   rc 0 -> valid, no report.
+  #   rc 1 -> invalid, normal dead-reference report (caller still runs
+  #           the prose-list heuristic first).
+  #   rc 2 -> invalid, distinct "unregistered managed root" report
+  #           (CITATION_MSG set).
+  #   rc 3 -> valid but noteworthy: emit a WARNING, not a failure
+  #           (CITATION_MSG set) — the references/tvs standing
+  #           exception.
   local cand="$1" citing_file="$2"
   local citing_dir
   citing_dir="$(dirname -- "${citing_file}")"
+  CITATION_MSG=""
 
-  local -a bases=("${REPO_ROOT}/${cand}")
-  [[ -n "${citing_dir}" && "${citing_dir}" != "." ]] && bases+=("${REPO_ROOT}/${citing_dir}/${cand}")
-
-  # Rule #5d: docs/references/dashboards/views prefixes also get tried
-  # under every currently-cloned SDK adapter checkout (same suffix).
+  # A bare mention of a top-level directory itself (no sub-path —
+  # `dist/`, `bundles/`, `references/`) names the convention/location,
+  # not a specific asset inside it — valid regardless of whether that
+  # directory is tracked, gitignored-but-currently-cloned, or a build
+  # output that doesn't exist until the build runs. (Mirrors rule #2's
+  # bare-root-FILE whitelist, extended to bare-root DIRECTORIES.)
+  local bare="${cand%/}"
+  if [[ "${bare}" != *"/"* && -n "${TOPLEVEL_SET[${bare}]:-}" ]]; then
+    return 0
+  fi
+  # Same idea for the two-segment registry root itself
+  # (`content/sdk-adapters/`, no `<name>` suffix).
   case "${cand}" in
-    docs/*|references/*|dashboards/*|views/*)
-      local d
-      for d in "${SDK_ADAPTER_DIRS[@]}"; do
-        bases+=("${REPO_ROOT}/${d}/${cand}")
-      done
+    content/sdk-adapters|content/sdk-adapters/)
+      return 0
       ;;
   esac
 
-  local b
-  for b in "${bases[@]}"; do
-    [[ -e "${b}" ]] && return 0
-    [[ -e "${b}.md" ]] && return 0
-    [[ -e "${b}.py" ]] && return 0
+  # Other known-ephemeral gitignored paths (build output, per-checkout
+  # state markers, vendor runtime jars) — literal match or nested-dir
+  # prefix match against .gitignore's own literal patterns.
+  if [[ -n "${GITIGNORE_FILE_LITERALS[${cand}]:-}" || -n "${GITIGNORE_FILE_LITERALS[${bare}]:-}" ]]; then
+    return 0
+  fi
+  local gd
+  for gd in "${GITIGNORE_DIR_LITERALS[@]}"; do
+    case "${cand}" in
+      "${gd}"|"${gd}/"*) return 0 ;;
+    esac
   done
+
+  # (a) COMMITTED.
+  if is_git_tracked "${cand}"; then
+    return 0
+  fi
+  if [[ -n "${citing_dir}" && "${citing_dir}" != "." ]] && is_git_tracked "${citing_dir}/${cand}"; then
+    return 0
+  fi
+
+  # (b) REGISTRY-MANAGED roots.
+  case "${cand}" in
+    content/sdk-adapters/?*)
+      local name="${cand#content/sdk-adapters/}"
+      name="${name%%/*}"
+      if [[ -n "${MANAGED_PAK_NAMES[${name}]:-}" ]]; then
+        return 0
+      fi
+      CITATION_MSG="unregistered managed root — \`${name}\` is not listed in context/managed_paks.md"
+      return 2
+      ;;
+    references/?*)
+      local rname="${cand#references/}"
+      rname="${rname%%/*}"
+      if [[ -n "${REFERENCE_SLUGS[${rname}]:-}" ]]; then
+        return 0
+      fi
+      if [[ "${rname}" == "tvs" ]]; then
+        CITATION_MSG="RULE-015 standing exception: references/tvs is a documented local-only artifact (rules/cited-artifacts-reproducible.md), not yet in context/reference_sources.md"
+        return 3
+      fi
+      CITATION_MSG="unregistered managed root — \`${rname}\` is not listed in context/reference_sources.md"
+      return 2
+      ;;
+  esac
+
+  # (c) Best-effort bonus only — never gates validity (see rule #5c
+  # comment above). `docs/`, `dashboards/`, `views/` bare prefixes are
+  # generic SDK-adapter-repo conventions (every pak, built from the
+  # `…-sdk-template`, generates its own `docs/README.md`,
+  # `docs/inventory-tree.md`, ships its own `dashboards/*.yaml`, etc.).
+  # Deliberately NOT verified against any specific locally-cloned pak
+  # (that would make the result depend on which paks happen to be
+  # bootstrapped on THIS checkout) — accepted whenever the managed-pak
+  # registry itself is non-empty, i.e. whenever "an SDK adapter repo"
+  # is a real concept in this factory at all.
+  case "${cand}" in
+    docs/*|dashboards/*|views/*)
+      [[ ${#MANAGED_PAK_NAMES[@]} -gt 0 ]] && return 0
+      ;;
+  esac
 
   return 1
 }
@@ -322,7 +505,7 @@ check_candidates() {
   # Args: file, line_no, raw_line, prev_line, candidates...
   local file="$1" lineno="$2" raw_line="$3" prev_line="$4"
   shift 4
-  local cand
+  local cand rc
   for cand in "$@"; do
     [[ -z "${cand}" ]] && continue
     is_placeholder "${cand}" && continue
@@ -331,7 +514,22 @@ check_candidates() {
     is_bare_non_path "${cand}" && continue
     preceded_by_example_marker "${raw_line}" "${prev_line}" "${cand}" && continue
     truncated_by_placeholder "${raw_line}" "${cand}" && continue
-    path_exists_anywhere "${cand}" "${file}" && continue
+
+    rc=0
+    citation_is_valid "${cand}" "${file}" || rc=$?
+    case "${rc}" in
+      0) continue ;;
+      3)
+        echo "WARNING: ${file}:${lineno} -> ${cand} (${CITATION_MSG})" >&2
+        continue
+        ;;
+      2)
+        echo "${file}:${lineno} -> ${cand} (${CITATION_MSG})"
+        FOUND_DEAD=1
+        continue
+        ;;
+    esac
+
     looks_like_prose_list "${cand}" && continue
     echo "${file}:${lineno} -> ${cand}"
     FOUND_DEAD=1

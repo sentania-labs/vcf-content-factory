@@ -30,7 +30,9 @@ Consequences:
 - The curator hunts violations as DEAD-REF; treat a citation that a
   fresh clone cannot resolve as a defect in the citing document.
 
-Origin: top-level reorg review 2026-07-06 (open hole #1 in
-`memory/environment/TODO-top-level-reorg.md`), confirmed live the same
-day when `references/tvs/` paks were load-bearing for a design decision
-(switch-port naming convention) while absent from every fetch registry.
+Origin: the top-level reorg review of 2026-07-06 (working from the
+ops-PM fresh-eyes review, `context/reviews/pm-feedback-2026-06-29.md`,
+whose open hole #1 was exactly this class of citation), confirmed live
+the same day when `references/tvs/` paks were load-bearing for a design
+decision (switch-port naming convention) while absent from every fetch
+registry.
