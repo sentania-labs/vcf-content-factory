@@ -160,9 +160,27 @@ jobs:
           # does not exist yet, create it.
           if gh release view "$FLOATING" --repo "${{ github.repository }}" > /dev/null 2>&1; then
             echo "Floating release ${FLOATING} exists — clobbering tarball."
+            # Upload FIRST, prune stale assets only after a successful upload:
+            # if the upload fails (network/API/runner), the release must still
+            # hold the previous working kit for sdk-buildkit-v1 consumers.
             gh release upload "$FLOATING" "$TARBALL" \
               --repo "${{ github.repository }}" \
               --clobber
+            # --clobber only replaces an asset with the SAME filename. The
+            # tarball name is version-stamped (sdk-buildkit-X.Y.Z.tgz), so
+            # prior versions' assets accumulate on the floating release and
+            # consumers that glob sdk-buildkit-*.tgz extract two files (this
+            # broke every pak repo's release CI on the 1.0.5→1.0.6 bump).
+            # Now that the new kit is up, delete every stale kit asset.
+            CURRENT="$(basename "$TARBALL")"
+            for ASSET in $(gh release view "$FLOATING" --repo "${{ github.repository }}" \
+                --json assets --jq '.assets[].name' | grep -E '^sdk-buildkit-.*\.tgz$' || true); do
+              if [ "$ASSET" != "$CURRENT" ]; then
+                echo "Deleting stale floating asset: $ASSET"
+                gh release delete-asset "$FLOATING" "$ASSET" \
+                  --repo "${{ github.repository }}" --yes
+              fi
+            done
             # Also update the release title/notes to reflect the new version.
             gh release edit "$FLOATING" \
               --repo "${{ github.repository }}" \
