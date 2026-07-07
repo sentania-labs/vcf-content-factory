@@ -69,12 +69,12 @@ ends up holding all the context.
 | `symptom-author` | Author | `content/symptoms/` | After recon confirms no existing symptom fits. |
 | `alert-author` | Author | `content/alerts/`, `content/recommendations/` | After recon, **and** required symptoms exist. |
 | `report-author` | Author | `content/reports/` | User wants a report. Blocks if upstream views missing. |
-| `api-explorer` | Research | `context/`, `reference/docs/` | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
+| `api-explorer` | Research | `context/` (findings); vendor artifacts may be *added* under `reference/docs/` (RULE-016) | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
 | `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `vcfops_*/`. |
 | `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. |
 | `content-packager` | Build | `bundles/`, `dist/` | Authors bundle manifests in `bundles/`; builds distributable zips into `dist/`. Rebuild after a tooling change. |
 | `qa-tester` | Testing | `/tmp/` | Acceptance-test a built zip. Spawn after `content-packager`. |
-| `api-cartographer` | Research | `context/api-maps/`, `reference/docs/` | New external API for an MP. |
+| `api-cartographer` | Research | `context/api-maps/` (findings); vendor artifacts may be *added* under `reference/docs/` (RULE-016) | New external API for an MP. |
 | `mp-designer` | Design | `designs/` | New MP. Wizard interview against API map. |
 | `mp-author` | Author | `content/managementpacks/` | After `mp-designer` produces approved design. **Tier 1** MPB YAML spec. |
 | `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` (each an independent repo, gitignored) | After `mp-designer` produces approved design. **Tier 2** Java SDK adapter source. The Java sibling to `mp-author`. **Only** agent that edits adapter Java. Commits go to the pak's **own** remote; a real release is a `v*` tag on that repo, not a factory `/publish`. |
@@ -212,7 +212,8 @@ Agent prompts forbid silent workarounds. When an agent returns a
 1. **Punt to the user** — trim or defer the request. Default when
    the gap is large or the fix is ambiguous.
 2. **Spawn `api-explorer`** when the gap is "we don't understand
-   the format." Output goes to `context/` or `reference/docs/`.
+   the format." Findings go to `context/`; only verbatim downloaded
+   vendor artifacts may be added under `reference/docs/` (RULE-016).
 3. **Spawn `tooling`** to make the repo change. Brief it with the
    specific gap, the working wire format, and what the loader/
    renderer needs to produce. Then re-invoke the blocked author.

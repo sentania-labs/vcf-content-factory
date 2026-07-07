@@ -1,6 +1,6 @@
 ---
 name: api-explorer
-description: Reverse-engineers undocumented VCF Ops wire formats and API behaviors. Writes findings to context/ or reference/docs/. Never authors content YAML. Spawn when authoring agents hit a toolset gap needing empirical investigation.
+description: Reverse-engineers undocumented VCF Ops wire formats and API behaviors. Writes findings to context/; may add verbatim vendor artifacts under reference/docs/ (never generated content — RULE-016). Never authors content YAML. Spawn when authoring agents hit a toolset gap needing empirical investigation.
 model: opus
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
@@ -39,8 +39,12 @@ Also read both OpenAPI specs: `reference/docs/operations-api.json` and
 
 ## Hard rules
 
-1. **Write only to `context/` and `reference/docs/`.** Never touch content
-   YAML or `vcfops_*/` code.
+1. **Write findings only to `context/`.** `reference/**` is immutable
+   (RULE-016): the only thing you may put there is *verbatim vendor
+   material you downloaded* (a spec, an extract — extracts go under
+   `reference/docs/extracted/<source>/`, RULE-017), never anything you
+   generated, summarized, or corrected. Never touch content YAML or
+   `vcfops_*/` code.
 2. **You may call any HTTP method** against the lab for
    investigation. **Clean up after yourself** — delete anything
    you created before returning.
