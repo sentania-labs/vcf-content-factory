@@ -57,11 +57,12 @@ not the axis that matters — RULE-010 protects *immutability*.
 | `dist/` | Build outputs (paks, zips). Reproducible; not tracked. |
 | `tmp/`, `scratchpad/`, `scratchpad-build/`, `scratch_pak/`, `scratch_ref/` | Session debris. Safe to delete at any time. |
 
-## Legacy stubs
+## Legacy content
 
-`dashboards/`, `views/` at top level are pre-`content/` era remnants
-(README pointers only). Authored content lives under `content/`. These
-stubs are retained only until links to them are audited out.
+The pre-`content/`-era root `dashboards/` and `views/` directories were
+removed in reorg v2 phase 0; their six historical YAMLs live in
+`context/attic/legacy-root-content/`. Authored content lives under
+`content/`.
 
 ## Layout history (why it looks like this)
 

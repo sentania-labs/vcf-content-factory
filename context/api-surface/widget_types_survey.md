@@ -137,7 +137,7 @@ selected ESXi Host"):
 A prior tooling pass incorrectly extrapolated from Heatmap's array form.
 Empirically confirmed 2026-05-21: emitting `[1, -1, 0]` for
 `relationship_mode: children` caused an Internal Server Error on dashboard
-load (MSSQL disk-latency widgets, `dashboards/mssql-query-performance.yaml`).
+load (MSSQL disk-latency widgets, `context/attic/legacy-root-content/mssql-query-performance.yaml`).
 Heatmap and AlertList accept the array form; MetricChart does not.
 Fixed in `vcfops_dashboards/render.py` `_metric_chart_widget()` — now emits
 scalar `-1` / `1` / `0`.

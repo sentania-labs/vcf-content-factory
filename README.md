@@ -27,6 +27,12 @@ you're trying to answer.
 lane you want. The full assembly-line view and the internal plumbing
 are in [HOW_IT_WORKS.md](HOW_IT_WORKS.md).*
 
+> **Just want the content, not the factory?** Ready-to-install
+> dashboards, bundles, and management packs are published at
+> [sentania-labs/vcf-content-factory-bundles](https://github.com/sentania-labs/vcf-content-factory-bundles)
+> — download a zip, run the installer, done. Everything below is for
+> people who want to *author* content.
+
 ---
 
 ## Why I care
@@ -117,10 +123,13 @@ Honest about the boundaries:
 
 Two paths:
 
-**I want to install something someone else built.** You received a
-`[VCF Content Factory] <Name>.zip`. Extract it, run `python3
-install.py` (or `.\install.ps1`), answer the prompts. Drop multiple
-zips in one directory and the installer multi-selects across them.
+**I want to install something someone else built.** Grab a zip from
+the distribution repo,
+[vcf-content-factory-bundles](https://github.com/sentania-labs/vcf-content-factory-bundles)
+(or use any `[VCF Content Factory] <Name>.zip` you were handed).
+Extract it, run `python3 install.py` (or `.\install.ps1`), answer the
+prompts. Drop multiple zips in one directory and the installer
+multi-selects across them.
 
 **I want to author something new.** Open Claude Code in this repo,
 have a conversation:
