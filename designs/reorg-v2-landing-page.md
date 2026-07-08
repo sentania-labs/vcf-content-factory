@@ -67,8 +67,18 @@ effort** — they change depth, not top-level row count.
 ## Phases (each gated: validate ×7 + full pytest + path-audit + review)
 
 ### Phase 0 — quick wins, no structural risk
-1. Delete `dashboards/` + `views/` stubs (audit inbound links first —
-   the enforcing path-audit is the net).
+1. Retire the legacy `dashboards/` + `views/` root dirs — **archive,
+   not delete** (Codex PR-38 review: these are not README-only stubs;
+   they hold five tracked pre-`content/`-era YAMLs "retained for
+   historical context", two of them live-cited from `context/`). Move
+   the YAMLs to `context/attic/legacy-root-content/` (ours-mutable,
+   no new root entry; phase 2 carries it into `knowledge/`
+   automatically), update the two citations
+   (`context/api-surface/widget_types_survey.md`,
+   `context/investigations/recon_log.md`), then delete the two root
+   dirs. Also fix STRUCTURE.md's incorrect "(README pointers only)"
+   claim about these dirs. The path-audit protects the *cited* files;
+   the archive move protects the uncited ones.
 2. Factory README top section links to `vcf-content-factory-bundles`
    ("just want the content?"); verify bundles README links back.
 3. Refresh `releases/*.yaml` metadata (dates/descriptions predate the
