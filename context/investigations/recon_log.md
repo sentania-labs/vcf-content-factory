@@ -8,7 +8,7 @@ Append-only. Each entry is a dated investigation section.
 
 **Target:** `[VCF Content Factory] MSSQL Query Performance & Blocking`
 (UUID `2679c78f-e88e-43ba-b1ae-864dbbe9c50c`), file
-`dashboards/mssql-query-performance.yaml`.
+`context/attic/legacy-root-content/mssql-query-performance.yaml`.
 **Instance:** vcf-lab-operations.int.sentania.net.
 **Symptoms:** (1) heatmap `query_heatmap` renders empty; (2) Internal
 Server Error on dashboard load.
