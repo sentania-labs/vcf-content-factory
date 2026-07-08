@@ -5,9 +5,14 @@ deprecates:
 - releases/unifi-network-integration-managementpack.yaml
 description: Monitors UniFi infrastructure via the classic Network API and Protect
   API. Discovers sites, gateways, switches, access points, NVR, and cameras. Per-switch-port
-  and per-AP-radio child objects with PoE tracking. LLDP-based stitching to ESXi hosts.
-  Replaces the Tier 1 UniFi Network and UniFi Network Integration management packs.
+  and per-AP-radio child objects with PoE tracking. Cross-MP stitching links switch
+  ports to the exact ESXi host vmnics behind them (vCenter-side LLDP join via the
+  Suite API) — clicking a host shows its physical switch ports and switch. Replaces
+  the Tier 1 UniFi Network and UniFi Network Integration management packs.
 name: unifi-controller-managementpack
-release_date: '2026-05-19'
-release_notes: ''
-version: '1.0'
+release_date: '2026-07-06'
+release_notes: 'v1.1.0.11: switchport-to-ESXi-host relationships now materialize
+  (vCenter-side LLDP join: switch system name + port matched per-vmnic), tolerant
+  of renamed ports via hardware-label aliasing, honest conflicted-port handling.
+  Verified on Cloud Proxy collector groups.'
+version: '1.1'
