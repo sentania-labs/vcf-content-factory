@@ -3,11 +3,11 @@
 This is the deeper architectural dive — for anyone considering
 forking, extending, or just curious how the agent loop is set up.
 
-![Authoring loop overview](diagrams/authoring-loop.svg)
+![Authoring loop overview](knowledge/diagrams/authoring-loop.svg)
 
 *The five-station assembly line. Start with this if you've never seen
 the factory in motion. Editable source:
-[authoring-loop.excalidraw](diagrams/authoring-loop.excalidraw).*
+[authoring-loop.excalidraw](knowledge/diagrams/authoring-loop.excalidraw).*
 
 If you're trying to use the framework, you don't need this.
 [Getting_Started.md](Getting_Started.md) is what you want.
@@ -304,12 +304,12 @@ tag — no developer machine, no agent, in the release path.
 
 ## The full picture
 
-![Framework internals](diagrams/framework-internals.svg)
+![Framework internals](knowledge/diagrams/framework-internals.svg)
 
 *All 16 specialists, their lanes, the file each writes, both build
 pipelines (Tier 1 MPB and Tier 2 native SDK), the three output paths,
 and the codification loop that closes back into the repo. Editable
-source: [framework-internals.excalidraw](diagrams/framework-internals.excalidraw).*
+source: [framework-internals.excalidraw](knowledge/diagrams/framework-internals.excalidraw).*
 
 ## What lives where in the repo
 

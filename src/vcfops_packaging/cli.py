@@ -2,7 +2,7 @@
 
 Commands:
     build   bundles/*.yaml       Build bundle into dist/<slug>.zip (flat)
-    build   releases/*.yaml      Build release into dist/<subdir>/<slug>.zip (routed)
+    build   bundles/releases/*.yaml  Build release into dist/<subdir>/<slug>.zip (routed)
     build   --all                Build all bundles/*.yaml
     build-discrete <type> <name> Build a self-contained discrete artifact zip
     validate bundles/*.yaml      Validate without building
@@ -37,7 +37,7 @@ def cmd_build(args) -> int:
 
     if args.all:
         bundles_dir = Path(DEFAULT_BUNDLES_DIR)
-        manifests = sorted(bundles_dir.rglob("*.y*ml")) if bundles_dir.exists() else []
+        manifests = sorted(bundles_dir.glob("*.y*ml")) if bundles_dir.exists() else []
         if not manifests:
             print(f"No bundle manifests found in {DEFAULT_BUNDLES_DIR}/", file=sys.stderr)
             return 1
@@ -87,13 +87,15 @@ def cmd_build(args) -> int:
 
 
 def _is_release_manifest(manifest: Path) -> bool:
-    """Return True if the manifest path lives under releases/.
+    """Return True if the manifest path lives under bundles/releases/.
 
-    Detects both relative paths like ``releases/foo.yaml`` and absolute
-    paths whose parent directory is named ``releases``.
+    Detects both relative paths like ``bundles/releases/foo.yaml`` and
+    absolute paths whose parent directory is named ``releases`` (the check
+    is by immediate parent directory name only, so it does not care how
+    deep ``releases/`` sits under the repo root).
     """
-    # Resolve to absolute so ``releases/foo.yaml`` and ``./releases/foo.yaml``
-    # both work.
+    # Resolve to absolute so ``bundles/releases/foo.yaml`` and
+    # ``./bundles/releases/foo.yaml`` both work.
     try:
         resolved = manifest.resolve()
     except Exception:
@@ -155,7 +157,7 @@ def cmd_validate(args) -> int:
     if not manifests:
         bundles_dir = Path(DEFAULT_BUNDLES_DIR)
         if bundles_dir.exists():
-            manifests = sorted(str(p) for p in bundles_dir.rglob("*.y*ml"))
+            manifests = sorted(str(p) for p in bundles_dir.glob("*.y*ml"))
         if not manifests:
             print("(no bundle manifests found)")
 
@@ -183,8 +185,8 @@ def cmd_validate(args) -> int:
             rc = 1
 
     # --- Release manifest validation ---
-    # Scan releases/ if it exists; graceful no-op if it doesn't.
-    releases_dir = Path("releases")
+    # Scan bundles/releases/ if it exists; graceful no-op if it doesn't.
+    releases_dir = Path("bundles") / "releases"
     if not releases_dir.exists():
         return rc
 
@@ -195,11 +197,11 @@ def cmd_validate(args) -> int:
     try:
         releases = load_all_releases(releases_dir, repo_root=repo_root)
     except ReleaseValidationError as e:
-        print(f"FAIL  releases/: {e}")
+        print(f"FAIL  bundles/releases/: {e}")
         return 1
 
     if not releases:
-        print("  (no release manifests found in releases/)")
+        print("  (no release manifests found in bundles/releases/)")
         return rc
 
     for r in releases:
@@ -221,7 +223,7 @@ def cmd_validate(args) -> int:
     else:
         print(f"  OK  {len(releases)} release manifest(s) valid, flag-state clean")
 
-    # --- Slug collision check: bundles/ vs releases/ ---
+    # --- Slug collision check: bundles/ vs bundles/releases/ ---
     bundles_dir = Path(DEFAULT_BUNDLES_DIR)
     collision_errors = check_bundle_release_collision(bundles_dir, releases)
     if collision_errors:
@@ -266,7 +268,7 @@ def cmd_list(args) -> int:
         print(f"No {DEFAULT_BUNDLES_DIR}/ directory found.")
         return 0
 
-    manifests = sorted(bundles_dir.rglob("*.y*ml"))
+    manifests = sorted(bundles_dir.glob("*.y*ml"))
     if not manifests:
         print(f"No bundle manifests found in {DEFAULT_BUNDLES_DIR}/")
         return 0
@@ -743,7 +745,7 @@ def cmd_release(args) -> int:
 
         # Jump directly to version/manifest computation (skip the general resolution
         # block below which does not apply to sdk-adapter).
-        releases_dir = repo_root / "releases"
+        releases_dir = repo_root / "bundles" / "releases"
         releases_dir.mkdir(parents=True, exist_ok=True)
         manifest_path = releases_dir / f"{slug}.yaml"
 
@@ -796,11 +798,11 @@ def cmd_release(args) -> int:
             dep_path = releases_dir / f"{dep_slug}.yaml"
             if not dep_path.exists():
                 print(
-                    f"ERROR: --deprecates target not found: releases/{dep_slug}.yaml",
+                    f"ERROR: --deprecates target not found: bundles/releases/{dep_slug}.yaml",
                     file=sys.stderr,
                 )
                 return 1
-            deprecates_paths.append(f"releases/{dep_slug}.yaml")
+            deprecates_paths.append(f"bundles/releases/{dep_slug}.yaml")
 
         # --- RULE-012: Defect gate for sdk-adapter (gate by pak name = dir name) ---
         from .defects import gate_pak as _gate_pak, format_defect_line as _fmt_defect
@@ -1035,7 +1037,7 @@ def cmd_release(args) -> int:
     # -----------------------------------------------------------------------
     # Compute version.
     # -----------------------------------------------------------------------
-    releases_dir = repo_root / "releases"
+    releases_dir = repo_root / "bundles" / "releases"
     releases_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = releases_dir / f"{slug}.yaml"
 
@@ -1105,11 +1107,11 @@ def cmd_release(args) -> int:
         dep_path = releases_dir / f"{dep_slug}.yaml"
         if not dep_path.exists():
             print(
-                f"ERROR: --deprecates target not found: releases/{dep_slug}.yaml",
+                f"ERROR: --deprecates target not found: bundles/releases/{dep_slug}.yaml",
                 file=sys.stderr,
             )
             return 1
-        deprecates_paths.append(f"releases/{dep_slug}.yaml")
+        deprecates_paths.append(f"bundles/releases/{dep_slug}.yaml")
 
     # -----------------------------------------------------------------------
     # RULE-012: Defect gate — refuse before writing anything on disk.
@@ -1372,7 +1374,7 @@ def build_parser() -> argparse.ArgumentParser:
         "build",
         help=(
             "build manifests into distributable zips. "
-            "releases/*.yaml -> dist/<subdir>/<slug>.zip (routed, matches /publish). "
+            "bundles/releases/*.yaml -> dist/<subdir>/<slug>.zip (routed, matches /publish). "
             "bundles/*.yaml  -> dist/<slug>.zip (flat)."
         ),
     )
@@ -1438,7 +1440,7 @@ def build_parser() -> argparse.ArgumentParser:
     pv = sub.add_parser("validate", help="validate bundle manifest(s) and release manifests")
     pv.add_argument("manifests", nargs="*",
                     help="path(s) to bundle manifest YAML files; "
-                         "omit to auto-scan bundles/ and releases/")
+                         "omit to auto-scan bundles/ and bundles/releases/")
     pv.set_defaults(func=cmd_validate)
 
     pl = sub.add_parser("list", help="list available bundle manifests")
@@ -1573,7 +1575,7 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="SLUG",
         help=(
             "slug of a prior release manifest to mark deprecated (repeatable). "
-            "Each slug must match an existing releases/<slug>.yaml file."
+            "Each slug must match an existing bundles/releases/<slug>.yaml file."
         ),
     )
     pr.add_argument(

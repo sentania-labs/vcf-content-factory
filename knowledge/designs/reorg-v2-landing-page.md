@@ -1,8 +1,17 @@
 # Reorg v2 — the landing page is the product surface
 
-**Status:** DRAFT — awaiting user review (this design IS the memo; v1's
-scope revisions lived in a gitignored local TODO and the user never saw
-them — that process defect is why this file exists as a PR).
+**Status:** EXECUTED (2026-07-09) — all four phases. Phases 0–2 merged
+(#39/#40, #41, #43 + the 7-repo defect-gate transition, PR #3→strip-PR
+in each pak repo); phase 3 executed on user go 2026-07-09 (`releases/`
+→ `bundles/releases/`, `diagrams/` → `knowledge/diagrams/`). Landing
+page 42 → 23 tracked root entries. The ~22 sketch assumed
+requirements*.txt folding into pyproject — rejected during phase 1
+(the no-install decision protecting the buildkit isolation tests), so
+23 is the deliberate floor. Follow-ups shipped: audit src/tests
+knowledge/-citation pass + migration-ownership rule (#44).
+(Originally DRAFT-as-PR #38: this design IS the memo; v1's scope
+revisions lived in a gitignored local TODO and the user never saw
+them — that process defect is why this file exists as a PR.)
 
 ## Initial prompt (verbatim)
 

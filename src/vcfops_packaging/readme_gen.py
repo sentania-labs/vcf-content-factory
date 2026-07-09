@@ -20,7 +20,7 @@ Sections supported (factory-repo content flags, original update_readme):
     customgroups           -- individually released custom groups
 
 Sections supported (release manifests, update_readme_release / Phase 3):
-    release-catalog        -- per-subdir tables generated from releases/*.yaml manifests
+    release-catalog        -- per-subdir tables generated from bundles/releases/*.yaml manifests
                              (bundles, dashboards, views, supermetrics, customgroups,
                               reports, management-packs) + retired section.
 

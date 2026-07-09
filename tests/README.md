@@ -123,8 +123,8 @@ All tests that do NOT carry `real_corpus` are designed to be fixture-isolated:
 - `test_validate_content_hook.py` builds a `tmp_path` workspace and sets
   `VCFCF_CONTENT_ROOT` so the hook subprocess resolves all `content/…` paths
   against that temp tree — the real `content/` directories are never touched.
-- No test mutates `content/`, `releases/`, or any shared repository state
-  outside of the `real_corpus` group.
+- No test mutates `content/`, `bundles/releases/`, or any shared repository
+  state outside of the `real_corpus` group.
 
 `tests/managementpacks/` and all the validator/loader unit tests are
 stateless and safe for full parallelism with `-n auto`.

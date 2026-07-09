@@ -1,5 +1,5 @@
 ---
-description: Build every release manifest under `releases/` into a zip, route artifacts to per-type subdirs in `vcf-content-factory-bundles/`, regenerate the README between AUTO markers, commit to a release branch, and open a PR (default) or push directly to main. See `knowledge/designs/release-lifecycle-v1.md` and `knowledge/designs/publish-pr-mode-v4.md`.
+description: Build every release manifest under `bundles/releases/` into a zip, route artifacts to per-type subdirs in `vcf-content-factory-bundles/`, regenerate the README between AUTO markers, commit to a release branch, and open a PR (default) or push directly to main. See `knowledge/designs/release-lifecycle-v1.md` and `knowledge/designs/publish-pr-mode-v4.md`.
 ---
 
 You are the VCF Content Factory orchestrator. The user invoked `/publish` with the following args:

@@ -6,7 +6,7 @@ distribution repo:
   1. Lockfile guard — refuse concurrent publishes.
   2. Validate factory repo — seven per-package validators + vcfops_packaging.
   3. Clean-tree check on dist repo — refuse if dirty / not on main / behind origin.
-  4. Enumerate release manifests from releases/.
+  4. Enumerate release manifests from bundles/releases/.
   5. Per-release build + copy — always build; git diff decides whether to commit.
   6. Legacy-zip sweep — delete in-place any ``<slug>-<X.Y>.zip`` that corresponds
      to a current release slug (the slug itself is now the canonical versionless
@@ -613,13 +613,13 @@ def _print_manual_pr_instructions(
 # ---------------------------------------------------------------------------
 
 def _enumerate_releases(factory_repo: Path):
-    """Load all release manifests from releases/.
+    """Load all release manifests from bundles/releases/.
 
     Returns a list of ReleaseDef objects sorted by manifest filename.
     """
     from .releases import load_all_releases
 
-    releases_dir = factory_repo / "releases"
+    releases_dir = factory_repo / "bundles" / "releases"
     if not releases_dir.exists():
         return []
 

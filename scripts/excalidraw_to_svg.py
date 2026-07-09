@@ -6,8 +6,8 @@ rectangle, ellipse, diamond, text (multi-line, font family 3 = mono),
 arrow (with end triangle), line.
 
 Usage:
-    python3 scripts/excalidraw_to_svg.py docs/diagrams/intro-flow.excalidraw
-    python3 scripts/excalidraw_to_svg.py docs/diagrams/*.excalidraw
+    python3 scripts/excalidraw_to_svg.py knowledge/diagrams/intro-flow.excalidraw
+    python3 scripts/excalidraw_to_svg.py knowledge/diagrams/*.excalidraw
 """
 
 from __future__ import annotations

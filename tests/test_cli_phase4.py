@@ -11,8 +11,8 @@ Six test groups as specified:
   T6 — publish --dry-run: cmd_publish with dry_run returns success, reports
        what it would do, and writes nothing mutating.
 
-All tests use temp directories.  The real releases/ directory is never
-written to, and the real vcf-content-factory-bundles/ is never touched.
+All tests use temp directories.  The real bundles/releases/ directory is
+never written to, and the real vcf-content-factory-bundles/ is never touched.
 """
 from __future__ import annotations
 
@@ -86,10 +86,10 @@ def _make_factory_copy(tmp_path: Path) -> Path:
     if src_content.exists():
         shutil.copytree(str(src_content), str(factory / "content"))
         # Remove any pre-existing release manifests so tests start at v1.0.
-        releases_dir = factory / "releases"
+        releases_dir = factory / "bundles" / "releases"
         if releases_dir.exists():
             shutil.rmtree(str(releases_dir))
-            releases_dir.mkdir()
+            releases_dir.mkdir(parents=True)
         # Reset released: true flags on all content subdirs so flag-flip tests
         # start clean (reports, dashboards, views, bundles, etc.).
         import yaml as _yaml
@@ -155,7 +155,7 @@ class TestReleaseSmoke:
         assert rc == 0, f"cmd_release returned {rc}"
 
         # New convention: slug = <stem>-<type> = demand-driven-capacity-v2-dashboard
-        manifest_path = factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
+        manifest_path = factory / "bundles" / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
         assert manifest_path.exists(), f"manifest not created: {manifest_path}"
 
     def test_manifest_schema(self, tmp_path, monkeypatch):
@@ -166,7 +166,7 @@ class TestReleaseSmoke:
         args = _build_release_args(no_commit=True)
         cmd_release(args)
 
-        manifest_path = factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
+        manifest_path = factory / "bundles" / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
         data = yaml.safe_load(manifest_path.read_text())
 
         assert data["name"] == "demand-driven-capacity-v2-dashboard"
@@ -205,7 +205,7 @@ class TestReleaseSmoke:
         rc = cmd_release(args)
         assert rc == 0, f"display-name resolution returned {rc}"
         # New convention slug: <stem>-dashboard
-        assert (factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml").exists()
+        assert (factory / "bundles" / "releases" / "demand-driven-capacity-v2-dashboard.yaml").exists()
 
     def test_path_resolution(self, tmp_path, monkeypatch):
         """T1: explicit relative path resolves to correct source file."""
@@ -219,7 +219,7 @@ class TestReleaseSmoke:
         )
         rc = cmd_release(args)
         assert rc == 0
-        assert (factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml").exists()
+        assert (factory / "bundles" / "releases" / "demand-driven-capacity-v2-dashboard.yaml").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -239,7 +239,7 @@ class TestAutoBump:
         args1 = _build_release_args(no_commit=True)
         rc = cmd_release(args1)
         assert rc == 0
-        manifest_path = factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
+        manifest_path = factory / "bundles" / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
         v1 = yaml.safe_load(manifest_path.read_text())["version"]
         assert v1 == "1.0", f"first release version should be 1.0, got {v1!r}"
 
@@ -259,7 +259,7 @@ class TestAutoBump:
         args = _build_release_args(version="2.0", no_commit=True)
         rc = cmd_release(args)
         assert rc == 0
-        manifest_path = factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
+        manifest_path = factory / "bundles" / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
         v = yaml.safe_load(manifest_path.read_text())["version"]
         assert v == "2.0", f"explicit version should be 2.0, got {v!r}"
 
@@ -289,7 +289,7 @@ class TestDeprecates:
 
         # Create a prior release manifest manually (so there's something to deprecate).
         prior_slug = "some-prior-slug"
-        prior_manifest = factory / "releases" / f"{prior_slug}.yaml"
+        prior_manifest = factory / "bundles" / "releases" / f"{prior_slug}.yaml"
         prior_manifest.parent.mkdir(parents=True, exist_ok=True)
         prior_manifest.write_text(yaml.dump({
             "name": prior_slug,
@@ -307,7 +307,7 @@ class TestDeprecates:
         assert rc == 0
 
         # New convention slug: demand-driven-capacity-v2-dashboard
-        manifest_path = factory / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
+        manifest_path = factory / "bundles" / "releases" / "demand-driven-capacity-v2-dashboard.yaml"
         data = yaml.safe_load(manifest_path.read_text())
         assert isinstance(data.get("deprecates"), list)
         assert any(prior_slug in d for d in data["deprecates"]), (
@@ -416,7 +416,7 @@ class TestCommit:
         )
         changed = set(r.stdout.strip().splitlines())
         # New convention slug: demand-driven-capacity-v2-dashboard
-        assert "releases/demand-driven-capacity-v2-dashboard.yaml" in changed, (
+        assert "bundles/releases/demand-driven-capacity-v2-dashboard.yaml" in changed, (
             f"manifest not in commit: {changed}"
         )
         assert "content/dashboards/demand_driven_capacity_v2.yaml" in changed, (
@@ -458,7 +458,7 @@ class TestPublishCLI:
         factory = _make_factory_copy(tmp_path)
 
         # Write a release manifest pointing at the dashboard (source must exist).
-        releases_dir = factory / "releases"
+        releases_dir = factory / "bundles" / "releases"
         releases_dir.mkdir(parents=True, exist_ok=True)
         dashboard_src = factory / "content" / "dashboards" / "demand_driven_capacity_v2.yaml"
 

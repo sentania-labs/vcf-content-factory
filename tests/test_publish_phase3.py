@@ -129,7 +129,7 @@ def _write_release_manifest(
 
 
 # ---------------------------------------------------------------------------
-# Factory repo fixture: use a temp copy of releases/ so we don't pollute
+# Factory repo fixture: use a temp copy of bundles/releases/ so we don't pollute
 # the real repo.
 # ---------------------------------------------------------------------------
 
@@ -140,10 +140,10 @@ def factory_with_release(tmp_path):
     temp directory that publish() will scan.
 
     We patch the _enumerate_releases() function to point at our temp dir
-    instead of factory_repo/releases/.  This keeps the real releases/ clean
-    (no new committed manifests).
+    instead of factory_repo/bundles/releases/.  This keeps the real
+    bundles/releases/ clean (no new committed manifests).
 
-    Alternatively: we write our temp manifest into a tmp releases/ dir,
+    Alternatively: we write our temp manifest into a tmp bundles/releases/ dir,
     then call publish() with a custom _releases_dir override via monkeypatching.
 
     Strategy: monkeypatch vcfops_packaging.publish._enumerate_releases so it
@@ -173,7 +173,7 @@ def factory_with_release(tmp_path):
 
 def _patch_enumerate(monkeypatch, releases_dir: Path):
     """Replace _enumerate_releases to read from releases_dir instead of
-    factory_repo/releases/."""
+    factory_repo/bundles/releases/."""
     from vcfops_packaging import publish as _pub
     from vcfops_packaging.releases import load_release
 
