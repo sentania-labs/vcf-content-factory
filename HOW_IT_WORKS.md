@@ -261,11 +261,14 @@ The decision framework is in
 [context/tier_decision_framework.md](context/tier_decision_framework.md).
 The default is Tier 1 unless a specific trigger forces Tier 2.
 
-Tier 2 is in production: six adapters ship from their own repos
-(`synology`, `unifi`, `compliance`, and the three `vcommunity`
-paks — registry: `context/managed_paks.md`), with sustained
-cross-MP stitching proven in prod. (Dell PowerEdge was evaluated
-and abandoned — see `lessons/dell-redfish-relationship-strategies.md`.)
+Tier 2 is in production: six adapters are registered, each in its
+own repo (`synology`, `unifi`, `compliance`, and the three
+`vcommunity` paks — registry: `context/managed_paks.md`), with
+sustained cross-MP stitching proven in prod. Releasability is per
+adapter — the defect gate (RULE-012) blocks any pak with an open
+blocking defect (e.g. `vcommunity-os` under DEF-004). (Dell
+PowerEdge was evaluated and abandoned — see
+`lessons/dell-redfish-relationship-strategies.md`.)
 
 ## Building SDK paks interactively
 
@@ -400,7 +403,7 @@ single most valuable transferable piece.
 ## Where the framework is going
 
 - **Tier 2 adapter roster growth** — six native-SDK adapters are
-  live (see `context/managed_paks.md`); each new target keeps
+  registered (see `context/managed_paks.md`); each new target keeps
   forcing the framework JAR to grow capabilities (instanced groups,
   multi-host iteration, cross-MP stitching) under real use.
 - **mp-designer interview improvements** — codified API-pattern
