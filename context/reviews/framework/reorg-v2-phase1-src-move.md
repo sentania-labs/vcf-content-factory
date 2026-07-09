@@ -61,3 +61,34 @@ No unfixed `__file__`/CWD resolution found.
 ## If shipped as-is
 
 If the index is committed without `git add pyproject.toml`, the PR ships with `pytest.ini` deleted and no pytest config tracked: local `pytest` loses the `-m "not slow"` fast-filter (runs slow tests by default), `slow`/`real_corpus` markers become unregistered, and `conftest.py`'s xdist-group reference dangles — a silent test-harness regression. Everything else in the change is correct and fully verified; the move itself is clean.
+
+---
+
+## Addendum — re-review of committed HEAD 0a0fbf0 (2026-07-08)
+
+The branch is now committed (`git diff main..HEAD` is authoritative — no working-tree ambiguity). I re-verified the incremental deltas against the three findings.
+
+**Verdict updated: APPROVE** (was CHANGES REQUESTED). All findings resolved; zero BLOCKING remaining.
+
+### BLOCKING — RESOLVED
+- `git show --stat HEAD` includes `pyproject.toml` (+90, added `A`) and `pytest.ini` (−39, deleted `D`); `git diff main..HEAD --name-status` confirms `A pyproject.toml` / `D pytest.ini`. The pytest config is intact in the committed pyproject: `[tool.pytest.ini_options]` (L51), `markers = [...]` (L69), `addopts = "-m \"not slow\""` (L90). The change is now self-consistent as committed.
+
+### WARNING 1 (`_make_isolated_env`) — RESOLVED
+- Committed helper now strips **both** `repo_root` and `repo_root/src` (`_stripped_roots = {repo_root, src_root}`, realpath-resolved so relative `"src"`, trailing slashes, and symlinks all normalize), and the docstring was rewritten to state the real defense. Empirically re-verified:
+  - ambient relative `PYTHONPATH=src`: **2 passed**
+  - absolute `PYTHONPATH=<repo>/src` (the scenario that previously tripped the canary): **2 passed** — the primary guard no longer blinds.
+  - three guard files together (`test_buildkit_isolated_build.py` + `test_defect_gate.py` + `test_publish_phase3.py`): **48 passed / 30 deselected**.
+
+### WARNING 2 (stale-zip) — CONSCIOUSLY CLOSED
+- Confirmed no `content-packager` rebuild required: `render.py` and all `templates/` are byte-identical to main (my original verification), and bundles were rebuilt fresh from source hours ago. Nothing stale can ship. Accepted.
+
+### NIT (`[project]` table) — RESOLVED
+- Committed `pyproject.toml` has **no `[project]` and no `[build-system]`** table; a header comment documents the deliberate non-installability. The setuptools-legacy-build attractive-nuisance is gone.
+
+### Re-run on committed tree (HEAD 0a0fbf0, clean)
+- validate ×7: **7/7 pass** (ambient env)
+- full pytest: **468 passed / 4 skipped / 162 deselected / 0 failed**
+- isolation guard: fails-closed under both relative and absolute PYTHONPATH (verified above)
+
+### One new observation (informational — NOT verdict-affecting, does NOT ship)
+- `pip show vcfops-content-factory` now returns `Name: vcfops-content-factory / Location: .../src / Cannot locate RECORD` on this machine. This is **not** a real install: `import vcfops_common` from a clean env (`PYTHONPATH` unset, cwd `/tmp`) still raises `ModuleNotFoundError`, and the isolation tests are genuinely green (the canary trips correctly). The `pip show` hit is stray metadata — two leftover dirs from the earlier pip experiment: `src/vcfops_content_factory.egg-info` and `src/UNKNOWN.egg-info`. Both are **untracked, covered by `.gitignore` (`*.egg-info/`), and absent from HEAD**, so they never reach a clone and have zero test/shipping impact. Recommend the coordinator `rm -rf src/*.egg-info` locally (siblings of the `build/` dir already removed) so `pip show` / future path audits aren't cosmetically misled. No action required for the PR.
