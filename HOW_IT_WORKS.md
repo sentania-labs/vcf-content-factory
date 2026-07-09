@@ -261,9 +261,11 @@ The decision framework is in
 [context/tier_decision_framework.md](context/tier_decision_framework.md).
 The default is Tier 1 unless a specific trigger forces Tier 2.
 
-Tier 2 Phase 1 is complete (framework JAR + builder + hello-world
-adapter); Synology and Dell PowerEdge are queued as the first real
-Tier 2 adapters.
+Tier 2 is in production: six adapters ship from their own repos
+(`synology`, `unifi`, `compliance`, and the three `vcommunity`
+paks — registry: `context/managed_paks.md`), with sustained
+cross-MP stitching proven in prod. (Dell PowerEdge was evaluated
+and abandoned — see `lessons/dell-redfish-relationship-strategies.md`.)
 
 ## Building SDK paks interactively
 
@@ -397,9 +399,10 @@ single most valuable transferable piece.
 
 ## Where the framework is going
 
-- **Tier 2 Phase 2: Synology + Dell PowerEdge** as the first real
-  native-SDK adapters. Forces the framework JAR to grow capabilities
-  (instanced groups, multi-host iteration) under real use.
+- **Tier 2 adapter roster growth** — six native-SDK adapters are
+  live (see `context/managed_paks.md`); each new target keeps
+  forcing the framework JAR to grow capabilities (instanced groups,
+  multi-host iteration, cross-MP stitching) under real use.
 - **mp-designer interview improvements** — codified API-pattern
   recognition (Redfish, vSphere REST, K8s, etc.) so the framework
   proposes a model immediately for any well-known shape.

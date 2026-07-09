@@ -400,8 +400,7 @@ current, not embedded in a stable reference doc (see
 `lessons/no-volatile-status-in-reference-docs.md`):
 
 - **Per-adapter build state:** the SDK reviews
-  (`context/reviews/<adapter>-build-<N>.md`) and the transient
-  `context/session-handoff.md`.
+  (`context/reviews/<adapter>-build-<N>.md`).
 - **Current (v2) design surface:** `designs/vcfcf-base-v2-adapterbase-rehome.md`
   plus the per-adapter v2 migration designs under `designs/sdk-adapters/`.
 - **Historical:** `designs/tier2-mp-architecture-plan.md` is the **v1**

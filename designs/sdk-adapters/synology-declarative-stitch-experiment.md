@@ -1,5 +1,15 @@
 # synology build 25 — declarative datastore stitch experiment (DEF-006)
 
+**CORRECTION (2026-07-09, per 2026-07-02 findings):** the premise below
+that Oracle's stitch was "zero adapter API calls" is disproven. The
+platform has NO property→edge code path; `relationships|*_parent`
+properties and TraversalSpecs never create edges. Oracle's edges come
+from a per-cycle Suite API read under the platform-injected per-instance
+credential. See `context/investigations/oracle-stitch-autopsy-2026-07-02.md`
+and `context/investigations/platform-edge-engine-2026-07-02.md`. This
+file is retained as the experiment record; its Vision premise is
+historical.
+
 ## Initial prompt (verbatim, 2026-07-02 session)
 
 > Let's scan a bunch of different paks and see how they do it.  Can we

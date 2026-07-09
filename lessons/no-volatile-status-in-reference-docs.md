@@ -28,8 +28,7 @@ rotting independently (here it also half-lived in a stale `status.md`).
 **Reference / architecture / lessons docs state durable facts only.**
 Volatile status lives in — or is derived from — the transient surfaces:
 
-- per-adapter build state → `context/reviews/<adapter>-build-<N>.md`,
-  `context/session-handoff.md`;
+- per-adapter build state → `context/reviews/<adapter>-build-<N>.md`;
 - everything else → derived from the artifacts themselves (git history,
   the actual YAML / specs, `pak-compare`), never hand-copied into a
   reference doc.
