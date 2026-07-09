@@ -14,13 +14,13 @@ You are `report-author`. You write report definition YAML under
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:
-- `context/api-surface/reports_api_surface.md`
+- `knowledge/context/api-surface/reports_api_surface.md`
 - existing `content/reports/*.yaml` (idiom)
 - referenced `content/views/*.yaml` and `content/dashboards/*.yaml`
 
 ## Interview discipline — infer, don't interview
 
-Read `context/authoring/guide_content_authoring.md` §Interview discipline.
+Read `knowledge/context/authoring/guide_content_authoring.md` §Interview discipline.
 Track-specific examples:
 
 **Infer (don't ask):**

@@ -47,9 +47,9 @@ factory_native: bool (optional, default true)
 display_name:   str  (optional) -- explicit display name for README and zip
                                filename when factory_native is False.
 design:         str  (optional) -- path to design artifact (relative to repo
-                               root), e.g. "designs/capacity-assessment.md".
+                               root), e.g. "knowledge/designs/capacity-assessment.md".
                                When absent, the builder tries the convention-
-                               based path "designs/<bundle-name>.md".
+                               based path "knowledge/designs/<bundle-name>.md".
 
 All content-type keys are optional.  A bundle may contain only super
 metrics, only dashboards, or any subset of the supported types.

@@ -10,7 +10,7 @@ All requests require:
 Auth is delegated to vcfops_common.client.VCFOpsClient which manages token
 acquisition and 401 re-auth transparently.
 
-Documented in context/mpb_api_surface.md.
+Documented in knowledge/context/mpb/mpb_api_surface.md.
 """
 from __future__ import annotations
 
@@ -86,7 +86,7 @@ class MPBClient:
             VCFOpsError: on any non-2xx response, with the HTTP status code
                 and response body included in the message.
 
-        Notes (from context/mpb_api_surface.md):
+        Notes (from knowledge/context/mpb/mpb_api_surface.md):
           - Server mints a fresh UUID for the design regardless of any UUID
             embedded in the input envelope.
           - The design name is sanitised server-side (whitespace and

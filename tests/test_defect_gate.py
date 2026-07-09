@@ -6,17 +6,17 @@ Every *behavior* assertion (parsing, gating logic, exit codes, open-blocks,
 closed-passes, gate-all semantics) runs against a small **fixture** registry
 built inline or in a ``tmp_path`` file for that test case.  Fixture registries
 never change, so these tests are stable regardless of what happens to any
-real defect in ``context/defects.md`` — a defect graduating from open to
+real defect in ``knowledge/context/defects.md`` — a defect graduating from open to
 closed (the registry doing its job) must never turn a green CI red.
 
-Against the **live** ``context/defects.md`` we only assert *structural*
+Against the **live** ``knowledge/context/defects.md`` we only assert *structural*
 invariants that must hold no matter which defects are currently open or
 closed: the file parses without error; every entry carries the required
 fields; every ``Status: closed`` entry carries a non-empty
 ``Closing-evidence``; severities/statuses are drawn from the allowed
 vocabulary; and ids are unique with no gaps in the numbering. We do NOT
 assert which specific DEF ids exist or what their open/closed state is —
-see ``lessons/`` for why pinning tests to mutable registry data is a test
+see ``knowledge/lessons/`` for why pinning tests to mutable registry data is a test
 design defect.
 
 Coverage map (old behavior -> new fixture test)
@@ -65,7 +65,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).parent.parent
-REAL_REGISTRY = REPO_ROOT / "context" / "defects.md"
+REAL_REGISTRY = REPO_ROOT / "knowledge" / "context" / "defects.md"
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +94,7 @@ _FIXTURE_REGISTRY_TEXT = """\
 - **Status:** open
 - **Affects:** fixture-pak-alpha
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/fixture.md
+- **Source:** knowledge/context/reviews/fixture.md
 - **Summary:** Open blocking defect used to prove the gate fires.
 
 ### DEF-002
@@ -104,7 +104,7 @@ _FIXTURE_REGISTRY_TEXT = """\
 - **Status:** open
 - **Affects:** fixture-pak-beta
 - **First-seen:** build 2 (2026-01-02)
-- **Source:** context/reviews/fixture.md
+- **Source:** knowledge/context/reviews/fixture.md
 - **Summary:** Second open blocking defect, different pak.
 
 ### DEF-003
@@ -114,7 +114,7 @@ _FIXTURE_REGISTRY_TEXT = """\
 - **Status:** closed
 - **Affects:** fixture-pak-gamma
 - **First-seen:** build 3 (2026-01-03)
-- **Source:** context/reviews/fixture.md
+- **Source:** knowledge/context/reviews/fixture.md
 - **Summary:** Closed defect; must never appear as a blocker.
 - **Closing-evidence:** Fixture proof — closed for this test suite.
 
@@ -125,7 +125,7 @@ _FIXTURE_REGISTRY_TEXT = """\
 - **Status:** open
 - **Affects:** fixture-pak-delta
 - **First-seen:** build 4 (2026-01-04)
-- **Source:** context/reviews/fixture.md
+- **Source:** knowledge/context/reviews/fixture.md
 - **Summary:** Tracked severity must never gate a release.
 """
 
@@ -168,7 +168,7 @@ class TestParserFixture:
 # ---------------------------------------------------------------------------
 
 class TestRealRegistryStructural:
-    """Format/shape contract that context/defects.md must satisfy regardless
+    """Format/shape contract that knowledge/context/defects.md must satisfy regardless
     of which defects are currently filed or their status."""
 
     _ALLOWED_SEVERITIES = {"blocking", "tracked"}
@@ -176,7 +176,7 @@ class TestRealRegistryStructural:
 
     def test_registry_exists(self):
         assert REAL_REGISTRY.exists(), (
-            f"context/defects.md not found at {REAL_REGISTRY}"
+            f"knowledge/context/defects.md not found at {REAL_REGISTRY}"
         )
 
     def test_parses_without_error(self):
@@ -198,7 +198,7 @@ class TestRealRegistryStructural:
 
     def test_every_closed_entry_has_closing_evidence(self):
         """The registry's own format contract (see header table in
-        context/defects.md): Status: closed requires Closing-evidence.
+        knowledge/context/defects.md): Status: closed requires Closing-evidence.
         The loader also enforces this at parse time, so this test is a
         second, explicit assertion of the same invariant on live data.
         """
@@ -259,7 +259,7 @@ class TestMalformedEntries:
 - **Status:** open
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Test defect with bad severity.
 """)
         with pytest.raises(DefectRegistryError, match="invalid Severity"):
@@ -279,7 +279,7 @@ class TestMalformedEntries:
 - **Status:** waived
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Test defect with waived status.
 """)
         with pytest.raises(DefectRegistryError, match="waived"):
@@ -299,7 +299,7 @@ class TestMalformedEntries:
 - **Status:** closed
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** This entry is closed but has no Closing-evidence.
 """)
         with pytest.raises(DefectRegistryError, match="Closing-evidence"):
@@ -319,7 +319,7 @@ class TestMalformedEntries:
 - **Status:** open
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** First.
 
 ### DEF-001
@@ -329,7 +329,7 @@ class TestMalformedEntries:
 - **Status:** open
 - **Affects:** unifi
 - **First-seen:** build 2 (2026-01-02)
-- **Source:** context/reviews/test2.md
+- **Source:** knowledge/context/reviews/test2.md
 - **Summary:** Duplicate id — must be rejected.
 """)
         with pytest.raises(DefectRegistryError, match="duplicate"):
@@ -348,7 +348,7 @@ class TestMalformedEntries:
 - **Status:** open
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Missing Title field.
 """)
         with pytest.raises(DefectRegistryError, match="Title"):
@@ -368,7 +368,7 @@ class TestMalformedEntries:
 - **Status:** pending
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Unknown status.
 """)
         with pytest.raises(DefectRegistryError, match="invalid Status"):
@@ -437,7 +437,7 @@ class TestGateItem:
 - **Status:** open
 - **Affects:** dashboard/my_dashboard
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Blocking dashboard defect.
 
 ### DEF-002
@@ -447,7 +447,7 @@ class TestGateItem:
 - **Status:** open
 - **Affects:** view/my_view
 - **First-seen:** build 2 (2026-01-02)
-- **Source:** context/reviews/test2.md
+- **Source:** knowledge/context/reviews/test2.md
 - **Summary:** Non-blocking tracked issue — must not gate.
 """
 
@@ -561,7 +561,7 @@ class TestCLIDefectGate:
 - **Status:** closed
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Closed without evidence — malformed.
 """)
         monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", bad_reg)
@@ -600,7 +600,7 @@ class TestCLIDefectGate:
 - **Status:** open
 - **Affects:** dashboards/demand_driven_capacity_v2
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Blocking dashboard defect.
 """)
         monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", reg)
@@ -623,7 +623,7 @@ class TestCLIDefectGate:
 - **Status:** open
 - **Affects:** dashboards/demand_driven_capacity_v2
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Only affects demand_driven_capacity_v2.
 """)
         monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", reg)
@@ -735,8 +735,8 @@ class TestGatePublish:
         """A pak whose only registered defect is closed passes _gate_publish."""
         from vcfops_packaging.publish import _gate_publish
 
-        reg_dir = tmp_path / "context"
-        reg_dir.mkdir()
+        reg_dir = tmp_path / "knowledge" / "context"
+        reg_dir.mkdir(parents=True)
         (reg_dir / "defects.md").write_text("""\
 # Defect registry
 
@@ -749,7 +749,7 @@ class TestGatePublish:
 - **Status:** closed
 - **Affects:** fixturepak
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Closed for test.
 - **Closing-evidence:** Test proof — closed for this fixture.
 """, encoding="utf-8")
@@ -768,8 +768,8 @@ class TestGatePublish:
         blocking defect registered against it."""
         from vcfops_packaging.publish import _gate_publish, PublishError
 
-        reg_dir = tmp_path / "context"
-        reg_dir.mkdir()
+        reg_dir = tmp_path / "knowledge" / "context"
+        reg_dir.mkdir(parents=True)
         (reg_dir / "defects.md").write_text("""\
 # Defect registry
 
@@ -782,7 +782,7 @@ class TestGatePublish:
 - **Status:** open
 - **Affects:** fixturepak
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Open blocker used to prove the gate raises.
 """, encoding="utf-8")
 
@@ -803,8 +803,8 @@ class TestGatePublish:
         """A pak with no entries at all in the registry passes cleanly."""
         from vcfops_packaging.publish import _gate_publish
 
-        reg_dir = tmp_path / "context"
-        reg_dir.mkdir()
+        reg_dir = tmp_path / "knowledge" / "context"
+        reg_dir.mkdir(parents=True)
         (reg_dir / "defects.md").write_text("""\
 # Defect registry
 
@@ -817,7 +817,7 @@ class TestGatePublish:
 - **Status:** open
 - **Affects:** some-other-pak
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Does not affect the pak under test.
 """, encoding="utf-8")
 
@@ -834,8 +834,8 @@ class TestGatePublish:
         """A registry with only closed/tracked defects lets _gate_publish pass."""
         from vcfops_packaging.publish import _gate_publish
 
-        reg_dir = tmp_path / "context"
-        reg_dir.mkdir()
+        reg_dir = tmp_path / "knowledge" / "context"
+        reg_dir.mkdir(parents=True)
         reg = reg_dir / "defects.md"
         reg.write_text("""\
 # Defect registry
@@ -849,7 +849,7 @@ class TestGatePublish:
 - **Status:** closed
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Closed for test.
 - **Closing-evidence:** Test proof — closed for this fixture.
 """, encoding="utf-8")
@@ -867,8 +867,8 @@ class TestGatePublish:
         """A malformed registry raises PublishError (never silently passes)."""
         from vcfops_packaging.publish import _gate_publish, PublishError
 
-        reg_dir = tmp_path / "context"
-        reg_dir.mkdir()
+        reg_dir = tmp_path / "knowledge" / "context"
+        reg_dir.mkdir(parents=True)
         reg = reg_dir / "defects.md"
         reg.write_text("""\
 # Defect registry
@@ -882,7 +882,7 @@ class TestGatePublish:
 - **Status:** closed
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/test.md
+- **Source:** knowledge/context/reviews/test.md
 - **Summary:** Closed without evidence — malformed.
 """, encoding="utf-8")
 
@@ -896,12 +896,12 @@ class TestGatePublish:
             _gate_publish([release], tmp_path)
 
     def test_vacuous_pass_when_registry_absent(self, tmp_path, capsys):
-        """When factory_repo has no context/defects.md the gate vacuously
+        """When factory_repo has no knowledge/context/defects.md the gate vacuously
         passes with a clearly visible WARNING — never raises, never falls
         back to the package-relative registry."""
         from vcfops_packaging.publish import _gate_publish
 
-        # tmp_path has no context/ directory — registry is absent.
+        # tmp_path has no knowledge/context/ directory — registry is absent.
         adapter_dir = tmp_path / "content" / "sdk-adapters" / "synology"
         adapter_dir.mkdir(parents=True)
         adapter_yaml = adapter_dir / "adapter.yaml"
@@ -922,14 +922,14 @@ class TestGatePublish:
         )
 
     def test_fires_on_fixture_repo_own_registry(self, tmp_path):
-        """When the fixture repo HAS its own context/defects.md with an open
+        """When the fixture repo HAS its own knowledge/context/defects.md with an open
         blocking defect, _gate_publish must raise naming the defect — it must
         not use the package-relative registry."""
         from vcfops_packaging.publish import _gate_publish, PublishError
 
         # Write a fixture registry that blocks synology.
-        reg_dir = tmp_path / "context"
-        reg_dir.mkdir()
+        reg_dir = tmp_path / "knowledge" / "context"
+        reg_dir.mkdir(parents=True)
         (reg_dir / "defects.md").write_text("""\
 # Defect registry
 
@@ -942,7 +942,7 @@ class TestGatePublish:
 - **Status:** open
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** context/reviews/fixture.md
+- **Source:** knowledge/context/reviews/fixture.md
 - **Summary:** Blocking defect created by the test fixture.
 """, encoding="utf-8")
 
@@ -973,7 +973,7 @@ class TestStandaloneEntrypoint:
     not the import path.  This is the load-bearing proof for the curl-and-run
     contract.  The registry files used here are synthetic fixtures written to
     tmp_path — only the real defects.py *script* is copied/invoked, never the
-    live context/defects.md content — so these tests are independent of the
+    live knowledge/context/defects.md content — so these tests are independent of the
     live corpus's current defect states.
     """
 
@@ -1045,7 +1045,7 @@ class TestStandaloneEntrypoint:
 
         The pak-repo CI workflow does:
           curl .../defects.py -o defects.py
-          curl .../context/defects.md -o defects.md
+          curl .../knowledge/context/defects.md -o defects.md
           python3 defects.py --pak <name> --registry defects.md
 
         This test reproduces that mechanism exactly (bare script, no

@@ -1,6 +1,6 @@
 """Registry reader for independently-versioned SDK management-pack adapters.
 
-Parses ``context/managed_paks.md`` into a list of :class:`ManagedPak` entries.
+Parses ``knowledge/context/managed_paks.md`` into a list of :class:`ManagedPak` entries.
 HTML-comment blocks (the entry template) are skipped, mirroring the field
 names and parse logic of ``scripts/bootstrap_managed_paks.sh``.
 
@@ -22,7 +22,7 @@ derived_api_latest_url(pak) -> str
     Return the GitHub REST API form, e.g.
     ``https://api.github.com/repos/<owner>/<repo>/releases/latest``.
 
-Registry file format (from context/managed_paks.md)
+Registry file format (from knowledge/context/managed_paks.md)
 ----------------------------------------------------
 Each non-commented entry has at least::
 
@@ -70,7 +70,7 @@ _GITHUB_REMOTE_RE = re.compile(
 )
 
 # Default registry path relative to the package file.
-_DEFAULT_REGISTRY_PATH = Path(__file__).parent.parent.parent / "context" / "managed_paks.md"
+_DEFAULT_REGISTRY_PATH = Path(__file__).parent.parent.parent / "knowledge" / "context" / "managed_paks.md"
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +85,7 @@ def load_registry(registry_path: "str | Path | None" = None) -> List[ManagedPak]
 
     Args:
         registry_path: Path to the registry markdown file.  Defaults to
-            ``context/managed_paks.md`` relative to the repo root.
+            ``knowledge/context/managed_paks.md`` relative to the repo root.
 
     Returns:
         A list of :class:`ManagedPak` entries in document order.

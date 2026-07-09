@@ -32,7 +32,7 @@ YAML schema (terse, expanded to wire JSON by `to_wire()`):
 Multiple `rules[]` entries are OR'd together; condition rules
 within one rule entry are AND'd.
 
-For wire format and grammar see context/customgroup_authoring.md.
+For wire format and grammar see knowledge/context/authoring/customgroup_authoring.md.
 """
 from __future__ import annotations
 
@@ -75,7 +75,7 @@ class CustomGroupValidationError(ValueError):
 
 
 # Compare operators that VCF Ops accepts on custom group rules.
-# Sourced from context/customgroup_authoring.md and OpenAPI.
+# Sourced from knowledge/context/authoring/customgroup_authoring.md and OpenAPI.
 COMPARE_OPS = {
     "EQ", "NOT_EQ", "GT", "GT_EQ", "LT", "LT_EQ",
     "CONTAINS", "NOT_CONTAINS", "STARTS_WITH", "ENDS_WITH",
@@ -230,7 +230,7 @@ class CustomGroupDef:
         install-script REST path.
 
         Top-level envelope: {"customGroups": [...], "customGroupTypes": [...]}
-        See context/customgroup_import_format.md for the full format reference.
+        See knowledge/context/wire-formats/customgroup_import_format.md for the full format reference.
         """
         group = {
             "name": self.name,
@@ -337,7 +337,7 @@ class CustomGroupDef:
         """Expand the terse YAML into the verbose JSON body the
         `/api/resources/groups` POST endpoint expects.
 
-        See context/customgroup_authoring.md for the grammar.
+        See knowledge/context/authoring/customgroup_authoring.md for the grammar.
         """
         return {
             "resourceKey": {

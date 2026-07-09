@@ -10,7 +10,7 @@ matches by `resourceKey.name`, not by UUID. Group types are
 identified by their `key` string, which the server sets equal to
 the `name` on POST when `key` is omitted.
 
-See context/customgroup_authoring.md and context/wire_formats.md
+See knowledge/context/authoring/customgroup_authoring.md and knowledge/context/wire-formats/wire_formats.md
 §"Custom groups (dynamic)" for the full wire grammar.
 """
 from __future__ import annotations

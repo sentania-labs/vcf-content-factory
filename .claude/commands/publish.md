@@ -1,5 +1,5 @@
 ---
-description: Build every release manifest under `releases/` into a zip, route artifacts to per-type subdirs in `vcf-content-factory-bundles/`, regenerate the README between AUTO markers, commit to a release branch, and open a PR (default) or push directly to main. See `designs/release-lifecycle-v1.md` and `designs/publish-pr-mode-v4.md`.
+description: Build every release manifest under `releases/` into a zip, route artifacts to per-type subdirs in `vcf-content-factory-bundles/`, regenerate the README between AUTO markers, commit to a release branch, and open a PR (default) or push directly to main. See `knowledge/designs/release-lifecycle-v1.md` and `knowledge/designs/publish-pr-mode-v4.md`.
 ---
 
 You are the VCF Content Factory orchestrator. The user invoked `/publish` with the following args:
@@ -12,7 +12,7 @@ $ARGUMENTS
 
 Wrap `python3 -m vcfops_packaging publish` and report the result. The CLI
 runs the full publish pipeline (Phase 3 / v4 orchestrator from
-`designs/release-lifecycle-v1.md` and `designs/publish-pr-mode-v4.md`):
+`knowledge/designs/release-lifecycle-v1.md` and `knowledge/designs/publish-pr-mode-v4.md`):
 validate → enumerate releases → build → route → retire stale zips →
 regenerate README → commit → branch/PR (default) or direct push.
 
@@ -131,7 +131,7 @@ If the CLI exits non-zero, surface the error verbatim. Common cases:
 - **`--push` + `--auto-merge` together.** These are mutually exclusive.
   Tell the user to pick one.
 - **Defect gate refusal** (RULE-012). A release in the publish set has
-  an open `blocking` defect in `context/defects.md`; the CLI refuses
+  an open `blocking` defect in `knowledge/context/defects.md`; the CLI refuses
   (in `--dry-run` too) and names the defect ids. Surface the ids and
   point the user at the registry; do not bypass. The CLI does not yet
   cascade to managed paks a bundle emits pointers to — per RULE-012 §3

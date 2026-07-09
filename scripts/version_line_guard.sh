@@ -2,14 +2,14 @@
 # version_line_guard.sh — RULE-014 / RULE-012 pre-tag guard.
 #
 # Spec: memory/environment/TODO-top-level-reorg.md "New HOOKS" §1;
-# durable-output map: STRUCTURE.md (vcfops_*/, scripts/, context/).
+# durable-output map: STRUCTURE.md (vcfops_*/, scripts/, knowledge/context/).
 #
 # Refuses a `v*` tag / push on an SDK adapter repo checkout when:
 #   (a) RULE-014 — adapter.yaml is still on the 0.x version line. 0.x is the
 #       dev-preview line and is NEVER tagged; only a `<version>.<build>`
 #       where <version> is 1.x+ may carry a v* tag.
 #   (b) RULE-012 — the factory's defect gate refuses the named pak because
-#       an open blocking defect names it in context/defects.md.
+#       an open blocking defect names it in knowledge/context/defects.md.
 # It also emits an INFORMATIONAL (non-blocking) warning if a locally-built
 # 1.x+ pak filename is sitting in dist/ — that pak did not necessarily come
 # from CI (the real release path), but this cannot be proven from a local
@@ -141,7 +141,7 @@ ${SCRIPT_NAME}: REFUSED (RULE-014).
   adapter.yaml version '${VERSION}' is on the 0.x dev-preview line.
   0.x paks are never tagged, never released, never attached to a
   GitHub Release. Bump adapter.yaml's version to 1.x+ before tagging
-  '${TAG}'. See rules/pak-version-lines.md.
+  '${TAG}'. See knowledge/rules/pak-version-lines.md.
 EOF
   exit 2
 fi
@@ -206,7 +206,7 @@ else
   # Claude Code's .claude/settings.json env and CI's workflow-level env.
   if ! ( cd "${FACTORY_ROOT}" && PYTHONPATH="${FACTORY_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" python3 -m vcfops_packaging defect-gate --pak "${PAK_NAME}" ); then
     echo "${SCRIPT_NAME}: REFUSED (RULE-012) — open blocking defect(s) affect pak '${PAK_NAME}'." >&2
-    echo "See context/defects.md. Fix or legitimately close the named defect(s) first." >&2
+    echo "See knowledge/context/defects.md. Fix or legitimately close the named defect(s) first." >&2
     exit 3
   fi
 fi

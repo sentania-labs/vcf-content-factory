@@ -2,7 +2,7 @@
 
 Queries ``/api/adapterkinds/<kind>/resourcekinds/<rk>/statkeys`` on a live
 VCF Ops instance and persists the results in a JSON file under
-``context/adapter_describe_cache/<adapter_kind>/<resource_kind>.json``.
+``knowledge/context/adapter_describe_cache/<adapter_kind>/<resource_kind>.json``.
 
 At build time the cache is the authoritative source for:
   - whether a metric key exists on a given adapter/resource-kind pair
@@ -67,7 +67,7 @@ class MetricInfo:
 
 # Cache root is repo-relative so it's always findable regardless of cwd.
 _REPO_ROOT = Path(__file__).parent.parent.parent
-_DEFAULT_CACHE_ROOT = _REPO_ROOT / "context" / "adapter_describe_cache"
+_DEFAULT_CACHE_ROOT = _REPO_ROOT / "knowledge" / "context" / "adapter_describe_cache"
 
 
 class DescribeCacheError(RuntimeError):
@@ -79,7 +79,7 @@ class DescribeCache:
 
     Args:
         cache_dir: Root directory for cache files.  Defaults to
-            ``context/adapter_describe_cache/`` relative to the repo root.
+            ``knowledge/context/adapter_describe_cache/`` relative to the repo root.
         client: Optional ``VCFOpsClient`` instance.  Required for
             ``refresh()`` / ``refresh_all()``.  Pass ``None`` for offline use.
     """

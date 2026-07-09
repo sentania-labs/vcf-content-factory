@@ -5,8 +5,8 @@ Wire format derived from:
     (Scott's build-8 ground truth — CUSTOM auth, globalHeaders, sessionVariables)
   - reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json
     (only reference with populated relationships + events)
-  - context/mpb/mp_schema_vs_existing_mp.md (full cross-check document)
-  - context/mpb/reference-mpb-research.md (baseline research)
+  - knowledge/context/mpb/mp_schema_vs_existing_mp.md (full cross-check document)
+  - knowledge/context/mpb/reference-mpb-research.md (baseline research)
 
 Key wire-format facts encoded here:
   - All IDs are UUID5 strings (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx), derived
@@ -127,7 +127,7 @@ def _chain_wire_key(bind_name: str) -> str:
     per-request-scoped key that avoids duplicate-attribute collisions on objects
     with two chained children sharing the same bind name (Bug 1 fix, 2026-05-14).
 
-    Evidence: context/render_export_strip_audit_2026_05_14.md §chainingSettings.params
+    Evidence: knowledge/context/investigations/render_export_strip_audit_2026_05_14.md §chainingSettings.params
     Adopted 2026-05-14 to fix e135142 over-strip regression.
     """
     if bind_name == "id":
@@ -166,7 +166,7 @@ def _chain_wire_key_for_request(bind_name: str, child_req_name: str) -> str:
     Inherited ancestor chain params (not in _own_chain_map) continue to use
     _chain_wire_key() so they match the ancestor's chainingSettings.params key.
 
-    Codified 2026-05-14.  See context/mp_chain_authoring.md §wire key mapping.
+    Codified 2026-05-14.  See knowledge/context/authoring/mp_chain_authoring.md §wire key mapping.
     """
     return f"id_{child_req_name}"
 
@@ -376,7 +376,7 @@ _STANDARD_CONFIG_FIELDS = [
         # Template default 15; per-MP YAML overrides via src.max_concurrent.
         # MPB ships 2 / Verify; factory ships higher concurrency / No Verify
         # intentionally — parallel collection, lab-friendly TLS.
-        # See context/mp_format_comparison_2026_05_15.md §item 5.
+        # See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 5.
         "defaultValue": 15,
     },
     {
@@ -621,7 +621,7 @@ def _render_paging(pg: Optional["PagingDef"]) -> Optional[Dict]:
     sets RequestDef.paging=None, so this function always returns None from the
     YAML-driven path.  It is preserved for the flat-render path only.
 
-    Wire format confirmed from context/mpb_wire_reference/synology_nas_working_export.json
+    Wire format confirmed from knowledge/context/mpb/wire_reference/synology_nas_working_export.json
     (2026-04-21 ground truth).  Key name is `pagingStart` (not `start`).
     The paging block also has a `response` sub-block with its own dataModelLists,
     which MPB populates from live API responses — we do not synthesize it here
@@ -724,7 +724,7 @@ def _render_aria_ops_conf(aria_ops: "AriaOpsConf", obj_seed: str) -> Dict:
     cross-reference target in the metricSet's objectMatchExpression.
 
     Wire format ground truth:
-      context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json
+      knowledge/context/mpb/wire_reference/vsphere_storage_paths_aria_ops_stitch.json
       §objects[0].object.ariaOpsConf
 
     The binding metric's usage is "ARIA_OPS_REFERENCE_ID" (NOT
@@ -845,7 +845,7 @@ def _render_source(
         # but the MPB SINGLE_SELECTION options list uses display values
         # ("No Verify", "Verify", "No SSL").  Setting defaultValue to the loader
         # enum form ("NO_VERIFY") causes SINGLE_SELECTION validator rejection at
-        # MPB import time (confirmed: context/mpb_synology_import_diff_2026_04_29.md §7).
+        # MPB import time (confirmed: knowledge/context/investigations/mpb_synology_import_diff_2026_04_29.md §7).
         # The ssl default is user-configured per adapter instance; leave it as None
         # so MPB forces the operator to pick explicitly.
         _SRC_OVERRIDES = {
@@ -884,7 +884,7 @@ def _render_source(
     # requestedMetrics, adapterKind, resourceKind, etc.).
     # Fix 2026-05-15: previously hard-coded to []; ARIA_OPS-stitching MPs
     # (e.g. vSphere Storage Paths) had zero-metric collection as a result.
-    # See context/mp_format_comparison_2026_05_15.md §item 1.
+    # See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 1.
     external_resources = [obj for obj in wire_objects if obj.get("type") == "ARIA_OPS"]
 
     return {
@@ -1423,7 +1423,7 @@ def _build_chaining_settings(
 ) -> Tuple[Dict, Dict[str, str]]:
     """Build the chainingSettings block for a child request.
 
-    Wire format per context/mpb_chaining_wire_format.md §2.
+    Wire format per knowledge/context/mpb/mpb_chaining_wire_format.md §2.
 
     baseListId = parent_dml_id (the DML the chain iterates over).
     params[] = one entry per bind entry.
@@ -1454,9 +1454,9 @@ def _build_chaining_settings(
       _RequestInfo._own_chain_param_ids.  Used by _render_one_object to build
       objectBinding.matchExpression with originType=PARAMETER (Pattern V, Bug 4).
 
-    See context/mp_chain_authoring.md §wire key mapping for the full scheme.
-    See context/render_export_strip_audit_2026_05_14.md §Bug1 for evidence.
-    See context/render_export_strip_audit_2026_05_14.md §Bug4 for Pattern V evidence.
+    See knowledge/context/authoring/mp_chain_authoring.md §wire key mapping for the full scheme.
+    See knowledge/context/investigations/render_export_strip_audit_2026_05_14.md §Bug1 for evidence.
+    See knowledge/context/investigations/render_export_strip_audit_2026_05_14.md §Bug4 for Pattern V evidence.
     """
     chain_seed = f"{ak}:object:{ot_key}:chain:{child_req_name}"
     chain_id = _make_id(chain_seed)
@@ -1712,7 +1712,7 @@ def _render_one_object(
                 # identical metric/property keys.  The YAML's key: field is an
                 # authoring identifier only (used for in-YAML cross-references)
                 # and is never written to the wire.
-                # See context/mpb_explicit_key_investigation_2026_05_16.md.
+                # See knowledge/context/mpb/mpb_explicit_key_investigation_2026_05_16.md.
                 "key": m.wire_key,
                 "unit": m.unit,
                 "isKpi": m.kpi,
@@ -1748,7 +1748,7 @@ def _render_one_object(
 
         if ot.type == "ARIA_OPS" and ms_def.primary and ms_def.stitch_match_field:
             # Case 0 — ARIA_OPS primary metricSet: cross-resource stitching binding.
-            # Ground truth: context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json
+            # Ground truth: knowledge/context/mpb/wire_reference/vsphere_storage_paths_aria_ops_stitch.json
             stitch_field = ms_def.stitch_match_field
             aria_ops = ot.aria_ops
 

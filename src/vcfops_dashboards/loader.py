@@ -3,7 +3,7 @@
 UUIDs are random uuid4 values stored in each view / dashboard YAML's
 `id` field, minted on first validate and never touched again. This
 matches the super metric loader's contract (see
-`context/uuids_and_cross_references.md`) and means rename-safe
+`knowledge/context/authoring/uuids_and_cross_references.md`) and means rename-safe
 install: changing a view or dashboard's name does not change its id,
 so the existing server-side object is updated in place on re-sync.
 """
@@ -33,7 +33,7 @@ def stable_id(kind: str, name: str) -> str:
 
 
 # Transformation enum whitelist — verified against real exported view XML.
-# See context/wire-formats/view_column_wire_format.md §Per-column transformations.
+# See knowledge/context/wire-formats/view_column_wire_format.md §Per-column transformations.
 # MIN/SUM/LAST/TIMESTAMP/TIME_POINT confirmed present in live 13.6 MB export
 # (ops-recon 2026-05-27): MIN=15 uses, SUM=59, LAST=138, TIMESTAMP=24, TIME_POINT=12.
 # STDDEV and HIGH_WATER_MARK confirmed absent (zero hits).
@@ -60,7 +60,7 @@ class ViewTimeWindow:
     This window applies to ALL aggregating columns in the view (AVG, MAX,
     PERCENTILE, TRANSFORM_EXPRESSION). Per-column time windows are not
     supported by VCF Ops — one view, one window.
-    See context/view_column_wire_format.md §Limitations.
+    See knowledge/context/wire-formats/view_column_wire_format.md §Limitations.
     """
     unit: str   # MONTHS|WEEKS|DAYS|HOURS|MINUTES|YEARS
     count: int  # positive integer
@@ -88,7 +88,7 @@ class ViewColumn:
     localized_metric_to_relate_with: Optional[str] = None
     # Which extreme of the related metric to find: "MAX" or "MIN".
     operator_to_relate_with: Optional[str] = None
-    # Per-column color thresholds. See context/wire-formats/view_column_wire_format.md.
+    # Per-column color thresholds. See knowledge/context/wire-formats/view_column_wire_format.md.
     yellow_bound: Optional[Union[float, str]] = None
     orange_bound: Optional[Union[float, str]] = None
     # red_bound accepts float for numeric, str for property-match (e.g. "Powered Off")
@@ -248,7 +248,7 @@ class ViewDef:
             raise DashboardValidationError(
                 f"{name_ctx}: transformation {c.transformation!r} is not valid. "
                 f"Must be one of {sorted(_VALID_TRANSFORMATIONS)}. "
-                "See context/view_column_wire_format.md."
+                "See knowledge/context/wire-formats/view_column_wire_format.md."
             )
 
         # PERCENTILE cross-validation
@@ -551,7 +551,7 @@ class AlertListConfig:
     # resourceName:"vSphere World"}] instead of the standard self-provider shape.
     # This mirrors the sdwan ProblemAlertsList corpus pattern and is required when
     # a definition-pinned AlertList needs to query the full fleet without an
-    # interaction-driven resource binding.  See lessons/heatmap-empty-groupby-crashes-renderer.md
+    # interaction-driven resource binding.  See knowledge/lessons/heatmap-empty-groupby-crashes-renderer.md
     # for the AlertList counterpart.
     pin_to_world: bool = False
 
@@ -896,7 +896,7 @@ def _mint_id_into_file(path: Path) -> str:
 
     Same contract as the super metric loader: UUIDs are generated
     once on first validate and never touched after. See
-    context/uuids_and_cross_references.md.
+    knowledge/context/authoring/uuids_and_cross_references.md.
     """
     new_id = str(uuid.uuid4())
     original = path.read_text()

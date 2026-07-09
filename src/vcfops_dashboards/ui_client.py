@@ -117,7 +117,7 @@ class VCFOpsUIClient:
     def login(self) -> None:
         """Authenticate to the VCF Ops UI and capture the CSRF token.
 
-        Three-step flow documented in context/dashboard_delete_api.md:
+        Three-step flow documented in knowledge/context/api-surface/dashboard_delete_api.md:
         1. GET /ui/login.action?vcf=1 — seeds JSESSIONID
         2. POST /ui/login.action (form creds) — validates credentials
         3. GET /ui/index.action (no redirect) — OPS_SESSION cookie with csrfToken
@@ -297,7 +297,7 @@ class VCFOpsUIClient:
         ``viewDefIds`` value is a JSON-stringified array of {id, name} objects.
         Sending a bare UUID string (the old shape) causes the handler to crash
         and return {"type":"exception","message":"Internal server error."}.
-        See context/dashboard_delete_api.md "2026-04-11 correction".
+        See knowledge/context/api-surface/dashboard_delete_api.md "2026-04-11 correction".
 
         WARNING: unsupported internal endpoint; may change between releases.
 

@@ -7,7 +7,7 @@ schema from the design.json that ``render_mp_design_json()`` produces.
 Wire format reverse-engineered from:
   - vcfops_managementpacks/adapter_runtime/mpb_synology_nas_template.json
     (ground-truth template built by MPB UI on VCF Ops 9.0.x)
-  - context/mpb_template_json_schema.md
+  - knowledge/context/mpb/mpb_template_json_schema.md
     (full field-by-field diff and conversion spec)
 
 Key conversion facts encoded here:
@@ -264,7 +264,7 @@ def _convert_authentication(design_auth: Dict, design_global_headers: List[Dict]
       stateless header-based auth.  This is empirically inferred from the
       UniFi Integration MP (http_header preset, credentialType=CUSTOM,
       sessionSettings=null) — no ground-truth template.json exists yet for
-      this case.  See context/mpb_template_json_schema.md §4.
+      this case.  See knowledge/context/mpb/mpb_template_json_schema.md §4.
     """
     session_settings = design_auth.get("sessionSettings")
     design_creds = design_auth.get("creds", []) or []
@@ -376,7 +376,7 @@ def _convert_object_binding(
     3. CHAINED_REQUEST:
        Template shape: {type: "CHAINED_REQUEST", id: <uuid>}
 
-    Wire format captured in context/mpb_template_json_schema.md section 6.3.
+    Wire format captured in knowledge/context/mpb/mpb_template_json_schema.md section 6.3.
     """
     if design_ob is None:
         return None
@@ -631,7 +631,7 @@ def _convert_resource(
 ) -> Dict:
     """Convert one design.json resource to template.json resource format.
 
-    Changes (see context/mpb_template_json_schema.md §6):
+    Changes (see knowledge/context/mpb/mpb_template_json_schema.md §6):
       - Decompose ``internalObjectInfo`` into ``label``, ``resourceKind``,
         ``name``, ``identifiers``, ``icon``.
       - Rename ``metricSets`` -> ``requestedMetrics`` with deep conversion.
@@ -758,7 +758,7 @@ def _convert_resource(
 def _convert_configuration(design_config: Dict) -> Dict:
     """Convert one design.json configuration entry to template.json format.
 
-    Changes (see context/mpb_template_json_schema.md §7):
+    Changes (see knowledge/context/mpb/mpb_template_json_schema.md §7):
       - Use ``id`` as ``key`` (mpb_-prefixed key, not the short alias)
       - Rename ``configType`` -> ``type``, ``NUMBER`` -> ``INTEGER``
       - Rename ``defaultValue`` -> ``default``, stringify the value
@@ -989,7 +989,7 @@ def _convert_aria_ops_external_resource(
     in source.externalResources[] rather than source.resources[].
 
     Shape (confirmed from MPB-built vSphere Storage Paths template.json, 2026-05-15;
-    see context/mp_format_comparison_2026_05_15.md §item 1):
+    see knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 1):
 
       {
         "id":               "<object_id>",          # same as resources[].id
@@ -1163,7 +1163,7 @@ def render_template_json(
     # isListResource, requestedMetrics, metricGroups).
     # Fix 2026-05-15: previously passed through design-format list unchanged;
     # template runtime requires converted format with requestedMetrics.
-    # See context/mp_format_comparison_2026_05_15.md §item 1.
+    # See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 1.
     aria_ops_resources = [r for r in design_resources if r.get("type") == "ARIA_OPS"]
     mp_display_name = pak_settings_template.get("name", "")
     external_resources_template = [

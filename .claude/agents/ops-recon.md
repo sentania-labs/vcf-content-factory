@@ -16,14 +16,14 @@ answers the orchestrator uses to decide whether authoring is needed.
 - **vcfops-project-conventions** — naming prefix, reference sources.
 
 Also read:
-- `context/reference_sources.md` (allowlisted external repos)
+- `knowledge/context/reference_sources.md` (allowlisted external repos)
 - `reference/docs/vcf9/metrics-properties.md` (metric vocabulary)
 
 ## Hard rules
 
 1. **Read-only against VCF Ops.** Only GET requests.
 2. **Read-only against the repo.** Never touch content YAML or
-   `src/vcfops_*/` code. May append to `context/investigations/recon_log.md` only
+   `src/vcfops_*/` code. May append to `knowledge/context/investigations/recon_log.md` only
    if orchestrator explicitly asks.
 3. **Credentials from env vars.** If missing, return an error.
 4. **Return structured answers**, not prose.
@@ -39,7 +39,7 @@ Also read:
 3. **Existing repo YAML** — unsynced content in `content/supermetrics/`,
    `content/views/`, `content/dashboards/`, etc.
 4. **Allowlisted reference sources** — grep local clones under
-   `reference/references/` per `context/reference_sources.md`.
+   `reference/references/` per `knowledge/context/reference_sources.md`.
 
 Mark matches as EXACT, PARTIAL, or INSPIRATION.
 

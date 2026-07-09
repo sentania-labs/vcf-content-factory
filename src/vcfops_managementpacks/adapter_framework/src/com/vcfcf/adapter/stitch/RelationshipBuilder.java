@@ -47,7 +47,7 @@ import java.util.Map;
  *       are emitted <strong>additively</strong> via
  *       {@link Relationships#addRelationships(ResourceKey, Collection)} — never
  *       full-set. This matches the uniformly-additive vendor TVS corpus
- *       (see {@code context/api-maps/tvs-cross-mp-stitching.md}) and is
+ *       (see {@code knowledge/context/api-maps/tvs-cross-mp-stitching.md}) and is
  *       clobber-safe on any platform version, independent of any
  *       per-adapter {@code setRelationships} scoping assumption.</li>
  * </ul>

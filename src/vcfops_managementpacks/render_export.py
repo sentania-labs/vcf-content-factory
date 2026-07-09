@@ -4,7 +4,7 @@ STRIP RULE POLICY (codified 2026-05-14 after audit of e135142 over-strip pattern
 
     A field is stripped from the exchange format ONLY when we have positive
     evidence MPB rejects it on import.  Evidence means a documented import
-    failure (link to a context/ file or commit message), NOT absence-in-one-sample.
+    failure (link to a knowledge/context/ file or commit message), NOT absence-in-one-sample.
 
     If the only justification is "this field was absent in the Synology DSM sample",
     that is NOT sufficient evidence.  The Synology sample was a minimal single-level
@@ -21,7 +21,7 @@ STRIP RULE POLICY (codified 2026-05-14 after audit of e135142 over-strip pattern
     Do not add new strip rules on the basis of absence-in-one-sample alone.
     Mark uncertain rules (no evidence either way) with # UNCERTAIN comment.
 
-    Audit log: context/render_export_strip_audit_2026_05_14.md
+    Audit log: knowledge/context/investigations/render_export_strip_audit_2026_05_14.md
 
 WRAPPING RULE (derived from diff_mpb/conf/export.json vs template.json,
 cross-checked against vcf_operations_mp_designs_export.zip "Synology DSM MP.json"
@@ -116,7 +116,7 @@ _FLAT_ONLY_KEYS: frozenset = frozenset({
     # The jcox reference appears to have been captured under an older MPB build;
     # the 2026-05-15 live evidence is more authoritative.  Strip everywhere to
     # match current MPB behavior.
-    # See context/mp_format_comparison_2026_05_15.md §item 2.
+    # See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 2.
     "example",
     "regex",
     "regexOutput",
@@ -141,7 +141,7 @@ def _strip_flat_only_fields(obj: Any) -> Any:
     on jcox-au_vmware ground truth (2026-05-14).  Live MPB UI exports for
     both UniFi and vSphere Storage Paths (2026-05-15) strip them universally.
     Exception flags and their preservation logic have been removed.
-    See context/mp_format_comparison_2026_05_15.md §item 2.
+    See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 2.
     """
     if isinstance(obj, dict):
         return {
@@ -223,7 +223,7 @@ _MPB_STANDARD_CONFIG_TEMPLATE: List[Dict[str, Any]] = [
         # src.max_concurrent (e.g. UniFi ships 10, Storage Paths ships 5).
         # MPB ships 2 / Verify; factory ships higher concurrency / No Verify
         # intentionally — parallel collection, lab-friendly TLS.
-        # See context/mp_format_comparison_2026_05_15.md §item 5.
+        # See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 5.
         "defaultValue": "2",
         "description": "The maximum number of request that can be run simultaneously.",
         "advanced": True,
@@ -247,7 +247,7 @@ _MPB_STANDARD_CONFIG_TEMPLATE: List[Dict[str, Any]] = [
         # Template default "Verify" matches MPB default.  Per-MP YAML overrides this
         # via src.ssl (e.g. UniFi and Storage Paths ship "No Verify" for lab TLS).
         # MPB ships "Verify"; factory ships "No Verify" intentionally for lab environments.
-        # See context/mp_format_comparison_2026_05_15.md §item 5.
+        # See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 5.
         "defaultValue": "Verify",
         "description": "The SSL mode to use when connecting to the target. Can be configured without SSL (No SSL), to use SSL but do not verify the target's certificate (No Verify), or to use SSL and verify the target's certificate (Verify).",
         "advanced": True,
@@ -393,7 +393,7 @@ def _strip_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[str, Any
     """Convert a flat request object to exchange format.
 
     Key rules (updated 2026-05-15 against MPB UI exports for UniFi and
-    vSphere Storage Paths — see context/mp_format_comparison_2026_05_15.md):
+    vSphere Storage Paths — see knowledge/context/mpb/mp_format_comparison_2026_05_15.md):
 
     1. designId: NOT emitted.
        Evidence (2026-05-15): MPB-built UniFi export — request keys are
@@ -535,7 +535,7 @@ def _strip_metric_set(ms: Dict[str, Any]) -> Dict[str, Any]:
       Superseded (2026-05-15): MPB UI exports for both UniFi and Storage Paths
       drop the key when null.  The field is listed in mpb_api_surface.md
       "Fields present in flat format that MPB's import parser rejects" for
-      null values.  See context/mp_format_comparison_2026_05_15.md §item 3.
+      null values.  See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 3.
     - Remap type: "CHAINED_REQUEST" → "ATTRIBUTE_TO_PROPERTY" for exchange
       format.  "CHAINED_REQUEST" is our flat-format internal marker.
     - Full expression structures (expressionText + expressionParts) are present
@@ -566,7 +566,7 @@ def _strip_internal_object_info(ioi: Dict[str, Any]) -> Dict[str, Any]:
       Paths drop internalObjectInfo.id entirely.  The field is listed in
       mpb_api_surface.md "Fields present in flat format that MPB's import
       parser rejects".  The jcox reference was an older MPB version.
-      See context/mp_format_comparison_2026_05_15.md §item 3.
+      See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 3.
 
     Preserves: nameMetricExpression (including expressionParts[].label) —
       MPB-built exports do have nameMetricExpression; the label field on
@@ -595,7 +595,7 @@ def _strip_object(obj: Dict[str, Any]) -> Dict[str, Any]:
 
     For ARIA_OPS objects:
       - ariaOpsConf: KEPT with its value (confirmed from ground truth:
-        context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json).
+        knowledge/context/mpb/wire_reference/vsphere_storage_paths_aria_ops_stitch.json).
       - internalObjectInfo is absent (ARIA_OPS objects don't have it).
       - objectBinding uses "objectBindingType" key — passed through as-is.
       - designId: dropped from ARIA_OPS objects as well (consistent with INTERNAL
@@ -650,7 +650,7 @@ def _strip_session_request(req: Dict[str, Any], adapter_kind: str = "") -> Dict[
     shape for testRequest — no body/headers/dataModelLists.
 
     Previous rule (2026-05-14, jcox): full envelope same as regular requests.
-    Superseded (2026-05-15) — see context/mp_format_comparison_2026_05_15.md §item 4.
+    Superseded (2026-05-15) — see knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 4.
 
     chainingSettings: dropped when null (testRequest never chains).
     """
@@ -746,7 +746,7 @@ def render_mpb_exchange_json(
     # entirely.  The jcox reference appears to have been an older MPB build;
     # 2026-05-15 live MPB output is authoritative.  These null/numeric placeholders
     # are harmless on import but should be omitted to match current MPB.
-    # See context/mp_format_comparison_2026_05_15.md §item 3.
+    # See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 3.
     design_block = {
         "design": {
             "name": pak.get("name", mp.name),
@@ -779,7 +779,7 @@ def render_mpb_exchange_json(
     # which had sessionSettings: null explicitly.
     # Superseded (2026-05-15): MPB UI exports for UniFi and Storage Paths drop the
     # key entirely when sessionSettings is null (stateless APIs have no session).
-    # See context/mp_format_comparison_2026_05_15.md §item 3.
+    # See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 3.
     ss = auth.get("sessionSettings")
     if ss is None:
         auth.pop("sessionSettings", None)

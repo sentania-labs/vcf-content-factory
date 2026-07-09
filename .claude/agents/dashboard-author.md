@@ -26,19 +26,19 @@ Ignore them. Always target `content/dashboards/`. See lesson
 
 - **vcfops-content-model** — dashboard structure, widget types,
   interaction wiring.
-- **vcfops-api** — wire formats (`context/wire-formats/wire_formats.md`
+- **vcfops-api** — wire formats (`knowledge/context/wire-formats/wire_formats.md`
   §dashboard JSON).
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:
-- `context/authoring/view_dashboard_design_guide.md` (list/distribution/trend
+- `knowledge/context/authoring/view_dashboard_design_guide.md` (list/distribution/trend
   view types, the column transform enum, confirmed widget configs)
 - existing `content/dashboards/*.yaml` (idiom)
 - referenced `content/views/*.yaml` (confirm existence)
 
 ## Interview discipline — infer, don't interview
 
-Read `context/authoring/guide_content_authoring.md` §Interview discipline.
+Read `knowledge/context/authoring/guide_content_authoring.md` §Interview discipline.
 Track-specific examples:
 
 **Infer (don't ask):**
@@ -96,7 +96,7 @@ Track-specific examples:
 - **ProblemAlertsList** — top-N active alerts by criticality
 
 Read existing `content/dashboards/*.yaml` and
-`context/authoring/view_dashboard_design_guide.md`
+`knowledge/context/authoring/view_dashboard_design_guide.md`
 for YAML examples of each type.
 
 ## Interaction wiring
@@ -120,7 +120,7 @@ DASHBOARD AUTHORING BLOCKED
 
 1. Read brief: title, views, layout, interactions. **The brief must
    include the user-approved wireframe (RULE-011) committed to
-   `designs/dashboards/<slug>.md`.** If the design file lacks a
+   `knowledge/designs/dashboards/<slug>.md`.** If the design file lacks a
    wireframe, BLOCK and tell the orchestrator — do not infer layout
    from prose alone.
 2. Confirm referenced view YAMLs exist.

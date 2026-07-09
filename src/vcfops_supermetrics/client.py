@@ -238,7 +238,7 @@ class _SMExtendedClient(VCFOpsClient):
           <SuperMetrics adapterKind="X" resourceKind="Y"> block, then POST
           the modified ZIP back via POST /api/policies/import?forceImport=true.
 
-        See context/internal_supermetrics_assign.md for the full investigation.
+        See knowledge/context/api-surface/internal_supermetrics_assign.md for the full investigation.
         """
         import xml.etree.ElementTree as ET
 
@@ -515,7 +515,7 @@ class _SMExtendedClient(VCFOpsClient):
         cross-references stable across re-installs and across instances.
 
         Wire format verified by api-explorer against a live instance —
-        see context/wire_formats.md §"Super metrics zip".
+        see knowledge/context/wire-formats/wire_formats.md §"Super metrics zip".
         """
         # Imported lazily to avoid a hard package dep at import time.
         from vcfops_dashboards.client import (

@@ -72,24 +72,24 @@ this order:
 1. Built-in metrics (live `/statkeys` + docs)
 2. Existing content on the instance
 3. Existing YAML in the repo
-4. Allowlisted external reference repos (`context/reference_sources.md`)
+4. Allowlisted external reference repos (`knowledge/context/reference_sources.md`)
 
 If any source has an exact match, prefer reuse over authoring.
 
-## Intent capture (`designs/<type>/<slug>.md`)
+## Intent capture (`knowledge/designs/<type>/<slug>.md`)
 
 After recon confirms new content is needed, the orchestrator writes
 a design note before spawning an author:
 
-- `designs/supermetrics/<slug>.md`, `designs/dashboards/<slug>.md`,
-  `designs/bundles/<slug>.md`, `designs/managementpacks/<slug>.md`,
+- `knowledge/designs/supermetrics/<slug>.md`, `knowledge/designs/dashboards/<slug>.md`,
+  `knowledge/designs/bundles/<slug>.md`, `knowledge/designs/managementpacks/<slug>.md`,
   etc. — one file per authored content object.
 - Two required sections: **Initial prompt** (verbatim) and **Vision**
   (distilled understanding).
 - Path is passed to the author agent in its brief. Author agents
   read it; they do not rewrite the prompt or vision sections.
 
-See `designs/README.md` for the full template. Over time this turns
+See `knowledge/designs/README.md` for the full template. Over time this turns
 the repo into a sample-prompt corpus.
 
 ## TOOLSET GAP reporting

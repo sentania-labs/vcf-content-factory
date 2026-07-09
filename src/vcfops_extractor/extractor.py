@@ -60,7 +60,7 @@ def _build_ui_client(host: str, user: str, password: str, verify_ssl: bool):
     """Build an authenticated /ui/ Struts session for dashboard calls.
 
     Uses the three-step /ui/ login pattern documented in
-    context/pak_ui_upload_investigation.md and implemented in
+    knowledge/context/api-surface/pak_ui_upload_investigation.md and implemented in
     vcfops_managementpacks/installer.py _UISession.login():
 
       Step 1: GET /ui/login.action?vcf=1      -- seed JSESSIONID
@@ -144,7 +144,7 @@ def _dashboard_action(session, host: str, csrf_token: Optional[str], main_action
     """POST to /ui/dashboard.action with a mainAction and optional params.
 
     CSRF is injected as a form field (secureToken=<csrf>) matching the
-    /ui/ Struts pattern documented in context/pak_ui_upload_investigation.md.
+    /ui/ Struts pattern documented in knowledge/context/api-surface/pak_ui_upload_investigation.md.
     The response is expected to be JSON; a non-200 status raises RuntimeError.
     """
     form_data: dict = {"mainAction": main_action}
@@ -586,7 +586,7 @@ def _parse_time_window(controls_elem) -> Optional[dict]:
     Returns a dict {unit, count, advanced_time_mode} if the control is present
     with both ``unit`` and ``count`` properties, else None.
 
-    Wire format (from context/view_column_wire_format.md):
+    Wire format (from knowledge/context/wire-formats/view_column_wire_format.md):
         <Control id="..." type="time-interval-selector" visible="false">
           <Property name="advancedTimeMode" value="false"/>
           <Property name="unit" value="MONTHS"/>
@@ -2044,8 +2044,11 @@ def extract_dashboard(
     # An orphan SM is one whose formula references metric keys that are absent
     # from the describe cache entirely (not merely defaultMonitored=false).
     # "Ships broken" is a build error: refuse to write the file and surface
-    # the unresolved keys on stdout.  This mirrors the packaging dependency
-    # audit principle from context/feedback_packaging_dependency_audit.md.
+    # the unresolved keys on stdout.  This mirrors a packaging dependency
+    # audit principle (original citation, context/feedback_packaging_dependency_audit.md,
+    # no longer exists in the corpus and no direct successor was found during
+    # the reorg-v2 phase 2 citation sweep — the principle itself is preserved
+    # here verbatim).
     sm_subdir = slug_dir / "supermetrics"
     orphan_check_cache = DescribeCache()
     orphaned_sms: list[str] = []

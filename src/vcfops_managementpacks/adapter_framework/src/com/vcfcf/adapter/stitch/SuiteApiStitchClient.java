@@ -24,7 +24,7 @@ import java.util.Map;
  * {@code HttpsURLConnection} wired to mirror the vendor
  * {@code aria-ops-core SuiteAPIClient.getClientConfigBuilder()} transport
  * <strong>exactly</strong> (see
- * {@code context/api-surface/casa-injected-vs-raw-client.md} §3): trust-all +
+ * {@code knowledge/context/api-surface/casa-injected-vs-raw-client.md} §3): trust-all +
  * ignore-hostname in non-FIPS mode (server-trust only — no client keystore, no
  * CaSA, no cert-renewal registration), with a documented-TODO FIPS branch (see
  * {@link VcfCfAdapter#openPlatformConnection(String)}). This replaced an
@@ -33,8 +33,8 @@ import java.util.Map;
  * every cycle on live devel because framework adapters declare no
  * cert-renewal URL set for the platform's non-disruptive certificate handler
  * to persist trust against — see
- * {@code context/investigations/synology-b23-devel-pkix-2026-07-01.md} and
- * {@code context/defects.md} DEF-005. It also eliminates the earlier
+ * {@code knowledge/context/investigations/synology-b23-devel-pkix-2026-07-01.md} and
+ * {@code knowledge/context/defects.md} DEF-005. It also eliminates the earlier
  * {@code java.net.http.HttpClient} + {@code insecureSslContext()} path, which
  * could not inject a {@code HostnameVerifier} and failed with
  * {@code certificate_unknown(46)} on production appliances whose
@@ -67,7 +67,7 @@ import java.util.Map;
  *   <li><strong>Ambient</strong> — identity v3: (a) the platform-injected
  *       per-instance credential read via the SDK-public
  *       {@code AdapterBase.getAdapterConfig().getAdapterCredentials()} chain
- *       (see {@code context/api-surface/
+ *       (see {@code knowledge/context/api-surface/
  *       per-instance-suiteapi-credential-contract.md}), preferred
  *       unconditionally when present; (b) {@code automationuser.properties}
  *       ({@code automationAdmin}); (c) {@code maintenanceuser.properties}
@@ -323,7 +323,7 @@ public final class SuiteApiStitchClient {
                             + ". On a remote collector, supply explicit Suite API "
                             + "credential fields (host/username/password) in the adapter "
                             + "instance configuration. "
-                            + "See context/investigations/"
+                            + "See knowledge/context/investigations/"
                             + "suiteapi_ambient_auth_devel_2026_06_09.md (Caveats).",
                             e);
                 }

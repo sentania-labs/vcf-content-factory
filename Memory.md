@@ -66,7 +66,7 @@ the README.
 2. **Reuse check** — scan reference/references/ and existing repo content.
    Adapt-and-import beats authoring from scratch.
 3. **Design** — for MPs: interview, API map, object model, tier
-   routing. For content: clarify intent, capture in designs/.
+   routing. For content: clarify intent, capture in knowledge/designs/.
 4. **Author** — specialist agent produces YAML or code.
 5. **Validate** — repo-wide validation catches cross-reference
    errors, format violations, naming issues.

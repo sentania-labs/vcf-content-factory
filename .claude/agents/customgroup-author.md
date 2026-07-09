@@ -18,20 +18,20 @@ content-import never ships. See lesson `content-root-is-content-dir.md`.
 ## Knowledge sources
 
 - **vcfops-content-model** — custom group structure, rule grammar
-  (in `context/wire-formats/customgroup_relationship_grammar.md`).
-- **vcfops-api** — wire format (`context/wire-formats/wire_formats.md`
-  §custom groups, `context/wire-formats/customgroup_import_format.md`).
+  (in `knowledge/context/wire-formats/customgroup_relationship_grammar.md`).
+- **vcfops-api** — wire format (`knowledge/context/wire-formats/wire_formats.md`
+  §custom groups, `knowledge/context/wire-formats/customgroup_import_format.md`).
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:
-- `context/authoring/customgroup_authoring.md` (detailed rule grammar)
+- `knowledge/context/authoring/customgroup_authoring.md` (detailed rule grammar)
 - `src/vcfops_customgroups/loader.py` docstring (YAML schema)
-- `context/specimens/customgroups/*.json` (ground truth)
+- `knowledge/context/specimens/customgroups/*.json` (ground truth)
 - existing `content/customgroups/*.yaml` (idiom)
 
 ## Interview discipline — infer, don't interview
 
-Read `context/authoring/guide_content_authoring.md` §Interview discipline.
+Read `knowledge/context/authoring/guide_content_authoring.md` §Interview discipline.
 Track-specific examples:
 
 **Infer (don't ask):**

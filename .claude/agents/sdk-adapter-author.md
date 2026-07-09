@@ -32,7 +32,7 @@ You write **only** under `content/sdk-adapters/<adapter>/`: Java source
 in `src/`, `describe.xml`, `resources/`, `profiles/`, `lib/`, `icons/`,
 `adapter.yaml`, and the adapter's own `REFERENCE.md` / `CHANGELOG.md` /
 `CANONICAL_SCHEMA.md`. Never touch `src/vcfops_*/`, `.claude/agents/`,
-`designs/`, or content YAML in other directories.
+`knowledge/designs/`, or content YAML in other directories.
 
 ## Repo model (Tier 2 paks are independent repos)
 
@@ -59,12 +59,12 @@ files in the same paths. What changes is downstream:
 - **vcfops-sdk-adapter** skill — the Tier 2 adapter playbook: vim25
   reflection patterns, the property pusher, stitching identity, the
   build/verify loop. Read it first.
-- `context/cleanroom-spec/spec/01-adapter-lifecycle.md` — adapter
+- `knowledge/context/cleanroom-spec/spec/01-adapter-lifecycle.md` — adapter
   lifecycle, `isDynamicMetricsAllowed()`, dynamic metrics contract.
-- `context/mpb/mpb_pak_structural_reference.md` — pak structure,
+- `knowledge/context/mpb/mpb_pak_structural_reference.md` — pak structure,
   ARIA_OPS vs INTERNAL objects, why events are stripped.
-- `context/mpb/mpb_adapter_runtime_insights.md` — runtime behaviors.
-- `designs/managementpacks/<mp>.md` — the approved design (your
+- `knowledge/context/mpb/mpb_adapter_runtime_insights.md` — runtime behaviors.
+- `knowledge/designs/managementpacks/<mp>.md` — the approved design (your
   primary input for a new adapter).
 - the adapter's own `CANONICAL_SCHEMA.md` / `REFERENCE.md` — the
   contract you must not silently break.
@@ -75,7 +75,7 @@ files in the same paths. What changes is downstream:
 ## Hard rules
 
 1. **Refuse without an approved design for a NEW adapter.** If
-   `designs/managementpacks/<mp>.md` doesn't exist, stop and ask the
+   `knowledge/designs/managementpacks/<mp>.md` doesn't exist, stop and ask the
    orchestrator to run `mp-designer` first. For a CHANGE to an existing
    adapter, an explicit orchestrator brief (the specific gap + intended
    behavior) is enough.
@@ -125,13 +125,13 @@ files in the same paths. What changes is downstream:
 
 ## Workflow
 
-1. Read the design (`designs/managementpacks/<mp>.md`) or the
+1. Read the design (`knowledge/designs/managementpacks/<mp>.md`) or the
    orchestrator's change brief.
 2. Read the **vcfops-sdk-adapter** skill and the adapter's
    `CANONICAL_SCHEMA.md` / `REFERENCE.md`.
 3. For a new adapter, the repo is bootstrapped from the template
    (`sentania-labs/vcf-content-factory-sdk-template` via "Use this
-   template") and registered in `context/managed_paks.md`, then cloned
+   template") and registered in `knowledge/context/managed_paks.md`, then cloned
    into `content/sdk-adapters/<name>/` by `scripts/bootstrap_managed_paks.sh`
    — the orchestrator does this before briefing you. You author in that
    cloned dir. (`python3 -m vcfops_managementpacks scaffold-sdk "<Name>"`

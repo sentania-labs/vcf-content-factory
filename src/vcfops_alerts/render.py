@@ -97,7 +97,7 @@ def _symptom_id(adapter_kind: str, name: str, uuid: Optional[str] = None) -> str
     The UUID form is required for pak content-import: the importer resolves
     symptomdef XML by the declared ``id``; a slug-based id is unresolvable
     and aborts the entire content/ tree (see
-    ``context/investigations/sdk_pak_content_import_gap.md``).
+    ``knowledge/context/investigations/sdk_pak_content_import_gap.md``).
     """
     if uuid:
         return f"SymptomDefinition-{uuid}"

@@ -87,7 +87,7 @@ def delete_report(client: VCFOpsClient, report_id: str) -> None:
     Report definitions can only be removed through the VCF Operations web UI
     (Admin > Content > Reports).
 
-    This limitation is documented in context/api-surface/reports_api_surface.md.
+    This limitation is documented in knowledge/context/api-surface/reports_api_surface.md.
     """
     raise NotImplementedError(
         "The VCF Operations API has no DELETE endpoint for report definitions. "

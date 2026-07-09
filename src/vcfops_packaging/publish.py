@@ -698,7 +698,7 @@ def _gate_publish(releases, factory_repo: Path) -> None:
     - Any open blocking defect affects a release's headline artifact.
     - The defect registry is malformed.
 
-    When the registry is absent from ``factory_repo/context/defects.md`` the
+    When the registry is absent from ``factory_repo/knowledge/context/defects.md`` the
     gate vacuously passes and prints a clearly visible WARNING.  It never falls
     back to the package-relative copy — that would couple test fixtures and any
     other factory checkout to this repo's live defect state.
@@ -707,7 +707,7 @@ def _gate_publish(releases, factory_repo: Path) -> None:
     (it is the preview of the real behaviour).
 
     For sdk-adapter headline sources the gate token is the adapter directory
-    name (the managed-pak name registered in context/managed_paks.md).
+    name (the managed-pak name registered in knowledge/context/managed_paks.md).
     For all other headline sources the gate token is ``<parent-dir>/<stem>``
     where parent-dir is the source type directory name (e.g. ``dashboards``,
     ``bundles``) and stem is the filename stem.
@@ -715,7 +715,7 @@ def _gate_publish(releases, factory_repo: Path) -> None:
     TOOLSET GAP note: bundle sources (``bundles/<slug>.yaml``) may internally
     reference Tier 1 management pack YAMLs via their ``managementpacks:``
     field, but there is no reliable path from those entries to managed-pak
-    names in ``context/managed_paks.md`` without a separate lookup table.
+    names in ``knowledge/context/managed_paks.md`` without a separate lookup table.
     The gate checks bundle slugs (as ``bundle/<slug>`` tokens) but does NOT
     cascade into managed paks referenced inside the bundle.  Register a
     separate DEF-NNN with ``Affects: <pak-name>`` to gate a managed pak
@@ -730,12 +730,13 @@ def _gate_publish(releases, factory_repo: Path) -> None:
     from .release_builder import _is_sdk_adapter_source
 
     # The defect registry must live in the factory repo.  If it is absent
-    # (e.g. a test fixture that copies only content/ without context/) the gate
-    # vacuously passes with a visible warning rather than falling back to the
-    # package-relative copy.  Falling back to the package-relative copy would
-    # couple any checkout — including test fixtures — to THIS repo's live defect
-    # state, which causes spurious failures when the live registry is malformed.
-    registry_path = factory_repo / "context" / "defects.md"
+    # (e.g. a test fixture that copies only content/ without knowledge/context/)
+    # the gate vacuously passes with a visible warning rather than falling back
+    # to the package-relative copy.  Falling back to the package-relative copy
+    # would couple any checkout — including test fixtures — to THIS repo's live
+    # defect state, which causes spurious failures when the live registry is
+    # malformed.
+    registry_path = factory_repo / "knowledge" / "context" / "defects.md"
     if not registry_path.exists():
         print(
             f"WARNING: no defect registry at {registry_path} "
@@ -784,7 +785,7 @@ def _gate_publish(releases, factory_repo: Path) -> None:
             f"RULE-012: {len(all_blockers)} open blocking defect(s) prevent publish:\n"
             + "\n".join(lines)
             + f"\n\nDefect ids: {', '.join(defect_ids)}"
-            + f"\nSee context/defects.md to review or close these defects."
+            + f"\nSee knowledge/context/defects.md to review or close these defects."
         )
 
     except DefectRegistryError as exc:

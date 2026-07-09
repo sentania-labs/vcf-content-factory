@@ -23,7 +23,7 @@ against.
 1. **Read-only against external APIs.** GET requests only unless
    the API requires POST for queries (e.g., Synology uses POST
    for some endpoints). Never mutate state on the target system.
-2. **Write only to `context/api-maps/`.** Never touch content YAML,
+2. **Write only to `knowledge/context/api-maps/`.** Never touch content YAML,
    `src/vcfops_*/` code, or `managementpacks/`.
 3. **Credentials come from env vars or the orchestrator's brief.**
    Never hardcode credentials. Use env vars like
@@ -145,7 +145,7 @@ methods literally named in the URL you called) doesn't need a tag.
 
 ### Updating vs. creating a map
 
-- **If `context/api-maps/<target-slug>.md` already exists**: Read
+- **If `knowledge/context/api-maps/<target-slug>.md` already exists**: Read
   it first. Preserve prior observations — tag them
   `[unchanged since <prior date>]` if you didn't re-verify, or
   `[re-verified YYYY-MM-DD]` if you did. Append a new entry to
@@ -156,7 +156,7 @@ methods literally named in the URL you called) doesn't need a tag.
 
 ## Output format
 
-Save to `context/api-maps/<target-slug>.md`:
+Save to `knowledge/context/api-maps/<target-slug>.md`:
 
 ```markdown
 # API Map: <Target Name>
@@ -219,7 +219,7 @@ CARTOGRAPHY RESULT
   metrics identified: <count>
   properties identified: <count>
   relationship candidates: <count>
-  documented in: context/api-maps/<slug>.md
+  documented in: knowledge/context/api-maps/<slug>.md
   update history entry: <one-line summary of what was added/changed>
   observations tagged this session: <count of inline tags added/updated>
   gaps: <any endpoints that errored, auth issues, etc.>

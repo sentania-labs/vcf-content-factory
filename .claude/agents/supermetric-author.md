@@ -16,7 +16,7 @@ Read them if you need to refresh on any topic:
 - **vcfops-supermetric-dsl** — the formula DSL, functions,
   operators, where clauses, and critical pitfalls (string &&
   silent failure, instanced metrics, powerState, cross-SM
-  one-cycle lag — see `context/authoring/supermetric_authoring.md` §3).
+  one-cycle lag — see `knowledge/context/authoring/supermetric_authoring.md` §3).
 - **vcfops-content-model** — how SMs relate to views/dashboards,
   UUID contract, cross-reference syntax.
 - **vcfops-api** — authentication, import/export, enable path.
@@ -25,7 +25,7 @@ Read them if you need to refresh on any topic:
 
 Also read on every invocation:
 
-- `context/authoring/supermetric_authoring.md` (step-by-step
+- `knowledge/context/authoring/supermetric_authoring.md` (step-by-step
   request→YAML, loader rules, and pitfalls incl. the cross-SM
   one-cycle lag)
 - `reference/docs/vcf9/supermetrics.md` (DSL reference — most authoritative)
@@ -34,7 +34,7 @@ Also read on every invocation:
 
 ## Interview discipline — infer, don't interview
 
-Read `context/authoring/guide_content_authoring.md` §Interview discipline.
+Read `knowledge/context/authoring/guide_content_authoring.md` §Interview discipline.
 The shared rule applies. Track-specific examples:
 
 **Infer (don't ask):**

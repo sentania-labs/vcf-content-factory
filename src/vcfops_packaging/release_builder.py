@@ -210,7 +210,7 @@ def _build_component_headline(
 def _resolve_sdk_mp_pointer(source_path: Path) -> dict:
     """Resolve the registry entry for a Tier 2 SDK management pack headline.
 
-    Looks up the adapter in ``context/managed_paks.md`` by directory name and
+    Looks up the adapter in ``knowledge/context/managed_paks.md`` by directory name and
     returns a pointer-info dict with all fields needed for README generation.
     No zip or binary is produced.
 
@@ -234,7 +234,7 @@ def _resolve_sdk_mp_pointer(source_path: Path) -> dict:
     Raises:
         ValueError: if the adapter is not found in the managed-paks registry.
             This is a hard failure — add the registry entry in
-            ``context/managed_paks.md`` before publishing.
+            ``knowledge/context/managed_paks.md`` before publishing.
     """
     from .managed_paks import (
         lookup_by_adapter_name,
@@ -249,7 +249,7 @@ def _resolve_sdk_mp_pointer(source_path: Path) -> dict:
     pak = lookup_by_adapter_name(adapter_name)
     if pak is None:
         raise ValueError(
-            f"SDK adapter {adapter_name!r} is not registered in context/managed_paks.md. "
+            f"SDK adapter {adapter_name!r} is not registered in knowledge/context/managed_paks.md. "
             f"This means the adapter has not been extracted to its own remote repo and "
             f"registered in the managed-paks registry yet. "
             f"Complete Workstream D (de-track migration) before publishing this adapter. "

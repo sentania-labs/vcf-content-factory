@@ -907,7 +907,7 @@ class TestSynologyRegression:
 
 
 @pytest.mark.skip(
-    reason="render_mpb_exchange_json does not yet emit buildNumber — product decision pending (see ROADMAP.md known gaps)"
+    reason="render_mpb_exchange_json does not yet emit buildNumber — product decision pending (see knowledge/ROADMAP.md known gaps)"
 )
 class TestBuildNumberExport:
     """render_mpb_exchange_json must emit buildNumber at design.buildNumber."""

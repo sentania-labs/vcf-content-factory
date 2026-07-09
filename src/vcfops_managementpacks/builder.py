@@ -39,7 +39,7 @@ Per-adapter JAR generation:
   The builder patches these 4 strings in-memory (pure Python, no JDK needed),
   then packages the result into a fresh JAR.  The reference class bytes come
   from adapter_runtime/mpb_adapter3.jar (the Synology NAS adapter from MPB).
-  See context/mpb_adapter_jar_reverse_engineering.md for the full analysis.
+  See knowledge/context/investigations/mpb_adapter_jar_reverse_engineering.md for the full analysis.
 """
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"
 # The reference adapter JAR — source of the Gen-2 class bytes for constant-pool patching.
 # Contains com/vmware/mpb/mpbsynologynas/MPBSynologyNASAdapter.class (842 bytes),
 # the Synology NAS adapter built by MPB on VCF Ops 9.0.2.
-# See _generate_adapter_jar() and context/mpb_adapter_jar_reverse_engineering.md.
+# See _generate_adapter_jar() and knowledge/context/investigations/mpb_adapter_jar_reverse_engineering.md.
 _GENERIC_ADAPTER_JAR = _ADAPTER_RUNTIME_DIR / "mpb_adapter3.jar"
 
 # Per-resource-kind SVG icon templates.
@@ -451,7 +451,7 @@ def _append_traversal_spec_kinds(
     # entirely (confirmed: synology_diskstation has no peer relationships and
     # does NOT appear in the MPB reference TraversalSpec paths).
     #
-    # Wire shape reference: context/mpb_wire_reference/synology_nas_working_describe.xml
+    # Wire shape reference: knowledge/context/mpb/wire_reference/synology_nas_working_describe.xml
     # lines 177-180.  Paths observed:
     #   pool -> volume -> iscsi_lun   (Path 1)
     #   pool -> disks                 (Path 2)
@@ -773,7 +773,7 @@ def _append_bare_adapter_instance_kind(
     ComputedMetric expressions reference attributes that don't exist at runtime,
     causing world-level count metrics to return blank.
 
-    Wire shape reference: context/mpb_wire_reference/synology_nas_working_describe.xml
+    Wire shape reference: knowledge/context/mpb/wire_reference/synology_nas_working_describe.xml
     lines 13-19.  Attribute shape: dataType="float", isProperty="false",
     isRate="false", isDiscrete="false".
     """
@@ -991,7 +991,7 @@ def _append_data_kind(
     #   - On each child kind:  mpb_{ak}_{parent_kind_key}_parent
     # Derivation: walk mp.relationships, collect all parent/child roles for
     # this kind (by short YAML key), and emit the matching directed attributes.
-    # Wire shape reference: context/mpb_wire_reference/synology_nas_working_describe.xml
+    # Wire shape reference: knowledge/context/mpb/wire_reference/synology_nas_working_describe.xml
     # (storage_pool lines 121-125, volume lines 84-88, disks lines 136-139,
     # iscsi_lun lines 107-110).  Shape: dataType="string", isProperty="true",
     # isRate="false".
@@ -1192,7 +1192,7 @@ def _append_world_aggregate_kind(
     and the expression sums that same attribute on the adapter-instance kind
     (objecttype={ak}) at depth=1.
 
-    Wire format reference: context/mpb_wire_reference/synology_nas_working_describe.xml
+    Wire format reference: knowledge/context/mpb/wire_reference/synology_nas_working_describe.xml
     lines 156-171 (2026-04-22).
     """
     nk = name_key_counter[0]
@@ -1351,7 +1351,7 @@ def _generate_manifest(mp: ManagementPackDef) -> str:
 
     The fix: emit empty strings for all three script slots and omit
     run_scripts_on_all_nodes.  This matches the Gen-2 wire format exactly.
-    See context/mpb_pak_structural_reference.md §"manifest.txt key fields".
+    See knowledge/context/mpb/mpb_pak_structural_reference.md §"manifest.txt key fields".
     """
     version_str = f"{mp.version}.{mp.build_number}"
     manifest = {
@@ -1362,7 +1362,7 @@ def _generate_manifest(mp: ManagementPackDef) -> str:
         # vcops_minimum_version: bumped to 8.10.0 to match MPB-built paks (2026-05-15).
         # MPB ships "8.10.0"; the previous factory value "7.5.0" invited install on
         # older VCF Ops releases that lack the Gen-2 MPB adapter runtime.
-        # See context/mp_format_comparison_2026_05_15.md §item 6.
+        # See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 6.
         "vcops_minimum_version": "8.10.0",
         "disk_space_required": 500,
         "eula_file": "eula.txt",
@@ -1411,7 +1411,7 @@ def _generate_adapter_jar(
         Raw bytes of the generated JAR (ZIP format).
 
     Wire format reference:
-        context/mpb_adapter_jar_reverse_engineering.md
+        knowledge/context/investigations/mpb_adapter_jar_reverse_engineering.md
     """
     # Derive the package slug: adapter_kind with all underscores removed
     # e.g. "mpb_unifi_integration" -> "mpbunifiintegration"
@@ -1700,8 +1700,8 @@ def _build_adapters_zip(
         #
         # Do NOT remove design.json without strong evidence (confirmed working
         # prod install) that the 9.0.x runtime no longer needs it.
-        # See context/mp_format_comparison_2026_05_15.md §item 8 (REVERTED) and
-        # context/mpb_api_surface.md §"Pak conf/ layout".
+        # See knowledge/context/mpb/mp_format_comparison_2026_05_15.md §item 8 (REVERTED) and
+        # knowledge/context/mpb/mpb_api_surface.md §"Pak conf/ layout".
         zf.writestr(f"{adapter_dir}/conf/design.json", design_json_str.encode("utf-8"))
         # export.json — MPB UI exchange format (read by the adapter runtime at
         # initialization / redescribe; required for adapter kind registration
@@ -1755,7 +1755,7 @@ def _build_adapters_zip(
             rk_key = f"{ak}_{ot.key}" if not ot.key.startswith(ak) else ot.key
             # Emit a WARN when the icon hint is absent or unresolvable, unless
             # the author explicitly set icon: default (a deliberate choice for
-            # synthetic kinds per context/mp_icon_library.md).
+            # synthetic kinds per knowledge/context/mpb/mp_icon_library.md).
             if ot.icon != "default":
                 if not ot.icon or not (_ICONS_DIR / f"{ot.icon}.svg").exists():
                     print(
@@ -1905,7 +1905,7 @@ def build_pak(
         # kind never appears in getIntegrations.
         # Template files under vcfops_managementpacks/templates/ are kept for
         # historical reference but are never written into the pak.
-        # See context/mpb_pak_structural_reference.md §"Gen-1 vs Gen-2 MPB differences".
+        # See knowledge/context/mpb/mpb_pak_structural_reference.md §"Gen-1 vs Gen-2 MPB differences".
 
         # adapters.zip
         zf.writestr("adapters.zip", adapters_zip_bytes)

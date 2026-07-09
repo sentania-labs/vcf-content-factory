@@ -918,7 +918,7 @@ class UIClient:
       2. POST /ui/login.action (form creds) -- validates credentials
       3. GET /ui/index.action (no redirect) -- OPS_SESSION with csrfToken
 
-    See context/dashboard_delete_api.md for full protocol documentation.
+    See knowledge/context/api-surface/dashboard_delete_api.md for full protocol documentation.
     """
 
     def __init__(self, host: str, user: str, password: str,
@@ -1038,7 +1038,7 @@ class UIClient:
         The real fix for the prior "everything returns 500" bug was the
         data shape for deleteView: the old code sent a bare UUID string;
         the correct shape uses viewDefIds with a JSON-stringified [{id,name}]
-        array. See context/dashboard_delete_api.md §2026-04-11 update.
+        array. See knowledge/context/api-surface/dashboard_delete_api.md §2026-04-11 update.
         """
         return f"https://{self._host}/ui/vcops/services/router"
 
@@ -1082,7 +1082,7 @@ class UIClient:
             "data": [{"viewDefIds": "[{\"id\":\"...\",\"name\":\"...\"}]"}]
         Both id and name are required. Sending a bare UUID (old shape) causes
         the handler to return type:exception "Internal server error."
-        See context/dashboard_delete_api.md §2026-04-11 update.
+        See knowledge/context/api-surface/dashboard_delete_api.md §2026-04-11 update.
         """
         assert self._session and self._csrf_token
         tid = self._next_tid()
@@ -1160,7 +1160,7 @@ class UIClient:
             "data": {"reportDefIds": "[{\"id\":\"...\",\"name\":\"...\"}]"}
         This differs from deleteView which wraps data in an array of one dict.
         Success response is {"type":"rpc"} with no "result" key.
-        See context/dashboard_delete_api.md §2026-04-11 update.
+        See knowledge/context/api-surface/dashboard_delete_api.md §2026-04-11 update.
         """
         assert self._session and self._csrf_token
         tid = self._next_tid()
