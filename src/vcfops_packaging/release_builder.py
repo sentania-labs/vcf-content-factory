@@ -351,7 +351,7 @@ def build_release(
     A missing ``output_dir`` is created automatically.
 
     Args:
-        release_path:  Path to a ``releases/*.yaml`` manifest.
+        release_path:  Path to a ``bundles/releases/*.yaml`` manifest.
         output_dir:    Directory where output zips are written.
         skip_audit:    Passed to the bundle builder to skip the describe-cache
                        dependency audit (default True for offline builds).

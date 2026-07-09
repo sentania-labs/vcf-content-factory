@@ -60,7 +60,7 @@ help — surface that error verbatim.
 The CLI prints a short summary to stdout:
 
 ```
-release manifest : releases/<slug>.yaml
+release manifest : bundles/releases/<slug>.yaml
 source flagged   : <source-path>  (released: true)
 version          : X.Y
 commit           : <sha>

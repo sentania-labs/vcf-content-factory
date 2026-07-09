@@ -199,7 +199,7 @@ class TestReleaseSlugOverride:
 # ---------------------------------------------------------------------------
 
 class TestReleaseManifestOutput:
-    """N3: cmd_release writes releases/<slug>.yaml with correct name: field."""
+    """N3: cmd_release writes bundles/releases/<slug>.yaml with correct name: field."""
 
     def _run_release(
         self,
@@ -237,7 +237,7 @@ class TestReleaseManifestOutput:
         )
 
     def test_dashboard_manifest_filename(self, tmp_path):
-        """Releasing a dashboard writes releases/my-dash-dashboard.yaml."""
+        """Releasing a dashboard writes bundles/releases/my-dash-dashboard.yaml."""
         result = self._run_release(
             tmp_path, "dashboard", "my_dash",
             yaml.dump({
@@ -250,13 +250,13 @@ class TestReleaseManifestOutput:
         assert result.returncode == 0, (
             f"cmd_release failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
-        manifest = tmp_path / "releases" / "my-dash-dashboard.yaml"
+        manifest = tmp_path / "bundles" / "releases" / "my-dash-dashboard.yaml"
         assert manifest.exists(), f"Expected {manifest} to be created"
         data = yaml.safe_load(manifest.read_text())
         assert data["name"] == "my-dash-dashboard"
 
     def test_report_manifest_filename(self, tmp_path):
-        """Releasing a report writes releases/weekly-cap-report.yaml."""
+        """Releasing a report writes bundles/releases/weekly-cap-report.yaml."""
         result = self._run_release(
             tmp_path, "report", "weekly_cap",
             yaml.dump({
@@ -268,7 +268,7 @@ class TestReleaseManifestOutput:
         assert result.returncode == 0, (
             f"cmd_release failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
-        manifest = tmp_path / "releases" / "weekly-cap-report.yaml"
+        manifest = tmp_path / "bundles" / "releases" / "weekly-cap-report.yaml"
         assert manifest.exists(), f"Expected {manifest} to be created"
         data = yaml.safe_load(manifest.read_text())
         assert data["name"] == "weekly-cap-report"
@@ -288,12 +288,12 @@ class TestReleaseManifestOutput:
         assert result.returncode == 0, (
             f"cmd_release with --slug failed:\nstdout: {result.stdout}\nstderr: {result.stderr}"
         )
-        manifest = tmp_path / "releases" / "legacy-dashboard-name.yaml"
+        manifest = tmp_path / "bundles" / "releases" / "legacy-dashboard-name.yaml"
         assert manifest.exists(), f"Expected {manifest} with override slug"
         data = yaml.safe_load(manifest.read_text())
         assert data["name"] == "legacy-dashboard-name"
         # Default-slug file must NOT exist
-        default_manifest = tmp_path / "releases" / "my-dash-dashboard.yaml"
+        default_manifest = tmp_path / "bundles" / "releases" / "my-dash-dashboard.yaml"
         assert not default_manifest.exists(), "Default-slug file should not be created when --slug given"
 
     def test_source_released_flag_flipped(self, tmp_path):
@@ -447,10 +447,10 @@ class TestBundleComposerSlugDefault:
 # ---------------------------------------------------------------------------
 
 class TestValidatorCollisionHardError:
-    """N5: validate exits non-zero when a slug appears in both bundles/ and releases/."""
+    """N5: validate exits non-zero when a slug appears in both bundles/ and bundles/releases/."""
 
     def _make_collision_repo(self, tmp_path: Path, slug: str) -> None:
-        """Create a minimal repo with a colliding slug in bundles/ and releases/.
+        """Create a minimal repo with a colliding slug in bundles/ and bundles/releases/.
 
         The release manifest headlines a DIFFERENT source (bundles/<slug>_source.yaml),
         NOT the bundle file itself, so this is a genuine collision — not a
@@ -466,8 +466,8 @@ class TestValidatorCollisionHardError:
         source_path = tmp_path / "bundles" / f"{slug}_source.yaml"
         source_path.write_text(_minimal_bundle_yaml(f"{slug}-source"))
 
-        # Create releases/<slug>.yaml (collision! — headlines a different bundle)
-        release_path = tmp_path / "releases" / f"{slug}.yaml"
+        # Create bundles/releases/<slug>.yaml (collision! — headlines a different bundle)
+        release_path = tmp_path / "bundles" / "releases" / f"{slug}.yaml"
         release_path.parent.mkdir(parents=True, exist_ok=True)
         release_path.write_text(_minimal_release_yaml(slug, f"bundles/{slug}_source.yaml"))
 
@@ -514,9 +514,9 @@ class TestValidatorCollisionHardError:
         bundle_path.parent.mkdir(parents=True, exist_ok=True)
         bundle_path.write_text(_minimal_bundle_yaml("my-bundle"))
 
-        # releases/my-bundle-bundle.yaml (different slug — follows convention)
+        # bundles/releases/my-bundle-bundle.yaml (different slug — follows convention)
         source_path = tmp_path / "bundles" / "my-bundle.yaml"
-        release_path = tmp_path / "releases" / "my-bundle-bundle.yaml"
+        release_path = tmp_path / "bundles" / "releases" / "my-bundle-bundle.yaml"
         release_path.parent.mkdir(parents=True, exist_ok=True)
         release_path.write_text(_minimal_release_yaml("my-bundle-bundle", "bundles/my-bundle.yaml"))
 
@@ -550,8 +550,8 @@ class TestValidatorCollisionHardError:
         source_file.write_text(_minimal_bundle_yaml("other-source"))
 
         # Create a release with the SAME slug
-        releases_dir = tmp_path / "releases"
-        releases_dir.mkdir()
+        releases_dir = tmp_path / "bundles" / "releases"
+        releases_dir.mkdir(parents=True, exist_ok=True)
         (releases_dir / "shared-slug.yaml").write_text(
             _minimal_release_yaml("shared-slug", "bundles/other-source.yaml")
         )
@@ -587,8 +587,8 @@ class TestBundleReleaseLegitimatePairing:
         bd["released"] = True
         bundle_path.write_text(_yaml.dump(bd))
 
-        releases_dir = tmp_path / "releases"
-        releases_dir.mkdir()
+        releases_dir = tmp_path / "bundles" / "releases"
+        releases_dir.mkdir(parents=True, exist_ok=True)
         # Release manifest headlines the bundle itself — this is the legitimate pairing
         (releases_dir / f"{slug}.yaml").write_text(
             _minimal_release_yaml(slug, f"bundles/{slug}.yaml")
@@ -601,7 +601,7 @@ class TestBundleReleaseLegitimatePairing:
         )
 
     def test_bundle_release_pairing_no_error_subprocess(self, tmp_path):
-        """validate exits zero when bundles/<slug>.yaml + releases/<slug>.yaml
+        """validate exits zero when bundles/<slug>.yaml + bundles/releases/<slug>.yaml
         where the release headlines that same bundle."""
         import yaml as _yaml
 
@@ -613,8 +613,8 @@ class TestBundleReleaseLegitimatePairing:
         bd["released"] = True
         bundle_path.write_text(_yaml.dump(bd))
 
-        releases_dir = tmp_path / "releases"
-        releases_dir.mkdir()
+        releases_dir = tmp_path / "bundles" / "releases"
+        releases_dir.mkdir(parents=True, exist_ok=True)
         (releases_dir / f"{slug}.yaml").write_text(
             _minimal_release_yaml(slug, f"bundles/{slug}.yaml")
         )
@@ -645,8 +645,8 @@ class TestBundleReleaseLegitimatePairing:
         other_source = bundle_dir / "other-source.yaml"
         other_source.write_text(_minimal_bundle_yaml("other-source"))
 
-        releases_dir = tmp_path / "releases"
-        releases_dir.mkdir()
+        releases_dir = tmp_path / "bundles" / "releases"
+        releases_dir.mkdir(parents=True, exist_ok=True)
         # Release has same slug but headlines a DIFFERENT source — real collision
         (releases_dir / f"{slug}.yaml").write_text(
             _minimal_release_yaml(slug, "bundles/other-source.yaml")
@@ -667,7 +667,7 @@ class TestBundleReleaseLegitimatePairing:
             load_all_releases,
         )
 
-        releases = load_all_releases(REPO_ROOT / "releases", repo_root=REPO_ROOT)
+        releases = load_all_releases(REPO_ROOT / "bundles" / "releases", repo_root=REPO_ROOT)
         bundles_dir = REPO_ROOT / "bundles"
         errors = check_bundle_release_collision(bundles_dir, releases)
         assert errors == [], (
@@ -695,8 +695,8 @@ class TestValidatorNamingConventionWarn:
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_text(_minimal_bundle_yaml("dummy"))
 
-        releases_dir = tmp_path / "releases"
-        releases_dir.mkdir()
+        releases_dir = tmp_path / "bundles" / "releases"
+        releases_dir.mkdir(parents=True, exist_ok=True)
         (releases_dir / "some-thing.yaml").write_text(
             _minimal_release_yaml("some-thing", "bundles/dummy.yaml")
         )
@@ -723,8 +723,8 @@ class TestValidatorNamingConventionWarn:
             "widgets": [],
         }))
 
-        releases_dir = tmp_path / "releases"
-        releases_dir.mkdir()
+        releases_dir = tmp_path / "bundles" / "releases"
+        releases_dir.mkdir(parents=True, exist_ok=True)
         (releases_dir / "vks-core-consumption-dashboard.yaml").write_text(
             _minimal_release_yaml(
                 "vks-core-consumption-dashboard",
@@ -754,8 +754,8 @@ class TestValidatorNamingConventionWarn:
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_text(_minimal_bundle_yaml("src"))
 
-        releases_dir = tmp_path / "releases"
-        releases_dir.mkdir()
+        releases_dir = tmp_path / "bundles" / "releases"
+        releases_dir.mkdir(parents=True, exist_ok=True)
         release_name = f"my-content-{suffix}"
         (releases_dir / f"{release_name}.yaml").write_text(
             _minimal_release_yaml(release_name, "bundles/src.yaml")
@@ -778,8 +778,8 @@ class TestValidatorNamingConventionWarn:
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_text(_minimal_bundle_yaml("dummy"))
 
-        releases_dir = tmp_path / "releases"
-        releases_dir.mkdir()
+        releases_dir = tmp_path / "bundles" / "releases"
+        releases_dir.mkdir(parents=True, exist_ok=True)
         (releases_dir / "bad-name.yaml").write_text(
             _minimal_release_yaml("bad-name", "bundles/dummy.yaml")
         )
@@ -822,7 +822,7 @@ class TestGrandfatherList:
             load_all_releases,
         )
 
-        releases = load_all_releases(REPO_ROOT / "releases", repo_root=REPO_ROOT)
+        releases = load_all_releases(REPO_ROOT / "bundles" / "releases", repo_root=REPO_ROOT)
         warnings = check_release_naming_convention(releases)
         assert warnings == [], (
             f"Real repo releases produced unexpected naming warnings:\n"
@@ -850,7 +850,7 @@ class TestGrandfatherList:
         src.parent.mkdir(parents=True, exist_ok=True)
         src.write_text(_minimal_bundle_yaml("source"))
 
-        manifest = tmp_path / "releases" / "demand-driven-capacity-v2.yaml"
+        manifest = tmp_path / "bundles" / "releases" / "demand-driven-capacity-v2.yaml"
         manifest.parent.mkdir(parents=True, exist_ok=True)
         manifest.write_text("name: placeholder\n")
 
@@ -931,13 +931,13 @@ class TestRealRepoValidateIntegration:
         )
 
     def test_real_repo_no_collision_errors(self):
-        """Real repo has no slug collision between bundles/ and releases/."""
+        """Real repo has no slug collision between bundles/ and bundles/releases/."""
         from vcfops_packaging.releases import (
             check_bundle_release_collision,
             load_all_releases,
         )
 
-        releases = load_all_releases(REPO_ROOT / "releases", repo_root=REPO_ROOT)
+        releases = load_all_releases(REPO_ROOT / "bundles" / "releases", repo_root=REPO_ROOT)
         bundles_dir = REPO_ROOT / "bundles"
         errors = check_bundle_release_collision(bundles_dir, releases)
         assert errors == [], (
@@ -951,7 +951,7 @@ class TestRealRepoValidateIntegration:
             load_all_releases,
         )
 
-        releases = load_all_releases(REPO_ROOT / "releases", repo_root=REPO_ROOT)
+        releases = load_all_releases(REPO_ROOT / "bundles" / "releases", repo_root=REPO_ROOT)
         warnings = check_release_naming_convention(releases)
         assert warnings == [], (
             f"Real repo releases have unexpected naming warnings:\n"

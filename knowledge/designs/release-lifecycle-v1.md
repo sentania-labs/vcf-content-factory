@@ -301,7 +301,7 @@ Concretely:
    tooling.)
 2. **In the factory repo, run `/release` per release item:**
    - `/release dashboard demand_driven_capacity_v2` — creates
-     `releases/demand-driven-capacity-v2.yaml`, headline = the dashboard.
+     `bundles/releases/demand-driven-capacity-v2.yaml`, headline = the dashboard.
    - `/release bundle capacity-assessment` — creates
      `releases/capacity-assessment.yaml`, headline = the bundle YAML.
    - `/release bundle vks-core-consumption` — same shape.
@@ -466,7 +466,7 @@ No silent failures. Any error stops the chain and reports verbatim.
 - `src/vcfops_packaging/publish.py` (publish orchestrator).
 - `releases/capacity-assessment.yaml` (Phase 7 backfill).
 - `releases/vks-core-consumption.yaml` (Phase 7 backfill).
-- `releases/demand-driven-capacity-v2.yaml` (Phase 7 backfill).
+- `bundles/releases/demand-driven-capacity-v2.yaml` (Phase 7 backfill).
 
 **Modify:**
 

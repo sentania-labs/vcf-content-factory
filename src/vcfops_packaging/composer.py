@@ -3,7 +3,7 @@
 Implements the /bundle CLI subcommand (Phase 4 of content-structure-v3.md).
 
 Flow:
-  1. Slug validation — unique across bundles/ and releases/.
+  1. Slug validation — unique across bundles/ and bundles/releases/.
   2. Display name + description.
   3. Component picking by type — factory + third-party, grouped by provenance.
   4. Dependency consistency check — walker finds dashboard deps missing from picks.
@@ -135,15 +135,15 @@ def check_slug_collision(slug: str, repo_root: Path) -> Optional[str]:
 
     Checks:
       - bundles/<slug>.yaml exists
-      - releases/<slug>.yaml exists
+      - bundles/releases/<slug>.yaml exists
     """
     bundle_path = repo_root / "bundles" / f"{slug}.yaml"
     if bundle_path.exists():
         return f"bundle '{slug}' already exists at {bundle_path}"
 
-    release_path = repo_root / "releases" / f"{slug}.yaml"
+    release_path = repo_root / "bundles" / "releases" / f"{slug}.yaml"
     if release_path.exists():
-        return f"release manifest '{slug}' already exists at {release_path} (slugs must be unique across bundles/ and releases/)"
+        return f"release manifest '{slug}' already exists at {release_path} (slugs must be unique across bundles/ and bundles/releases/)"
 
     return None
 

@@ -1,4 +1,4 @@
-"""Load and validate release manifests from releases/*.yaml.
+"""Load and validate release manifests from bundles/releases/*.yaml.
 
 A release manifest declares a shipping event: it references 1+ headline
 artifacts (component or bundle YAMLs) and carries metadata (name, version,
@@ -121,10 +121,10 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
     ``load_all_releases`` and ``validate_flag_state``).
 
     Args:
-        path:      Path to a ``releases/*.yaml`` file.
+        path:      Path to a ``bundles/releases/*.yaml`` file.
         repo_root: Repo root for resolving ``source:`` paths.  When None,
-                   defaults to two levels up from the manifest (releases/ is
-                   one level under the repo root).
+                   defaults to three levels up from the manifest
+                   (``bundles/releases/`` is two levels under the repo root).
 
     Returns:
         A populated ``ReleaseDef``.
@@ -176,9 +176,9 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
     if raw_release_date is not None:
         release_date = str(raw_release_date).strip() or None
 
-    # Resolve root: releases/ sits one level under repo root.
+    # Resolve root: bundles/releases/ sits two levels under repo root.
     if repo_root is None:
-        repo_root = path.parent.parent
+        repo_root = path.parent.parent.parent
 
     def _resolve_source(ref: str) -> Path:
         p = Path(ref)
@@ -274,7 +274,7 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
 
 
 def load_all_releases(
-    releases_dir: str | Path = "releases",
+    releases_dir: str | Path = "bundles/releases",
     repo_root: Optional[Path] = None,
 ) -> List[ReleaseDef]:
     """Load all release manifests from a directory.
@@ -282,7 +282,7 @@ def load_all_releases(
     Also performs duplicate-name validation across the full corpus.
 
     Args:
-        releases_dir: Directory to scan (defaults to ``releases/``).
+        releases_dir: Directory to scan (defaults to ``bundles/releases/``).
         repo_root:    Passed through to ``load_release``; see that function.
 
     Returns:
@@ -408,7 +408,7 @@ def check_bundle_release_collision(
     bundles_dir: Path,
     releases: List[ReleaseDef],
 ) -> List[str]:
-    """Hard-error check: a slug must not appear in both bundles/ and releases/.
+    """Hard-error check: a slug must not appear in both bundles/ and bundles/releases/.
 
     Scans every ``bundles/*.yaml`` filename stem and every loaded release
     manifest ``name:`` field.  If the same slug appears in both sets, returns

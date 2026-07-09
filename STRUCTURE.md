@@ -27,20 +27,18 @@ now `knowledge/HOW_IT_WORKS.md`, `knowledge/vcf_ops_concepts.md`, and
 
 | Path | What it is |
 |---|---|
-| `knowledge/` | The governance-and-reference umbrella (reorg v2 phase 2). Contains `rules/`, `lessons/`, `context/`, `designs/`, plus `HOW_IT_WORKS.md`, `ROADMAP.md`, `vcf_ops_concepts.md`. Internal structure unchanged — see the subrows below. |
+| `knowledge/` | The governance-and-reference umbrella (reorg v2 phase 2). Contains `rules/`, `lessons/`, `context/`, `designs/`, `diagrams/` (folded in phase 3), plus `HOW_IT_WORKS.md`, `ROADMAP.md`, `vcf_ops_concepts.md`. Internal structure unchanged — see the subrows below. |
 | `knowledge/rules/` | Absolute law. Precedence 1. Obey without question. |
 | `knowledge/lessons/` | Hard-won lessons. Precedence 2. Heed before "obvious" paths. |
 | `knowledge/context/` | Working knowledge: specs, API maps, investigations, reviews, defect registry. Precedence 3. |
 | `knowledge/designs/` | Prompt-of-record + design artifacts per content item / feature. |
 | `content/` | Authored factory output: supermetrics, views, dashboards, alerts, MPs. `content/sdk-adapters/*` are independent git repos (gitignored, bootstrap-cloned). |
-| `bundles/` | Bundle manifests (what ships together). |
-| `releases/` | Release manifests (what has been released, per item). |
+| `bundles/` | Publish-pipeline inputs: bundle manifests (what ships together) at the top level, release manifests (what has been released, per item) under `bundles/releases/`. Merged in reorg v2 phase 3. |
 | `src/` | The ten `vcfops_*` framework Python packages (`src/vcfops_alerts/` … `src/vcfops_symptoms/`). **Only the `tooling` agent edits these** (RULE-013 gate applies). Directories moved under `src/` in reorg v2 phase 1; package names and import paths are unchanged (`python3 -m vcfops_<x>` still works — ambient `PYTHONPATH=src`). |
 | `scripts/` | Hooks and operational shell scripts. Cannot move — wired into settings/CI. |
 | `tests/` | Framework test suite. Cannot move. |
 | `.claude/` | Harness config: agents, skills, settings. Cannot move. |
 | `.github/` | CI workflows. Cannot move. |
-| `diagrams/` | Authored diagrams (excalidraw etc.). |
 
 ## Directories — vendor / third-party, immutable (never edit; RULE-010/RULE-016)
 

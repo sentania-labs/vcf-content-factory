@@ -40,7 +40,7 @@ python3 -m vcfops_packaging bundle $ARGUMENTS
 The CLI is interactive — it will prompt for:
 
 1. **Slug** (if not provided as `<name>`) — validated for uniqueness across
-   `bundles/` and `releases/`.
+   `bundles/` (manifests at the top level, release manifests under `bundles/releases/`).
 2. **Display name** — defaults to the slug in Title Case.
 3. **Description** — multi-line, terminated by `END` on its own line.
 4. **Component picks** for each type (dashboards, views, super metrics,
