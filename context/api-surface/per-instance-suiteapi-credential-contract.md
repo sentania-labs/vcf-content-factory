@@ -25,7 +25,7 @@ internal user* — that code is not in these jars (see §6).
 Evidence rule honored: every factual claim below is `class + method +
 bytecode quote`, or explicitly labeled **INFERENCE**.
 
-Jars (`vcfops_managementpacks/adapter_runtime/`): `aria-ops-core-8.0.0.jar`,
+Jars (`src/vcfops_managementpacks/adapter_runtime/`): `aria-ops-core-8.0.0.jar`,
 `vrops-adapters-sdk-2.2.jar`, `alive_platform.jar`, `alive_common.jar`;
 plus `aria-ops-core-7.1.1.jar` extracted from
 `reference/references/tvs/OracleDatabase-9.1.0…pak` for version contrast. Tool:
@@ -310,7 +310,7 @@ on the raw deserialized field.
 this repo compiles or ships against
 (`vrops-adapters-sdk-2.2.jar`, `aria-ops-core-8.0.0.jar`, `alive_common.jar`,
 `alive_platform.jar`, `mpb_adapter3.jar`, `vmware-ops-api-stubs.jar` — a
-constant-pool-string grep across `vcfops_managementpacks/adapter_runtime/`
+constant-pool-string grep across `src/vcfops_managementpacks/adapter_runtime/`
 returns nothing). If that class is likewise absent from the actual adapter
 process's runtime classpath on some collector build (unconfirmed — it may
 live in a platform-core jar available only at runtime, never shipped to

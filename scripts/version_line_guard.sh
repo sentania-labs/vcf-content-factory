@@ -200,7 +200,11 @@ else
 
   FACTORY_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
   echo "${SCRIPT_NAME}: running RULE-012 defect gate for pak '${PAK_NAME}'."
-  if ! ( cd "${FACTORY_ROOT}" && python3 -m vcfops_packaging defect-gate --pak "${PAK_NAME}" ); then
+  # vcfops_packaging lives under src/ (see pyproject.toml src-layout) and is
+  # never pip-installed — resolve it via PYTHONPATH explicitly, since this
+  # script runs standalone (by hand or from a pre-push hook), outside both
+  # Claude Code's .claude/settings.json env and CI's workflow-level env.
+  if ! ( cd "${FACTORY_ROOT}" && PYTHONPATH="${FACTORY_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" python3 -m vcfops_packaging defect-gate --pak "${PAK_NAME}" ); then
     echo "${SCRIPT_NAME}: REFUSED (RULE-012) — open blocking defect(s) affect pak '${PAK_NAME}'." >&2
     echo "See context/defects.md. Fix or legitimately close the named defect(s) first." >&2
     exit 3

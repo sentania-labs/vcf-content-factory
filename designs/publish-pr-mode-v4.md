@@ -69,7 +69,7 @@ consumer with a different policy appears.
 
 ## Implementation sketch
 
-`vcfops_packaging/publish.py`:
+`src/vcfops_packaging/publish.py`:
 
 1. **PR mode (default)** — instead of pushing to main:
    - Create a release branch on the dist repo:

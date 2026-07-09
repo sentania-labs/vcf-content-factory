@@ -17,7 +17,7 @@ action was called but returned an error, not tile data.
 
 ## Root cause
 
-`vcfops_dashboards/render.py` — the Heatmap renderer — previously emitted
+`src/vcfops_dashboards/render.py` — the Heatmap renderer — previously emitted
 `groupBy: {}` when the YAML tab had no explicit `group_by_kind`.  The Java
 `HeatMapAction.initParam` calls `groupBy.getString("type")` unconditionally;
 an empty object has no `"type"` key, so it throws before fetching any data.
@@ -82,10 +82,10 @@ fields in YAML remain present and consistent; `pin_to_world` is an alternate
 
 ## Files changed (build 29)
 
-- `vcfops_dashboards/render.py` — Heatmap `else: group_by = {}` replaced
+- `src/vcfops_dashboards/render.py` — Heatmap `else: group_by = {}` replaced
   with self-grouping block (lines ~1197–1240); `_alert_list_widget` updated
   to handle `pin_to_world`.
-- `vcfops_dashboards/loader.py` — `AlertListConfig` dataclass: new
+- `src/vcfops_dashboards/loader.py` — `AlertListConfig` dataclass: new
   `pin_to_world: bool = False` field; loader parses `w.get("pin_to_world", False)`.
 - `dashboards/compliance-overview.yaml` — `fleet_alerts` widget: added
   `pin_to_world: true`.

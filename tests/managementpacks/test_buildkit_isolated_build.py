@@ -210,7 +210,7 @@ def _assemble_kit_python_only(kit_dir: Path) -> None:
     # the Java step; we create stubs so the kit directory is structurally valid.
     (pkg_dir / "adapter_runtime").mkdir(exist_ok=True)
 
-    fw_src_real = Path(__file__).parent.parent.parent / "vcfops_managementpacks" / "adapter_framework" / "src"
+    fw_src_real = Path(__file__).parent.parent.parent / "src" / "vcfops_managementpacks" / "adapter_framework" / "src"
     fw_dst = pkg_dir / "adapter_framework" / "src"
     if fw_src_real.is_dir():
         import shutil
@@ -226,21 +226,35 @@ def _assemble_kit_python_only(kit_dir: Path) -> None:
 def _make_isolated_env(kit_parent: Path) -> dict:
     """Return an env dict where ONLY the kit parent dir is on PYTHONPATH.
 
-    The factory repo root is explicitly stripped from PYTHONPATH and sys.path
-    cannot leak via CWD (we set cwd=/tmp in the subprocess call).  This
+    The factory repo root AND its src/ subdirectory are explicitly stripped
+    from PYTHONPATH — the vcfops_* packages live at repo_root/src (see
+    pyproject.toml src-layout), and the factory's own dev/CI environment
+    resolves them via an ambient PYTHONPATH=src entry (.claude/settings.json,
+    .github/workflows/*.yml) that may be either a relative "src" (resolves
+    against whatever the subprocess's cwd happens to be) or an absolute
+    repo_root/src path, depending on the caller. Both forms — plus the bare
+    repo_root, kept for defense-in-depth even though the factory no longer
+    imports vcfops_* directly from repo_root — must be filtered out, or this
+    guard's "packages are NOT importable" claim silently stops being true for
+    whichever caller happened to inject an absolute path. sys.path cannot
+    leak via CWD either (we set cwd=/tmp in the subprocess call). This
     reproduces the clean CI-runner condition: the factory packages must NOT
     be importable; only the kit must be.
     """
-    # Determine the repo root to strip it.
-    repo_root = str(Path(__file__).parent.parent.parent.resolve())
+    # Determine the repo root and its src/ subdir to strip both.
+    repo_root = Path(__file__).parent.parent.parent.resolve()
+    src_root = (repo_root / "src").resolve()
+    _stripped_roots = {repo_root, src_root}
 
     env = os.environ.copy()
 
-    # Build a clean PYTHONPATH: take existing entries, strip the factory root.
+    # Build a clean PYTHONPATH: take existing entries, strip the factory
+    # root and its src/ subdir (realpath-resolved so trailing slashes,
+    # relative entries like "src", and symlinks all normalize the same way).
     existing_pp = env.get("PYTHONPATH", "")
     cleaned_entries = [
         e for e in existing_pp.split(os.pathsep) if e
-        if not Path(e).resolve() == Path(repo_root)
+        if Path(e).resolve() not in _stripped_roots
     ]
     # Prepend the kit parent so `import sdk_buildkit` works.
     cleaned_entries.insert(0, str(kit_parent))
@@ -409,7 +423,7 @@ def test_kit_isolated_build_fails_without_sm_rewrite(tmp_path):
             (pkg_dir / dest_name).write_bytes(src_path.read_bytes())
 
     (pkg_dir / "adapter_runtime").mkdir(exist_ok=True)
-    fw_src_real = Path(__file__).parent.parent.parent / "vcfops_managementpacks" / "adapter_framework" / "src"
+    fw_src_real = Path(__file__).parent.parent.parent / "src" / "vcfops_managementpacks" / "adapter_framework" / "src"
     fw_dst = pkg_dir / "adapter_framework" / "src"
     if fw_src_real.is_dir():
         shutil.copytree(str(fw_src_real), str(fw_dst))

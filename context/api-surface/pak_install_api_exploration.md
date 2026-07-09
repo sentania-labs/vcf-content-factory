@@ -113,7 +113,7 @@ paths are silent in 9.0.2.  Subsequent live work disproved it:
   did not probe `solution.action` at all; the "dead stub" conclusion was
   extrapolated without evidence.
 
-**Current state as of 2026-04-17:**  `vcfops_managementpacks/installer.py` uses
+**Current state as of 2026-04-17:**  `src/vcfops_managementpacks/installer.py` uses
 `/ui/solution.action` for the full pak lifecycle (install + uninstall + status
 polling).  `/admin/solution.action` is no longer used by this codebase.
 
@@ -257,7 +257,7 @@ From `admin/js/components/initialConfiguration/solutions/Select.js` +
 11. POST /admin/login.action?mainAction=logout  (cleanup)
 ```
 
-### Reference Python snippet (minimal, not committed to vcfops_*/)
+### Reference Python snippet (minimal, not committed to src/vcfops_*/)
 
 ```python
 import base64, json, os, time, requests, urllib3

@@ -588,7 +588,7 @@ authors don't try to express them:
 
 Concrete changes for the `tooling` agent to make:
 
-### `vcfops_dashboards/loader.py::ViewColumn`
+### `src/vcfops_dashboards/loader.py::ViewColumn`
 
 Add fields (all optional, all default to current behavior):
 
@@ -642,7 +642,7 @@ Validation rules in `loader.py`:
 - Warn on inverted band ordering (`ascending_range=false` with
   `yellow >= orange` or `orange >= red`; mirror for `true`).
 
-### `vcfops_dashboards/render.py::_xml_attribute_item()`
+### `src/vcfops_dashboards/render.py::_xml_attribute_item()`
 
 1. Drop the view-level `_xml_transformations_block(view)` call
    unless `view.data_type == "trend"` (the stacked

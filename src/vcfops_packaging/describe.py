@@ -66,7 +66,7 @@ class MetricInfo:
 # ---------------------------------------------------------------------------
 
 # Cache root is repo-relative so it's always findable regardless of cwd.
-_REPO_ROOT = Path(__file__).parent.parent
+_REPO_ROOT = Path(__file__).parent.parent.parent
 _DEFAULT_CACHE_ROOT = _REPO_ROOT / "context" / "adapter_describe_cache"
 
 

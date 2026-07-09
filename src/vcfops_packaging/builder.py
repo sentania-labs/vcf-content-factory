@@ -292,7 +292,7 @@ def _load_design_sections(bundle: Bundle) -> dict:
     Returns a dict of {section_key: markdown_content_str}.  Only keys whose
     source heading is found in the design artifact are included.
     """
-    repo_root = Path(__file__).parent.parent
+    repo_root = Path(__file__).parent.parent.parent
 
     # Resolve design artifact path.
     design_path: Optional[Path] = None
@@ -752,7 +752,7 @@ def build_bundle(
     )
 
     # --- Repo root LICENSE ---
-    repo_root = Path(__file__).parent.parent
+    repo_root = Path(__file__).parent.parent.parent
     license_path = repo_root / "LICENSE"
     license_text = license_path.read_text() if license_path.exists() else None
 

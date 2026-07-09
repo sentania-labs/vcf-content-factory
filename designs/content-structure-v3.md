@@ -69,7 +69,7 @@ sibling; meta-structures (`bundles/`, `releases/`) at top-level too:
   decomposition would erase that signal.
 - **Top-level is uncluttered but explicit.** Four content-related
   directories at root, each with a single job. Framework
-  infrastructure (`vcfops_*/`, `reference/docs/`, `context/`, `designs/`,
+  infrastructure (`src/vcfops_*/`, `reference/docs/`, `context/`, `designs/`,
   `scripts/`, `tests/`, etc.) sits alongside.
 - **Symmetric type subdirs WHERE the structure repeats.** Inside
   `content/` and inside any `third_party/<project>/`, the type words
@@ -210,7 +210,7 @@ Substantial scope. Bundle into a coherent rollout:
    other projects across third-party boundaries — third-party should be
    self-contained, factory may share factory-only deps).
 
-3. **Walker** (`vcfops_common/dep_walker`) — the dependency walker
+3. **Walker** (`src/vcfops_common/dep_walker`) — the dependency walker
    gains awareness of project scope. When walking a third-party
    dashboard's deps, prefer same-project resolution; only fall back to
    factory roots if the dependency is documented as a cross-link

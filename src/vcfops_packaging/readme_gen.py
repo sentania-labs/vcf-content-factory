@@ -49,7 +49,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-_REPO_ROOT = Path(__file__).parent.parent
+_REPO_ROOT = Path(__file__).parent.parent.parent
 
 # Marker pattern: <!-- AUTO:START <section> --> ... <!-- AUTO:END -->
 _MARKER_RE = re.compile(

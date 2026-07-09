@@ -79,9 +79,12 @@ from .sdk_project import SdkProjectDef, SdkProjectError, load_sdk_project
 # ---------------------------------------------------------------------------
 
 _HERE = Path(__file__).parent
+# _REPO_ROOT: the actual factory repo root (two levels above this file after
+# the src/ reorg: src/vcfops_managementpacks/sdk_builder.py -> repo root).
+_REPO_ROOT = _HERE.parent.parent
 _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"
 _ADAPTER_FRAMEWORK_SRC_DIR = _HERE / "adapter_framework" / "src"
-_LICENSE_PATH = _HERE.parent / "LICENSE"
+_LICENSE_PATH = _REPO_ROOT / "LICENSE"
 
 
 def _find_stale_framework_sources(output_jar: Path, sources: List[Path]) -> List[Path]:
@@ -269,7 +272,7 @@ _SHARED_CLASSPATH_PATTERNS = [
 ]
 
 # Reference pak directories to check for pak-compare
-_REFERENCES_DIR = _HERE.parent / "tmp" / "reference_paks"
+_REFERENCES_DIR = _REPO_ROOT / "tmp" / "reference_paks"
 
 
 class SdkBuildError(RuntimeError):
@@ -2922,7 +2925,7 @@ def build_sdk_pak(project_dir: Path, output_dir: Optional[Path] = None) -> Path:
         SdkProjectError: on adapter.yaml validation failure
     """
     if output_dir is None:
-        output_dir = _HERE.parent / "dist"
+        output_dir = _REPO_ROOT / "dist"
 
     project_dir = Path(project_dir).resolve()
     adapter_yaml = project_dir / "adapter.yaml"

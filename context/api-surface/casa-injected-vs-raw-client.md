@@ -30,7 +30,7 @@ is **principal/identity** (see Residual).
 
 ---
 
-## Evidence (jars in `vcfops_managementpacks/adapter_runtime/`)
+## Evidence (jars in `src/vcfops_managementpacks/adapter_runtime/`)
 
 Tools: `javap -p -c` / `javap -v` on `vrops-adapters-sdk-2.2.jar`,
 `aria-ops-core-8.0.0.jar`. Extracted to session scratchpad only;

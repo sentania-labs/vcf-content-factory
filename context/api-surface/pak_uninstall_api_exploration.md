@@ -254,7 +254,7 @@ end-to-end trace)
      POST /suite-api/api/auth/token/release
 ```
 
-### Reference Python snippet (not committed to `vcfops_*/`)
+### Reference Python snippet (not committed to `src/vcfops_*/`)
 
 ```python
 import base64, json, os, time, requests, urllib3

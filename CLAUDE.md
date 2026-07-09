@@ -51,7 +51,7 @@ Your job is to clarify, delegate, broker cross-references through
 the filesystem, validate, install, and report.
 
 You do not write YAML, post-process rendered JSON, reverse-engineer
-wire formats, query live Ops, edit `vcfops_*/` code, or run
+wire formats, query live Ops, edit `src/vcfops_*/` code, or run
 sync/enable/delete. Each of those has an agent. When you catch
 yourself doing one inline, stop and delegate. The failure mode of
 this setup is a capable orchestrator that doesn't delegate and
@@ -70,7 +70,7 @@ ends up holding all the context.
 | `alert-author` | Author | `content/alerts/`, `content/recommendations/` | After recon, **and** required symptoms exist. |
 | `report-author` | Author | `content/reports/` | User wants a report. Blocks if upstream views missing. |
 | `api-explorer` | Research | `context/` (findings); vendor artifacts may be *added* under `reference/docs/` (RULE-016) | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
-| `tooling` | Engineering | `vcfops_*/`, `context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `vcfops_*/`. |
+| `tooling` | Engineering | `src/vcfops_*/`, `context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `src/vcfops_*/`. |
 | `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. |
 | `content-packager` | Build | `bundles/`, `dist/` | Authors bundle manifests in `bundles/`; builds distributable zips into `dist/`. Rebuild after a tooling change. |
 | `qa-tester` | Testing | `/tmp/` | Acceptance-test a built zip. Spawn after `content-packager`. |
@@ -79,7 +79,7 @@ ends up holding all the context.
 | `mp-author` | Author | `content/managementpacks/` | After `mp-designer` produces approved design. **Tier 1** MPB YAML spec. |
 | `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` (each an independent repo, gitignored) | After `mp-designer` produces approved design. **Tier 2** Java SDK adapter source. The Java sibling to `mp-author`. **Only** agent that edits adapter Java. Commits go to the pak's **own** remote; a real release is a `v*` tag on that repo, not a factory `/publish`. |
 | `sdk-adapter-reviewer` | Read-only review | `context/reviews/` | After `sdk-adapter-author` reports a build, before the install gate. Skeptical correctness/quality check on Tier 2 Java — hunts unreadable-is-compliant, stitch corruption, crash-the-cycle. Never edits source, never installs. |
-| `framework-reviewer` | Read-only review | `context/reviews/framework/` | After `tooling` touches `vcfops_*/`, **before the PR**. Skeptical correctness/regression gate on framework Python — the `vcfops_*/` sibling of `sdk-adapter-reviewer`. **Blanket:** every `vcfops_*/` diff. Re-runs validate/tests/render-regression; hunts global-default-leak / key-collision / silent-downgrade. Never edits source, never installs. |
+| `framework-reviewer` | Read-only review | `context/reviews/framework/` | After `tooling` touches `src/vcfops_*/`, **before the PR**. Skeptical correctness/regression gate on framework Python — the `src/vcfops_*/` sibling of `sdk-adapter-reviewer`. **Blanket:** every `src/vcfops_*/` diff. Re-runs validate/tests/render-regression; hunts global-default-leak / key-collision / silent-downgrade. Never edits source, never installs. |
 | `curator` | Read-only audit | `context/curation/<date>-report.md` | When the SessionStart staleness hook says curation is due (or on request). Librarian over the governance corpus (rules/, lessons/, context/, `.claude/agents/`, CLAUDE.md, skills) — hunts SUPERSEDED / DRIFT / CONTRADICTION / INDEX-ROT / DEAD-REF / STALE-FACT / DUPLICATION / PROMPT-ROSTER-SKEW. Reports only; never edits the corpus, never installs. Spawn **in the background**. |
 
 Agent prompts under `.claude/agents/` are authoritative for each
@@ -178,11 +178,11 @@ file (not a skill) because it runs before any skill could load.
 
 9. **Tooling changes go through the `tooling` agent, then the
    `framework-reviewer` gate.** The same discipline that keeps you
-   out of `supermetrics/` keeps you out of `vcfops_*/`. And the same
+   out of `supermetrics/` keeps you out of `src/vcfops_*/`. And the same
    discipline that gives Tier 2 Java a skeptical review before it
    ships gives framework Python one too: after `tooling` reports a
-   `vcfops_*/` change and **before you open the PR**, spawn
-   `framework-reviewer`. Scope is **blanket** — every `vcfops_*/`
+   `src/vcfops_*/` change and **before you open the PR**, spawn
+   `framework-reviewer`. Scope is **blanket** — every `src/vcfops_*/`
    diff, no exceptions. A **CHANGES REQUESTED** verdict (≥1 BLOCKING)
    blocks the PR; re-brief `tooling` and re-review until APPROVE. This
    is the framework-code sibling of the `sdk-adapter-reviewer` gate
@@ -284,13 +284,13 @@ path is first-class, not a sad fallback.
   GitHub Release, never a built/mirrored binary. New pak = instantiate the
   `…-sdk-template` repo + add one line to `context/managed_paks.md`.
 - **Toolset gap:** punt / api-explorer / tooling → fix → re-invoke.
-- **Framework changes (`vcfops_*/`):** tooling → **`framework-reviewer`**
+- **Framework changes (`src/vcfops_*/`):** tooling → **`framework-reviewer`**
   (blanket, every diff; CHANGES REQUESTED blocks the PR — RULE-013) →
   open PR. The pre-PR, factory-owned regression gate; complements Codex's
   post-PR pass, does not replace it.
 - **After tooling changes:** if `tooling` modifies anything in
-  `vcfops_packaging/templates/`, `vcfops_packaging/builder.py`, or
-  `vcfops_dashboards/render.py`, **all distribution zips are
+  `src/vcfops_packaging/templates/`, `src/vcfops_packaging/builder.py`, or
+  `src/vcfops_dashboards/render.py`, **all distribution zips are
   stale.** Delegate to `content-packager` to rebuild every manifest
   in `bundles/`. Not optional — shipping stale zips is how
   false-positive bugs escape to users.

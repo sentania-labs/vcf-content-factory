@@ -3,7 +3,7 @@
 Authoritative reference for how the MPB importer accepts (and silently
 mutates) the `objectBinding` block on `objects[].object.metricSets[]`
 in a design-import payload. Future tooling work
-(`vcfops_managementpacks/render.py`, `render_export.py`) and
+(`src/vcfops_managementpacks/render.py`, `render_export.py`) and
 `mp-author` decisions cite this file before editing the renderer.
 
 **Scope.** Only the MPB design-import wire format
@@ -329,7 +329,7 @@ Synology / Unifi authoring.
 
 ### 4.1 The current emission (factory bug)
 
-At `vcfops_managementpacks/render.py:1302` (or whichever line the
+At `src/vcfops_managementpacks/render.py:1302` (or whichever line the
 chained-metricSet branch lives — verify before patching), for a
 chained metricSet on a list object, the renderer currently emits:
 
@@ -849,7 +849,7 @@ shows it doesn't clear the verify error, fall back to Tier 2 #2
 
 ## 10. Recommended renderer change (supersedes §4.2)
 
-`vcfops_managementpacks/render.py` chained-secondary-metricSet
+`src/vcfops_managementpacks/render.py` chained-secondary-metricSet
 branch must emit the Tier 1 #1 shape, NOT null. Concrete spec:
 
 ### 10.1 Inputs the renderer needs at this site
@@ -1035,7 +1035,7 @@ PARENT's metric (by wire metric ID, originType METRIC, not ATTRIBUTE).
 
 ### 11.3 Renderer implementation
 
-Implemented in `vcfops_managementpacks/render.py` Case 2 (2026-05-07).
+Implemented in `src/vcfops_managementpacks/render.py` Case 2 (2026-05-07).
 The renderer now:
 
 1. Calls `req_info.register_field(parent_attr_label, dml_id)` to get the

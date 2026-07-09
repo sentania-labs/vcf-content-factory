@@ -44,7 +44,8 @@ Import rewrites also applied to:
 
 repo_root handling:
   In the factory, _load_bundled_content resolves bundled_content paths against
-  _HERE.parent (the factory root).  In the kit, there is no factory root —
+  _REPO_ROOT (_HERE.parent.parent since the src/ reorg — the factory root).
+  In the kit, there is no factory root —
   adapters carry their own view/dashboard YAML.  The kit's build-sdk passes
   project_dir as repo_root so that bundled_content: paths are relative to the
   adapter's own directory.
@@ -75,7 +76,11 @@ BUILDKIT_VERSION = "0.2.1"
 # ---------------------------------------------------------------------------
 
 _HERE = Path(__file__).parent
-_REPO_ROOT = _HERE.parent
+# _SRC_ROOT: parent of all sibling vcfops_* packages (src/ after the reorg).
+_SRC_ROOT = _HERE.parent
+# _REPO_ROOT: the actual factory repo root (one level above src/), used for
+# repo-level assets like dist/ and LICENSE that never moved under src/.
+_REPO_ROOT = _SRC_ROOT.parent
 
 # Source files to copy into sdk_buildkit/
 _FACTORY_SOURCES = {
@@ -83,16 +88,16 @@ _FACTORY_SOURCES = {
     "sdk_builder.py": _HERE / "sdk_builder.py",
     "sdk_project.py": _HERE / "sdk_project.py",
     "pak_compare.py": _HERE / "pak_compare.py",
-    "provenance.py": _REPO_ROOT / "vcfops_common" / "provenance.py",
-    "dashboard_loader.py": _REPO_ROOT / "vcfops_dashboards" / "loader.py",
-    "dashboard_render.py": _REPO_ROOT / "vcfops_dashboards" / "render.py",
-    "dashboard_yaml_utils.py": _REPO_ROOT / "vcfops_dashboards" / "yaml_utils.py",
-    "sm_loader.py": _REPO_ROOT / "vcfops_supermetrics" / "loader.py",
-    "symptoms_loader.py": _REPO_ROOT / "vcfops_symptoms" / "loader.py",
-    "alerts_loader.py": _REPO_ROOT / "vcfops_alerts" / "loader.py",
-    "alerts_render.py": _REPO_ROOT / "vcfops_alerts" / "render.py",
-    "reports_loader.py": _REPO_ROOT / "vcfops_reports" / "loader.py",
-    "reports_render.py": _REPO_ROOT / "vcfops_reports" / "render.py",
+    "provenance.py": _SRC_ROOT / "vcfops_common" / "provenance.py",
+    "dashboard_loader.py": _SRC_ROOT / "vcfops_dashboards" / "loader.py",
+    "dashboard_render.py": _SRC_ROOT / "vcfops_dashboards" / "render.py",
+    "dashboard_yaml_utils.py": _SRC_ROOT / "vcfops_dashboards" / "yaml_utils.py",
+    "sm_loader.py": _SRC_ROOT / "vcfops_supermetrics" / "loader.py",
+    "symptoms_loader.py": _SRC_ROOT / "vcfops_symptoms" / "loader.py",
+    "alerts_loader.py": _SRC_ROOT / "vcfops_alerts" / "loader.py",
+    "alerts_render.py": _SRC_ROOT / "vcfops_alerts" / "render.py",
+    "reports_loader.py": _SRC_ROOT / "vcfops_reports" / "loader.py",
+    "reports_render.py": _SRC_ROOT / "vcfops_reports" / "render.py",
     "docs_gen.py": _HERE / "docs_gen.py",
 }
 
@@ -168,20 +173,24 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         ),
         # Relocate path constants:
         #   _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"  (no change; _HERE is already right)
-        #   _LICENSE_PATH = _HERE.parent / "LICENSE"  → _HERE / "LICENSE"
+        #   _LICENSE_PATH = _REPO_ROOT / "LICENSE"  → _HERE / "LICENSE"
+        # (source uses _REPO_ROOT = _HERE.parent.parent since the src/ reorg —
+        # two levels up from src/vcfops_managementpacks/sdk_builder.py to the
+        # factory repo root; the flat kit has no repo root, so this collapses
+        # to _HERE.)
         (
-            r'_LICENSE_PATH = _HERE\.parent / "LICENSE"',
+            r'_LICENSE_PATH = _REPO_ROOT / "LICENSE"',
             '_LICENSE_PATH = _HERE / "LICENSE"',
         ),
-        #   _REFERENCES_DIR = _HERE.parent / "tmp" / "reference_paks"  → _HERE / "reference_paks"
+        #   _REFERENCES_DIR = _REPO_ROOT / "tmp" / "reference_paks"  → _HERE / "reference_paks"
         (
-            r'_REFERENCES_DIR = _HERE\.parent / "tmp" / "reference_paks"',
+            r'_REFERENCES_DIR = _REPO_ROOT / "tmp" / "reference_paks"',
             '_REFERENCES_DIR = _HERE / "reference_paks"',
         ),
         # icons path: _HERE / "templates" / "icons" — same structure; no change needed
-        # but sdk_builder also does _HERE.parent / "dist" for default output_dir:
+        # but sdk_builder also does _REPO_ROOT / "dist" for default output_dir:
         (
-            r'output_dir = _HERE\.parent / "dist"',
+            r'output_dir = _REPO_ROOT / "dist"',
             'output_dir = Path.cwd() / "dist"',
         ),
         # NOTE: Two rewrite rules that patched `_repo_root = _HERE.parent` were

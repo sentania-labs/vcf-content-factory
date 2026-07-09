@@ -19,26 +19,29 @@ reference/                   Immutable external material (RULE-016) — see Know
 
 ## Python packages
 
-One package per content type plus shared infrastructure. Only the
-`tooling` agent edits these.
+One package per content type plus shared infrastructure, all under
+`src/`. Only the `tooling` agent edits these. Package names and
+module invocations are unchanged by the `src/` move — `python3 -m
+vcfops_<x>` still works verbatim (ambient `PYTHONPATH=src`).
 
 ```
-vcfops_common/               Shared helpers: env loader, base HTTP client
-vcfops_supermetrics/         Loader, client, CLI (validate/list/sync/delete)
-vcfops_dashboards/           Views + dashboards loader/render/client/CLI
-vcfops_customgroups/         Custom groups + group types loader/client/CLI
-vcfops_symptoms/             Symptom definitions loader/client/CLI
-vcfops_alerts/               Alert + recommendation loader/render/client/CLI
-vcfops_reports/              Report definitions loader/render/client/CLI
-vcfops_packaging/            Bundle loader, builder, install script templates
-vcfops_managementpacks/      MP YAML loader, MPB render, .pak builder/installer
-vcfops_extractor/            Reverse flow — extract live dashboards into bundles
+src/
+  vcfops_common/             Shared helpers: env loader, base HTTP client
+  vcfops_supermetrics/       Loader, client, CLI (validate/list/sync/delete)
+  vcfops_dashboards/         Views + dashboards loader/render/client/CLI
+  vcfops_customgroups/       Custom groups + group types loader/client/CLI
+  vcfops_symptoms/           Symptom definitions loader/client/CLI
+  vcfops_alerts/             Alert + recommendation loader/render/client/CLI
+  vcfops_reports/            Report definitions loader/render/client/CLI
+  vcfops_packaging/          Bundle loader, builder, install script templates
+  vcfops_managementpacks/    MP YAML loader, MPB render, .pak builder/installer
+  vcfops_extractor/          Reverse flow — extract live dashboards into bundles
 ```
 
 Every package follows the same skeleton:
 
 ```
-vcfops_<type>/
+src/vcfops_<type>/
   __init__.py
   __main__.py    → cli.main()
   loader.py      → YAML schema → dataclass, validate

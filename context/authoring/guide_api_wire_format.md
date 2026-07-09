@@ -33,7 +33,7 @@ structures the UI dialogs accept.
 ## QA and testing priorities
 
 ### Struts priority: framework=last-ditch, QA=primary
-Framework code (vcfops_*/) should use REST Suite API first, Struts
+Framework code (src/vcfops_*/) should use REST Suite API first, Struts
 last-ditch. QA testing should prefer Struts/Ext.Direct paths that
 replicate real admin experience.
 

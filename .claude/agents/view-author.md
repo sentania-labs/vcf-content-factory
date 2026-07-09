@@ -10,7 +10,7 @@ Nothing else.
 
 **Output location is `content/` — not the repo root.** The factory's
 canonical content root is `content/` (the loaders scan `content/views`,
-`content/dashboards`, `content/customgroups` — see `vcfops_dashboards/cli.py`).
+`content/dashboards`, `content/customgroups` — see `src/vcfops_dashboards/cli.py`).
 A bare `views/` at the repo root is NOT the content-import location.
 (Dashboards bundled *inside* an SDK-adapter pak are the one exception, and
 that's the adapter author's job, not yours.) See lesson
@@ -67,7 +67,7 @@ Track-specific examples:
 7. **Never install.**
 8. **Supported view types: `list`, `distribution`, `trend`.** The factory's
    loader/renderer support exactly three `data_type` values
-   (`vcfops_dashboards/loader.py`): `list` (default; `list`/`summary`
+   (`src/vcfops_dashboards/loader.py`): `list` (default; `list`/`summary`
    presentation), `distribution` (`bar-chart`/`pie-chart`/`donut-chart`), and
    `trend` (`line-chart`). You author all three — see
    `context/authoring/view_dashboard_design_guide.md` for each type's columns,

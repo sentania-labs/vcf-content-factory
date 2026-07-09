@@ -904,7 +904,7 @@ class TestPolicyCaveatInReadme:
         from pathlib import Path
         template = (
             Path(__file__).parent.parent
-            / "vcfops_packaging" / "templates" / "README_framework.md"
+            / "src" / "vcfops_packaging" / "templates" / "README_framework.md"
         )
         content = template.read_text(encoding="utf-8")
         assert self._CAVEAT_FRAGMENT in content, (

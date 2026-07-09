@@ -184,7 +184,7 @@ entries from the BuilderFile and writes them as nested
 `instanced` attribute is hardcoded to `false` in the emitter
 because the source-model class doesn't carry the value.
 
-## 5. Implications for `vcfops_managementpacks/`
+## 5. Implications for `src/vcfops_managementpacks/`
 
 ### 5.1 YAML schema delta on `MetricSetDef` (loader.py line 482)
 

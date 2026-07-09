@@ -159,7 +159,7 @@ edge.
 
 ### Loader implications
 
-The loader in `vcfops_customgroups/` faithfully emits whatever the
+The loader in `src/vcfops_customgroups/` faithfully emits whatever the
 YAML says. No loader bug here — the YAML itself was expressing an
 unrepresentable rule. No code change needed unless we want the
 validator to warn on

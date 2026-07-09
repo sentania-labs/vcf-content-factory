@@ -127,7 +127,7 @@ names — they cannot be pre-resolved in a pak.
 
 ### The fix (build 19)
 
-Added `_VIEW_PIN_CONTAINER` table to `vcfops_dashboards/render.py` mapping
+Added `_VIEW_PIN_CONTAINER` table to `src/vcfops_dashboards/render.py` mapping
 `(adapter_kind, leaf_resource_kind)` to the world-singleton container
 `(container_adapter_kind, container_resource_kind, container_resource_name)`.
 
@@ -151,7 +151,7 @@ The idps-planner reference confirmed this exact pattern works end-to-end.
 
 When authoring a dashboard with a self-provider View widget pinned to a
 leaf kind for a new adapter, add an entry to `_VIEW_PIN_CONTAINER` in
-`vcfops_dashboards/render.py`.  The container resource name must be a
+`src/vcfops_dashboards/render.py`.  The container resource name must be a
 resource that will always exist when the owning adapter is installed
 (typically the adapter's "world" singleton).
 

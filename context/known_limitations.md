@@ -28,7 +28,7 @@ super metrics via the CLI today.
 The *server* constraint is narrower:
 `PUT /internal/supermetrics/assign` with `policyIds` is a no-op for
 content-zip-imported SMs (real server behavior, documented in
-`vcfops_supermetrics/client.py:287-292`). But the policy-export →
+`src/vcfops_supermetrics/client.py:287-292`). But the policy-export →
 edit-XML → re-import path used for actual enablement is
 policy-agnostic — it already operates on whatever ZIP the server
 returns. The Default-only behavior is a framework code shortcut,
@@ -210,7 +210,7 @@ Tier 2 native Java SDK adapter authoring path. Tier 2 has full
 programmatic control over relationship emission and the metric wire
 format. The factory's Tier 2 pipeline (`build-sdk`, `scaffold-sdk`,
 `validate-sdk` CLI commands, framework JAR at
-`vcfops_managementpacks/adapter_framework/`) is Phase-1 operational.
+`src/vcfops_managementpacks/adapter_framework/`) is Phase-1 operational.
 
 For Synology DSM-shape APIs (where the data model exposes shared
 scalar identifiers between parent and child responses), `field_match`

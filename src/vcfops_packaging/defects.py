@@ -60,7 +60,7 @@ from typing import List, Optional
 # ---------------------------------------------------------------------------
 
 #: Default path to the defect registry, relative to the repo root.
-REGISTRY_PATH = Path(__file__).parent.parent / "context" / "defects.md"
+REGISTRY_PATH = Path(__file__).parent.parent.parent / "context" / "defects.md"
 
 #: Valid severity values.
 _VALID_SEVERITIES = frozenset({"blocking", "tracked"})

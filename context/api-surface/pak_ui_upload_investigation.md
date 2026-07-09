@@ -10,7 +10,7 @@ forbidden further live probes until he authorizes the next one).
 
 **Scope constraint honored.** This investigation consulted only
 static sources: repo docs, prior `context/*.md` exploration logs,
-the `vcfops_managementpacks/installer.py` source, and the three
+the `src/vcfops_managementpacks/installer.py` source, and the three
 reference clones under `reference/references/` that contain UI-relevant JS.
 No requests were made against the live instance.
 
@@ -161,7 +161,7 @@ be polled at `GET /admin/admin/services/solution/upload?uploadId=
 
 ### 5. The CLI currently uses only the admin-side path
 
-`vcfops_managementpacks/installer.py` implements:
+`src/vcfops_managementpacks/installer.py` implements:
 
 - Install: `_AdminSession` → `/admin/login.action` + `/admin/
   commonJS.action` (CSRF) + `/admin/utility.action prepareFileUpload`
@@ -251,7 +251,7 @@ resolve this is:
    (hypothesis 1), the CLI refactor is larger and Scott should
    weigh the value.
 
-## Implications for `vcfops_managementpacks/installer.py` if hypothesis 3 is confirmed
+## Implications for `src/vcfops_managementpacks/installer.py` if hypothesis 3 is confirmed
 
 **The current install code works.** Confirming a `/ui/`-side upload
 endpoint is a refactor opportunity, not a bug fix. Concrete changes
@@ -360,7 +360,7 @@ made. Drafting them is in scope for a docs-only PR.
 Scott authorized read-only static-asset fetches against the live
 lab. The `/ui/` SPA bundles were downloaded with an authenticated
 `/ui/` admin session (mirrors the `_UISession` pattern in
-`vcfops_managementpacks/installer.py`) and grepped for the
+`src/vcfops_managementpacks/installer.py`) and grepped for the
 upload-related strings the brief listed. Bundles were fetched
 from `https://<VCFOPS_HOST>/ui/dist/js/app.part{0..6}.min.js` plus
 ~30 supporting JS files referenced by `<script src=...>` in
@@ -617,7 +617,7 @@ by the `/ui/` SPA in-process, no iframe, no `/admin/` redirect.
 | 2 | iframe / nav-out to `/admin/` SPA for upload | **Ruled out.** The Add button instantiates an in-SPA Ext window (`Ext.create("...ConfigurationWizard", { autoShow: true })`); no iframe, no navigation. |
 | 3 | distinct `/ui/` upload endpoint | **Confirmed.** `/ui/admin/services/solution/upload` exists and is wired to the same Java handler that `/admin/admin/services/solution/upload` is wired to (same wizard code, same response shape). |
 
-### Implications for `vcfops_managementpacks/installer.py`
+### Implications for `src/vcfops_managementpacks/installer.py`
 
 Recap of the four refactor opportunities listed earlier in this
 file, now that hypothesis 3 is confirmed:
@@ -758,7 +758,7 @@ VCF Operations 9.0.2.0 build 25137838 only.
   summary needing a row for `/ui/solution.action`.
 - `context/dashboard_delete_api.md` — canonical `/ui/` session
   login pattern with `OPS_SESSION` CSRF.
-- `vcfops_managementpacks/installer.py` — current dual-session
+- `src/vcfops_managementpacks/installer.py` — current dual-session
   CLI implementation.
 - Live `/ui/dist/js/app.part{0..6}.min.js` SPA bundles — not
   reproduced in the repo. The 2026-04-16 second-pass live fetch

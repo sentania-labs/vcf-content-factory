@@ -72,7 +72,7 @@ from .loader import Bundle, BuiltinMetricEnable
 from .template_version import CURRENT_TEMPLATE_VERSION
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
-_REPO_ROOT = Path(__file__).parent.parent
+_REPO_ROOT = Path(__file__).parent.parent.parent
 
 # Supported content types
 DISCRETE_TYPES = {

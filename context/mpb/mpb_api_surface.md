@@ -281,7 +281,7 @@ The `source.source.id` field is MPB-server-minted (UUID4) in the reference expor
 the factory derives a stable UUID5 from `adapter_kind` per CLAUDE.md §6.
 
 **Factory support**: `python3 -m vcfops_managementpacks render-export <mp.yaml> --out <output.json>`
-implemented in `vcfops_managementpacks/render_export.py` (2026-04-18).
+implemented in `src/vcfops_managementpacks/render_export.py` (2026-04-18).
 
 ## Pak conf/ layout — both design.json AND export.json required (2026-04-18, reconfirmed 2026-05-15)
 
@@ -492,7 +492,7 @@ for exchange format**. Update when rewriting the flat-vs-exchange table:
 events in exchange format are `events → list of {"event": ...}` like
 the other three sections, not "flat list".
 
-**Tooling fix location**: `vcfops_managementpacks/render_export.py`.
+**Tooling fix location**: `src/vcfops_managementpacks/render_export.py`.
 Wherever it builds the `events` list, wrap each item:
 `{"event": <current>}` — same pattern as the existing `{"object": ...}`,
 `{"request": ...}`, `{"relationship": ...}` emitters.

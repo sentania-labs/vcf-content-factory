@@ -179,7 +179,7 @@ error feedback — silent data loss is the failure mode, not exceptions.
 ## Reference files
 
 - `content/sdk-adapters/compliance/` — the compliance adapter project
-- `vcfops_managementpacks/adapter_framework/src/.../stitch/ForeignResourceResolver.java` — proven host lookup
+- `src/vcfops_managementpacks/adapter_framework/src/.../stitch/ForeignResourceResolver.java` — proven host lookup
 - `context/cleanroom-spec/spec/07-relationships-cross-mp.md` — cross-MP attachment spec (aspirational, not fully accurate for Java SDK)
 - `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/app/collectors/host/collectHostData.py` — working Python SDK pattern (different runtime, cannot be replicated in Java SDK)
 - `context/investigations/action_wire_format_deep_dive.md` — action research (Phase 2 reference)

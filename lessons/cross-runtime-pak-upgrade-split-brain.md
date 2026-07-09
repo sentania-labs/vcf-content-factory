@@ -52,6 +52,6 @@ or deleting filtered results.
   experiment, structural comparison table, cleanup verification
 - `designs/managementpacks/vcommunity.md` — Tier 2 design; "distinct kind key"
   is now a hard requirement, not a nicety
-- Related toolset note: `vcfops_managementpacks/sdk_project.py` rejects
+- Related toolset note: `src/vcfops_managementpacks/sdk_project.py` rejects
   mixed-case adapter kind keys (`[a-z][a-z0-9_]*`) that VCF Ops itself accepts
   — a same-identity build is un-buildable through `build-sdk` as it stands

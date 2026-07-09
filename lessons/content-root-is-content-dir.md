@@ -18,9 +18,9 @@ The factory's canonical content root is **`content/`**. The loaders scan there
 and nowhere else:
 
 ```
-vcfops_dashboards/cli.py:18   DEFAULT_VIEWS      = Path("content/views")
-vcfops_dashboards/cli.py:19   DEFAULT_DASHBOARDS = Path("content/dashboards")
-vcfops_dashboards/cli.py:211  _cg_dir            = Path("content/customgroups")
+src/vcfops_dashboards/cli.py:18   DEFAULT_VIEWS      = Path("content/views")
+src/vcfops_dashboards/cli.py:19   DEFAULT_DASHBOARDS = Path("content/dashboards")
+src/vcfops_dashboards/cli.py:211  _cg_dir            = Path("content/customgroups")
 ```
 
 Every content type lives under `content/` — `content/{supermetrics,views,

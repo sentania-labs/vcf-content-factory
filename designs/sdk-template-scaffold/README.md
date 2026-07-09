@@ -15,7 +15,7 @@ be maintained centrally and PR'd.
   Releases, builds the `.pak` headlessly (no agent, no factory checkout), gates
   on `pak-compare`, and attaches the `.pak` to the tag's GitHub Release.
 - `ci/defect_gate.py` — **vendored** copy of the factory's
-  `vcfops_packaging/defects.py`, committed into each pak repo so the gate runs
+  `src/vcfops_packaging/defects.py`, committed into each pak repo so the gate runs
   *local, reviewable* code (never fetched-and-executed from a mutable ref — that
   would run arbitrary factory-main code on a secret-bearing runner). Re-vendor
   when the gate's parser changes; only the registry DATA (`defects.md`) is

@@ -39,7 +39,7 @@ Pick the destination by scope, not by convenience:
 | Kind of knowledge | Destination |
 |---|---|
 | DSL pattern, formula idiom, anti-pattern | `context/supermetric_authoring.md` AND `.claude/agents/supermetric-author.md` (the agent prompt is what gets loaded at delegation time) |
-| Wire format detail (zip layout, JSON shape, header) | `context/wire_formats.md` (or the topical wire format file) AND the relevant `vcfops_*/render.py` or `loader.py` if the renderer needs to emit it |
+| Wire format detail (zip layout, JSON shape, header) | `context/wire_formats.md` (or the topical wire format file) AND the relevant `src/vcfops_*/render.py` or `loader.py` if the renderer needs to emit it |
 | API surface (endpoint, behavior, auth quirk) | `context/content_api_surface.md` or the topical API file |
 | "Do this not that" correction for an agent | The agent's prompt under `.claude/agents/<agent>.md`. Hard rules go in the **Hard rules** section; idioms go in the workflow section |
 | Orchestrator-level rule (delegation, install gating) | `CLAUDE.md` itself, in the relevant section |

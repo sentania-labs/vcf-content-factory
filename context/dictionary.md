@@ -132,7 +132,7 @@ execution).
 The `install.py` and `install.ps1` files inside a Package —
 the drop-in executables a user runs to perform a Package
 install. Plural because we ship one per supported OS/runtime.
-Generated from templates in `vcfops_packaging/templates/`.
+Generated from templates in `src/vcfops_packaging/templates/`.
 
 *Distinct from:* Tooling install (which uses the `vcfops_*`
 Python modules directly, not these scripts).
