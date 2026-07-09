@@ -61,7 +61,7 @@ class MPBClient:
         return cls(c)
 
     # ------------------------------------------------------------------
-    # POST /internal/mpbuilder/knowledge/designs/import
+    # POST /internal/mpbuilder/designs/import
     # ------------------------------------------------------------------
 
     def post_design_import(
@@ -70,7 +70,7 @@ class MPBClient:
     ) -> Dict[str, Any]:
         """Upload an MPB exchange-format envelope to the import endpoint.
 
-        Endpoint: POST /suite-api/internal/mpbuilder/knowledge/designs/import
+        Endpoint: POST /suite-api/internal/mpbuilder/designs/import
         Required header: X-Ops-API-use-unsupported: true
 
         Args:
@@ -97,7 +97,7 @@ class MPBClient:
             silently overwrite the earlier design.  See mpb_api_surface.md
             §"Collateral note — import may collide on source.source.id".
         """
-        path = f"{_MPB_BASE}/knowledge/designs/import"
+        path = f"{_MPB_BASE}/designs/import"
         r = self._c._request(
             "POST",
             path,

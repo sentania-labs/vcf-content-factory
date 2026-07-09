@@ -451,7 +451,7 @@ def _append_traversal_spec_kinds(
     # entirely (confirmed: synology_diskstation has no peer relationships and
     # does NOT appear in the MPB reference TraversalSpec paths).
     #
-    # Wire shape reference: knowledge/context/mpb_wire_reference/synology_nas_working_describe.xml
+    # Wire shape reference: knowledge/context/mpb/wire_reference/synology_nas_working_describe.xml
     # lines 177-180.  Paths observed:
     #   pool -> volume -> iscsi_lun   (Path 1)
     #   pool -> disks                 (Path 2)
@@ -773,7 +773,7 @@ def _append_bare_adapter_instance_kind(
     ComputedMetric expressions reference attributes that don't exist at runtime,
     causing world-level count metrics to return blank.
 
-    Wire shape reference: knowledge/context/mpb_wire_reference/synology_nas_working_describe.xml
+    Wire shape reference: knowledge/context/mpb/wire_reference/synology_nas_working_describe.xml
     lines 13-19.  Attribute shape: dataType="float", isProperty="false",
     isRate="false", isDiscrete="false".
     """
@@ -991,7 +991,7 @@ def _append_data_kind(
     #   - On each child kind:  mpb_{ak}_{parent_kind_key}_parent
     # Derivation: walk mp.relationships, collect all parent/child roles for
     # this kind (by short YAML key), and emit the matching directed attributes.
-    # Wire shape reference: knowledge/context/mpb_wire_reference/synology_nas_working_describe.xml
+    # Wire shape reference: knowledge/context/mpb/wire_reference/synology_nas_working_describe.xml
     # (storage_pool lines 121-125, volume lines 84-88, disks lines 136-139,
     # iscsi_lun lines 107-110).  Shape: dataType="string", isProperty="true",
     # isRate="false".
@@ -1192,7 +1192,7 @@ def _append_world_aggregate_kind(
     and the expression sums that same attribute on the adapter-instance kind
     (objecttype={ak}) at depth=1.
 
-    Wire format reference: knowledge/context/mpb_wire_reference/synology_nas_working_describe.xml
+    Wire format reference: knowledge/context/mpb/wire_reference/synology_nas_working_describe.xml
     lines 156-171 (2026-04-22).
     """
     nk = name_key_counter[0]

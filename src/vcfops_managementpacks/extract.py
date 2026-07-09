@@ -11,7 +11,7 @@ the factory's UUID5-derived IDs.
 
 USAGE:
     python3 -m vcfops_managementpacks extract \\
-        --from knowledge/context/mpb_wire_reference/synology_nas_working_export.json \\
+        --from knowledge/context/mpb/wire_reference/synology_nas_working_export.json \\
         --out /tmp/extracted.yaml
 
 The output YAML is a starting point for review, not a drop-in replacement.
@@ -23,7 +23,7 @@ The author should:
   4. Confirm response_path (derived from the DML id prefix before the
      list component).
 
-WIRE FORMAT NOTES (from knowledge/context/mpb_wire_reference/synology_nas_working_export.json):
+WIRE FORMAT NOTES (from knowledge/context/mpb/wire_reference/synology_nas_working_export.json):
   - top-level keys: type, design, source, objects, relationships, events, requests
   - requests[].request.response.result.dataModelLists[].id encodes the full
     JSON path + .* suffix for list DMLs (e.g. "data.volumes.*") or "base"

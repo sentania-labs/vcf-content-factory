@@ -16,7 +16,7 @@ Usage (direct):
     print(format_report(findings, factory_label, reference_label))
 
 Wire format references:
-  knowledge/context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json
+  knowledge/context/mpb/wire_reference/vsphere_storage_paths_aria_ops_stitch.json
   knowledge/context/investigations/mpb_adapter_jar_reverse_engineering.md
 """
 from __future__ import annotations

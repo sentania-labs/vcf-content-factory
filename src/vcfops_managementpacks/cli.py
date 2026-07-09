@@ -600,7 +600,7 @@ def cmd_pak_compare(args) -> int:
 
 def cmd_push_design(args) -> int:
     """Upload an MPB exchange-format JSON (or render one from YAML) and POST it
-    to POST /suite-api/internal/mpbuilder/knowledge/designs/import on a live VCF Ops instance.
+    to POST /suite-api/internal/mpbuilder/designs/import on a live VCF Ops instance.
 
     Accepts either:
       - A pre-rendered exchange-format JSON file (produced by render-export).
@@ -715,7 +715,7 @@ def cmd_push_design(args) -> int:
     # ------------------------------------------------------------------
     print(
         f"Importing design {design_name!r} to "
-        f"https://{client.host}/suite-api/internal/mpbuilder/knowledge/designs/import ...",
+        f"https://{client.host}/suite-api/internal/mpbuilder/designs/import ...",
         file=sys.stderr,
     )
     try:
@@ -752,7 +752,7 @@ def cmd_push_design(args) -> int:
     # The exact deep-link to a specific design is not documented in mpb_api_surface.md;
     # the admin-landing URL for the MPB section is used as the closest confirmed path.
     # Update this when a confirmed per-design deep-link is established.
-    ui_url = f"https://{host}/ui/index.action#/mpbuilder/knowledge/designs/{design_id}"
+    ui_url = f"https://{host}/ui/index.action#/mpbuilder/designs/{design_id}"
 
     print(f"Design imported: name={design_name!r}  id={design_id}")
     print(f"  URL: {ui_url}")
@@ -1241,7 +1241,7 @@ def build_parser() -> argparse.ArgumentParser:
         "push-design",
         help=(
             "upload an MPB exchange-format JSON (or render from YAML) to "
-            "POST /suite-api/internal/mpbuilder/knowledge/designs/import on a live "
+            "POST /suite-api/internal/mpbuilder/designs/import on a live "
             "VCF Ops instance. Replaces the prior manual curl workflow. "
             "See knowledge/context/mpb/mpb_api_surface.md for endpoint documentation."
         ),

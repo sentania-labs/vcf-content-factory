@@ -11,7 +11,7 @@ Wire format derived from:
 Key wire-format facts encoded here:
   - All IDs are UUID5 strings (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx), derived
     deterministically from a stable factory namespace + semantic seed string.
-    MPB's UI import endpoint (POST /suite-api/internal/mpbuilder/knowledge/designs/import)
+    MPB's UI import endpoint (POST /suite-api/internal/mpbuilder/designs/import)
     validates UUID shape before processing; base62 IDs cause HTTP 400.
   - Two independent `id` fields per object: object.id AND internalObjectInfo.id.
   - is_world: true → isListObject: false; world metricSets use listId "base".
@@ -621,7 +621,7 @@ def _render_paging(pg: Optional["PagingDef"]) -> Optional[Dict]:
     sets RequestDef.paging=None, so this function always returns None from the
     YAML-driven path.  It is preserved for the flat-render path only.
 
-    Wire format confirmed from knowledge/context/mpb_wire_reference/synology_nas_working_export.json
+    Wire format confirmed from knowledge/context/mpb/wire_reference/synology_nas_working_export.json
     (2026-04-21 ground truth).  Key name is `pagingStart` (not `start`).
     The paging block also has a `response` sub-block with its own dataModelLists,
     which MPB populates from live API responses — we do not synthesize it here
@@ -724,7 +724,7 @@ def _render_aria_ops_conf(aria_ops: "AriaOpsConf", obj_seed: str) -> Dict:
     cross-reference target in the metricSet's objectMatchExpression.
 
     Wire format ground truth:
-      knowledge/context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json
+      knowledge/context/mpb/wire_reference/vsphere_storage_paths_aria_ops_stitch.json
       §objects[0].object.ariaOpsConf
 
     The binding metric's usage is "ARIA_OPS_REFERENCE_ID" (NOT
@@ -1039,7 +1039,7 @@ def _render_authentication(mp: ManagementPackDef) -> Dict:
         # Stateless header-based auth (e.g. X-API-Key).
         # Emits CUSTOM credential type with no sessionSettings block.
         # TOKEN was previously emitted here but appears in zero known-working MPB
-        # imports and caused HTTP 400 on POST /internal/mpbuilder/knowledge/designs/import.
+        # imports and caused HTTP 400 on POST /internal/mpbuilder/designs/import.
         # HoL GitLab-Basic (credentialType: CUSTOM, sessionSettings: null, single
         # API-key header via globalHeaders) is the correct analogue (2026-05-07).
         # The inject[] rules on this preset render into globalHeaders (handled in
@@ -1748,7 +1748,7 @@ def _render_one_object(
 
         if ot.type == "ARIA_OPS" and ms_def.primary and ms_def.stitch_match_field:
             # Case 0 — ARIA_OPS primary metricSet: cross-resource stitching binding.
-            # Ground truth: knowledge/context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json
+            # Ground truth: knowledge/context/mpb/wire_reference/vsphere_storage_paths_aria_ops_stitch.json
             stitch_field = ms_def.stitch_match_field
             aria_ops = ot.aria_ops
 

@@ -595,7 +595,7 @@ def _strip_object(obj: Dict[str, Any]) -> Dict[str, Any]:
 
     For ARIA_OPS objects:
       - ariaOpsConf: KEPT with its value (confirmed from ground truth:
-        knowledge/context/mpb_wire_reference/vsphere_storage_paths_aria_ops_stitch.json).
+        knowledge/context/mpb/wire_reference/vsphere_storage_paths_aria_ops_stitch.json).
       - internalObjectInfo is absent (ARIA_OPS objects don't have it).
       - objectBinding uses "objectBindingType" key — passed through as-is.
       - designId: dropped from ARIA_OPS objects as well (consistent with INTERNAL
