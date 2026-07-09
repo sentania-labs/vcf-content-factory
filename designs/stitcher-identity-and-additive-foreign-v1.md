@@ -1,5 +1,14 @@
 # stitcher v3 — automationAdmin identity + additive foreign-parent edges
 
+**CORRECTION (2026-07-09, per 2026-07-02 findings):** the evidence-base
+line below citing the cp-auth-door probe's "Oracle puzzle solved
+(describe.xml traversal, no suite-api calls)" is disproven: describe.xml
+traversal never creates edges; Oracle's edges come from a per-cycle Suite
+API read under the platform-injected per-instance credential. See
+`context/investigations/oracle-stitch-autopsy-2026-07-02.md` and the
+CORRECTION addenda on the probe doc itself
+(`context/investigations/cp-auth-door-probe-2026-07-01.md`).
+
 ## Initial prompt (verbatim, 2026-07-01 session)
 
 The change emerged over one investigation thread. The load-bearing user

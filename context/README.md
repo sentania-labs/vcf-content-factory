@@ -136,6 +136,21 @@ Content export snapshots from live instances.
 Session-specific research logs, diff analyses, and exploration notes. Read when
 debugging a specific issue; not required reading.
 
+### `reviews/` — Build and framework review reports
+Point-in-time review records: per-build SDK adapter reviews written by
+`sdk-adapter-reviewer`, and `reviews/framework/` written by
+`framework-reviewer` (the pre-PR gate on `src/vcfops_*/` changes).
+Timestamped records, not living docs.
+
+### `cleanroom-requests/` — Cleanroom investigation requests
+Dated request/finding notes feeding the cleanroom reverse-engineering work
+(see `cleanroom-spec/`).
+
+### `attic/` — Retired historical artifacts
+Superseded files kept for provenance (e.g. `attic/legacy-root-content/` —
+the pre-`content/`-era root dashboards/views YAMLs retired in reorg v2
+phase 0). Never read for current guidance.
+
 ---
 
 ## Reference files
@@ -144,3 +159,5 @@ debugging a specific issue; not required reading.
 | `reference_sources.md` | Allowlisted external reference repos |
 | `reference_docs.md` | Reference docs inventory + PDF extraction |
 | `managed_paks.md` | SDK pak registry — per-repo Tier 2 adapters cloned by `scripts/bootstrap_managed_paks.sh` |
+| `feedback_queue.md` | Intake queue for user feedback/enhancement requests, pre-triage (correctness problems graduate to `defects.md`) |
+| `vrops-content-management.md` | Extracted community article (Brock Peterson) on vROps content management via the Suite API |
