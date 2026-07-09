@@ -11,7 +11,7 @@ import java.util.List;
  *
  * <p>No JUnit required — call via {@code main()}. Covers the additive
  * foreign-parent write-verb split (2026-07-01 —
- * {@code context/reviews/synology-stitcher-vs-tvs-corpus.md} R1): edges whose
+ * {@code knowledge/context/reviews/synology-stitcher-vs-tvs-corpus.md} R1): edges whose
  * parent belongs to a foreign adapter must be emitted via
  * {@link Relationships#addRelationships} (never full-set
  * {@link Relationships#setRelationships}), while own-adapter parents keep

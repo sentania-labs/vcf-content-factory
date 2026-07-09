@@ -5,11 +5,11 @@ working in this repo.
 
 ## Knowledge precedence (read in this order)
 
-1. `rules/INDEX.md` — Absolute. Obey without question.
-2. `lessons/INDEX.md` — Hard-won lessons. Read before going
+1. `knowledge/rules/INDEX.md` — Absolute. Obey without question.
+2. `knowledge/lessons/INDEX.md` — Hard-won lessons. Read before going
    down a path that looks obvious. If a lesson covers your
    situation, heed it.
-3. `context/README.md` — Documentation and specs. Reference
+3. `knowledge/context/README.md` — Documentation and specs. Reference
    when doing work.
 4. `reference/references/` — Known-good examples. Grep when authoring.
 5. `reference/docs/` — Immutable vendor source material. Read-only.
@@ -29,8 +29,8 @@ are all part of the deliverable.
   machine, this user's memory, or this dev environment is a bug.
 - **Reviewability matters.** All persistent knowledge lives in the
   repo where it can be diffed and PR'd. Auto-memory is off.
-- **Codify, don't accumulate.** Hard-won lessons go in `lessons/`,
-  `context/`, agent prompts, or skills. See `context/authoring/guide_codification.md`
+- **Codify, don't accumulate.** Hard-won lessons go in `knowledge/lessons/`,
+  `knowledge/context/`, agent prompts, or skills. See `knowledge/context/authoring/guide_codification.md`
   for how. The framework should get smarter over time.
 
 `ADMIN.md` is the human-facing walkthrough of VCF Ops content
@@ -61,7 +61,7 @@ ends up holding all the context.
 
 | Agent | Posture | Writes to | Spawn when |
 |---|---|---|---|
-| `ops-recon` | Read-only against live Ops | `context/investigations/recon_log.md` on request | **Before every authoring task.** Does this exist? Is it enabled? Does a built-in cover it? |
+| `ops-recon` | Read-only against live Ops | `knowledge/context/investigations/recon_log.md` on request | **Before every authoring task.** Does this exist? Is it enabled? Does a built-in cover it? |
 | `supermetric-author` | Author | `content/supermetrics/` | After recon. One SM per invocation. |
 | `customgroup-author` | Author | `content/customgroups/` | User needs a dynamic group. Static is out of scope. |
 | `view-author` | Author | `content/views/` | User wants a list view. Blocks if upstream SM/group missing. |
@@ -69,18 +69,18 @@ ends up holding all the context.
 | `symptom-author` | Author | `content/symptoms/` | After recon confirms no existing symptom fits. |
 | `alert-author` | Author | `content/alerts/`, `content/recommendations/` | After recon, **and** required symptoms exist. |
 | `report-author` | Author | `content/reports/` | User wants a report. Blocks if upstream views missing. |
-| `api-explorer` | Research | `context/` (findings); vendor artifacts may be *added* under `reference/docs/` (RULE-016) | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
-| `tooling` | Engineering | `src/vcfops_*/`, `context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `src/vcfops_*/`. |
+| `api-explorer` | Research | `knowledge/context/` (findings); vendor artifacts may be *added* under `reference/docs/` (RULE-016) | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
+| `tooling` | Engineering | `src/vcfops_*/`, `knowledge/context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `src/vcfops_*/`. |
 | `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. |
 | `content-packager` | Build | `bundles/`, `dist/` | Authors bundle manifests in `bundles/`; builds distributable zips into `dist/`. Rebuild after a tooling change. |
 | `qa-tester` | Testing | `/tmp/` | Acceptance-test a built zip. Spawn after `content-packager`. |
-| `api-cartographer` | Research | `context/api-maps/` (findings); vendor artifacts may be *added* under `reference/docs/` (RULE-016) | New external API for an MP. |
-| `mp-designer` | Design | `designs/` | New MP. Wizard interview against API map. |
+| `api-cartographer` | Research | `knowledge/context/api-maps/` (findings); vendor artifacts may be *added* under `reference/docs/` (RULE-016) | New external API for an MP. |
+| `mp-designer` | Design | `knowledge/designs/` | New MP. Wizard interview against API map. |
 | `mp-author` | Author | `content/managementpacks/` | After `mp-designer` produces approved design. **Tier 1** MPB YAML spec. |
 | `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` (each an independent repo, gitignored) | After `mp-designer` produces approved design. **Tier 2** Java SDK adapter source. The Java sibling to `mp-author`. **Only** agent that edits adapter Java. Commits go to the pak's **own** remote; a real release is a `v*` tag on that repo, not a factory `/publish`. |
-| `sdk-adapter-reviewer` | Read-only review | `context/reviews/` | After `sdk-adapter-author` reports a build, before the install gate. Skeptical correctness/quality check on Tier 2 Java — hunts unreadable-is-compliant, stitch corruption, crash-the-cycle. Never edits source, never installs. |
-| `framework-reviewer` | Read-only review | `context/reviews/framework/` | After `tooling` touches `src/vcfops_*/`, **before the PR**. Skeptical correctness/regression gate on framework Python — the `src/vcfops_*/` sibling of `sdk-adapter-reviewer`. **Blanket:** every `src/vcfops_*/` diff. Re-runs validate/tests/render-regression; hunts global-default-leak / key-collision / silent-downgrade. Never edits source, never installs. |
-| `curator` | Read-only audit | `context/curation/<date>-report.md` | When the SessionStart staleness hook says curation is due (or on request). Librarian over the governance corpus (rules/, lessons/, context/, `.claude/agents/`, CLAUDE.md, skills) — hunts SUPERSEDED / DRIFT / CONTRADICTION / INDEX-ROT / DEAD-REF / STALE-FACT / DUPLICATION / PROMPT-ROSTER-SKEW. Reports only; never edits the corpus, never installs. Spawn **in the background**. |
+| `sdk-adapter-reviewer` | Read-only review | `knowledge/context/reviews/` | After `sdk-adapter-author` reports a build, before the install gate. Skeptical correctness/quality check on Tier 2 Java — hunts unreadable-is-compliant, stitch corruption, crash-the-cycle. Never edits source, never installs. |
+| `framework-reviewer` | Read-only review | `knowledge/context/reviews/framework/` | After `tooling` touches `src/vcfops_*/`, **before the PR**. Skeptical correctness/regression gate on framework Python — the `src/vcfops_*/` sibling of `sdk-adapter-reviewer`. **Blanket:** every `src/vcfops_*/` diff. Re-runs validate/tests/render-regression; hunts global-default-leak / key-collision / silent-downgrade. Never edits source, never installs. |
+| `curator` | Read-only audit | `knowledge/context/curation/<date>-report.md` | When the SessionStart staleness hook says curation is due (or on request). Librarian over the governance corpus (knowledge/rules/, knowledge/lessons/, knowledge/context/, `.claude/agents/`, CLAUDE.md, skills) — hunts SUPERSEDED / DRIFT / CONTRADICTION / INDEX-ROT / DEAD-REF / STALE-FACT / DUPLICATION / PROMPT-ROSTER-SKEW. Reports only; never edits the corpus, never installs. Spawn **in the background**. |
 
 Agent prompts under `.claude/agents/` are authoritative for each
 agent's behavior. If "Spawn when" above ever conflicts with a
@@ -92,9 +92,9 @@ This is the spine of the orchestrator's job. It belongs in this
 file (not a skill) because it runs before any skill could load.
 
 0. **Check rules and lessons.** Before planning any work, read
-   `rules/INDEX.md`. If any rule applies to the current request,
+   `knowledge/rules/INDEX.md`. If any rule applies to the current request,
    follow it — do not propose alternatives. Then scan
-   `lessons/INDEX.md` — if a lesson covers your situation, heed
+   `knowledge/lessons/INDEX.md` — if a lesson covers your situation, heed
    it before committing to a path. Only proceed to recon after
    confirming no rule blocks or redirects the request.
 
@@ -103,13 +103,13 @@ file (not a skill) because it runs before any skill could load.
    language plus the specific questions you want answered. Recon
    checks, in order: built-in metrics, existing instance content,
    existing repo YAML, and allowlisted external reference repos
-   (`context/reference_sources.md`, grepped from `reference/references/`).
+   (`knowledge/context/reference_sources.md`, grepped from `reference/references/`).
    If recon finds an exact match anywhere, tell the user and stop —
    prefer adapt-and-import over authoring from scratch.
 
 2. **Capture intent before delegating.** Once recon confirms the
    content needs to be authored (i.e. no existing match), write a
-   design note to `designs/<type>/<slug>.md` *before* spawning the
+   design note to `knowledge/designs/<type>/<slug>.md` *before* spawning the
    author. The note has two short sections:
 
    - **Initial prompt** — the user's request, verbatim, no editing
@@ -141,14 +141,14 @@ file (not a skill) because it runs before any skill could load.
    **For dashboards specifically (RULE-011):** before spawning
    `dashboard-author`, enter plan mode and present an ASCII / markdown-
    table wireframe of the proposed layout. Get explicit user approval.
-   Commit the wireframe to `designs/dashboards/<slug>.md`. Only then
+   Commit the wireframe to `knowledge/designs/dashboards/<slug>.md`. Only then
    delegate. Skipping this step is how layout problems escape to install
-   — see `rules/wireframe-before-dashboard.md`.
+   — see `knowledge/rules/wireframe-before-dashboard.md`.
 
 4. **Pass filenames, not file contents.** Agents read the
    filesystem themselves. Keeping file contents out of your context
    is how this architecture stays affordable. Every authoring brief
-   includes the `designs/<type>/<slug>.md` path from step 2 so the
+   includes the `knowledge/designs/<type>/<slug>.md` path from step 2 so the
    author can read the intent without you re-typing it.
 
 5. **Validate the whole repo after each round.** Validation is the
@@ -194,13 +194,13 @@ file (not a skill) because it runs before any skill could load.
     `additionalContext` when the governance corpus is overdue
     (`last_run > 7 days` OR `sessions_since > 10`). When you see it:
     spawn the `curator` agent **in the background** (read-only; it writes
-    `context/curation/<date>-report.md`) and tell the user it's running —
+    `knowledge/context/curation/<date>-report.md`) and tell the user it's running —
     do not block their current task. When the curator completes, **reset
-    the marker**: set `context/curation/.last-run`'s `last_run` to today
-    and zero `context/curation/.sessions-since`. The hook only informs;
+    the marker**: set `knowledge/context/curation/.last-run`'s `last_run` to today
+    and zero `knowledge/context/curation/.sessions-since`. The hook only informs;
     it never launches the agent — that's your job. The corpus growing is
     the product, so its rot is a product defect; the curator is how it
-    gets caught. (Design: `designs/curator-v1.md`.)
+    gets caught. (Design: `knowledge/designs/curator-v1.md`.)
 
 ## When the toolset is inadequate
 
@@ -212,7 +212,7 @@ Agent prompts forbid silent workarounds. When an agent returns a
 1. **Punt to the user** — trim or defer the request. Default when
    the gap is large or the fix is ambiguous.
 2. **Spawn `api-explorer`** when the gap is "we don't understand
-   the format." Findings go to `context/`; only verbatim downloaded
+   the format." Findings go to `knowledge/context/`; only verbatim downloaded
    vendor artifacts may be added under `reference/docs/` (RULE-016).
 3. **Spawn `tooling`** to make the repo change. Brief it with the
    specific gap, the working wire format, and what the loader/
@@ -233,7 +233,7 @@ path is first-class, not a sad fallback.
   validate → confirm → install.
 - **Package + QA:** author content → packager → qa-tester → report.
 - **Management pack:** clarify target API → cartographer →
-  catalog-match (`context/api_pattern_catalog.md`) → designer →
+  catalog-match (`knowledge/context/api_pattern_catalog.md`) → designer →
   author → validate → **render-export → push-design → MPB UI Verify
   against mock/live source** → build → pak-compare → confirm →
   install. The MPB UI Verify step is the cheap loop — design.json
@@ -255,7 +255,7 @@ path is first-class, not a sad fallback.
   existing VCF Ops resources (e.g., VMWARE HostSystem); they do not
   appear in describe.xml or template.json. Events are stripped from
   pak builds (runtime format unknown — TOOLSET GAP). See
-  `context/mpb/mpb_pak_structural_reference.md`.
+  `knowledge/context/mpb/mpb_pak_structural_reference.md`.
 - **Management pack (Tier 2 Java SDK):** clarify target API →
   cartographer → designer → **`sdk-adapter-author`** (not `mp-author`;
   Tier 2 is Java source, not MPB YAML) → `validate-sdk` (cheap loop) →
@@ -272,17 +272,17 @@ path is first-class, not a sad fallback.
   independent git repo (in the `sentania-labs` org, named
   `vcf-content-factory-sdk-<name>`), cloned into the gitignored
   `content/sdk-adapters/<name>/` by `scripts/bootstrap_managed_paks.sh`
-  from the `context/managed_paks.md` registry. Authoring/validate/review
+  from the `knowledge/context/managed_paks.md` registry. Authoring/validate/review
   happen in-tree exactly as above and `build-sdk` is still the local dev
   preview — but the **official** release is the pak's own CI building the
   `.pak` on a `v*` git tag (no agent, no factory checkout: a runner pulls
   the published `sdk-buildkit` tarball and runs it). **Before any v\* tag
   is pushed, `python3 -m vcfops_packaging defect-gate --pak <name>` must
-  pass** — an open blocking defect in `context/defects.md` refuses the
-  release (RULE-012, `rules/release-gate-defects.md`). A factory `/publish`
+  pass** — an open blocking defect in `knowledge/context/defects.md` refuses the
+  release (RULE-012, `knowledge/rules/release-gate-defects.md`). A factory `/publish`
   that references an SDK pak emits a **pointer** to that pak's latest
   GitHub Release, never a built/mirrored binary. New pak = instantiate the
-  `…-sdk-template` repo + add one line to `context/managed_paks.md`.
+  `…-sdk-template` repo + add one line to `knowledge/context/managed_paks.md`.
 - **Toolset gap:** punt / api-explorer / tooling → fix → re-invoke.
 - **Framework changes (`src/vcfops_*/`):** tooling → **`framework-reviewer`**
   (blanket, every diff; CHANGES REQUESTED blocks the PR — RULE-013) →
@@ -308,7 +308,7 @@ path is first-class, not a sad fallback.
 
 ## Reference material
 
-Read `context/README.md` for the tiered index of all context files.
+Read `knowledge/context/README.md` for the tiered index of all context files.
 Scan it at session start — it costs almost nothing and prevents
 re-deriving known knowledge.
 

@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@link #apply} call re-acquires a fresh token via the
  * {@link SessionProvider}. A second auth failure on the retry propagates
  * loudly — there is no retry loop. See
- * {@code context/framework_v2_migration.md §21.3}.
+ * {@code knowledge/context/framework_v2_migration.md §21.3}.
  */
 public final class SessionCookieAuth implements AuthStrategy {
 

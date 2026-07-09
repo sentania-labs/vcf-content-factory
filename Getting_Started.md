@@ -272,8 +272,8 @@ The framework leaves a trail. If an install fails:
 - The validation step runs before any wire-format work, so most
   errors come up early.
 - For installer issues, see
-  [context/lessons_pak_install_reliability.md](context/lessons_pak_install_reliability.md)
-  and [context/install_and_enable.md](context/install_and_enable.md).
+  [knowledge/lessons/pak-install-reliability.md](knowledge/lessons/pak-install-reliability.md)
+  and [knowledge/context/api-surface/install_and_enable.md](knowledge/context/api-surface/install_and_enable.md).
 - If the framework hits something it doesn't understand, it will say
   so explicitly and emit a **TOOLSET GAP** report — never silently
   work around. You decide whether to defer, spawn an investigator
@@ -302,11 +302,11 @@ already knows the framework, not like filling out a form.
 
 ## Next steps
 
-- Skim [vcf_ops_concepts.md](vcf_ops_concepts.md) for a
+- Skim [vcf_ops_concepts.md](knowledge/vcf_ops_concepts.md) for a
   reference on what each VCF Ops content type actually is — useful
   if "what's a super metric vs a custom group?" is a real question
   for you.
-- Read [HOW_IT_WORKS.md](HOW_IT_WORKS.md) if you want to understand
+- Read [HOW_IT_WORKS.md](knowledge/HOW_IT_WORKS.md) if you want to understand
   the orchestrator + agents architecture before extending it.
 - Read [CLAUDE.md](CLAUDE.md) if you're forking or contributing — it's
   the rules the orchestrator follows.

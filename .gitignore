@@ -32,11 +32,11 @@ dist/
 src/vcfops_managementpacks/adapter_runtime/
 src/vcfops_managementpacks/adapter_runtime.stubs.bak/
 
-# Local clones of external reference sources (see context/reference_sources.md)
+# Local clones of external reference sources (see knowledge/context/reference_sources.md)
 /reference/references/
 
 # SDK adapter paks are independently-versioned repos cloned here by
-# scripts/bootstrap_managed_paks.sh (see context/managed_paks.md). They are
+# scripts/bootstrap_managed_paks.sh (see knowledge/context/managed_paks.md). They are
 # NOT stored in the factory — each is its own repo with its own CI release.
 content/sdk-adapters/
 
@@ -55,5 +55,5 @@ memory/sessions/
 .pka/
 .claude/scheduled_tasks.lock
 
-# Curation velocity counter — per-checkout, not shared (see designs/curator-v1.md)
-context/curation/.sessions-since
+# Curation velocity counter — per-checkout, not shared (see knowledge/designs/curator-v1.md)
+knowledge/context/curation/.sessions-since

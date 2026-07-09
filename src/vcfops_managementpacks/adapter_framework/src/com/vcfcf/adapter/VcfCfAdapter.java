@@ -95,7 +95,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * component in the pak layout ({@code <adaptersHome>/<key>/conf/describe.xml}).
  * <strong>Do not derive the key from any {@code CommonConstants} field</strong>
  * — those are display-name strings, not filesystem tokens. See
- * {@code lessons/sdk-constants-are-display-names.md}.
+ * {@code knowledge/lessons/sdk-constants-are-display-names.md}.
  *
  * <p>The no-arg constructor inherited from the platform interface is still
  * supported for binary compatibility with any bare-reflection caller, but
@@ -187,7 +187,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * instance rather than once per Suite API request (token acquire, each
      * datastore page, each stitch write). Same instance-scoped once-flag
      * shape as {@link #abortRequested}. (DEF-005 FIPS branch — NIT fix,
-     * `context/reviews/framework/bc-mirror-transport-v1.md`.)
+     * `knowledge/context/reviews/framework/bc-mirror-transport-v1.md`.)
      */
     private final AtomicBoolean fipsGapWarnLogged = new AtomicBoolean(false);
 
@@ -479,7 +479,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                 + "Either override enumerateResources(sink) with the shared enumeration body, "
                 + "or set discoverOnCollect() back to false and hand-roll "
                 + "VcfCfCollector.needsRediscovery() / rediscover() instead. "
-                + "See context/framework_v2_migration.md §22.");
+                + "See knowledge/context/framework_v2_migration.md §22.");
     }
 
     // -----------------------------------------------------------------------
@@ -524,7 +524,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * Build 43 was immune because its {@code onDescribe()} used the static
      * {@code ADAPTER_KIND} constant directly. This framework default replicates
      * that safety via the constructor-stored kind key.
-     * See {@code lessons/controller-describe-bare-instantiation.md}.
+     * See {@code knowledge/lessons/controller-describe-bare-instantiation.md}.
      *
      * <p>Override this method only when custom describe handling is required
      * (e.g., programmatic describe construction or a non-standard file location).
@@ -574,7 +574,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                     + "Fix: call super(ADAPTER_KIND) from your adapter's no-arg "
                     + "constructor and super(ADAPTER_KIND, adapterDir, instanceId) "
                     + "from your two-arg constructor. "
-                    + "See lessons/controller-describe-bare-instantiation.md.");
+                    + "See knowledge/lessons/controller-describe-bare-instantiation.md.");
         }
         // Use make(String) — the file-path overload — so the SDK automatically
         // loads <conf>/resources/resources.properties alongside describe.xml.
@@ -969,7 +969,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * (trust-all + ignore-hostname) rather than the platform's strict TOFU
      * {@code CustomTrustManager}, which cannot self-heal for framework adapters
      * (see the {@link #openPlatformConnection(String)} javadoc and
-     * {@code context/defects.md} DEF-005).
+     * {@code knowledge/context/defects.md} DEF-005).
      *
      * @return an {@link javax.net.ssl.SSLContext} built from {@code getAdapterTrustManager()}
      *         and {@code getKeyManagers()} — suitable for use with {@code HttpClientBuilder}
@@ -1005,12 +1005,12 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * attempt with {@code "Adapter certificate renewal url set is empty"}
      * because framework ({@code com.vcfcf}) adapters declare no
      * certificate-renewal URL set — so trust never persists and every cycle
-     * PKIX-fails ({@code context/investigations/synology-b23-devel-pkix-2026-07-01.md},
-     * {@code context/defects.md} DEF-005). {@code lessons/suite-api-stitch-ssl-tofu-vs-java-http.md}
+     * PKIX-fails ({@code knowledge/context/investigations/synology-b23-devel-pkix-2026-07-01.md},
+     * {@code knowledge/context/defects.md} DEF-005). {@code knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md}
      * predicted exactly this failure mode and is vindicated by that live run.
      *
      * <p>The vendor ground truth (bytecode-proven,
-     * {@code context/api-surface/casa-injected-vs-raw-client.md} §3): the
+     * {@code knowledge/context/api-surface/casa-injected-vs-raw-client.md} §3): the
      * {@code SuiteAPIClient} used by every shipping Broadcom pak —
      * Oracle/PureStorage/NetApp included — sets, verbatim, non-FIPS →
      * {@code verify("false")} + {@code ignoreHostName(true)}; FIPS →
@@ -1047,7 +1047,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * reads the same JVM launch flag
      * ({@code -Dorg.bouncycastle.fips.approved_only=true}) this framework's
      * own {@code AmbientCredential} decrypt path already keys off of
-     * (9.1+; {@code context/tier2_architecture.md} "FIPS constraint"). When
+     * (9.1+; {@code knowledge/context/tier2_architecture.md} "FIPS constraint"). When
      * that flag is set, this method logs a WARN identifying the gap and then
      * falls through to the same non-FIPS trust-all mirror above — a
      * documented stopgap, not a claim of FIPS parity. This is still strictly
@@ -1138,7 +1138,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * "Layer 1 only" note in this class's javadoc). Not a novel detection
      * scheme: it is the pre-existing, documented FIPS constraint this
      * codebase already relies on elsewhere
-     * ({@code context/tier2_architecture.md} "FIPS constraint").
+     * ({@code knowledge/context/tier2_architecture.md} "FIPS constraint").
      *
      * @return {@code true} if {@code -Dorg.bouncycastle.fips.approved_only=true}
      *         was passed to this JVM; {@code false} otherwise (including if unset)
@@ -1338,7 +1338,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      *
      * <p><strong>Do not shadow this method in adapter subclasses.</strong>
      * Use {@link #componentLogger(Class)} to obtain leveled loggers for
-     * helper classes. See {@code context/framework_v2_migration.md}.
+     * helper classes. See {@code knowledge/context/framework_v2_migration.md}.
      */
     private com.integrien.alive.common.adapter3.Logger adapterLogger() {
         com.integrien.alive.common.adapter3.Logger l = adapterLogger;

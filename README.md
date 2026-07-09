@@ -25,7 +25,7 @@ you're trying to answer.
 
 *Three nodes. Talk to it, let the agents work, ship the result on the
 lane you want. The full assembly-line view and the internal plumbing
-are in [HOW_IT_WORKS.md](HOW_IT_WORKS.md).*
+are in [HOW_IT_WORKS.md](knowledge/HOW_IT_WORKS.md).*
 
 > **Just want the content, not the factory?** Everything released is
 > cataloged at
@@ -156,16 +156,16 @@ in detail with worked examples for each content type.
   edit it (the mutable/immutable model behind RULE-010).
 - **[Getting_Started.md](Getting_Started.md)** — first conversation,
   example prompts for each content type, how to talk to the framework.
-- **[HOW_IT_WORKS.md](HOW_IT_WORKS.md)** — the orchestrator + agents
+- **[HOW_IT_WORKS.md](knowledge/HOW_IT_WORKS.md)** — the orchestrator + agents
   architecture, the codification loop, Tier 1 vs Tier 2, why it's set
   up this way. For people considering forking, extending, or just
   curious about the AI-agent design.
-- **[vcf_ops_concepts.md](vcf_ops_concepts.md)** — reference
+- **[vcf_ops_concepts.md](knowledge/vcf_ops_concepts.md)** — reference
   walkthrough of every VCF Ops content type the framework produces:
   what they are, how they relate, how they're identified, where
   they're enabled.
 - **[CLAUDE.md](CLAUDE.md)** — the rules the orchestrator follows.
-- **[ROADMAP.md](ROADMAP.md)** — what's on deck.
+- **[ROADMAP.md](knowledge/ROADMAP.md)** — what's on deck.
 
 ---
 

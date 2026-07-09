@@ -392,7 +392,7 @@ def _parse_column_value_to_dataclass(value_elem) -> Optional[ViewColumn]:
         #   yellow < orange < red  →  False  (higher-is-worse: CPU %, latency)
         #   yellow > orange > red  →  True   (lower-is-worse: free capacity, headroom)
         # This inverts the ordering check in loader.py §_validate_view_column.
-        # See context/wire-formats/view_column_wire_format.md §ascending_range derivation.
+        # See knowledge/context/wire-formats/view_column_wire_format.md §ascending_range derivation.
         all_numeric = (
             yellow is not None and orange is not None and red is not None
             and isinstance(yellow, (int, float))

@@ -353,7 +353,7 @@ def _parse_column_value_dict(value_elem) -> Optional[dict]:
         # which is the same signal the forward renderer encodes:
         #   yellow < orange < red  →  False  (higher-is-worse: CPU %, latency)
         #   yellow > orange > red  →  True   (lower-is-worse: free capacity, headroom)
-        # See context/wire-formats/view_column_wire_format.md §ascending_range derivation.
+        # See knowledge/context/wire-formats/view_column_wire_format.md §ascending_range derivation.
         y_val = col.get("yellow_bound")
         o_val = col.get("orange_bound")
         all_numeric = (

@@ -494,7 +494,7 @@ def cmd_defect_gate(args) -> int:
       --all              check every artifact for open blocking defects
       <type> <name>      check a content item by type and slug (filename stem)
 
-    The <type>/<slug> form matches the Affects: token in context/defects.md
+    The <type>/<slug> form matches the Affects: token in knowledge/context/defects.md
     exactly.  Pass the slug (filename stem of the source YAML), not the
     display name.
     """
@@ -542,7 +542,7 @@ def cmd_defect_gate(args) -> int:
                 print(format_defect_line(entry))
             print(
                 f"\n{len(blockers)} open blocking defect(s) found. "
-                f"See RULE-012 and context/defects.md."
+                f"See RULE-012 and knowledge/context/defects.md."
             )
             return 2
 
@@ -556,7 +556,7 @@ def cmd_defect_gate(args) -> int:
                 print(format_defect_line(entry))
             print(
                 f"\n{len(blockers)} open blocking defect(s) block release of {pak_name!r}. "
-                f"Refused by RULE-012. See context/defects.md."
+                f"Refused by RULE-012. See knowledge/context/defects.md."
             )
             return 2
 
@@ -571,7 +571,7 @@ def cmd_defect_gate(args) -> int:
             print(format_defect_line(entry))
         print(
             f"\n{len(blockers)} open blocking defect(s) block release of {token!r}. "
-            f"Refused by RULE-012. See context/defects.md."
+            f"Refused by RULE-012. See knowledge/context/defects.md."
         )
         return 2
 
@@ -813,7 +813,7 @@ def cmd_release(args) -> int:
                     print(_fmt_defect(_e), file=sys.stderr)
                 print(
                     f"\n{len(_sdk_blockers)} open blocking defect(s) block release of "
-                    f"{_sdk_pak_name!r}. Refused by RULE-012. See context/defects.md.",
+                    f"{_sdk_pak_name!r}. Refused by RULE-012. See knowledge/context/defects.md.",
                     file=sys.stderr,
                 )
                 return 2
@@ -1146,7 +1146,7 @@ def cmd_release(args) -> int:
                 print(_fmt_dl(_e), file=sys.stderr)
             print(
                 f"\n{len(_gate_blockers)} open blocking defect(s) block this release. "
-                f"Refused by RULE-012. See context/defects.md.",
+                f"Refused by RULE-012. See knowledge/context/defects.md.",
                 file=sys.stderr,
             )
             return 2
@@ -1624,7 +1624,7 @@ def build_parser() -> argparse.ArgumentParser:
     pdg = sub.add_parser(
         "defect-gate",
         help=(
-            "check context/defects.md for open blocking defects. "
+            "check knowledge/context/defects.md for open blocking defects. "
             "Exit 0 = clean; exit 2 = blocked; exit 1 = malformed registry.\n"
             "Usage forms:\n"
             "  defect-gate --pak <name>       check a managed pak\n"

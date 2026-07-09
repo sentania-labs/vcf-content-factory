@@ -1,6 +1,6 @@
 # Synology NAS Management Pack — v2 Strategy C
 #
-# Architecture summary (designs/synology-mp-v1.md §"Strategy C"):
+# Architecture summary (knowledge/designs/synology-mp-v1.md §"Strategy C"):
 #   - Synology Diskstation is is_singleton: true — one-per-adapter-instance
 #     named entity that carries root-device metrics (CPU, memory, temperature,
 #     uptime, model, serial, hostname). Identified by serial number.

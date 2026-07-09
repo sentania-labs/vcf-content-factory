@@ -21,7 +21,7 @@ import java.util.Set;
  *   <li>{@code buildCandidates()} resolution order: automation preferred,
  *       maintenance fallback, override-only-when-set (2026-07-01 CP-403
  *       identity fix — see
- *       {@code context/investigations/cp-auth-door-probe-2026-07-01.md}).</li>
+ *       {@code knowledge/context/investigations/cp-auth-door-probe-2026-07-01.md}).</li>
  *   <li>{@code load()} end-to-end via the {@code vcfcf.suiteapi.credential.path}
  *       override: successful parse of an unencrypted test fixture, source
  *       label {@code "override"}, and the override's hard-fail-on-unreadable
@@ -30,7 +30,7 @@ import java.util.Set;
  *       per-instance credential selected when present; injected-null/blank
  *       falls through to the automation/maintenance file candidates;
  *       construction never throws with a null {@link AdapterConfig} — see
- *       {@code designs/stitcher-identity-v3-adapter-credentials.md}.</li>
+ *       {@code knowledge/designs/stitcher-identity-v3-adapter-credentials.md}.</li>
  * </ol>
  *
  * <p>The hard-wired {@code automationuser.properties}/{@code

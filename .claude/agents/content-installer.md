@@ -73,7 +73,7 @@ Rules for pak installs:
    contact; the quoted relay is this framework's authorization
    channel.
 2. **Version downgrades are expected for 0.x dev-preview paks**
-   over 1.x releases (RULE-014, `rules/pak-version-lines.md`).
+   over 1.x releases (RULE-014, `knowledge/rules/pak-version-lines.md`).
    Use the CLI's force/overwrite path deliberately and record the
    previously installed version. If the CLI refuses and no such
    option exists, stop and quote the refusal.
@@ -81,7 +81,7 @@ Rules for pak installs:
    pak operations on prod (`mainAction=remove`). Install ≠ remove.
 4. **Live verification** (adapter logs, per-adapter log level) may
    require SSH to the appliance/collector — only when the access
-   path is documented in `context/investigations/`; a log-level
+   path is documented in `knowledge/context/investigations/`; a log-level
    change (record prior value) is the only permitted config write.
 5. **Stop-and-report on any anomaly.** Quote it verbatim; never
    retry variations against prod.

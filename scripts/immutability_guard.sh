@@ -209,7 +209,7 @@ fi
 echo "${SCRIPT_NAME}: REFUSED (RULE-010)." >&2
 echo "The following changes modify or delete tracked files under reference/." >&2
 echo "That path is immutable vendor/third-party material —" >&2
-echo "corrections belong in context/ (cite the source path), never here." >&2
+echo "corrections belong in knowledge/context/ (cite the source path), never here." >&2
 echo >&2
 for o in "${OFFENDERS[@]}"; do
   printf '  %s\n' "${o}" >&2

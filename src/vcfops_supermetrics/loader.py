@@ -161,7 +161,7 @@ def _mint_id_into_file(path: Path) -> str:
     """Generate a uuid4 and prepend `id: <uuid>` to the YAML file.
 
     Called on first validate when a YAML lacks an `id`. Per
-    `context/uuids_and_cross_references.md`, UUIDs are stable content
+    `knowledge/context/authoring/uuids_and_cross_references.md`, UUIDs are stable content
     identifiers — generated once, never changed after.
     """
     new_id = str(uuid.uuid4())

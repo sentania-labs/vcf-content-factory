@@ -2,7 +2,7 @@
 # Non-blocking CI reminder for the framework-review gate (P4).
 #
 # When a PR's diff touches framework Python (src/vcfops_*/) but adds no
-# matching review doc under context/reviews/framework/, emit a GitHub
+# matching review doc under knowledge/context/reviews/framework/, emit a GitHub
 # Actions ::warning::. This is a NUDGE, never a failure — the real gate
 # is the orchestrator spawning `framework-reviewer` before the PR
 # (CLAUDE.md). A doc-existence CI check would be rubber-stampable and
@@ -44,7 +44,7 @@ fi
 # report would otherwise satisfy this check via the stale old path. Count
 # only review docs that still EXIST in the post-change tree. [Codex PR-17]
 REVIEW_HITS=""
-for f in $(printf '%s\n' "${CHANGED}" | grep -E '^context/reviews/framework/.+\.md$' | grep -v '/README\.md$' || true); do
+for f in $(printf '%s\n' "${CHANGED}" | grep -E '^knowledge/context/reviews/framework/.+\.md$' | grep -v '/README\.md$' || true); do
   [ -f "${f}" ] && REVIEW_HITS="${REVIEW_HITS} ${f}"
 done
 REVIEW_HITS="${REVIEW_HITS# }"
@@ -57,7 +57,7 @@ fi
 
 # Touched framework Python, no review doc — warn (non-blocking).
 PKGS="$(printf '%s\n' "${FRAMEWORK_HITS}" | cut -d/ -f2 | sort -u | tr '\n' ' ')"
-MSG="vcfops_*/ changed (${PKGS}) with no context/reviews/framework/ doc. Per CLAUDE.md, tooling changes need a framework-reviewer pass before merge (RULE/P4). This is a reminder, not a failure."
+MSG="vcfops_*/ changed (${PKGS}) with no knowledge/context/reviews/framework/ doc. Per CLAUDE.md, tooling changes need a framework-reviewer pass before merge (RULE/P4). This is a reminder, not a failure."
 echo "::warning title=Framework review missing::${MSG}"
 echo "check-framework-review: WARN — ${MSG}"
 exit 0

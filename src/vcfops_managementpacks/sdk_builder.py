@@ -1,6 +1,6 @@
 """sdk_builder.py — Tier 2 SDK adapter build pipeline.
 
-Implements steps 1-13 of the design plan (designs/tier2-mp-architecture-plan.md):
+Implements steps 1-13 of the design plan (knowledge/designs/tier2-mp-architecture-plan.md):
   1. Load adapter.yaml metadata
   2. Detect JDK on PATH
   3. Build classpath from adapter_runtime/ + project lib/*.jar
@@ -37,7 +37,7 @@ Pak structure produced (SDK format — differs from MPB Tier 1):
 Key design decisions:
   - vrops-adapters-sdk-*.jar resolves from the appliance classpath at runtime
     (proven by C2 install test, build 42, devel + prod, 2026-06-09 — see
-    context/investigations/c2_no_sdk_jar_install_test.md).  It is kept on the
+    knowledge/context/investigations/c2_no_sdk_jar_install_test.md).  It is kept on the
     javac compile classpath but is NEVER bundled in pak lib/.
   - aria-ops-core is NOT on the appliance shared classpath.  It must be bundled
     for any adapter whose compiled classes reference com.vmware.tvs.* (v1 adapters
@@ -254,7 +254,7 @@ def _read_license() -> str:
 
 # JARs that ship in every pak's lib/ — framework only by default.
 # vrops-adapters-sdk is on the appliance shared classpath and is NEVER bundled
-# (proven by C2 test — see context/investigations/c2_no_sdk_jar_install_test.md).
+# (proven by C2 test — see knowledge/context/investigations/c2_no_sdk_jar_install_test.md).
 # aria-ops-core is conditionally bundled for v1 adapters that reference
 # com.vmware.tvs.* — detected automatically at build time via _needs_aria_ops_core().
 _FRAMEWORK_JAR_PATTERN = "vcfcf-adapter-base.jar"
@@ -387,7 +387,7 @@ def _build_classpath(project_dir: Path) -> str:
       When running outside the factory (e.g. from the sdk-buildkit tarball in CI)
       the adapter_runtime/ directory only contains vcfcf-adapter-base.jar — no
       Broadcom JARs (they cannot ship in a public toolchain tarball; see the
-      redistribution survey at context/cleanroom-spec/analysis/sdk-survey/).
+      redistribution survey at knowledge/context/cleanroom-spec/analysis/sdk-survey/).
       In that case the SDK JAR must be supplied via the VCFCF_SDK_JAR environment
       variable or the --sdk-jar CLI flag (which sets the same env var before calling
       this function).  A clear error is raised when the SDK JAR is absent from both

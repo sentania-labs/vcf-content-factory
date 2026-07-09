@@ -219,7 +219,7 @@ def _render_customgroup_ui_payload(bundle: Bundle) -> dict | None:
     the bundle are merged into a single envelope.  Duplicate customGroupTypes
     (same resourceKind) are deduplicated, keeping the first occurrence.
 
-    See context/customgroup_import_format.md for the format specification.
+    See knowledge/context/wire-formats/customgroup_import_format.md for the format specification.
     """
     if not bundle.customgroups:
         return None
@@ -278,7 +278,7 @@ def _load_design_sections(bundle: Bundle) -> dict:
 
     Resolution order:
     1. Explicit ``design:`` field in the bundle manifest (repo-relative path).
-    2. Convention: ``designs/<bundle-name>.md`` at repo root.
+    2. Convention: ``knowledge/designs/<bundle-name>.md`` at repo root.
     3. If neither exists, return an empty dict (design sections are skipped).
 
     Sections extracted (keyed by destination name):
@@ -304,7 +304,7 @@ def _load_design_sections(bundle: Bundle) -> dict:
             design_path = candidate
     if design_path is None:
         # Convention-based lookup.
-        candidate = repo_root / "designs" / f"{bundle.name}.md"
+        candidate = repo_root / "knowledge" / "designs" / f"{bundle.name}.md"
         if candidate.exists():
             design_path = candidate
 
@@ -400,7 +400,7 @@ def _generate_bundle_readme(bundle: Bundle, display_name: str) -> str:
         # Duplicating extraction-origin language here creates double provenance.
 
     # --- Design artifact sections ---
-    # Extracted from designs/<bundle-name>.md (or manifest's design: field).
+    # Extracted from knowledge/designs/<bundle-name>.md (or manifest's design: field).
     # Only present when the design artifact exists and contains the heading.
     # Sections included: Intent, Layout (mockup), Design Decisions, Out of
     # Scope (conditional), Origin (conditional).  Internal sections

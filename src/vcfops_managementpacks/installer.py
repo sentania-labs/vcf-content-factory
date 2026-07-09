@@ -6,7 +6,7 @@ Implements the two scripted flows using the /ui/ SPA Struts layer:
 
 Both flows run through a single _UISession.  The former dual-session design
 (_AdminSession for install, _UISession for uninstall) was eliminated after
-context/pak_ui_upload_investigation.md §"Live-source findings (2026-04-16,
+knowledge/context/api-surface/pak_ui_upload_investigation.md §"Live-source findings (2026-04-16,
 second pass)" confirmed that /ui/admin/services/solution/upload is a live
 endpoint backed by the same Java handler as /admin/admin/services/solution/upload,
 and that /ui/solution.action exposes the full install lifecycle mainAction surface
@@ -26,7 +26,7 @@ PakId namespace split (important):
   correct form from the appropriate endpoint before issuing a mutating call.
   Switching from /admin/ to /ui/ for upload does NOT collapse this split —
   the upload endpoint returns the same compressed pakId regardless of which
-  servlet context serves it.  See context/pak_ui_upload_investigation.md
+  servlet context serves it.  See knowledge/context/api-surface/pak_ui_upload_investigation.md
   §"Upload response shape".
 
 CREDENTIALS (primary env vars — matches the rest of the factory):
@@ -168,7 +168,7 @@ def _resolve_credentials(
 def _parse_manifest_txt(pak_path: Path) -> Dict[str, str]:
     """Extract key=value pairs from manifest.txt inside a .pak zip file.
 
-    Corresponds to context/pak_install_api_exploration.md pre-flight check:
+    Corresponds to knowledge/context/api-surface/pak_install_api_exploration.md pre-flight check:
     parse manifest before uploading to catch obviously-broken paks early.
 
     Returns a dict of all key=value pairs.  Raises RuntimeError on bad pak.
@@ -260,7 +260,7 @@ class _UISession:
                       secureToken=<csrf>
     (Note: ignoreSignatureChecking is on the QUERY STRING for the /ui/ path;
     on the /admin/ path it was a form field.  This mirrors the SPA wire format
-    exactly per context/pak_ui_upload_investigation.md §"Wire format".)
+    exactly per knowledge/context/api-surface/pak_ui_upload_investigation.md §"Wire format".)
 
     prepareFileUpload:  POST /ui/utility.action  mainAction=prepareFileUpload
     install trigger:    POST /ui/solution.action  mainAction=install
@@ -268,7 +268,7 @@ class _UISession:
     status polling:     POST /ui/solution.action
                              mainAction=getLatestInstalledSolutionStatuses
     (NOTE: getLatestInstalledSolutionStatuses is advertised on /ui/solution.action
-    per the mainAction surface enumerated in context/bug_report_pak_isunremovable_not_enforced.md
+    per the mainAction surface enumerated in knowledge/lessons/pak-isunremovable-vendor-bug.md
     and verified live for the uninstall flow.  The install-side exercising of this
     endpoint via /ui/ is implicit from the shared wizard code that backs both
     /ui/ and /admin/ — it has NOT been independently exercised end-to-end for
@@ -280,9 +280,9 @@ class _UISession:
     remove:           POST /ui/solution.action  mainAction=remove
                            pakId=<short-display-form>  version=<ver>
 
-    Documented in context/pak_ui_upload_investigation.md (install) and
-    context/pak_uninstall_api_exploration.md (uninstall).
-    Also see context/dashboard_delete_api.md Authentication flow for the
+    Documented in knowledge/context/api-surface/pak_ui_upload_investigation.md (install) and
+    knowledge/context/api-surface/pak_uninstall_api_exploration.md (uninstall).
+    Also see knowledge/context/api-surface/dashboard_delete_api.md Authentication flow for the
     identical /ui/ login pattern used elsewhere in the factory.
     """
 
@@ -411,10 +411,10 @@ class _UISession:
 
         Must be called immediately before the multipart upload.
         Mirrors the admin-side prepareFileUpload step documented in
-        context/pak_install_api_exploration.md step 3.
+        knowledge/context/api-surface/pak_install_api_exploration.md step 3.
 
         /ui/utility.action is a registered Struts handler on the /ui/ side
-        (proven by the SPA bundle grep in context/pak_ui_upload_investigation.md
+        (proven by the SPA bundle grep in knowledge/context/api-surface/pak_ui_upload_investigation.md
         §"prepareFileUpload precursor").  Not live-tested via this code path;
         proven only from JS source inspection.
         """
@@ -446,7 +446,7 @@ class _UISession:
 
         KEY DIFFERENCE FROM /admin/ PATH: ignoreSignatureChecking is on the
         QUERY STRING here, not in the form body.  This mirrors the SPA's exact
-        wire format (context/pak_ui_upload_investigation.md §"Wire format",
+        wire format (knowledge/context/api-surface/pak_ui_upload_investigation.md §"Wire format",
         uploadSolution() at part4 offset 487784).
 
         Returns the full JSON response including pakId (compressed form,
@@ -468,7 +468,7 @@ class _UISession:
         # qa-tester (2026-04-17 run /tmp/qa-run-1776427320/): every upload
         # attempt without the header returned HTTP 500; every attempt with it
         # returned HTTP 200 with a clean success response.
-        # Reference: context/pak_ui_upload_investigation.md §"CSRF placement"
+        # Reference: knowledge/context/api-surface/pak_ui_upload_investigation.md §"CSRF placement"
         # (the SPA's Ext.Ajax.request hook always injects secureToken as both
         # header and form param; Ext.form.Panel.submit() injects form-param only
         # — upload uses a form submit, so the header must be set explicitly here).
@@ -533,7 +533,7 @@ class _UISession:
         The SPA wizard relies on server-side session state for pakId (it does
         not always pass it explicitly).  Passing it explicitly via pakId param
         is safe — the handler accepts it and being unambiguous is better for
-        scripted use.  See context/pak_ui_upload_investigation.md
+        scripted use.  See knowledge/context/api-surface/pak_ui_upload_investigation.md
         §"Post-upload install handoff".
 
         Success shape: {} (empty dict, no errorMsg key).
@@ -932,7 +932,7 @@ def uninstall_pak(
     The isUnremovable guard is the most critical safety feature.  Bypassing
     it by sending remove against a built-in pak (vSAN, vCenter, NSX, etc.)
     partially deregisters the adapter kind and leaves the instance in a stuck
-    state requiring manual recovery.  See context/pak_uninstall_api_exploration.md
+    state requiring manual recovery.  See knowledge/context/api-surface/pak_uninstall_api_exploration.md
     Safety-critical section for the full incident report.
 
     Credentials resolve order: CLI flags > active credential profile env vars.
@@ -988,7 +988,7 @@ def uninstall_pak(
         # Step 3: MANDATORY isUnremovable guard
         # The server does NOT enforce this flag; the UI disables the remove
         # button for built-in paks but the mainAction=remove handler accepts
-        # ANY pakId regardless.  See context/pak_uninstall_api_exploration.md
+        # ANY pakId regardless.  See knowledge/context/api-surface/pak_uninstall_api_exploration.md
         # Safety-critical section.
         if is_unremovable and not allow_builtin:
             print(

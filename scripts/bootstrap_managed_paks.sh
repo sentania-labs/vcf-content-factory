@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bootstrap_managed_paks.sh — Clone or update independently-versioned SDK paks.
 #
-# Reads context/managed_paks.md for repo remotes and target paths, clones any
+# Reads knowledge/context/managed_paks.md for repo remotes and target paths, clones any
 # that are missing under content/sdk-adapters/, and optionally updates existing
 # clones with git pull. Each target is an independent git repo that the factory
 # gitignores — cloning them never dirties the factory tree.
@@ -14,7 +14,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PAKS_DIR="${REPO_ROOT}/content/sdk-adapters"
-REGISTRY_FILE="${REPO_ROOT}/context/managed_paks.md"
+REGISTRY_FILE="${REPO_ROOT}/knowledge/context/managed_paks.md"
 
 UPDATE_EXISTING=false
 if [[ "${1:-}" == "--update" ]]; then

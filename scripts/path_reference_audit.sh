@@ -15,7 +15,7 @@
 # Corpus scanned (fixed list, matching the TODO's "agent-prompt path
 # sweep" hole):
 #   CLAUDE.md, STRUCTURE.md, .claude/agents/*.md, .claude/skills/**/*.md,
-#   rules/*.md, lessons/INDEX.md, context/README.md,
+#   knowledge/rules/*.md, knowledge/lessons/INDEX.md, knowledge/context/README.md,
 #   .github/workflows/*.yml, .gitignore
 #
 # Heuristic (tuned against the tree as it exists today; every rule below
@@ -29,7 +29,7 @@
 #      endpoints (`/publish`, `/api/supermetrics`, ...), GitHub org/repo
 #      refs (`sentania-labs/vcf-content-factory-sdk-template`), agent/CLI
 #      identifiers (`tooling`, `build-sdk`), and doc-internal relative
-#      section labels (context/README.md's own `` `mpb/` `` subdir
+#      section labels (knowledge/context/README.md's own `` `mpb/` `` subdir
 #      headers) — none of those start with a real top-level name.
 #   2. A lone top-level-root FILE with no slash at all (`` `CLAUDE.md` ``)
 #      is still a valid citation, checked against a small whitelist of
@@ -62,9 +62,9 @@
 #                  subdir, not the factory root's)
 #        b. REGISTRY-MANAGED: `content/sdk-adapters/<name>/...` is
 #           valid iff `<name>` is a registered entry in
-#           `context/managed_paks.md`; `reference/references/<name>/...`
+#           `knowledge/context/managed_paks.md`; `reference/references/<name>/...`
 #           is valid iff `<name>` is a registered entry in
-#           `context/reference_sources.md` (its `**Local path:**`
+#           `knowledge/context/reference_sources.md` (its `**Local path:**`
 #           field). Both roots are gitignored clones (bootstrap-cloned
 #           by `scripts/bootstrap_managed_paks.sh` /
 #           `scripts/bootstrap_references.sh`) that may be entirely
@@ -145,8 +145,8 @@ cd "${REPO_ROOT}"
 declare -a TARGET_FILES=()
 [[ -f CLAUDE.md ]] && TARGET_FILES+=("CLAUDE.md")
 [[ -f STRUCTURE.md ]] && TARGET_FILES+=("STRUCTURE.md")
-[[ -f lessons/INDEX.md ]] && TARGET_FILES+=("lessons/INDEX.md")
-[[ -f context/README.md ]] && TARGET_FILES+=("context/README.md")
+[[ -f knowledge/lessons/INDEX.md ]] && TARGET_FILES+=("knowledge/lessons/INDEX.md")
+[[ -f knowledge/context/README.md ]] && TARGET_FILES+=("knowledge/context/README.md")
 [[ -f .gitignore ]] && TARGET_FILES+=(".gitignore")
 
 while IFS= read -r -d '' f; do
@@ -159,7 +159,7 @@ done < <(find .claude/skills -type f -name '*.md' -print0 2>/dev/null | sort -z)
 
 while IFS= read -r -d '' f; do
   TARGET_FILES+=("${f#./}")
-done < <(find rules -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null | sort -z)
+done < <(find knowledge/rules -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null | sort -z)
 
 while IFS= read -r -d '' f; do
   TARGET_FILES+=("${f#./}")
@@ -251,7 +251,7 @@ done
 # so a fresh, un-bootstrapped clone audits identically to a fully-cloned one.
 
 declare -A MANAGED_PAK_NAMES=()
-if [[ -f context/managed_paks.md ]]; then
+if [[ -f knowledge/context/managed_paks.md ]]; then
   in_comment=false
   while IFS= read -r line; do
     # Same HTML-comment-skipping convention as
@@ -267,16 +267,16 @@ if [[ -f context/managed_paks.md ]]; then
     if [[ "${line}" =~ \*\*Target:\*\*[[:space:]]+\`content/sdk-adapters/([^/\`]+)/?\` ]]; then
       MANAGED_PAK_NAMES["${BASH_REMATCH[1]}"]=1
     fi
-  done < context/managed_paks.md
+  done < knowledge/context/managed_paks.md
 fi
 
 declare -A REFERENCE_SLUGS=()
-if [[ -f context/reference_sources.md ]]; then
+if [[ -f knowledge/context/reference_sources.md ]]; then
   while IFS= read -r line; do
     if [[ "${line}" =~ \*\*Local[[:space:]]path:\*\*[[:space:]]+\`reference/references/([^/\`]+)/?\` ]]; then
       REFERENCE_SLUGS["${BASH_REMATCH[1]}"]=1
     fi
-  done < context/reference_sources.md
+  done < knowledge/context/reference_sources.md
 fi
 
 # --- Extraction + verification ----------------------------------------------
@@ -396,7 +396,7 @@ citation_is_valid() {
       if [[ -n "${MANAGED_PAK_NAMES[${name}]:-}" ]]; then
         return 0
       fi
-      CITATION_MSG="unregistered managed root — \`${name}\` is not listed in context/managed_paks.md"
+      CITATION_MSG="unregistered managed root — \`${name}\` is not listed in knowledge/context/managed_paks.md"
       return 2
       ;;
     reference/references/?*)
@@ -406,10 +406,10 @@ citation_is_valid() {
         return 0
       fi
       if [[ "${rname}" == "tvs" ]]; then
-        CITATION_MSG="RULE-015 standing exception: reference/references/tvs is a documented local-only artifact (rules/cited-artifacts-reproducible.md), not yet in context/reference_sources.md"
+        CITATION_MSG="RULE-015 standing exception: reference/references/tvs is a documented local-only artifact (knowledge/rules/cited-artifacts-reproducible.md), not yet in knowledge/context/reference_sources.md"
         return 3
       fi
-      CITATION_MSG="unregistered managed root — \`${rname}\` is not listed in context/reference_sources.md"
+      CITATION_MSG="unregistered managed root — \`${rname}\` is not listed in knowledge/context/reference_sources.md"
       return 2
       ;;
   esac
@@ -493,14 +493,14 @@ truncated_by_placeholder() {
   # Rule #3b: the extraction regex deliberately stops before `<`, `*`,
   # `$`, `{`, `}` (disallowed chars). If one of those immediately follows
   # the matched candidate in the raw line, the FULL literal token was a
-  # placeholder/glob pattern (`designs/supermetrics/<slug>.md`,
-  # `context/api-maps/tvs-*.md`) and got truncated into something that
+  # placeholder/glob pattern (`knowledge/designs/supermetrics/<slug>.md`,
+  # `knowledge/context/api-maps/tvs-*.md`) and got truncated into something that
   # looks like a real (but missing) path. Treat as placeholder, not dead.
   local line="$1" cand="$2"
   local after="${line#*"${cand}"}"
   # Allow one intervening "/" — the extraction regex requires its final
   # char to be alnum, so a placeholder right after a path separator
-  # (`designs/supermetrics/<slug>.md`) truncates the slash away too.
+  # (`knowledge/designs/supermetrics/<slug>.md`) truncates the slash away too.
   case "${after}" in
     /'<'*|/'*'*|/'$'*|/'{'*|'<'*|'*'*|'$'*|'{'*|'}'*) return 0 ;;
     *) return 1 ;;

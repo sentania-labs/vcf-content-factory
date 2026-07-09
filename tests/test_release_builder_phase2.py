@@ -347,7 +347,7 @@ class TestSdkMpPointer:
     and no external repos need to exist — this is a pure unit test).
 
     Note: full end-to-end publish verification (registry lookup via real
-    context/managed_paks.md pointing at live sentania-labs repos) cannot
+    knowledge/context/managed_paks.md pointing at live sentania-labs repos) cannot
     be automated until Workstream D (de-track migration) is complete and
     the external repos exist.
     """

@@ -1,4 +1,4 @@
-"""Registry reader for ``context/defects.md``.
+"""Registry reader for ``knowledge/context/defects.md``.
 
 Parses the defect registry into :class:`DefectEntry` dataclasses and exposes
 the gate logic used by ``defect-gate``, ``release``, and ``publish``.
@@ -32,7 +32,7 @@ format_defect_line(entry) -> str
     ``DEF-NNN  <title>  (first seen <first_seen>, source <source>)``
 
 REGISTRY_PATH
-    Default registry path (``context/defects.md`` relative to repo root).
+    Default registry path (``knowledge/context/defects.md`` relative to repo root).
 
 Registry file format
 --------------------
@@ -60,7 +60,7 @@ from typing import List, Optional
 # ---------------------------------------------------------------------------
 
 #: Default path to the defect registry, relative to the repo root.
-REGISTRY_PATH = Path(__file__).parent.parent.parent / "context" / "defects.md"
+REGISTRY_PATH = Path(__file__).parent.parent.parent / "knowledge" / "context" / "defects.md"
 
 #: Valid severity values.
 _VALID_SEVERITIES = frozenset({"blocking", "tracked"})
@@ -123,7 +123,7 @@ _REQUIRED_FIELDS = ("Title", "Severity", "Status", "Affects", "First-seen", "Sou
 def load_registry(
     registry_path: "str | Path | None" = None,
 ) -> List[DefectEntry]:
-    """Parse ``context/defects.md`` and return all entries.
+    """Parse ``knowledge/context/defects.md`` and return all entries.
 
     The registry is parsed strictly:
     - Unknown ``Severity:`` values raise :class:`DefectRegistryError`.
@@ -142,7 +142,7 @@ def load_registry(
 
     Args:
         registry_path: Path to the registry file.  Defaults to
-            ``context/defects.md`` relative to the repo root.
+            ``knowledge/context/defects.md`` relative to the repo root.
 
     Returns:
         A list of :class:`DefectEntry` objects in document order.
@@ -276,13 +276,13 @@ def _validate_and_emit(
         raise DefectRegistryError(
             f"{loc}: 'waived' is not a valid Status. "
             f"To ship a defect, downgrade Severity to 'tracked' with a dated note — "
-            f"the git diff is the audit trail. See rules/release-gate-defects.md."
+            f"the git diff is the audit trail. See knowledge/rules/release-gate-defects.md."
         )
     if status not in _VALID_STATUSES:
         raise DefectRegistryError(
             f"{loc}: invalid Status {status!r}. "
             f"Allowed: {', '.join(sorted(_VALID_STATUSES))}. "
-            f"Note: 'waived' is not accepted — see rules/release-gate-defects.md."
+            f"Note: 'waived' is not accepted — see knowledge/rules/release-gate-defects.md."
         )
 
     # --- Closed-without-evidence check ---
@@ -291,7 +291,7 @@ def _validate_and_emit(
             f"{loc}: Status is 'closed' but Closing-evidence is absent or empty. "
             f"A close without evidence is invalid — provide concrete proof "
             f"(fix commit/build, devel proof, lesson). "
-            f"See context/defects.md schema and rules/release-gate-defects.md."
+            f"See knowledge/context/defects.md schema and knowledge/rules/release-gate-defects.md."
         )
 
     entries.append(DefectEntry(
@@ -320,11 +320,11 @@ def gate_pak(
 
     ``pak_name`` is matched against the ``Affects:`` token directly —
     it must be the exact managed-pak name as registered in
-    ``context/managed_paks.md`` (e.g. ``"synology"``, ``"unifi"``).
+    ``knowledge/context/managed_paks.md`` (e.g. ``"synology"``, ``"unifi"``).
 
     Args:
         pak_name:      Managed pak name to check.
-        registry_path: Path to the registry; defaults to ``context/defects.md``.
+        registry_path: Path to the registry; defaults to ``knowledge/context/defects.md``.
 
     Returns:
         List of open blocking :class:`DefectEntry` objects.  Empty list = clean.
@@ -361,7 +361,7 @@ def gate_item(
     Args:
         content_type:  Singular content type name.
         slug:          Filename stem of the content item.
-        registry_path: Path to the registry; defaults to ``context/defects.md``.
+        registry_path: Path to the registry; defaults to ``knowledge/context/defects.md``.
 
     Returns:
         List of open blocking :class:`DefectEntry` objects.  Empty list = clean.
@@ -386,7 +386,7 @@ def gate_all(
     """Return all open blocking defects in the registry.
 
     Args:
-        registry_path: Path to the registry; defaults to ``context/defects.md``.
+        registry_path: Path to the registry; defaults to ``knowledge/context/defects.md``.
 
     Returns:
         List of open blocking :class:`DefectEntry` objects.  Empty list = clean.
@@ -421,7 +421,7 @@ def format_defect_line(entry: DefectEntry) -> str:
 #
 # This block makes defects.py runnable as a bare script with no package
 # install — intended for pak-repo CI that curl's this file alongside
-# context/defects.md and invokes:
+# knowledge/context/defects.md and invokes:
 #
 #   python3 defects.py --pak <name> [--registry <path>]
 #   python3 defects.py --all        [--registry <path>]
@@ -489,7 +489,7 @@ if __name__ == "__main__":
                 print(format_defect_line(_entry))
             print(
                 f"\n{len(_blockers)} open blocking defect(s) found. "
-                f"See RULE-012 and context/defects.md."
+                f"See RULE-012 and knowledge/context/defects.md."
             )
             _sys.exit(2)
         else:
@@ -502,7 +502,7 @@ if __name__ == "__main__":
                 print(format_defect_line(_entry))
             print(
                 f"\n{len(_blockers)} open blocking defect(s) block release of {_pak_name!r}. "
-                f"Refused by RULE-012. See context/defects.md."
+                f"Refused by RULE-012. See knowledge/context/defects.md."
             )
             _sys.exit(2)
 

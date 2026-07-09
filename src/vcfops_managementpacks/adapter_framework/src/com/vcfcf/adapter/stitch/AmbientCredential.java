@@ -23,7 +23,7 @@ import java.util.Properties;
  * <p><strong>The platform-injected per-instance credential is preferred,
  * unconditionally, when present.</strong> This is the same credential the
  * vendor SDK itself prefers (bytecode-proven,
- * {@code context/api-surface/per-instance-suiteapi-credential-contract.md}):
+ * {@code knowledge/context/api-surface/per-instance-suiteapi-credential-contract.md}):
  * the collector serializes a per-instance Suite API credential into
  * {@code AdapterConfig.adapterCredentials}, readable via the SDK-public
  * chain {@code AdapterBase.getAdapterConfig().getAdapterCredentials()} →
@@ -32,7 +32,7 @@ import java.util.Properties;
  * (principal {@code automationAdmin}) when the injected credential is
  * absent, null, or blank, and finally to
  * {@code maintenanceuser.properties} when automation is also absent or
- * unreadable. See {@code designs/stitcher-identity-v3-adapter-credentials.md}.
+ * unreadable. See {@code knowledge/designs/stitcher-identity-v3-adapter-credentials.md}.
  *
  * <p>This preference order is not cosmetic. On a Cloud Proxy the file-based
  * fallbacks name <em>different</em> principals: {@code automationuser.properties}
@@ -42,7 +42,7 @@ import java.util.Properties;
  * {@code cloudproxy_<uuid>} (scoped reverse-connect account with
  * {@code roles:[]}, which 403s on Suite API resource reads). Preferring
  * maintenance-first is the confirmed root cause of the Synology-stitcher
- * CP-403 (see {@code context/investigations/cp-auth-door-probe-2026-07-01.md}).
+ * CP-403 (see {@code knowledge/context/investigations/cp-auth-door-probe-2026-07-01.md}).
  * The platform-injected credential — a per-instance principal minted by the
  * collector — is the mechanism the vendor corpus relies on and sidesteps the
  * automation/maintenance CP identity distinction entirely when present.
@@ -69,7 +69,7 @@ import java.util.Properties;
  *       {@code /usr/lib/vmware-vcops/user/conf/maintenanceuser.properties} —
  *       used only when the automation file is absent or unreadable.
  *       Empirically confirmed present on VCF Ops 9.0.2 (devel) and 9.1
- *       (prod). See {@code context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md}.</li>
+ *       (prod). See {@code knowledge/context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md}.</li>
  * </ol>
  *
  * <p><strong>Crash-the-cycle guarantee:</strong> a failure reading any one
@@ -91,7 +91,7 @@ import java.util.Properties;
  * name as its literal value (e.g. {@code USER_CONF = "USER_CONF"}) — none
  * of these are filesystem paths. The SDK exposes no install-directory or
  * user-directory path constant; use the empirically proven hard-wired default.
- * See {@code lessons/sdk-constants-are-display-names.md}.
+ * See {@code knowledge/lessons/sdk-constants-are-display-names.md}.
  *
  * <h3>File format (keys only — no secret values)</h3>
  * <pre>
@@ -143,7 +143,7 @@ public final class AmbientCredential {
      * {@link #AUTOMATION_PROPS_PATH} is preferred unconditionally and this
      * file is used only when the automation file is absent or unreadable.
      * Empirically confirmed present on VCF Ops 9.0.2 (devel) and 9.1 (prod).
-     * See {@code context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md}.
+     * See {@code knowledge/context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md}.
      */
     static final String MAINTENANCE_PROPS_PATH =
             "/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties";
@@ -179,7 +179,7 @@ public final class AmbientCredential {
      * ended up being a file candidate instead of {@code "instance"}; {@code
      * null} in every other case (including the common early-lifecycle
      * "no config yet" case, which is not surprising and stays silent). See
-     * {@code context/reviews/framework/ambient-credential-v3-instance-first.md}
+     * {@code knowledge/context/reviews/framework/ambient-credential-v3-instance-first.md}
      * WARNING-1.
      */
     private final String injectedFailureReason;
@@ -420,7 +420,7 @@ public final class AmbientCredential {
      * source falls to the next; nothing throws out of construction" for
      * exactly that documented case, while letting genuinely-fatal JVM errors
      * ({@link VirtualMachineError}, {@link ThreadDeath}) propagate rather
-     * than be silently swallowed. See {@code context/api-surface/
+     * than be silently swallowed. See {@code knowledge/context/api-surface/
      * per-instance-suiteapi-credential-contract.md} §7 for the live evidence.
      *
      * <p>When the injected source is lost while {@code adapterConfig} was
@@ -431,7 +431,7 @@ public final class AmbientCredential {
      * eventual file-sourced {@link AmbientCredential} as {@link
      * #getInjectedFailureReason()} — a one-line INFO breadcrumb for the
      * {@code SuiteApiStitchClient.Builder} to log. See {@code
-     * context/reviews/framework/ambient-credential-v3-instance-first.md}
+     * knowledge/context/reviews/framework/ambient-credential-v3-instance-first.md}
      * WARNING-1.
      *
      * @param adapterConfig the platform-supplied config, or {@code null}

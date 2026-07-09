@@ -167,7 +167,7 @@ def _xml_time_interval_selector(view: ViewDef, control_id: str = "time-interval-
     Otherwise falls back to the prior default (HOURS/24).
 
     The control always sits at the top of the <Controls> block.
-    See context/view_column_wire_format.md §Per-column transformations.
+    See knowledge/context/wire-formats/view_column_wire_format.md §Per-column transformations.
     """
     if view.time_window is not None:
         tw = view.time_window
@@ -281,7 +281,7 @@ def _xml_attribute_item(
         props.append(_xml_transformations_block(view))
     else:
         # Emit per-transformation sibling properties BEFORE the transformations
-        # block (matches exported order: context/wire-formats/view_column_wire_format.md).
+        # block (matches exported order: knowledge/context/wire-formats/view_column_wire_format.md).
         transform = (col.transformation or "CURRENT").upper()
         if transform == "PERCENTILE" and col.percentile is not None:
             props.append(_xml_property("percentile", str(col.percentile)))
@@ -290,7 +290,7 @@ def _xml_attribute_item(
         if transform == "TIME_POINT":
             # Three required siblings: metricToRelateWith, localizedMetricToRelateWith,
             # operatorToRelateWith. Wire format confirmed by ops-recon 2026-05-27
-            # (12 live uses). See context/wire-formats/view_column_wire_format.md.
+            # (12 live uses). See knowledge/context/wire-formats/view_column_wire_format.md.
             if col.metric_to_relate_with:
                 props.append(_xml_property("metricToRelateWith", col.metric_to_relate_with))
             if col.localized_metric_to_relate_with:
@@ -305,7 +305,7 @@ def _xml_attribute_item(
     props.append(_xml_property("isProperty", "true" if col.is_property else "false"))
     # Color bound Properties — emitted between isProperty and displayName
     # in order: yellow, orange, red, ascendingRange.
-    # See context/view_column_wire_format.md §Per-column color thresholds.
+    # See knowledge/context/wire-formats/view_column_wire_format.md §Per-column color thresholds.
     def _bound_str(v) -> str:
         """Coerce a bound value to its wire-format string representation."""
         if isinstance(v, bool):
@@ -537,7 +537,7 @@ def render_views_xml(
             binding the view to the pak's owning adapter namespace.  Required
             for the platform's content importer to file the view under the
             owning adapter; without it the importer drops the view silently.
-            Spec ref: context/cleanroom-spec/spec/18-pak-content-bundle.md §A2.
+            Spec ref: knowledge/context/cleanroom-spec/spec/18-pak-content-bundle.md §A2.
         owning_resource_kind: The "World" ResourceKind for the owning adapter
             (the type=1 ResourceKind in describe.xml by convention).  Must be
             supplied together with ``owning_adapter_kind``; ignored when
@@ -897,7 +897,7 @@ def _metric_chart_widget(
 
     Verified against 146 live MetricChart widgets: zero use any array form.
     The array form ``[1, -1, 0]`` is Heatmap/AlertList-only and causes a 500
-    on MetricChart.  See context/api-surface/widget_types_survey.md §MetricChart.
+    on MetricChart.  See knowledge/context/api-surface/widget_types_survey.md §MetricChart.
     """
     cfg = w.metric_chart_config
     assert cfg is not None
@@ -941,7 +941,7 @@ def _health_chart_widget(
     config fields, NOT inside a metric.resourceKindMetrics[] array. This
     is the key structural difference from Scoreboard and MetricChart.
 
-    Wire format reference: context/chart_widget_formats.md §HealthChart.
+    Wire format reference: knowledge/context/api-surface/widget_types_survey.md §HealthChart.
     """
     cfg = w.health_chart_config
     assert cfg is not None
@@ -1004,7 +1004,7 @@ def _pareto_analysis_widget(
     Shape 2 (mode=metric, metricOption/tagOption) requires live-instance
     metric-picker interaction and is not supported for static authoring.
 
-    Wire format reference: context/chart_widget_formats.md §ParetoAnalysis.
+    Wire format reference: knowledge/context/api-surface/widget_types_survey.md §ParetoAnalysis.
     """
     cfg = w.pareto_analysis_config
     assert cfg is not None
@@ -1071,9 +1071,9 @@ def _alert_list_widget(w: Widget) -> dict:
         backend queries in this scenario (no heatMap.action call observed in
         the access log).  Corpus reference: sdwan ProblemAlertsList widgets
         use the same resource shape; adapted for AlertList per investigation
-        context/investigations/2026-05-29-compliance-dashboard-render-failures.md.
+        knowledge/context/investigations/2026-05-29-compliance-dashboard-render-failures.md.
 
-    Wire format reference: context/chart_widget_formats.md §AlertList.
+    Wire format reference: knowledge/context/api-surface/widget_types_survey.md §AlertList.
     """
     cfg = w.alert_list_config
     assert cfg is not None
@@ -1129,7 +1129,7 @@ def _problem_alerts_list_widget(
     whose descendants Ops evaluates for badge impact. Non-self-provider mode
     is interaction-driven: resource=null and selfProvider=false.
 
-    Wire format reference: context/chart_widget_formats.md §ProblemAlertsList.
+    Wire format reference: knowledge/context/api-surface/widget_types_survey.md §ProblemAlertsList.
     """
     cfg = w.problems_alerts_list_config
     assert cfg is not None
@@ -1183,7 +1183,7 @@ def _heatmap_widget(
 ) -> dict:
     """Render a Heatmap (treemap) widget.
 
-    Structural notes from wire format analysis (context/chart_widget_formats.md):
+    Structural notes from wire format analysis (knowledge/context/api-surface/widget_types_survey.md):
 
     1. ``configs[]`` holds one entry per tab. Each tab defines a subject
        resource kind (``resourceKind``), a colorBy metric, an optional sizeBy
@@ -1205,7 +1205,7 @@ def _heatmap_widget(
        **self-grouping** block using the subject resource kind.  An empty
        ``{}`` causes ``HeatMapAction.initParam`` to throw JSONException
        because it calls ``groupBy.getString("type")`` unconditionally.
-       See lessons/heatmap-empty-groupby-crashes-renderer.md.
+       See knowledge/lessons/heatmap-empty-groupby-crashes-renderer.md.
 
     6. ``value`` (selected tab index) is always 0; authors control default
        tab by ordering configs[].
@@ -1213,7 +1213,7 @@ def _heatmap_widget(
     7. ``relationshipMode`` uses the array form ``[1, -1, 0]`` (observed in
        65/70 live Heatmap instances; consistent with AlertList and ParetoAnalysis).
 
-    Wire format reference: context/chart_widget_formats.md §Heatmap.
+    Wire format reference: knowledge/context/api-surface/widget_types_survey.md §Heatmap.
     """
     cfg = w.heatmap_config
     assert cfg is not None
@@ -1241,7 +1241,7 @@ def _heatmap_widget(
         # JSONException("type not found") and the widget returns blank.
         # Corpus reference: idps-planner "VM by Host PPS" tab uses HostSystem as
         # both subject and groupBy (resourceKind:id:1_::_, id=004null002006VMWAREHostSystem).
-        # Fix documented in lessons/heatmap-empty-groupby-crashes-renderer.md.
+        # Fix documented in knowledge/lessons/heatmap-empty-groupby-crashes-renderer.md.
         if tab.group_by_kind:
             gb_adapter = tab.group_by_adapter or tab.adapter_kind
             gb_kind = tab.group_by_kind
@@ -1260,7 +1260,7 @@ def _heatmap_widget(
         gb_rk_id = f"resourceKind:id:{kind_index[gb_key]}_::_"
         # groupBy.id format: 004null + 6-digit adapter prefix + adapterKind + resourceKind
         # This is a stable Ops-internal composite ID; the format is documented in
-        # context/chart_widget_formats.md §Heatmap / §Gotchas #7.
+        # knowledge/context/api-surface/widget_types_survey.md §Heatmap / §Gotchas #7.
         gb_id = f"004null{gb_prefix}{gb_adapter}{gb_kind}"
         gb_text = (tab.group_by_text or gb_kind) if tab.group_by_kind else tab.resource_kind
         group_by: dict = {
@@ -1348,8 +1348,8 @@ def _property_list_widget(
     - String properties use ``isStringMetric: true`` on their metric entries;
       authors set ``is_string_metric: true`` per entry in the YAML.
 
-    Wire format reference: context/api-surface/widget_renderer_scope.md
-    §PropertyList and context/api-surface/widget_types_survey.md §PropertyList.
+    Wire format reference: knowledge/context/api-surface/widget_renderer_scope.md
+    §PropertyList and knowledge/context/api-surface/widget_types_survey.md §PropertyList.
     """
     cfg = w.property_list_config
     assert cfg is not None
@@ -1566,7 +1566,7 @@ def render_dashboards_bundle_json(
             to this value.  Required for the platform's DashboardImporter to
             associate the dashboard with the owning adapter; without it the
             importer silently drops the dashboard.
-            Spec ref: context/cleanroom-spec/spec/18-pak-content-bundle.md §A1.
+            Spec ref: knowledge/context/cleanroom-spec/spec/18-pak-content-bundle.md §A1.
     """
     kind_index: dict[tuple[str, str], int] = {}
     for d in dashboards:
@@ -1674,7 +1674,7 @@ def render_dashboards_bundle_json(
     # A1: emit entries.adapterKind when an owning adapter is specified.
     # The importer uses this to bind the dashboard to the adapter's content
     # namespace; without it the dashboard is silently dropped on pak install.
-    # Spec ref: context/cleanroom-spec/spec/18-pak-content-bundle.md §A1.
+    # Spec ref: knowledge/context/cleanroom-spec/spec/18-pak-content-bundle.md §A1.
     if owning_adapter_kind:
         entries["adapterKind"] = [
             {

@@ -10,7 +10,7 @@ All requests require:
 Auth is delegated to vcfops_common.client.VCFOpsClient which manages token
 acquisition and 401 re-auth transparently.
 
-Documented in context/mpb_api_surface.md.
+Documented in knowledge/context/mpb/mpb_api_surface.md.
 """
 from __future__ import annotations
 
@@ -61,7 +61,7 @@ class MPBClient:
         return cls(c)
 
     # ------------------------------------------------------------------
-    # POST /internal/mpbuilder/designs/import
+    # POST /internal/mpbuilder/knowledge/designs/import
     # ------------------------------------------------------------------
 
     def post_design_import(
@@ -70,7 +70,7 @@ class MPBClient:
     ) -> Dict[str, Any]:
         """Upload an MPB exchange-format envelope to the import endpoint.
 
-        Endpoint: POST /suite-api/internal/mpbuilder/designs/import
+        Endpoint: POST /suite-api/internal/mpbuilder/knowledge/designs/import
         Required header: X-Ops-API-use-unsupported: true
 
         Args:
@@ -86,7 +86,7 @@ class MPBClient:
             VCFOpsError: on any non-2xx response, with the HTTP status code
                 and response body included in the message.
 
-        Notes (from context/mpb_api_surface.md):
+        Notes (from knowledge/context/mpb/mpb_api_surface.md):
           - Server mints a fresh UUID for the design regardless of any UUID
             embedded in the input envelope.
           - The design name is sanitised server-side (whitespace and
@@ -97,7 +97,7 @@ class MPBClient:
             silently overwrite the earlier design.  See mpb_api_surface.md
             §"Collateral note — import may collide on source.source.id".
         """
-        path = f"{_MPB_BASE}/designs/import"
+        path = f"{_MPB_BASE}/knowledge/designs/import"
         r = self._c._request(
             "POST",
             path,

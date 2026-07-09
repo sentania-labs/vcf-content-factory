@@ -139,7 +139,7 @@ MIGRATION NOTE:
     Old grammar had requests: under each object_type: entry and used
     source: "request:<name>.<field>" in metrics.  Both forms now produce
     a ManagementPackValidationError with a clear migration hint.  See
-    designs/synology-mp-v1.md §"Chaining grammar design" for the Option C
+    knowledge/designs/synology-mp-v1.md §"Chaining grammar design" for the Option C
     specification.
 """
 from __future__ import annotations
@@ -261,7 +261,7 @@ def derive_key_from_label(label: str) -> str:
     ``key:`` field declared in the YAML.
 
     Algorithm (reverse-engineered from 40+ label→key pairs in MPB-built paks —
-    see ``context/mpb_explicit_key_investigation_2026_05_16.md`` §"Derivation
+    see ``knowledge/context/mpb/mpb_explicit_key_investigation_2026_05_16.md`` §"Derivation
     algorithm"):
 
     1. Drop ``.`` (period) — no replacement character.
@@ -511,7 +511,7 @@ class MetricSetDef:
     #
     # Must be absent on scalar kinds (is_world/is_singleton) and may not be
     # combined with chained_from.
-    # See context/mpb_object_binding_wire_format.md §3.5 and §5 rule 6.
+    # See knowledge/context/mpb/mpb_object_binding_wire_format.md §3.5 and §5 rule 6.
     stitch_to: Optional[str] = None
     stitch_match_field: Optional[str] = None
     # chain_anchor_stub: optional dotted field path (relative to this metricSet's
@@ -850,8 +850,8 @@ def _validate_mp(mp: ManagementPackDef) -> None:
                 f"are cross-instance anchors with no per-adapter-instance identity). "
                 f"For a one-per-adapter-instance named entity that carries identifiers "
                 f"and metrics, use `is_singleton: true` instead. See "
-                f"context/mp_chain_authoring.md §\"Singleton vs list\" and the "
-                f"architecture decision in context/mpb_synology_pickup_2026_04_29.md."
+                f"knowledge/context/authoring/mp_chain_authoring.md §\"Singleton vs list\" and the "
+                f"architecture decision in knowledge/context/investigations/mpb_synology_pickup_2026_04_29.md."
             )
 
         # Guardrail: is_world kinds are navigation roots only — they must not carry
@@ -863,8 +863,8 @@ def _validate_mp(mp: ManagementPackDef) -> None:
                 f"metricSets — they exist only as navigation roots for fleet-level "
                 f"aggregation). For a kind that holds metrics about the "
                 f"adapter-instance-level device, use `is_singleton: true` instead. See "
-                f"context/mp_chain_authoring.md §\"Singleton vs list\" and the "
-                f"architecture decision in context/mpb_synology_pickup_2026_04_29.md."
+                f"knowledge/context/authoring/mp_chain_authoring.md §\"Singleton vs list\" and the "
+                f"architecture decision in knowledge/context/investigations/mpb_synology_pickup_2026_04_29.md."
             )
 
         # ARIA_OPS-specific validation block.
@@ -943,7 +943,7 @@ def _validate_mp(mp: ManagementPackDef) -> None:
                     f"{ot_tag}: is_world: true objects require an 'identity:' block. "
                     f"Add 'identity: {{tier: system_issued, source: \"metricset:<name>.<path>\"}}' "
                     f"(or connection_address / display_name tier as appropriate). "
-                    f"See designs/synology-mp-v1.md §\"Axis 7 — World-object identity\"."
+                    f"See knowledge/designs/synology-mp-v1.md §\"Axis 7 — World-object identity\"."
                 )
         else:
             # Non-world objects (both is_singleton and plain list) must NOT declare identity.
@@ -1065,7 +1065,7 @@ def _validate_mp(mp: ManagementPackDef) -> None:
     # dangling chain — the importer sees ${requestParameters.X} with no
     # chainingSettings block and rejects the design.
     #
-    # Context: context/mpb_synology_import_diff_2026_04_29.md §3 (defect #3).
+    # Context: knowledge/context/investigations/mpb_synology_import_diff_2026_04_29.md §3 (defect #3).
     # -----------------------------------------------------------------------
     chained_requests: set = set()
     for ot in mp.object_types:
@@ -1098,7 +1098,7 @@ def _validate_mp(mp: ManagementPackDef) -> None:
     # The MPB importer validates SINGLE_SELECTION defaults against the options
     # list at import time.  A mismatch (e.g. case difference: "WARNING" vs
     # "Warning") causes a hard import rejection.
-    # Context: context/mpb_synology_import_diff_2026_04_29.md §7 (defect #7).
+    # Context: knowledge/context/investigations/mpb_synology_import_diff_2026_04_29.md §7 (defect #7).
     # -----------------------------------------------------------------------
     if mp.source:
         for cf in mp.source.config_fields:
@@ -1267,7 +1267,7 @@ def _validate_object_binding_rules(ot_tag: str, ot: ObjectTypeDef) -> None:
 
     These rules encode the empirical findings from the 2026-04-29 MPB
     objectBinding investigation on vcf-lab-operations-devel.
-    See context/mpb_object_binding_wire_format.md §5 for the rationale
+    See knowledge/context/mpb/mpb_object_binding_wire_format.md §5 for the rationale
     behind every rule here.
 
     The YAML grammar exposes objectBinding only via the 'stitch_to' knob
@@ -1277,7 +1277,7 @@ def _validate_object_binding_rules(ot_tag: str, ot: ObjectTypeDef) -> None:
       - objectBinding: <stitch shape>  when stitch_to is declared
     Chained secondaries MUST carry a non-null objectBinding to satisfy the
     MPB verify-time per-resource null-count rule (§8.1 of
-    context/mpb_object_binding_wire_format.md).  The renderer enforces this
+    knowledge/context/mpb/mpb_object_binding_wire_format.md).  The renderer enforces this
     with a RuntimeError assertion; the loader validates the YAML preconditions
     (chained_from requires at least one bind entry with from_attribute).
 
@@ -1288,7 +1288,7 @@ def _validate_object_binding_rules(ot_tag: str, ot: ObjectTypeDef) -> None:
     """
     is_scalar = ot.is_world or ot.is_singleton
     is_aria_ops = ot.type == "ARIA_OPS"
-    doc_ref = "context/mpb_object_binding_wire_format.md"
+    doc_ref = "knowledge/context/mpb/mpb_object_binding_wire_format.md"
 
     for i, ms in enumerate(ot.metric_sets):
         mstag = f"{ot_tag}: metricSets[{i}] ('{ms.local_name}')"
@@ -1765,7 +1765,7 @@ def _validate_auth(tag: str, auth: AuthFlowDef) -> None:
         raise ManagementPackValidationError(
             f"{atag}: unknown preset {auth.preset!r}. "
             f"Valid presets are: {sorted(VALID_AUTH_PRESET)}. "
-            f"See designs/synology-mp-v1.md §\"Framework-vs-Synology review "
+            f"See knowledge/designs/synology-mp-v1.md §\"Framework-vs-Synology review "
             f"(2026-04-18)\" axis 1 for the flow grammar spec."
         )
 
@@ -2227,7 +2227,7 @@ def _validate_metric(tag: str, m: MetricDef, ms_names: set) -> None:
     # --- Label quality lint (WARN, not error) ---
     # These checks flag label patterns that produce unexpected wire keys under
     # MPB's derivation algorithm.  See derive_key_from_label() and
-    # context/mpb_explicit_key_investigation_2026_05_16.md §"Derivation algorithm".
+    # knowledge/context/mpb/mpb_explicit_key_investigation_2026_05_16.md §"Derivation algorithm".
     import warnings as _w
     label = m.label
     if label.strip() != label:
@@ -2300,7 +2300,7 @@ def _reject_object_type_requests(raw: dict, ot_tag: str) -> None:
             f"block (sibling of 'object_types:') and replace the implicit "
             f"request-is-metricSet convention with an explicit 'metricSets:' "
             f"block on each object_type. "
-            f"See designs/synology-mp-v1.md §'Chaining grammar design'."
+            f"See knowledge/designs/synology-mp-v1.md §'Chaining grammar design'."
         )
 
 
@@ -2361,7 +2361,7 @@ def _parse_metric_source(raw_source: Any, parent_tag: str) -> "MetricSourceDef":
                 f"supported. Migrate to 'metricset:<metricset_name>.<field_path>'. "
                 f"The metricset_name is the from_request value (or 'as:' alias) of "
                 f"the metricSet that sources this metric. "
-                f"See designs/synology-mp-v1.md §'Chaining grammar design'."
+                f"See knowledge/designs/synology-mp-v1.md §'Chaining grammar design'."
             )
         m = _METRICSET_SOURCE_RE.match(s)
         if not m:
@@ -2798,7 +2798,7 @@ def _parse_auth(raw: dict, parent_tag: str) -> AuthFlowDef:
             f"{parent_tag}: auth.type: enum form is retired. "
             f"Migrate to auth.preset with one of: "
             f"{', '.join(sorted(VALID_AUTH_PRESET))}. "
-            f"See designs/synology-mp-v1.md §\"Framework-vs-Synology review "
+            f"See knowledge/designs/synology-mp-v1.md §\"Framework-vs-Synology review "
             f"(2026-04-18)\" axis 1 for the flow grammar spec."
         )
 

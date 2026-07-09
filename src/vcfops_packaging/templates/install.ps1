@@ -1490,7 +1490,7 @@ function Remove-View {
     # data shape: array containing one dict; viewDefIds is a JSON-stringified
     # array of {id, name} objects. Sending a bare UUID (old shape) crashes the
     # server handler and returns type:exception "Internal server error."
-    # See context/dashboard_delete_api.md section 2026-04-11 update.
+    # See knowledge/context/api-surface/dashboard_delete_api.md section 2026-04-11 update.
     $innerJson = ConvertTo-Json @(@{ id = $ViewId; name = $ViewName }) -Compress
     $result = Invoke-ExtDirect -Calls @(@{
         action = "viewServiceController"
@@ -1552,7 +1552,7 @@ function Remove-Reports {
     $tid = Get-NextTid
     # data shape: BARE DICT (not array), reportDefIds is a JSON-stringified
     # array of {id, name} objects. This differs from deleteView which wraps
-    # data in an array. See context/dashboard_delete_api.md section 2026-04-11 update.
+    # data in an array. See knowledge/context/api-surface/dashboard_delete_api.md section 2026-04-11 update.
     $innerJson = ConvertTo-Json @($Reports | ForEach-Object {
         @{ id = $_.Uuid; name = $_.Name }
     }) -Compress

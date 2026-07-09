@@ -14,7 +14,7 @@ Wrap `python3 -m vcfops_packaging release` so the user can release a content
 item by typing a slash command. The CLI does all the actual work — your job
 is to parse the args, run the command, and report the result clearly.
 
-The release lifecycle design doc lives at `designs/release-lifecycle-v1.md`
+The release lifecycle design doc lives at `knowledge/designs/release-lifecycle-v1.md`
 if anything below is ambiguous.
 
 ## Args grammar
@@ -84,11 +84,11 @@ If the CLI exits non-zero, surface the error. Common cases:
   Tell the user the resolved path the CLI tried, and the candidates it
   rejected.
 - **Defect gate refusal** (RULE-012). The item has an open `blocking`
-  defect in `context/defects.md`; the CLI refuses and names the defect
+  defect in `knowledge/context/defects.md`; the CLI refuses and names the defect
   ids. Surface the ids and point the user at the registry entries. Do
   NOT work around it by editing manifests; the path forward is fixing
   or legitimately closing the defect (with evidence) per
-  `rules/release-gate-defects.md`. For **bundles** the CLI checks only
+  `knowledge/rules/release-gate-defects.md`. For **bundles** the CLI checks only
   the bundle's own token — per RULE-012 §3 the orchestrator must also
   run `defect-gate --pak <name>` for each managed pak the bundle
   references before releasing it.

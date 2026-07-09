@@ -19,20 +19,20 @@ that's the adapter author's job, not yours.) See lesson
 ## Knowledge sources
 
 - **vcfops-content-model** — view structure, cross-references.
-- **vcfops-api** — wire formats (view XML in `context/wire-formats/wire_formats.md`,
-  `context/wire-formats/view_column_wire_format.md`).
+- **vcfops-api** — wire formats (view XML in `knowledge/context/wire-formats/wire_formats.md`,
+  `knowledge/context/wire-formats/view_column_wire_format.md`).
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 
 Also read:
-- `context/authoring/view_dashboard_design_guide.md` (list/distribution/trend
+- `knowledge/context/authoring/view_dashboard_design_guide.md` (list/distribution/trend
   view types, the column transform enum, confirmed widget configs)
-- `context/wire-formats/wire_formats.md` §view definition XML
+- `knowledge/context/wire-formats/wire_formats.md` §view definition XML
 - existing `content/views/*.yaml` (idiom)
 - relevant `supermetrics/*.yaml` (for column references)
 
 ## Interview discipline — infer, don't interview
 
-Read `context/authoring/guide_content_authoring.md` §Interview discipline.
+Read `knowledge/context/authoring/guide_content_authoring.md` §Interview discipline.
 Track-specific examples:
 
 **Infer (don't ask):**
@@ -70,7 +70,7 @@ Track-specific examples:
    (`src/vcfops_dashboards/loader.py`): `list` (default; `list`/`summary`
    presentation), `distribution` (`bar-chart`/`pie-chart`/`donut-chart`), and
    `trend` (`line-chart`). You author all three — see
-   `context/authoring/view_dashboard_design_guide.md` for each type's columns,
+   `knowledge/context/authoring/view_dashboard_design_guide.md` for each type's columns,
    transforms, and confirmed configs. For a view type *outside* these three
    (a vendor view kind the loader doesn't model), return BLOCKED and name it as
    a TOOLSET GAP — never fake an unsupported type.

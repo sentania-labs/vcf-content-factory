@@ -41,9 +41,9 @@ jobs:
 
       - name: Framework-review reminder (non-blocking, P4)
         # Nudge only — emits a ::warning:: when a PR changes vcfops_*/ with
-        # no context/reviews/framework/ doc. The real gate is the
+        # no knowledge/context/reviews/framework/ doc. The real gate is the
         # orchestrator spawning `framework-reviewer` before the PR
-        # (CLAUDE.md / designs/framework-reviewer-v1.md). Never fails the
+        # (CLAUDE.md / knowledge/designs/framework-reviewer-v1.md). Never fails the
         # build: a doc-existence gate would be rubber-stampable and could
         # wedge legitimate hotfixes.
         if: github.event_name == 'pull_request'

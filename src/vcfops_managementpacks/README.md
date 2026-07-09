@@ -41,8 +41,8 @@ python3 -m vcfops_managementpacks uninstall "Synology DSM" --no-wait
 
 Both install and uninstall run through a single `/ui/` SPA session —
 no `/admin/` session or separate admin credentials required.  See
-`context/pak_ui_upload_investigation.md` §"Live-source findings" for
-the wire format, and `context/pak_uninstall_api_exploration.md` for
+`knowledge/context/api-surface/pak_ui_upload_investigation.md` §"Live-source findings" for
+the wire format, and `knowledge/context/api-surface/pak_uninstall_api_exploration.md` for
 the `isUnremovable` safety guard (mandatory; built-in paks are refused
 unless `--allow-builtin` is passed).
 
@@ -252,14 +252,14 @@ For the Tier 2 adapter kind naming convention:
 
 ## Related context
 
-- `context/mpb/reference-mpb-research.md` — MPB design JSON schema baseline
-- `context/mp_schema_vs_existing_mp.md` — sanity check against a
+- `knowledge/context/mpb/reference-mpb-research.md` — MPB design JSON schema baseline
+- `knowledge/context/mpb/mp_schema_vs_existing_mp.md` — sanity check against a
   known-working MP; documents wire-format deltas informed by live
   reference JSON
-- `context/pak_wire_format.md` — `.pak` and `adapters.zip` internals,
+- `knowledge/context/wire-formats/pak_wire_format.md` — `.pak` and `adapters.zip` internals,
   manifest shape, describe.xml structure, adapter JAR gap
-- `context/pak_install_api_exploration.md` — scripted install via
+- `knowledge/context/api-surface/pak_install_api_exploration.md` — scripted install via
   admin SPA Struts layer (11-step flow)
-- `context/pak_uninstall_api_exploration.md` — scripted uninstall via
+- `knowledge/context/api-surface/pak_uninstall_api_exploration.md` — scripted uninstall via
   `/ui/solution.action mainAction=remove`, mandatory
   `isUnremovable` safety guard

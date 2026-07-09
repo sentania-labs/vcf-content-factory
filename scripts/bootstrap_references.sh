@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bootstrap_references.sh — Clone or update allowlisted reference repos.
 #
-# Reads context/reference_sources.md for repo URLs and local paths,
+# Reads knowledge/context/reference_sources.md for repo URLs and local paths,
 # clones any that are missing under reference/references/, and
 # optionally updates existing clones with git pull.
 #
@@ -13,7 +13,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REFERENCES_DIR="${REPO_ROOT}/reference/references"
-SOURCES_FILE="${REPO_ROOT}/context/reference_sources.md"
+SOURCES_FILE="${REPO_ROOT}/knowledge/context/reference_sources.md"
 
 UPDATE_EXISTING=false
 if [[ "${1:-}" == "--update" ]]; then

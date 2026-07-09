@@ -16,7 +16,7 @@ You are the only agent that edits code in these directories.
 
 ## Hard rules
 
-1. **Write only to `src/vcfops_*/`, `context/`, and test files.**
+1. **Write only to `src/vcfops_*/`, `knowledge/context/`, and test files.**
    Never touch content YAML or `.claude/agents/`.
 2. **Never break validate.** After any change, run the full
    validation suite. If existing YAML stops validating, your
@@ -25,7 +25,7 @@ You are the only agent that edits code in these directories.
 4. **Credentials stay in env vars.**
 5. **Minimal changes.** Fix exactly what you were asked to fix.
    No drive-by refactors.
-6. **Document wire format discoveries** in the relevant `context/`
+6. **Document wire format discoveries** in the relevant `knowledge/context/`
    file.
 
 ## Package skeleton

@@ -530,7 +530,7 @@ def cmd_install(args) -> int:
 
     Uses the /ui/ SPA Struts layer for the full install lifecycle —
     no /admin/ session required.  Documented in
-    context/pak_ui_upload_investigation.md §"Live-source findings".
+    knowledge/context/api-surface/pak_ui_upload_investigation.md §"Live-source findings".
 
     Credentials are read from env vars (VCFOPS_HOST, VCFOPS_USER,
     VCFOPS_PASSWORD) or from CLI flags.  The legacy VCFOPS_ADMIN /
@@ -600,7 +600,7 @@ def cmd_pak_compare(args) -> int:
 
 def cmd_push_design(args) -> int:
     """Upload an MPB exchange-format JSON (or render one from YAML) and POST it
-    to POST /suite-api/internal/mpbuilder/designs/import on a live VCF Ops instance.
+    to POST /suite-api/internal/mpbuilder/knowledge/designs/import on a live VCF Ops instance.
 
     Accepts either:
       - A pre-rendered exchange-format JSON file (produced by render-export).
@@ -715,7 +715,7 @@ def cmd_push_design(args) -> int:
     # ------------------------------------------------------------------
     print(
         f"Importing design {design_name!r} to "
-        f"https://{client.host}/suite-api/internal/mpbuilder/designs/import ...",
+        f"https://{client.host}/suite-api/internal/mpbuilder/knowledge/designs/import ...",
         file=sys.stderr,
     )
     try:
@@ -746,13 +746,13 @@ def cmd_push_design(args) -> int:
 
     design_id = result.get("id", "(unknown)")
     host = client.host
-    # MPB UI design edit URL — confirmed path from context/mpb_api_surface.md
+    # MPB UI design edit URL — confirmed path from knowledge/context/mpb/mpb_api_surface.md
     # §"Auth / session notes" (MPB UI lives under /vcf-operations/... behind SSO,
     # but the direct /ui/mpbuilder/ path is what most admins bookmark).
     # The exact deep-link to a specific design is not documented in mpb_api_surface.md;
     # the admin-landing URL for the MPB section is used as the closest confirmed path.
     # Update this when a confirmed per-design deep-link is established.
-    ui_url = f"https://{host}/ui/index.action#/mpbuilder/designs/{design_id}"
+    ui_url = f"https://{host}/ui/index.action#/mpbuilder/knowledge/designs/{design_id}"
 
     print(f"Design imported: name={design_name!r}  id={design_id}")
     print(f"  URL: {ui_url}")
@@ -763,7 +763,7 @@ def cmd_uninstall(args) -> int:
     """Uninstall a management pack from a live VCF Ops instance.
 
     Follows the recommended uninstall flow documented in
-    context/pak_uninstall_api_exploration.md.
+    knowledge/context/api-surface/pak_uninstall_api_exploration.md.
 
     The isUnremovable guard is mandatory and defaults to on.
     Built-in paks (vSAN, vCenter, NSX, etc.) will be refused unless
@@ -1241,9 +1241,9 @@ def build_parser() -> argparse.ArgumentParser:
         "push-design",
         help=(
             "upload an MPB exchange-format JSON (or render from YAML) to "
-            "POST /suite-api/internal/mpbuilder/designs/import on a live "
+            "POST /suite-api/internal/mpbuilder/knowledge/designs/import on a live "
             "VCF Ops instance. Replaces the prior manual curl workflow. "
-            "See context/mpb_api_surface.md for endpoint documentation."
+            "See knowledge/context/mpb/mpb_api_surface.md for endpoint documentation."
         ),
     )
     ppd.add_argument(

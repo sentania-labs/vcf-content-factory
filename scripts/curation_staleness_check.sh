@@ -6,21 +6,21 @@
 # FAIL-OPEN: any internal error exits 0 silently and never blocks a session.
 #
 # Trigger: last_run > 7 days  OR  sessions-since-last-curation > 10.
-#   - context/curation/.last-run   (COMMITTED)  holds `last_run=<ISO8601>` — the
+#   - knowledge/context/curation/.last-run   (COMMITTED)  holds `last_run=<ISO8601>` — the
 #     durable "when did we last curate", reset by the orchestrator when the
 #     curator completes.
-#   - context/curation/.sessions-since (GITIGNORED) is a per-checkout velocity
+#   - knowledge/context/curation/.sessions-since (GITIGNORED) is a per-checkout velocity
 #     counter the hook increments each session; zeroed on curation. It is not
 #     committed because "sessions since" has no meaning shared across clones.
 #
 # When due, emits a SessionStart additionalContext block instructing the
 # orchestrator to spawn `curator` in the background and tell the user.
-# Design of record: designs/curator-v1.md.
+# Design of record: knowledge/designs/curator-v1.md.
 
 # No `set -e` — fail-open is the priority. Wrap everything; any failure → exit 0.
 {
   REPO_ROOT="$(cd "$(dirname "$0")/.." 2>/dev/null && pwd)" || exit 0
-  CUR_DIR="${REPO_ROOT}/context/curation"
+  CUR_DIR="${REPO_ROOT}/knowledge/context/curation"
   MARKER="${CUR_DIR}/.last-run"
   COUNTER="${CUR_DIR}/.sessions-since"
   THRESHOLD_DAYS=7
@@ -82,7 +82,7 @@ PY
   # --- emit the nudge as SessionStart additionalContext ---
   # Single-quoted message: no backticks / double-quotes / backslashes / newlines,
   # so it is safe both for bash and as a raw JSON string value.
-  msg='CURATION DUE ('"$due_reason"'). The governance corpus (rules/, lessons/, context/, .claude/agents/, CLAUDE.md) is overdue for a staleness audit. Per the curator contract in CLAUDE.md: spawn the curator agent in the BACKGROUND (read-only; it writes context/curation/<date>-report.md) and tell the user it is running. Do not block the current task. On completion, reset context/curation/.last-run last_run to today and zero context/curation/.sessions-since.'
+  msg='CURATION DUE ('"$due_reason"'). The governance corpus (knowledge/rules/, knowledge/lessons/, knowledge/context/, .claude/agents/, CLAUDE.md) is overdue for a staleness audit. Per the curator contract in CLAUDE.md: spawn the curator agent in the BACKGROUND (read-only; it writes knowledge/context/curation/<date>-report.md) and tell the user it is running. Do not block the current task. On completion, reset knowledge/context/curation/.last-run last_run to today and zero knowledge/context/curation/.sessions-since.'
   printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$msg"
 } 2>/dev/null || true
 
