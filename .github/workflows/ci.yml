@@ -10,6 +10,16 @@ jobs:
     # Fork-gate: do not run on PRs from outside the org (prevents RCE on runners)
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.owner.login == 'sentania-labs'
     runs-on: ubuntu-latest
+    env:
+      # The ten vcfops_* packages live under src/ (see pyproject.toml
+      # src-layout). CI resolves them via PYTHONPATH — never `pip install`
+      # the factory as a package — so the kit-isolation regression tests
+      # (tests/managementpacks/test_buildkit_isolated_build.py and friends)
+      # keep proving the published sdk-buildkit tarball works with zero
+      # factory install. An editable/real install would leak vcfops_* into
+      # every subprocess via site-packages regardless of PYTHONPATH
+      # stripping, silently blinding those guards.
+      PYTHONPATH: src
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -42,8 +52,9 @@ jobs:
           bash scripts/check_framework_review.sh "origin/${{ github.event.pull_request.base.ref }}"
 
       - name: Run pytest (all tests)
-        # pytest.ini sets addopts=-m "not slow" for fast local runs.
-        # CI must run the FULL suite, so we override addopts to clear the
+        # pyproject.toml's [tool.pytest.ini_options] sets addopts=-m "not slow"
+        # for fast local runs. CI must run the FULL suite, so we override
+        # addopts to clear the
         # default marker filter and add -n auto for parallel execution.
         # -m "" means "no marker filter" (run everything including slow).
         run: |

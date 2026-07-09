@@ -32,8 +32,8 @@ from typing import Optional
 
 import yaml
 
-# Repo root: two levels above bundles/third_party/<slug>
-_REPO_ROOT = Path(__file__).parent.parent
+# Repo root: three levels above (src/vcfops_extractor/extractor.py -> repo root)
+_REPO_ROOT = Path(__file__).parent.parent.parent
 
 
 # ---------------------------------------------------------------------------

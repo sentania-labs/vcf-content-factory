@@ -46,6 +46,12 @@ permissions:
 jobs:
   publish-buildkit:
     runs-on: ubuntu-latest
+    env:
+      # vcfops_managementpacks lives under src/ (see pyproject.toml
+      # src-layout). Resolve it via PYTHONPATH — this workflow deliberately
+      # never installs the factory as a package (see redistribution survey
+      # note above: only pyyaml is installed).
+      PYTHONPATH: src
     steps:
       - name: Check out factory repo
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4

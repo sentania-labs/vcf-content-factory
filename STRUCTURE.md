@@ -32,7 +32,7 @@ not the axis that matters — RULE-010 protects *immutability*.
 | `content/` | Authored factory output: supermetrics, views, dashboards, alerts, MPs. `content/sdk-adapters/*` are independent git repos (gitignored, bootstrap-cloned). |
 | `bundles/` | Bundle manifests (what ships together). |
 | `releases/` | Release manifests (what has been released, per item). |
-| `vcfops_*/` | Framework Python packages. **Only the `tooling` agent edits these** (RULE-013 gate applies). Cannot move — import paths. |
+| `src/` | The ten `vcfops_*` framework Python packages (`src/vcfops_alerts/` … `src/vcfops_symptoms/`). **Only the `tooling` agent edits these** (RULE-013 gate applies). Directories moved under `src/` in reorg v2 phase 1; package names and import paths are unchanged (`python3 -m vcfops_<x>` still works — ambient `PYTHONPATH=src`). |
 | `scripts/` | Hooks and operational shell scripts. Cannot move — wired into settings/CI. |
 | `tests/` | Framework test suite. Cannot move. |
 | `.claude/` | Harness config: agents, skills, settings. Cannot move. |

@@ -14,7 +14,7 @@ are not interchangeable:
 
 | Location | Purpose | You? |
 |---|---|---|
-| `content/dashboards/` | Factory content, installed via content-import (the loaders scan here — `vcfops_dashboards/cli.py`) | **YES — always write here** |
+| `content/dashboards/` | Factory content, installed via content-import (the loaders scan here — `src/vcfops_dashboards/cli.py`) | **YES — always write here** |
 | `dashboards/` (repo root) | Dashboards embedded *inside* an SDK-adapter pak (e.g. `content/sdk-adapters/compliance/` bundles `dashboards/compliance-overview.yaml`) | NO — that's the SDK-adapter author's tree |
 
 The repo root still contains real pak-bundled dashboards, so a `glob` for

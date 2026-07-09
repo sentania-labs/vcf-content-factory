@@ -16,7 +16,7 @@ P4 from the review, verbatim:
 > catch the renderer-defaults leak. The Tier 2 review pattern already
 > proves the fix works.
 
-The two real escapes that motivate it — both in `vcfops_dashboards/render.py`,
+The two real escapes that motivate it — both in `src/vcfops_dashboards/render.py`,
 both caught by **Codex after the PR**, by nothing the factory owned:
 
 - **`00d3382`** — pak-specific renderer defaults (`hidden:true`, a +1
@@ -30,7 +30,7 @@ both caught by **Codex after the PR**, by nothing the factory owned:
 
 ## Vision (interview outcomes)
 
-A read-only, skeptical correctness/regression gate on `vcfops_*/` Python
+A read-only, skeptical correctness/regression gate on `src/vcfops_*/` Python
 changes — the **framework-code sibling of `sdk-adapter-reviewer`**.
 `tooling` writes the framework Python; this agent tries to find what's
 wrong before the change ships. Most of the Tier 2 reviewer template
@@ -46,11 +46,11 @@ transfers; the four deltas Scott decided:
   `validate` chain + test suite + render regression. Codex stays as the
   generic second pass on the PR itself.
 - **Trigger — prose discipline + non-blocking CI reminder.** CLAUDE.md
-  mandates spawning the reviewer after any `vcfops_*/` edit, before the
+  mandates spawning the reviewer after any `src/vcfops_*/` edit, before the
   PR. A CI step **warns** (does not fail) when a PR's diff touches
-  `vcfops_*/` but adds no `context/reviews/framework/` doc — a nudge, not
+  `src/vcfops_*/` but adds no `context/reviews/framework/` doc — a nudge, not
   a rubber-stampable hard gate.
-- **Scope — BLANKET.** *Every* `vcfops_*/` diff gets a review, no
+- **Scope — BLANKET.** *Every* `src/vcfops_*/` diff gets a review, no
   risk-weighting exceptions. (Scott chose this over the recommended
   risk-weighted option: the cost of a missed review on a "boring"
   packaging change is worse than the Opus spend, and a blanket rule has
@@ -65,7 +65,7 @@ transfers; the four deltas Scott decided:
 Model: **opus** (reviewer ≥ author capability; `tooling` is Sonnet —
 the review's own data called tooling-at-Sonnet the one borderline model
 call, so the gate above it must be the stronger model). Writes only
-`context/reviews/framework/`. Never edits `vcfops_*/`, never installs.
+`context/reviews/framework/`. Never edits `src/vcfops_*/`, never installs.
 
 ## Failure-mode taxonomy (the review dimensions)
 
@@ -99,7 +99,7 @@ Anchored on the two real escapes, generalized:
    removed or defaulted-off that silently drops content — the
    framework analog of "unreadable is not compliant."
 9. **Stale-zip discipline.** If the change touches
-   `vcfops_packaging/templates/`, `builder.py`, or `render.py`, all dist
+   `src/vcfops_packaging/templates/`, `builder.py`, or `render.py`, all dist
    zips are stale (CLAUDE.md already says this) — the change must flag a
    `content-packager` rebuild.
 10. **Test coverage of the change.** Did `tooling` add/extend tests for
@@ -110,13 +110,13 @@ Anchored on the two real escapes, generalized:
 ## Wiring
 
 - **Roster:** new row in CLAUDE.md's agent table.
-- **Discipline:** after `tooling` reports a `vcfops_*/` change and
+- **Discipline:** after `tooling` reports a `src/vcfops_*/` change and
   *before* opening the PR, spawn `framework-reviewer`; blanket; BLOCKING
   blocks the PR; re-brief `tooling` until APPROVE. Sits beside delegation
   step 9 and the "After tooling changes" workflow note.
 - **CI reminder:** non-blocking `scripts/check_framework_review.sh`
   invoked from a CI step on `pull_request` — emits a `::warning::` when
-  the PR diff touches `vcfops_*/` with no `context/reviews/framework/`
+  the PR diff touches `src/vcfops_*/` with no `context/reviews/framework/`
   doc in the same diff.
 - **Output dir:** `context/reviews/framework/` (SDK reviews stay in
   `context/reviews/`; framework reviews get their own subdir).

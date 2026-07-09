@@ -12,6 +12,11 @@ import os
 import subprocess
 import sys
 
+# FACTORY_ROOT is always derived from this script's own location — it is
+# where the vcfops_* packages live (under src/, see pyproject.toml
+# src-layout) — and must NOT follow VCFCF_CONTENT_ROOT overrides below.
+FACTORY_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 # VCFCF_CONTENT_ROOT overrides the workspace root so tests (and any other
 # caller) can point the hook at a temporary directory instead of the real
 # content/ tree.  Unset → derive from __file__ as before.
@@ -19,7 +24,7 @@ _env_root = os.environ.get("VCFCF_CONTENT_ROOT", "").strip()
 if _env_root:
     WORKSPACE_ROOT = os.path.realpath(_env_root)
 else:
-    WORKSPACE_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    WORKSPACE_ROOT = FACTORY_ROOT
 
 CONTENT_ROOT = os.path.join(WORKSPACE_ROOT, "content") + os.sep
 
@@ -61,11 +66,22 @@ def main() -> None:
     if accepts_path:
         cmd.append(file_path)
 
+    # The vcfops_* packages live under src/ (see pyproject.toml src-layout),
+    # always relative to FACTORY_ROOT — never WORKSPACE_ROOT, which may be
+    # a hermetic VCFCF_CONTENT_ROOT override with no src/ of its own.
+    # Prepend it to PYTHONPATH so `-m <package>` resolves even when the
+    # package has not been pip-installed into the caller's environment.
+    env = os.environ.copy()
+    src_root = os.path.join(FACTORY_ROOT, "src")
+    existing_pp = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = src_root + (os.pathsep + existing_pp if existing_pp else "")
+
     result = subprocess.run(
         cmd,
         capture_output=True,
         text=True,
         cwd=WORKSPACE_ROOT,
+        env=env,
     )
 
     if result.returncode != 0:

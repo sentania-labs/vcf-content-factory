@@ -70,7 +70,7 @@ _GITHUB_REMOTE_RE = re.compile(
 )
 
 # Default registry path relative to the package file.
-_DEFAULT_REGISTRY_PATH = Path(__file__).parent.parent / "context" / "managed_paks.md"
+_DEFAULT_REGISTRY_PATH = Path(__file__).parent.parent.parent / "context" / "managed_paks.md"
 
 
 # ---------------------------------------------------------------------------

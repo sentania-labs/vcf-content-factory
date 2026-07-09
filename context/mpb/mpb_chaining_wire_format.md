@@ -2,7 +2,7 @@
 
 Authoritative reference for how Management Pack Builder (MPB) serializes
 request-to-request chaining inside its design-export JSON. Future tooling
-work (`vcfops_managementpacks/render.py`, `render_export.py`) and
+work (`src/vcfops_managementpacks/render.py`, `render_export.py`) and
 `mp-designer` decisions cite this file.
 
 **Scope.** The design-export JSON. The live MPB `/suite-api/internal/mpbuilder/*`
@@ -425,7 +425,7 @@ factory and with the Synology-family designs we are repackaging.
 
 ## 10. Rendering implications for factory tooling
 
-**Current state (2026-04-18).** `vcfops_managementpacks/render.py` and
+**Current state (2026-04-18).** `src/vcfops_managementpacks/render.py` and
 `render_export.py` have no chainingSettings emission. Designs that need
 multi-request LIST objects cannot be expressed.
 

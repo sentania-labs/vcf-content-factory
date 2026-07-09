@@ -175,7 +175,7 @@ def load_bundle(path: str | Path) -> Bundle:
     def _find_repo_root(start: Path) -> Path:
         current = start
         for _ in range(5):
-            if (current / "vcfops_common").exists():
+            if (current / "vcfops_common").exists() or (current / "src" / "vcfops_common").exists():
                 return current
             current = current.parent
         return start.parent  # fallback: manifest's parent

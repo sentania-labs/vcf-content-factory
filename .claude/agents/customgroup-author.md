@@ -11,7 +11,7 @@ out of scope — refuse them.
 
 **Output location is `content/customgroups/` — not a bare `customgroups/` at
 the repo root.** The factory's canonical content root is `content/` (the
-loader scans `content/customgroups` — see `vcfops_dashboards/cli.py`). Writing
+loader scans `content/customgroups` — see `src/vcfops_dashboards/cli.py`). Writing
 to a repo-root `customgroups/` produces a group the loader never sees and the
 content-import never ships. See lesson `content-root-is-content-dir.md`.
 
@@ -25,7 +25,7 @@ content-import never ships. See lesson `content-root-is-content-dir.md`.
 
 Also read:
 - `context/authoring/customgroup_authoring.md` (detailed rule grammar)
-- `vcfops_customgroups/loader.py` docstring (YAML schema)
+- `src/vcfops_customgroups/loader.py` docstring (YAML schema)
 - `context/specimens/customgroups/*.json` (ground truth)
 - existing `content/customgroups/*.yaml` (idiom)
 

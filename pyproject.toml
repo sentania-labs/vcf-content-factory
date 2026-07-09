@@ -1,0 +1,90 @@
+# This file deliberately does NOT declare a [project] table (nor a
+# [build-system]). The factory is never pip-installed — as a package, from
+# any of: local dev, CI (.github/workflows/*.yml), or Claude Code / agent
+# shells (.claude/settings.json) — full stop.
+#
+# The ten vcfops_* packages live under src/ (a real src-layout on disk) and
+# resolve purely via an ambient PYTHONPATH=src: set by .claude/settings.json
+# for Claude Code / agent shells, and by an `env:` block in each CI workflow.
+# Runtime and dev dependencies are declared in requirements.txt and
+# requirements-dev.txt respectively — install those directly
+# (`pip install -r requirements.txt -r requirements-dev.txt`), never `pip
+# install .` / `pip install -e .` against this repo.
+#
+# Why this matters: an install (editable OR a plain `pip install .` /
+# `pip install -e .`) registers vcfops_* in site-packages, which every
+# subprocess sharing that interpreter can then import regardless of
+# PYTHONPATH stripping. That silently blinds the kit-isolation regression
+# tests (tests/managementpacks/test_buildkit_isolated_build.py and
+# friends), which prove the published sdk-buildkit tarball works with zero
+# factory install. A [project] table here — even with no [build-system] —
+# is enough to make `pip install .` succeed via setuptools' legacy
+# src-layout auto-discovery fallback and install vcfops_* into
+# site-packages; that leak is exactly what this file must never enable, so
+# no [project] table is declared.
+#
+# That alone is NOT sufficient, though: pip still treats the mere presence
+# of this pyproject.toml as "buildable" — absent an explicit [build-system]
+# table, pip falls back to setuptools.build_meta by default (PEP 517), and
+# setuptools' auto-discovery finds the src/ layout and packages it into an
+# unnamed "UNKNOWN-0.0.0" wheel regardless of whether [project] declares a
+# name. Verified empirically in a scratch venv (with PYTHONPATH cleared, to
+# rule out ambient leakage from this repo's own PYTHONPATH=src convention):
+# with only the [project] table removed, `pip install .` still built and
+# installed "UNKNOWN-0.0.0" and `import vcfops_common` still succeeded.
+#
+# The explicit `[tool.setuptools] packages = []` below closes that — but
+# not by producing an empty install as originally assumed. Once
+# `[tool.setuptools]` is present, setuptools' pyproject.toml reader tries to
+# synthesize a minimal [project] stub and requires it to satisfy
+# setuptools.config.pyprojecttoml's validation, which demands a `version`
+# key that isn't there. The build fails outright:
+#   ValueError: invalid pyproject.toml config: `project`.
+#   configuration error: `project` must contain ['version'] properties
+# `pip install .` exits non-zero and `pip list` afterward shows nothing
+# installed (confirmed in a scratch venv, PYTHONPATH cleared) — no wheel is
+# ever produced, so there is nothing for vcfops_common to leak through.
+
+[tool.setuptools]
+packages = []
+
+[tool.pytest.ini_options]
+# ---------------------------------------------------------------------------
+# Markers
+# ---------------------------------------------------------------------------
+# slow  — tests that build real zips, run full validators against the real
+#         corpus, or otherwise take >~2s individually.  The default local run
+#         excludes them (addopts below).  CI overrides with -m "" to run all.
+#
+# real_corpus — xdist isolation group.  Tests that READ the real content/
+#               directories through subprocess validators (publish tests using
+#               factory_repo=REPO_ROOT) must not run concurrently with each
+#               other.  Tagging them with the same xdist_group colocates them
+#               on a single worker where they run sequentially.
+#               NOTE: test_validate_content_hook.py is NOT in this group —
+#               it is hermetic (uses VCFCF_CONTENT_ROOT to write into a
+#               tmp_path copy, never touching the real content/ tree).
+#               IMPORTANT: this group is only effective when using
+#               --dist=loadgroup (see addopts / CI command).
+markers = [
+    "slow: marks tests as slow (deselect with -m \"not slow\")",
+    "real_corpus: xdist group for tests that read or write the real content/ corpus",
+]
+
+# ---------------------------------------------------------------------------
+# Default: fast subset only
+# ---------------------------------------------------------------------------
+# Excludes `slow` tests on every plain `pytest` invocation so the local
+# edit-test loop stays fast.
+#
+# CI MUST override this.  The workflow passes:
+#   -m "" --override-ini="addopts="
+# to run the full suite.  See .github/workflows/ci.yml for the comment
+# explaining why.
+#
+# --dist=loadgroup is deliberately NOT in addopts: pytest-xdist is a dev
+# dependency (requirements-dev.txt), and an xdist flag here would break
+# plain `pytest` on a fresh clone without it.  When you pass -n, you MUST
+# also pass --dist=loadgroup (tests/conftest.py enforces this) so the
+# real_corpus group serializes correctly.
+addopts = "-m \"not slow\""

@@ -123,7 +123,7 @@ as its entry point (not just lib/), install will fail.
 
 **To get a real JAR**: upload the design JSON to the MPB UI → Build pak →
 download. Extract the JAR from adapters.zip and drop it into
-`vcfops_managementpacks/adapter_runtime/<adapter_dir>.jar`.
+`src/vcfops_managementpacks/adapter_runtime/<adapter_dir>.jar`.
 The builder will prefer an adapter-specific JAR over the generic stand-in.
 
 ## describe.xml structure

@@ -146,9 +146,9 @@ command as syntactic sugar for an ad-hoc bundle release).
 
 ## Tooling changes
 
-All of this lives in `vcfops_packaging/` — extend, don't fork.
+All of this lives in `src/vcfops_packaging/` — extend, don't fork.
 
-### 1. Release loader (`vcfops_packaging/releases.py` — new)
+### 1. Release loader (`src/vcfops_packaging/releases.py` — new)
 
 - Parse `releases/*.yaml` and validate schema.
 - Validate referenced source files exist and are flagged `released: true`.
@@ -156,7 +156,7 @@ All of this lives in `vcfops_packaging/` — extend, don't fork.
 - Validate version is semver-shaped.
 - No UUID — release manifests use `name` as identity.
 
-### 2. Type-to-subdir router (`vcfops_packaging/release_types.py` — new)
+### 2. Type-to-subdir router (`src/vcfops_packaging/release_types.py` — new)
 
 Small utility module exposing `headline_to_dir(source_path) -> str`
 (maps `dashboards/foo.yaml` → `dashboards`). Used by the publish
@@ -171,7 +171,7 @@ Existing builders stay:
 - `builder.py` — builds a bundle zip. Used when a release headline is a
   bundle.
 
-New: `vcfops_packaging/release_builder.py` (or extend existing) — top-level
+New: `src/vcfops_packaging/release_builder.py` (or extend existing) — top-level
 function that takes a release manifest, picks the right builder per
 headline, names the output zip per the convention, and returns the
 artifact list (path + dest subdir).
@@ -195,7 +195,7 @@ source release manifest no longer exists is *also* moved to retired/
 on next publish (with a generic "source release manifest no longer present"
 note). This is the migration path for the current flat-layout state.
 
-### 5. Publish orchestrator (`vcfops_packaging/publish.py` — new)
+### 5. Publish orchestrator (`src/vcfops_packaging/publish.py` — new)
 
 Top-level entrypoint. Steps:
 1. `validate` everything (existing `validate` calls).
@@ -216,7 +216,7 @@ Top-level entrypoint. Steps:
 
 Stops on any failure; never auto-pushes a broken state.
 
-### 6. CLI subcommands (`vcfops_packaging/cli.py` — extend)
+### 6. CLI subcommands (`src/vcfops_packaging/cli.py` — extend)
 
 Add:
 - `release <type> <name>` — materialize release manifest + flip flag
@@ -356,7 +356,7 @@ work and can run in parallel with Phase 5.
 
 ### Phase 1.5 detail — walker extension
 
-Findings from 2026-04-27 walker audit (`vcfops_common/dep_walker.py`):
+Findings from 2026-04-27 walker audit (`src/vcfops_common/dep_walker.py`):
 
 - **No customgroup reference model anywhere** — neither dashboard widgets,
   view scoping, nor SM formulas extract customgroup refs.
@@ -460,18 +460,18 @@ No silent failures. Any error stops the chain and reports verbatim.
 **New:**
 
 - `releases/` directory (empty initially; populated in Phase 7).
-- `vcfops_packaging/releases.py` (release loader + validator).
-- `vcfops_packaging/release_types.py` (type→subdir router).
-- `vcfops_packaging/release_builder.py` (builds release zips).
-- `vcfops_packaging/publish.py` (publish orchestrator).
+- `src/vcfops_packaging/releases.py` (release loader + validator).
+- `src/vcfops_packaging/release_types.py` (type→subdir router).
+- `src/vcfops_packaging/release_builder.py` (builds release zips).
+- `src/vcfops_packaging/publish.py` (publish orchestrator).
 - `releases/capacity-assessment.yaml` (Phase 7 backfill).
 - `releases/vks-core-consumption.yaml` (Phase 7 backfill).
 - `releases/demand-driven-capacity-v2.yaml` (Phase 7 backfill).
 
 **Modify:**
 
-- `vcfops_packaging/cli.py` — add `release` + `publish` subcommands.
-- `vcfops_packaging/readme_gen.py` — extend AUTO-marker sections for
+- `src/vcfops_packaging/cli.py` — add `release` + `publish` subcommands.
+- `src/vcfops_packaging/readme_gen.py` — extend AUTO-marker sections for
   the per-subdir layout.
 - `.claude/commands/publish.md` — rewrite as thin glue over `python3 -m
   vcfops_packaging publish`.
@@ -486,8 +486,8 @@ No silent failures. Any error stops the chain and reports verbatim.
 
 - All `supermetrics/`, `views/`, `dashboards/`, etc. component YAML.
 - Bundle manifests under `bundles/`.
-- Install scripts in `vcfops_packaging/templates/`.
-- Other `vcfops_*/` packages.
+- Install scripts in `src/vcfops_packaging/templates/`.
+- Other `src/vcfops_*/` packages.
 
 ## Addendum 2026-04-27 — Versionless consumer artifacts
 

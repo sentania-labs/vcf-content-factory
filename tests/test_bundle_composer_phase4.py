@@ -640,7 +640,7 @@ class TestRoundTrip:
             (tmp_path / "third_party").symlink_to(third_party_src.resolve())
 
         # Also symlink vcfops_common (needed by loader to find repo_root).
-        (tmp_path / "vcfops_common").symlink_to((REPO_ROOT / "vcfops_common").resolve())
+        (tmp_path / "vcfops_common").symlink_to((REPO_ROOT / "src" / "vcfops_common").resolve())
 
         # Pick 2 supermetrics (indices 1 and 2)
         sm_entries = discover_components(REPO_ROOT, "supermetrics")

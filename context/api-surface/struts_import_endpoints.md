@@ -359,7 +359,7 @@ The inner keys are resource kind strings. The leaf values are lists of view
 summary dicts, each with at minimum `id` and `name`.
 
 **Failure mode**: iterating the top-level dict yields string keys. The old
-`_resolve_view_ids` in `vcfops_dashboards/cli.py` tested each `item` for
+`_resolve_view_ids` in `src/vcfops_dashboards/cli.py` tested each `item` for
 `isinstance(item, dict)` or `isinstance(item, list)` — string keys matched
 neither branch, so `all_views` stayed empty and every name lookup returned
 `[]`. Result: `list-views` and `delete-view` silently found nothing.

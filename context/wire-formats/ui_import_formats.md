@@ -109,7 +109,7 @@ the *currently authenticated admin user*. Whatever string we put in
 the inner JSON's `userId` / `lastUpdateUserId` is thrown away. The
 nil UUID `00000000-0000-0000-0000-000000000000` is a good stub
 because it's obviously non-functional and matches the builder's
-current behavior (`vcfops_packaging/builder.py::_build_dashboard_dropin_zip`).
+current behavior (`src/vcfops_packaging/builder.py::_build_dashboard_dropin_zip`).
 `"PLACEHOLDER_USER_ID"` as a literal string also works but looks
 wrong and may confuse admins who inspect the inner JSON.
 
@@ -129,7 +129,7 @@ Dashboard-<name>.zip
 ```
 
 The builder currently writes exactly this (see
-`vcfops_packaging/builder.py::_build_dashboard_dropin_zip`). No
+`src/vcfops_packaging/builder.py::_build_dashboard_dropin_zip`). No
 changes needed beyond keeping the nil UUID swap.
 
 ### Reports drop-in shape
@@ -294,7 +294,7 @@ were successfully deleted.
 ## Recommendations for the distribution package refactor
 
 1. **`Dashboard.zip`** — no changes. The builder's current code at
-   `vcfops_packaging/builder.py::_build_dashboard_dropin_zip` (which
+   `src/vcfops_packaging/builder.py::_build_dashboard_dropin_zip` (which
    substitutes `NIL_UUID` for `PLACEHOLDER_USER_ID` and adds
    resource stubs) is exactly right. Document that the inner user
    IDs are intentional stubs and will be rewritten at import.

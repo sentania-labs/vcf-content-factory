@@ -321,7 +321,7 @@ group wrapper cause "Adapter install failed" with no further detail.
   failed at apply_adapter with "Adapter install failed" because
   `_append_data_kind` in `builder.py` emitted bare `ResourceAttribute`
   elements directly under `ResourceKind`.
-- Fix: `vcfops_managementpacks/builder.py` `_append_data_kind()` now
+- Fix: `src/vcfops_managementpacks/builder.py` `_append_data_kind()` now
   always opens a `<ResourceGroup key="summary">`, emits all metrics and
   properties inside it, then closes the group.
 - `pak_compare.py` D27 check added to warn when a factory pak's data

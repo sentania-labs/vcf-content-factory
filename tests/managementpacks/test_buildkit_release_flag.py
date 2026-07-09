@@ -84,7 +84,7 @@ def _assemble_kit_python_only(kit_dir: Path) -> None:
 
     fw_src_real = (
         Path(__file__).parent.parent.parent
-        / "vcfops_managementpacks" / "adapter_framework" / "src"
+        / "src" / "vcfops_managementpacks" / "adapter_framework" / "src"
     )
     fw_dst = pkg_dir / "adapter_framework" / "src"
     if fw_src_real.is_dir():

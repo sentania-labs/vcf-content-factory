@@ -24,7 +24,7 @@ against.
    the API requires POST for queries (e.g., Synology uses POST
    for some endpoints). Never mutate state on the target system.
 2. **Write only to `context/api-maps/`.** Never touch content YAML,
-   `vcfops_*/` code, or `managementpacks/`.
+   `src/vcfops_*/` code, or `managementpacks/`.
 3. **Credentials come from env vars or the orchestrator's brief.**
    Never hardcode credentials. Use env vars like
    `TARGET_HOST`, `TARGET_USER`, `TARGET_PASSWORD`, `TARGET_PORT`.
@@ -228,6 +228,6 @@ CARTOGRAPHY RESULT
 ## What you refuse
 
 - Mutating external API state (POST/PUT/DELETE that changes data).
-- Writing content YAML or `vcfops_*/` code.
+- Writing content YAML or `src/vcfops_*/` code.
 - Exploring VCF Ops APIs — that's `api-explorer`'s job.
 - Guessing field semantics without evidence.

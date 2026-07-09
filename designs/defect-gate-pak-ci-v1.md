@@ -11,7 +11,7 @@ The original task #4 was "bundle→pak cascade + pak-repo CI wiring."
 Reading the code re-scoped it:
 
 - **SDK-pointer-release cascade is ALREADY done.** `_gate_publish`
-  (`vcfops_packaging/publish.py:759`) detects an SDK adapter headline
+  (`src/vcfops_packaging/publish.py:759`) detects an SDK adapter headline
   via `_is_sdk_adapter_source` and gates it by managed-pak name
   (`gate_pak(source_path.parent.name)`). So a factory `/publish` that
   emits a pointer to the synology/unifi pak **already refuses** while
@@ -67,7 +67,7 @@ the build, with no factory checkout:
    The canonical source is `designs/sdk-template-scaffold/build-pak-on-tag.yml`;
    the change propagates to the 4 pak repos + the template (same flow as
    the README propagation), and propagation **also vendors
-   `ci/defect_gate.py`** (a copy of `vcfops_packaging/defects.py`) into
+   `ci/defect_gate.py`** (a copy of `src/vcfops_packaging/defects.py`) into
    each repo.
 
 ## Code is vendored; only the registry is fetched live
@@ -100,7 +100,7 @@ The split matters for security (Codex PR-18 P1):
 ## Boundaries / who does what
 
 - `tooling` → the `defects.py` standalone entrypoint + tests
-  (`vcfops_packaging/`). Triggers the **RULE-013 `framework-reviewer`
+  (`src/vcfops_packaging/`). Triggers the **RULE-013 `framework-reviewer`
   gate** (run via prompt-adoption this session — agent type not yet
   registered).
 - orchestrator → the canonical `build-pak-on-tag.yml` gate step
@@ -108,12 +108,12 @@ The split matters for security (Codex PR-18 P1):
 - `sdk-adapter-author` → propagate to the 4 pak repos + template (direct
   pushes, infra-only, no version bump): copy the updated
   `build-pak-on-tag.yml` **and** vendor `ci/defect_gate.py` (a copy of
-  `vcfops_packaging/defects.py`) into each repo. Post-merge only (main
+  `src/vcfops_packaging/defects.py`) into each repo. Post-merge only (main
   must carry the standalone `defects.py` first).
 
 ## Acceptance (negative proof)
 
-- `python3 vcfops_packaging/defects.py --pak synology --registry context/defects.md`
+- `python3 src/vcfops_packaging/defects.py --pak synology --registry context/defects.md`
   → exit 2, names DEF-001 (the same refusal the package CLI gives).
 - A bare copy of `defects.py` run outside the package (no
   `vcfops_packaging` on `PYTHONPATH`) gives the identical result —

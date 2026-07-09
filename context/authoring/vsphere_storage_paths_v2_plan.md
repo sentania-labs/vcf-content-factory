@@ -181,5 +181,5 @@ or just `VCF-CF|Dead Paths`.
   (ground-truth MPB export)
 - `context/mpb_object_binding_wire_format.md` (§3.5 stitching)
 - `context/management_pack_authoring.md` (YAML grammar)
-- `vcfops_managementpacks/loader.py` — AriaOpsConf, ARIA_OPS validation
-- `vcfops_managementpacks/render.py` — _render_aria_ops_conf()
+- `src/vcfops_managementpacks/loader.py` — AriaOpsConf, ARIA_OPS validation
+- `src/vcfops_managementpacks/render.py` — _render_aria_ops_conf()

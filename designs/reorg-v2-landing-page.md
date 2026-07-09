@@ -92,7 +92,7 @@ names unchanged; `pip install -e .` replaces `requirements.txt` manual
 path-dependency; every `python3 -m vcfops_<x>` invocation in CLAUDE.md /
 agents / CI / pak workflows keeps working verbatim.
 **Spike first, on a branch, before any sweep:**
-- `vcfops_managementpacks/buildkit.py` (build-buildkit packages the sdk
+- `src/vcfops_managementpacks/buildkit.py` (build-buildkit packages the sdk
   tarball from package-relative paths — must use `__file__`, verify);
 - `scripts/*.sh` referencing `vcfops_*` paths; CI install step;
   `Getting_Started.md` dev setup; editable-install behavior for the
@@ -101,6 +101,18 @@ agents / CI / pak workflows keeps working verbatim.
   not the factory checkout) — verify the tarball layout is unchanged.
 Owner: `tooling`; gate: `framework-reviewer` (RULE-013 blanket) + a full
 buildkit rebuild compared against the released 1.0.6 tarball.
+
+**Execution note (2026-07-08):** the spike ran and the move executed on
+`chore/reorg-v2-phase1-src` — all ten packages now live at
+`src/vcfops_<x>/`, names and `python3 -m vcfops_<x>` invocations
+unchanged. The install mechanism decided differs from the sketch above:
+**no package install at all** — `pip install -e .` was rejected because an
+editable install would leak the packages into every subprocess via
+site-packages and blind the buildkit isolation-guard tests. Instead the
+packages resolve via ambient `PYTHONPATH=src` (`.claude/settings.json`
+env for agent shells + `env:` in the CI workflows); `requirements.txt` /
+`requirements-dev.txt` are retained (only `pytest.ini` was absorbed into
+`pyproject.toml` `[tool.pytest.ini_options]`).
 
 ### Phase 2 — `knowledge/` (the −3/−6 move; v1's declined step 3, revived)
 The v1 no-go was decided against the comprehension goal; against the

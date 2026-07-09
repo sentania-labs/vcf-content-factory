@@ -1,7 +1,8 @@
 """Suite-wide guards.
 
 The only logic here is the xdist dist-mode guard: the `real_corpus`
-xdist_group (see pytest.ini) only serializes its tests when xdist runs
+xdist_group (see pyproject.toml's [tool.pytest.ini_options]) only
+serializes its tests when xdist runs
 with --dist=loadgroup. The default --dist=load scatters them across
 workers and they race on the real content/ directories (proven: 3
 failures). Running parallel without loadgroup is always a mistake, so

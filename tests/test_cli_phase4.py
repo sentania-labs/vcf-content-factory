@@ -104,7 +104,7 @@ def _make_factory_copy(tmp_path: Path) -> Path:
     # symlink vcfops_* packages and vcfops_common back to the real location
     # so imports work, without creating duplicate symlinks.
     _linked: set[str] = set()
-    for pkg in REPO_ROOT.glob("vcfops_*"):
+    for pkg in (REPO_ROOT / "src").glob("vcfops_*"):
         if pkg.is_dir() and pkg.name not in _linked:
             (factory / pkg.name).symlink_to(pkg.resolve())
             _linked.add(pkg.name)

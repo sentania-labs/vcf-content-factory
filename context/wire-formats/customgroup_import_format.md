@@ -181,7 +181,7 @@ from specimens.
 ## Known gap: tag rules
 
 The reference specimens contain no example of a tag-based rule in UI format.
-`vcfops_customgroups/loader.py` approximates tag conditions as
+`src/vcfops_customgroups/loader.py` approximates tag conditions as
 `StringMetricPropertyRule` with a `_tag_gap` comment key. If a bundle's
 `customgroup.json` drag-drop import fails for a group with `tag:` conditions,
 this gap is the likely cause. Investigation via api-explorer needed.

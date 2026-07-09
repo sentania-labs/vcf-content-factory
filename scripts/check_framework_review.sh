@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Non-blocking CI reminder for the framework-review gate (P4).
 #
-# When a PR's diff touches framework Python (vcfops_*/) but adds no
+# When a PR's diff touches framework Python (src/vcfops_*/) but adds no
 # matching review doc under context/reviews/framework/, emit a GitHub
 # Actions ::warning::. This is a NUDGE, never a failure — the real gate
 # is the orchestrator spawning `framework-reviewer` before the PR
@@ -31,8 +31,9 @@ if [ -z "${CHANGED}" ]; then
   exit 0
 fi
 
-# Did the change touch framework Python?
-FRAMEWORK_HITS="$(printf '%s\n' "${CHANGED}" | grep -E '^vcfops_[^/]+/' || true)"
+# Did the change touch framework Python? The ten vcfops_* packages live
+# under src/ (see pyproject.toml src-layout).
+FRAMEWORK_HITS="$(printf '%s\n' "${CHANGED}" | grep -E '^src/vcfops_[^/]+/' || true)"
 if [ -z "${FRAMEWORK_HITS}" ]; then
   echo "check-framework-review: no vcfops_*/ changes; framework review not required."
   exit 0
@@ -55,7 +56,7 @@ if [ -n "${REVIEW_HITS}" ]; then
 fi
 
 # Touched framework Python, no review doc — warn (non-blocking).
-PKGS="$(printf '%s\n' "${FRAMEWORK_HITS}" | cut -d/ -f1 | sort -u | tr '\n' ' ')"
+PKGS="$(printf '%s\n' "${FRAMEWORK_HITS}" | cut -d/ -f2 | sort -u | tr '\n' ' ')"
 MSG="vcfops_*/ changed (${PKGS}) with no context/reviews/framework/ doc. Per CLAUDE.md, tooling changes need a framework-reviewer pass before merge (RULE/P4). This is a reminder, not a failure."
 echo "::warning title=Framework review missing::${MSG}"
 echo "check-framework-review: WARN — ${MSG}"

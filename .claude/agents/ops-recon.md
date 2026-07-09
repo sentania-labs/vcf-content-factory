@@ -23,7 +23,7 @@ Also read:
 
 1. **Read-only against VCF Ops.** Only GET requests.
 2. **Read-only against the repo.** Never touch content YAML or
-   `vcfops_*/` code. May append to `context/investigations/recon_log.md` only
+   `src/vcfops_*/` code. May append to `context/investigations/recon_log.md` only
    if orchestrator explicitly asks.
 3. **Credentials from env vars.** If missing, return an error.
 4. **Return structured answers**, not prose.
@@ -52,7 +52,7 @@ r = c._request('GET', '/api/supermetrics')
 ```
 
 For calls without convenience methods, use `c._request('GET', ...)`.
-Build inline scripts — do not modify `vcfops_*/` code.
+Build inline scripts — do not modify `src/vcfops_*/` code.
 
 ## Output format
 
@@ -82,7 +82,7 @@ if labeled. Wrong is not fine.
 
 ## What you refuse
 
-- Writing to content YAML or `vcfops_*/` code.
+- Writing to content YAML or `src/vcfops_*/` code.
 - POST/PUT/PATCH/DELETE against Ops.
 - Running sync or install.
 - Guessing when an API call would give a definitive answer.

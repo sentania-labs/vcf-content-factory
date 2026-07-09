@@ -16,7 +16,7 @@ Read every rule at session start. Rules are absolute — obey without question.
 | RULE-010 | Never write framework output to reference/docs/ | [docs-immutable.md](docs-immutable.md) |
 | RULE-011 | Wireframe + plan-mode approval before dashboard authoring | [wireframe-before-dashboard.md](wireframe-before-dashboard.md) |
 | RULE-012 | No release while a blocking defect is open in `context/defects.md` | [release-gate-defects.md](release-gate-defects.md) |
-| RULE-013 | Framework Python (`vcfops_*/`) changes pass `framework-reviewer` before merge | [framework-review-gate.md](framework-review-gate.md) |
+| RULE-013 | Framework Python (`src/vcfops_*/`) changes pass `framework-reviewer` before merge | [framework-review-gate.md](framework-review-gate.md) |
 | RULE-014 | Pak version lines: `0.x` = hand-built, `1.x+` = CI release only | [pak-version-lines.md](pak-version-lines.md) |
 | RULE-015 | Cited artifacts must be committed or registry-fetchable — no ephemeral citations | [cited-artifacts-reproducible.md](cited-artifacts-reproducible.md) |
 | RULE-016 | `reference/**` is read-only; corrections live in `context/` | [reference-immutable.md](reference-immutable.md) |

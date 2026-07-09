@@ -392,5 +392,5 @@ analysis and the failure mode of Pattern B (Bug 2d).
   of the dangling-chain defect (defect #3)
 - `context/render_export_strip_audit_2026_05_14.md §Bug4` — Pattern V derivation,
   failure mode of Pattern B (ATTRIBUTE origin), vSAN ground truth
-- `vcfops_managementpacks/loader.py` — validator implementation
-- `vcfops_managementpacks/render.py:_build_chaining_settings` — renderer
+- `src/vcfops_managementpacks/loader.py` — validator implementation
+- `src/vcfops_managementpacks/render.py:_build_chaining_settings` — renderer

@@ -1,7 +1,7 @@
 # MPB template.json Schema Specification
 
 Reverse-engineered from the working Synology NAS template.json
-(`vcfops_managementpacks/adapter_runtime/mpb_synology_nas_template.json`)
+(`src/vcfops_managementpacks/adapter_runtime/mpb_synology_nas_template.json`)
 and validated against `BuilderFileParseException` errors from failed
 UniFi Integration pak installs (rounds 1-5, 2026-05-08 through 2026-05-09).
 

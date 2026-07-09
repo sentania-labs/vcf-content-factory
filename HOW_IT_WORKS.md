@@ -318,8 +318,10 @@ content/sdk-adapters/            Tier 2 Java adapter projects
 supermetrics/  views/  dashboards/  customgroups/  symptoms/  alerts/
 recommendations/  reports/       per-content-type YAML
 
-vcfops_*/                        Python packages — renderer, loader, builder,
+src/vcfops_*/                    Python packages — renderer, loader, builder,
                                  installer. Only the `tooling` agent edits.
+                                 (Package names/imports unchanged by the src/
+                                 move — `python3 -m vcfops_<x>` still works.)
 
 context/                         shared knowledge files (wire formats, rules,
                                  API maps, codified lessons). Agents read on

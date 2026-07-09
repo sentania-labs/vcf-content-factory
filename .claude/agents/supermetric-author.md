@@ -108,4 +108,4 @@ Do not edit the loader. Do not silently downgrade.
 - Writing outside `content/supermetrics/`.
 - Installing anything.
 - Creating views, dashboards, custom groups, symptoms, or alerts.
-- Editing `vcfops_*/` code.
+- Editing `src/vcfops_*/` code.

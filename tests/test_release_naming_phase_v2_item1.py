@@ -231,7 +231,7 @@ class TestReleaseManifestOutput:
             content_type, source_stem,
             "--no-commit",
         ] + (extra_args or [])
-        env = {"PYTHONPATH": str(REPO_ROOT), "PATH": "/usr/bin:/bin"}
+        env = {"PYTHONPATH": str(REPO_ROOT / "src"), "PATH": "/usr/bin:/bin"}
         return subprocess.run(
             cmd, cwd=str(tmp_path), capture_output=True, text=True, env=env,
         )
@@ -474,7 +474,7 @@ class TestValidatorCollisionHardError:
     def test_collision_causes_nonzero_exit(self, tmp_path):
         """Validator returns non-zero on a slug collision."""
         self._make_collision_repo(tmp_path, "foo-bundle")
-        env = {"PYTHONPATH": str(REPO_ROOT), "PATH": "/usr/bin:/bin"}
+        env = {"PYTHONPATH": str(REPO_ROOT / "src"), "PATH": "/usr/bin:/bin"}
         result = subprocess.run(
             [sys.executable, "-m", "vcfops_packaging", "validate"],
             cwd=str(tmp_path),
@@ -490,7 +490,7 @@ class TestValidatorCollisionHardError:
     def test_collision_error_message_names_both_files(self, tmp_path):
         """Collision error message names both the bundle file and the release manifest."""
         self._make_collision_repo(tmp_path, "collision-test")
-        env = {"PYTHONPATH": str(REPO_ROOT), "PATH": "/usr/bin:/bin"}
+        env = {"PYTHONPATH": str(REPO_ROOT / "src"), "PATH": "/usr/bin:/bin"}
         result = subprocess.run(
             [sys.executable, "-m", "vcfops_packaging", "validate"],
             cwd=str(tmp_path),
@@ -619,7 +619,7 @@ class TestBundleReleaseLegitimatePairing:
             _minimal_release_yaml(slug, f"bundles/{slug}.yaml")
         )
 
-        env = {"PYTHONPATH": str(REPO_ROOT), "PATH": "/usr/bin:/bin"}
+        env = {"PYTHONPATH": str(REPO_ROOT / "src"), "PATH": "/usr/bin:/bin"}
         result = subprocess.run(
             [sys.executable, "-m", "vcfops_packaging", "validate"],
             cwd=str(tmp_path),

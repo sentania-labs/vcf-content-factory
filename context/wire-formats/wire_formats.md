@@ -213,8 +213,8 @@ Request body (JSON):
 ```
 Note: the body uses `adapterKind` / `resourceKind` (not the
 `adapterKindKey` / `resourceKindKey` keys that the loader's
-`resource_kinds` list stores). Both `vcfops_supermetrics/client.py`
-and `vcfops_packaging/templates/install.py` translate the loader
+`resource_kinds` list stores). Both `src/vcfops_supermetrics/client.py`
+and `src/vcfops_packaging/templates/install.py` translate the loader
 keys to the API keys in the dict comprehension that builds the body.
 
 ### SM ghost state — assign returns 404 despite GET /{id} succeeding
@@ -239,8 +239,8 @@ status and check `operationSummaries[contentType=SUPER_METRICS]`. If
 **Fix:** Re-import the same ZIP a second time. The second import finds
 the SM in ghost state, fully re-registers it, and reports `imported=N`.
 After re-import the SM appears in the list and assign/default returns
-200. Both `vcfops_supermetrics/client.py:import_supermetrics_bundle`
-and `vcfops_packaging/templates/install.py:_install_supermetrics` detect
+200. Both `src/vcfops_supermetrics/client.py:import_supermetrics_bundle`
+and `src/vcfops_packaging/templates/install.py:_install_supermetrics` detect
 the all-skipped signal and retry automatically.
 
 **Note:** `GET /api/supermetrics` returning a result does NOT guarantee

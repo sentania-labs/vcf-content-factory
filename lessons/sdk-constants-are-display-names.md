@@ -79,7 +79,7 @@ $ javap -c -classpath vrops-adapters-sdk-2.2.jar \
 ## Scope
 
 Applies to: `AmbientCredential.resolvePropertiesPath()` (fixed in
-`vcfops_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/AmbientCredential.java`
+`src/vcfops_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/AmbientCredential.java`
 as of 2026-06-10).
 
 Applies to: any future code that needs a platform directory path — do not

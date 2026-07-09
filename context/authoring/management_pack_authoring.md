@@ -22,7 +22,7 @@ migration hints — do not use them.
 
 **Ground truth for behavior.** When this doc and the loader disagree, the
 loader wins — open a tooling ticket to reconcile. Loader source is
-`vcfops_managementpacks/loader.py`; the module docstring has a working
+`src/vcfops_managementpacks/loader.py`; the module docstring has a working
 example.
 
 ---
@@ -737,7 +737,7 @@ live API at import time — those extra entries are a runtime artifact and
 cannot be reproduced from author YAML. The minimal set is sufficient for
 MPB to accept and import the design.
 
-See `vcfops_managementpacks/README.md` for the full CLI surface. The authoring
+See `src/vcfops_managementpacks/README.md` for the full CLI surface. The authoring
 loop stops at the YAML; rendering and install are not mp-author's job.
 
 ---

@@ -977,7 +977,7 @@ class TestStandaloneEntrypoint:
     live corpus's current defect states.
     """
 
-    _DEFECTS_SCRIPT = REPO_ROOT / "vcfops_packaging" / "defects.py"
+    _DEFECTS_SCRIPT = REPO_ROOT / "src" / "vcfops_packaging" / "defects.py"
 
     def _run_script(self, script_path: Path, argv: list, cwd: Path | None = None):
         """Run defects.py as a bare script; return (returncode, stdout, stderr)."""

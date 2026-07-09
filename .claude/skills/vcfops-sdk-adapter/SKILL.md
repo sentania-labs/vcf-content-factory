@@ -29,7 +29,7 @@ Reference implementation: `content/sdk-adapters/compliance/`.
 content/sdk-adapters/<adapter>/
   adapter.yaml          # name, version, build_number, adapter_kind, entry_class, bundled_content
   describe.xml          # ResourceKinds, ResourceIdentifiers, credential/connection params
-  src/com/.../*.java    # adapter source
+  src/                  # adapter Java source (com/.../*.java) — the ADAPTER repo's own src/, not the factory's top-level src/
   lib/                  # bundled jars (vim25, vapi-runtime, ...) — classpath is pak-isolated
   profiles/             # input data (e.g. benchmark CSVs)
   resources/            # resources.properties (nameKey -> label resolution)

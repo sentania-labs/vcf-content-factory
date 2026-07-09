@@ -77,8 +77,8 @@ XML renderer and the properties generator.
 
 VCF-CF convention: `desc` (matching VCFAutomation, our closest structural
 reference). The `_attribute_to_localization_key()` function that sanitizes
-column attribute keys runs identically in both `vcfops_dashboards/render.py`
-and `vcfops_managementpacks/sdk_builder.py` — keep them in sync when modifying
+column attribute keys runs identically in both `src/vcfops_dashboards/render.py`
+and `src/vcfops_managementpacks/sdk_builder.py` — keep them in sync when modifying
 either.
 
 A build-time validator in `validate_sdk_project()` now catches mismatches
@@ -89,11 +89,11 @@ after any change to the renderer or properties generator.
 
 - Spec/18 Pass 31: `context/cleanroom-spec/spec/18-pak-content-bundle.md`
   (four-bundle contract, diagnostic fingerprint, build history)
-- Generator code: `vcfops_managementpacks/sdk_builder.py` —
+- Generator code: `src/vcfops_managementpacks/sdk_builder.py` —
   `_generate_outer_resources_properties`, `_generate_content_resources_properties`,
   `_generate_dashboard_resources_properties`, `_generate_view_content_properties`,
   `_attribute_to_localization_key`
-- XML renderer: `vcfops_dashboards/render.py` — `localizationKey="title"` and
+- XML renderer: `src/vcfops_dashboards/render.py` — `localizationKey="title"` and
   `localizationKey="desc"` on `<Title>` and `<Description>` respectively
 - Confirmed working: v22 pak (`vcfcf_sdk_compliance.1.0.0.22.pak`) on devel,
   post-install inventory: 1 dashboard, 1 view, 1 alert, 2 symptoms, 3 recs

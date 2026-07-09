@@ -184,7 +184,7 @@ sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
 
 ## Formula validation
 
-The loader (`vcfops_supermetrics/loader.py`) enforces a subset of
+The loader (`src/vcfops_supermetrics/loader.py`) enforces a subset of
 these rules. **The loader is not a full parser** — treat a
 successful `validate` as necessary but not sufficient. Always
 re-read the formula yourself.

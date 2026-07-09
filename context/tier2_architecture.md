@@ -48,7 +48,7 @@ content/sdk-adapters/<name>/        # Layer 3: Tier 2 adapter projects
     resources/resources.properties
     lib/                            # optional: vendor JARs (JDBC driver, etc.)
 
-vcfops_managementpacks/
+src/vcfops_managementpacks/
     adapter_framework/src/          # Layer 2 framework Java source
     adapter_runtime/                # pre-compiled JARs:
         vcfcf-adapter-base.jar      #   - Layer 2 (we build, commit, ship)
@@ -345,7 +345,7 @@ Use `pushStringProperty(rc, key, value)` on `VcfCfAdapter`, or
 ### Rebuild the framework JAR after changes — UNCHANGED
 
 ```
-cd vcfops_managementpacks/
+cd src/vcfops_managementpacks/
 ./adapter_framework/build-framework.sh
 ```
 

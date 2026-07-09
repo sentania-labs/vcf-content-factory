@@ -1,15 +1,15 @@
 # RULE-013 — Framework Python changes pass `framework-reviewer` before merge
 
-No change to `vcfops_*/` (the framework Python — loaders, renderers,
+No change to `src/vcfops_*/` (the framework Python — loaders, renderers,
 builders, CLIs) merges to `main` until the **`framework-reviewer`** agent
 has reviewed it and returned **APPROVE** (zero BLOCKING).
 
 The flow:
 
-1. `tooling` makes the `vcfops_*/` change and reports it (the only agent
-   that edits `vcfops_*/`).
+1. `tooling` makes the `src/vcfops_*/` change and reports it (the only agent
+   that edits `src/vcfops_*/`).
 2. **Before the PR is opened**, the orchestrator spawns
-   `framework-reviewer`. Scope is **blanket** — *every* `vcfops_*/` diff,
+   `framework-reviewer`. Scope is **blanket** — *every* `src/vcfops_*/` diff,
    with no risk-weighting exceptions. A "boring" packaging or CLI change
    is in scope exactly like a renderer change.
 3. The reviewer re-runs the `validate` chain, the test suite, and render
@@ -31,13 +31,13 @@ pass, it does not replace it.
 Supporting obligations:
 
 - **The reviewer is read-only and independent.** It never edits
-  `vcfops_*/`; it hands findings back to `tooling`. A reviewer that edits
+  `src/vcfops_*/`; it hands findings back to `tooling`. A reviewer that edits
   the code it reviews is no longer a check.
 - **No rubber-stamping.** The verdict must rest on re-run evidence
   (validate chain, tests, render regression), not on repeating `tooling`'s
   claims. The verdict is binary on BLOCKING count.
 - **CI reminds, does not gate.** `scripts/check_framework_review.sh` warns
-  (non-blocking) when a PR touches `vcfops_*/` with no
+  (non-blocking) when a PR touches `src/vcfops_*/` with no
   `context/reviews/framework/` doc. The real gate is this rule + the
   orchestrator discipline; a CI doc-existence gate would be
   rubber-stampable and could wedge legitimate hotfixes.
