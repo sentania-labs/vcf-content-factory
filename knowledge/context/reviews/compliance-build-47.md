@@ -67,7 +67,7 @@ treated as unknown → normal evaluation (does NOT fabricate disconnected).
 through the framework-base `logWarn` (the visible path, per the investigation's
 E2 finding), not the dead helper logger. No credentials/tokens in any new log
 line — messages carry host name + connectionState enum + exception message only
-(`rules/no-secrets-on-disk.md` upheld). `getHostConnectionState` is a
+(`knowledge/rules/no-secrets-on-disk.md` upheld). `getHostConnectionState` is a
 reflection-tolerant DOM read (`getStringProperty` → null on absent element,
 never throws) — skill § *vim25 over JAX-WS* upheld.
 

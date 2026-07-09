@@ -44,7 +44,7 @@ Pick the destination by scope, not by convenience:
 | "Do this not that" correction for an agent | The agent's prompt under `.claude/agents/<agent>.md`. Hard rules go in the **Hard rules** section; idioms go in the workflow section |
 | Orchestrator-level rule (delegation, install gating) | `CLAUDE.md` itself, in the relevant section |
 | Cross-cutting operational rule (credentials, labs) | The matching `context/rules_*.md` |
-| New capability boundary discovered | `context/known_limitations.md` (so future sessions surface it early instead of discovering it mid-workflow) |
+| New capability boundary discovered | `knowledge/context/known_limitations.md` (so future sessions surface it early instead of discovering it mid-workflow) |
 
 When in doubt, write to two places: the topical context file (for
 depth) and the agent prompt (for the always-loaded, agent-scoped

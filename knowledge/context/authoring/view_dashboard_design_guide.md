@@ -380,6 +380,6 @@ coords: {x: 0, y: 0, w: 12, h: 4}    # full-width, 4 rows tall
 | View/dashboard YAML | `content/views/`, `content/dashboards/` |
 | Loader (dataclasses + parsing) | `src/vcfops_dashboards/loader.py` |
 | Renderer (wire format emission) | `src/vcfops_dashboards/render.py` |
-| Wire format spec | `context/wire-formats/view_column_wire_format.md` |
-| Widget type survey | `context/api-surface/widget_types_survey.md` |
-| Widget renderer scope | `context/api-surface/widget_renderer_scope.md` |
+| Wire format spec | `knowledge/context/wire-formats/view_column_wire_format.md` |
+| Widget type survey | `knowledge/context/api-surface/widget_types_survey.md` |
+| Widget renderer scope | `knowledge/context/api-surface/widget_renderer_scope.md` |

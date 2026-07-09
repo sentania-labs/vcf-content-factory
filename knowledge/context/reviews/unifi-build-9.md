@@ -4,7 +4,7 @@
 - **Commit reviewed:** `3bb262a` (adapter repo main, "replace dead
   controller-side LLDP cross-link with vCenter-side vmnic→port join")
 - **Base:** `a71b280` (build 8)
-- **Design of record:** `designs/managementpacks/unifi-switchport-host-stitch-v2.md`
+- **Design of record:** `knowledge/designs/managementpacks/unifi-switchport-host-stitch-v2.md`
 - **Reviewer:** `sdk-adapter-reviewer`
 - **Verdict:** APPROVE (0 BLOCKING)
 - **Findings:** 0 BLOCKING / 0 WARNING / 3 NIT
@@ -21,7 +21,7 @@
 
 No discrepancy between author's result block and observed behavior.
 
-## Registry check (`context/defects.md`)
+## Registry check (`knowledge/context/defects.md`)
 
 - **DEF-002** (open, blocking, Affects: unifi) — **still present, unchanged.**
   The edge is still `rb.parentForeign(host, portKey)` onto a foreign VMWARE
@@ -70,7 +70,7 @@ No discrepancy between author's result block and observed behavior.
    idVal, isUnique)` — never hardcoded true. `SimpleJson.asBoolean()`
    returns **false** on absent/null (verified in source: `SimpleJson.java`
    L86–91, and `get()` is null-safe L26–33), so absent → false. Matches
-   `lessons/cross-mp-foreign-key-uniqueness-flags.md`. ✔
+   `knowledge/lessons/cross-mp-foreign-key-uniqueness-flags.md`. ✔
 
 5. **Crash-the-cycle.** `computeVmnicStitch` wraps the entire fetch+match
    body in try/catch → `adapter.logWarn`, never rethrows; it is invoked

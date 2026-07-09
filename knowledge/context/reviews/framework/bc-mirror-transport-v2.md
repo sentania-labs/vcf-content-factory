@@ -4,7 +4,7 @@
   `tests/test_defect_gate.py` (DEF-005 corpus alignment)
 - **Date:** 2026-07-01
 - **Reviewer:** `framework-reviewer` (RULE-013, blanket pre-PR gate)
-- **Prior:** `context/reviews/framework/bc-mirror-transport-v1.md` — CHANGES REQUESTED (1 BLOCKING / 1 NIT)
+- **Prior:** `knowledge/context/reviews/framework/bc-mirror-transport-v1.md` — CHANGES REQUESTED (1 BLOCKING / 1 NIT)
 - **This pass:** verify the two v1 items are properly closed and nothing else moved.
 - **Verdict:** APPROVE (0 BLOCKING)
 
@@ -16,12 +16,12 @@ after v1:
 - `VcfCfAdapter.java` (18:42)
 
 Every other file in the combined four-diff tree predates the v1 review
-(`context/defects.md` 18:21; `SuiteApiStitchClient.java` 18:24; `VcfCfAdapterTest.java` 18:27;
+(`knowledge/context/defects.md` 18:21; `SuiteApiStitchClient.java` 18:24; `VcfCfAdapterTest.java` 18:27;
 `SuiteApiStitchClientTest.java` 18:28; `cli.py`/`sdk_builder.py` 17:31;
 `AmbientCredential`/`RelationshipBuilder` 16:26–16:27). **No drive-by edits** to the three
-already-APPROVED sibling diffs or to `context/defects.md`.
+already-APPROVED sibling diffs or to `knowledge/context/defects.md`.
 
-- **DEF-005 byte-identical:** `context/defects.md` mtime (18:21) precedes the v1 review; the
+- **DEF-005 byte-identical:** `knowledge/context/defects.md` mtime (18:21) precedes the v1 review; the
   git diff still shows the same +33-line block characterized in v1 (blocking / open / synology,
   closes only on live-devel datastore+stitch verification). Not touched this round. Confirmed.
 
@@ -45,7 +45,7 @@ already-APPROVED sibling diffs or to `context/defects.md`.
 ## v1 item 1 — BLOCKING (stale gate tests) → CLOSED
 
 `tests/test_defect_gate.py` updated so the synology assertions expect DEF-005 as synology's one
-open blocker, with docstrings citing DEF-005 by id. `context/defects.md` **not** touched
+open blocker, with docstrings citing DEF-005 by id. `knowledge/context/defects.md` **not** touched
 (DEF-005 still `Status: open`, verbatim). Full pytest now green (457/4/0). Correctly did **not**
 close DEF-005 to satisfy the suite — DEF-005 closes only on live-devel verification per its own
 criterion.

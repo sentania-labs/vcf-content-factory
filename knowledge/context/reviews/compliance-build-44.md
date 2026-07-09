@@ -186,4 +186,4 @@ and the actual non-empty inventory walk get their runtime confirmation. Nothing 
 this static review blocks promotion to that step.
 
 ## Report
-`context/reviews/compliance-build-44.md`
+`knowledge/context/reviews/compliance-build-44.md`

@@ -307,7 +307,7 @@ requires matching by `resourceKey.name` on sync, not by UUID).
 Exact shape returned by `GET /api/resources/groups` and accepted by
 `POST`, verified by round-trip on the lab (create → GET → delete,
 `2026-04-08`). Full specimens in
-`context/specimens/customgroups/`.
+`knowledge/context/specimens/customgroups/`.
 
 ```json
 {

@@ -23,7 +23,7 @@
   surface (classic / v2 / Integration) exposes LLDP sysNames. The switch's
   own LLDP daemon sees the ESXi hosts (CLI-proven) but the controller
   filters those neighbors out of every API response.
-  Evidence: `context/investigations/unifi-lldp-switchport-esxi-2026-07-05.md`.
+  Evidence: `knowledge/context/investigations/unifi-lldp-switchport-esxi-2026-07-05.md`.
 - Redesign the stitch to match **the right switch + port to the right
   vmnic** — per-NIC accuracy is the user's stated bar, not just per-host.
 - **Primary design: vCenter-side join via Suite API.** VCF Ops publishes,
@@ -202,13 +202,13 @@ edge, no dup.
   DEF-002 clobber idiom stays absent.
 - **Honest uniqueness flags:** the host `ResourceKey` carries each identifier's
   real `isPartOfUniqueness` read from the Suite API response, default false on
-  absent/null — never hardcode true (`lessons/cross-mp-foreign-key-uniqueness-flags.md`;
+  absent/null — never hardcode true (`knowledge/lessons/cross-mp-foreign-key-uniqueness-flags.md`;
   the synology .18–.21 silent-drop reproducer). Reuse the existing
   `SuiteApiHostBridge` parse loop unchanged; it is already byte-correct per the
   build-8 review.
 - **Adapter-scoped additive semantics:** relying on the additive foreign edge
   contract, not on the superseded per-adapter-scoped full-set behaviour
-  (`lessons/setrelationships-foreign-adapter-scoped.md` — SUPERSEDED banner;
+  (`knowledge/lessons/setrelationships-foreign-adapter-scoped.md` — SUPERSEDED banner;
   do **not** reintroduce full-set-onto-foreign). Nothing in build 9 changes the
   write verb, so this constraint survives untouched.
 - **Crash-the-cycle safety:** the whole stitch body stays wrapped in
@@ -297,9 +297,9 @@ Three artifacts are now orphaned by the source change. Recommendations:
 ## 8. Constraints carried forward (checklist for the reviewer)
 
 - Additive foreign edge only (`parentForeign` → `addRelationships`); no full-set
-  onto a foreign parent. (DEF-002; `lessons/setrelationships-foreign-adapter-scoped.md`.)
+  onto a foreign parent. (DEF-002; `knowledge/lessons/setrelationships-foreign-adapter-scoped.md`.)
 - Honest `isPartOfUniqueness` from the Suite API response; default false; never
-  hardcode true. (`lessons/cross-mp-foreign-key-uniqueness-flags.md`.)
+  hardcode true. (`knowledge/lessons/cross-mp-foreign-key-uniqueness-flags.md`.)
 - Stitch wrapped; a stitch fault never costs the collect its own inventory.
 - No fabricated edges: zero/ambiguous match → no edge, debug only.
 - CP-safe: only `SuiteApiStitcher.get()` / BC-mirror transport / identity-v3

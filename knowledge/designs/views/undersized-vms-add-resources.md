@@ -1,7 +1,7 @@
 # Design — [VCF Content Factory] Undersized VMs — Add Resources (view)
 
 Part of the **Fleet Capacity & Rightsizing** dashboard (Band D-2). See
-`designs/dashboards/fleet-capacity-rightsizing.md`.
+`knowledge/designs/dashboards/fleet-capacity-rightsizing.md`.
 
 ## Vision
 A list view of undersized VMs (performance-risk counterpart to reclamation) and

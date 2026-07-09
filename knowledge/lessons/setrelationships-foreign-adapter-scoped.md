@@ -37,7 +37,7 @@ retained all 22 VMWARE-collected children and gained the new
 `SynologyIscsiLun` child edge. VMWARE's edges were undisturbed.
 
 This closed the open question in synology-build-16 WARNING-1
-(`context/reviews/synology-build-16.md`), which the static review could not
+(`knowledge/context/reviews/synology-build-16.md`), which the static review could not
 close: "the only authoritative disproof is a live collect."
 
 Spec/19 §3 line 213–214 endorses the cross-MP `ResourceKey` as parent with
@@ -54,10 +54,10 @@ the non-owning adapter's collect.
 
 ## Context
 
-- `context/tier2_architecture.md` — "setRelationships on a foreign resource"
+- `knowledge/context/tier2_architecture.md` — "setRelationships on a foreign resource"
   authoring contract note and changelog entry
-- `context/framework_v2_migration.md` §7 — RelationshipBuilder API
-- `context/reviews/synology-build-16.md` — WARNING-1 (the static-review gap
+- `knowledge/context/framework_v2_migration.md` §7 — RelationshipBuilder API
+- `knowledge/context/reviews/synology-build-16.md` — WARNING-1 (the static-review gap
   this lesson closes)
 - `cleanroom-spec/spec/19-adapterbase-behavioral-contract.md` §3 — the
   `setRelationships` contract spec (read-only drop; do not edit)

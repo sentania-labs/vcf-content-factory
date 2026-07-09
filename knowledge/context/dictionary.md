@@ -158,7 +158,7 @@ The *Release lifecycle* is how content gets from the factory
 repo to the public Distribution repo. Concepts in this section
 are recent (introduced 2026-04-27) and supersede the earlier
 `released: bool` flag-only model. Full design:
-`designs/release-lifecycle-v1.md`.
+`knowledge/designs/release-lifecycle-v1.md`.
 
 ### Release
 **A shipping event.** A YAML manifest under `releases/` that
@@ -301,4 +301,4 @@ Bundle (the YAML collection the manifest references).
 - UUID and cross-reference rules: `context/uuids_and_cross_references.md`
 - API surface map: `context/content_api_surface.md`
 - Install + enable details: `context/install_and_enable.md`
-- Release lifecycle design: `designs/release-lifecycle-v1.md`
+- Release lifecycle design: `knowledge/designs/release-lifecycle-v1.md`

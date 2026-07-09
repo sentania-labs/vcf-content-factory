@@ -89,7 +89,7 @@ the original fix only addressed the loopback half. The explicit/remote path was 
 **Decision (SME): fix both — shipping the guard without the CP path "doesn't materially improve the
 product."** The reference-correct, zero-CA-store mechanism is the platform **`getSocketFactory()`
 `CustomSSLSocketFactory` (TOFU)** — the same one every BlueMedora/native pak and the OG `SuiteAPIClient`
-use for all outbound HTTPS (`lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`; spec §20:304 "the
+use for all outbound HTTPS (`knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`; spec §20:304 "the
 platform supplies the trust store; the adapter requests it"). TOFU is a *third* option between
 trust-all and an adapter-managed CA store: the platform owns the store and the first-use registration.
 
@@ -266,7 +266,7 @@ fix until it is re-tagged (the kit is pulled at build time, not runtime).
   (reference-MP TLS/auth posture; loopback-peer gating caveat; explicit-creds-must-target-primary).
   §1–§4 give the token-lifecycle, retry, cancellation, and remote-collector contracts the
   re-implemented transport must match.
-- `context/investigations/recon_log.md` — 2026-06-29 synology prod recon (all four passes:
+- `knowledge/context/investigations/recon_log.md` — 2026-06-29 synology prod recon (all four passes:
   version, behavioral fingerprint, jar bytecode, adapter-log 403, re-home → TLS, cert comparison).
 - `vcfops_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitcher.java`
   — `create()` (ambient localhost) vs `explicitCredentials(host,user,pass)`.

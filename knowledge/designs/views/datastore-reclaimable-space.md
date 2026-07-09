@@ -1,7 +1,7 @@
 # Design — [VCF Content Factory] Datastore Reclaimable Space (view)
 
 Part of the **Fleet Capacity & Rightsizing** dashboard (Band E). See
-`designs/dashboards/fleet-capacity-rightsizing.md`.
+`knowledge/designs/dashboards/fleet-capacity-rightsizing.md`.
 
 ## Vision
 A list view of datastores showing total/used capacity plus reclaimable space

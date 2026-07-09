@@ -140,7 +140,7 @@ Recon checks, in order:
    close? Same.
 4. **Reference repos.** Has someone in the community already solved
    this? `references/` carries an allowlist of grepped-but-not-trusted
-   source material (see `context/reference_sources.md`).
+   source material (see `knowledge/context/reference_sources.md`).
 
 This step is the framework's first line of defense against
 reinventing things, **and** the framework's mechanism for grounding
@@ -165,7 +165,7 @@ Instead, every hard-won lesson goes somewhere reviewable:
   capability
 
 The process is documented in
-[context/authoring/guide_codification.md](context/authoring/guide_codification.md). The
+[knowledge/context/authoring/guide_codification.md](knowledge/context/authoring/guide_codification.md). The
 practical rule of thumb: when the user says "no, do it this way
 instead," ask yourself which of the above files should remember
 that.
@@ -180,7 +180,7 @@ or a context file is committable, reviewable, and survives forks.
 
 Codified across all author agents (with per-agent details in their
 prompts and shared discipline in
-`context/authoring/guide_content_authoring.md`):
+`knowledge/context/authoring/guide_content_authoring.md`):
 
 1. **Probe the existing state before asking the user.** Live
    instance + repo + references. If the answer is already there,
@@ -258,17 +258,17 @@ non-HTTP protocols, per-instance attribute groups, dynamic time
 parameters.
 
 The decision framework is in
-[context/tier_decision_framework.md](context/tier_decision_framework.md).
+[knowledge/context/tier_decision_framework.md](knowledge/context/tier_decision_framework.md).
 The default is Tier 1 unless a specific trigger forces Tier 2.
 
 Tier 2 is in production: six adapters are registered, each in its
 own repo (`synology`, `unifi`, `compliance`, and the three
-`vcommunity` paks — registry: `context/managed_paks.md`), with
+`vcommunity` paks — registry: `knowledge/context/managed_paks.md`), with
 sustained cross-MP stitching proven in prod. Releasability is per
 adapter — the defect gate (RULE-012) blocks any pak with an open
 blocking defect (e.g. `vcommunity-os` under DEF-004). (Dell
 PowerEdge was evaluated and abandoned — see
-`lessons/dell-redfish-relationship-strategies.md`.)
+`knowledge/lessons/dell-redfish-relationship-strategies.md`.)
 
 ## Building SDK paks interactively
 
@@ -277,7 +277,7 @@ Two builder personas, two paths:
 **From a factory clone (this repo).** The session-start bootstrap
 clones each registered pak repo into the gitignored
 `content/sdk-adapters/<name>/` (registry:
-`context/managed_paks.md`). The interactive dev loop is:
+`knowledge/context/managed_paks.md`). The interactive dev loop is:
 
 ```bash
 python3 -m vcfops_managementpacks validate-sdk content/sdk-adapters/<name>  # cheap loop
@@ -287,7 +287,7 @@ python3 -m vcfops_managementpacks build-sdk    content/sdk-adapters/<name>  # de
 You'll need a JDK 11+ and the Broadcom adapter SDK jar, which has no
 public redistribution channel — extract it from your own VCF Ops
 appliance (see the consumer contract in
-[designs/sdk-template-scaffold/BUILDING_FROM_SOURCE.md](designs/sdk-template-scaffold/BUILDING_FROM_SOURCE.md)).
+[knowledge/designs/sdk-template-scaffold/BUILDING_FROM_SOURCE.md](knowledge/designs/sdk-template-scaffold/BUILDING_FROM_SOURCE.md)).
 
 **From a bare pak repo clone or fork (no factory).** Each pak repo's
 README has a "Building from source" section: pull the portable
@@ -336,7 +336,7 @@ designs/                         design artifacts from `mp-designer` and other
                                  ad-hoc planning docs.
 
 references/                      cloned community repos (allowlisted in
-                                 context/reference_sources.md). Gitignored —
+                                 knowledge/context/reference_sources.md). Gitignored —
                                  each user clones their own.
 
 bundles/                         release-grade bundle manifests + dist outputs.
@@ -403,7 +403,7 @@ single most valuable transferable piece.
 ## Where the framework is going
 
 - **Tier 2 adapter roster growth** — six native-SDK adapters are
-  registered (see `context/managed_paks.md`); each new target keeps
+  registered (see `knowledge/context/managed_paks.md`); each new target keeps
   forcing the framework JAR to grow capabilities (instanced groups,
   multi-host iteration, cross-MP stitching) under real use.
 - **mp-designer interview improvements** — codified API-pattern

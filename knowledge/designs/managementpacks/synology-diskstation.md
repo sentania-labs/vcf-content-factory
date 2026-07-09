@@ -73,7 +73,7 @@ my NAS the cause?" with one click instead of three tools.
 
 ### A. INTERNAL-only (resurrect 2026-04 design as-is)
 
-Take `designs/synology-mp-v1.md`'s 5-kind topology (Diskstation
+Take `knowledge/designs/synology-mp-v1.md`'s 5-kind topology (Diskstation
 singleton, Storage Pool, Volume, Disk, SSDCache, iSCSI LUN), drop
 the chained `volume_util` metricSet (the showstopper), accept lost
 per-volume IO. Add NFS Share once cartography returns. **No
@@ -139,7 +139,7 @@ kinds for stitching.
 
 ## Cartographer findings (2026-05-18) — resolve open gaps
 
-### NFS (`context/api-maps/synology-nfs.md`)
+### NFS (`knowledge/context/api-maps/synology-nfs.md`)
 
 - ✅ NFS service status alertable (`SYNO.Core.FileServ.NFS get` v3).
 - ✅ NFS export inventory: 11 shares, 9 NFS-exported. `SYNO.Core.Share list` + `SYNO.Core.FileServ.NFS.SharePrivilege load` per-share. Empty `rule[]` → exists but not NFS-exported.
@@ -147,7 +147,7 @@ kinds for stitching.
 - ❌ **Per-share NFS IO is NOT exposed.** Only aggregate server-wide row in `Utilization`. Fallback: per-volume IO via `space.volume[]` (already mapped) attributed to the parent volume's exports.
 - 🎯 Cartographer recommends: NFS Export as a first-class object type, child of Volume.
 
-### Stitching (`context/api-maps/synology-vcfops-stitching.md`)
+### Stitching (`knowledge/context/api-maps/synology-vcfops-stitching.md`)
 
 - ✅ **iSCSI key:** `lun.uuid` → NAA via deterministic transform → match Datastore `resourceIdentifiers.DataStrorePath = "VMFS:|naa.6001405<25-hex>|"`. Verified live (2 LUN/Datastore pairs).
 - ✅ **NFS key:** `<nas-ip>/<vol_path-no-slash>/<share-name>` → match Datastore `DataStrorePath`. Emit one row per (NIC IP × share) pair. Verified live (3 NFS datastores).
@@ -273,7 +273,7 @@ will determine what object type they bind to. Outcomes:
 ARIA_OPS stitching, but was built as a **Tier 2 native Java SDK
 adapter** instead. The Synology API's cross-endpoint joining
 requirement (trigger #2) and the NAA transform (trigger #9) made
-Tier 1/MPB unviable. See `context/tier_decision_framework.md`.
+Tier 1/MPB unviable. See `knowledge/context/tier_decision_framework.md`.
 
 **Final object model (build 1.0.0.9, 23 objects on devel):**
 

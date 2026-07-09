@@ -1,7 +1,7 @@
 # Framework Review — onDescribe() localization fix (make(String) overload swap)
 
 - **Area:** `vcfops_managementpacks/adapter_framework/src/com/vcfcf/adapter/VcfCfAdapter.java` (`onDescribe()`)
-- **Change:** swap `AdapterDescribe.make(InputStream)` → `AdapterDescribe.make(String)` so the SDK auto-loads `<conf>/resources/resources.properties`; remove now-dead `InputStream`/`Files` imports; update Javadoc + `context/framework_v2_migration.md` §3.
+- **Change:** swap `AdapterDescribe.make(InputStream)` → `AdapterDescribe.make(String)` so the SDK auto-loads `<conf>/resources/resources.properties`; remove now-dead `InputStream`/`Files` imports; update Javadoc + `knowledge/context/framework_v2_migration.md` §3.
 - **Reviewer:** framework-reviewer (pre-PR, read-only)
 - **Date:** 2026-06-24
 - **Verdict:** APPROVE (0 BLOCKING)
@@ -38,7 +38,7 @@ sole framework compile classpath) with `javap -p -c`. The author's claim is
 actionable throw if both null) is **byte-for-byte unchanged**. The change is
 strictly below `getAdapterDescribeFile(kind, …)`. The kind is still resolved
 before any `make()` call, so the controller-side bare-`describe()` NPE chain
-(`lessons/controller-describe-bare-instantiation.md`) is not reintroduced.
+(`knowledge/lessons/controller-describe-bare-instantiation.md`) is not reintroduced.
 
 ### 2. Absent resources.properties — TOLERATED (bytecode-verified)
 Traced `MLDDL.load(String)` → `LocalizedNamesDataProvider.getLocalizedNameFiles(String)`:
@@ -90,7 +90,7 @@ delta is the wrapped Java cause is dropped from the framework exception — but
 - none
 
 ### NIT
-- `[context/framework_v2_migration.md:132]` and `[VcfCfAdapter.java:536–537]` —
+- `[knowledge/context/framework_v2_migration.md:132]` and `[VcfCfAdapter.java:536–537]` —
   build-number prose is self-contradictory: line 132 says the localization
   regression is "fixed in build 43 framework fix" while the Javadoc says the
   regression "was the v1→v2 regression (build 43)" — attributing both the

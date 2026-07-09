@@ -68,7 +68,7 @@ a `<credential_kind>` block.
 
 ## Related
 
-- `lessons/pak-content-localization-bundles.md` — content side of MP
+- `knowledge/lessons/pak-content-localization-bundles.md` — content side of MP
   install, separate failure mode.
-- `context/investigations/v20-step5-silent-drop.md` — earlier MP
+- `knowledge/context/investigations/v20-step5-silent-drop.md` — earlier MP
   install-cycle investigation.

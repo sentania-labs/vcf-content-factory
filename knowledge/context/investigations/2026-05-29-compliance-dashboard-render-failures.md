@@ -32,7 +32,7 @@ No other server-side exceptions correlate with the dashboard load.
 
 Compared to `/tmp/idps/bundles/idps-planner/content/dashboard.json` widget
 `5c2a30b1-…` ("Cluster Host Heatmap") and the canonical capacity Heatmap
-in `context/api-surface/widget_types_survey.md` §Heatmap.
+in `knowledge/context/api-surface/widget_types_survey.md` §Heatmap.
 
 | Field | Ours (v28) | Working corpus | Verdict |
 |---|---|---|---|
@@ -49,7 +49,7 @@ is fetched, so the heatmap returns no tiles and surfaces the Internal Server
 Error popup.
 
 Across all surveyed corpus dashboards (idps-planner, capacity, vSAN samples
-in `context/api-surface/widget_types_survey.md`), **no** Heatmap has an empty
+in `knowledge/context/api-surface/widget_types_survey.md`), **no** Heatmap has an empty
 `groupBy`. The pattern is always populated even when `focusOnGroups: false`.
 
 ### AlertList

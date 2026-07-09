@@ -18,7 +18,7 @@
   63ac66e, clean working tree** — the fork did not mutate the unified pak
   (claim 7).
 
-## Registry check (`context/defects.md`)
+## Registry check (`knowledge/context/defects.md`)
 
 - No open defect names `vcommunity-vsphere` (or `vcommunity`) in `Affects:`.
   DEF-001 (synology), DEF-002 (unifi), DEF-003 (synology, closed) — none
@@ -83,7 +83,7 @@ surface — none is unexplained:
    unknown, falls back to unscoped and keeps the resource. Wired each cycle
    at `VCommunityAdapter:326` —
    `stitcher.setOwningVcUuid(vsphere.getVCenterInstanceUuid())`. Matches
-   `lessons/stitch-moid-not-unique-across-vcenters.md` and the skill's
+   `knowledge/lessons/stitch-moid-not-unique-across-vcenters.md` and the skill's
    *ARIA_OPS stitching identity* rule. No regression.
 
 6. **Logging quality / no secrets** — PASS. Per-VM failures logged with
@@ -169,5 +169,5 @@ confirmation it degrades rather than erroring the dashboard load.
 - The dangling-view WARNING is **conditional** — it only graduates to the
   registry if the live degrade-to-no-data check fails (i.e. if it turns out
   to error the dashboard load). If qa-tester confirms graceful degradation,
-  it stays a review WARNING and does not enter `context/defects.md`. Flag to
+  it stays a review WARNING and does not enter `knowledge/context/defects.md`. Flag to
   the orchestrator to decide after the devel proof.

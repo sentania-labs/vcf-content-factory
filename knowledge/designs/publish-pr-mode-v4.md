@@ -2,7 +2,7 @@
 
 **Status:** queued 2026-04-27 (after v3 Phase 1 lands)
 **Owner:** orchestrator (planning) + tooling agent (implementation)
-**Builds on:** `designs/release-lifecycle-v1.md` (publish pipeline) and `designs/content-structure-v3.md` (Phase 1 layout migration must land first)
+**Builds on:** `knowledge/designs/release-lifecycle-v1.md` (publish pipeline) and `knowledge/designs/content-structure-v3.md` (Phase 1 layout migration must land first)
 
 ## Context
 

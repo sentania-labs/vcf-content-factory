@@ -468,7 +468,7 @@ All SCG 8.0 manual controls have direct equivalents in SCG 9.0 (same physical/pr
 
 3. **Style A (service_state) is the highest-value new style.** One Java style unlocks 10 service-state controls (shell/SSH/CIM/SLP/SNMP/NTP across both profiles). This is the most bang-for-buck new style.
 
-4. **The vSAN SDK gap is the largest genuinely-manual cluster.** 10 (SCG 8.0) + 13 (SCG 9.0) vSAN cluster controls are blocked by the missing `com.vmware.vim.vsan.binding` classpath. This is documented in `context/investigations/2026-05-29-vsan-management-sdk-gap.md`.
+4. **The vSAN SDK gap is the largest genuinely-manual cluster.** 10 (SCG 8.0) + 13 (SCG 9.0) vSAN cluster controls are blocked by the missing `com.vmware.vim.vsan.binding` classpath. This is documented in `knowledge/context/investigations/2026-05-29-vsan-management-sdk-gap.md`.
 
 5. **Sub-product controls (NSX, VCF Ops, VCF Logs, Networks) are all genuinely manual.** The adapter has no reach into those products' management APIs. 40+ SCG 9.0 controls fall here.
 

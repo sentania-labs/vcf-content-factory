@@ -8,7 +8,7 @@ Append-only. Each entry is a dated investigation section.
 
 **Target:** `[VCF Content Factory] MSSQL Query Performance & Blocking`
 (UUID `2679c78f-e88e-43ba-b1ae-864dbbe9c50c`), file
-`context/attic/legacy-root-content/mssql-query-performance.yaml`.
+`knowledge/context/attic/legacy-root-content/mssql-query-performance.yaml`.
 **Instance:** vcf-lab-operations.int.sentania.net.
 **Symptoms:** (1) heatmap `query_heatmap` renders empty; (2) Internal
 Server Error on dashboard load.
@@ -38,16 +38,16 @@ Server Error on dashboard load.
    have valid data (one DB reports 25.9ms write delay).
 
 **Evidence files:**
-- `context/investigations/mssql_dashboard_live.json` — server-side
+- `knowledge/context/investigations/mssql_dashboard_live.json` — server-side
   `getDashboardConfig` (shallow tab metadata only; deep widget config
   is not retrievable for admin-owned locked dashboards from a
   non-admin user — clone is blocked by the lock).
-- `context/investigations/mssql_dashboard_rendered.json` —
+- `knowledge/context/investigations/mssql_dashboard_rendered.json` —
   the exact JSON the renderer emits and the importer received,
   including the broken `[1, -1, 0]` shape on the two disk widgets.
 
 **Documentation updates:**
-- `context/api-surface/widget_types_survey.md` §MetricChart — replaced
+- `knowledge/context/api-surface/widget_types_survey.md` §MetricChart — replaced
   the "array form [1, -1, 0]" extrapolation with the verified scalar
   `-1` shape and a 146-widget distribution table.
 
@@ -3475,4 +3475,4 @@ log at DEBUG; the observation window fell on DB-unreachable cycles that skip
 the relationship phase). Live DEBUG capture proved Oracle performs a
 per-cycle Suite API read authenticated as the platform-injected per-instance
 credential (token user = adapter instance UUID). See
-`context/investigations/oracle-stitch-autopsy-2026-07-02.md`.
+`knowledge/context/investigations/oracle-stitch-autopsy-2026-07-02.md`.

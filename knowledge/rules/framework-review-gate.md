@@ -38,9 +38,9 @@ Supporting obligations:
   claims. The verdict is binary on BLOCKING count.
 - **CI reminds, does not gate.** `scripts/check_framework_review.sh` warns
   (non-blocking) when a PR touches `src/vcfops_*/` with no
-  `context/reviews/framework/` doc. The real gate is this rule + the
+  `knowledge/context/reviews/framework/` doc. The real gate is this rule + the
   orchestrator discipline; a CI doc-existence gate would be
   rubber-stampable and could wedge legitimate hotfixes.
 
-Design of record: `designs/framework-reviewer-v1.md`. Reviewer prompt:
+Design of record: `knowledge/designs/framework-reviewer-v1.md`. Reviewer prompt:
 `.claude/agents/framework-reviewer.md`.

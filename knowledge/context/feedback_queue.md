@@ -5,7 +5,7 @@ testing, before triage. This is the **intake** queue — items here are raw
 and not yet a commitment. Triage routes each item to its real home:
 
 - A correctness problem that must converge → graduate to
-  `context/defects.md` (a `tracked` or `blocking` `DEF-NNN`).
+  `knowledge/context/defects.md` (a `tracked` or `blocking` `DEF-NNN`).
 - A design/UX change with real scope → a design note under `designs/`.
 - A quick mechanical fix → straight to the owning agent.
 
@@ -81,7 +81,7 @@ not a gate.
      enable Allow Insecure.
 - **Related (distinct connection):** the framework's **own loopback Suite API hop** had a separate
   TLS hostname-verification regression (fixed 2026-06-30 via the `VcfCfAdapter` shim helper — see
-  `designs/suite-api-stitcher-tls-auth-cleanup-v1.md` and FB-005). That is the adapter→`localhost`
+  `knowledge/designs/suite-api-stitcher-tls-auth-cleanup-v1.md` and FB-005). That is the adapter→`localhost`
   Suite API call, **not** the adapter→target-device call this item is about. FB-004 (the target-facing
   cert-accept flow) remains open; the loopback fix does not address it.
 
@@ -91,7 +91,7 @@ not a gate.
 - **Kind:** bug
 - **Status:** open — **root cause revised 2026-06-30** (see update at end of entry). Active prod
   blocker is the framework loopback Suite API transport, not describe.xml ResourcePath. Fix in flight:
-  `designs/suite-api-stitcher-tls-auth-cleanup-v1.md`.
+  `knowledge/designs/suite-api-stitcher-tls-auth-cleanup-v1.md`.
 - **Raised:** 2026-06-25/26, deep investigation across devel SSH logs + Suite API.
 - **Detail:** The Datastore↔LUN/NFS cross-link (`emitDatastoreCrossLink` →
   `parentForeign(ds, child)`) is emitted correctly every cycle (devel log:
@@ -101,7 +101,7 @@ not a gate.
   **not** transport/credentials (maintenanceuser.properties present), **not** a
   key mismatch, and **not** the old `RelationshipBuilder` constructor swap (that
   was fixed; internal Synology edges persist fine). Root cause per
-  `context/cleanroom-spec/spec/07-relationships-cross-mp.md`: a cross-MP
+  `knowledge/context/cleanroom-spec/spec/07-relationships-cross-mp.md`: a cross-MP
   **relationship** needs **both** a declarative `<TraversalSpec>`/`<ResourcePath>`
   naming the foreign adapter kind **and** the runtime push — synology declares
   only internal paths (no `||VMWARE::Datastore` segment), so the runtime edge has
@@ -118,7 +118,7 @@ not a gate.
   06-26 jar — so persistence is not the live problem there. The remaining failure is **prod-only and
   transport-layer**: the stitch's `loadDatastores` Suite API call fails every cycle, so the adapter
   loads **0 datastores → 0 matches → no edge to emit at all**. Two causes by node (ground-truth from
-  SSH'd adapter logs + cert inspection, see `context/investigations/recon_log.md`):
+  SSH'd adapter logs + cert inspection, see `knowledge/context/investigations/recon_log.md`):
   (1) on a **remote collector** the ambient maintenance user gets **HTTP 403** (appliance-only auth);
   (2) on the **primary node** the loopback HTTPS call fails **`certificate_unknown(46)`** because the
   operator-replaced cert's SAN lacks `localhost` and `java.net.http.HttpClient` strict-checks the

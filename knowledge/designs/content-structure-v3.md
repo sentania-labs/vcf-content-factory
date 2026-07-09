@@ -2,7 +2,7 @@
 
 **Status:** Phase 1 shipped (commits `ba1755d` + `0433815`); Phase 1 over-consolidated `bundles/`, `releases/`, and `third_party/` under `content/` — corrected layout being applied 2026-04-27 to lift them back to top-level siblings (this revision of the doc captures the corrected end-state).
 **Owner:** orchestrator (planning) + tooling agent (implementation)
-**Builds on:** `designs/release-lifecycle-v1.md` (publish pipeline + ThirdPartyContent routing) and `designs/content-structure-v2.md` (smaller cleanup items)
+**Builds on:** `knowledge/designs/release-lifecycle-v1.md` (publish pipeline + ThirdPartyContent routing) and `knowledge/designs/content-structure-v2.md` (smaller cleanup items)
 **Supersedes:** v2 item #2 (third_party/ promotion) — see "Relationship to v2" below
 
 ## Context

@@ -67,7 +67,7 @@ The cardinal rule (unreadable ≠ compliant) is satisfied on every read path I t
 ## WARNING
 
 - **[profiles/UNAUDITED_CONTROLS.md:68-80] Gap-honesty / stale in-pak coverage
-  statement** (skill § *Gaps — name them, never hide them*; `rules/no-fabricated-metrics.md`).
+  statement** (skill § *Gaps — name them, never hide them*; `knowledge/rules/no-fabricated-metrics.md`).
   Build 37 reclassified ~16 controls to evaluable `esxcli` recipes, but the
   coverage statement that **ships inside the pak**
   (`vcfcf_compliance/conf/profiles/UNAUDITED_CONTROLS.md`) still lists them under

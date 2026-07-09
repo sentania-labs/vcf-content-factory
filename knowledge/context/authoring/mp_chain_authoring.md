@@ -6,7 +6,7 @@ Tooling agent settled this grammar on 2026-04-29 during the four-piece
 Synology MP import-fix run.
 
 **Scope.** Factory YAML authoring only.  The rendered wire format is
-documented in `context/mpb/mpb_chaining_wire_format.md`.  This file is the
+documented in `knowledge/context/mpb/mpb_chaining_wire_format.md`.  This file is the
 *author-facing* reference; that file is the *wire-format* reference.
 
 ---
@@ -163,7 +163,7 @@ The factory YAML chain grammar maps to the MPB design JSON as follows:
 | `metricSet.bind[].from_attribute` | `chainingSettings.params[].attributeExpression.expressionParts[].label` |
 | `${chain.<name>}` in request | `${requestParameters.<wire_key>}` in emitted request params/path |
 
-See `context/mpb/mpb_chaining_wire_format.md` §2 for the full wire schema.
+See `knowledge/context/mpb/mpb_chaining_wire_format.md` §2 for the full wire schema.
 
 ### Wire key mapping: bind.name → requestParameters key
 
@@ -246,7 +246,7 @@ No chaining is needed.  All metricSets use `listId: "base"` (scalar
 context).  Do **not** declare `primary: true` or `chained_from` on any
 metricSet of a singleton.
 
-See also: `context/mpb/mpb_chaining_wire_format.md` §7 "Singleton vs list".
+See also: `knowledge/context/mpb/mpb_chaining_wire_format.md` §7 "Singleton vs list".
 
 ---
 
@@ -387,7 +387,7 @@ analysis and the failure mode of Pattern B (Bug 2d).
 
 ## References
 
-- `context/mpb/mpb_chaining_wire_format.md` — wire format spec, UUID rules
+- `knowledge/context/mpb/mpb_chaining_wire_format.md` — wire format spec, UUID rules
 - `context/mpb_synology_import_diff_2026_04_29.md` — root-cause analysis
   of the dangling-chain defect (defect #3)
 - `context/render_export_strip_audit_2026_05_14.md §Bug4` — Pattern V derivation,

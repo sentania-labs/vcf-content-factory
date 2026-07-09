@@ -296,4 +296,4 @@ DEBUG-level artifact. The real mechanism: per-cycle Suite API read as the
 platform-injected per-instance credential (instance-UUID principal), which
 has resource-read RBAC on a CP. The maintenance/automation findings in this
 file remain valid. See `oracle-stitch-autopsy-2026-07-02.md` and
-`context/api-surface/per-instance-suiteapi-credential-contract.md`.
+`knowledge/context/api-surface/per-instance-suiteapi-credential-contract.md`.

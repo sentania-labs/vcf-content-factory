@@ -9,11 +9,11 @@
 - **Verdict:** **APPROVE** (0 BLOCKING)
 - **Findings:** 0 BLOCKING / 2 WARNING / 1 NIT
 - **Date:** 2026-06-10
-- **Authority baseline:** build-14 review (`context/reviews/synology-build-14.md`),
+- **Authority baseline:** build-14 review (`knowledge/context/reviews/synology-build-14.md`),
   v1 reference source (factory `8e6cea0`), golden baseline
-  (`context/investigations/synology_v1_golden_baseline_devel.md`),
-  spec/19 §3 relationship contract, `lessons/synology-dsm-client-side-joins.md`,
-  `lessons/foreign-resource-property-push.md`, `rules/no-secrets-on-disk.md`.
+  (`knowledge/context/investigations/synology_v1_golden_baseline_devel.md`),
+  spec/19 §3 relationship contract, `knowledge/lessons/synology-dsm-client-side-joins.md`,
+  `knowledge/lessons/foreign-resource-property-push.md`, `knowledge/rules/no-secrets-on-disk.md`.
 
 ## Claims check (independently re-run)
 
@@ -57,7 +57,7 @@ each:
 
 `_sid` terminal-position case checked: for endpoints with no `extra` params
 `_sid` is the last query param (no trailing `&`); `(?i)(_sid=)[^&]*` matches to
-end-of-string correctly. **No missed site.** `rules/no-secrets-on-disk.md`
+end-of-string correctly. **No missed site.** `knowledge/rules/no-secrets-on-disk.md`
 WARNING-2 from build 14 is **resolved.**
 
 ### Hollow-but-200 contract asserts — correct, no false-trip (priority 1)
@@ -116,7 +116,7 @@ vs build-16 "OUI 6001405") — doc only, the literal `"naa.6001405"` is identica
 
 The resolver loads VMWARE Datastores by `DataStrorePath` and matches by exact
 map lookup (`datastoresByPath.get(path)`) — **path identity, never bare MOID**,
-satisfying the MOID-trap requirement (`lessons/foreign-resource-property-push.md`,
+satisfying the MOID-trap requirement (`knowledge/lessons/foreign-resource-property-push.md`,
 skill *ARIA_OPS stitching identity*). The match keys are **byte-identical to v1**
 (NAA for LUNs, `ip/volPath/share` for NFS), so every ambiguity that exists —
 NAA collision across two NASes, two NASes exporting the same `volPath/share` on
@@ -166,7 +166,7 @@ Datastore behind it. ✔
 47f41ae0c0a5`). I walked build-16's logic against that identifier:
 `lunDataStorePath("d023e190-8940-485a-8bf1-47f41ae0c0a5")` →
 `"VMFS:|naa.6001405d023e190d8940d485ad8bf1d4|"`, which the stitching api-map
-(`8e6cea0:context/api-maps/synology-vcfops-stitching.md:284`) confirms is the
+(`8e6cea0:knowledge/context/api-maps/synology-vcfops-stitching.md:284`) confirms is the
 `DataStrorePath` of the `vcf-lab-wld01-cl01-iscsi` Datastore. So **given a
 reachable Suite API, build-16 `matchByPath` resolves this exact Datastore and
 emits the edge** — the v1-landed edge is preserved in the baseline scenario, not
@@ -255,7 +255,7 @@ new `SynologyStitcher` class + the `configure`/`onDiscard`/`buildRelationships`
 wiring. No drive-by refactor. The generalization (restoring the cross-link over
 the new transport) is proven behavior-preserving on the 103 keys (pak-compare
 16-vs-15 = 0/0/0; `describe.xml` byte-unchanged) and on the v1 transform
-(byte-for-byte, §2a above). `lessons/synology-dsm-client-side-joins.md` (the
+(byte-for-byte, §2a above). `knowledge/lessons/synology-dsm-client-side-joins.md` (the
 charter for this very NAA/NFS-path stitch) is honored, not violated.
 
 ## If shipped as-is
@@ -300,4 +300,4 @@ review blocks promotion to that devel/`qa-tester` gate.
   (`git status --short` empty, HEAD `306e678`).
 
 ## Report
-`context/reviews/synology-build-16.md`
+`knowledge/context/reviews/synology-build-16.md`

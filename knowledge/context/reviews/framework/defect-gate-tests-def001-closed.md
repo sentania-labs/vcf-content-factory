@@ -3,7 +3,7 @@
 - **Area:** `tests/test_defect_gate.py` (no `vcfops_*/` source changed)
 - **Branch:** `fix/defect-gate-tests-def001-closed`
 - **Change:** De-brittle the defect-gate suite after DEF-001 (synology
-  credential-leak) was legitimately closed in `context/defects.md`
+  credential-leak) was legitimately closed in `knowledge/context/defects.md`
   (shipped as `v1.0.0.19`, 2026-06-26). 10 real-corpus-coupled tests
   hardcoded "DEF-001 open / synology blocked"; they were inverted
   (synology now exit-0/clean) or retargeted to a genuinely-open blocker.
@@ -23,7 +23,7 @@
     both closed)
   - `gate_pak("unifi")` → `["DEF-002"]`
   - `gate_all()` → `["DEF-002", "DEF-004"]`
-- Registry cross-check `context/defects.md`: DEF-001 **closed**
+- Registry cross-check `knowledge/context/defects.md`: DEF-001 **closed**
   (Closing-evidence: synology build 19 `1.0.0.19`, 2026-06-26), DEF-002
   **open** (unifi), DEF-003 **closed** (synology), DEF-004 **open**
   (vcommunity-os). Test comments match the registry exactly.

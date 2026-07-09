@@ -82,11 +82,11 @@ The build-3 (`a5ef1c2`) resurrected SCSI pipe dual-emit is fully removed:
    at WARN with VM-name context (line 195) and isolated — it cannot abort
    the collection cycle.
 4. **Stitch corruption / MOID trap** (skill § *ARIA_OPS stitching
-   identity*; `lessons/stitch-moid-not-unique-across-vcenters.md`): not in
+   identity*; `knowledge/lessons/stitch-moid-not-unique-across-vcenters.md`): not in
    this diff. `VCommunityStitcher` (untouched, mtime 06-10) scopes the
    VMWARE MOID match by `VMEntityVCID` (vCenter Instance UUID), not bare
    MOID — already correct. No change in build 11.
-5. **Secrets in logs** (`rules/no-secrets-on-disk.md`): PASS. The only log
+5. **Secrets in logs** (`knowledge/rules/no-secrets-on-disk.md`): PASS. The only log
    line on the changed path (`VmCollector.java:195`) emits VM name +
    exception class/message — no credentials.
 
@@ -102,7 +102,7 @@ declares this adapter's own kinds (`vcfcf_vcommunity`, `vCommunityWorld`).
 Stitched foreign keys do not require a native describe home. The kept keys
 have a valid landing spot. No finding.
 
-## Registry check (`context/defects.md`)
+## Registry check (`knowledge/context/defects.md`)
 
 No open defect's `Affects:` names `vcommunity`. DEF-001 (synology),
 DEF-002 (unifi), DEF-003 (synology, closed) — none affect this pak.

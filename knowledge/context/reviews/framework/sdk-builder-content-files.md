@@ -5,7 +5,7 @@
 **Branch:** chore/doc-hygiene (uncommitted working tree)
 **Change under review:** `vcfops_managementpacks/sdk_builder.py` (+68 lines) +
 new test `tests/managementpacks/test_sdk_content_files.py` (12 tests)
-**Root-cause evidence:** `context/investigations/vcommunity-solutionconfig-400-2026-06-16.md`
+**Root-cause evidence:** `knowledge/context/investigations/vcommunity-solutionconfig-400-2026-06-16.md`
 
 ## What tooling changed
 
@@ -70,7 +70,7 @@ byte-size match in the rebuilt pak).
 
 ### 3. Wire-format conformance — CLEAR (cited)
 
-Authority: `context/cleanroom-spec/spec/18-pak-content-bundle.md` §9
+Authority: `knowledge/context/cleanroom-spec/spec/18-pak-content-bundle.md` §9
 (`content/files/solutionconfig/`) and the canonical `content/` tree (lines
 56-88), plus the ground-truth reference pak
 `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/files/`.

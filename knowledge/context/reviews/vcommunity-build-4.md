@@ -28,7 +28,7 @@ a `1.0.0.4` CHANGELOG entry, and build-generated docs stamp bumps.
   via `unzip -l` — exactly 6 `solutionconfig/*.xml` in the build-4 pak,
   matching the build-3 baseline count of 6.
 
-## Registry check (context/defects.md)
+## Registry check (knowledge/context/defects.md)
 
 - None affect this pak. DEF-001 (synology), DEF-002 (unifi), DEF-003
   (synology, closed) — no open or tracked defect names `vcommunity` in

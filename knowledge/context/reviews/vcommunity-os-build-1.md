@@ -32,7 +32,7 @@
   `vcfcf_vcommunity_os`. No half-rename / split-brain risk. Kind regex compliant
   (`^[a-z][a-z0-9_]*$`).
 
-## Registry check (context/defects.md)
+## Registry check (knowledge/context/defects.md)
 
 - **DEF-001 (synology)** — does not affect this pak.
 - **DEF-002 (unifi)** — does not affect this pak.
@@ -44,7 +44,7 @@
 
 ### 1. Stitch identity — the MOID trap (THE load-bearing check) — PASS
 
-`lessons/stitch-moid-not-unique-across-vcenters.md`; SKILL § *ARIA_OPS stitching identity*.
+`knowledge/lessons/stitch-moid-not-unique-across-vcenters.md`; SKILL § *ARIA_OPS stitching identity*.
 The build-2 `VMEntityVCID` per-cycle vCenter-scoping fix survived the fork **verbatim and
 wired**:
 
@@ -108,11 +108,11 @@ tell "evaluated and passed" from "couldn't read."
 
 ### 5. Shelved-blocker honesty — PASS
 
-SKILL § *Gaps — name them, never hide them*; `rules/no-fabricated-metrics.md`. The KNOWN-OPEN
+SKILL § *Gaps — name them, never hide them*; `knowledge/rules/no-fabricated-metrics.md`. The KNOWN-OPEN
 guest-ops blocker is documented prominently in README (`## KNOWN-OPEN BLOCKER — guest-ops
 collection is shelved`, lines 11–29) and CHANGELOG (build-1), citing **both** investigation
 files, which exist:
-`context/investigations/vcommunity-windows-services-empty-2026-06-23.md` and
+`knowledge/context/investigations/vcommunity-windows-services-empty-2026-06-23.md` and
 `…-guestops-execution-divergence-2026-06-22.md`. Nothing is rigged to fake success: zero-rows
 → DEGRADED property, never an invented service. The leading-theory fix site is honest —
 `GuestOpsClient.runPowershell` builds `args = "-Command \"…\""` with **no** `-ExecutionPolicy
@@ -121,7 +121,7 @@ un-shelve fix. Not faked-compliant.
 
 ### 6. Logging quality / no secrets — PASS
 
-`rules/no-secrets-on-disk.md`. No `password`/`winPass`/`passwd`/`token` value is interpolated
+`knowledge/rules/no-secrets-on-disk.md`. No `password`/`winPass`/`passwd`/`token` value is interpolated
 into any log statement (grep clean). The `auth()` block builds `NamePasswordAuthentication`
 into the SOAP body but is never logged. Connect-failure and fault messages carry
 operation/faultstring/host only — no credential material. Skips/null-reads are at WARN with

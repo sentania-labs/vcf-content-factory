@@ -227,4 +227,4 @@ No Suite API writes, no test objects. Clean-up verified: yes (nothing to remove)
 *Source read locally: `content/sdk-adapters/compliance/src/.../{ComplianceAdapter,*
 *VSphereClient,EsxcliSoapClient,ControlEvaluator}.java`,*
 *`profiles/canonical/scg_9.0.csv`. Recon basis:*
-*`context/investigations/compliance_build46_golden_comparison.md`.*
+*`knowledge/context/investigations/compliance_build46_golden_comparison.md`.*

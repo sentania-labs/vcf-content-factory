@@ -1,9 +1,9 @@
-# context/curation/ — knowledge-corpus curation
+# knowledge/context/curation/ — knowledge-corpus curation
 
 Reports and trigger state for the **`curator`** agent (P6) — the read-only
 librarian that audits the governance corpus (`rules/`, `lessons/`,
 `context/`, `.claude/agents/`, `CLAUDE.md`, skills) for staleness and
-self-contradiction. Design of record: `designs/curator-v1.md`. Agent:
+self-contradiction. Design of record: `knowledge/designs/curator-v1.md`. Agent:
 `.claude/agents/curator.md`.
 
 ## Contents

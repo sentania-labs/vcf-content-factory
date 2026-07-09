@@ -2,7 +2,7 @@
 
 Task #4 / P2 completion. Wires the defect gate (RULE-012) into the place
 it actually needs to bite: a pak's own `v*`-tag CI build. Follows
-`designs/defect-registry-v1.md` (the registry) and `designs/release-sdk-pointer-v1.md`
+`knowledge/designs/defect-registry-v1.md` (the registry) and `knowledge/designs/release-sdk-pointer-v1.md`
 (the pointer model).
 
 ## Re-scope discovery (2026-06-13)
@@ -64,7 +64,7 @@ the build, with no factory checkout:
    - on non-zero exit, **fail the build** with the printed defect lines,
      so the `.pak` is never produced/attached while a blocking defect is
      open.
-   The canonical source is `designs/sdk-template-scaffold/build-pak-on-tag.yml`;
+   The canonical source is `knowledge/designs/sdk-template-scaffold/build-pak-on-tag.yml`;
    the change propagates to the 4 pak repos + the template (same flow as
    the README propagation), and propagation **also vendors
    `ci/defect_gate.py`** (a copy of `src/vcfops_packaging/defects.py`) into
@@ -84,7 +84,7 @@ The split matters for security (Codex PR-18 P1):
   runs that. This mirrors the factory's existing posture for the
   `sdk-buildkit`: executable toolchain is consumed as a pinned/vendored
   artifact, **never** fetched live from main.
-- **The registry DATA (`context/defects.md`) is fetched live from main.**
+- **The registry DATA (`knowledge/context/defects.md`) is fetched live from main.**
   It is inert markdown, parsed locally by the vendored gate, never
   executed — so a defect closed on main immediately unblocks the next
   tag and one opened on main immediately blocks, with no stale-registry
@@ -104,7 +104,7 @@ The split matters for security (Codex PR-18 P1):
   gate** (run via prompt-adoption this session — agent type not yet
   registered).
 - orchestrator → the canonical `build-pak-on-tag.yml` gate step
-  (infra, `designs/sdk-template-scaffold/`).
+  (infra, `knowledge/designs/sdk-template-scaffold/`).
 - `sdk-adapter-author` → propagate to the 4 pak repos + template (direct
   pushes, infra-only, no version bump): copy the updated
   `build-pak-on-tag.yml` **and** vendor `ci/defect_gate.py` (a copy of
@@ -113,7 +113,7 @@ The split matters for security (Codex PR-18 P1):
 
 ## Acceptance (negative proof)
 
-- `python3 src/vcfops_packaging/defects.py --pak synology --registry context/defects.md`
+- `python3 src/vcfops_packaging/defects.py --pak synology --registry knowledge/context/defects.md`
   → exit 2, names DEF-001 (the same refusal the package CLI gives).
 - A bare copy of `defects.py` run outside the package (no
   `vcfops_packaging` on `PYTHONPATH`) gives the identical result —

@@ -115,5 +115,5 @@ Tier 2 as roughly 5-10× the effort of a comparable Tier 1 MP.
 
 - `content/sdk-adapters/synology/` — the adapter project
 - `context/api-maps/synology-*.md` — API surface maps
-- `context/tier2_architecture.md` — Tier 2 architecture doc
-- `designs/managementpacks/synology-diskstation.md` — original design intent
+- `knowledge/context/tier2_architecture.md` — Tier 2 architecture doc
+- `knowledge/designs/managementpacks/synology-diskstation.md` — original design intent

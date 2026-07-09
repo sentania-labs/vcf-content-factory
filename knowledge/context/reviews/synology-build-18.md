@@ -19,7 +19,7 @@
 
 `build_number` bumped 17 → 18 (`adapter.yaml`); `CHANGELOG.md` carries a matching `1.0.0.18` entry. Minimal diff — no drive-by refactors in the internal collect tree (pak-compare vs 17 is clean).
 
-## Registry check (`context/defects.md`)
+## Registry check (`knowledge/context/defects.md`)
 
 - **DEF-001** (synology, blocking, **open**) — **STILL PRESENT. Do NOT close.**
   The build fixes the *primary registered* path (the `callRaw` `"HTTP <code> from <path>"`
@@ -31,7 +31,7 @@
 - **DEF-003** (synology, blocking, **closed**) — **re-asserted, remains correctly closed.**
   Build 18's `parentForeign(ds, child)` for both iSCSI LUN and NFS Export is exactly the
   full-set `setRelationships(ds,{child})`-onto-foreign-Datastore idiom proven adapter-scoped-safe
-  on devel 9.0.2 (build 16; `lessons/setrelationships-foreign-adapter-scoped.md`). Verified the
+  on devel 9.0.2 (build 16; `knowledge/lessons/setrelationships-foreign-adapter-scoped.md`). Verified the
   write is still adapter-scoped (`RelationshipBuilder.parentForeign` → one `setRelationships`
   per foreign parent in `doBuild`). **Residual stands: 9.1 unverified** — re-prove at the first
   9.1 target. The 0.0.0.21 `childForeign` experiment is correctly reverted.
@@ -44,7 +44,7 @@
 - **Where:** `src/com/vcfcf/adapters/synology/SynologyApiClient.java:195-202` (`callRaw`),
   reachable via `SynologyAdapter.java:207` (`getTester` → `testApi.login()`) and the collect
   path (`ensureSession()` → `login()`).
-- **Authority:** `rules/no-secrets-on-disk.md` (RULE-008); skill § *Gaps / secrets*; DEF-001.
+- **Authority:** `knowledge/rules/no-secrets-on-disk.md` (RULE-008); skill § *Gaps / secrets*; DEF-001.
 - **What's wrong:** `callRaw` only guards the *HTTP-response* branch:
   ```java
   HttpResponse<String> resp = http.get(path, ...);          // <-- can THROW, uncaught

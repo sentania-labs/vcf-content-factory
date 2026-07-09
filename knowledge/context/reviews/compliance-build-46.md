@@ -44,7 +44,7 @@ new test path cannot leak the password and cannot NPE:
   `"vCenter login failed: HTTP <status>"` (status code only); the password
   is base64'd into the `Authorization: Basic` header and never reaches a
   thrown message or a log line. `logInfo` logs only `vcenterHost` + a host
-  count. RULE-008 / `rules/no-secrets-on-disk.md` holds.
+  count. RULE-008 / `knowledge/rules/no-secrets-on-disk.md` holds.
 - *`logout` in `finally` is NPE-safe on all paths.* The lambda builds a
   fresh `VCenterApiClient`, calls `login()`, then `try { listHosts; logInfo }
   finally { testApi.logout() }`. `logout()` is `sessionId == null`-guarded,
@@ -133,4 +133,4 @@ proof (`qa-tester` / orchestrator devel proof) — nothing in this static
 review blocks promotion to that step.
 
 ## Report
-`context/reviews/compliance-build-46.md`
+`knowledge/context/reviews/compliance-build-46.md`

@@ -129,5 +129,5 @@ emit a flattering partial score. No new regression on healthy hosts (pak-compare
   "No structural divergences found."
 - Build-48 adapter jar: 37 classes, target classes present, no `.java` leak.
 - No `build-sdk` run by this review; CHANGELOG.md/REFERENCE.md untouched.
-  Adapter tree clean (the two untracked `context/investigations/*.md` predate
+  Adapter tree clean (the two untracked `knowledge/context/investigations/*.md` predate
   this review and are factory-side, not adapter source).

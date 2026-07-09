@@ -9,7 +9,7 @@
   full-set `setRelationships`.
 - **Verdict:** APPROVE
 - **Date:** 2026-07-01
-- **Design-of-record:** `designs/stitcher-identity-and-additive-foreign-v1.md`
+- **Design-of-record:** `knowledge/designs/stitcher-identity-and-additive-foreign-v1.md`
 
 ## Checks re-run (independently, this reviewer)
 

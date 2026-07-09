@@ -10,7 +10,7 @@
 Carried decisions: framework v2 rehome (aria-ops-core unwind), C2 pak
 shape, stitching transport = ambient maintenanceAdmin via
 `SuiteApiStitcher` (proven on devel/prod; see
-`context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md`).
+`knowledge/context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md`).
 
 ## Vision
 
@@ -24,5 +24,5 @@ shape, stitching transport = ambient maintenanceAdmin via
 - Use the framework default `onDescribe()` (do not hand-roll).
 - C2 pak shape: lib/ = vcfcf-adapter-base.jar only.
 - Acceptance: devel install, collection parity vs the pre-migration
-  baseline (`context/investigations/` baseline doc), clean cycles at
+  baseline (`knowledge/context/investigations/` baseline doc), clean cycles at
   debug interval.

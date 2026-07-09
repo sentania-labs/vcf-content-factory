@@ -7,12 +7,12 @@ emits a stitch key that the VCF Ops side already carries on the
 target resource.
 
 See also:
-- `context/api-maps/synology-iscsi.md` — Synology iSCSI LUN map
-- `context/api-maps/synology-storage.md` — Synology volume / share map
-- `context/api-maps/synology-overview.md` — Synology object model
+- `knowledge/context/api-maps/synology-iscsi.md` — Synology iSCSI LUN map
+- `knowledge/context/api-maps/synology-storage.md` — Synology volume / share map
+- `knowledge/context/api-maps/synology-overview.md` — Synology object model
 - `context/mpb_pak_structural_reference.md` — ARIA_OPS object rules
   in MPB-built paks
-- `context/api_pattern_catalog.md` — "vSphere REST" entry, which
+- `knowledge/context/api_pattern_catalog.md` — "vSphere REST" entry, which
   documents the canonical VMware ARIA_OPS stitch targets
 
 ## Provenance
@@ -563,7 +563,7 @@ stitch candidates = nas_ips + [dsm_info.hostname]
 
 …where `dsm_info.hostname` is queried from `SYNO.DSM.Info getinfo`
 (already in the 5-min cycle per
-`context/api-maps/synology-overview.md`).
+`knowledge/context/api-maps/synology-overview.md`).
 
 This is **inferred and not live-verified** in this lab — every NFS
 datastore here uses the bare IP, so the FQDN form wasn't observable.
@@ -703,7 +703,7 @@ already emits `hostname` and `datastore_moid` as flat fields.
 finalizes the Synology MP design, ask `tooling` to confirm whether
 the renderer can compute a stitch key from `lun.uuid` via a YAML
 expression (e.g., a `jinja:` source or similar). If yes, document
-the syntax in `context/authoring/guide_content_authoring.md`. If no, that's
+the syntax in `knowledge/context/authoring/guide_content_authoring.md`. If no, that's
 the gap, and the adapter-side enrichment story needs a new
 mechanism. The transform itself (§1.3) is trivial — five lines of
 Python — and shouldn't block the MP, but the framework needs a
@@ -728,7 +728,7 @@ All metric names should carry the `vcf_cf_` prefix per the
 ## 5. Mapping to the API pattern catalog
 
 The catalog entry for **vSphere REST**
-(`context/api_pattern_catalog.md`, section "vSphere REST (vCenter
+(`knowledge/context/api_pattern_catalog.md`, section "vSphere REST (vCenter
 Server)") is the closest precedent and the pattern this MP should
 mirror:
 
@@ -756,7 +756,7 @@ than the catalog's "Summary|Datastore URL" guess:
 > - **NFS:** `<server-ip-or-fqdn>/<server-path-without-leading-slash>`
 > - **vSAN:** `VSAN:<cluster-uuid>-<node-uuid>`
 
-The Synology catalog entry in `context/api_pattern_catalog.md`
+The Synology catalog entry in `knowledge/context/api_pattern_catalog.md`
 (section "Synology DSM (NAS management)") should be updated to
 **cross-reference this stitching map** under "Known limitations"
 or a new "Stitching" section. (Out of scope for this session;
@@ -838,10 +838,10 @@ flag for the orchestrator.)
 
 | File | Purpose |
 |---|---|
-| `context/api-maps/synology-iscsi.md` | iSCSI LUN & Target API surface |
-| `context/api-maps/synology-storage.md` | Storage Pool / Volume / Disk; Utilization filter contract |
-| `context/api-maps/synology-overview.md` | Endpoint inventory & object summary |
-| `context/api-maps/synology-auth.md` | Auth flow |
+| `knowledge/context/api-maps/synology-iscsi.md` | iSCSI LUN & Target API surface |
+| `knowledge/context/api-maps/synology-storage.md` | Storage Pool / Volume / Disk; Utilization filter contract |
+| `knowledge/context/api-maps/synology-overview.md` | Endpoint inventory & object summary |
+| `knowledge/context/api-maps/synology-auth.md` | Auth flow |
 | `context/mpb_pak_structural_reference.md` | ARIA_OPS object rules in MPB paks |
-| `context/api_pattern_catalog.md` | vSphere REST entry — canonical ARIA_OPS Datastore precedent |
+| `knowledge/context/api_pattern_catalog.md` | vSphere REST entry — canonical ARIA_OPS Datastore precedent |
 | `content/managementpacks/vsphere_storage_paths.yaml` | Closest factory MP precedent — pure ARIA_OPS stitch, no INTERNAL kinds |

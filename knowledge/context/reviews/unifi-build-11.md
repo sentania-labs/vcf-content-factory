@@ -3,9 +3,9 @@
 - **Adapter:** `content/sdk-adapters/unifi/`
 - **Commit reviewed:** `8ca645b` (adapter repo main, "conflicted-port property
   honesty in the vmnic→port stitch")
-- **Base:** `20db25a` (build 10, APPROVEd — `context/reviews/unifi-build-10.md`;
+- **Base:** `20db25a` (build 10, APPROVEd — `knowledge/context/reviews/unifi-build-10.md`;
   build 10 uninstalled, superseded by this build)
-- **Design of record:** `designs/managementpacks/unifi-switchport-host-stitch-v2.md`
+- **Design of record:** `knowledge/designs/managementpacks/unifi-switchport-host-stitch-v2.md`
   (§"Build 11 amendment — conflicted-port property honesty")
 - **Reviewer:** `sdk-adapter-reviewer`
 - **Verdict:** APPROVE (0 BLOCKING)
@@ -23,7 +23,7 @@
 
 No discrepancy between the author's result block and observed behavior.
 
-## Registry check (`context/defects.md`)
+## Registry check (`knowledge/context/defects.md`)
 
 - **DEF-002** (Affects: unifi) — **closed** at build 9 (`0.0.0.9`, devel proof
   2026-07-06; additive `parentForeign`→`addRelationships`, no VMWARE-child
@@ -86,7 +86,7 @@ No discrepancy between the author's result block and observed behavior.
    to build 10; pak-compare vs 0.0.0.10 = 0/0/0 corroborates the write path is
    byte-identical. A conflicted PROPERTY portKey still emits its edges. ✔
    (skill §*ARIA_OPS stitching identity* — additive foreign edge preserved;
-   `lessons/setrelationships-foreign-adapter-scoped.md`.)
+   `knowledge/lessons/setrelationships-foreign-adapter-scoped.md`.)
 
 5. **Summary-line arithmetic — no double-count. SAFE.**
    `vmnicConflictedCount++` fires only in the `else` (different-host) branch
@@ -97,7 +97,7 @@ No discrepancy between the author's result block and observed behavior.
    neighbours were already counted in `vmnicNeighbourCount` and their edges
    emitted; `conflicted` counts the *port* that lost its property, not the
    neighbours. No overlap with `ambiguous`/`unmatched` (those `continue` before
-   the match is taken) or with edge count. ✔ (`rules/no-fabricated-metrics.md`.)
+   the match is taken) or with edge count. ✔ (`knowledge/rules/no-fabricated-metrics.md`.)
 
 6. **Full-diff scan (`git diff 20db25a..8ca645b`) — nothing beyond scope.**
    Touched: `UniFiAdapter.java` (comment updates at `:737`/`:1188`; new
@@ -109,7 +109,7 @@ No discrepancy between the author's result block and observed behavior.
    fabricated capability, correctly states the edge is still emitted). No
    drive-by refactor, no import churn beyond what build 10 already added
    (`LinkedHashSet`/`Set` imports pre-exist). `build_number` bumped + matching
-   CHANGELOG line (author hard rules 8–9; `rules/validate-before-install.md`). ✔
+   CHANGELOG line (author hard rules 8–9; `knowledge/rules/validate-before-install.md`). ✔
 
 ## NIT (non-blocking, no action required to ship)
 

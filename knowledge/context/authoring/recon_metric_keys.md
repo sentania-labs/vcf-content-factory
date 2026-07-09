@@ -25,7 +25,7 @@ installed cleanly but rendered every column blank in the UI on
 
 ## Task 1: live view diff
 
-Specimen: `context/specimens/vm_perf_storage_live.xml` (extracted from a
+Specimen: `knowledge/context/specimens/vm_perf_storage_live.xml` (extracted from a
 `POST /api/content/operations/export {scope:CUSTOM, contentTypes:[VIEW_DEFINITIONS]}`
 zip → `views.zip` → `content.xml`, the only path Ops offers for views).
 

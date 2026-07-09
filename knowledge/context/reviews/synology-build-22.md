@@ -3,7 +3,7 @@
 **Reviewer:** `sdk-adapter-reviewer` · **Date:** 2026-06-30
 **Adapter:** `content/sdk-adapters/synology` (build 21 → 22, local only — not committed/tagged)
 **Verdict:** APPROVE (0 BLOCKING / 0 WARNING / 0 NIT)
-**Predecessor:** `context/reviews/synology-build-21.md` (APPROVE; this build closes its
+**Predecessor:** `knowledge/context/reviews/synology-build-21.md` (APPROVE; this build closes its
 1 WARNING + 2 NITs).
 
 ## Delta reviewed (21 → 22)
@@ -63,7 +63,7 @@ otherwise unchanged.
    docs). `describe.xml` / `resources.properties` are identical to build 21 (pak-compare 22 vs
    21: no structural divergence).
 
-## Registry check (`context/defects.md`)
+## Registry check (`knowledge/context/defects.md`)
 
 - DEF-001 (synology, secrets-on-disk) — closed; not re-opened (new WARN logs the resolved host
   + user only, never a secret).

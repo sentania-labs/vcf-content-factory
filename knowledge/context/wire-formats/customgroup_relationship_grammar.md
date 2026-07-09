@@ -43,7 +43,7 @@ Rule:
    {"relation":"DESCENDANT","name":"[Custom] Standard PGs","compareOperator":"EQ"},
    {"relation":"DESCENDANT","name":"[Custom] NSX PGs","compareOperator":"NOT_EQ"}]
 ```
-Full JSON: `context/specimens/vm_by_portgroup_group.json`.
+Full JSON: `knowledge/context/specimens/vm_by_portgroup_group.json`.
 
 ### Our broken group — `[VCF Content Factory] VMs on NFS` (0 members)
 
@@ -52,7 +52,7 @@ Rule as emitted by the customgroup loader:
 "relationshipConditionRules":[
   {"relation":"CHILD","name":"[VCF Content Factory] NFS Datastores","compareOperator":"EQ"}]
 ```
-Full JSON: `context/specimens/vm_by_datastore_group_BROKEN.json`.
+Full JSON: `knowledge/context/specimens/vm_by_datastore_group_BROKEN.json`.
 
 ### Matrix of throwaway VirtualMachine groups (45s resolve wait)
 

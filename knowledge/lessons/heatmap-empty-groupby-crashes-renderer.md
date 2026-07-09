@@ -93,4 +93,4 @@ fields in YAML remain present and consistent; `pin_to_world` is an alternate
 
 ## Investigation source
 
-`context/investigations/2026-05-29-compliance-dashboard-render-failures.md`
+`knowledge/context/investigations/2026-05-29-compliance-dashboard-render-failures.md`

@@ -33,7 +33,7 @@
 - Generator lives in the factory tooling (and flows into the
   sdk-buildkit so CI/template users get it); per-repo adoption is an
   author pass; template repo gets the docset scaffold.
-- The bundles-repo README pointer rows (designs/release-sdk-pointer-v1.md)
+- The bundles-repo README pointer rows (knowledge/designs/release-sdk-pointer-v1.md)
   gain nothing new — the repo-page link already lands users on the
   docset.
 - Rendering constraint: GitHub does not render `.excalidraw` natively,

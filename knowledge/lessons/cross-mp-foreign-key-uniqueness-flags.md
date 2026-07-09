@@ -36,8 +36,8 @@ VMWARE `Datastore`/`HostSystem` as both parents and children on the same
 appliance, via the runtime push model — proof the platform persists SDK-pushed
 cross-MP edges in either direction when the key is right.
 
-**Source.** `context/reviews/synology-build-19.md`;
-`context/cleanroom-spec/spec/07-relationships-cross-mp.md` (cross-MP
+**Source.** `knowledge/context/reviews/synology-build-19.md`;
+`knowledge/context/cleanroom-spec/spec/07-relationships-cross-mp.md` (cross-MP
 relationships bullet + the EMPIRICALLY CONFIRMED note). Related:
-`lessons/setrelationships-foreign-adapter-scoped.md`,
-`lessons/foreign-resource-property-push.md`.
+`knowledge/lessons/setrelationships-foreign-adapter-scoped.md`,
+`knowledge/lessons/foreign-resource-property-push.md`.

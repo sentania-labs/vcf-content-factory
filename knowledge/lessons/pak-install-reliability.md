@@ -110,5 +110,5 @@ confusion about which pak is installed.
 
 ## Reference files
 
-- `context/authoring/guide_install_verification.md` — install workflow
-- `context/mpb/mpb_pak_structural_reference.md` — structural reference
+- `knowledge/context/authoring/guide_install_verification.md` — install workflow
+- `knowledge/context/mpb/mpb_pak_structural_reference.md` — structural reference

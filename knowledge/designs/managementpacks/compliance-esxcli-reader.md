@@ -5,10 +5,10 @@
 **Type**: Tier 2 SDK adapter enhancement (compliance)
 **Owner agent**: `sdk-adapter-author`
 **Parent designs**:
-- `designs/managementpacks/vcf-compliance-adapter.md`
-- `designs/managementpacks/compliance-vim-property-reader.md` (read_recipe engine)
-- `designs/managementpacks/compliance-control-coverage-expansion.md` (build 35)
-**Investigation of record**: `context/investigations/esxcli-soap-reflect-executer-spike.md` §0 (the proven encoding)
+- `knowledge/designs/managementpacks/vcf-compliance-adapter.md`
+- `knowledge/designs/managementpacks/compliance-vim-property-reader.md` (read_recipe engine)
+- `knowledge/designs/managementpacks/compliance-control-coverage-expansion.md` (build 35)
+**Investigation of record**: `knowledge/context/investigations/esxcli-soap-reflect-executer-spike.md` §0 (the proven encoding)
 
 ---
 

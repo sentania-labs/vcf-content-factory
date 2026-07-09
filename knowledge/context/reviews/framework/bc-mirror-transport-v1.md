@@ -25,7 +25,7 @@
 - **pak-compare:** n/a (no template.json/describe.xml/render.py change).
 
 ## BLOCKING
-- **[context/defects.md + tests/test_defect_gate.py]** — dimension 7 (corpus regression),
+- **[knowledge/context/defects.md + tests/test_defect_gate.py]** — dimension 7 (corpus regression),
   RULE-005 / RULE-012. This changeset files **DEF-005 as `Status: open` blocking against
   `synology`** (new, +33 lines, not in HEAD). The defect gate now correctly returns
   `['DEF-005']` for synology, which reds 4 corpus tests that assert synology is clean:
@@ -63,7 +63,7 @@
   hostname on the explicit/remote path to unconditional trust-all is called out explicitly in
   the `openPlatformConnection` javadoc ("Non-FIPS branch (implemented)", peer-gating-removed
   note) and in the runtime INFO log (`BC-mirror: trust-all + ignore-hostname, non-FIPS`). It
-  mirrors the vendor client exactly (`context/api-surface/casa-injected-vs-raw-client.md` §3),
+  mirrors the vendor client exactly (`knowledge/context/api-surface/casa-injected-vs-raw-client.md` §3),
   per the "mirror BC, don't invent" directive. Loud + documented → not a downgrade finding.
 - **Preserved pieces preserved** (dimension 2/4). `SuiteApiStitchClient` credential resolution
   (automation-first ambient, explicit fallback), endpoint selection, and token lifecycle are

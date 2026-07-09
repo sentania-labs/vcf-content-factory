@@ -13,8 +13,8 @@ All conclusions are based on read-only inspection of:
 - `vcfops_alerts/render.py`
 - `vcfops_reports/loader.py`, `render.py`
 - `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/`
-- `lessons/pak-content-bundling.md`
-- `lessons/pak-content-localization-bundles.md`
+- `knowledge/lessons/pak-content-bundling.md`
+- `knowledge/lessons/pak-content-localization-bundles.md`
 
 ---
 
@@ -37,7 +37,7 @@ No other content types are accepted by `bundled_content` today. The emit paths a
 | Solution i18n | `resources/resources.properties` | `_generate_outer_resources_properties()` — sdk_builder.py:1070 |
 | config files | `content/files/**` | raw copy from `project_dir/content/files/` — sdk_builder.py:1488 |
 
-The localization four-bundle contract from `lessons/pak-content-localization-bundles.md`
+The localization four-bundle contract from `knowledge/lessons/pak-content-localization-bundles.md`
 is satisfied for views and dashboards. The `_attribute_to_localization_key()` function
 is kept in sync between `sdk_builder.py:1253` and `vcfops_dashboards/render.py:118`.
 
@@ -155,7 +155,7 @@ The vCommunity reference pak ships views as flat XML files at
 `content/reports/<Name>.xml` (NOT in a subdirectory). Example:
 `content/reports/ESXi Host Details vCommunity.xml`. The factory sdk_builder emits
 `content/reports/<slug>/content.xml` (subdirectory per view — the VMware first-party
-pattern from `lessons/pak-content-bundling.md`).
+pattern from `knowledge/lessons/pak-content-bundling.md`).
 
 Both the flat-file pattern (vCommunity) and the subdirectory pattern (VMware first-party,
 compliance v22 confirmed working) are present in the wild. The subdirectory pattern is
@@ -304,7 +304,7 @@ works.
 
 ### 8. Localization Bundles
 
-**Confirmed required.** `lessons/pak-content-localization-bundles.md` documents the
+**Confirmed required.** `knowledge/lessons/pak-content-localization-bundles.md` documents the
 four-bundle contract:
 
 | Path | Purpose | Emitted today? |

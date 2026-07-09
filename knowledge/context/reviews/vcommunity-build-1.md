@@ -3,7 +3,7 @@
 - **Adapter:** `content/sdk-adapters/vcommunity` (uncommitted working tree — review-before-commit gate)
 - **Build reviewed:** 1 (`vcfcf_sdk_vcommunity.1.0.0.1.pak`)
 - **Reviewer:** `sdk-adapter-reviewer`
-- **Design:** `designs/managementpacks/vcommunity-sdk.md` (APPROVED)
+- **Design:** `knowledge/designs/managementpacks/vcommunity-sdk.md` (APPROVED)
 - **Ground truth:** `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/` (Python source)
 - **Reference impl:** `content/sdk-adapters/compliance/`
 - **Verdict:** **APPROVE** (zero BLOCKING)
@@ -26,10 +26,10 @@ Build metadata correct: `build_number: 1`, `version: 1.0.0`, CHANGELOG `1.0.0.1`
 
 Independently verified, not taken on the author's word:
 - describeSchema.xsd permits ≥1 `CredentialKind` (`maxOccurs="unbounded"`) and a comma-delimited `credentialKind` attr on the type=7 ResourceKind. The describe.xml is schema-valid.
-- pak-compare's "CredentialKind count: factory=2, reference=1" is a *structural delta vs the single-credential compliance pak*, which is the only reference in the corpus — it is mechanically flagged BLOCKING because credential-count mismatches have historically caused install failures (`lessons/pak-install-reliability.md`), but that lesson's failure mode was a *malformed/duplicate* credential binding, not a legitimate second kind. The second kind here is design-mandated (OPEN — Windows Guest Credential, distinct trust boundary), correctly defined (`windows_guest_credentials`, two optional fields), and correctly bound on the instance ResourceKind.
+- pak-compare's "CredentialKind count: factory=2, reference=1" is a *structural delta vs the single-credential compliance pak*, which is the only reference in the corpus — it is mechanically flagged BLOCKING because credential-count mismatches have historically caused install failures (`knowledge/lessons/pak-install-reliability.md`), but that lesson's failure mode was a *malformed/duplicate* credential binding, not a legitimate second kind. The second kind here is design-mandated (OPEN — Windows Guest Credential, distinct trust boundary), correctly defined (`windows_guest_credentials`, two optional fields), and correctly bound on the instance ResourceKind.
 - W1/W2 are the same divergence's downstream field/identifier counts. Same disposition.
 
-This is the expected and intended shape; B1/W1/W2 are noise from comparing a 2-credential adapter against a 1-credential reference. **EMPIRICAL-VERIFY at install** (not a static blocker): confirm VCF Ops renders both credential kinds in the instance dialog and accepts an instance with the Windows Guest Credential left unset — `lessons/pak-install-reliability.md` makes credential handling the single most install-fragile surface, so this is the one thing `qa-tester` must watch on first install.
+This is the expected and intended shape; B1/W1/W2 are noise from comparing a 2-credential adapter against a 1-credential reference. **EMPIRICAL-VERIFY at install** (not a static blocker): confirm VCF Ops renders both credential kinds in the instance dialog and accepts an instance with the Windows Guest Credential left unset — `knowledge/lessons/pak-install-reliability.md` makes credential handling the single most install-fragile surface, so this is the one thing `qa-tester` must watch on first install.
 
 ## WARNING
 

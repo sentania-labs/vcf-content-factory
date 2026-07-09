@@ -6,8 +6,8 @@
 - **Verdict:** **APPROVE** (0 BLOCKING)
 - **Findings:** 0 BLOCKING / 0 WARNING / 1 NIT
 - **Date:** 2026-06-10
-- **Context:** `context/investigations/unifi_401_and_relationship_persistence_2026_06_10.md`;
-  framework §22 (`context/framework_v2_migration.md`); framework `main` d59785a.
+- **Context:** `knowledge/context/investigations/unifi_401_and_relationship_persistence_2026_06_10.md`;
+  framework §22 (`knowledge/context/framework_v2_migration.md`); framework `main` d59785a.
 
 ## Claims check (independently re-run)
 
@@ -184,7 +184,7 @@ disassembled directly with `javap -p -c`:
   TOKEN/unifises/`"password":`/`password=` (`:114-121`), unchanged; login
   failure logs status only (`:82`); "UniFi session acquired" logs no value
   (`:90`). All build-5 added lines mentioning TOKEN/CSRF/password are
-  documentation prose, not secret-emitting code. `rules/no-secrets-on-disk.md`
+  documentation prose, not secret-emitting code. `knowledge/rules/no-secrets-on-disk.md`
   clean.
 - **Build hygiene:** PASS. `build_number` 4→5, matching CHANGELOG entry, minimal
   diff (refactor + jar pickup), no drive-by.

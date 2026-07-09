@@ -388,8 +388,8 @@ This keeps dashboards maintenance-free across profile versions.
 - SCG CSV schema: 27 columns per control (see design doc body)
 - PowerCLI audit/remediation scripts: reference implementation for
   collection and remediation logic
-- Action wire format: `context/investigations/action_wire_format_deep_dive.md`
-- Dynamic metrics SDK: `context/cleanroom-spec/spec/01-adapter-lifecycle.md` line 176
+- Action wire format: `knowledge/context/investigations/action_wire_format_deep_dive.md`
+- Dynamic metrics SDK: `knowledge/context/cleanroom-spec/spec/01-adapter-lifecycle.md` line 176
 - vCommunity service monitoring pattern: `reference/references/vmbro_vcf_operations_vcommunity/`
 - Existing compliance pak analysis: ops-recon 2026-05-27 (53 properties
   on prod, 15 on devel; gap caused by CIS/PCI paks on prod only)

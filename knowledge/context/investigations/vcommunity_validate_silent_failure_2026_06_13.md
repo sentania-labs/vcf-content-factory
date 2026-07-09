@@ -178,7 +178,7 @@ priority so the next test attempt is diagnosable.
 Ranked by likelihood of being THE cause.
 
 **F1 — two-credential-kind instance acceptance (MOST LIKELY ROOT).**
-The reviewer's open EMPIRICAL-VERIFY (`context/reviews/vcommunity-build-1.md`):
+The reviewer's open EMPIRICAL-VERIFY (`knowledge/context/reviews/vcommunity-build-1.md`):
 confirm VCF Ops renders both credential kinds and accepts an instance with the
 optional Windows Guest Credential **unset**. If the platform's controller-side
 instance validation rejects/!binds a 2-kind `credentialKind="vcenter_credentials,windows_guest_credentials"`
@@ -193,7 +193,7 @@ type=7 ResourceKind when the second kind is empty, validation fails *before*
   do not change describe.xml on speculation.**
 - *This is the only candidate that explains zero onTest log lines.* It is also
   the one the reviewer already pre-flagged as the single most install-fragile
-  surface (`lessons/pak-install-reliability.md`).
+  surface (`knowledge/lessons/pak-install-reliability.md`).
 
 **F2 — surface the real vCenter fault on connect failure (diagnostics, do
 regardless).**

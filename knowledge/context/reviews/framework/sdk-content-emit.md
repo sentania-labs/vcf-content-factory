@@ -7,7 +7,7 @@
 new test `tests/managementpacks/test_sdk_content_emit.py` (20 tests) +
 `tests/managementpacks/test_bundled_content_resolver.py` (updated for 5-tuple)
 **Predecessor review (same working tree):**
-`context/reviews/framework/sdk-builder-content-files.md` — APPROVE, content/files
+`knowledge/context/reviews/framework/sdk-builder-content-files.md` — APPROVE, content/files
 SolutionConfig fix. This diff stacks the SM/symptom/alert emit on top of it.
 
 ## What tooling changed

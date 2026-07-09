@@ -22,7 +22,7 @@
 ### B1 — Change 2 (task #12) does NOT flip the SSL default; effective default is still trust-all, contradicting the documented "platform trust by default"
 
 - **Where:** `ComplianceConfig.java:21`, `describe.xml:35-36`, `ComplianceAdapter.java:120,193` (`sslSocketFactoryFor`).
-- **Authority:** skill § *Gaps — name them, never hide them* + `rules/no-fabricated-metrics.md` (the documented behavior must match the code's actual behavior); security-posture correctness.
+- **Authority:** skill § *Gaps — name them, never hide them* + `knowledge/rules/no-fabricated-metrics.md` (the documented behavior must match the code's actual behavior); security-posture correctness.
 - **What's wrong:** The CHANGELOG (1.0.0.49 §2), the `VSphereClient` ctor Javadoc, and `sslSocketFactoryFor`'s Javadoc all assert **"platform trust by default, `allowInsecure=true` as the opt-out."** The code does the opposite at the config layer:
   - `describe.xml:36` — `allowInsecure` identifier carries `default="true"` (unchanged this build; describe.xml is not in the diff).
   - `ComplianceConfig.java:21` — `this.allowInsecure = !"false".equalsIgnoreCase(allowInsecure);`. This is `true` for **everything except the literal string `"false"`** — `null` (absent field), `""`, `"0"`, `"no"`, `"off"` all parse to `allowInsecure = true` (insecure/trust-all).
@@ -63,7 +63,7 @@
 - **Change 3 (shadow logger deletion):** PASS. `adapterLogger()` removed; `VSphereClient` / `SuiteApiStitcher` / `ComplianceStitcher` now take `componentLogger(Class)` (framework-provided, level-correct). The build-46 dead-logger footgun is removed by construction; no regression.
 - **Per-host wire push unchanged:** PASS. The build-48 `totalCount>0` score gate in `pushComplianceViaClient` is untouched; task #16 only changes the *world rollup input*, not the per-host push (docstring updated to scope the v1 byte-identical claim — the build-48 NIT, addressed). pak-compare 0/0/0 corroborates.
 - **Stitching identity:** PASS. `matchHost(hostName, hostId)` uses MOID, not bare display name; no foreign-resource join introduced or changed this build.
-- **Redaction:** PASS. No new log line or exception in the diff emits password / token / credential. New lines emit hostname, score, connState, and the `allowInsecure` boolean only. `rules/no-secrets-on-disk.md` clean.
+- **Redaction:** PASS. No new log line or exception in the diff emits password / token / credential. New lines emit hostname, score, connState, and the `allowInsecure` boolean only. `knowledge/rules/no-secrets-on-disk.md` clean.
 
 ## Deployment note for the installer (per brief)
 

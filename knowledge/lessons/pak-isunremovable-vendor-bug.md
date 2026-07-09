@@ -56,6 +56,6 @@ separate authorization, not implied extension of test scope.
 
 ## Reference files
 
-- `context/api-surface/pak_uninstall_api_exploration.md` — full uninstall investigation
-- `context/api-surface/pak_install_api_exploration.md` — install flow validation
-- `rules/no-destructive-on-prod.md` — the rule this incident created
+- `knowledge/context/api-surface/pak_uninstall_api_exploration.md` — full uninstall investigation
+- `knowledge/context/api-surface/pak_install_api_exploration.md` — install flow validation
+- `knowledge/rules/no-destructive-on-prod.md` — the rule this incident created

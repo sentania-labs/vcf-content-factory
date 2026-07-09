@@ -21,7 +21,7 @@ User-confirmed decisions carried from the 2026-06-09 session
 
 1. Unwind aria-ops-core; framework v2 re-homed directly on AdapterBase
    (built — `vcfops_managementpacks/adapter_framework/`, design at
-   `designs/vcfcf-base-v2-adapterbase-rehome.md`); adapters not yet
+   `knowledge/designs/vcfcf-base-v2-adapterbase-rehome.md`); adapters not yet
    migrated.
 2. C2 pak shape — never bundle vrops-adapters-sdk.
 3. JAX-WS fix = Option 2: remove JAX-WS entirely from compliance — raw
@@ -40,10 +40,10 @@ User-confirmed decisions carried from the 2026-06-09 session
   `lib/`. This fixes the prod 9.1 outage: platform pairs javax
   jaxws-api-2.3.1 with jakarta jaxws-rt-4.0.3, parent-first loads the
   wrong ProviderImpl → "not a subtype" every cycle
-  (`context/investigations/prod_91_jaxws_provider_failure.md`).
+  (`knowledge/context/investigations/prod_91_jaxws_provider_failure.md`).
 - Stitching transport = **Option 1, ambient maintenance credentials**
   (empirically proven on devel 9.0.2 AND prod 9.1,
-  `context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md`):
+  `knowledge/context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md`):
   read `/usr/lib/vmware-vcops/user/conf/maintenanceuser.properties`,
   decrypt via the platform SDK `com.integrien.alive.common.security.Crypt`
   (MANDATORY reuse — 9.1 collector runs FIPS approved-only; never

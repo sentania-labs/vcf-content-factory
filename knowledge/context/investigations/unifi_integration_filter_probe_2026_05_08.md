@@ -222,8 +222,8 @@ No clean-up required.
 
 ## Cross-references
 
-- `context/api-maps/unifi-integration-api.md` -- full API map
+- `knowledge/context/api-maps/unifi-integration-api.md` -- full API map
   (Finding 2 documents the filterable properties from the v10.1.84
   OpenAPI spec; this probe live-verifies and extends those findings)
-- `designs/unifi-mp-v2.md` -- MP design that will consume these
+- `knowledge/designs/unifi-mp-v2.md` -- MP design that will consume these
   findings for the gateway identification gap (action item #4)

@@ -13,7 +13,7 @@
 is positively documented — javap-confirmed, live-confirmed — as the manager that *always
 rejects* the prod cert.
 
-`lessons/suite-api-stitch-ssl-tofu-vs-java-http.md` (confirmed devel+prod, build 45,
+`knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md` (confirmed devel+prod, build 45,
 2026-06-10), lines 25-27:
 
 > `adapter.getPlatformSslContext()`, **which wraps `AdapterBase.getAdapterTrustManager()`
@@ -74,7 +74,7 @@ already past). `getAdapterTrustManager()` is provably the broken choice either w
 ## BLOCKING
 
 - **[VcfCfAdapter.java:1015-1035 `openPlatformConnection`]** —
-  `lessons/suite-api-stitch-ssl-tofu-vs-java-http.md:25-46,67-72`; spec
+  `knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md:25-46,67-72`; spec
   `20-suiteapi-client-behavioral-contract.md` §5 / ledger #12. The loopback trust is built from
   `getAdapterTrustManager()` (= the strict TOFU `CustomTrustManager`) via a hand-rolled
   `SSLContext`, which (a) rejects the prod operator-replaced org-CA cert and (b) drops the

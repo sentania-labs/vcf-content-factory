@@ -10,11 +10,11 @@ to `VMWARE::Datastore`?
 **Method:** static `unzip` of pak → `adapters.zip` → `conf/describe.xml`
 + `conf/scripts/*.sdm` for **every** pak in `reference/references/tvs/` (48 paks).
 Extraction to scratchpad only. No live instance touched, nothing in
-`reference/references/` modified. Companion to `context/api-maps/tvs-cross-mp-stitching.md`
+`reference/references/` modified. Companion to `knowledge/context/api-maps/tvs-cross-mp-stitching.md`
 (which read the **jars**); this file reads the **declarative layer** that
 prior RE under-examined. Grammar cross-checked against
 `~/specs/07-relationships-cross-mp.md`, `~/specs/02a-describe-xsd-canonical.md`,
-and `context/mpb/mpb_pak_structural_reference.md`.
+and `knowledge/context/mpb/mpb_pak_structural_reference.md`.
 
 **Evidentiary discipline (user-mandated):** every mechanical claim below
 is a verbatim quote from a named file inside a named pak. Anything not so
@@ -340,7 +340,7 @@ declares a foreign `VMWARE` `<AdapterKind>` or `VMWARE::Datastore`
 `<ResourceKind>` stub anywhere (grep = 0), so there is **no descriptor
 site** where a Datastore identifier (`VMEntityObjectID`, `VMEntityVCID`,
 `DataStorePath`, or an NAA property) could be bound to a match value.
-The mpb structural reference (`context/mpb/mpb_pak_structural_reference.md`)
+The mpb structural reference (`knowledge/context/mpb/mpb_pak_structural_reference.md`)
 shows `<TraversalSpecKinds/>` empty for Gen-2 and lists no match
 attribute; `eventMatchers` exists only for ARIA_OPS objects, not for
 Datastore path stitching. Datastore's true identity per spec/07 is

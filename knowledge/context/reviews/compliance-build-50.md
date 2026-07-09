@@ -6,7 +6,7 @@
 - **Verdict:** **APPROVE** (0 BLOCKING)
 - **Findings:** 0 BLOCKING / 0 WARNING / 0 NIT
 - **Date:** 2026-06-10
-- **Closes:** build-49 review (`context/reviews/compliance-build-49.md`) — B1, W1, W2, N1.
+- **Closes:** build-49 review (`knowledge/context/reviews/compliance-build-49.md`) — B1, W1, W2, N1.
 
 ## Claims check (independently re-run)
 
@@ -38,7 +38,7 @@ Verified at **both** layers, **in the shipped pak** (not just source):
   returning `null` now yields `allowInsecure=false` → `sslSocketFactoryFor`
   takes the `getPlatformSslContext()` (platform-trust) branch. The documented
   "platform trust by default / allowInsecure opt-out" is now matched by the code.
-- **Authority:** `rules/no-fabricated-metrics.md` / skill *Gaps — name them*
+- **Authority:** `knowledge/rules/no-fabricated-metrics.md` / skill *Gaps — name them*
   (docs must match behavior) — now satisfied; the build-49 contradiction is gone.
 - **Deployment note carried forward:** the build-49 deployment risk is now
   *real* — any instance against a vCenter whose cert is not in the platform
@@ -142,7 +142,7 @@ compliance depends on. No regression introduced.
   (`:160-163`) emits vcenter host / profile / allowInsecure bool / stitcher flag
   — no credentials. The password-bearing SOAP login envelope
   (`VSphereClient.java:172`) is passed to `post()`, never logged (pre-existing,
-  unchanged). `rules/no-secrets-on-disk.md` clean.
+  unchanged). `knowledge/rules/no-secrets-on-disk.md` clean.
 - **Build hygiene:** PASS. `build_number` 49→50, matching CHANGELOG entry,
   minimal diff, no drive-by refactor.
 

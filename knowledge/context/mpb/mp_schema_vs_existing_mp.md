@@ -7,7 +7,7 @@
   `reference/references/sentania_aria_operations_dsm_mp/Management Pack JSON/Synology DSM MP.json`
 - **Postman collection** (API-exploration artifact) —
   `reference/references/sentania_aria_operations_dsm_mp/API Exploration/Synology.postman_collection.json`
-- **Research baseline** — `context/mpb/reference-mpb-research.md`
+- **Research baseline** — `knowledge/context/mpb/reference-mpb-research.md`
 - **Our loader schema** — `src/vcfops_managementpacks/loader.py`
 
 **Cross-check reference MPs used**

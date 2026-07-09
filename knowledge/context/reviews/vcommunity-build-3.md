@@ -80,7 +80,7 @@ resolution (`instanceUuid` + MOID, the build-2 MOID-trap fix) is untouched
 by this delta. New licensing/guest/SCSI keys push onto the VM/Host already
 resolved under that scope. No new bare-MOID join introduced.
 
-### 6. Logging quality & secrets (rules/no-secrets-on-disk.md — DEF-001 family)
+### 6. Logging quality & secrets (knowledge/rules/no-secrets-on-disk.md — DEF-001 family)
 PASS, with a hardening WARNING (non-blocking).
 - The cleartext-`<password>` login **request** body (`loginBody`,
   `VSphereClient.java:126`) is **never** folded into any thrown or logged
@@ -128,7 +128,7 @@ explicitly named TOOLSET GAP (`HostCollector.java:135`). The `License
 Expiration Date` PROP emits the literal string `"null"` on absence — see
 NIT-1; it matches prod-verbatim parity and pushes no scored value.
 
-## Registry check (context/defects.md)
+## Registry check (knowledge/context/defects.md)
 
 - **No open defect names `vcommunity` in its `Affects:` line.** Confirmed
   against the registry: DEF-001 (synology, open), DEF-002 (unifi, open),
@@ -138,8 +138,8 @@ NIT-1; it matches prod-verbatim parity and pushes no scored value.
 ## Findings
 
 ### WARNING-1 — `redactSecrets` does not cover the full DEF-001 token family
-`[VCommunityVSphereClient.java:955 redactSecrets]` — rules/no-secrets-on-disk.md;
-`lessons/synology-dsm-client-side-joins.md` (DEF-001 family). The redactor
+`[VCommunityVSphereClient.java:955 redactSecrets]` — knowledge/rules/no-secrets-on-disk.md;
+`knowledge/lessons/synology-dsm-client-side-joins.md` (DEF-001 family). The redactor
 covers `vmware_soap_session=` and `password=` only. The brief and the
 DEF-001 lesson call out `_sid`, `passwd`, and `account` as part of the
 same secret-in-path family. These tokens are **not currently reachable**

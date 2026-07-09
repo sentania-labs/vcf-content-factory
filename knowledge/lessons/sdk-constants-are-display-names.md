@@ -60,7 +60,7 @@ static final String DEFAULT_PROPS_PATH =
 
 Confirmed present and owner-readable (by the collector user `admin`) on
 VCF Ops 9.0.2 (devel) and 9.1 (prod). See
-`context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md`.
+`knowledge/context/investigations/suiteapi_ambient_auth_devel_2026_06_09.md`.
 
 Allow a system-property override for test harnesses
 (`vcfcf.suiteapi.credential.path`). Do not attempt to derive the path from

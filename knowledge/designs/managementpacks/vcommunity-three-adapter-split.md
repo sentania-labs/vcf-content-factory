@@ -56,7 +56,7 @@ here.** What this note resolves is *how* to execute it safely.
 ## Supersession (explicit)
 
 This **supersedes** the "stay UNIFIED for v1" recommendation in
-`designs/managementpacks/vcommunity-parity-plan.md` §"Architecture decision
+`knowledge/designs/managementpacks/vcommunity-parity-plan.md` §"Architecture decision
 — single pak vs vSphere/OS split" (lines 72–89). That section recommended a
 single pak with internal modules and listed four reasons; this note's intent
 section and the co-push verdict below address each:
@@ -237,7 +237,7 @@ identity (see below).
 
 ### Stitching identity must stay consistent across adapters — the MOID trap
 
-**Binding lesson:** `lessons/stitch-moid-not-unique-across-vcenters.md`.
+**Binding lesson:** `knowledge/lessons/stitch-moid-not-unique-across-vcenters.md`.
 Because vsphere and os (and eventually hardware) all push onto the **same**
 foreign VMWARE resources, every adapter's stitcher MUST resolve identity the
 same way, or two adapters will disagree about which `HostSystem`/`VM` a key
@@ -505,7 +505,7 @@ dashboards/symptoms ship with it.
 
 ## 6. Repo / release structure
 
-Three independent repos in `sentania-labs`, per `context/managed_paks.md`,
+Three independent repos in `sentania-labs`, per `knowledge/context/managed_paks.md`,
 each instantiated from `sentania-labs/vcf-content-factory-sdk-template`
 ("Use this template" → skeleton + `build-pak-on-tag` CI), each with its own
 `v*` release cadence and its own defect-gate before a tag (RULE-012).
@@ -524,7 +524,7 @@ vsphere one to ease migration — see §8). Recommendation: three **fresh**
 kinds for symmetry and clean RBAC; do not reuse `vcfcf_vcommunity` (avoids any
 split-brain ambiguity with the existing installed unified kind).
 
-### `context/managed_paks.md` registry changes needed
+### `knowledge/context/managed_paks.md` registry changes needed
 
 The orchestrator must (after each repo exists):
 
@@ -573,7 +573,7 @@ credential fix (the UPN-vs-SAM `NamePasswordAuthentication` format issue —
    not in the dying unified pak. Author the os content per §5.
 3. **Operator migration on each instance** (document in each pak's README):
    - **Uninstall the unified `vcfcf_vcommunity` pak.** Per
-     `lessons/pak-uninstall-cascades-credentials.md`, its instances and
+     `knowledge/lessons/pak-uninstall-cascades-credentials.md`, its instances and
      credentials cascade away.
    - **Install `vcommunity-vsphere`** (and `vcommunity-os` if Windows
      monitoring is wanted). Recreate instances + credentials against the new
@@ -595,7 +595,7 @@ credential fix (the UPN-vs-SAM `NamePasswordAuthentication` format issue —
    can ship independently while os guest-ops is still being debugged — which
    is precisely the blast-radius-isolation benefit Scott wants.
 5. **Retire the unified pak.** Once vsphere+os reach parity on devel, remove
-   the `### vcommunity` entry from `context/managed_paks.md` (OPEN-D) and
+   the `### vcommunity` entry from `knowledge/context/managed_paks.md` (OPEN-D) and
    archive the original unified repo.
 
 ---
@@ -608,7 +608,7 @@ credential fix (the UPN-vs-SAM `NamePasswordAuthentication` format issue —
    empirical test a release gate. **Decide A1 before authoring.**
 2. **Stitch-identity drift across forks.** Three copies of `VCommunityStitcher`
    must all keep the build-2 `VMEntityVCID` scoping fix
-   (`lessons/stitch-moid-not-unique-across-vcenters.md`). A fork that drops it
+   (`knowledge/lessons/stitch-moid-not-unique-across-vcenters.md`). A fork that drops it
    reintroduces silent multi-vCenter cross-stitch. Flag for
    `sdk-adapter-reviewer` on every pak.
 3. **Content duplication / name collision across paks.** If both paks are
@@ -730,11 +730,11 @@ intentionally shelved. State so it is not re-derived when un-shelved:
   `GuestOpsClient.runPowershell` (`args = "-Command \"…\""` today, no policy
   flag); (3) separately, fix the `GuestOpsClient.post()` silent-null so a
   StartProgram fault surfaces instead of empty→DEGRADED.
-- Full diagnosis: `context/investigations/vcommunity-windows-services-empty-2026-06-23.md`
+- Full diagnosis: `knowledge/context/investigations/vcommunity-windows-services-empty-2026-06-23.md`
   and `…-guestops-execution-divergence-2026-06-22.md`.
 
 ## Attribution
 
 All three paks credit Onur Yuzseven / `vmbro/VCF-Operations-vCommunity` (CC)
 in their MP descriptions and every ported artifact, per
-`context/reference_sources.md` — unchanged from the unified pak.
+`knowledge/context/reference_sources.md` — unchanged from the unified pak.

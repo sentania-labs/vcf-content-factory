@@ -73,21 +73,21 @@ is called.
 
 ## References
 
-- `context/tier2_architecture.md` — transport section, SSL rationale
+- `knowledge/context/tier2_architecture.md` — transport section, SSL rationale
 - `src/vcfops_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitchClient.java` — fix site
 - SDK class: `com.integrien.alive.common.adapter3.CustomTrustManager`
   (in `vrops-adapters-sdk-2.2.jar`) — confirmed by `javap` inspection
 
 ## Addendum (2026-07-01) — vindicated live; DEF-005
 
-A later revision (2026-06-30, `designs/suite-api-stitcher-tls-auth-cleanup-v1.md`
+A later revision (2026-06-30, `knowledge/designs/suite-api-stitcher-tls-auth-cleanup-v1.md`
 §0) tried to have it both ways: route the loopback hop back through the
 platform's strict TOFU `CustomTrustManager` via `getSocketFactory()`, betting
 that `getSocketFactory()`'s socket factory (unlike `getPlatformSslContext()`'s
 vanilla JSSE factory) carries a working TOFU-survival intercept — register the
 unknown cert on first contact, then transparently retry.
 
-**Live devel proved that bet wrong.** `context/investigations/synology-b23-devel-pkix-2026-07-01.md`:
+**Live devel proved that bet wrong.** `knowledge/context/investigations/synology-b23-devel-pkix-2026-07-01.md`:
 the intercept *does* fire (the platform's `NonDisruptiveCertificateHandler`
 starts on every cycle), but it **always errors** —
 `"Adapter certificate renewal url set is empty"` — because framework
@@ -107,9 +107,9 @@ depends on a platform capability (adapter-declared cert-renewal URL set) that
 this framework's adapters do not — and, per the vendor ground truth below,
 should not need to — have.
 
-**Filed as `context/defects.md` DEF-005 (blocking)** and fixed by mirroring
+**Filed as `knowledge/context/defects.md` DEF-005 (blocking)** and fixed by mirroring
 the Broadcom vendor transport exactly instead of re-deriving a TOFU posture:
-`context/api-surface/casa-injected-vs-raw-client.md` §3 shows (bytecode-proven)
+`knowledge/context/api-surface/casa-injected-vs-raw-client.md` §3 shows (bytecode-proven)
 that `aria-ops-core SuiteAPIClient.getClientConfigBuilder()` — the client used
 by every shipping Broadcom pak — sets `verify("false")` + `ignoreHostName(true)`
 in non-FIPS mode, `useClusterTruststore` under FIPS. No pak, including the

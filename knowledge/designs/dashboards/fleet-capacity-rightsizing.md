@@ -103,7 +103,7 @@ The Band B "Cluster Capacity Breakdown" View widget (`cluster_capacity_view`)
 shipped without provider config; as a non-self-provider with no resource
 binding it rendered empty until driven. The user fixed the deployed copy on
 devel directly. ops-recon extracted the deployed wire config
-(`context/investigations/recon_log.md`, entry "2026-06-12 — Fleet Capacity
+(`knowledge/context/investigations/recon_log.md`, entry "2026-06-12 — Fleet Capacity
 self-provider fix"): `selfProvider: true` + vSphere World resource pin.
 Repo fix: add `self_provider: true` and
 `pin: {adapter_kind: VMWARE, resource_kind: vSphere World}` to the widget —

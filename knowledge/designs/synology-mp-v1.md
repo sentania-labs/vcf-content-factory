@@ -563,7 +563,7 @@ and lets dashboards iterate without MP re-installs.
 
 - Read `context/management_pack_authoring.md` first — it's the YAML spec.
 - Read `context/mpb_relationships.md` next — it's the design-pattern doc.
-- Read `context/api-maps/synology-storage.md`, `synology-iscsi.md`,
+- Read `knowledge/context/api-maps/synology-storage.md`, `synology-iscsi.md`,
   `synology-auth.md`, `synology-system.md` for JSON paths.
 - For NFS Share: STOP and ask the orchestrator before authoring (Gap #1).
 - For Utilization chain params: default to the **two-request** variant

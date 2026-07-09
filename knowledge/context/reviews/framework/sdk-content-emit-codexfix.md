@@ -3,7 +3,7 @@
 - **Date:** 2026-06-18
 - **Reviewer:** framework-reviewer (RULE-013 blanket pre-PR gate)
 - **Area:** `vcfops_managementpacks/buildkit.py`, `vcfops_managementpacks/sdk_builder.py` (+ `tests/managementpacks/test_bundled_reports_emit.py`)
-- **Scope:** incremental Codex-fix diff on PR #24 only. The full content-emit pipeline was already APPROVED (`context/reviews/framework/sdk-content-emit-consolidated.md`); this reviews only the P1/P2 increment.
+- **Scope:** incremental Codex-fix diff on PR #24 only. The full content-emit pipeline was already APPROVED (`knowledge/context/reviews/framework/sdk-content-emit-consolidated.md`); this reviews only the P1/P2 increment.
 - **Change:** P1 — packages 5 new modules into the buildkit (symptoms/alerts/reports loaders + alerts/reports renderers) and adds `_IMPORT_REWRITES` so `sdk_builder.py`'s `from vcfops_{symptoms,alerts,reports}.{loader,render}` (and the previously-missing `from vcfops_supermetrics.loader import load_file`) rewrite to flat kit names. P2 — `_load_bundled_content` 6→7-tuple (adds `recommendations`); `_write_outer_pak` threads referenced recs into `render_alert_content_xml` with fail-loud cross-ref validation.
 - **Verdict:** **CHANGES REQUESTED** (1 BLOCKING)
 

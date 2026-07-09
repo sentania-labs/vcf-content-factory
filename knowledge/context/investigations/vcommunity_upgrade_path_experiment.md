@@ -110,7 +110,7 @@ adapter-instance `ResourceKind` key and all `ResourceIdentifier` keys
 kind (`user`/`password`/`winUser`/`winPass`) were mirrored from the original's
 describe.xml so instance-config compatibility was genuinely on the table.
 Stub `test()`/`collect()`. Keyed constructors `super(ADAPTER_KIND)` /
-`super(ADAPTER_KIND, dir, id)` per `lessons/controller-describe-bare-instantiation.md`.
+`super(ADAPTER_KIND, dir, id)` per `knowledge/lessons/controller-describe-bare-instantiation.md`.
 
 **TOOLSET GAP — factory rejects mixed-case adapter kind keys.**
 `vcfops_managementpacks/sdk_project.py:137` enforces
@@ -214,7 +214,7 @@ kind, instance, or experiment credential.
    each candidate's *real* `adapterKindKey` via the unfiltered list — do not
    trust the filtered query and do not bulk-delete its results.
 2. **Credential cascade-on-uninstall is not the whole story.**
-   `lessons/pak-uninstall-cascades-credentials.md` documents creds *cascading
+   `knowledge/lessons/pak-uninstall-cascades-credentials.md` documents creds *cascading
    away* on uninstall; here the vCommunity-scoped creds I created were gone
    (cascade + my own deletes), but the leaky-filter behavior above means a naive
    "remaining creds" count can read non-zero from unrelated kinds. No
@@ -224,7 +224,7 @@ kind, instance, or experiment credential.
 
 ## Implications for the vCommunity Tier 2 design
 
-(`designs/managementpacks/vcommunity.md` — which already scopes upgrade
+(`knowledge/designs/managementpacks/vcommunity.md` — which already scopes upgrade
 compatibility as **NOT** a requirement; this experiment confirms that was the
 right call and closes the "would-be-cool upgrade pak" door empirically.)
 

@@ -23,7 +23,7 @@ The wireframe must show:
    per-database because the metric doesn't exist on the parent
    `SqlServer`").
 
-The wireframe lives in the design note (`designs/dashboards/<slug>.md`),
+The wireframe lives in the design note (`knowledge/designs/dashboards/<slug>.md`),
 **not** in chat alone — so a future reader can diff it against the
 shipped YAML. The orchestrator commits the wireframe to the design note
 BEFORE spawning `dashboard-author`.

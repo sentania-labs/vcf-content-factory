@@ -101,7 +101,7 @@ installed and are simply **missing on devel**.
   (the port) but **not** the original `VCFOperationsvCommunity`. Only the
   port has ever been installed on devel.
 - The port pak is supposed to seed the store: design
-  (`designs/managementpacks/vcommunity-sdk.md:135,439-441`) says the six
+  (`knowledge/designs/managementpacks/vcommunity-sdk.md:135,439-441`) says the six
   XMLs "ship in `content/files/solutionconfig/` → imported into the
   central store at pak install."
 - **But the SDK builder never packs them.** In

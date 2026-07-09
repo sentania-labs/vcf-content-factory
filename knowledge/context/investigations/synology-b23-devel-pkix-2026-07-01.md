@@ -92,7 +92,7 @@ The **platform side** of that same flow is in `collector.log` — and it is **fa
 2. That factory delegates cert validation to the platform's strict **TOFU `CustomTrustManager`**,
    which **throws** on any cert not already registered — including devel's own localhost cert —
    surfacing to our caller as `SSLHandshakeException: PKIX path building failed`. (This is exactly
-   the failure mode documented in `lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`.)
+   the failure mode documented in `knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`.)
 3. As a side effect it fires the platform's async `NonDisruptiveCertificateHandler` ("initiating
    non-disruptive certificate handling"). **That handler is the thing that is supposed to make the
    cert trusted for future cycles — and it errors out:** `createAdapterCertificateRenewalConfig`
@@ -210,10 +210,10 @@ work.
 
 ## Cross-references / corrections to existing docs
 
-- **`lessons/suite-api-stitch-ssl-tofu-vs-java-http.md` is VINDICATED by this live run.** Its
+- **`knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md` is VINDICATED by this live run.** Its
   generalizable rule ("`CustomTrustManager` always throws on first contact; for localhost Suite
   API use `insecureSslContext()`") predicted exactly what build 23 now does. The 2026-06-30
-  correction in `designs/suite-api-stitcher-tls-auth-cleanup-v1.md` §0 (that `getSocketFactory()`
+  correction in `knowledge/designs/suite-api-stitcher-tls-auth-cleanup-v1.md` §0 (that `getSocketFactory()`
   carries a working TOFU-survival intercept) is **not supported by the evidence**: the intercept
   fires but the platform renewal step errors with "Adapter certificate renewal url set is empty"
   and never persists.

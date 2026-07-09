@@ -3,8 +3,8 @@
 - **Adapter:** `content/sdk-adapters/unifi/`
 - **Commit reviewed:** `20db25a` (adapter repo main, "hardware-label alias
   in the vmnic→port own-inventory index")
-- **Base:** `3bb262a` (build 9, APPROVEd — `context/reviews/unifi-build-9.md`)
-- **Design of record:** `designs/managementpacks/unifi-switchport-host-stitch-v2.md`
+- **Base:** `3bb262a` (build 9, APPROVEd — `knowledge/context/reviews/unifi-build-9.md`)
+- **Design of record:** `knowledge/designs/managementpacks/unifi-switchport-host-stitch-v2.md`
   (§"Build 10 amendment")
 - **Reviewer:** `sdk-adapter-reviewer`
 - **Verdict:** APPROVE (0 BLOCKING)
@@ -22,7 +22,7 @@
 
 No discrepancy between the author's result block and observed behavior.
 
-## Registry check (`context/defects.md`)
+## Registry check (`knowledge/context/defects.md`)
 
 - **DEF-002** (Affects: unifi) — **closed** at build 9 (`0.0.0.9`, devel
   proof 2026-07-06; all 8 hosts gained UniFiSwitchPort children via additive
@@ -98,7 +98,7 @@ No discrepancy between the author's result block and observed behavior.
    the stated build-10 amendment or its mechanical version-stamp fallout.
    The `overview.md` "renamed ports" paragraph is honest (replaces build 9's
    "unverified" caveat with the verified two-alias behavior); no gap hidden,
-   no coverage inflated (`rules/no-fabricated-metrics.md`). ✔
+   no coverage inflated (`knowledge/rules/no-fabricated-metrics.md`). ✔
 
 ## NIT (non-blocking, no action required to ship)
 

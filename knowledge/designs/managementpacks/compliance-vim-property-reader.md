@@ -4,7 +4,7 @@
 **Status**: Approved for build
 **Type**: Tier 2 SDK adapter enhancement (compliance)
 **Owner agent**: `sdk-adapter-author`
-**Parent design**: `designs/managementpacks/vcf-compliance-adapter.md`
+**Parent design**: `knowledge/designs/managementpacks/vcf-compliance-adapter.md`
 
 ---
 

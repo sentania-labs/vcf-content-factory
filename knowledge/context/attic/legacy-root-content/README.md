@@ -7,5 +7,5 @@ historical context; **not** loaded, validated, or packaged by any
 `vcfops_*` CLI. Do not add new content here — authored content goes in
 `content/<type>/`.
 
-Archived here by reorg v2 phase 0 (`designs/reorg-v2-landing-page.md`)
+Archived here by reorg v2 phase 0 (`knowledge/designs/reorg-v2-landing-page.md`)
 when the two legacy root directories were removed from the landing page.

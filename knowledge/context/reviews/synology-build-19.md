@@ -6,7 +6,7 @@
 - **Verdict:** APPROVE
 - **Findings:** 0 BLOCKING / 0 WARNING / 2 NIT
 - **Reviewer:** sdk-adapter-reviewer
-- **Re-spin of:** `context/reviews/synology-build-18.md` (1 BLOCKING on DEF-001)
+- **Re-spin of:** `knowledge/context/reviews/synology-build-18.md` (1 BLOCKING on DEF-001)
 
 ## Claims check (independently re-run)
 
@@ -59,9 +59,9 @@ The single residual leak vector flagged in build-18 BLOCKING-1 is closed. Concre
    `ce.getMessage()` ("Connection refused", no URI) and per the class contract does not
    reach the adapter log.
 
-**Authority:** `rules/no-secrets-on-disk.md` (RULE-008); skill § *Gaps / secrets*; DEF-001.
+**Authority:** `knowledge/rules/no-secrets-on-disk.md` (RULE-008); skill § *Gaps / secrets*; DEF-001.
 
-**Proposed closing-evidence for `context/defects.md` (orchestrator to record):**
+**Proposed closing-evidence for `knowledge/context/defects.md` (orchestrator to record):**
 > Fixed in synology build 19 (`1.0.0.19`), 2026-06-26,
 > `src/com/vcfcf/adapters/synology/SynologyApiClient.java:195-215`. `callRaw` wraps
 > `http.get` in try/catch and rethrows a standalone `IOException` built from the `endpoint`
@@ -96,7 +96,7 @@ This precisely resolves the build-18 NIT (`SynologyAdapter.java:986-988`). The
 `nfsMatches++` counter now sits inside the dedup guard — a cosmetic, correct change to the
 INFO count only.
 
-## Registry check (`context/defects.md`)
+## Registry check (`knowledge/context/defects.md`)
 
 - **DEF-001** (synology, blocking, open) — **RESOLVED in build 19. Propose CLOSE** with the
   concrete evidence above. The build-18 BLOCKING is genuinely fixed; the registered

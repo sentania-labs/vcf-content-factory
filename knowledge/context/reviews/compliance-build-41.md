@@ -76,7 +76,7 @@ Traced every new read path; the unreadable-is-not-compliant contract holds end-t
   `username:password` it builds in `ensureSession` and the returned session token are never
   written to a log. Grep of every `log*`/`logger` call across `src/` for
   password/credential/secret/sessionId/cookie/getBytes/Base64 → no matches.
-  `rules/no-secrets-on-disk.md` satisfied.
+  `knowledge/rules/no-secrets-on-disk.md` satisfied.
 
 ---
 
@@ -102,7 +102,7 @@ Traced every new read path; the unreadable-is-not-compliant contract holds end-t
 
 - **[CHANGELOG.md / adapter.yaml] Build hygiene — no CHANGELOG entry for builds 38, 39, 40, 41**
   (skill § *Build / verify loop* "add a `CHANGELOG.md` line every build"; author hard rule 9;
-  `rules/validate-before-install.md`). `adapter.yaml` declares `build_number: 41`, but the top
+  `knowledge/rules/validate-before-install.md`). `adapter.yaml` declares `build_number: 41`, but the top
   CHANGELOG entry is still `## 1.0.0.37`. The only CHANGELOG change in the working tree is a
   re-churn of the existing 1.0.0.37 line (the same regeneration NIT flagged at build 37) — there
   are NO `1.0.0.38/.39/.40/.41` entries. Re-running `build-sdk` did NOT add them (the doc

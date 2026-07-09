@@ -86,7 +86,7 @@ is:
    policy bindings.
 
 Mechanical translator from BuilderFile to Tier 2 scaffolding is on the
-Phase 3 backlog (see `designs/tier2-mp-architecture-plan.md`).
+Phase 3 backlog (see `knowledge/designs/tier2-mp-architecture-plan.md`).
 
 ## Anti-patterns — when NOT to use Tier 2
 

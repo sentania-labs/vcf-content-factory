@@ -1,7 +1,7 @@
 # Design — [VCF Content Factory] Oversized VMs — Reclaimable (view)
 
 Part of the **Fleet Capacity & Rightsizing** dashboard (Band D-1). See
-`designs/dashboards/fleet-capacity-rightsizing.md`.
+`knowledge/designs/dashboards/fleet-capacity-rightsizing.md`.
 
 ## Vision
 A list view of oversized VMs and what can be reclaimed from each. Driven by

@@ -64,21 +64,21 @@ Decided judgment calls (all four put to Scott; his selections):
     HostSystem keeps its VMWARE children and gains the port child. The
     synology instance of the same idiom is seeded **closed** (DEF-003)
     on the build-16 devel 9.0.2 proof
-    (`lessons/setrelationships-foreign-adapter-scoped.md`), recording
+    (`knowledge/lessons/setrelationships-foreign-adapter-scoped.md`), recording
     the convergence and demonstrating the closed-entry shape.
 - **Gate surface: rule + factory CLI now; pak-repo CI later.**
   `vcfops_packaging` gains `defect-gate` (standalone, the dry-run /
   pre-tag check) and the `release` / `publish` pipelines refuse over
   open blocking defects, naming ids. RULE-012 mandates a passing
   `defect-gate --pak <name>` before any v* tag is pushed to a managed
-  pak repo. Wiring the pak repos' own CI (fetch `context/defects.md`
+  pak repo. Wiring the pak repos' own CI (fetch `knowledge/context/defects.md`
   from factory main, fail the v* build) is a **named follow-up** — it
   touches five external repos (4 paks + template) and exceeds this PR.
 
 Who writes the registry: the orchestrator (or Scott), only. The
 reviewer's verdict re-asserts open defects for the pak under review and
 *proposes* openings/closures with evidence; it never edits
-`context/defects.md` (its write boundary stays `context/reviews/`).
+`knowledge/context/defects.md` (its write boundary stays `knowledge/context/reviews/`).
 
 ## Follow-ups (out of this PR)
 
@@ -93,5 +93,5 @@ reviewer's verdict re-asserts open defects for the pak under review and
   orchestrator duty (`defect-gate --pak <name>` per referenced pak).
 - Candidate third entry: the MOID cross-stitch fix for **compliance**
   was "queued" as of 2026-06-10
-  (`lessons/stitch-moid-not-unique-across-vcenters.md`) — verify and
+  (`knowledge/lessons/stitch-moid-not-unique-across-vcenters.md`) — verify and
   register if still unfixed at next compliance review.

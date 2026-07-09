@@ -143,7 +143,7 @@ the datacenter, view the stats, scan right to see the explanation".)
 - **vCPU:pCPU Ratio column** uses OOTB metric
   `cpu|vcpus_to_cores_allocation_ratio` (UI display name "CPU|Current
   Overcommit Ratio", `default_monitored: true`). Found in
-  `context/adapter_describe_cache/VMWARE/ClusterComputeResource.json:1409`.
+  `knowledge/context/adapter_describe_cache/VMWARE/ClusterComputeResource.json:1409`.
   Initial recon missed it because the markdown extract at
   `reference/docs/vcf9/metrics-properties.md` doesn't list it; user push-back
   ("what about CPU|Current Overcommit ratio?") corrected the omission.

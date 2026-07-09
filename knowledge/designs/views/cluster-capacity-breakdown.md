@@ -1,7 +1,7 @@
 # Design — [VCF Content Factory] Cluster Capacity Breakdown (view)
 
 Part of the **Fleet Capacity & Rightsizing** dashboard (see
-`designs/dashboards/fleet-capacity-rightsizing.md`). This is Band B — the
+`knowledge/designs/dashboards/fleet-capacity-rightsizing.md`). This is Band B — the
 primary per-cluster capacity table that also acts as the dashboard's selector.
 
 ## Initial prompt

@@ -67,7 +67,7 @@ not authoring discipline.
 
 ## References
 
-- `context/reviews/vcommunity-build-1.md` — the WARNING and honest
+- `knowledge/context/reviews/vcommunity-build-1.md` — the WARNING and honest
   disposition (reference-parity argument for WARNING-not-BLOCKING)
 - `content/sdk-adapters/vcommunity/src/com/vcfcf/adapters/vcommunity/VCommunityStitcher.java` — fix site (build 2)
 - `content/sdk-adapters/compliance/` — `ComplianceStitcher` **had** the same

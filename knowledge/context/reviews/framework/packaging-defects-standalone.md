@@ -3,7 +3,7 @@
 - **Branch:** `feat/p2-pak-ci-defect-gate`
 - **Date:** 2026-06-13
 - **Reviewer:** `framework-reviewer` (RULE-013 gate, pre-PR)
-- **Design of record:** `designs/defect-gate-pak-ci-v1.md`
+- **Design of record:** `knowledge/designs/defect-gate-pak-ci-v1.md`
 - **Diff reviewed:** `git diff main -- vcfops_packaging/defects.py tests/test_defect_gate.py`
 - **Verdict:** APPROVE (0 BLOCKING / 0 WARNING / 2 NIT)
 
@@ -15,7 +15,7 @@ default = `Path(__file__).parent / "defects.md"`). It reuses the existing
 `gate_pak` / `gate_all` / `format_defect_line` / `DefectRegistryError`
 defined above in the same file. Exit codes 0 (clean) / 1 (bad or missing
 registry) / 2 (open blocking defects). Goal: a pak repo's `v*`-tag CI can
-`curl` this one file + `context/defects.md` from factory `main` and run
+`curl` this one file + `knowledge/context/defects.md` from factory `main` and run
 the defect gate with no factory checkout and no `pip install`. Plus 6
 subprocess-based tests in `tests/test_defect_gate.py::TestStandaloneEntrypoint`.
 
@@ -109,7 +109,7 @@ flow). Malformed registry → exit 1 with a clear stderr message; missing regist
   pre-validate) and re-exit 1. Cosmetic only.
 
 - **N2 — `--registry` default is `Path(__file__).parent / "defects.md"`, while
-  the package CLI default is `context/defects.md` relative to repo root.** This
+  the package CLI default is `knowledge/context/defects.md` relative to repo root.** This
   is intentional and correct for the curl-and-run model (file + registry land
   in the same dir), and is documented in the block comment. Noted only so a
   future reader doesn't mistake the two defaults for a parity bug — they serve
@@ -117,9 +117,9 @@ flow). Malformed registry → exit 1 with a clear stderr message; missing regist
 
 ## Scope note
 
-The branch also contains non-`vcfops_*` files (`designs/sdk-template-scaffold/
-build-pak-on-tag.yml`, README, `context/managed_paks.md`, `session-handoff.md`,
-`lessons/INDEX.md`). Per the design's boundary section those are the
+The branch also contains non-`vcfops_*` files (`knowledge/designs/sdk-template-scaffold/
+build-pak-on-tag.yml`, README, `knowledge/context/managed_paks.md`, `session-handoff.md`,
+`knowledge/lessons/INDEX.md`). Per the design's boundary section those are the
 orchestrator's / sdk-adapter-author's surface, not `tooling`'s — outside this
 reviewer's `vcfops_*/` mandate and not reviewed here.
 

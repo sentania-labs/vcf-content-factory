@@ -178,7 +178,7 @@ log line). Its absence for synology and unifi is expected and non-diagnostic.
 ### B2. How each adapter emits relationships (mechanism)
 
 Both v2 adapters use the **identical** documented multi-resource idiom
-(`context/framework_v2_migration.md` §18): build the full topology once, return
+(`knowledge/context/framework_v2_migration.md` §18): build the full topology once, return
 it only on the **World** resource's `collectRelationships(rc)` call; the
 framework calls `addRelationshipsToCurrentCycle(rels)` →
 `collectResult.addRelationships(rels)`. Both build keys via

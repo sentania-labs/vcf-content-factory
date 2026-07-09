@@ -2,7 +2,7 @@
 
 **Status:** draft 2026-04-27
 **Owner:** orchestrator (design) + tooling agent (implementation)
-**Supersedes:** `designs/publish-command-v1.md` (the two-knob `released:` model)
+**Supersedes:** `knowledge/designs/publish-command-v1.md` (the two-knob `released:` model)
 
 ## Context
 
@@ -479,7 +479,7 @@ No silent failures. Any error stops the chain and reports verbatim.
 
 **Decommission:**
 
-- `designs/publish-command-v1.md` — superseded by this doc; leave as
+- `knowledge/designs/publish-command-v1.md` — superseded by this doc; leave as
   historical record but add a header pointing here.
 
 **No changes:**
@@ -532,7 +532,7 @@ lives.
 
 ### Registry
 
-`context/managed_paks.md` is the canonical registry of published SDK paks.
+`knowledge/context/managed_paks.md` is the canonical registry of published SDK paks.
 Each entry names the pak's remote repo and the factory-relative target
 directory (`content/sdk-adapters/<name>/`).  The registry is SHA-free and
 version-free; "latest release" is always derived at publish time as
@@ -544,7 +544,7 @@ When `/publish` processes a headline whose source is
 `content/sdk-adapters/<name>/adapter.yaml`, `_build_sdk_mp_headline()`
 in `release_builder.py`:
 
-1. Looks up the adapter in `context/managed_paks.md` by its directory name.
+1. Looks up the adapter in `knowledge/context/managed_paks.md` by its directory name.
 2. Fails loudly with a `ValueError` if the adapter is not registered
    (the signal that de-track migration has not been done for this adapter).
 3. Writes a **pointer zip** to the build staging area.  The zip contains
@@ -588,7 +588,7 @@ An SDK adapter can only be published once:
 1. Its repo exists at the registered remote (Workstream D de-track migration).
 2. At least one `v*` tag has been pushed to trigger the pak's CI, which
    attaches the `.pak` to the GitHub Release.
-3. The adapter's entry has been added to `context/managed_paks.md`.
+3. The adapter's entry has been added to `knowledge/context/managed_paks.md`.
 
 Without all three, `/publish` will hit the `ValueError` guard and abort.
 
@@ -615,7 +615,7 @@ a file that can go stale and still requires the retire-and-sweep machinery.
   the next publish.
 - `readme_gen._render_release_catalog()` detects SDK adapter artifacts by
   source path (`grandparent == "sdk-adapters"`), looks up the registry in
-  `context/managed_paks.md`, and renders the release in a dedicated
+  `knowledge/context/managed_paks.md`, and renders the release in a dedicated
   **"SDK Adapter Management Packs"** subsection under Management Packs.  Each
   row links the name to the pak's GitHub repo page and provides a
   `[Download latest](<remote>/releases/latest)` link.  No version is pinned.
@@ -627,4 +627,4 @@ to `retired/management-packs/` automatically.  No `deprecates:` entry is
 needed in the release manifests — the sweep handles it because these filenames
 are no longer in the "known filenames" set.
 
-See `designs/release-sdk-pointer-v1.md` for the design rationale.
+See `knowledge/designs/release-sdk-pointer-v1.md` for the design rationale.

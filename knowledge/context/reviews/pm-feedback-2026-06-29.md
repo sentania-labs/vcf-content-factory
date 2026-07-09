@@ -9,7 +9,7 @@ the disposition/tracking backbone for the internal review it seeds.
 
 | Feedback | Disposition |
 |---|---|
-| **SM time-misalignment:** a SM that depends on other SMs reads the *previous* collection's value; ideally don't split a complex SM into multiple SMs. | **CODIFIED** — `context/authoring/supermetric_authoring.md` §3 (cross-SM one-cycle lag + prefer single self-contained formula) + `.claude/agents/supermetric-author.md` pitfall list. |
+| **SM time-misalignment:** a SM that depends on other SMs reads the *previous* collection's value; ideally don't split a complex SM into multiple SMs. | **CODIFIED** — `knowledge/context/authoring/supermetric_authoring.md` §3 (cross-SM one-cycle lag + prefer single self-contained formula) + `.claude/agents/supermetric-author.md` pitfall list. |
 | **view-author view-type scope.** PM *assumed* List-View-only. **INCORRECT** — verified against `vcfops_dashboards/loader.py:117-119` + `view_dashboard_design_guide.md` (Codex caught it on PR #29): the factory supports **list, distribution, trend**. | **CODIFIED (corrected)** — `view-author.md` hard rule 8 now states the accurate 3-type scope (list/distribution/trend; types outside these → TOOLSET GAP). **Lesson:** verify a *capability* claim against the loader/renderer, not a stakeholder's assumption, before codifying as a hard rule. The orphaned design guide (REACH-22) documented the truth all along. |
 | **Dashboards:** deprecate Object Picker (`ResourceList`) in favor of self-provider `View`; recommend Heat Map + Health Chart. | **DEFERRED — design consideration.** SME wants to be thoughtful (self-provider View is more flexible long-term but not a blanket deprecation yet). Do NOT codify a deprecation. Decide deliberately, then update `dashboard-author` defaults. → TODO. |
 
@@ -17,13 +17,13 @@ the disposition/tracking backbone for the internal review it seeds.
 
 | Feedback | Disposition |
 |---|---|
-| `view_dashboard_design_guide.md` is index-listed in `context/README.md` but NOT reachable from the `view-author → guide_content_authoring.md` chain (orphaned from its fire point). | Seeded into the **curator** audit (2026-06-29) as the lead "reachability" finding; generalize to all agents. Fix per the curator report. |
+| `view_dashboard_design_guide.md` is index-listed in `knowledge/context/README.md` but NOT reachable from the `view-author → guide_content_authoring.md` chain (orphaned from its fire point). | Seeded into the **curator** audit (2026-06-29) as the lead "reachability" finding; generalize to all agents. Fix per the curator report. |
 | Wants connected files (agent ↔ skill ↔ guide) to be clickable links. | Tied to the **doc-site** TODO (§4); GitHub markdown already renders relative links — partial win possible by adding explicit links in prompts/guides. |
 
 ## 3. Onboarding / credibility questions → answers (to document)
 
 - **"Define *the framework* (add a link)."** → README polish TODO.
-- **"The YAML is validated against the live wire format — what is the wire format itself validated against?"** (the deep one). **Answer:** our YAML is validated against the renderer's wire-format *model*; that model's ground truth bottoms out in three layers — (a) reference export specimens under `reference/references/`, (b) the cleanroom spec (`context/cleanroom-spec/`, reverse-engineered from the SDK + live Ops), and ultimately (c) **does it install and render on a live VCF Ops instance** (the QA / install-verify loop). Not circular — it terminates in empirical install verification. → document in an onboarding/architecture note.
+- **"The YAML is validated against the live wire format — what is the wire format itself validated against?"** (the deep one). **Answer:** our YAML is validated against the renderer's wire-format *model*; that model's ground truth bottoms out in three layers — (a) reference export specimens under `reference/references/`, (b) the cleanroom spec (`knowledge/context/cleanroom-spec/`, reverse-engineered from the SDK + live Ops), and ultimately (c) **does it install and render on a live VCF Ops instance** (the QA / install-verify loop). Not circular — it terminates in empirical install verification. → document in an onboarding/architecture note.
 - **"How does the SM agent know the DSL — told, or deductive?"** **Answer:** the `.claude/agents/<agent>.md` prompt + the matching skill (e.g. `vcfops-supermetric-dsl`) + `context/` guides, loaded at delegation time. The model's general capability helps; the *domain correctness* is curated in the repo. → make explicit in onboarding.
 
 ## 4. Strategic initiatives (parked / scoping)

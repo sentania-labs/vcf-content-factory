@@ -142,6 +142,6 @@ URL path, not in the body.
 ## Reference files
 
 - `designs/managementpacks/dell-poweredge.md` — original design intent
-- `context/tier_decision_framework.md` — trigger table row 9 (custom transforms
+- `knowledge/context/tier_decision_framework.md` — trigger table row 9 (custom transforms
   / regex extraction) and the URL-hierarchy trigger
 - `context/api-maps/dell-poweredge-redfish.md` — full API surface

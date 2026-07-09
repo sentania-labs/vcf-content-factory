@@ -7,8 +7,8 @@
 <name>`, no brackets; distinct from content's bracketed `[VCF Content
 Factory]` form.)
 
-**Supersedes.** `designs/unifi-mp-v1.md` (2026-04-18). v1 was written
-*before* `context/api-maps/unifi-network-api.md` landed and *before* the
+**Supersedes.** `knowledge/designs/unifi-mp-v1.md` (2026-04-18). v1 was written
+*before* `knowledge/context/api-maps/unifi-network-api.md` landed and *before* the
 2026-04-29 substrate gains (`is_singleton`, explicit `chains_from`/`bind`
 grammar, three-phase MPB validation model, URL-path-identity recognition
 rule). v1's object model, grammar, and framework-vs-target review are
@@ -71,7 +71,7 @@ pre-design) should be small; large divergences are substrate gaps.
   - **Network App version verified (round-2 OQ #8 closed).**
     Controller is now on 10.3.55 (was 10.2.105 on 2026-04-18 —
     upgrade between dates). 2026-04-30 spot-check
-    (`context/api-maps/unifi-network-api.md` §"Version verification")
+    (`knowledge/context/api-maps/unifi-network-api.md` §"Version verification")
     confirms zero drift in v2's metric paths. Two minor field-shape
     notes:
     - `port_table[].mac` is NOT on classic switch surface and never
@@ -112,7 +112,7 @@ pre-design) should be small; large divergences are substrate gaps.
   twelve-axis framework-vs-UniFi review is superseded by the smaller §
   framework-vs-UniFi review here.
 - **2026-04-30 (v2 auth-path pass)** — incorporated
-  `context/api-maps/unifi-integration-api.md` evidence (28 endpoints
+  `knowledge/context/api-maps/unifi-integration-api.md` evidence (28 endpoints
   probed authenticated against the live UDM Pro). Decision: **stay on
   classic `cookie_session`. Do NOT pivot to Integration API.** Coverage
   audit shows Integration v1 covers ~23% of v2's ~132 metric/property
@@ -133,7 +133,7 @@ pre-design) should be small; large divergences are substrate gaps.
   (10.2.105 vs 10.3.55) requiring re-confirmation before authoring
   metric keys.
 - **2026-04-29 (v2, this doc)** — re-derived from
-  `context/api-maps/unifi-network-api.md` against post-substrate grammar.
+  `knowledge/context/api-maps/unifi-network-api.md` against post-substrate grammar.
   Concrete deltas from v1:
   - **No `is_world` kind.** v2 follows Synology v2 — adapter instance is
     the implicit topology root; `is_singleton: true` carries
@@ -381,7 +381,7 @@ it is not the v1 metric-collection path under any circumstance.
 
 **Why not Integration v1:** Integration is a clean, officially-supported,
 inventory-shaped API — but inventory only. Per the 2026-04-30 audit
-(`context/api-maps/unifi-integration-api.md` §"Coverage comparison vs
+(`knowledge/context/api-maps/unifi-integration-api.md` §"Coverage comparison vs
 classic"), Integration v1 covers ~23% of v2's planned metric set,
 overwhelmingly properties / inventory. **0 throughput, 0 utilization,
 0 PoE wattage, 0 system load, 0 health-subsystem aggregates, 0
@@ -469,7 +469,7 @@ At the v2 design-review gate, the orchestrator asked whether v2 should
 pivot from classic `cookie_session` (Gap B blocking) to UniFi's
 Integration API (`X-API-Key` bearer — sidesteps Gap B entirely). The
 Integration v1 surface was probed authenticated against the live UDM
-Pro; results live in `context/api-maps/unifi-integration-api.md`.
+Pro; results live in `knowledge/context/api-maps/unifi-integration-api.md`.
 
 ### Decision
 
@@ -477,7 +477,7 @@ Pro; results live in `context/api-maps/unifi-integration-api.md`.
 
 ### Evidence
 
-From `context/api-maps/unifi-integration-api.md` §"Coverage comparison
+From `knowledge/context/api-maps/unifi-integration-api.md` §"Coverage comparison
 vs classic":
 
 | Object | v2 planned | Integration covered | % | Headline gap |
@@ -579,7 +579,7 @@ before authoring. See §"Open questions for Scott" #8.
 ## Metrics by Object Type
 
 Every metric below is grounded in a specific endpoint and field path
-from `context/api-maps/unifi-network-api.md`. Field-name corrections from
+from `knowledge/context/api-maps/unifi-network-api.md`. Field-name corrections from
 v1 (api map drift findings) are applied. Round-3 topology pivot has
 re-bucketed metrics: hardware-specific fields that were previously on
 Controller (CPU, mem, system load, hardware uptime, hardware identity)
@@ -1290,7 +1290,7 @@ exercises an unrelated substrate corner.
 7. **Integration API verified, role scoped to v3 (no longer a v2
    risk).** As of 2026-04-30 Integration v1 has been probed
    authenticated against the live UDM Pro
-   (`context/api-maps/unifi-integration-api.md`). It is **not**
+   (`knowledge/context/api-maps/unifi-integration-api.md`). It is **not**
    suitable as the v1 metric-collection path (~23% coverage; no
    throughput/utilization/health metrics; entire Gateway WAN block
    absent). It IS the right surface for v3 supplements: identity
@@ -1359,7 +1359,7 @@ Required tooling before mp-author can produce shippable YAML:
 | Loader/renderer: single request feeding multiple list objects (Question E) | tooling | Verification, not necessarily a gap | Wire format almost certainly supports; renderer path needs check. |
 | Loader/renderer: singleton metricSet consuming first row of a list response (Question C) | tooling | Degradable | Drop site_meta metrics if not supported. |
 | Loader/renderer: login.body Content-Type (Gap A) | tooling | No | Likely runtime-injected; flag for parity. |
-| api-cartographer: Integration API response shapes | api-cartographer | **Done (2026-04-30)** — see `context/api-maps/unifi-integration-api.md`. Result: Integration v1 is v3 supplement only, not a v2 alternative. | — |
+| api-cartographer: Integration API response shapes | api-cartographer | **Done (2026-04-30)** — see `knowledge/context/api-maps/unifi-integration-api.md`. Result: Integration v1 is v3 supplement only, not a v2 alternative. | — |
 | api-cartographer: `rest/event` time-window param shape | api-cartographer | No (events deferred to v1.1) | Required before v1.1 events authoring. |
 | MPB UI .pak install verification | Scott (manual) | Yes | Same as Synology — devel-lab MPB UI install path. |
 
@@ -1657,7 +1657,7 @@ Reading order before mp-author starts:
 2. `context/mpb_relationships.md` — relationship pattern reference
 3. `context/mp_chain_authoring.md` — chain grammar (used here only for
    completeness; v2 has no chains)
-4. `context/api-maps/unifi-network-api.md` — every metric source path
+4. `knowledge/context/api-maps/unifi-network-api.md` — every metric source path
    maps back to a specific endpoint here; cross-check before authoring
 5. `context/mpb_object_binding_wire_format.md` §10 — `objectBinding`
    rules. v2 has no chained-secondary metricSets, so the §10 emit shape

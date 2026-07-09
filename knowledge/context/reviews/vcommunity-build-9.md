@@ -3,8 +3,8 @@
 - **Adapter:** `content/sdk-adapters/vcommunity` (pre-install/pre-tag static gate; HEAD is build 7 `bad8ad4`, working tree carries builds 8 + 9, uncommitted)
 - **Build reviewed:** 9 (`dist/vcfcf_sdk_vcommunity.1.0.0.9.pak`, reproduced locally)
 - **Reviewer:** `sdk-adapter-reviewer`
-- **Scope:** the build 8→9 delta only — all behavior-neutral guest-ops decision diagnostics. Build 8 was reviewed APPROVE (`context/reviews/vcommunity-build-8.md`); that diff's clearances stand. Four source files changed vs build 8: `GuestOpsClient.java` (new `readyReason()`), `VCommunityVSphereClient.java` (new `vmGuestId()`), `VmCollector.java` (`Result` diagnostics + tally + bounded skip summary), `VCommunityAdapter.java:411-413` (three `Summary|*` props), plus `adapter.yaml` 8→9 and the `1.0.0.9` CHANGELOG entry (docs README/inventory-tree also touched — out of read-path scope, no behavior).
-- **Ground truth:** `ready()` predicate `GuestOpsClient.java:91-94`; gate predicate `VmCollector.java:263-264`; recon `context/investigations/recon_log.md` (2026-06-22).
+- **Scope:** the build 8→9 delta only — all behavior-neutral guest-ops decision diagnostics. Build 8 was reviewed APPROVE (`knowledge/context/reviews/vcommunity-build-8.md`); that diff's clearances stand. Four source files changed vs build 8: `GuestOpsClient.java` (new `readyReason()`), `VCommunityVSphereClient.java` (new `vmGuestId()`), `VmCollector.java` (`Result` diagnostics + tally + bounded skip summary), `VCommunityAdapter.java:411-413` (three `Summary|*` props), plus `adapter.yaml` 8→9 and the `1.0.0.9` CHANGELOG entry (docs README/inventory-tree also touched — out of read-path scope, no behavior).
+- **Ground truth:** `ready()` predicate `GuestOpsClient.java:91-94`; gate predicate `VmCollector.java:263-264`; recon `knowledge/context/investigations/recon_log.md` (2026-06-22).
 - **Verdict:** **APPROVE** (zero BLOCKING)
 - **Findings:** 0 BLOCKING / 0 WARNING / 2 NIT
 
@@ -19,7 +19,7 @@
 
 Build metadata correct: `adapter.yaml build_number: 9`, `version: 1.0.0`; CHANGELOG `1.0.0.9 (2026-06-22)` present, dated today, accurate. Minimal diff — only the in-scope diagnostic files plus docs; no drive-by refactor of any collection path.
 
-## Registry check (context/defects.md)
+## Registry check (knowledge/context/defects.md)
 
 - **No open defect names `vcommunity` in `Affects:`.** DEF-001 (synology, open), DEF-002 (unifi, open), DEF-003 (synology, closed) — none affect this pak. `defect-gate --pak vcommunity` independently confirms `no open blocking defects affecting vcommunity`. Nothing to re-assert.
 - **Build-8 owed-proof note (not a registry defect).** The build-8 review's single WARNING was an *unproven causal claim* — whether the zero-collection is the narrow-read gate (build-8 target) or the `guestOps.ready()` leg (recon's prime suspect). It was never graduated to a defect; it is owed live proof. **Build 9 is the instrument that pays that debt:** `Summary|guestops_ready` now reads the `ready()` outcome on the anchor (`vCommunityWorld`), which the Suite API can read even though the appliance adapter log is 404. One install + recon now reads which leg blocks. Build 9 does not itself resolve the claim — a devel collect still does — but it makes it resolvable without appliance log access, which the build-8 WARNING explicitly called the missing ground-truth window.
@@ -30,7 +30,7 @@ Build metadata correct: `adapter.yaml build_number: 9`, `version: 1.0.0`; CHANGE
 The whole build is diagnostics. The binding question is whether collection is genuinely unchanged and whether `readyReason()` can report a different answer than the real gate. Both verified.
 
 ### `readyReason()` cannot diverge from `ready()` — VERIFIED byte-for-byte
-`ready()` (`GuestOpsClient.java:91-94`): `guestFileManager != null && guestProcessManager != null && winUser != null && !winUser.isEmpty()`. `readyReason()` (`:104-108`) tests the **same three predicates in the same order**: `guestFileManager == null` → `guestProcessManager == null` → `winUser == null || winUser.isEmpty()` → else `"true"`. Each `false (...)` branch is the exact negation of the corresponding `ready()` conjunct, evaluated in `ready()`'s short-circuit order, so the first reported failing leg is exactly the leg that would have made `ready()` return false. `readyReason()=="true"` iff `ready()==true`. No fourth check, no reordered check, no loosened literal. A diagnostic that lied about the gate would be worse than none; this one cannot. (skill § *Unreadable is NOT compliant* — the diagnostic faithfully mirrors the decision; `rules/no-fabricated-metrics.md` — it reports the real predicate, not a fabricated proxy.)
+`ready()` (`GuestOpsClient.java:91-94`): `guestFileManager != null && guestProcessManager != null && winUser != null && !winUser.isEmpty()`. `readyReason()` (`:104-108`) tests the **same three predicates in the same order**: `guestFileManager == null` → `guestProcessManager == null` → `winUser == null || winUser.isEmpty()` → else `"true"`. Each `false (...)` branch is the exact negation of the corresponding `ready()` conjunct, evaluated in `ready()`'s short-circuit order, so the first reported failing leg is exactly the leg that would have made `ready()` return false. `readyReason()=="true"` iff `ready()==true`. No fourth check, no reordered check, no loosened literal. A diagnostic that lied about the gate would be worse than none; this one cannot. (skill § *Unreadable is NOT compliant* — the diagnostic faithfully mirrors the decision; `knowledge/rules/no-fabricated-metrics.md` — it reports the real predicate, not a fabricated proxy.)
 
 ### `guestopsReady` precedence in `VmCollector` mirrors `guestEnabled` — VERIFIED
 `VmCollector.java:118-126` assigns `guestopsReady` in exactly the order `guestEnabled` (`:128-130`) short-circuits: DISABLED → no-credential → `guestOps == null` → else `guestOps.readyReason()`. So the anchor string distinguishes *monitoring off* / *no credential* / *client unresolved* / *ready() precondition failed* — the four legs the recon needs to disambiguate — and never claims `ready()` ran when `guestEnabled` would have short-circuited before it. Faithful to the existing decision path.
@@ -55,7 +55,7 @@ None of the three `Summary|*` values nor the updated log lines carry credential 
 - `Summary|guestops_vms`: integer counts only.
 - `Summary|guestops_skips`: `vmName`, `toolsStatus`, `guestFamily`, `guestId` — all confirmed non-secret per the brief; `guestId` is the VM's OS identifier (e.g. `windows2025_64Guest`), not credential material.
 - The updated `log.info` summary line (`:162-168`) and the new skip WARN (`:274-277`) carry VM name + gate enum values + `guestopsReady` only.
-- `grep` of `GuestOpsClient.java` + `VmCollector.java` for `winPass|winPassword|password|getPassword|token|secret` returns only the constructor field and doc comments — **no secret value flows into any prop or log line**. `winPassword` is never read by any build-9 code. (RULE-008 / `rules/no-secrets-on-disk.md` — CLEAN.)
+- `grep` of `GuestOpsClient.java` + `VmCollector.java` for `winPass|winPassword|password|getPassword|token|secret` returns only the constructor field and doc comments — **no secret value flows into any prop or log line**. `winPassword` is never read by any build-9 code. (RULE-008 / `knowledge/rules/no-secrets-on-disk.md` — CLEAN.)
 
 ## Failure-mode hunt — cleared (build-9 surface only)
 

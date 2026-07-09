@@ -60,7 +60,7 @@ in wait-event groups).
 3. **No Oracle reference dashboard exists** in any allowlisted
    reference repo. Layout pattern can borrow from the MSSQL
    brockpeterson reference; metric keys must come exclusively from
-   `context/adapter_describe_cache/ORACLE/`.
+   `knowledge/context/adapter_describe_cache/ORACLE/`.
 
 ## Panel-by-panel spec
 
@@ -164,4 +164,4 @@ All scoped to the selected Oracle instance.
   a derived value (option 3 under panel 3a), return TOOLSET GAP — do
   not invent silently.
 - **Validation gate:** every metric key in the final YAML must exist in
-  `context/adapter_describe_cache/ORACLE/`. RULE-002 is non-negotiable.
+  `knowledge/context/adapter_describe_cache/ORACLE/`. RULE-002 is non-negotiable.

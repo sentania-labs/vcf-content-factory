@@ -21,7 +21,7 @@
 
 Build metadata correct: `adapter.yaml build_number: 6`, `version: 1.0.0`, CHANGELOG `1.0.0.6 (2026-06-17)` entry present and accurate.
 
-## Registry check (context/defects.md)
+## Registry check (knowledge/context/defects.md)
 
 - **No open defect names `vcommunity` in `Affects:`.** DEF-001 (synology), DEF-002 (unifi, open), DEF-003 (synology, closed) — none affect this pak. `defect-gate --pak vcommunity` independently confirms: "no open blocking defects affecting vcommunity." Nothing to re-assert.
 
@@ -39,7 +39,7 @@ describe.xml declares one `CredentialKind key="vsphere_user"` with fields `user`
 - **No dangling old keys.** Grep across all `.java`/`.xml`/`.properties`/`.yaml` for `vcenter_host` / `windows_monitoring` / `windows_guest_credentials` / `vcenter_credentials` returns zero hits in source.
 
 ### A.4 Crash-the-cycle / describe path — SAFE
-The no-arg constructor supplies the static `ADAPTER_KIND="vcfcf_vcommunity"` (`VCommunityAdapter.java:66-68`); the describe path uses `getAdapterDescribeFile(ADAPTER_KIND, "describe.xml")` (`:167`), never `getAdapterKind()` or any injected-state accessor — compliant with `lessons/controller-describe-bare-instantiation.md`. The credential/identifier reads (`buildConfig`) are in the collect path, not describe. This rework did not touch the describe path.
+The no-arg constructor supplies the static `ADAPTER_KIND="vcfcf_vcommunity"` (`VCommunityAdapter.java:66-68`); the describe path uses `getAdapterDescribeFile(ADAPTER_KIND, "describe.xml")` (`:167`), never `getAdapterKind()` or any injected-state accessor — compliant with `knowledge/lessons/controller-describe-bare-instantiation.md`. The credential/identifier reads (`buildConfig`) are in the collect path, not describe. This rework did not touch the describe path.
 
 ### Secrets-in-logs (RULE-008 / no-secrets-on-disk) — CLEAN after rework
 The new config-summary log line (`VCommunityAdapter.java:118-122`) logs `winCred=<boolean>` (presence only, via `hasWindowsCredential()`) — never a credential value. No `log*` / exception / URL construction line touches `password`/`winPass`/`winPassword`. The credential rework introduced no leak.

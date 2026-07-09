@@ -24,7 +24,7 @@
   description (from the release manifest), **link to the pak repo page**
   (primary — GitHub renders the pak's living README there) and **link
   to `releases/latest`** (one-click download of the current pak).
-  Repo URLs come from the `context/managed_paks.md` registry.
+  Repo URLs come from the `knowledge/context/managed_paks.md` registry.
 - Release manifests for SDK MPs stay (they carry description/notes for
   the README); the pipeline routes them as pointers instead of building
   zips. Existing hosted SDK zips move to `retired/` (repo convention)

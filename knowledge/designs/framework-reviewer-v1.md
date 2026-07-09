@@ -48,7 +48,7 @@ transfers; the four deltas Scott decided:
 - **Trigger — prose discipline + non-blocking CI reminder.** CLAUDE.md
   mandates spawning the reviewer after any `src/vcfops_*/` edit, before the
   PR. A CI step **warns** (does not fail) when a PR's diff touches
-  `src/vcfops_*/` but adds no `context/reviews/framework/` doc — a nudge, not
+  `src/vcfops_*/` but adds no `knowledge/context/reviews/framework/` doc — a nudge, not
   a rubber-stampable hard gate.
 - **Scope — BLANKET.** *Every* `src/vcfops_*/` diff gets a review, no
   risk-weighting exceptions. (Scott chose this over the recommended
@@ -65,7 +65,7 @@ transfers; the four deltas Scott decided:
 Model: **opus** (reviewer ≥ author capability; `tooling` is Sonnet —
 the review's own data called tooling-at-Sonnet the one borderline model
 call, so the gate above it must be the stronger model). Writes only
-`context/reviews/framework/`. Never edits `src/vcfops_*/`, never installs.
+`knowledge/context/reviews/framework/`. Never edits `src/vcfops_*/`, never installs.
 
 ## Failure-mode taxonomy (the review dimensions)
 
@@ -80,7 +80,7 @@ Anchored on the two real escapes, generalized:
    ground-truth (reference packs use plain `displayName`, no
    `localizationKey`). → BLOCKING.
 3. **Wire-format conformance.** Emitted JSON/XML matches the documented
-   wire formats (`context/wire-formats/`, `context/mpb/`) and known-good
+   wire formats (`knowledge/context/wire-formats/`, `knowledge/context/mpb/`) and known-good
    reference values; no silent schema drift.
 4. **Loader / validator correctness.** Cross-reference resolution
    (`sm_<uuid>`, view UUIDs), UUID stability (RULE-007), prefix
@@ -116,10 +116,10 @@ Anchored on the two real escapes, generalized:
   step 9 and the "After tooling changes" workflow note.
 - **CI reminder:** non-blocking `scripts/check_framework_review.sh`
   invoked from a CI step on `pull_request` — emits a `::warning::` when
-  the PR diff touches `src/vcfops_*/` with no `context/reviews/framework/`
+  the PR diff touches `src/vcfops_*/` with no `knowledge/context/reviews/framework/`
   doc in the same diff.
-- **Output dir:** `context/reviews/framework/` (SDK reviews stay in
-  `context/reviews/`; framework reviews get their own subdir).
+- **Output dir:** `knowledge/context/reviews/framework/` (SDK reviews stay in
+  `knowledge/context/reviews/`; framework reviews get their own subdir).
 
 ## Acceptance (negative proof, per the review)
 

@@ -2,9 +2,9 @@
 
 All three pak upgrades installed on devel (9.0.2) and ACCEPTED the same
 day; `v*` tags cut afterward and all three CI release builds green
-(buildkit v1.0.2). Reviews: `context/reviews/{compliance-build-50,
+(buildkit v1.0.2). Reviews: `knowledge/context/reviews/{compliance-build-50,
 unifi-build-5,synology-build-17}.md`. Root-cause context:
-`context/investigations/unifi_401_and_relationship_persistence_2026_06_10.md`.
+`knowledge/context/investigations/unifi_401_and_relationship_persistence_2026_06_10.md`.
 
 ## Live proofs (what this round settled empirically)
 

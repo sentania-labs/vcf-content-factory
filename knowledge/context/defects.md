@@ -3,8 +3,8 @@
 The declared registry of **known defects that must converge**. A review
 verdict records findings; this file is where a finding that survives
 acceptance stops being prose and becomes something a release mechanically
-refuses over. Design of record: `designs/defect-registry-v1.md`. Gate
-rule: `rules/release-gate-defects.md` (RULE-012).
+refuses over. Design of record: `knowledge/designs/defect-registry-v1.md`. Gate
+rule: `knowledge/rules/release-gate-defects.md` (RULE-012).
 
 ## How it works
 
@@ -28,14 +28,14 @@ rule: `rules/release-gate-defects.md` (RULE-012).
 One `### DEF-NNN` section per entry. Ids are sequential and never
 reused. Field lines are `- **Field:** value` (parsed by
 `vcfops_packaging` — keep the shape exact, same convention as
-`context/managed_paks.md`).
+`knowledge/context/managed_paks.md`).
 
 | Field | Values / meaning |
 |---|---|
 | `Title` | One line; refusal messages quote it. |
 | `Severity` | `blocking` (gates releases of affected artifacts) or `tracked` (must converge, re-asserted every review, but ships). |
 | `Status` | `open` or `closed`. **No `waived`.** A conscious decision to ship is a severity downgrade with a dated note — the diff is the audit trail. |
-| `Affects` | Exactly one artifact scope per entry: a managed pak name from `context/managed_paks.md` (e.g. `synology`), a content item as `<type>/<slug>` (e.g. `dashboard/demand_driven_capacity_v2`), or `factory:<area>` for framework code. One issue on N artifacts = N entries, cross-linked via `Related:`. |
+| `Affects` | Exactly one artifact scope per entry: a managed pak name from `knowledge/context/managed_paks.md` (e.g. `synology`), a content item as `<type>/<slug>` (e.g. `dashboard/demand_driven_capacity_v2`), or `factory:<area>` for framework code. One issue on N artifacts = N entries, cross-linked via `Related:`. |
 | `First-seen` | Build (or commit) + date where the defect first appeared. |
 | `Source` | The review / lesson / investigation that found it, by path (+ finding label). |
 | `Summary` | 2–4 lines: what it is, why it matters, smallest correct fix. Enough for a reviewer to re-assert without re-reading the source. |
@@ -51,7 +51,7 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **Status:** closed
 - **Affects:** synology
 - **First-seen:** build 14 (2026-06-10)
-- **Source:** `context/reviews/synology-build-14.md` (WARNING-2)
+- **Source:** `knowledge/context/reviews/synology-build-14.md` (WARNING-2)
 - **Closing-evidence:** synology build 19 (`1.0.0.19`), 2026-06-26.
   `SynologyApiClient.callRaw` now wraps `http.get(path,…)` in try/catch and
   rethrows a **standalone** `IOException` built from the `endpoint` label +
@@ -62,15 +62,15 @@ reused. Field lines are `- **Field:** value` (parsed by
   — the plaintext-password carrier) was the last gap, now closed. Full-adapter
   grep confirms no throw / log / Test-connection path emits a raw path or
   secret. Statically provable (no live trigger owed). Certified by
-  `sdk-adapter-reviewer`: `context/reviews/synology-build-19.md` (APPROVE,
-  0 BLOCKING). Rule: `rules/no-secrets-on-disk.md`.
+  `sdk-adapter-reviewer`: `knowledge/context/reviews/synology-build-19.md` (APPROVE,
+  0 BLOCKING). Rule: `knowledge/rules/no-secrets-on-disk.md`.
 - **Summary:** `SynologyApiClient.callRaw` throws `"HTTP <code> from <path>"`
   where the path carries `_sid=` on every call and `account=` /
   `passwd=<URL-encoded plaintext password>` on the login call; the
   framework logs exception messages to the on-disk adapter log and
   surfaces them on Test-connection, and v14's `componentLogger` swap
   newly lands the `_sid`-bearing logout WARN on disk
-  (`rules/no-secrets-on-disk.md`). Smallest correct fix: redact
+  (`knowledge/rules/no-secrets-on-disk.md`). Smallest correct fix: redact
   `_sid` / `account` / `passwd` from every thrown message — build the
   message from `api`/`method`, never the full path. Hand-back issued at
   build 14; not yet executed.
@@ -82,7 +82,7 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **Status:** closed
 - **Affects:** unifi
 - **First-seen:** build 3 (2026-06-10)
-- **Source:** `context/reviews/unifi-build-3.md` (WARNING-1)
+- **Source:** `knowledge/context/reviews/unifi-build-3.md` (WARNING-1)
 - **Summary:** `emitLldpHostCrossLink` emits full-set
   `setRelationships(host, {switchPort})` onto a VMWARE-owned
   HostSystem — a semantic change from v1's additive `addParent`. The
@@ -98,20 +98,20 @@ reused. Field lines are `- **Field:** value` (parsed by
   `3bb262a`), 2026-07-06. First build whose stitch ever matched a host
   (builds ≤8 matched zero: the controller-side per-port `lldp_table`
   does not exist on Network App 10.2.105 — see
-  `context/investigations/unifi-lldp-switchport-esxi-2026-07-05.md`;
+  `knowledge/context/investigations/unifi-lldp-switchport-esxi-2026-07-05.md`;
   build 9 inverted the join to vCenter-side
   `net:vmnic*|discoveryProtocol|lldp` properties per
-  `designs/managementpacks/unifi-switchport-host-stitch-v2.md`). Post-
+  `knowledge/designs/managementpacks/unifi-switchport-host-stitch-v2.md`). Post-
   install collect: all 8 VMWARE HostSystems gained UniFiSwitchPort
   children (15 vmnic edges) via additive `parentForeign` →
   `addRelationships`, and every host retained its pre-existing VMWARE
   children — Datastore/StoragePool counts exact vs. baseline; mgmt-host
   VM children total 30 before and after (15+4+2+9 → 12+4+4+10, DRS
   drift between hosts, not loss). Write verb had already moved from
-  full-set to additive in build 8 (`context/reviews/unifi-build-8.md`);
+  full-set to additive in build 8 (`knowledge/context/reviews/unifi-build-8.md`);
   build 9 supplied the live exercise. Residual: 9.1 unverified (same as
   DEF-003).
-- **Related:** DEF-003, `lessons/setrelationships-foreign-adapter-scoped.md`
+- **Related:** DEF-003, `knowledge/lessons/setrelationships-foreign-adapter-scoped.md`
 
 ### DEF-003
 
@@ -120,7 +120,7 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **Status:** closed
 - **Affects:** synology
 - **First-seen:** build 16 (2026-06-10)
-- **Source:** `context/reviews/synology-build-16.md` (WARNING-1)
+- **Source:** `knowledge/context/reviews/synology-build-16.md` (WARNING-1)
 - **Summary:** Same idiom as DEF-002: full-set `setRelationships` emitted
   by the synology adapter onto a foreign VMWARE-owned Datastore, with
   the same static-unprovable clobber risk against the owning adapter's
@@ -129,7 +129,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   2026-06-10: wld01 iSCSI Datastore retained its 22 VMWARE children and
   gained the LUN child — the platform scopes `setRelationships`
   per-reporting-adapter. Codified in
-  `lessons/setrelationships-foreign-adapter-scoped.md`. Residual: 9.1
+  `knowledge/lessons/setrelationships-foreign-adapter-scoped.md`. Residual: 9.1
   unverified (re-open or re-prove at the first 9.1 target).
 - **Related:** DEF-002
 
@@ -140,7 +140,7 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **Status:** open
 - **Affects:** vcommunity-os
 - **First-seen:** build 11 / split fork (2026-06-23)
-- **Source:** `context/investigations/vcommunity-windows-services-empty-2026-06-23.md`
+- **Source:** `knowledge/context/investigations/vcommunity-windows-services-empty-2026-06-23.md`
 - **Summary:** The guest-ops half of the vCommunity split — services,
   in-guest CSV OS-info, and event logs collected via vCenter
   GuestOperationsManager — returns empty on the hardened devel DCs, so
@@ -153,7 +153,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   collection is non-functional. Closes when a devel collect against a
   representative Windows guest returns non-empty service/event/OS-info
   data and the root cause is codified.
-- **Related:** `designs/managementpacks/vcommunity-three-adapter-split.md`,
+- **Related:** `knowledge/designs/managementpacks/vcommunity-three-adapter-split.md`,
   vcommunity-os pak README
 
 ### DEF-005
@@ -169,7 +169,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   principal=automationAdmin`, 10 datastores loaded, 5 foreign
   Datastore edges live via API, no clobber; pre-install baseline on
   the same box failed every cycle with `certificate_unknown(46)`.
-  Reviews: `context/reviews/framework/bc-mirror-transport-v1.md`/`-v2.md`.
+  Reviews: `knowledge/context/reviews/framework/bc-mirror-transport-v1.md`/`-v2.md`.
   Residual (FIPS cluster-truststore parity) documented as TODO in
   `VcfCfAdapter.openPlatformConnection()`. The remaining CP-resident
   gap is a distinct defect → DEF-006.
@@ -177,7 +177,7 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **First-seen:** build 23 devel install (2026-07-01) — latent in every
   build ≥ 20 (first live install since the transport rework; builds
   20–22 were local-only)
-- **Source:** `context/investigations/synology-b23-devel-pkix-2026-07-01.md`
+- **Source:** `knowledge/context/investigations/synology-b23-devel-pkix-2026-07-01.md`
 - **Summary:** The TLS/TOFU transport rework (PRs #29/#30) routed the
   loopback Suite API call through the platform's strict
   `CustomTrustManager`, assuming the platform's non-disruptive
@@ -187,7 +187,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   cert-renewal URL set, so trust never persists and `loadDatastores`
   PKIX-fails forever. Build 19 worked only because it trusted the
   loopback connection outright. Vendor ground truth
-  (`context/api-surface/casa-injected-vs-raw-client.md` §3): the
+  (`knowledge/context/api-surface/casa-injected-vs-raw-client.md` §3): the
   aria-ops-core `SuiteAPIClient` used by every shipping Broadcom pak
   sets `verify("false")` + `ignoreHostName(true)` non-FIPS, cluster
   truststore under FIPS — none use the strict path. Fix: mirror the BC
@@ -196,9 +196,9 @@ reused. Field lines are `- **Field:** value` (parsed by
   vcommunity*) — verify per pak as each rebuilds. Closes when a devel
   collect under the fixed transport loads datastores and writes the
   stitch.
-- **Related:** `designs/suite-api-stitcher-tls-auth-cleanup-v1.md`
+- **Related:** `knowledge/designs/suite-api-stitcher-tls-auth-cleanup-v1.md`
   (premise contradicted by live evidence),
-  `lessons/suite-api-stitch-ssl-tofu-vs-java-http.md` (vindicated),
+  `knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md` (vindicated),
   DEF-006 (successor: CP-resident gap)
 
 ### DEF-006
@@ -220,9 +220,9 @@ reused. Field lines are `- **Field:** value` (parsed by
   `credential mechanism=ambient file=instance
   principal=816c72ef-84b2-4caf-848c-4b09a6517648` followed by
   `loaded 11 VMWARE Datastores`. Contract:
-  `context/api-surface/per-instance-suiteapi-credential-contract.md`;
+  `knowledge/context/api-surface/per-instance-suiteapi-credential-contract.md`;
   live mechanism discovery:
-  `context/investigations/oracle-stitch-autopsy-2026-07-02.md`;
+  `knowledge/context/investigations/oracle-stitch-autopsy-2026-07-02.md`;
   reviews: `context/reviews/framework/ambient-credential-v3-*.md`.
   **Residual (evidentiary, not functional):** the CP-side
   `file=instance` log line is unquoted — the new proxy refuses SSH;
@@ -253,13 +253,13 @@ reused. Field lines are `- **Field:** value` (parsed by
   investigation: (a) descriptor-declared traversal + reported
   `relationships|Datastore_parent` property (the mechanism Oracle
   provably uses from this same CP with zero API calls — see
-  `context/api-maps/tvs-declarative-stitching.md`; binding-value scan
+  `knowledge/context/api-maps/tvs-declarative-stitching.md`; binding-value scan
   in flight), (b) CaSA node-certificate door (cleanroom build-spec
   pending). Closes when a collect executed ON the CP results in the
   Synology→VMWARE Datastore edge existing, via either mechanism.
-- **Related:** DEF-005, `context/api-maps/tvs-declarative-stitching.md`,
-  `context/api-maps/tvs-cross-mp-stitching.md`,
-  `context/investigations/cp-auth-door-probe-2026-07-01.md`
+- **Related:** DEF-005, `knowledge/context/api-maps/tvs-declarative-stitching.md`,
+  `knowledge/context/api-maps/tvs-cross-mp-stitching.md`,
+  `knowledge/context/investigations/cp-auth-door-probe-2026-07-01.md`
 
 ### DEF-007
 
@@ -370,4 +370,4 @@ reused. Field lines are `- **Field:** value` (parsed by
   met and sustained. Remediation for recurrence: restart/reboot the
   analytics service/nodes; adapter-level bounces do not clear it.
 - **Related:** DEF-006 (CP ambient path, closed via synology),
-  `context/reviews/unifi-build-11.md`
+  `knowledge/context/reviews/unifi-build-11.md`

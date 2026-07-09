@@ -89,7 +89,7 @@ The kind key must match:
   `<adaptersHome>/<key>/conf/describe.xml`
 
 **Do NOT derive the key from `CommonConstants`** — those are display-name
-strings, not filesystem tokens. See `lessons/sdk-constants-are-display-names.md`.
+strings, not filesystem tokens. See `knowledge/lessons/sdk-constants-are-display-names.md`.
 
 ## Scope
 
@@ -106,7 +106,7 @@ never `getAdapterKind()`.
 ## Pattern name
 
 "Controller-side describe trap" — the second injected-state trap after
-`lessons/sdk-constants-are-display-names.md`. Both share the root cause:
+`knowledge/lessons/sdk-constants-are-display-names.md`. Both share the root cause:
 code that assumes platform injection has occurred when it hasn't.
 
 The describe-phase trap fires during **pak install** (controller instantiates

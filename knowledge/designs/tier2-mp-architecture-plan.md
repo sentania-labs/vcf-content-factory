@@ -108,7 +108,7 @@ vcf-content-factory/
 
 ## Tier Decision Framework
 
-Added to `mp-designer` agent and documented in `context/tier_decision_framework.md`:
+Added to `mp-designer` agent and documented in `knowledge/context/tier_decision_framework.md`:
 
 **Default: Tier 1** (MPB/YAML) unless any of these triggers are present:
 
@@ -246,12 +246,12 @@ Framework source lives at: `src/vcfops_managementpacks/adapter_framework/src/` (
 
 ### Phase 1: Foundation (framework + tooling skeleton)
 
-1. Ingest cleanroom bundle into repo (spec files → `context/cleanroom-spec/`)
+1. Ingest cleanroom bundle into repo (spec files → `knowledge/context/cleanroom-spec/`)
 2. Create `vcfcf-adapter-base.jar` — VcfCfAdapter base class, HTTP client, session auth, retry, metric pusher
 3. Pre-compile and commit to `adapter_runtime/`
 4. Build `sdk_builder.py` — javac-based compile + pak assembly
 5. Add `build-sdk` and `scaffold-sdk` CLI commands
-6. Write `context/tier2_architecture.md` and `context/tier_decision_framework.md`
+6. Write `knowledge/context/tier2_architecture.md` and `knowledge/context/tier_decision_framework.md`
 7. **Validation gate:** trivial "hello world" adapter that installs on devel and emits 1 resource
 
 ### Phase 2: Synology adapter
@@ -266,7 +266,7 @@ Framework source lives at: `src/vcfops_managementpacks/adapter_framework/src/` (
 
 1. Create `sdk-builder` agent prompt
 2. Update CLAUDE.md with Tier 2 workflow pattern and agent roster
-3. Update `context/known_limitations.md` with Tier 2 capabilities
+3. Update `knowledge/context/known_limitations.md` with Tier 2 capabilities
 4. pak-compare updates for SDK pak format
 5. Tier 1 → Tier 2 promotion documentation (mechanical steps)
 6. **Validation gate:** end-to-end "user asks for Synology MP" demo
@@ -303,17 +303,17 @@ Framework source lives at: `src/vcfops_managementpacks/adapter_framework/src/` (
 - `src/vcfops_managementpacks/adapter_runtime/vrops-adapters-sdk-2.2.jar` — Layer 1
 - `.claude/agents/sdk-author.md` — Tier 2 Java author agent
 - `.claude/agents/sdk-builder.md` — Tier 2 build agent
-- `context/tier2_architecture.md` — reference doc
-- `context/tier_decision_framework.md` — when Tier 1 vs Tier 2
-- `context/cleanroom-spec/` — ingested spec files from bundle
+- `knowledge/context/tier2_architecture.md` — reference doc
+- `knowledge/context/tier_decision_framework.md` — when Tier 1 vs Tier 2
+- `knowledge/context/cleanroom-spec/` — ingested spec files from bundle
 
 ### Modified files
 - `CLAUDE.md` — agent roster, workflow patterns, tier routing
 - `.claude/agents/mp-designer.md` — tier evaluation in interview
 - `src/vcfops_managementpacks/cli.py` — new commands
 - `src/vcfops_managementpacks/builder.py` — auto-detect routing
-- `context/known_limitations.md` — Tier 2 capabilities
-- `context/README.md` — index updates
+- `knowledge/context/known_limitations.md` — Tier 2 capabilities
+- `knowledge/context/README.md` — index updates
 
 ---
 

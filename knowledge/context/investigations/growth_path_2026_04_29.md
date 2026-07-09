@@ -62,7 +62,7 @@ non-MP side: validate → sync → check the dashboard manually.
 
 **An mp-designer that actually does the heavy lifting.** Today
 `mp-designer` is an aspirational agent definition. In practice, design
-artifacts are hand-authored (`designs/synology-mp-v1.md` etc.). A real
+artifacts are hand-authored (`knowledge/designs/synology-mp-v1.md` etc.). A real
 mp-designer would consume structured api-cartographer output, ask user
 the genuinely-ambiguous questions only (1–3 questions, not 30), and
 produce a design YAML directly.

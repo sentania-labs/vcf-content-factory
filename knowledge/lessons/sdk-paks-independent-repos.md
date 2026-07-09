@@ -4,7 +4,7 @@
 be built locally by the factory's own `vcfops_managementpacks` tooling, and
 have no independent versioning or release channel. They were moved out into
 per-pak repos (`sentania-labs/vcf-content-factory-sdk-<name>`, gitignored,
-cloned via the `context/managed_paks.md` registry) so each versions and
+cloned via the `knowledge/context/managed_paks.md` registry) so each versions and
 releases on its own cadence.
 
 ## The principle (heed it)

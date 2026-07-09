@@ -1,7 +1,7 @@
 # Framework review — 2026-04-18
 
 Reviewer: orchestrator (research pass, read-only).
-Scope: everything except `designs/synology-mp-v1.md` (mp-designer owns that
+Scope: everything except `knowledge/designs/synology-mp-v1.md` (mp-designer owns that
 artifact in parallel). Covers `vcfops_*/`, `.claude/agents/`,
 `.claude/commands/`, `.claude/skills/`, bundle manifest + `bundles/`,
 install scripts, `context/`, reference-source machinery, `vcfops_extractor`,
@@ -442,7 +442,7 @@ prevented by the UUID contract (axis 2.4).
 
 ### 2.11 Reference sources trust model
 
-Current choice: `context/reference_sources.md` is an allowlist. No
+Current choice: `knowledge/context/reference_sources.md` is an allowlist. No
 per-source trust tier (all sources treated equally), no drift detection,
 no automated verification that local clones match upstream. The
 bootstrap script (`scripts/bootstrap_references.sh`) clones and

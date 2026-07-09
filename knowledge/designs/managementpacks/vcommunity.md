@@ -23,8 +23,8 @@ Scope clarification turns (2026-06-10):
 - Upgrade pak (follow-up turn): **"could we reimplement this as a
   true upgrade pak? it does exist on prod"** → explored empirically;
   ruled out (see
-  `context/investigations/vcommunity_upgrade_path_experiment.md` and
-  `lessons/cross-runtime-pak-upgrade-split-brain.md`). User then
+  `knowledge/context/investigations/vcommunity_upgrade_path_experiment.md` and
+  `knowledge/lessons/cross-runtime-pak-upgrade-split-brain.md`). User then
   asked **"Is the upgrade option we are exploring to
   complicated/uneeded?"** — agreed to side-by-side + migration
   runbook.
@@ -93,7 +93,7 @@ Scope clarification turns (2026-06-10):
   pipeline (and harvesting lessons/toolset gaps) is an explicit goal
   of this build, co-equal with shipping the pak.
 - Repo: `sentania-labs/vcf-content-factory-sdk-vcommunity` from the
-  sdk-template; one line in `context/managed_paks.md`; official
+  sdk-template; one line in `knowledge/context/managed_paks.md`; official
   release is CI on a `v*` tag. Display name: prose prefix per
   convention. Attribution to Onur Yuzseven /
   `vmbro/VCF-Operations-vCommunity` in MP and content descriptions.

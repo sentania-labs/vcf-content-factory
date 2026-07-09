@@ -38,7 +38,7 @@ partner-channel jar no third party uses) from our paks.
   `com.vcfcf.adapter.*` — deliberately NOT mirroring the TVS API shape.
 - The orchestration (onCollect/onTest/onDiscover/onConfigure/stop) is
   implemented from the cleanroom behavioral contract:
-  `context/cleanroom-spec/spec/19-adapterbase-behavioral-contract.md`
+  `knowledge/context/cleanroom-spec/spec/19-adapterbase-behavioral-contract.md`
   (spec-driven, never from decompiled aria-ops-core — clean-room wall).
 - Certification requirements fold into the new orchestrator by design:
   - SSL only via `AdapterBase#getSocketFactory` (replaces
@@ -55,7 +55,7 @@ partner-channel jar no third party uses) from our paks.
   (sdk-adapter-author, serial), devel-test each, then ONE template-repo
   update carrying framework v2 + final pak/buildkit shape.
 - Pak bundling endgame depends on the C2 install test
-  (`context/investigations/c2_no_sdk_jar_install_test.md`): if C2 works,
+  (`knowledge/context/investigations/c2_no_sdk_jar_install_test.md`): if C2 works,
   paks ship zero Broadcom jars; either way `aria-ops-core` is gone.
   `vrops-adapters-sdk` remains compile-time-only and is never publicly
   redistributed outside a pak (survey: no precedent; partner-channel

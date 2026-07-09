@@ -5,9 +5,9 @@
 **Type**: Tier 2 SDK adapter enhancement (compliance)
 **Owner agent**: `sdk-adapter-author`
 **Parent designs**:
-- `designs/managementpacks/vcf-compliance-adapter.md`
-- `designs/managementpacks/compliance-vim-property-reader.md` (the read_recipe engine this builds on)
-**Recon of record**: `context/investigations/scg89-audit-coverage-recon.md`
+- `knowledge/designs/managementpacks/vcf-compliance-adapter.md`
+- `knowledge/designs/managementpacks/compliance-vim-property-reader.md` (the read_recipe engine this builds on)
+**Recon of record**: `knowledge/context/investigations/scg89-audit-coverage-recon.md`
 
 ---
 

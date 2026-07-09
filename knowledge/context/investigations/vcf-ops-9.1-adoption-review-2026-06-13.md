@@ -76,12 +76,12 @@ Where a claim cannot be confirmed from what was obtained, it is marked
 
 - **FIPS compliance is enabled by default and *cannot be disabled* on 9.1**
   (`PDF:31225`). The factory's Tier-2 SDK lessons already assume this
-  (`context/tier2_architecture.md:105`, `:414` — bouncycastle
+  (`knowledge/context/tier2_architecture.md:105`, `:414` — bouncycastle
   `approved_only=true`, the `AmbientCredential` FIPS-safe decrypt path). 9.0.x
   did **not** hard-force FIPS. Any adapter crypto/HTTP path that only works
   with non-approved providers is a 9.1 install failure. **This is already a
   prod-9.1 reality** — see the JAX-WS Provider failure
-  (`context/investigations/prod_91_jaxws_provider_failure.md`). Do not "adopt"
+  (`knowledge/context/investigations/prod_91_jaxws_provider_failure.md`). Do not "adopt"
   anything that assumes FIPS-off.
 - **Direct vCenter authentication removed in 9.1** (`PDF:31231`). vCenter user
   credentials can no longer authenticate to the Operations API, and the vCenter
@@ -276,7 +276,7 @@ directly — so the honest answer for most is **still UNVERIFIED on 9.1**, and
 the existing "open residual / 9.1 unverified" flags remain correct. Do **not**
 rewrite these lessons based on 9.1 docs; they require a live 9.1 collect.
 
-- **`lessons/setrelationships-foreign-adapter-scoped.md`** (per-reporting-
+- **`knowledge/lessons/setrelationships-foreign-adapter-scoped.md`** (per-reporting-
   adapter `setRelationships` scoping). 9.1 docs say nothing about
   `setRelationships` *runtime scoping*. The only relationships-API change in
   9.1 is C2 above (the read endpoint's optional `relationshipType`), which is
@@ -284,24 +284,24 @@ rewrite these lessons based on 9.1 docs; they require a live 9.1 collect.
   **Verdict: UNVERIFIED on 9.1 — lesson's open residual stands.** Keep the
   acceptance criterion: prove foreign-parent edge retention on the first 9.1
   stitch install. (The 9.0.2 proof is recorded in
-  `context/investigations/v2_round2_devel_acceptance_2026_06_10.md`; the mixed-
+  `knowledge/context/investigations/v2_round2_devel_acceptance_2026_06_10.md`; the mixed-
   fleet hazard is already captured in
-  `lessons/cross-runtime-pak-upgrade-split-brain.md`.)
+  `knowledge/lessons/cross-runtime-pak-upgrade-split-brain.md`.)
 
-- **`lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`** (Suite-API SSL
+- **`knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`** (Suite-API SSL
   trust-on-first-use vs Java HTTP). 9.1 docs do **not** describe any change to
   Suite-API SSL trust behavior. (The only "TOFU" references in the 9.1 PDF are
   NSX ARP/ND snooping — `PDF:223234` — entirely unrelated.) **Verdict:
   UNVERIFIED on 9.1.** *However*, the **FIPS-by-default-and-cannot-be-disabled**
   change (`PDF:31225`) is the relevant adjacent risk: the SSL/HTTP path on a
   9.1 collector runs under `approved_only` crypto, which is exactly the regime
-  `context/tier2_architecture.md` and `prod_91_jaxws_provider_failure.md`
+  `knowledge/context/tier2_architecture.md` and `prod_91_jaxws_provider_failure.md`
   already document as the prod-9.1 JAX-WS Provider failure. So the SSL-TOFU
   lesson's *mechanism* is unchanged-by-docs, but the *crypto environment it
   runs in* is now hard-FIPS on 9.1 — re-validate the stitch SSL path on a 9.1
   collector, not just 9.0.2.
 
-- **`context/api-surface/vcf_operations_api_surface.md`** (404s on
+- **`knowledge/context/api-surface/vcf_operations_api_surface.md`** (404s on
   `/internal/adapterkinds`, `/internal/credentials`, etc., on 9.0.2). 9.1 docs
   don't enumerate internal-endpoint presence. **UNVERIFIED on 9.1** — re-probe
   with ops-recon against a 9.1 instance before relying on either presence or

@@ -178,7 +178,7 @@ priority set). No pak in this set exposes a vROps credential field.
 
 ---
 
-## Relation to `lessons/setrelationships-foreign-adapter-scoped.md`
+## Relation to `knowledge/lessons/setrelationships-foreign-adapter-scoped.md`
 
 Our lesson holds that our own **full-set `setRelationships(foreignParent,
 {ownChildren})`** is per-reporting-adapter scoped (proven on 9.0.2, 9.1

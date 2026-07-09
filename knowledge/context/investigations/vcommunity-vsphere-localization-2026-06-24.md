@@ -347,7 +347,7 @@ adapter bundle against the integer-key schema can reject the *entire* bundle
 when it encounters unrecognized dotted keys — which would cause **every** nameKey
 for that AdapterKind (1, 5, 6, 8–16, …) to fall back to its raw key string,
 matching the observed total failure exactly. This is the same failure *class*
-documented in `lessons/pak-content-localization-bundles.md` ("the importer …
+documented in `knowledge/lessons/pak-content-localization-bundles.md` ("the importer …
 aborts the entire content tree when any single key is absent / mismatched"),
 applied to the adapter-config describe bundle rather than the content bundle.
 
@@ -468,7 +468,7 @@ shape of a cross-adapter describe-registry key collision, and it is the sole
 property that separates the failing pak from the known-good control group.
 
 This collision was an unanticipated side effect of two design decisions in
-`designs/managementpacks/vcommunity-three-adapter-split.md`: OPEN-C ("three
+`knowledge/designs/managementpacks/vcommunity-three-adapter-split.md`: OPEN-C ("three
 fresh AdapterKinds, do not reuse `vcfcf_vcommunity`") correctly made the
 **AdapterKinds** distinct, and OPEN-D ("keep the unified pak installed until
 parity") created the co-resident state — but neither renamed the inherited
@@ -536,12 +536,12 @@ touched, no pak/source modified, all extraction into the session scratchpad:
 - Verified installed-pak describe.xml and properties are byte-identical to
   current `content/sdk-adapters/vcommunity-vsphere/` source (rules out stale
   install).
-- Cross-referenced `lessons/pak-content-localization-bundles.md`,
-  `context/cleanroom-spec/spec/02-describe-xml.md` + `05-resource-model.md`
+- Cross-referenced `knowledge/lessons/pak-content-localization-bundles.md`,
+  `knowledge/context/cleanroom-spec/spec/02-describe-xml.md` + `05-resource-model.md`
   (ResourceKind `key` "unique within the adapter kind"),
-  `context/reviews/vcommunity-vsphere-build-1.md`,
-  `context/investigations/recon_log.md` (2026-06-24 co-resident state), and
-  `designs/managementpacks/vcommunity-three-adapter-split.md` (OPEN-C/OPEN-D).
+  `knowledge/context/reviews/vcommunity-vsphere-build-1.md`,
+  `knowledge/context/investigations/recon_log.md` (2026-06-24 co-resident state), and
+  `knowledge/designs/managementpacks/vcommunity-three-adapter-split.md` (OPEN-C/OPEN-D).
 
 ## Follow-up questions
 

@@ -91,7 +91,7 @@ it is not a published pak.
   (Onur Yuzseven, CC) — vSphere enrichment stitched onto VMWARE
   Cluster/Host/VM under the `vCommunity|` namespace; central
   SolutionConfig check lists; Windows guest-ops monitoring.
-  Design: `designs/managementpacks/vcommunity-sdk.md`.
+  Design: `knowledge/designs/managementpacks/vcommunity-sdk.md`.
   **Being split** (`vcommunity-three-adapter-split.md`): guest-OS surface
   moved to `vcommunity-os`; this entry retires once vsphere+os reach
   devel parity.
@@ -111,7 +111,7 @@ it is not a published pak.
   Reviewer APPROVE 0 BLOCKING; migrated onto devel, GREEN. This is the
   primary split artifact; the unified `vcommunity` entry retires once
   vsphere+os reach devel parity.
-  Design: `designs/managementpacks/vcommunity-three-adapter-split.md`.
+  Design: `knowledge/designs/managementpacks/vcommunity-three-adapter-split.md`.
 
 ### vcommunity-os
 
@@ -126,8 +126,8 @@ it is not a published pak.
   Ships the 2 Windows SolutionConfig check lists. **In-guest collection
   is a KNOWN-OPEN, intentionally-shelved blocker** (execution-policy /
   ConstrainedLanguage theory; privilege ELIMINATED) — see README +
-  `context/investigations/vcommunity-windows-services-empty-2026-06-23.md`.
-  Design: `designs/managementpacks/vcommunity-three-adapter-split.md`.
+  `knowledge/context/investigations/vcommunity-windows-services-empty-2026-06-23.md`.
+  Design: `knowledge/designs/managementpacks/vcommunity-three-adapter-split.md`.
 
 ### compliance
 

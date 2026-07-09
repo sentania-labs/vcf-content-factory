@@ -47,7 +47,7 @@ choose one of three exits — never invent a fragile workaround:
    roadmap item (jq filter projection is targeted for MPB 9.2 per
    first-party confirmation), park the work. The YAML stays clean
    and ships when the runtime catches up. Note the deferral in
-   `context/known_limitations.md`. Caveat: 9.2's jq addon is
+   `knowledge/context/known_limitations.md`. Caveat: 9.2's jq addon is
    bolted onto a Jackson-`JsonNode`/dot-path engine, not a
    replacement of it — predicate support will be a feature flag
    on top of the existing grammar, not a generalized JMESPath
@@ -116,13 +116,13 @@ the source.
 Every dropped or deferred capability gets recorded in three
 places:
 
-1. **`context/known_limitations.md`** — durable note: what's
+1. **`knowledge/context/known_limitations.md`** — durable note: what's
    missing, why, when it might come back.
 2. **`designs/<mp>.md` §Risks** — design-time decision record:
    what the user was promised vs what shipped.
 3. **`content/managementpacks/<mp>.yaml`** comment header — a
    one-line `# Deferred: <feature> pending <gating event>. See
-   context/known_limitations.md §<n>.` so the next reader
+   knowledge/context/known_limitations.md §<n>.` so the next reader
    doesn't have to dig.
 
 Future authors should encounter the deferral before they re-invent
@@ -176,7 +176,7 @@ and would produce silent wrong-band metric labels — a worse
 failure mode than not shipping the metric at all.
 
 **The decision.** Drop the 8 radio metrics + 6 radio properties
-from UniFi 1.0.0.13. Documented in `context/known_limitations.md`
+from UniFi 1.0.0.13. Documented in `knowledge/context/known_limitations.md`
 §"MPB runtime: dot-path + `data.*` grammar only" and in the UniFi
 YAML header comment.
 
@@ -197,7 +197,7 @@ declarative grammar fit.
 ## Related
 
 - `context/management_pack_authoring.md` — *how* to write MP YAML
-- `context/known_limitations.md` — current capability boundaries
+- `knowledge/context/known_limitations.md` — current capability boundaries
 - `context/mpb_explicit_key_investigation_2026_05_16.md` — label→key
   derivation algorithm
 - `context/mpb_designer_wire_format.md` — runtime expression form,

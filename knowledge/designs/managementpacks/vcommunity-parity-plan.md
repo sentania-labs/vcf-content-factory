@@ -6,9 +6,9 @@ Tier-2 Java SDK pak is a like-for-like replacement of the original
 reports, symptoms, alerts — verified against the original running on prod as
 the parity reference.
 
-Set 2026-06-16 with Scott. Companion to `designs/managementpacks/vcommunity.md`
-(decisions) and `designs/managementpacks/vcommunity-sdk.md` (object model + gap
-list). Reference recon: `context/investigations/recon_log.md` (2026-06-16
+Set 2026-06-16 with Scott. Companion to `knowledge/designs/managementpacks/vcommunity.md`
+(decisions) and `knowledge/designs/managementpacks/vcommunity-sdk.md` (object model + gap
+list). Reference recon: `knowledge/context/investigations/recon_log.md` (2026-06-16
 devel-vs-prod parity entry).
 
 ## The parity bar (prod original = reference)
@@ -103,7 +103,7 @@ pak level** as of build-3 (see Current state). Residual:
   reference files + override params = parity. (Builder fix reviewed by
   framework-reviewer; PR pending Scott's factory-branch coordination.)
 - 1b. ✅ Build 3 landed Host Licensing (10) + VM `Config` alias (4) + F2
-  diagnosability. Reviewed (`context/reviews/vcommunity-build-3.md`), installed.
+  diagnosability. Reviewed (`knowledge/context/reviews/vcommunity-build-3.md`), installed.
 - 1c. ⏳ **Build 4 (Scott chose ALIGN, 2026-06-16):** keep the VMware-Tools Guest
   OS path but rename its keys to the original's six `OS `-prefixed names
   (`OS Name / OS Version / OS BuildNumber / OS Architecture / OS Last Boot Up

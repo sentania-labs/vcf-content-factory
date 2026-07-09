@@ -4,7 +4,7 @@
 - **change:** default `build-sdk` stamps `0.0.0.<build_number>` on every version
   surface; the real `adapter.yaml` version is used only on explicit release
   opt-in (`--release` → `VCFCF_RELEASE_BUILD`).
-- **governing authority:** `rules/pak-version-lines.md` (RULE-014)
+- **governing authority:** `knowledge/rules/pak-version-lines.md` (RULE-014)
 - **verdict:** APPROVE (0 BLOCKING)
 - **findings:** 0 BLOCKING / 1 WARNING / 2 NIT
 - **ships with:** `stitcher-identity-additive-foreign-v1.md`,
@@ -100,8 +100,8 @@ NIT-1 below for the residual ambient-export consideration.
 
 ## WARNING
 
-- [designs/sdk-template-scaffold/build-pak-on-tag.yml + 6 external pak-repo CI
-  copies] `rules/pak-version-lines.md` §"Operational consequences" —
+- [knowledge/designs/sdk-template-scaffold/build-pak-on-tag.yml + 6 external pak-repo CI
+  copies] `knowledge/rules/pak-version-lines.md` §"Operational consequences" —
   **rollout-sequencing hazard.** The factory source-of-truth workflow now passes
   `--release`, but the six pak-repo copies are (per the brief) intentionally left
   stale as a follow-up. The moment a new `sdk-buildkit` tarball carrying this

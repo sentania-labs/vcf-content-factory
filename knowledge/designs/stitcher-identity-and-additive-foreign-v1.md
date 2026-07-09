@@ -5,9 +5,9 @@ line below citing the cp-auth-door probe's "Oracle puzzle solved
 (describe.xml traversal, no suite-api calls)" is disproven: describe.xml
 traversal never creates edges; Oracle's edges come from a per-cycle Suite
 API read under the platform-injected per-instance credential. See
-`context/investigations/oracle-stitch-autopsy-2026-07-02.md` and the
+`knowledge/context/investigations/oracle-stitch-autopsy-2026-07-02.md` and the
 CORRECTION addenda on the probe doc itself
-(`context/investigations/cp-auth-door-probe-2026-07-01.md`).
+(`knowledge/context/investigations/cp-auth-door-probe-2026-07-01.md`).
 
 ## Initial prompt (verbatim, 2026-07-01 session)
 
@@ -50,7 +50,7 @@ unifi, compliance, vcommunity*) inherits both on its next re-pull.
   same public `https://<gateway>/suite-api` door, same token-acquire,
   no CaSA/node-cert mTLS, no relay, no aria-ops-core, no base-class
   change (`VcfCfAdapter` stays on bare `AdapterBase` — locked decision,
-  see `designs/vcfcf-base-v2-adapterbase-rehome.md`).
+  see `knowledge/designs/vcfcf-base-v2-adapterbase-rehome.md`).
 
 - **Write-verb split (retires the DEF-002/003 9.1 residual).** In
   `RelationshipBuilder`: edges whose **parent belongs to a foreign
@@ -59,7 +59,7 @@ unifi, compliance, vcommunity*) inherits both on its next re-pull.
   via full-set `setRelationships`. **Own-adapter hierarchies keep the
   consolidated one-`setRelationships`-per-parent-per-cycle** idiom —
   that preserves the MP certification checklist item recorded in
-  `designs/vcfcf-base-v2-adapterbase-rehome.md`, which is about an
+  `knowledge/designs/vcfcf-base-v2-adapterbase-rehome.md`, which is about an
   adapter's own tree, not foreign resources. Additive-on-foreign is
   what all 8 modern Broadcom TVS paks do; it is clobber-safe on any
   platform version, so the 9.1 per-adapter-scoping proof is no longer
@@ -72,16 +72,16 @@ unifi, compliance, vcommunity*) inherits both on its next re-pull.
 
 ## Evidence base (read, don't re-derive)
 
-- `context/investigations/cp-auth-door-probe-2026-07-01.md` — live prod
+- `knowledge/context/investigations/cp-auth-door-probe-2026-07-01.md` — live prod
   CP (9.1) probe: automation vs maintenance file, working-door proof
   (`VMWARE_INFRA_MANAGEMENT`, vCommunity 200s), SynologyStitcher caught
   failing as `cloudproxy_<uuid>`, Oracle puzzle solved (describe.xml
   traversal, no suite-api calls), CaSA constants harvested.
-- `context/api-surface/casa-injected-vs-raw-client.md` — bytecode RE:
+- `knowledge/context/api-surface/casa-injected-vs-raw-client.md` — bytecode RE:
   no CaSA routing in any pak jar; fix is identity, not transport.
-- `context/reviews/synology-stitcher-vs-tvs-corpus.md` — the review
+- `knowledge/context/reviews/synology-stitcher-vs-tvs-corpus.md` — the review
   that produced R1 (additive) / R2 (door) / R3 / R4.
-- `context/api-maps/tvs-cross-mp-stitching.md` — vendor corpus is
+- `knowledge/context/api-maps/tvs-cross-mp-stitching.md` — vendor corpus is
   uniformly additive for foreign parents.
 
 ## Out of scope (tracked, not this round)

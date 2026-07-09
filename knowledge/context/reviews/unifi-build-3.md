@@ -9,13 +9,13 @@
 - **Findings:** 0 BLOCKING / 2 WARNING / 2 NIT
 - **Date:** 2026-06-10
 - **Authority baseline:** synology build-16 review
-  (`context/reviews/synology-build-16.md`, the multi-resource + stitching exemplar
+  (`knowledge/context/reviews/synology-build-16.md`, the multi-resource + stitching exemplar
   this port followed), v1 source (`7ad709c:src/.../UniFiAdapter.java`), golden
-  baseline (`context/investigations/unifi_v1_golden_baseline_devel.md` — NO
+  baseline (`knowledge/context/investigations/unifi_v1_golden_baseline_devel.md` — NO
   configured instance on devel; acceptance is clean-install/clean-collect, no
   parity diff), framework source under `vcfops_managementpacks/adapter_framework/`,
-  spec/19 §3 relationship contract, `lessons/controller-describe-bare-instantiation.md`,
-  `lessons/foreign-resource-property-push.md`, `rules/no-secrets-on-disk.md`,
+  spec/19 §3 relationship contract, `knowledge/lessons/controller-describe-bare-instantiation.md`,
+  `knowledge/lessons/foreign-resource-property-push.md`, `knowledge/rules/no-secrets-on-disk.md`,
   skill *Unreadable is NOT compliant* / *ARIA_OPS stitching identity*.
 
 ## Claims check (independently re-run)
@@ -41,7 +41,7 @@ gitignored).
   `super(ADAPTER_KIND, adapterDir, adapterInstanceId)` (`UniFiAdapter.java:96-102`).
   No `getAdapterKind()`-at-construction trap. ✔
 - **No `onDescribe` override** — only an explanatory comment block
-  (`:104-109`) citing `lessons/controller-describe-bare-instantiation.md`; no
+  (`:104-109`) citing `knowledge/lessons/controller-describe-bare-instantiation.md`; no
   method. Framework default resolves describe.xml from the stored kind. ✔
 - **`componentLogger` only; no shadow logger** — every helper logger is
   `componentLogger(X.class)` (`:122,135,137,169,211`). No `private … Logger`
@@ -102,7 +102,7 @@ no unbounded staleness; `onDiscard` nulls it. ✔
   (`ForeignResourceResolver.java:163`) indexes by **identifier value**
   (`index.get(identifierValue)`), never by MOID. Byte-identical to v1
   (`7ad709c:UniFiAdapter.java:916-918`). Satisfies skill *ARIA_OPS stitching
-  identity* / `lessons/foreign-resource-property-push.md`. ✔
+  identity* / `knowledge/lessons/foreign-resource-property-push.md`. ✔
 - **sysName normalization — none, and v2 preserves that.** v1 passed `sysName`
   to `findByIdentifier` **raw** (no `toLowerCase`/`toUpperCase`/FQDN-vs-short
   transform; only a `sysName.isEmpty()` skip). v2 passes `systemName` straight
@@ -306,4 +306,4 @@ blocks promotion to that devel / `qa-tester` gate.
   HEAD `9e0ee81`).
 
 ## Report
-`context/reviews/unifi-build-3.md`
+`knowledge/context/reviews/unifi-build-3.md`

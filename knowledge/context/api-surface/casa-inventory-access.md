@@ -6,7 +6,7 @@ operator credentials**. Reverse-engineered from the live prod CP
 (`vcf-lab-operations-collector.int.sentania.net`) and Broadcom
 first-party bytecode. This corrects and supersedes the "authenticates
 via the node certificate, bypassing the user-credential stack"
-framing in `context/investigations/recon_log.md`
+framing in `knowledge/context/investigations/recon_log.md`
 (2026-06-30 section) — the node cert secures the **transport tunnel**,
 but the suite-api call itself is authorized by a platform-managed
 **service account token** (`automationAdmin`), not the node cert.

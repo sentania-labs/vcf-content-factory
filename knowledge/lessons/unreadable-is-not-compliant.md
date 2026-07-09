@@ -36,6 +36,6 @@ averaging in a `totalCount==0` result.
 
 **Authority / history:** skill § *Unreadable is NOT compliant*
 (`.claude/skills/vcfops-sdk-adapter/SKILL.md`); enforced end-to-end in
-`context/reviews/compliance-build-37.md`, `-41.md`, `-43.md`; the
-snapshot-must-throw contract is `context/framework_v2_migration.md`
+`knowledge/context/reviews/compliance-build-37.md`, `-41.md`, `-43.md`; the
+snapshot-must-throw contract is `knowledge/context/framework_v2_migration.md`
 (SourceSnapshot section).

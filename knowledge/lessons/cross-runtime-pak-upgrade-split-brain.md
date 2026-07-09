@@ -20,7 +20,7 @@ install-new + recreate instances/credentials.
 ## Evidence
 
 Live experiment, devel instance, VCF Ops 9.0.2, 2026-06-10
-(`context/investigations/vcommunity_upgrade_path_experiment.md`):
+(`knowledge/context/investigations/vcommunity_upgrade_path_experiment.md`):
 
 Installed containerized `iSDK_VCFOperationsvCommunity` 0.2.8 (kind
 `VCFOperationsvCommunity`, registered `DOCKERIZED`), then installed a
@@ -48,9 +48,9 @@ or deleting filtered results.
 
 ## Context
 
-- `context/investigations/vcommunity_upgrade_path_experiment.md` — full
+- `knowledge/context/investigations/vcommunity_upgrade_path_experiment.md` — full
   experiment, structural comparison table, cleanup verification
-- `designs/managementpacks/vcommunity.md` — Tier 2 design; "distinct kind key"
+- `knowledge/designs/managementpacks/vcommunity.md` — Tier 2 design; "distinct kind key"
   is now a hard requirement, not a nicety
 - Related toolset note: `src/vcfops_managementpacks/sdk_project.py` rejects
   mixed-case adapter kind keys (`[a-z][a-z0-9_]*`) that VCF Ops itself accepts

@@ -56,7 +56,7 @@ Matches the 2024 community pack's 5-kind topology.
 
 **v3 (deferred):** Add an empty `Synology World` (`is_world: true`)
 stub *if and when* fleet-level aggregation supermetrics are authored.
-Cheap to add later. The `designs/synology-mp-v1.md` file currently
+Cheap to add later. The `knowledge/designs/synology-mp-v1.md` file currently
 documents Diskstation as `is_world: true — SIDECAR`; that's stale wording
 from a prior iteration and gets cleaned up when v3 work begins (a natural
 moment for `mp-designer` to revisit the doc).
@@ -102,7 +102,7 @@ Feature add, not a regression.
 - Diff diagnostic: `context/mpb_synology_import_diff_2026_04_29.md`
 - Chain authoring grammar: `context/mp_chain_authoring.md`
 - Design doc (named v1, content is v2 Strategy C):
-  `designs/synology-mp-v1.md` (stale on the is_world wording — clean up
+  `knowledge/designs/synology-mp-v1.md` (stale on the is_world wording — clean up
   in v3)
 - Authored YAML: `content/managementpacks/synology_nas.yaml`
 - Renderer: `vcfops_managementpacks/render.py`
@@ -197,5 +197,5 @@ until Scott returns to it.
   the §10.2 shape (broken). Future tooling pass should refuse no-echo
   chains with "use SDK" error, OR detect echo vs no-echo and emit
   appropriately.
-- **Design doc** — `designs/synology-mp-v1.md` stale `is_world` line.
+- **Design doc** — `knowledge/designs/synology-mp-v1.md` stale `is_world` line.
   Lower priority since Synology is moving SDK-ward.

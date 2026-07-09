@@ -60,7 +60,7 @@ v1.1.0.11 / synology previously** (cross-MP edge documented only in
 The gap is closed on all three doc surfaces. This is exactly the outcome
 dimension #11 was written to force.
 
-## Registry check (context/defects.md) — mandatory
+## Registry check (knowledge/context/defects.md) — mandatory
 
 Read in full. **No open defect names `synology`.**
 

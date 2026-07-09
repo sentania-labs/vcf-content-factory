@@ -107,7 +107,7 @@ The whole-bundle-rejection mechanism (a strict Dictionary/describe loader
 aborting the entire bundle on unrecognized dotted keys → every nameKey falls
 back to raw) is the **prime suspect, not statically proven** — both the author
 and the investigation say so explicitly, and that is honest. The relevant
-failure *class* is documented in `lessons/pak-content-localization-bundles.md`
+failure *class* is documented in `knowledge/lessons/pak-content-localization-bundles.md`
 ("the importer … aborts the entire content tree when any single key is
 absent/mismatched"), which is the content bundle rather than the adapter-config
 describe bundle — analogous, not identical, but a real precedent.
@@ -128,7 +128,7 @@ visually verifying the labels resolve in the Accounts UI. No static artifact can
 prove a platform-side loader's behavior; that is `qa-tester` / orchestrator
 devel-proof territory, not this gate's.
 
-## Registry check (`context/defects.md`)
+## Registry check (`knowledge/context/defects.md`)
 
 Open defects whose `Affects:` names **this** pak (`vcommunity-vsphere`):
 

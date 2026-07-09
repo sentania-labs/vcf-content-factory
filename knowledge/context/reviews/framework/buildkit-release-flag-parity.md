@@ -26,13 +26,13 @@
 
 3. **Test proves the STRONG property.** `test_buildkit_release_flag_stamps_declared_version` asserts `version stamp -> release build -> 1.2.3.42` is on the assembled kit's subprocess stderr — i.e. `VCFCF_RELEASE_BUILD=1` propagated through the kit's own `_apply_release_flag` into `sdk_builder._is_release_build()` and flipped the version line — not merely that argparse accepted the flag. The default-build test asserts the inverse (`dev preview -> 0.0.0.42`, and `release build` absent). Host-env leakage is guarded (`env.pop("VCFCF_RELEASE_BUILD", None)`). The stamp log lands before `_ensure_framework_jar()`, so it is reliably present despite the expected downstream no-SDK-jar failure.
 
-4. **No collateral.** The `_KIT_MAIN` edit adds only the `--release` argument to the `build-sdk` subparser and one `_apply_release_flag(args)` call inside the `build-sdk` branch of `main()`. `validate-sdk`, `pak-compare`, the mutually-exclusive reference-pak group, and the `_apply_sdk_jar` path are untouched. `test_buildkit_isolated_build.py` (which assembles the same template) still passes in the full suite. CI template `designs/sdk-template-scaffold/build-pak-on-tag.yml:144-145` already passes `--release`; the kit parser now matches it.
+4. **No collateral.** The `_KIT_MAIN` edit adds only the `--release` argument to the `build-sdk` subparser and one `_apply_release_flag(args)` call inside the `build-sdk` branch of `main()`. `validate-sdk`, `pak-compare`, the mutually-exclusive reference-pak group, and the `_apply_sdk_jar` path are untouched. `test_buildkit_isolated_build.py` (which assembles the same template) still passes in the full suite. CI template `knowledge/designs/sdk-template-scaffold/build-pak-on-tag.yml:144-145` already passes `--release`; the kit parser now matches it.
 
 ## Dimension walk
 
 - **Global-default / pak-specific leak (00d3382):** N/A. `--release` defaults to `False` (explicit opt-in); no default, coordinate, or flag leaks onto any global path. The dev-preview `0.0.0.N` stamp is the safe default — a hand/local build is never version-indistinguishable from a release.
 - **Key/label collision (6c59f6b):** N/A.
-- **Wire-format conformance:** The change enforces the pak version-line guardrail (RULE-014 / `rules/pak-version-lines.md`) on the CI path that was previously crashing. Conforms.
+- **Wire-format conformance:** The change enforces the pak version-line guardrail (RULE-014 / `knowledge/rules/pak-version-lines.md`) on the CI path that was previously crashing. Conforms.
 - **Loader/validator, render regression, builder structure:** N/A — no loader/renderer/builder-output surface touched.
 - **Corpus regression:** None — validate chain clean, 460 passed.
 - **Silent capability change:** This is a *restoration*, not a downgrade — release builds were crashing at argparse; they now succeed. No silent drop.

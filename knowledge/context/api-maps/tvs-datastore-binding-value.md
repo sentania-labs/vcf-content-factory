@@ -10,7 +10,7 @@ datastore's friendly name?
 relationship engine and each vendor's stitch config. Extraction to
 scratchpad only; `reference/references/` untouched (git clean, verified); no live
 calls (the live Oracle evidence is already captured in
-`context/investigations/recon_log.md` / prior maps). Builds on
+`knowledge/context/investigations/recon_log.md` / prior maps). Builds on
 `tvs-cross-mp-stitching.md` (jar layer) and `tvs-declarative-stitching.md`
 (descriptor layer) — this file adds the **value layer**: the exact string
 constructed and the exact foreign attribute it is matched against.
@@ -310,7 +310,7 @@ silently drops the edge (spec/07, live-confirmed 9.0.2). The NAA is a
 property-driven binder exists is disproven: the platform has NO property→edge
 code path, TraversalSpecKind never creates edges, and edge creation requires
 uniqueness-identifier ResourceKey resolution
-(`context/investigations/platform-edge-engine-2026-07-02.md`). The CP-viable
+(`knowledge/context/investigations/platform-edge-engine-2026-07-02.md`). The CP-viable
 identity for the vendor-style Suite API read is the platform-injected
 per-instance credential (`per-instance-suiteapi-credential-contract.md`),
 proven live by synology build 26 (DEF-006 closing evidence).

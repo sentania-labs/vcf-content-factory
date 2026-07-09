@@ -25,7 +25,7 @@ The zero-import has **two independent, compounding causes**:
    The *only* content type ever proven to import via an SDK (Track C)
    pak in this factory is **dashboards + views** — and only after
    compliance v22 added the four localization bundles
-   (`lessons/pak-content-localization-bundles.md`). **No SDK pak has
+   (`knowledge/lessons/pak-content-localization-bundles.md`). **No SDK pak has
    ever successfully bundled supermetrics, symptomdefs, or alertdefs.**
    Compliance never shipped them in any pak (`v22`, `v41`, `v51` all ship
    only `content/dashboards/` + `content/reports/` + `content/resources/`).
@@ -37,7 +37,7 @@ The zero-import has **two independent, compounding causes**:
 
 2. **A poison record aborts the whole content tree (the acute trigger).**
    The content importer does an all-or-nothing walk: per
-   `lessons/pak-content-localization-bundles.md`, a single absent
+   `knowledge/lessons/pak-content-localization-bundles.md`, a single absent
    localization key or a single unresolvable reference **aborts the entire
    content tree** for the pak — every dashboard/view/SM included. The
    analytics log line `Cannot find Symptom Definition with Id

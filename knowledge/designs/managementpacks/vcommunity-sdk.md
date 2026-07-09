@@ -13,7 +13,7 @@
 
 ## Original Request
 
-See `designs/managementpacks/vcommunity.md` (prompt-of-record, do not
+See `knowledge/designs/managementpacks/vcommunity.md` (prompt-of-record, do not
 rewrite). Distilled: full-parity Tier 2 rewrite, no Docker; keep the
 `vCommunity|` key namespace; port all bundled content converted to
 factory YAML; strengthen the MP content pipeline as a co-equal goal;
@@ -45,7 +45,7 @@ The reference implementation (`content/sdk-adapters/compliance/`) is
 the same shape (vim25 SOAP read → Suite API push onto VMWARE
 HostSystem) and is healthy with two DATA_RECEIVING instances on devel,
 so the runtime path is proven. **Lesson check:** no Tier-2-vs-Tier-1
-ambiguity to route through `lessons/INDEX.md` — every relevant lesson
+ambiguity to route through `knowledge/lessons/INDEX.md` — every relevant lesson
 (`foreign-resource-property-push`, `suite-api-stitch-ssl-tofu-vs-java-http`,
 `controller-describe-bare-instantiation`, `sdk-constants-are-display-names`,
 `setrelationships-foreign-adapter-scoped`) already assumes Tier 2 and is
@@ -56,7 +56,7 @@ binding on the author.
 - New repo: **`sentania-labs/vcf-content-factory-sdk-vcommunity`**,
   instantiated from `sentania-labs/vcf-content-factory-sdk-template`
   ("Use this template") — ships skeleton + `build-pak-on-tag` CI.
-- Orchestrator adds one line to `context/managed_paks.md`
+- Orchestrator adds one line to `knowledge/context/managed_paks.md`
   (name `vcommunity` / remote / target
   `content/sdk-adapters/vcommunity/`) so bootstrap clones it for
   authoring.
@@ -68,7 +68,7 @@ binding on the author.
 ### Migration from the original MP (RESOLVED — side-by-side fork)
 
 The upgrade-path experiment
-(`context/investigations/vcommunity_upgrade_path_experiment.md`)
+(`knowledge/context/investigations/vcommunity_upgrade_path_experiment.md`)
 **empirically closes the in-place-upgrade door.** A same-identity
 classic pak installed over the installed containerized pak is *accepted*
 (version bumps, no rejection, no signature complaint) but **silently
@@ -123,7 +123,7 @@ below; full reasoning in each section + the OPEN Questions block.
 
 | Question | Answer |
 |---|---|
-| Adapter kind key | **`vcfcf_vcommunity`** (factory convention, mirrors `vcfcf_compliance`). NOT `VCFOperationsvCommunity`. RESOLVED (OPEN-1): side-by-side fork is now **experimentally confirmed as the only viable path** — see `context/investigations/vcommunity_upgrade_path_experiment.md`. Complies with the `sdk_project.py` `^[a-z][a-z0-9_]*$` lowercase rule (no tooling change needed). |
+| Adapter kind key | **`vcfcf_vcommunity`** (factory convention, mirrors `vcfcf_compliance`). NOT `VCFOperationsvCommunity`. RESOLVED (OPEN-1): side-by-side fork is now **experimentally confirmed as the only viable path** — see `knowledge/context/investigations/vcommunity_upgrade_path_experiment.md`. Complies with the `sdk_project.py` `^[a-z][a-z0-9_]*$` lowercase rule (no tooling change needed). |
 | Adapter display name | `VCF Content Factory vCommunity` (prose prefix per convention). |
 | New object types? | **None.** Pure ARIA_OPS-style stitching onto existing VMWARE `ClusterComputeResource` / `HostSystem` / `VirtualMachine`. |
 | Key namespace | `vCommunity\|...` verbatim — every key traced to source file:line below (RULE-002). |
@@ -435,7 +435,7 @@ default).
 - **The six check-list files ship in the pak at
   `content/files/solutionconfig/*.xml`** — the **verbatim, byte-identical**
   originals (verify subdirectory placement against
-  `lessons/pak-content-bundling.md`; the original ships them under
+  `knowledge/lessons/pak-content-bundling.md`; the original ships them under
   `content/files/solutionconfig/` and they import into the central store at
   the `SolutionConfig/` path). At pak install these are imported into the
   VCF Ops **central configuration-file store** (the `SolutionConfig/` path),
@@ -468,8 +468,8 @@ default).
   obligations:
   - **Use the framework's existing Suite API channel** — the same one
     `SuiteApiStitcher` already uses for property/stat push. Do NOT stand up
-    a new HTTP client. See `lessons/foreign-resource-property-push.md` and
-    `lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`. The fetch is
+    a new HTTP client. See `knowledge/lessons/foreign-resource-property-push.md` and
+    `knowledge/lessons/suite-api-stitch-ssl-tofu-vs-java-http.md`. The fetch is
     `GET api/configurations/files?path=SolutionConfig/<name>.xml`; parse the
     XML body and split the comma-delimited check list exactly as
     `get_config_file_data` does (adapter.py:266-273).
@@ -669,7 +669,7 @@ DATA_RECEIVE before all content is ported; content lands incrementally.
   rewrite of the Python Integration SDK management pack."
 - Every ported content artifact's `description`: cite
   `vmbro/VCF-Operations-vCommunity/Management Pack/content/<file>` per
-  `context/reference_sources.md` rule 3.
+  `knowledge/context/reference_sources.md` rule 3.
 - Per-file Python copyright headers credit both Onur Yuzseven and
   Scott Bowe (some collectors, e.g. `host_install_date.py`,
   `vm_scsi_controller_type.py`) — preserve dual attribution where the
@@ -719,7 +719,7 @@ ready for `sdk-adapter-author`.
 - **OPEN-1 (adapter kind) — RESOLVED:** `vcfcf_vcommunity`, side-by-side
   with the original. The same-identity classic-over-container upgrade is
   **experimentally confirmed non-viable** (silent split-brain,
-  `context/investigations/vcommunity_upgrade_path_experiment.md`).
+  `knowledge/context/investigations/vcommunity_upgrade_path_experiment.md`).
   Migration = uninstall-old → install-ours → recreate
   instances/credentials; `vCommunity|` key continuity preserves metric
   history as a convenience, not a contract. See "Migration from the

@@ -23,7 +23,7 @@ Source material driving this design:
   research + Pattern fact-check).
 - `/home/scott/pka/agents/khriss/outbox/2026-04-17-unifi-api-external-supplement.md` — 446-line
   supplement with per-surface detail.
-- `designs/synology-mp-v1.md` — structural template and the 12-axis
+- `knowledge/designs/synology-mp-v1.md` — structural template and the 12-axis
   framework-vs-target review whose shape this artifact mirrors.
 - `vcfops_managementpacks/loader.py`, `render.py` — the post-Tier-3
   grammar reality against which every grammar claim below is checked.

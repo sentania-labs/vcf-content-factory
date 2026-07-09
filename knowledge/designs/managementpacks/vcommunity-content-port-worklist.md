@@ -138,7 +138,7 @@ author time, so every SM in a lower tier must exist before its consumer.
 ## 2. Views (16 — `view-author` targets)
 
 All live in `content/reports/` as `<Content><Views><ViewDef>` (confirms
-`lessons/pak-content-bundling.md`: views ship in a pak's `content/reports/`).
+`knowledge/lessons/pak-content-bundling.md`: views ship in a pak's `content/reports/`).
 Targets are `view-author`, **not** `report-author`.
 
 ### SM-free views (10) — author before any SM exists, native VMWARE only

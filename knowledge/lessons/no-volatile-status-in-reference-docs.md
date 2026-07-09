@@ -2,7 +2,7 @@
 
 ## Symptom
 
-`context/tier2_architecture.md` carried an "Implementation status" block —
+`knowledge/context/tier2_architecture.md` carried an "Implementation status" block —
 *"Phase 2 (Synology): IN PROGRESS — build 1.0.0.7"*, *"Phase 3: IN
 PROGRESS"* — embedded in an **architecture** doc. Synology reached build
 17 and those phases completed, but the block was never updated, so a
@@ -28,7 +28,7 @@ rotting independently (here it also half-lived in a stale `status.md`).
 **Reference / architecture / lessons docs state durable facts only.**
 Volatile status lives in — or is derived from — the transient surfaces:
 
-- per-adapter build state → `context/reviews/<adapter>-build-<N>.md`;
+- per-adapter build state → `knowledge/context/reviews/<adapter>-build-<N>.md`;
 - everything else → derived from the artifacts themselves (git history,
   the actual YAML / specs, `pak-compare`), never hand-copied into a
   reference doc.

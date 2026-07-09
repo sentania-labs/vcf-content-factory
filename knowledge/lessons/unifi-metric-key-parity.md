@@ -23,7 +23,7 @@ runtime emits whatever the label-derivation algorithm produces regardless. The
 only fix was making the factory match what MPB does (not the other way around).
 
 The derivation algorithm is documented in
-`context/mpb/mpb_explicit_key_investigation_2026_05_16.md`. Factory YAML `key:` is
+`knowledge/context/mpb/mpb_explicit_key_investigation_2026_05_16.md`. Factory YAML `key:` is
 now an authoring-side identifier only — never written on the wire.
 
 ## The filter projection dead-end
@@ -70,6 +70,6 @@ All three agreed before making a decision.
 
 ## Reference files
 
-- `context/mpb/mpb_explicit_key_investigation_2026_05_16.md` — derivation algorithm
-- `context/authoring/mp_authoring_design_principles.md` — codified design rules
-- `context/known_limitations.md` — "MPB <9.2 runtime: no JMESPath filter projections"
+- `knowledge/context/mpb/mpb_explicit_key_investigation_2026_05_16.md` — derivation algorithm
+- `knowledge/context/authoring/mp_authoring_design_principles.md` — codified design rules
+- `knowledge/context/known_limitations.md` — "MPB <9.2 runtime: no JMESPath filter projections"

@@ -16,7 +16,7 @@ Java/SDK paks (VMware Kubernetes, Physical SAN, FabricServer) and
 by the Python Integration SDK (Onur's `HardwarevCommunity`) — but
 not by MPB.
 
-This advances `context/cleanroom-spec/spec/05-resource-model.md`
+This advances `knowledge/context/cleanroom-spec/spec/05-resource-model.md`
 §152 from "semantics TBD" to **"semantics confirmed; MPB does not
 expose them."** The describe.xml feature is real, well-formed,
 and runtime-supported. The MPB compiler simply doesn't author it.
@@ -87,7 +87,7 @@ Plus user-authored nested non-instanced groups via `BuilderMetricGroup.childGrou
 
 From the disassembled MPB code we already documented in
 `context/mpb_builderfile_schema.md` (which is identical to the
-cleanroom mirror at `context/cleanroom-spec/spec/10-mpb-builderfile-schema.md`):
+cleanroom mirror at `knowledge/context/cleanroom-spec/spec/10-mpb-builderfile-schema.md`):
 
 ```kotlin
 data class BuilderHttpResource(
@@ -282,7 +282,7 @@ resources back into instance-buckets under 1 resource.
    `<ResourceGroup instanced="true">` directly, the way Onur's
    `HardwarevCommunity` does. This is the only path that yields
    exactly the colon-instance wire form observed empirically.
-   `context/cleanroom-spec/spec/05-resource-model.md` §152 should
+   `knowledge/context/cleanroom-spec/spec/05-resource-model.md` §152 should
    be updated to note this Tier 2-only status.
 
 3. **Probe MPB further via live UI.** Build a deliberately
@@ -323,7 +323,7 @@ resources back into instance-buckets under 1 resource.
 
 ## 7. Cleanroom-spec status update
 
-- `context/cleanroom-spec/spec/05-resource-model.md` §152 — advance
+- `knowledge/context/cleanroom-spec/spec/05-resource-model.md` §152 — advance
   from "semantics TBD" to: "Semantics confirmed by reference-pak
   inspection — `instanced='true'` indicates the runtime fans the
   group's `<ResourceAttribute>` children out into per-instance
@@ -333,7 +333,7 @@ resources back into instance-buckets under 1 resource.
   Java SDK paks and Python Integration SDK paks declare instanced
   groups. Tier 2 only."
 
-- `context/cleanroom-spec/spec/10-mpb-builderfile-schema.md` (and
+- `knowledge/context/cleanroom-spec/spec/10-mpb-builderfile-schema.md` (and
   mirror `context/mpb_builderfile_schema.md`) — Limitations
   section should explicitly add:
   "`<ResourceGroup instanced='true'>` — not exposed; emitted only
@@ -360,12 +360,12 @@ Standalone design files audited:
 - `reference/references/brockpeterson_operations_management_packs/Rubrik Management Pack Design.json`
 
 Spec context consulted:
-- `context/cleanroom-spec/spec/02-describe-xml.md`
-- `context/cleanroom-spec/spec/02a-describe-xsd-canonical.md`
-- `context/cleanroom-spec/spec/05-resource-model.md` (§152 is the
+- `knowledge/context/cleanroom-spec/spec/02-describe-xml.md`
+- `knowledge/context/cleanroom-spec/spec/02a-describe-xsd-canonical.md`
+- `knowledge/context/cleanroom-spec/spec/05-resource-model.md` (§152 is the
   TBD this doc closes)
-- `context/cleanroom-spec/spec/10-mpb-builderfile-schema.md`
-- `context/cleanroom-spec/spec/11-mpb-designer-wire-format.md`
+- `knowledge/context/cleanroom-spec/spec/10-mpb-builderfile-schema.md`
+- `knowledge/context/cleanroom-spec/spec/11-mpb-designer-wire-format.md`
 - `context/mpb_describe_xml_emission.md`
 - `context/mpb_builderfile_schema.md`
 - `context/mpb_designer_wire_format.md`

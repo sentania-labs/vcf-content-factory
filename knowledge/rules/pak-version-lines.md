@@ -27,7 +27,7 @@ Operational consequences:
   installed release version so the roll-forward target is known.
 - A `0.x` pak found attached to a release, referenced in a bundle, or
   installed as the standing version on prod after its test window is a
-  defect — file it in `context/defects.md`.
+  defect — file it in `knowledge/context/defects.md`.
 - RULE-012 (defect gate before `v*` tags) is unchanged and runs before
   any CI release build exists.
 

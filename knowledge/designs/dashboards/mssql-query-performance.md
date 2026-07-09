@@ -167,4 +167,4 @@ All trend charts scoped to the selected `SqlServer` unless noted.
   case that genuinely needs a super metric, return TOOLSET GAP — do not
   invent one silently.
 - **Validation gate:** every metric key in the final YAML must exist in
-  `context/adapter_describe_cache/MSSQL/`. RULE-002 is non-negotiable.
+  `knowledge/context/adapter_describe_cache/MSSQL/`. RULE-002 is non-negotiable.

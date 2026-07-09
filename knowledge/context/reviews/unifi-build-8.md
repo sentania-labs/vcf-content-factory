@@ -38,7 +38,7 @@ All author claims re-run, not repeated:
 ## Correctness walk
 
 **1. Uniqueness-flag propagation (the fix) — SOUND.**
-`lessons/cross-mp-foreign-key-uniqueness-flags.md`. The read path
+`knowledge/lessons/cross-mp-foreign-key-uniqueness-flags.md`. The read path
 `id.get("identifierType").get("isPartOfUniqueness").asBoolean()` matches the
 rule's mandated Suite API shape
 (`resourceIdentifiers[].identifierType.isPartOfUniqueness`). Verified against
@@ -78,9 +78,9 @@ clobber idiom is not present in this build.
 **5. Logging / gaps — CLEAN.** One summary line per cycle
 (`"...N port→host edges"`), per-no-match at debug (no loop spam), no secrets. No
 fabricated edges — no match yields no edge, never a phantom HostSystem
-(`rules/no-fabricated-metrics.md` respected).
+(`knowledge/rules/no-fabricated-metrics.md` respected).
 
-## Registry check (`context/defects.md`)
+## Registry check (`knowledge/context/defects.md`)
 
 - **DEF-002** (`unifi`, open, blocking) — **still open; re-asserted.** This
   build addresses the *static-review basis* (the full-set-`setRelationships`-
@@ -126,4 +126,4 @@ gains the UniFiSwitchPort child.
 
 ## Report
 
-`context/reviews/unifi-build-8.md`
+`knowledge/context/reviews/unifi-build-8.md`

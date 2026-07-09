@@ -87,7 +87,7 @@ after any change to the renderer or properties generator.
 
 ## Reference
 
-- Spec/18 Pass 31: `context/cleanroom-spec/spec/18-pak-content-bundle.md`
+- Spec/18 Pass 31: `knowledge/context/cleanroom-spec/spec/18-pak-content-bundle.md`
   (four-bundle contract, diagnostic fingerprint, build history)
 - Generator code: `src/vcfops_managementpacks/sdk_builder.py` —
   `_generate_outer_resources_properties`, `_generate_content_resources_properties`,

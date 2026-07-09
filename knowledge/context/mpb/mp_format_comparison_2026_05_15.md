@@ -259,7 +259,7 @@ MPB-built reference. Full report: `tmp/unifi_pak_compare.txt`.
   rendered fine by VCF Ops 9.0. **Cosmetic, do not block.**
 - **(I8/I9 signatures)** MPB pak has `signature.cert` +
   `signature.mf`. Factory paks are unsigned. Per the
-  `context/known_limitations.md` (and acceptance from the task),
+  `knowledge/context/known_limitations.md` (and acceptance from the task),
   this is a known limitation — VMware signing key not available
   to factory builds. **Flag but do not fix.**
 - **(I1/I19/I34) supermetrics.** Factory bundles

@@ -9,7 +9,7 @@
   color thresholds, and per-column unit scaling on list views?
 - Sources used (no lab traffic required — all evidence found in
   existing artifacts):
-  - `context/exports/working_views.xml` — prior lab export, 4828
+  - `knowledge/context/exports/working_views.xml` — prior lab export, 4828
     lines, 928 views' worth. Contains one hand-crafted view that
     happens to exercise `PERCENTILE`, `AVG`, and `TRANSFORM_EXPRESSION`.
   - `reference/references/brockpeterson_operations_dashboards/*.zip` — extracted
@@ -143,7 +143,7 @@ In YAML:
 
 ### Example XML from real files
 
-- **PERCENTILE** — `context/exports/working_views.xml:2542-2584`
+- **PERCENTILE** — `knowledge/context/exports/working_views.xml:2542-2584`
 
   ```xml
   <Item>
@@ -172,7 +172,7 @@ In YAML:
   `<Value>` block probably doesn't matter to the parser, but
   consistent order matches exported files.
 
-- **TRANSFORM_EXPRESSION** — `context/exports/working_views.xml:4050-4090`
+- **TRANSFORM_EXPRESSION** — `knowledge/context/exports/working_views.xml:4050-4090`
 
   ```xml
   <Property name="attributeKey" value="Super Metric|sm_a747b3d3-..."/>
@@ -482,7 +482,7 @@ for changing the displayed numeric value are:
   server does the conversion. No SM needed.
 
 - **Transform expression doing arithmetic conversion** —
-  `context/exports/working_views.xml:4052-4080`
+  `knowledge/context/exports/working_views.xml:4052-4080`
 
   ```xml
   <Property name="attributeKey" value="Super Metric|sm_a747..."/>

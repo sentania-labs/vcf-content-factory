@@ -63,16 +63,16 @@ single-IP shortcut was a real bug).
 
 ## Evidence chain (read before deviating)
 
-- `context/api-surface/per-instance-suiteapi-credential-contract.md` —
+- `knowledge/context/api-surface/per-instance-suiteapi-credential-contract.md` —
   the credential contract, bytecode receipts.
-- `context/investigations/oracle-stitch-autopsy-2026-07-02.md` — live
+- `knowledge/context/investigations/oracle-stitch-autopsy-2026-07-02.md` — live
   DEBUG capture of the vendor mechanism (and the log-level artifact
   that misled three earlier investigations: stitch lines are DEBUG;
   absence of evidence at INFO is not evidence of absence).
-- `context/investigations/platform-edge-engine-2026-07-02.md` — the
+- `knowledge/context/investigations/platform-edge-engine-2026-07-02.md` — the
   edge-writer bytecode: identifier-keyed cache, silent drop, no
   property path, traversal inert.
-- `context/defects.md` DEF-005/DEF-006 — the full failure/fix history.
+- `knowledge/context/defects.md` DEF-005/DEF-006 — the full failure/fix history.
 - Reference implementation: synology adapter (build 26) +
   `adapter_framework` stitch layer (`AmbientCredential`,
   `SuiteApiStitchClient`, `RelationshipBuilder`).

@@ -16,7 +16,7 @@ from the appliance classpath (`common-lib/` + `suite-api/WEB-INF/lib/`) at
 runtime. No `installSolution` failure, no `NoClassDefFoundError`, no
 `ClassNotFoundException`.
 
-**The historical lesson in `context/tier2_architecture.md` should be AMENDED.**
+**The historical lesson in `knowledge/context/tier2_architecture.md` should be AMENDED.**
 The row asserting that `vrops-adapters-sdk.jar` "must bundle in `<adapter>/lib/`
 despite being on shared classpath / installSolution task fails in 14ms with empty
 errorMessages" is **not reproducible** on the current build 41 pak shape against

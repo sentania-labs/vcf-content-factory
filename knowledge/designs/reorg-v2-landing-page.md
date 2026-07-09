@@ -71,11 +71,11 @@ effort** — they change depth, not top-level row count.
    not delete** (Codex PR-38 review: these are not README-only stubs;
    they hold five tracked pre-`content/`-era YAMLs "retained for
    historical context", two of them live-cited from `context/`). Move
-   the YAMLs to `context/attic/legacy-root-content/` (ours-mutable,
+   the YAMLs to `knowledge/context/attic/legacy-root-content/` (ours-mutable,
    no new root entry; phase 2 carries it into `knowledge/`
    automatically), update the two citations
-   (`context/api-surface/widget_types_survey.md`,
-   `context/investigations/recon_log.md`), then delete the two root
+   (`knowledge/context/api-surface/widget_types_survey.md`,
+   `knowledge/context/investigations/recon_log.md`), then delete the two root
    dirs. Also fix STRUCTURE.md's incorrect "(README pointers only)"
    claim about these dirs. The path-audit protects the *cited* files;
    the archive move protects the uncited ones.
@@ -118,13 +118,13 @@ env for agent shells + `env:` in the CI workflows); `requirements.txt` /
 The v1 no-go was decided against the comprehension goal; against the
 landing-page goal it pays. Costs unchanged and known:
 - **Cross-repo pre-work first:** all 6 pak repos + the sdk-template
-  fetch `context/defects.md` from factory main by raw URL (workflow +
+  fetch `knowledge/context/defects.md` from factory main by raw URL (workflow +
   vendored `ci/defect_gate.py`). Sequence: (a) update all 7 to try
   `knowledge/context/defects.md` with fallback to the old path, (b) move
   the factory dirs, (c) strip fallbacks later. No `v*` tags mid-window.
 - ~300-file citation sweep (v2-proven playbook: delegated sweep +
   enforcing path-audit); CLAUDE.md precedence text, agent-prompt
-  boilerplate ("read rules/INDEX.md"), curator corpus definition,
+  boilerplate ("read knowledge/rules/INDEX.md"), curator corpus definition,
   RULE-015/016/017 texts, curation hooks, registry-reading scripts.
 - Fold `HOW_IT_WORKS.md` / `ROADMAP.md` / `vcf_ops_concepts.md` into
   `knowledge/` in the same sweep.

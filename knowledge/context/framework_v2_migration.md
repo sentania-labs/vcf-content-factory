@@ -83,7 +83,7 @@ method.
 Adapters do not need to implement it, **but they MUST supply the adapter
 kind key via the constructor.** This is mandatory — failure to do so causes
 an NPE / adapter-not-found failure during pak install (build 44 root cause;
-see `lessons/controller-describe-bare-instantiation.md`).
+see `knowledge/lessons/controller-describe-bare-instantiation.md`).
 
 **Why:** During pak install the controller instantiates the adapter class
 bare (no-arg reflection) and calls `describe()`. At that point the platform
@@ -483,7 +483,7 @@ return rb.build(); // returns Relationships, not ResourceCollection
 For adapters that push properties or stats onto a foreign VCF Ops
 resource (e.g. a `VMWARE/HostSystem`), the v2 primary path is
 `SuiteApiStitcher`. See the **"Ambient Suite API stitching transport"**
-section in `context/tier2_architecture.md` for the full contract.
+section in `knowledge/context/tier2_architecture.md` for the full contract.
 
 ```java
 // In configureAdapter():
@@ -634,7 +634,7 @@ Operational consequence: `collector.log` is the authoritative source for
 post-reload diagnostics. Per-adapter logs resume silently once configure
 completes — if they appear empty post-install, check `collector.log` first.
 A collector restart eliminates the gap (appender wires correctly at startup).
-See also the Logging authoring contract note in `context/tier2_architecture.md`.
+See also the Logging authoring contract note in `knowledge/context/tier2_architecture.md`.
 
 ---
 
@@ -648,7 +648,7 @@ See also the Logging authoring contract note in `context/tier2_architecture.md`.
 | Relationship max | `maximumRelationshipsPerCollection` field on UnlicensedAdapter | `VcfCfAdapter.MAX_RELATIONSHIPS_PER_CYCLE` constant (default 100 000); override `getMaxRelationshipsPerCycle()`. |
 | MetricDataCache | Auto-created and auto-flushed by UnlicensedAdapter | Auto-created in `onConfigure` and auto-flushed at end of `onCollect`. Constructor params `(1000, 100)` are [INFER] — see spec/19 §8. |
 | SSL | `insecureSslContext()` embedded in HttpClientBuilder (inline, always insecure) | JVM default trust store when no SSL configured; `platformSsl(this)` for platform trust; `allowInsecure(true)` for explicit lab opt-out. |
-| SuiteAPIClient | Injected as field `suiteAPIClient` on UnlicensedAdapter | Not injected. Primary stitching path is `SuiteApiStitcher` (ambient transport — see "Ambient Suite API stitching transport" in `context/tier2_architecture.md`). `ForeignResourceResolver.SuiteApiBridge` is for cross-MP UUID lookup only. Neither is required on the collect path. |
+| SuiteAPIClient | Injected as field `suiteAPIClient` on UnlicensedAdapter | Not injected. Primary stitching path is `SuiteApiStitcher` (ambient transport — see "Ambient Suite API stitching transport" in `knowledge/context/tier2_architecture.md`). `ForeignResourceResolver.SuiteApiBridge` is for cross-MP UUID lookup only. Neither is required on the collect path. |
 | onDiscard | Call `super.onDiscard()` first | Same — call `super.onDiscard()` first. |
 
 ---
@@ -792,7 +792,7 @@ must **throw out of `currentSnapshot()`** so the framework marks the
 resource ERROR/DOWN. Never catch the exception inside `currentSnapshot()`
 and return a partial or empty snapshot — that would make a broken source
 look healthy. Cross-reference:
-`lessons/unreadable-is-not-compliant.md`.
+`knowledge/lessons/unreadable-is-not-compliant.md`.
 
 Per-endpoint sub-failures within an otherwise-healthy snapshot (e.g. an
 optional UPS endpoint returning 404) may be caught locally and the
@@ -1048,7 +1048,7 @@ the socket timeout fires.
 Credential values — passwords, session tokens, session IDs — must **never**
 appear in thrown exception messages, log lines, or any string that could
 reach `collector.log` or a test-connection error dialog. The rule
-(`rules/no-secrets-on-disk.md`) is enforced at code-review time.
+(`knowledge/rules/no-secrets-on-disk.md`) is enforced at code-review time.
 
 **Log the mechanism and principal name, not the value:**
 ```java

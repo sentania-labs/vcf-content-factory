@@ -41,7 +41,7 @@
   - 2026-04-30 — Initial Integration API mapping. Authenticated probe
     with the `X-API-Key` Scott generated. Targeted comparison map for
     the v2 auth-pivot decision (Gap B); follow-on to the 2026-04-18
-    classic-surface map at `context/api-maps/unifi-network-api.md`
+    classic-surface map at `knowledge/context/api-maps/unifi-network-api.md`
     which had probed Integration only at the auth wall.
 - **Evidence basis:** live API calls (28 endpoint probes against
   `unifi.int.sentania.net` on 2026-04-30, plus 2 unauthenticated
@@ -643,7 +643,7 @@ DNS overrides), not for metrics. v2 doesn't need this.
 
 The v2 design's metric-by-object-type tables enumerate ~131 lines
 of metrics + properties (counted via `grep -E '^\| \`[a-z_0-9]+\`'`
-on `designs/unifi-mp-v2.md`). Roll-up by object:
+on `knowledge/designs/unifi-mp-v2.md`). Roll-up by object:
 
 - **Controller**: ~36 entries (12 sysinfo + 4 site_meta + 20
   health subsystems) + `wan2_*` mirror = ~46 effective.
@@ -1394,11 +1394,11 @@ These are flagged to mp-designer / Scott but not pursued here:
 
 ## Cross-references
 
-- `context/api-maps/unifi-network-api.md` — classic surface map
+- `knowledge/context/api-maps/unifi-network-api.md` — classic surface map
   (authoritative for everything under `/proxy/network/api/...`).
   Endpoint-number references throughout this file (e.g.
   "classic endpoint #4 (`stat/device`)") point there.
-- `designs/unifi-mp-v2.md` §"Authentication" / §"Metrics by Object
+- `knowledge/designs/unifi-mp-v2.md` §"Authentication" / §"Metrics by Object
   Type" / §"Key Risks" — the design this map informs. Specific
   v2 risks this map updates: **Gap B** (do not pivot — coverage
   is insufficient), **Gap F** (unchanged — Integration has no

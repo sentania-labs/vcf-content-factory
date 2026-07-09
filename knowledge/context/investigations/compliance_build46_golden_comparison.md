@@ -1,7 +1,7 @@
 # Compliance Adapter Build 46 — Golden Comparison (devel)
 
 **Captured:** 2026-06-10  
-**Comparison basis:** `context/investigations/compliance_build42_golden_baseline_devel.md` (build-41/42 v1 behavior envelope)  
+**Comparison basis:** `knowledge/context/investigations/compliance_build42_golden_baseline_devel.md` (build-41/42 v1 behavior envelope)  
 **Build 46 collection cycle confirmed running:** first v2 cycle at 2026-06-10T06:35-06:36Z  
 **Instance:** vcf-lab-operations-devel.int.sentania.net (VCF Ops 9.0.2)  
 **Comparison agent:** ops-recon (read-only, GET-only against live instance)
@@ -361,7 +361,7 @@ Recommendation:
 ---
 
 *Captured by ops-recon. Read-only GET-only against VCF Ops devel. No writes performed.*  
-*Raw baseline: `context/investigations/compliance_build42_golden_baseline_devel.md`*
+*Raw baseline: `knowledge/context/investigations/compliance_build42_golden_baseline_devel.md`*
 
 ---
 

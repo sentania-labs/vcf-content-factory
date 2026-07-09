@@ -48,4 +48,4 @@
 
 An operator on a node where the injected "instance" credential is present-but-unusable (missing `com.vmware.vcops.security.Crypt`, null/blank creds) now gets one INFO line — `file=automation` plus `instance-credential not used reason=NoClassDefFoundError: com/vmware/vcops/security/Crypt` — closing the exact field-debugging blind spot WARNING-1 named. No secret is logged, no thread-local leaks across constructions or races between concurrent adapter instances, and blank-username-with-throwing-password can no longer be misclassified as a linkage failure. No functional regression on any credential path; no key/label collision, wire-format drift, or global-default leak.
 
-**Report:** context/reviews/framework/ambient-credential-v3-closeout.md
+**Report:** knowledge/context/reviews/framework/ambient-credential-v3-closeout.md

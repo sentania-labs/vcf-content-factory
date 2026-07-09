@@ -26,7 +26,7 @@ construction branches ambient vs explicit), `adapter.yaml` build_number 21, `CHA
   ResourceIdentifiers unchanged). Confirms the author's claim and confirms the structural
   delta is the credential surface only.
 
-## Registry check (`context/defects.md`)
+## Registry check (`knowledge/context/defects.md`)
 
 - **DEF-001** (synology, secrets-on-disk) — **closed** (build 19). Re-verified not
   re-opened: the new code logs principal/host/path only; no secret on any throw/log path.

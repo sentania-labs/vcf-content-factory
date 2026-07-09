@@ -88,19 +88,19 @@ After the report:
 
 ## Trigger marker — refinement (deliberate deviation, flagged)
 
-The prompt specifies one committed marker `context/curation/.last-run`
+The prompt specifies one committed marker `knowledge/context/curation/.last-run`
 holding *both* the timestamp and the session counter, incremented by the
 hook every session. Implemented with a **two-file split**, because a
 committed file the hook mutates every session would leave the working
 tree perpetually dirty — which breaks the **clean-tree precondition** of
 `/publish` and `/release` (a hard, shipped requirement):
 
-- **`context/curation/.last-run`** — **committed**. Holds `last_run=<ISO>`
+- **`knowledge/context/curation/.last-run`** — **committed**. Holds `last_run=<ISO>`
   (the durable, portable "when did we last curate"). Changes only when
   the curator completes — so a fresh clone immediately knows the calendar
   state and the 7-day timer works on first session. This is the portable
   shared state the portability rule cares about.
-- **`context/curation/.sessions-since`** — **gitignored**. An integer the
+- **`knowledge/context/curation/.sessions-since`** — **gitignored**. An integer the
   hook increments each session and the curator/orchestrator zeroes on
   completion. "Sessions since last curation" is inherently a *per-checkout
   velocity* signal — it has no meaning shared across clones/machines, so
@@ -116,7 +116,7 @@ publish friction.
 ## Wiring
 
 - **Agent:** `.claude/agents/curator.md` (sonnet, read-only, sole write
-  `context/curation/<date>-report.md`).
+  `knowledge/context/curation/<date>-report.md`).
 - **Hook:** `scripts/curation_staleness_check.sh`, added to
   `SessionStart` in `.claude/settings.json` alongside the bootstrap
   hooks. Reads the marker, increments the gitignored counter, and emits
@@ -125,7 +125,7 @@ publish friction.
   when due. **Never launches a session itself.** Fail-open on any error.
 - **CLAUDE.md:** roster row + the trigger contract in the delegation
   protocol (no new RULE — the prompt scopes this to roster + contract).
-- **`context/curation/`** — the report directory + a README convention.
+- **`knowledge/context/curation/`** — the report directory + a README convention.
 
 ## Acceptance (negative proof)
 

@@ -5,8 +5,8 @@ that Oracle's stitch was "zero adapter API calls" is disproven. The
 platform has NO property→edge code path; `relationships|*_parent`
 properties and TraversalSpecs never create edges. Oracle's edges come
 from a per-cycle Suite API read under the platform-injected per-instance
-credential. See `context/investigations/oracle-stitch-autopsy-2026-07-02.md`
-and `context/investigations/platform-edge-engine-2026-07-02.md`. This
+credential. See `knowledge/context/investigations/oracle-stitch-autopsy-2026-07-02.md`
+and `knowledge/context/investigations/platform-edge-engine-2026-07-02.md`. This
 file is retained as the experiment record; its Vision premise is
 historical.
 
@@ -37,7 +37,7 @@ Synology stitch works from a Cloud Proxy with zero credentials.
 - **Experiment (build 25):** clone the vendor descriptor construct
   (TraversalSpecKind ResourcePath `…::child||VMWARE::Datastore::~child`
   + `Datastore_parent` isProperty placeholder — grammar quoted in
-  `context/api-maps/tvs-declarative-stitching.md`) into synology's
+  `knowledge/context/api-maps/tvs-declarative-stitching.md`) into synology's
   describe.xml, and have the adapter report
   `relationships|Datastore_parent = <path value>` on each LUN/NFS
   resource, built purely from Synology API data.
@@ -57,10 +57,10 @@ Synology stitch works from a Cloud Proxy with zero credentials.
 
 ## Evidence base
 
-- `context/api-maps/tvs-declarative-stitching.md` — descriptor grammar,
+- `knowledge/context/api-maps/tvs-declarative-stitching.md` — descriptor grammar,
   quoted from 12+ storage paks.
-- `context/api-maps/tvs-datastore-binding-value.md` — binding values
+- `knowledge/context/api-maps/tvs-datastore-binding-value.md` — binding values
   from vendor bytecode; platform matches `DataStrorePath`.
-- `context/investigations/recon_log.md` (2026-07-01/02) + live prod
+- `knowledge/context/investigations/recon_log.md` (2026-07-01/02) + live prod
   reads — Oracle property mechanism + live `DataStrorePath` forms.
-- DEF-006 in `context/defects.md` — the gap this closes.
+- DEF-006 in `knowledge/context/defects.md` — the gap this closes.

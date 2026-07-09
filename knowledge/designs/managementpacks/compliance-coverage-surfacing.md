@@ -4,7 +4,7 @@
 **Status**: Queued (behind the esxcli sprint)
 **Type**: Tier 2 SDK adapter + content enhancement (compliance)
 **Owner agents**: `sdk-adapter-author` (counts) + `dashboard-author` (widget)
-**Parent**: `designs/managementpacks/vcf-compliance-adapter.md`
+**Parent**: `knowledge/designs/managementpacks/vcf-compliance-adapter.md`
 
 ---
 

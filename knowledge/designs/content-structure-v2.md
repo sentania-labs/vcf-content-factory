@@ -3,8 +3,8 @@
 **Status:** queued 2026-04-27 (items #1 and #3 still scoped; #2 superseded
 by v3; #4 subsumed into v3)
 **Owner:** orchestrator (planning) + tooling agent (implementation)
-**Builds on:** `designs/release-lifecycle-v1.md` (publish pipeline + ThirdPartyContent routing already shipped)
-**Related:** `designs/content-structure-v3.md` — bigger restructure that
+**Builds on:** `knowledge/designs/release-lifecycle-v1.md` (publish pipeline + ThirdPartyContent routing already shipped)
+**Related:** `knowledge/designs/content-structure-v3.md` — bigger restructure that
 supersedes the third_party/ promotion in this doc and the resolver fix.
 
 ## Context
@@ -20,7 +20,7 @@ Two bundles in the repo today are 1-dashboard wrappers, not true multi-content b
 - `bundles/capacity-assessment.yaml` — wraps `dashboards/capacity_assessment.yaml` + 11 SMs + 2 views + 1 customgroup (all already in top-level dirs).
 - `bundles/vks-core-consumption.yaml` — wraps `dashboards/vks_core_consumption.yaml` + 8 SMs + 1 view + 1 report (all in top-level dirs).
 
-Per the dictionary update (`context/dictionary.md`, the `Bundle` definition tightened 2026-04-27), bundles are reserved for genuinely multi-content sets. These two predate the release-manifest concept; they earned their place when bundles were the only way to declare "this group ships together," which is now the release manifest's job.
+Per the dictionary update (`knowledge/context/dictionary.md`, the `Bundle` definition tightened 2026-04-27), bundles are reserved for genuinely multi-content sets. These two predate the release-manifest concept; they earned their place when bundles were the only way to declare "this group ships together," which is now the release manifest's job.
 
 **Per-bundle cleanup:**
 

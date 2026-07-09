@@ -4,7 +4,7 @@
 **Scope:** cross-MP relationship stitching in `content/sdk-adapters/synology`
 (and shared framework `vcfops_managementpacks/adapter_framework/…/stitch/`),
 measured against the presumed-correct 2023–2024 Broadcom TVS idiom documented in
-`context/api-maps/tvs-cross-mp-stitching.md`.
+`knowledge/context/api-maps/tvs-cross-mp-stitching.md`.
 **Posture:** static; no build, no install, no live instance touched. Every
 verdict is backed by a code quote or an explicit "can't determine from source."
 
@@ -17,10 +17,10 @@ discussed inline where relevant).
 
 ## Evidence base (read, not re-derived)
 
-- `context/api-maps/tvs-cross-mp-stitching.md` — the vendor idiom (bytecode RE of 8 paks).
-- `context/cleanroom-requests/2026-06-30-CORRECTION-cp-stitches-via-casa.md` — the CaSA correction.
-- `context/investigations/recon_log.md` (2026-07-01 Oracle entry) — live proof Oracle stitches creds-free from the CP.
-- `lessons/setrelationships-foreign-adapter-scoped.md` — our 9.0.2-proven / 9.1-unverified scoping assumption.
+- `knowledge/context/api-maps/tvs-cross-mp-stitching.md` — the vendor idiom (bytecode RE of 8 paks).
+- `knowledge/context/cleanroom-requests/2026-06-30-CORRECTION-cp-stitches-via-casa.md` — the CaSA correction.
+- `knowledge/context/investigations/recon_log.md` (2026-07-01 Oracle entry) — live proof Oracle stitches creds-free from the CP.
+- `knowledge/lessons/setrelationships-foreign-adapter-scoped.md` — our 9.0.2-proven / 9.1-unverified scoping assumption.
 
 Code read in full: `SynologyAdapter.java`, `SynologyStitcher.java`,
 `SuiteApiStitcher.java`, `SuiteApiStitchClient.java`, `AmbientCredential.java`,
@@ -148,7 +148,7 @@ An additive form exists (`buildDelta(false)` → `rels.addRelationships(...)`,
 `:242`) but the Synology cross-link does **not** use it. So our foreign edge rides
 `setRelationships(Datastore, {synologyChildren})`, whose clobber-safety depends on
 the platform scoping the replacement per-reporting-adapter —
-**proven on 9.0.2 only** (`lessons/setrelationships-foreign-adapter-scoped.md`,
+**proven on 9.0.2 only** (`knowledge/lessons/setrelationships-foreign-adapter-scoped.md`,
 DEF-003 closed on that basis), **unverified on 9.1**.
 
 The TVS corpus is uniformly **additive** (`addParent`/`addChild`/`addMultipleParents`
@@ -197,7 +197,7 @@ Datastores in one `GET /api/resources?adapterKind=VMWARE&resourceKind=Datastore&
 and index/match **client-side** by `DataStrorePath`
 (`SynologyStitcher.loadDatastores():86-127`, `SuiteApiDatastoreBridge:216-257`).
 This is the documented factory bulk-read + client-lookup pattern
-(`lessons/synology-dsm-client-side-joins.md`) — reasonable, and it enables the
+(`knowledge/lessons/synology-dsm-client-side-joins.md`) — reasonable, and it enables the
 multi-vCenter fan-out the vendor single-value `loadAll` would collapse
 (`SynologyStitcher.java:56-64`). Two things to keep on the radar, neither blocking:
 
@@ -209,7 +209,7 @@ multi-vCenter fan-out the vendor single-value `loadAll` would collapse
    `ResourceKey` is rebuilt from the real per-identifier uniqueness flags read from
    the Suite API (`SuiteApiDatastoreBridge:246-247`
    `id.get("identifierType").get("isPartOfUniqueness").asBoolean()`), **not**
-   hardcoded `true` — exactly what `lessons/cross-mp-foreign-key-uniqueness-flags.md`
+   hardcoded `true` — exactly what `knowledge/lessons/cross-mp-foreign-key-uniqueness-flags.md`
    requires (the synology .18–.21 over-marking bug that silently dropped edges).
    The Datastore is resolved by `DataStrorePath`, never a bare MOID
    (`SynologyStitcher.java:24-26`, `lunDataStorePath`/`nfsDataStorePath`) — the

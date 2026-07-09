@@ -167,7 +167,7 @@ evaluated by a different engine and are not affected.
 MPB's relationship model requires real metric values that match
 between parent and child objects, where both metrics are pulled from
 each object's own primary request response body (the "UniFi
-pattern" — see `context/api_pattern_catalog.md` UniFi entry for the
+pattern" — see `knowledge/context/api_pattern_catalog.md` UniFi entry for the
 canonical example).
 
 Redfish APIs encode parent-child hierarchy in URL paths
@@ -219,7 +219,7 @@ rather than assuming this limitation blocks everything.
 
 Authority: `context/lessons_dell_redfish_2026_05_18.md` (empirical
 session writeup with MPB error messages for each failure mode);
-`context/api_pattern_catalog.md` Redfish entry.
+`knowledge/context/api_pattern_catalog.md` Redfish entry.
 
 ## Pak install is UI-only (not scriptable via Suite API)
 

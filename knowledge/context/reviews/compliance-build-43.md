@@ -93,7 +93,7 @@ silent catches are `disconnect()`'s Logout and `destroyViewQuietly()`'s DestroyV
 parsing already proven in prior builds). Not touched by this migration.
 
 ### 5. Stitching identity — the MOID trap (skill § ARIA_OPS stitching identity;
-`lessons/foreign-resource-property-push.md`) — PASS
+`knowledge/lessons/foreign-resource-property-push.md`) — PASS
 
 `matchResource` resolves MOID-first then exact name then dot-prefix fuzzy, against
 **per-resource-kind** tables keyed by `VMEntityObjectID`
@@ -219,4 +219,4 @@ follow-up task. The remaining acceptance bar is the live golden comparison vs bu
 gate. Nothing in the static review blocks promotion to that step.
 
 ## Report
-`context/reviews/compliance-build-43.md`
+`knowledge/context/reviews/compliance-build-43.md`

@@ -96,7 +96,7 @@ Loader responsibilities:
 
 ## Specimens to learn from
 
-Under `context/specimens/customgroups/`:
+Under `knowledge/context/specimens/customgroups/`:
 
 - `01_[Custom]_VMs_on_only_Standard_PGs.json` — relationship-only,
   double-condition (`DESCENDANT EQ X` AND `DESCENDANT NOT_EQ Y`)

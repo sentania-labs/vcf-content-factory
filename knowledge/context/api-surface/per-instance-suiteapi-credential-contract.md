@@ -3,7 +3,7 @@
 **Question (the only one this file answers):** By what programmatic
 contract does the platform/collector hand an adapter its per-instance
 Suite API credential — the one the live Oracle autopsy
-(`context/investigations/oracle-stitch-autopsy-2026-07-02.md`) saw
+(`knowledge/context/investigations/oracle-stitch-autopsy-2026-07-02.md`) saw
 acquire a token as the **adapter INSTANCE UUID** `48fb5d76-…` even
 though Oracle's pak declares no vROps credential field?
 

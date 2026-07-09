@@ -50,7 +50,7 @@ synology defect.
 - **Keyed constructors** `super(ADAPTER_KIND)` / `super(ADAPTER_KIND, dir, id)`
   (SynologyAdapter.java:77–83). ✔
 - **No `onDescribe` override** — framework default; only an explanatory comment
-  block at :86. ✔ (`lessons/controller-describe-bare-instantiation.md`)
+  block at :86. ✔ (`knowledge/lessons/controller-describe-bare-instantiation.md`)
 - **No `adapterLogger()` shadow** — no private `adapterLogger`, no
   `getAdapterLoggerFactory()`; the only mention is a doc-comment in the client.
   Helper logger is `componentLogger(SynologyApiClient.class)` at both call sites
@@ -118,7 +118,7 @@ fail? Traced end-to-end:
 ### WARNING
 
 - **[SynologyAdapter.java buildRelationships :709–847 / commit message + design
-  note]** — `rules/no-fabricated-metrics.md` gap-honesty adjacency / parity.
+  note]** — `knowledge/rules/no-fabricated-metrics.md` gap-honesty adjacency / parity.
   The v1→v2 migration **drops the foreign Datastore parent relationship** that v1
   `stitchDatastores` emitted onto Synology iSCSI-LUN and NFS-Export resources.
   The author/commit/design-note justify this as "v1 produced no landing data
@@ -141,7 +141,7 @@ fail? Traced end-to-end:
   acceptable before this ships, since the golden baseline lists it as present.
 
 - **[SynologyApiClient.java callRaw :184 + login :49–63 + logout warn :71]** —
-  `rules/no-secrets-on-disk.md`. The session id (`_sid`) and, on the login call,
+  `knowledge/rules/no-secrets-on-disk.md`. The session id (`_sid`) and, on the login call,
   the **plaintext URL-encoded password** are embedded in the request `path`
   (`synoUrl` :192–194 appends `_sid`; login appends `account=`/`passwd=`). On a
   non-200 response `callRaw` throws `"HTTP " + statusCode + " from " + path` —
@@ -228,4 +228,4 @@ gate, and nothing in this static review blocks promotion to it.
 - No `build-sdk` run by this review; synology + factory trees left clean.
 
 ## Report
-`context/reviews/synology-build-14.md`
+`knowledge/context/reviews/synology-build-14.md`

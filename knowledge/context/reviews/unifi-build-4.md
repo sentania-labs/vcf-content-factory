@@ -3,12 +3,12 @@
 - **Adapter:** `content/sdk-adapters/unifi`
 - **Build reviewed:** 4 (commit `0b8a915`, "fix(adapter): collect-path discovery
   for VCF Ops 9.0.2 (build 4)") — the **scoped delta** over the APPROVEd build 3
-  (`9e0ee81`, reviewed in `context/reviews/unifi-build-3.md`).
+  (`9e0ee81`, reviewed in `knowledge/context/reviews/unifi-build-3.md`).
 - **Reviewer:** `sdk-adapter-reviewer` (static, pre-install gate)
 - **Verdict:** **APPROVE** (0 BLOCKING)
 - **Findings:** 0 BLOCKING / 0 WARNING / 2 NIT
 - **Date:** 2026-06-10
-- **Authority baseline:** build-3 review (`context/reviews/unifi-build-3.md`),
+- **Authority baseline:** build-3 review (`knowledge/context/reviews/unifi-build-3.md`),
   framework SPI source (`vcfops_managementpacks/adapter_framework/src/com/vcfcf/adapter/spi/VcfCfCollector.java`,
   `.../VcfCfAdapter.java`), spec/19 §1 step 1 (top-of-cycle rediscovery) + §2
   (new-resource registration identity contract), the compliance reference adapter
@@ -261,4 +261,4 @@ symptom build 4 just fixed for unifi.
   clean (HEAD `0b8a915`); factory tree clean; `/tmp` build output only.
 
 ## Report
-`context/reviews/unifi-build-4.md`
+`knowledge/context/reviews/unifi-build-4.md`

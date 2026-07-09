@@ -21,7 +21,7 @@ The ambient Suite API identity becomes the credential the collector
 hands every adapter at startup — the mechanism the vendor corpus uses
 and the live Oracle adapter proves works on the prod Cloud Proxy.
 
-- **Contract (bytecode-proven, `context/api-surface/
+- **Contract (bytecode-proven, `knowledge/context/api-surface/
   per-instance-suiteapi-credential-contract.md`):** the collector
   serializes a per-instance credential into the adapter's config
   payload; SDK-public read: `AdapterBase.getAdapterConfig()
@@ -48,7 +48,7 @@ and the live Oracle adapter proves works on the prod Cloud Proxy.
   export/target is actually served on, or all candidates), and REMOVE
   the build-25 `relationships|Datastore_parent` property emission +
   its describe placeholders (platform-proven inert for edge creation:
-  `context/investigations/platform-edge-engine-2026-07-02.md` — no
+  `knowledge/context/investigations/platform-edge-engine-2026-07-02.md` — no
   property→edge code path exists).
 - **Ladder:** tooling → framework-reviewer → build 26 → devel →
   prod CP fixture → DEF-006 close on live evidence → doc corrections →
@@ -57,9 +57,9 @@ and the live Oracle adapter proves works on the prod Cloud Proxy.
 
 ## Evidence base
 
-- `context/api-surface/per-instance-suiteapi-credential-contract.md`
-- `context/investigations/oracle-stitch-autopsy-2026-07-02.md` (live
+- `knowledge/context/api-surface/per-instance-suiteapi-credential-contract.md`
+- `knowledge/context/investigations/oracle-stitch-autopsy-2026-07-02.md` (live
   DEBUG capture: token as instance UUID; corrects three earlier docs)
-- `context/investigations/platform-edge-engine-2026-07-02.md` (edge
+- `knowledge/context/investigations/platform-edge-engine-2026-07-02.md` (edge
   engine: identifier-keyed cache; no property path; traversal inert)
-- DEF-006 in `context/defects.md`
+- DEF-006 in `knowledge/context/defects.md`

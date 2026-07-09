@@ -8,16 +8,16 @@
 - **Verdict:** **APPROVE** (0 BLOCKING)
 - **Findings:** 0 BLOCKING / 2 WARNING / 1 NIT
 - **Date:** 2026-06-10
-- **Authority baseline:** build-16 review (`context/reviews/synology-build-16.md`),
-  build-14 review (`context/reviews/synology-build-14.md`), sibling reviews this
+- **Authority baseline:** build-16 review (`knowledge/context/reviews/synology-build-16.md`),
+  build-14 review (`knowledge/context/reviews/synology-build-14.md`), sibling reviews this
   round (`compliance-build-50.md`, `unifi-build-5.md`) for the §22 framework
   contract and the bytecode-verified framework jar, framework §22
-  (`context/framework_v2_migration.md`), investigation
-  `context/investigations/unifi_401_and_relationship_persistence_2026_06_10.md`,
-  golden baseline (`context/investigations/synology_v1_golden_baseline_devel.md`),
-  skill *Unreadable is NOT compliant*, `lessons/synology-dsm-client-side-joins.md`,
-  `lessons/foreign-resource-property-push.md`, `rules/no-secrets-on-disk.md`,
-  `rules/no-fabricated-metrics.md`.
+  (`knowledge/context/framework_v2_migration.md`), investigation
+  `knowledge/context/investigations/unifi_401_and_relationship_persistence_2026_06_10.md`,
+  golden baseline (`knowledge/context/investigations/synology_v1_golden_baseline_devel.md`),
+  skill *Unreadable is NOT compliant*, `knowledge/lessons/synology-dsm-client-side-joins.md`,
+  `knowledge/lessons/foreign-resource-property-push.md`, `knowledge/rules/no-secrets-on-disk.md`,
+  `knowledge/rules/no-fabricated-metrics.md`.
 
 ## Claims check (independently re-run)
 
@@ -107,7 +107,7 @@ no describe-killing NPE.**
 `SynologyStitcher.java` is **byte-unchanged** this build (confirmed by diff). The
 build-16 cross-link logic — path-identity match (`datastoresByPath.get(path)`),
 byte-identical NAA / `ip/volPath/share` keys to v1, **never bare MOID** — is
-exactly as APPROVEd in build 16 (`lessons/foreign-resource-property-push.md`,
+exactly as APPROVEd in build 16 (`knowledge/lessons/foreign-resource-property-push.md`,
 skill *ARIA_OPS stitching identity*).
 
 The framework `ForeignResourceResolver` ResourceKey-swap fix (verified in this
@@ -184,7 +184,7 @@ neither gates.
 - **Redaction (_sid/passwd/account):** PASS. `SynologyApiClient` byte-unchanged;
   the build-15 `redact()` at `callRaw` throw (`:186`) and `logout` WARN (`:73`)
   intact. The one new log line (`logInfo("Synology enumerate: …")`) emits counts
-  only — no secret. `rules/no-secrets-on-disk.md` clean.
+  only — no secret. `knowledge/rules/no-secrets-on-disk.md` clean.
 - **Build hygiene:** PASS. `build_number` 16→17 in `adapter.yaml`; matching
   1.0.0.17 CHANGELOG entry, accurate and thorough; minimal diff (one Java file =
   §22 refactor, + version/docs); no drive-by refactor. The generalization
@@ -243,4 +243,4 @@ devel/`qa-tester` gate.
   gitignored; only review `.md` files untracked.
 
 ## Report
-`context/reviews/synology-build-17.md`
+`knowledge/context/reviews/synology-build-17.md`

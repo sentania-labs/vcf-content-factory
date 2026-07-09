@@ -127,7 +127,7 @@ subcommands. Two learning targets in flight:
   fix.
 - **UniFi Network API** — second MP, framework-generalization
   test. API mapped against the devel controller; design in
-  `designs/unifi-mp-v1.md`.
+  `knowledge/designs/unifi-mp-v1.md`.
 - **GitLab** — untracked third MP under `managementpacks/`
   exploring CI/CD observability.
 

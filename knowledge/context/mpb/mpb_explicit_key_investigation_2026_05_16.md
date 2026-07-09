@@ -268,7 +268,7 @@ YAML still has redundant `key:` declarations that are obeyed in
 one install path and ignored in the other.
 
 This is workable but ugly. Codify the rule in
-`context/authoring/guide_content_authoring.md` if pursued.
+`knowledge/context/authoring/guide_content_authoring.md` if pursued.
 
 ### 3. Mutate the design via PUT before install (not viable)
 

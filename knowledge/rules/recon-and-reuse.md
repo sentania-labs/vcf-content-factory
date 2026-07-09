@@ -8,7 +8,7 @@ Every authoring request begins with `ops-recon`. Check, in order:
 1. Built-in metrics and transformations on the live instance
 2. Existing content on the instance
 3. Existing repo YAML
-4. Allowlisted external reference repos (`context/reference_sources.md`, grepped from `reference/references/`)
+4. Allowlisted external reference repos (`knowledge/context/reference_sources.md`, grepped from `reference/references/`)
 
 If any source has an exact match, stop — prefer adapt-and-import over authoring from scratch.
 

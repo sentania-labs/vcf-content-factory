@@ -3,7 +3,7 @@
 Captured 2026-04-28 against `vcf-lab-operations-devel.int.sentania.net`
 and `vcf-lab-operations.int.sentania.net`. Companion to
 `context/auth_vidb_oauth_flow.md` (VIDB-specific deep-dive) and
-the design plan `designs/auth-source-support-v1.md`.
+the design plan `knowledge/designs/auth-source-support-v1.md`.
 
 This file documents the **wire formats** for auth-source
 discovery, Suite-API token acquisition, and UI session login.
@@ -281,7 +281,7 @@ Decode the `OPS_SESSION` value (base64 → JSON) to extract
 `csrfToken` for subsequent Struts/Ext.Direct calls. This part of
 the protocol is identical regardless of authSourceType; the
 hardcoded Local triplet is the only source-specific bit and
-becomes a configurable input per `designs/auth-source-support-v1.md`.
+becomes a configurable input per `knowledge/designs/auth-source-support-v1.md`.
 
 ## Server-side surprises worth flagging
 

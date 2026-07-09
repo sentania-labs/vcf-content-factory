@@ -1,6 +1,6 @@
-# Editing context/defects.md is corpus-coupled — change it via PR, never a direct push to main
+# Editing knowledge/context/defects.md is corpus-coupled — change it via PR, never a direct push to main
 
-**Rule.** Any change to `context/defects.md` — including just flipping a
+**Rule.** Any change to `knowledge/context/defects.md` — including just flipping a
 `Status: open → closed` — goes through a **PR**, not a direct push to `main`.
 The factory test suite (`tests/test_defect_gate.py`) has **real-corpus-coupled**
 assertions that read the live registry; a status change can turn them red. The
@@ -32,6 +32,6 @@ prove "closed defect clears the gate" — in one PR.
    re-break CI.
 
 **Source.** PR #27 (`test(defect-gate): de-brittle real-corpus assertions after
-DEF-001 closed`); `context/reviews/framework/defect-gate-tests-def001-closed.md`;
-`rules/release-gate-defects.md` (RULE-012). The registry's own note ("Only the
+DEF-001 closed`); `knowledge/context/reviews/framework/defect-gate-tests-def001-closed.md`;
+`knowledge/rules/release-gate-defects.md` (RULE-012). The registry's own note ("Only the
 orchestrator writes here, in a diff") — this lesson refines *how* that diff ships.
