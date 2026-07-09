@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # path_reference_audit.sh — the top-level-reorg migration safety net.
 #
-# Spec: memory/environment/TODO-top-level-reorg.md "New HOOKS" §3 +
-# "Open holes to resolve during execution" #4 (agent-prompt path sweep);
-# durable-output map: STRUCTURE.md (the map this script cross-checks the
+# Spec: originally the (since-deleted) local reorg TODO's "New HOOKS" §3;
+# the governing design is now knowledge/designs/reorg-v2-landing-page.md.
+# Durable-output map: STRUCTURE.md (the map this script cross-checks the
 # corpus against).
 #
 # Greps the governance corpus for repo-relative path references and
@@ -16,7 +16,20 @@
 # sweep" hole):
 #   CLAUDE.md, STRUCTURE.md, .claude/agents/*.md, .claude/skills/**/*.md,
 #   knowledge/rules/*.md, knowledge/lessons/INDEX.md, knowledge/context/README.md,
-#   .github/workflows/*.yml, .gitignore
+#   .github/workflows/*.yml, .gitignore,
+#   src/**/*.py + src/**/README.md + tests/**/*.py — knowledge/-anchored
+#   citations ONLY (added after the reorg-v2 phase 2 review: the framework
+#   Python's docstring/comment citations were invisible to this audit — W2
+#   in knowledge/context/reviews/framework/reorg-v2-phase2-knowledge-move.md —
+#   so it reported "clear" while dead knowledge/context/ citations existed
+#   in src/. The scan is deliberately restricted to tokens starting with
+#   `knowledge/`: framework source is full of pak-INTERNAL wire paths
+#   (`content/files`, `content/resources` inside a .pak) that collide with
+#   the repo's `content/` root, and a full-token scan both drowns in those
+#   false positives and is too slow for a CI gate. Governance-corpus
+#   citations are the class that goes dead in a reorg; vendor endpoint
+#   strings are immune — candidates preceded by "/" are rejected by the
+#   extraction lookbehind.)
 #
 # Heuristic (tuned against the tree as it exists today; every rule below
 # earned its place fixing a real false positive found by running this
@@ -112,8 +125,8 @@
 # prose — the goal is signal, not noise. It will not catch every future
 # dead reference; it is a net, not a prover.
 #
-# This script does not (yet) run automatically (no pre-push/CI wiring) —
-# see the reorg TODO for how it graduates into a git hook or CI step.
+# This script runs as an enforcing CI gate (.github/workflows/ci.yml,
+# "Path reference audit" step) — exit 2 fails the build.
 #
 # Usage:
 #   scripts/path_reference_audit.sh [-h|--help]
@@ -587,6 +600,25 @@ for file in "${TARGET_FILES[@]}"; do
     prev_line="${line}"
   done < "${file}"
 done
+
+# --- Second pass: src/ + tests/ knowledge/-anchored citations (W2) ----------
+# One pre-filtering grep over the whole framework source, then only the
+# hit lines go through the (subprocess-heavy) validity check — keeps the
+# CI gate fast. Scope: tokens starting with `knowledge/` (see the corpus
+# note in the header for why the scan is restricted to this class).
+while IFS= read -r hit; do
+  file="${hit%%:*}"
+  rest="${hit#*:}"
+  lineno="${rest%%:*}"
+  line="${rest#*:}"
+  declare -a candidates=()
+  while IFS= read -r m; do
+    [[ -n "${m}" ]] && candidates+=("${m}")
+  done < <(grep -oP '(?<![/A-Za-z0-9_.-])knowledge/(?:[A-Za-z0-9_.\/-]*[A-Za-z0-9_-])?' <<< "${line}" 2>/dev/null || true)
+  if [[ ${#candidates[@]} -gt 0 ]]; then
+    check_candidates "${file}" "${lineno}" "${line}" "" "${candidates[@]}"
+  fi
+done < <(grep -rnH 'knowledge/' --include='*.py' --include='README.md' src tests 2>/dev/null || true)
 
 if [[ "${FOUND_DEAD}" -eq 1 ]]; then
   echo >&2

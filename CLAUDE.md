@@ -189,6 +189,18 @@ file (not a skill) because it runs before any skill could load.
    (RULE-013). The framework is the product — it gets at least the
    protection the content does.
 
+   **Repo-wide migrations are orchestrator-owned.** A directory move /
+   citation sweep that spans many surfaces (CLAUDE.md, agent prompts,
+   `.claude/` config, scripts, workflows, root docs) is not a
+   delegable unit: no subagent's write scope covers it, and a subagent
+   asked to rewrite CLAUDE.md or agent prompts must refuse (as
+   `tooling` correctly did in reorg-v2 phase 2). Split it along
+   mandate lines — the orchestrator executes the moves and the
+   non-`src/` sweep directly, `tooling` handles the `src/vcfops_*/` +
+   `tests/` portion, and the `framework-reviewer` gate above still
+   applies to any resulting `src/vcfops_*/` diff. Everything lands in
+   one PR the user reviews.
+
 10. **Curation trigger — heed the staleness nudge.** The SessionStart
     hook `scripts/curation_staleness_check.sh` emits a "CURATION DUE"
     `additionalContext` when the governance corpus is overdue

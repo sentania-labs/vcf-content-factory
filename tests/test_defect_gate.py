@@ -94,7 +94,7 @@ _FIXTURE_REGISTRY_TEXT = """\
 - **Status:** open
 - **Affects:** fixture-pak-alpha
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/fixture.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Open blocking defect used to prove the gate fires.
 
 ### DEF-002
@@ -104,7 +104,7 @@ _FIXTURE_REGISTRY_TEXT = """\
 - **Status:** open
 - **Affects:** fixture-pak-beta
 - **First-seen:** build 2 (2026-01-02)
-- **Source:** knowledge/context/reviews/fixture.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Second open blocking defect, different pak.
 
 ### DEF-003
@@ -114,7 +114,7 @@ _FIXTURE_REGISTRY_TEXT = """\
 - **Status:** closed
 - **Affects:** fixture-pak-gamma
 - **First-seen:** build 3 (2026-01-03)
-- **Source:** knowledge/context/reviews/fixture.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Closed defect; must never appear as a blocker.
 - **Closing-evidence:** Fixture proof — closed for this test suite.
 
@@ -125,7 +125,7 @@ _FIXTURE_REGISTRY_TEXT = """\
 - **Status:** open
 - **Affects:** fixture-pak-delta
 - **First-seen:** build 4 (2026-01-04)
-- **Source:** knowledge/context/reviews/fixture.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Tracked severity must never gate a release.
 """
 
@@ -259,7 +259,7 @@ class TestMalformedEntries:
 - **Status:** open
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Test defect with bad severity.
 """)
         with pytest.raises(DefectRegistryError, match="invalid Severity"):
@@ -279,7 +279,7 @@ class TestMalformedEntries:
 - **Status:** waived
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Test defect with waived status.
 """)
         with pytest.raises(DefectRegistryError, match="waived"):
@@ -299,7 +299,7 @@ class TestMalformedEntries:
 - **Status:** closed
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** This entry is closed but has no Closing-evidence.
 """)
         with pytest.raises(DefectRegistryError, match="Closing-evidence"):
@@ -319,7 +319,7 @@ class TestMalformedEntries:
 - **Status:** open
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** First.
 
 ### DEF-001
@@ -329,7 +329,7 @@ class TestMalformedEntries:
 - **Status:** open
 - **Affects:** unifi
 - **First-seen:** build 2 (2026-01-02)
-- **Source:** knowledge/context/reviews/test2.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture-2>.md
 - **Summary:** Duplicate id — must be rejected.
 """)
         with pytest.raises(DefectRegistryError, match="duplicate"):
@@ -348,7 +348,7 @@ class TestMalformedEntries:
 - **Status:** open
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Missing Title field.
 """)
         with pytest.raises(DefectRegistryError, match="Title"):
@@ -368,7 +368,7 @@ class TestMalformedEntries:
 - **Status:** pending
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Unknown status.
 """)
         with pytest.raises(DefectRegistryError, match="invalid Status"):
@@ -437,7 +437,7 @@ class TestGateItem:
 - **Status:** open
 - **Affects:** dashboard/my_dashboard
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Blocking dashboard defect.
 
 ### DEF-002
@@ -447,7 +447,7 @@ class TestGateItem:
 - **Status:** open
 - **Affects:** view/my_view
 - **First-seen:** build 2 (2026-01-02)
-- **Source:** knowledge/context/reviews/test2.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture-2>.md
 - **Summary:** Non-blocking tracked issue — must not gate.
 """
 
@@ -561,7 +561,7 @@ class TestCLIDefectGate:
 - **Status:** closed
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Closed without evidence — malformed.
 """)
         monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", bad_reg)
@@ -600,7 +600,7 @@ class TestCLIDefectGate:
 - **Status:** open
 - **Affects:** dashboards/demand_driven_capacity_v2
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Blocking dashboard defect.
 """)
         monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", reg)
@@ -623,7 +623,7 @@ class TestCLIDefectGate:
 - **Status:** open
 - **Affects:** dashboards/demand_driven_capacity_v2
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Only affects demand_driven_capacity_v2.
 """)
         monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", reg)
@@ -749,7 +749,7 @@ class TestGatePublish:
 - **Status:** closed
 - **Affects:** fixturepak
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Closed for test.
 - **Closing-evidence:** Test proof — closed for this fixture.
 """, encoding="utf-8")
@@ -782,7 +782,7 @@ class TestGatePublish:
 - **Status:** open
 - **Affects:** fixturepak
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Open blocker used to prove the gate raises.
 """, encoding="utf-8")
 
@@ -817,7 +817,7 @@ class TestGatePublish:
 - **Status:** open
 - **Affects:** some-other-pak
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Does not affect the pak under test.
 """, encoding="utf-8")
 
@@ -849,7 +849,7 @@ class TestGatePublish:
 - **Status:** closed
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Closed for test.
 - **Closing-evidence:** Test proof — closed for this fixture.
 """, encoding="utf-8")
@@ -882,7 +882,7 @@ class TestGatePublish:
 - **Status:** closed
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/test.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Closed without evidence — malformed.
 """, encoding="utf-8")
 
@@ -942,7 +942,7 @@ class TestGatePublish:
 - **Status:** open
 - **Affects:** synology
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/fixture.md
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Blocking defect created by the test fixture.
 """, encoding="utf-8")
 
