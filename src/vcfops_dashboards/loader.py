@@ -318,7 +318,10 @@ class SubjectFilterCondition:
             )
         if self.business_hours is not None and not isinstance(self.business_hours, bool):
             raise DashboardValidationError(
-                f"view {view_name}: subject_filter.business_hours must be a bool"
+                f"view {view_name}: subject_filter.business_hours must be a bool "
+                f"(unquoted true/false in YAML); got {type(self.business_hours).__name__} "
+                f"{self.business_hours!r} — a quoted \"true\"/\"false\" string is not "
+                "accepted and is not silently coerced"
             )
 
 
@@ -1299,14 +1302,52 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
             raise DashboardValidationError(
                 f"{path}: subject.filter condition must be a mapping, got {raw!r}"
             )
-        value = raw.get("value")
+
+        # Coerce-before-validate ordering bug (Codex P2, PR #47): the loader
+        # must NOT type-coerce a field into a value that happens to already
+        # be valid before SubjectFilterCondition.validate() gets a chance to
+        # reject the wrong type. `bool(raw["business_hours"])` was the
+        # concrete instance — bool() of ANY truthy value (including the
+        # string "false") is True, so a quoted `business_hours: "false"`
+        # silently became `True` instead of failing validation, and the
+        # renderer emitted `"businessHours":true`. Fixed by passing raw
+        # values straight through (preserving their original type) and
+        # letting `validate()` do the sole type check.
+        #
+        # For the string-typed fields (filter_type/metric_key/condition/
+        # transform) the same failure *shape* (str(x) coincidentally
+        # equalling a valid enum token) cannot happen for any YAML-typed
+        # value, but a non-str input was still being silently stringified
+        # here rather than reported with a clear type error — fixed the
+        # same way: reject non-str values at load time instead of masking
+        # them via str().
+        def _str_field(key: str, upper: bool = False) -> str:
+            v = raw.get(key)
+            if v is None:
+                return ""
+            if not isinstance(v, str):
+                raise DashboardValidationError(
+                    f"{path}: subject.filter.{key} must be a string; got "
+                    f"{type(v).__name__} ({v!r})"
+                )
+            v = v.strip()
+            return v.upper() if upper else v
+
+        transform = None
+        if "transform" in raw and raw.get("transform") is not None:
+            transform = _str_field("transform", upper=True) or None
+
+        business_hours = None
+        if "business_hours" in raw and raw.get("business_hours") is not None:
+            business_hours = raw["business_hours"]  # type preserved; validate() rejects non-bool
+
         return SubjectFilterCondition(
-            filter_type=str(raw.get("filter_type", "")).strip(),
-            metric_key=str(raw.get("metric_key", "")).strip(),
-            condition=str(raw.get("condition", "")).strip().upper(),
-            value=value,
-            transform=(str(raw.get("transform")).strip().upper() if raw.get("transform") else None),
-            business_hours=(bool(raw["business_hours"]) if "business_hours" in raw and raw["business_hours"] is not None else None),
+            filter_type=_str_field("filter_type"),
+            metric_key=_str_field("metric_key"),
+            condition=_str_field("condition", upper=True),
+            value=raw.get("value"),
+            transform=transform,
+            business_hours=business_hours,
         )
 
     # subject.filter — flat list of condition mappings (single implicit AND

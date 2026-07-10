@@ -205,6 +205,110 @@ class TestLoaderValidation:
         with pytest.raises(DashboardValidationError, match="transform"):
             load_view(p, enforce_framework_prefix=False)
 
+    def test_business_hours_quoted_false_string_rejected(self, tmp_path):
+        """Codex P2 (PR #47): bool(raw["business_hours"]) previously coerced
+        ANY truthy value — including the string "false" — to True before
+        validate() ran, so a quoted "false" silently became `businessHours:
+        true` in the rendered XML. Must now be a loud validation failure,
+        not a silent flip.
+        """
+        from vcfops_dashboards.loader import load_view, DashboardValidationError
+
+        data = _base_view_data([
+            {
+                "filter_type": "metrics",
+                "metric_key": "net|usage_average",
+                "condition": "GREATER_THAN",
+                "value": 12,
+                "business_hours": "false",
+            }
+        ])
+        p = _write_view(tmp_path, data)
+        with pytest.raises(DashboardValidationError, match="business_hours"):
+            load_view(p, enforce_framework_prefix=False)
+
+    def test_business_hours_quoted_true_string_rejected(self, tmp_path):
+        from vcfops_dashboards.loader import load_view, DashboardValidationError
+
+        data = _base_view_data([
+            {
+                "filter_type": "metrics",
+                "metric_key": "net|usage_average",
+                "condition": "GREATER_THAN",
+                "value": 12,
+                "business_hours": "true",
+            }
+        ])
+        p = _write_view(tmp_path, data)
+        with pytest.raises(DashboardValidationError, match="business_hours"):
+            load_view(p, enforce_framework_prefix=False)
+
+    def test_business_hours_unquoted_false_accepted(self, tmp_path):
+        from vcfops_dashboards.loader import load_view
+
+        data = _base_view_data([
+            {
+                "filter_type": "metrics",
+                "metric_key": "net|usage_average",
+                "condition": "GREATER_THAN",
+                "value": 12,
+                "business_hours": False,
+            }
+        ])
+        p = _write_view(tmp_path, data)
+        v = load_view(p, enforce_framework_prefix=False)
+        assert v.subject_filter[0][0].business_hours is False
+
+    def test_business_hours_unquoted_true_accepted(self, tmp_path):
+        from vcfops_dashboards.loader import load_view
+
+        data = _base_view_data([
+            {
+                "filter_type": "metrics",
+                "metric_key": "net|usage_average",
+                "condition": "GREATER_THAN",
+                "value": 12,
+                "business_hours": True,
+            }
+        ])
+        p = _write_view(tmp_path, data)
+        v = load_view(p, enforce_framework_prefix=False)
+        assert v.subject_filter[0][0].business_hours is True
+
+    def test_transform_non_string_rejected(self, tmp_path):
+        """Sibling-field audit: transform must also reject non-string types
+        at load time (previously silently stringified via str(x) rather
+        than reported with a clear type error)."""
+        from vcfops_dashboards.loader import load_view, DashboardValidationError
+
+        data = _base_view_data([
+            {
+                "filter_type": "metrics",
+                "metric_key": "net|usage_average",
+                "condition": "GREATER_THAN",
+                "value": 12,
+                "transform": 5,
+            }
+        ])
+        p = _write_view(tmp_path, data)
+        with pytest.raises(DashboardValidationError, match="transform"):
+            load_view(p, enforce_framework_prefix=False)
+
+    def test_condition_non_string_rejected(self, tmp_path):
+        from vcfops_dashboards.loader import load_view, DashboardValidationError
+
+        data = _base_view_data([
+            {
+                "filter_type": "metrics",
+                "metric_key": "net|usage_average",
+                "condition": True,
+                "value": 12,
+            }
+        ])
+        p = _write_view(tmp_path, data)
+        with pytest.raises(DashboardValidationError, match="condition"):
+            load_view(p, enforce_framework_prefix=False)
+
     def test_empty_filter_list_rejected(self, tmp_path):
         from vcfops_dashboards.loader import load_view, DashboardValidationError
 
