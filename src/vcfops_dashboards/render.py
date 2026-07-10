@@ -141,6 +141,36 @@ def _xml_property(name: str, value: str, localization_key: Optional[str] = None)
     return f'<Property name="{escape(name, {chr(34): "&quot;"})}" value="{escape(value, {chr(34): "&quot;"})}"/>'
 
 
+# The platform's ViewDef Localization Property `key` attribute is XSD-capped
+# at maxLength=64 (`#AnonType_keyPropertyLocaleLocalizationViewDefViewsContent`).
+# This helper is dormant for view columns today (displayName carries no
+# localizationKey — see the module docstring note near _xml_column below),
+# but the twin in vcfops_managementpacks/sdk_builder.py hit a real 69-char
+# key that aborted a whole colocated content/reports/ batch. Capped here too
+# so this class of bug can't resurface if column localizationKeys are ever
+# re-enabled or this helper reused elsewhere. See the 2026-07-10 addendum in
+# knowledge/context/investigations/sdk_pak_content_import_gap.md.
+_LOCALIZATION_KEY_MAX_LEN = 64
+
+
+def _cap_localization_key(key: str, max_len: int = _LOCALIZATION_KEY_MAX_LEN) -> str:
+    """Deterministically shorten *key* to at most *max_len* chars.
+
+    A blind truncate risks two long attribute keys colliding on the same
+    truncated prefix — Java properties would then silently keep only the
+    last-written line, dropping a column's localized label. To preserve
+    uniqueness, an over-length key is shortened to a prefix of the original
+    plus an underscore and an 8-hex-char SHA-1 digest of the *full* original
+    key, so two keys sharing a long common prefix still diverge in their
+    hash suffix.
+    """
+    if len(key) <= max_len:
+        return key
+    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:8]
+    prefix_len = max_len - len(digest) - 1  # -1 for the separating "_"
+    return f"{key[:prefix_len]}_{digest}"
+
+
 def _attribute_to_localization_key(attribute: str) -> str:
     """Convert an attribute key to a Java-properties-compatible localizationKey.
 
@@ -149,7 +179,9 @@ def _attribute_to_localization_key(attribute: str) -> str:
     must match exactly.
 
     Removes the 'Super Metric|' prefix, replaces '|' with '_', spaces with '_',
-    and strips non-(alphanumeric/hyphen/underscore) characters.
+    and strips non-(alphanumeric/hyphen/underscore) characters. The result is
+    capped at ``_LOCALIZATION_KEY_MAX_LEN`` chars (platform XSD maxLength=64)
+    — see ``_cap_localization_key``.
 
     Examples:
         "VCF-CF Compliance|score"       → "VCF-CF_Compliance_score"
@@ -161,7 +193,7 @@ def _attribute_to_localization_key(attribute: str) -> str:
         key = key[len("Super Metric|"):]
     key = key.replace("|", "_").replace(" ", "_")
     key = "".join(c for c in key if c.isalnum() or c in "-_")
-    return key
+    return _cap_localization_key(key)
 
 
 def _xml_buckets_control(view: ViewDef) -> str:

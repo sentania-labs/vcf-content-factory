@@ -273,3 +273,147 @@ kinds; adding a vcommunity-owned kind entry would be wrong — no widget
 references it.  Unlike the compliance pack (whose `ComplianceWorld` kind IS
 referenced by compliance widgets), vcommunity has no owning World widget
 anchor.  No code change required; the latent risk noted in Q3 does not apply.
+
+---
+
+# ADDENDUM — vcommunity-vsphere build-8: 0/11 ReportDefinitions + 4 views drop (2026-07-10)
+
+**Pak:** `vcfcf_sdk_vcommunity_vsphere` build-8, installed on
+vcf-lab-operations-**devel** as `0.0.0.8`.
+**Investigator:** api-explorer. **Posture:** read-only against devel (token
+acquire + GET + SSH log grep; **no** POST/PUT/DELETE, no test objects). Scratch
+pak extraction removed.
+
+## Symptom
+
+Build-8 shipped 11 CSV-export ReportDef XMLs (flat under `content/reports/`)
+plus 109 view subdirs (`content/reports/<slug>/content.xml`). Post-install:
+`GET /api/reportdefinitions` returns 63 total, **none ours (0/11)**; most views
+render, but a few return "No appropriate view definition is found."
+
+## Root cause — ONE defect, TWO effects: a view localization key exceeds the platform's 64-char XSD maxLength
+
+Devel `view-bridge.log` / `analytics-*.log` for the install window
+(2026-07-10 13:32 and 17:29) show the decisive error, thrown during
+`SolutionManagerDistributedTask.installReportContent → ContentImportService.importSolutionContent`:
+
+```
+JAXB unmarshalling exception; nested exception is javax.xml.bind.UnmarshalException
+cvc-maxLength-valid: Value 'config_policies_override_network_resourcepool_moving_override_allowed'
+  with length = '69' is not facet-valid with respect to maxLength '64'
+  for type '#AnonType_keyPropertyLocaleLocalizationViewDefViewsContent'
+```
+
+The XSD type `#AnonType_keyPropertyLocaleLocalizationViewDefViewsContent` is the
+`key` attribute of a `Content/Views/ViewDef/Localization/Locale/Property` — i.e.
+a **view localization key**, capped at **64 chars**. Two distinct over-length
+keys appear in the logs:
+
+| key | len | source column |
+|---|---|---|
+| `config_policies_override_network_resourcepool_moving_override_allowed` | 69 | Distributed Virtual Portgroup config-policy property |
+| `virtualDiskAggregate_of_all_instances_numberWriteAveraged_average` | 65 | VM virtual-disk write metric |
+
+**Where the key comes from.** `src/vcfops_managementpacks/sdk_builder.py`
+emits, for every bundled view, a `content/reports/<slug>/resources/content.properties`
+bundle via `_generate_view_content_properties` (~line 1435). Each column line is
+`view.<uuid>.<loc_key>=<display>` where `loc_key = _attribute_to_localization_key(col.attribute)`
+(~line 1465) — the column's metric/property path with `|` and spaces replaced by
+`_`. The platform re-materializes each content.properties entry (stripping the
+`view.<uuid>.` prefix) into a `<Localization><Locale><Property key="<loc_key>">`
+element inside the ViewDef and XSD-validates it. A `loc_key` > 64 chars fails
+`cvc-maxLength-valid`. (Note: `render.py` no longer emits `localizationKey` on
+column displayName — that was removed 2026-06-10, commit `6c59f6bc`, before
+build-8 — so `content.properties` is the sole entry point for the long key.)
+
+**Effect 1 — the offending views drop.** Each view content.xml whose
+content.properties carries an over-64 key fails to unmarshal individually →
+that ViewDef is skipped → "No appropriate view definition is found."
+
+**Effect 2 — ALL 11 reports drop.** Our builder colocates reports (flat
+`content/reports/<name>.xml`) and views (subdir `content/reports/<slug>/content.xml`)
+in the **same** `content/reports/` tree. `installReportContent` unmarshals that
+tree as one solution-content unit; the first over-64 **view** key aborts the
+whole JAXB unmarshal → the entire reports batch fails (log shows the
+`ViewDefViewsContent` maxLength error thrown *inside* `installReportContent`,
+20 retries, all failing the same way). There is **no** separate report-side
+schema error — the ReportDef XML itself (`<Content><Reports><ReportDef>`,
+`src/vcfops_reports/render.py::render_report_xml`) is structurally fine and
+matches the vendor `<Content><Reports><ReportDef id="uuid">…` shape byte-for-byte.
+
+## Scope correction: it's 4 views, not 3
+
+The user observed 3 broken **report-companion** views (Distributed Port Groups,
+Virtual Machines, vSphere Pod). Rendering every view's content.properties keys
+locally shows **four** views carry an over-64 key:
+
+| view YAML | over-64 loc_key (len) |
+|---|---|
+| `Distributed Port Groups.yaml` | `config_policies_override_network_resourcepool_moving_override_allowed` (69) |
+| `Report Virtual Machines for CSV export.yaml` | `virtualDiskAggregate_of_all_instances_numberWriteAveraged_average` (65) |
+| `Report vSphere Pod for CSV export.yaml` | `virtualDiskAggregate_of_all_instances_numberWriteAveraged_average` (65) |
+| `vSphere Port Group Configuration.yaml` | `config_policies_override_network_resourcepool_moving_override_allowed` (69) |
+
+The 4th (`vSphere Port Group Configuration`) is a standalone view (not a report
+companion) so it wasn't in the user's spot-check, but it is broken by the same
+defect and would show "No appropriate view definition is found" too.
+
+## Vendor packaging comparison (byte-structural)
+
+| aspect | vendor `vmbro_vcf_operations_vcommunity` | our build-8 |
+|---|---|---|
+| reports+views location | all **flat** `content/reports/<Name>.xml` (32 files) | reports **flat** `content/reports/<Name>.xml`; views in **subdirs** `content/reports/<slug>/content.xml` |
+| ReportDef root | `<Content><Reports><ReportDef id="uuid">` | **same** (`render_report_xml`) |
+| ViewDef root | `<Content><Views><ViewDef id="uuid">` | **same** (`render_views_xml`) |
+| per-view localization bundle | **none** (no `resources/` subdir, no content.properties) | `content/reports/<slug>/resources/content.properties` present |
+| localization keys | n/a — no bundle → no over-64 Locale key ever generated | attribute-derived keys, **not length-capped** → 4 exceed 64 |
+
+The vendor never ships a per-view content.properties bundle, so it never
+manufactures a Locale `key` that the XSD can reject. Our factory adds the
+bundle (per the localization lesson, an SDK-pak view needs a populated
+`resources/` bundle to import at all — see
+`knowledge/lessons/pak-content-localization-bundles.md`), and that bundle is the
+exact thing carrying the illegal key. The bundle is not itself wrong; its **key
+derivation is uncapped**.
+
+## The fix (for `tooling`)
+
+**Primary — cap the localization key at 64 chars.**
+**File:** `src/vcfops_managementpacks/sdk_builder.py`
+**Function:** `_attribute_to_localization_key` (~line 1465), consumed by
+`_generate_view_content_properties` (~line 1435).
+When the derived key exceeds 64 chars, shorten it deterministically **and
+keep it unique** (e.g. first ~55 chars + `_` + an 8-hex hash of the full
+attribute). A blind truncate risks two long columns colliding on the same
+64-char prefix → Java-properties would silently keep only the last, dropping a
+column's localized label. Uniqueness must be preserved.
+
+**Consistency — cap the twin.** `src/vcfops_dashboards/render.py::_attribute_to_localization_key`
+(~line 144) is an identical helper. It is currently dormant for view columns
+(displayName carries no localizationKey), but it is a latent trap if column
+localizationKeys are ever re-enabled or reused for dashboards — cap it the same
+way (share one helper if practical).
+
+**Optional hardening — stop colocating reports and views** so a single bad view
+no longer takes the whole report batch down. Reports and views could live in
+separate content subtrees, or the builder could pre-validate every emitted
+localization key against the 64-char limit and fail the build loudly rather than
+shipping a pak that aborts on import. Not required once keys are capped, but it
+shrinks the blast radius of any future content-side schema violation.
+
+**Result of the primary fix:** with no content.properties key exceeding 64
+chars, all 4 view content.xml files unmarshal, the `installReportContent` batch
+no longer aborts, and **all 11 reports land** — a single change closes both
+Effect 1 (the 4 views) and Effect 2 (the 11 reports). This is **not** a
+platform limitation / BY-DESIGN gap: ReportDef-via-pak works (the ReportDef XML
+is schema-valid); it was masked by a colocated view with an illegal key.
+
+## Verdict
+
+| hypothesis | verdict |
+|---|---|
+| ReportDef-via-pak unsupported (TOOLSET GAP / BY-DESIGN) | **Rejected** — ReportDef XML is schema-valid; import aborted on a *view* key. |
+| Report layout wrong (flat vs subdir, embedded ViewDef) | **Rejected** — report root matches vendor; layout is not the fault. |
+| A view localization key exceeds the 64-char XSD maxLength | **Confirmed** — `cvc-maxLength-valid … maxLength '64'` on `keyPropertyLocaleLocalizationViewDefViewsContent`, from uncapped `_attribute_to_localization_key`. |
+| Reports die because views are colocated in `content/reports/` | **Confirmed** — the `ViewDefViewsContent` error is thrown inside `installReportContent`; one bad view aborts the whole reports batch. |
+| Only 3 views affected | **Corrected** — 4 views carry an over-64 key (3 report-companions + `vSphere Port Group Configuration`). |

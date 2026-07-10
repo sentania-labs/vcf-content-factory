@@ -355,28 +355,67 @@ def _render_alert_definition(
         severity = "automatic"
     state_elem = ET.SubElement(ad_elem, "State", {"severity": severity})
 
-    # Emit SymptomSet references.
+    # Emit SymptomSet elements — one per entry in symptom_sets["sets"], NOT
+    # one per symptom.  Vendor ground truth (RULE-016; see
+    # knowledge/context/wire-formats/alertdef_symptomset_import.md):
+    # the platform's content importer keeps only the LAST of multiple bare
+    # <SymptomSet> siblings under <State> — a compound <SymptomSets
+    # operator="..."> wrapper is required whenever there are >=2 sets, and
+    # is omitted (bare <SymptomSet> directly under <State>) when there is
+    # exactly one set.  Within a set: a single symptom is a bare ref=
+    # attribute on <SymptomSet>; multiple symptoms become <Symptom ref=.../>
+    # children of a <SymptomSet operator="...">.  The non-vendor
+    # aggregation="any" attribute is never emitted.
     symptom_sets = alert.symptom_sets or {}
     sets = symptom_sets.get("sets") or []
-    for s in sets:
-        for sym_ref in (s.get("symptoms") or []):
-            sym_name = sym_ref.get("name", "")
-            # Find the adapter_kind for this symptom by matching name to the
-            # loaded symptom objects; fall back to the alert's adapter_kind.
-            sym_adapter = adapter_kind
-            sym_uuid = None
-            for sym_obj in symptom_objs:
-                if sym_obj.name == sym_name:
-                    sym_adapter = sym_obj.adapter_kind
-                    sym_uuid = getattr(sym_obj, "id", None)
-                    break
-            ref = _symptom_id(sym_adapter, sym_name, uuid=sym_uuid)
-            ET.SubElement(state_elem, "SymptomSet", {
-                "aggregation": "any",
-                "applyOn": "self",
-                "operator": "and",
-                "ref": ref,
-            })
+
+    def _symptom_set_elements() -> List[ET.Element]:
+        elements: List[ET.Element] = []
+        for s in sets:
+            defined_on = (s.get("defined_on") or "SELF").upper()
+            apply_on = defined_on.lower()
+            set_op = "and" if (s.get("operator") or "ALL").upper() == "ALL" else "or"
+
+            refs: List[str] = []
+            for sym_ref in (s.get("symptoms") or []):
+                sym_name = sym_ref.get("name", "")
+                # Find the adapter_kind for this symptom by matching name to
+                # the loaded symptom objects; fall back to the alert's
+                # adapter_kind.
+                sym_adapter = adapter_kind
+                sym_uuid = None
+                for sym_obj in symptom_objs:
+                    if sym_obj.name == sym_name:
+                        sym_adapter = sym_obj.adapter_kind
+                        sym_uuid = getattr(sym_obj, "id", None)
+                        break
+                refs.append(_symptom_id(sym_adapter, sym_name, uuid=sym_uuid))
+
+            if len(refs) == 1:
+                ss_elem = ET.Element("SymptomSet", {
+                    "applyOn": apply_on,
+                    "operator": set_op,
+                    "ref": refs[0],
+                })
+            else:
+                ss_elem = ET.Element("SymptomSet", {
+                    "applyOn": apply_on,
+                    "operator": set_op,
+                })
+                for ref in refs:
+                    ET.SubElement(ss_elem, "Symptom", {"ref": ref})
+            elements.append(ss_elem)
+        return elements
+
+    ss_elements = _symptom_set_elements()
+    if len(ss_elements) >= 2:
+        top_op = "and" if (symptom_sets.get("operator") or "ALL").upper() == "ALL" else "or"
+        wrapper = ET.SubElement(state_elem, "SymptomSets", {"operator": top_op})
+        for elem in ss_elements:
+            wrapper.append(elem)
+    else:
+        for elem in ss_elements:
+            state_elem.append(elem)
 
     # Impact badge.
     ET.SubElement(state_elem, "Impact", {

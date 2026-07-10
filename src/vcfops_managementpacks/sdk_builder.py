@@ -53,6 +53,7 @@ Key design decisions:
 from __future__ import annotations
 
 import glob
+import hashlib
 import io
 import json
 import os
@@ -1462,11 +1463,40 @@ def _generate_view_content_properties(view) -> str:
     return "\n".join(lines)
 
 
+# The platform's ViewDef Localization Property `key` attribute is XSD-capped
+# at maxLength=64 (`#AnonType_keyPropertyLocaleLocalizationViewDefViewsContent`).
+# A key over this length fails JAXB unmarshal for that ViewDef *and* — because
+# our builder colocates reports and views under the same content/reports/
+# tree — aborts the whole colocated ReportDef batch too. See the 2026-07-10
+# addendum in knowledge/context/investigations/sdk_pak_content_import_gap.md.
+LOCALIZATION_KEY_MAX_LEN = 64
+
+
+def _cap_localization_key(key: str, max_len: int = LOCALIZATION_KEY_MAX_LEN) -> str:
+    """Deterministically shorten *key* to at most *max_len* chars.
+
+    A blind truncate risks two long attribute keys colliding on the same
+    truncated prefix — Java properties would then silently keep only the
+    last-written line, dropping a column's localized label. To preserve
+    uniqueness, an over-length key is shortened to a prefix of the original
+    plus an underscore and an 8-hex-char SHA-1 digest of the *full* original
+    key, so two keys sharing a long common prefix still diverge in their
+    hash suffix.
+    """
+    if len(key) <= max_len:
+        return key
+    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:8]
+    prefix_len = max_len - len(digest) - 1  # -1 for the separating "_"
+    return f"{key[:prefix_len]}_{digest}"
+
+
 def _attribute_to_localization_key(attribute: str) -> str:
     """Convert an attribute key to a Java properties-compatible localizationKey.
 
     Removes the 'Super Metric|' prefix, replaces '|' separators with '_',
-    replaces spaces with '_', and keeps alphanumerics, hyphens, and underscores.
+    replaces spaces with '_', and keeps alphanumerics, hyphens, and
+    underscores. The result is capped at ``LOCALIZATION_KEY_MAX_LEN`` chars
+    (platform XSD maxLength=64) — see ``_cap_localization_key``.
 
     Examples:
         "VCF-CF Compliance|score"          → "VCF-CF_Compliance_score"
@@ -1482,7 +1512,7 @@ def _attribute_to_localization_key(attribute: str) -> str:
     key = key.replace("|", "_").replace(" ", "_")
     # Strip any remaining non-safe characters (keep alphanumerics, hyphen, underscore)
     key = "".join(c for c in key if c.isalnum() or c in "-_")
-    return key
+    return _cap_localization_key(key)
 
 
 # Standard content/ subdirectories that VCF Ops auto-imports during pak install.
@@ -3162,6 +3192,29 @@ def _validate_localization_key_contract(views: list, sm_scope: Optional[List[Pat
                     f"Present suffixes: {sorted(props_suffixes)}. "
                     f"Fix: align the suffix in _generate_view_content_properties() "
                     f"or the localizationKey attribute in render.py."
+                )
+
+        # --- Step 5: length guard ---
+        # The platform's ViewDef Localization Property `key` attribute has an
+        # XSD maxLength=64 (`#AnonType_keyPropertyLocaleLocalizationViewDefViewsContent`).
+        # `_attribute_to_localization_key` already caps every key it derives,
+        # so this should never trip in practice — it exists as a build-time
+        # trip-wire so this defect class (a single over-64 view key aborting
+        # the ENTIRE colocated content/reports/ batch — views AND reports —
+        # see the 2026-07-10 addendum in
+        # knowledge/context/investigations/sdk_pak_content_import_gap.md)
+        # can never ship silently again, even if a future code path bypasses
+        # the capping helper.
+        for suffix in props_suffixes:
+            if len(suffix) > LOCALIZATION_KEY_MAX_LEN:
+                errors.append(
+                    f"[localization-key-too-long] view '{view.name}' (uuid={uuid}): "
+                    f"localization key '{suffix}' is {len(suffix)} chars, exceeds "
+                    f"the platform's XSD maxLength={LOCALIZATION_KEY_MAX_LEN}. "
+                    f"An over-length key aborts this view's unmarshal AND the "
+                    f"entire colocated content/reports/ batch (views + reports) "
+                    f"on pak install. Fix: _attribute_to_localization_key() must "
+                    f"cap every derived key via _cap_localization_key()."
                 )
 
     return errors
