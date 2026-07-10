@@ -24,6 +24,7 @@ from xml.sax.saxutils import escape
 
 from .loader import (
     Dashboard, Interaction, MetricSpec, ViewDef, ViewColumn, ViewTimeWindow, Widget,
+    SubjectFilterCondition,
     MetricChartConfig, ScoreboardConfig, TextDisplayConfig,
     HealthChartConfig, ParetoAnalysisConfig,
     AlertListConfig, ProblemAlertsListConfig,
@@ -104,6 +105,31 @@ def _resolve_view_pin(
 
 
 # ---------------- View definition (XML) ----------------
+
+def _subject_filter_json(groups: list[list["SubjectFilterCondition"]]) -> str:
+    """Render a ViewDef.subject_filter (OR-of-AND groups) to the vendor JSON
+    string that goes verbatim into a SubjectType ``filter="..."`` attribute.
+
+    Key order per condition object mirrors the vendor ``VM Network Top
+    Talkers`` fixture exactly (``condition``, ``transform``, ``metricKey``,
+    ``metricValue``, ``businessHours``, ``filterType``) — see
+    SubjectFilterCondition docstring in loader.py for the citation and the
+    caveat that vendor key order otherwise varies (not schema-significant).
+    """
+    def _cond_dict(c: "SubjectFilterCondition") -> dict:
+        d: dict = {"condition": c.condition}
+        if c.transform is not None:
+            d["transform"] = c.transform
+        d["metricKey"] = c.metric_key
+        d["metricValue"] = {"isStringMetric": c.is_string_metric, "value": c.value}
+        if c.business_hours is not None:
+            d["businessHours"] = c.business_hours
+        d["filterType"] = c.filter_type
+        return d
+
+    payload = [[_cond_dict(c) for c in group] for group in groups]
+    return json.dumps(payload, separators=(",", ":"))
+
 
 def _xml_property(name: str, value: str, localization_key: Optional[str] = None) -> str:
     if localization_key:
@@ -561,12 +587,20 @@ def _render_view_def_fragment(
         desc_elem = f'<Description localizationKey="desc">{escape(view.description)}</Description>'
     else:
         desc_elem = f'<Description>{escape(view.description)}</Description>'
+    # Optional SubjectType metric/property filter — applied identically to
+    # both the "descendant" and "self" SubjectType elements (matches the
+    # vendor corpus, which always carries the same filter= value on both).
+    if view.subject_filter:
+        filter_json = _subject_filter_json(view.subject_filter)
+        filter_attr = f' filter="{escape(filter_json, {chr(34): "&quot;"})}"'
+    else:
+        filter_attr = ""
     header = (
         f'<ViewDef id="{view.id}">'
         f'<Title localizationKey="title">{escape(view.name)}</Title>'
         + desc_elem +
-        f'<SubjectType adapterKind="{escape(view.adapter_kind)}" resourceKind="{escape(view.resource_kind)}" type="descendant"/>'
-        f'<SubjectType adapterKind="{escape(view.adapter_kind)}" resourceKind="{escape(view.resource_kind)}" type="self"/>'
+        f'<SubjectType adapterKind="{escape(view.adapter_kind)}"{filter_attr} resourceKind="{escape(view.resource_kind)}" type="descendant"/>'
+        f'<SubjectType adapterKind="{escape(view.adapter_kind)}"{filter_attr} resourceKind="{escape(view.resource_kind)}" type="self"/>'
         "<Usage>dashboard</Usage><Usage>report</Usage><Usage>details</Usage><Usage>content</Usage>"
     )
 
