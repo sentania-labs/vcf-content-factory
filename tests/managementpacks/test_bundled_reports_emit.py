@@ -1,14 +1,21 @@
 """Tests for bundled_content.reports emit path in sdk_builder.py.
 
-Layout confirmed from the vCommunity reference pak:
-  reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/
-  - Report XMLs are FLAT files directly in content/reports/ (no subdirectory).
-  - Each file: <Content><Reports><ReportDef ...>...</ReportDef></Reports></Content>
-  - No separate resources/content.properties per report (unlike views).
-  - Dashboard/view UUIDs in ContentKey elements are emitted verbatim.
+Layout (subdirectory — flat files are NEVER imported by the platform):
+  content/reports/<slug>/content.xml — the platform content walker
+  (SolutionManagerDistributedTask.installContent) only descends into
+  *subdirectories* of content/reports/; a flat content/reports/<name>.xml
+  file is silently ignored (proven against build-9 of
+  vcfcf_sdk_vcommunity_vsphere — 0/11 ReportDefinitions landed while flat —
+  and against the shipping vendor pak
+  reference/references/tvs/SolarWindsNPM-7.0_3.0.0_*.pak, whose 18/18
+  reports are subdirectories). See the build-9 addendum in
+  knowledge/context/investigations/sdk_pak_content_import_gap.md. When the
+  report references a view that is also part of this pak's bundled content,
+  the ViewDef is co-bundled inline (same <Content> document) — matching the
+  vendor TVS shape exactly.
 
 Covers:
-  1. A bundled report emits to content/reports/<safe_name>.xml (flat layout).
+  1. A bundled report emits to content/reports/<slug>/content.xml (subdirectory).
   2. The emitted XML is well-formed with <Content><Reports><ReportDef> root.
   3. Empty/absent bundled_content.reports key → no spurious content/reports output
      beyond what views may write.
@@ -175,10 +182,10 @@ _VIEW_YAML = textwrap.dedent(
 
 
 class TestReportEmit:
-    """content/reports/<safe_name>.xml is written with correct XML structure."""
+    """content/reports/<slug>/content.xml is written with correct XML structure."""
 
     def test_report_xml_written_to_pak(self, tmp_path: Path) -> None:
-        """Report XML appears flat at content/reports/<safe_name>.xml."""
+        """Report XML appears in its own subdirectory: content/reports/<slug>/content.xml."""
         project_dir = tmp_path / "adapter"
         rpt_path = project_dir / "reports" / "test_report.yaml"
         _write_yaml(rpt_path, _REPORT_YAML)
@@ -206,10 +213,15 @@ class TestReportEmit:
         assert len(report_entries) == 1, (
             f"Expected 1 report XML entry; got: {report_entries}"
         )
-        # Flat layout: no subdirectory between content/reports/ and the .xml
-        assert "/" not in report_entries[0].removeprefix("content/reports/"), (
-            f"Report XML must be at flat path content/reports/<name>.xml, "
-            f"not in a subdirectory; got: {report_entries[0]}"
+        # Subdirectory layout: content/reports/<slug>/content.xml — a flat
+        # content/reports/<name>.xml is never imported by the platform.
+        assert report_entries[0].endswith("/content.xml"), (
+            f"Report XML must be at content/reports/<slug>/content.xml "
+            f"(subdirectory layout); got: {report_entries[0]}"
+        )
+        rel = report_entries[0].removeprefix("content/reports/")
+        assert rel.count("/") == 1, (
+            f"Expected exactly one subdirectory level; got: {report_entries[0]}"
         )
 
     def test_report_xml_well_formed_with_correct_root(self, tmp_path: Path) -> None:
@@ -351,8 +363,8 @@ class TestLoadBundledContentReportsTuple:
 
 
 class TestViewsAndReportsCoexist:
-    """Views (subdir) and reports (flat) can coexist under content/reports/
-    without duplicating the dir entry."""
+    """Views and reports (both subdirectory layout) can coexist under
+    content/reports/ without duplicating the dir entry or colliding slugs."""
 
     def test_views_and_reports_content_reports_dir_once(self, tmp_path: Path) -> None:
         project_dir = tmp_path / "adapter"
@@ -386,26 +398,30 @@ class TestViewsAndReportsCoexist:
             f"(expected exactly 1)"
         )
 
-        # View: subdirectory pattern
-        view_entries = [
+        # Both views and reports use the subdirectory pattern; the report in
+        # this test has no View section, so it embeds no ViewDef of its own —
+        # there must be exactly 2 distinct content.xml entries total (one
+        # per subdirectory: the view's own, and the report's).
+        content_xml_entries = [
             n for n in names
-            if n.startswith("content/reports/") and n.endswith("content.xml")
+            if n.startswith("content/reports/") and n.endswith("/content.xml")
         ]
-        assert len(view_entries) == 1, f"Expected 1 view content.xml; got {view_entries}"
-
-        # Report: flat pattern
+        assert len(content_xml_entries) == 2, (
+            f"Expected 2 content.xml entries (1 view subdir + 1 report subdir); "
+            f"got {content_xml_entries}"
+        )
         report_xml_entries = [
-            n for n in names
-            if n.startswith("content/reports/") and n.endswith(".xml")
-            and "/content.xml" not in n
+            n for n in content_xml_entries
+            if "<ReportDef " in _pak_read(pak_path, n).decode("utf-8")
         ]
         assert len(report_xml_entries) == 1, (
-            f"Expected 1 flat report XML; got {report_xml_entries}"
+            f"Expected 1 report XML (subdirectory layout); got {report_xml_entries}"
         )
-        # Confirm the flat entry has no subdirectory component
-        flat_basename = report_xml_entries[0].removeprefix("content/reports/")
-        assert "/" not in flat_basename, (
-            f"Report XML must be flat (no subdir); got path: {report_xml_entries[0]}"
+        # Confirm the subdirectory form: content/reports/<slug>/content.xml
+        rel = report_xml_entries[0].removeprefix("content/reports/")
+        assert rel.count("/") == 1, (
+            f"Report XML must be at content/reports/<slug>/content.xml; "
+            f"got path: {report_xml_entries[0]}"
         )
 
     def test_only_reports_no_views_content_reports_dir_once(
@@ -468,18 +484,20 @@ class TestReportSafeNameDedup:
         names = _pak_namelist(pak_path)
         report_entries = sorted(
             n for n in names
-            if n.startswith("content/reports/") and n.endswith(".xml")
+            if n.startswith("content/reports/") and n.endswith("/content.xml")
         )
         assert len(report_entries) == 2, (
             f"Expected 2 report XML entries (dedup); got: {report_entries}"
         )
+        # Subdirectory layout: content/reports/<slug>/content.xml — the dedup
+        # suffix lands on the slug (the subdirectory name), not the filename.
         stems = {
-            e.removeprefix("content/reports/").removesuffix(".xml")
+            e.removeprefix("content/reports/").removesuffix("/content.xml")
             for e in report_entries
         }
         base_stem = min(stems, key=len)
         assert f"{base_stem}-2" in stems, (
-            f"Expected dedup suffix '-2' on second entry; got stems: {stems}"
+            f"Expected dedup suffix '-2' on second entry's slug; got stems: {stems}"
         )
 
 

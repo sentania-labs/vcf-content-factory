@@ -417,3 +417,168 @@ is schema-valid); it was masked by a colocated view with an illegal key.
 | A view localization key exceeds the 64-char XSD maxLength | **Confirmed** — `cvc-maxLength-valid … maxLength '64'` on `keyPropertyLocaleLocalizationViewDefViewsContent`, from uncapped `_attribute_to_localization_key`. |
 | Reports die because views are colocated in `content/reports/` | **Confirmed** — the `ViewDefViewsContent` error is thrown inside `installReportContent`; one bad view aborts the whole reports batch. |
 | Only 3 views affected | **Corrected** — 4 views carry an over-64 key (3 report-companions + `vSphere Port Group Configuration`). |
+
+> **NOTE (superseded by the build-9 addendum below):** the build-8 verdict
+> table above was partly wrong. It **rejected** "report layout wrong (flat vs
+> subdir)" and predicted the 64-char key fix alone would land all 11 reports.
+> Build 9 shipped that fix (views now import cleanly) and **reports are still
+> 0/11**. The real reason reports never imported is that they are emitted as
+> **flat** `content/reports/<name>.xml` files, which the platform content
+> walker does not descend into — see the build-9 addendum. The maxLength abort
+> was real but it only ever masked a *pre-existing* flat-layout gap for reports.
+
+---
+
+# ADDENDUM — vcommunity-vsphere build-9: reports STILL 0/11, SM readUUID noise, root-caused (2026-07-10, PM)
+
+**Pak:** `vcfcf_sdk_vcommunity_vsphere` build-9 (`0.0.0.9`), upgrade over
+`0.0.0.8`, installed on vcf-lab-operations-**devel** 2026-07-10T21:41:55Z.
+**Investigator:** api-explorer. **Posture:** devel token GET + SSH log grep +
+read-only per-UUID GET probes. **No** POST/PUT/DELETE, no test objects created.
+Scratch pak/tvs extractions removed; token file removed.
+
+## TL;DR — three findings, cleanly separated
+
+1. **The empty-UUID `readUUID` errors are our renderer emitting
+   `"modifiedBy": ""` on every bundled supermetric, and they are
+   NON-FATAL.** All 37 SMs are healthy on devel (37/37 return HTTP 200).
+2. **The `readUUID` errors are NOT a build-9 regression and NOT the cause of
+   the reports gap.** They fire 37× (one per SM) in *every* install — both
+   build-8 windows (13:32, 17:30) and build-9 (21:42) — 111 total in the log.
+   The premise "build 8 did not hit this" is **false**.
+3. **Reports are 0/11 because our builder emits them as FLAT
+   `content/reports/<name>.xml` files, which the platform content walker
+   ignores.** It only descends into *subdirectories* of `content/reports/`.
+   PR #48's 64-char fix worked (views import cleanly now), but it could never
+   fix reports — reports were never being walked in the first place.
+
+## Finding 1 — what emits the empty UUID (and why it is harmless)
+
+**Source:** `src/vcfops_managementpacks/sdk_builder.py`, SM-emission block,
+line **1850**: every bundled SM JSON is written with a hardcoded
+`"modifiedBy": ""`. The platform's `SuperMetricImportParam.readUUID` parses
+`modifiedBy` as a UUID; an empty string throws `Invalid UUID string:` (the
+offending string is empty — matches the log exactly). One error per SM → 37.
+
+- **Vendor comparison (decisive):** every one of the vendor
+  `vmbro_vcf_operations_vcommunity` SM JSONs sets `modifiedBy` to a real user
+  UUID (e.g. `8a399472-453b-435f-b57d-84aa33550d08`). Ours are all `""`.
+- **Non-fatal:** the error is logged, but the SM create/update proceeds — the
+  platform defaults the missing `modifiedBy`. Confirmed on devel: **all 37 SM
+  UUIDs return HTTP 200** from `GET /suite-api/api/supermetrics/<uuid>`.
+- The saved excerpt showed 33 errors only because it was truncated; the full
+  log window has 37 (= the 37 bundled SMs).
+
+## Finding 2 — why build 8 "differed" (it did not)
+
+`grep SuperMetricImportParam.readUUID` over the whole
+`analytics-0ad8f158-*.log` returns **111** hits: **37 at 13:32** (build-8
+install #1), **37 at 17:30** (build-8 install #2), **37 at 21:42** (build-9).
+Identical every time — PR #48 did not touch SM emission, `modifiedBy` has been
+`""` all along, so the errors are a constant. The build-8 addendum simply never
+looked for them (it was chasing the maxLength view-key abort). **Not a
+differentiator.**
+
+## Finding 3 — why reports abort (the actual reports root cause)
+
+The reports/views import is `SolutionManagerDistributedTask.installContent`,
+logged in `view-bridge.log`. Build-9 sequence (task **finished successfully**
+in 35 s, no exception):
+
+```
+installContent: localization import started... / passed...
+installContent: report import started...
+installContent: dashboard import started...      ← report step ran, no error
+...
+SolutionManagerDistributedTask finished in 35094ms.
+```
+
+(Only `localization` ever logs a `passed` line; absence of "report import
+passed" is not a failure signal — that message does not exist for reports.)
+
+Inside that window the analytics log shows exactly **109
+`ContentImport.importFile` lock cycles** (21:42:05–21:42:16) — **one per view
+subdirectory**. The pak has **109 view subdirs + 11 flat report `.xml` files =
+120** content-report entries, but only **109** were imported. **The 11 flat
+report files got zero importFile locks — they were never walked.** No
+maxLength/Unmarshal error occurs in build 9 (the stripped localization keys now
+max out at exactly 64 — PR #48 held; 0 keys over 64).
+
+**Per-UUID probe on devel (definitive):**
+- 11/11 ReportDef UUIDs from the pak → `GET /api/reportdefinitions/<uuid>` = **404**.
+- 37/37 SM UUIDs → **200**.
+
+**Why flat files are ignored — proven against a known-good BUILT pak.** The TVS
+`SolarWindsNPM-7.0_3.0.0` pak (a shipping vendor pak) has **zero** flat report
+files: all 18 reports are **subdirectories** —
+`content/reports/<Report Name>/<Report Name>.xml` — and each XML is a single
+`<Content>` with `<Views>` (the ViewDefs the report uses) followed by
+`<Reports><ReportDef>`. The platform content walker descends into each
+`content/reports/<subdir>/` and imports its XML; it does not import loose
+`*.xml` sitting directly under `content/reports/`. Our **views** use the subdir
+form (`content/reports/<slug>/content.xml`) and import fine; our **reports** use
+the flat form and are dropped. The vendor *source* tree stores reports flat,
+which misled the build-8 conclusion — but a source tree is not a built pak.
+
+## The fix (for `tooling`)
+
+**File:** `src/vcfops_managementpacks/sdk_builder.py`
+**Function:** the report-emission block (the `if reports:` loop, ~lines
+**2068–2100**; the flat write is line **2093–2096**:
+`zf.writestr(f"content/reports/{safe_name}.xml", xml_text)`).
+
+**Change:** emit each report inside its own subdirectory so the walker
+descends into it, mirroring the proven TVS/subdir layout and our own working
+view layout:
+
+```
+content/reports/<report-slug>/content.xml   # <Content><Reports><ReportDef>…
+```
+
+i.e. `zf.writestr(f"content/reports/{safe_name}/", "")` +
+`zf.writestr(f"content/reports/{safe_name}/content.xml", xml_text)`. A report
+slug will not collide with a view slug (distinct names); if a future collision
+is possible, reuse the same de-dupe guard already in the loop. Update the
+now-incorrect comment block at lines **2055–2063** (it documents the flat
+layout as intentional/vendor-matching — it is neither for a *built* pak).
+
+- **Optional but recommended:** to match TVS exactly, also embed the ViewDef(s)
+  the ReportDef references in the same `<Content>` document (TVS ships
+  `<Views>`+`<Reports>` together per report subdir). Our reports reference views
+  that are already bundled as their own subdirs, so a UUID cross-reference
+  *should* resolve post-import — but co-bundling is the vendor-proven belt-and-
+  suspenders form and removes any import-ordering dependency. Worth trying the
+  minimal subdir move first; escalate to co-bundling only if reports still drop.
+
+**Finding 1 fix (low priority, log-noise only):** at line **1850**, emit a
+valid UUID for `modifiedBy` instead of `""` (reuse `sm.id`, or a fixed factory
+system UUID). Purely cosmetic — silences 37 ERROR lines per install; the SMs
+already import correctly without it. Do this alongside the reports fix, not as
+a blocker.
+
+## Health on devel right now (post build-9)
+
+| content type | state |
+|---|---|
+| Supermetrics (37) | **healthy — 37/37 present (HTTP 200)** despite the readUUID noise |
+| Symptoms / 4-tier alert | imported (log shows `UPDATED` for each; four-tier alert landed) |
+| Views (109) | imported — 109 importFile locks, no errors (build-9) |
+| ReportDefinitions (11) | **absent — 0/11 (all 404)**; flat-layout, never walked |
+| Dashboards (12) | separate `DashboardImporter` errors at 21:44/21:54 (out of scope here — `ResourceKindImport…`; flag for follow-up) |
+
+## Verdict (build-9)
+
+| hypothesis | verdict |
+|---|---|
+| Empty-UUID = our `modifiedBy:""` on SM JSON | **Confirmed** — line 1850; vendor sets a real UUID. |
+| readUUID error is fatal / aborts the reports step | **Rejected** — non-fatal; 37/37 SMs land; errors present in every install. |
+| Build 8 did not hit the readUUID error | **Rejected** — 37 hits in each build-8 window too (111 total). |
+| Reports 0/11 caused by the 64-char maxLength (build-8 theory) | **Rejected for build 9** — 0 keys over 64; no unmarshal error; reports still 0. |
+| Reports 0/11 because emitted as FLAT files the walker ignores | **Confirmed** — 109 view subdirs imported, 11 flat reports got 0 importFile locks; TVS built pak proves reports must be subdirs. |
+| Upgrade path re-imports SMs differently (readUUID on existing refs) | **Rejected** — same 37 errors on fresh and upgrade; SMs update fine. |
+
+## Clean-up
+
+Read-only. Devel token acquired for GET probes then discarded; scratch token
+file removed. TVS pak extraction (`scratchpad/tvs_probe`) removed. No repo
+content, no `src/vcfops_*/`, no live Ops state modified (no POST/PUT/DELETE).

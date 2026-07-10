@@ -85,6 +85,18 @@ _HERE = Path(__file__).parent
 _REPO_ROOT = _HERE.parent.parent
 _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"
 _ADAPTER_FRAMEWORK_SRC_DIR = _HERE / "adapter_framework" / "src"
+
+# Deterministic, all-zero factory "system" UUID used for fields the platform
+# parses as a UUID but that don't correspond to any real user account (e.g.
+# a bundled SuperMetric's modifiedBy at pak-import time — the platform has
+# no per-import "who ran this install" identity to attribute it to). Same
+# convention already used for _OWNER_UUID (the dashboard-bundle owner) below.
+# Using a valid-but-empty UUID here (rather than "") avoids 37
+# SuperMetricImportParam.readUUID "Invalid UUID string:" ERROR log lines per
+# install — cosmetic, but silences real log noise investigators would
+# otherwise have to re-triage each time. See the build-9 addendum in
+# knowledge/context/investigations/sdk_pak_content_import_gap.md.
+_FACTORY_SYSTEM_UUID = "00000000-0000-0000-0000-000000000000"
 _LICENSE_PATH = _REPO_ROOT / "LICENSE"
 
 
@@ -1523,7 +1535,10 @@ def _attribute_to_localization_key(attribute: str) -> str:
 # Emit status (as of this version):
 #   content/             — written when any bundled content or content/files is present
 #   content/reports/     — written when bundled views OR reports are present
-#                          (views → subdir pattern; reports → flat .xml pattern)
+#                          (both views and reports use the subdirectory
+#                          pattern — content/reports/<slug>/content.xml — the
+#                          platform content walker does not import flat files
+#                          directly under content/reports/)
 #   content/dashboards/  — written when bundled dashboards are present
 #   content/files/       — written when project_dir/content/files/ is non-empty
 #                          (SolutionConfig XMLs, custom XML; see _write_outer_pak)
@@ -1674,12 +1689,24 @@ def _write_outer_pak(
             ``content/alertdefs/``.  Each alert XML includes its referenced
             symptoms inline.
         reports: List of ReportDef objects to emit as XML in
-            ``content/reports/<safe_name>.xml`` (flat layout matching the
-            vCommunity reference pak — each file is a standalone
-            ``<Content><Reports><ReportDef>...</ReportDef></Reports></Content>``
-            document).  Dashboard and view UUIDs embedded in report sections
-            are emitted verbatim (cross-instance references — not resolved
-            against bundled content).
+            ``content/reports/<slug>/content.xml`` (subdirectory layout — the
+            platform content walker only descends into *subdirectories* of
+            ``content/reports/``; a flat ``content/reports/<name>.xml`` file is
+            never imported.  Proven against a shipping vendor pak, TVS
+            SolarWindsNPM, whose 18 report subdirs are 100% subdir-form and
+            0% flat.  See the build-9 addendum in
+            ``knowledge/context/investigations/sdk_pak_content_import_gap.md``).
+            Each subdirectory's ``content.xml`` co-bundles the report's
+            referenced ``View`` sections as embedded ``<ViewDef>`` elements in
+            the same ``<Content>`` document as the ``<ReportDef>`` — matching
+            the TVS vendor shape exactly (every sampled TVS ReportDef embeds
+            the ViewDefs its ``<Sections><Section><ContentKey>`` entries
+            reference, in the same file, rather than pointing at a sibling
+            subdirectory).  Only views that are also part of this pak's
+            bundled ``views`` list can be embedded; a report section
+            referencing a view UUID outside the bundle is emitted verbatim
+            (cross-instance reference — not resolved against bundled
+            content).
         recommendations: List of Recommendation objects whose definitions are
             referenced by one or more bundled alerts.  When an alert's
             ``recommendations:`` list names a recommendation that is in this
@@ -1821,7 +1848,16 @@ def _write_outer_pak(
         # absent.  Existing SMs update by name and survive the missing field; NEW SMs
         # fail to create.  Use 0 — a valid long, parseable, and treated as "epoch zero"
         # by the platform (confirmed by live install 1.0.0.6 on devel, 2026-06-12).
-        # modifiedBy uses an empty string (not present at import time; server assigns it).
+        # modifiedBy: emit _FACTORY_SYSTEM_UUID (a valid, deterministic
+        # all-zero UUID), NOT an empty string. The platform's
+        # SuperMetricImportParam.readUUID parses modifiedBy as a UUID; an
+        # empty string throws "Invalid UUID string:" — non-fatal (the SM
+        # still imports; the platform defaults the field) but logs one ERROR
+        # per bundled SM (37/37 SMs -> 37 ERROR lines per install, confirmed
+        # on devel). Vendor vmbro_vcf_operations_vcommunity SM JSONs all set
+        # modifiedBy to a real user UUID; we have no real user identity to
+        # attribute a pak-time import to, so we use the same all-zero
+        # convention as _OWNER_UUID below rather than inventing a fake user.
         #
         # SM-to-SM cross-reference resolution:
         # Factory SM YAML uses @supermetric:"<name>" tokens inside formulas when
@@ -1847,7 +1883,7 @@ def _write_outer_pak(
                         "formula": resolved_formula,
                         "description": sm.description,
                         "unitId": sm.unit_id,
-                        "modifiedBy": "",
+                        "modifiedBy": _FACTORY_SYSTEM_UUID,
                     }
                 }
                 # Derive a filesystem-safe filename from the SM display name.
@@ -1873,6 +1909,12 @@ def _write_outer_pak(
                     file=sys.stderr,
                 )
 
+        # Slugs already used under content/reports/ (views and, later, reports
+        # share this tree — see the report-emission block below).  Tracked so
+        # a report display name that happens to sanitize to the same slug as
+        # a view never silently overwrites that view's subdirectory.
+        _content_reports_used_slugs: set[str] = set()
+
         if views:
             from vcfops_dashboards.render import render_views_xml
             # Emit content/reports/ only when views are present.
@@ -1896,6 +1938,7 @@ def _write_outer_pak(
                     owning_resource_kind=owning_resource_kind,
                 )
                 slug = _view_slug(v.name, v.id)
+                _content_reports_used_slugs.add(slug)
                 zf.writestr(f"content/reports/{slug}/", "")
                 zf.writestr(f"content/reports/{slug}/content.xml", xml_text)
                 # A3: resources/ subdirectory with populated content.properties.
@@ -2052,50 +2095,123 @@ def _write_outer_pak(
                 )
 
         # --- Reports ---
-        # Emit one XML file per report at content/reports/<safe_name>.xml (flat layout).
-        # Layout matches the vCommunity reference pak (confirmed against
-        # reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/):
-        #   content/reports/Report - VOA - Capacity.xml
-        #   content/reports/ESXi Host Details vCommunity.xml
-        #   … (no subdirectory per report; each file is a standalone
-        #      <Content><Reports><ReportDef>...</ReportDef></Reports></Content> document)
-        # Views in the same content/reports/ dir use the subdirectory pattern
-        # (content/reports/<slug>/content.xml); reports use the flat pattern.
-        # Dashboard/view UUIDs embedded in report sections (ContentKey elements)
-        # are emitted verbatim — they are cross-instance references that must
-        # not be resolved against bundled content (the importer resolves them
-        # against the live instance at import time).
+        # Emit one XML file per report at content/reports/<slug>/content.xml
+        # (subdirectory layout).
+        #
+        # A flat content/reports/<name>.xml file is NEVER imported: the
+        # platform content walker (SolutionManagerDistributedTask.installContent)
+        # only descends into *subdirectories* of content/reports/. Proven
+        # twice: (1) build-9 of vcfcf_sdk_vcommunity_vsphere shipped 109 view
+        # subdirs + 11 flat report files — the analytics log shows exactly 109
+        # ContentImport.importFile lock cycles (one per view subdir) and ZERO
+        # for the 11 flat files, and GET /api/reportdefinitions/<uuid> 404s for
+        # all 11; (2) the shipping vendor pak
+        # reference/references/tvs/SolarWindsNPM-7.0_3.0.0_*.pak has ZERO flat
+        # files under content/reports/ — all 18 of its reports are
+        # subdirectories. See the build-9 addendum in
+        # knowledge/context/investigations/sdk_pak_content_import_gap.md.
+        #
+        # Shape inside each subdirectory (co-bundled, not sibling-referenced):
+        # every sampled TVS report subdirectory embeds the full <ViewDef>
+        # elements for the views its <Sections><Section><ContentKey> entries
+        # reference, in the SAME <Content> document as the <ReportDef> — e.g.
+        # "SolarWinds NPM Interfaces/SolarWinds NPM Interfaces.xml" contains
+        # both <Views><ViewDef id="11cb51b6-...">...</ViewDef></Views> and
+        # <Reports><ReportDef>...<ContentKey>11cb51b6-...</ContentKey>...
+        # </ReportDef></Reports> in one file — never a bare reference to a
+        # sibling content/reports/<other-slug>/ directory. We match that shape:
+        # for every View section whose view_id is also present in this pak's
+        # bundled `views` list, the corresponding ViewDef is rendered via the
+        # same render_view_def_fragments() helper used for standalone view
+        # subdirs (no second XML emitter to drift) and embedded ahead of
+        # <Reports>. A view_id NOT in the bundled views list (a cross-instance
+        # reference) is left as a bare ContentKey, unchanged from prior
+        # behaviour — we have no ViewDef payload to embed for it.
+        #
+        # Vendor TVS never ships a per-report resources/ localization bundle
+        # (no content.properties anywhere under its content/reports/ tree; its
+        # ViewDef/ReportDef Title/Description carry no localizationKey
+        # attribute at all). Our own ViewDef fragments DO carry
+        # localizationKey="title"/"desc" (spec A3 — required for our
+        # bracket-prefixed display names to resolve). Since an embedded
+        # fragment is validated as part of THIS subdirectory's own import
+        # unit (not the view's separate subdirectory), any embedded view's
+        # localizationKeys need their own resolution here too — so we emit a
+        # matching resources/content.properties in the report subdirectory
+        # whenever a view is embedded, generated by the same
+        # _generate_view_content_properties() used for the view's own subdir
+        # (identical keys; safe to duplicate — Java properties files with
+        # matching key/value pairs across files are not a collision).
         if reports:
+            from vcfops_dashboards.render import render_view_def_fragments
             from vcfops_reports.render import render_report_xml
+
+            _views_by_id = {v.id: v for v in (views or [])}
+
             # Emit content/reports/ dir entry — only once; views may have
             # already written it.  ZipFile silently de-dupes same-path entries
             # in successive writes but we guard anyway for clarity.
             if not views:
                 zf.writestr("content/reports/", "")
-            _report_seen_names: set[str] = set()
+
             for rpt in reports:
-                xml_text = render_report_xml([rpt])
-                # Derive a filesystem-safe name from the report title.
-                # Keep alphanumerics, spaces, hyphens, periods — same policy
-                # as symptoms/alerts.
-                safe_name = "".join(
-                    c for c in rpt.name if c.isalnum() or c in " -."
-                ).strip()
-                safe_name = safe_name or rpt.id
-                # Deduplicate: if two report names sanitize to the same string,
-                # append a counter suffix so the second file is not silently lost.
-                if safe_name in _report_seen_names:
-                    suffix = 2
-                    while f"{safe_name}-{suffix}" in _report_seen_names:
-                        suffix += 1
-                    safe_name = f"{safe_name}-{suffix}"
-                _report_seen_names.add(safe_name)
-                zf.writestr(
-                    f"content/reports/{safe_name}.xml",
-                    xml_text,
+                # Referenced views that are part of THIS pak's bundled content
+                # (order-preserving, de-duplicated) — these get embedded.
+                _seen_view_ids: set[str] = set()
+                embedded_views = []
+                for sec in rpt.sections:
+                    if sec.type == "View" and sec.view_id and sec.view_id not in _seen_view_ids:
+                        _seen_view_ids.add(sec.view_id)
+                        v = _views_by_id.get(sec.view_id)
+                        if v is not None:
+                            embedded_views.append(v)
+
+                # <Reports>...</Reports> body, unchanged renderer — extract the
+                # inner fragment so it can be composed into a shared <Content>.
+                reports_only_xml = render_report_xml([rpt])
+                reports_inner = reports_only_xml.split("<Reports>", 1)[1].rsplit(
+                    "</Reports>", 1
+                )[0]
+
+                views_block = ""
+                if embedded_views:
+                    view_fragments = render_view_def_fragments(
+                        embedded_views,
+                        sm_scope=_sm_scope,
+                        owning_adapter_kind=owning_adapter_kind,
+                        owning_resource_kind=owning_resource_kind,
+                    )
+                    views_block = f"<Views>{view_fragments}</Views>"
+
+                xml_text = (
+                    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                    f"<Content>{views_block}<Reports>{reports_inner}</Reports></Content>"
                 )
+
+                slug = _view_slug(rpt.name, rpt.id)
+                # Guard against a report slug colliding with a view's own
+                # subdirectory (or another report's) — never silently
+                # overwrite an existing content/reports/<slug>/ entry.
+                if slug in _content_reports_used_slugs:
+                    suffix = 2
+                    while f"{slug}-{suffix}" in _content_reports_used_slugs:
+                        suffix += 1
+                    slug = f"{slug}-{suffix}"
+                _content_reports_used_slugs.add(slug)
+
+                zf.writestr(f"content/reports/{slug}/", "")
+                zf.writestr(f"content/reports/{slug}/content.xml", xml_text)
+                if embedded_views:
+                    zf.writestr(f"content/reports/{slug}/resources/", "")
+                    props_text = "".join(
+                        _generate_view_content_properties(v) for v in embedded_views
+                    )
+                    zf.writestr(
+                        f"content/reports/{slug}/resources/content.properties",
+                        props_text,
+                    )
                 print(
-                    f"  bundled content: content/reports/{safe_name}.xml <- {rpt.name}",
+                    f"  bundled content: content/reports/{slug}/content.xml <- {rpt.name}",
                     file=sys.stderr,
                 )
 

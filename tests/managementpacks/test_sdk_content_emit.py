@@ -1429,3 +1429,343 @@ class TestSmFormulaResolution:
         assert "Super Metric|sm_Super Metric|sm_" not in formula, (
             f"Double-resolution detected in formula: {formula!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Report emission — subdirectory layout (build-9 addendum fix)
+# ---------------------------------------------------------------------------
+#
+# Reports must be emitted as content/reports/<slug>/content.xml — the
+# platform content walker only descends into subdirectories of
+# content/reports/, never flat content/reports/<name>.xml files. Proven
+# against build-9 (109 view-subdir importFile locks, 0 for 11 flat report
+# files -> 0/11 ReportDefinitions on the target) and against the shipping
+# vendor pak reference/references/tvs/SolarWindsNPM-7.0_3.0.0_*.pak (18/18
+# reports are subdirectories, 0 flat files). See the build-9 addendum in
+# knowledge/context/investigations/sdk_pak_content_import_gap.md.
+
+_REPORT_VIEW_YAML = textwrap.dedent(
+    """\
+    id: 33334444-5555-6666-7777-888899990000
+    name: "[VCF Content Factory] Test Report View"
+    description: "View embedded inside the report subdirectory"
+    subject:
+      adapter_kind: VMWARE
+      resource_kind: VirtualMachine
+    summary: false
+    columns:
+      - attribute: cpu|usage_average
+        display_name: "CPU Usage"
+        unit: percent
+        transformation: AVG
+    """
+)
+
+_REPORT_YAML = textwrap.dedent(
+    """\
+    id: 55556666-7777-8888-9999-aaaabbbbcccc
+    name: "[VCF Content Factory] Test Report"
+    description: "Report that bundles the test view"
+    subject_types:
+      - adapter_kind: VMWARE
+        resource_kind: VirtualMachine
+        type: self
+    sections:
+      - type: View
+        view: "[VCF Content Factory] Test Report View"
+        orientation: Landscape
+        colorize: true
+    settings:
+      show_page_footer: true
+      output_formats:
+        - pdf
+    """
+)
+
+
+def _load_test_view_and_report(project_dir: Path):
+    """Write the report + its referenced view under project_dir and load both."""
+    from vcfops_dashboards.loader import load_view
+    from vcfops_reports.loader import load_file as load_report
+
+    view_path = project_dir / "views" / "test_report_view.yaml"
+    _write_yaml(view_path, _REPORT_VIEW_YAML)
+    report_path = project_dir / "reports" / "test_report.yaml"
+    _write_yaml(report_path, _REPORT_YAML)
+
+    view = load_view(view_path)
+    report = load_report(
+        report_path,
+        views_dir=project_dir / "views",
+        dashboards_dir=project_dir / "dashboards",
+    )
+    return view, report
+
+
+class TestReportSubdirEmission:
+    """content/reports/<slug>/content.xml — never a flat content/reports/<name>.xml."""
+
+    def test_report_written_as_subdirectory_not_flat_file(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "adapter"
+        view, report = _load_test_view_and_report(project_dir)
+
+        project = _make_project()
+        output_dir = tmp_path / "out"
+        pak_path = _write_outer_pak(
+            project,
+            _minimal_adapters_zip(),
+            output_dir,
+            project_dir=project_dir,
+            views=[view],
+            reports=[report],
+        )
+
+        names = _pak_namelist(pak_path)
+        # No flat content/reports/<name>.xml entries anywhere.
+        flat_report_files = [
+            n for n in names
+            if n.startswith("content/reports/")
+            and n.count("/") == 2  # content/reports/<file> — no subdir
+            and not n.endswith("/")
+        ]
+        assert not flat_report_files, (
+            f"Flat file(s) directly under content/reports/ — the platform "
+            f"content walker will never import these: {flat_report_files}"
+        )
+        # The report itself must land inside its own subdirectory.
+        report_content_entries = [
+            n for n in names
+            if n.startswith("content/reports/") and n.endswith("/content.xml")
+        ]
+        report_xml_entry = None
+        for entry in report_content_entries:
+            raw = _pak_read(pak_path, entry).decode("utf-8")
+            if "<ReportDef " in raw:
+                report_xml_entry = entry
+                break
+        assert report_xml_entry is not None, (
+            f"No content.xml with a <ReportDef> found under content/reports/*/; "
+            f"entries: {report_content_entries}"
+        )
+        # subdir form: content/reports/<slug>/content.xml
+        parts = report_xml_entry.split("/")
+        assert parts[0] == "content" and parts[1] == "reports" and parts[3] == "content.xml"
+
+    def test_report_content_xml_co_bundles_referenced_view(self, tmp_path: Path) -> None:
+        """The report's subdirectory content.xml embeds the referenced ViewDef
+        in the same <Content> document — matching the vendor TVS shape (every
+        sampled TVS ReportDef embeds the ViewDefs its Sections/ContentKey
+        entries reference in the same file, not a sibling subdirectory)."""
+        project_dir = tmp_path / "adapter"
+        view, report = _load_test_view_and_report(project_dir)
+
+        project = _make_project()
+        output_dir = tmp_path / "out"
+        pak_path = _write_outer_pak(
+            project,
+            _minimal_adapters_zip(),
+            output_dir,
+            project_dir=project_dir,
+            views=[view],
+            reports=[report],
+        )
+
+        names = _pak_namelist(pak_path)
+        report_xml_entry = None
+        for n in names:
+            if n.startswith("content/reports/") and n.endswith("/content.xml"):
+                raw = _pak_read(pak_path, n).decode("utf-8")
+                if "<ReportDef " in raw:
+                    report_xml_entry = n
+                    break
+        assert report_xml_entry is not None
+
+        raw = _pak_read(pak_path, report_xml_entry).decode("utf-8")
+        # Co-bundled shape: one <Content> document containing both <Views> and
+        # <Reports>, with the embedded ViewDef id matching the ReportDef
+        # Section's ContentKey.
+        assert "<Views>" in raw and "<ViewDef " in raw, (
+            f"Expected the referenced ViewDef to be embedded in the report's "
+            f"content.xml (vendor co-bundle shape); got: {raw[:600]}"
+        )
+        assert "<Reports>" in raw and "<ReportDef " in raw
+        view_id = "33334444-5555-6666-7777-888899990000"
+        assert f'<ViewDef id="{view_id}"' in raw
+        assert f"<ContentKey>{view_id}</ContentKey>" in raw
+
+    def test_report_subdirectory_has_localization_bundle_for_embedded_view(
+        self, tmp_path: Path
+    ) -> None:
+        """When a view is embedded, its localizationKey="title"/"desc" attrs
+        need a resources/content.properties in the SAME subdirectory (this
+        import unit is separate from the view's own standalone subdirectory)."""
+        project_dir = tmp_path / "adapter"
+        view, report = _load_test_view_and_report(project_dir)
+
+        project = _make_project()
+        output_dir = tmp_path / "out"
+        pak_path = _write_outer_pak(
+            project,
+            _minimal_adapters_zip(),
+            output_dir,
+            project_dir=project_dir,
+            views=[view],
+            reports=[report],
+        )
+
+        names = _pak_namelist(pak_path)
+        report_xml_entry = next(
+            n for n in names
+            if n.startswith("content/reports/") and n.endswith("/content.xml")
+            and "<ReportDef " in _pak_read(pak_path, n).decode("utf-8")
+        )
+        report_dir = report_xml_entry.rsplit("/", 1)[0]
+        props_entry = f"{report_dir}/resources/content.properties"
+        assert props_entry in names, (
+            f"Expected {props_entry} alongside the co-bundled view; names: "
+            f"{[n for n in names if report_dir in n]}"
+        )
+        props_text = _pak_read(pak_path, props_entry).decode("utf-8")
+        assert "view.33334444-5555-6666-7777-888899990000.title=" in props_text
+
+    def test_report_referencing_view_outside_bundle_left_verbatim(
+        self, tmp_path: Path
+    ) -> None:
+        """A report section referencing a view UUID NOT in this pak's bundled
+        views list is left as a bare ContentKey (cross-instance reference) —
+        no ViewDef is embedded and no resources/ bundle is written for it."""
+        project_dir = tmp_path / "adapter"
+        # Report references a view, but we do NOT pass that view to
+        # _write_outer_pak's `views=` — simulating a cross-pak reference.
+        _, report = _load_test_view_and_report(project_dir)
+
+        project = _make_project()
+        output_dir = tmp_path / "out"
+        pak_path = _write_outer_pak(
+            project,
+            _minimal_adapters_zip(),
+            output_dir,
+            project_dir=project_dir,
+            reports=[report],
+            # views intentionally omitted
+        )
+
+        names = _pak_namelist(pak_path)
+        report_xml_entry = next(
+            n for n in names
+            if n.startswith("content/reports/") and n.endswith("/content.xml")
+        )
+        raw = _pak_read(pak_path, report_xml_entry).decode("utf-8")
+        assert "<ViewDef " not in raw, (
+            "No bundled ViewDef payload exists for the referenced view — "
+            "nothing should be embedded"
+        )
+        assert "<ReportDef " in raw
+        view_id = "33334444-5555-6666-7777-888899990000"
+        assert f"<ContentKey>{view_id}</ContentKey>" in raw, (
+            "The bare cross-instance ContentKey reference must still be emitted"
+        )
+        report_dir = report_xml_entry.rsplit("/", 1)[0]
+        assert f"{report_dir}/resources/" not in names
+
+    def test_report_and_view_slugs_do_not_collide(self, tmp_path: Path) -> None:
+        """A report whose sanitized slug happens to collide with an existing
+        view subdirectory gets a distinct '-2' suffix, never overwriting the
+        view's own content.xml."""
+        project_dir = tmp_path / "adapter"
+        # Give the report the exact same name as its embedded view so both
+        # sanitize to the identical slug.
+        colliding_report_yaml = _REPORT_YAML.replace(
+            'name: "[VCF Content Factory] Test Report"',
+            'name: "[VCF Content Factory] Test Report View"',
+        )
+        view_path = project_dir / "views" / "test_report_view.yaml"
+        _write_yaml(view_path, _REPORT_VIEW_YAML)
+        report_path = project_dir / "reports" / "test_report.yaml"
+        _write_yaml(report_path, colliding_report_yaml)
+
+        from vcfops_dashboards.loader import load_view
+        from vcfops_reports.loader import load_file as load_report
+
+        view = load_view(view_path)
+        report = load_report(
+            report_path,
+            views_dir=project_dir / "views",
+            dashboards_dir=project_dir / "dashboards",
+        )
+
+        project = _make_project()
+        output_dir = tmp_path / "out"
+        pak_path = _write_outer_pak(
+            project,
+            _minimal_adapters_zip(),
+            output_dir,
+            project_dir=project_dir,
+            views=[view],
+            reports=[report],
+        )
+
+        names = _pak_namelist(pak_path)
+        subdirs = sorted({
+            n.split("/")[2] for n in names
+            if n.startswith("content/reports/") and n.count("/") >= 3
+        })
+        assert len(subdirs) == 2, f"Expected 2 distinct subdirs; got {subdirs}"
+        # The view's own subdirectory content.xml must be untouched (no <ReportDef>).
+        view_only_entries = [
+            n for n in names
+            if n.startswith("content/reports/") and n.endswith("/content.xml")
+            and "<ReportDef " not in _pak_read(pak_path, n).decode("utf-8")
+        ]
+        assert view_only_entries, "View's own subdirectory content.xml is missing"
+
+
+# ---------------------------------------------------------------------------
+# SuperMetric modifiedBy — valid UUID, not empty string (build-9 addendum)
+# ---------------------------------------------------------------------------
+#
+# An empty modifiedBy triggers SuperMetricImportParam.readUUID "Invalid UUID
+# string:" on every bundled SM at import time — non-fatal (the platform
+# defaults the field and the SM imports fine) but log-noise: 37 ERROR lines
+# per install on the vcommunity-vsphere pak. Emitting a valid, deterministic
+# UUID silences it.
+
+_VALID_UUID_RE = __import__("re").compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
+class TestSuperMetricModifiedByUuid:
+    def test_modified_by_is_a_valid_uuid_not_empty_string(self, tmp_path: Path) -> None:
+        project_dir = tmp_path / "adapter"
+        sm_path = project_dir / "supermetrics" / "test_sm.yaml"
+        _write_yaml(sm_path, _SM_YAML)
+
+        from vcfops_supermetrics.loader import load_file
+
+        sm = load_file(sm_path, enforce_framework_prefix=False)
+        project = _make_project()
+        output_dir = tmp_path / "out"
+        pak_path = _write_outer_pak(
+            project,
+            _minimal_adapters_zip(),
+            output_dir,
+            project_dir=project_dir,
+            supermetrics=[sm],
+        )
+
+        sm_entries = [
+            n for n in _pak_namelist(pak_path)
+            if n.startswith("content/supermetrics/") and n.endswith(".json")
+        ]
+        assert sm_entries
+        data = json.loads(_pak_read(pak_path, sm_entries[0]))
+        modified_by = data[_SM_UUID]["modifiedBy"]
+        assert modified_by != "", (
+            "modifiedBy must not be an empty string — the platform's "
+            "SuperMetricImportParam.readUUID throws 'Invalid UUID string:' "
+            "on an empty value (non-fatal, but 37 ERROR lines per install)."
+        )
+        assert _VALID_UUID_RE.match(modified_by), (
+            f"modifiedBy must be a valid UUID string; got {modified_by!r}"
+        )
