@@ -321,3 +321,181 @@ class TestXmlEmission:
             '<Property name="attributeKey" value="vCommunity|Configuration|Packages:atlantic|Package Name"/>'
             in xml
         )
+
+
+# ---------------------------------------------------------------------------
+# Codex P2 follow-up (2026-07-10, PR #46) — instanced-group member columns
+# with non-CURRENT transformations were missing companion sibling properties
+# (PERCENTILE -> percentile, TRANSFORM_EXPRESSION -> transformExpression,
+# TIME_POINT -> related-metric properties). Verified against a full survey of
+# every isInstancedGroup Item in reference/references/vmbro_*/**/content/
+# reports/*.xml:
+#   - MAX, TRANSFORM_EXPRESSION, TIMESTAMP: vendor evidence found
+#     ("View - Set 4.xml": "Windows CPU Usage", "Linux Disk Performance",
+#     "VM Snapshots List") -> mirrored here, including the corrected
+#     rollUpType="NONE" (previously guessed "AVG" with no vendor backing).
+#   - PERCENTILE, TIME_POINT: no vendor evidence on an instanced-group
+#     member column anywhere in the corpus -> loader rejects both.
+# ---------------------------------------------------------------------------
+
+def _member_column(prefix, suffix, sample_instance, **kwargs) -> dict:
+    col = {
+        "instanced_group": {
+            "name": "GROUP_x",
+            "prefix": prefix,
+            "suffix": suffix,
+            "sample_instance": sample_instance,
+        },
+    }
+    col.update(kwargs)
+    return col
+
+
+def _driver_column(name="GROUP_x", display_name="Instance") -> dict:
+    return {"display_name": display_name, "instanced_group": {"name": name}}
+
+
+class TestInstancedGroupMemberTransformEmission:
+    """Vendor-confirmed non-CURRENT transformations on member columns."""
+
+    def _render(self, tmp_path: Path, member: dict, stem: str) -> str:
+        from vcfops_dashboards.loader import load_view
+        from vcfops_dashboards.render import render_views_xml
+
+        data = {
+            "name": "[VCF Content Factory] Transform Test",
+            "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
+            "columns": [_driver_column(), member],
+        }
+        p = _write_view(tmp_path, data, stem=stem)
+        v = load_view(p, enforce_framework_prefix=False)
+        v.validate(enforce_framework_prefix=False)
+        return render_views_xml([v])
+
+    def test_max_member_column_rolluptype_none(self, tmp_path):
+        """Ref: View - Set 4.xml 'Windows CPU Usage' cpu:0|Percent.DPC.Time —
+        transform=MAX, rollUpType='NONE' (not the previously-guessed 'AVG')."""
+        member = _member_column(
+            "cpu", "Percent.DPC.Time", "0",
+            display_name="Worst DPC Time",
+            transformation="MAX",
+        )
+        xml = self._render(tmp_path, member, "max_member")
+        expected = (
+            "<Item><Value>"
+            '<Property name="objectType" value="RESOURCE"/>'
+            '<Property name="attributeKey" value="cpu:0|Percent.DPC.Time"/>'
+            '<Property name="isStringAttribute" value="false"/>'
+            '<Property name="adapterKind" value="VMWARE"/>'
+            '<Property name="resourceKind" value="VirtualMachine"/>'
+            '<Property name="rollUpType" value="NONE"/>'
+            '<Property name="rollUpCount" value="0"/>'
+            '<Property name="transformations"><List><Item value="MAX"/></List></Property>'
+            '<Property name="isProperty" value="false"/>'
+            '<Property name="displayName" value="Worst DPC Time"/>'
+            '<Property name="addTimestampAsColumn" value="false"/>'
+            '<Property name="isShowRelativeTimestamp" value="false"/>'
+            "</Value></Item>"
+        )
+        assert expected in xml
+
+    def test_transform_expression_member_column_emits_sibling_property(self, tmp_path):
+        """Ref: View - Set 4.xml 'Linux Disk Performance' diskio:dm-0|read.time —
+        transformExpression sibling emitted immediately before transformations,
+        rollUpType='NONE'."""
+        member = _member_column(
+            "diskio", "read.time", "dm-0",
+            display_name="Read Time",
+            transformation="TRANSFORM_EXPRESSION",
+            transform_expression="(current-first)/60000",
+        )
+        xml = self._render(tmp_path, member, "transform_expr_member")
+        assert (
+            '<Property name="rollUpType" value="NONE"/>'
+            '<Property name="rollUpCount" value="0"/>'
+            '<Property name="transformExpression" value="(current-first)/60000"/>'
+            '<Property name="transformations"><List><Item value="TRANSFORM_EXPRESSION"/></List></Property>'
+            in xml
+        )
+
+    def test_timestamp_member_column_no_extra_siblings(self, tmp_path):
+        """Ref: View - Set 4.xml 'VM Snapshots List'
+        diskspace:262|snapshot:snapshot-1|accessTime — transform=TIMESTAMP,
+        rollUpType='NONE', no percentile/transformExpression siblings."""
+        member = _member_column(
+            "diskspace", "accessTime", "snapshot-1",
+            display_name="Last Accessed",
+            transformation="TIMESTAMP",
+        )
+        xml = self._render(tmp_path, member, "timestamp_member")
+        assert '<Property name="transformations"><List><Item value="TIMESTAMP"/></List></Property>' in xml
+        assert "percentile" not in xml
+        assert "transformExpression" not in xml
+
+
+class TestInstancedGroupMemberUnprovenTransformationsRejected:
+    """No vendor evidence for PERCENTILE or TIME_POINT on an instanced-group
+    member column anywhere in the surveyed corpus — fail closed."""
+
+    def test_percentile_on_member_column_rejected(self, tmp_path):
+        from vcfops_dashboards.loader import load_view, DashboardValidationError
+
+        data = {
+            "name": "X",
+            "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
+            "columns": [
+                _driver_column(),
+                _member_column(
+                    "cpu", "usagemhz_average", "0",
+                    display_name="P95",
+                    transformation="PERCENTILE",
+                    percentile=95,
+                ),
+            ],
+        }
+        p = _write_view(tmp_path, data, stem="percentile_member")
+        with pytest.raises(DashboardValidationError, match="not supported on instanced_group member"):
+            load_view(p, enforce_framework_prefix=False)
+
+    def test_time_point_on_member_column_rejected(self, tmp_path):
+        from vcfops_dashboards.loader import load_view, DashboardValidationError
+
+        data = {
+            "name": "X",
+            "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
+            "columns": [
+                _driver_column(),
+                _member_column(
+                    "cpu", "usage_average", "0",
+                    display_name="Peak Time",
+                    transformation="TIME_POINT",
+                    metric_to_relate_with="cpu:0|usage_average",
+                    localized_metric_to_relate_with="CPU Usage",
+                    operator_to_relate_with="MAX",
+                ),
+            ],
+        }
+        p = _write_view(tmp_path, data, stem="time_point_member")
+        with pytest.raises(DashboardValidationError, match="not supported on instanced_group member"):
+            load_view(p, enforce_framework_prefix=False)
+
+    def test_percentile_still_allowed_on_non_instanced_column(self, tmp_path):
+        """Regression guard: the new rejection must not leak onto ordinary
+        (non-instanced_group) columns — PERCENTILE remains valid there."""
+        from vcfops_dashboards.loader import load_view
+
+        data = {
+            "name": "X",
+            "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
+            "columns": [
+                {
+                    "attribute": "cpu|usagemhz_average",
+                    "display_name": "P95",
+                    "transformation": "PERCENTILE",
+                    "percentile": 95,
+                },
+            ],
+        }
+        p = _write_view(tmp_path, data, stem="percentile_non_instanced")
+        v = load_view(p, enforce_framework_prefix=False)
+        assert v.columns[0].transformation == "PERCENTILE"

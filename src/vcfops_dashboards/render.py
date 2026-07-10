@@ -231,8 +231,9 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
       objectType, attributeKey, isStringAttribute, adapterKind, resourceKind,
       [rollUpType — metric columns only, e.g. "NONE" for Remaining Days;
        property columns (isProperty=true) omit rollUpType entirely],
-      rollUpCount="0", transformations=[CURRENT], isProperty, [color bounds],
-      displayName, addTimestampAsColumn="false", isShowRelativeTimestamp="false".
+      rollUpCount="0", [transformExpression], transformations=[CURRENT],
+      isProperty, [color bounds], displayName, addTimestampAsColumn="false",
+      isShowRelativeTimestamp="false".
 
     AMBIGUITY: whether rollUpType-omission-for-properties is specific to
     this pak's instanced-group columns or a broader vCommunity-pak-wide
@@ -241,6 +242,43 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     out of scope for this instanced-group capability. Only the
     instanced-group code path below mirrors it; the generic
     _xml_attribute_item() path is untouched.
+
+    Non-CURRENT transformations on member columns (2026-07-10 follow-up,
+    Codex P2 on PR #46): a full survey of every isInstancedGroup Item across
+    all reference/references/vmbro_* content/reports/*.xml files found
+    additional vendor evidence beyond the three files above —
+    "View - Set 4.xml" (same vmbro_vcf_operations_vcommunity pak) bundles
+    several *other* instanced-group views whose member columns use MAX,
+    TRANSFORM_EXPRESSION, and TIMESTAMP:
+      "Windows CPU Usage" — cpu:0|Percent.DPC.Time, transform=MAX,
+        rollUpType="NONE", plus yellowBound/orangeBound/redBound/
+        ascendingRange color bounds (same shape this function already
+        supports).
+      "Linux Disk Performance" — diskio:dm-0|read.time,
+        transform=TRANSFORM_EXPRESSION, transformExpression=
+        "(current-first)/60000" emitted as a sibling Property
+        **immediately before** the transformations Property (same
+        ordering as the generic _xml_attribute_item() path),
+        rollUpType="NONE".
+      "VM Snapshots List" — diskspace:262|snapshot:snapshot-1|accessTime,
+        transform=TIMESTAMP, rollUpType="NONE", no extra sibling
+        properties (matches the generic path's TIMESTAMP handling).
+    Critically, **every** non-property instanced-group member column found
+    in this wider survey — CURRENT, MAX, TRANSFORM_EXPRESSION, and
+    TIMESTAMP alike — carries rollUpType="NONE". There is no vendor
+    evidence anywhere in the corpus for a non-"NONE" rollUpType on an
+    instanced-group member column; the previous "AVG" fallback for
+    non-CURRENT/NONE transforms here was an unproven guess (not vendor
+    evidence) and is corrected below.
+
+    No vendor example of PERCENTILE or TIME_POINT on an instanced-group
+    member column was found anywhere in the surveyed corpus (both DO
+    appear on plenty of *non*-instanced columns in the same files, so
+    their absence here is not merely "these files don't use that
+    transformation" — it's specific to instanced-group columns). Per the
+    framework's no-silent-downgrade posture, `ViewDef._validate_column`
+    rejects both on instanced_group member columns rather than guessing
+    their wire shape.
     """
     ig = col.instanced_group
     props = [_xml_property("objectType", "RESOURCE")]
@@ -262,12 +300,22 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     # carry the same adapterKind/resourceKind as their <SubjectType>).
     props.append(_xml_property("adapterKind", view.adapter_kind))
     props.append(_xml_property("resourceKind", view.resource_kind))
-    if not col.is_property:
-        transform = (col.transformation or "CURRENT").upper()
-        roll_up_type = "NONE" if transform in ("CURRENT", "NONE") else "AVG"
-        props.append(_xml_property("rollUpType", roll_up_type))
-    props.append(_xml_property("rollUpCount", "0"))
     transform = (col.transformation or "CURRENT").upper()
+    if not col.is_property:
+        # Every non-property instanced-group member column found in the
+        # vendor survey — CURRENT, MAX, TRANSFORM_EXPRESSION, TIMESTAMP —
+        # carries rollUpType="NONE" (see docstring). No vendor evidence
+        # supports a different rollUpType here for any transformation.
+        props.append(_xml_property("rollUpType", "NONE"))
+    props.append(_xml_property("rollUpCount", "0"))
+    # transformExpression is a sibling Property emitted immediately before
+    # the transformations block — matches both the generic column path
+    # ordering and the vendor's "Linux Disk Performance" instanced example
+    # (see docstring). PERCENTILE/TIME_POINT companion properties are not
+    # handled here: ViewDef._validate_column rejects those transformations
+    # on instanced_group member columns before render is ever reached.
+    if transform == "TRANSFORM_EXPRESSION" and col.transform_expression:
+        props.append(_xml_property("transformExpression", col.transform_expression))
     props.append(
         f'<Property name="transformations"><List><Item value="{escape(transform)}"/></List></Property>'
     )

@@ -758,12 +758,14 @@ does not validate it against a known set.
 
 Property member columns (`isProperty=true`) **omit `rollUpType`
 entirely**; metric member columns (`isProperty=false`) carry
-`rollUpType="NONE"` (not the generic renderer's `"AVG"` fallback).
-Order otherwise matches the generic column shape: objectType,
-attributeKey, isStringAttribute, adapterKind, resourceKind,
+`rollUpType="NONE"` **unconditionally, regardless of transformation**
+(not the generic renderer's `"AVG"` fallback for non-CURRENT
+transforms — see the non-CURRENT-transformations subsection below for
+the evidence). Order otherwise matches the generic column shape:
+objectType, attributeKey, isStringAttribute, adapterKind, resourceKind,
 [rollUpType], rollUpCount="0" (not "1" — differs from the generic
-default), transformations, isProperty, [color bounds], displayName,
-addTimestampAsColumn, isShowRelativeTimestamp.
+default), [transformExpression], transformations, isProperty, [color
+bounds], displayName, addTimestampAsColumn, isShowRelativeTimestamp.
 
 **AMBIGUITY (not resolved here):** whether the rollUpType omission for
 property columns is specific to instanced-group columns, or a broader
@@ -777,6 +779,86 @@ further. The factory's generic (non-instanced) column renderer
 to instanced-group columns only. If a future port needs the generic
 renderer to match this pattern too, that's a separate change — flag to
 api-explorer for live confirmation first.
+
+### Non-CURRENT transformations on member columns (2026-07-10 follow-up)
+
+- Date: 2026-07-10
+- Agent: tooling (Codex P2 review finding on PR #46)
+- Driving question: the original instanced-group implementation only
+  emitted the `transformations` list for member columns, with no
+  companion sibling properties. The generic (non-instanced) column path
+  emits `percentile` (before `transformations`) for `PERCENTILE`,
+  `transformExpression` (before `transformations`) for
+  `TRANSFORM_EXPRESSION`, and three sibling properties for `TIME_POINT`.
+  Does any vendor instanced-group member column actually use a
+  transformation that needs one of these companions — and if so, what's
+  the wire shape?
+
+**Method:** parsed every `<ViewDef>` in every `reference/references/vmbro_*/
+**/content/reports/*.xml` file, found every `attributes-selector` Control
+whose `attributeInfos` List contains an `isInstancedGroup=true` driver
+Item, and inspected every *other* Item in that same List (i.e. every
+member column of an actual instanced-group view) for its
+`transformations` value and any companion sibling properties.
+
+**Findings:**
+
+- **MAX, TRANSFORM_EXPRESSION, TIMESTAMP: vendor evidence found.**
+  `View - Set 4.xml` (same `vmbro_vcf_operations_vcommunity` pak as the
+  three files already cited above) bundles several further
+  instanced-group views beyond Licensing/Packages/Guest OS Services:
+  - `"Windows CPU Usage"` — member `cpu:0|Percent.DPC.Time`,
+    `transformations=[MAX]`, `rollUpType="NONE"`, plus
+    `yellowBound`/`orangeBound`/`redBound`/`ascendingRange` color bounds
+    (a shape this renderer already supported before this follow-up).
+  - `"Linux Disk Performance"` — member `diskio:dm-0|read.time`,
+    `transformations=[TRANSFORM_EXPRESSION]`, with
+    `<Property name="transformExpression" value="(current-first)/60000"/>`
+    emitted as a sibling **immediately before** the `transformations`
+    Property (same ordering as the generic column path),
+    `rollUpType="NONE"`.
+  - `"VM Snapshots List"` — member
+    `diskspace:262|snapshot:snapshot-1|accessTime`,
+    `transformations=[TIMESTAMP]`, `rollUpType="NONE"`, no extra sibling
+    properties (matches the generic path's TIMESTAMP handling — "No
+    extra sibling properties" per the enum table above).
+  All three examples confirmed `rollUpType="NONE"` — same as every
+  `CURRENT`-transform instanced member column already documented. This
+  **contradicts** the original implementation's `"AVG"` fallback for
+  non-CURRENT/NONE transforms on instanced member columns (that fallback
+  was never vendor-evidenced; it has been removed — `rollUpType="NONE"`
+  is now unconditional for non-property instanced member columns,
+  regardless of transformation).
+- **PERCENTILE, TIME_POINT: no vendor evidence found**, despite both
+  transformations appearing on plenty of *non*-instanced columns in the
+  same files (`View - Set 2.xml`/`View - Set 3.xml`/`View - Set 4.xml`
+  all contain `PERCENTILE` Items; none are inside an
+  `isInstancedGroup`-bearing attributes-selector alongside a member
+  column). Per the framework's no-silent-downgrade posture,
+  `ViewDef._validate_column` now **rejects** `PERCENTILE` and
+  `TIME_POINT` on `instanced_group` member columns (not the driver —
+  driver columns never render a transformation) with a pointer to this
+  section. If a live/vendor example of either surfaces later, route to
+  api-explorer to confirm the wire shape before lifting the rejection.
+
+Implementation: `src/vcfops_dashboards/render.py::_xml_instanced_group_item`
+(emission + docstring citations) and
+`src/vcfops_dashboards/loader.py::ViewDef._validate_column` (rejection).
+Tests: `tests/test_view_instanced_group_columns.py`
+(`TestInstancedGroupMemberTransformEmission`,
+`TestInstancedGroupMemberUnprovenTransformationsRejected`).
+
+**Separate finding, NOT fixed here (documented per hard rule, out of
+scope for this follow-up):** the same three `View - Set 4.xml` examples
+above also carry `<Property name="preferredUnitId" value="percent|min|
+auto"/>` on their member columns (right after `attributeKey`, matching
+the generic path's ordering) — `_xml_instanced_group_item()` does not
+emit `preferredUnitId` at all (`ViewColumn.unit` is read by the generic
+path but ignored by the instanced-group path). This is unrelated to the
+Codex P2 companion-fields finding (it's not transformation-dependent —
+even the CURRENT-transform vendor examples in this file could plausibly
+carry a unit) and was left alone to keep this fix scoped. Flag for a
+future tooling pass if an instanced-group column needs unit display.
 
 ### Factory YAML syntax
 

@@ -343,6 +343,34 @@ class ViewDef:
                 "See knowledge/context/wire-formats/view_column_wire_format.md."
             )
 
+        # Instanced-group member column transformation whitelist.
+        # A survey of every isInstancedGroup Item across all reference/references/
+        # vmbro_* content/reports/*.xml files (2026-07-10, tooling) found vendor
+        # evidence for CURRENT, MAX, TRANSFORM_EXPRESSION, and TIMESTAMP on
+        # instanced-group member columns (e.g. "View - Set 4.xml": "Windows CPU
+        # Usage" MAX, "Linux Disk Performance" TRANSFORM_EXPRESSION, "VM
+        # Snapshots List" TIMESTAMP) — _xml_instanced_group_item() mirrors their
+        # companion-property shape exactly (see that function's docstring).
+        # PERCENTILE and TIME_POINT have NO vendor example on an instanced-group
+        # member column anywhere in the surveyed corpus, despite both appearing
+        # on plenty of *non*-instanced columns in the same files. Per the
+        # framework's no-silent-downgrade posture, an unproven combination is
+        # rejected here rather than guessed at render time — the importer's
+        # actual behavior for e.g. a per-instance percentile is unknown.
+        if (
+            c.instanced_group is not None
+            and not c.instanced_group.is_driver
+            and transform in ("PERCENTILE", "TIME_POINT")
+        ):
+            raise DashboardValidationError(
+                f"{name_ctx}: transformation {transform!r} is not supported on "
+                "instanced_group member columns — no vendor XML example of this "
+                "combination exists in the surveyed reference corpus (RULE-016), "
+                "so the wire shape is unproven and the factory will not guess it. "
+                "See knowledge/context/wire-formats/view_column_wire_format.md "
+                "§ Instanced-group columns."
+            )
+
         # PERCENTILE cross-validation
         if transform == "PERCENTILE":
             if c.percentile is None:
