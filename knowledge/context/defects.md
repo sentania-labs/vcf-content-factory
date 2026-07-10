@@ -432,3 +432,81 @@ reused. Field lines are `- **Field:** value` (parsed by
   build pipeline, not just the unit-level renderer call.
 - **Related:** `knowledge/context/wire-formats/view_column_wire_format.md`
   (sibling instanced-group discovery, same session)
+
+### DEF-009
+
+- **Title:** Factory renderer: XML content-import path collapses multi-tier
+  alerts to their last symptom set only — earlier tiers silently dropped on
+  every field install
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** vcommunity-vsphere
+- **First-seen:** shipped dev-preview build `0.0.0.8`
+  (`vcfcf_sdk_vcommunity_vsphere.0.0.0.8.pak`, installed on
+  vcf-lab-operations-devel), discovered 2026-07-10
+- **Source:** `knowledge/context/wire-formats/alertdef_symptomset_import.md`
+  (api-explorer, live GET on devel); framework-reviewer's defect-registry
+  recommendation in
+  `knowledge/context/reviews/framework/import-fidelity-three-fixes.md`
+  ("Defect-registry assessment" section).
+- **Summary:** `src/vcfops_alerts/render.py::_render_alert_definition` (the
+  XML content-import path consumed by pak-bundled `content/alertdefs/` and
+  by `content-packager`'s standalone AlertContent.xml zips — see
+  `render_alert_content_xml` call sites in `sdk_builder.py`, `buildkit.py`,
+  `packaging/builder.py`, `packaging/discrete_builder.py`) emitted one bare
+  `<SymptomSet ref=…>` sibling per symptom directly under `<State>`, with no
+  `<SymptomSets>` compound wrapper. The platform's content importer keeps
+  only the **last** such sibling on import and silently drops the rest — no
+  error, no warning. Live-confirmed on devel: the `ESXi Host License
+  Expiring` alert (4 severity tiers: Critical/Immediate/Warning/Info)
+  imports and shows only its Info tier; the other three never fire. The
+  REST sync path (`AlertDef.to_wire()` in `vcfops_alerts/loader.py`, used by
+  `vcfops_alerts sync`) is **not** affected — it already emits the correct
+  `SYMPTOM_SET_COMPOSITE` shape for multi-set alerts. Fix (already committed
+  on this branch, `3d5ba94`, `fix/report-subject-filter-escaping`): groups
+  `<SymptomSet>` by set (not by symptom), wraps ≥2 sets in one
+  `<SymptomSets operator="…">`, leaves single-set alerts bare (unchanged),
+  drops the non-vendor `aggregation="any"` attribute.
+- **Empirical affected-artifact check (this entry):** every SDK adapter
+  repo's bundled `alerts/` dir was inspected for `>=2`-symptom-set alerts on
+  the buggy XML path, and every factory `content/alerts/` multi-set item
+  was checked against `bundles/*.yaml` + `bundles/releases/*.yaml` for
+  distribution-zip exposure:
+  - **vcommunity-vsphere** (`content/sdk-adapters/vcommunity-vsphere/alerts/esxi-host-license-expiring.yaml`,
+    4 sets) — pak-bundled, shipped in dev-preview build `0.0.0.8`, live
+    collapse confirmed on devel. **Affected, this entry.**
+  - **vcommunity** (`esxi-host-nic-disconnected.yaml`, `windows-service-down.yaml`)
+    and **vcommunity-os** (`windows-service-down.yaml`) — bundled alerts are
+    all single-set (1). Not affected.
+  - **compliance**, **synology**, **unifi** — none of these three Tier 2 SDK
+    adapter repos bundle an `alerts/` directory at all (no `content/alertdefs/`
+    in their pak content today); the review's initial recommendation to
+    register entries against "synology pak" and "compliance pak" does not
+    hold up empirically and is **not** carried into this registry. The
+    `content/alerts/` items targeting `mpb_synology_dsm` /
+    `VMWARE` (`synology_disk_health_alert`, `synology_storage_pool_health_alert`,
+    `synology_system_temperature_alert`, `synology_volume_space_alert`,
+    `vm_cpu_usage_alert`, `host_compliance_score_alert` — all multi-set) are
+    factory-authored content intended for direct `vcfops_alerts sync` (the
+    unaffected REST path); none of them appear in any `bundles/*.yaml` or
+    `bundles/releases/*.yaml` manifest today, so none currently reach a
+    live instance via the buggy XML path. **If any of these six is ever
+    bundled into a release/dist zip or an SDK pak's `content/alertdefs/`
+    before this defect closes, that artifact needs its own DEF-0NN entry at
+    that time** (schema: one issue on N artifacts = N entries).
+- **Closing criterion (per-pak, per RULE-012):** closes for `vcommunity-vsphere`
+  when a release built from the fixed renderer (i.e. **after** the published
+  `sdk-buildkit` tarball is regenerated to carry `3d5ba94`, per the
+  framework-review WARNING on buildkit propagation — official SDK pak CI
+  builds from the published tarball, not the factory checkout) ships on a
+  `v*` tag **and** a live devel/prod import shows all four severity tiers
+  present (not just Info). Until then this entry gates `v*` tags of
+  `vcommunity-vsphere` per `python3 -m vcfops_packaging defect-gate --pak
+  vcommunity-vsphere` — intended: the dev-preview build already carries the
+  bug in the field, and the fix is merged-pending on a branch, not yet in
+  a release. This entry tracks **field state**, not code state — the code
+  fix already exists (`3d5ba94`).
+- **Related:** `knowledge/context/wire-formats/alertdef_symptomset_import.md`,
+  `knowledge/context/reviews/framework/import-fidelity-three-fixes.md`,
+  DEF-008 (sibling XML content-import renderer defect, same pak, same
+  session's discovery lineage — instanced-attribute drop, closed)
