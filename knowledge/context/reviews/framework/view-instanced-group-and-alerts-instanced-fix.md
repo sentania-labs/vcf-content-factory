@@ -118,3 +118,89 @@ instance) and — more importantly — every `instanced: true` symptom now actua
 instances instead of silently collapsing to one, closing DEF-008. **Caveat:** the fix only
 reaches instances after the affected bundles/paks are rebuilt (WARNING above); until then the
 shipped `vcommunity-vsphere 1.0.0.2` pak remains the broken artifact.
+
+---
+
+## Addendum — commit `301145b` (Codex P2 on PR #46: member-column transformation companions)
+
+- **Date:** 2026-07-10
+- **Rebase:** branch rebased cleanly onto `origin/main` (commit hashes changed:
+  `ea6e614` view columns, `6a074a7` alerts fix, `8c43647` prior review report,
+  `301145b` this follow-up). Re-reviewed against the rebased tree.
+- **Verdict:** APPROVE (0 BLOCKING). Original approval stands; this commit is
+  additive-and-corrective, inert on all existing rendered content.
+- **Findings (this commit):** 0 BLOCKING / 0 WARNING / 1 NIT (carry-forward).
+
+### What changed
+
+1. `_xml_instanced_group_item()` now emits `transformExpression` as a sibling
+   Property **immediately before** `transformations` for TRANSFORM_EXPRESSION
+   members, and handles MAX/TIMESTAMP.
+2. `rollUpType` is now **unconditional `"NONE"`** for non-property instanced
+   members — the previous `else "AVG"` fallback was removed.
+3. `ViewDef._validate_column` **rejects** PERCENTILE and TIME_POINT on
+   instanced_group member columns (fail-closed; no vendor evidence exists).
+4. Wire-format doc updated with the survey and a documented out-of-scope
+   `preferredUnitId` gap note.
+
+### Independent verification
+
+- **Vendor citations — verified at the cited spots in `View - Set 4.xml`**
+  (`vmbro_vcf_operations_vcommunity/Management Pack/content/reports/`):
+  - `cpu:0|Percent.DPC.Time` (Windows CPU Usage) — `rollUpType="NONE"`, MAX. ✓
+  - `diskio:dm-0|read.time` (Linux Disk Performance) — `rollUpType="NONE"`,
+    `transformExpression="(current-first)/60000"` emitted **immediately before**
+    the `transformations` Property. ✓ (matches the render order exactly)
+  - `diskspace:262|snapshot:snapshot-1|accessTime` (VM Snapshots List) —
+    `rollUpType="NONE"`, TIMESTAMP, no extra siblings. ✓
+  - **Every** non-property instanced member in the survey carries
+    `rollUpType="NONE"` — the AVG→NONE change is vendor-correct, not a guess.
+    (Vendor examples also carry `id`/`preferredUnitId` the factory omits — a
+    pre-existing generic difference, out of scope; see NIT.)
+- **rollUpType change does not alter existing content:** re-rendered **115
+  views** (16 factory `content/views` + 98 `vcommunity-vsphere` + 1
+  `vcommunity-os`) on `HEAD~1` vs `HEAD`. Output **byte-identical**. The
+  licensing/ported views use CURRENT/plain members (→ NONE under both the old
+  and new code), so the removed AVG branch was never exercised by existing
+  content. (10 of 115 are pre-existing standalone SM-cross-ref load errors,
+  identical on both trees — not caused by this commit.)
+- **Rejection does not leak onto ordinary columns:** the guard is scoped
+  `c.instanced_group is not None and not is_driver`; ordinary columns have
+  `instanced_group=None`. Proven by the new test
+  `test_percentile_still_allowed_on_non_instanced_column` (ordinary PERCENTILE
+  column still validates) and by validate ×7 passing over the whole corpus
+  (which includes non-instanced PERCENTILE/TIMESTAMP columns).
+- **Test coverage:** 6 new tests — MAX→rollUpType=NONE, transformExpression
+  sibling emission, TIMESTAMP no-extra-siblings, PERCENTILE rejected,
+  TIME_POINT rejected, and the non-leak regression above.
+
+### Gates re-run
+
+- **full pytest** — 491 passed, 4 skipped, 162 deselected (matches the claim).
+- **validate ×7** — PASS.
+- **render regression** — 115 views byte-identical `HEAD~1`→`HEAD`.
+- **path audit** — this commit touches only `src/vcfops_dashboards/loader.py`,
+  `src/vcfops_dashboards/render.py`, `tests/test_view_instanced_group_columns.py`,
+  `knowledge/context/wire-formats/view_column_wire_format.md`. No content YAML, no
+  `.claude/`/`.github/`. Clean.
+
+### NIT (carry-forward, no action required for this PR)
+
+- [`_xml_instanced_group_item`] Instanced-group member columns still do not emit
+  `preferredUnitId` even though the vendor `View - Set 4.xml` members carry it
+  (`ViewColumn.unit` is read by the generic path but ignored here). This is a
+  **pre-existing** gap in the original instanced-group implementation (not
+  introduced by this commit), now **honestly documented** in the wire-format doc
+  as out-of-scope and flagged for a future tooling pass — a loud, documented
+  limitation, not a silent downgrade. If an author sets `unit:` on an
+  instanced-group member it would be silently ignored; no current pak content
+  does. Acceptable to defer.
+
+### Stale-zip note (unchanged)
+
+The WARNING from the original review still applies: `src/vcfops_dashboards/render.py`
+is a named staleness trigger and the branch also carries the alerts symptom-XML
+change, so a `content-packager` rebuild of affected bundles plus a fresh
+`vcommunity-vsphere` `v*` release is required before the fix reaches instances.
+This commit's render change is inert on existing content, so it adds no *new*
+staleness beyond what the branch already carried.
