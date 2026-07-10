@@ -111,3 +111,63 @@ the alerts that depend on them — stop silently vanishing on content-import. No
 existing view or factory-bundled symptom changes on the wire. Downstream:
 `content-packager` should still be run per stale-zip discipline before any
 affected release, though the rebuild is a formality here.
+
+---
+
+## Addendum — `916cd9b` (Codex P2 on PR #47, 2026-07-10)
+
+- Commit: `916cd9b` fix(dashboards): subject_filter loader must not coerce
+  fields before `validate()` runs
+- Surface: `src/vcfops_dashboards/loader.py` (`load_view._load_filter_condition`)
+  + `tests/test_view_subject_filter.py`
+- Verdict: **APPROVE** (0 BLOCKING)
+
+### The bug being fixed
+
+`_load_filter_condition` did `bool(raw["business_hours"])` and blind
+`str(...)` coercion on the string fields **before**
+`SubjectFilterCondition.validate()` ran. Because `bool("false")` is `True`,
+a quoted `business_hours: "false"` in YAML was silently coerced to `True` and
+the renderer emitted `"businessHours":true` — the fail-closed `isinstance(bool)`
+gate built for exactly this field was bypassed by coercion ordering. This is a
+real fail-closed-bypass (dimension 4/8), correctly rated P2, and correctly
+fixed here.
+
+### Independent verification
+
+- **Coercion genuinely gone.** Grepped the filter-condition load path: the only
+  `bool(...)`/`str(raw...)` occurrences remaining are inside the explanatory
+  comment. Live path now passes `value` and `business_hours` through with type
+  preserved; `_str_field()` does an `isinstance(str)` check and raises a
+  named-field error *before* any `.strip()/.upper()`. `validate()`'s
+  `isinstance(bool)` check is the sole authority for `business_hours`.
+- **Quoted-string rejection works.** Directly exercised: quoted
+  `business_hours: "false"` and `"true"` both raise `DashboardValidationError`
+  naming `business_hours` (no silent coercion to `True`). Non-string
+  `transform`/`condition` also rejected with the field named.
+- **Happy path unchanged / byte-exact.** Unquoted `business_hours: false`
+  renders byte-exact against the actual vendor file
+  `View - Collection01.xml:7` (re-extracted and compared, not the test
+  constant). Unquoted `true` renders `"businessHours":true`.
+- **No existing-content behavior change.** validate ×7 pass. View render
+  regression re-run against `main` over all 213 repo+adapter views →
+  **byte-identical, zero diff** (nothing in the corpus uses `subject.filter`).
+- **Path audit clear** — only `src/vcfops_dashboards/loader.py` + the test file.
+- **Tests.** `test_view_subject_filter.py` now 18 (12 + 6 new); the 6 cover
+  quoted true/false rejected, unquoted true/false accepted, non-string
+  transform/condition rejected. Full suite `-m ""` (incl. slow),
+  `-n auto --dist=loadgroup`: **679 passed, 4 skipped** in 883s — matches
+  tooling's claim exactly (683 collected = 679 + 4).
+
+### Findings
+
+BLOCKING: none. WARNING: none. NIT: the stale-zip NIT above is unchanged (this
+addendum touches only `loader.py`, not a trigger path, so it adds no new
+stale-zip obligation beyond the render.py one already noted).
+
+### If shipped as-is
+
+A quoted `"true"`/`"false"` for `subject_filter.business_hours` now fails loudly
+at load with a field-named error instead of silently becoming `true` on the
+wire. No change to any currently-shipped content (none uses `subject.filter`);
+the unquoted-boolean happy path stays byte-exact against the vendor fixture.
