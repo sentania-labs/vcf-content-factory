@@ -157,10 +157,49 @@ def _xml_operator(op: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _add_condition_element(parent: ET.Element, cond: dict) -> None:
-    """Append a <Condition> element to *parent* from the YAML condition dict."""
+    """Append a <Condition> element to *parent* from the YAML condition dict.
+
+    ``instanced``/``thresholdType``/``valueType`` wire shape — TOOLSET GAP
+    fix (2026-07-09, defects.md DEF-<see below>): this XML content-import
+    path previously never emitted ``instanced`` for metric_static/property
+    conditions (the REST path's ``_condition_to_wire`` in
+    ``vcfops_symptoms/loader.py`` always had it), so every instanced
+    condition silently downgraded to exact-string key matching in every
+    built pak. Fixed to mirror the vendor XML shape exactly, confirmed
+    against two independent vendor symptomdefs (RULE-016 read-only
+    references):
+
+      reference/references/vmbro_vcf_operations_vcommunity/Management Pack/
+        content/symptomdefs/ESXi Host NIC Disconnected Symptom.xml:5
+        <Condition instanced="true" key="vCommunity|Network|Device:vmnic0|Status"
+          operator="!=" thresholdType="static" type="property" value="Connected"
+          valueType="string"/>
+
+      reference/references/vmbro_vcf_operations_hardware_vcommunity/Management
+        Pack/content/symptomdefs/Dell EMC Server Physical Disk Life Remaining -
+        Critical.xml:5
+        <Condition instanced="true" key="Hardware|Controller|Physical Disks:NVMe 0|
+          Predicted Media Life Left Percent" operator="&lt;" thresholdType="static"
+          type="metric" value="10.0" valueType="numeric"/>
+
+    Both confirm ``thresholdType``/``valueType`` ARE present on the XML path
+    (load-bearing, not server-defaulted) and use **lowercase** values
+    ("static"/"numeric"/"string") — distinct from the REST wire's uppercase
+    ("STATIC"/"NUMERIC"). The two wire formats are cased independently; do
+    not copy the REST casing here.
+
+    No vendor XML example with a DT (metric_dynamic) condition was found in
+    any reference pak to confirm whether thresholdType/valueType apply
+    there too. Since DT conditions carry no ``value`` at all (REST's own
+    ``_condition_to_wire`` omits thresholdType/valueType for
+    CONDITION_DT), this renderer follows the same omission for metric_dynamic
+    on the XML path — instanced only, no thresholdType/valueType. Flag to
+    api-explorer if a live/vendor DT example ever surfaces to confirm.
+    """
     ctype = cond.get("type", "")
     key = cond.get("key", "")
     operator = cond.get("operator", "")
+    instanced = "true" if cond.get("instanced", False) else "false"
 
     attribs: dict = {}
 
@@ -169,18 +208,34 @@ def _add_condition_element(parent: ET.Element, cond: dict) -> None:
         attribs["operator"] = _xml_operator(operator)
         attribs["value"] = str(cond.get("value", ""))
         attribs["type"] = "metric"
+        attribs["instanced"] = instanced
+        attribs["thresholdType"] = "static"
+        attribs["valueType"] = "numeric"
 
     elif ctype == "metric_dynamic":
         direction = cond.get("direction", "ABOVE")
         attribs["key"] = key
         attribs["operator"] = f"DT_{direction}"
         attribs["type"] = "metric"
+        attribs["instanced"] = instanced
 
     elif ctype == "property":
+        value = cond.get("value", "")
         attribs["key"] = key
         attribs["operator"] = _xml_operator(operator)
-        attribs["value"] = str(cond.get("value", ""))
+        attribs["value"] = str(value)
         attribs["type"] = "property"
+        attribs["instanced"] = instanced
+        attribs["thresholdType"] = "static"
+        # Mirrors _condition_to_wire's CONDITION_PROPERTY_STRING/NUMERIC
+        # split: bool -> string ("true"/"false" text), int/float -> numeric,
+        # everything else -> string. See vcfops_symptoms/loader.py.
+        if isinstance(value, bool):
+            attribs["valueType"] = "string"
+        elif isinstance(value, (int, float)):
+            attribs["valueType"] = "numeric"
+        else:
+            attribs["valueType"] = "string"
 
     elif ctype == "msg_event":
         # Built-in / future symptom type: pass through event attributes.
