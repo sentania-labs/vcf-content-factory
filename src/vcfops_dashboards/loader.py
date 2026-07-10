@@ -68,6 +68,73 @@ class ViewTimeWindow:
 
 
 @dataclass
+class InstancedGroupSpec:
+    """Instanced-group column config — one row/column-set per instance of a
+    colon-syntax metric group (e.g. one row per license name under
+    ``vCommunity|Licensing:<name>|...``).
+
+    Vendor wire format (ground truth, RULE-016 read-only reference):
+      reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/
+        ESXi Host License Information vCommunity.xml (Licensing group)
+        ESXi Packages.xml                              (Packages group)
+        Windows Services vCommunity.xml                (Guest OS|Services group)
+      All three ship an ``attributes-selector`` Control whose first
+      ``attributeInfos`` Item is a "driver" column carrying
+      ``attributeKey=Instance Name``, ``isInstancedGroup=true``,
+      ``showInstanceName``, ``instanceGroupName`` and ``keepInstanceSummary``.
+      Every subsequent Item in the same view is a normal-looking column whose
+      ``attributeKey`` embeds one *representative* instance name in the
+      colon segment (e.g. ``vCommunity|Licensing:Evaluation Mode|Edition Key``,
+      ``vCommunity|Configuration|Packages:atlantic|Package Name``,
+      ``vCommunity|Guest OS|Services:DHCP Client|Service Name``). VCF Ops
+      expands these into one row per instance found on the resource at
+      render time — the embedded instance name is a *sample* used to
+      identify the group+suffix pattern, not a filter.
+
+    AMBIguity (flagged per brief, not guessed): whether the *value* of the
+    embedded sample instance name matters to the server's instanced-group
+    matching (vs. being purely cosmetic / first-seen-at-authoring-time) is
+    not verifiable from static XML alone. This loader requires the author
+    to supply ``sample_instance`` explicitly (no default) so the choice is
+    visible in the YAML and in code review, rather than silently guessing
+    a placeholder. Recommend confirming behavior against a live instance
+    via api-explorer / ops-recon before relying on the exact string.
+
+    ``name`` (-> instanceGroupName) is emitted verbatim. The vendor pak
+    uses the literal ``GROUP_vCommunity`` for every one of its own
+    user-defined instanced groups (Licensing, Packages, Guest OS Services)
+    regardless of the underlying metric family — see the three files
+    above. VMware's own built-in instanced groups use different literal
+    tokens (``GROUP_net``, ``GROUP_cpu``, ``GROUP_disk``, ...; see
+    ``View - Set 4.xml`` in the same directory). The factory does not
+    validate ``name`` against a known enum — treat it as an opaque
+    wire-format token the author supplies.
+
+    Two column roles, distinguished by whether ``prefix``/``suffix`` are set:
+
+    - Driver column (``prefix``/``suffix`` both unset): the single
+      "Instance Name" pseudo-column that turns on instanced-group mode
+      for the view. ``show_instance_name`` / ``keep_instance_summary``
+      apply here.
+    - Member column (``prefix`` AND ``suffix`` both set): a data column
+      belonging to the group. The loader synthesizes the wire
+      ``attributeKey`` as ``f"{prefix}:{sample_instance}|{suffix}"``.
+      Authors must NOT also set ``attribute:`` on a member (or driver)
+      column — see ``ViewDef.validate()`` for the rejection.
+    """
+    name: str
+    prefix: Optional[str] = None
+    suffix: Optional[str] = None
+    sample_instance: Optional[str] = None
+    show_instance_name: bool = True
+    keep_instance_summary: bool = False
+
+    @property
+    def is_driver(self) -> bool:
+        return not self.prefix and not self.suffix
+
+
+@dataclass
 class ViewColumn:
     attribute: str
     display_name: str
@@ -101,6 +168,11 @@ class ViewColumn:
     # Default False preserves existing behaviour for numeric metric columns.
     is_property: bool = False
     is_string_attribute: bool = False
+    # Instanced-group column config. When set, `attribute` is synthesized by
+    # the loader (driver -> "Instance Name"; member ->
+    # "{prefix}:{sample_instance}|{suffix}") and must not be author-supplied.
+    # See InstancedGroupSpec docstring for the wire format and citations.
+    instanced_group: Optional["InstancedGroupSpec"] = None
 
 
 @dataclass
@@ -196,6 +268,26 @@ class ViewDef:
                     f"view {self.name}: column requires attribute and display_name"
                 )
             self._validate_column(c)
+        # Instanced-group cross-check: every member column's group `name`
+        # must have a matching driver column somewhere in the same view.
+        # Without the driver, VCF Ops has no isInstancedGroup/instanceGroupName
+        # signal and the member columns render as ordinary (non-expanding)
+        # single-instance columns — the exact bug this capability fixes.
+        driver_names = {
+            c.instanced_group.name
+            for c in self.columns
+            if c.instanced_group is not None and c.instanced_group.is_driver
+        }
+        for c in self.columns:
+            ig = c.instanced_group
+            if ig is not None and not ig.is_driver and ig.name not in driver_names:
+                raise DashboardValidationError(
+                    f"view {self.name}: column {c.display_name!r} belongs to "
+                    f"instanced_group {ig.name!r} but no driver column "
+                    f"(instanced_group with no prefix/suffix, name={ig.name!r}) "
+                    "is present in this view. Add the 'Instance Name' driver "
+                    "column first."
+                )
         if self.data_type not in _VALID_PRESENTATIONS:
             raise DashboardValidationError(
                 f"view {self.name}: data_type must be one of "
@@ -959,8 +1051,69 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
         localized_metric_to_relate_with = str(lmtrw_raw).strip() if lmtrw_raw else None
         operator_to_relate_with = str(otrw_raw).strip().upper() if otrw_raw else None
 
+        # Instanced-group column: `attribute` is loader-synthesized, not
+        # author-supplied. See InstancedGroupSpec docstring for the wire
+        # format this mirrors.
+        ig_raw = c.get("instanced_group")
+        instanced_group: Optional[InstancedGroupSpec] = None
+        attribute_raw = c.get("attribute")
+        if ig_raw is not None:
+            if not isinstance(ig_raw, dict):
+                raise DashboardValidationError(
+                    "view column: instanced_group must be a mapping "
+                    f"(name, prefix, suffix, sample_instance, ...), got {ig_raw!r}."
+                )
+            if attribute_raw:
+                raise DashboardValidationError(
+                    f"view column {c.get('display_name')!r}: instanced_group columns "
+                    "must not also set `attribute` — the attributeKey is synthesized "
+                    "by the loader (driver -> 'Instance Name'; member -> "
+                    "'{prefix}:{sample_instance}|{suffix}'). Setting `attribute` "
+                    "here would hardcode a single instance and defeat the "
+                    "one-row-per-instance expansion. Use `prefix`/`suffix`/"
+                    "`sample_instance` on the instanced_group block instead."
+                )
+            ig_name = str(ig_raw.get("name", "") or "").strip()
+            if not ig_name:
+                raise DashboardValidationError(
+                    f"view column {c.get('display_name')!r}: instanced_group.name is required."
+                )
+            ig_prefix = ig_raw.get("prefix")
+            ig_suffix = ig_raw.get("suffix")
+            ig_prefix = str(ig_prefix).strip() if ig_prefix else None
+            ig_suffix = str(ig_suffix).strip() if ig_suffix else None
+            if bool(ig_prefix) != bool(ig_suffix):
+                raise DashboardValidationError(
+                    f"view column {c.get('display_name')!r}: instanced_group.prefix and "
+                    "instanced_group.suffix must both be set (member column) or both "
+                    "unset (driver column)."
+                )
+            ig_sample = ig_raw.get("sample_instance")
+            ig_sample = str(ig_sample).strip() if ig_sample else None
+            instanced_group = InstancedGroupSpec(
+                name=ig_name,
+                prefix=ig_prefix,
+                suffix=ig_suffix,
+                sample_instance=ig_sample,
+                show_instance_name=bool(ig_raw.get("show_instance_name", True)),
+                keep_instance_summary=bool(ig_raw.get("keep_instance_summary", False)),
+            )
+            if instanced_group.is_driver:
+                attribute = "Instance Name"
+            else:
+                if not instanced_group.sample_instance:
+                    raise DashboardValidationError(
+                        f"view column {c.get('display_name')!r}: instanced_group member "
+                        "columns require sample_instance (a representative instance name "
+                        "embedded in the synthesized attributeKey; see InstancedGroupSpec "
+                        "docstring — the factory does not guess this value)."
+                    )
+                attribute = f"{instanced_group.prefix}:{instanced_group.sample_instance}|{instanced_group.suffix}"
+        else:
+            attribute = str(attribute_raw or "").strip()
+
         return ViewColumn(
-            attribute=str(c["attribute"]).strip(),
+            attribute=attribute,
             display_name=str(c["display_name"]).strip(),
             unit=str(c.get("unit", "") or "").strip(),
             transformation=transformation,
@@ -975,6 +1128,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
             ascending_range=ascending,
             is_property=bool(c.get("is_property", False)),
             is_string_attribute=bool(c.get("is_string_attribute", False)),
+            instanced_group=instanced_group,
         )
 
     cols = [_load_column(c) for c in (data.get("columns") or [])]

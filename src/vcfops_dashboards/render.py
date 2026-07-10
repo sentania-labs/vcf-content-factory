@@ -208,6 +208,110 @@ def _xml_transformations_block(view: ViewDef) -> str:
     return '<Property name="transformations"><List><Item value="CURRENT"/></List></Property>'
 
 
+def _xml_instanced_group_item(view: ViewDef, col) -> str:
+    """Render an instanced-group driver or member column Item.
+
+    Wire format ground truth (RULE-016 read-only vendor reference):
+      reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/
+        ESXi Host License Information vCommunity.xml:36-222 (Licensing, no driver displayName)
+        ESXi Packages.xml:36-146                            (Packages, driver has displayName)
+        Windows Services vCommunity.xml:36-188              (Guest OS|Services, driver has displayName)
+
+    Driver Item property order (all three files, identical):
+      objectType, attributeKey="Instance Name", rollUpCount="0",
+      isInstancedGroup="true", showInstanceName, instanceGroupName,
+      keepInstanceSummary, [displayName]
+    The License view's driver omits displayName; the other two include it
+    ("Instance" / "Service"). Since this loader always has a non-empty
+    display_name (required field on every ViewColumn), always emitting it
+    matches the two-of-three observed variant and is harmless — VCF Ops
+    accepts a displayName on the driver as evidenced by those exports.
+
+    Member Item property order (all three files, identical):
+      objectType, attributeKey, isStringAttribute, adapterKind, resourceKind,
+      [rollUpType — metric columns only, e.g. "NONE" for Remaining Days;
+       property columns (isProperty=true) omit rollUpType entirely],
+      rollUpCount="0", transformations=[CURRENT], isProperty, [color bounds],
+      displayName, addTimestampAsColumn="false", isShowRelativeTimestamp="false".
+
+    AMBIGUITY: whether rollUpType-omission-for-properties is specific to
+    this pak's instanced-group columns or a broader vCommunity-pak-wide
+    convention (ESXi Host Details vCommunity.xml:44-76 shows the same
+    omission on a *non*-instanced property column) was not resolved here —
+    out of scope for this instanced-group capability. Only the
+    instanced-group code path below mirrors it; the generic
+    _xml_attribute_item() path is untouched.
+    """
+    ig = col.instanced_group
+    props = [_xml_property("objectType", "RESOURCE")]
+    if ig.is_driver:
+        props.append(_xml_property("attributeKey", "Instance Name"))
+        props.append(_xml_property("rollUpCount", "0"))
+        props.append(_xml_property("isInstancedGroup", "true"))
+        props.append(_xml_property("showInstanceName", "true" if ig.show_instance_name else "false"))
+        props.append(_xml_property("instanceGroupName", ig.name))
+        props.append(_xml_property("keepInstanceSummary", "true" if ig.keep_instance_summary else "false"))
+        props.append(_xml_property("displayName", col.display_name))
+        return "<Item><Value>" + "".join(props) + "</Value></Item>"
+
+    # Member column.
+    props.append(_xml_property("attributeKey", col.attribute))
+    props.append(_xml_property("isStringAttribute", "true" if col.is_string_attribute else "false"))
+    # adapterKind/resourceKind are the view's own subject kinds, matching
+    # every observed instanced-group member column (all three cited files
+    # carry the same adapterKind/resourceKind as their <SubjectType>).
+    props.append(_xml_property("adapterKind", view.adapter_kind))
+    props.append(_xml_property("resourceKind", view.resource_kind))
+    if not col.is_property:
+        transform = (col.transformation or "CURRENT").upper()
+        roll_up_type = "NONE" if transform in ("CURRENT", "NONE") else "AVG"
+        props.append(_xml_property("rollUpType", roll_up_type))
+    props.append(_xml_property("rollUpCount", "0"))
+    transform = (col.transformation or "CURRENT").upper()
+    props.append(
+        f'<Property name="transformations"><List><Item value="{escape(transform)}"/></List></Property>'
+    )
+    props.append(_xml_property("isProperty", "true" if col.is_property else "false"))
+
+    def _bound_str(v) -> str:
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, float):
+            return str(v)
+        return str(v)
+
+    def _is_numeric_bound(v) -> bool:
+        if v is None:
+            return False
+        if isinstance(v, (int, float)):
+            return True
+        try:
+            float(str(v))
+            return True
+        except (ValueError, TypeError):
+            return False
+
+    has_yellow = col.yellow_bound is not None
+    has_orange = col.orange_bound is not None
+    has_red = col.red_bound is not None
+    red_is_string = has_red and not _is_numeric_bound(col.red_bound)
+    if has_yellow:
+        props.append(_xml_property("yellowBound", _bound_str(col.yellow_bound)))
+    if has_orange:
+        props.append(_xml_property("orangeBound", _bound_str(col.orange_bound)))
+    if has_red:
+        props.append(_xml_property("redBound", _bound_str(col.red_bound)))
+    if col.ascending_range is not None and not (red_is_string and not has_yellow and not has_orange):
+        props.append(_xml_property("ascendingRange", "true" if col.ascending_range else "false"))
+
+    props.append(_xml_property("displayName", col.display_name))
+    props += [
+        _xml_property("addTimestampAsColumn", "false"),
+        _xml_property("isShowRelativeTimestamp", "false"),
+    ]
+    return "<Item><Value>" + "".join(props) + "</Value></Item>"
+
+
 def _xml_attribute_item(
     view: ViewDef,
     col,
@@ -216,6 +320,13 @@ def _xml_attribute_item(
     sm_scope_active: bool = False,
     bundle_context: str | None = None,
 ) -> str:
+    # Instanced-group columns (driver + member) have their own wire shape,
+    # distinct from every other column kind rendered below. Handle them
+    # first and return early. See InstancedGroupSpec in loader.py for the
+    # vendor XML citations this mirrors.
+    if getattr(col, "instanced_group", None) is not None:
+        return _xml_instanced_group_item(view, col)
+
     # Super metric columns live in their own namespace and need the
     # "Super Metric|sm_<uuid>" attributeKey form — bare "sm_<uuid>"
     # renders as a blank column in the UI. Reference: exported views
