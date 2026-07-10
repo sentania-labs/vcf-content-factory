@@ -371,3 +371,64 @@ reused. Field lines are `- **Field:** value` (parsed by
   analytics service/nodes; adapter-level bounces do not clear it.
 - **Related:** DEF-006 (CP ambient path, closed via synology),
   `knowledge/context/reviews/unifi-build-11.md`
+
+### DEF-008
+
+- **Title:** Factory renderer: XML content-import path silently drops the
+  `instanced` attribute on symptom conditions — every instanced symptom
+  downgrades to exact-string key matching in every built pak
+- **Severity:** blocking
+- **Status:** closed
+- **Affects:** vcommunity-vsphere
+- **First-seen:** shipped pak `1.0.0.2`
+  (`content/sdk-adapters/vcommunity-vsphere/dist/vcfcf_sdk_vcommunity_vsphere.1.0.0.2.pak`),
+  discovered 2026-07-09/10
+- **Source:** sdk-adapter-author pak-extraction evidence — extracting
+  `vcfcf_sdk_vcommunity_vsphere.1.0.0.2.pak` shows
+  `content/symptomdefs/'ESXi Host NIC Disconnected.xml'` with no
+  `instanced="true"` on its `<Condition>`, despite the source YAML
+  (`content/sdk-adapters/vcommunity-vsphere/symptoms/esxi-host-nic-disconnected.yaml`)
+  declaring `condition.instanced: true`.
+- **Summary:** `src/vcfops_alerts/render.py::_add_condition_element` (the
+  XML content-import path used by every pak build) never read/emitted
+  `cond["instanced"]` for `metric_static`/`property` conditions, even
+  though the REST-sync path
+  (`vcfops_symptoms/loader.py::_condition_to_wire`) always has. Effect:
+  every symptom authored with `instanced: true` — meant to match ALL
+  instances of a colon-syntax metric group (e.g. any
+  `vCommunity|Licensing:<name>|Remaining Days`, any
+  `vCommunity|Network|Device:<nic>|Status`) — silently downgrades to
+  exact-string single-instance matching in the built pak, with no error,
+  warning, or validation failure. Two concrete blast-radius items in
+  `vcommunity-vsphere`: the already-shipped `1.0.0.2` pak's `ESXi Host NIC
+  Disconnected` symptom only fires for the literal instance name baked
+  into its condition key at author time (not "any NIC"), and the new
+  `esxi-host-license-remaining-days-{critical,warning,info,immediate}`
+  symptoms (not yet released) would ship completely non-functional against
+  their designed "any license instance" semantics. Smallest correct fix:
+  emit `instanced` (plus vendor-confirmed `thresholdType`/`valueType`) in
+  `_add_condition_element`, matching the vendor XML shape exactly.
+- **Closing-evidence:** Fixed in `src/vcfops_alerts/render.py` on branch
+  `feat/view-instanced-group-columns` (commit follows this entry).
+  `_add_condition_element` now emits `instanced` for
+  metric_static/property/metric_dynamic conditions, and
+  `thresholdType="static"`/`valueType="numeric"|"string"` for
+  metric_static/property conditions — verified byte-for-byte against three
+  independent vendor symptomdef XMLs (RULE-016 read-only references):
+  `reference/references/vmbro_vcf_operations_vcommunity/Management
+  Pack/content/symptomdefs/ESXi Host NIC Disconnected Symptom.xml`,
+  `.../Windows Service Down Symptom.xml`, and
+  `reference/references/vmbro_vcf_operations_hardware_vcommunity/Management
+  Pack/content/symptomdefs/Dell EMC Server Physical Disk Life Remaining -
+  Critical.xml`. Unit coverage:
+  `tests/test_symptom_condition_instanced_attribute.py` (8 tests). **End-to-end
+  proof:** rebuilt the vcommunity-vsphere dev-preview pak
+  (`python3 -m vcfops_managementpacks build-sdk content/sdk-adapters/vcommunity-vsphere`,
+  build `0.0.0.5`, no tag/release) and extracted it — all five
+  `content/symptomdefs/*.xml` files (`ESXi Host NIC Disconnected.xml` and
+  the four `ESXi Host License Remaining Days *.xml`) now carry
+  `instanced="true" ... thresholdType="static" valueType="numeric|string"`
+  on their `<Condition>` elements, confirming the fix survives the full
+  build pipeline, not just the unit-level renderer call.
+- **Related:** `knowledge/context/wire-formats/view_column_wire_format.md`
+  (sibling instanced-group discovery, same session)

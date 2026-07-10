@@ -687,6 +687,226 @@ Validation rules in `loader.py`:
    aggregation computes AVG/MAX/PERCENTILE of those 5-min
    averages). Do not change `rollUpType` as part of this work.
 
+## Instanced-group columns (`isInstancedGroup` / `instanceGroupName`)
+
+- Date: 2026-07-09
+- Agent: tooling (`feat/view-instanced-group-columns`)
+- Driving question: how does a view column select an attribute across
+  ALL instances of a colon-syntax metric group — one row/column set
+  per instance — rather than a single hardcoded instance?
+- Sources (RULE-016, read-only vendor reference, no lab traffic
+  required):
+  - `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/ESXi Host License Information vCommunity.xml`
+    (licensing, `vCommunity|Licensing:<name>|*`)
+  - `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/ESXi Packages.xml`
+    (packages, `vCommunity|Configuration|Packages:<name>|*`)
+  - `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/Windows Services vCommunity.xml`
+    (guest services, `vCommunity|Guest OS|Services:<name>|*`)
+  - `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/View - Set 3.xml`
+    and `View - Set 4.xml` — VMware's own built-in instanced groups
+    (`GROUP_net`, `GROUP_cpu`, `GROUP_disk`, `GROUP_diskio`,
+    `GROUP_config`, `GROUP_storageAdapter`, `GROUP_diskspace`,
+    `GROUP_virtualDisk`, `GROUP_host`, `GROUP_guestfilesystem`),
+    surveyed to confirm the construct's shape is not vCommunity-specific.
+
+### Wire format shape
+
+The first `Item` in `attributeInfos/List` is a "driver" column that turns
+on instanced-group mode for the whole view. It carries a literal sentinel
+`attributeKey`, not a real metric/property key:
+
+```xml
+<Item><Value>
+  <Property name="objectType" value="RESOURCE"/>
+  <Property name="attributeKey" value="Instance Name"/>
+  <Property name="rollUpCount" value="0"/>
+  <Property name="isInstancedGroup" value="true"/>
+  <Property name="showInstanceName" value="true"/>
+  <Property name="instanceGroupName" value="GROUP_vCommunity"/>
+  <Property name="keepInstanceSummary" value="true"/>
+  <Property name="displayName" value="Instance"/>  <!-- omitted in the
+       License view, present in Packages/Windows Services — both
+       accepted, so the factory always emits it -->
+</Value></Item>
+```
+
+Every subsequent Item is a normal-looking column whose `attributeKey`
+embeds one *representative* instance name in the colon segment:
+
+```xml
+<Property name="attributeKey" value="vCommunity|Licensing:Evaluation Mode|Edition Key"/>
+```
+
+Pattern: `<group-prefix>:<sample-instance>|<attribute-suffix>`. VCF Ops
+expands this into one row per instance actually present on the resource
+at render time — the embedded instance name is a *sample* used to
+identify the `prefix`+`suffix` pattern, not a filter that restricts
+rendering to only that one instance.
+
+`instanceGroupName` (`GROUP_vCommunity`) is the **same literal string**
+for every one of the vCommunity pak's own user-defined instanced groups
+(Licensing, Packages, Guest OS Services) despite them being unrelated
+metric families — confirmed identical across all three cited files.
+VMware's built-in instanced groups use distinct per-family tokens
+(`GROUP_net`, `GROUP_cpu`, ...). This strongly suggests `instanceGroupName`
+is closer to a UI label / opaque grouping token than a server-validated
+enum keyed to the metric family — but this was not confirmed against a
+live instance. Treat it as an author-supplied opaque string; the loader
+does not validate it against a known set.
+
+### Member column property emission — differs from generic columns
+
+Property member columns (`isProperty=true`) **omit `rollUpType`
+entirely**; metric member columns (`isProperty=false`) carry
+`rollUpType="NONE"` **unconditionally, regardless of transformation**
+(not the generic renderer's `"AVG"` fallback for non-CURRENT
+transforms — see the non-CURRENT-transformations subsection below for
+the evidence). Order otherwise matches the generic column shape:
+objectType, attributeKey, isStringAttribute, adapterKind, resourceKind,
+[rollUpType], rollUpCount="0" (not "1" — differs from the generic
+default), [transformExpression], transformations, isProperty, [color
+bounds], displayName, addTimestampAsColumn, isShowRelativeTimestamp.
+
+**AMBIGUITY (not resolved here):** whether the rollUpType omission for
+property columns is specific to instanced-group columns, or a broader
+vCommunity-pak-wide convention. `ESXi Host Details vCommunity.xml:44-76`
+shows the same omission on a **non-instanced** property column
+(`Install Date|UTC`), which suggests the latter — but this was out of
+scope for the instanced-group capability and was not investigated
+further. The factory's generic (non-instanced) column renderer
+(`_xml_attribute_item`) was deliberately left untouched; only the new
+`_xml_instanced_group_item()` path mirrors this vendor behavior, scoped
+to instanced-group columns only. If a future port needs the generic
+renderer to match this pattern too, that's a separate change — flag to
+api-explorer for live confirmation first.
+
+### Non-CURRENT transformations on member columns (2026-07-10 follow-up)
+
+- Date: 2026-07-10
+- Agent: tooling (Codex P2 review finding on PR #46)
+- Driving question: the original instanced-group implementation only
+  emitted the `transformations` list for member columns, with no
+  companion sibling properties. The generic (non-instanced) column path
+  emits `percentile` (before `transformations`) for `PERCENTILE`,
+  `transformExpression` (before `transformations`) for
+  `TRANSFORM_EXPRESSION`, and three sibling properties for `TIME_POINT`.
+  Does any vendor instanced-group member column actually use a
+  transformation that needs one of these companions — and if so, what's
+  the wire shape?
+
+**Method:** parsed every `<ViewDef>` in every `reference/references/vmbro_*/
+**/content/reports/*.xml` file, found every `attributes-selector` Control
+whose `attributeInfos` List contains an `isInstancedGroup=true` driver
+Item, and inspected every *other* Item in that same List (i.e. every
+member column of an actual instanced-group view) for its
+`transformations` value and any companion sibling properties.
+
+**Findings:**
+
+- **MAX, TRANSFORM_EXPRESSION, TIMESTAMP: vendor evidence found.**
+  `View - Set 4.xml` (same `vmbro_vcf_operations_vcommunity` pak as the
+  three files already cited above) bundles several further
+  instanced-group views beyond Licensing/Packages/Guest OS Services:
+  - `"Windows CPU Usage"` — member `cpu:0|Percent.DPC.Time`,
+    `transformations=[MAX]`, `rollUpType="NONE"`, plus
+    `yellowBound`/`orangeBound`/`redBound`/`ascendingRange` color bounds
+    (a shape this renderer already supported before this follow-up).
+  - `"Linux Disk Performance"` — member `diskio:dm-0|read.time`,
+    `transformations=[TRANSFORM_EXPRESSION]`, with
+    `<Property name="transformExpression" value="(current-first)/60000"/>`
+    emitted as a sibling **immediately before** the `transformations`
+    Property (same ordering as the generic column path),
+    `rollUpType="NONE"`.
+  - `"VM Snapshots List"` — member
+    `diskspace:262|snapshot:snapshot-1|accessTime`,
+    `transformations=[TIMESTAMP]`, `rollUpType="NONE"`, no extra sibling
+    properties (matches the generic path's TIMESTAMP handling — "No
+    extra sibling properties" per the enum table above).
+  All three examples confirmed `rollUpType="NONE"` — same as every
+  `CURRENT`-transform instanced member column already documented. This
+  **contradicts** the original implementation's `"AVG"` fallback for
+  non-CURRENT/NONE transforms on instanced member columns (that fallback
+  was never vendor-evidenced; it has been removed — `rollUpType="NONE"`
+  is now unconditional for non-property instanced member columns,
+  regardless of transformation).
+- **PERCENTILE, TIME_POINT: no vendor evidence found**, despite both
+  transformations appearing on plenty of *non*-instanced columns in the
+  same files (`View - Set 2.xml`/`View - Set 3.xml`/`View - Set 4.xml`
+  all contain `PERCENTILE` Items; none are inside an
+  `isInstancedGroup`-bearing attributes-selector alongside a member
+  column). Per the framework's no-silent-downgrade posture,
+  `ViewDef._validate_column` now **rejects** `PERCENTILE` and
+  `TIME_POINT` on `instanced_group` member columns (not the driver —
+  driver columns never render a transformation) with a pointer to this
+  section. If a live/vendor example of either surfaces later, route to
+  api-explorer to confirm the wire shape before lifting the rejection.
+
+Implementation: `src/vcfops_dashboards/render.py::_xml_instanced_group_item`
+(emission + docstring citations) and
+`src/vcfops_dashboards/loader.py::ViewDef._validate_column` (rejection).
+Tests: `tests/test_view_instanced_group_columns.py`
+(`TestInstancedGroupMemberTransformEmission`,
+`TestInstancedGroupMemberUnprovenTransformationsRejected`).
+
+**Separate finding, NOT fixed here (documented per hard rule, out of
+scope for this follow-up):** the same three `View - Set 4.xml` examples
+above also carry `<Property name="preferredUnitId" value="percent|min|
+auto"/>` on their member columns (right after `attributeKey`, matching
+the generic path's ordering) — `_xml_instanced_group_item()` does not
+emit `preferredUnitId` at all (`ViewColumn.unit` is read by the generic
+path but ignored by the instanced-group path). This is unrelated to the
+Codex P2 companion-fields finding (it's not transformation-dependent —
+even the CURRENT-transform vendor examples in this file could plausibly
+carry a unit) and was left alone to keep this fix scoped. Flag for a
+future tooling pass if an instanced-group column needs unit display.
+
+### Factory YAML syntax
+
+```yaml
+columns:
+  - display_name: "Instance"
+    instanced_group:
+      name: "GROUP_vCommunity"          # -> instanceGroupName (opaque token)
+      show_instance_name: true          # default true
+      keep_instance_summary: true       # default false
+      # no prefix/suffix => this is the driver column
+
+  - display_name: "Edition"
+    is_property: true
+    is_string_attribute: true
+    instanced_group:
+      name: "GROUP_vCommunity"          # must match a driver's name in this view
+      prefix: "vCommunity|Licensing"    # group prefix before ":"
+      suffix: "Edition Key"             # attribute name after "<instance>|"
+      sample_instance: "Evaluation Mode"  # required, no default — see below
+```
+
+Implementation: `src/vcfops_dashboards/loader.py` (`InstancedGroupSpec`,
+`ViewColumn.instanced_group`, `_load_column` synthesis, `ViewDef.validate`
+driver cross-check) and `src/vcfops_dashboards/render.py`
+(`_xml_instanced_group_item`).
+
+### Loader validation
+
+- A column with `instanced_group` set must NOT also set `attribute`
+  (hardcoding a literal attributeKey defeats the abstraction and is
+  exactly the bug this capability fixes — see the shipped-but-broken
+  `content/sdk-adapters/vcommunity-vsphere/views/ESXi Host License
+  Information vCommunity.yaml`, which hardcodes
+  `vCommunity|Licensing:Evaluation Mode|*` in every column with no
+  `isInstancedGroup` driver at all).
+- `prefix` and `suffix` must both be set (member column) or both unset
+  (driver column) — one without the other is rejected.
+- Member columns require `sample_instance` — no default is synthesized.
+  This is a deliberate "require, don't guess" choice per CLAUDE.md's
+  no-silent-downgrade posture: whether the sample value affects server
+  behavior is unverified (see AMBIGUITY above), so the loader forces
+  the author to make the choice explicitly and visibly in YAML/review
+  rather than picking an arbitrary placeholder.
+- Every member column's `instanced_group.name` must match a driver
+  column present in the same view, or validation fails with a
+  pointer to add the driver.
+
 ### `context/` updates the tooling agent should also make
 
 - Cross-link this file from `context/chart_widget_formats.md` (which
