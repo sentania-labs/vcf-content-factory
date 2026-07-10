@@ -69,7 +69,11 @@ def render_report_xml(reports: list[ReportDef]) -> str:
             f'<SubjectType adapterKind="{escape(st.adapter_kind)}" '
             f'resourceKind="{escape(st.resource_kind)}" '
             f'type="{escape(st.type)}"'
-            + (f' filter="{escape(st.filter)}"' if st.filter else "")
+            + (
+                f' filter="{escape(st.filter, {chr(34): "&quot;"})}"'
+                if st.filter
+                else ""
+            )
             + "/>"
             for st in rd.subject_types
         )
