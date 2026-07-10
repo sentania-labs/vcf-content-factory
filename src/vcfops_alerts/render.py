@@ -153,6 +153,32 @@ def _xml_operator(op: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Severity translation: REST wire token -> content-import XML token
+# ---------------------------------------------------------------------------
+#
+# The REST API (vcfops_symptoms.loader.SEVERITY_MAP) and the content-import
+# XML path disagree on the informational severity token: REST uses
+# "INFORMATION", the XML importer only accepts lowercase "info" (and
+# rejects "information" outright, silently skipping symptom creation — see
+# knowledge/context/wire-formats/symptomdef_severity_import.md). Every other
+# severity (WARNING/CRITICAL/IMMEDIATE) happens to share the same spelling
+# on both paths, so a naive ``.lower()`` was correct for those and wrong
+# only for INFO.
+#
+# This is a lookup map (not an inline branch) so future REST/XML token
+# divergences slot in here rather than accreting ad-hoc special cases,
+# mirroring the alert-State "auto" -> "automatic" translation below.
+_XML_SEVERITY_MAP: dict[str, str] = {
+    "INFORMATION": "info",
+}
+
+
+def _xml_severity(severity: str) -> str:
+    """Translate a REST-wire severity token to the content-import XML token."""
+    return _XML_SEVERITY_MAP.get(severity.upper(), severity.lower())
+
+
+# ---------------------------------------------------------------------------
 # Condition serialization (YAML condition dict -> XML Condition element)
 # ---------------------------------------------------------------------------
 
@@ -273,7 +299,7 @@ def _render_symptom_definition(parent: ET.Element, sym, all_sym_names: set) -> N
         "waitCycle": str(sym.wait_cycles),
     }
     sd_elem = ET.SubElement(parent, "SymptomDefinition", attribs)
-    state_elem = ET.SubElement(sd_elem, "State", {"severity": sym.severity.lower()})
+    state_elem = ET.SubElement(sd_elem, "State", {"severity": _xml_severity(sym.severity)})
     _add_condition_element(state_elem, sym.condition)
 
 

@@ -954,7 +954,19 @@ def _load_bundled_content(
             )
         try:
             from vcfops_reports.loader import load_file as _load_report
-            report = _load_report(path, enforce_framework_prefix=False)
+            # Resolve view/dashboard name cross-references against the
+            # adapter project's own views/ and dashboards/ directories, not
+            # the factory-default content/views and content/dashboards
+            # (vcfops_reports.loader.load_file's fallback). Without this, a
+            # report referencing a view that lives only under the adapter
+            # repo (e.g. content/sdk-adapters/<name>/views/) resolves to an
+            # empty view index and fails with "could not be resolved".
+            report = _load_report(
+                path,
+                views_dir=project_dir / "views",
+                dashboards_dir=project_dir / "dashboards",
+                enforce_framework_prefix=False,
+            )
         except Exception as exc:
             raise SdkBuildError(
                 f"bundled_content.reports: failed to load {path}: {exc}"

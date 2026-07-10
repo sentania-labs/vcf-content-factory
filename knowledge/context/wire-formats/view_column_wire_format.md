@@ -907,6 +907,127 @@ driver cross-check) and `src/vcfops_dashboards/render.py`
   column present in the same view, or validation fails with a
   pointer to add the driver.
 
+## SubjectType metric filter (`filter=` on `<SubjectType>`)
+
+### Research date and scope (2026-07-10, `tooling` agent, closeout Fix 2)
+
+Closes a TOOLSET GAP flagged in
+`content/sdk-adapters/vcommunity-vsphere/CHANGELOG.md` (build-4): the
+vendor's `VM Network Top Talkers` view restricts its subject set to VMs
+whose `net|usage_average` sustained above a threshold via a JSON `filter=`
+attribute on `<SubjectType>` — no such construct was expressible in
+`ViewDef`/`SubjectType` before this fix.
+
+### Wire format shape
+
+Ground truth (RULE-016 read-only reference), surveyed across every
+`filter="..."` occurrence in the vendor reference corpus (~35 unique
+strings across `View - Collection01.xml`, `View - Set {1,2,3,4}.xml` in
+`reference/references/vmbro_vcf_operations_vcommunity/Management Pack/
+content/reports/`, and `Dell EMC Server Details Workbench.xml` in
+`reference/references/vmbro_vcf_operations_hardware_vcommunity/`):
+
+```xml
+<SubjectType adapterKind="VMWARE" filter="[[{&quot;condition&quot;:
+  &quot;GREATER_THAN&quot;,&quot;transform&quot;:&quot;AVG&quot;,
+  &quot;metricKey&quot;:&quot;net|usage_average&quot;,&quot;metricValue&quot;:
+  {&quot;isStringMetric&quot;:false,&quot;value&quot;:12},&quot;businessHours
+  &quot;:false,&quot;filterType&quot;:&quot;metrics&quot;}]]"
+  resourceKind="VirtualMachine" type="descendant"/>
+```
+
+Decoded, `filter=` is a JSON array-of-arrays: the outer array is OR'd
+groups, each inner array is AND'd conditions within that group. Both the
+`type="descendant"` and `type="self"` SubjectType elements on a given
+ViewDef always carry the identical `filter=` value in every vendor example
+found.
+
+Fields observed (fail-closed — the loader accepts only these, nothing the
+corpus doesn't prove):
+
+- `filterType`: `"metrics"` | `"properties"`
+- `metricKey`: same colon/pipe metric-key syntax used elsewhere in this
+  loader (e.g. `net|usage_average`).
+- `condition`: `"EQUALS"` | `"NOT_EQUALS"` | `"GREATER_THAN"` — no
+  `LESS_THAN` or other comparator observed anywhere in the corpus.
+- `metricValue`: `{"isStringMetric": bool, "value": ...}` — `isStringMetric`
+  tracks the Python/JS type of `value` (string -> true, numeric -> false),
+  confirmed by every occurrence including string-typed `"true"`/`"false"`
+  literals (e.g. `config|extraConfig|vcpu_hotadd == "true"` has
+  `isStringMetric: true` despite looking boolean).
+- `transform` (optional): `"AVG"` | `"CURRENT"` — omitted in several
+  examples, never any other value.
+- `businessHours` (optional bool) — omitted in several examples; when
+  present, always co-occurs with a metrics-type, transform-bearing
+  condition in the corpus (correlation only, not enforced as a hard rule
+  since no counter-example exists to test against).
+
+Vendor JSON key order is **not** schema-significant — it varies across
+occurrences (JS object literal insertion order at authoring time, not a
+constraint the importer checks).
+
+### Factory YAML syntax
+
+`src/vcfops_dashboards/loader.py::SubjectFilterCondition` /
+`ViewDef.subject_filter`. Author-facing syntax lives under the existing
+`subject:` block as `filter:`:
+
+```yaml
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+  filter:
+    - filter_type: metrics
+      metric_key: net|usage_average
+      condition: GREATER_THAN
+      value: 12
+      transform: AVG
+      business_hours: false
+```
+
+A flat list of condition mappings is sugar for a single implicit AND
+group (`[[cond1, cond2, ...]]`). For an explicit OR of AND-groups, nest
+one level (mirrors the wire shape 1:1):
+
+```yaml
+subject:
+  filter:
+    - - filter_type: metrics
+        metric_key: sys|poweredOn
+        condition: EQUALS
+        value: 0
+    - - filter_type: properties
+        metric_key: runtime|connectionState
+        condition: EQUALS
+        value: notConnected
+```
+
+`isStringMetric` is derived automatically from the YAML `value`'s type —
+authors do not set it directly. A bare YAML boolean (`true`/`false`) for
+`value` is rejected (the corpus only shows quoted `"true"`/`"false"`
+string literals or numeric thresholds); quote the string explicitly if
+that's the intent.
+
+### Rendering
+
+`src/vcfops_dashboards/render.py::_subject_filter_json()` builds the JSON
+with condition-object key order `condition, transform, metricKey,
+metricValue, businessHours, filterType` — this matches the `VM Network
+Top Talkers` fixture verbatim (a rendering choice, not a proven schema
+requirement, chosen so the one currently-ported filter view is byte-exact
+against source). The same filter JSON is emitted on both the
+`type="descendant"` and `type="self"` SubjectType elements, matching every
+vendor example.
+
+### Not yet ported
+
+The `VM Network Top Talkers` view itself (the content YAML) was not
+ported by this tooling change — porting content YAML is `view-author`'s
+job, not `tooling`'s (CLAUDE.md hard rule #1). This section only unblocks
+that port; a follow-up author round should consume
+`subject.filter:` to bring the view in and update
+`content/sdk-adapters/vcommunity-vsphere/CHANGELOG.md`.
+
 ### `context/` updates the tooling agent should also make
 
 - Cross-link this file from `context/chart_widget_formats.md` (which

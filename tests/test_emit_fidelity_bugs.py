@@ -147,6 +147,127 @@ class TestSymptomOperatorTranslation:
 
 
 # ---------------------------------------------------------------------------
+# Bug 4 tests — INFO severity content-import XML token (2026-07-10)
+# ---------------------------------------------------------------------------
+#
+# The content-import XML path only accepts lowercase severity tokens
+# critical|immediate|warning|info|automatic. The REST wire value for an
+# INFO symptom is "INFORMATION" (vcfops_symptoms.loader.SEVERITY_MAP); a
+# naive .lower() on that REST value produced "information", which the
+# server-side SymptomDefinitionRetriever silently rejects (severity:null),
+# skipping symptom creation and cascading to dependent alert import
+# failure. See knowledge/context/wire-formats/symptomdef_severity_import.md.
+
+
+class TestSymptomSeverityXmlToken:
+    """The XML State severity= attribute must use content-import tokens, not REST tokens."""
+
+    @staticmethod
+    def _parse_xml(xml_text: str) -> ET.Element:
+        stripped = xml_text.strip()
+        if stripped.startswith("<?xml"):
+            end = stripped.index("?>") + 2
+            stripped = stripped[end:].lstrip()
+        return ET.fromstring(stripped)
+
+    def _render_symptom_xml(self, severity: str) -> str:
+        from vcfops_symptoms.loader import SymptomDef
+        from vcfops_alerts.render import render_alert_content_xml
+
+        sym = SymptomDef(
+            name="Test Symptom",
+            adapter_kind="VMWARE",
+            resource_kind="VirtualMachine",
+            severity=severity,
+            condition={
+                "type": "property",
+                "key": "summary|runtime|powerState",
+                "operator": "NOT_EQ",
+                "value": "poweredOff",
+            },
+            wait_cycles=1,
+            cancel_cycles=1,
+            id="aaaabbbb-cccc-dddd-eeee-ffffffffffff",
+        )
+        return render_alert_content_xml([sym], [])
+
+    def _extract_state_severity(self, xml_text: str) -> str:
+        root = self._parse_xml(xml_text)
+        state = root.find(".//SymptomDefinition/State")
+        assert state is not None, "No <State> element found"
+        return state.get("severity", "")
+
+    def test_information_wire_token_emits_info(self):
+        """REST wire token 'INFORMATION' (from severity: INFO in YAML, mapped by
+        vcfops_symptoms SEVERITY_MAP) must emit XML severity="info", not
+        "information" — the content-import path rejects "information" outright.
+        """
+        xml_text = self._render_symptom_xml("INFORMATION")
+        sev = self._extract_state_severity(xml_text)
+        assert sev == "info", (
+            f"Expected severity='info' for REST token INFORMATION but got {sev!r}. "
+            "The content-import XML path rejects 'information' with "
+            "'Severity or condition is null or incorrect' and silently skips "
+            "symptom creation (devel install failure, 2026-07-10)."
+        )
+
+    @pytest.mark.parametrize(
+        "wire_severity,expected_xml",
+        [
+            ("CRITICAL", "critical"),
+            ("IMMEDIATE", "immediate"),
+            ("WARNING", "warning"),
+            ("INFORMATION", "info"),
+        ],
+    )
+    def test_all_severities_emit_expected_xml_token(self, wire_severity, expected_xml):
+        xml_text = self._render_symptom_xml(wire_severity)
+        sev = self._extract_state_severity(xml_text)
+        assert sev == expected_xml
+
+
+class TestNoSymptomXmlEverEmitsRejectedInformationToken:
+    """Fidelity guard: no rendered symptom XML may ever carry severity="information".
+
+    This is the token the content-import server rejects (it is not a
+    recognized severity and resolves to severity:null server-side). Any
+    future regression that reintroduces a naive .lower() on the REST
+    "INFORMATION" wire value must fail this test.
+    """
+
+    def test_no_information_token_across_all_severities(self):
+        from vcfops_symptoms.loader import SymptomDef, SEVERITY_MAP
+        from vcfops_alerts.render import render_alert_content_xml
+
+        syms = []
+        for i, wire_severity in enumerate(sorted(set(SEVERITY_MAP.values()))):
+            syms.append(
+                SymptomDef(
+                    name=f"Test Symptom {i}",
+                    adapter_kind="VMWARE",
+                    resource_kind="VirtualMachine",
+                    severity=wire_severity,
+                    condition={
+                        "type": "property",
+                        "key": "summary|runtime|powerState",
+                        "operator": "NOT_EQ",
+                        "value": "poweredOff",
+                    },
+                    wait_cycles=1,
+                    cancel_cycles=1,
+                    id=f"aaaabbbb-cccc-dddd-eeee-ffffffff000{i}",
+                )
+            )
+        xml_text = render_alert_content_xml(syms, [])
+        assert 'severity="information"' not in xml_text, (
+            "Rendered symptom XML contains the rejected severity token "
+            "'information'. The content-import server accepts only "
+            "critical|immediate|warning|info|automatic (lowercase) — see "
+            "knowledge/context/wire-formats/symptomdef_severity_import.md."
+        )
+
+
+# ---------------------------------------------------------------------------
 # Bug 2 tests — SM JSON includes modificationTime and modifiedBy
 # ---------------------------------------------------------------------------
 

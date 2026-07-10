@@ -209,6 +209,123 @@ class BucketsConfig:
 
 
 @dataclass
+class SubjectFilterCondition:
+    """One condition in a SubjectType metric/property filter.
+
+    Vendor wire format (ground truth, RULE-016 read-only reference):
+      reference/references/vmbro_vcf_operations_vcommunity/Management Pack/
+        content/reports/View - Collection01.xml:7-9 — ``VM Network Top
+        Talkers``:
+          <SubjectType adapterKind="VMWARE" filter="[[{&quot;condition&quot;:
+            &quot;GREATER_THAN&quot;,&quot;transform&quot;:&quot;AVG&quot;,
+            &quot;metricKey&quot;:&quot;net|usage_average&quot;,
+            &quot;metricValue&quot;:{&quot;isStringMetric&quot;:false,
+            &quot;value&quot;:12},&quot;businessHours&quot;:false,
+            &quot;filterType&quot;:&quot;metrics&quot;}]]" resourceKind=
+            "VirtualMachine" type="descendant"/>
+
+    Decoded, the ``filter=`` attribute is a JSON array-of-arrays:
+    the outer array is OR'd groups, each inner array is AND'd
+    conditions within that group — confirmed by surveying every
+    ``filter="..."`` occurrence across the vendor reference corpus
+    (``View - Collection01.xml``, ``View - Set {1,2,3,4}.xml``,
+    ``Dell EMC Server Details Workbench.xml``, ~35 unique filter
+    strings total). Two AND'd conditions in one group:
+      ``[[{mem|guestOSMemNotCollecting==1},{summary|running==1}]]``
+    Multiple OR'd single-condition groups:
+      ``[[{sys|poweredOn==0}],[{runtime|connectionState==notConnected}],
+        ...]``
+
+    Fields observed across the whole survey (fail-closed: only these
+    are accepted; anything else the vendor corpus doesn't prove is
+    rejected rather than silently passed through):
+      - ``filterType``: ``"metrics"`` | ``"properties"``
+      - ``metricKey``: the same colon/pipe metric-key syntax used
+        elsewhere in this loader (e.g. ``net|usage_average``).
+      - ``condition``: ``"EQUALS"`` | ``"NOT_EQUALS"`` | ``"GREATER_THAN"``
+        (no LESS_THAN or other comparator observed anywhere in corpus).
+      - ``metricValue``: ``{"isStringMetric": bool, "value": ...}`` —
+        ``isStringMetric`` is derived from the Python type of ``value``
+        (str -> true, int/float -> false); every observed occurrence is
+        consistent with this rule, including string-typed "true"/"false"
+        literals (e.g. ``config|extraConfig|vcpu_hotadd == "true"`` has
+        ``isStringMetric: true`` despite looking boolean).
+      - ``transform`` (optional): ``"AVG"`` | ``"CURRENT"`` — omitted
+        entirely in several vendor examples, never any other value.
+      - ``businessHours`` (optional bool) — omitted in several vendor
+        examples; when present, always paired with a metrics-type,
+        transform-bearing condition in the corpus (co-occurrence, not
+        a proven hard requirement — the loader does not enforce the
+        pairing since no counter-example was found to test against).
+
+    Key order on the JSON object mirrors the ``VM Network Top Talkers``
+    fixture exactly (``condition``, ``transform``, ``metricKey``,
+    ``metricValue``, ``businessHours``, ``filterType``) so the byte-exact
+    regression test can assert against the vendor XML verbatim — the
+    corpus shows the key order varies vendor-side (JS object literal
+    insertion order, not a schema constraint), so this is a rendering
+    choice, not a proven requirement, but it keeps our one currently-
+    ported fixture byte-identical to source.
+    """
+    filter_type: str          # "metrics" | "properties"
+    metric_key: str
+    condition: str             # "EQUALS" | "NOT_EQUALS" | "GREATER_THAN"
+    value: Union[str, int, float]
+    transform: Optional[str] = None       # "AVG" | "CURRENT"
+    business_hours: Optional[bool] = None
+
+    _VALID_FILTER_TYPES = {"metrics", "properties"}
+    _VALID_CONDITIONS = {"EQUALS", "NOT_EQUALS", "GREATER_THAN"}
+    _VALID_TRANSFORMS = {"AVG", "CURRENT"}
+
+    @property
+    def is_string_metric(self) -> bool:
+        return isinstance(self.value, str)
+
+    def validate(self, view_name: str) -> None:
+        if not self.metric_key.strip():
+            raise DashboardValidationError(
+                f"view {view_name}: subject_filter condition missing metric_key"
+            )
+        if self.filter_type not in self._VALID_FILTER_TYPES:
+            raise DashboardValidationError(
+                f"view {view_name}: subject_filter.filter_type must be one of "
+                f"{sorted(self._VALID_FILTER_TYPES)}; got {self.filter_type!r}"
+            )
+        if self.condition not in self._VALID_CONDITIONS:
+            raise DashboardValidationError(
+                f"view {view_name}: subject_filter.condition must be one of "
+                f"{sorted(self._VALID_CONDITIONS)}; got {self.condition!r} "
+                "(only these are proven present in the vendor reference "
+                "corpus — fail closed rather than guess)"
+            )
+        if isinstance(self.value, bool):
+            raise DashboardValidationError(
+                f"view {view_name}: subject_filter.value must not be a bare "
+                "boolean — the vendor corpus only shows string \"true\"/"
+                "\"false\" literals or numeric thresholds; use a quoted "
+                "string if that's the intent"
+            )
+        if not isinstance(self.value, (str, int, float)):
+            raise DashboardValidationError(
+                f"view {view_name}: subject_filter.value must be a string, "
+                f"int, or float; got {type(self.value).__name__}"
+            )
+        if self.transform is not None and self.transform not in self._VALID_TRANSFORMS:
+            raise DashboardValidationError(
+                f"view {view_name}: subject_filter.transform must be one of "
+                f"{sorted(self._VALID_TRANSFORMS)} (or omitted); got {self.transform!r}"
+            )
+        if self.business_hours is not None and not isinstance(self.business_hours, bool):
+            raise DashboardValidationError(
+                f"view {view_name}: subject_filter.business_hours must be a bool "
+                f"(unquoted true/false in YAML); got {type(self.business_hours).__name__} "
+                f"{self.business_hours!r} — a quoted \"true\"/\"false\" string is not "
+                "accepted and is not silently coerced"
+            )
+
+
+@dataclass
 class ViewDef:
     name: str
     description: str
@@ -217,6 +334,11 @@ class ViewDef:
     columns: List[ViewColumn]
     id: str = ""
     source_path: Path | None = None
+    # Optional SubjectType metric/property filter — OR of AND-groups.
+    # Applied identically to both the "descendant" and "self" SubjectType
+    # elements (the vendor corpus always carries the same filter= value on
+    # both). See SubjectFilterCondition docstring for the wire format.
+    subject_filter: Optional[List[List["SubjectFilterCondition"]]] = None
     summary: SummaryRow | None = None
     # "list" (default), "distribution", or "trend"
     data_type: str = "list"
@@ -288,6 +410,19 @@ class ViewDef:
                     "is present in this view. Add the 'Instance Name' driver "
                     "column first."
                 )
+        # SubjectType metric filter — OR of AND-groups.
+        if self.subject_filter is not None:
+            if not self.subject_filter:
+                raise DashboardValidationError(
+                    f"view {self.name}: subject_filter must not be an empty list"
+                )
+            for group in self.subject_filter:
+                if not group:
+                    raise DashboardValidationError(
+                        f"view {self.name}: subject_filter group must not be empty"
+                    )
+                for cond in group:
+                    cond.validate(self.name)
         if self.data_type not in _VALID_PRESENTATIONS:
             raise DashboardValidationError(
                 f"view {self.name}: data_type must be one of "
@@ -1161,6 +1296,80 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
 
     cols = [_load_column(c) for c in (data.get("columns") or [])]
     subj = data.get("subject") or {}
+
+    def _load_filter_condition(raw: dict) -> "SubjectFilterCondition":
+        if not isinstance(raw, dict):
+            raise DashboardValidationError(
+                f"{path}: subject.filter condition must be a mapping, got {raw!r}"
+            )
+
+        # Coerce-before-validate ordering bug (Codex P2, PR #47): the loader
+        # must NOT type-coerce a field into a value that happens to already
+        # be valid before SubjectFilterCondition.validate() gets a chance to
+        # reject the wrong type. `bool(raw["business_hours"])` was the
+        # concrete instance — bool() of ANY truthy value (including the
+        # string "false") is True, so a quoted `business_hours: "false"`
+        # silently became `True` instead of failing validation, and the
+        # renderer emitted `"businessHours":true`. Fixed by passing raw
+        # values straight through (preserving their original type) and
+        # letting `validate()` do the sole type check.
+        #
+        # For the string-typed fields (filter_type/metric_key/condition/
+        # transform) the same failure *shape* (str(x) coincidentally
+        # equalling a valid enum token) cannot happen for any YAML-typed
+        # value, but a non-str input was still being silently stringified
+        # here rather than reported with a clear type error — fixed the
+        # same way: reject non-str values at load time instead of masking
+        # them via str().
+        def _str_field(key: str, upper: bool = False) -> str:
+            v = raw.get(key)
+            if v is None:
+                return ""
+            if not isinstance(v, str):
+                raise DashboardValidationError(
+                    f"{path}: subject.filter.{key} must be a string; got "
+                    f"{type(v).__name__} ({v!r})"
+                )
+            v = v.strip()
+            return v.upper() if upper else v
+
+        transform = None
+        if "transform" in raw and raw.get("transform") is not None:
+            transform = _str_field("transform", upper=True) or None
+
+        business_hours = None
+        if "business_hours" in raw and raw.get("business_hours") is not None:
+            business_hours = raw["business_hours"]  # type preserved; validate() rejects non-bool
+
+        return SubjectFilterCondition(
+            filter_type=_str_field("filter_type"),
+            metric_key=_str_field("metric_key"),
+            condition=_str_field("condition", upper=True),
+            value=raw.get("value"),
+            transform=transform,
+            business_hours=business_hours,
+        )
+
+    # subject.filter — flat list of condition mappings (single implicit AND
+    # group) or a nested list-of-lists (explicit OR-of-AND groups), mirroring
+    # the vendor JSON shape 1:1. See SubjectFilterCondition docstring.
+    subject_filter: Optional[List[List["SubjectFilterCondition"]]] = None
+    sf_raw = subj.get("filter")
+    if sf_raw is not None:
+        if not isinstance(sf_raw, list) or not sf_raw:
+            raise DashboardValidationError(
+                f"{path}: subject.filter must be a non-empty list"
+            )
+        if isinstance(sf_raw[0], list):
+            # Explicit OR-of-AND groups.
+            subject_filter = [
+                [_load_filter_condition(c) for c in group]
+                for group in sf_raw
+            ]
+        else:
+            # Flat list -> single AND group.
+            subject_filter = [[_load_filter_condition(c) for c in sf_raw]]
+
     summary_raw = data.get("summary")
     summary = None
     if summary_raw is True:
@@ -1244,6 +1453,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
         resource_kind=str(subj.get("resource_kind", "")).strip(),
         columns=cols,
         source_path=path,
+        subject_filter=subject_filter,
         summary=summary,
         data_type=data_type,
         presentation=presentation,
