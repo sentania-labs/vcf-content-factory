@@ -735,15 +735,24 @@ def _render_view_def_fragment(
     return header + controls + data_provider + presentation + "</ViewDef>"
 
 
-def render_views_xml(
+def render_view_def_fragments(
     views: list[ViewDef],
     sm_scope: Optional[list[Path]] = None,
     bundle_context: Optional[str] = None,
     owning_adapter_kind: Optional[str] = None,
     owning_resource_kind: Optional[str] = None,
 ) -> str:
-    """Render one or more ViewDefs into the single content.xml the
-    VCF Ops content importer expects inside views.zip.
+    """Render one or more ViewDefs into bare ``<ViewDef>...</ViewDef>``
+    fragments (no ``<?xml?>`` prolog, no ``<Content><Views>`` wrapper).
+
+    This is the shared building block behind :func:`render_views_xml`. It
+    also lets callers that need to co-bundle ViewDefs inside another
+    document's ``<Content>`` element (e.g. ``vcfops_managementpacks``
+    embedding a report's referenced views in the same ``<Content>`` as its
+    ``<ReportDef>``, matching the vendor TVS pak shape — see
+    ``knowledge/context/investigations/sdk_pak_content_import_gap.md``)
+    reuse the exact same rendering path as standalone view subdirs, instead
+    of hand-rolling a second XML emitter that could drift.
 
     Args:
         views: ViewDef objects to render.
@@ -769,7 +778,7 @@ def render_views_xml(
             ``owning_adapter_kind`` is None.
 
     Returns:
-        XML string for ``content.xml`` inside ``views.zip``.
+        Concatenated ``<ViewDef>...</ViewDef>`` fragments (no wrapper).
 
     Raises:
         ValueError: (scoped mode only) when a ``supermetric:"<name>"``
@@ -790,8 +799,8 @@ def render_views_xml(
         except Exception as exc:
             # Re-raise as ValueError so the build fails with a clear message.
             raise ValueError(
-                f"render_views_xml: failed to load scoped SM for bundle "
-                f"{bundle_context!r}: {exc}"
+                f"render_view_def_fragments: failed to load scoped SM for "
+                f"bundle {bundle_context!r}: {exc}"
             ) from exc
     else:
         # Native (unscoped) mode: scan the full supermetrics/ directory tree.
@@ -830,7 +839,30 @@ def render_views_xml(
             frag = frag[:usage_pos] + owning_st + frag[usage_pos:]
         return frag
 
-    fragments = "".join(_fragment_with_owning(v) for v in views)
+    return "".join(_fragment_with_owning(v) for v in views)
+
+
+def render_views_xml(
+    views: list[ViewDef],
+    sm_scope: Optional[list[Path]] = None,
+    bundle_context: Optional[str] = None,
+    owning_adapter_kind: Optional[str] = None,
+    owning_resource_kind: Optional[str] = None,
+) -> str:
+    """Render one or more ViewDefs into the single content.xml the
+    VCF Ops content importer expects inside views.zip.
+
+    Thin wrapper around :func:`render_view_def_fragments` that adds the
+    ``<?xml?>`` prolog and the ``<Content><Views>...</Views></Content>``
+    envelope. See that function for the full argument/return docs.
+    """
+    fragments = render_view_def_fragments(
+        views,
+        sm_scope=sm_scope,
+        bundle_context=bundle_context,
+        owning_adapter_kind=owning_adapter_kind,
+        owning_resource_kind=owning_resource_kind,
+    )
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f"<Content><Views>{fragments}</Views></Content>"
