@@ -73,7 +73,7 @@ from typing import Optional
 # Version constant — bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "0.2.1"
+BUILDKIT_VERSION = "1.0.9"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfops_managementpacks/)
