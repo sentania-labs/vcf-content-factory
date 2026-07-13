@@ -142,3 +142,41 @@ view (vcommunity-vsphere's exact shape, 11 report subdirs) succeeds instead of
 dying with `ModuleNotFoundError: vcfops_dashboards` at sdk_builder.py:2146. This
 unblocks the DEF-009 closure path. No operator-visible regression on any other
 path.
+
+---
+
+## Addendum — follow-up commit `a2dd6c2` (BUILDKIT_VERSION bump)
+
+- **Commit:** `a2dd6c2` on `fix/buildkit-vendored-import`
+- **Change:** `BUILDKIT_VERSION "0.2.1" → "1.0.9"` (buildkit.py:76) — implements this
+  review's NIT-2, also Codex P2 on PR #52 (default-invocation tarballs were
+  emitting changed payloads under the same `sdk-buildkit-0.2.1.tgz` name).
+- **Verdict:** APPROVE (0 BLOCKING)
+
+### Independent verification
+- **Diff is exactly one line, nothing rides along:** `git show a2dd6c2 --stat` =
+  `buildkit.py | 2 +-` (1 insertion, 1 deletion); the hunk is solely the constant.
+- **No pin on the literal:** repo-wide grep of `src/ tests/ .github/` for `0.2.1`
+  returns zero hits after the bump; the only `BUILDKIT_VERSION` references are its
+  own definition, `assemble_buildkit(version=BUILDKIT_VERSION)` default param, and
+  `cli.py:463` (`version = args.version or BUILDKIT_VERSION`) + its help text.
+  Confirms tooling's "no test pins the literal" claim.
+- **"1.0.9" is sane given cli.py's use:** the constant is only the *local-dev
+  default* tarball version — used when `build-buildkit` is invoked without
+  `--version`. The CI release path passes `--version` from the `sdk-buildkit-v*`
+  git tag (publish-buildkit.yml:75/86), so this constant never drives a real
+  release. Aligning the local default with the next release tag makes local
+  tarballs self-describing; no coupling risk.
+- **Tests:** `test_buildkit_isolated_build.py` + `test_buildkit_release_flag.py`
+  → **7 passed**. (Those files reference only unrelated adapter-fixture version
+  strings, not `BUILDKIT_VERSION`.)
+
+### Findings
+- BLOCKING: none. WARNING: none. NIT: none — this commit resolves NIT-2 from the
+  primary review; the remaining NIT-1 (comment cross-ref) and NIT-3 (unregistered
+  `pytest.mark.timeout`) are untouched and remain cosmetic.
+
+### If shipped as-is
+A default `python3 -m vcfops_managementpacks build-buildkit` now stamps
+`sdk-buildkit-1.0.9.tgz` (self-describing) instead of re-emitting a
+`0.2.1` name over changed contents. No behavior change to the CI release path.
