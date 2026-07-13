@@ -77,37 +77,40 @@ _VIEW_PIN_CONTAINER: dict[tuple[str, str], tuple[str, str, str]] = {
     # falls back to (adapter_kind, resource_kind, resource_kind) for unknowns)
 }
 
-# OPTIONAL enrichment: a built-in Ops traversal-spec id for a self-provider
-# View/ProblemAlertsList widget's container resource, when one is known.
-# Format is `<specName>-<rootAdapterKindKey>-<rootResourceKindKey>`,
-# confirmed against a live instance's `/api/auth/traversalspecs` (a public,
-# out-of-the-box endpoint — these specs are NOT pak-shipped content). Keyed
-# by the *container* (adapter_kind, resource_kind) — i.e. the same key used
-# in `_VIEW_PIN_CONTAINER` values / `resource_index`, not the raw pin target.
+# NOTE on nested config.resource.traversalSpecId (removed enrichment,
+# 2026-07-13): an earlier revision of this module carried a
+# `_VIEW_PIN_TRAVERSAL_SPEC` table that filled in a known-good traversal
+# spec string (e.g. "vSphere Hosts and Clusters-VMWARE-vSphere World") for
+# self-provider pinned View/ProblemAlertsList widgets keyed on the
+# *container* resource (adapter_kind, resource_kind). That was wrong: a
+# traversal spec constrains the VIEW SUBJECT's hierarchy, not just the pin
+# container, so container-keyed injection misfires whenever a view's
+# subject isn't in the hierarchy the spec describes. Concretely,
+# `content/dashboards/vks_core_consumption.yaml` pins a View to VMWARE/
+# vSphere World, but the view's subject
+# (`content/views/vks_core_consumption_by_vcenter.yaml`) is
+# `VMwareAdapter Instance` — not in the "Hosts and Clusters" hierarchy the
+# spec traverses — and the checked-in WORKING export of that exact widget
+# (`knowledge/context/exports/working_dashboards.json` ~L412-424) carries
+# an EMPTY nested `traversalSpecId`. Emitting the spec string there would
+# have been a wire-format regression on real, shipped, working content.
 #
-# NOT required for a working pin. Two vendor exports were compared:
-# "Cluster Performance 2.0.json" ships its pinned "vSphere Clusters" widget
-# WITH this string set in the NESTED `config.resource.traversalSpecId` only
-# — its top-level `config.traversalSpecId` is `null` even on that
-# fully-bound pin, and `refreshContent` stays `false`. (An earlier
-# api-explorer pass mistranscribed this as "both sites"; corrected against
-# the vendor JSON bytes.) "ESXi Host Details Dashboard.json" ships five
-# pinned View widgets (ESXi Host Details / Versions / Models / Power State /
-# Maintenance State) all bound to vSphere World with the nested
-# `traversalSpecId: ""` (empty) too — and that pak is shipped and
-# field-working. So an empty nested traversalSpecId is a vendor-proven
-# working shape, not a bug; the map below is a best-effort enrichment only,
-# applied to the nested site alone. A container with no entry here falls
-# back to the historic nested `""` emission — silently, no warning. The
-# top-level `config.traversalSpecId` is ALWAYS `null`, mapped or not.
+# Decision: emit `config.resource.traversalSpecId: ""` unconditionally.
+# Binding is provided by `selfProvider` + the bound `resource` entry, not
+# by this field. Evidence an empty string is itself proven-working (not a
+# fallback/downgrade): the vendor's own "ESXi Host Details Dashboard.json"
+# ships five pinned View widgets with an empty nested traversalSpecId; our
+# own checked-in VKS working export (cited above) does the same; and the
+# api-explorer's content-import round-trips succeeded either way. No
+# evidence anywhere shows the spec string is REQUIRED for a pin to bind —
+# only that one vendor export (Cluster Performance 2.0.json) happens to
+# carry one for a widget whose view subject IS in the Hosts-and-Clusters
+# hierarchy. If a future visual QA pass shows a specific widget failing to
+# scope data without a spec string, add a narrowly-scoped, evidence-backed
+# mechanism then (keyed on view subject, not container) — not a blanket
+# container-keyed table.
 #
 # Evidence: knowledge/context/api-surface/dashboard_selfprovider_pin_wire_format.md
-#
-# Extend this table when a known-good spec is discovered for a new container
-# — look it up via `/api/auth/traversalspecs` on a live instance.
-_VIEW_PIN_TRAVERSAL_SPEC: dict[tuple[str, str], str] = {
-    ("VMWARE", "vSphere World"): "vSphere Hosts and Clusters-VMWARE-vSphere World",
-}
 
 
 def _resolve_view_pin(
@@ -1029,24 +1032,15 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
         # The Ext.vcops.chrome.model.Resource-N id is 1-based in exports
         # but Ops reassigns it on import — any positive integer works.
         res_idx = resource_index[container_key]
-        # OPTIONAL enrichment when known; empty string is also a
-        # vendor-proven working shape (see _VIEW_PIN_TRAVERSAL_SPEC docstring
-        # above) — no warning on a miss.
-        #
-        # IMPORTANT: the vendor export (Cluster Performance 2.0.json,
-        # "vSphere Clusters" widget) puts the spec string ONLY in the
-        # nested config.resource.traversalSpecId — the top-level
-        # config.traversalSpecId is `null` even on a fully-bound pin, and
-        # refreshContent stays `false`. An earlier api-explorer transcription
-        # of this widget claimed both sites carried the spec string plus
-        # refreshContent:true; that was a byte-compare error, corrected here
-        # against the actual vendor JSON. Do not reintroduce the top-level
-        # spec / refreshContent:true without re-verifying against
-        # reference/references/.../Cluster Performance 2.0.json.
-        traversal_spec_id = _VIEW_PIN_TRAVERSAL_SPEC.get(container_key, "")
+        # Nested traversalSpecId is unconditionally empty — see the NOTE
+        # above `_resolve_view_pin` for why a container-keyed enrichment
+        # here was wrong and was removed. Top-level traversalSpecId (below)
+        # is always null and refreshContent is always false, matching the
+        # vendor bytes (Cluster Performance 2.0.json "vSphere Clusters" and
+        # our own checked-in VKS working export agree on both).
         resource = {
             "resourceId": f"resource:id:{res_idx}_::_",
-            "traversalSpecId": traversal_spec_id,
+            "traversalSpecId": "",
             "resourceName": c_name,
             "resourceKindId": f"{prefix}{c_adapter}{c_kind}",
             "id": f"Ext.vcops.chrome.model.Resource-{res_idx + 1}",
@@ -1064,9 +1058,7 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
         "config": {
             "refreshInterval": 300,
             "resource": resource,
-            # Vendor bytes: top-level traversalSpecId is always null (the
-            # spec string lives only in config.resource.traversalSpecId
-            # above) — see the IMPORTANT note above.
+            # Vendor bytes: top-level traversalSpecId is always null.
             "traversalSpecId": None,
             # Vendor bytes: refreshContent is always false on this widget
             # type, self-provider or not.

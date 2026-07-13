@@ -1,24 +1,29 @@
 """Self-provider widget pin wire format — regression tests per
 knowledge/context/api-surface/dashboard_selfprovider_pin_wire_format.md.
 
-  FIX 1 (revised) — a self-provider pinned View widget's traversalSpecId is
-      an OPTIONAL enrichment, not a requirement: two vendor exports were
-      compared and "ESXi Host Details Dashboard.json" ships five working
-      pinned View widgets with `traversalSpecId: ""` (empty) in the NESTED
-      `config.resource.traversalSpecId`. So render.py fills in a known-good
-      traversalSpecId (``_VIEW_PIN_TRAVERSAL_SPEC``) for mapped containers
-      (e.g. VMWARE/vSphere World) at that nested site only, and silently
-      falls back to the historic empty-string shape for unmapped
-      containers — no warning, since empty is itself a vendor-proven
+  FIX 1 (twice-revised) — a self-provider pinned View widget's nested
+      `config.resource.traversalSpecId` is emitted EMPTY, unconditionally
+      — no enrichment table. render.py briefly (commits b1b044b/8e44ba9)
+      carried a `_VIEW_PIN_TRAVERSAL_SPEC` table that filled in a
+      known-good spec string for mapped containers (e.g. VMWARE/vSphere
+      World), reasoning the vendor's "Cluster Performance 2.0.json"
+      "vSphere Clusters" widget carries one. That was REMOVED: a
+      traversal spec constrains the VIEW SUBJECT's hierarchy, not just the
+      pin container, so container-keyed injection misfires whenever a
+      view's subject isn't in the hierarchy the spec describes —
+      concretely, `content/dashboards/vks_core_consumption.yaml` pins to
+      VMWARE/vSphere World but its view subject is `VMwareAdapter
+      Instance`, and the checked-in WORKING export of that exact widget
+      (`knowledge/context/exports/working_dashboards.json`) carries an
+      empty nested traversalSpecId — the enrichment would have regressed
+      it. No evidence anywhere shows the spec string is REQUIRED for a pin
+      to bind (binding comes from selfProvider + the bound resource
+      entry); the vendor's own "ESXi Host Details Dashboard.json" (five
+      widgets) and our own VKS working export both prove empty is a
       working shape. The TOP-LEVEL `config.traversalSpecId` is ALWAYS
-      `null`, mapped or not — the vendor's own "Cluster Performance
-      2.0.json" "vSphere Clusters" widget (a fully-bound pin) carries the
-      spec string ONLY in the nested resource object, never at the top
-      level, and keeps `refreshContent: false` even when bound. (An
-      earlier api-explorer transcription claimed "both sites" plus
-      `refreshContent: true`; that was a byte-compare error, corrected here
-      against the vendor JSON.) What IS locked in regardless: selfProvider:
-      true plus a bound resource entry — the old
+      `null` and `refreshContent` is ALWAYS `false`, mapped container or
+      not — unchanged from the previous revision. What IS locked in
+      regardless: selfProvider:true plus a bound resource entry — the old
       selfProvider:false/resource:null shape must never come back for a
       self-provider pinned widget.
 
@@ -96,13 +101,12 @@ def _make_dashboard(widgets: list[Widget], dash_id: str | None = None) -> Dashbo
 # FIX 1 — View widget pin traversalSpecId
 # ---------------------------------------------------------------------------
 
-def test_selfprovider_view_pin_emits_mapped_traversal_spec_id():
-    """A self-provider View pinned to VMWARE/vSphere World emits the known
-    built-in traversalSpecId in the NESTED resource object only. The
-    top-level config.traversalSpecId is always null — the vendor's own
-    "vSphere Clusters" widget (Cluster Performance 2.0.json) carries the
-    spec string solely in config.resource.traversalSpecId even on a
-    fully-bound pin."""
+def test_selfprovider_view_pin_emits_empty_nested_traversal_spec_id():
+    """A self-provider View pinned to VMWARE/vSphere World emits an EMPTY
+    nested config.resource.traversalSpecId, unconditionally — no
+    container-keyed enrichment (removed; see the NOTE above
+    _resolve_view_pin in render.py). The top-level config.traversalSpecId
+    is always null and refreshContent is always false."""
     w = Widget(
         local_id="view1",
         type="View",
@@ -121,9 +125,7 @@ def test_selfprovider_view_pin_emits_mapped_traversal_spec_id():
     widget = bundle["dashboards"][0]["widgets"][0]
 
     assert widget["config"]["selfProvider"]["selfProvider"] is True
-    assert widget["config"]["resource"]["traversalSpecId"] == (
-        "vSphere Hosts and Clusters-VMWARE-vSphere World"
-    )
+    assert widget["config"]["resource"]["traversalSpecId"] == ""
     assert widget["config"]["traversalSpecId"] is None
     assert widget["config"]["refreshContent"]["refreshContent"] is False
     # Leaf-kind pin (HostSystem) redirects to the vSphere World container,
@@ -131,10 +133,11 @@ def test_selfprovider_view_pin_emits_mapped_traversal_spec_id():
     assert widget["config"]["resource"]["resourceName"] == "vSphere World"
 
 
-def test_selfprovider_view_pin_leaf_kind_redirects_and_maps_traversal_spec():
+def test_selfprovider_view_pin_leaf_kind_redirects_container_only():
     """A pin to a leaf kind (HostSystem) redirects to the vSphere World
-    container via _resolve_view_pin, and still resolves a traversalSpecId
-    (nested only) because the container (not the leaf) is the map key."""
+    container via _resolve_view_pin for naming/kinding purposes, but the
+    nested traversalSpecId stays empty regardless — there is no per-
+    container spec lookup any more."""
     w = Widget(
         local_id="view1",
         type="View",
@@ -152,17 +155,15 @@ def test_selfprovider_view_pin_leaf_kind_redirects_and_maps_traversal_spec():
     widget = json.loads(result_json)["dashboards"][0]["widgets"][0]
 
     assert widget["config"]["resource"]["resourceName"] == "vSphere World"
-    assert widget["config"]["resource"]["traversalSpecId"] == (
-        "vSphere Hosts and Clusters-VMWARE-vSphere World"
-    )
+    assert widget["config"]["resource"]["traversalSpecId"] == ""
     assert widget["config"]["traversalSpecId"] is None
 
 
-def test_selfprovider_view_pin_unmapped_container_keeps_empty_shape_silently():
-    """An unmapped container keeps the historic empty-string / null emission,
-    with NO warning — the vendor's "ESXi Host Details Dashboard.json" export
-    proves an empty traversalSpecId is itself a working, shipped shape (its
-    five pinned View widgets all carry ""), so this is not a downgrade."""
+def test_selfprovider_view_pin_any_container_keeps_empty_nested_spec():
+    """Any container (including one that would previously have been
+    "unmapped") emits the same empty nested traversalSpecId — there is no
+    map to miss any more, so no distinction between "mapped" and
+    "unmapped" containers exists at this site."""
     w = Widget(
         local_id="view1",
         type="View",
@@ -228,12 +229,13 @@ def test_external_uuid_passthrough_with_pin_emits_vendor_shape():
     widget. Previously the isinstance(view, str) branch returned early with
     selfProvider:false/resource:None, silently dropping the pin.
 
-    Exact vendor bytes (reference/references/vmbro_vcf_operations_vcommunity/
-    Management Pack/content/dashboards/Cluster Performance 2.0.json, widget
-    id 46a74d94-9562-4532-b54b-9a7274406b8f): the traversalSpecId string
-    lives ONLY in the nested config.resource.traversalSpecId; top-level
-    config.traversalSpecId is null and refreshContent is false, even though
-    the pin is fully bound."""
+    The NESTED config.resource.traversalSpecId is emitted EMPTY (see the
+    module docstring FIX 1 note — the container-keyed enrichment that once
+    filled this in for VMWARE/vSphere World was removed as unsound: a
+    traversal spec constrains the view SUBJECT's hierarchy, and container-
+    keying misfires for widgets whose subject isn't in that hierarchy,
+    e.g. content/dashboards/vks_core_consumption.yaml). Top-level
+    config.traversalSpecId is null and refreshContent is false regardless."""
     w = Widget(
         local_id="view1",
         type="View",
@@ -254,7 +256,7 @@ def test_external_uuid_passthrough_with_pin_emits_vendor_shape():
     assert widget["config"]["selfProvider"]["selfProvider"] is True
     assert widget["config"]["resource"] == {
         "resourceId": "resource:id:0_::_",
-        "traversalSpecId": "vSphere Hosts and Clusters-VMWARE-vSphere World",
+        "traversalSpecId": "",
         "resourceName": "vSphere World",
         "resourceKindId": "002006VMWAREvSphere World",
         "id": "Ext.vcops.chrome.model.Resource-1",

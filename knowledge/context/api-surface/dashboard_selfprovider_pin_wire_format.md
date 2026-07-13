@@ -87,13 +87,43 @@ Vendor (working):
 > paragraph and "two places" language immediately below as historical —
 > retained for the record of how the delta was originally (incorrectly)
 > characterized, not as current guidance.
+>
+> **SECOND CORRECTION (Codex P1 on PR #54, upheld, 2026-07-13):** the
+> nested-site enrichment introduced by the correction above (a
+> `_VIEW_PIN_TRAVERSAL_SPEC` table filling in the spec string for mapped
+> *containers*, e.g. VMWARE/vSphere World) has also been **removed**. A
+> traversal spec constrains the VIEW SUBJECT's hierarchy, not just the pin
+> container — container-keyed injection misfires whenever a view's subject
+> isn't in the hierarchy the spec describes. Concretely,
+> `content/dashboards/vks_core_consumption.yaml` pins a View to VMWARE/
+> vSphere World, but the view's subject
+> (`content/views/vks_core_consumption_by_vcenter.yaml`) is
+> `VMwareAdapter Instance` — not in the "Hosts and Clusters" hierarchy —
+> and the checked-in WORKING export of that exact widget
+> (`knowledge/context/exports/working_dashboards.json`) carries an EMPTY
+> nested `traversalSpecId`. The container-keyed enrichment would have
+> regressed that real, shipped, working widget. `render.py` now emits
+> `config.resource.traversalSpecId: ""` **unconditionally** for every
+> self-provider pinned View/ProblemAlertsList widget — no table, no
+> per-container lookup. Binding is provided by `selfProvider` + the bound
+> `resource` entry, not by this field: the vendor's "ESXi Host Details
+> Dashboard.json" (five widgets) and the VKS working export both prove
+> empty is itself a working, shipped shape. No evidence anywhere shows the
+> spec string is *required* — only that one vendor export (Cluster
+> Performance 2.0.json) happens to carry one for a widget whose subject IS
+> in the Hosts-and-Clusters hierarchy. If a future visual QA pass shows
+> that specific widget failing to scope data without it, add a narrowly-
+> scoped, evidence-backed mechanism then (keyed on the view SUBJECT, not
+> the pin container) — not a blanket container-keyed table.
 
-**Original (incorrect) characterization — superseded by the correction
+**Original (incorrect) characterizations — superseded by both corrections
 above:** "Exact delta = the `traversalSpecId` string, in two places:
 `config.resource.traversalSpecId` and top-level `config.traversalSpecId`."
 Everything else (resourceId placeholder, `resourceKindId`,
 `selfProvider:true`, `entries.resource[0]`) already matches the vendor.
-The string format is `<specName>-<rootAdapterKindKey>-<rootResourceKindKey>`.
+The string format is `<specName>-<rootAdapterKindKey>-<rootResourceKindKey>`
+(retained for reference — this format IS what the vendor's CP2 export uses
+for its one occurrence, it is simply no longer factory-emitted).
 
 ### HealthChart widget (`_health_chart_widget`, render.py ~1191-1250)
 
@@ -238,10 +268,16 @@ from server-side evidence alone.
 
 ## Confidence summary for the renderer fix
 
-- View `traversalSpecId` (hypothesis 1): **high confidence** the fix is
-  correct — the only delta vs a known-working vendor widget is the
-  traversalSpecId string; the spec exists built-in; the view renders
-  against the world; the format imports.
+- View `traversalSpecId` (hypothesis 1): **superseded — see the SECOND
+  CORRECTION above.** Binding does not require the traversalSpecId string;
+  it comes from `selfProvider` + the bound `resource` entry. The
+  originally "high confidence" fix (filling in the spec string) was
+  correct-looking against a single vendor widget but wrong as a general
+  mechanism (container-keyed, not subject-keyed) and was reverted after it
+  would have regressed a real, checked-in working widget
+  (`vks_core_consumption.yaml`). What IS high confidence and unchanged:
+  `selfProvider:true` + a bound `resource` entry + `entries.resource`
+  registration is required and correct.
 - HealthChart `resource` entry (hypothesis 2): **high confidence** — same
   reasoning; the renderer currently emits an impossible self-provider
   widget (`selfProvider:true` + `resource:[]`, which the vendor never
