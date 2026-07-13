@@ -138,17 +138,32 @@ def _self_provider_pin_container(
     """Resolve the container pin for a self-provider widget.
 
     Prefers an explicit ``w.pin`` (the generic ``pin:`` YAML block used by
-    View/ProblemAlertsList). Falls back to the widget's own declared
-    ``adapter_kind``/``resource_kind`` (e.g. a self-provider HealthChart's
-    ``health_chart_config``) — no separate ``pin:`` field is required for
-    those widget types since the config already names the resource kind to
-    bind against. Returns None when neither is available (not self-provider,
-    or no resource kind declared).
+    View/ProblemAlertsList) — an explicit pin is always honored, whatever
+    kind it names.
+
+    Falls back to the widget's own declared ``adapter_kind``/
+    ``resource_kind`` (e.g. a self-provider HealthChart's
+    ``health_chart_config``) ONLY when that kind already resolves to itself
+    through ``_resolve_view_pin`` — i.e. it's already a world/singleton
+    container (`vSphere World`, `ComplianceWorld`, etc.), not a leaf kind
+    that `_resolve_view_pin` would redirect (e.g. VMWARE `HostSystem` →
+    `vSphere World`). There is no vendor evidence for silently world-pinning
+    a self-provider HealthChart authored on a leaf kind — that redirect is
+    only proven for View/ProblemAlertsList widgets carrying an *explicit*
+    `pin:` block. Without this gate, a future self-provider HealthChart on a
+    leaf kind (any `mode`) would silently become world-pinned with no basis.
+
+    Returns None when no pin applies (not self-provider, no resource kind
+    declared, or an implicit leaf-kind fallback that isn't gated) — the
+    caller keeps the historic ``resource: []`` shape in that case.
     """
     if w.pin:
         return _resolve_view_pin(w.pin.adapter_kind, w.pin.resource_kind)
     if cfg_adapter_kind and cfg_resource_kind:
-        return _resolve_view_pin(cfg_adapter_kind, cfg_resource_kind)
+        resolved = _resolve_view_pin(cfg_adapter_kind, cfg_resource_kind)
+        _, resolved_kind, _ = resolved
+        if resolved_kind == cfg_resource_kind:
+            return resolved
     return None
 
 
@@ -976,29 +991,14 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
     # render at view time with no diagnostic.
     # External view passthrough: when `view` is a raw UUID string (not a bundled
     # ViewDef), the platform resolves it at install time.  Emit the UUID verbatim
-    # as viewDefinitionId; self-provider pinning is not applicable for external
-    # views (the platform owns the view's subject), so resource is set to None.
-    if isinstance(view, str):
-        return {
-            "collapsed": False,
-            "id": w.widget_id,
-            "gridsterCoords": w.coords,
-            "type": "View",
-            "title": w.title,
-            "config": {
-                "refreshInterval": 300,
-                "resource": None,
-                "traversalSpecId": None,
-                "refreshContent": {"refreshContent": False},
-                "isUpdatedView": True,
-                "chartViewItems": [],
-                "selectFirstRow": {"selectFirstRow": True},
-                "selfProvider": {"selfProvider": False},
-                "title": w.title,
-                "viewDefinitionId": view,
-            },
-            "height": 600,
-        }
+    # as viewDefinitionId. `self_provider`+`pin` is honored on this branch too —
+    # the vendor's own Cluster Performance 2.0.json export pins its "vSphere
+    # Clusters" widget (an external built-in UUID) exactly this way
+    # (selfProvider:true + bound vSphere World resource entry); a bare
+    # early-return here previously discarded a declared self_provider+pin
+    # silently, which is the wire-format delta behind the live
+    # "Select the widget source…" symptom on that widget.
+    view_def_id = view if isinstance(view, str) else view.id
 
     if w.self_provider and w.pin:
         # Resolve the pin to a container resource that will exist on the
@@ -1058,7 +1058,7 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
             "selectFirstRow": {"selectFirstRow": True},
             "selfProvider": {"selfProvider": self_provider_flag},
             "title": w.title,
-            "viewDefinitionId": view.id,
+            "viewDefinitionId": view_def_id,
         },
         "height": 600,
     }

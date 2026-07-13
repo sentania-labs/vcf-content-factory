@@ -18,6 +18,22 @@ knowledge/context/api-surface/dashboard_selfprovider_pin_wire_format.md.
       ``selfProvider:true`` + ``resource:[]``), and the container must be
       registered in the shared ``entries.resource`` block.
 
+  FIX 3 (post-review, framework-reviewer WARNING 1) — the external-UUID
+      View passthrough branch (``view: '<raw-uuid>'``) must honor a
+      declared ``self_provider``+``pin`` the same way the internal
+      (bundled-ViewDef) branch does. This is the wire-format delta behind
+      Cluster Performance 2.0's live-broken "vSphere Clusters" widget,
+      which pins an external built-in view UUID.
+
+  FIX 4 (post-review, framework-reviewer WARNING 2) — a self-provider
+      HealthChart's implicit pin fallback (deriving the container from its
+      own ``adapter_kind``/``resource_kind`` with no explicit ``pin:``
+      block) must NOT silently redirect a leaf kind (e.g. VMWARE
+      ``HostSystem``) to the vSphere World container — there is no vendor
+      evidence for that. The fallback only applies when the declared kind
+      already resolves to itself (a world/singleton). An explicit ``pin:``
+      is still honored for any kind.
+
 All fixtures are built in-memory using loader/render dataclasses; no disk
 content YAML, no network, no install.
 """
@@ -43,10 +59,7 @@ _BUNDLED_VIEW_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
 
 
 def _make_bundled_view() -> ViewDef:
-    """Return a minimal ViewDef representing a bundled view (a View widget
-    must reference a bundled view — not an external UUID — for pin/
-    self-provider config to be emitted; the external-passthrough branch in
-    ``_view_widget`` intentionally skips pin resolution entirely)."""
+    """Return a minimal ViewDef representing a bundled view."""
     return ViewDef(
         id=_BUNDLED_VIEW_ID,
         name=_BUNDLED_VIEW_NAME,
@@ -189,6 +202,81 @@ def test_selfprovider_view_pin_always_emits_selfprovider_and_resource_entry():
 
 
 # ---------------------------------------------------------------------------
+# FIX 3 — external-UUID View passthrough honors self_provider + pin
+# ---------------------------------------------------------------------------
+
+_EXTERNAL_UUID = "d8a3767e-9d5e-4bf2-b613-9e3bef977502"
+
+
+def test_external_uuid_passthrough_with_pin_emits_vendor_shape():
+    """Cluster Performance 2.0's live-broken widget shape: a View widget
+    pinned to a raw external UUID (view: d8a3767e-...) with self_provider
+    + pin must still emit selfProvider:true + a bound resource entry — the
+    vendor's own CP2 export does exactly this for its "vSphere Clusters"
+    widget. Previously the isinstance(view, str) branch returned early with
+    selfProvider:false/resource:None, silently dropping the pin."""
+    w = Widget(
+        local_id="view1",
+        type="View",
+        title="vSphere Clusters",
+        coords={"x": 1, "y": 1, "w": 6, "h": 4},
+        view_name=_EXTERNAL_UUID,
+        self_provider=True,
+        pin=WidgetResourceKindRef(adapter_kind="VMWARE", resource_kind="vSphere World"),
+        dashboard_name="Test Dashboard",
+    )
+    dashboard = _make_dashboard([w])
+
+    result_json = render_dashboards_bundle_json([dashboard], {}, _OWNER_ID)
+    bundle = json.loads(result_json)
+    widget = bundle["dashboards"][0]["widgets"][0]
+
+    assert widget["config"]["viewDefinitionId"] == _EXTERNAL_UUID
+    assert widget["config"]["selfProvider"]["selfProvider"] is True
+    assert widget["config"]["resource"] == {
+        "resourceId": "resource:id:0_::_",
+        "traversalSpecId": "vSphere Hosts and Clusters-VMWARE-vSphere World",
+        "resourceName": "vSphere World",
+        "resourceKindId": "002006VMWAREvSphere World",
+        "id": "Ext.vcops.chrome.model.Resource-1",
+    }
+    assert widget["config"]["traversalSpecId"] == (
+        "vSphere Hosts and Clusters-VMWARE-vSphere World"
+    )
+    assert bundle["entries"]["resource"] == [
+        {
+            "resourceKindKey": "vSphere World",
+            "internalId": "resource:id:0_::_",
+            "adapterKindKey": "VMWARE",
+            "identifiers": [],
+            "name": "vSphere World",
+        }
+    ]
+
+
+def test_external_uuid_passthrough_without_pin_unchanged():
+    """A non-self-provider (interaction-driven) external-UUID View widget
+    keeps the historic passthrough shape — no pin resolution attempted."""
+    w = Widget(
+        local_id="view1",
+        type="View",
+        title="External View",
+        coords={"x": 1, "y": 1, "w": 6, "h": 4},
+        view_name=_EXTERNAL_UUID,
+        dashboard_name="Test Dashboard",
+    )
+    dashboard = _make_dashboard([w])
+
+    result_json = render_dashboards_bundle_json([dashboard], {}, _OWNER_ID)
+    widget = json.loads(result_json)["dashboards"][0]["widgets"][0]
+
+    assert widget["config"]["viewDefinitionId"] == _EXTERNAL_UUID
+    assert widget["config"]["selfProvider"]["selfProvider"] is False
+    assert widget["config"]["resource"] is None
+    assert widget["config"]["traversalSpecId"] is None
+
+
+# ---------------------------------------------------------------------------
 # FIX 2 — HealthChart self-provider resource pin
 # ---------------------------------------------------------------------------
 
@@ -289,3 +377,106 @@ def test_selfprovider_healthchart_and_view_share_one_resource_index_slot():
     hc_widget = next(w for w in widgets if w["type"] == "HealthChart")
     assert view_widget["config"]["resource"]["resourceId"] == "resource:id:0_::_"
     assert hc_widget["config"]["resource"][0]["id"] == "resource:id:0_::_"
+
+
+# ---------------------------------------------------------------------------
+# FIX 4 — implicit HealthChart fallback is gated to world/singleton kinds
+# ---------------------------------------------------------------------------
+
+def test_selfprovider_healthchart_leaf_kind_no_pin_keeps_empty_resource():
+    """A self-provider HealthChart authored directly on a VMWARE leaf kind
+    (ClusterComputeResource) with NO explicit pin: block must NOT be
+    silently redirected to the vSphere World container — there is no
+    vendor evidence for that. resource stays []."""
+    w = Widget(
+        local_id="hc1",
+        type="HealthChart",
+        title="Leaf Kind Chart",
+        coords={"x": 1, "y": 1, "w": 6, "h": 4},
+        self_provider=True,
+        health_chart_config=HealthChartConfig(
+            adapter_kind="VMWARE",
+            resource_kind="ClusterComputeResource",
+            metric_key="cpu|usage_average",
+            metric_name="CPU Usage (%)",
+            mode="resource",
+        ),
+        dashboard_name="Test Dashboard",
+    )
+    dashboard = _make_dashboard([w])
+
+    result_json = render_dashboards_bundle_json([dashboard], {}, _OWNER_ID)
+    bundle = json.loads(result_json)
+    widget = bundle["dashboards"][0]["widgets"][0]
+
+    assert widget["config"]["selfProvider"]["selfProvider"] is True
+    assert widget["config"]["resource"] == []
+    assert bundle["entries"].get("resource", []) == []
+
+
+def test_selfprovider_healthchart_leaf_kind_mode_all_no_pin_keeps_empty_resource():
+    """Same gate applies for mode: 'all' ("list all resources of the kind")
+    — the fallback is not mode-dependent; a leaf kind never implicitly
+    world-pins regardless of mode."""
+    w = Widget(
+        local_id="hc1",
+        type="HealthChart",
+        title="Leaf Kind Chart (mode=all)",
+        coords={"x": 1, "y": 1, "w": 6, "h": 4},
+        self_provider=True,
+        health_chart_config=HealthChartConfig(
+            adapter_kind="VMWARE",
+            resource_kind="VirtualMachine",
+            metric_key="cpu|usage_average",
+            metric_name="CPU Usage (%)",
+            mode="all",
+        ),
+        dashboard_name="Test Dashboard",
+    )
+    dashboard = _make_dashboard([w])
+
+    result_json = render_dashboards_bundle_json([dashboard], {}, _OWNER_ID)
+    widget = json.loads(result_json)["dashboards"][0]["widgets"][0]
+
+    assert widget["config"]["selfProvider"]["selfProvider"] is True
+    assert widget["config"]["resource"] == []
+
+
+def test_selfprovider_healthchart_leaf_kind_with_explicit_pin_still_binds():
+    """An explicit pin: block IS honored for a leaf kind — only the
+    implicit adapter_kind/resource_kind fallback is gated, not an
+    author-declared pin."""
+    w = Widget(
+        local_id="hc1",
+        type="HealthChart",
+        title="Leaf Kind Chart (explicit pin)",
+        coords={"x": 1, "y": 1, "w": 6, "h": 4},
+        self_provider=True,
+        pin=WidgetResourceKindRef(adapter_kind="VMWARE", resource_kind="HostSystem"),
+        health_chart_config=HealthChartConfig(
+            adapter_kind="VMWARE",
+            resource_kind="ClusterComputeResource",
+            metric_key="cpu|usage_average",
+            metric_name="CPU Usage (%)",
+            mode="resource",
+        ),
+        dashboard_name="Test Dashboard",
+    )
+    dashboard = _make_dashboard([w])
+
+    result_json = render_dashboards_bundle_json([dashboard], {}, _OWNER_ID)
+    bundle = json.loads(result_json)
+    widget = bundle["dashboards"][0]["widgets"][0]
+
+    assert widget["config"]["resource"] == [
+        {"name": "vSphere World", "id": "resource:id:0_::_"}
+    ]
+    assert bundle["entries"]["resource"] == [
+        {
+            "resourceKindKey": "vSphere World",
+            "internalId": "resource:id:0_::_",
+            "adapterKindKey": "VMWARE",
+            "identifiers": [],
+            "name": "vSphere World",
+        }
+    ]
