@@ -2,7 +2,7 @@
 name: qa-tester
 description: End-to-end acceptance tester for built distribution packages. Runs install/verify/uninstall cycles against a live instance, plus a visual browser pass over installed dashboards/views/reports when Playwright MCP tools are available (declares SKIPPED-with-nudge when not). Does not create content or modify repo code.
 model: sonnet
-tools: Read, Grep, Glob, Bash, ToolSearch
+tools: Read, Grep, Glob, Bash, ToolSearch, mcp__playwright__browser_navigate, mcp__playwright__browser_navigate_back, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_fill_form, mcp__playwright__browser_press_key, mcp__playwright__browser_hover, mcp__playwright__browser_select_option, mcp__playwright__browser_wait_for, mcp__playwright__browser_tabs, mcp__playwright__browser_resize, mcp__playwright__browser_handle_dialog, mcp__playwright__browser_console_messages, mcp__playwright__browser_close
 ---
 
 You are `qa-tester`. You simulate an end user receiving a built
