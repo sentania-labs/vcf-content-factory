@@ -506,6 +506,17 @@ reused. Field lines are `- **Field:** value` (parsed by
   bug in the field, and the fix is merged-pending on a branch, not yet in
   a release. This entry tracks **field state**, not code state — the code
   fix already exists (`3d5ba94`).
+  **Criterion amendment (2026-07-13):** the "ships on a `v*` tag" wording
+  above is circular against RULE-012 — the gate refuses the very tag the
+  criterion requires, so as written it can never be satisfied. Amended
+  standard: closes when (a) a build from the **published sdk-buildkit
+  tarball via the pak repo's exact CI invocation** produces the correct
+  four-tier `SymptomSets` XML, **and** (b) a live import of that artifact
+  shows all four severity tiers present. This is the same proof a `v*` CI
+  build would provide, minus the tag the gate forbids. The release runbook
+  retains a **non-skippable post-tag confirmation** (extract the CI-built
+  pak, verify the wrapper, live four-tier check); a failure there pulls
+  the release and **reopens this entry**.
 - **Closure attempt (2026-07-12, REVERTED — Codex PR #50 P1 upheld):** an
   attempt to close on staged evidence (fix merged #48; published
   buildkit grep-verified; build-10 live four-tier proof) was reverted
