@@ -244,6 +244,9 @@ path is first-class, not a sad fallback.
 - **Report:** clarify → recon → upstream views/SMs → report →
   validate → confirm → install.
 - **Package + QA:** author content → packager → qa-tester → report.
+  qa-tester (and content-installer on pak verifies) runs a Playwright
+  browser pass over rendered surfaces when the MCP tools are available,
+  and reports a recurring VISUAL VERIFICATION: SKIPPED nudge when not.
 - **Management pack:** clarify target API → cartographer →
   catalog-match (`knowledge/context/api_pattern_catalog.md`) → designer →
   author → validate → **render-export → push-design → MPB UI Verify
