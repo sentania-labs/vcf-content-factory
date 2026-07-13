@@ -86,14 +86,20 @@ _VIEW_PIN_CONTAINER: dict[tuple[str, str], tuple[str, str, str]] = {
 # in `_VIEW_PIN_CONTAINER` values / `resource_index`, not the raw pin target.
 #
 # NOT required for a working pin. Two vendor exports were compared:
-# "Cluster Performance 2.0.json" ships its pinned View widget WITH this
-# string set; "ESXi Host Details Dashboard.json" ships five pinned View
-# widgets (ESXi Host Details / Versions / Models / Power State / Maintenance
-# State) all bound to vSphere World with `traversalSpecId: ""` (empty) — and
-# that pak is shipped and field-working. So an empty traversalSpecId is a
-# vendor-proven working shape, not a bug; the map below is a best-effort
-# enrichment only. A container with no entry here falls back to the historic
-# `""` / top-level `null` emission — silently, no warning.
+# "Cluster Performance 2.0.json" ships its pinned "vSphere Clusters" widget
+# WITH this string set in the NESTED `config.resource.traversalSpecId` only
+# — its top-level `config.traversalSpecId` is `null` even on that
+# fully-bound pin, and `refreshContent` stays `false`. (An earlier
+# api-explorer pass mistranscribed this as "both sites"; corrected against
+# the vendor JSON bytes.) "ESXi Host Details Dashboard.json" ships five
+# pinned View widgets (ESXi Host Details / Versions / Models / Power State /
+# Maintenance State) all bound to vSphere World with the nested
+# `traversalSpecId: ""` (empty) too — and that pak is shipped and
+# field-working. So an empty nested traversalSpecId is a vendor-proven
+# working shape, not a bug; the map below is a best-effort enrichment only,
+# applied to the nested site alone. A container with no entry here falls
+# back to the historic nested `""` emission — silently, no warning. The
+# top-level `config.traversalSpecId` is ALWAYS `null`, mapped or not.
 #
 # Evidence: knowledge/context/api-surface/dashboard_selfprovider_pin_wire_format.md
 #
@@ -1026,6 +1032,17 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
         # OPTIONAL enrichment when known; empty string is also a
         # vendor-proven working shape (see _VIEW_PIN_TRAVERSAL_SPEC docstring
         # above) — no warning on a miss.
+        #
+        # IMPORTANT: the vendor export (Cluster Performance 2.0.json,
+        # "vSphere Clusters" widget) puts the spec string ONLY in the
+        # nested config.resource.traversalSpecId — the top-level
+        # config.traversalSpecId is `null` even on a fully-bound pin, and
+        # refreshContent stays `false`. An earlier api-explorer transcription
+        # of this widget claimed both sites carried the spec string plus
+        # refreshContent:true; that was a byte-compare error, corrected here
+        # against the actual vendor JSON. Do not reintroduce the top-level
+        # spec / refreshContent:true without re-verifying against
+        # reference/references/.../Cluster Performance 2.0.json.
         traversal_spec_id = _VIEW_PIN_TRAVERSAL_SPEC.get(container_key, "")
         resource = {
             "resourceId": f"resource:id:{res_idx}_::_",
@@ -1035,13 +1052,9 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
             "id": f"Ext.vcops.chrome.model.Resource-{res_idx + 1}",
         }
         self_provider_flag = True
-        refresh_content = True
-        top_level_traversal_spec_id = traversal_spec_id or None
     else:
         resource = None
         self_provider_flag = False
-        refresh_content = False
-        top_level_traversal_spec_id = None
     return {
         "collapsed": False,
         "id": w.widget_id,
@@ -1051,8 +1064,13 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
         "config": {
             "refreshInterval": 300,
             "resource": resource,
-            "traversalSpecId": top_level_traversal_spec_id,
-            "refreshContent": {"refreshContent": refresh_content},
+            # Vendor bytes: top-level traversalSpecId is always null (the
+            # spec string lives only in config.resource.traversalSpecId
+            # above) — see the IMPORTANT note above.
+            "traversalSpecId": None,
+            # Vendor bytes: refreshContent is always false on this widget
+            # type, self-provider or not.
+            "refreshContent": {"refreshContent": False},
             "isUpdatedView": True,
             "chartViewItems": [],
             "selectFirstRow": {"selectFirstRow": True},

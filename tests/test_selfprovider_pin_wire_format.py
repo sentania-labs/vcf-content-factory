@@ -4,14 +4,23 @@ knowledge/context/api-surface/dashboard_selfprovider_pin_wire_format.md.
   FIX 1 (revised) — a self-provider pinned View widget's traversalSpecId is
       an OPTIONAL enrichment, not a requirement: two vendor exports were
       compared and "ESXi Host Details Dashboard.json" ships five working
-      pinned View widgets with `traversalSpecId: ""` (empty). So render.py
-      fills in a known-good traversalSpecId (``_VIEW_PIN_TRAVERSAL_SPEC``)
-      for mapped containers (e.g. VMWARE/vSphere World) but silently falls
-      back to the historic empty-string / null shape for unmapped
+      pinned View widgets with `traversalSpecId: ""` (empty) in the NESTED
+      `config.resource.traversalSpecId`. So render.py fills in a known-good
+      traversalSpecId (``_VIEW_PIN_TRAVERSAL_SPEC``) for mapped containers
+      (e.g. VMWARE/vSphere World) at that nested site only, and silently
+      falls back to the historic empty-string shape for unmapped
       containers — no warning, since empty is itself a vendor-proven
-      working shape. What IS locked in regardless: selfProvider:true plus
-      a bound resource entry — the old selfProvider:false/resource:null
-      shape must never come back for a self-provider pinned widget.
+      working shape. The TOP-LEVEL `config.traversalSpecId` is ALWAYS
+      `null`, mapped or not — the vendor's own "Cluster Performance
+      2.0.json" "vSphere Clusters" widget (a fully-bound pin) carries the
+      spec string ONLY in the nested resource object, never at the top
+      level, and keeps `refreshContent: false` even when bound. (An
+      earlier api-explorer transcription claimed "both sites" plus
+      `refreshContent: true`; that was a byte-compare error, corrected here
+      against the vendor JSON.) What IS locked in regardless: selfProvider:
+      true plus a bound resource entry — the old
+      selfProvider:false/resource:null shape must never come back for a
+      self-provider pinned widget.
 
   FIX 2 — a self-provider HealthChart widget must carry a
       ``resource: [{"name", "id"}]`` entry (never the impossible
@@ -89,7 +98,11 @@ def _make_dashboard(widgets: list[Widget], dash_id: str | None = None) -> Dashbo
 
 def test_selfprovider_view_pin_emits_mapped_traversal_spec_id():
     """A self-provider View pinned to VMWARE/vSphere World emits the known
-    built-in traversalSpecId in both wire-format locations."""
+    built-in traversalSpecId in the NESTED resource object only. The
+    top-level config.traversalSpecId is always null — the vendor's own
+    "vSphere Clusters" widget (Cluster Performance 2.0.json) carries the
+    spec string solely in config.resource.traversalSpecId even on a
+    fully-bound pin."""
     w = Widget(
         local_id="view1",
         type="View",
@@ -111,9 +124,8 @@ def test_selfprovider_view_pin_emits_mapped_traversal_spec_id():
     assert widget["config"]["resource"]["traversalSpecId"] == (
         "vSphere Hosts and Clusters-VMWARE-vSphere World"
     )
-    assert widget["config"]["traversalSpecId"] == (
-        "vSphere Hosts and Clusters-VMWARE-vSphere World"
-    )
+    assert widget["config"]["traversalSpecId"] is None
+    assert widget["config"]["refreshContent"]["refreshContent"] is False
     # Leaf-kind pin (HostSystem) redirects to the vSphere World container,
     # so the resource entry itself is still named/kinded as the world.
     assert widget["config"]["resource"]["resourceName"] == "vSphere World"
@@ -122,7 +134,7 @@ def test_selfprovider_view_pin_emits_mapped_traversal_spec_id():
 def test_selfprovider_view_pin_leaf_kind_redirects_and_maps_traversal_spec():
     """A pin to a leaf kind (HostSystem) redirects to the vSphere World
     container via _resolve_view_pin, and still resolves a traversalSpecId
-    because the container (not the leaf) is the map key."""
+    (nested only) because the container (not the leaf) is the map key."""
     w = Widget(
         local_id="view1",
         type="View",
@@ -143,9 +155,7 @@ def test_selfprovider_view_pin_leaf_kind_redirects_and_maps_traversal_spec():
     assert widget["config"]["resource"]["traversalSpecId"] == (
         "vSphere Hosts and Clusters-VMWARE-vSphere World"
     )
-    assert widget["config"]["traversalSpecId"] == (
-        "vSphere Hosts and Clusters-VMWARE-vSphere World"
-    )
+    assert widget["config"]["traversalSpecId"] is None
 
 
 def test_selfprovider_view_pin_unmapped_container_keeps_empty_shape_silently():
@@ -198,7 +208,9 @@ def test_selfprovider_view_pin_always_emits_selfprovider_and_resource_entry():
     assert widget["config"]["selfProvider"]["selfProvider"] is True
     assert widget["config"]["resource"] is not None
     assert widget["config"]["resource"]["resourceId"] == "resource:id:0_::_"
-    assert widget["config"]["refreshContent"]["refreshContent"] is True
+    # Vendor bytes: refreshContent stays false even on a fully-bound pin
+    # (Cluster Performance 2.0.json "vSphere Clusters" widget).
+    assert widget["config"]["refreshContent"]["refreshContent"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -214,7 +226,14 @@ def test_external_uuid_passthrough_with_pin_emits_vendor_shape():
     + pin must still emit selfProvider:true + a bound resource entry — the
     vendor's own CP2 export does exactly this for its "vSphere Clusters"
     widget. Previously the isinstance(view, str) branch returned early with
-    selfProvider:false/resource:None, silently dropping the pin."""
+    selfProvider:false/resource:None, silently dropping the pin.
+
+    Exact vendor bytes (reference/references/vmbro_vcf_operations_vcommunity/
+    Management Pack/content/dashboards/Cluster Performance 2.0.json, widget
+    id 46a74d94-9562-4532-b54b-9a7274406b8f): the traversalSpecId string
+    lives ONLY in the nested config.resource.traversalSpecId; top-level
+    config.traversalSpecId is null and refreshContent is false, even though
+    the pin is fully bound."""
     w = Widget(
         local_id="view1",
         type="View",
@@ -240,9 +259,8 @@ def test_external_uuid_passthrough_with_pin_emits_vendor_shape():
         "resourceKindId": "002006VMWAREvSphere World",
         "id": "Ext.vcops.chrome.model.Resource-1",
     }
-    assert widget["config"]["traversalSpecId"] == (
-        "vSphere Hosts and Clusters-VMWARE-vSphere World"
-    )
+    assert widget["config"]["traversalSpecId"] is None
+    assert widget["config"]["refreshContent"]["refreshContent"] is False
     assert bundle["entries"]["resource"] == [
         {
             "resourceKindKey": "vSphere World",

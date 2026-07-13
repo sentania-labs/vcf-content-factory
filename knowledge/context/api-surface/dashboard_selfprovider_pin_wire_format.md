@@ -57,7 +57,7 @@ Current HEAD emits, for `self_provider and pin`:
   "resourceKindId": "002006VMWAREvSphere World",  // already correct
   "id": "Ext.vcops.chrome.model.Resource-1"
 },
-"traversalSpecId": null,                          // ← BUG (top-level, empty)
+"traversalSpecId": null,                          // matches vendor (see correction below)
 ```
 Vendor (working):
 ```json
@@ -68,10 +68,29 @@ Vendor (working):
   "resourceKindId": "002006VMWAREvSphere World",
   "id": "Ext.vcops.chrome.model.Resource-140"
 },
-"traversalSpecId": "vSphere Hosts and Clusters-VMWARE-vSphere World",
+"traversalSpecId": null,
 ```
-**Exact delta = the `traversalSpecId` string, in two places:**
-`config.resource.traversalSpecId` and top-level `config.traversalSpecId`.
+> **CORRECTION (post-framework-review, 2026-07-13):** the "two places"
+> claim below was a transcription error against the vendor export,
+> caught by `framework-reviewer`'s byte-compare of the actual JSON
+> (`reference/references/vmbro_vcf_operations_vcommunity/Management
+> Pack/content/dashboards/Cluster Performance 2.0.json`, widget id
+> `46a74d94-9562-4532-b54b-9a7274406b8f`, "vSphere Clusters"). The vendor's
+> top-level `config.traversalSpecId` is **`null`**, even on this
+> fully-bound pin — the spec string lives **only** in the nested
+> `config.resource.traversalSpecId`. `refreshContent` is also `false` on
+> this widget, not `true`. `src/vcfops_dashboards/render.py` was corrected
+> to match (commit on `fix/dashboard-selfprovider-pin-wire-format`): the
+> `_VIEW_PIN_TRAVERSAL_SPEC` enrichment now applies to the nested site
+> only; top-level `traversalSpecId` is unconditionally `null` and
+> `refreshContent` unconditionally `false` for View widgets. Treat the
+> paragraph and "two places" language immediately below as historical —
+> retained for the record of how the delta was originally (incorrectly)
+> characterized, not as current guidance.
+
+**Original (incorrect) characterization — superseded by the correction
+above:** "Exact delta = the `traversalSpecId` string, in two places:
+`config.resource.traversalSpecId` and top-level `config.traversalSpecId`."
 Everything else (resourceId placeholder, `resourceKindId`,
 `selfProvider:true`, `entries.resource[0]`) already matches the vendor.
 The string format is `<specName>-<rootAdapterKindKey>-<rootResourceKindKey>`.
