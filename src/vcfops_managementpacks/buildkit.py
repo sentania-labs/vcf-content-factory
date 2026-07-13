@@ -41,6 +41,10 @@ Path relocation in the kit's sdk_builder.py:
 Import rewrites also applied to:
   alerts_render.py  — vcfops_symptoms.loader / vcfops_alerts.loader → flat kit names
   reports_render.py — relative .loader → reports_loader (flat kit name)
+  sdk_builder.py    — also rewrites the inline `from vcfops_dashboards.render
+                       import render_view_def_fragments` used by the
+                       co-bundled-reports path (report subdir embeds its
+                       referenced views' <ViewDef> fragments)
 
 repo_root handling:
   In the factory, _load_bundled_content resolves bundled_content paths against
@@ -69,7 +73,7 @@ from typing import Optional
 # Version constant — bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
-BUILDKIT_VERSION = "0.2.1"
+BUILDKIT_VERSION = "1.0.9"
 
 # ---------------------------------------------------------------------------
 # Source paths (relative to this file's parent = vcfops_managementpacks/)
@@ -130,6 +134,17 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from vcfops_dashboards\.render import render_dashboards_bundle_json",
             "from .dashboard_render import render_dashboards_bundle_json",
+        ),
+        # from vcfops_dashboards.render import render_view_def_fragments
+        # (inline import in the co-bundled-reports path; embeds a bundled
+        # view's <ViewDef> fragment inside a report's content/reports/<slug>/
+        # subdirectory — see sdk_builder.py's _build_sdk_pak_inner reports
+        # loop). Introduced by PR #49; missed by the buildkit's rewrite
+        # sweep until DEF-caught in a from-tarball build of
+        # vcfcf_sdk_vcommunity_vsphere (report + embedded view shape).
+        (
+            r"from vcfops_dashboards\.render import render_view_def_fragments",
+            "from .dashboard_render import render_view_def_fragments",
         ),
         # from vcfops_supermetrics.loader import load_file as _load_sm  (inline in _load_bundled_content)
         (

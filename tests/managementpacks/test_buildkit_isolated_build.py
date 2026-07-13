@@ -15,9 +15,18 @@ expected to fail (no SDK jar in CI) and that failure is explicitly allowed.
 What must NOT happen is a `ModuleNotFoundError: No module named 'vcfops_common'`
 (or any other `vcfops_*` module) during content loading.
 
-The fixture contains 1 supermetric + 1 symptom + 1 alert so that
-sm_loader, symptoms_loader, and alerts_loader are all exercised before
-the Java step is reached.
+The fixture contains 1 supermetric + 1 symptom + 1 alert + 1 view +
+1 report (embedding that view) so that sm_loader, symptoms_loader,
+alerts_loader, dashboard_loader, and reports_loader/reports_render are
+all exercised before the Java step is reached. The report+embedded-view
+shape specifically exercises the co-bundled-reports path in
+sdk_builder.py's ``_build_sdk_pak_inner`` (report subdir embeds the
+<ViewDef> for any view it references that is also part of this pak's
+bundled views) — this is the path that does the inline
+``from vcfops_dashboards.render import render_view_def_fragments``
+import that DEF-caught buildkit 1.0.8 missed from its rewrite sweep
+(only fires when a report actually has an embedded view; a report-only
+or view-only fixture does NOT reach it).
 
 The subprocess environment is sanitised:
   - PYTHONPATH set to ONLY the kit parent dir (not the factory root).
@@ -111,6 +120,45 @@ _ALERT_YAML = textwrap.dedent(f"""\
             - name: "[VCF Content Factory] Kit Isolation Test Symptom"
 """)
 
+_VIEW_UUID = "11112222-0004-0004-0004-000000000004"
+
+_VIEW_YAML = textwrap.dedent(f"""\
+    id: {_VIEW_UUID}
+    name: "[VCF Content Factory] Kit Isolation Test View"
+    description: "Minimal view for kit isolation test (embedded in the report below)."
+    subject:
+      adapter_kind: VMWARE
+      resource_kind: HostSystem
+    columns:
+      - attribute: cpu|usage_average
+        display_name: "CPU Usage (%)"
+    released: false
+    version: "1.0.0"
+""")
+
+_REPORT_UUID = "33334444-0005-0005-0005-000000000005"
+
+_REPORT_YAML = textwrap.dedent(f"""\
+    id: {_REPORT_UUID}
+    name: "[VCF Content Factory] Kit Isolation Test Report"
+    description: "Minimal report for kit isolation test — embeds the bundled view above so the co-bundled-reports path (render_view_def_fragments) fires."
+    subject_types:
+      - adapter_kind: VMWARE
+        resource_kind: HostSystem
+        type: self
+    sections:
+      - type: View
+        view: "[VCF Content Factory] Kit Isolation Test View"
+        orientation: Landscape
+        colorize: true
+    settings:
+      show_page_footer: true
+      output_formats:
+        - pdf
+    released: false
+    version: "1.0.0"
+""")
+
 _ADAPTER_YAML = textwrap.dedent("""\
     name: "VCF Content Factory Kit Isolation Test Adapter"
     version: "1.0.0"
@@ -127,6 +175,10 @@ _ADAPTER_YAML = textwrap.dedent("""\
         - symptoms/kit-isolation-symptom.yaml
       alerts:
         - alerts/kit-isolation-alert.yaml
+      views:
+        - views/kit-isolation-view.yaml
+      reports:
+        - reports/kit-isolation-report.yaml
 """)
 
 # Minimal describe.xml — the sdk_builder reads this for the world resource kind.
@@ -170,6 +222,14 @@ def _write_fixture_adapter(base: Path) -> Path:
     alert_dir = project_dir / "alerts"
     alert_dir.mkdir()
     (alert_dir / "kit-isolation-alert.yaml").write_text(_ALERT_YAML, encoding="utf-8")
+
+    views_dir = project_dir / "views"
+    views_dir.mkdir()
+    (views_dir / "kit-isolation-view.yaml").write_text(_VIEW_YAML, encoding="utf-8")
+
+    reports_dir = project_dir / "reports"
+    reports_dir.mkdir()
+    (reports_dir / "kit-isolation-report.yaml").write_text(_REPORT_YAML, encoding="utf-8")
 
     src_dir = project_dir / "src" / "main" / "java" / "com" / "vcfcf" / "adapters" / "kitisolation"
     src_dir.mkdir(parents=True)
@@ -296,6 +356,13 @@ def _assert_content_loading_succeeded(stderr: str) -> None:
     if "supermetric" not in stderr:
         pytest.fail(
             "Expected 'supermetric(s)' count in 'bundled content:' line but not found.\n"
+            f"subprocess stderr:\n{stderr[:2000]}"
+        )
+    # Confirm the report (with its embedded view) loaded — this is the path
+    # that exercises the co-bundled-reports render_view_def_fragments import.
+    if "report" not in stderr:
+        pytest.fail(
+            "Expected 'report(s)' count in 'bundled content:' line but not found.\n"
             f"subprocess stderr:\n{stderr[:2000]}"
         )
 
@@ -466,3 +533,224 @@ def test_kit_isolated_build_fails_without_sm_rewrite(tmp_path):
         )
     # If we get here, the revert correctly produces the expected error — the
     # canary is healthy and the guard in the sibling test is meaningful.
+
+
+# ---------------------------------------------------------------------------
+# Reports-with-embedded-views seam (DEF: render_view_def_fragments import)
+# ---------------------------------------------------------------------------
+#
+# The two tests above drive build-sdk end-to-end, but the reports+embedded
+# -views code path (sdk_builder.py's co-bundled-reports branch, which does
+# `from vcfops_dashboards.render import render_view_def_fragments`) lives
+# INSIDE _write_outer_pak, which only runs AFTER a successful javac compile
+# (Step 4, ~line 3169) — and a CI sandbox with no SDK jar / no javac never
+# gets that far, so build-sdk alone can never reach the buggy import even
+# with a report+view fixture bundled. To reach it without requiring a real
+# JDK + vrops-adapters-sdk jar, this test calls sdk_builder._write_outer_pak
+# directly (the same call the full build makes at Step 10) inside the
+# isolated subprocess, entirely bypassing Java compilation.
+
+_ISOLATED_WRITE_OUTER_PAK_SCRIPT = textwrap.dedent("""\
+    import sys
+    from pathlib import Path
+
+    project_dir = Path(sys.argv[1])
+    output_dir = Path(sys.argv[2])
+
+    from sdk_buildkit.sdk_project import load_sdk_project
+    from sdk_buildkit.dashboard_loader import load_view
+    from sdk_buildkit.reports_loader import load_file as load_report
+    from sdk_buildkit import sdk_builder
+
+    project = load_sdk_project(project_dir / "adapter.yaml")
+    view = load_view(project_dir / "views" / "kit-isolation-view.yaml", enforce_framework_prefix=False)
+    report = load_report(
+        project_dir / "reports" / "kit-isolation-report.yaml",
+        views_dir=project_dir / "views",
+        dashboards_dir=project_dir / "dashboards",
+        enforce_framework_prefix=False,
+    )
+
+    pak_path = sdk_builder._write_outer_pak(
+        project,
+        b"",
+        output_dir,
+        project_dir,
+        views=[view],
+        reports=[report],
+    )
+    print(f"WROTE_PAK:{pak_path}")
+""")
+
+
+@pytest.mark.timeout(30)
+def test_kit_isolated_reports_with_embedded_views_no_vcfops_import_error(tmp_path):
+    """The co-bundled-reports branch (render_view_def_fragments) must not
+    raise ModuleNotFoundError for vcfops_dashboards in the isolated kit.
+
+    Reproduces the exact DEF: a report bundled alongside a view it
+    references triggers sdk_builder.py's inline
+    `from vcfops_dashboards.render import render_view_def_fragments` import
+    inside `_write_outer_pak`. That import is only reachable in a real
+    build-sdk run AFTER a successful javac compile, which CI sandboxes
+    without a JDK/SDK jar never reach — so this test calls
+    `_write_outer_pak` directly to exercise the seam without Java.
+    """
+    import tempfile
+
+    kit_root = tmp_path / "kit"
+    fixture_root = tmp_path / "fixture"
+    fixture_root.mkdir()
+
+    _assemble_kit_python_only(kit_root)
+    kit_parent = kit_root
+
+    project_dir = _write_fixture_adapter(fixture_root)
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    env = _make_isolated_env(kit_parent)
+
+    script_path = tmp_path / "_run_write_outer_pak.py"
+    script_path.write_text(_ISOLATED_WRITE_OUTER_PAK_SCRIPT, encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), str(project_dir), str(output_dir)],
+        capture_output=True,
+        text=True,
+        cwd=tempfile.gettempdir(),
+        env=env,
+        timeout=25,
+    )
+
+    stderr = result.stderr
+    stdout = result.stdout
+
+    _assert_no_vcfops_module_error(stderr, stdout)
+
+    assert result.returncode == 0, (
+        "Isolated _write_outer_pak call failed unexpectedly "
+        "(expected clean success — no Java is involved in this path).\n"
+        f"stdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+    assert "WROTE_PAK:" in stdout, (
+        f"Expected 'WROTE_PAK:<path>' in stdout.\nstdout:\n{stdout}\nstderr:\n{stderr}"
+    )
+
+    paks = list(output_dir.glob("*.pak"))
+    assert paks, f"Expected a .pak in {output_dir}, found: {list(output_dir.iterdir())}"
+
+    # Confirm the report subdirectory actually embeds the view (proves the
+    # render_view_def_fragments code path ran to completion, not just that
+    # the import succeeded before an early return).
+    import zipfile
+
+    with zipfile.ZipFile(paks[0]) as zf:
+        report_content_entries = [
+            n for n in zf.namelist()
+            if n.startswith("content/reports/") and n.endswith("content.xml")
+        ]
+        assert report_content_entries, (
+            f"Expected a content/reports/<slug>/content.xml entry in {paks[0].name}.\n"
+            f"pak entries: {zf.namelist()}"
+        )
+        report_xml = zf.read(report_content_entries[0]).decode("utf-8")
+        assert "<ViewDef" in report_xml and _VIEW_UUID in report_xml, (
+            "Expected the embedded <ViewDef> for the bundled view inside the "
+            "report's content.xml (co-bundled-reports shape) — "
+            "render_view_def_fragments did not run or did not embed the view.\n"
+            f"report_xml:\n{report_xml[:2000]}"
+        )
+
+
+@pytest.mark.timeout(30)
+def test_kit_isolated_reports_with_embedded_views_fails_without_rewrite(tmp_path):
+    """Canary: confirms the guard above is meaningful by reverting the new
+    render_view_def_fragments rewrite rule and proving the isolated
+    _write_outer_pak call then raises ModuleNotFoundError for
+    vcfops_dashboards.
+
+    If this test starts failing (i.e. the error is no longer reproduced with
+    the rewrite reverted), the reports-with-views code path has changed and
+    both tests in this section need updating.
+    """
+    import shutil
+    import tempfile
+
+    from vcfops_managementpacks.buildkit import (
+        _FACTORY_SOURCES,
+        _IMPORT_REWRITES,
+        _apply_rewrites,
+        _KIT_INIT,
+        _KIT_MAIN,
+    )
+
+    kit_root = tmp_path / "kit_no_report_view_rewrite"
+    pkg_dir = kit_root / "sdk_buildkit"
+    pkg_dir.mkdir(parents=True)
+
+    (pkg_dir / "__init__.py").write_text(_KIT_INIT, encoding="utf-8")
+    (pkg_dir / "__main__.py").write_text(_KIT_MAIN, encoding="utf-8")
+
+    for dest_name, src_path in _FACTORY_SOURCES.items():
+        if not src_path.is_file():
+            continue
+        source_text = src_path.read_text(encoding="utf-8")
+        if dest_name == "sdk_builder.py":
+            # Apply every sdk_builder.py rewrite EXCEPT the
+            # render_view_def_fragments one — that's what we're reverting.
+            rules = [
+                (pattern, replacement)
+                for pattern, replacement in _IMPORT_REWRITES.get(dest_name, [])
+                if "render_view_def_fragments" not in pattern
+            ]
+        else:
+            rules = _IMPORT_REWRITES.get(dest_name, [])
+        if rules:
+            patched_text = _apply_rewrites(source_text, rules)
+            (pkg_dir / dest_name).write_text(patched_text, encoding="utf-8")
+        else:
+            (pkg_dir / dest_name).write_bytes(src_path.read_bytes())
+
+    (pkg_dir / "adapter_runtime").mkdir(exist_ok=True)
+    fw_src_real = Path(__file__).parent.parent.parent / "src" / "vcfops_managementpacks" / "adapter_framework" / "src"
+    fw_dst = pkg_dir / "adapter_framework" / "src"
+    if fw_src_real.is_dir():
+        shutil.copytree(str(fw_src_real), str(fw_dst))
+    else:
+        fw_dst.mkdir(parents=True, exist_ok=True)
+
+    fixture_root = tmp_path / "fixture"
+    fixture_root.mkdir()
+    project_dir = _write_fixture_adapter(fixture_root)
+    output_dir = tmp_path / "output"
+    output_dir.mkdir()
+
+    env = _make_isolated_env(kit_root)
+
+    script_path = tmp_path / "_run_write_outer_pak.py"
+    script_path.write_text(_ISOLATED_WRITE_OUTER_PAK_SCRIPT, encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, str(script_path), str(project_dir), str(output_dir)],
+        capture_output=True,
+        text=True,
+        cwd=tempfile.gettempdir(),
+        env=env,
+        timeout=25,
+    )
+
+    combined = result.stderr + result.stdout
+    has_vcfops_error = (
+        "ModuleNotFoundError" in combined and "vcfops_dashboards" in combined
+    )
+
+    if not has_vcfops_error:
+        pytest.fail(
+            "Revert-check canary FAILED: expected ModuleNotFoundError for "
+            "vcfops_dashboards when the render_view_def_fragments rewrite is "
+            "absent, but it was NOT present. The reports-with-views code path "
+            "may have changed — update both tests in this section.\n"
+            f"subprocess stderr:\n{result.stderr[:2000]}\n"
+            f"subprocess stdout:\n{result.stdout[:500]}"
+        )
