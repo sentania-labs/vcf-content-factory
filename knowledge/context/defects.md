@@ -439,7 +439,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   alerts to their last symptom set only — earlier tiers silently dropped on
   every field install
 - **Severity:** blocking
-- **Status:** open
+- **Status:** closed
 - **Affects:** vcommunity-vsphere
 - **First-seen:** shipped dev-preview build `0.0.0.8`
   (`vcfcf_sdk_vcommunity_vsphere.0.0.0.8.pak`, installed on
@@ -506,6 +506,17 @@ reused. Field lines are `- **Field:** value` (parsed by
   bug in the field, and the fix is merged-pending on a branch, not yet in
   a release. This entry tracks **field state**, not code state — the code
   fix already exists (`3d5ba94`).
+  **Criterion amendment (2026-07-13):** the "ships on a `v*` tag" wording
+  above is circular against RULE-012 — the gate refuses the very tag the
+  criterion requires, so as written it can never be satisfied. Amended
+  standard: closes when (a) a build from the **published sdk-buildkit
+  tarball via the pak repo's exact CI invocation** produces the correct
+  four-tier `SymptomSets` XML, **and** (b) a live import of that artifact
+  shows all four severity tiers present. This is the same proof a `v*` CI
+  build would provide, minus the tag the gate forbids. The release runbook
+  retains a **non-skippable post-tag confirmation** (extract the CI-built
+  pak, verify the wrapper, live four-tier check); a failure there pulls
+  the release and **reopens this entry**.
 - **Closure attempt (2026-07-12, REVERTED — Codex PR #50 P1 upheld):** an
   attempt to close on staged evidence (fix merged #48; published
   buildkit grep-verified; build-10 live four-tier proof) was reverted
@@ -521,6 +532,35 @@ reused. Field lines are `- **Field:** value` (parsed by
   isolated-build regression exercising the reports path → buildkit
   1.0.9 published → tarball-build + devel install + live four-tier
   proof (the run that caught this) → THEN close with that evidence.
+- **Closing-evidence:** Closed 2026-07-13 on the attempt-2 evidence run
+  (content-installer, buildkit **1.0.9**), executing the exact sequence the
+  reverted closure demanded. (1) **Tarball build, kit-only paths:** downloaded
+  the published `sdk-buildkit-1.0.9.tgz` (522,143 bytes) from the floating
+  `sdk-buildkit-v1` release (PR #52 fix merged `6c664dc`, republished before
+  the run) and built vcommunity-vsphere (`fix/localization-raw-keys-build-2`
+  @ `58a5304`, clean before/after) with
+  `PYTHONPATH=<kit> python3 -m sdk_buildkit build-sdk … --sdk-jar
+  vrops-adapters-sdk-2.2.jar` — the same invocation the pak repo's
+  `build-pak-on-tag.yml` CI runs. Build succeeded; `sdk_builder.py:2146` now
+  resolves `render_view_def_fragments` from the vendored `.dashboard_render`
+  (the 1.0.8 `ModuleNotFoundError` that reverted the first closure is gone).
+  Built-in pak-compare: 0 BLOCKING. (2) **Artifact verify:** extracted pak
+  (`vcfcf_sdk_vcommunity_vsphere.0.0.0.10.pak`) carries exactly one
+  `<State severity="automatic">` with one `<SymptomSets operator="or">`
+  wrapping all four `ESXi_Host_License_Remaining_Days_{Critical,Immediate,
+  Warning,Info}` SymptomSet refs, plus all 11 VOA report subdirs with
+  co-bundled ViewDefs. (3) **Live proof:** installed on devel
+  (`isInstalled=true`, 0.0.0.10); Suite API GET on the `ESXi_Host_License_
+  Expiring` alertdefinition returns one `SYMPTOM_SET_COMPOSITE`/`OR` with all
+  **four** `symptomDefinitionIds` present; all three adapter instances
+  DATA_RECEIVING/GREEN, zero new ERROR log lines post-install. Criterion note:
+  the literal "ships on a `v*` tag" wording is circular against RULE-012 (the
+  gate refuses the tag while this entry is open); equivalent evidence — a
+  build from the **published tarball** via the CI invocation plus live
+  four-tier import proof — satisfies the criterion's intent, and the release
+  runbook keeps a **non-skippable post-tag confirmation** (extract the CI-built
+  pak, verify the SymptomSets wrapper, live four-tier check); if that fails,
+  pull the release and reopen this entry.
 - **Related:** `knowledge/context/wire-formats/alertdef_symptomset_import.md`,
   `knowledge/context/reviews/framework/import-fidelity-three-fixes.md`,
   DEF-008 (sibling XML content-import renderer defect, same pak, same
