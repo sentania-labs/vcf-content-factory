@@ -77,6 +77,41 @@ _VIEW_PIN_CONTAINER: dict[tuple[str, str], tuple[str, str, str]] = {
     # falls back to (adapter_kind, resource_kind, resource_kind) for unknowns)
 }
 
+# NOTE on nested config.resource.traversalSpecId (removed enrichment,
+# 2026-07-13): an earlier revision of this module carried a
+# `_VIEW_PIN_TRAVERSAL_SPEC` table that filled in a known-good traversal
+# spec string (e.g. "vSphere Hosts and Clusters-VMWARE-vSphere World") for
+# self-provider pinned View/ProblemAlertsList widgets keyed on the
+# *container* resource (adapter_kind, resource_kind). That was wrong: a
+# traversal spec constrains the VIEW SUBJECT's hierarchy, not just the pin
+# container, so container-keyed injection misfires whenever a view's
+# subject isn't in the hierarchy the spec describes. Concretely,
+# `content/dashboards/vks_core_consumption.yaml` pins a View to VMWARE/
+# vSphere World, but the view's subject
+# (`content/views/vks_core_consumption_by_vcenter.yaml`) is
+# `VMwareAdapter Instance` — not in the "Hosts and Clusters" hierarchy the
+# spec traverses — and the checked-in WORKING export of that exact widget
+# (`knowledge/context/exports/working_dashboards.json` ~L412-424) carries
+# an EMPTY nested `traversalSpecId`. Emitting the spec string there would
+# have been a wire-format regression on real, shipped, working content.
+#
+# Decision: emit `config.resource.traversalSpecId: ""` unconditionally.
+# Binding is provided by `selfProvider` + the bound `resource` entry, not
+# by this field. Evidence an empty string is itself proven-working (not a
+# fallback/downgrade): the vendor's own "ESXi Host Details Dashboard.json"
+# ships five pinned View widgets with an empty nested traversalSpecId; our
+# own checked-in VKS working export (cited above) does the same; and the
+# api-explorer's content-import round-trips succeeded either way. No
+# evidence anywhere shows the spec string is REQUIRED for a pin to bind —
+# only that one vendor export (Cluster Performance 2.0.json) happens to
+# carry one for a widget whose view subject IS in the Hosts-and-Clusters
+# hierarchy. If a future visual QA pass shows a specific widget failing to
+# scope data without a spec string, add a narrowly-scoped, evidence-backed
+# mechanism then (keyed on view subject, not container) — not a blanket
+# container-keyed table.
+#
+# Evidence: knowledge/context/api-surface/dashboard_selfprovider_pin_wire_format.md
+
 
 def _resolve_view_pin(
     adapter_kind: str,
@@ -102,6 +137,43 @@ def _resolve_view_pin(
     # World/singleton convention: the resource's display name equals the kind
     # name (e.g., ComplianceWorld resource is named "ComplianceWorld").
     return (adapter_kind, resource_kind, resource_kind)
+
+
+def _self_provider_pin_container(
+    w: "Widget",
+    cfg_adapter_kind: str = "",
+    cfg_resource_kind: str = "",
+) -> tuple[str, str, str] | None:
+    """Resolve the container pin for a self-provider widget.
+
+    Prefers an explicit ``w.pin`` (the generic ``pin:`` YAML block used by
+    View/ProblemAlertsList) — an explicit pin is always honored, whatever
+    kind it names.
+
+    Falls back to the widget's own declared ``adapter_kind``/
+    ``resource_kind`` (e.g. a self-provider HealthChart's
+    ``health_chart_config``) ONLY when that kind already resolves to itself
+    through ``_resolve_view_pin`` — i.e. it's already a world/singleton
+    container (`vSphere World`, `ComplianceWorld`, etc.), not a leaf kind
+    that `_resolve_view_pin` would redirect (e.g. VMWARE `HostSystem` →
+    `vSphere World`). There is no vendor evidence for silently world-pinning
+    a self-provider HealthChart authored on a leaf kind — that redirect is
+    only proven for View/ProblemAlertsList widgets carrying an *explicit*
+    `pin:` block. Without this gate, a future self-provider HealthChart on a
+    leaf kind (any `mode`) would silently become world-pinned with no basis.
+
+    Returns None when no pin applies (not self-provider, no resource kind
+    declared, or an implicit leaf-kind fallback that isn't gated) — the
+    caller keeps the historic ``resource: []`` shape in that case.
+    """
+    if w.pin:
+        return _resolve_view_pin(w.pin.adapter_kind, w.pin.resource_kind)
+    if cfg_adapter_kind and cfg_resource_kind:
+        resolved = _resolve_view_pin(cfg_adapter_kind, cfg_resource_kind)
+        _, resolved_kind, _ = resolved
+        if resolved_kind == cfg_resource_kind:
+            return resolved
+    return None
 
 
 # ---------------- View definition (XML) ----------------
@@ -928,29 +1000,14 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
     # render at view time with no diagnostic.
     # External view passthrough: when `view` is a raw UUID string (not a bundled
     # ViewDef), the platform resolves it at install time.  Emit the UUID verbatim
-    # as viewDefinitionId; self-provider pinning is not applicable for external
-    # views (the platform owns the view's subject), so resource is set to None.
-    if isinstance(view, str):
-        return {
-            "collapsed": False,
-            "id": w.widget_id,
-            "gridsterCoords": w.coords,
-            "type": "View",
-            "title": w.title,
-            "config": {
-                "refreshInterval": 300,
-                "resource": None,
-                "traversalSpecId": None,
-                "refreshContent": {"refreshContent": False},
-                "isUpdatedView": True,
-                "chartViewItems": [],
-                "selectFirstRow": {"selectFirstRow": True},
-                "selfProvider": {"selfProvider": False},
-                "title": w.title,
-                "viewDefinitionId": view,
-            },
-            "height": 600,
-        }
+    # as viewDefinitionId. `self_provider`+`pin` is honored on this branch too —
+    # the vendor's own Cluster Performance 2.0.json export pins its "vSphere
+    # Clusters" widget (an external built-in UUID) exactly this way
+    # (selfProvider:true + bound vSphere World resource entry); a bare
+    # early-return here previously discarded a declared self_provider+pin
+    # silently, which is the wire-format delta behind the live
+    # "Select the widget source…" symptom on that widget.
+    view_def_id = view if isinstance(view, str) else view.id
 
     if w.self_provider and w.pin:
         # Resolve the pin to a container resource that will exist on the
@@ -975,6 +1032,12 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
         # The Ext.vcops.chrome.model.Resource-N id is 1-based in exports
         # but Ops reassigns it on import — any positive integer works.
         res_idx = resource_index[container_key]
+        # Nested traversalSpecId is unconditionally empty — see the NOTE
+        # above `_resolve_view_pin` for why a container-keyed enrichment
+        # here was wrong and was removed. Top-level traversalSpecId (below)
+        # is always null and refreshContent is always false, matching the
+        # vendor bytes (Cluster Performance 2.0.json "vSphere Clusters" and
+        # our own checked-in VKS working export agree on both).
         resource = {
             "resourceId": f"resource:id:{res_idx}_::_",
             "traversalSpecId": "",
@@ -983,11 +1046,9 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
             "id": f"Ext.vcops.chrome.model.Resource-{res_idx + 1}",
         }
         self_provider_flag = True
-        refresh_content = True
     else:
         resource = None
         self_provider_flag = False
-        refresh_content = False
     return {
         "collapsed": False,
         "id": w.widget_id,
@@ -997,14 +1058,17 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
         "config": {
             "refreshInterval": 300,
             "resource": resource,
+            # Vendor bytes: top-level traversalSpecId is always null.
             "traversalSpecId": None,
-            "refreshContent": {"refreshContent": refresh_content},
+            # Vendor bytes: refreshContent is always false on this widget
+            # type, self-provider or not.
+            "refreshContent": {"refreshContent": False},
             "isUpdatedView": True,
             "chartViewItems": [],
             "selectFirstRow": {"selectFirstRow": True},
             "selfProvider": {"selfProvider": self_provider_flag},
             "title": w.title,
-            "viewDefinitionId": view.id,
+            "viewDefinitionId": view_def_id,
         },
         "height": 600,
     }
@@ -1191,6 +1255,7 @@ def _metric_chart_widget(
 def _health_chart_widget(
     w: Widget,
     kind_index: dict[tuple[str, str], int],
+    resource_index: dict[tuple[str, str], int],
 ) -> dict:
     """Render a HealthChart (ranked health-bar) widget.
 
@@ -1198,12 +1263,29 @@ def _health_chart_widget(
     config fields, NOT inside a metric.resourceKindMetrics[] array. This
     is the key structural difference from Scoreboard and MetricChart.
 
-    Wire format reference: knowledge/context/api-surface/widget_types_survey.md §HealthChart.
+    A self-provider HealthChart (``self_provider: true``) must be pinned to
+    a container resource the same way a self-provider View is — the vendor
+    wire format is ``selfProvider:true`` + ``resource:[{"name","id"}]``
+    (NOT the impossible ``selfProvider:true`` + ``resource:[]``, which
+    causes the UI to list every resource on the instance instead of just
+    the pinned container). The binding is derived from ``w.pin`` if set, else
+    from the widget's own declared ``adapter_kind``/``resource_kind`` — see
+    ``_self_provider_pin_container``.
+
+    Wire format reference: knowledge/context/api-surface/widget_types_survey.md §HealthChart;
+    knowledge/context/api-surface/dashboard_selfprovider_pin_wire_format.md §HealthChart.
     """
     cfg = w.health_chart_config
     assert cfg is not None
     key = (cfg.adapter_kind, cfg.resource_kind)
     rk_id = f"resourceKind:id:{kind_index[key]}_::_"
+    resource_list: list = []
+    if w.self_provider:
+        container = _self_provider_pin_container(w, cfg.adapter_kind, cfg.resource_kind)
+        if container is not None:
+            c_adapter, c_kind, c_name = container
+            res_idx = resource_index[(c_adapter, c_kind)]
+            resource_list = [{"name": c_name, "id": f"resource:id:{res_idx}_::_"}]
     return {
         "collapsed": False,
         "id": w.widget_id,
@@ -1212,7 +1294,7 @@ def _health_chart_widget(
         "title": w.title,
         "config": {
             "refreshInterval": 300,
-            "resource": [],
+            "resource": resource_list,
             "refreshContent": {"refreshContent": False},
             "relationshipMode": {"relationshipMode": 0},
             "selfProvider": {"selfProvider": w.self_provider},
@@ -1728,7 +1810,7 @@ def _build_dashboard_obj(
         elif w.type == "MetricChart":
             widgets_json.append(_metric_chart_widget(w, kind_index))
         elif w.type == "HealthChart":
-            widgets_json.append(_health_chart_widget(w, kind_index))
+            widgets_json.append(_health_chart_widget(w, kind_index, resource_index))
         elif w.type == "ParetoAnalysis":
             widgets_json.append(_pareto_analysis_widget(w, kind_index))
         elif w.type == "AlertList":
@@ -1877,10 +1959,11 @@ def render_dashboards_bundle_json(
                     key = (rk.adapter_kind, rk.resource_kind)
                     if key not in kind_index:
                         kind_index[key] = len(kind_index)
-    # Build resource index for self-provider pinned View and ProblemAlertsList
-    # widgets.  Only those two widget types reference entries.resource[] in
-    # their widget configs; other self-provider types (Scoreboard, MetricChart,
-    # Heatmap, AlertList) use "resource": [] and don't need an entry here.
+    # Build resource index for self-provider pinned View, ProblemAlertsList,
+    # and HealthChart widgets.  Those are the widget types that reference
+    # entries.resource[] in their widget configs; other self-provider types
+    # (Scoreboard, MetricChart, Heatmap, AlertList) use "resource": [] and
+    # don't need an entry here.
     #
     # IMPORTANT: the key is the CONTAINER resource, not the raw pin target.
     # When the YAML pins a View to a leaf kind (e.g. VMWARE/HostSystem), the
@@ -1891,6 +1974,11 @@ def render_dashboards_bundle_json(
     # (e.g. vcfcf_compliance/ComplianceWorld) the kind name equals the resource
     # name, so _resolve_view_pin returns them unchanged.
     #
+    # HealthChart widgets don't require a ``pin:`` block — a self-provider
+    # HealthChart's own ``adapter_kind``/``resource_kind`` (already required
+    # for the metric's resourceKindId) doubles as the implicit pin target via
+    # ``_self_provider_pin_container``. An explicit ``pin:`` still wins if set.
+    #
     # The resource_index maps (container_adapter_kind, container_resource_kind)
     # to a 0-based slot matching entries.resource[].internalId.
     # resource_name_map stores the display name for each container key, which
@@ -1900,10 +1988,16 @@ def render_dashboards_bundle_json(
     resource_name_map: dict[tuple[str, str], str] = {}
     for d in dashboards:
         for w in d.widgets:
-            if w.self_provider and w.pin and w.type in ("View", "ProblemAlertsList"):
-                c_adapter, c_kind, c_name = _resolve_view_pin(
-                    w.pin.adapter_kind, w.pin.resource_kind
+            container = None
+            if w.self_provider and w.type in ("View", "ProblemAlertsList") and w.pin:
+                container = _resolve_view_pin(w.pin.adapter_kind, w.pin.resource_kind)
+            elif w.self_provider and w.type == "HealthChart" and w.health_chart_config:
+                cfg = w.health_chart_config
+                container = _self_provider_pin_container(
+                    w, cfg.adapter_kind, cfg.resource_kind
                 )
+            if container is not None:
+                c_adapter, c_kind, c_name = container
                 container_key = (c_adapter, c_kind)
                 if container_key not in resource_index:
                     resource_index[container_key] = len(resource_index)
