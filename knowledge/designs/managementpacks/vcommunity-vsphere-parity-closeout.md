@@ -63,3 +63,19 @@ four localization bundles + exact localizationKey matching
 pak repo has an in-flight localization fix branch
 (`fix/localization-raw-keys-build-2`) that this work must build on,
 not fight.
+
+## EXECUTED (2026-07-12)
+
+Closeout complete and certified
+(`knowledge/context/reviews/vcommunity-vsphere-parity-certification.md`:
+PARITY CERTIFIED, 5/5 original gaps closed or deferred-by-design).
+Delivered across pak builds 5-10 + factory PRs #46-#49 + sdk-buildkit
+1.0.7/1.0.8: 4-tier instanced license alert (version-aware,
+no-metric-no-fire), licensing view on instanced-group columns, 4 ported
+views incl. Top Talkers (subject.filter), 11 CSV-export VOA reports
+(subdir emission), DEF-008 + DEF-009 found/fixed/closed. Deferred by
+design, recorded in REFERENCE.md + CHANGELOG: 5 PDF VOA reports +
+34-dashboard input-dashboards template (future dashboard-author design);
+Windows-surface views (vcommunity-os, OPEN-B1). New residual R1 (LOW):
+4 additional nenic/nfnic VIB views in the source's 5-ViewDef container
+file, optional future port.

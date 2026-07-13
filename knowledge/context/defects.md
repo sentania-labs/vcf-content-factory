@@ -439,7 +439,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   alerts to their last symptom set only — earlier tiers silently dropped on
   every field install
 - **Severity:** blocking
-- **Status:** open
+- **Status:** closed
 - **Affects:** vcommunity-vsphere
 - **First-seen:** shipped dev-preview build `0.0.0.8`
   (`vcfcf_sdk_vcommunity_vsphere.0.0.0.8.pak`, installed on
@@ -506,6 +506,26 @@ reused. Field lines are `- **Field:** value` (parsed by
   bug in the field, and the fix is merged-pending on a branch, not yet in
   a release. This entry tracks **field state**, not code state — the code
   fix already exists (`3d5ba94`).
+- **Closing-evidence:** (2026-07-12) the criterion above was circular as written — the
+  defect-gate refuses the very `v*` tag the criterion requires (RULE-012
+  gates tags on open blocking defects; this entry was the open blocking
+  defect). Resolved by closing on the evidence that retires the actual
+  risk, ratified by the user via PR:
+  1. Renderer fix merged to factory main (PR #48, `3d5ba94` content).
+  2. **Published buildkit verified fixed** — `sdk-buildkit-1.0.8.tgz`
+     downloaded from the floating release and extracted: `alerts_render.py`
+     emits the `<SymptomSets>` wrapper (line 413); this is the
+     deterministic input to the official pak CI, so the propagation risk
+     the criterion guarded against is empirically retired
+     (`knowledge/context/reviews/vcommunity-vsphere-build-10.md` addendum).
+  3. **Live four-tier proof on devel** — build 10 (0.0.0.10, built from the
+     same renderer code) imports with all four tiers wired
+     (`SYMPTOM_SET_COMPOSITE operator=OR`, all four symptom IDs present).
+  **Post-tag confirmation (committed, non-skippable):** on the first `v*`
+  release, extract the CI-built pak and confirm the `SymptomSets` wrapper +
+  live four-tier import; if it fails, pull the release and REOPEN this
+  entry (per the sdk-adapter-reviewer's addendum condition in
+  `knowledge/context/reviews/vcommunity-vsphere-build-10.md`).
 - **Related:** `knowledge/context/wire-formats/alertdef_symptomset_import.md`,
   `knowledge/context/reviews/framework/import-fidelity-three-fixes.md`,
   DEF-008 (sibling XML content-import renderer defect, same pak, same
