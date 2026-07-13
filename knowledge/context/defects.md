@@ -605,3 +605,39 @@ reused. Field lines are `- **Field:** value` (parsed by
 - **Related:** knowledge/context/session-handoff.md (SM enablement decision — pak
   ships SMs unactivated by design, matching source; activation list of 13
   documented in the 2026-07-13 enablement report)
+
+### DEF-011
+
+- **Title:** vcommunity-vsphere: 0.x dev-preview pak attached to GitHub Release
+  v1.0.0.12 — adapter.yaml carried the dev version line at tag time (RULE-014)
+- **Severity:** blocking
+- **Status:** closed
+- **Affects:** vcommunity-vsphere
+- **First-seen:** first CI build of tag `v1.0.0.12` (2026-07-13, run 29291131479
+  re-run): release asset came out `vcfcf_sdk_vcommunity_vsphere.0.0.0.12.pak`.
+- **Source:** RULE-014 (`knowledge/rules/pak-version-lines.md`) — "A 0.x pak found
+  attached to a release … is a defect — file it"; caught by the release
+  runbook's non-skippable post-tag verification before any consumption.
+- **Summary:** The CI release path stamps `<adapter.yaml version>.<build_number>`,
+  but the pak's `adapter.yaml` still carried the dev-line `version: "0.0.0"`
+  (siblings carry `1.0.0`/`1.1.0`), so the tag-triggered release build produced
+  and attached a `0.0.0.12` pak. Root cause: the version line was never set to
+  the release line when this repo was instantiated; nothing guards it at tag
+  time. Smallest correct fix beyond the remediation below: the backlogged
+  `version_line_guard` pre-push hook (or a CI assertion that the tag's
+  `major.minor.patch` equals adapter.yaml's version) so a dev version line
+  refuses the tag instead of shipping.
+- **Closing-evidence:** Remediated same-day, before any consumer touched the
+  asset: bad release + tag deleted (`gh release delete v1.0.0.12 --cleanup-tag`
+  + remote tag delete); `adapter.yaml` version line fixed `0.0.0` → `1.0.0`
+  (pak repo commit `6277865`); tag `v1.0.0.12` re-pushed on the fixed commit;
+  CI run 29291404751 succeeded and the release now carries
+  `vcfcf_sdk_vcommunity_vsphere.1.0.0.12.pak` (519,713 bytes). Full post-tag
+  verification passed on the corrected asset: manifest `"version": "1.0.0.12"`,
+  DEF-009 four-tier SymptomSets XML, 4/4 DISCRETE distribution ViewDefs, 11/11
+  VOA report subdirs, PR #54 dashboard bindings, devel upgrade install
+  verified with live four-tier GET (2026-07-13 release-verification report).
+- **Related:** DEF-009 (the post-tag verification that caught this is DEF-009's
+  committed confirmation step), `knowledge/rules/pak-version-lines.md` (RULE-014),
+  session-handoff backlog (`version_line_guard` pre-push hook, now with a
+  concrete incident behind it).
