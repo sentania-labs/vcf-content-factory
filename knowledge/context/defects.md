@@ -565,3 +565,43 @@ reused. Field lines are `- **Field:** value` (parsed by
   `knowledge/context/reviews/framework/import-fidelity-three-fixes.md`,
   DEF-008 (sibling XML content-import renderer defect, same pak, same
   session's discovery lineage — instanced-attribute drop, closed)
+
+### DEF-010
+
+- **Title:** vcommunity-vsphere: "ESXi Bad Network Packets" super metric divides
+  by never-collected stat keys — SM never computes; its contribution to the
+  Cluster Performance rollup is silently absent (inherited verbatim from
+  source pak)
+- **Severity:** tracked
+- **Status:** open
+- **Affects:** vcommunity-vsphere
+- **First-seen:** dev-preview build `0.0.0.12` on devel (SM chain first
+  policy-enabled 2026-07-13; defect present in every build since the SMs
+  were ported, and in the source pak itself)
+- **Source:** content-installer SM-enablement diagnostic 2026-07-13 (poll
+  logs + stat-key decomposition in session scratchpad); corroborated against
+  `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/supermetrics/Bad Network Packets.json`
+  (byte-identical formula, same UUID `c0c98494-…`).
+- **Summary:** The SM's denominator references
+  `net|packetsRx_summation_sum` + `net|packetsTx_summation_sum`, which the
+  VMWARE adapter never populates on devel (every sibling
+  `net|errors*/dropped*_summation_sum` key carries data; the `packets*` pair
+  has zero datapoints over any window). The SM therefore never computes.
+  **Impact correction (2026-07-13, build-12 visual pass):** the rollups
+  (`vSphere Cluster Performance`, `vSphere Clusters not Green`) DO compute
+  once SM compute catches up (~1h after enablement — the initial 35-min
+  zero-datapoint window was compute cadence, not blockage; both HealthCharts
+  render live data, screenshots `shots-vsphere-b12/03,04`). The platform
+  tolerates the dead operand rather than nulling the chain. Real impact:
+  the leaf SM never has data, and the `Worst ESXi Bad Network Packets`
+  component's contribution to the performance KPI is silently absent —
+  the rollup computes from fewer inputs than designed, not empty.
+  Inherited defect: the formula is byte-identical to the source pak, so the
+  original pack has the same silent gap on such instances. Smallest
+  correct fix: replace the denominator with a stat the adapter actually
+  collects (or drop the ratio for a sum), diverging deliberately from the
+  source; needs a design decision + recon on which `net|` packet counters
+  exist across vSphere 8/9.x.
+- **Related:** knowledge/context/session-handoff.md (SM enablement decision — pak
+  ships SMs unactivated by design, matching source; activation list of 13
+  documented in the 2026-07-13 enablement report)
