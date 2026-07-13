@@ -506,6 +506,21 @@ reused. Field lines are `- **Field:** value` (parsed by
   bug in the field, and the fix is merged-pending on a branch, not yet in
   a release. This entry tracks **field state**, not code state — the code
   fix already exists (`3d5ba94`).
+- **Closure attempt (2026-07-12, REVERTED — Codex PR #50 P1 upheld):** an
+  attempt to close on staged evidence (fix merged #48; published
+  buildkit grep-verified; build-10 live four-tier proof) was reverted
+  when the criterion's actual test — BUILD from the published tarball —
+  failed: `sdk-buildkit-1.0.8`'s `sdk_builder.py:2146` unconditionally
+  imports factory-only `vcfops_dashboards.render` in the
+  reports-with-embedded-views path, so the real `v*` CI build would
+  fail on this adapter today. Grep-level presence of the fix was not
+  build-level proof. New blocker: TOOLSET GAP in the buildkit's
+  vendoring/import-rewrite (the kit vendors the function locally at
+  `dashboard_render.py` but the new import added in PR #49 was never
+  rewritten). Sequence to close: tooling fixes the import + adds an
+  isolated-build regression exercising the reports path → buildkit
+  1.0.9 published → tarball-build + devel install + live four-tier
+  proof (the run that caught this) → THEN close with that evidence.
 - **Related:** `knowledge/context/wire-formats/alertdef_symptomset_import.md`,
   `knowledge/context/reviews/framework/import-fidelity-three-fixes.md`,
   DEF-008 (sibling XML content-import renderer defect, same pak, same
