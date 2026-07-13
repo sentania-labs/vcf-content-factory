@@ -385,3 +385,129 @@ self-provider Views now emit the exact vendor wire shape (top-level
 resource site) — the pin binds and the config matches the known-good export. The
 only outstanding action before the PR is a `content-packager` rebuild of every
 bundle that carries these dashboards, since their JSON changed.
+
+---
+
+## ADDENDUM 3 — 2026-07-13 — review of follow-up commit `31e2865`
+
+- **Commit reviewed:** `31e2865` (child of `8e44ba9`) — "remove container-keyed
+  traversalSpecId enrichment, emit empty nested spec unconditionally".
+- **Trigger:** Codex P1 on PR #54, upheld by the coordinator — the removed
+  `_VIEW_PIN_TRAVERSAL_SPEC` table was keyed on the pin *container*, but a
+  traversal spec constrains the *view subject's* hierarchy. It would have
+  injected `"vSphere Hosts and Clusters-VMWARE-vSphere World"` into
+  `content/dashboards/vks_core_consumption.yaml`'s pinned View, whose subject
+  (`vks_core_consumption_by_vcenter.yaml`) is `VMwareAdapter Instance` — NOT in
+  that hierarchy — regressing a real, checked-in, working widget.
+- **Diff scope (verified):** `src/vcfops_dashboards/render.py` (table deleted →
+  explanatory NOTE; `_view_widget` nested site emits `""` unconditionally), the
+  wire-format doc (SECOND CORRECTION block), and the test file. Nothing else. No
+  dangling `_VIEW_PIN_TRAVERSAL_SPEC` reference remains in live code (grep: only
+  comment/docstring mentions).
+
+### Checks re-run (independently)
+
+| Check | Result |
+|---|---|
+| 7-package `validate` chain | all exit 0 |
+| targeted + external-passthrough + buildkit | **23 passed** (13 + 6 + 4) |
+| Full suite, not-slow (`-n auto --dist=loadgroup`) | **554 passed / 4 skipped** |
+| Render-regression, factory-native corpus, `8e44ba9` vs HEAD `31e2865`, `PYTHONHASHSEED=0` | **exactly 4 lines** — nested `traversalSpecId` spec-string → `""`, nothing else |
+| VKS widget vs checked-in working export | byte-match on both traversalSpecId fields |
+| CP2 (vcommunity) binding fields | selfProvider:true + full resource entry intact |
+
+### Per-item verdict
+
+**Item 1 — nested `config.resource.traversalSpecId` unconditionally `""`: RESOLVED.**
+Re-rendered both the factory-native corpus and vcommunity CP2: every self-provider
+pinned View now emits nested `traversalSpecId: ""`; the container-keyed lookup is
+gone (table deleted, no residual reference).
+
+**Item 2 — top-level `null` / `refreshContent` `false` unchanged: RESOLVED.**
+Confirmed in the render output (top-level `traversalSpecId: null`,
+`refreshContent.refreshContent: false`) and in the diff — those lines are
+untouched from `8e44ba9`.
+
+**Item 3 — table replaced with NOTE comment: RESOLVED.** `_VIEW_PIN_TRAVERSAL_SPEC`
+is deleted; in its place a NOTE explains why container-keyed injection was unsound,
+cites the VKS regression and the vendor ESXi export, and instructs any future spec
+mechanism to be keyed on view subject (not container) with evidence.
+
+**Item 4 — second CORRECTION block in wire-format doc: RESOLVED.**
+`dashboard_selfprovider_pin_wire_format.md` carries a dated
+**SECOND CORRECTION (Codex P1 on PR #54, upheld, 2026-07-13)** block plus an
+updated hypothesis-1 confidence line ("Binding does not require the traversalSpecId
+string"); the prior prose is retained, marked superseded. Non-destructive,
+reviewable.
+
+**Item 5 — tests updated to unconditional-empty, binding assertions intact:
+RESOLVED.** Diff'd every `assert`: the ONLY removed assertions are the two
+`resource.traversalSpecId == <spec-string>` (now `== ""`); one full-dict assertion
+had its `traversalSpecId` value changed to `""` in place. Every binding assertion
+survives — current file still has 6 `selfProvider is True`, 4 `entries.resource`,
+`resourceKindId`, and 10 `resource:id:0_::_` checks. No binding assertion weakened.
+Tests renamed to reflect the empty-spec behavior. 13/13 green.
+
+**Item 6 — VKS widget byte-matches working export: RESOLVED.** Rendered
+`content/dashboards/vks_core_consumption.yaml`'s "VKS Core Consumption by vCenter"
+widget: `selfProvider:true`, top-level `traversalSpecId: None`, nested
+`traversalSpecId: ""` — byte-identical on both traversalSpecId fields to the
+checked-in working export (`knowledge/context/exports/working_dashboards.json`,
+dashboard `62652554-b2a7-46ef-a7cd-8163ab3b59f1`).
+
+### Targeted hunt (as briefed)
+
+**(a) Render-regression — CLEAN.** `8e44ba9` → HEAD deltas are exactly 4 lines,
+all `traversalSpecId: "vSphere Hosts and Clusters-VMWARE-vSphere World"` → `""` on
+the 4 previously-enriched self-provider Views. No other byte moves. Same single
+delta on vcommunity CP2. Anchor `00d3382` clear — the change is unconditional and
+global on both the standalone and pak paths; in fact it *removes* a latent
+global-default leak (the container-keyed table misfired for out-of-hierarchy
+subjects like VKS).
+
+**(b) No binding assertion weakened — CONFIRMED** (see Item 5).
+
+**(c) Load-bearing fixes untouched — CONFIRMED.** The diff touches no
+binding line: `_self_provider_pin_container` (HealthChart gate), `_health_chart_widget`,
+the UUID-passthrough `view_def_id` + `if w.self_provider and w.pin` resource
+emission, the `resource_index` build loop, and `entries.resource` are all
+unchanged. CP2's HealthChart pins and the external-UUID View pin still emit their
+bound resource + `entries.resource` slot.
+
+### Note on CP2 deviation from the vendor (intended, not a finding)
+
+HEAD now emits nested `traversalSpecId: ""` for CP2's "vSphere Clusters" widget,
+whereas the vendor CP2 export carries the spec string there. This is the deliberate,
+Codex-P1-upheld tradeoff: container-keyed injection is unsound; empty is a
+vendor-proven-working shape (ESXi Host Details export, 5 widgets) and matches our
+own VKS working export; the spec string is not required for binding (the bound
+resource entry + `selfProvider:true`, which DO match the vendor, provide it). Not a
+regression — an optional, non-required enrichment removed to avoid a proven
+regression elsewhere.
+
+### Carry-forward / still open
+
+**WARNING 3 (stale dist zips) — STILL OPEN.** `render.py` changed again and the
+rendered wire output of the 4 factory-native self-provider Views (and vcommunity
+CP2) changed (nested `traversalSpecId` now `""`). Any dist bundle carrying these
+dashboards is stale versus HEAD. Orchestrator must rebuild affected `bundles/`
+before/with the PR. Dimension 9.
+
+**NIT (carried) — `selectFirstRow: true`** vs vendor `false`, pre-existing global,
+out of scope.
+
+### Addendum 3 verdict
+
+**APPROVE** (0 BLOCKING). All six items RESOLVED and independently verified: the
+unsound container-keyed enrichment is gone, the nested spec is unconditionally
+empty, the VKS working widget is no longer at risk of regression (byte-matches its
+export), and every load-bearing binding fix (HealthChart pin, external-UUID View
+pin, `entries.resource`) plus its test coverage is intact. Only carry-forward
+WARNING 3 (stale zips) and the pre-existing `selectFirstRow` NIT remain.
+
+**If shipped as-is:** self-provider pinned Views across the corpus (VKS, the 3
+other VMWARE/vSphere World Views, and vcommunity CP2) emit `selfProvider:true` +
+a bound `vSphere World` resource entry + empty nested/top-level traversalSpecId +
+`refreshContent:false` — the proven-working shape that matches the checked-in VKS
+export and does not regress its out-of-hierarchy subject. The one remaining pre-PR
+action is a `content-packager` rebuild of every bundle carrying these dashboards.
