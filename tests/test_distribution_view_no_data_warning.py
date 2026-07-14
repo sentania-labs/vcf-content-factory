@@ -27,6 +27,19 @@ Cases covered:
        content/sdk-adapters/vcommunity-vsphere/views/ (the four originally
        fixed ESXi Host Details views plus every view touched by the
        DEF-012 remediation sweep) must not warn.
+  T9 — PR #57 P2 partial-fix regression: dynamic DISCRETE buckets present
+       but is_property missing -> still warns (the outer buckets-gate used
+       to suppress this silently).
+  T10 — PR #57 P2 partial-fix regression: is_property: true present but
+       buckets missing/fixed -> still warns (the column-level `is_property:
+       continue` used to suppress this silently).
+  T11 — full fixed shape (is_property + dynamic DISCRETE buckets) with
+       is_string_attribute: false -> no warning (vendor exception: vSphere
+       Cluster Admission Control Policy / DRS Automation Level use this
+       shape deliberately; is_string_attribute is not part of the
+       suppression condition).
+  T12 — real-repo regression: the unfixed vcommunity (vendor original)
+       control corpus must still warn for its broken distribution views.
 """
 from __future__ import annotations
 
@@ -188,6 +201,83 @@ def test_list_view_with_property_column_does_not_warn(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# T9 — partial fix: dynamic DISCRETE buckets present, is_property missing
+# ---------------------------------------------------------------------------
+
+def test_dynamic_discrete_buckets_without_is_property_warns(tmp_path):
+    """PR #57 P2: the outer `buckets is not None and not is_dynamic` gate
+    used to suppress this entirely — dynamic DISCRETE buckets with no
+    is_property marker on the column still renders isProperty=false and
+    shows "No data to display"."""
+    views_dir = tmp_path / "views"
+    data = _base_view("Missing IsProperty Distribution", "summary|version")
+    data["buckets"] = {"dynamic": True, "calc_function": "DISCRETE"}
+    p = _write_view(views_dir, "missing_is_property", data)
+    view, warned = _load_and_capture(p)
+    assert len(warned) == 1, f"expected exactly one warning, got: {warned}"
+    assert "summary|version" in warned[0]
+    assert "is_property: true" in warned[0]
+
+
+# ---------------------------------------------------------------------------
+# T10 — partial fix: is_property true, buckets missing/fixed
+# ---------------------------------------------------------------------------
+
+def test_is_property_without_dynamic_discrete_buckets_warns(tmp_path):
+    """PR #57 P2: the column-level `if c.is_property: continue` used to
+    suppress this entirely — is_property: true with no (or fixed) buckets
+    still renders a fixed numeric histogram over a string property."""
+    views_dir = tmp_path / "views"
+    p = _write_view(
+        views_dir, "missing_buckets",
+        _base_view(
+            "Missing Buckets Distribution", "summary|version",
+            extra_column={"is_property": True, "is_string_attribute": True},
+        ),
+    )
+    view, warned = _load_and_capture(p)
+    assert len(warned) == 1, f"expected exactly one warning, got: {warned}"
+    assert "summary|version" in warned[0]
+    assert "buckets: {dynamic: true, calc_function: DISCRETE}" in warned[0]
+
+
+def test_is_property_with_explicit_fixed_buckets_warns(tmp_path):
+    """Same partial-fix shape as above but with an explicit (non-dynamic)
+    buckets block instead of an absent one."""
+    views_dir = tmp_path / "views"
+    data = _base_view(
+        "Missing Dynamic Buckets Distribution", "hardware|vendorModel",
+        extra_column={"is_property": True, "is_string_attribute": True},
+    )
+    data["buckets"] = {"min_value": 0.0, "max_value": 100.0, "count": 10}
+    p = _write_view(views_dir, "fixed_not_dynamic", data)
+    view, warned = _load_and_capture(p)
+    assert len(warned) == 1, f"expected exactly one warning, got: {warned}"
+    assert "hardware|vendorModel" in warned[0]
+
+
+# ---------------------------------------------------------------------------
+# T11 — full fixed shape with is_string_attribute: false (vendor exception)
+# ---------------------------------------------------------------------------
+
+def test_fixed_shape_with_is_string_attribute_false_does_not_warn(tmp_path):
+    """Vendor exception: vSphere Cluster Admission Control Policy and DRS
+    Automation Level (content/sdk-adapters/vcommunity-vsphere/views/) use
+    is_property: true + is_string_attribute: false + dynamic DISCRETE
+    buckets deliberately. is_string_attribute must not gate the warning."""
+    views_dir = tmp_path / "views"
+    data = _base_view(
+        "Admission Control Policy Distribution",
+        "configuration|dasConfig|admissionControlPolicyId",
+        extra_column={"is_property": True, "is_string_attribute": False},
+    )
+    data["buckets"] = {"dynamic": True, "calc_function": "DISCRETE"}
+    p = _write_view(views_dir, "admission_control_policy", data)
+    view, warned = _load_and_capture(p)
+    assert warned == [], f"expected no warning for vendor-exception shape, got: {warned}"
+
+
+# ---------------------------------------------------------------------------
 # T8 — real-repo regression: vcommunity-vsphere distribution views
 # ---------------------------------------------------------------------------
 
@@ -224,4 +314,46 @@ def test_real_repo_vcommunity_vsphere_distribution_views_do_not_warn():
     assert all_warnings == [], (
         f"expected zero distribution-view 'no data' warnings in the fixed "
         f"vcommunity-vsphere corpus, got: {all_warnings}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T12 — real-repo regression: unfixed vcommunity control corpus still warns
+# ---------------------------------------------------------------------------
+
+def test_real_repo_vcommunity_control_corpus_still_warns():
+    """The vendor-original vcommunity/views/ corpus (pre-DEF-012-fix) is the
+    negative control: it must still trigger the guard for its broken
+    distribution views (property-looking attributes with no is_property /
+    no dynamic DISCRETE buckets), proving the restructured guard didn't
+    become permissive."""
+    from vcfops_dashboards.loader import load_view
+
+    repo_root = Path(__file__).parent.parent
+    views_dir = repo_root / "content" / "sdk-adapters" / "vcommunity" / "views"
+    if not views_dir.exists():
+        pytest.skip("vcommunity sdk-adapter control corpus not present")
+
+    yaml_files = sorted(views_dir.glob("*.yaml"))
+    distribution_files = []
+    for f in yaml_files:
+        raw = yaml.safe_load(f.read_text())
+        if isinstance(raw, dict) and raw.get("data_type") == "distribution":
+            distribution_files.append(f)
+
+    assert distribution_files, "expected at least one distribution view in the control corpus"
+
+    all_warnings = []
+    for f in distribution_files:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            load_view(f, enforce_framework_prefix=False)
+        for w in caught:
+            if issubclass(w.category, UserWarning) and "No data to display" in str(w.message):
+                all_warnings.append((f.name, str(w.message)))
+
+    assert all_warnings, (
+        "expected at least one distribution-view 'no data' warning in the "
+        "unfixed vcommunity control corpus — the guard should not have "
+        "gone silent on the known-broken vendor originals"
     )

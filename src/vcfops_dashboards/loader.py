@@ -472,36 +472,61 @@ class ViewDef:
         # intentionally-numeric distributions (buckets not set, or set
         # non-dynamic on purpose) must not break. See
         # knowledge/context/api-surface/distribution_view_no_data.md.
-        if (
-            self.data_type == "distribution"
-            and self.buckets is not None
-            and not self.buckets.is_dynamic
-        ):
+        #
+        # The fully-fixed shape requires BOTH pieces on the property-hinted
+        # column: `is_property: true` AND view-level dynamic DISCRETE
+        # buckets (`buckets: {dynamic: true, calc_function: DISCRETE}`).
+        # Either piece alone is a *partial* fix that still renders "No data
+        # to display" (Codex PR #57 P2 finding — the original guard's
+        # outer/column gates each independently suppressed on a partial
+        # fix). `is_string_attribute` is deliberately NOT part of the
+        # suppression condition: two legitimate vendor views (vSphere
+        # Cluster Admission Control Policy, vSphere Cluster DRS Automation
+        # Level, in content/sdk-adapters/vcommunity-vsphere/views/) use
+        # is_property: true + is_string_attribute: false + dynamic DISCRETE
+        # buckets and must not warn.
+        if self.data_type == "distribution":
+            buckets_dynamic_discrete = (
+                self.buckets is not None
+                and self.buckets.is_dynamic
+                and self.buckets.calc_function == "DISCRETE"
+            )
             for c in self.columns:
                 attr_lower = c.attribute.lower()
-                if attr_lower.startswith("supermetric:") or c.is_property:
+                if attr_lower.startswith("supermetric:"):
                     continue
-                if any(hint in attr_lower for hint in _DISTRIBUTION_PROPERTY_ATTR_HINTS):
-                    warnings.warn(
-                        f"view {self.name!r} column {c.display_name!r} "
-                        f"(attribute {c.attribute!r}): data_type is "
-                        "'distribution' and this attribute looks like a "
-                        "string/enum resource property, but the column is "
-                        "not marked is_property and the buckets are not "
-                        "dynamic — it will render as a fixed numeric "
-                        "histogram (min/max/count) instead of a discrete "
-                        "bucket set, which silently produces \"No data to "
-                        "display\" (DEF-012; see "
-                        "knowledge/context/api-surface/"
-                        "distribution_view_no_data.md). If this attribute "
-                        "really is a string property, fix with: "
-                        "is_property: true, is_string_attribute: true, and "
-                        "buckets: {dynamic: true, calc_function: DISCRETE}. "
-                        "If it is genuinely numeric, this warning is a "
-                        "false positive and can be ignored.",
-                        UserWarning,
-                        stacklevel=2,
+                if not any(hint in attr_lower for hint in _DISTRIBUTION_PROPERTY_ATTR_HINTS):
+                    continue
+                if c.is_property and buckets_dynamic_discrete:
+                    # Fully-fixed shape — silent.
+                    continue
+                missing: list[str] = []
+                if not c.is_property:
+                    missing.append("is_property: true")
+                if not buckets_dynamic_discrete:
+                    missing.append(
+                        "buckets: {dynamic: true, calc_function: DISCRETE}"
                     )
+                warnings.warn(
+                    f"view {self.name!r} column {c.display_name!r} "
+                    f"(attribute {c.attribute!r}): data_type is "
+                    "'distribution' and this attribute looks like a "
+                    "string/enum resource property, but "
+                    + " and ".join(missing)
+                    + " — it will render as a fixed numeric histogram "
+                    "(min/max/count) instead of a discrete bucket set, "
+                    "which silently produces \"No data to display\" "
+                    "(DEF-012; see knowledge/context/api-surface/"
+                    "distribution_view_no_data.md). If this attribute "
+                    "really is a string property, fix with: "
+                    "is_property: true and "
+                    "buckets: {dynamic: true, calc_function: DISCRETE} "
+                    "(is_string_attribute is independent and does not "
+                    "affect this warning). If it is genuinely numeric, "
+                    "this warning is a false positive and can be ignored.",
+                    UserWarning,
+                    stacklevel=2,
+                )
         # Time window validation
         if self.time_window is not None:
             tw = self.time_window
