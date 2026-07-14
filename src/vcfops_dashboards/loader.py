@@ -191,6 +191,37 @@ _VALID_PRESENTATIONS: dict[str, set[str]] = {
     "trend": {"line-chart"},
 }
 
+# Attribute-name substrings (case-insensitive, matched anywhere in the
+# `attribute:` key) that historically indicate a string/enum/boolean VCF Ops
+# *resource property* rather than a genuine numeric metric. Used only to
+# power the distribution-view "no data" validate-time WARNING below.
+#
+# Root cause: DEF-012, documented in
+# knowledge/context/api-surface/distribution_view_no_data.md. A
+# `data_type: distribution` column that is really a string property but is
+# declared `is_property: false` (the default) renders with a fixed numeric
+# histogram (buckets min/max/count) instead of a DISCRETE bucket set — the
+# widget then queries the metric subsystem for a numeric metric that does
+# not exist and silently shows "No data to display" / "Metrics displaying
+# 0 of N". The fix shape is `is_property: true` + `is_string_attribute:
+# true` + `buckets: {dynamic: true, calc_function: DISCRETE}`.
+#
+# This is deliberately an allowlist of *suspicion*, not a blocklist of
+# certainty: a false negative (an unusual property name this list doesn't
+# catch) is acceptable for a WARNING; a false positive on a genuinely
+# numeric metric distribution is not. Calibrated against every real
+# `data_type: distribution` view attribute in
+# content/sdk-adapters/vcommunity-vsphere/views/ (2026-07-14, tooling) —
+# zero collisions with the numeric set (counts, sizes, GHz, percentages,
+# reservations, limits, latencies, capacities, VMDK/RDM counts, datastore/
+# host counts) while catching the version/model/enabled/policy/available/
+# behavior/technology-shaped properties that produced DEF-012.
+_DISTRIBUTION_PROPERTY_ATTR_HINTS = (
+    "version", "model", "polic", "enabled", "available", "allow",
+    "behavior", "technolo", "vendor", "status", "state", "capabilit",
+    "name", "type", "mode", "level",
+)
+
 
 @dataclass
 class BucketsConfig:
@@ -434,6 +465,43 @@ class ViewDef:
                 f"view {self.name}: presentation {self.presentation!r} is not "
                 f"valid for data_type {self.data_type!r}; allowed: {sorted(allowed)}"
             )
+        # Distribution-view "no data" footgun (DEF-012): a
+        # property-looking attribute rendered with a fixed numeric histogram
+        # (buckets not dynamic) instead of a DISCRETE bucket set silently
+        # produces "No data to display". WARNING only — existing
+        # intentionally-numeric distributions (buckets not set, or set
+        # non-dynamic on purpose) must not break. See
+        # knowledge/context/api-surface/distribution_view_no_data.md.
+        if (
+            self.data_type == "distribution"
+            and self.buckets is not None
+            and not self.buckets.is_dynamic
+        ):
+            for c in self.columns:
+                attr_lower = c.attribute.lower()
+                if attr_lower.startswith("supermetric:") or c.is_property:
+                    continue
+                if any(hint in attr_lower for hint in _DISTRIBUTION_PROPERTY_ATTR_HINTS):
+                    warnings.warn(
+                        f"view {self.name!r} column {c.display_name!r} "
+                        f"(attribute {c.attribute!r}): data_type is "
+                        "'distribution' and this attribute looks like a "
+                        "string/enum resource property, but the column is "
+                        "not marked is_property and the buckets are not "
+                        "dynamic — it will render as a fixed numeric "
+                        "histogram (min/max/count) instead of a discrete "
+                        "bucket set, which silently produces \"No data to "
+                        "display\" (DEF-012; see "
+                        "knowledge/context/api-surface/"
+                        "distribution_view_no_data.md). If this attribute "
+                        "really is a string property, fix with: "
+                        "is_property: true, is_string_attribute: true, and "
+                        "buckets: {dynamic: true, calc_function: DISCRETE}. "
+                        "If it is genuinely numeric, this warning is a "
+                        "false positive and can be ignored.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
         # Time window validation
         if self.time_window is not None:
             tw = self.time_window

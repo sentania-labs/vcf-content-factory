@@ -242,3 +242,51 @@ checks on pak-installed views (which `/api/content/operations/export` type
 "custom" views). Does NOT expose attribute items or buckets-control detail —
 the attribute-level verification gap documented above still stands; browser
 render remains the only proof of distribution-view internals.
+
+## Addendum (2026-07-14, tooling) — validate-time WARNING guard landed
+
+Implemented the backlogged guard from "Fix ownership decision" item 3
+(`ViewDef.validate()`, `src/vcfops_dashboards/loader.py`). It is a
+**WARNING**, not an error — a data-less numeric histogram is a rendering
+defect, not a structurally invalid YAML document, and existing
+intentionally-numeric fixed-histogram distributions must keep validating.
+
+**Trigger condition:** `data_type: distribution`, the resolved `buckets`
+config is not dynamic (`is_dynamic=False` — true both when the author omits
+`buckets:` entirely, since the loader defaults to a fixed `[0,100]/10`
+numeric histogram, and when the author explicitly sets a fixed histogram),
+and a column is *not* `is_property: true` but its `attribute:` key contains
+one of a curated set of case-insensitive substrings that historically mark
+a string/enum/boolean resource property: `version, model, polic, enabled,
+available, allow, behavior, technolo, vendor, status, state, capabilit,
+name, type, mode, level`. `supermetric:"..."` formula attributes are always
+exempt (supermetric output is numeric by construction).
+
+**Calibration (2026-07-14):** the list was built and checked against every
+real `data_type: distribution` view attribute in
+`content/sdk-adapters/vcommunity-vsphere/views/` — by the time this guard
+landed, a parallel remediation sweep (DEF-012 close-out) had already fixed
+every property-shaped distribution in that adapter (`is_property: true` +
+`is_string_attribute: true` + `buckets: {dynamic: true, calc_function:
+DISCRETE}`), so the fixed corpus produces **zero** warnings and the
+genuinely-numeric corpus (counts, sizes, GHz, percentages, reservations,
+limits, latencies, capacities, VMDK/RDM counts, datastore/host counts,
+supermetric references) also produces **zero** warnings. The still-broken
+sibling adapter `content/sdk-adapters/vcommunity/` (gitignored, retiring
+per `knowledge/context/managed_paks.md`) was used as a live positive
+control: the guard correctly fires on 20 of its ~21 broken distribution
+views. The one known miss is `vSphere Cluster DRS Automation Level`
+(attribute `configuration|drsconfig|vmotionRate` — an enum masquerading
+under a "Rate" name with no keyword-list hit); this is an accepted false
+negative for a heuristic warning, not a blocking gap — the `vmotionRate`
+sibling in the already-fixed `vcommunity-vsphere` corpus is correctly
+`is_property: true` and does not need the guard to catch it there.
+
+**Design constraint honored:** the hint list is an allowlist of suspicion
+(favor false negatives), never a blocklist of certainty — a false positive
+on a genuinely numeric distribution was treated as disqualifying during
+calibration, a false negative on an unusual property name was not.
+
+Tests: `tests/test_distribution_view_no_data_warning.py` (synthetic
+warn/no-warn cases plus a real-repo regression asserting the full
+`vcommunity-vsphere` distribution-view corpus stays silent).

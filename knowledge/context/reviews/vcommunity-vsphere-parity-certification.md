@@ -140,6 +140,22 @@ from upstream updates.
   no action.
 - No other open defect names `vcommunity-vsphere`.
 
+## Addendum 2026-07-14 — scope correction (orchestrator, per user direction)
+
+This certification is a **ledger** certification against the original gap
+checklist; it is not, and must not be read as, a whole-pack content-parity
+claim. Dashboards and their backing views are content, and the pack does
+**not** hold full content parity with the source: **DEF-012** (registered
+2026-07-14, blocking, open) — six string-property distribution views on
+ESXi Configuration 2.0 plus siblings on other dashboards ship as numeric
+histograms and render "No data", a DRIFT vs the vendor source introduced by
+the view conversion and present in released `v1.0.0.12`. Likewise the
+2026-07-13 "PARITY HOLDS" live comparison was scoped to the collected
+metric/property namespace + SM definitions only. User direction of record:
+visual defects are parity defects. Whole-pack parity is re-assertable only
+after DEF-012 (and the Cluster Performance 2.0 pin-binding defect, once
+registered or fixed) closes.
+
 ## Bottom line
 Parity closeout closed what the original review found: **5/5 checklist gaps
 closed or deferred-by-design, the broken licensing view repaired, all BY-DESIGN
