@@ -189,13 +189,17 @@ not a gate.
   during curation — these items were NOT resolved when the handoff file was
   retired, contrary to its "consumed" status:
 - **Detail:**
-  1. `src/vcfops_dashboards/packager.py:7` docstring cites
-     `memory/vcfops_content_import_wire_format.md` — the `memory/` path is
-     retired; the wire-format doc lives under `knowledge/context/wire-formats/`.
-     (Confirmed still stale 2026-07-16.)
-  2. Handoff also listed "annotated dead citation in extractor.py" — no
-     `extractor.py` exists under `src/vcfops_packaging/`; locate the intended
-     module and verify before closing.
+  1. ~~`src/vcfops_dashboards/packager.py:7` docstring cites
+     `memory/vcfops_content_import_wire_format.md`~~ **RESOLVED 2026-07-16:**
+     citation fixed to `knowledge/context/wire-formats/wire_formats.md`
+     (tooling, framework-reviewer APPROVE —
+     `knowledge/context/reviews/framework/dashboards-packager-2026-07-16.md`).
+  2. ~~"annotated dead citation in extractor.py"~~ **RESOLVED 2026-07-16:**
+     the module is `src/vcfops_extractor/extractor.py` (not vcfops_packaging);
+     its one dead citation (~lines 2044-2051) was already correctly
+     self-annotated by the reorg-v2 phase 2 sweep — deliberate
+     preserved-principle annotation, no change needed. Verified by both
+     tooling and framework-reviewer.
   3. "unifi build 12 (cross_mp_edges docs stanza)" — no `cross_mp_edges`
      mention found in unifi README/docs as of 2026-07-16; verify whether the
      stanza shipped in a generated doc or is still pending.
