@@ -19,5 +19,5 @@ Read every rule at session start. Rules are absolute — obey without question.
 | RULE-013 | Framework Python (`src/vcfops_*/`) changes pass `framework-reviewer` before merge | [framework-review-gate.md](framework-review-gate.md) |
 | RULE-014 | Pak version lines: `0.x` = hand-built, `1.x+` = CI release only | [pak-version-lines.md](pak-version-lines.md) |
 | RULE-015 | Cited artifacts must be committed or registry-fetchable — no ephemeral citations | [cited-artifacts-reproducible.md](cited-artifacts-reproducible.md) |
-| RULE-016 | `reference/**` is read-only; corrections live in `context/` | [reference-immutable.md](reference-immutable.md) |
-| RULE-017 | Distilled docs carry provenance: verbatim extract → `reference/docs/extracted/`, digest → `context/` with citation | [distilled-doc-provenance.md](distilled-doc-provenance.md) |
+| RULE-016 | `reference/**` is read-only; corrections live in `knowledge/context/` | [reference-immutable.md](reference-immutable.md) |
+| RULE-017 | Distilled docs carry provenance: verbatim extract → `reference/docs/extracted/`, digest → `knowledge/context/` with citation | [distilled-doc-provenance.md](distilled-doc-provenance.md) |

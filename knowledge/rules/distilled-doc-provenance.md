@@ -9,7 +9,7 @@ one of two forms, and each has a home:
    it inherits `reference/**` immutability (RULE-016). Adding a new
    extract is allowed; editing one is not.
 2. **Digest** — our summary, interpretation, or correction of vendor
-   material. Lives in `context/` and **must cite the extract or source
+   material. Lives in `knowledge/context/` and **must cite the extract or source
    file by path** so the next reader can check the digest against the
    original.
 
@@ -17,9 +17,9 @@ Consequences:
 
 - A digest with no citation to its source is a defect in the digest
   (curator hunts these alongside DEAD-REF).
-- Never blend the two: a `context/` file may quote short passages with
+- Never blend the two: a `knowledge/context/` file may quote short passages with
   citation, but a wholesale vendor dump belongs in
-  `reference/docs/extracted/`, not in `context/`.
+  `reference/docs/extracted/`, not in `knowledge/context/`.
 - Citations obey RULE-015 — the cited extract must be committed or
   registry-fetchable.
 

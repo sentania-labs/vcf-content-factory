@@ -602,9 +602,24 @@ reused. Field lines are `- **Field:** value` (parsed by
   collects (or drop the ratio for a sum), diverging deliberately from the
   source; needs a design decision + recon on which `net|` packet counters
   exist across vSphere 8/9.x.
-- **Related:** knowledge/context/session-handoff.md (SM enablement decision — pak
-  ships SMs unactivated by design, matching source; activation list of 13
-  documented in the 2026-07-13 enablement report)
+- **Related:** SM enablement decision (user, 2026-07-13): the pak ships SMs
+  unactivated by design, matching source behavior — corpus survey found no
+  pak that ships SMs enables them (source vCommunity: one README sentence
+  "bulk enable them in Policy"; TVS OracleEM: 5 SMs, no policy; hardware
+  vCommunity ships a policy but only for alerts). SMs ship with
+  resourceKinds assignment only; activation is a manual user step. The
+  2026-07-13 devel enablement of the Cluster Performance chain was a
+  lab-side manual diagnostic step, not product behavior. The 13 SMs
+  activated are the dependency closure of the two rollups named in the
+  Summary, reconstructable from the pak's SM cross-references
+  (`content/sdk-adapters/vcommunity-vsphere/supermetrics/`): vSphere
+  Cluster Performance; vSphere Clusters not Green; vSphere Cluster CPU
+  Ready; vSphere Cluster CPU Co-Stop; vSphere Cluster Memory Contention;
+  vSphere Cluster Memory Zip Swap; vSphere Cluster Memory Ballooned;
+  vSphere Cluster vMotions; vSphere Cluster Worst VM CPU Ready; vSphere
+  Cluster Worst VM CPU Co-Stop; vSphere Cluster Worst VM Memory
+  Contention; vSphere Cluster Worst ESXi Bad Network Packets; ESXi Bad
+  Network Packets (this defect's SM, leaf of the chain).
 
 ### DEF-012
 
@@ -682,5 +697,5 @@ reused. Field lines are `- **Field:** value` (parsed by
   verified with live four-tier GET (2026-07-13 release-verification report).
 - **Related:** DEF-009 (the post-tag verification that caught this is DEF-009's
   committed confirmation step), `knowledge/rules/pak-version-lines.md` (RULE-014),
-  session-handoff backlog (`version_line_guard` pre-push hook, now with a
-  concrete incident behind it).
+  FB-008 in `knowledge/context/feedback_queue.md` (`version_line_guard`
+  pre-push hook, now with a concrete incident behind it).
