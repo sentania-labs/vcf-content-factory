@@ -608,9 +608,18 @@ reused. Field lines are `- **Field:** value` (parsed by
   "bulk enable them in Policy"; TVS OracleEM: 5 SMs, no policy; hardware
   vCommunity ships a policy but only for alerts). SMs ship with
   resourceKinds assignment only; activation is a manual user step. The
-  2026-07-13 devel enablement of the Cluster Performance chain (activation
-  list of 13, documented in the enablement report) was a lab-side manual
-  diagnostic step, not product behavior.
+  2026-07-13 devel enablement of the Cluster Performance chain was a
+  lab-side manual diagnostic step, not product behavior. The 13 SMs
+  activated are the dependency closure of the two rollups named in the
+  Summary, reconstructable from the pak's SM cross-references
+  (`content/sdk-adapters/vcommunity-vsphere/supermetrics/`): vSphere
+  Cluster Performance; vSphere Clusters not Green; vSphere Cluster CPU
+  Ready; vSphere Cluster CPU Co-Stop; vSphere Cluster Memory Contention;
+  vSphere Cluster Memory Zip Swap; vSphere Cluster Memory Ballooned;
+  vSphere Cluster vMotions; vSphere Cluster Worst VM CPU Ready; vSphere
+  Cluster Worst VM CPU Co-Stop; vSphere Cluster Worst VM Memory
+  Contention; vSphere Cluster Worst ESXi Bad Network Packets; ESXi Bad
+  Network Packets (this defect's SM, leaf of the chain).
 
 ### DEF-012
 
