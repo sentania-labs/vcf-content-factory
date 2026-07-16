@@ -645,11 +645,27 @@ reused. Field lines are `- **Field:** value` (parsed by
   numeric histograms — render "No data" on ESXi Configuration 2.0 and sibling
   dashboards (partial-fix residue of the DISCRETE distribution fix)
 - **Severity:** blocking
-- **Status:** open
+- **Status:** closed
 - **Affects:** vcommunity-vsphere
 - **First-seen:** shipped `1.0.0.2` (visual symptom first observed in the
   2026-07-12 build-10 browser pass); confirmed still present in released
   `v1.0.0.12`. Registered 2026-07-14 after the prod-vs-devel dashboard diff.
+- **Closing-evidence:** 2026-07-16 live render proof on devel —
+  `knowledge/context/reviews/def-012-closure-visual-pass-2026-07-16.md`.
+  Build-13 dev preview (`0.0.0.13`, built from pak main @ `72c1b42` carrying
+  all 17 fixed views) installed 15:44 CDT; Playwright pass confirms **all 14
+  tracked distribution widgets across the three affected dashboards render
+  live DISCRETE bucket data** with real string values, cross-checked exactly
+  against the raw property tables (ESXi Configuration 2.0: 6/6; vSphere
+  Cluster Configuration 2.0: 4/4; vSphere Network Configuration 2.0: 4/4).
+  Same-day pre-install QA sweep had re-confirmed the broken state, so the
+  before/after delta is attributable to build-13. Static shape was already
+  certified in `knowledge/context/reviews/vcommunity-vsphere-build-13.md`
+  (0 BLOCKING) and guarded by factory PR #57's T8/T12 regression tests. The
+  "HA Admission Control enabled" widget timeout observed nearby is a
+  different widget/root-cause — tracked separately as FB-011. Release note:
+  with this closed, the RULE-012 defect-gate no longer blocks a
+  `v1.0.0.13` tag on the pak repo.
 - **Source:** `knowledge/context/reviews/esxi-configuration-20-dashboard-comparison.md`
   (api-explorer, 2026-07-14); root-cause class first documented in
   `knowledge/context/api-surface/distribution_view_no_data.md`.
