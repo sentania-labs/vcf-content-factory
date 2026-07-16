@@ -606,6 +606,49 @@ reused. Field lines are `- **Field:** value` (parsed by
   ships SMs unactivated by design, matching source; activation list of 13
   documented in the 2026-07-13 enablement report)
 
+### DEF-012
+
+- **Title:** vcommunity-vsphere: string-property distribution views ship as
+  numeric histograms — render "No data" on ESXi Configuration 2.0 and sibling
+  dashboards (partial-fix residue of the DISCRETE distribution fix)
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** vcommunity-vsphere
+- **First-seen:** shipped `1.0.0.2` (visual symptom first observed in the
+  2026-07-12 build-10 browser pass); confirmed still present in released
+  `v1.0.0.12`. Registered 2026-07-14 after the prod-vs-devel dashboard diff.
+- **Source:** `knowledge/context/reviews/esxi-configuration-20-dashboard-comparison.md`
+  (api-explorer, 2026-07-14); root-cause class first documented in
+  `knowledge/context/api-surface/distribution_view_no_data.md`.
+- **Summary:** The dashboard *definition* of ESXi Configuration 2.0 is
+  structurally identical to the vendor original (20 widgets, byte-identical
+  layout, same interactions) — the user-visible "not 1:1" is data, not layout.
+  Six string-property distribution views on it (ESXi Versions, CPU Model, BIOS
+  Version, Power Management ESXi, Power Management BIOS, Hyper Threading) ship
+  in our port as numeric-histogram-over-a-string-property (`isProperty=false`,
+  `isStringAttribute=false`, fixed `[0,100]/10` buckets) where the vendor
+  originals are `isProperty=true` + `isStringAttribute=true` + dynamic
+  DISCRETE, so they render "No data" plus a "Metrics displaying 0 of N"
+  scoreboard. The earlier DISCRETE fix covered only the four ESXi Host Details
+  views (DEF-011's closing evidence "4/4 DISCRETE ViewDefs" verified exactly
+  that subset); these six were never remediated, and the same broken shape is
+  carried by sibling views on other dashboards (`vSphere Switch Version`,
+  `vSphere Cluster DRS/HA/DPM Status`, DRS Automation Level/Status, Admission
+  Control Policy/status, 3 Port Group security-policy distributions).
+  Classification: DRIFT vs vendor source (conversion dropped the property/
+  string/bucket attributes). Smallest correct fix: add `is_property: true`,
+  `is_string_attribute: true`, and `buckets: {dynamic, calc_function: DISCRETE}`
+  to every affected view (mirroring the fixed four), rebuild, and Playwright-
+  verify the rendered widgets (browser render is the only valid proof — the
+  internal export endpoint cannot compute DISCRETE buckets). Closes when a
+  build carrying the fixed views renders live data in all previously-empty
+  distribution widgets on devel.
+- **Related:** DEF-011 (its post-tag verification's "4/4 DISCRETE" scope is why
+  this slipped through), `knowledge/context/api-surface/distribution_view_no_data.md`
+  (root-cause class + proposed validate-time guard),
+  `knowledge/context/reviews/vcommunity-vsphere-parity-certification.md`
+  (2026-07-14 scope-correction addendum)
+
 ### DEF-011
 
 - **Title:** vcommunity-vsphere: 0.x dev-preview pak attached to GitHub Release
