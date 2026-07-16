@@ -597,11 +597,21 @@ reused. Field lines are `- **Field:** value` (parsed by
   component's contribution to the performance KPI is silently absent —
   the rollup computes from fewer inputs than designed, not empty.
   Inherited defect: the formula is byte-identical to the source pak, so the
-  original pack has the same silent gap on such instances. Smallest
-  correct fix: replace the denominator with a stat the adapter actually
-  collects (or drop the ratio for a sum), diverging deliberately from the
-  source; needs a design decision + recon on which `net|` packet counters
-  exist across vSphere 8/9.x.
+  original pack has the same silent gap on such instances.
+  **Root-cause re-classification (2026-07-16, recon):** the denominator keys
+  are NOT missing from the adapter — `net|packetsRx_summation(_sum)` and
+  `net|packetsTx_summation(_sum)` exist in the VMWARE HostSystem stat-key
+  catalog flagged `default_monitored: false`, while the collecting
+  `net|dropped*/errors*` siblings are `default_monitored: true`; the live
+  host's active statkeys match (`knowledge/context/investigations/recon_log.md`,
+  2026-07-16 entry). Same enablement class as the VM Advanced-Parameters
+  finding. Smallest correct fix (revised): keep the source formula; document
+  the policy-activation requirement in the pak docs (the two `net|packets*`
+  attributes + SM enablement) — no formula divergence. The earlier fix
+  proposal (replace the denominator) is superseded. Residual caveat: the
+  policy-definition API on devel 500s, so the per-attribute activation table
+  wasn't directly read; the closing proof is a devel policy edit showing the
+  keys start accumulating and the SM computes.
 - **Related:** SM enablement decision (user, 2026-07-13): the pak ships SMs
   unactivated by design, matching source behavior — corpus survey found no
   pak that ships SMs enables them (source vCommunity: one README sentence
