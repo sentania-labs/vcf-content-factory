@@ -609,9 +609,15 @@ reused. Field lines are `- **Field:** value` (parsed by
   the policy-activation requirement in the pak docs (the two `net|packets*`
   attributes + SM enablement) — no formula divergence. The earlier fix
   proposal (replace the denominator) is superseded. Residual caveat: the
-  policy-definition API on devel 500s, so the per-attribute activation table
-  wasn't directly read; the closing proof is a devel policy edit showing the
-  keys start accumulating and the SM computes.
+  policy-definition API on devel 500s (tracked as FB-010 in
+  `knowledge/context/feedback_queue.md`), so the per-attribute activation
+  table wasn't directly read; the closing proof is a devel policy edit
+  showing the keys start accumulating and the SM computes.
+  **Docs remediation (2026-07-16):** the revised fix is executed in pak repo
+  PR #8 (`docs/post-install-policy-enablement` branch, commit `1769f83`) —
+  README "Post-install: policy enablement" section + installing.md step +
+  troubleshooting bullet covering both the SM activation and the two
+  `net|packets*` attributes.
 - **Related:** SM enablement decision (user, 2026-07-13): the pak ships SMs
   unactivated by design, matching source behavior — corpus survey found no
   pak that ships SMs enables them (source vCommunity: one README sentence
@@ -668,6 +674,14 @@ reused. Field lines are `- **Field:** value` (parsed by
   internal export endpoint cannot compute DISCRETE buckets). Closes when a
   build carrying the fixed views renders live data in all previously-empty
   distribution widgets on devel.
+  **Progress (2026-07-16):** fix authored and merged, proof pending. All 17
+  affected views carry the fixed shape on the pak repo's main (pak PR #7,
+  commits `e9fce12`/`3d8f013`, "build-13" line); the factory validate-time
+  guard + T8/T12 regression tests merged in factory PR #57 (T8 asserts the
+  fixed corpus warns zero, T12 asserts the unfixed vendor control corpus
+  still warns). Remaining to close: build the build-13 pak, install on
+  devel, and Playwright-verify the previously-empty distribution widgets
+  render live data.
 - **Related:** DEF-011 (its post-tag verification's "4/4 DISCRETE" scope is why
   this slipped through), `knowledge/context/api-surface/distribution_view_no_data.md`
   (root-cause class + proposed validate-time guard),

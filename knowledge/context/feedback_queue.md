@@ -201,3 +201,23 @@ not a gate.
      stanza shipped in a generated doc or is still pending.
   Items 1–2 are `src/vcfops_*/` diffs → route through `tooling` +
   `framework-reviewer` per RULE-013 when picked up.
+
+### FB-010 — devel: `GET /api/policies/{id}` returns HTTP 500 — blocks per-attribute policy inspection
+
+- **Scope:** devel instance (platform fault, not factory content)
+- **Kind:** bug (instance) / investigation
+- **Status:** open
+- **Raised:** 2026-07-16, during the DEF-010 enablement recon
+  (`knowledge/context/investigations/recon_log.md`, dated entry).
+- **Detail:** `GET /api/policies` (list) works and identifies the active
+  default policy ("vSphere Solution's Default Policy (Apr 17, 2026)",
+  id `9c1d42be-09b7-4149-92fc-2224e3d778bd`, defaultPolicy: true), but
+  `GET /api/policies/{id}` — and the `/base`, `/policy/{id}`,
+  `/metricconfig`, `/collectionconfig` variants — consistently return
+  HTTP 500 "Internal Server error, cause unknown". Server-side fault,
+  reproducible. Consequence: the per-attribute activation table for
+  VMWARE HostSystem cannot be read via REST, which is what keeps
+  DEF-010's enablement classification INFERRED rather than PROVEN.
+  Next steps: try a different API version/path (internal surface?),
+  check collector/api logs on devel, or accept the alternative proof
+  (a policy edit showing `net|packets*` keys begin accumulating).
