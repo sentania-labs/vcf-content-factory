@@ -591,7 +591,9 @@ reused. Field lines are `- **Field:** value` (parsed by
   (`vSphere Cluster Performance`, `vSphere Clusters not Green`) DO compute
   once SM compute catches up (~1h after enablement — the initial 35-min
   zero-datapoint window was compute cadence, not blockage; both HealthCharts
-  render live data, screenshots `shots-vsphere-b12/03,04`). The platform
+  render live data — observed in the 2026-07-13 build-12 visual pass;
+  session screenshots not retained, troubleshooting captures stay out of
+  the repo by convention). The platform
   tolerates the dead operand rather than nulling the chain. Real impact:
   the leaf SM never has data, and the `Worst ESXi Bad Network Packets`
   component's contribution to the performance KPI is silently absent —
