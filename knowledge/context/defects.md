@@ -591,17 +591,35 @@ reused. Field lines are `- **Field:** value` (parsed by
   (`vSphere Cluster Performance`, `vSphere Clusters not Green`) DO compute
   once SM compute catches up (~1h after enablement — the initial 35-min
   zero-datapoint window was compute cadence, not blockage; both HealthCharts
-  render live data, screenshots `shots-vsphere-b12/03,04`). The platform
+  render live data — observed in the 2026-07-13 build-12 visual pass;
+  session screenshots not retained, troubleshooting captures stay out of
+  the repo by convention). The platform
   tolerates the dead operand rather than nulling the chain. Real impact:
   the leaf SM never has data, and the `Worst ESXi Bad Network Packets`
   component's contribution to the performance KPI is silently absent —
   the rollup computes from fewer inputs than designed, not empty.
   Inherited defect: the formula is byte-identical to the source pak, so the
-  original pack has the same silent gap on such instances. Smallest
-  correct fix: replace the denominator with a stat the adapter actually
-  collects (or drop the ratio for a sum), diverging deliberately from the
-  source; needs a design decision + recon on which `net|` packet counters
-  exist across vSphere 8/9.x.
+  original pack has the same silent gap on such instances.
+  **Root-cause re-classification (2026-07-16, recon):** the denominator keys
+  are NOT missing from the adapter — `net|packetsRx_summation(_sum)` and
+  `net|packetsTx_summation(_sum)` exist in the VMWARE HostSystem stat-key
+  catalog flagged `default_monitored: false`, while the collecting
+  `net|dropped*/errors*` siblings are `default_monitored: true`; the live
+  host's active statkeys match (`knowledge/context/investigations/recon_log.md`,
+  2026-07-16 entry). Same enablement class as the VM Advanced-Parameters
+  finding. Smallest correct fix (revised): keep the source formula; document
+  the policy-activation requirement in the pak docs (the two `net|packets*`
+  attributes + SM enablement) — no formula divergence. The earlier fix
+  proposal (replace the denominator) is superseded. Residual caveat: the
+  policy-definition API on devel 500s (tracked as FB-010 in
+  `knowledge/context/feedback_queue.md`), so the per-attribute activation
+  table wasn't directly read; the closing proof is a devel policy edit
+  showing the keys start accumulating and the SM computes.
+  **Docs remediation (2026-07-16):** the revised fix is executed in pak repo
+  PR #8 (`docs/post-install-policy-enablement` branch, commit `1769f83`) —
+  README "Post-install: policy enablement" section + installing.md step +
+  troubleshooting bullet covering both the SM activation and the two
+  `net|packets*` attributes.
 - **Related:** SM enablement decision (user, 2026-07-13): the pak ships SMs
   unactivated by design, matching source behavior — corpus survey found no
   pak that ships SMs enables them (source vCommunity: one README sentence
@@ -627,11 +645,27 @@ reused. Field lines are `- **Field:** value` (parsed by
   numeric histograms — render "No data" on ESXi Configuration 2.0 and sibling
   dashboards (partial-fix residue of the DISCRETE distribution fix)
 - **Severity:** blocking
-- **Status:** open
+- **Status:** closed
 - **Affects:** vcommunity-vsphere
 - **First-seen:** shipped `1.0.0.2` (visual symptom first observed in the
   2026-07-12 build-10 browser pass); confirmed still present in released
   `v1.0.0.12`. Registered 2026-07-14 after the prod-vs-devel dashboard diff.
+- **Closing-evidence:** 2026-07-16 live render proof on devel —
+  `knowledge/context/reviews/def-012-closure-visual-pass-2026-07-16.md`.
+  Build-13 dev preview (`0.0.0.13`, built from pak main @ `72c1b42` carrying
+  all 17 fixed views) installed 15:44 CDT; Playwright pass confirms **all 14
+  tracked distribution widgets across the three affected dashboards render
+  live DISCRETE bucket data** with real string values, cross-checked exactly
+  against the raw property tables (ESXi Configuration 2.0: 6/6; vSphere
+  Cluster Configuration 2.0: 4/4; vSphere Network Configuration 2.0: 4/4).
+  Same-day pre-install QA sweep had re-confirmed the broken state, so the
+  before/after delta is attributable to build-13. Static shape was already
+  certified in `knowledge/context/reviews/vcommunity-vsphere-build-13.md`
+  (0 BLOCKING) and guarded by factory PR #57's T8/T12 regression tests. The
+  "HA Admission Control enabled" widget timeout observed nearby is a
+  different widget/root-cause — tracked separately as FB-011. Release note:
+  with this closed, the RULE-012 defect-gate no longer blocks a
+  `v1.0.0.13` tag on the pak repo.
 - **Source:** `knowledge/context/reviews/esxi-configuration-20-dashboard-comparison.md`
   (api-explorer, 2026-07-14); root-cause class first documented in
   `knowledge/context/api-surface/distribution_view_no_data.md`.
@@ -658,6 +692,14 @@ reused. Field lines are `- **Field:** value` (parsed by
   internal export endpoint cannot compute DISCRETE buckets). Closes when a
   build carrying the fixed views renders live data in all previously-empty
   distribution widgets on devel.
+  **Progress (2026-07-16):** fix authored and merged, proof pending. All 17
+  affected views carry the fixed shape on the pak repo's main (pak PR #7,
+  commits `e9fce12`/`3d8f013`, "build-13" line); the factory validate-time
+  guard + T8/T12 regression tests merged in factory PR #57 (T8 asserts the
+  fixed corpus warns zero, T12 asserts the unfixed vendor control corpus
+  still warns). Remaining to close: build the build-13 pak, install on
+  devel, and Playwright-verify the previously-empty distribution widgets
+  render live data.
 - **Related:** DEF-011 (its post-tag verification's "4/4 DISCRETE" scope is why
   this slipped through), `knowledge/context/api-surface/distribution_view_no_data.md`
   (root-cause class + proposed validate-time guard),

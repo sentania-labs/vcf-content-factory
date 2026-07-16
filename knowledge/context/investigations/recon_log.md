@@ -3476,3 +3476,77 @@ the relationship phase). Live DEBUG capture proved Oracle performs a
 per-cycle Suite API read authenticated as the platform-injected per-instance
 credential (token user = adapter instance UUID). See
 `knowledge/context/investigations/oracle-stitch-autopsy-2026-07-02.md`.
+
+---
+## 2026-07-16 — DEF-010 follow-up: is the "Bad Network Packets" denominator policy-disabled or never emitted?
+
+**Intent:** Determine whether `net|packetsRx_summation_sum` / `net|packetsTx_summation_sum`
+(the DEF-010 dead denominator on `ESXi Bad Network Packets`) are a policy/config
+enablement gap (same class as the VM Advanced-Parameters/IDPS finding) or genuinely
+never emitted by the VMWARE adapter.
+
+**Findings:**
+
+1. **Catalog presence (offline, `knowledge/context/adapter_describe_cache/VMWARE/HostSystem.json`,
+   fetched 2026-04-28 from devel's live `/statkeys` describe surface):** both keys exist —
+   `net|packetsRx_summation_sum` and `net|packetsTx_summation_sum` are present with
+   `"default_monitored": false`. Non-`_sum` instanced forms
+   (`net|packetsRx_summation`, `net|packetsTx_summation`) also exist, also
+   `default_monitored: false`. By contrast the siblings that DO carry data —
+   `net|droppedRx_summation(_sum)`, `net|droppedTx_summation(_sum)`,
+   `net|errorsRx_summation(_sum)`, `net|errorsTx_summation(_sum)` — are all
+   `default_monitored: true`.
+
+2. **Live confirmation (`GET /api/resources/{id}/statkeys` against ESXi host
+   `vcf-lab-wld01-esx01.int.sentania.net`, devel, 2026-07-16):** the host's ~260 currently
+   active/collectable stat keys include `net|droppedRx_summation`, `net|droppedRx_summation_sum`,
+   `net|droppedTx_summation`, `net|droppedTx_summation_sum`, `net|errorsRx_summation`,
+   `net|errorsRx_summation_sum`, `net|errorsTx_summation`, `net|errorsTx_summation_sum` —
+   but **no** `net|packets*` keys at all (neither `_summation`, `_summation_sum`, nor
+   `PerSec` variants). This matches the `default_monitored: false` flag for the packets
+   pair. Caveat: `net|packetsTxPerSec` is flagged `default_monitored: true` in the catalog
+   but was ALSO absent from this host's live statkey list — so catalog `default_monitored`
+   and this instance's actual per-key activation aren't perfectly 1:1; something in the
+   active policy has diverged from catalog defaults on at least one key.
+
+3. **Policy-definition confirmation attempted, blocked by a live API error, not a client
+   gap:** `GET /api/policies` (200) lists the active default policy —
+   `"vSphere Solution's Default Policy (Apr 17, 2026 3:50:38 PM)"`, id
+   `9c1d42be-09b7-4149-92fc-2224e3d778bd`, `defaultPolicy: true`. `GET
+   /api/policies/{id}` (and `/base`, `/policy/{id}`, `/metricconfig`,
+   `/collectionconfig` variants) all returned `HTTP 500 {"type":"Error","message":"Internal
+   Server error, cause unknown."}` — consistently, across all tried variants. This is a
+   **server-side fault on this instance**, not a missing client helper; could not directly
+   enumerate the active policy's per-attribute activation table to do a clean
+   packets-vs-dropped/errors side-by-side at the policy-definition level.
+
+4. **No solutionconfig/describe.xml opt-in artifact found** for the native VMWARE
+   solution in the allowlisted reference clones — the only local reference to the
+   formula is the third-party `vmbro_vcf_operations_vcommunity` MP itself, which contains
+   no adapter-level activation config (it's a consumer MP, not the vSphere solution).
+
+**Classification (answering DEF-010's open question):**
+
+**(a) Policy/config enablement — likely, same class as the IDPS/advanced-parameters
+finding, but not 100% proven due to the policy-detail API 500.** The keys demonstrably
+EXIST in the adapter's stat-key catalog (ruling out "never emitted" as a certainty) and
+are flagged `default_monitored: false`, while the siblings that DO carry data are
+`default_monitored: true` and are confirmed present in the live per-host statkey list.
+This is the same signature as the VM Advanced-Parameters/IDPS precedent
+(`knowledge/context/reviews/vcommunity-vsphere-prod-devel-comparison.md`): catalog-known,
+policy-gated-off by default.
+
+**What would move this from INFERRED to PROVEN:** (1) get `GET /api/policies/{id}`
+(or equivalent) working — possibly a different API version/path, or file the 500 as its
+own defect — to directly inspect the default policy's per-attribute activation table for
+VMWARE HostSystem and confirm `net|packetsRx_summation_sum` /
+`net|packetsTx_summation_sum` are explicitly deactivated (not just catalog-default-off);
+or (2) the config-change proof used for the IDPS precedent — opt the attribute into a
+policy (test policy, non-default) and observe whether `net|packetsRx_summation_sum`
+begins appearing in `/api/resources/{id}/statkeys` and accumulating datapoints. Neither
+was performed here (read-only recon; policy edits are out of scope for `ops-recon`).
+
+**Recommendation:** no authoring action from this recon by itself. Feed classification
+(a)-with-caveat back to whoever owns DEF-010's fix decision; if the config-opt-in proof
+step is wanted, that's a live-instance policy change (write operation) outside `ops-recon`
+scope — needs explicit user sign-off before anyone touches the policy.

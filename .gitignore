@@ -57,3 +57,9 @@ memory/sessions/
 
 # Curation velocity counter — per-checkout, not shared (see knowledge/designs/curator-v1.md)
 knowledge/context/curation/.sessions-since
+
+# Session-local artifacts — never committed
+memory/environment/
+shots-*/
+.playwright-mcp/
+search-debug*.png
