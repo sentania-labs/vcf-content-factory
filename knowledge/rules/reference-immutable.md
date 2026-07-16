@@ -1,4 +1,4 @@
-# RULE-016 — `reference/**` is read-only; corrections live in `context/`
+# RULE-016 — `reference/**` is read-only; corrections live in `knowledge/context/`
 
 Everything under `reference/` (vendor API docs in `reference/docs/`,
 external example repos in `reference/references/`) is authored by
@@ -11,7 +11,7 @@ immutable root.
   byte of an existing file under `reference/` is a violation — even to
   "fix" an obvious vendor error.
 - **Corrections, digests, and findings** about reference material live
-  in `context/` (or `lessons/` if hard-won) and cite the source by path
+  in `knowledge/context/` (or `knowledge/lessons/` if hard-won) and cite the source by path
   (e.g. "`reference/docs/vcf9/supermetrics.md` says X, but live behavior
   is Y — see investigation Z").
 - Framework output, rendered JSON, test artifacts, and anything an agent

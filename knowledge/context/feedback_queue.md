@@ -161,3 +161,43 @@ not a gate.
   `portDescription`). Enabling ESXi LLDP **TX** would also light the UniFi side,
   but that path additionally needs match-by-`chassis_id` + a host vmnic MAC the
   VMWARE MP doesn't currently expose.
+
+### FB-008 — `version_line_guard`: refuse a `v*` tag whose adapter.yaml carries a dev version line
+
+- **Scope:** all-sdk-paks
+- **Kind:** enhancement (release-safety guard)
+- **Status:** open
+- **Raised:** 2026-07-13 (session-handoff backlog); migrated here 2026-07-16
+  during curation (the handoff file was transient and has been retired).
+- **Detail:** A pre-push hook — or equivalently a CI assertion in the
+  tag-triggered release workflow — that a `v*` tag's `major.minor.patch`
+  equals the pak's `adapter.yaml` `version:` line, so a dev-line pak
+  (`0.0.0`) refuses the tag instead of shipping. Concrete incident behind
+  it: DEF-011 (closed) — the v1.0.0.12 vcommunity-vsphere release built and
+  attached a `0.0.0.12` pak because adapter.yaml still carried the dev
+  version line at tag time (RULE-014, `knowledge/rules/pak-version-lines.md`).
+  The release-runbook post-tag verification caught it after the fact; this
+  guard would refuse it up front. DEF-011's Summary names this as the
+  "smallest correct fix beyond the remediation."
+
+### FB-009 — Residual session-handoff backlog: stale citations + unifi docs stanza
+
+- **Scope:** framework (`src/vcfops_*/`) + unifi
+- **Kind:** bug (doc rot) / mechanical
+- **Status:** open
+- **Raised:** 2026-07-13 (session-handoff backlog); migrated here 2026-07-16
+  during curation — these items were NOT resolved when the handoff file was
+  retired, contrary to its "consumed" status:
+- **Detail:**
+  1. `src/vcfops_dashboards/packager.py:7` docstring cites
+     `memory/vcfops_content_import_wire_format.md` — the `memory/` path is
+     retired; the wire-format doc lives under `knowledge/context/wire-formats/`.
+     (Confirmed still stale 2026-07-16.)
+  2. Handoff also listed "annotated dead citation in extractor.py" — no
+     `extractor.py` exists under `src/vcfops_packaging/`; locate the intended
+     module and verify before closing.
+  3. "unifi build 12 (cross_mp_edges docs stanza)" — no `cross_mp_edges`
+     mention found in unifi README/docs as of 2026-07-16; verify whether the
+     stanza shipped in a generated doc or is still pending.
+  Items 1–2 are `src/vcfops_*/` diffs → route through `tooling` +
+  `framework-reviewer` per RULE-013 when picked up.
