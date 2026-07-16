@@ -301,3 +301,24 @@ not a gate.
   configured"). Recommendation: uninstall both from devel (stale,
   unmaintained, no DB adapters in the lab); fixing the binding only makes
   sense if the dashboards return to active content.
+
+### FB-016 — devel: `/api/resources/{id}/stats` returns empty for SM statkeys the UI charts
+
+- **Scope:** devel instance (platform/API surface) + factory verification tooling
+- **Kind:** bug (instance) / investigation
+- **Status:** open
+- **Raised:** 2026-07-16, DEF-010 closure investigation
+  (`knowledge/context/reviews/def-010-closure-2026-07-16.md`).
+- **Detail:** At the same moment the devel UI charted nonzero datapoints
+  for `sm_c0c98494…` (ESXi Bad Network Packets, on mgmt-esx03) and
+  `sm_48f81e75…` (cluster rollup), `GET /api/resources/{id}/stats`
+  (latest + ranged) returned `{"values": []}` for the same statkeys on
+  the same resources — a full 9-host + 3-cluster sweep was uniformly
+  empty. The UI's chart path reads a different data path/tier than the
+  public stats API for these SM series. Impact: API-only verification of
+  SM compute produces false negatives (it did, twice, today) — browser
+  render is the ground truth until this is understood. Possibly related
+  to FB-010 (`GET /api/policies/{id}` 500s on the same instance —
+  another backend surface misbehaving). Next steps: try the internal
+  stats endpoints / different rollup params; check whether it reproduces
+  on prod; consider a devel platform-health check.
