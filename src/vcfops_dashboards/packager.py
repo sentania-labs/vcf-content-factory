@@ -4,7 +4,7 @@ POST /api/content/operations/import (multipart field `contentFile`).
 This layout was reverse-engineered by exporting a known-good bundle
 from a live VCF Ops 9 instance via POST /api/content/operations/export
 and inspecting the resulting zip. See
-`memory/vcfops_content_import_wire_format.md` for the full reference.
+`knowledge/context/wire-formats/wire_formats.md` for the full reference.
 
 Outer zip, combining VIEW_DEFINITIONS + DASHBOARDS in one bundle:
 
