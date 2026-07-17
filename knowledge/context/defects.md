@@ -589,10 +589,14 @@ reused. Field lines are `- **Field:** value` (parsed by
   clusters (nonzero 15:50–16:50, peak ~1.8e-4). Not a formula defect —
   policy enablement, documented as the fix in pak PR #8 ("Post-install:
   policy enablement"), and the metrics are now permanently enabled on
-  devel (user decision, 2026-07-16). Caveat for future verifiers:
-  `/api/resources/{id}/stats` returned empty for these SM statkeys while
-  the UI charted them (FB-016) — browser render is the ground truth for
-  SM compute on this instance.
+  devel (user decision, 2026-07-16). API-verified fleet-wide after the
+  key-format correction (`Super Metric|sm_<uuid>`, not bare `sm_<uuid>`
+  — see `knowledge/lessons/sm-statkey-api-prefix.md`): all 9 hosts carry
+  the leaf SM series (73 datapoints from 20:43Z — four minutes after
+  enablement — mgmt-esx03 8.2e-5, mgmt-esx04 2.05e-5, others computed 0)
+  and all 3 clusters carry the rollup. The interim "UI charts it but the
+  API says empty" theory (FB-016 as first filed) was a factory-side
+  bare-key query error, resolved same day.
 - **Source:** content-installer SM-enablement diagnostic 2026-07-13 (poll
   logs + stat-key decomposition in session scratchpad); corroborated against
   `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/supermetrics/Bad Network Packets.json`

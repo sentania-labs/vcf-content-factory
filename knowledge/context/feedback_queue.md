@@ -302,23 +302,20 @@ not a gate.
   unmaintained, no DB adapters in the lab); fixing the binding only makes
   sense if the dashboards return to active content.
 
-### FB-016 — devel: `/api/resources/{id}/stats` returns empty for SM statkeys the UI charts
+### FB-016 — ~~devel: stats API returns empty for SM statkeys the UI charts~~ RESOLVED: factory-side key-format error, not a platform bug
 
-- **Scope:** devel instance (platform/API surface) + factory verification tooling
-- **Kind:** bug (instance) / investigation
-- **Status:** open
-- **Raised:** 2026-07-16, DEF-010 closure investigation
-  (`knowledge/context/reviews/def-010-closure-2026-07-16.md`).
-- **Detail:** At the same moment the devel UI charted nonzero datapoints
-  for `sm_c0c98494…` (ESXi Bad Network Packets, on mgmt-esx03) and
-  `sm_48f81e75…` (cluster rollup), `GET /api/resources/{id}/stats`
-  (latest + ranged) returned `{"values": []}` for the same statkeys on
-  the same resources — a full 9-host + 3-cluster sweep was uniformly
-  empty. The UI's chart path reads a different data path/tier than the
-  public stats API for these SM series. Impact: API-only verification of
-  SM compute produces false negatives (it did, twice, today) — browser
-  render is the ground truth until this is understood. Possibly related
-  to FB-010 (`GET /api/policies/{id}` 500s on the same instance —
-  another backend surface misbehaving). Next steps: try the internal
-  stats endpoints / different rollup params; check whether it reproduces
-  on prod; consider a devel platform-health check.
+- **Scope:** factory verification tooling (was misfiled as devel platform)
+- **Kind:** bug (ours) / lesson
+- **Status:** done — root-caused and codified same day
+- **Raised:** 2026-07-16, DEF-010 closure investigation; resolved
+  2026-07-16 by direct statkeys inspection.
+- **Detail (corrected):** The stats API serves SM series under the key
+  `Super Metric|sm_<uuid>` — every query that day used the bare
+  `sm_<uuid>` and got `{"values": []}`, which reads exactly like "SM
+  never computed." There is NO UI-vs-API data-path discrepancy: with the
+  correct key, the full fleet sweep returns the complete series on all
+  9 hosts + 3 clusters, values matching the UI charts exactly. The
+  original entry's platform-bug theory was wrong; the plain-metric
+  control (which worked) used a real key, masking the pattern. Codified:
+  `knowledge/lessons/sm-statkey-api-prefix.md`. NOT related to FB-010
+  (the policy-API 500 is real and remains open).
