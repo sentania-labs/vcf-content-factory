@@ -266,7 +266,15 @@ def _parse_time_window(controls_elem) -> Optional[dict]:
         if count <= 0:
             continue
         adv = props.get("advancedTimeMode", "false").strip().lower() == "true"
-        return {"unit": unit, "count": count, "advanced_time_mode": adv}
+        start_period = props.get("startPeriod", "").strip().upper() or None
+        end_period = props.get("endPeriod", "").strip().upper() or None
+        return {
+            "unit": unit,
+            "count": count,
+            "advanced_time_mode": adv,
+            "start_period": start_period,
+            "end_period": end_period,
+        }
     return None
 
 
@@ -469,6 +477,10 @@ def _write_view_yaml(path: Path, view_data: dict, uuid_to_name: dict[str, str]) 
         tw_doc: dict = {"unit": tw["unit"], "count": tw["count"]}
         if tw.get("advanced_time_mode"):
             tw_doc["advanced_time_mode"] = True
+        if tw.get("start_period"):
+            tw_doc["start_period"] = tw["start_period"]
+        if tw.get("end_period"):
+            tw_doc["end_period"] = tw["end_period"]
         doc["time_window"] = tw_doc
 
     path.parent.mkdir(parents=True, exist_ok=True)

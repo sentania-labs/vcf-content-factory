@@ -583,14 +583,25 @@ def _parse_view_def_element(elem) -> dict:
 def _parse_time_window(controls_elem) -> Optional[dict]:
     """Parse the time-interval-selector Control from a <Controls> element.
 
-    Returns a dict {unit, count, advanced_time_mode} if the control is present
-    with both ``unit`` and ``count`` properties, else None.
+    Returns a dict {unit, count, advanced_time_mode, start_period, end_period}
+    if the control is present with both ``unit`` and ``count`` properties,
+    else None. ``start_period``/``end_period`` are None when absent (the
+    common case — advanced_time_mode false).
 
     Wire format (from knowledge/context/wire-formats/view_column_wire_format.md):
         <Control id="..." type="time-interval-selector" visible="false">
           <Property name="advancedTimeMode" value="false"/>
           <Property name="unit" value="MONTHS"/>
           <Property name="count" value="6"/>
+        </Control>
+
+    Advanced-mode wire format (FB-011) additionally carries a range:
+        <Control id="..." type="time-interval-selector" visible="false">
+          <Property name="advancedTimeMode" value="true"/>
+          <Property name="unit" value="DAYS"/>
+          <Property name="count" value="7"/>
+          <Property name="startPeriod" value="PREVIOUS"/>
+          <Property name="endPeriod" value="NOW"/>
         </Control>
     """
     for ctrl in controls_elem:
@@ -618,10 +629,14 @@ def _parse_time_window(controls_elem) -> Optional[dict]:
             continue
 
         advanced_raw = props.get("advancedTimeMode", "false").strip().lower()
+        start_period = props.get("startPeriod", "").strip().upper() or None
+        end_period = props.get("endPeriod", "").strip().upper() or None
         return {
             "unit": unit,
             "count": count,
             "advanced_time_mode": advanced_raw == "true",
+            "start_period": start_period,
+            "end_period": end_period,
         }
 
     return None
@@ -955,6 +970,10 @@ def _write_view_yaml(path: Path, view_data: dict) -> None:
         tw_doc: dict = {"unit": tw["unit"], "count": tw["count"]}
         if tw.get("advanced_time_mode"):
             tw_doc["advanced_time_mode"] = True
+        if tw.get("start_period"):
+            tw_doc["start_period"] = tw["start_period"]
+        if tw.get("end_period"):
+            tw_doc["end_period"] = tw["end_period"]
         doc["time_window"] = tw_doc
 
     path.parent.mkdir(parents=True, exist_ok=True)

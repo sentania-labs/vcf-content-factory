@@ -65,6 +65,17 @@ class ViewTimeWindow:
     unit: str   # MONTHS|WEEKS|DAYS|HOURS|MINUTES|YEARS
     count: int  # positive integer
     advanced_time_mode: bool = False
+    # start_period/end_period: only observed pairing in the vendor corpus is
+    # PREVIOUS/NOW (the sole advancedTimeMode=true control found across the
+    # full reference corpus — "vSphere Cluster HA Admission Control status",
+    # View - Set 3.xml, ViewDef fc64c67a-d5b0-4a03-a10b-767b9b247120). Left
+    # free-form (not a closed enum) since the wider vocabulary is unknown —
+    # see FB-011 / knowledge/context/feedback_queue.md. The renderer defaults
+    # both to PREVIOUS/NOW when advanced_time_mode is true and these are
+    # unset, since advanced mode with no range is the leading suspect for
+    # the "View request timed out" bug.
+    start_period: Optional[str] = None
+    end_period: Optional[str] = None
 
 
 @dataclass
@@ -1519,7 +1530,17 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
         tw_unit = str(tw_raw.get("unit", "")).strip().upper()
         tw_count = int(tw_raw.get("count", 0))
         tw_adv = bool(tw_raw.get("advanced_time_mode", False))
-        time_window = ViewTimeWindow(unit=tw_unit, count=tw_count, advanced_time_mode=tw_adv)
+        tw_start_raw = tw_raw.get("start_period")
+        tw_end_raw = tw_raw.get("end_period")
+        tw_start = str(tw_start_raw).strip().upper() if tw_start_raw else None
+        tw_end = str(tw_end_raw).strip().upper() if tw_end_raw else None
+        time_window = ViewTimeWindow(
+            unit=tw_unit,
+            count=tw_count,
+            advanced_time_mode=tw_adv,
+            start_period=tw_start,
+            end_period=tw_end,
+        )
 
     released_raw = data.get("released", False)
     released = bool(released_raw) if isinstance(released_raw, bool) else False

@@ -296,6 +296,23 @@ def _xml_time_interval_selector(view: ViewDef, control_id: str = "time-interval-
     When ``view.time_window`` is set the control uses those values.
     Otherwise falls back to the prior default (HOURS/24).
 
+    ``startPeriod``/``endPeriod`` (FB-011): the vendor wire format pairs
+    ``advancedTimeMode=true`` with a ``startPeriod``/``endPeriod`` range —
+    across the full reference corpus (250+ time-interval-selector controls
+    surveyed) the *only* control with ``advancedTimeMode=true`` carries
+    ``startPeriod=PREVIOUS``/``endPeriod=NOW`` ("vSphere Cluster HA
+    Admission Control status", View - Set 3.xml, ViewDef
+    fc64c67a-d5b0-4a03-a10b-767b9b247120). No vendor evidence of
+    advancedTimeMode=true without a range, or of a range value other than
+    PREVIOUS/NOW. We therefore default start_period/end_period to
+    PREVIOUS/NOW whenever advanced_time_mode is true and the author left
+    them unset — advanced mode with no defined range is the leading
+    suspect for the "View request timed out" bug this control produced
+    (knowledge/context/feedback_queue.md FB-011). Authors may still set
+    explicit values in time_window.start_period/end_period to override.
+    The properties are omitted entirely when advanced_time_mode is false,
+    matching every non-advanced vendor control observed.
+
     The control always sits at the top of the <Controls> block.
     See knowledge/context/wire-formats/view_column_wire_format.md §Per-column transformations.
     """
@@ -304,15 +321,29 @@ def _xml_time_interval_selector(view: ViewDef, control_id: str = "time-interval-
         adv = "true" if tw.advanced_time_mode else "false"
         unit = escape(tw.unit)
         count = str(tw.count)
+        start_period = tw.start_period
+        end_period = tw.end_period
+        if tw.advanced_time_mode:
+            start_period = start_period or "PREVIOUS"
+            end_period = end_period or "NOW"
     else:
         adv = "false"
         unit = "HOURS"
         count = "24"
+        start_period = None
+        end_period = None
+    period_props = ""
+    if adv == "true":
+        period_props = (
+            f'<Property name="startPeriod" value="{escape(start_period)}"/>'
+            f'<Property name="endPeriod" value="{escape(end_period)}"/>'
+        )
     return (
         f'<Control id="{control_id}" type="time-interval-selector" visible="false">'
         f'<Property name="advancedTimeMode" value="{adv}"/>'
         f'<Property name="unit" value="{unit}"/>'
         f'<Property name="count" value="{count}"/>'
+        f'{period_props}'
         f'</Control>'
     )
 

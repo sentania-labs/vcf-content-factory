@@ -225,19 +225,68 @@ not a gate.
   Next steps: try a different API version/path (internal surface?),
   check collector/api logs on devel, or accept the alternative proof
   (a policy edit showing `net|packets*` keys begin accumulating).
-### FB-011 — vSphere Cluster Configuration 2.0: "HA Admission Control" widget times out
 
-- **Scope:** vcommunity-vsphere (possibly platform)
-- **Kind:** bug
-- **Status:** open
-- **Raised:** 2026-07-16 QA visual pass (FINDING-1), devel.
-- **Detail:** Unlike the DEF-012 "No data to display" siblings, the
-  "HA Admission Control ..." widget renders the literal error "View request
-  timed out. Please try again in a few moments." Reproduced on reload.
-  Distinct root-cause class from DEF-012 (backend query timeout, not bucket
-  shape). Triage: check whether this view's query is unusually expensive
-  (property + groupby over all clusters?) and whether it reproduces after
-  build-13.
+### FB-011 — vcommunity-vsphere: "HA Admission Control enabled" widget times out — renderer drops `startPeriod`/`endPeriod` from advanced-time-mode views
+
+- **Scope:** framework (`src/vcfops_dashboards/render.py`, `loader.py`,
+  `src/vcfops_extractor/`) + vcommunity-vsphere
+- **Kind:** bug / framework fix + pak rebuild
+- **Status:** framework half fixed 2026-07-21 (`tooling` agent,
+  `framework-reviewer` APPROVED 0 BLOCKING); pak-side view YAML / rebuild /
+  Playwright re-verify still open.
+- **Raised:** referenced as "tracked separately as FB-011" in the DEF-012
+  closure pass (`knowledge/context/reviews/def-012-closure-visual-pass-2026-07-16.md`)
+  but never registered; entry written 2026-07-21 with root-cause diagnosis.
+- **Detail:** On vSphere Cluster Configuration 2.0, the "HA Admission
+  Control enabled" widget renders "View request timed out" while every
+  sibling distribution widget renders live data (observed 2026-07-16
+  build-13 visual pass; explicitly NOT a DEF-012 widget — its DISCRETE
+  shape is correct). The backing view
+  (`views/vSphere Cluster HA Admission Control status.yaml` in the pak
+  repo) is the **only** view in the pak with `advanced_time_mode: true`.
+  The vendor original ViewDef (`View - Set 3.xml`, id
+  `fc64c67a-d5b0-4a03-a10b-767b9b247120`) pairs
+  `advancedTimeMode=true` with `startPeriod=PREVIOUS` and
+  `endPeriod=NOW`; our renderer
+  (`src/vcfops_dashboards/render.py:311-317`) emits only
+  `advancedTimeMode`/`unit`/`count` and silently drops
+  startPeriod/endPeriod — leaving the server an advanced-mode query with
+  no defined range, the leading suspect for the timeout. The loader and
+  extractor likewise have no start/end-period fields, so round-trips
+  lose them too.
+- **Proposed fix:** extend the view time-window model with
+  `start_period`/`end_period` (loader + renderer emit them when
+  `advanced_time_mode: true`; extractor captures them), route through
+  `tooling` + `framework-reviewer` (RULE-013), update the pak view YAML,
+  rebuild, and Playwright-verify the widget renders. Fallback content-only
+  fix if the framework change is deferred: drop `advanced_time_mode: true`
+  from that one view to match its working siblings (accepts drift from
+  vendor time semantics).
+- **Related:** DEF-012 (same dashboard, distinct root cause),
+  `knowledge/context/reviews/def-012-closure-visual-pass-2026-07-16.md`
+- **Framework fix landed 2026-07-21:** `ViewTimeWindow` gained optional
+  `start_period`/`end_period` fields (`src/vcfops_dashboards/loader.py`);
+  the renderer (`src/vcfops_dashboards/render.py:_xml_time_interval_selector`)
+  emits `startPeriod`/`endPeriod` Properties whenever `advanced_time_mode`
+  is true, **defaulting to `PREVIOUS`/`NOW` when unset**. Defaulting
+  evidence: a full survey of the reference corpus (`reference/references/**`,
+  250+ time-interval-selector controls) found exactly one control with
+  `advancedTimeMode=true` in the entire corpus, and it carries
+  `startPeriod=PREVIOUS`/`endPeriod=NOW` — no other pairing, and no
+  advanced-mode-without-range example, is attested anywhere. Properties
+  are omitted entirely when `advanced_time_mode` is false, so the other
+  250+ existing views render byte-identically (verified: full test suite
+  583 passed / 4 skipped / 0 failed, full validate chain OK). The
+  extractor (`src/vcfops_extractor/extractor.py`) and reverse-local path
+  (`src/vcfops_extractor/reverse_local.py`) now capture/re-emit the same
+  fields for a lossless round-trip. Test coverage:
+  `tests/test_fb011_advanced_time_mode_range.py`. **Not yet done:** the
+  pak's own `views/vSphere Cluster HA Admission Control status.yaml` is
+  unedited (tooling agent does not touch pak content) — either add
+  explicit `start_period: PREVIOUS`/`end_period: NOW` to that view's
+  `time_window:` block (belt-and-suspenders, since the renderer now
+  defaults it) or rely on the default, then rebuild the pak and
+  Playwright-verify the widget stops timing out on a live instance.
 
 ### FB-012 — Cluster Performance 2.0: dashboard renders essentially blank
 
