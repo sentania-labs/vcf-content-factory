@@ -225,3 +225,97 @@ not a gate.
   Next steps: try a different API version/path (internal surface?),
   check collector/api logs on devel, or accept the alternative proof
   (a policy edit showing `net|packets*` keys begin accumulating).
+### FB-011 — vSphere Cluster Configuration 2.0: "HA Admission Control" widget times out
+
+- **Scope:** vcommunity-vsphere (possibly platform)
+- **Kind:** bug
+- **Status:** open
+- **Raised:** 2026-07-16 QA visual pass (FINDING-1), devel.
+- **Detail:** Unlike the DEF-012 "No data to display" siblings, the
+  "HA Admission Control ..." widget renders the literal error "View request
+  timed out. Please try again in a few moments." Reproduced on reload.
+  Distinct root-cause class from DEF-012 (backend query timeout, not bucket
+  shape). Triage: check whether this view's query is unusually expensive
+  (property + groupby over all clusters?) and whether it reproduces after
+  build-13.
+
+### FB-012 — Cluster Performance 2.0: dashboard renders essentially blank
+
+- **Scope:** vcommunity-vsphere
+- **Kind:** bug / question (triage vs SM enablement)
+- **Status:** open
+- **Raised:** 2026-07-16 QA visual pass (FINDING-2), devel.
+- **Detail:** Both top scoreboards ("Average Performance of All Clusters",
+  "Count of Clusters not in Green zone") show "No data to display" while
+  claiming "1 - 15 of 507 items"; the "vSphere Clusters" self-provider list
+  shows only the unconfigured placeholder, leaving all downstream widgets
+  empty. Two candidate causes to separate: (a) SM-enablement scope — the
+  13-SM Cluster Performance chain was manually policy-enabled 2026-07-13
+  for the local clusters only, and these aggregates may sweep a much larger
+  resource catalog; (b) a genuine self-provider/interaction wiring defect
+  (the cluster list should populate regardless of SM data). The identical
+  "507 items" count also appears in FB-013 — correlate. Note: same-day
+  build-13 install and the DEF-010 metric test may change what this
+  dashboard shows; re-check before deep triage.
+
+### FB-013 — Critical Business Applications: dashboard essentially blank
+
+- **Scope:** vcommunity-vsphere (likely environment, not content)
+- **Kind:** question
+- **Status:** open
+- **Raised:** 2026-07-16 QA visual pass (FINDING-4), devel.
+- **Detail:** All Business Application cards and the average-performance
+  scoreboard show "No data to display" against the same suspicious
+  "507 items" count as FB-012. The Business Application object type is a
+  built-in that requires app-discovery configuration/tagging the lab has
+  never done — most likely environment, not a pak defect. Confirm the lab
+  has zero BusinessApplication resources; if so mark this dashboard
+  "requires app discovery configured" in pak docs and close.
+
+### FB-014 — vSphere Resource Management: "Cascading Resource Pools?" widget render error
+
+- **Scope:** vcommunity-vsphere
+- **Kind:** bug
+- **Status:** open
+- **Raised:** 2026-07-16 QA visual pass (FINDING-3), devel.
+- **Detail:** Widget body renders "The view cannot be rendered for the
+  specified Object." — a genuine render failure, not "No data". Suspected
+  content defect: self-provider pin / subject-type mismatch (same failure
+  family as `knowledge/context/api-surface/dashboard_selfprovider_pin_wire_format.md`,
+  different widget). Compare the widget's pinned object type against the
+  view's subject kinds; check the vendor original's binding.
+
+### FB-015 — Legacy MSSQL/Oracle Query Performance dashboards live on devel with mis-scoped anchor
+
+- **Scope:** devel instance content (repo: attic'd legacy content)
+- **Kind:** bug / stale-content cleanup
+- **Status:** open — needs a user decision (uninstall vs fix)
+- **Raised:** 2026-07-16 QA visual pass (FINDING-5), devel.
+- **Detail:** `[VCF Content Factory] MSSQL Query Performance & Blocking`
+  and `...Oracle Query Performance & Blocking` are installed and live on
+  devel but exist in the repo only under
+  `knowledge/context/attic/legacy-root-content/` (retired in reorg v2).
+  Their "Select SQL Server / Oracle Instance" self-provider lists match a
+  UniFi switch (`usw-lite-16-nuc`) — the anchor's resource-kind filter is
+  mis-scoped — and every dependent widget is empty ("Heatmap is not
+  configured"). Recommendation: uninstall both from devel (stale,
+  unmaintained, no DB adapters in the lab); fixing the binding only makes
+  sense if the dashboards return to active content.
+
+### FB-016 — ~~devel: stats API returns empty for SM statkeys the UI charts~~ RESOLVED: factory-side key-format error, not a platform bug
+
+- **Scope:** factory verification tooling (was misfiled as devel platform)
+- **Kind:** bug (ours) / lesson
+- **Status:** done — root-caused and codified same day
+- **Raised:** 2026-07-16, DEF-010 closure investigation; resolved
+  2026-07-16 by direct statkeys inspection.
+- **Detail (corrected):** The stats API serves SM series under the key
+  `Super Metric|sm_<uuid>` — every query that day used the bare
+  `sm_<uuid>` and got `{"values": []}`, which reads exactly like "SM
+  never computed." There is NO UI-vs-API data-path discrepancy: with the
+  correct key, the full fleet sweep returns the complete series on all
+  9 hosts + 3 clusters, values matching the UI charts exactly. The
+  original entry's platform-bug theory was wrong; the plain-metric
+  control (which worked) used a real key, masking the pattern. Codified:
+  `knowledge/lessons/sm-statkey-api-prefix.md`. NOT related to FB-010
+  (the policy-API 500 is real and remains open).

@@ -573,11 +573,30 @@ reused. Field lines are `- **Field:** value` (parsed by
   Cluster Performance rollup is silently absent (inherited verbatim from
   source pak)
 - **Severity:** tracked
-- **Status:** open
+- **Status:** closed
 - **Affects:** vcommunity-vsphere
 - **First-seen:** dev-preview build `0.0.0.12` on devel (SM chain first
   policy-enabled 2026-07-13; defect present in every build since the SMs
   were ported, and in the source pak itself)
+- **Closing-evidence:** 2026-07-16 —
+  `knowledge/context/reviews/def-010-closure-2026-07-16.md`. Full chain
+  proven on devel: the `net|packets*` denominator keys exist in the
+  catalog (`default_monitored: false`), collect real values within one
+  collection cycle of policy enablement, and with them enabled the SM
+  computes on hosts (mgmt-esx03: 9.999e-5 @ 15:53, 1.604e-4 @ 16:14
+  local, UI-chart verified, user-corroborated) and the
+  `vSphere Cluster Worst ESXi Bad Network Packets` rollup computes on
+  clusters (nonzero 15:50–16:50, peak ~1.8e-4). Not a formula defect —
+  policy enablement, documented as the fix in pak PR #8 ("Post-install:
+  policy enablement"), and the metrics are now permanently enabled on
+  devel (user decision, 2026-07-16). API-verified fleet-wide after the
+  key-format correction (`Super Metric|sm_<uuid>`, not bare `sm_<uuid>`
+  — see `knowledge/lessons/sm-statkey-api-prefix.md`): all 9 hosts carry
+  the leaf SM series (73 datapoints from 20:43Z — four minutes after
+  enablement — mgmt-esx03 8.2e-5, mgmt-esx04 2.05e-5, others computed 0)
+  and all 3 clusters carry the rollup. The interim "UI charts it but the
+  API says empty" theory (FB-016 as first filed) was a factory-side
+  bare-key query error, resolved same day.
 - **Source:** content-installer SM-enablement diagnostic 2026-07-13 (poll
   logs + stat-key decomposition in session scratchpad); corroborated against
   `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/supermetrics/Bad Network Packets.json`

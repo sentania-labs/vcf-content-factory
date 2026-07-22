@@ -6,6 +6,7 @@ situation, heed it.
 
 | Story | Lesson |
 |---|---|
+| [sm-statkey-api-prefix.md](sm-statkey-api-prefix.md) | SM stat series on the Suite API are keyed `Super Metric|sm_<uuid>`, not bare `sm_<uuid>` — bare-key queries return empty and look exactly like "SM never computed." List `/statkeys` before concluding any metric has no data. Three false negatives in one day. |
 | [unreadable-is-not-compliant.md](unreadable-is-not-compliant.md) | A value the adapter failed to read must never become a pass, sentinel, or folded `score=100`. Skip or surface as unreadable; `totalCount==0` results never fold into averages; a failed snapshot refresh throws so the source looks broken. The cardinal Tier 2 scoring rule. |
 | [dell-redfish-relationship-strategies.md](dell-redfish-relationship-strategies.md) | Three MPB relationship strategies tried against Dell Redfish; all failed. URL-path hierarchies require Tier 2. |
 | [synology-dsm-client-side-joins.md](synology-dsm-client-side-joins.md) | Synology DSM has no common join key across endpoints. MPB can't model it. First Tier 2 build: 9 paks, 8 structure fixes, 20 commits. |

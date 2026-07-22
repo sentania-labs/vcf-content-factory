@@ -3550,3 +3550,74 @@ was performed here (read-only recon; policy edits are out of scope for `ops-reco
 (a)-with-caveat back to whoever owns DEF-010's fix decision; if the config-opt-in proof
 step is wanted, that's a live-instance policy change (write operation) outside `ops-recon`
 scope — needs explicit user sign-off before anyone touches the policy.
+
+### 2026-07-16 21:57Z addendum — full ESXi host sweep (correcting single-host verify)
+
+**Trigger:** user reported seeing "ESXi Bad Network Packets"
+(`sm_c0c98494-1147-4ec1-affd-fcaf54334563`) computing on `mgmt-esx03`. The
+21:51Z verify pass had queried only `vcf-lab-wld01-esx01` (`{"values": []}`) —
+too narrow to support a "dead everywhere" conclusion. Re-ran against **all**
+HostSystem resources on devel plus the cluster-level rollup SM.
+
+**Devel HostSystem inventory (9 hosts, all `VMWARE` adapter kind):**
+
+| Host | Resource ID | `sm_c0c98494...` latest | Value in 18:00Z–21:57Z range |
+|---|---|---|---|
+| vcf-lab-mgmt-esx01 | `8bd31613-9ff6-4af7-b51f-ea421cc48955` | `{"values": []}` | no data |
+| vcf-lab-mgmt-esx02 | `b21b8d6e-3acd-4b5f-8480-323b361b5e96` | `{"values": []}` | no data |
+| vcf-lab-mgmt-esx03 | `5fd4f7b2-52be-40f5-813b-dc971def6a55` | `{"values": []}` | no data |
+| vcf-lab-mgmt-esx04 | `dee43744-bf06-4561-87cc-3db1d5e53d0e` | `{"values": []}` | no data |
+| vcf-lab-mgmt-esx05 | `6a9ea409-05d8-4181-855f-3da220ea9c49` | `{"values": []}` | no data |
+| vcf-lab-wld01-esx01 | `1d6dae4e-e4d4-4b52-97e2-b6e13f9484b6` | `{"values": []}` | no data |
+| vcf-lab-wld01-esx02 | `3f4ed775-6612-4237-86c7-867c1be8a2f1` | `{"values": []}` | no data |
+| vcf-lab-wld02-esx01 | `b1dbe6b5-fb80-429c-bd3f-eea7cb172469` | `{"values": []}` | no data |
+| vcf-lab-wld02-esx02 | `801e74df-5243-48eb-90c2-44659985f5ef` | `{"values": []}` | no data |
+
+**mgmt-esx03 specifically** (the host the user flagged): both
+`GET /api/resources/{id}/stats/latest?statKey=sm_c0c98494-...` and
+`GET /api/resources/{id}/stats?statKey=...&begin=<18:00Z>&end=<21:57Z now>`
+return `{"values": []}` — no computed datapoint at any timestamp in that
+window, which fully spans the 20:39Z–21:52Z policy-enable window for the
+`net|packets*` denominator keys plus ~5 min before and ~5 min after. **No
+evidence of the SM computing on mgmt-esx03 was found via the API.**
+
+**Rollup SM check — "vSphere Cluster Worst ESXi Bad Network Packets"
+(`sm_48f81e75-bbc4-45f2-860f-4f0683d2a56d`):** queried all 3
+`ClusterComputeResource` objects (`vcf-lab-mgmt-cl01`, `vcf-lab-wld01-cl01`,
+`vcf-lab-wld02-cl01`) over the same 18:00Z–21:57Z range — all three return
+`{"values": []}`. The rollup has nothing to roll up.
+
+**Interpretation:** the full sweep does not corroborate the user's
+observation. Every host (9/9) and every cluster rollup (3/3) is empty for
+the entire window that contains the policy-enable period, so this isn't a
+"only the host you happened to query was cold" gap — it's uniform across
+the fleet. Two explanations remain open and were **not** distinguishable
+from this read-only pass:
+
+1. The user saw a **cached/stale UI value** (e.g. a browser tab open since
+   before the policy was disabled, or a widget using a longer default time
+   range that renders a stale last-known-good tile) rather than a live
+   recompute.
+2. The API's `/stats` and `/stats/latest` paths are not the same data path
+   the UI's live widget uses (e.g. UI badge/tile endpoints, or a
+   different aggregation level) — would need to compare against the exact
+   UI call, which is out of scope for a read-only API sweep.
+
+This addendum does not change DEF-010's existing classification
+(policy/config-gated denominator, likely, unproven at the policy-detail
+API-500 blocker) — it only closes the "did we check enough hosts" gap in
+the 21:51Z pass. **Recommendation unchanged:** no authoring action from
+recon; the config-opt-in proof step (if wanted) remains a live-instance
+policy write outside `ops-recon` scope, and if the user's mgmt-esx03
+observation needs to be explained specifically, that likely requires a UI-side
+check (screenshot / exact widget + time range), not another API sweep.
+
+#### 2026-07-16 late addendum — the 21:57Z "uniformly empty" sweep was a false negative
+
+The full-fleet sweep above queried bare `sm_<uuid>` statkeys. The stats
+API keys SM series as `Super Metric|sm_<uuid>` — re-swept with the
+correct key, all 9 hosts carry the ESXi Bad Network Packets series
+(from 20:43Z, 4 min after policy enablement) and all 3 clusters carry
+the rollup, values matching the UI. The user's mgmt-esx03 observation
+was correct. See `knowledge/lessons/sm-statkey-api-prefix.md` and
+`knowledge/context/reviews/def-010-closure-2026-07-16.md`.
