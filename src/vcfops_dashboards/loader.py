@@ -1056,6 +1056,13 @@ class ResourceRelationshipAdvancedConfig:
     self_provider: bool = False
 
 
+# ResourceList "Show Columns" grid-state presets. Closed enum — see
+# Widget.column_preset docstring-comment for why this isn't a raw-blob
+# passthrough. Keys are the YAML-facing values; ``render.py`` maps
+# "name-only" to the verbatim captured wire-format constant.
+_SUPPORTED_COLUMN_PRESETS = frozenset({"name-only"})
+
+
 @dataclass
 class Widget:
     local_id: str  # author-supplied short id used for interaction wiring
@@ -1064,6 +1071,19 @@ class Widget:
     coords: dict  # {x, y, w, h}
     # ResourceList only:
     resource_kinds: List[WidgetResourceKindRef] = field(default_factory=list)
+    # ResourceList only: optional typed "Show Columns" grid-state preset.
+    # Wire format: a top-level widget `states[]` array carrying a captured
+    # ExtJS grid-state blob, keyed `permResGrid_widget_<dashUuid>_<widgetUuid>`.
+    # See knowledge/context/api-surface/resourcelist_column_state_wire_format.md
+    # for the full investigation — the blob is an internal, unpublished Ops
+    # UI persistence artefact (no OpenAPI schema) reproduced verbatim from a
+    # captured ground-truth export, not re-derived. Only "name-only" (h15 =
+    # Name is the sole visible column) is verified; this is a closed enum by
+    # design — extend it only after capturing and verifying a new preset the
+    # same way, not by accepting arbitrary blobs. ``None`` (default) emits no
+    # `states[]`, i.e. current/unchanged behavior (Ops falls back to its
+    # built-in default column set).
+    column_preset: str | None = None
     # View only:
     view_name: str = ""
     # View-widget self-provider: when true, the widget does not wait
@@ -1184,6 +1204,17 @@ class Dashboard:
                 raise DashboardValidationError(
                     f"dashboard {self.name}: widget {w.local_id}: "
                     f"ResourceList requires resource_kinds"
+                )
+            if w.column_preset is not None and w.column_preset not in _SUPPORTED_COLUMN_PRESETS:
+                raise DashboardValidationError(
+                    f"dashboard {self.name}: widget {w.local_id}: "
+                    f"unsupported column_preset {w.column_preset!r} "
+                    f"(supported: {', '.join(sorted(_SUPPORTED_COLUMN_PRESETS))})"
+                )
+            if w.column_preset is not None and w.type != "ResourceList":
+                raise DashboardValidationError(
+                    f"dashboard {self.name}: widget {w.local_id}: "
+                    f"column_preset is only supported on ResourceList widgets"
                 )
             if w.type == "View":
                 if not w.view_name:
@@ -1922,6 +1953,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 property_list_config=property_list_config,
                 resource_relationship_advanced_config=resource_relationship_advanced_config,
                 relationship_mode=relationship_mode,
+                column_preset=(str(w["column_preset"]).strip() if w.get("column_preset") else None),
             )
         )
     interactions = [

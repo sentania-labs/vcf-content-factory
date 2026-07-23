@@ -404,3 +404,17 @@ not a gate.
   `/publish` path handles the None case; the `build` command does not.
   Reproduced with pre-DEF-013 `render.py` — NOT a DEF-013 regression.
   Route through `tooling` + `framework-reviewer` (RULE-013).
+
+### FB-019 — `_resource_list_widget(dashboard_id="")` default is a latent footgun
+
+- **Scope:** framework (`src/vcfops_dashboards/render.py`)
+- **Kind:** nit (reviewer follow-up)
+- **Status:** open
+- **Raised:** 2026-07-22, framework-reviewer column_preset review
+  (`knowledge/context/reviews/framework/resourcelist-column-preset-2026-07-22.md`, NIT).
+- **Detail:** Not reachable today (sole caller passes `dashboard.id`),
+  but a future caller omitting the param while a widget has
+  `column_preset` would silently emit a malformed states key
+  `permResGrid_widget__<widget>`. Make the param required or assert
+  non-empty when states is emitted. Route through `tooling` +
+  `framework-reviewer` next time render.py is touched.

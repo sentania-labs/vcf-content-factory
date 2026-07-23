@@ -38,6 +38,9 @@ widgets:
     type: ResourceList
     title: "Scope (World / vCenter)"
     coords: {x: 1, y: 1, w: 5, h: 10}
+    # column_preset: name-only — scope picker shows Name only; Adapter
+    # Type/Object Type/Policy/Collection columns are noise in a picker.
+    column_preset: name-only
     resource_kinds:
       - {adapter_kind: VMWARE, resource_kind: vSphere World}
       - {adapter_kind: VMWARE, resource_kind: VMwareAdapter Instance}

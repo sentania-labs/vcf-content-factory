@@ -127,3 +127,7 @@ Maybe next to the cluster selector not above…"
 ```
 
 Interactions and select_first_row settings unchanged — pure geometry.
+
+`cluster_picker` now sets `column_preset: name-only` so the scope picker's
+grid shows only the Name column (Adapter Type/Object Type/Policy/
+Collection columns hidden as noise in a picker).
