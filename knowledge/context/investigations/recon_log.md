@@ -3720,3 +3720,176 @@ allowlisted reference source) implements KB 318697 CPU support
 classification. Proceed with the design as scoped — one coded supermetric
 on VMWARE HostSystem over `cpu|cpuModel`, then the dashboard. Probe-gate
 step in the SM design note (compound `||` where-dialect) still applies.
+
+## 2026-07-23 — Dual-instance compliance-enablement recon (devel vs prod)
+
+**Scope:** read-only GET survey of compliance-standard enablement, run
+identically against `VCFOPS_PROFILE=devel` and `VCFOPS_PROFILE=prod`.
+No writes, no policy edits, no `/api/policies/{id}` fighting past the
+known FB-010 500.
+
+### 1. Compliance-subtype (subType 21) alert definitions
+
+`type`/`subType` int codes confirmed against
+`reference/docs/internal-api-9.1.json` (`BuilderAlertSubType`
+enum: AVAILABILITY=18, PERFORMANCE=19, CAPACITY=20, **COMPLIANCE=21**,
+CONFIGURATION=22). Paginated `/api/alertdefinitions` fully (both
+instances exceed the 1000-row default page size — `pageInfo.totalCount`
+devel=1145, prod=1466; fetched all pages).
+
+| | devel | prod |
+|---|---|---|
+| Total alert definitions | 1145 | 1466 |
+| subType=21 (COMPLIANCE) count | **71** | **108** |
+| Standards represented | vSphere SCG (v6.5/6.7/7/8), VCF Compliance Audit Guide 4.2–4.5, vSAN/NSX Hardening Guide | All of devel's **plus** CIS-VCF (`CISVCF-*`), PCI-DSS 3.2.1 and PCI DSS 4.0 (`PCI-*`), and VCF 9.0 SCG (`*ViolatingVCFSCG_V9.0`) families |
+
+**Drift finding:** prod ships 37 more built-in compliance alert
+definitions than devel — CIS-VCF, PCI-DSS (two versions), and the VCF
+9.0 Security Configuration Guide family exist only on prod. This is a
+build/content-catalog difference between the two instances, not a
+policy-enablement difference — confirmed by comparing the raw
+`/api/alertdefinitions` name lists (saved to
+`/tmp/.../alertdefs_devel.json` / `alertdefs_prod.json` this session,
+not persisted to the repo).
+
+**Per-policy enablement — blocked on both instances identically.**
+`GET /api/policies` (list, no detail) returns 20 `policySummaries` on
+each instance (name-for-name near-identical: Foundation Policy, Base
+Settings, Default Policy, vSphere Security Configuration Guide, vSAN
+Security Configuration Policy, NSX Security Configuration Guide,
+Config Wizard Based Policy, Risk/Health/Efficiency × {all infra, infra
+except VM, VM only} × 3 risk profiles — 20/20 match by name). **Prod
+additionally lists `PCI 3.2.1 / PCI 4.0`** (21st-vs-20th distinct
+policy — devel has no PCI-named policy at all), consistent with the
+alert-definition drift above.
+
+Per the FB-010 caveat, tried `GET /api/policies/{id}` on both — **500
+on both devel and prod** (not devel-specific as the caveat implied;
+re-verified this session with the vSAN Security Configuration Policy
+id on each). Also tried the one documented alternate surface,
+`GET /api/policies/{id}/settings?type=...` — reachable (400 without a
+`type=` query value) but its `type` enum is capacity/pricing/workload-
+automation settings only (`VC_PRICING_*`, `WORKLOAD_AUTOMATION_*`,
+`CAPACITY_*`, `TIME_REMAINING`) — **no alert/symptom enablement type
+exists in that enum**, so it cannot substitute. **Verdict: per-policy
+compliance-alert enablement state is not reachable via any GET
+endpoint on either instance.** Reported as blocked, not fought
+further, per the recon brief's explicit instruction.
+
+### 2. Per-component `badge|compliance` — the reliable enablement marker
+
+Sampled 5×HostSystem, 5×VirtualMachine, 3×ClusterComputeResource
+(all clusters — total count is 3 on both instances),
+5×Datastore per instance via `/api/resources` (VMWARE adapter kind)
+then `/api/resources/{id}/statkeys` (note: the JSON key is
+**`stat-key`**, not `statKey` — the response shape trap on this
+endpoint) and `/api/resources/{id}/stats/latest?statKey=badge|compliance`.
+
+**`badge|compliance` key is present on every sampled resource on both
+instances, all 4 kinds** — it is a platform-native badge key, not
+gated by adapter/pak presence. What varies is the **value**, and the
+value is the reliable "is compliance enabled for this component"
+signal:
+
+| Kind | devel `badge\|compliance` | prod `badge\|compliance` |
+|---|---|---|
+| HostSystem | **-1.0** (no data) on all 5 sampled | **100.0** (data present, fully compliant) on all 5 sampled |
+| VirtualMachine | **-1.0** on all 5 sampled | **100.0** on all 5 sampled |
+| ClusterComputeResource | **-1.0** on all 3 | **-1.0** on all 3 |
+| Datastore | **-1.0** on all 5 sampled | **-1.0** on all 5 sampled |
+
+Key present + `-1.0` ≠ key present + real data — distinguished by
+value, not by key absence (the key is never absent on VMWARE
+resources in this survey). `-1.0` reads as "no compliance alert
+definition is currently enabled against this resource" — consistent
+with devel lacking the CIS-VCF/PCI/VCF-9.0-SCG alert families (§1) and
+prod's Host/VM compliance badges reading a real (fully-compliant, no
+active violations) 100.0. Cluster and Datastore both read -1.0 on
+**both** instances even though prod *does* ship a Cluster-targeting
+compliance alert (`ClusterViolatingVCFSCG_V9.0`) — so that alert
+def's existence doesn't by itself light the badge; it must not be
+enabled in prod's active policy either. Datastore has **zero**
+subType-21 alert definitions targeting it on either instance (no
+built-in compliance content author ever wrote a Datastore-kind
+compliance alert) — Datastore's -1.0 is therefore structural, not a
+policy gap.
+
+### 3. Active compliance-subtype (subType=21) alerts — none firing
+
+Paginated `/api/alerts?activeOnly=true` fully on both (devel
+totalCount=1183, prod totalCount=15970 — prod's alert volume is far
+higher; unrelated to compliance). Filtered to `subType == "21"`:
+**0 active compliance-subtype alerts on either instance.** Matches
+§2 — prod's Host/VM badges are 100 (nothing is failing) and devel has
+no compliance badge coverage to fire against.
+
+### 4. Our compliance SDK pak (`content/sdk-adapters/compliance`)
+
+Key namespace confirmed from source (`ComplianceAdapter.java`
+`pushComplianceViaClient`/`pushProfileNamePropertyOnly`), **not** from
+REFERENCE.md (REFERENCE.md only documents the adapter's own internal
+`Compliance World` object — it does not enumerate the ARIA_OPS-pushed
+keys, which live only in the Java source): `VCF-CF Compliance|score`,
+`|pass_count`, `|fail_count`, `|total_count`, `|unreadable_count`
+(stats), `|profile_name` (property), plus per-control
+`VCF-CF Compliance|<profileName>|<control_id>|{Actual,Expected,
+Description,Compliant}`.
+
+| | devel | prod |
+|---|---|---|
+| `vcfcf_compliance` adapter instances (`/api/adapters?adapterKindKey=vcfcf_compliance`) | **3**, one per vCenter (wld01, wld02, mgmt), profile `VMware_SCG_9.0`, `lastCollected` ~1h fresh (within the 60-min interval) at survey time | **0** — pak not installed |
+| `VCF-CF Compliance\|*` keys on sampled HostSystem | 50–54 keys/host | **0** |
+| `VCF-CF Compliance\|*` keys on sampled VirtualMachine | 23–25 keys/VM | **0** |
+| `VCF-CF Compliance\|*` keys on sampled ClusterComputeResource | 7 keys/cluster | **0** |
+| `VCF-CF Compliance\|*` keys on sampled Datastore | 0 (adapter doesn't target Datastore) | 0 |
+| Our factory alert `AlertDefinition-vcfcf_compliance-vcfcf_compliance_score_degraded` ("Host Compliance Score Degraded", subType 20/CAPACITY, impact RISK) | Installed; **9 hosts ACTIVE at CRITICAL** (score <80%), plus history of WARNING/CANCELED transitions | Not present in active-alerts sweep (0 matches) — consistent with pak absence |
+
+### Comparison table (summary)
+
+| Dimension | devel | prod | Drift |
+|---|---|---|---|
+| Compliance (subType 21) alert defs shipped | 71 | 108 | prod has 37 more — CIS-VCF, PCI-DSS ×2, VCF 9.0 SCG families |
+| Compliance-named policies | 20 (no PCI policy) | 21 (+ "PCI 3.2.1 / PCI 4.0") | prod-only PCI policy |
+| Per-policy enablement detail (GET) | blocked, 500 (FB-010) | blocked, 500 (FB-010) | **no drift — same platform limitation both places** |
+| `badge\|compliance` on HostSystem/VM | -1.0 (no data) | 100.0 (compliant, data flowing) | **enablement drift** — prod has *some* native compliance alert active in policy against Host/VM; devel has none |
+| `badge\|compliance` on Cluster/Datastore | -1.0 | -1.0 | no drift (Datastore structural; Cluster policy-gapped on both) |
+| Active subType-21 alerts | 0 | 0 | no drift |
+| `vcfcf_compliance` (our pak) adapter instances | 3 (all vCenters) | 0 | **our pak is devel-only** |
+| Our pak's HostSystem alert firing | yes, 9 hosts CRITICAL | n/a (not installed) | pak coverage gap on prod |
+
+### Marker checklist that proved most reliable for "is compliance enabled on this component"
+
+1. `GET /api/resources/{id}/statkeys` (mind the **`stat-key`** field
+   name, not `statKey`) — confirm `badge|compliance` is present
+   (it always is, on VMWARE resources, regardless of enablement).
+2. `GET /api/resources/{id}/stats/latest?statKey=badge|compliance` —
+   read the **value**: `-1.0` = key present, no compliance alert
+   enabled against this resource in the active policy; any `0–100`
+   value = at least one compliance-subtype alert definition is both
+   (a) defined for this resource kind and (b) enabled in the policy
+   applied to this resource, and is actively evaluating.
+3. Do **not** infer enablement from alert-definition existence alone
+   (`/api/alertdefinitions` subType=21) — a shipped definition for a
+   resource's kind does not mean it's policy-enabled (prod's Cluster
+   compliance alert def exists but the badge is still -1.0).
+4. Do **not** infer enablement from active-alert absence alone — zero
+   active alerts is also what "fully compliant" looks like (prod
+   Host/VM: badge=100, zero active alerts, alert defs exist and *are*
+   enabled). Badge value is the only marker that discriminates
+   "enabled + compliant" from "not enabled" — both look like "no
+   active alerts."
+5. For our own pak specifically: `GET /api/adapters?adapterKindKey=
+   vcfcf_compliance` (instance presence + `lastCollected` freshness)
+   is more direct than hunting `VCF-CF Compliance|*` keys first, but
+   the keys are still useful for confirming the ARIA_OPS push landed
+   on the *component* (not just that the adapter is running) and for
+   distinguishing key-absent from key-present-no-data per the
+   sm-statkey lesson's discipline generally.
+
+**Recommendation:** no authoring action from this recon alone. Two
+follow-up decisions for the orchestrator/user: (a) whether to install
+the `vcfcf_compliance` pak on prod to close the pak-coverage gap, and
+(b) whether devel's missing native compliance-alert families
+(CIS-VCF/PCI/VCF-9.0-SCG) and missing badge data reflect a
+build/version difference worth reconciling, or are expected given
+devel's role as the "destructive playground" profile.

@@ -206,9 +206,9 @@ not a gate.
   Items 1–2 are `src/vcfops_*/` diffs → route through `tooling` +
   `framework-reviewer` per RULE-013 when picked up.
 
-### FB-010 — devel: `GET /api/policies/{id}` returns HTTP 500 — blocks per-attribute policy inspection
+### FB-010 — `GET /api/policies/{id}` returns HTTP 500 — blocks per-attribute policy inspection
 
-- **Scope:** devel instance (platform fault, not factory content)
+- **Scope:** platform fault (re-scoped 2026-07-23: reproduced on BOTH devel and prod — not instance-specific; likely a platform/API-version behavior, raising the odds this is a product bug worth a Broadcom SR)
 - **Kind:** bug (instance) / investigation
 - **Status:** open
 - **Raised:** 2026-07-16, during the DEF-010 enablement recon
