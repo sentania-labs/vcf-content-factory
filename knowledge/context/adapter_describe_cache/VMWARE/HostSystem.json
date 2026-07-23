@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-04-28T17:36:59Z",
+  "fetched_at": "2026-07-23T03:18:22Z",
   "metrics": {
     "NTP|DRIFT_IN_MILLS": {
       "default_monitored": true,
@@ -82,13 +82,13 @@
       "default_monitored": false,
       "name": "Sensor|Temperature|(DEP) Health State"
     },
-    "Super Metric|sm_0a200668-9de1-4be6-9539-5e5a6d772ac8": {
-      "default_monitored": true,
-      "name": "Super Metrics|[IDPS] Peak Net Usage within cycle (All VMs)"
-    },
     "Super Metric|sm_51613351-5865-478e-9f26-b9d5598fed4d": {
       "default_monitored": true,
       "name": "Super Metrics|Network Speed Degradation"
+    },
+    "Super Metric|sm_55ef6c51-3b90-4a6e-800a-983d2e86a8a5": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Storage Active Path Count"
     },
     "Super Metric|sm_57be077d-f61e-4d25-ae05-ae27eed15229": {
       "default_monitored": true,
@@ -98,9 +98,9 @@
       "default_monitored": true,
       "name": "Super Metrics|[IDPS] Packets per second (All VMs)"
     },
-    "Super Metric|sm_acb5239f-0d39-4c46-8d45-75b4105868bc": {
+    "Super Metric|sm_a7becc4c-22f4-4946-acf9-6cb559672544": {
       "default_monitored": true,
-      "name": "Super Metrics|[Custom] Sum of Powered off vCPUs"
+      "name": "Super Metrics|[VCF Content Factory] CPU Support Status (KB318697)"
     },
     "Super Metric|sm_b6f20136-03bf-48d3-8b80-429f59d21374": {
       "default_monitored": true,
@@ -108,7 +108,7 @@
     },
     "Super Metric|sm_c0c98494-1147-4ec1-affd-fcaf54334563": {
       "default_monitored": true,
-      "name": "Super Metrics|Bad Network Packets"
+      "name": "Super Metrics|ESXi Bad Network Packets"
     },
     "Super Metric|sm_c458582f-b63f-4085-8465-fa32cb718271": {
       "default_monitored": true,
@@ -3872,5 +3872,5 @@
     }
   },
   "resource_kind": "HostSystem",
-  "source": "https://vcf-lab-operations.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys"
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys"
 }

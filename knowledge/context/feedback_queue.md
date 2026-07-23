@@ -368,3 +368,53 @@ not a gate.
   control (which worked) used a real key, masking the pattern. Codified:
   `knowledge/lessons/sm-statkey-api-prefix.md`. NOT related to FB-010
   (the policy-API 500 is real and remains open).
+
+### FB-017 — loader-level validation for out-of-grid dashboard coords (DEF-013 follow-up)
+
+- **Scope:** framework (`src/vcfops_dashboards/loader.py`)
+- **Kind:** enhancement (reviewer WARNING follow-up)
+- **Status:** open
+- **Raised:** 2026-07-22, framework-reviewer DEF-013 review
+  (`knowledge/context/reviews/framework/def013-gridster-floor-2026-07-22.md`, APPROVE
+  with 2 WARNING / 1 NIT).
+- **Detail:** The DEF-013 fix floor-clamps `gridsterCoords` to the
+  1-indexed grid at render time, but the clamp is defensive, not a
+  whole-layout translation: a fully 0-based authored dashboard shifts
+  only its zero-row and can render a silent one-row widget overlap.
+  Reviewer recommendation: add a loader-level validation WARNING when
+  any widget authors `x < 1` or `y < 1`, so authors fix the source and
+  the render clamp stays a backstop. NIT from the same review: the
+  ceiling-overflow class (`x + w > 13`) is also unvalidated — the
+  sibling half of the 00d3382 symptom family; cover both in one pass.
+  Route through `tooling` + `framework-reviewer` (RULE-013).
+
+### FB-018 — `vcfops_packaging build` crashes on SDK-pointer release manifests (`zip_path=None`)
+
+- **Scope:** framework (`src/vcfops_packaging/cli.py`)
+- **Kind:** bug (TOOLSET GAP, pre-existing)
+- **Status:** open
+- **Raised:** 2026-07-22, content-packager DEF-013 stale-zip rebuild.
+- **Detail:** `python3 -m vcfops_packaging build bundles/releases/*.yaml`
+  fails with `'NoneType' object has no attribute 'name'` for the three
+  SDK-adapter release manifests (synology / unifi / vcommunity-vsphere
+  managementpacks). Root cause (packager read-only diagnosis):
+  pointer-only SDK builds intentionally return `zip_path=None`
+  (`release_builder.py` ~422-439), but `cli.py::_build_release_to_dist`
+  (~line 136) unconditionally dereferences `art.zip_path.name`. The
+  `/publish` path handles the None case; the `build` command does not.
+  Reproduced with pre-DEF-013 `render.py` — NOT a DEF-013 regression.
+  Route through `tooling` + `framework-reviewer` (RULE-013).
+
+### FB-019 — `_resource_list_widget(dashboard_id="")` default is a latent footgun
+
+- **Scope:** framework (`src/vcfops_dashboards/render.py`)
+- **Kind:** nit (reviewer follow-up)
+- **Status:** open
+- **Raised:** 2026-07-22, framework-reviewer column_preset review
+  (`knowledge/context/reviews/framework/resourcelist-column-preset-2026-07-22.md`, NIT).
+- **Detail:** Not reachable today (sole caller passes `dashboard.id`),
+  but a future caller omitting the param while a widget has
+  `column_preset` would silently emit a malformed states key
+  `permResGrid_widget__<widget>`. Make the param required or assert
+  non-empty when states is emitted. Route through `tooling` +
+  `framework-reviewer` next time render.py is touched.

@@ -975,15 +975,70 @@ def render_views_xml(
 # ---------------- Dashboard (JSON) ----------------
 
 
-def _resource_list_widget(w: Widget, kind_index: dict[tuple[str, str], int]) -> dict:
+def _clamp_gridster_floor(coords: dict) -> dict:
+    """Normalize an authored ``coords: {x, y, w, h}`` block into a wire-valid
+    ``gridsterCoords``.
+
+    The dashboard grid is **1-indexed**: every ``gridsterCoords`` observed
+    across the entire known-good corpus (vendor MP exports under
+    ``reference/references/`` — over 100 widgets surveyed — plus every
+    ``knowledge/context/exports/*.json`` capture) uses ``x >= 1`` and
+    ``y >= 1``. None use 0 for either axis.
+
+    DEF-013: an authored ``coords`` block using 0-based x/y (e.g.
+    ``{x: 0, y: 0, ...}``, the natural DX default for someone thinking in
+    array-index terms) produces a dashboard where the picker/top widget
+    renders *below* a widget declared later in y-order — an inverted
+    vertical stack relative to the authored layout. 0 is outside the grid's
+    valid coordinate space; downstream the UI's placement engine appears to
+    treat it as unset/auto rather than "first row", so the widget falls
+    back to flow order instead of the declared position. Clamping to the
+    grid's 1-indexed floor here fixes the wire output without an author
+    having to know this quirk, and without touching any authored YAML.
+
+    Only the floor is clamped (``max(1, x)`` / ``max(1, y)``) — relative
+    ordering of already-valid (>=1) coordinates in the same dashboard is
+    left untouched, so multi-row layouts that were already 1-indexed are
+    unaffected. This is deliberately NOT a reintroduction of the
+    `_gridster_coords()` helper deleted in 00d3382 (see
+    ``tests/test_renderer_regression_phase16.py`` Test A) — that helper
+    unconditionally shifted every x/y by +1 regardless of whether the input
+    was already 1-based, corrupting valid layouts. This helper is a no-op
+    (`max(1, v) == v`) for every coordinate that was already >= 1, and only
+    changes values that are provably out-of-grid (< 1).
+    """
+    c = dict(coords)
+    c["x"] = max(1, c.get("x", 1))
+    c["y"] = max(1, c.get("y", 1))
+    return c
+
+
+# Verbatim captured ExtJS grid-state blob for a ResourceList "Show
+# Columns -> Name only" preset (h15 = Name; the sole hidden=b:0 column).
+# Captured ground truth and full decode grammar:
+# knowledge/context/api-surface/resourcelist_column_state_wire_format.md
+# Column ids are generic (h1..h47, resourceRating) — they do not embed
+# any widget/dashboard UUID — so this value is a reusable constant across
+# every ResourceList widget. Only the sibling `key` is per-widget. This
+# is an internal, unpublished Ops UI (ExtJS) persistence artefact with no
+# OpenAPI schema; paste verbatim, do not re-derive the multi-pass
+# URL-encoding (see the doc's "Encoding note").
+_RESOURCE_LIST_COLUMN_STATE_NAME_ONLY = (
+    "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253Ah1%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah2%255Eo%25253Aid%25253Ds%2525253Ah3%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah4%255Eo%25253Aid%25253Ds%2525253Ah5%255Eo%25253Aid%25253Ds%2525253Ah6%255Eo%25253Aid%25253Ds%2525253Ah7%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah8%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah9%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah10%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah11%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah12%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah13%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah14%255Eo%25253Aid%25253Ds%2525253Ah15%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253Ah16%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253AresourceRating%25255Ehidden%25253Db%2525253A1%255Eo%25253Aid%25253Ds%2525253Ah18%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah19%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah20%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah21%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah22%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah23%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah24%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah25%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah26%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah27%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah28%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah29%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah30%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah31%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah32%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah33%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah34%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah35%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah36%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah37%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah38%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah39%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah40%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah41%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah42%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah43%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah44%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah45%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah46%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah47%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100"
+)
+
+
+def _resource_list_widget(
+    w: Widget, kind_index: dict[tuple[str, str], int], dashboard_id: str = "",
+) -> dict:
     kinds = [
         f"resourceKind:id:{kind_index[(rk.adapter_kind, rk.resource_kind)]}_::_"
         for rk in w.resource_kinds
     ]
-    return {
+    widget_json = {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "ResourceList",
         "title": w.title,
         "config": {
@@ -1006,11 +1061,19 @@ def _resource_list_widget(w: Widget, kind_index: dict[tuple[str, str], int]) -> 
             },
             "depth": 1,
             "customFilter": {"filter": [], "excludedResources": None, "includedResources": None},
-            "selectFirstRow": {"selectFirstRow": True},
+            "selectFirstRow": {"selectFirstRow": w.select_first_row},
             "selfProvider": {"selfProvider": False},
         },
         "height": 600,
     }
+    if w.column_preset == "name-only":
+        widget_json["states"] = [
+            {
+                "value": _RESOURCE_LIST_COLUMN_STATE_NAME_ONLY,
+                "key": f"permResGrid_widget_{dashboard_id}_{w.widget_id}",
+            }
+        ]
+    return widget_json
 
 
 def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, str], int],
@@ -1083,7 +1146,7 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "View",
         "title": w.title,
         "config": {
@@ -1096,7 +1159,7 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
             "refreshContent": {"refreshContent": False},
             "isUpdatedView": True,
             "chartViewItems": [],
-            "selectFirstRow": {"selectFirstRow": True},
+            "selectFirstRow": {"selectFirstRow": w.select_first_row},
             "selfProvider": {"selfProvider": self_provider_flag},
             "title": w.title,
             "viewDefinitionId": view_def_id,
@@ -1170,7 +1233,7 @@ def _text_display_widget(w: Widget) -> dict:
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "TextDisplay",
         "title": w.title,
         "config": {
@@ -1198,7 +1261,7 @@ def _scoreboard_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "Scoreboard",
         "title": w.title,
         "config": {
@@ -1262,7 +1325,7 @@ def _metric_chart_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "MetricChart",
         "title": w.title,
         "config": {
@@ -1320,7 +1383,7 @@ def _health_chart_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "HealthChart",
         "title": w.title,
         "config": {
@@ -1384,7 +1447,7 @@ def _pareto_analysis_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "ParetoAnalysis",
         "title": w.title,
         "config": {
@@ -1460,7 +1523,7 @@ def _alert_list_widget(w: Widget) -> dict:
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "AlertList",
         "title": w.title,
         "config": {
@@ -1539,7 +1602,7 @@ def _problem_alerts_list_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "ProblemAlertsList",
         "title": w.title,
         "config": config,
@@ -1678,7 +1741,7 @@ def _heatmap_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "Heatmap",
         "title": w.title,
         "config": {
@@ -1727,7 +1790,7 @@ def _property_list_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "PropertyList",
         "title": w.title,
         "config": {
@@ -1777,7 +1840,7 @@ def _resource_relationship_advanced_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "ResourceRelationshipAdvanced",
         "title": w.title,
         "config": {
@@ -1802,7 +1865,7 @@ def _resource_relationship_advanced_widget(
             "customFilter": {
                 "filter": [], "excludedResources": None, "includedResources": None,
             },
-            "selectFirstRow": {"selectFirstRow": True},
+            "selectFirstRow": {"selectFirstRow": w.select_first_row},
             "selfProvider": {"selfProvider": cfg.self_provider},
         },
         "height": 600,
@@ -1819,7 +1882,7 @@ def _build_dashboard_obj(
     widgets_json = []
     for w in dashboard.widgets:
         if w.type == "ResourceList":
-            widgets_json.append(_resource_list_widget(w, kind_index))
+            widgets_json.append(_resource_list_widget(w, kind_index, dashboard.id))
         elif w.type == "View":
             # Resolve to a bundled ViewDef when available; fall back to the raw
             # UUID for external (platform/other-MP) views.  A bare name that

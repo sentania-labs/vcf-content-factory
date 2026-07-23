@@ -3621,3 +3621,102 @@ correct key, all 9 hosts carry the ESXi Bad Network Packets series
 the rollup, values matching the UI. The user's mgmt-esx03 observation
 was correct. See `knowledge/lessons/sm-statkey-api-prefix.md` and
 `knowledge/context/reviews/def-010-closure-2026-07-16.md`.
+
+## 2026-07-22 — recon: CPU Support Status (KB 318697) supermetric + dashboard
+
+**Intent:** dashboard classifying every ESXi host's CPU against Broadcom
+KB 318697 (CPU deprecation/discontinuation for vSphere/VCF 9.x) via ONE
+coded supermetric on VMWARE HostSystem reading `cpu|cpuModel`. Design
+notes: `knowledge/designs/supermetrics/cpu-support-status.md`,
+`knowledge/designs/dashboards/cpu-support-status.md`.
+
+### 1. Live `cpu|cpuModel` / `hardware|vendorModel` inventory (devel, 9 HostSystem objects)
+
+Queried `/api/resources` (VMWARE/HostSystem) then `/api/resources/{id}/properties`
+per host.
+
+| `cpu|cpuModel` (verbatim) | host count |
+|---|---|
+| `12th Gen Intel(R) Core(TM) i7-1260P` | 4 |
+| `AMD Ryzen 9 9955HX 16-Core Processor` | 4 |
+| `Intel(R) Celeron(R) J6412 @ 2.00GHz` | 1 |
+
+| `hardware|vendorModel` (verbatim) | host count |
+|---|---|
+| `To Be Filled By O.E.M. To Be Filled By O.E.M.` | 4 |
+| `Micro Computer (HK) Tech Limited MS-A2` | 4 |
+| `Maxtang EHL30` | 1 |
+
+**Population:** `cpu|cpuModel` and `hardware|vendorModel` are populated on
+all 9/9 hosts — zero missing/empty. (This is a small homelab-style devel
+fleet — Intel Core i7-1260P NUC-class, AMD Ryzen 9955HX, Celeron J6412 —
+none of these consumer/mobile/embedded CPUs appear on the KB 318697
+deprecated/discontinued server-CPU lists as of this pass; the pattern
+table will need real data-center Xeon/EPYC strings from KB 318697 itself,
+not from this devel fleet, to be meaningfully exercised. Flagging so the
+author doesn't mistake "0 matches on devel" for "pattern table is wrong.")
+
+### 2. Existing coverage check — none found
+
+- **Instance (`/api/supermetrics`, 66 total):** 19 name matches on
+  `cpu|deprecat|discontinu|support|318697|hardware compat` regex — all
+  are vCPU sizing/reclamation/ready/co-stop metrics
+  (`[VCF Content Factory] vCLS vCPU (count)`, `CPU Reservation`,
+  `CPU Usable Capacity Utilization`, etc.). **None** address CPU
+  model/hardware support classification.
+- **Instance (`/api/symptomdefinitions`, 1000) / `/api/alertdefinitions`
+  (1000):** matches are all built-in VMware/NSX symptom/alert content —
+  VLAN-switch support, NIC driver support, vSAN Support Insight, HCG
+  database age ("Checking the age of the VMware Hardware Compatibility
+  Guide database..."), CPU AES-NI support, CPU utilization/contention
+  alerts. **None** classify CPU model against KB 318697 tiers.
+- **Instance (`/api/reportdefinitions`, 74):** no name matches.
+- **Instance (`/api/resources/groups`):** 0 dynamic groups defined at all.
+- **Repo (`content/`):** no supermetric/view/dashboard file with
+  cpuModel-classification logic. `grep -ril cpuModel content/` hits only
+  distribution views: `content/sdk-adapters/vcommunity-vsphere/views/ESXi
+  CPU Models.yaml` and `content/sdk-adapters/vcommunity/views/ESXi CPU
+  Models.yaml` — confirmed by reading the YAML: `data_type: distribution`,
+  single column `cpu|cpuModel`, donut-chart presentation. Pure model
+  inventory, no supported/deprecated/discontinued logic, no KB 318697
+  reference. Does not go further than what the design already assumes.
+- **Reference repos (`reference/references/`, all 16 allowlisted sources
+  grepped for `318697|cpu.*support.*status|cpu.*deprecat|cpu.*discontinu`):**
+  no hits in any source.
+- **Built-in metric / vocabulary
+  (`reference/docs/vcf9/metrics-properties.md`):** `cpu|cpuModel` is
+  documented as a raw property ("CPU Model / CPU Model"), confirming it's
+  a valid metric key to build the coded SM on. No built-in metric or
+  property encodes support/deprecation/discontinuation status — that
+  classification does not exist anywhere in the vocabulary and must be
+  authored.
+
+### 3. Property population — no gaps
+
+`cpu|cpuModel` and `hardware|vendorModel` both populated on 9/9 devel
+HostSystem objects (see table above). No empty-string or missing-property
+hosts observed on this instance.
+
+### 4. Existing SM name collision check — clear
+
+No supermetric named `[VCF Content Factory] CPU Support Status` (or any
+KB-318697-flavored name) exists on the devel instance (confirmed via the
+66-item `/api/supermetrics` name sweep above).
+
+### Tooling/API gap note
+
+Dashboard and view listing have no REST GET endpoint (per
+`knowledge/context/api-surface/content_api_surface.md` §Dashboards/§Views —
+"no REST CRUD," list only via UI Struts `POST /ui/dashboard.action` or
+Ext.Direct RPC). Per ops-recon's GET-only hard rule, dashboard/view name
+collision was checked via repo YAML + reference-repo grep only, **not**
+via a live instance dashboard/view name sweep — flagging as a known
+coverage gap for the "no dashboard named X already exists on the instance"
+question specifically (a POST-based unsupported-endpoint check would be
+needed to close it, which is out of this agent's read-only-GET mandate).
+
+**Recommendation:** author. No existing content (instance, repo, or
+allowlisted reference source) implements KB 318697 CPU support
+classification. Proceed with the design as scoped — one coded supermetric
+on VMWARE HostSystem over `cpu|cpuModel`, then the dashboard. Probe-gate
+step in the SM design note (compound `||` where-dialect) still applies.

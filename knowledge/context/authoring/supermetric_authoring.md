@@ -70,9 +70,14 @@ metric to `ClusterComputeResource`). When in doubt, ask.
 - **`depth`**: positive = children, negative = parents, **never 0**.
   Cannot cross sibling branches in one super metric (e.g. VM →
   Datastore Cluster requires two chained super metrics; see p.4173).
-- **`where` clause**: a **bare quoted string** inside a resource
-  entry. Property keys and literal values appear bare — no nested
-  `${}` around the property key, no single quotes around the
+- **`where` clause — TWO DIALECTS.** (Empirically established
+  2026-07-22 by a 6-probe suite on devel; see "Parenthesized
+  `$value` dialect" below for the second one. The dialects have
+  DIFFERENT rules — do not mix guidance between them.)
+
+  **Dialect A — quoted-string**: a **bare quoted string** inside a
+  resource entry. Property keys and literal values appear bare — no
+  nested `${}` around the property key, no single quotes around the
   literal, no wrapping the whole thing in parens. String operators
   (`equals`, `contains`, `startsWith`, `endsWith`, and their `!`
   negations) and numeric operators (`==`, `!=`, `<`, `>`, `<=`,
@@ -93,7 +98,8 @@ metric to `ClusterComputeResource`). When in doubt, ask.
   outer entry's own value (`where="$value == 1"`) and `isFresh()`
   for freshness (`where="$value.isFresh()"`).
 
-  **CRITICAL: Do NOT use `&&` with string operators.** Compound
+  **CRITICAL (Dialect A only): Do NOT use `&&` with string
+  operators.** Compound
   `&&` works with numeric conditions
   (`where=($value == 7 && $value.isFresh())`), but **silently
   fails** when combined with string operators (`equals`,
@@ -102,7 +108,41 @@ metric to `ClusterComputeResource`). When in doubt, ask.
   successfully, validates, and produces **zero data** with no
   error — the most dangerous kind of bug. Discovered 2026-04-09
   when three VKS super metrics all returned 0 despite correct
-  property values on the target VMs.
+  property values on the target VMs. **This restriction does NOT
+  apply to Dialect B below** — the 2026-04-09 finding was
+  overgeneralized until the 2026-07-22 probe suite separated the
+  two grammars.
+
+  **Dialect B — parenthesized `$value`**: `where=( … )` with
+  `$value` referring to the entry's own metric/property value and
+  **single-quoted** string literals:
+
+  ```
+  count(${this, metric=cpu|cpuModel,
+    where=($value contains 'Gold 61' || $value contains 'EPYC 7551')}) ? 1 : 0
+  ```
+
+  Vendor-attested ("My Top 15 vRealize Operations Super Metrics"
+  blog, #8/#9/#10) and verified end-to-end on devel 2026-07-22 by a
+  6-probe suite (probe SMs installed, policy-enabled, per-host
+  values checked against known cpuModel ground truth — 45/45 series
+  correct, zero silent failures). Established behavior:
+
+  | Construct | Verdict |
+  |---|---|
+  | `$value contains 'A' \|\| $value contains 'B'` | ✅ works (both arms evaluated) |
+  | `$value contains 'A' && $value contains 'B'` | ✅ works (unlike Dialect A!) |
+  | `!($value contains 'A')` | ✅ works (inverts correctly) |
+  | Parens inside the quoted literal (`'Core(TM) i7'`) | ✅ works |
+  | Chained ternary `c1 ? 2 : c2 ? 1 : 0` around counts | ✅ correct precedence |
+  | Case-insensitive matching | ❌ NO — `contains 'I7'` does not match `i7`; literals must be byte-exact case |
+
+  Use Dialect B whenever a formula must test one string
+  property against multiple literals (classification, allowlists);
+  use Dialect A for cross-property filtering on related resources.
+  Testing DIFFERENT properties in one compound Dialect-B where is
+  untested — probe first (the 2026-07-22 suite only exercised
+  multiple conditions on the same `$value`).
 
   **Subtraction pattern** — the correct way to filter on two
   string properties simultaneously:

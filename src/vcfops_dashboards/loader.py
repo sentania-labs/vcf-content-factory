@@ -1056,6 +1056,13 @@ class ResourceRelationshipAdvancedConfig:
     self_provider: bool = False
 
 
+# ResourceList "Show Columns" grid-state presets. Closed enum — see
+# Widget.column_preset docstring-comment for why this isn't a raw-blob
+# passthrough. Keys are the YAML-facing values; ``render.py`` maps
+# "name-only" to the verbatim captured wire-format constant.
+_SUPPORTED_COLUMN_PRESETS = frozenset({"name-only"})
+
+
 @dataclass
 class Widget:
     local_id: str  # author-supplied short id used for interaction wiring
@@ -1064,6 +1071,19 @@ class Widget:
     coords: dict  # {x, y, w, h}
     # ResourceList only:
     resource_kinds: List[WidgetResourceKindRef] = field(default_factory=list)
+    # ResourceList only: optional typed "Show Columns" grid-state preset.
+    # Wire format: a top-level widget `states[]` array carrying a captured
+    # ExtJS grid-state blob, keyed `permResGrid_widget_<dashUuid>_<widgetUuid>`.
+    # See knowledge/context/api-surface/resourcelist_column_state_wire_format.md
+    # for the full investigation — the blob is an internal, unpublished Ops
+    # UI persistence artefact (no OpenAPI schema) reproduced verbatim from a
+    # captured ground-truth export, not re-derived. Only "name-only" (h15 =
+    # Name is the sole visible column) is verified; this is a closed enum by
+    # design — extend it only after capturing and verifying a new preset the
+    # same way, not by accepting arbitrary blobs. ``None`` (default) emits no
+    # `states[]`, i.e. current/unchanged behavior (Ops falls back to its
+    # built-in default column set).
+    column_preset: str | None = None
     # View only:
     view_name: str = ""
     # View-widget self-provider: when true, the widget does not wait
@@ -1072,6 +1092,22 @@ class Widget:
     # whose descendants Ops walks to populate the list.
     self_provider: bool = False
     pin: WidgetResourceKindRef | None = None
+    # Whether the widget auto-selects its first row and fires a
+    # downstream resourceId interaction as soon as data loads. Wire
+    # format: config.selectFirstRow.selectFirstRow (View and
+    # ResourceList widgets). Defaults to True — the historical,
+    # byte-identical-with-existing-content behavior. Set to False as a
+    # strict opt-out on a *middle* tier of a picker -> intermediate view
+    # -> terminal view drill chain when the intermediate view's
+    # auto-select re-fires on every upstream refresh and permanently
+    # pins the terminal widget to the intermediate view's first row —
+    # this is what blocks a wider upstream selection (e.g. World/
+    # vCenter) from ever reaching the terminal widget. See the CPU
+    # Support Status v2 dashboard investigation
+    # (knowledge/context/investigations/) and the vendor corpus, which
+    # emits selectFirstRow:false 132 times vs true 16 times —
+    # overwhelmingly the norm on multi-tier drill dashboards.
+    select_first_row: bool = True
     # Type-specific config for chart/text widgets
     scoreboard_config: ScoreboardConfig | None = None
     metric_chart_config: MetricChartConfig | None = None
@@ -1168,6 +1204,17 @@ class Dashboard:
                 raise DashboardValidationError(
                     f"dashboard {self.name}: widget {w.local_id}: "
                     f"ResourceList requires resource_kinds"
+                )
+            if w.column_preset is not None and w.column_preset not in _SUPPORTED_COLUMN_PRESETS:
+                raise DashboardValidationError(
+                    f"dashboard {self.name}: widget {w.local_id}: "
+                    f"unsupported column_preset {w.column_preset!r} "
+                    f"(supported: {', '.join(sorted(_SUPPORTED_COLUMN_PRESETS))})"
+                )
+            if w.column_preset is not None and w.type != "ResourceList":
+                raise DashboardValidationError(
+                    f"dashboard {self.name}: widget {w.local_id}: "
+                    f"column_preset is only supported on ResourceList widgets"
                 )
             if w.type == "View":
                 if not w.view_name:
@@ -1616,6 +1663,14 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
             )
         widget_type = str(w["type"]).strip()
 
+        select_first_row_raw = w.get("select_first_row", True)
+        if not isinstance(select_first_row_raw, bool):
+            raise DashboardValidationError(
+                f"widget '{w.get('id', '')}': select_first_row must be a bool "
+                f"(unquoted true/false in YAML); got {type(select_first_row_raw).__name__} "
+                f"{select_first_row_raw!r}"
+            )
+
         # --- Parse TextDisplay config ---
         text_display_config = None
         if widget_type == "TextDisplay":
@@ -1886,6 +1941,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 view_name=str(w.get("view", "") or "").strip(),
                 self_provider=bool(w.get("self_provider", False)),
                 pin=pin,
+                select_first_row=select_first_row_raw,
                 scoreboard_config=scoreboard_config,
                 metric_chart_config=metric_chart_config,
                 text_display_config=text_display_config,
@@ -1897,6 +1953,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 property_list_config=property_list_config,
                 resource_relationship_advanced_config=resource_relationship_advanced_config,
                 relationship_mode=relationship_mode,
+                column_preset=(str(w["column_preset"]).strip() if w.get("column_preset") else None),
             )
         )
     interactions = [

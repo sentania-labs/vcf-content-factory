@@ -1,0 +1,25 @@
+id: a7becc4c-22f4-4946-acf9-6cb559672544
+name: "[VCF Content Factory] CPU Support Status (KB318697)"
+resource_kinds:
+  - resource_kind_key: HostSystem
+    adapter_kind_key: VMWARE
+description: >
+  Classifies each ESXi host's physical CPU against Broadcom KB 318697
+  (CPU support deprecation and discontinuation for vSphere/VCF —
+  https://knowledge.broadcom.com/external/article/318697/). Emits a
+  coded tier value read from cpu|cpuModel: 0 = supported (default —
+  CPU model matched none of the deprecated/discontinued literals
+  below), 1 = deprecated, 2 = discontinued, 3 = discontinued starting
+  from VCF 9.2. The formula is a chained ternary checked most-severe
+  tier first (3 -> 2 -> 1 -> 0); each tier is a single count() term
+  over a compound `$value contains '<literal>' || ...` where clause
+  (Dialect B — parenthesized $value, single-quoted literals — per
+  knowledge/context/authoring/supermetric_authoring.md). Literals are
+  copied byte-exact from the KB-318697 pattern table in
+  knowledge/designs/supermetrics/cpu-support-status.md; matching is
+  case-sensitive. Unmatched CPU models (including all CPUs observed in
+  the devel recon sample, which is a homelab fleet with no
+  KB-318697-listed model) read 0 by design — this is the intended
+  "assume supported" default for new/unlisted CPUs, not a bug.
+formula: |
+  count(${this, metric=cpu|cpuModel, where=($value contains ' v5' || $value contains 'Platinum 81' || $value contains 'Gold 61' || $value contains 'Gold 51' || $value contains 'Silver 41' || $value contains 'Bronze 31' || $value contains 'D-21')}) ? 3 : count(${this, metric=cpu|cpuModel, where=($value contains 'D-15' || $value contains ' v4' || $value contains ' v6' || $value contains 'W-21')}) ? 2 : count(${this, metric=cpu|cpuModel, where=($value contains 'EPYC 7251' || $value contains 'EPYC 7261' || $value contains 'EPYC 7281' || $value contains 'EPYC 7301' || $value contains 'EPYC 7351' || $value contains 'EPYC 7371' || $value contains 'EPYC 7401' || $value contains 'EPYC 7451' || $value contains 'EPYC 7501' || $value contains 'EPYC 7551' || $value contains 'EPYC 7571' || $value contains 'EPYC 7601' || $value contains 'EPYC 7232' || $value contains 'EPYC 7252' || $value contains 'EPYC 7262' || $value contains 'EPYC 7272' || $value contains 'EPYC 7282' || $value contains 'EPYC 7302' || $value contains 'EPYC 7352' || $value contains 'EPYC 7402' || $value contains 'EPYC 7452' || $value contains 'EPYC 7502' || $value contains 'EPYC 7532' || $value contains 'EPYC 7542' || $value contains 'EPYC 7552' || $value contains 'EPYC 7642' || $value contains 'EPYC 7662' || $value contains 'EPYC 7702' || $value contains 'EPYC 7742' || $value contains 'EPYC 7F32' || $value contains 'EPYC 7F52' || $value contains 'EPYC 7F72' || $value contains 'EPYC 7H12' || $value contains 'Platinum 82' || $value contains 'Gold 62' || $value contains 'Gold 52' || $value contains 'Silver 42' || $value contains 'Bronze 32' || $value contains 'E-21' || $value contains 'E-22' || $value contains 'Atom(TM) CPU C3')}) ? 1 : 0
