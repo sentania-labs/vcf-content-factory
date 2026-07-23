@@ -1,80 +1,59 @@
+description: 'CPU support/deprecation posture per Broadcom KB 318697 (https://knowledge.broadcom.com/external/article/318697/cpu-support-deprecation-and-discontinuat.html)
+  — source of record for the underlying coded classification. Scope tier (Row 1) lists
+  vSphere World and vCenter (VMwareAdapter Instance) rows and auto-selects the first
+  row. Row 2 rolls up the worst per-cluster CPU support status (scoped to the Row
+  1 selection): 0=supported, 1=deprecated, 2=discontinued, 3=discontinued starting
+  from VCF 9.2. Row 3 lists per-host model, CPU model, and CPU support status, scoped
+  to whichever of Row 1 (World/vCenter) or Row 2 (cluster) was most recently selected.
+
+  '
 id: b6796122-4c9b-4770-83d8-10f785755ef2
-name: "[VCF Content Factory] CPU Support Status"
-description: >
-  CPU support/deprecation posture per Broadcom KB 318697
-  (https://knowledge.broadcom.com/external/article/318697/cpu-support-deprecation-and-discontinuat.html) —
-  source of record for the underlying coded classification. Scope tier
-  (Row 1) lists vSphere World and vCenter (VMwareAdapter Instance) rows
-  and auto-selects the first row. Row 2 rolls up the worst per-cluster
-  CPU support status (scoped to the Row 1 selection): 0=supported,
-  1=deprecated, 2=discontinued, 3=discontinued starting from VCF 9.2.
-  Row 3 lists per-host model, CPU model, and CPU support status, scoped
-  to whichever of Row 1 (World/vCenter) or Row 2 (cluster) was most
-  recently selected.
-
-released: false
-version: "1.0.0"
-
-widgets:
-
-  # ── Row 1: Scope tier — vSphere World / vCenter ─────────────────────────
-  # ResourceList always auto-selects the first row (selectFirstRow is
-  # hardcoded true by the renderer) and populates directly from
-  # resource_kinds — no self_provider/pin needed (those fields are not
-  # honored on ResourceList; see render.py _resource_list_widget).
-  # v2 (2026-07-22): ClusterComputeResource removed from this picker —
-  # clusters now live in Row 2 as their own rolled-up view, keeping this
-  # picker short in large environments. World rows surface every host
-  # including standalone hosts with no cluster (e.g. vcf-lab-mgmt-esx05);
-  # vCenter rows scope to that vCenter's hosts.
-
-  # v2.1 (2026-07-22): side-by-side scope tier — picker and cluster
-  # view now sit next to each other (not stacked) and the picker is
-  # taller (h:10) so all rows show without scrolling. Host view moves
-  # to a full-width row below both. Geometry-only change; interactions
-  # and select_first_row settings unchanged.
-
-  - id: cluster_picker
-    type: ResourceList
-    title: "Scope (World / vCenter)"
-    coords: {x: 1, y: 1, w: 5, h: 10}
-    # column_preset: name-only — scope picker shows Name only; Adapter
-    # Type/Object Type/Policy/Collection columns are noise in a picker.
-    column_preset: name-only
-    resource_kinds:
-      - {adapter_kind: VMWARE, resource_kind: vSphere World}
-      - {adapter_kind: VMWARE, resource_kind: VMwareAdapter Instance}
-
-  # ── Row 2: Per-cluster worst CPU support status, scoped to Row 1 ───────
-
-  - id: cpu_support_status_cluster_view
-    type: View
-    title: "CPU Support Status by Cluster (worst status: 0=supported 1=deprecated 2=discontinued 3=discontinued 9.2 — KB 318697)"
-    coords: {x: 6, y: 1, w: 7, h: 10}
-    view: "[VCF Content Factory] CPU Support Status by Cluster"
-    # select_first_row: false — auto-select was re-firing the resourceId
-    # interaction on every Row 1 (scope-picker) selection, permanently
-    # pinning the Row 3 host view to the first cluster. With this off,
-    # Row 1 selections drive Row 3 directly and Row 2 only drives it on
-    # an explicit user click (most-recent-wins as designed).
-    select_first_row: false
-
-  # ── Row 3: Host CPU support status. Dual provider (Row 1 and Row 2) —
-  # most-recently-selected wins, per user-confirmed platform semantics.
-
-  - id: cpu_support_status_view
-    type: View
-    title: "CPU Support Status by Host (0=supported 1=deprecated 2=discontinued 3=discontinued 9.2 — KB 318697)"
-    coords: {x: 1, y: 11, w: 12, h: 12}
-    view: "[VCF Content Factory] CPU Support Status by Host"
-
 interactions:
-  - from: cluster_picker
-    to: cpu_support_status_cluster_view
-    type: resourceId
-  - from: cluster_picker
-    to: cpu_support_status_view
-    type: resourceId
-  - from: cpu_support_status_cluster_view
-    to: cpu_support_status_view
-    type: resourceId
+- from: cluster_picker
+  to: cpu_support_status_cluster_view
+  type: resourceId
+- from: cluster_picker
+  to: cpu_support_status_view
+  type: resourceId
+- from: cpu_support_status_cluster_view
+  to: cpu_support_status_view
+  type: resourceId
+name: '[VCF Content Factory] CPU Support Status'
+released: true
+version: 1.0.0
+widgets:
+- column_preset: name-only
+  coords:
+    h: 10
+    w: 5
+    x: 1
+    y: 1
+  id: cluster_picker
+  resource_kinds:
+  - adapter_kind: VMWARE
+    resource_kind: vSphere World
+  - adapter_kind: VMWARE
+    resource_kind: VMwareAdapter Instance
+  title: Scope (World / vCenter)
+  type: ResourceList
+- coords:
+    h: 10
+    w: 7
+    x: 6
+    y: 1
+  id: cpu_support_status_cluster_view
+  select_first_row: false
+  title: 'CPU Support Status by Cluster (worst status: 0=supported 1=deprecated 2=discontinued
+    3=discontinued 9.2 — KB 318697)'
+  type: View
+  view: '[VCF Content Factory] CPU Support Status by Cluster'
+- coords:
+    h: 12
+    w: 12
+    x: 1
+    y: 11
+  id: cpu_support_status_view
+  title: CPU Support Status by Host (0=supported 1=deprecated 2=discontinued 3=discontinued
+    9.2 — KB 318697)
+  type: View
+  view: '[VCF Content Factory] CPU Support Status by Host'

@@ -1,0 +1,15 @@
+artifacts:
+- headline: true
+  source: content/dashboards/cpu_support_status.yaml
+deprecates: []
+description: 'CPU support/deprecation posture per Broadcom KB 318697 (https://knowledge.broadcom.com/external/article/318697/cpu-support-deprecation-and-discontinuat.html)
+  — source of record for the underlying coded classification. Scope tier (Row 1) lists
+  vSphere World and vCenter (VMwareAdapter Instance) rows and auto-selects the first
+  row. Row 2 rolls up the worst per-cluster CPU support status (scoped to the Row
+  1 selection): 0=supported, 1=deprecated, 2=discontinued, 3=discontinued starting
+  from VCF 9.2. Row 3 lists per-host model, CPU model, and CPU support status, scoped
+  to whichever of Row 1 (World/vCenter) or Row 2 (cluster) was most recently selected.'
+name: cpu-support-status-dashboard
+release_date: '2026-07-22'
+release_notes: ''
+version: '1.0'
