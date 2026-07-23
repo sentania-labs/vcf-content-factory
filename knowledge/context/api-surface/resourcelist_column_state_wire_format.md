@@ -30,9 +30,12 @@ set to **Name-only** in the UI before this capture.
   `resourceRating`, `h18`…`h47`) — they do **not** embed the widget/dash
   UUID, so **the decoded/encoded `value` for "Name-only" is a constant**.
   Only the `key` varies per widget.
-- **`h15` is the Name column.** In the operator's confirmed Name-only
-  state it is the *only* column with `hidden=b:0`; every other column is
-  `hidden=b:1` or default-hidden.
+- **`h15` is the Name column.** In the captured state it is the *only*
+  column with an explicit `hidden=b:0`. But 5 columns (`h2 h4 h5 h6 h14`)
+  carry **no** `hidden` attribute and default to **visible**, so the grid
+  actually renders **6 columns**, not 1. The blob is an *incomplete*
+  Name-only — see the §1 CORRECTION and §5. "Name-only" needs explicit
+  `hidden=b:1` added to those 5 columns.
 - **Import survival: CONFIRMED.** A dashboard imported via
   `POST /api/content/operations/import` with the `states[]` blob present
   retains it verbatim (verified by API readback). The importer does not
@@ -59,8 +62,20 @@ o:columns=a: <col> ^ <col> ^ <col> ...
   `^index=n:<pos>` — seen on TableView captures, not on this ResourceList).
 
 A column entry with **no** `hidden` field (just `o:id=s:hN`) carries no
-override and falls back to that column's built-in default visibility
-(for ResourceList metadata columns, default = hidden).
+override and falls back to that column's built-in default visibility.
+
+> **CORRECTION (2026-07-22, empirical).** An earlier version of this doc
+> asserted the built-in default for unflagged ResourceList metadata
+> columns is **hidden**. That is **wrong**. Empirically the default is
+> **visible**. In the Name-only blob exactly **five** columns carry no
+> `hidden` attribute — `h2`, `h4`, `h5`, `h6`, `h14` — and all five
+> render. Together with the one explicit `h15^hidden=b:0`, that is
+> **six visible columns**, which is exactly what the admin UI session
+> renders. So the "Name-only" blob does **not** actually produce a
+> one-column grid: it only *explicitly* hides 41 columns and shows
+> `h15`, while leaving 5 columns to a default that turns out to be
+> visible. To truly ship Name-only the renderer must emit an explicit
+> `^hidden=b:1` on `h2`, `h4`, `h5`, `h6`, `h14` as well. See §5.
 
 ### Column roster for a ResourceList — 47 entries
 
@@ -192,22 +207,72 @@ UUIDs substituted.
   persisted back into the dashboard definition** (that is exactly the blob
   we read from the live export). So an owner's UI change to the picker
   becomes the shipped default — good.
-- **Caveat (unverified, ExtJS-standard behavior):** ExtJS grids also keep
-  a **live per-user grid state** keyed by the same `permResGrid_widget_…`
-  stateId. If a *viewer* later hides/shows columns themselves, that
-  per-user state can override the baked-in definition **for that viewer
-  only**, and it is stored outside the dashboard definition (user prefs /
-  browser-side state), so:
-  - Re-importing the dashboard will **not** clobber a viewer's own
-    per-user override.
-  - A viewer who has never touched the picker gets the baked default from
-    the `states[]` blob.
-  This means the `states[]` blob is the correct and sufficient ship
-  vehicle for "everyone sees Name-only by default"; it does not and cannot
-  force a viewer who has made their own column choice back to Name-only.
-  This per-user override layer was **not** exercised in this
-  investigation (would require a second user account); flagged as a known
-  boundary, not a proven behavior.
+### Per-user override layer — CONFIRMED server-side (2026-07-22)
+
+The per-user grid state is **server-side**, not browser localStorage. It
+is persisted by the ExtJS `Ext.state.SessionProvider` (defined in
+`/ui/js/components/SessionProvider.js`) against the internal Struts
+endpoint **`/ui/stateManager.action`**, keyed **per user, per pageKey**.
+The dashboard viewer runs under pageKey **`index.action`**
+(`dashboardViewer.action` is remapped to `index.action` in `commonJS.action`
+`initStates()`); the two other pageKeys probed (`dashboardViewer.action`,
+`dashboard.action`) return `{}`.
+
+Wire format (all POST, form-encoded, `secureToken` as both form field and
+header; `pageKey=index.action`):
+
+| Op | `mainAction` | Params |
+|---|---|---|
+| read | `getState` | `pageKey` → JSON map `{stateId: encodedValue}` |
+| write | `storeState` | `states=[{"name":<stateId>,"value":<encodedValue>}]` |
+| clear | `removeState` | `names=[{"name":<stateId>}]` |
+
+**Precedence model (empirically confirmed).** On page load,
+`commonJS.action initStates()` fetches the user's stored state via
+`getState` and installs it as the `SessionProvider`. Then, per widget,
+`updateStates(states, force)` walks the dashboard-definition `states[]`
+blob and, for each key, calls `stateProvider.get(key)`; it applies the
+definition value **only if `existingState == null` (or `force`)**. So:
+
+- **Stored per-user value present → it WINS.** The definition `states[]`
+  is *not* applied over an existing per-user entry.
+- **No stored entry → definition `states[]` seeds it** (and that seeding
+  writes the value back into the per-user layer, so a viewer who has
+  never touched the picker still ends up with a stored entry equal to the
+  definition default).
+- Re-importing the dashboard does **not** clobber a viewer's per-user
+  override (the importer only touches the definition blob).
+- **Reset to default (as a user):** hide/show columns back to the desired
+  set (that just rewrites the stored entry), or clear the entry so the
+  definition re-seeds on next load.
+- **Reset to default (as an admin, API):** `removeState` the stateId for
+  that pageKey. Next dashboard load re-seeds it from the definition
+  `states[]`.
+
+### This dashboard: per-user override is NOT the cause of the 6-column render
+
+Investigated the admin user's OWN stored entry for
+`permResGrid_widget_b6796122-4c9b-4770-83d8-10f785755ef2_f9c1e72c-25c0-5372-b865-8e4d64202d52`
+under pageKey `index.action`. Result: **the stored per-user value is
+byte-identical (4244 bytes) to the definition Name-only blob** — same
+single explicit `h15^hidden=b:0`, same 41 explicit `hidden=b:1`, same 5
+unflagged columns. So there is **no divergent per-user override** here;
+the per-user layer and the definition agree.
+
+Therefore the 6-column render is **not** a per-user override problem and
+**cannot be fixed by clearing per-user state** — clearing it just falls
+back to a byte-identical definition (which the arithmetic in the §1
+CORRECTION shows also yields 6 columns: `h15` + the 5 default-visible
+unflagged columns `h2 h4 h5 h6 h14`). The fix is in the **blob content**
+(add explicit `hidden=b:1` to those 5 columns), not in the per-user
+persistence layer.
+
+**Clear/restore exercised and cleaned up.** To confirm the mechanism, the
+admin's real entry was `removeState`d (re-read → gone) and then restored
+via `storeState` with the captured value (re-read → present, byte-identical
+4244 bytes). A throwaway probe key `permXPROBE_apiexplorer_delete_me` was
+used to validate the verbs first and was removed. Final state: byte-for-byte
+as found. No other user's data and no dashboard definition were touched.
 
 ## Cross-references
 

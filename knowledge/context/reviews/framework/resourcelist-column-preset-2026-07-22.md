@@ -123,3 +123,94 @@ must remember (outside this diff's scope, but from the basis doc §5): a
 viewer who later changes their own columns keeps their per-user override
 — the blob sets the default, it cannot force. Only operational follow-up:
 rebuild the distribution zips (WARNING above) before packaging.
+
+---
+
+## Re-review (2026-07-22) — §1 CORRECTION blob fix (narrow scope)
+
+- Trigger: RULE-013 re-review of the corrected
+  `_RESOURCE_LIST_COLUMN_STATE_NAME_ONLY` constant in `render.py` +
+  updated `tests/test_resource_list_column_preset.py` (now 8 tests, incl.
+  two decode-based ones). The prior APPROVE above covered the feature;
+  this pass covers only the blob correction (h2/h4/h5/h6/h14 gain explicit
+  `^hidden=b:1^width=n:100`; empirical finding: unflagged columns default
+  VISIBLE — see §1 CORRECTION in the wire-format doc).
+
+### Verdict: APPROVE (0 BLOCKING)
+
+### Checks re-run (independently — re-derived, not trusted)
+
+- **Shipped constant decode** — extracted `_RESOURCE_LIST_COLUMN_STATE_NAME_ONLY`
+  from `render.py` source, decoded 4× via `urllib.parse.unquote`:
+  **5315 bytes**, **47 columns** (roster `h1..h47` minus `h17` +
+  `resourceRating` — exact match to wire-doc §1 roster). `h15` is the
+  **sole** `hidden=b:0`; **every** other column, incl. `resourceRating`,
+  carries explicit `hidden=b:1` (empty "not-explicitly-hidden" set). No
+  implicit-default column remains. Confirms the doc's §1-CORRECTION
+  requirement and the `PRINCIPLE` comment in `render.py`.
+- **Round-trip** — re-encoding the decoded string 4× (`quote(safe="")`)
+  reproduces the shipped constant **byte-identical**. The multi-pass blob
+  is internally consistent; no single-char corruption.
+- **Constant identity across copies** — `render.py` constant ==
+  test `EXPECTED_NAME_ONLY_VALUE` (byte-identical). Test's independent
+  copy still guards both.
+- **decoded-old vs decoded-new diff** — parsed the 4244-byte raw capture
+  (wire-doc §2 verbatim line) and the 5315-byte shipped constant; the set
+  of differing columns is **exactly `{h2, h4, h5, h6, h14}`**, each going
+  from `{}` (unflagged) to `{hidden: b:1, width: n:100}`. Every other
+  column byte-identical. Matches the test's claim, re-derived independently.
+- **Test length assert** — `EXPECTED_VALUE_LENGTH = 5315` matches the
+  decoded/observed length.
+- **validate chain** — all seven `vcfops_* validate` modules: **pass**
+  (exit 0).
+- **tests** — preset file: **8 passed** (2 new decode-based tests among
+  them). Full suite: **603 passed, 4 skipped, 0 failed** (88s).
+- **No-preset path byte-identity** — the constant is referenced **only**
+  inside `if w.column_preset == "name-only":` (render.py:1086). Every
+  widget not opting in emits no `states` key regardless of the constant's
+  value, so the correction is structurally inert on the standalone
+  content-import path and every non-opt-in widget corpus-wide. Confirmed
+  by grep: single reference site.
+
+### Dimension delta vs prior pass
+
+- **Anchor `00d3382` (global-default leak)** — CLEAR, and reinforced:
+  the corrected blob is still emitted only on explicit opt-in; the fix
+  changes what the opt-in column-hiding does, not whether any global/
+  standalone path gains a default. Inert unless requested.
+- **Anchor `6c59f6b` (key/label collision)** — unchanged; key derivation
+  untouched by this diff.
+- **Silent capability change / downgrade (dim 8)** — this correction
+  *removes* a silent downgrade: the pre-correction blob shipped a
+  mislabeled "Name-only" that actually rendered 6 columns (h15 + 5
+  default-visible). The fix makes the emitted preset match its documented
+  intent. Loud, documented, correct direction.
+- **Test coverage (dim 10)** — improved: two decode-based tests now assert
+  the *semantic* invariant (no column relies on implicit default; exactly
+  the 5 columns changed from raw capture), not just blob length/identity.
+  This is the right guard for the class of bug the correction fixes.
+
+### Findings
+
+**WARNING (carried forward, now sharper)**
+- [src/vcfops_dashboards/render.py] CLAUDE.md "After tooling changes" —
+  `render.py` is a stale-zip trigger file, so all `dist/` zips are stale.
+  This is now load-bearing: `content/dashboards/cpu_support_status.yaml`
+  actually sets `column_preset: name-only`, so any packaged bundle
+  carrying that dashboard will ship the **old 6-column blob** until
+  rebuilt. → Re-brief: `content-packager` must rebuild every `bundles/`
+  manifest before any zip ships.
+
+**NIT (carried forward)**
+- [src/vcfops_dashboards/render.py] `_resource_list_widget(..., dashboard_id: str = "")`
+  default `= ""` remains a latent footgun (unchanged by this diff; sole
+  caller passes `dashboard.id`). Non-blocking.
+
+### If shipped as-is
+
+An operator authoring `column_preset: name-only` now gets a genuine
+one-column (Name) ResourceList on first load — the 5 previously-unflagged
+metadata columns are explicitly hidden, matching the documented intent.
+Non-opt-in dashboards are byte-for-byte unchanged. Only operational
+follow-up: rebuild the distribution zips (WARNING above) so
+`cpu_support_status` ships the corrected blob, not the stale 6-column one.
