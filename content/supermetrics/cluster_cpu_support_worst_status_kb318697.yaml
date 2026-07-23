@@ -14,8 +14,11 @@ description: >
   knowledge/designs/supermetrics/cluster-cpu-support-worst-status.md):
   0 = all hosts supported, 1 = worst host is deprecated, 2 = worst host
   is discontinued starting from VCF 9.2, 3 = worst host is
-  discontinued. The formula (max()) is unchanged; only the upstream
-  host-level SM's code assignment was corrected, which this max()
-  roll-up now correctly reflects.
+  discontinued, 4 = worst host is unsupported (pre-9.0, not in KB
+  318697 scope). Tier 4 added 2026-07-23 — see
+  knowledge/designs/supermetrics/cpu-support-status.md. The formula
+  (max()) is unchanged; only the upstream host-level SM's code
+  assignment was corrected/extended, which this max() roll-up now
+  correctly reflects (it tops out at 4 naturally).
 formula: |
   max(${adaptertype=VMWARE, objecttype=HostSystem, metric=Super Metric|sm_a7becc4c-22f4-4946-acf9-6cb559672544, depth=1})
