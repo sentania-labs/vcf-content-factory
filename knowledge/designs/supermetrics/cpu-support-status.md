@@ -30,9 +30,23 @@ any bad list; unknown/new CPUs read as supported).
 
 - ONE supermetric on VMWARE HostSystem:
   `[VCF Content Factory] CPU Support Status (KB318697)`.
-- Emits a tier code: 0=supported, 1=deprecated, 2=discontinued,
-  3=discontinued starting from VCF 9.2. Most-severe tier wins
-  (nested ternary, checked 3 → 2 → 1 → 0).
+- Emits a tier code: 0=supported, 1=deprecated,
+  2=discontinued starting from VCF 9.2, 3=discontinued. Most-severe
+  tier wins (nested ternary, checked 3 → 2 → 1 → 0). **Codes are
+  monotonic in severity** so a downstream max() roll-up never masks a
+  currently-discontinued host behind a merely future-discontinued one.
+
+> **Correction (2026-07-22, Codex review P1 on bundles PR):** the
+> original code assignment had 3=discontinued-starting-from-9.2 and
+> 2=discontinued, which is inverted — discontinued-now is strictly
+> worse than discontinued-starting-9.2 (blocked on all 9.x releases
+> vs. blocked only from 9.2 onward). This made the cluster-level
+> max() roll-up (`cluster_cpu_support_worst_status_kb318697.yaml`)
+> mask a currently-discontinued host behind a future-discontinued one
+> whenever both existed in the same cluster. Fixed by swapping the
+> emitted codes in `cpu_support_status_kb318697.yaml` (pattern
+> literals unchanged, tier check order unchanged at 3→2→1→0): the
+> tier table below reflects the corrected mapping.
 - Each tier is one `count(${this, metric=cpu|cpuModel, where=($value
   contains '<p1>' || $value contains '<p2>' || …)})` term — the
   parenthesized `$value` where-dialect with single-quoted literals,
@@ -65,15 +79,7 @@ ESXi `cpu|cpuModel` string shapes the patterns target:
 Tier check order in the formula: 3 → 2 → 1 → 0 (most severe wins; the
 tiers below are disjoint by construction).
 
-### Tier 3 — Discontinued starting from 9.2
-
-| KB series | Code name | contains patterns |
-|---|---|---|
-| Xeon E3-1200-V5 / E3-1500-V5 | Skylake-S | `' v5'` (v5 suffix exists only on these) |
-| Platinum 8100, Gold 6100/5100, Silver 4100, Bronze 3100 | Skylake-SP | `'Platinum 81'`, `'Gold 61'`, `'Gold 51'`, `'Silver 41'`, `'Bronze 31'` |
-| Xeon D-2100 | Skylake-D | `'D-21'` |
-
-### Tier 2 — Discontinued
+### Tier 3 — Discontinued (code 3, most severe)
 
 | KB series | Code name | contains patterns |
 |---|---|---|
@@ -81,6 +87,14 @@ tiers below are disjoint by construction).
 | E5-2600-V4 / E5-1600-V4 / E5-4600-V4 / E7-8800-4800-V4 | Broadwell-EP/EX | `' v4'` (all Xeon v4 are Broadwell; slight over-match on unlisted edge v4 SKUs is intended-spirit) |
 | Xeon E3-1200-v6 | Kaby Lake-S | `' v6'` (v6 suffix exists only on E3-1200 v6) |
 | Xeon W-2100 | Skylake-W | `'W-21'` |
+
+### Tier 2 — Discontinued starting from 9.2
+
+| KB series | Code name | contains patterns |
+|---|---|---|
+| Xeon E3-1200-V5 / E3-1500-V5 | Skylake-S | `' v5'` (v5 suffix exists only on these) |
+| Platinum 8100, Gold 6100/5100, Silver 4100, Bronze 3100 | Skylake-SP | `'Platinum 81'`, `'Gold 61'`, `'Gold 51'`, `'Silver 41'`, `'Bronze 31'` |
+| Xeon D-2100 | Skylake-D | `'D-21'` |
 
 ### Tier 1 — Deprecated
 
