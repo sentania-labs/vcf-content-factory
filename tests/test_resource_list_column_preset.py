@@ -27,15 +27,60 @@ import yaml
 OWNER_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 # Same verbatim constant as knowledge/context/api-surface/
-# resourcelist_column_state_wire_format.md §2 — copied here (not imported
-# from the renderer) so this test independently guards against silent
-# corruption of the pasted blob.
+# resourcelist_column_state_wire_format.md §2 (post §1-CORRECTION fix) —
+# copied here (not imported from the renderer) so this test independently
+# guards against silent corruption of the pasted blob. This is the raw
+# capture with an explicit `hidden=b:1^width=n:100` patched onto h2, h4,
+# h5, h6, h14 (which the raw capture left unflagged, and an unflagged
+# column defaults to VISIBLE — see the doc's §1 CORRECTION). Every other
+# byte is identical to the raw capture.
 EXPECTED_NAME_ONLY_VALUE = (
-    "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253Ah1%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah2%255Eo%25253Aid%25253Ds%2525253Ah3%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah4%255Eo%25253Aid%25253Ds%2525253Ah5%255Eo%25253Aid%25253Ds%2525253Ah6%255Eo%25253Aid%25253Ds%2525253Ah7%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah8%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah9%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah10%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah11%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah12%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah13%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah14%255Eo%25253Aid%25253Ds%2525253Ah15%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253Ah16%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253AresourceRating%25255Ehidden%25253Db%2525253A1%255Eo%25253Aid%25253Ds%2525253Ah18%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah19%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah20%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah21%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah22%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah23%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah24%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah25%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah26%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah27%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah28%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah29%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah30%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah31%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah32%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah33%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah34%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah35%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah36%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah37%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah38%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah39%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah40%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah41%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah42%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah43%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah44%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah45%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah46%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah47%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100"
+    "o%2525253Acolumns%2525253Da%2525253Ao%2525253Aid%2525253Ds%2525253Ah1%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah2%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah3%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah4%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah5%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah6%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah7%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah8%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah9%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah10%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah11%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah12%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah13%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah14%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah15%2525255Ehidden%2525253Db%2525253A0%2525255Eo%2525253Aid%2525253Ds%2525253Ah16%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253AresourceRating%2525255Ehidden%2525253Db%2525253A1%2525255Eo%2525253Aid%2525253Ds%2525253Ah18%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah19%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah20%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah21%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah22%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah23%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah24%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah25%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah26%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah27%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah28%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah29%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah30%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah31%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah32%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah33%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah34%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah35%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah36%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah37%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah38%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah39%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah40%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah41%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah42%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah43%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah44%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah45%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah46%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah47%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100"
 )
 
-# 4244 bytes per the investigation doc's TL;DR.
-EXPECTED_VALUE_LENGTH = 4244
+# 5315 bytes: the raw-capture 4244-byte blob plus 5 patched columns
+# (h2, h4, h5, h6, h14), each gaining `^hidden=b:1^width=n:100`, re-encoded
+# through the same 4-pass depth encoding.
+EXPECTED_VALUE_LENGTH = 5315
+
+
+def _decode_grid_state(value: str) -> str:
+    """Undo the ExtJS grid-state depth encoding.
+
+    Per knowledge/context/api-surface/resourcelist_column_state_wire_format.md
+    §1's "Encoding note": the blob is `urllib.parse.quote`d 4x on the way
+    out, so 4 passes of `urllib.parse.unquote` recover the flat
+    `o:columns=a:o:id=s:h1^hidden=b:1^width=n:100^...` grammar.
+    """
+    import urllib.parse
+
+    decoded = value
+    for _ in range(4):
+        decoded = urllib.parse.unquote(decoded)
+    return decoded
+
+
+def _decode_columns(value: str) -> dict[str, dict[str, str]]:
+    """Parse the decoded grid-state string into {colId: {field: value}}."""
+    decoded = _decode_grid_state(value)
+    assert decoded.startswith("o:columns=a:")
+    body = decoded[len("o:columns=a:"):]
+    records = body.split("^o:id=s:")
+    records[1:] = [r for r in records[1:]]  # already stripped by split
+    columns: dict[str, dict[str, str]] = {}
+    for i, rec in enumerate(records):
+        rec = rec if i == 0 and rec.startswith("o:id=s:") else rec
+        fields = rec.split("^")
+        # first field is either "o:id=s:<id>" (i==0) or "<id>" (i>0, since
+        # the split already consumed "o:id=s:")
+        col_id = fields[0][len("o:id=s:"):] if fields[0].startswith("o:id=s:") else fields[0]
+        attrs: dict[str, str] = {}
+        for f in fields[1:]:
+            if "=" in f:
+                key, val = f.split("=", 1)
+                attrs[key] = val
+        columns[col_id] = attrs
+    return columns
 
 
 def _write_yaml(path: Path, data: dict) -> Path:
@@ -126,6 +171,64 @@ class TestColumnPresetNameOnly:
             "constant in knowledge/context/api-surface/"
             "resourcelist_column_state_wire_format.md §2"
         )
+
+    def test_every_column_except_h15_is_explicitly_hidden(self, tmp_path):
+        """Decode the blob and assert no column relies on an implicit
+        default. Per the doc's §1 CORRECTION, an unflagged column defaults
+        to VISIBLE, so a true Name-only preset must carry an explicit
+        `hidden=b:1` on every column except h15 (Name)."""
+        dashboard, dash_obj, widget_obj = _render(tmp_path, "name-only")
+        state = widget_obj["states"][0]
+        columns = _decode_columns(state["value"])
+
+        assert set(columns) == {f"h{i}" for i in range(1, 48) if i != 17} | {
+            "resourceRating"
+        }, "unexpected column roster in decoded blob"
+
+        for col_id, attrs in columns.items():
+            if col_id == "h15":
+                assert attrs.get("hidden") == "b:0", (
+                    f"h15 (Name) must be the sole visible column, got "
+                    f"hidden={attrs.get('hidden')!r}"
+                )
+                continue
+            assert attrs.get("hidden") == "b:1", (
+                f"{col_id} must carry an explicit hidden=b:1 — an unflagged "
+                f"column defaults to VISIBLE (see the doc's §1 CORRECTION), "
+                f"got attrs={attrs!r}"
+            )
+
+    def test_round_trip_only_five_columns_changed_from_raw_capture(self, tmp_path):
+        """Decoding the shipped constant must equal the raw-capture decode
+        plus exactly the five added hidden flags on h2, h4, h5, h6, h14 —
+        every other byte identical."""
+        dashboard, dash_obj, widget_obj = _render(tmp_path, "name-only")
+        state = widget_obj["states"][0]
+        new_columns = _decode_columns(state["value"])
+
+        # The raw capture (pre-fix): h2, h4, h5, h6, h14 carry no `hidden`
+        # attribute at all.
+        raw_capture_columns = dict(new_columns)
+        patched = {"h2", "h4", "h5", "h6", "h14"}
+        for col_id in patched:
+            raw_capture_columns[col_id] = {}
+
+        # Reconstructing the "old" form (no hidden/width on the 5 columns)
+        # and comparing to the new form: only those 5 keys should differ.
+        differing = {
+            col_id
+            for col_id in new_columns
+            if raw_capture_columns[col_id] != new_columns[col_id]
+        }
+        assert differing == patched, (
+            f"expected exactly {patched} to differ from the raw capture, "
+            f"got {differing}"
+        )
+        for col_id in patched:
+            assert new_columns[col_id] == {"hidden": "b:1", "width": "n:100"}, (
+                f"{col_id} must gain exactly hidden=b:1^width=n:100, got "
+                f"{new_columns[col_id]!r}"
+            )
 
 
 class TestColumnPresetInvalid:
