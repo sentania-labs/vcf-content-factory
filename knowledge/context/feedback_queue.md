@@ -438,3 +438,22 @@ not a gate.
   update-in-place. Verify whether other widget-level additions share
   this partial-merge behavior; then codify as a lesson + installer
   procedure note.
+
+### FB-021 — ExtJS grid ignores byte-correct `states[]` column visibility for the ResourceList picker
+
+- **Scope:** platform UI behavior (investigation) — dashboard/cpu_support_status picker widget
+- **Kind:** bug (cosmetic) / investigation
+- **Status:** open
+- **Raised:** 2026-07-22/23, FB-020 remediation re-pass.
+- **Detail:** After the fresh-import fix, BOTH server-side stores agree
+  and are byte-correct (definition `states[]` and per-user
+  `stateManager.action` entry, 5315 bytes, h15-only visible) — yet the
+  rendered grid still shows all 6 default columns, across full page
+  reloads. Not the materialization race (isLoading:false, full
+  configs), not FB-020 (fresh import carries the blob). Hypothesis to
+  test: the modern Angular shell's iframe wrapping of the legacy ExtJS
+  grid may not apply `states[]` column visibility the way the direct
+  `/ui/index.action` path (used in the original wire-format
+  investigation) does. Needs api-explorer + browser pass. Functional
+  impact: none (cosmetic — extra columns in the picker); the published
+  zip carries the correct blob for platforms that honor it.
