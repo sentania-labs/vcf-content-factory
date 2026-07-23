@@ -2,8 +2,8 @@ id: 903248ce-3847-4509-bb37-ca335ea7724e
 name: "[VCF Content Factory] CPU Support Status by Cluster"
 description: >
   Worst CPU support tier among each cluster's hosts per Broadcom KB 318697:
-  0=all supported, 1=deprecated, 2=discontinued, 3=discontinued starting from
-  VCF 9.2. Drives the host-level view in the CPU Support Status dashboard.
+  0=all supported, 1=deprecated, 2=discontinued starting from VCF 9.2,
+  3=discontinued. Drives the host-level view in the CPU Support Status dashboard.
 
 subject:
   adapter_kind: VMWARE
@@ -15,7 +15,7 @@ columns:
   # Worst CPU Support Status: coded tier (0-3), rolled up (max) from the
   # per-host KB-318697 super metric across the cluster's child hosts.
   # 0=supported (green/uncolored), 1=deprecated (yellow), 2=discontinued
-  # (orange), 3=discontinued starting from VCF 9.2 (red). Higher code =
+  # starting from VCF 9.2 (orange), 3=discontinued (red). Higher code =
   # worse, so ascending_range: false.
   - attribute: supermetric:"[VCF Content Factory] Cluster CPU Support Worst Status (KB318697)"
     display_name: "Worst CPU Support Status"

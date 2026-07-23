@@ -131,3 +131,14 @@ Interactions and select_first_row settings unchanged — pure geometry.
 `cluster_picker` now sets `column_preset: name-only` so the scope picker's
 grid shows only the Name column (Adapter Type/Object Type/Policy/
 Collection columns hidden as noise in a picker).
+
+### Fix (2026-07-22) — legend ordering corrected (Codex P1 recode)
+
+Codex flagged (P1) that the status legend text read "…1=deprecated
+2=discontinued 3=discontinued 9.2…", misplacing the "starting from VCF
+9.2" qualifier on tier 3 instead of tier 2. Corrected ordering across
+the dashboard description and both View widget titles to "…1=deprecated
+2=discontinued 9.2 3=discontinued…" (0=supported, 1=deprecated,
+2=discontinued starting from VCF 9.2, 3=discontinued). Upstream SM and
+view files were updated in the same recode; no coords/interactions/
+preset changes.

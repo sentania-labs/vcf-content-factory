@@ -8,8 +8,14 @@ description: >
   (KB318697)" super metric (sm_a7becc4c-22f4-4946-acf9-6cb559672544) to the
   cluster by taking the worst (max) coded tier among the cluster's child
   hosts, per Broadcom KB 318697
-  (https://knowledge.broadcom.com/external/article/318697/). Legend:
-  0 = all hosts supported, 1 = worst host is deprecated, 2 = worst host is
-  discontinued, 3 = worst host is discontinued starting from VCF 9.2.
+  (https://knowledge.broadcom.com/external/article/318697/). Legend
+  (monotonic in severity, corrected 2026-07-22 per Codex review P1
+  finding on the bundles PR — see
+  knowledge/designs/supermetrics/cluster-cpu-support-worst-status.md):
+  0 = all hosts supported, 1 = worst host is deprecated, 2 = worst host
+  is discontinued starting from VCF 9.2, 3 = worst host is
+  discontinued. The formula (max()) is unchanged; only the upstream
+  host-level SM's code assignment was corrected, which this max()
+  roll-up now correctly reflects.
 formula: |
   max(${adaptertype=VMWARE, objecttype=HostSystem, metric=Super Metric|sm_a7becc4c-22f4-4946-acf9-6cb559672544, depth=1})

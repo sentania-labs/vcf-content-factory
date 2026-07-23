@@ -401,6 +401,26 @@ _THIRD_PARTY_SUBDIR_ORDER = [
 ]
 
 
+def _first_sentence(desc: str) -> str:
+    """Return the first sentence of a release description.
+
+    A naive ``desc.split(".")[0]`` truncates at *any* period, including
+    periods embedded in URLs (e.g. ``https://knowledge.broadcom.com/...``),
+    which are not followed by whitespace. Sentence boundaries are only
+    periods followed by whitespace or the end of the string, so URL dots
+    (which are always immediately followed by another URL character) are
+    never mistaken for a sentence end.
+    """
+    desc = (desc or "").strip()
+    if not desc:
+        return ""
+    match = re.search(r"\.(?:\s|$)", desc)
+    if match:
+        return desc[: match.start() + 1].strip()
+    # No sentence-ending period found — use the whole description.
+    return desc if desc.endswith(".") else desc + "."
+
+
 def _render_release_table(rows: list[dict]) -> str:
     """Render the per-subdir release table for factory-native content.
 
@@ -636,10 +656,11 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
                 released_date = "—"
 
             # Description: first sentence of the release manifest description.
-            desc = (r.description or "").strip()
-            first_sentence = desc.split(".")[0].strip()
-            if first_sentence and not first_sentence.endswith("."):
-                first_sentence += "."
+            # _first_sentence() treats a period as a sentence boundary only
+            # when followed by whitespace or end-of-string, so URLs embedded
+            # in the description (e.g. Broadcom KB links) are never split
+            # mid-URL.
+            first_sentence = _first_sentence(r.description or "")
 
             # SDK adapter (Tier 2) releases are pointer-only: no zip lives in
             # the dist repo.  Build a dedicated row for the SDK MPs subsection,

@@ -2,8 +2,8 @@ id: 160c5756-1b39-4376-888b-00fad13f1123
 name: "[VCF Content Factory] CPU Support Status by Host"
 description: >
   Per-host CPU support tier per Broadcom KB 318697:
-  0=supported, 1=deprecated, 2=discontinued, 3=discontinued starting from
-  VCF 9.2. Unlisted CPUs read 0 (supported) by design. Subject is HostSystem
+  0=supported, 1=deprecated, 2=discontinued starting from VCF 9.2,
+  3=discontinued. Unlisted CPUs read 0 (supported) by design. Subject is HostSystem
   (VMWARE adapter). Columns: physical host model, physical CPU model, and the
   coded support-tier super metric (color-thresholded). Resource name is
   rendered automatically as the leftmost column by the list widget — no
@@ -34,7 +34,7 @@ columns:
 
   # CPU Support Status: coded tier (0-3) from the KB-318697 super metric.
   # 0=supported (green/uncolored), 1=deprecated (yellow), 2=discontinued
-  # (orange), 3=discontinued starting from VCF 9.2 (red). Higher code =
+  # starting from VCF 9.2 (orange), 3=discontinued (red). Higher code =
   # worse, so ascending_range: false.
   - attribute: supermetric:"[VCF Content Factory] CPU Support Status (KB318697)"
     display_name: "CPU Support Status"
