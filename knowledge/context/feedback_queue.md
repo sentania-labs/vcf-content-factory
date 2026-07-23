@@ -418,3 +418,23 @@ not a gate.
   `permResGrid_widget__<widget>`. Make the param required or assert
   non-empty when states is emitted. Route through `tooling` +
   `framework-reviewer` next time render.py is touched.
+
+### FB-020 — in-place dashboard update import drops NEW widget `states[]`
+
+- **Scope:** platform import behavior (documentation) + install procedure
+- **Kind:** investigation / lesson candidate
+- **Status:** open
+- **Raised:** 2026-07-22, name-only column-preset verification.
+- **Detail:** Adding a `states[]` grid-state entry to an EXISTING
+  (previously-imported) dashboard's widget does not survive the
+  content-import update path — the live widget ends with no `states`
+  key while sibling widgets' pre-existing `states[]` round-trip fine.
+  Fresh-UUID imports DO carry `states[]` (proven,
+  `knowledge/context/api-surface/resourcelist_column_state_wire_format.md` §3 —
+  that test used a fresh clone, not an in-place update; §3 needs a
+  scope caveat). Local render is correct (5315-byte blob present in
+  the package output). Consequence: shipping a column-preset change to
+  an already-installed dashboard requires DELETE + re-import, not
+  update-in-place. Verify whether other widget-level additions share
+  this partial-merge behavior; then codify as a lesson + installer
+  procedure note.
