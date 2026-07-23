@@ -108,3 +108,22 @@ behavior. `cpu_support_status_cluster_view` now sets
 `select_first_row: false`, so Row 1 drives Row 3 directly and Row 2
 only drives it on an explicit user click. Row 1 (picker) and Row 3
 (terminal, no receivers) are unchanged.
+
+### Amendment v2.1 (2026-07-22) — side-by-side scope tier, taller pickers
+
+User feedback on v2 screenshot: "vcenter vsphere world select needs more
+height so you don't have to scroll. Like it should be like 10-20 high.
+Maybe next to the cluster selector not above…"
+
+```
++---------------------------+------------------------------------+
+| Scope (World / vCenter)   | CPU Support Status by Cluster      |
+| ResourceList              | (worst status roll-up)             |
+| x:1 y:1 w:5 h:10          | x:6 y:1 w:7 h:10                   |
++---------------------------+------------------------------------+
+| CPU Support Status by Host (all columns)                       |
+| x:1 y:11 w:12 h:12                                             |
++----------------------------------------------------------------+
+```
+
+Interactions and select_first_row settings unchanged — pure geometry.
