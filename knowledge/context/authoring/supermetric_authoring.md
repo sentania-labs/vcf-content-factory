@@ -136,6 +136,7 @@ metric to `ClusterComputeResource`). When in doubt, ask.
   | Parens inside the quoted literal (`'Core(TM) i7'`) | ✅ works |
   | Chained ternary `c1 ? 2 : c2 ? 1 : 0` around counts | ✅ correct precedence |
   | Case-insensitive matching | ❌ NO — `contains 'I7'` does not match `i7`; literals must be byte-exact case |
+  | `$value contains 'A' && !($value contains 'B')` | ✅ works (AND + negation combo; probed 2026-07-23, 9/9 ground truth) |
 
   Use Dialect B whenever a formula must test one string
   property against multiple literals (classification, allowlists);

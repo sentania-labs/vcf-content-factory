@@ -126,3 +126,91 @@ Notes:
   verified on this instance and the patterns rest on the canonical
   vendor string shapes documented above. Re-verify on a production
   fleet when available.
+
+## Production-fleet validation and tier 4 (2026-07-23)
+
+**Validation summary:** the SM (and its cluster-level max() roll-up)
+was validated against a real 324-host production inventory covering
+46 distinct `cpu|cpuModel` strings.
+
+- Zero false positives across the 226 hosts that read 0/supported —
+  every one of those CPU strings was independently confirmed to be
+  outside all KB-318697 deprecated/discontinued families.
+- All KB-318697 family matches (tiers 1-3) were confirmed correct
+  against the fleet's actual strings — no pattern over-matched or
+  under-matched a family it wasn't intended for.
+- 40 of 324 hosts carried CPU models that predate KB 318697's scope
+  entirely (the KB only covers CPUs transitioning within VCF 9.x):
+  Haswell (Xeon E5 vN "v3"), Ivy Bridge ("v2"), and Sandy Bridge
+  (bare "0" generation marker, e.g. `E5-2640 0 @ 2.50GHz`). Under the
+  original 0-3 scheme these 40 hosts read 0/supported, which is wrong
+  in spirit — they are not "supported," they are simply not
+  addressed by this KB. This population motivated a new, most-severe
+  tier 4 rather than silently continuing to read as tier 0.
+
+**User decision:** tier 4 is distinct from tier 3
+(discontinued-per-KB), not folded into it. Rationale: tier 3 hosts
+are named in KB 318697 as actively being discontinued across VCF
+9.x; tier 4 hosts are old enough that the KB doesn't discuss them at
+all — a meaningfully different (and more severe) risk category for
+an admin doing capacity/refresh planning. Tier 4 is checked *first*
+in the chained ternary (most-severe-first ordering), so it wins over
+any coincidental tier 1-3 substring match.
+
+**New tier-4 patterns (validated against the 324-host fleet):**
+
+| Generation | Example fleet string | Pattern | Rationale |
+|---|---|---|---|
+| Haswell (Xeon E5 v3) | `Intel(R) Xeon(R) CPU E5-2650 v3 @ 2.30GHz` | `' v3'` | No modern (post-9.0-relevant) Xeon carries a `vN` version suffix of "3"; disjoint from the existing `' v4'`/`' v5'`/`' v6'` tier-3/2 patterns by construction. |
+| Ivy Bridge (Xeon E5 v2) | `Intel(R) Xeon(R) CPU E5-2420 v2 @ 1.90GHz` | `' v2 '` (leading AND trailing space) | The trailing space distinguishes the version suffix from incidental substring collisions (e.g. avoids matching inside longer tokens); confirmed present in the fleet's Ivy Bridge strings exactly as `... v2 @ ...`. |
+| Sandy Bridge | `Intel(R) Xeon(R) CPU E5-2640 0 @ 2.50GHz` | `' 0 @'` | Sandy Bridge-era Xeons report a bare `0` generation marker (no `vN` suffix existed yet) immediately before the clock-speed `@`; ` 0 @` isolates that shape from unrelated zeros elsewhere in the string. |
+
+All three patterns are disjoint from each other and from the
+existing tier 1-3 pattern set (checked against the full 46-string
+fleet vocabulary, not just the tier-4 subset).
+
+**Latent risk — case sensitivity (not fixed, flagged for awareness):**
+matching is case-sensitive (per the existing Dialect B where-clause
+mechanism; unchanged by this update). The 324-host fleet contained
+one CPU model string reported in ALL CAPS:
+`INTEL(R) XEON(R) SILVER 4514Y`. This host is genuinely
+supported (Sapphire Rapids, not in any tier 1-4 pattern set), so the
+case mismatch is harmless *today* — it already reads 0, correctly,
+just not via any pattern match. However, if a fleet ever reports a
+deprecated/discontinued/unsupported CPU model in all-uppercase (some
+BIOS/firmware versions are known to vary `cpu|cpuModel` casing), none
+of the tier 1-4 patterns (`'Gold 61'`, `' v3'`, `'EPYC 7551'`, etc.)
+would match against the uppercased string, and that host would
+silently read 0/supported when it should read 1-4. This is a known
+gap, not addressed by this change — case-insensitive matching is not
+available in the current where-dialect (see
+knowledge/context/authoring/supermetric_authoring.md for dialect
+capabilities). Flagging for future revisit if an uppercase-reporting
+fleet surfaces a deprecated/discontinued CPU in practice.
+
+## Tier-4 family-complete expansion (2026-07-23, Codex P1 on PR #66)
+
+Codex flagged that tier 4 covered only the three production-sampled
+generations — a Westmere `X5670` or AMD Opteron still read 0. Expanded
+to family-complete coverage. Mechanism gate: the Dialect-B
+`contains && !(contains)` combo was probed on devel first
+(probe_where_and_negation, sm_467dfab5…): 9/9 hosts matched ground
+truth (four i7-1260P → 1, five Ryzen/Celeron → 0); probe deleted from
+instance and repo after the run.
+
+Tier-4 structure: FOUR count() terms summed, ternaried, checked first:
+1. Literals: ' v3', ' v2 ', 'Opteron', ' X55', ' X56', ' E55',
+   ' E56', ' L55', ' L56' (Haswell/Ivy literals + Nehalem/Westmere-EP
+   55xx/56xx families + all Opterons). ' 0 @' dropped (subsumed by 2).
+2. `contains 'E5-' && !(contains ' v')` — bare Sandy Bridge E5
+   (incl. the "E5-2640 0 @" form).
+3. `contains 'E7-' && !(contains ' v')` — Westmere/Nehalem-EX E7.
+4. `contains 'E3-' && !(contains ' v')` — bare Sandy Bridge E3.
+
+Disjointness: the three bare-prefix terms exclude every vN-suffixed
+part (v2/v3 → term 1; v4/v5/v6 → tiers 3/2, checked later); 'E3-'
+cannot occur in tier-1's 'E-21'/'E-22' strings (dash follows E);
+' E55'/' E56' (leading space) never match 'E5-…' modern strings.
+Fleet re-simulation: 324 hosts → identical results to the pre-expansion
+run (40×tier4, 98×tiers1-3, 186×0) + synthetic Westmere/Opteron/EX
+strings now classify 4.

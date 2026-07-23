@@ -8,16 +8,36 @@ description: >
   (CPU support deprecation and discontinuation for vSphere/VCF —
   https://knowledge.broadcom.com/external/article/318697/). Emits a
   coded tier value read from cpu|cpuModel: 0 = supported (default —
-  CPU model matched none of the deprecated/discontinued literals
-  below), 1 = deprecated, 2 = discontinued starting from VCF 9.2,
-  3 = discontinued. Codes are monotonic in severity (3 is worst) so
+  CPU model matched none of the deprecated/discontinued/unsupported
+  literals below), 1 = deprecated, 2 = discontinued starting from
+  VCF 9.2, 3 = discontinued, 4 = unsupported (pre-9.0 silicon, outside
+  KB 318697 scope). Codes are monotonic in severity (4 is worst) so
   that a max() roll-up (e.g. the cluster-level worst-status SM) never
   masks a currently-discontinued host behind a merely
   future-discontinued one — corrected 2026-07-22 per Codex review P1
   finding on the bundles PR (see
-  knowledge/designs/supermetrics/cpu-support-status.md). The formula
-  is a chained ternary checked most-severe tier first (3 -> 2 -> 1 ->
-  0); each tier is a single count() term over a compound `$value
+  knowledge/designs/supermetrics/cpu-support-status.md). Tier 4 was
+  added 2026-07-23 after validating against a 324-host production
+  fleet: Haswell (E5 vN v3), Ivy Bridge (v2), and Sandy Bridge CPUs
+  (40 of 324 hosts) predate KB 318697's scope entirely and were
+  previously misread as 0/supported; they are a distinct, more severe
+  tier rather than folded into tier 3, per user decision (see
+  knowledge/designs/supermetrics/cpu-support-status.md). Tier 4 was
+  expanded 2026-07-23 (Codex P1, factory PR #66) to be family-complete
+  rather than limited to the three production-sampled generations:
+  it now also catches AMD Opteron, Nehalem/Westmere-EP 55xx/56xx
+  (X55/X56/E55/E56/L55/L56), Sandy Bridge/Westmere-family E5-, E7-,
+  and E3- parts without a vN suffix (e.g. Westmere-EX E7-4870,
+  Sandy Bridge E5-2640), so no pre-9.0 silicon falls through to the
+  0/supported default. The tier-4 check is a sum of four count()
+  terms (one compound-literal term plus three bare-prefix
+  contains-and-negated-contains terms) rather than a single count()
+  term, because the bare E5-/E7-/E3- prefixes must positively exclude
+  any vN-suffixed (post-9.0-relevant) sibling part; see
+  knowledge/designs/supermetrics/cpu-support-status.md for the full
+  expansion and disjointness table. The formula
+  is a chained ternary checked most-severe tier first (4 -> 3 -> 2 ->
+  1 -> 0); each tier is a single count() term over a compound `$value
   contains '<literal>' || ...` where clause (Dialect B — parenthesized
   $value, single-quoted literals — per
   knowledge/context/authoring/supermetric_authoring.md). Literals are
@@ -28,4 +48,4 @@ description: >
   KB-318697-listed model) read 0 by design — this is the intended
   "assume supported" default for new/unlisted CPUs, not a bug.
 formula: |
-  count(${this, metric=cpu|cpuModel, where=($value contains 'D-15' || $value contains ' v4' || $value contains ' v6' || $value contains 'W-21')}) ? 3 : count(${this, metric=cpu|cpuModel, where=($value contains ' v5' || $value contains 'Platinum 81' || $value contains 'Gold 61' || $value contains 'Gold 51' || $value contains 'Silver 41' || $value contains 'Bronze 31' || $value contains 'D-21')}) ? 2 : count(${this, metric=cpu|cpuModel, where=($value contains 'EPYC 7251' || $value contains 'EPYC 7261' || $value contains 'EPYC 7281' || $value contains 'EPYC 7301' || $value contains 'EPYC 7351' || $value contains 'EPYC 7371' || $value contains 'EPYC 7401' || $value contains 'EPYC 7451' || $value contains 'EPYC 7501' || $value contains 'EPYC 7551' || $value contains 'EPYC 7571' || $value contains 'EPYC 7601' || $value contains 'EPYC 7232' || $value contains 'EPYC 7252' || $value contains 'EPYC 7262' || $value contains 'EPYC 7272' || $value contains 'EPYC 7282' || $value contains 'EPYC 7302' || $value contains 'EPYC 7352' || $value contains 'EPYC 7402' || $value contains 'EPYC 7452' || $value contains 'EPYC 7502' || $value contains 'EPYC 7532' || $value contains 'EPYC 7542' || $value contains 'EPYC 7552' || $value contains 'EPYC 7642' || $value contains 'EPYC 7662' || $value contains 'EPYC 7702' || $value contains 'EPYC 7742' || $value contains 'EPYC 7F32' || $value contains 'EPYC 7F52' || $value contains 'EPYC 7F72' || $value contains 'EPYC 7H12' || $value contains 'Platinum 82' || $value contains 'Gold 62' || $value contains 'Gold 52' || $value contains 'Silver 42' || $value contains 'Bronze 32' || $value contains 'E-21' || $value contains 'E-22' || $value contains 'Atom(TM) CPU C3')}) ? 1 : 0
+  (count(${this, metric=cpu|cpuModel, where=($value contains ' v3' || $value contains ' v2 ' || $value contains 'Opteron' || $value contains ' X55' || $value contains ' X56' || $value contains ' E55' || $value contains ' E56' || $value contains ' L55' || $value contains ' L56')}) + count(${this, metric=cpu|cpuModel, where=($value contains 'E5-' && !($value contains ' v'))}) + count(${this, metric=cpu|cpuModel, where=($value contains 'E7-' && !($value contains ' v'))}) + count(${this, metric=cpu|cpuModel, where=($value contains 'E3-' && !($value contains ' v'))})) ? 4 : count(${this, metric=cpu|cpuModel, where=($value contains 'D-15' || $value contains ' v4' || $value contains ' v6' || $value contains 'W-21')}) ? 3 : count(${this, metric=cpu|cpuModel, where=($value contains ' v5' || $value contains 'Platinum 81' || $value contains 'Gold 61' || $value contains 'Gold 51' || $value contains 'Silver 41' || $value contains 'Bronze 31' || $value contains 'D-21')}) ? 2 : count(${this, metric=cpu|cpuModel, where=($value contains 'EPYC 7251' || $value contains 'EPYC 7261' || $value contains 'EPYC 7281' || $value contains 'EPYC 7301' || $value contains 'EPYC 7351' || $value contains 'EPYC 7371' || $value contains 'EPYC 7401' || $value contains 'EPYC 7451' || $value contains 'EPYC 7501' || $value contains 'EPYC 7551' || $value contains 'EPYC 7571' || $value contains 'EPYC 7601' || $value contains 'EPYC 7232' || $value contains 'EPYC 7252' || $value contains 'EPYC 7262' || $value contains 'EPYC 7272' || $value contains 'EPYC 7282' || $value contains 'EPYC 7302' || $value contains 'EPYC 7352' || $value contains 'EPYC 7402' || $value contains 'EPYC 7452' || $value contains 'EPYC 7502' || $value contains 'EPYC 7532' || $value contains 'EPYC 7542' || $value contains 'EPYC 7552' || $value contains 'EPYC 7642' || $value contains 'EPYC 7662' || $value contains 'EPYC 7702' || $value contains 'EPYC 7742' || $value contains 'EPYC 7F32' || $value contains 'EPYC 7F52' || $value contains 'EPYC 7F72' || $value contains 'EPYC 7H12' || $value contains 'Platinum 82' || $value contains 'Gold 62' || $value contains 'Gold 52' || $value contains 'Silver 42' || $value contains 'Bronze 32' || $value contains 'E-21' || $value contains 'E-22' || $value contains 'Atom(TM) CPU C3')}) ? 1 : 0

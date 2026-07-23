@@ -142,3 +142,11 @@ the dashboard description and both View widget titles to "…1=deprecated
 2=discontinued starting from VCF 9.2, 3=discontinued). Upstream SM and
 view files were updated in the same recode; no coords/interactions/
 preset changes.
+
+### Update (2026-07-23) — legend-only update for tier 4
+
+Added the 5th classification code to the legend text: "…3=discontinued
+4=unsupported (pre-9.0)". Updated the dashboard description and both
+View widget titles (Row 2 cluster-view and Row 3 host-view) to append
+this suffix; full definition of the code lives in the upstream view
+descriptions (already updated). No coords/interactions/preset changes.
