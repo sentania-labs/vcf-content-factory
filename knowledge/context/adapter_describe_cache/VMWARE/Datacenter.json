@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-04-28T17:36:59Z",
+  "fetched_at": "2026-07-23T02:01:50Z",
   "metrics": {
     "OnlineCapacityAnalytics|capacityRemainingPercentage": {
       "default_monitored": true,
@@ -121,10 +121,6 @@
     "Super Metric|sm_0c648c9c-cede-4403-b8fe-500067629bf0": {
       "default_monitored": true,
       "name": "Super Metrics|Total Network Configuration Issues"
-    },
-    "Super Metric|sm_1d4d0a06-4955-4110-acfe-bddea257b6f0": {
-      "default_monitored": true,
-      "name": "Super Metrics|[Custom] Non-local Datastore Capacity"
     },
     "Super Metric|sm_2308ba66-91c6-43c8-95e3-33fd2ee51f73": {
       "default_monitored": true,
@@ -2549,5 +2545,5 @@
     }
   },
   "resource_kind": "Datacenter",
-  "source": "https://vcf-lab-operations.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/Datacenter/statkeys"
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/Datacenter/statkeys"
 }

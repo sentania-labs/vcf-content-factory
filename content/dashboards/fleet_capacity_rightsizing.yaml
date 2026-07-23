@@ -15,7 +15,7 @@ version: "1.0.0"
 
 widgets:
 
-  # ── Band A · Scoreboard — Fleet Summary  (y:0, x:0, w:12, h:2) ─────────────
+  # ── Band A · Scoreboard — Fleet Summary  (y:1, x:1, w:12, h:2) ─────────────
   # Subject = vSphere World singleton. Self-provider pinned to world so the
   # scoreboard queries immediately on load without requiring an interaction.
   # All seven metric keys are built-in on vSphere World (demand model confirmed).
@@ -24,7 +24,7 @@ widgets:
   - id: fleet_summary
     type: Scoreboard
     title: "Fleet Summary"
-    coords: {x: 0, y: 0, w: 12, h: 2}
+    coords: {x: 1, y: 1, w: 12, h: 2}
     self_provider: true
     pin:
       adapter_kind: VMWARE
@@ -80,7 +80,7 @@ widgets:
         label: "Potential $ Savings"
         color_method: 1
 
-  # ── Band B · View — Cluster Capacity Breakdown  (y:2, x:0, w:12, h:4) ─────
+  # ── Band B · View — Cluster Capacity Breakdown  (y:3, x:1, w:12, h:4) ─────
   # PRIMARY SELECTOR, self-provider, fleet-wide. Self-provider pinned to
   # vSphere World so the view loads fleet-wide on open without requiring an
   # upstream interaction. Sorted ascending by capacity-remaining-pct so the
@@ -91,14 +91,14 @@ widgets:
   - id: cluster_capacity_view
     type: View
     title: "Cluster Capacity Breakdown"
-    coords: {x: 0, y: 2, w: 12, h: 4}
+    coords: {x: 1, y: 3, w: 12, h: 4}
     self_provider: true
     pin:
       adapter_kind: VMWARE
       resource_kind: vSphere World
     view: "[VCF Content Factory] Cluster Capacity Breakdown"
 
-  # ── Band C · Heatmaps — CPU / Memory / Storage  (y:6, h:4) ─────────────────
+  # ── Band C · Heatmaps — CPU / Memory / Storage  (y:7, h:4) ─────────────────
   # Three heatmaps side-by-side, each showing all ClusterComputeResource objects.
   # No group_by specified → renderer emits self-grouping block (build 29 fix);
   # an empty groupBy JSON object would crash HeatMapAction.initParam.
@@ -108,7 +108,7 @@ widgets:
   - id: cpu_heatmap
     type: Heatmap
     title: "CPU Capacity Pressure by Cluster"
-    coords: {x: 0, y: 6, w: 4, h: 4}
+    coords: {x: 1, y: 7, w: 4, h: 4}
     self_provider: true
     pin:
       adapter_kind: VMWARE
@@ -137,7 +137,7 @@ widgets:
   - id: mem_heatmap
     type: Heatmap
     title: "Memory Capacity Pressure by Cluster"
-    coords: {x: 4, y: 6, w: 4, h: 4}
+    coords: {x: 5, y: 7, w: 4, h: 4}
     self_provider: true
     pin:
       adapter_kind: VMWARE
@@ -166,7 +166,7 @@ widgets:
   - id: storage_heatmap
     type: Heatmap
     title: "Storage Capacity Pressure by Cluster"
-    coords: {x: 8, y: 6, w: 4, h: 4}
+    coords: {x: 9, y: 7, w: 4, h: 4}
     self_provider: true
     pin:
       adapter_kind: VMWARE
@@ -192,34 +192,34 @@ widgets:
         solid_coloring: false
         focus_on_groups: false
 
-  # ── Band D-1 · View — Oversized VMs  (y:10, x:0, w:6, h:4) ────────────────
+  # ── Band D-1 · View — Oversized VMs  (y:11, x:1, w:6, h:4) ────────────────
   # Driven by cluster_capacity_view selection. Default (no selection) = fleet-wide.
   # Sort by reclaimable vCPUs descending is set in the view definition.
 
   - id: oversized_vms_view
     type: View
     title: "Oversized VMs — Reclaimable"
-    coords: {x: 0, y: 10, w: 6, h: 4}
+    coords: {x: 1, y: 11, w: 6, h: 4}
     view: "[VCF Content Factory] Oversized VMs — Reclaimable"
 
-  # ── Band D-2 · View — Undersized VMs  (y:10, x:6, w:6, h:4) ───────────────
+  # ── Band D-2 · View — Undersized VMs  (y:11, x:7, w:6, h:4) ───────────────
   # Driven by cluster_capacity_view selection. Default (no selection) = fleet-wide.
   # Sort by vCPUs-to-add descending is set in the view definition.
 
   - id: undersized_vms_view
     type: View
     title: "Undersized VMs — Add Resources"
-    coords: {x: 6, y: 10, w: 6, h: 4}
+    coords: {x: 7, y: 11, w: 6, h: 4}
     view: "[VCF Content Factory] Undersized VMs — Add Resources"
 
-  # ── Band E · View — Datastore Reclaimable Space  (y:14, x:0, w:12, h:4) ───
+  # ── Band E · View — Datastore Reclaimable Space  (y:15, x:1, w:12, h:4) ───
   # Driven by cluster_capacity_view selection. Default (no selection) = fleet-wide.
   # Sort by snapshot space descending is set in the view definition.
 
   - id: datastore_reclaimable_view
     type: View
     title: "Datastore Reclaimable Space"
-    coords: {x: 0, y: 14, w: 12, h: 4}
+    coords: {x: 1, y: 15, w: 12, h: 4}
     view: "[VCF Content Factory] Datastore Reclaimable Space"
 
 interactions:

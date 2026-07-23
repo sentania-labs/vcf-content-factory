@@ -1072,6 +1072,22 @@ class Widget:
     # whose descendants Ops walks to populate the list.
     self_provider: bool = False
     pin: WidgetResourceKindRef | None = None
+    # Whether the widget auto-selects its first row and fires a
+    # downstream resourceId interaction as soon as data loads. Wire
+    # format: config.selectFirstRow.selectFirstRow (View and
+    # ResourceList widgets). Defaults to True — the historical,
+    # byte-identical-with-existing-content behavior. Set to False as a
+    # strict opt-out on a *middle* tier of a picker -> intermediate view
+    # -> terminal view drill chain when the intermediate view's
+    # auto-select re-fires on every upstream refresh and permanently
+    # pins the terminal widget to the intermediate view's first row —
+    # this is what blocks a wider upstream selection (e.g. World/
+    # vCenter) from ever reaching the terminal widget. See the CPU
+    # Support Status v2 dashboard investigation
+    # (knowledge/context/investigations/) and the vendor corpus, which
+    # emits selectFirstRow:false 132 times vs true 16 times —
+    # overwhelmingly the norm on multi-tier drill dashboards.
+    select_first_row: bool = True
     # Type-specific config for chart/text widgets
     scoreboard_config: ScoreboardConfig | None = None
     metric_chart_config: MetricChartConfig | None = None
@@ -1616,6 +1632,14 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
             )
         widget_type = str(w["type"]).strip()
 
+        select_first_row_raw = w.get("select_first_row", True)
+        if not isinstance(select_first_row_raw, bool):
+            raise DashboardValidationError(
+                f"widget '{w.get('id', '')}': select_first_row must be a bool "
+                f"(unquoted true/false in YAML); got {type(select_first_row_raw).__name__} "
+                f"{select_first_row_raw!r}"
+            )
+
         # --- Parse TextDisplay config ---
         text_display_config = None
         if widget_type == "TextDisplay":
@@ -1886,6 +1910,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 view_name=str(w.get("view", "") or "").strip(),
                 self_provider=bool(w.get("self_provider", False)),
                 pin=pin,
+                select_first_row=select_first_row_raw,
                 scoreboard_config=scoreboard_config,
                 metric_chart_config=metric_chart_config,
                 text_display_config=text_display_config,

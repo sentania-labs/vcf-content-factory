@@ -760,3 +760,173 @@ reused. Field lines are `- **Field:** value` (parsed by
   committed confirmation step), `knowledge/rules/pak-version-lines.md` (RULE-014),
   FB-008 in `knowledge/context/feedback_queue.md` (`version_line_guard`
   pre-push hook, now with a concrete incident behind it).
+
+### DEF-013
+
+- **Title:** Dashboards: widgets authored with 0-based `coords` (x=0/y=0)
+  render with an inverted vertical stack in the VCF Ops UI
+- **Severity:** blocking
+- **Status:** closed
+- **Closing-evidence:** Devel proof 2026-07-22: after the
+  `_clamp_gridster_floor` renderer fix (framework-reviewer APPROVE 0
+  BLOCKING, `knowledge/context/reviews/framework/def013-gridster-floor-2026-07-22.md`)
+  and 1-based coords in the content YAML, the reinstalled dashboard
+  renders the ResourceList picker ABOVE the View widget as authored
+  (Playwright pass + screenshot cpu-support-status-dashboard-v2.png;
+  re-confirmed in the v4 pass). Regression guarded by
+  `tests/test_gridster_coord_floor_def013.py`; all distribution zips
+  rebuilt post-change (dashboard payloads byte-identical).
+- **Affects:** factory:dashboards (`src/vcfops_dashboards/render.py`)
+- **First-seen:** `content/dashboards/cpu_support_status.yaml` installed on
+  devel 2026-07-22 (dashboard UUID `b6796122-4c9b-4770-83d8-10f785755ef2`).
+- **Source:** framework-reviewer-directed investigation, 2026-07-22
+  (Playwright screenshot of the installed dashboard on devel).
+- **Summary:** `cpu_support_status.yaml` declares `cluster_picker`
+  (ResourceList) first at `coords: {x: 0, y: 0, w: 12, h: 3}` and
+  `cpu_support_status_view` (View) second at `{x: 0, y: 3, w: 12, h: 12}`
+  — correct declared y-order, picker above view. On devel the UI rendered
+  the View widget ON TOP and the ResourceList BELOW: an exact inversion
+  of the declared y-order (interaction — picker → view resourceId — still
+  worked; purely a layout defect). Root cause: the `gridsterCoords` wire
+  format is **1-indexed**. Every widget coordinate in the known-good
+  corpus — 100+ widgets across `reference/references/` vendor MP exports
+  plus every `knowledge/context/exports/*.json` capture — uses `x >= 1`
+  and `y >= 1`; zero use 0 for either axis. `render.py` passed authored
+  `coords` straight through to `gridsterCoords` with no floor validation,
+  so the 0-based `{x: 0, y: 0, ...}` block (a natural authoring mistake —
+  0-based array-index thinking) reached the wire unmodified, landing
+  outside the grid's valid coordinate space; the UI's placement engine
+  appears to treat the invalid axis as unset/auto rather than "first
+  row", falling back to a different stacking order than the declared
+  layout. Confirmed same-file `fleet_capacity_rightsizing.yaml` also
+  authors 0-based coords (unverified on devel whether it renders
+  incorrectly — not yet installed at investigation time); confirmed
+  `vsan_cluster_health.yaml` already authors 1-based coords (the correct
+  pattern) and was not implicated. Affects any multi-row dashboard using
+  0-based `coords`, independent of widget-type combination — the pass-
+  through happens identically for all 12 widget-type renderers.
+- **Progress (2026-07-22, fix authored, devel re-verification pending):**
+  `_clamp_gridster_floor()` added to `src/vcfops_dashboards/render.py`
+  (fix commit pending — not yet merged), applied at all 12
+  `"gridsterCoords":` emission sites. Clamps `x`/`y` to a floor of 1
+  (`max(1, v)`) before emission; `w`/`h` and already-valid (`>=1`)
+  coordinates pass through unchanged — the clamp is a no-op on every
+  authored value that was already grid-valid. Deliberately distinct from
+  the `_gridster_coords()` helper deleted in commit 00d3382 (guarded by
+  `tests/test_renderer_regression_phase16.py` Test A), which
+  unconditionally shifted every coordinate by +1 and corrupted valid
+  1-based layouts — this fix only touches values provably < 1. Full test
+  suite (588 tests) and the 7-package validate chain both pass with the
+  change. New regression coverage:
+  `tests/test_gridster_coord_floor_def013.py` — picker-above-view
+  two-widget dashboard authored 0-based renders with picker.y < view.y
+  post-clamp (the reported inversion, guarded); already 1-based coords
+  pass through byte-identical; every dashboard currently in
+  `content/dashboards/` renders with gridsterCoords equal to its
+  authored `coords` except where the authored value was < 1 (clamped to
+  1) — i.e. the fix's diff against pre-fix pass-through is exactly the
+  floor clamp, nothing else. Content-YAML correction
+  (`cpu_support_status.yaml`, and `fleet_capacity_rightsizing.yaml` if it
+  has the same defect) is out of this entry's scope (`tooling` does not
+  edit `content/`) — the renderer clamp is the durable fix regardless of
+  the authored value, but authors should still prefer 1-based `coords`
+  going forward to match the wire format directly. **Since dist bundles
+  embed rendered output, `src/vcfops_dashboards/render.py` changed —
+  all distribution zips are stale per CLAUDE.md and must be rebuilt by
+  `content-packager` before this closes.** Remaining to close: rebuild
+  affected bundle(s), reinstall `cpu_support_status.yaml` on devel, and
+  Playwright-verify the ResourceList picker now renders above the View
+  widget.
+- **Related:** `tests/test_renderer_regression_phase16.py` (sibling
+  regression this fix must not reintroduce).
+
+### DEF-014
+
+- **Title:** CPU Support Status dashboard: View widget loses its view
+  binding after whole-repo dashboards re-sync — renders "The widget is
+  not configured. Select a view to render."
+- **Severity:** blocking
+- **Status:** closed
+- **Closing-evidence:** Round-2 investigation
+  (`knowledge/context/investigations/def014-view-binding-loss-2026-07-22.md`, ROUND 2)
+  proved server-side config was correct and complete the whole time
+  (`isLoading:false`, `getWidgetConfigs` carries the correct
+  `viewDefinitionId 160c5756-…`, view renders HTTP 200 with data), and
+  the follow-up Playwright pass (2026-07-22, screenshot
+  cpu-support-status-dashboard-v4.png) shows live host rows with
+  working picker→view rescope. The earlier "not configured" renders —
+  including the failed delete+reimport "remediation," which simply
+  re-entered the deferred window — were races against the platform's
+  deferred-import materialization (first-open or ~20-min background
+  job). Codified: `knowledge/lessons/dashboard-import-deferred-materialization.md`.
+- **Affects:** factory:dashboards (suspect: render/sync path in
+  `src/vcfops_dashboards/`; content YAML unchanged in the relevant part)
+- **First-seen:** devel, 2026-07-22, DEF-013 closure re-install
+  (dashboard UUID `b6796122-4c9b-4770-83d8-10f785755ef2`).
+- **Source:** content-installer DEF-013 closure report 2026-07-22;
+  investigation `knowledge/context/investigations/def014-view-binding-loss-2026-07-22.md`.
+- **Summary:** The first install of `cpu_support_status.yaml` earlier
+  the same day rendered the embedded view
+  ("[VCF Content Factory] CPU Support Status by Host", repo UUID
+  `160c5756-1b39-4376-888b-00fad13f1123`) correctly, with live rows and
+  the SM status column (Playwright-verified, screenshot v1). After the
+  DEF-013 closure re-sync (full views+dashboards sync; view YAML
+  unchanged, dashboard YAML change limited to 1-based coords; renderer
+  change limited to the gridster floor clamp, byte-identical for
+  already-1-based coords), the View widget persistently renders "The
+  widget is not configured. Select a view to render." across cluster
+  selections and page reload; the widget's own Edit dialog reports the
+  configuration incomplete. Picker auto-select and row selection still
+  work. Suspect family: view re-import churning the view's
+  instance-side identity while the dashboard's rendered JSON references
+  a stale binding, or per-render nondeterministic widget/extModel IDs
+  breaking the provider wiring on re-import. Root cause unknown —
+  under investigation (api-explorer).
+- **Progress (2026-07-22, round 1 remediation FAILED):** investigation
+  round 1 (read-only,
+  `knowledge/context/investigations/def014-view-binding-loss-2026-07-22.md`)
+  established: view re-import preserves the public UUID; the rendered
+  dashboard JSON is provably correct (binds `viewDefinitionId` to the
+  stable UUID); widget config materializes lazily at first UI open;
+  hypothesis was stale materialized binding fixable by dashboard
+  delete+reimport. Installer executed delete + whole views+dashboards
+  re-sync: **widget still unconfigured on first open** — hypothesis
+  contradicted for the combined-sync form. Key discriminator: the only
+  materialization that ever worked (v1) had view AND dashboard both new
+  to the instance; every sync since re-imports the views in place.
+  Round 2 (write-experiment authorized) is isolating the working import
+  recipe and the exact materialization gate.
+- **Closure gate:** view widget renders live host rows again on devel
+  after re-install, Playwright-verified.
+- **Related:** DEF-015 (same mechanism, fleet_capacity_rightsizing).
+
+### DEF-015
+
+- **Title:** Fleet Capacity & Rightsizing dashboard: ALL widgets
+  (5 Views + 3 Heatmaps + scoreboard) render unconfigured on devel
+  after 2026-07-22 re-syncs
+- **Severity:** blocking
+- **Status:** closed
+- **Closing-evidence:** Playwright pass 2026-07-22 (screenshot
+  fleet-capacity-v1.png): Fleet Summary populated, Cluster Capacity
+  Breakdown fully data-bearing for all 3 clusters, all three heatmaps
+  render cluster tiles with live legends, Oversized VMs table shows
+  13+ rows with reclaim values; zero "not configured" strings on the
+  page. Server-side health signal (`isLoading:false` + full
+  `getWidgetConfigs`) confirmed in the DEF-014 ROUND 2 investigation.
+  Lesson: `knowledge/lessons/dashboard-import-deferred-materialization.md`.
+- **Affects:** dashboard/fleet_capacity_rightsizing
+- **First-seen:** devel, 2026-07-22, observed during the DEF-014
+  remediation pass (dashboard UUID `762fc025-…`).
+- **Source:** content-installer DEF-014 remediation report, 2026-07-22
+  (Playwright pass, verbatim: "The widget is not configured. Select a
+  view to render." on every View widget; "Heatmap is not configured."
+  on all three heatmaps).
+- **Summary:** Same materialization-failure family as DEF-014, but
+  broader — heatmap widgets bind metrics, not views, so the failure is
+  whole-widget-config materialization, not merely view-id resolution.
+  Unknown whether this dashboard ever rendered correctly on devel (it
+  was flagged unverified in DEF-013 and predates today's visual
+  passes). Blocked on the DEF-014 round-2 investigation naming the
+  working import recipe; remediate with the same fix once proven.
+- **Related:** DEF-014 (mechanism investigation lives there).

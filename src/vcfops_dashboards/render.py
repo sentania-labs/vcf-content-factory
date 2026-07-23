@@ -975,6 +975,44 @@ def render_views_xml(
 # ---------------- Dashboard (JSON) ----------------
 
 
+def _clamp_gridster_floor(coords: dict) -> dict:
+    """Normalize an authored ``coords: {x, y, w, h}`` block into a wire-valid
+    ``gridsterCoords``.
+
+    The dashboard grid is **1-indexed**: every ``gridsterCoords`` observed
+    across the entire known-good corpus (vendor MP exports under
+    ``reference/references/`` — over 100 widgets surveyed — plus every
+    ``knowledge/context/exports/*.json`` capture) uses ``x >= 1`` and
+    ``y >= 1``. None use 0 for either axis.
+
+    DEF-013: an authored ``coords`` block using 0-based x/y (e.g.
+    ``{x: 0, y: 0, ...}``, the natural DX default for someone thinking in
+    array-index terms) produces a dashboard where the picker/top widget
+    renders *below* a widget declared later in y-order — an inverted
+    vertical stack relative to the authored layout. 0 is outside the grid's
+    valid coordinate space; downstream the UI's placement engine appears to
+    treat it as unset/auto rather than "first row", so the widget falls
+    back to flow order instead of the declared position. Clamping to the
+    grid's 1-indexed floor here fixes the wire output without an author
+    having to know this quirk, and without touching any authored YAML.
+
+    Only the floor is clamped (``max(1, x)`` / ``max(1, y)``) — relative
+    ordering of already-valid (>=1) coordinates in the same dashboard is
+    left untouched, so multi-row layouts that were already 1-indexed are
+    unaffected. This is deliberately NOT a reintroduction of the
+    `_gridster_coords()` helper deleted in 00d3382 (see
+    ``tests/test_renderer_regression_phase16.py`` Test A) — that helper
+    unconditionally shifted every x/y by +1 regardless of whether the input
+    was already 1-based, corrupting valid layouts. This helper is a no-op
+    (`max(1, v) == v`) for every coordinate that was already >= 1, and only
+    changes values that are provably out-of-grid (< 1).
+    """
+    c = dict(coords)
+    c["x"] = max(1, c.get("x", 1))
+    c["y"] = max(1, c.get("y", 1))
+    return c
+
+
 def _resource_list_widget(w: Widget, kind_index: dict[tuple[str, str], int]) -> dict:
     kinds = [
         f"resourceKind:id:{kind_index[(rk.adapter_kind, rk.resource_kind)]}_::_"
@@ -983,7 +1021,7 @@ def _resource_list_widget(w: Widget, kind_index: dict[tuple[str, str], int]) -> 
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "ResourceList",
         "title": w.title,
         "config": {
@@ -1006,7 +1044,7 @@ def _resource_list_widget(w: Widget, kind_index: dict[tuple[str, str], int]) -> 
             },
             "depth": 1,
             "customFilter": {"filter": [], "excludedResources": None, "includedResources": None},
-            "selectFirstRow": {"selectFirstRow": True},
+            "selectFirstRow": {"selectFirstRow": w.select_first_row},
             "selfProvider": {"selfProvider": False},
         },
         "height": 600,
@@ -1083,7 +1121,7 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "View",
         "title": w.title,
         "config": {
@@ -1096,7 +1134,7 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
             "refreshContent": {"refreshContent": False},
             "isUpdatedView": True,
             "chartViewItems": [],
-            "selectFirstRow": {"selectFirstRow": True},
+            "selectFirstRow": {"selectFirstRow": w.select_first_row},
             "selfProvider": {"selfProvider": self_provider_flag},
             "title": w.title,
             "viewDefinitionId": view_def_id,
@@ -1170,7 +1208,7 @@ def _text_display_widget(w: Widget) -> dict:
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "TextDisplay",
         "title": w.title,
         "config": {
@@ -1198,7 +1236,7 @@ def _scoreboard_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "Scoreboard",
         "title": w.title,
         "config": {
@@ -1262,7 +1300,7 @@ def _metric_chart_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "MetricChart",
         "title": w.title,
         "config": {
@@ -1320,7 +1358,7 @@ def _health_chart_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "HealthChart",
         "title": w.title,
         "config": {
@@ -1384,7 +1422,7 @@ def _pareto_analysis_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "ParetoAnalysis",
         "title": w.title,
         "config": {
@@ -1460,7 +1498,7 @@ def _alert_list_widget(w: Widget) -> dict:
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "AlertList",
         "title": w.title,
         "config": {
@@ -1539,7 +1577,7 @@ def _problem_alerts_list_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "ProblemAlertsList",
         "title": w.title,
         "config": config,
@@ -1678,7 +1716,7 @@ def _heatmap_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "Heatmap",
         "title": w.title,
         "config": {
@@ -1727,7 +1765,7 @@ def _property_list_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "PropertyList",
         "title": w.title,
         "config": {
@@ -1777,7 +1815,7 @@ def _resource_relationship_advanced_widget(
     return {
         "collapsed": False,
         "id": w.widget_id,
-        "gridsterCoords": w.coords,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "ResourceRelationshipAdvanced",
         "title": w.title,
         "config": {
@@ -1802,7 +1840,7 @@ def _resource_relationship_advanced_widget(
             "customFilter": {
                 "filter": [], "excludedResources": None, "includedResources": None,
             },
-            "selectFirstRow": {"selectFirstRow": True},
+            "selectFirstRow": {"selectFirstRow": w.select_first_row},
             "selfProvider": {"selfProvider": cfg.self_provider},
         },
         "height": 600,
