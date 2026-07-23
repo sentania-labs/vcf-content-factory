@@ -187,3 +187,30 @@ available in the current where-dialect (see
 knowledge/context/authoring/supermetric_authoring.md for dialect
 capabilities). Flagging for future revisit if an uppercase-reporting
 fleet surfaces a deprecated/discontinued CPU in practice.
+
+## Tier-4 family-complete expansion (2026-07-23, Codex P1 on PR #66)
+
+Codex flagged that tier 4 covered only the three production-sampled
+generations — a Westmere `X5670` or AMD Opteron still read 0. Expanded
+to family-complete coverage. Mechanism gate: the Dialect-B
+`contains && !(contains)` combo was probed on devel first
+(probe_where_and_negation, sm_467dfab5…): 9/9 hosts matched ground
+truth (four i7-1260P → 1, five Ryzen/Celeron → 0); probe deleted from
+instance and repo after the run.
+
+Tier-4 structure: FOUR count() terms summed, ternaried, checked first:
+1. Literals: ' v3', ' v2 ', 'Opteron', ' X55', ' X56', ' E55',
+   ' E56', ' L55', ' L56' (Haswell/Ivy literals + Nehalem/Westmere-EP
+   55xx/56xx families + all Opterons). ' 0 @' dropped (subsumed by 2).
+2. `contains 'E5-' && !(contains ' v')` — bare Sandy Bridge E5
+   (incl. the "E5-2640 0 @" form).
+3. `contains 'E7-' && !(contains ' v')` — Westmere/Nehalem-EX E7.
+4. `contains 'E3-' && !(contains ' v')` — bare Sandy Bridge E3.
+
+Disjointness: the three bare-prefix terms exclude every vN-suffixed
+part (v2/v3 → term 1; v4/v5/v6 → tiers 3/2, checked later); 'E3-'
+cannot occur in tier-1's 'E-21'/'E-22' strings (dash follows E);
+' E55'/' E56' (leading space) never match 'E5-…' modern strings.
+Fleet re-simulation: 324 hosts → identical results to the pre-expansion
+run (40×tier4, 98×tiers1-3, 186×0) + synthetic Westmere/Opteron/EX
+strings now classify 4.
