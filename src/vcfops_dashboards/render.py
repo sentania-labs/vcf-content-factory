@@ -455,6 +455,19 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
 
     # Member column.
     props.append(_xml_property("attributeKey", col.attribute))
+    # preferredUnitId — same field/YAML convention as the generic column
+    # path (`col.unit` / `unit:` in YAML), same emission position
+    # (immediately after attributeKey, before isStringAttribute). Vendor-
+    # confirmed on an instanced-group member column: reference/references/
+    # vmbro_vcf_operations_vcommunity/Management Pack/content/reports/
+    # View - Set 4.xml:22141-22150 ("VM Snapshots List") carries
+    # attributeKey="diskspace:262|snapshot:snapshot-1|used",
+    # preferredUnitId="gb" in this exact position. That vendor item also
+    # carries an `id` attribute (an export-time internal reference) between
+    # attributeKey and preferredUnitId, which the factory deliberately
+    # omits (see prior instanced-group review).
+    if col.unit:
+        props.append(_xml_property("preferredUnitId", col.unit))
     props.append(_xml_property("isStringAttribute", "true" if col.is_string_attribute else "false"))
     # adapterKind/resourceKind are the view's own subject kinds, matching
     # every observed instanced-group member column (all three cited files

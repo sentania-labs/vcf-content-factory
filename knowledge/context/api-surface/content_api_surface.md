@@ -39,6 +39,21 @@ exactly the mechanism `vcfops_dashboards` already uses. This is why
 every new content type added to this repo should target the content
 zip path first, not per-object CRUD.
 
+### Import failures can be completely silent
+
+The importer does **not** always populate `errorMessages`. Confirmed
+case (VCF Ops 9.1, 2026-07-27): a `VIEW_DEFINITIONS` import whose view
+`<Description>` exceeds **1024 characters** returns `state=FAILED`,
+`skipped=1`, and an **empty** `errorMessages` list — no field name, no
+length, no hint. Bisected exactly at 1024 (pass) / 1025 (fail);
+non-transient.
+
+Treat `FAILED` + `skipped>=1` + zero `errorMessages` as a field-length
+problem before suspecting auth, zip structure, or UUID collision. Full
+write-up: `knowledge/context/known_limitations.md` §14 and
+`knowledge/context/wire-formats/view_column_wire_format.md`
+§"View-level field limits".
+
 ## Undocumented fields are real
 
 The OpenAPI spec for `POST /api/supermetrics` does not list

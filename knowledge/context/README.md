@@ -118,6 +118,7 @@ SDK adapter reviews.
 | `widget_types_survey.md` | Widget types (supported + unsupported) |
 | `widget_renderer_scope.md` | Widget renderer expansion targets |
 | `view_render_internal_endpoint.md` | Server-side view render (`/internal/views/{id}/data/export`) |
+| `ui_deep_links.md` | UI deep-link routes for dashboards/views (global search does NOT deep-link) |
 | `distribution_view_no_data.md` | DEF-012 root cause: property distributions rendered as numeric histograms |
 | `dashboard_selfprovider_pin_wire_format.md` | Self-provider widget pin wire format (View traversalSpecId, HealthChart) |
 | `casa-inventory-access.md` | CaSA / Cloud-Proxy adapter inventory-read mechanism |

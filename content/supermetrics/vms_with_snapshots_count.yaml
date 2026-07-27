@@ -1,0 +1,19 @@
+id: 77dca431-01ec-4a7c-824e-275908b89472
+name: "[VCF Content Factory] VMs with Snapshots (Count)"
+resource_kinds:
+  - resource_kind_key: vSphere World
+    adapter_kind_key: VMWARE
+description: >
+  Fleet-wide count of VMWARE VirtualMachine descendants carrying at least
+  one snapshot (flat metric diskspace|snapshot > 0.0001), assigned to
+  vSphere World so it computes once per fleet. Threshold matches the
+  companion "[VCF Content Factory] VM Snapshot Inventory" view's subject
+  filter for consistency. depth=5 walks from vSphere World through
+  vCenter, Datacenter, ClusterComputeResource, and HostSystem to
+  VirtualMachine (same hop count as the vendor-attested "Total VMs Minus
+  BAP VMs v2" World-scope precedent). Feeds the scoreboard tile on the
+  VM Snapshot Inventory dashboard.
+formula: |
+  count(${adaptertype=VMWARE, objecttype=VirtualMachine,
+         metric=diskspace|snapshot, depth=5,
+         where="diskspace|snapshot > 0.0001"})

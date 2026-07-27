@@ -418,6 +418,17 @@ class ViewDef:
                 f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
                 f"bundle content, ensure the bundle manifest sets factory_native: false."
             )
+        if len(self.description) > 1024:
+            raise DashboardValidationError(
+                f"view {self.name}: description is {len(self.description)} characters, "
+                f"exceeding the 1024-character limit. On VCF Operations 9.1, a "
+                f"VIEW_DEFINITIONS content-zip import with a description over 1024 "
+                f"characters fails SILENTLY server-side (state=FAILED, skipped=1, "
+                f"empty errorMessages) — see "
+                f"knowledge/context/wire-formats/view_column_wire_format.md "
+                f'"View-level field limits" and knowledge/context/known_limitations.md '
+                f"§14. Shorten the description."
+            )
         if not self.adapter_kind or not self.resource_kind:
             raise DashboardValidationError(
                 f"view {self.name}: adapter_kind and resource_kind required"

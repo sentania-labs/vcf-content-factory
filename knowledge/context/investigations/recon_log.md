@@ -3893,3 +3893,108 @@ the `vcfcf_compliance` pak on prod to close the pak-coverage gap, and
 (CIS-VCF/PCI/VCF-9.0-SCG) and missing badge data reflect a
 build/version difference worth reconciling, or are expected given
 devel's role as the "destructive playground" profile.
+
+## Recon: "Active VM Snapshot Inventory" view/dashboard (2026-07-27)
+
+**Intent:** view/dashboard listing all active VM snapshots — VM name,
+Snapshot Name, Creator, Description, Age (days), Snapshot Space (GB),
+Parent Cluster, Parent vCenter, Parent Datastore. Requester asked to
+VERIFY (not assume) a claim that snapshot descriptive properties
+(Name, Creator, Description, MOR, Number of Days Old) are instanced
+on **Datastore** (`Disk Space > Snapshot > snapshot-<id> > <attr>`)
+and that **VirtualMachine** only exposes Snapshot Age (Days) /
+Snapshot Space (GB).
+
+**Instance:** prod profile, `vcf-lab-operations.int.sentania.net`,
+**VCF Operations 9.1.0.0** (build 25541561) — confirmed via
+`GET /api/versions/current`.
+
+**Verdict: the supplied claim is WRONG.** Snapshot descriptive
+properties live on **VirtualMachine**, not Datastore, and Datastore
+has zero snapshot-related keys of any kind on this instance.
+
+### Live evidence
+
+- Scanned all 50 `VMWARE:VirtualMachine` resources'
+  `GET /api/resources/{id}/properties`. 50/50 carry flat snapshot
+  properties; several with active snapshots carry **instanced**
+  properties in the pattern:
+  `diskspace:<datastoreInternalId>|snapshot:snapshot-<n>|{name,mor,numberOfDays}`
+  — e.g. `diskspace:356893|snapshot:snapshot-16|name = pre-node24-runner-deploy-20260612-1233`
+  on VM `infra` (id `0e55f417-87d3-4bc9-931c-bfe35328caaa`).
+  Flat (non-instanced) VM properties present on every VM:
+  `diskspace|snapshot|olderThanXDays`, `diskspace|snapshot|oldestSnapshotTimestamp`,
+  `diskspace|snapshot|snapshotAge`.
+  **`creator` and `description` were absent from every VM scanned** —
+  present in the vocabulary (doc + MPB catalog dumps) but not
+  populated/enabled as live property values on this instance.
+- Scanned all 11 `VMWARE:Datastore` resources'
+  `/properties` — **zero snapshot-related property keys on any
+  datastore.** The claim that Datastore carries instanced
+  `snapshot-<id>` properties does not hold on this instance.
+- `GET /api/resources/{id}/statkeys` (note: JSON field is `stat-key`,
+  not `statKey`) on a snapshotted VM: METRIC keys present include
+  `summary|snapshotSpace` (flat, Snapshot Space GB), `diskspace|snapshot`
+  (flat aggregate), and instanced `diskspace:<ds>|snapshot:snapshot-<n>|{used,accessTime}`.
+  `diskspace|snapshot|snapshotAge` is a PROPERTY only — it does **not**
+  appear in `/statkeys` (not a queryable metric/time-series on this
+  instance).
+- Datastore statkeys **do** include a flat `diskspace|snapshot`
+  metric (aggregate snapshot GB across VMs on that datastore) — this
+  is the metric the repo's `content/views/datastore_reclaimable_space.yaml`
+  already uses. It is not instanced and carries no descriptive
+  attributes.
+- VM flat properties confirm Parent Cluster/vCenter/Datastore/Host/
+  Datacenter are available: `summary|parentCluster`,
+  `summary|parentVcenter`, `summary|datastore`, `summary|parentHost`,
+  `summary|parentDatacenter`.
+
+### Existing content
+
+- Built-in report `Optimization Report - Virtual Machines with
+  Snapshot` (id `796c3661-522a-4439-8f2f-6b7dfe4b5b95`) exists on the
+  instance, subject `Virtual Machine`. `/api/reportdefinitions/{id}`
+  does not expose embedded view columns via Suite API, so it's an
+  unconfirmed PARTIAL — worth opening in the UI before authoring
+  from scratch.
+- Repo `content/views/datastore_reclaimable_space.yaml` uses flat
+  `diskspace|snapshot` on Datastore (aggregate GB, no per-snapshot
+  descriptive columns) — not a match for a per-snapshot inventory.
+- No repo YAML lists per-snapshot descriptive attributes.
+
+### Reference repos — instanced-property-in-a-view precedent
+
+`reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports/View - Set 4.xml`
+line ~21991, view titled **"VM Snapshots List"**, subject
+`VirtualMachine`, contains real columns with
+`isProperty=true`, `isInstancedGroup=true`, `instanceGroupName=GROUP_diskspace`,
+pinned to a captured instance key
+`diskspace:262|snapshot:snapshot-1|{name,numberOfDays,used,accessTime}`.
+This **confirms VCF Ops list views CAN address instanced properties
+as columns** via the instanced-group mechanism. Caveat: the captured
+example is pinned to a single instance slot (`snapshot-1`) — it reads
+as "first/representative snapshot per VM row," not a guaranteed
+per-snapshot row fan-out for VMs with multiple concurrent snapshots.
+This nuance needs explicit design attention (not a recon blocker) if
+the requester wants one row per active snapshot rather than one row
+per VM.
+
+MPB catalog-dump JSONs (Rubrik/UniFi/phpIPAM/FastAPI design files —
+large full-attribute-catalog exports, not view definitions) all key
+these same instanced properties as
+`aria-VMWARE-VirtualMachine-diskspace|snapshot|creator` etc. —
+corroborating **VirtualMachine**, not Datastore, as the owning
+resource kind.
+
+**Recommendation:** author a new view (VirtualMachine subject) using
+the flat parent/cluster/vCenter/datastore properties plus the
+instanced `diskspace:<ds>|snapshot:snapshot-<n>|{name,numberOfDays}`
+columns via the `isInstancedGroup` mechanism demonstrated in the
+vmbro reference view. Open design question to resolve before
+authoring: whether "list all active snapshots" needs per-snapshot row
+fan-out (the instanced-group column mechanism observed only proves
+single/representative-instance columns) — flag to the user/dashboard-
+author. Creator/Description keys exist in vocabulary but render empty
+on this instance (property collection appears disabled by default,
+consistent with docs marking them "disabled by default") — call this
+out explicitly if the requester wants those columns populated.

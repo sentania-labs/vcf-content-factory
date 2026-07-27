@@ -433,6 +433,150 @@ class TestInstancedGroupMemberTransformEmission:
         assert "transformExpression" not in xml
 
 
+class TestInstancedGroupMemberUnitEmission:
+    """preferredUnitId parity fix (2026-07-27): instanced-group member
+    columns can declare `unit:` the same way regular columns do, and the
+    renderer must emit `preferredUnitId` immediately after `attributeKey`
+    (same field, same YAML convention, same position as the generic
+    _xml_attribute_item() path) — closing the gap flagged in
+    view_column_wire_format.md 'Instanced-group columns'.
+
+    Ref (consuming case): VM Snapshot Inventory instanced `used` metric
+    column, knowledge/designs/views/vm-snapshot-inventory.md."""
+
+    def _render(self, tmp_path: Path, member: dict, stem: str) -> str:
+        from vcfops_dashboards.loader import load_view
+        from vcfops_dashboards.render import render_views_xml
+
+        data = {
+            "name": "[VCF Content Factory] Unit Test",
+            "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
+            "columns": [_driver_column(name="GROUP_diskspace"), member],
+        }
+        p = _write_view(tmp_path, data, stem=stem)
+        v = load_view(p, enforce_framework_prefix=False)
+        v.validate(enforce_framework_prefix=False)
+        return render_views_xml([v])
+
+    def test_metric_member_column_emits_preferred_unit_id(self, tmp_path):
+        """diskspace:<dsId>|snapshot:snapshot-<n>|used with unit=gb must
+        render preferredUnitId="gb" right after attributeKey, matching
+        the generic column path's position/ordering."""
+        member = _member_column(
+            "diskspace", "used", "356893|snapshot:snapshot-16",
+            display_name="Used",
+            unit="gb",
+        )
+        member["instanced_group"]["name"] = "GROUP_diskspace"
+        xml = self._render(tmp_path, member, "unit_member")
+        expected = (
+            "<Item><Value>"
+            '<Property name="objectType" value="RESOURCE"/>'
+            '<Property name="attributeKey" value="diskspace:356893|snapshot:snapshot-16|used"/>'
+            '<Property name="preferredUnitId" value="gb"/>'
+            '<Property name="isStringAttribute" value="false"/>'
+            '<Property name="adapterKind" value="VMWARE"/>'
+            '<Property name="resourceKind" value="VirtualMachine"/>'
+            '<Property name="rollUpType" value="NONE"/>'
+            '<Property name="rollUpCount" value="0"/>'
+            '<Property name="transformations"><List><Item value="CURRENT"/></List></Property>'
+            '<Property name="isProperty" value="false"/>'
+            '<Property name="displayName" value="Used"/>'
+            '<Property name="addTimestampAsColumn" value="false"/>'
+            '<Property name="isShowRelativeTimestamp" value="false"/>'
+            "</Value></Item>"
+        )
+        assert expected in xml
+
+    def test_property_member_column_with_unit_omits_rolluptype(self, tmp_path):
+        """is_property=true member column with unit set: preferredUnitId is
+        still emitted right after attributeKey, and rollUpType is still
+        omitted (isProperty branch is independent of the unit branch)."""
+        member = _member_column(
+            "diskspace", "used", "356893|snapshot:snapshot-16",
+            display_name="Used Percent",
+            is_property=True,
+            is_string_attribute=False,
+            unit="percent",
+        )
+        member["instanced_group"]["name"] = "GROUP_diskspace"
+        xml = self._render(tmp_path, member, "property_unit_member")
+        expected = (
+            "<Item><Value>"
+            '<Property name="objectType" value="RESOURCE"/>'
+            '<Property name="attributeKey" value="diskspace:356893|snapshot:snapshot-16|used"/>'
+            '<Property name="preferredUnitId" value="percent"/>'
+            '<Property name="isStringAttribute" value="false"/>'
+            '<Property name="adapterKind" value="VMWARE"/>'
+            '<Property name="resourceKind" value="VirtualMachine"/>'
+            '<Property name="rollUpCount" value="0"/>'
+            '<Property name="transformations"><List><Item value="CURRENT"/></List></Property>'
+            '<Property name="isProperty" value="true"/>'
+            '<Property name="displayName" value="Used Percent"/>'
+            '<Property name="addTimestampAsColumn" value="false"/>'
+            '<Property name="isShowRelativeTimestamp" value="false"/>'
+            "</Value></Item>"
+        )
+        assert expected in xml
+        assert "rollUpType" not in expected
+
+    def test_member_column_without_unit_still_omits_preferred_unit_id(self, tmp_path):
+        """Regression guard: no `unit:` set -> no preferredUnitId emitted
+        (unchanged behavior for every existing instanced-group column)."""
+        member = _member_column(
+            "diskspace", "name", "356893|snapshot:snapshot-16",
+            display_name="Snapshot Name",
+            is_property=True,
+            is_string_attribute=True,
+        )
+        member["instanced_group"]["name"] = "GROUP_diskspace"
+        xml = self._render(tmp_path, member, "no_unit_member")
+        assert "preferredUnitId" not in xml
+
+    def test_driver_column_never_emits_preferred_unit_id(self, tmp_path):
+        """Driver columns have no attribute/unit of their own; unit set on
+        a driver block (author error, but not schema-rejected) must not
+        leak a preferredUnitId onto the driver Item."""
+        from vcfops_dashboards.loader import load_view
+        from vcfops_dashboards.render import render_views_xml
+
+        data = {
+            "name": "[VCF Content Factory] Driver Unit Test",
+            "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
+            "columns": [
+                {
+                    "display_name": "Instance",
+                    "unit": "gb",
+                    "instanced_group": {"name": "GROUP_diskspace"},
+                },
+                _member_column(
+                    "diskspace", "name", "356893|snapshot:snapshot-16",
+                    display_name="Snapshot Name",
+                    is_property=True,
+                    is_string_attribute=True,
+                ),
+            ],
+        }
+        data["columns"][1]["instanced_group"]["name"] = "GROUP_diskspace"
+        p = _write_view(tmp_path, data, stem="driver_unit")
+        v = load_view(p, enforce_framework_prefix=False)
+        v.validate(enforce_framework_prefix=False)
+        xml = render_views_xml([v])
+        driver_item = (
+            "<Item><Value>"
+            '<Property name="objectType" value="RESOURCE"/>'
+            '<Property name="attributeKey" value="Instance Name"/>'
+            '<Property name="rollUpCount" value="0"/>'
+            '<Property name="isInstancedGroup" value="true"/>'
+            '<Property name="showInstanceName" value="true"/>'
+            '<Property name="instanceGroupName" value="GROUP_diskspace"/>'
+            '<Property name="keepInstanceSummary" value="false"/>'
+            '<Property name="displayName" value="Instance"/>'
+            "</Value></Item>"
+        )
+        assert driver_item in xml
+
+
 class TestInstancedGroupMemberUnprovenTransformationsRejected:
     """No vendor evidence for PERCENTILE or TIME_POINT on an instanced-group
     member column anywhere in the surveyed corpus — fail closed."""
