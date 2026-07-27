@@ -4,17 +4,48 @@ resource_kinds:
   - resource_kind_key: vSphere World
     adapter_kind_key: VMWARE
 description: >
-  Fleet-wide sum of VM snapshot space (GB) across all VMWARE VirtualMachine
-  descendants, assigned to vSphere World so it computes once per fleet.
-  Source metric diskspace|snapshot is a flat per-VM GB metric (live-verified
-  in recon 2026-07-27), chosen over summary|snapshotSpace for consistency
-  with the companion "[VCF Content Factory] VM Snapshot Inventory" view's
-  filter/columns. depth=5 walks from vSphere World through vCenter,
-  Datacenter, ClusterComputeResource, and HostSystem to VirtualMachine (same
-  hop count as the companion "[VCF Content Factory] VMs with Snapshots
+  Fleet-wide sum of VM snapshot space (GB) across VMWARE VirtualMachine
+  descendants carrying at least one AGED snapshot, assigned to vSphere
+  World so it computes once per fleet. Source metric diskspace|snapshot is
+  a flat per-VM GB metric (live-verified in recon 2026-07-27), chosen over
+  summary|snapshotSpace for consistency with the companion "[VCF Content
+  Factory] VM Snapshot Inventory" view's filter/columns. Aligned with that
+  view's row population, which surfaces only snapshots whose instanced
+  numberOfDays > 0 (RECLAIM_SNAPSHOTS_DAYS=7 gates when per-snapshot
+  instanced properties populate — younger snapshots can take up to ~a week,
+  sometimes as little as ~24h, before their instanced properties appear).
+  The where clause gates on the flat, per-VM property
+  diskspace|snapshot|snapshotAge > 0 — the same age predicate used by the
+  companion "[VCF Content Factory] VMs with Snapshots (Count)" SM — since a
+  super metric cannot aggregate the view's per-snapshot instanced key
+  directly (that key is fanned out per snapshot, not a single per-VM value).
+  diskspace|snapshot|snapshotAge is PROPERTY-ONLY on this platform (absent
+  from /statkeys — confirmed live, recon 2026-07-27); per the DSL's
+  documented property-vs-metric addressing (the metric= and where= slots
+  both accept property keys, e.g. the canonical `summary|config|type equals
+  VMOperator` example), a numeric where clause on this property key is
+  expressible using the same grammar.
+
+  Semantics note: because diskspace|snapshot is a flat per-VM total, this
+  sums the WHOLE snapshot space of any VM with at least one aged snapshot —
+  it cannot split young vs. aged space within a single VM. On current
+  devel data this is identical to a strict per-snapshot aged sum (no VM
+  currently mixes aged and non-aged snapshots). Shipped, not yet
+  live-verified: grounded in the DSL doc/skill (RULE-002) but the actual
+  computed value has not been confirmed by the author (no live-query
+  capability). Installer is expected to sync and check against devel
+  ground truth: expected ≈12.5 GB (docker ~8.33 + avi ~4.19), replacing the
+  prior ungated total of 12.9 GB. If the where-clause on a property-only
+  key silently produces zero or stale data, that is a TOOLSET GAP to route
+  back through recon/api-explorer.
+
+  depth=5 walks from vSphere World through vCenter, Datacenter,
+  ClusterComputeResource, and HostSystem to VirtualMachine (same hop
+  count as the companion "[VCF Content Factory] VMs with Snapshots
   (Count)" SM and the vendor-attested "Total VMs Minus BAP VMs v2"
   World-scope precedent). Feeds the scoreboard tile on the VM Snapshot
   Inventory dashboard.
 formula: |
   sum(${adaptertype=VMWARE, objecttype=VirtualMachine,
-        metric=diskspace|snapshot, depth=5})
+        metric=diskspace|snapshot, depth=5,
+        where="diskspace|snapshot|snapshotAge > 0"})

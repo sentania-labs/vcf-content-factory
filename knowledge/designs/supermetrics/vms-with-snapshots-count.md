@@ -25,3 +25,62 @@ capacity_assessment.yaml / fleet_capacity_rightsizing.yaml).
   dashboard.
 - Ghost caveat does not apply: flat `diskspace|snapshot` reflects live
   snapshot space, not ghost instanced properties.
+
+## Correction (2026-07-27, post-initial-authoring)
+
+User correction, relayed via orchestrator: the companion view's table
+was changed to show only snapshots with instanced `numberOfDays > 0`
+(aged, live snapshots). `RECLAIM_SNAPSHOTS_DAYS=7` gates when the
+per-snapshot instanced properties populate — younger snapshots can take
+up to ~a week (per user, sometimes as little as ~24h) before their
+instanced properties appear at all. The original threshold
+(`diskspace|snapshot > 0.0001`, i.e. "has any snapshot space") no longer
+matches the table's population rule and had to be re-aligned.
+
+**Predicate change:** `diskspace|snapshot > 0.0001` (space-based) →
+`diskspace|snapshot|snapshotAge > 0` (age-based), matching the view's
+`numberOfDays > 0` gate at VM granularity. The scoreboard cannot
+aggregate the view's per-snapshot instanced key directly (a count()
+loop needs a per-VM value, not a per-snapshot fan-out), so it uses the
+flat, per-VM property `diskspace|snapshot|snapshotAge` as the closest
+available proxy for "this VM has at least one aged snapshot."
+
+**DSL challenge:** `diskspace|snapshot|snapshotAge` is PROPERTY-ONLY on
+this platform — confirmed absent from `/statkeys` live (recon
+2026-07-27, "Active VM Snapshot Inventory" section,
+`knowledge/context/investigations/recon_log.md`). Per the DSL's
+documented property-vs-metric addressing rule (`metric=` slot accepts
+both real metric keys and property keys — see
+`knowledge/context/authoring/supermetric_authoring.md` §3, "Metric vs
+property targets"; also `vcfops-supermetric-dsl` skill pitfall #5), and
+per the existing canonical Dialect A example that already uses a bare
+*property* key (`summary|config|type equals VMOperator`, not a metric)
+in a `where=` clause, a numeric `where="diskspace|snapshot|snapshotAge
+> 0"` clause is expressible under the established grammar. This is not
+a novel construct — it follows the same property-key-in-where pattern
+already in use elsewhere in the repo, just with a numeric operator
+instead of `equals`.
+
+**LIVE-VERIFIED 2026-07-27:** installer synced the corrected SM to
+devel and confirmed computed value **2.0** — exactly the expected
+docker + vcf-lab-avi-wld01-node0 population — read via statkey
+`Super Metric|sm_77dca431-…` after one compute cycle, with the
+timestamp advanced past baseline. This replaces the prior ungated
+count of 5 and confirms the age-based predicate is correctly scoped.
+
+**General DSL fact now proven:** a numeric `where=` clause on a
+PROPERTY-ONLY key (absent from `/statkeys`) computes correctly on
+VCF Ops 9.1.0.0 — the property-vs-metric addressing rule (`metric=`
+slot accepts both real metric keys and property keys) extends to
+where-clause predicates, not just the aggregated value itself. This
+was previously grounded only in DSL doc/skill guidance and an
+analogous string-operator precedent; it is now empirically confirmed
+end-to-end (formula → sync → compute → correct value) rather than
+inferred.
+
+**Formula (current):**
+```
+count(${adaptertype=VMWARE, objecttype=VirtualMachine,
+       metric=diskspace|snapshot|snapshotAge, depth=5,
+       where="diskspace|snapshot|snapshotAge > 0"})
+```

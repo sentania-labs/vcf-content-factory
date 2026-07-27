@@ -5,15 +5,30 @@ resource_kinds:
     adapter_kind_key: VMWARE
 description: >
   Fleet-wide count of VMWARE VirtualMachine descendants carrying at least
-  one snapshot (flat metric diskspace|snapshot > 0.0001), assigned to
-  vSphere World so it computes once per fleet. Threshold matches the
-  companion "[VCF Content Factory] VM Snapshot Inventory" view's subject
-  filter for consistency. depth=5 walks from vSphere World through
-  vCenter, Datacenter, ClusterComputeResource, and HostSystem to
-  VirtualMachine (same hop count as the vendor-attested "Total VMs Minus
-  BAP VMs v2" World-scope precedent). Feeds the scoreboard tile on the
-  VM Snapshot Inventory dashboard.
+  one AGED snapshot, assigned to vSphere World so it computes once per
+  fleet. Aligned with the companion "[VCF Content Factory] VM Snapshot
+  Inventory" view's row population, which surfaces only snapshots whose
+  instanced numberOfDays > 0 (RECLAIM_SNAPSHOTS_DAYS=7 gates when
+  per-snapshot instanced properties populate — younger snapshots can take
+  up to ~a week, sometimes as little as ~24h, before their instanced
+  properties appear). The scoreboard cannot read the view's per-snapshot
+  instanced key directly (that key is fanned out per snapshot, not a
+  single per-VM value a super metric can aggregate over), so it uses the
+  flat, per-VM property diskspace|snapshot|snapshotAge as the count
+  predicate instead — same underlying age gate, expressed at VM
+  granularity. diskspace|snapshot|snapshotAge is PROPERTY-ONLY on this
+  platform (absent from /statkeys — confirmed live, recon 2026-07-27);
+  per the DSL's documented property-vs-metric addressing (the metric=
+  slot accepts both real metric keys and property keys, and Dialect A
+  where clauses already use bare property keys, e.g. the canonical
+  `summary|config|type equals VMOperator` example), a numeric where
+  clause on this property key is expressible using the same grammar.
+  depth=5 walks from vSphere World through vCenter, Datacenter,
+  ClusterComputeResource, and HostSystem to VirtualMachine (same hop
+  count as the vendor-attested "Total VMs Minus BAP VMs v2" World-scope
+  precedent). Feeds the scoreboard tile on the VM Snapshot Inventory
+  dashboard.
 formula: |
   count(${adaptertype=VMWARE, objecttype=VirtualMachine,
-         metric=diskspace|snapshot, depth=5,
-         where="diskspace|snapshot > 0.0001"})
+         metric=diskspace|snapshot|snapshotAge, depth=5,
+         where="diskspace|snapshot|snapshotAge > 0"})
