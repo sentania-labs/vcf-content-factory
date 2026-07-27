@@ -399,4 +399,32 @@ scripts/bootstrap_references.sh --update # also git pull existing
   content. Public repo, VMware-by-Broadcom IP; see repo LICENSE
   before redistribution.
 
+### brockpeterson.com — blog articles (NOT a clone; extracts only)
+
+- **URL:** https://www.brockpeterson.com/
+- **Local path:** *none* — this is a website, not a clonable repo, so
+  `bootstrap_references.sh` does not fetch it.
+- **Owner:** Brock Peterson (same author as the four
+  `brockpeterson/*` GitHub repos above). Public blog.
+- **Scope:** long-form explanations of VCF Ops / Aria Ops behaviour that
+  is not documented in the vendor PDFs — collector timing, metric
+  semantics, "why is this property -1" class of questions.
+- **How to cite (RULE-015/017):** a live URL is **not** re-fetchable by a
+  fresh clone, so do **not** cite the URL alone. Commit a verbatim
+  extract under
+  `reference/docs/extracted/brockpeterson-<article-slug>/article.txt`
+  with a header carrying SOURCE URL, author, publish/update dates and
+  retrieval date; then cite the **extract path** from `knowledge/context/`.
+- **Extracts committed so far:**
+  - `reference/docs/extracted/brockpeterson-vm-snapshots-aria-operations/article.txt`
+    — "Everything you wanted to know about VM Snapshots in Aria
+    Operations" (2024-11-17, upd. 2025-10-23). Authority for the **24 h**
+    snapshot property/metric materialisation gate, the Age `-1` sentinel
+    semantics, Creator/Description being off by default, and Reclaimable
+    Snapshot Space being computed once daily. Digested in
+    `knowledge/context/investigations/vm-snapshot-instanced-fanout-2026-07-27.md`.
+- **Attribution:** cite the extract path plus the SOURCE URL in its
+  header. Third-party blog content — reproduced for provenance only;
+  check with the author before redistributing in shipped content.
+
 <!-- Add new sources below. Keep entries in the same shape. -->

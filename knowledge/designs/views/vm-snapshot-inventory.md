@@ -141,3 +141,11 @@ only, for `GROUP_diskspace`; not yet confirmed on prod or for other
 instanced groups (portability warning in the investigation doc).
 `content/views/vm_snapshot_inventory.yaml` updated; UUID and columns
 unchanged.
+
+**Correction to the recall caveat above (2026-07-27, same day):** the
+materialization gate is **24 hours**, not `RECLAIM_SNAPSHOTS_DAYS`/7
+days — vendor-community-documented (brockpeterson, allowlisted source:
+"Properties appear after the VM Snapshot is 24 hours old"), consistent
+with all live observations; api-explorer is correcting the knowledge
+base in parallel. The view's `description:` and the recall-gap wording
+above now read "24h", not the 7-day figure.

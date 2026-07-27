@@ -29,7 +29,7 @@ widgets:
   - id: vms_with_snapshots_count
     type: Scoreboard
     title: "VMs with Snapshots"
-    coords: {x: 1, y: 1, w: 6, h: 3}
+    coords: {x: 1, y: 1, w: 4, h: 4}
     self_provider: true
     pin:
       adapter_kind: VMWARE
@@ -46,7 +46,7 @@ widgets:
   - id: total_snapshot_space_gb
     type: Scoreboard
     title: "Total Snapshot Space (GB)"
-    coords: {x: 7, y: 1, w: 6, h: 3}
+    coords: {x: 5, y: 1, w: 4, h: 4}
     self_provider: true
     pin:
       adapter_kind: VMWARE
@@ -60,10 +60,19 @@ widgets:
         label: "Total Snapshot Space (GB)"
         color_method: 1
 
+  - id: snapshot_visibility_note
+    type: TextDisplay
+    title: "Note"
+    coords: {x: 9, y: 1, w: 4, h: 4}
+    html: >
+      <p>Snapshots appear here only once they are older than 24 hours —
+      snapshot properties (name, creator, age) populate 24h after
+      creation.</p>
+
   - id: snapshot_inventory_view
     type: View
     title: "VM Snapshot Inventory"
-    coords: {x: 1, y: 4, w: 12, h: 12}
+    coords: {x: 1, y: 5, w: 12, h: 12}
     self_provider: true
     pin:
       adapter_kind: VMWARE

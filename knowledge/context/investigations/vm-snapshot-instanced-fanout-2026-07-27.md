@@ -154,10 +154,9 @@ On this 50-VM lab that is ~50 ghost rows vs 2 real ones.
 
 **Discriminator (empirical, and vendor-blessed — see Q3):** the instanced
 property `…|numberOfDays` is `-1.0` for a ghost and a real age for a live
-snapshot. **⚠ Read the `RECLAIM_SNAPSHOTS_DAYS` section below before
-relying on this — `-1` also covers live snapshots younger than the
-global 7-day threshold, so this discriminator is weaker than it looks
-here.** Verbatim from the `docker` render — five ghosts and one live
+snapshot. **⚠ Read the snapshot-ageing section below before relying on
+this — `-1` also covers live snapshots younger than **24 hours**, so this
+discriminator has a one-day blind spot.** Verbatim from the `docker` render — five ghosts and one live
 row, same view, same VM:
 
 ```json
@@ -209,13 +208,78 @@ snapshots.)*
 
 ---
 
-## The "older than X days" threshold: `RECLAIM_SNAPSHOTS_DAYS` — **GLOBAL, = 7**
+## Snapshot ageing: the gate is **24 HOURS**, not `RECLAIM_SNAPSHOTS_DAYS`
 
-- Date: 2026-07-27. Read-only on **both** devel and prod. Nothing changed.
+> **⚠ CORRECTION — 2026-07-27.** An earlier version of this section claimed
+> the `-1` → real-value flip was gated by the global
+> `RECLAIM_SNAPSHOTS_DAYS` (= 7). **That inference was wrong.** The gate is
+> **24 hours**, per Brock Peterson's article (allowlisted reference author;
+> verbatim extract committed at
+> `reference/docs/extracted/brockpeterson-vm-snapshots-aria-operations/article.txt`,
+> source URL in its header).
+>
+> My sampling could not have distinguished them: the observed VMs were
+> **0.1 days** (no instances) and **11–12 days** (instances present). The
+> entire 1–6 day band — where a 24 h gate and a 7 day gate disagree — was
+> **never sampled**. I flagged the claim "strongly indicated, not proven",
+> which was right, but I should have named the specific unsampled interval
+> that would discriminate rather than leaving it as generic hedging. Every
+> observation is equally consistent with 24 h, and 24 h is what the source
+> documents.
 
-The threshold that gates when flat `diskspace|snapshot|snapshotAge` **and**
-instanced `…|numberOfDays` flip from `-1` to a real value is a
-**deployment-global setting**, not per-adapter-instance and not per-policy:
+### What the source says (short quotes, full text in the extract)
+
+> "Properties appear after the VM Snapshot is 24 hours old."
+>
+> "Snapshot Age property is -1 by default, even if a Snapshot doesn't
+> exist. It remains -1 until a Snapshot is 24 hours old, and gets reset to
+> -1 once a Snapshot is deleted."
+>
+> "After the next collection interval, you now have disk related metrics,
+> number of snapshots metric, and the age is still -1. After 24 hours the
+> rest of the metrics and properties will appear."
+>
+> "Summary | Reclaimable Snapshot Space (GB) — reclaimable snapshot space,
+> this is only calculated once daily…"
+
+That third quote resolves a detail my own observations showed but I had not
+explained: **flat** snapshot metrics (`diskspace|snapshot`,
+`summary|snapshot_count`) appear at the **next collection interval**, while
+the **instanced** per-snapshot metrics/properties and the Age properties
+appear only after **24 hours**. Exactly matches prod `ca`/`dcint1`:
+`snapshot_count = 1` and flat disk metrics present, **zero** instanced keys,
+2.4 h after the snapshot was taken.
+
+It also independently corroborates two things established here empirically:
+Creator/Description are off by default and must be activated (Q4), and the
+Age property resets to `-1` on deletion (the ghost mechanism, Q1b).
+
+### `RECLAIM_SNAPSHOTS_DAYS` is real, but scoped elsewhere
+
+The setting exists and is genuinely global — it is simply **not** the
+ageing gate. It governs the **reclamation / cost** calculations
+(`diskspace|snapshot|olderThanXDays`, Reclaimable Snapshot Space, the
+reclaim badges), which per the source are computed **once daily**.
+
+Consistency check that the two are separate: `docker` and
+`vcf-lab-avi-wld01-node0` carry 11–12 day snapshots and
+`olderThanXDays = 1.0` — i.e. one snapshot older than the 7-day reclaim
+threshold. That is the reclaim counter doing its job, independent of the
+24 h materialisation gate.
+
+### Pending natural experiment (decisive, available 2026-07-28)
+
+Devel and prod both have snapshots created **2026-07-27** (`ca`, `dcint1`,
+`vcf-lab-sddcmgr`'s live one) which currently have **zero instanced keys**.
+When they cross **24 h** their instanced properties/metrics and a real
+`numberOfDays` should appear. If they do → 24 h confirmed live. If they
+remain absent until day 7 → the source's 24 h claim does not hold on 9.1
+and this needs reopening. **Cheap to run: re-render the view, or re-check
+`/api/resources/{id}/properties` for `diskspace:*|snapshot:*` keys.**
+
+### The setting itself (values verified read-only on both instances)
+
+The following is still accurate — only its *interpretation* changed:
 
 ```
 GET /api/deployment/config/globalsettings/RECLAIM_SNAPSHOTS_DAYS
@@ -247,9 +311,12 @@ per-key metadata via `…/globalsettings/metadata`; writes are
   `CAPACITY_REMAINING`, `WORKLOAD`), and the exported Default Policy XML
   contains **zero** occurrences of the string "snapshot".
 
-So one number governs snapshot ageing for the entire deployment.
+(These exclusions remain valid and are worth keeping: whatever governs
+snapshot ageing, it is **not** an adapter-instance setting and **not** a
+policy setting. The 24 h gate appears to be hard-coded collector behaviour,
+with no exposed knob found on either instance.)
 
-### Empirically confirmed against live data (prod, threshold = 7)
+### Live data — consistent with a 24 h gate (prod)
 
 | VM | real age of oldest snapshot | `snapshotAge` | `olderThanXDays` | instanced `numberOfDays` |
 |---|---|---|---|---|
@@ -259,8 +326,11 @@ So one number governs snapshot ageing for the entire deployment.
 | docker | 12.3 d | `12.0` | `1.0` | 5 × `-1.0`, 1 × `12.0` |
 | vcf-lab-avi-wld01-node0 | 11.9 d | `11.0` | `1.0` | 2 × `-1.0`, 1 × `11.0` |
 
-Clean split at 7 days, and — the important part — **the instanced
-`numberOfDays` obeys the same gate as the flat property.**
+The 0.1 d rows are all below **24 h** (and also below 7 d — which is exactly
+why this sample cannot discriminate between the two hypotheses); the 11.9 /
+12.3 d rows are above both. **The important, sample-independent finding
+stands: the instanced `numberOfDays` obeys the same gate as the flat
+property.** Only the gate's *value* was misidentified.
 
 ### This materially weakens the ghost heuristic — correction to Q1b
 
@@ -268,20 +338,24 @@ Clean split at 7 days, and — the important part — **the instanced
 instanced `numberOfDays` read `-1.0`. So:
 
 > **`numberOfDays == -1` does NOT mean "ghost". It means "ghost **OR**
-> live-but-younger-than `RECLAIM_SNAPSHOTS_DAYS`".**
+> live-but-younger-than 24 hours".**
 
 The two are indistinguishable in the property data. A view column keyed on
-Age therefore reads as *"live snapshots older than 7 days"*, not *"live
-snapshots"* — it silently omits every snapshot taken in the last week,
-which for a snapshot-hygiene use case is precisely the population an
-operator most wants to see.
+Age therefore reads as *"live snapshots at least a day old"*, not *"live
+snapshots"*.
 
-The earlier hedge in Q1b ("high-precision / low-recall") was directionally
-right but under-stated the mechanism: the low recall is **systematic and
-tunable**, not sampling noise. If the user wants younger snapshots
-included, the lever is `RECLAIM_SNAPSHOTS_DAYS` (global, min 1) — an
-**operator decision with deployment-wide blast radius** (it also drives
-reclamation/cost reporting), not something content authoring should touch.
+**This is much less damaging than the 7-day version of this claim** that
+appeared in the earlier draft. A 24 h blind spot on a snapshot-hygiene
+report is largely benign — nobody chases a snapshot taken an hour ago. A
+7-day blind spot would have been serious. Correcting the gate therefore
+*downgrades* this from a significant caveat to a footnote, and the "the
+operator most wants to see exactly this population" framing in the earlier
+draft was overwrought.
+
+There is also **no tuning lever** for it — the 24 h gate is collector
+behaviour, not the `RECLAIM_SNAPSHOTS_DAYS` setting, and no exposed knob was
+found. The earlier claim that recall is "systematic and tunable" was wrong
+on the second word: systematic yes, tunable no.
 
 ---
 
@@ -417,9 +491,9 @@ subject:
   widen anything (finding 4).
 - **This does not repeal the recall caveat.** The filter selects rows where
   `numberOfDays > 0`, and that property is gated by the global
-  `RECLAIM_SNAPSHOTS_DAYS = 7` — so the view still shows only snapshots
-  older than a week. The filter fixes the *ghost* problem, not the *young
-  snapshot* problem. Both must be communicated.
+  the **24 h** materialisation gate — so the view shows only snapshots at
+  least a day old. The filter fixes the *ghost* problem, not the
+  *sub-24 h* problem. The latter is a footnote, not a blocker.
 - With this clause the row-set-steering workaround (metric-only members) is
   **no longer needed** — you can keep `name`, `creator`, `description` and
   still get ghost-free rows. That resolves the "ghost-free XOR Snapshot Name"
@@ -669,16 +743,19 @@ instanced metric statkeys but **zero samples in 6 h**; its 13 property
 instances are all aged ghosts.
 
 **Strongly indicated (not proven):** a per-snapshot instance is only
-materialised once the snapshot is older than `RECLAIM_SNAPSHOTS_DAYS` (7).
-That single model explains every observation — young live snapshot → no
-instance at all; aged live → instance with metrics and a real
-`numberOfDays`; deleted-after-aging → frozen ghost. **Decisive test not
-run:** watch one of today's snapshots cross the 7-day mark and see whether
-its instance appears. 2.4 h of absence is suggestive but does not
-formally exclude ordinary collection lag.
+materialised once the snapshot is **24 hours** old — **confirmed by the
+cited source**, see the snapshot-ageing section
+(`reference/docs/extracted/brockpeterson-vm-snapshots-aria-operations/article.txt`).
+(An earlier draft here guessed `RECLAIM_SNAPSHOTS_DAYS` = 7; wrong — the
+1–6 day band that would have discriminated was never sampled.) The model
+explains every observation — sub-24 h live snapshot → flat metrics only, no
+instance; aged live → instance with metrics and a real `numberOfDays`;
+deleted-after-aging → frozen ghost. **Live confirmation pending
+2026-07-28**, when today's snapshots cross 24 h.
 
-Either way the consequence is the same for the user: **no instanced-group
-view — ghost-free or not — shows a snapshot taken in the last week.**
+Consequence for the user: **no instanced-group view — ghost-free or not —
+shows a snapshot taken in the last 24 hours.** A one-day lag, not a
+one-week one.
 
 ### Verdict and the closest available levers
 
@@ -729,9 +806,10 @@ threshold", **not** "has a snapshot". This is exactly what the built-in
 report filters on.
 
 That threshold is now identified: the deployment-global
-`RECLAIM_SNAPSHOTS_DAYS` (= **7** on both devel and prod) — see the
-dedicated section above. The same gate applies to the **instanced**
-`…|numberOfDays`, not just this flat property.
+a **24 h** materialisation gate (**not** `RECLAIM_SNAPSHOTS_DAYS`, which
+is real but scoped to reclamation/cost maths) — see the dedicated section
+above. The same gate applies to the **instanced** `…|numberOfDays`, not
+just this flat property.
 
 Field-availability caveat: `oldestSnapshotTimestamp` and `olderThanXDays`
 are present on **prod** VMs but **absent on devel**, where only
@@ -919,9 +997,10 @@ XML export.
 5. **Ghost rows: filter them out** with an instanced-key `SubjectType`
    filter (`diskspace:<any>|snapshot:snapshot-<any>|numberOfDays`
    `GREATER_THAN 0`) — see the correction section. Still tell the user the
-   other half: that same property is gated by `RECLAIM_SNAPSHOTS_DAYS`
-   (global, = 7), so the view shows *snapshots older than a week*, not
-   *all live snapshots*. The filter fixes ghosts, not young-snapshot recall.
+   other half: that same property only materialises once a snapshot is
+   **24 h** old, so the view shows *snapshots at least a day old*, not
+   *all live snapshots*. The filter fixes ghosts; the 24 h lag is a
+   footnote, not a blocker.
 6. Creator / Description: **viable as of the Q4 resolution** — they are
    ordinary instanced properties (`prefix: "diskspace"`, suffix
    `creator` / `description`, `is_property: true`,

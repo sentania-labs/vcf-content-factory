@@ -8,10 +8,10 @@ description: >
   one AGED snapshot, assigned to vSphere World so it computes once per
   fleet. Aligned with the companion "[VCF Content Factory] VM Snapshot
   Inventory" view's row population, which surfaces only snapshots whose
-  instanced numberOfDays > 0 (RECLAIM_SNAPSHOTS_DAYS=7 gates when
-  per-snapshot instanced properties populate — younger snapshots can take
-  up to ~a week, sometimes as little as ~24h, before their instanced
-  properties appear). The scoreboard cannot read the view's per-snapshot
+  instanced numberOfDays > 0 (a snapshot's instanced properties, incl.
+  Age, populate once the snapshot is 24 hours old; RECLAIM_SNAPSHOTS_DAYS
+  governs reclamation/cost math only, not property materialization). The
+  scoreboard cannot read the view's per-snapshot
   instanced key directly (that key is fanned out per snapshot, not a
   single per-VM value a super metric can aggregate over), so it uses the
   flat, per-VM property diskspace|snapshot|snapshotAge as the count

@@ -6,13 +6,13 @@ description: >
   Snapshot Space (GB), Creator, Description, plus flat Parent Cluster,
   Parent vCenter, Parent Datastore, and Total Snapshot Space (GB).
 
-  One row per LIVE snapshot older than the global RECLAIM_SNAPSHOTS_DAYS
-  threshold (default 7d) — the instanced-key subject filter below drops
-  ghost/deleted-snapshot rows per-row. Snapshots younger than the
-  threshold do not appear (their instanced data isn't materialized yet)
-  — a recall gap, not a bug. Sort descending on Age (or Total Snapshot
-  Space (GB) as a proxy) at the consuming widget
-  (sort_by_column/sort_by_dir); no view-level default.
+  One row per LIVE snapshot older than 24h — the instanced-key subject
+  filter below drops ghost/deleted-snapshot rows per-row. Instanced
+  properties populate ~24h after snapshot creation; Age -1 = deleted or
+  <24h old, so snapshots younger than 24h don't appear — a recall gap,
+  not a bug. Sort descending on Age (or Total Snapshot Space (GB) as a
+  proxy) at the consuming widget (sort_by_column/sort_by_dir); no
+  view-level default.
 
   Creator/Description render blank until
   diskspace|snapshot|{creator,description} are enabled on the Default

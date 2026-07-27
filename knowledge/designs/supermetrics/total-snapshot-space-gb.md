@@ -29,9 +29,11 @@ recon 2026-07-27 and world-scope scoreboard precedents).
 
 User correction, relayed via orchestrator: the companion view's table was
 changed to show only snapshots with instanced `numberOfDays > 0` (aged,
-live snapshots). `RECLAIM_SNAPSHOTS_DAYS=7` gates when the per-snapshot
-instanced properties populate — younger snapshots can take up to ~a week
-(sometimes as little as ~24h) before their instanced properties appear.
+live snapshots). A snapshot's instanced properties, including Age,
+populate once the snapshot is 24 hours old; `RECLAIM_SNAPSHOTS_DAYS`
+governs reclamation/cost math only, not property materialization (see
+`knowledge/context/investigations/vm-snapshot-instanced-fanout-2026-07-27.md`,
+citing `reference/docs/extracted/brockpeterson-vm-snapshots-aria-operations/article.txt`).
 The scoreboard must align with the same gate. Same predicate change as
 applied to the companion count SM
 (`knowledge/designs/supermetrics/vms-with-snapshots-count.md`):

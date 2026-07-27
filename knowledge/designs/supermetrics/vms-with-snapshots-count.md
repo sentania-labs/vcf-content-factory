@@ -30,10 +30,14 @@ capacity_assessment.yaml / fleet_capacity_rightsizing.yaml).
 
 User correction, relayed via orchestrator: the companion view's table
 was changed to show only snapshots with instanced `numberOfDays > 0`
-(aged, live snapshots). `RECLAIM_SNAPSHOTS_DAYS=7` gates when the
-per-snapshot instanced properties populate — younger snapshots can take
-up to ~a week (per user, sometimes as little as ~24h) before their
-instanced properties appear at all. The original threshold
+(aged, live snapshots). A snapshot's instanced properties, including
+Age, populate once the snapshot is **24 hours old**; `RECLAIM_SNAPSHOTS_DAYS`
+governs reclamation/cost math only, not property materialization
+(corrected doctrine — see "Snapshot ageing: the gate is 24 HOURS" in
+`knowledge/context/investigations/vm-snapshot-instanced-fanout-2026-07-27.md`,
+citing `reference/docs/extracted/brockpeterson-vm-snapshots-aria-operations/article.txt`;
+an earlier draft here incorrectly attributed the gate to
+`RECLAIM_SNAPSHOTS_DAYS=7`). The original threshold
 (`diskspace|snapshot > 0.0001`, i.e. "has any snapshot space") no longer
 matches the table's population rule and had to be re-aligned.
 
