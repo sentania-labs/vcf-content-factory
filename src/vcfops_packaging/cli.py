@@ -419,17 +419,34 @@ def cmd_update_readme(args) -> int:
 
 def cmd_build_discrete(args) -> int:
     """Build a self-contained discrete artifact zip for a single released content item."""
+    from .audit import AuditError
+    from .describe import DescribeCacheError
     from .discrete_builder import build_discrete, DiscreteBuilderError
 
     output_dir = getattr(args, "output_dir", "dist/discrete") or "dist/discrete"
+
+    audit_mode = "auto"
+    if getattr(args, "strict_deps", False):
+        audit_mode = "strict"
+    elif getattr(args, "lax_deps", False):
+        audit_mode = "lax"
+    live_describe = not getattr(args, "no_live_describe", False)
+    skip_audit = getattr(args, "skip_audit", False)
+
     try:
         out = build_discrete(
             content_type=args.content_type,
             item_name=args.item_name,
             output_dir=output_dir,
+            audit_mode=audit_mode,
+            live_describe=live_describe,
+            skip_audit=skip_audit,
         )
         print(f"built  {out}")
         return 0
+    except (AuditError, DescribeCacheError) as e:
+        print(f"AUDIT FAILED  {e}", file=sys.stderr)
+        return 1
     except DiscreteBuilderError as e:
         print(f"ERROR  {e}", file=sys.stderr)
         return 1
@@ -1434,6 +1451,34 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         default="dist/discrete",
         help="output directory for the built zip (default: dist/discrete)",
+    )
+    _bd_dep_group = pbd.add_mutually_exclusive_group()
+    _bd_dep_group.add_argument(
+        "--strict-deps", action="store_true",
+        help="fail build if any defaultMonitored=false metric is not declared",
+    )
+    _bd_dep_group.add_argument(
+        "--lax-deps", action="store_true",
+        help="log defaultMonitored=false metrics but do not fail or auto-add",
+    )
+    pbd.add_argument(
+        "--no-live-describe", action="store_true",
+        help="use describe cache only; do not refresh against a live instance. "
+             "By default (this flag unset) build-discrete behaves like 'build': "
+             "if VCFOPS_HOST/USER/PASSWORD are set it contacts the configured "
+             "instance and REWRITES the tracked "
+             "knowledge/context/adapter_describe_cache/<ak>/<rk>.json cache "
+             "files for every adapter/resource kind pair this item references. "
+             "That means build output (which metrics get auto-added to "
+             "builtin_metric_enables, or whether --strict-deps fails) can "
+             "change between runs with no code change, if the live describe "
+             "surface changed. Pass this flag for a fully offline, "
+             "repo-state-preserving build.",
+    )
+    pbd.add_argument(
+        "--skip-audit", action="store_true",
+        help="skip dependency audit entirely; metric references are NOT validated. "
+             "Use only when describe cache cannot be refreshed and content is known correct.",
     )
     pbd.set_defaults(func=cmd_build_discrete)
 

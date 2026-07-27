@@ -930,3 +930,54 @@ reused. Field lines are `- **Field:** value` (parsed by
   passes). Blocked on the DEF-014 round-2 investigation naming the
   working import recipe; remediate with the same fix once proven.
 - **Related:** DEF-014 (mechanism investigation lives there).
+
+### DEF-016
+
+- **Title:** vm-snapshot-inventory-dashboard 1.0 zip ships without policy
+  enablement for Creator/Description (`builtin_metric_enables` absent)
+- **Severity:** blocking
+- **Status:** closed
+- **Affects:** dashboard/vm_snapshot_inventory
+- **First-seen:** release 1.0 build, publish of 2026-07-27
+  (dist commit `6d151fb9`, bundles PR #23 — held, not merged).
+- **Source:** content-packager TOOLSET GAP report 2026-07-27;
+  `knowledge/context/reviews/framework/packaging-discrete-builtin-metric-enables-2026-07-27.md`.
+- **Summary:** The discrete/single-item release path had no
+  `builtin_metric_enables:` support (schema, builder emission, or audit
+  gate), so the published zip installs a view whose Creator/Description
+  columns silently render blank — the policy properties
+  `diskspace|snapshot|{creator,description}` are `defaultMonitored:false`
+  and never get enabled by `install.py`/`install.ps1`. Smallest correct
+  fix: thread the field through releases.py → release_builder →
+  discrete_builder (in progress under framework review), declare the two
+  entries in `bundles/releases/vm-snapshot-inventory-dashboard.yaml`,
+  verify the rebuilt zip carries `content/builtin_metric_enables.json`,
+  and re-publish superseding PR #23.
+- **Closing-evidence:** 2026-07-27. Framework fix (releases.py schema +
+  release_builder/discrete_builder threading + audit gate) passed
+  `framework-reviewer` round-2 APPROVE
+  (`knowledge/context/reviews/framework/packaging-discrete-builtin-metric-enables-2026-07-27.md`);
+  `bundles/releases/vm-snapshot-inventory-dashboard.yaml` declares both
+  entries; content-packager verified the rebuilt
+  `dist/dashboards/vm-snapshot-inventory-dashboard.zip` contains
+  `content/builtin_metric_enables.json` with both entries and the
+  `bundle.json` content-block key. Re-publish supersedes dist PR #23.
+
+### DEF-017
+
+- **Title:** `vcfops_packaging build <release>` CLI crashes on SDK-pointer
+  releases (`'NoneType' object has no attribute 'name'`)
+- **Severity:** tracked
+- **Status:** open
+- **Affects:** factory:packaging-cli
+- **First-seen:** 2026-07-27, full stale-zip rebuild pass (synology /
+  unifi / vcommunity-vsphere managementpack release manifests).
+- **Source:** content-packager rebuild report 2026-07-27 (DEF-016
+  remediation pass).
+- **Summary:** `cli.py::_build_release_to_dist()` does
+  `dest_dir / art.zip_path.name` unconditionally; SDK-pointer releases
+  (`is_sdk_pointer=True`) legitimately have `zip_path=None`, so the plain
+  `build` subcommand throws instead of reporting "no zip: pointer
+  release." `publish.py` handles pointers correctly, so publishing is
+  unaffected. Smallest correct fix: guard on `is_sdk_pointer` in the CLI
+  dist-copy step, mirroring publish.py.

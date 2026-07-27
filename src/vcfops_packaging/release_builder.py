@@ -174,6 +174,9 @@ def _build_component_headline(
     source_prefix: str,
     tmp_dir: Path,
     extra_search_dirs: "list[Path] | None" = None,
+    *,
+    builtin_metric_enables: "list | None" = None,
+    skip_audit: bool = True,
 ) -> Path:
     """Build a component headline zip using the discrete builder.
 
@@ -185,6 +188,16 @@ def _build_component_headline(
                             the item and its dependencies.  Used when the
                             source lives under ``third_party/<project>/`` rather
                             than the factory-native ``content/`` tree.
+        builtin_metric_enables: Optional pre-declared built-in metric
+                            enablements from the release manifest's
+                            ``builtin_metric_enables:`` field.  Discrete
+                            releases have no bundle YAML of their own to carry
+                            this list, so it is threaded through from the
+                            release manifest instead.
+        skip_audit:         Passed to the discrete builder to skip the
+                            describe-cache dependency audit (default True for
+                            offline release builds, matching the bundle
+                            headline path's default).
 
     Returns the path to the zip written by the builder (before rename).
     """
@@ -203,6 +216,8 @@ def _build_component_headline(
         item_name=item_name,
         output_dir=tmp_dir,
         extra_search_dirs=extra_search_dirs,
+        builtin_metric_enables=builtin_metric_enables,
+        skip_audit=skip_audit,
     )
     return built
 
@@ -353,10 +368,12 @@ def build_release(
     Args:
         release_path:  Path to a ``bundles/releases/*.yaml`` manifest.
         output_dir:    Directory where output zips are written.
-        skip_audit:    Passed to the bundle builder to skip the describe-cache
-                       dependency audit (default True for offline builds).
-                       Has no effect for discrete (component) headlines —
-                       the discrete builder's dep walk is always offline.
+        skip_audit:    Passed to the bundle builder and the discrete (component)
+                       builder to skip the describe-cache dependency audit
+                       (default True for offline builds). A discrete headline
+                       also has any ``builtin_metric_enables:`` declared on the
+                       release manifest threaded through, since it has no
+                       bundle YAML of its own to carry that list.
 
     Returns:
         One ``ReleaseArtifact`` per headline artifact in the manifest.
@@ -448,11 +465,17 @@ def build_release(
                 built_path = _build_component_headline(
                     source_path, source_prefix, tmp_dir,
                     extra_search_dirs=[source_path.parent.parent],
+                    builtin_metric_enables=release.builtin_metric_enables,
+                    skip_audit=skip_audit,
                 )
             elif source_prefix == "bundles":
                 built_path = _build_bundle_headline(source_path, tmp_dir, skip_audit)
             elif source_prefix in _SOURCE_PREFIX_TO_DISCRETE_TYPE:
-                built_path = _build_component_headline(source_path, source_prefix, tmp_dir)
+                built_path = _build_component_headline(
+                    source_path, source_prefix, tmp_dir,
+                    builtin_metric_enables=release.builtin_metric_enables,
+                    skip_audit=skip_audit,
+                )
             elif source_prefix == "managementpacks":
                 built_path = _build_mp_headline(source_path, tmp_dir)
             else:

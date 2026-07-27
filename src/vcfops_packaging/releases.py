@@ -15,6 +15,18 @@ artifacts:     list (required, 1+ entries) -- each entry:
                    headline: bool (required) -- at least one must be true
 deprecates:    list (optional) -- repo-relative paths to other release manifests
                    that this release retires; targets must exist on disk.
+builtin_metric_enables: list (optional) -- built-in metrics to enable on the
+                   Default Policy at install time, for discrete (component)
+                   headline releases.  Same entry shape as the bundle manifest
+                   field of the same name (see vcfops_packaging.loader.BuiltinMetricEnable):
+                       adapter_kind: str (required) -- e.g. "VMWARE"
+                       resource_kind: str (required) -- e.g. "VirtualMachine"
+                       metric_key: str (required) -- e.g. "net|packetsPerSec"
+                       reason: str (optional) -- human-readable explanation
+                   Bundle headlines already carry this list on the bundle YAML
+                   itself and ignore this field. It exists because the discrete
+                   (single-item release) build path has no bundle manifest to
+                   carry the declaration.
 
 Validation rules
 ----------------
@@ -37,6 +49,8 @@ from pathlib import Path
 from typing import List, Optional
 
 import yaml
+
+from .loader import BuiltinMetricEnable
 
 
 VERSION_RE = re.compile(r"^\d+\.\d+$")
@@ -97,6 +111,9 @@ class ReleaseDef:
     deprecates: List[Path]           # resolved absolute paths
     manifest_path: Path
     release_date: Optional[str] = None   # YYYY-MM-DD; None if not present
+    # Only consumed by the discrete (component) build path — see schema note
+    # at the top of this module.  Empty list for bundle-headline releases.
+    builtin_metric_enables: List["BuiltinMetricEnable"] = field(default_factory=list)
 
 
 def _load_released_flag(path: Path) -> Optional[bool]:
@@ -261,6 +278,44 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
         # themselves and catch the resulting error.
         deprecates.append(dep_candidate)
 
+    # --- builtin_metric_enables (optional) ---
+    raw_bmes = data.get("builtin_metric_enables") or []
+    if not isinstance(raw_bmes, list):
+        raise ReleaseValidationError(
+            f"{path}: 'builtin_metric_enables' must be a list, "
+            f"got {type(raw_bmes).__name__}"
+        )
+    builtin_metric_enables: List[BuiltinMetricEnable] = []
+    for i, entry in enumerate(raw_bmes):
+        if not isinstance(entry, dict):
+            raise ReleaseValidationError(
+                f"{path}: builtin_metric_enables[{i}] must be a mapping, "
+                f"got {type(entry).__name__}"
+            )
+        # Mirror vcfops_packaging.loader's builtin_metric_enables validation
+        # exactly (same field is documented as "same entry shape as the
+        # bundle manifest field") — required fields must be non-empty
+        # strings (not merely str()-coercible), and reason must be a string
+        # if present, not silently stringified (e.g. a YAML list/dict).
+        for required_field in ("adapter_kind", "resource_kind", "metric_key"):
+            val = entry.get(required_field)
+            if not val or not isinstance(val, str) or not val.strip():
+                raise ReleaseValidationError(
+                    f"{path}: builtin_metric_enables[{i}].{required_field} "
+                    f"is required and must be a non-empty string"
+                )
+        reason = entry.get("reason", "") or ""
+        if not isinstance(reason, str):
+            raise ReleaseValidationError(
+                f"{path}: builtin_metric_enables[{i}].reason must be a string"
+            )
+        builtin_metric_enables.append(BuiltinMetricEnable(
+            adapter_kind=entry["adapter_kind"].strip(),
+            resource_kind=entry["resource_kind"].strip(),
+            metric_key=entry["metric_key"].strip(),
+            reason=reason.strip(),
+        ))
+
     return ReleaseDef(
         name=name,
         version=version,
@@ -270,6 +325,7 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
         deprecates=deprecates,
         manifest_path=path,
         release_date=release_date,
+        builtin_metric_enables=builtin_metric_enables,
     )
 
 

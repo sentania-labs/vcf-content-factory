@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-07-23T03:18:22Z",
+  "fetched_at": "2026-07-27T22:10:47Z",
   "metrics": {
     "OnlineCapacityAnalytics|capacityRemainingPercentage": {
       "default_monitored": true,
@@ -3589,228 +3589,378 @@
   },
   "properties": {
     "System Properties|businessHours": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Business Hours"
     },
     "System Properties|considerPowerOffVMs": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Consider Power Off VMs"
     },
     "System Properties|cpu|alloc|bufferSetting": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|CPU|Allocation|Buffer"
     },
     "System Properties|cpu|alloc|overcommitRatioSetting": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|CPU|Allocation|Planned Overcommit Ratio"
     },
     "System Properties|cpu|demand|bufferSetting": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|CPU|Demand|Buffer"
     },
     "System Properties|diskspace|alloc|bufferSetting": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Disk Space|Allocation|Buffer"
     },
     "System Properties|diskspace|alloc|overcommitRatioSetting": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Disk Space|Allocation|Planned Overcommit Ratio"
     },
     "System Properties|diskspace|demand|bufferSetting": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Disk Space|Demand|Buffer"
     },
     "System Properties|host_collector_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Current Collector ID"
     },
     "System Properties|mem|alloc|bufferSetting": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Memory|Allocation|Buffer"
     },
     "System Properties|mem|alloc|overcommitRatioSetting": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Memory|Allocation|Planned Overcommit Ratio"
     },
     "System Properties|mem|demand|bufferSetting": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Memory|Demand|Buffer"
     },
     "System Properties|resource_kind_subtype": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Object Type Subclassification"
     },
     "System Properties|resource_kind_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Object Type Classification"
     },
     "configuration|dasConfig|admissionControlEnabled": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSphere HA|Admission Control Enabled"
     },
     "configuration|dasConfig|admissionControlPolicyId": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSphere HA|HA Admission Control Policy"
     },
     "configuration|dasConfig|cpuFailoverPercent": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSphere HA|HA CPU Failover Percent"
     },
     "configuration|dasConfig|enabled": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSphere HA|HA Enabled"
     },
     "configuration|dasConfig|hostFailoverLevel": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSphere HA|HA Failover Level"
     },
     "configuration|dasConfig|memFailoverPercent": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSphere HA|HA Memory Failover Percent"
     },
     "configuration|dasConfig|slotCpuDefault": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSphere HA|HA Default CPU Reservation"
     },
     "configuration|dasConfig|slotCpuMax": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSphere HA|HA Max CPU Slot Size"
     },
     "configuration|dasConfig|slotFixedCpu": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSphere HA|HA Fixed CPU Slot Size"
     },
     "configuration|dasConfig|slotFixedMem": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSphere HA|HA Fixed Memory Slot Size"
     },
     "configuration|dasConfig|slotMemMax": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSphere HA|HA Max Memory Slot Size"
     },
     "configuration|dpmConfiginfo|defaultDpmBehavior": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|DPM Configuration|Default DPM Behaviour"
     },
     "configuration|dpmConfiginfo|enabled": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|DPM Configuration|DPM Enabled"
     },
     "configuration|drsConfig|affinityRules": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|DRS Configuration|Affinity Rules"
     },
     "configuration|drsConfig|defaultVmBehavior": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|DRS Configuration|Default DRS Behaviour"
     },
     "configuration|drsConfig|enabled": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|DRS Configuration|Enabled"
     },
     "configuration|drsConfig|pctIdleMBInMemDemand": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|DRS Configuration|Idle Consumed Memory"
     },
     "configuration|drsConfig|targetBalance": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|DRS Configuration|Tolerable imbalance threshold"
     },
     "configuration|drsConfig|vMotionRate": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|DRS Configuration|DRS Migration Threshold"
     },
     "configuration|infraUpdateHaConfig|remediation": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|HA Configuration|Remediation"
     },
     "configuration|vsanEnabled": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSAN Enabled"
     },
     "configuration|vsanEnabled_vc": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|vSAN Enabled (vCenter)"
     },
     "configuration|wpConfiguration|api_server_cluster_endpoint": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Control Plane Node IP Address"
     },
     "configuration|wpConfiguration|availableVersions": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Available Versions"
     },
     "configuration|wpConfiguration|currentVersion": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Current Version"
     },
     "configuration|wpConfiguration|managementNetwork|api_server_management_endpoint": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Management Network Settings|Control Plane Node IP Address"
     },
     "configuration|wpConfiguration|managementNetwork|master_dns": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Management Network Settings|DNS"
     },
     "configuration|wpConfiguration|workloadNetwork|edge_cluster": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Workload Network|Edge Cluster"
     },
     "configuration|wpConfiguration|workloadNetwork|egress_cidrs": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Workload Network|Egress CIDRs"
     },
     "configuration|wpConfiguration|workloadNetwork|ingress_cidrs": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Workload Network|Ingress CIDRs"
     },
     "configuration|wpConfiguration|workloadNetwork|pod_cidrs": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Workload Network|Pod CIDRs IP Range"
     },
     "configuration|wpConfiguration|workloadNetwork|services_cidr": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Workload Network|Services CIDR"
     },
     "configuration|wpConfiguration|workloadNetwork|vds_name": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Workload Network|vDS Name"
     },
     "configuration|wpConfiguration|workloadNetwork|worker_dns": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Workload Network|DNS Servers"
     },
     "configuration|wpConfiguration|wpEnabled": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cluster Configuration|WM Configuration|Enabled"
     },
     "config|name": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Name"
     },
     "summary|customTag|customTagValue": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Custom Tag|Value"
     },
     "summary|drsTunable": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|DRS Tunable"
     },
     "summary|folder": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Folder"
     },
     "summary|isHorizonManaged": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Is Horizon Managed"
     },
     "summary|max_number_vms_property": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Maximum Supported VMs"
     },
     "summary|parentDatacenter": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent Datacenter"
     },
     "summary|parentVcenter": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent vCenter"
     },
     "summary|resourcePool": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Resource Pool ID"
     },
     "summary|tag": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Tag"
     },
     "summary|tagJson": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Tag Json"
     },
     "summary|type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Type"
     },
     "summary|vcp|compliance_status": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Configuration Profiles|Compliance Status"
     },
     "summary|vcp|enabled": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Configuration Profiles|Enabled"
     },
     "summary|vcp|lastComplianceCheckTime": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Configuration Profiles|Drift Check Timestamp"
     },
     "vcm|compscoreupdated": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Compliance score updated"
     },
     "vcm|template|active": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Active"
     },
     "vcm|template|checktime": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Checktime"
     },
     "vcm|template|failedchecks": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Failed Checks"
     },
     "vcm|template|lastevaluated": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Last data collection"
     },
     "vcm|template|link": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Link"
     },
     "vcm|template|mappingname": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Mapping name"
     },
     "vcm|template|score": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Score"
     },
     "vcm|template|templatename": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Template name"
     },
     "vcm|template|totalchecks": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Total checks"
     },
     "vmcd|host_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VMC-D|Host Type"
     }
   },

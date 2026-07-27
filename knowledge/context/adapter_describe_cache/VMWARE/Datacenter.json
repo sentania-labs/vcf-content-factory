@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-07-23T03:18:22Z",
+  "fetched_at": "2026-07-27T22:10:45Z",
   "metrics": {
     "OnlineCapacityAnalytics|capacityRemainingPercentage": {
       "default_monitored": true,
@@ -2481,66 +2481,108 @@
   },
   "properties": {
     "System Properties|businessHours": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Business Hours"
     },
     "System Properties|host_collector_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Current Collector ID"
     },
     "System Properties|resource_kind_subtype": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Object Type Subclassification"
     },
     "System Properties|resource_kind_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Object Type Classification"
     },
     "config|name": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Name"
     },
     "summary|customTag|customTagValue": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Custom Tag|Value"
     },
     "summary|folder": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Folder"
     },
     "summary|max_number_vms_property": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Maximum Supported VMs"
     },
     "summary|parentVcenter": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent vCenter"
     },
     "summary|tag": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Tag"
     },
     "summary|tagJson": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Tag Json"
     },
     "vcm|compscoreupdated": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Compliance score updated"
     },
     "vcm|template|active": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Active"
     },
     "vcm|template|checktime": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Checktime"
     },
     "vcm|template|failedchecks": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Failed Checks"
     },
     "vcm|template|lastevaluated": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Last data collection"
     },
     "vcm|template|link": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Link"
     },
     "vcm|template|mappingname": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Mapping name"
     },
     "vcm|template|score": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Score"
     },
     "vcm|template|templatename": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Template name"
     },
     "vcm|template|totalchecks": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Total checks"
     }
   },

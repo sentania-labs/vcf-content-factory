@@ -83,6 +83,14 @@ def _split_kv(inner: str) -> list[tuple[str, str]]:
 
 _SM_KEY_RE = re.compile(r"^sm_[0-9a-f\-]+$", re.IGNORECASE)
 _SUPER_METRIC_PREFIX = "super metric|"
+# Unresolved authoring-time SM cross-reference, e.g. supermetric:"<name>"
+# (CLAUDE.md "Cross-reference syntax" table, View column -> SM row). Views
+# carry this literal form until render_views_xml() resolves it to sm_<uuid>
+# (see vcfops_dashboards/render.py:558-585) — code that walks *loader*
+# objects (as the dependency auditor does) sees the unresolved form and must
+# recognise it too, or it hard-fails treating the SM name as an unknown
+# built-in metric key.
+_UNRESOLVED_SM_REF_PREFIX = "supermetric:"
 
 # Pattern for instanced metric keys in SM formulas:
 #   "net:Aggregate of all instances|packetsPerSec"  ->  "net|packetsPerSec"
@@ -94,7 +102,11 @@ _INSTANCED_KEY_RE = re.compile(r"^([^|:]+):[^|]+\|(.+)$")
 def _is_sm_ref(metric_key: str) -> bool:
     """Return True if the key is a super-metric reference (not a built-in)."""
     k = metric_key.strip()
-    return k.lower().startswith(_SUPER_METRIC_PREFIX) or bool(_SM_KEY_RE.match(k))
+    return (
+        k.lower().startswith(_SUPER_METRIC_PREFIX)
+        or k.lower().startswith(_UNRESOLVED_SM_REF_PREFIX)
+        or bool(_SM_KEY_RE.match(k))
+    )
 
 
 def _normalize_metric_key(metric_key: str) -> str:
@@ -176,6 +188,18 @@ def _refs_from_view(view) -> list[MetricReference]:
     rk = view.resource_kind
     source_desc = f"view {view.name!r}"
     for col in view.columns:
+        # instanced_group columns carry a loader-synthesized attribute that
+        # is NOT a describe key: the driver column is the literal string
+        # "Instance Name", and member columns are
+        # "{prefix}:{sample_instance}|{suffix}" — the instance token sits in
+        # the *middle* segment, which _INSTANCED_KEY_RE (below) does not
+        # normalise (it only strips a leading "group:instance|" form). The
+        # underlying base key (e.g. "diskspace|snapshot|used") is audited
+        # separately when referenced directly; instanced_group's synthetic
+        # per-column form has no static describe-cache entry to look up.
+        # See knowledge/context/investigations/vm-snapshot-instanced-fanout-2026-07-27.md.
+        if getattr(col, "instanced_group", None) is not None:
+            continue
         attr = col.attribute.strip()
         if _is_sm_ref(attr):
             continue

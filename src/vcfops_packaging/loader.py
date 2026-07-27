@@ -89,6 +89,33 @@ class BuiltinMetricEnable:
     reason: str = ""
 
 
+def render_bme_items(bmes: "List[BuiltinMetricEnable]") -> list:
+    """Render a list of BuiltinMetricEnable into the wire-format dict shape.
+
+    Shared by both build paths that emit ``builtin_metric_enables`` —
+    ``builder.py`` (bundle headlines) and ``discrete_builder.py`` (component
+    headlines) — so the ``content/builtin_metric_enables.json`` payload and
+    the ``bundle.json`` content-block ``items`` list stay byte-identical
+    between the two builders without relying on four independent copies of
+    the same list comprehension staying in sync by hand.
+
+    ``name`` (= ``metric_key``) is the uninstall-name contract read by
+    ``templates/install.py``'s registry predicate
+    (``item["name"]`` — see ``_install_builtin_metric_enables`` and
+    ``_uninstall_builtin_metric_enables_note``).
+    """
+    return [
+        {
+            "name": bme.metric_key,       # uninstall-name contract
+            "adapter_kind": bme.adapter_kind,
+            "resource_kind": bme.resource_kind,
+            "metric_key": bme.metric_key,
+            **({"reason": bme.reason} if bme.reason else {}),
+        }
+        for bme in bmes
+    ]
+
+
 @dataclass
 class Bundle:
     name: str

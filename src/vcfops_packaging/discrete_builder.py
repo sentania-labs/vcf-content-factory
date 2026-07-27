@@ -43,6 +43,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import sys
 import zipfile
 from pathlib import Path
 from typing import List, Optional
@@ -68,7 +69,7 @@ from .builder import (
     _render_customgroup_ui_payload,
     PLACEHOLDER_USER_ID,
 )
-from .loader import Bundle, BuiltinMetricEnable
+from .loader import Bundle, BuiltinMetricEnable, render_bme_items
 from .template_version import CURRENT_TEMPLATE_VERSION
 
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
@@ -222,6 +223,7 @@ def _make_synthetic_bundle(
     alerts: List[AlertDef] = None,
     recommendations: List[Recommendation] = None,
     sm_paths: List[Path] = None,
+    builtin_metric_enables: List[BuiltinMetricEnable] = None,
 ) -> Bundle:
     """Fabricate a Bundle dataclass for use with the rendering helpers."""
     return Bundle(
@@ -236,7 +238,7 @@ def _make_synthetic_bundle(
         symptoms=symptoms or [],
         alerts=alerts or [],
         recommendations=recommendations or [],
-        builtin_metric_enables=[],
+        builtin_metric_enables=list(builtin_metric_enables or []),
         source_path=None,
         sm_paths=sm_paths or [],
         factory_native=True,
@@ -367,6 +369,11 @@ def build_discrete(
     item_name: str,
     output_dir: str | Path = "dist/discrete",
     extra_search_dirs: "list[Path] | None" = None,
+    *,
+    builtin_metric_enables: "List[BuiltinMetricEnable] | None" = None,
+    audit_mode: str = "auto",
+    live_describe: bool = True,
+    skip_audit: bool = False,
 ) -> Path:
     """Build a self-contained discrete artifact zip for a single released content item.
 
@@ -380,6 +387,20 @@ def build_discrete(
                             sub-directories named after content types (``supermetrics/``,
                             ``views/``, ``dashboards/``, etc.) following the same layout as
                             a third-party project root (e.g. ``third_party/idps-planner/``).
+        builtin_metric_enables: Optional pre-declared built-in metric enablements
+                            (e.g. from a release manifest's ``builtin_metric_enables:``
+                            field — discrete releases have no bundle YAML of their
+                            own to carry this list).  Merged with any entries the
+                            dependency audit auto-adds.
+        audit_mode:         Dependency audit mode — "auto" (default), "strict", or
+                            "lax".  See vcfops_packaging/audit.py for semantics.
+                            Same auto-add/fail behavior as ``build_bundle``.
+        live_describe:      If True (default) and VCFOPS_HOST/USER/PASSWORD are in
+                            the environment, refresh the describe cache for all
+                            adapter/resource kind pairs referenced by this item
+                            before auditing.  If False, use the cache as-is.
+        skip_audit:         If True, skip the dependency audit entirely.  Metric
+                            references are NOT validated.  Emits a WARN to stderr.
 
     Returns:
         Path to the built zip file.
@@ -417,6 +438,7 @@ def build_discrete(
             description=description,
             supermetrics=[item],
             sm_paths=[item.source_path] if item.source_path else [],
+            builtin_metric_enables=builtin_metric_enables,
         )
 
     elif ct == "view":
@@ -431,6 +453,7 @@ def build_discrete(
             supermetrics=dep_sms,
             views=[item],
             sm_paths=[sm.source_path for sm in dep_sms if sm.source_path],
+            builtin_metric_enables=builtin_metric_enables,
         )
 
     elif ct == "dashboard":
@@ -458,6 +481,7 @@ def build_discrete(
             dashboards=[item],
             customgroups=dep_cgs,
             sm_paths=[sm.source_path for sm in dep_sms if sm.source_path],
+            builtin_metric_enables=builtin_metric_enables,
         )
 
     elif ct == "report":
@@ -476,6 +500,7 @@ def build_discrete(
             dashboards=dep_dashboards,
             reports=[item],
             sm_paths=[sm.source_path for sm in dep_sms if sm.source_path],
+            builtin_metric_enables=builtin_metric_enables,
         )
 
     elif ct == "alert":
@@ -490,6 +515,7 @@ def build_discrete(
             symptoms=dep_symptoms,
             alerts=[item],
             recommendations=dep_recs,
+            builtin_metric_enables=builtin_metric_enables,
         )
 
     elif ct == "customgroup":
@@ -501,13 +527,52 @@ def build_discrete(
             name=item_name,
             description=description,
             customgroups=[item],
+            builtin_metric_enables=builtin_metric_enables,
         )
 
     else:
         raise DiscreteBuilderError(f"Unhandled content type: {ct!r}")
 
+    # --- Dependency audit ---
+    # Same gate build_bundle() runs (audit.py) — a discrete release that
+    # references a policy-disabled built-in metric/property must fail loudly
+    # at build time rather than shipping silently broken.  Same auto-add/fail
+    # semantics as build_bundle: "auto" (default) auto-adds defaultMonitored=
+    # false refs into bundle.builtin_metric_enables; "strict" fails on any
+    # undeclared one; unknown keys are always a hard error regardless of mode.
+    if skip_audit:
+        print(
+            f"  WARN: --skip-audit is set; dependency audit skipped for "
+            f"{ct} {item_name!r}. Metric references will NOT be validated.",
+            file=sys.stderr,
+        )
+        audit_result = None
+    else:
+        from .audit import audit_bundle_dependencies, print_audit_summary
+        from .describe import make_cache, DescribeCacheError
+
+        describe_cache = make_cache(live=live_describe)
+
+        if live_describe and describe_cache._client is not None:
+            from .deps import extract_metric_references
+            refs = extract_metric_references(bundle)
+            pairs_needed: set[tuple[str, str]] = {
+                (r.adapter_kind, r.resource_kind) for r in refs
+            }
+            for ak, rk in sorted(pairs_needed):
+                try:
+                    describe_cache.refresh(ak, rk)
+                except DescribeCacheError as exc:
+                    print(f"  WARN: could not refresh describe cache for {ak}/{rk}: {exc}",
+                          file=sys.stderr)
+
+        audit_result = audit_bundle_dependencies(bundle, describe_cache, mode=audit_mode)
+
+        if audit_result.auto_added:
+            bundle.builtin_metric_enables = list(bundle.builtin_metric_enables) + audit_result.auto_added
+
     # Build the zip using the same rendering infrastructure as build_bundle
-    return _assemble_zip(
+    out_path = _assemble_zip(
         bundle=bundle,
         display_name=item_name,
         item_type=ct,
@@ -515,6 +580,11 @@ def build_discrete(
         description=description,
         output_dir=output_dir,
     )
+
+    if audit_result is not None:
+        print_audit_summary(audit_result, audit_mode)
+
+    return out_path
 
 
 def _item_slug(name: str) -> str:
@@ -755,6 +825,13 @@ def _assemble_zip(
             "file": "content/reports_content.xml",
             "items": [{"uuid": rd.id, "name": rd.name} for rd in bundle.reports],
         }
+    if bundle.builtin_metric_enables:
+        content_block["builtin_metric_enables"] = {
+            "file": "content/builtin_metric_enables.json",
+            # render_bme_items() is shared with builder.py so this stays
+            # byte-identical to the bundle-headline build path.
+            "items": render_bme_items(bundle.builtin_metric_enables),
+        }
 
     bundle_json_str = json.dumps({
         "name": slug,
@@ -831,6 +908,11 @@ def _assemble_zip(
             z.writestr(content_prefix + "symptoms.json", symptoms_json)
         if alerts_json:
             z.writestr(content_prefix + "alerts.json", alerts_json)
+        if bundle.builtin_metric_enables:
+            z.writestr(
+                content_prefix + "builtin_metric_enables.json",
+                json.dumps(render_bme_items(bundle.builtin_metric_enables), indent=2),
+            )
 
     out_path.write_bytes(buf.getvalue())
     return out_path

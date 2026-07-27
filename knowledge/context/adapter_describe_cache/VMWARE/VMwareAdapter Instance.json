@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-07-27T15:58:14Z",
+  "fetched_at": "2026-07-27T22:10:54Z",
   "metrics": {
     "CapacityBreakdown|capacityRemaining|cpu|numberCriticalClusters": {
       "default_monitored": true,
@@ -2677,177 +2677,293 @@
   },
   "properties": {
     "CertificateSummaryPropGroup|EndDate": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Certificate Summary|End Date"
     },
     "CertificateSummaryPropGroup|IssuerDn": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Certificate Summary|Issuer DN"
     },
     "CertificateSummaryPropGroup|NumberOfDaysToExpire": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Certificate Summary|No. of days to expire"
     },
     "CertificateSummaryPropGroup|StartDate": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Certificate Summary|Start Date"
     },
     "CustomFieldManager|CustomFieldDef": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Custom Field Manager|Custom Field Def"
     },
     "System Properties|businessHours": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Business Hours"
     },
     "System Properties|host_collector_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Current Collector ID"
     },
     "System Properties|resource_kind_subtype": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Object Type Subclassification"
     },
     "System Properties|resource_kind_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Object Type Classification"
     },
     "metering|MeteringPolicyId": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Metering|(DEP) Metering Policy ID"
     },
     "metering|MeteringPolicyName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Metering|(DEP) Metering Policy Name"
     },
     "others|busy": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Busy"
     },
     "others|is_enabled": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Is Enabled"
     },
     "others|listenerState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Listener State"
     },
     "others|status": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Status"
     },
     "others|supported": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Supported"
     },
     "others|task_status": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Task Status"
     },
     "summary|cert_expiry_date": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Certificate Expiration Date"
     },
     "summary|cloud_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Cloud Type"
     },
     "summary|cluster_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Ops Cluster UUID"
     },
     "summary|cluster_url": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Ops Cluster URL"
     },
     "summary|extension_list": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Extension List Json"
     },
     "summary|max_number_vms_property": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Maximum Supported VMs"
     },
     "summary|near_realtime_monitoring": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Near Real-Time Monitoring"
     },
     "summary|nfcusessl": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|VirtualCenter NFC SSL"
     },
     "summary|part_of_elm": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Is Part of ELM"
     },
     "summary|pdrsCapable": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Is PDRS Capable"
     },
     "summary|soap_session_timeout": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|SOAP Session Timeout"
     },
     "summary|tag": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Tag"
     },
     "summary|tagJson": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Tag Json"
     },
     "summary|vc_config_log_level": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Summary|Logging Level"
     },
     "summary|vc_config_vpxd_host_password_length": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Summary|Vpxd Host Password Length"
     },
     "summary|vc_vim_password_expiration_in_days": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Summary|Virtual Center VIM Password Expiration In Days"
     },
     "summary|vcfullname": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Product Name"
     },
     "summary|vcuuid": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|VirtualCenter ID"
     },
     "summary|version": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|(DEP) Version"
     },
     "summary|version_4d": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Version"
     },
     "summary|vpxd_event_syslog_enabled": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Summary|Is Vpxd Event Syslog Enabled"
     },
     "vc_appliance|access_consolecli": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Appliance|Console Cli Enabled"
     },
     "vc_appliance|hasAccessSSH": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Appliance|Access SSH"
     },
     "vc_appliance|hasLoggingForwardingConfigs": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Appliance|Has Logging Forwarding Configs"
     },
     "vc_appliance|hasNetworkingFirewallInboundRules": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Appliance|Has Networking Firewall Inbound Rules"
     },
     "vc_appliance|hasRecoveryBackupJobs": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Appliance|Has Recovery Backup Jobs"
     },
     "vc_appliance|isDailyBackupScheduled": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Appliance|Daily Backup Scheduled"
     },
     "vc_appliance|networkNICs": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Appliance|Number of NICs"
     },
     "vc_appliance|root_user_expiration_date": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Appliance|Root Account Expiration Date"
     },
     "vc_appliance|root_user_is_expired": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Appliance|Is Root Account Enabled"
     },
     "vc_appliance|timeSyncMode": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Appliance|Time Sync Mode"
     },
     "vcm|compscoreupdated": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Compliance score updated"
     },
     "vcm|template|active": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Active"
     },
     "vcm|template|checktime": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Checktime"
     },
     "vcm|template|failedchecks": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Failed Checks"
     },
     "vcm|template|lastevaluated": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Last data collection"
     },
     "vcm|template|link": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Link"
     },
     "vcm|template|mappingname": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Mapping name"
     },
     "vcm|template|score": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Score"
     },
     "vcm|template|templatename": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Template name"
     },
     "vcm|template|totalchecks": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Total checks"
     }
   },

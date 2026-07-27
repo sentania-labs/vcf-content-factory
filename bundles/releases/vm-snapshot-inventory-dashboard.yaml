@@ -1,6 +1,15 @@
 artifacts:
 - headline: true
   source: content/dashboards/vm_snapshot_inventory.yaml
+builtin_metric_enables:
+- adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+  metric_key: "diskspace|snapshot|creator"
+  reason: "View Creator column reads this policy-disabled property; enabled=true alone verified sufficient 2026-07-27"
+- adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+  metric_key: "diskspace|snapshot|description"
+  reason: "View Description column reads this policy-disabled property; enabled=true alone verified sufficient 2026-07-27"
 deprecates: []
 description: 'Fleet-wide VM snapshot inventory. Row 1 answers "how bad is it?" with
   two self-provider Scoreboard tiles pinned to vSphere World, driven by world-scope
