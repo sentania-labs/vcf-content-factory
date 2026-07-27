@@ -301,3 +301,13 @@ XPROBE dashboard `65327f04-64ab-40eb-ad7f-be852e534c59` and view
 and `getGroupedViewDefinitionThumbnails` confirm both absent. Transient clone
 `fb5a6b1d-…` deleted. CPU (`b6796122`) and Fleet (`762fc025`) were READ-ONLY —
 not modified. No tracked repo files changed (`content/`, `src/` untouched).
+
+---
+
+**See also (added 2026-07-27):** `knowledge/context/api-surface/ui_deep_links.md`
+— the working UI deep-link routes for dashboards/views, plus a measured
+materialization timing datapoint from the `qa-tester` visual pass:
+`getDashboardList.isLoading` flipped `false` ~3 minutes after first open,
+versus up to ~20 minutes when left to the background worker. Opening the
+dashboard is the fastest way to force the materialization described in §4
+above.

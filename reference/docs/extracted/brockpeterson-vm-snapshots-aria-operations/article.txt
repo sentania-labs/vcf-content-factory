@@ -1,0 +1,71 @@
+SOURCE: https://www.brockpeterson.com/post/everything-you-wanted-to-know-about-vm-snapshots-in-aria-operations
+AUTHOR: Brock Peterson
+PUBLISHED: 2024-11-17   UPDATED: 2025-10-23
+RETRIEVED: 2026-07-27 by api-explorer (curl, HTML tags stripped; site nav/footer chrome removed)
+LICENSE: third-party blog content, reproduced here as a verbatim extract for provenance (RULE-017).
+NOTE: text below is unmodified article prose. Images/screenshots in the original are not
+      reproduced; sentences that referred to them are left as-is.
+==============================================================================
+
+Everything you wanted to know about VM Snapshots in Aria Operations
+Brock Peterson
+Nov 17, 2024
+4 min read
+Updated:
+Oct 23, 2025
+We've blogged about VM Snapshots in Aria Operations a couple times:
+VM Snapshots in Aria Operations 8.18
+VMware Aria Operations and VM Snapshots
+I've also released VM Snapshot related Dashboards, Views, and Super Metrics into
+my GitHub Repo
+.  In this blog, we'll focus on the metrics being published in Operations, VM Snapshot Age, Size, Properties, and highlight a couple things that aren't super intuitive.
+Upon deployment, Aria Operations will present several VM Snapshot related metrics and properties, let's run through them.  Here's a default Policy.
+First, the Metrics:
+Disk Space | Snapshot | Access Time (ms) - date and time the snapshot was taken.  It's really the time (in ms) since the Epoch that the VM Snapshot was taken.  Use an Epoch converter to convert this number (ms) to a date/time.
+Disk Space | Snapshot | Virtual Machine used (GB) - Disk space used by the virtual machine snapshot files.  This is the space that can potentially be reclaimed if the snapshot is removed.
+Disk Space | Snapshot Space (GB) - space used by snapshots.  This is the size (GB) of the snapshot files of a VM, I have yet to find an instance where this metric isn't the same as the previous one, though it is using different logic.
+General | Snapshot Size (bytes) - this metric used to come from VCD, it's been deprecated, I've disabled it in my Policy as it's confusing and asked the Product team to remove it.
+Summary | Number of Snapshots - total number of Snapshots a VM has.
+Summary | Snapshot Space (GB) - spaced used by Snapshots, this is the same metric as Disk Space | Snapshot | Virtual Machine used (GB) above, I've disabled it in my Policy as it's confusing and asked the Product team to remove it.
+Summary | Reclaimable Snapshot Space (GB) - reclaimable snapshot space, this is only calculated once daily and as such varies slightly from the others.
+Next, the Properties:
+Configuration | Requires Snapshot Consolidation - requires snapshot consolidation.
+Disk Space | Snapshot | Creator - creator of the Snapshot, not activated by default.
+Disk Space | Snapshot | Description - snapshot description, not activated by default.
+Disk Space | Snapshot | Managed Object Reference - managed object reference.  This is the MOR ID of the Snapshot in vCenter.
+Disk Space | Snapshot | Name - snapshot name
+Disk Space | Snapshot | Number of Days Old - number of days since snapshot creation.
+Disk Space | Snapshot | Age (Days) - VMs topmost snapshot age in days.  If a VM has multiple Snapshots, this is age of the oldest one.
+A few things I've noticed:
+You must activate the Creator and Description properties, they aren't enabled by default.
+Properties appear after the VM Snapshot is 24 hours old.
+Snapshot Age property is -1 by default, even if a Snapshot doesn't exist.  It remains -1 until a Snapshot is 24 hours old, and gets reset to -1 once a Snapshot is deleted.
+Here is a VM without any Snapshots, as expected there are no disk metrics and Age shows as -1.
+Let's take a Snapshot.
+After the next collection interval, you now have disk related metrics, number of snapshots metric, and the age is still -1.
+After 24 hours the rest of the metrics and properties will appear.
+You might have also noticed the size of the Snapshot in vCenter (1.76GB in my case) isn't the same as the size of the Snapshot in Operations (.001GB).  This is because vCenter size includes all Snapshot related files (.vmdk, -delta.vmdk, .vmsd, .vmsn), whereas Operations only shows the -delta.vmdk size.
+You can watch the VM Snapshot size grow in Operations as -delta.vmdk gets bigger.
+As shown, the VM Snapshot disk metric values in Operations are all the same, I've asked the Product Management team to consolidate these if possible.  Thanks to Broadcom Engineer
+Rohith Ravindra Naik
+for looking into this and his input on this blog!
+Finally, there are some VM Snapshot related metrics at the vSphere World level that could use some explanation.
+Snapshots and Snapshot Failures are self explanatory, they are being used in the new Diagnostics (8.18+) as well.  But the two Disk related metrics need some attention.
+Disk Space Realized - VM Snapshots (GB)
+Disk Space Reclaimable - VM Snapshots (GB)
+These are internally computed metrics as follows (respectively):
+<ComputedMetric expression="sum(${adaptertype=VMWARE, objecttype=Datacenter, metric=storage_realized|realizedSnapshotSpace, depth=2})" key="storage_realized|realized_snapshotSpace"/>
+<ComputedMetric expression="sum(${adaptertype=VMWARE, objecttype=ClusterComputeResource, metric=reclaimable|vm_snapshots|diskspace, depth=3})" key="diskspace-waste|reclaimable_diskspace_from_vm_snapshots"/>
+Which means vSphere World: Disk Space Realized - VM Snapshots is the sum of all Datacenter: Disk Spaced Realized - VM Snapshots values.  This represents the total space being consumed by all of the -Delta.vmdk files.
+The second one means vSphere World: Disk Space Reclaimable - VM Snapshots is the sum of all Cluster: Reclaimable - VM Snapshots - Disk Space values.  These Reclaimable metrics are calculated daily.
+I've published another VM Snapshot related Dashboard (and Views) with all of these metrics and some details to
+GitHub
+, it's called VM Snapshot Details v4 if you'd like to download it.
+Tags:
+AriaOperations
+Related Posts
+See All
+Applying the latest VMware Aria Patches
+Upgrade Aria Operations 8.18.3 to VCF Operations 9.0 via Aria Suite Lifecycle Manager
+Upgrade Aria Operations 8.18.3 to VCF Operations 9.0
+bottom of page

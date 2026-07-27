@@ -1,0 +1,119 @@
+id: 38957c6d-0f1d-432e-85fb-683272cf3383
+name: "[VCF Content Factory] VM Snapshot Inventory"
+description: >
+  Per-snapshot inventory for VMWARE Virtual Machines: one row per snapshot
+  instance (GROUP_diskspace fan-out), with Snapshot Name, Age (Days),
+  Snapshot Space (GB), Creator, Description, plus flat Parent Cluster,
+  Parent vCenter, Parent Datastore, and Total Snapshot Space (GB).
+
+  One row per LIVE snapshot older than 24h — the instanced-key subject
+  filter below drops ghost/deleted-snapshot rows per-row. Instanced
+  properties populate ~24h after snapshot creation; Age -1 = deleted or
+  <24h old, so snapshots younger than 24h don't appear — a recall gap,
+  not a bug. Sort descending on Age (or Total Snapshot Space (GB) as a
+  proxy) at the consuming widget (sort_by_column/sort_by_dir); no
+  view-level default.
+
+  Creator/Description render blank until
+  diskspace|snapshot|{creator,description} are enabled on the Default
+  Policy (disabled by default) — a separate operator action.
+  Full narrative: knowledge/designs/views/vm-snapshot-inventory.md
+
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+  filter:
+    # Instanced-key SubjectType filter — evaluated PER FANNED-OUT ROW, not
+    # per VM object (verified 2026-07-27, 15-variant matrix). The instance
+    # segment "90|snapshot:snapshot-1" is an ARBITRARY PLACEHOLDER — it does
+    # not need to match a real snapshot on any VM, only the family prefix
+    # (diskspace) and attribute suffix (numberOfDays) must be real. Do not
+    # "fix" it to a real instance id; do not add an OR group expecting it to
+    # widen the row set (verified it doesn't — see
+    # knowledge/context/investigations/vm-snapshot-instanced-fanout-2026-07-27.md
+    # "Per-row filtering: IT EXISTS").
+    - filter_type: properties
+      metric_key: "diskspace:90|snapshot:snapshot-1|numberOfDays"
+      condition: GREATER_THAN
+      value: 0
+
+summary: false
+
+columns:
+  # Driver column — turns on instanced-group fan-out for the whole view.
+  # One row per snapshot instance (GROUP_diskspace) per VM subject.
+  - display_name: "Instance"
+    instanced_group:
+      name: GROUP_diskspace
+      show_instance_name: true
+      keep_instance_summary: false
+
+  - display_name: "Snapshot Name"
+    is_property: true
+    is_string_attribute: true
+    instanced_group:
+      name: GROUP_diskspace
+      prefix: "diskspace"
+      suffix: "name"
+      sample_instance: "356893|snapshot:snapshot-16"
+
+  - display_name: "Age (Days)"
+    is_property: true
+    instanced_group:
+      name: GROUP_diskspace
+      prefix: "diskspace"
+      suffix: "numberOfDays"
+      sample_instance: "356893|snapshot:snapshot-16"
+
+  - display_name: "Snapshot Space (GB)"
+    is_property: false
+    unit: "gb"
+    instanced_group:
+      name: GROUP_diskspace
+      prefix: "diskspace"
+      suffix: "used"
+      sample_instance: "356893|snapshot:snapshot-16"
+
+  - display_name: "Creator"
+    is_property: true
+    is_string_attribute: true
+    instanced_group:
+      name: GROUP_diskspace
+      prefix: "diskspace"
+      suffix: "creator"
+      sample_instance: "356893|snapshot:snapshot-16"
+
+  - display_name: "Description"
+    is_property: true
+    is_string_attribute: true
+    instanced_group:
+      name: GROUP_diskspace
+      prefix: "diskspace"
+      suffix: "description"
+      sample_instance: "356893|snapshot:snapshot-16"
+
+  # Flat per-VM context columns — repeat their single value on every
+  # fanned-out row (confirmed empirically, see the fanout investigation).
+  - attribute: summary|parentCluster
+    display_name: "Parent Cluster"
+    is_property: true
+    is_string_attribute: true
+
+  - attribute: summary|parentVcenter
+    display_name: "Parent vCenter"
+    is_property: true
+    is_string_attribute: true
+
+  - attribute: summary|datastore
+    display_name: "Parent Datastore"
+    is_property: true
+    is_string_attribute: true
+
+  # Flat metric — vendor-blessed aggregate from the built-in "Virtual
+  # Machines with Snapshot" embedded view (ccc97ab1-5d80-4413-a9e1-e94c167bc01d).
+  - attribute: diskspace|snapshot
+    display_name: "Total Snapshot Space (GB)"
+    unit: "gb"
+
+released: false
+version: "1.0.0"

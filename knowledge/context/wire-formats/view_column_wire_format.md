@@ -848,17 +848,22 @@ Tests: `tests/test_view_instanced_group_columns.py`
 (`TestInstancedGroupMemberTransformEmission`,
 `TestInstancedGroupMemberUnprovenTransformationsRejected`).
 
-**Separate finding, NOT fixed here (documented per hard rule, out of
-scope for this follow-up):** the same three `View - Set 4.xml` examples
-above also carry `<Property name="preferredUnitId" value="percent|min|
-auto"/>` on their member columns (right after `attributeKey`, matching
-the generic path's ordering) — `_xml_instanced_group_item()` does not
-emit `preferredUnitId` at all (`ViewColumn.unit` is read by the generic
-path but ignored by the instanced-group path). This is unrelated to the
-Codex P2 companion-fields finding (it's not transformation-dependent —
-even the CURRENT-transform vendor examples in this file could plausibly
-carry a unit) and was left alone to keep this fix scoped. Flag for a
-future tooling pass if an instanced-group column needs unit display.
+**`preferredUnitId` on instanced-group member columns — implemented.**
+The same three `View - Set 4.xml` examples above also carry
+`<Property name="preferredUnitId" value="percent|min|auto"/>` on their
+member columns (right after `attributeKey`, matching the generic path's
+ordering). Additionally, `View - Set 4.xml:22141-22150` ("VM Snapshots
+List") carries `attributeKey="diskspace:262|snapshot:snapshot-1|used"`,
+`preferredUnitId="gb"` in this exact position (vendor item also carries
+an `id` attribute between `attributeKey` and `preferredUnitId`, which
+the factory deliberately omits — an export-time internal reference with
+no YAML-authoring equivalent). `_xml_instanced_group_item()` now emits
+`preferredUnitId` immediately after `attributeKey` when `col.unit` is
+set (same `ViewColumn.unit` / `unit:` YAML field the generic path
+already used) — the prior silent-ignore gap is closed. Round-trips:
+`src/vcfops_dashboards/reverse.py` already parses `preferredUnitId`
+back into `unit` on the reverse path, so an XML→YAML→XML cycle does not
+lose the unit. Tests: `tests/test_view_instanced_group_columns.py`.
 
 ### Factory YAML syntax
 
@@ -1037,3 +1042,209 @@ that port; a follow-up author round should consume
   `view-author` / `dashboard-author` agent prompts to mention that
   `preferredUnitId="gb"` on a KB attribute CONVERTS — do not
   author an SM just to divide by 1024.
+
+## View-level field limits — `<Description>` maxes out at 1024 chars
+
+- Date: 2026-07-27
+- Instance: devel, **VCF Operations 9.1**
+- Source: content-installer bisect during the devel install close-out.
+
+A `VIEW_DEFINITIONS` content-zip import **silently fails** when the
+view's `<Description>` (factory YAML `description:`) exceeds **1024
+characters**. Exactly bisected:
+
+| description length | import result |
+|---|---|
+| 1024 chars | `state=FINISHED`, `imported=1`, `skipped=0` |
+| 1025 chars | `state=FAILED`, `imported=0`, `skipped=1`, **`errorMessages` empty** |
+
+The server returns no field name, no length, no diagnostic of any kind —
+the job envelope is identical to a generic import failure. Non-transient;
+retrying does not help.
+
+**Consequences for authoring and tooling:**
+
+- View YAML `description:` must render to ≤1024 characters. The house
+  style in `content/views/*.yaml` uses folded `>` blocks that routinely
+  run several hundred characters, so this is reachable in normal
+  authoring — count the *rendered* string, not the YAML source.
+- **Debugging heuristic:** a view import reporting `FAILED` /
+  `skipped>=1` with **zero** `errorMessages` should be treated as a
+  description-length failure until proven otherwise. That signature is
+  otherwise indistinguishable from auth trouble, a malformed zip, or a
+  UUID collision.
+- **Enforced.** `ViewDef.validate()` (`src/vcfops_dashboards/loader.py`)
+  now rejects any `description:` that renders to more than 1024
+  characters with a `DashboardValidationError` citing this section,
+  converting the silent server-side failure into a local `validate`-time
+  error. Scoped to `VIEW_DEFINITIONS` / `description` only — see the
+  "Unverified" note below; the limit is not generalized to other
+  content types or fields. Test:
+  `tests/test_view_description_length_limit.py`.
+
+**Unverified — do not extrapolate.** Only `VIEW_DEFINITIONS` /
+`description` was bisected. Whether dashboards, reports, symptoms or
+alerts carry the same ceiling, whether view `Title`/`name` has an
+analogous limit, and whether the limit counts bytes or characters
+(the bisect used ASCII, where the two coincide) are all **untested**.
+
+See also `knowledge/context/known_limitations.md` §14.
+
+## Row-level filtering: instanced key in `SubjectType filter=` (CORRECTED)
+
+**2026-07-27.** The section immediately below ("No row-level filter exists")
+overstated its case and its headline is **wrong**. Correction first, then
+the still-valid negative surveys.
+
+`<SubjectType filter=…>` carries **two semantics in one field**, selected by
+whether the `metricKey` contains an instance segment:
+
+| `metricKey` | evaluated | effect |
+|---|---|---|
+| `diskspace\|snapshot\|snapshotAge` (flat) | per **object** | passing object renders **all** its rows |
+| `diskspace:90\|snapshot:snapshot-7\|numberOfDays` (instanced) | per **row** | non-matching fanned-out rows dropped; object with no surviving row disappears |
+
+```xml
+<SubjectType adapterKind="VMWARE" resourceKind="VirtualMachine" type="self"
+  filter='[[{"condition":"NOT_EQUALS","transform":"CURRENT",
+             "metricKey":"diskspace:90|snapshot:snapshot-7|numberOfDays",
+             "metricValue":{"isStringMetric":false,"value":-1},
+             "filterType":"properties"}]]'/>
+```
+
+Key facts (15-variant matrix on devel 9.1):
+
+- The **instance segment is a generalized placeholder**, exactly like a
+  column's `sample_instance`. `90|snapshot:snapshot-7`,
+  `356893|snapshot:snapshot-1` and `zzzz|snapshot:snapshot-999` all give
+  identical results — including instances that exist on no object.
+- The **family prefix and attribute suffix must resolve to a real
+  attribute.** Wrong family or bogus suffix → **0 rows everywhere** (fails
+  closed, does not degrade to pass). Use the same family prefix as the
+  view's instanced group.
+- Works for `filterType: "metrics"` on instanced metric keys as well as
+  `"properties"`; `NOT_EQUALS` and `GREATER_THAN` both confirmed.
+- `transform: "CURRENT"` is **optional** — the UI emits it, results are
+  identical without it.
+- AND (multiple conditions in one group) behaves as expected. **OR (multiple
+  groups) does NOT widen the row set** — the outer array appears to act
+  object-level while the instanced clause still constrains rows. Inferred,
+  not proven; do not rely on OR to relax an instanced clause.
+- The filter also removes the **flat-only fallback row** an object renders
+  when it has no instances at all.
+
+Factory YAML (`subject.filter`, already supported — no tooling change
+needed):
+
+```yaml
+subject:
+  adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+  filter:
+    - filter_type: properties
+      metric_key: "diskspace:90|snapshot:snapshot-1|numberOfDays"
+      condition: GREATER_THAN
+      value: 0
+```
+
+Full matrix and discovery credit (the user, 2026-07-27):
+`knowledge/context/investigations/vm-snapshot-instanced-fanout-2026-07-27.md`
+§"Per-row filtering: IT EXISTS".
+
+## ~~No row-level filter exists in the view wire format~~ (headline SUPERSEDED — surveys still valid)
+
+- Date: 2026-07-27
+- Corpus: 1,233 `<ViewDef>`s (live prod `VIEW_DEFINITIONS` export +
+  every `reference/references/**/content/reports/*.xml`), plus 446
+  `type: "View"` widgets across 138 reference `dashboard.json` files.
+
+Recording the **negative space** of this wire format, because it is the
+question authors keep asking of instanced-group (fan-out) views: *can a
+column value filter out rows?*
+
+**No.** The complete `<Control type=…>` vocabulary across all 1,233
+ViewDefs is exactly five types:
+
+| Control type | count | what it does |
+|---|---|---|
+| `time-interval-selector` | 1229 | view-wide time window |
+| `attributes-selector` | 1220 | the columns (`attributeInfos`, `summaryInfos`) |
+| `metadata` | 955 | `maxPointsCount`, `hideObjectNameColumn`, `listTopResultSize` |
+| `pagination-control` | 896 | `start`, `size` |
+| `buckets-control` | 398 | distribution bucket ranges + colors |
+
+Property names containing `filter` or `condition` inside any ViewDef:
+**zero**. The only filter expressible in a view is the `filter=`
+attribute on `<SubjectType>` (see the SubjectType section above) —
+~~a subject/resource selector, evaluated per resource, structurally
+unable to address one row of a fanned-out instanced-group render.~~
+**WRONG — that clause is the error this correction exists for.** The
+`SubjectType` filter is per-row whenever its key carries an instance
+segment; see the correction section above.
+
+The View **widget** adds nothing: its config surface is a closed 11-key
+set (`refreshInterval, resource, traversalSpecId, refreshContent,
+isUpdatedView, chartViewItems, selectFirstRow, selfProvider, title,
+viewDefinitionId` + rare `widgetId/description/titleLocalized/
+viewDetails/viewType`) with no filter field — uniquely among widget
+types, all of which carry `filter`/`customFilter`/`tagFilter`/
+`filterMode`. Widget `states[]` blobs carry only `id`/`hidden`/`width`.
+
+Nearest levers, neither of which is a filter:
+- `metadata` → `listTopResultSize` (top-N; observed `-1` in 916 views,
+  and `50`/`20`/`10` in 25 others). Truncates **by position**, so it
+  only helps in combination with a sort, and N is a fixed constant.
+- `sortCriteria="true"` on a column marks it the sort column (419
+  occurrences). Note the factory cannot currently set initial sort at
+  import — the UI import path drops it.
+
+**Scope of what survives:** these surveys correctly establish that no
+*widget config*, *view Control*, *render/report endpoint parameter*, or
+*grid-state blob* offers row filtering. They do **not** establish that row
+filtering is impossible — it is done via `SubjectType filter=` with an
+instanced key (correction section above). Endpoint-level probes
+(`filter`/`instanceFilter`/`rowFilter`/`instanceName` query params on
+`/internal/views/{id}/data/export`) were all silently ignored and that
+remains true.
+
+See `knowledge/context/known_limitations.md` §15 and
+`knowledge/context/investigations/vm-snapshot-instanced-fanout-2026-07-27.md`
+§"Per-row filtering: IT EXISTS".
+
+### Instanced-group ROW SET = union over member columns (2026-07-27)
+
+Empirically established on devel 9.1 with 13 scratch views (all deleted).
+Complements the "no row-level filter" section above: you cannot filter
+rows, but you **can** control which instances the row set is built from.
+
+**Rule: the rendered row set is the UNION, across every member column, of
+the instances that currently hold a value for that member's attribute.**
+
+Consequences for authoring:
+
+- A **metric** member contributes only instances with current data. A
+  **property** member contributes every instance that ever had that
+  property (values persist after the underlying entity is gone).
+- Therefore **one property member can enlarge the whole row set.** Adding
+  a single `name` column to a metric-only instanced view took the row
+  count from 1 to 6 on a test object. Column order is irrelevant.
+- `is_property` is **display-only and does NOT affect the row set.**
+  Declaring a property member as `is_property: false` still resolves the
+  property value correctly *and* still unions. You cannot steer rows with
+  the flag — only by choosing which attributes appear as members.
+- `keep_instance_summary: true` **adds** one aggregate row with a blank
+  instance token; it never removes rows.
+- `show_instance_name: false` degrades the Instance cell to the raw
+  attributeKey string; the row set is unchanged.
+- A **wrong `instanceGroupName`** does not filter — it breaks the render
+  into a single all-`null` row. The token must match the real family.
+
+Worked example and the full variant → row-count table:
+`knowledge/context/investigations/vm-snapshot-instanced-fanout-2026-07-27.md`
+§"Row-set control: the fan-out set IS steerable".
+
+**Authoring caution.** Because property values persist for deleted
+entities, "this instanced view happens to show only live things today" can
+be an artifact of *when a property was enabled in policy*, not a stable
+property of the design. Verify against an object whose stale instances
+predate any recent enablement before relying on a narrow row set.
