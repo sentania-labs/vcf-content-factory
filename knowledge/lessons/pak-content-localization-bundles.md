@@ -1,5 +1,20 @@
 # Pak Content Localization Bundles — Four Bundles Required, Keys Must Match
 
+> **SCOPE NARROWED 2026-08-06 (DEF-018).** This lesson applies to
+> **pak units that ship localization bundles** (the SDK-pak
+> `content/reports/<dir>/` layout below). It is NOT an instruction to
+> emit `localizationKey` in general. The inverse failure mode is just
+> as fatal: a `localizationKey` attribute with **no** properties bundle
+> in the same import unit hard-fails view import on VCF Ops 8.18
+> (`ViewDefinitionDataServiceImpl.validate`; 9.1 silently tolerates
+> it). Standalone content-import zips (`Views.zip` = bare `content.xml`)
+> ship no bundles, so their `<Title>`/`<Description>` must carry **no**
+> `localizationKey` at all — the renderer emits plain elements since
+> DEF-018. Corpus invariant: emit `localizationKey` only when a
+> `content.properties` bundle ships in the same import unit; never
+> dangling. (14 of 934 vendor Title/Description elements carry the
+> attribute; all 14 ship a co-located bundle, zero carry it without one.)
+
 ## The dead end
 
 Builds 21 and 22 debugging why a VCF Ops solution pak with a clean
@@ -93,7 +108,8 @@ after any change to the renderer or properties generator.
   `_generate_outer_resources_properties`, `_generate_content_resources_properties`,
   `_generate_dashboard_resources_properties`, `_generate_view_content_properties`,
   `_attribute_to_localization_key`
-- XML renderer: `src/vcfops_dashboards/render.py` — `localizationKey="title"` and
-  `localizationKey="desc"` on `<Title>` and `<Description>` respectively
+- XML renderer: `src/vcfops_dashboards/render.py` — since DEF-018 emits plain
+  `<Title>`/`<Description>` (no `localizationKey`); the suffix-alignment rule
+  above applies only if a bundle-shipping path re-introduces the attribute
 - Confirmed working: v22 pak (`vcfcf_sdk_compliance.1.0.0.22.pak`) on devel,
   post-install inventory: 1 dashboard, 1 view, 1 alert, 2 symptoms, 3 recs

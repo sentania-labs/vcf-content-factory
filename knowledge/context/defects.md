@@ -981,3 +981,100 @@ reused. Field lines are `- **Field:** value` (parsed by
   release." `publish.py` handles pointers correctly, so publishing is
   unaffected. Smallest correct fix: guard on `is_sdk_pointer` in the CLI
   dist-copy step, mirroring publish.py.
+
+### DEF-018
+
+- **Title:** Factory renderer: view content-import zips ship
+  `localizationKey="title"`/`"desc"` on `<Title>`/`<Description>` with no
+  backing localization bundle — VCF Ops 8.18 hard-rejects the view import
+- **Severity:** tracked
+- **Status:** closed
+- **Affects:** factory:dashboards (`src/vcfops_dashboards/render.py`)
+- **First-seen:** shipped `dist/dashboards/vm-snapshot-inventory-dashboard.zip`
+  (release 1.0, DEF-016 build); latent in every content-import zip built by
+  `vcfops_dashboards/packager.py`'s `render_views_xml()` since
+  `localizationKey` was added to the Title/Description emission.
+- **Source:** Live root-cause session against a VCF Ops 8.18 instance,
+  2026-08-06: `dist/dashboards/vm-snapshot-inventory-dashboard.zip`'s
+  Views.zip fails import on 8.18 (server-side
+  `ViewDefinitionDataServiceImpl.validate` hard-rejects it); a byte-identical
+  copy with only the two `localizationKey` attributes stripped imports
+  cleanly. 9.1 was unaffected (falls back to inline text on the dangling
+  reference), which is why this shipped undetected against 9.1-only testing.
+  Reopened same-day by `framework-reviewer` (CHANGES REQUESTED,
+  `knowledge/context/reviews/framework/dashboards-render-localizationkey-2026-08-06.md`):
+  every shipped `dist/` zip still reproduces the defect, so an operator
+  downloading today still hits it.
+- **Summary:** `_render_view_def_fragment()` in
+  `src/vcfops_dashboards/render.py` emitted
+  `<Title localizationKey="title">` and (when non-blank)
+  `<Description localizationKey="desc">`, but the content-import zips built
+  from this path (`dist/**/Views.zip`, `content-packager`'s standalone view
+  bundles) ship no `content.properties`/localization bundle at all — there
+  is nothing for those keys to resolve against. VCF Ops 8.18's importer
+  hard-rejects the dangling reference; 9.1 tolerates it and uses the inline
+  text, masking the defect on 9.1-only test passes. Reference-corpus scan
+  (all zips under `reference/references/`, including nested zips): 934
+  `<Title>`/`<Description>` elements total, 14 carry `localizationKey` — and
+  every one of those 14 ships a `resources/content.properties` bundle in
+  the same import unit (`AriaOperationsContent/VM Encryption Reporting/Views.zip`,
+  `AriaOperationsContent/Cost Reporting/Cost Reporting.zip::Views.zip`, and
+  four `brockpeterson_operations_dashboards` view zips). Zero vendor units
+  carry the key without a bundle: `localizationKey` on Title/Description is
+  bundle-coupled, never dangling — a stronger justification for the fix
+  than "vendor never does it." Smallest correct fix (the one shipped, not
+  the ship-localization-bundles alternative): stop emitting
+  `localizationKey` on Title/Description entirely — plain
+  `<Title>text</Title>` / `<Description>text</Description>`, matching the
+  bundle-less shape our content-import zips actually ship and the inline
+  text VCF Ops already renders either way. The one other emission site
+  sharing the same renderer (`_render_view_def_fragment`, reused by
+  `vcfops_managementpacks/sdk_builder.py` for SDK-pak per-view/per-report
+  subdirectories) is a **different** condition — that path always ships a
+  matching `content/reports/<slug>/resources/content.properties` bundle in
+  the same import unit — but shares the code, so the fix applies there too;
+  it is harmless (the resources/ subdirectory stays populated per spec A3,
+  now simply unreferenced by the XML). `src/vcfops_reports/render.py`
+  already emitted plain `<Title>`/`<Description>` with no `localizationKey`
+  — not affected, no shared defect.
+  Renderer fix landed in `src/vcfops_dashboards/render.py`
+  (`_render_view_def_fragment`): `<Title>` and `<Description>` now render
+  with no `localizationKey` attribute unconditionally. Companion doc-only
+  update in `src/vcfops_managementpacks/sdk_builder.py` (comment block above
+  the report-embedding loop) corrected to no longer claim the embedded
+  ViewDef fragments carry `localizationKey`. Full validate chain (7
+  packages) and full test suite pass post-fix; regression coverage added
+  (`tests/test_renderer_regression_phase16.py` `TestViewDefTitleDescriptionNoLocalizationKey`)
+  asserts the new shape directly and fails if the attribute is
+  re-introduced. The 8.18 root-cause session's byte-diff proof (stripping
+  only the two `localizationKey` attributes from the already-shipped
+  `vm-snapshot-inventory-dashboard.zip` Views.zip made it import cleanly on
+  8.18) is the live evidence this fix targets; the renderer now produces
+  that same stripped shape by construction. **The framework-code fix is
+  done; the entry stays open because the fix is not yet in an operator's
+  hands.** Severity is `tracked` (not `blocking`) because the fix itself
+  carries no further defect and no pak's `defect-gate` is affected by this
+  entry's `Affects:` token (`factory:dashboards`, not a pak or
+  `<type>/<slug>`) — but it stays tracked-open as a standing reminder that
+  shipped artifacts are stale.
+- **Close condition:** `content-packager` has rebuilt every manifest under
+  `bundles/` (all `dist/dashboards/*.zip`, `dist/reports/*.zip`,
+  `dist/bundles/*.zip`) against the fixed renderer, and a rebuilt zip's
+  Views.zip has been spot-checked to contain zero `localizationKey`
+  occurrences. Close with the rebuild report as Closing-evidence.
+- **Closing-evidence:** 2026-08-06 `content-packager` rebuild: all 12
+  buildable manifests under `bundles/` rebuilt into `dist/` against the
+  fixed renderer (the 3 non-built manifests are Tier 2 SDK pointer
+  releases that produce no zip by design; their `build` CLI crash is a
+  pre-existing gap tracked separately). Spot-check of the rebuilt
+  `dist/dashboards/vm-snapshot-inventory-dashboard.zip` → inner
+  `Views.zip` `content.xml`: zero `localizationKey` occurrences,
+  Title/Description inline text intact. Framework-reviewer verdict
+  APPROVE (round 2,
+  `knowledge/context/reviews/framework/dashboards-render-localizationkey-2026-08-06-round2.md`).
+- **Related:** DEF-016 (same artifact, prior defect in the same build).
+  Buildkit divergence note (reviewer round-2 W2): the published
+  `sdk-buildkit` tarball vendors the pre-fix renderer as
+  `dashboard_render.py`; benign for SDK paks (they always ship the
+  matching localization bundle) — re-cut the kit on the next `v*`
+  release rather than out-of-band.

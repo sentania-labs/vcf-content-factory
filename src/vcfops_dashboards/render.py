@@ -722,19 +722,32 @@ def _render_view_def_fragment(
     )
 
     # Shared header elements.
-    # localizationKey attributes on <Title> and <Description> match the
-    # content.properties bundle keys: view.<uuid>.title and view.<uuid>.desc.
-    # Reference: /tmp/vcf_auto/content/reports/VCF90/content.xml.
-    # Only emit localizationKey="desc" when the view has a non-empty description.
-    # An empty description has no content.properties entry (see
-    # _generate_view_content_properties in sdk_builder.py) so emitting the key
-    # causes a localization-key-mismatch validation error.  The rendered XML still
-    # always carries a <Description> element (required by the importer) — it just
-    # has no localizationKey attribute when the description is blank.
-    if view.description:
-        desc_elem = f'<Description localizationKey="desc">{escape(view.description)}</Description>'
-    else:
-        desc_elem = f'<Description>{escape(view.description)}</Description>'
+    # DEF-018: <Title> and <Description> are emitted as plain elements with
+    # NO localizationKey attribute. VCF Ops 8.18's server-side view importer
+    # (ViewDefinitionDataServiceImpl.validate) hard-rejects a ViewDef whose
+    # Title/Description carry a localizationKey that has no backing
+    # content.properties bundle in the SAME import unit — and our
+    # content-import zips (dist/**/Views.zip, built by
+    # vcfops_dashboards/packager.py) ship no localization properties files at
+    # all. 9.1 tolerates the dangling reference and falls back to the inline
+    # text, which is what masked this for 9.1-only testing. Reference-corpus
+    # scan (all zips under reference/references/, including nested zips):
+    # 934 Title/Description elements total, 14 carry localizationKey — and
+    # every one of those 14 lives in an import unit that also ships
+    # resources/content.properties in the same unit (e.g.
+    # AriaOperationsContent/VM Encryption Reporting/Views.zip,
+    # AriaOperationsContent/Cost Reporting/Cost Reporting.zip::Views.zip, and
+    # four brockpeterson_operations_dashboards view zips). Zero vendor units
+    # carry the key without a bundle — localizationKey on Title/Description
+    # is bundle-coupled, never dangling. Our content-import zips ship no
+    # properties bundle, so this renderer emits plain elements to match. The
+    # one place a matching content.properties bundle IS
+    # shipped (vcfops_managementpacks/sdk_builder.py's per-view
+    # content/reports/<slug>/resources/content.properties) no longer needs
+    # the localizationKey to resolve anything since the inline text is
+    # always present; it is left in place as a harmless, already-populated
+    # resources/ subdirectory (spec A3 still wants that directory non-empty).
+    desc_elem = f'<Description>{escape(view.description)}</Description>'
     # Optional SubjectType metric/property filter — applied identically to
     # both the "descendant" and "self" SubjectType elements (matches the
     # vendor corpus, which always carries the same filter= value on both).
@@ -745,7 +758,7 @@ def _render_view_def_fragment(
         filter_attr = ""
     header = (
         f'<ViewDef id="{view.id}">'
-        f'<Title localizationKey="title">{escape(view.name)}</Title>'
+        f'<Title>{escape(view.name)}</Title>'
         + desc_elem +
         f'<SubjectType adapterKind="{escape(view.adapter_kind)}"{filter_attr} resourceKind="{escape(view.resource_kind)}" type="descendant"/>'
         f'<SubjectType adapterKind="{escape(view.adapter_kind)}"{filter_attr} resourceKind="{escape(view.resource_kind)}" type="self"/>'

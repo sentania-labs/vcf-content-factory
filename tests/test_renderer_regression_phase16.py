@@ -21,6 +21,17 @@ content-import zips:
       entirely — 80+ reference pack views carry plain displayName, zero
       exceptions.
 
+  Test C — dangling localizationKey on ViewDef Title/Description
+      (fixed by DEF-018): _render_view_def_fragment() emitted
+      localizationKey="title" / localizationKey="desc" on <Title> and
+      <Description> with no backing resources/content.properties bundle in
+      the same content-import unit. VCF Ops 8.18's server-side view importer
+      (ViewDefinitionDataServiceImpl.validate) hard-rejects a dangling key;
+      9.1 tolerates it and falls back to inline text, which masked the bug
+      for 9.1-only testing. The fix emits plain <Title>/<Description>
+      elements — no localizationKey attribute — since the factory's
+      standalone content-import zips ship no properties bundle.
+
 These tests must fail if either pre-fix behavior is re-introduced.
 All fixtures are tmp_path-local; no content YAML, network, or install touched.
 """
@@ -193,4 +204,84 @@ class TestLocalizationKeyCollision:
         assert len(set(values)) == len(values), (
             f"displayName values must be distinct across transformed columns, "
             f"got duplicates in {values}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Test C — no localizationKey on ViewDef Title/Description (DEF-018)
+# ---------------------------------------------------------------------------
+
+class TestViewDefTitleDescriptionNoLocalizationKey:
+    """A rendered ViewDef's <Title> and <Description> must carry no
+    localizationKey attribute, and the standalone content.xml document as a
+    whole must contain zero localizationKey occurrences — the factory's
+    content-import zips ship no resources/content.properties bundle, so a
+    dangling key hard-fails import on VCF Ops 8.18 (DEF-018)."""
+
+    def _render_view(self, tmp_path: Path) -> str:
+        from vcfops_dashboards.loader import load_view
+        from vcfops_dashboards.render import render_views_xml
+
+        view_path = _write_yaml(
+            tmp_path / "views" / "regression_view_defc.yaml",
+            {
+                "name": "Phase16 Regression View DEF-018",
+                "description": "Regression fixture for DEF-018.",
+                "subject": {
+                    "adapter_kind": "VMWARE",
+                    "resource_kind": "VirtualMachine",
+                },
+                "time_window": {"unit": "DAYS", "count": 7},
+                "columns": [
+                    {
+                        "attribute": "cpu|demandPct",
+                        "display_name": "CPU Demand",
+                        "transformation": "AVG",
+                    },
+                ],
+            },
+        )
+        view = load_view(view_path, enforce_framework_prefix=False)
+        # sm_scope=[] keeps the render hermetic: no scan of content/supermetrics.
+        return render_views_xml([view], sm_scope=[])
+
+    def test_title_and_description_carry_no_localization_key(self, tmp_path):
+        """<Title> and <Description> must render as plain elements with no
+        localizationKey attribute. Pre-fix, they carried
+        localizationKey="title" / "desc" with no backing properties bundle,
+        which VCF Ops 8.18 hard-rejects (see DEF-018)."""
+        xml_text = self._render_view(tmp_path)
+        root = ET.fromstring(xml_text)
+        title_els = list(root.iter("Title"))
+        desc_els = list(root.iter("Description"))
+        assert title_els and desc_els, (
+            f"Expected at least one <Title> and <Description> in rendered "
+            f"XML, found {len(title_els)} Title and {len(desc_els)} "
+            f"Description elements"
+        )
+        offenders = [
+            (el.tag, el.get("localizationKey"))
+            for el in title_els + desc_els
+            if el.get("localizationKey") is not None
+        ]
+        assert offenders == [], (
+            f"<Title>/<Description> must not carry localizationKey (the "
+            f"factory's content-import zips ship no resources/"
+            f"content.properties bundle, so a dangling key hard-fails "
+            f"import on VCF Ops 8.18 — see DEF-018), got: {offenders}"
+        )
+
+    def test_standalone_document_has_zero_localization_key_occurrences(
+        self, tmp_path
+    ):
+        """The rendered standalone content.xml must contain zero
+        localizationKey occurrences anywhere — a stronger guard than
+        checking Title/Description alone, so this fails if the attribute is
+        re-introduced on any element in the standalone (bundle-less)
+        import path."""
+        xml_text = self._render_view(tmp_path)
+        assert "localizationKey" not in xml_text, (
+            "Standalone rendered document must contain zero localizationKey "
+            "occurrences (no resources/content.properties bundle ships in "
+            "this import unit — see DEF-018), found at least one"
         )
