@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-07-23T03:18:22Z",
+  "fetched_at": "2026-07-27T22:10:45Z",
   "metrics": {
     "NTP|DRIFT_IN_MILLS": {
       "default_monitored": true,
@@ -3265,609 +3265,1013 @@
   },
   "properties": {
     "CONNECTIVITY|API|STATE": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Connectivity|API|State"
     },
     "CONNECTIVITY|API|STATUS": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Connectivity|API|Status"
     },
     "CONNECTIVITY|SSH|STATE": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Connectivity|SSH|State"
     },
     "CONNECTIVITY|SSH|STATUS": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Connectivity|SSH|Status"
     },
     "Certificate Summary|ESXi Host Certificate|End Date": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Certificate Summary|ESXi Host Certificate|End Date"
     },
     "Certificate Summary|ESXi Host Certificate|Issuer DN": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Certificate Summary|ESXi Host Certificate|Issuer DN"
     },
     "Certificate Summary|ESXi Host Certificate|No. of days to expire": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Certificate Summary|ESXi Host Certificate|No. of days to expire"
     },
     "Certificate Summary|ESXi Host Certificate|Start Date": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Certificate Summary|ESXi Host Certificate|Start Date"
     },
     "DNS|DNS_SERVER": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "DNS Summary|DNS Server(s)"
     },
     "DNS|FORWARD_LOOKUP_STATUS": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "DNS Summary|Forward Lookup Status"
     },
     "DNS|REVERSE_LOOKUP_STATUS": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "DNS Summary|Reverse Lookup Status"
     },
     "NTP|MSG": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "NTP Summary|Message"
     },
     "NTP|NTP_SERVER": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "NTP Summary|NTP Server(s)"
     },
     "NTP|STATUS": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "NTP Summary|Status"
     },
     "Sensor|fan|health_state": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Sensor|Fan|Health State"
     },
     "Sensor|temperature|health_state": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Sensor|Temperature|Health State"
     },
     "System Properties|businessHours": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Business Hours"
     },
     "System Properties|host_collector_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Current Collector ID"
     },
     "System Properties|resource_kind_subtype": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Object Type Subclassification"
     },
     "System Properties|resource_kind_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Object Type Classification"
     },
     "VcfManagementInfo|vcf_mgmt_certificate_info|vcf_mgmt_certificate_num_days_to_expire": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Management Information|VCF Certificate Management Information|No. of Days to Expire"
     },
     "VcfManagementInfo|vcf_mgmt_password_info|vcf_mgmt_password_num_days_to_expire": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Management Information|VCF Password Management Information|No. of Days to Expire"
     },
     "capability|tpmVersion": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Capability|TPM Version"
     },
     "configManager|memoryManager|consoleReservationInfo|serviceConsoleReserved": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration Manager|Memory Manager|Console Reservation|Service Console Reserved"
     },
     "config|commitType": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Commit Type"
     },
     "config|commitType|active": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Hyperthreading|Active"
     },
     "config|commitType|available": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Hyperthreading|Available"
     },
     "config|diskSpace": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Disk Space"
     },
     "config|hyperThread|active": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Hyperthreading|Active"
     },
     "config|hyperThread|available": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Hyperthreading|Available"
     },
     "config|name": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Name"
     },
     "config|network|dnsserver": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Network|DNS Server"
     },
     "config|network|domainname": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Network|Domain Name"
     },
     "config|network|linkspeed": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Network|Average Physical NIC Speed"
     },
     "config|network|nnic": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Network|Number of NICs"
     },
     "config|network|portgroup|allow_promiscuous_rollup": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Network|Host Port Group|Aggregated Allow Promiscuous"
     },
     "config|network|portgroup|forged_transmits_rollup": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Network|Host Port Group|Aggregated Forged Transmits"
     },
     "config|network|portgroup|mac_changes_rollup": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Network|Host Port Group|Aggregated MAC Address Changes"
     },
     "config|ntp|server": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|NTP Information|NTP Servers"
     },
     "config|product|apiVersion": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Product|API Version"
     },
     "config|product|productLineId": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Product|Product Line ID"
     },
     "config|security|audit_record_remote_enable": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Is Syslog Global Audit Record Remote Enabled"
     },
     "config|security|audit_record_storage_capacity": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Syslog Global Audit Record Storage Capacity"
     },
     "config|security|audit_record_storage_enable": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Is Syslog Global Audit Record Storage Enabled"
     },
     "config|security|bmc_network_enable": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Is BMC Network Enabled"
     },
     "config|security|certificate_strict_x509_compliance": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Is Syslog Global Strict X509 Compliant"
     },
     "config|security|current_scratch_location": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Scratch Folder Location"
     },
     "config|security|dcui_access": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Users who can override lock down mode and access the DCUI (DCUI.Access)"
     },
     "config|security|dcui_timeout": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|DCUI timeout"
     },
     "config|security|domain_membership_status": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Domain Membership Status"
     },
     "config|security|dvfilter_bind_address": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Dvfilter bind ip address (Net.DVFilterBindIpAddress)"
     },
     "config|security|enable_ad_auth": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Enable active directory authentication"
     },
     "config|security|enable_auth_proxy": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Enable authentication proxy (UserVars.ActiveDirectoryVerifyCAMCertificate)"
     },
     "config|security|enable_chap_auth": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Enable mutual chap authentication"
     },
     "config|security|enable_mob": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Enable MOB (Config.HostAgent.plugins.solo.enableMob)"
     },
     "config|security|esx_admins_group": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|ESX Admins Group"
     },
     "config|security|execInstalledOnly": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|VMkernel Boot Exec Installed Only (VMkernel.Boot.execInstalledOnly)"
     },
     "config|security|firewallDefaultPolicy|incomingBlocked": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Firewall Default Policy|Incoming Blocked"
     },
     "config|security|firewallDefaultPolicy|outgoingBlocked": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Firewall Default Policy|Outgoing Blocked"
     },
     "config|security|firewallRule|allowedHosts": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Firewall rule|Allowed hosts"
     },
     "config|security|firewallRule|servicesConfigured": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Firewall rule|Firewall Config for Services"
     },
     "config|security|has_lockdown_exception_users": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Has Lockdown exception users"
     },
     "config|security|host_agent_log_level": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Host Agent Logging Level (Config.HostAgent.log.level)"
     },
     "config|security|host_client_session_timeout": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Host Client Session Timeout"
     },
     "config|security|imageConfig|acceptance_level": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Host Image Configuration|Image Acceptance Level"
     },
     "config|security|imageConfig|acceptance_level_risk_profile_1": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Host Image Configuration|Image Acceptance Level Risk Profile 1"
     },
     "config|security|imageConfig|acceptance_level_risk_profile_2": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Host Image Configuration|Image Acceptance Level Risk Profile 2"
     },
     "config|security|imageConfig|acceptance_level_risk_profile_3": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Host Image Configuration|Image Acceptance Level Risk Profile 3"
     },
     "config|security|issue": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|SSH Connection Banner Message Configured"
     },
     "config|security|lockdown|lockdown_mode": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Lockdown|Lockdown Mode"
     },
     "config|security|log_check_ssl_certs": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Is Syslog Global SSL Certificate Check Enabled"
     },
     "config|security|mem_eager_zero": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Memory Eager Zero"
     },
     "config|security|net_block_guest_bpdu": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Block guest sourced BPDU frames (Net.BlockGuestBPDU)"
     },
     "config|security|ntpServer": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|NTP server"
     },
     "config|security|password_max_days": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Password Max Days"
     },
     "config|security|requireSecureBoot": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Is Require Secure Boot Enabled"
     },
     "config|security|security_account_lock_failures": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Account Lockout (Security.AccountLockFailures)"
     },
     "config|security|security_account_unlock_time": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Account Auto Unlock Time (Security.AccountUnlockTime)"
     },
     "config|security|security_password_history": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Password History (Security.PasswordHistory)"
     },
     "config|security|security_password_quality_control": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Password Policies (Security.PasswordQualityControl)"
     },
     "config|security|service|isRunning": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Service|Running"
     },
     "config|security|service|policy": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Service|Policy"
     },
     "config|security|service|ruleSet": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Service|Ruleset"
     },
     "config|security|shell_interactive_timeout": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Shell interactive timeout (UserVars.ESXiShellInteractiveTimeOut)"
     },
     "config|security|shell_timeout": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Shell timeout (UserVars.ESXiShellTimeOut)"
     },
     "config|security|suppressHyperthreadWarning": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Suppress Hyper Thread Warning (UserVars.SuppressHyperthreadWarning)"
     },
     "config|security|suppressShellWarning": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Suppress Shell Warning (UserVars.SuppressShellWarning)"
     },
     "config|security|syslog_dir": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Log directory (Syslog.global.logDir)"
     },
     "config|security|syslog_global_audit_record_storage_directory": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Syslog Global Audit Record Storage Directory"
     },
     "config|security|syslog_global_logLevel": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Syslog Global Log Level"
     },
     "config|security|syslog_global_log_filters_enable": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Is Syslog Global Log Filters Enabled"
     },
     "config|security|syslog_host": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Remote log host (Syslog.global.logHost)"
     },
     "config|security|tlsDisabledProtocols": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|TLS Deactivated Protocols"
     },
     "config|security|tps_share_force_salting": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Force TPS salting (Mem.ShareForceSalting)"
     },
     "config|security|vmacore_soap_session_timeout": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|vSphere API SOAP Session Timeout"
     },
     "config|security|welcome_message": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Welcome Message Configured"
     },
     "config|storageDevice|multipathInfo|multipathPolicy": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Storage Device|MultiPath Info|Multipath Policy"
     },
     "config|storageDevice|multipathInfo|numberofActivePath": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Storage Device|MultiPath Info|Total number of Active Path"
     },
     "config|storageDevice|plugStoreTopology|numberofPath": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Storage Device|PlugStore Topology|Total number of Path"
     },
     "config|vsanEnabled": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|vSAN Enabled"
     },
     "config|vsan|encryption": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|vSAN|Encryption"
     },
     "cost|energyConsumed": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cost|Energy Consumed"
     },
     "cost|numberOfRackUnits": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cost|Number Of Racks Units"
     },
     "cost|osCategories": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cost|OS Categories"
     },
     "cost|remainingDepreciationMonths": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cost|Remaining Depreciation Months"
     },
     "cost|serverIsLeased": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cost|Is Server Leased"
     },
     "cost|serverPurchaseCost": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cost|Server Purchase Cost"
     },
     "cost|serverPurchaseDate": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Cost|Server Purchase Date"
     },
     "cpu|cpuModel": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "CPU|CPU Model"
     },
     "cpu|numCpuSockets": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "CPU|Number of CPU Sockets"
     },
     "cpu|speed": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "CPU|CPU"
     },
     "datastore|maxObservedNumberRead": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Datastore|Highest Observed Number of Read Requests"
     },
     "datastore|maxObservedNumberWrite": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Datastore|Highest Observed Number of Write Requests"
     },
     "datastore|maxObservedOIO": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Datastore|Highest Observed Outstanding Requests"
     },
     "datastore|maxObservedRead": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Datastore|Highest Observed Read Rate"
     },
     "datastore|maxObservedWrite": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Datastore|Highest Observed Write Rate"
     },
     "gpu|active_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "GPU|Active Type"
     },
     "gpu|assignmentPolicy": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "GPU|Assignment Policy"
     },
     "gpu|configured_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "GPU|Configured Type"
     },
     "gpu|device_name": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "GPU|Device Name"
     },
     "gpu|power_limit": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "GPU|GPU Power limit (Max TDP)"
     },
     "gpu|shutdown_temperature": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "GPU|GPU Shutdown Temperature (Celsius)"
     },
     "gpu|slowdown_temperature": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "GPU|GPU Slowdown Temperature (Celsius)"
     },
     "gpu|vendor_name": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "GPU|Vendor Name"
     },
     "hardware|biosReleaseDate": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Hardware|BIOS Release Date"
     },
     "hardware|biosVersion": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Hardware|BIOS Version"
     },
     "hardware|cpuInfo|hz": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Hardware|CPU Information|CPU Speed per Core"
     },
     "hardware|cpuInfo|numCpuCores": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Hardware|CPU Information|Number of CPU Cores"
     },
     "hardware|cpuInfo|numCpuPackages": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Hardware|CPU Information|Number of CPU Packages"
     },
     "hardware|enclosureSerialNumberTag": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Hardware|Enclosure Serial Number Tag"
     },
     "hardware|memorySize": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Hardware|Memory Size"
     },
     "hardware|powerManagementPolicy": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Hardware|ESXi Power Management Setting"
     },
     "hardware|powerManagementTechnoloy": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Hardware|BIOS Power Management Setting"
     },
     "hardware|serialNumberTag": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Hardware|Serial Number Tag"
     },
     "hardware|serviceTag": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Hardware|Service Tag"
     },
     "hardware|vendor": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Hardware|Vendor"
     },
     "hardware|vendorModel": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Hardware|Model"
     },
     "net|configuredSpeed": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Network|Configured Speed"
     },
     "net|discoveryProtocol|cdp|hardwarePlatform": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Cisco Discovery Protocol|Hardware Platform"
     },
     "net|discoveryProtocol|cdp|managementIpAddress": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Cisco Discovery Protocol|Management IP Address"
     },
     "net|discoveryProtocol|cdp|mtu": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Cisco Discovery Protocol|MTU"
     },
     "net|discoveryProtocol|cdp|portName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Cisco Discovery Protocol|Port Name"
     },
     "net|discoveryProtocol|cdp|softwareVersion": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Cisco Discovery Protocol|Software Version"
     },
     "net|discoveryProtocol|cdp|systemName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Cisco Discovery Protocol|System Name"
     },
     "net|discoveryProtocol|cdp|timeToLive": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Cisco Discovery Protocol|Time to Live"
     },
     "net|discoveryProtocol|cdp|vlan": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Cisco Discovery Protocol|VLAN"
     },
     "net|discoveryProtocol|lldp|aggregationStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Link Layer Discovery Protocol|Aggregation Status"
     },
     "net|discoveryProtocol|lldp|managementIpAddress": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Link Layer Discovery Protocol|Management IP Address"
     },
     "net|discoveryProtocol|lldp|mtu": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Link Layer Discovery Protocol|MTU"
     },
     "net|discoveryProtocol|lldp|portDescription": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Link Layer Discovery Protocol|Port Description"
     },
     "net|discoveryProtocol|lldp|portName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Link Layer Discovery Protocol|Port Name"
     },
     "net|discoveryProtocol|lldp|systemDescription": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Link Layer Discovery Protocol|System Description"
     },
     "net|discoveryProtocol|lldp|systemName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Link Layer Discovery Protocol|System Name"
     },
     "net|discoveryProtocol|lldp|timeToLive": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Link Layer Discovery Protocol|Time to Live"
     },
     "net|discoveryProtocol|lldp|vlan": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Discovery Protocol|Link Layer Discovery Protocol|VLAN"
     },
     "net|ip_address": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|IP Address"
     },
     "net|maxObservedKBps": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Highest Observed Throughput"
     },
     "net|mgmt_address": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Management Address"
     },
     "net|nicDriver": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Driver"
     },
     "net|speed": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Actual Speed"
     },
     "others|available": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Available"
     },
     "others|is_enabled": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Is Enabled"
     },
     "others|ready": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Ready"
     },
     "others|status": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Status"
     },
     "passwordSummary|expiry": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Password Summary|Expiry Status"
     },
     "passwordSummary|healthState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Password Summary|Health State"
     },
     "passwordSummary|lastModified": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Password Summary|Last Modified"
     },
     "passwordSummary|noOfDaysExpire": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Password Summary|No. of Days to Expire"
     },
     "runtime|connectionState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Runtime|Connection State"
     },
     "runtime|cryptoState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Runtime|Crypto State"
     },
     "runtime|isUnavailable": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Runtime|Is Unresponsive"
     },
     "runtime|maintenanceState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Runtime|Maintenance State"
     },
     "runtime|memoryCap": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Runtime|(DEP) Memory Capacity"
     },
     "runtime|powerState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Runtime|Power State"
     },
     "runtime|quarantineState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Runtime|Quarantine State"
     },
     "storageAdapter|hbaDriver": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Storage Adapter|Driver"
     },
     "storageAdapter|port_WWN": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Storage Adapter|Port WWN"
     },
     "summary|customTag|customTagValue": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Custom Tag|Value"
     },
     "summary|evcMode": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Current EVC Mode"
     },
     "summary|folder": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Folder"
     },
     "summary|hostuuid": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Host UUID"
     },
     "summary|isHorizonManaged": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Is Horizon Managed"
     },
     "summary|max_number_vms_property": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Maximum Supported VMs"
     },
     "summary|parentCluster": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent Cluster"
     },
     "summary|parentDatacenter": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent Datacenter"
     },
     "summary|parentVcenter": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent vCenter"
     },
     "summary|tag": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Tag"
     },
     "summary|tagJson": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Tag Json"
     },
     "summary|version": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Version"
     },
     "sys|build": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "System|Build Number"
     },
     "sys|licenseProductName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "System|License Product Name"
     },
     "sys|productString": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "System|Product String"
     },
     "vcm|compscoreupdated": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Compliance score updated"
     },
     "vcm|template|active": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Active"
     },
     "vcm|template|checktime": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Checktime"
     },
     "vcm|template|failedchecks": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Failed Checks"
     },
     "vcm|template|lastevaluated": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Last data collection"
     },
     "vcm|template|link": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Link"
     },
     "vcm|template|mappingname": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Mapping name"
     },
     "vcm|template|score": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Score"
     },
     "vcm|template|templatename": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Template name"
     },
     "vcm|template|totalchecks": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Total checks"
     }
   },

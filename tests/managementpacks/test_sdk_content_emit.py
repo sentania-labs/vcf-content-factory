@@ -1596,9 +1596,15 @@ class TestReportSubdirEmission:
     def test_report_subdirectory_has_localization_bundle_for_embedded_view(
         self, tmp_path: Path
     ) -> None:
-        """When a view is embedded, its localizationKey="title"/"desc" attrs
-        need a resources/content.properties in the SAME subdirectory (this
-        import unit is separate from the view's own standalone subdirectory)."""
+        """When a view is embedded, its subdirectory still carries a
+        resources/content.properties bundle for the embedded ViewDef's
+        title/desc keys (this import unit is separate from the view's own
+        standalone subdirectory), per spec A3's non-empty resources/
+        directory requirement. Since DEF-018, the embedded <Title>/
+        <Description> no longer carry localizationKey (dropped renderer-wide
+        because the standalone content-import path ships no bundle at all),
+        so the properties entries asserted here are populated but
+        unreferenced by the XML — harmless, and still required by spec A3."""
         project_dir = tmp_path / "adapter"
         view, report = _load_test_view_and_report(project_dir)
 

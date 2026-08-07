@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-04-23T20:16:29Z",
+  "fetched_at": "2026-07-27T22:10:40Z",
   "metrics": {
     "Compliance|Critical|totalCount": {
       "default_monitored": true,
@@ -102,10 +102,6 @@
       "default_monitored": true,
       "name": "Super Metrics|Total Network Configuration Issues"
     },
-    "Super Metric|sm_1d4d0a06-4955-4110-acfe-bddea257b6f0": {
-      "default_monitored": true,
-      "name": "Super Metrics|[Custom] Non-local Datastore Capacity"
-    },
     "Super Metric|sm_3d21df83-083e-46b6-a6c0-5f7f2ae776c5": {
       "default_monitored": true,
       "name": "Super Metrics|Total Network Speed Degradation"
@@ -113,6 +109,10 @@
     "Super Metric|sm_400106ec-879f-46d7-a03b-d3781072cfa2": {
       "default_monitored": true,
       "name": "Super Metrics|Unavailable ESXi Host"
+    },
+    "Super Metric|sm_77dca431-01ec-4a7c-824e-275908b89472": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] VMs with Snapshots (Count)"
     },
     "Super Metric|sm_98997eae-62ba-4614-a622-11082c48ff00": {
       "default_monitored": true,
@@ -122,10 +122,6 @@
       "default_monitored": true,
       "name": "Super Metrics|Clusters Availability"
     },
-    "Super Metric|sm_acb5239f-0d39-4c46-8d45-75b4105868bc": {
-      "default_monitored": true,
-      "name": "Super Metrics|[Custom] Sum of Powered off vCPUs"
-    },
     "Super Metric|sm_dda97f70-65e0-4c5a-b6f0-7acec936a0bd": {
       "default_monitored": true,
       "name": "Super Metrics|vSphere Clusters not Green"
@@ -133,6 +129,10 @@
     "Super Metric|sm_eb874adf-1884-4576-91fd-0cc0fb54e58b": {
       "default_monitored": true,
       "name": "Super Metrics|vSphere Clusters Performance"
+    },
+    "Super Metric|sm_faab0b29-40b7-4141-8132-7602b4a93338": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Total Snapshot Space (GB)"
     },
     "System Attributes|active_alarms": {
       "default_monitored": false,
@@ -1085,21 +1085,31 @@
   },
   "properties": {
     "System Properties|host_collector_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Current Collector ID"
     },
     "System Properties|resource_kind_subtype": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Object Type Subclassification"
     },
     "System Properties|resource_kind_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Object Type Classification"
     },
     "metering|MeteringPolicyId": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Metering|(DEP) Metering Policy ID"
     },
     "metering|MeteringPolicyName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Metering|(DEP) Metering Policy Name"
     }
   },
   "resource_kind": "vSphere World",
-  "source": "https://vcf-lab-operations.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys"
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys"
 }

@@ -304,7 +304,9 @@ path is first-class, not a sad fallback.
   open PR. The pre-PR, factory-owned regression gate; complements Codex's
   post-PR pass, does not replace it.
 - **After tooling changes:** if `tooling` modifies anything in
-  `src/vcfops_packaging/templates/`, `src/vcfops_packaging/builder.py`, or
+  `src/vcfops_packaging/templates/`, `src/vcfops_packaging/builder.py`,
+  `src/vcfops_packaging/discrete_builder.py`,
+  `src/vcfops_packaging/release_builder.py`, or
   `src/vcfops_dashboards/render.py`, **all distribution zips are
   stale.** Delegate to `content-packager` to rebuild every manifest
   in `bundles/`. Not optional — shipping stale zips is how

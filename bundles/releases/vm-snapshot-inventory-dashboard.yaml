@@ -1,0 +1,34 @@
+artifacts:
+- headline: true
+  source: content/dashboards/vm_snapshot_inventory.yaml
+builtin_metric_enables:
+- adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+  metric_key: "diskspace|snapshot|creator"
+  reason: "View Creator column reads this policy-disabled property; enabled=true alone verified sufficient 2026-07-27"
+- adapter_kind: VMWARE
+  resource_kind: VirtualMachine
+  metric_key: "diskspace|snapshot|description"
+  reason: "View Description column reads this policy-disabled property; enabled=true alone verified sufficient 2026-07-27"
+deprecates: []
+description: 'Fleet-wide VM snapshot inventory. Row 1 answers "how bad is it?" with
+  two self-provider Scoreboard tiles pinned to vSphere World, driven by world-scope
+  Super Metrics (VMs with Snapshots (Count), Total Snapshot Space (GB) — content/supermetrics/vms_with_snapshots_count.yaml,
+  content/supermetrics/total_snapshot_space_gb.yaml). Row 2 answers "which snapshots?"
+  with the full per-snapshot inventory view (one row per snapshot instance, instanced-group
+  fan-out; see content/views/vm_snapshot_inventory.yaml for the ghost-row and Creator/Description-disabled-by-default
+  caveats).
+
+  Sort note: the view''s own note recommends sorting the embedded table by the flat
+  "Total Snapshot Space (GB)" column descending as the best available proxy (the instanced
+  Age column has no single attribute key and cannot be a sort target). However, initial
+  sort order for View widgets is not a loader/wire-format-supported field in this
+  framework (see knowledge/context/authoring/view_dashboard_design_guide.md, "What
+  views and dashboards cannot do" — Initial sort order in YAML is not configurable,
+  same limitation noted in oversized_vms_reclaimable.yaml and the other views that
+  carry this comment). The dashboard cannot force this sort at import time; users
+  set it in the UI on first view.'
+name: vm-snapshot-inventory-dashboard
+release_date: '2026-07-27'
+release_notes: ''
+version: '1.0'

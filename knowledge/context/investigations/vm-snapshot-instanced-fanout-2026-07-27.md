@@ -507,6 +507,49 @@ id inside it need not. Verified across two devel VMs and three
 instance-segment spellings. **Not** verified on prod, and not verified for
 instanced groups other than `GROUP_diskspace`.
 
+**Cross-environment corroboration (2026-07-27).** A third-party edit of this
+view came back carrying the instanced clause
+`diskspace:2201|snapshot:snapshot-3|numberOfDays` — datastore internal id
+**2201**, which exists on **neither** devel (`90`) nor prod (`356893`); it is
+an id from the editor's own lab. Re-rendered on devel it behaves identically
+to our own clause (1 live row per snapshot-bearing VM, 0 ghosts). So the
+placeholder generalises **across environments**, not just across spellings
+within one — a foreign lab's datastore id is a perfectly good placeholder.
+This is the strongest evidence yet that the segment is inert, and it removes
+most of the portability risk flagged above.
+
+### OR-group ordering does not matter (closes an open question)
+
+The same third-party edit used an **OR of two groups** with the *flat*
+clause first:
+
+```json
+[[{"condition":"GREATER_THAN","transform":"CURRENT","metricKey":"diskspace|snapshot",
+   "metricValue":{"isStringMetric":false,"value":0.0001},"businessHours":false,"filterType":"metrics"}],
+ [{"condition":"NOT_EQUALS","transform":"CURRENT","metricKey":"diskspace:2201|snapshot:snapshot-3|numberOfDays",
+   "metricValue":{"isStringMetric":false,"value":-1},"filterType":"properties"}]]
+```
+
+The f08 probe had tested the **reverse** order (instanced group first) and
+found the OR did not widen the row set. Re-tested with this order on devel:
+**also 1 row, also 0 ghosts.** So group order is irrelevant — an instanced
+clause constrains rows from either position, and a flat clause ORed
+alongside it does **not** re-admit the rows the instanced clause excluded.
+
+Measured on devel (rows, ghosts in parentheses):
+
+| filter shape | docker | avi-node0 | sddcmgr | ca | dcint1 |
+|---|---|---|---|---|---|
+| flat-OR-instanced (third-party) | 1 (0g) | 1 (0g) | 0 | 0 | 0 |
+| instanced only (ours) | 1 (0g) | 1 (0g) | 0 | 0 | 0 |
+| flat AND instanced | 1 (0g) | 1 (0g) | 0 | 0 | 0 |
+| instanced only, foreign ds id 2201 | 1 (0g) | 1 (0g) | 0 | 0 | 0 |
+
+**Consequence:** an added flat clause — whether ANDed or ORed — is **inert**
+next to an instanced clause on the same family, because the instanced clause
+already excludes every object the flat clause would. Keep the single
+instanced clause; extra clauses are noise, not defence-in-depth.
+
 ---
 
 ## ~~Per-row / per-instance filtering: DOES NOT EXIST. Definitive.~~ (SUPERSEDED — see above)

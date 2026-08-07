@@ -27,20 +27,33 @@ Cache file layout::
       },
       "properties": {
         "summary|guest|toolsVersion": {
-          "name": "Guest OS|Tools Version"
+          "name": "Guest OS|Tools Version",
+          "default_monitored": true,
+          "instance_type": "INSTANCED"
         }
       }
     }
 
 The ``properties`` section is optional — existing cache files without it are
-valid; properties will not be checked until the cache is refreshed.  Run
+valid.  ``default_monitored`` / ``instance_type`` are the real values
+returned by the ``/properties`` endpoint for that key (see
+``knowledge/context/investigations/adapter_describe_exploration.md`` — the
+endpoint returns the *same* schema as ``/statkeys``, only the ``property``
+discriminator differs, so properties are **not** always
+``defaultMonitored: true``).  Cache files written by ``refresh()`` before
+this fields were added carry only ``{"name": ...}`` per property; those
+legacy entries fall back to ``default_monitored=True`` when resolved (see
+``resolve_metric()``) until the cache is refreshed against a live instance,
+which emits a one-time WARN per (adapter_kind, resource_kind) pair the first
+time that legacy fallback is taken. Run
 ``python3 -m vcfops_packaging refresh-describe`` with a live instance to
-populate the properties section.
+populate/upgrade the properties section.
 """
 from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -93,10 +106,20 @@ class DescribeCache:
         self._client = client
         # In-memory layer: (adapter_kind, resource_kind) -> dict[key, MetricInfo]
         self._cache: dict[tuple[str, str], dict[str, MetricInfo]] = {}
-        # Properties layer: (adapter_kind, resource_kind) -> set of property key strings.
+        # Properties layer: (adapter_kind, resource_kind) -> dict[key, meta dict].
         # Populated from the "properties" section of each cache JSON file.
+        # meta dict carries "default_monitored" (bool) and "instance_type" (str)
+        # when present.  Older cache files written before this field existed
+        # only carry {"name": ...} per property; for those, default_monitored
+        # is treated as True (legacy shortcut, preserved for byte-for-byte
+        # backward compatibility until the cache is refreshed).
         # When empty/absent, property lookups are skipped (no false positives).
-        self._props: dict[tuple[str, str], set[str]] = {}
+        self._props: dict[tuple[str, str], dict[str, dict]] = {}
+        # Kind pairs for which the legacy name-only property shortcut
+        # (default_monitored missing -> assumed True) has already emitted its
+        # one-shot WARN. Prevents a WARN-per-property flood on a cache file
+        # with hundreds of legacy entries.
+        self._legacy_prop_warned: set[tuple[str, str]] = set()
 
     # ------------------------------------------------------------------ load
 
@@ -127,7 +150,7 @@ class DescribeCache:
 
         # Load properties section (optional — older cache files omit it)
         props_raw = raw.get("properties") or {}
-        self._props[(adapter_kind, resource_kind)] = set(props_raw.keys())
+        self._props[(adapter_kind, resource_kind)] = dict(props_raw)
 
         return True
 
@@ -159,14 +182,34 @@ class DescribeCache:
         if result is not None:
             return result
         # Not found in metrics cache.  Check the properties cache — if this key
-        # is a known property (e.g. summary|guest|toolsVersion) return a synthetic
-        # MetricInfo so the audit treats it as resolved (defaultMonitored=true,
-        # since properties are always collected and need no enablement).
-        if metric_key in self._props.get(pair, set()):
+        # is a known property (e.g. summary|guest|toolsVersion) return a
+        # MetricInfo using the property's own defaultMonitored value from the
+        # describe API.  Properties are NOT always defaultMonitored=true —
+        # e.g. VMWARE property counts across VM/HostSystem/Cluster/Datastore
+        # show a real mix (see knowledge/context/investigations/
+        # adapter_describe_exploration.md). Cache files written before this
+        # field was persisted fall back to True (legacy shortcut) until the
+        # cache is refreshed against a live instance.
+        props = self._props.get(pair, {})
+        if metric_key in props:
+            meta = props[metric_key] or {}
+            if "default_monitored" not in meta and pair not in self._legacy_prop_warned:
+                self._legacy_prop_warned.add(pair)
+                print(
+                    f"  WARN: {adapter_kind}/{resource_kind} describe cache has "
+                    f"legacy name-only property entries (no persisted "
+                    f"default_monitored) — properties are guessed as "
+                    f"defaultMonitored=true, which is wrong for a real fraction "
+                    f"of them on some resource kinds. Run "
+                    f"'python3 -m vcfops_packaging refresh-describe "
+                    f"--kind {adapter_kind}:{resource_kind}' against a live "
+                    f"instance to get the real per-property flag.",
+                    file=sys.stderr,
+                )
             return MetricInfo(
                 key=metric_key,
-                name=metric_key,
-                default_monitored=True,
+                name=meta.get("name", metric_key),
+                default_monitored=bool(meta.get("default_monitored", True)),
                 adapter_kind=adapter_kind,
                 resource_kind=resource_kind,
             )
@@ -273,7 +316,15 @@ class DescribeCache:
                     if not key:
                         continue
                     name = entry.get("name") or entry.get("displayName") or key
-                    properties[key] = {"name": name}
+                    # Properties carry their own defaultMonitored flag — it is
+                    # NOT always True (see adapter_describe_exploration.md).
+                    # instanceType is persisted too, observed as always
+                    # "INSTANCED" in practice but not assumed here.
+                    properties[key] = {
+                        "name": name,
+                        "default_monitored": bool(entry.get("defaultMonitored", False)),
+                        "instance_type": entry.get("instanceType", "") or "",
+                    }
         except Exception:
             # Properties fetch is best-effort; don't abort the statkeys refresh.
             pass

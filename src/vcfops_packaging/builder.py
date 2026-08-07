@@ -41,7 +41,7 @@ from typing import List, Optional
 from vcfops_dashboards.render import render_views_xml, render_dashboards_bundle_json
 from vcfops_reports.render import render_report_xml
 from vcfops_alerts.render import render_alert_content_xml
-from .loader import Bundle, load_bundle
+from .loader import Bundle, load_bundle, render_bme_items
 from .template_version import CURRENT_TEMPLATE_VERSION
 
 # ---------------------------------------------------------------------------
@@ -151,18 +151,7 @@ def _build_bundle_json(bundle: Bundle, display_name: str) -> str:
     if bundle.builtin_metric_enables:
         content["builtin_metric_enables"] = {
             "file": "content/builtin_metric_enables.json",
-            # Each item carries a "name" field (= metric_key) so the uninstall
-            # registry predicate (which reads item["name"]) can detect the section.
-            "items": [
-                {
-                    "name": bme.metric_key,       # uninstall-name contract
-                    "adapter_kind": bme.adapter_kind,
-                    "resource_kind": bme.resource_kind,
-                    "metric_key": bme.metric_key,
-                    **( {"reason": bme.reason} if bme.reason else {} ),
-                }
-                for bme in bundle.builtin_metric_enables
-            ],
+            "items": render_bme_items(bundle.builtin_metric_enables),
         }
 
     manifest: dict = {
@@ -810,19 +799,9 @@ def build_bundle(
         if alerts_json:
             z.writestr(content_prefix + "alerts.json", alerts_json)
         if bundle.builtin_metric_enables:
-            bme_items = [
-                {
-                    "name": bme.metric_key,
-                    "adapter_kind": bme.adapter_kind,
-                    "resource_kind": bme.resource_kind,
-                    "metric_key": bme.metric_key,
-                    **( {"reason": bme.reason} if bme.reason else {} ),
-                }
-                for bme in bundle.builtin_metric_enables
-            ]
             z.writestr(
                 content_prefix + "builtin_metric_enables.json",
-                json.dumps(bme_items, indent=2),
+                json.dumps(render_bme_items(bundle.builtin_metric_enables), indent=2),
             )
 
     out_path.write_bytes(buf.getvalue())

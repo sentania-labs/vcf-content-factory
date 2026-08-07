@@ -16,6 +16,12 @@ expected_artifact_path(release, dest_root) -> Path
 artifact_already_exists(release, dest_root) -> bool
     True iff a zip with the expected filename already exists at dest_root/<subdir>/.
 
+find_builtin_metric_enables_for_discrete_item(content_type, item_name) -> list
+    Look up a release manifest's builtin_metric_enables declaration for a
+    discrete item, keyed by content type + item name. Used by the
+    build-discrete CLI command so --strict-deps can see the same
+    declarations the release/publish path already threads through.
+
 Naming convention
 -----------------
 Output zip: ``<release-name>.zip``  (versionless consumer artifact)
@@ -135,6 +141,73 @@ def _read_name_from_yaml(path: Path) -> str:
     return str(name).strip()
 
 
+def find_builtin_metric_enables_for_discrete_item(
+    content_type: str,
+    item_name: str,
+    *,
+    releases_dir: "str | Path" = "bundles/releases",
+    repo_root: "Path | None" = None,
+) -> list:
+    """Find the ``builtin_metric_enables`` list declared for a discrete item.
+
+    A discrete component (dashboard/view/supermetric/customgroup/report) has
+    no bundle YAML of its own to carry a ``builtin_metric_enables:`` block.
+    When it ships as a release headline, that declaration lives on the
+    release manifest instead (``ReleaseDef.builtin_metric_enables`` — see the
+    schema note at the top of ``releases.py``). ``build_release`` already
+    threads it through for the ``release``/``publish`` path
+    (``_build_component_headline`` above); this helper gives the standalone
+    ``build-discrete`` CLI command the same lookup, keyed by content type +
+    item name instead of by manifest path, since that command has no release
+    manifest path on its command line.
+
+    Args:
+        content_type: Discrete builder type string ("dashboard", "view",
+                       "supermetric", "customgroup", "report") — matches the
+                       ``content_type`` argument to ``discrete_builder.build_discrete``.
+        item_name:    The content item's ``name:`` field, as passed to
+                       ``build-discrete``.
+        releases_dir: Directory to scan for release manifests (defaults to
+                       ``bundles/releases``).
+        repo_root:    Repo root for resolving manifest source paths. When
+                       None, defaults to ``Path.cwd()``.
+
+    Returns:
+        The matching release's ``builtin_metric_enables`` list, or an empty
+        list if no release headline matches (no release found, item not
+        released yet, or the release declares nothing).
+    """
+    from .releases import load_all_releases, ReleaseValidationError
+
+    if repo_root is None:
+        repo_root = Path.cwd()
+
+    try:
+        releases = load_all_releases(releases_dir, repo_root=repo_root)
+    except ReleaseValidationError:
+        # Manifest corpus is invalid — not this lookup's job to report that;
+        # the `validate` command already covers it. Fail soft to "no enables
+        # found" rather than blocking an otherwise-valid discrete build.
+        return []
+
+    for release in releases:
+        for artifact in release.artifacts:
+            if not artifact.headline:
+                continue
+            source_prefix = artifact.source_path.parent.name
+            mapped_type = _PARENT_DIR_TO_DISCRETE_TYPE.get(source_prefix)
+            if mapped_type != content_type:
+                continue
+            try:
+                name = _read_name_from_yaml(artifact.source_path)
+            except ValueError:
+                continue
+            if name == item_name:
+                return list(release.builtin_metric_enables)
+
+    return []
+
+
 def _zip_filename(release_name: str, release_version: str = "") -> str:
     """Return the canonical consumer-facing output zip filename for a release.
 
@@ -174,6 +247,9 @@ def _build_component_headline(
     source_prefix: str,
     tmp_dir: Path,
     extra_search_dirs: "list[Path] | None" = None,
+    *,
+    builtin_metric_enables: "list | None" = None,
+    skip_audit: bool = True,
 ) -> Path:
     """Build a component headline zip using the discrete builder.
 
@@ -185,6 +261,16 @@ def _build_component_headline(
                             the item and its dependencies.  Used when the
                             source lives under ``third_party/<project>/`` rather
                             than the factory-native ``content/`` tree.
+        builtin_metric_enables: Optional pre-declared built-in metric
+                            enablements from the release manifest's
+                            ``builtin_metric_enables:`` field.  Discrete
+                            releases have no bundle YAML of their own to carry
+                            this list, so it is threaded through from the
+                            release manifest instead.
+        skip_audit:         Passed to the discrete builder to skip the
+                            describe-cache dependency audit (default True for
+                            offline release builds, matching the bundle
+                            headline path's default).
 
     Returns the path to the zip written by the builder (before rename).
     """
@@ -203,6 +289,8 @@ def _build_component_headline(
         item_name=item_name,
         output_dir=tmp_dir,
         extra_search_dirs=extra_search_dirs,
+        builtin_metric_enables=builtin_metric_enables,
+        skip_audit=skip_audit,
     )
     return built
 
@@ -353,10 +441,12 @@ def build_release(
     Args:
         release_path:  Path to a ``bundles/releases/*.yaml`` manifest.
         output_dir:    Directory where output zips are written.
-        skip_audit:    Passed to the bundle builder to skip the describe-cache
-                       dependency audit (default True for offline builds).
-                       Has no effect for discrete (component) headlines —
-                       the discrete builder's dep walk is always offline.
+        skip_audit:    Passed to the bundle builder and the discrete (component)
+                       builder to skip the describe-cache dependency audit
+                       (default True for offline builds). A discrete headline
+                       also has any ``builtin_metric_enables:`` declared on the
+                       release manifest threaded through, since it has no
+                       bundle YAML of its own to carry that list.
 
     Returns:
         One ``ReleaseArtifact`` per headline artifact in the manifest.
@@ -448,11 +538,17 @@ def build_release(
                 built_path = _build_component_headline(
                     source_path, source_prefix, tmp_dir,
                     extra_search_dirs=[source_path.parent.parent],
+                    builtin_metric_enables=release.builtin_metric_enables,
+                    skip_audit=skip_audit,
                 )
             elif source_prefix == "bundles":
                 built_path = _build_bundle_headline(source_path, tmp_dir, skip_audit)
             elif source_prefix in _SOURCE_PREFIX_TO_DISCRETE_TYPE:
-                built_path = _build_component_headline(source_path, source_prefix, tmp_dir)
+                built_path = _build_component_headline(
+                    source_path, source_prefix, tmp_dir,
+                    builtin_metric_enables=release.builtin_metric_enables,
+                    skip_audit=skip_audit,
+                )
             elif source_prefix == "managementpacks":
                 built_path = _build_mp_headline(source_path, tmp_dir)
             else:

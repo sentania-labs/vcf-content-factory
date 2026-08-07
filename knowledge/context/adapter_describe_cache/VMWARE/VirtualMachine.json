@@ -1,6 +1,6 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-07-27T15:58:15Z",
+  "fetched_at": "2026-07-27T22:10:56Z",
   "metrics": {
     "Guest OS Services|mkInComingConnectionCount": {
       "default_monitored": true,
@@ -3733,756 +3733,1258 @@
   },
   "properties": {
     "AgentManagedType": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Agent Managed Type"
     },
     "BootstrappedUCP": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Bootstrapped UCP/CP"
     },
     "DependsOnApplicationComponents": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Application components the Virtual Machine depends on"
     },
     "Guest OS Services|AuthenticationStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Guest OS Services|Authentication Status"
     },
     "Guest OS Services|DiscoveredServicesInfo": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Guest OS Services|Discovered Services Info"
     },
     "Guest OS Services|DiscoveryMethod": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Guest OS Services|Authentication Method"
     },
     "Guest OS Services|InboundPorts": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Guest OS Services|Inbound Ports"
     },
     "Guest OS Services|ServiceDiscoveryStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Guest OS Services|Discovery Status"
     },
     "RunsOnApplicationComponents": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Application components running on the Virtual Machine"
     },
     "SRM Info|ProtectionGroup": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "SRM Info|Protection Group"
     },
     "SRM Info|RecoveryPlans": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "SRM Info|Recovery Plans"
     },
     "System Properties|businessHours": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Business Hours"
     },
     "System Properties|host_collector_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Current Collector ID"
     },
     "System Properties|resource_kind_subtype": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Object Type Subclassification"
     },
     "System Properties|resource_kind_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCF Operations Generated Properties|Object Type Classification"
     },
     "UCPFQDN": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "ARC FQDN"
     },
     "UCPVCCOMBI": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "ARC Mapped vCenters"
     },
     "VAP Content|Endpoint Content Version": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Application Remote Collector|Agent Version"
     },
     "VAP Content|Server Content Version": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Application Remote Collector|Version"
     },
     "VAP Content|Server Upgrade Required": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Application Remote Collector|Upgrade Required"
     },
     "config|boot_options_efi_secure_boot_enabled": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|EFI Secure Boot Enabled"
     },
     "config|cpuAllocation|limit": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|CPU Resource Allocation|Limit"
     },
     "config|cpuAllocation|reservation": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|CPU Resource Allocation|Reservation"
     },
     "config|cpuAllocation|shares|shares": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|CPU Resource Allocation|Shares|Shares"
     },
     "config|createDate": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Creation Date"
     },
     "config|cryptoKeyIDSet": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Crypto Key ID Set"
     },
     "config|ctkEnabled": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Changed Block Tracking"
     },
     "config|disk_consolidation_needed": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Requires Snapshot Consolidation"
     },
     "config|encryptionState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Encryption State"
     },
     "config|extraConfig|mem_hotadd": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Extra Configuration|Memory Hot Add"
     },
     "config|extraConfig|mem_tps_share": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Extra Configuration|VM MEM TPS"
     },
     "config|extraConfig|vcpu_hotadd": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Extra Configuration|vCPU Hot Add"
     },
     "config|extraConfig|vcpu_hotremove": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Extra Configuration|vCPU Hot Remove"
     },
     "config|faultTolerant": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Fault Tolerant"
     },
     "config|ftEncryptionMode": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Encrypted FT"
     },
     "config|ft_peer_vm": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|FT Peer VM"
     },
     "config|ft_role": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|FT Role"
     },
     "config|guestFullName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Guest OS from vCenter"
     },
     "config|hardware|diskSpace": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Hardware|Disk Space"
     },
     "config|hardware|memoryKB": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Hardware|Memory"
     },
     "config|hardware|numCoresPerSocket": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Hardware|Number of CPU cores per socket"
     },
     "config|hardware|numCpu": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Hardware|Number of virtual CPUs"
     },
     "config|hardware|numSockets": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Hardware|Number of virtual sockets"
     },
     "config|hardware|thinEnabled": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Hardware|(DEP) Thin Provisioned Disk"
     },
     "config|memoryAllocation|limit": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Memory Resource Allocation|Limit"
     },
     "config|memoryAllocation|reservation": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Memory Resource Allocation|Reservation"
     },
     "config|memoryAllocation|shares|shares": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Memory Resource Allocation|Shares|Shares"
     },
     "config|migrateEncryption": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Migrate Encryption"
     },
     "config|name": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Name"
     },
     "config|numRDMs": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Number of RDMs"
     },
     "config|numVMDKs": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Number of Virtual Disks"
     },
     "config|numVMDKsOnly": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Number of VMDKs"
     },
     "config|policy_name": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|VM Home Policy"
     },
     "config|security|disable_autoinstall": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate tools auto install (isolation.tools.autoInstall.disable)"
     },
     "config|security|disable_console_copy": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate console copy operations (isolation.tools.copy.disable)"
     },
     "config|security|disable_console_dnd": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate console drag and drop operations (isolation.tools.dnd.disable)"
     },
     "config|security|disable_console_paste": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate console paste operations (isolation.tools.paste.disable)"
     },
     "config|security|disable_device_interaction_connect": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unauthorized removal, connection of devices (isolation.device.connectable.disable)"
     },
     "config|security|disable_device_interaction_edit": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unauthorized modification of devices (isolation.device.edit.disable)"
     },
     "config|security|disable_disk_shrinking_shrink": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate virtual disk shrink (isolation.tools.diskShrink.disable)"
     },
     "config|security|disable_disk_shrinking_wiper": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate virtual disk wiper (isolation.tools.diskWiper.disable)"
     },
     "config|security|disable_hgfs": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate HGFS file transfers (isolation.tools.hgfsServerSet.disable)"
     },
     "config|security|disable_independent_nonpersistent": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Avoid using independent nonpersistent disks (scsiX:Y.mode)"
     },
     "config|security|disable_monitor_control": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate VM Monitor Control (isolation.monitor.control.disable)"
     },
     "config|security|disable_unexposed_features_autologon": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - autologon (isolation.tools.ghi.autologon.disable)"
     },
     "config|security|disable_unexposed_features_biosbbs": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - biosbbs (isolation.bios.bbs.disable)"
     },
     "config|security|disable_unexposed_features_getcreds": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - getcreds (isolation.tools.getCreds.disable)"
     },
     "config|security|disable_unexposed_features_launchmenu": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - launchmenu (isolation.tools.ghi.launchmenu.change)"
     },
     "config|security|disable_unexposed_features_memsfss": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - memsfss (isolation.tools.memSchedFakeSampleStats.disable)"
     },
     "config|security|disable_unexposed_features_protocolhandler": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - protocolhandler (isolation.tools.ghi.protocolhandler.info.disable)"
     },
     "config|security|disable_unexposed_features_shellaction": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - shellaction (isolation.ghi.host.shellAction.disable)"
     },
     "config|security|disable_unexposed_features_toporequest": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - toporequest (isolation.tools.dispTopoRequest.disable)"
     },
     "config|security|disable_unexposed_features_trashfolderstate": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - trashfolderstate (isolation.tools.trashFolderState.disable)"
     },
     "config|security|disable_unexposed_features_trayicon": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - trayicon (isolation.tools.ghi.trayicon.disable)"
     },
     "config|security|disable_unexposed_features_unity": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - unity (isolation.tools.unity.disable)"
     },
     "config|security|disable_unexposed_features_unity_interlock": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - unity-interlock (isolation.tools.unityInterlockOperation.disable)"
     },
     "config|security|disable_unexposed_features_unity_taskbar": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - unity-taskbar (isolation.tools.unity.taskbar.disable)"
     },
     "config|security|disable_unexposed_features_unity_unityactive": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - unity-unityactive (isolation.tools.unityActive.disable)"
     },
     "config|security|disable_unexposed_features_unity_windowcontents": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - unity-windowcontents (isolation.tools.unity.windowContents.disable)"
     },
     "config|security|disable_unexposed_features_unitypush": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - unitypush (isolation.tools.unity.push.update.disable)"
     },
     "config|security|disable_unexposed_features_versionget": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - versionget (isolation.tools.vmxDnDVersionGet.disable)"
     },
     "config|security|disable_unexposed_features_versionset": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate unexposed features - versionset (isolation.tools.guestDnDVersionSet.disable)"
     },
     "config|security|disable_vix_messages": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate VIX messages from the VM (isolation.tools.vixMessage.disable)"
     },
     "config|security|disconnect_devices_cd": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Disconnect CD-ROM"
     },
     "config|security|disconnect_devices_floppy": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Disconnect floppy drive"
     },
     "config|security|disconnect_devices_parallel": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Disconnect parallel port"
     },
     "config|security|disconnect_devices_serial": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Disconnect serial port"
     },
     "config|security|disconnect_devices_usb": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Disconnect USB controller"
     },
     "config|security|disconnect_devices_virtualahcicontroller": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Virtual AHCI Controller Disconnected"
     },
     "config|security|disconnect_devices_virtualensoniq1371": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Virtual Ensoniq 1371 Disconnected"
     },
     "config|security|disconnect_devices_virtualhdaudiocard": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Virtual HD Audio Card Disconnected"
     },
     "config|security|enable_console_VNC": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Enable access to VM console via VNC protocol (RemoteDisplay.vnc.enabled)"
     },
     "config|security|enable_console_gui_options": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Activate console GUI operations (isolation.tools.setGUIOptions.enable)"
     },
     "config|security|enable_host_info": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Enable send host information to guests (tools.guestlib.enableHostInfo)"
     },
     "config|security|enable_intervm_vmci": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Enable VM-to-VM communication through VMCI (vmci0.unrestricted)"
     },
     "config|security|enable_logging": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Enable VM logging (logging)"
     },
     "config|security|enable_non_essential_3D_features": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Enable 3D features on Server and desktop virtual machines (mks.enable3d)"
     },
     "config|security|enable_vga_only_mode": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Deactivate all but VGA mode on virtual machines (svga.vgaOnly)"
     },
     "config|security|limit_console_connection": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Limit number of console connections (RemoteDisplay.maxConnection)"
     },
     "config|security|limit_log_number": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Limit number of log files (log.keepOld)"
     },
     "config|security|limit_log_size": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Limit log file size (log.rotateSize)"
     },
     "config|security|limit_setinfo_size": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Limit VMX file size (tools.setInfo.sizeLimit)"
     },
     "config|security|network_filter_enable": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Enable dvfilter network APIs (ethernetX.filterY.name)"
     },
     "config|security|pci_device_configured": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|PCI PassThrough"
     },
     "config|security|tools_guest_desktop_autolock": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Tool Guest Desktop Autolock (tools.guest.desktop.autolock)"
     },
     "config|security|vmsafe_cpumem_agentaddress": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|VMsafe CPU/memory APIs - IP address (vmsafe.agentAddress)"
     },
     "config|security|vmsafe_cpumem_agentport": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|VMsafe CPU/memory APIs - port number (vmsafe.agentPort)"
     },
     "config|security|vmsafe_cpumem_enable": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Security|Enable VMsafe CPU/memory APIs (vmsafe.enable)"
     },
     "config|version": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Configuration|Version"
     },
     "cpu|limit": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "CPU|CPU limit"
     },
     "cpu|reservation": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "CPU|CPU reservation"
     },
     "cpu|speed": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "CPU|CPU"
     },
     "datastore|maxObservedNumberRead": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Datastore|Highest Observed Number of Read Requests"
     },
     "datastore|maxObservedNumberWrite": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Datastore|Highest Observed Number of Write Requests"
     },
     "datastore|maxObservedOIO": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Datastore|Highest Observed Outstanding Requests"
     },
     "datastore|maxObservedRead": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Datastore|Highest Observed Read Rate"
     },
     "datastore|maxObservedWrite": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Datastore|Highest Observed Write Rate"
     },
     "diskspace|snapshot|creator": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Disk Space|Snapshot|Creator"
     },
     "diskspace|snapshot|description": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Disk Space|Snapshot|Description"
     },
     "diskspace|snapshot|mor": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Disk Space|Snapshot|Managed Object Reference"
     },
     "diskspace|snapshot|name": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Disk Space|Snapshot|Name"
     },
     "diskspace|snapshot|numberOfDays": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Disk Space|Snapshot|Number of Days Old"
     },
     "diskspace|snapshot|snapshotAge": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Disk Space|Snapshot|Age (Days)"
     },
     "guestfilesystem|capacity_property": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Guest File System|Guest File System Capacity Property"
     },
     "guestfilesystem|capacity_property_total": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Guest File System|Total Capacity Property"
     },
     "mem|guestOSMemNotCollecting": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Memory|Guest OS Memory not collecting"
     },
     "mem|host_limit": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Memory|VM Limit"
     },
     "mem|host_reservation": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Memory|VM Reservation"
     },
     "net|default_gateway": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Network|Default Gateway"
     },
     "net|ip_address": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|IP Address"
     },
     "net|ipv6_address": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Network|IPv6 Address"
     },
     "net|ipv6_prefix_length": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Network|IPv6 Prefix Length"
     },
     "net|mac_address": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Network|Mac Address"
     },
     "net|nvp_vm_uuid": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Network|NVP VM UUID"
     },
     "net|portGroup": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Network|Port Group"
     },
     "net|subnet_mask": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Network|Subnet Mask"
     },
     "net|uptCompatibilityEnabled": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Network|Direct Path I/O Status"
     },
     "net|vnic_label": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Network|Label"
     },
     "net|vnic_type": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Network|Virtual NIC Type"
     },
     "others|org": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Organization"
     },
     "others|sizingPolicy": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Sizing Policy Name"
     },
     "others|storageProfileName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Storage Profile Name"
     },
     "others|vapp": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|vApp"
     },
     "others|vcd": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Cloud Director"
     },
     "others|vcd vm name": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|VCD VM Name"
     },
     "others|vcdVmNameInVC": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|VCD VM Name In VC"
     },
     "others|vcdVmNameWithIdentifier": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|VCD VM Name With UUID"
     },
     "others|vdc": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "General|Organization VDC"
     },
     "runtime|memoryCap": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Runtime|Memory Capacity"
     },
     "srm|PlaceholderVMError": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VMware Live Site Recovery|Placeholder VM Error"
     },
     "srm|PlaceholderVMNeedsRepair": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VMware Live Site Recovery|Placeholder VM Needs Repair"
     },
     "srm|ProtectionStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VMware Live Site Recovery|Protection Status"
     },
     "srm|RecoveryStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VMware Live Site Recovery|Recovery Status"
     },
     "srm|VMErrors": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VMware Live Site Recovery|Errors"
     },
     "srm|vmType": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VMware Live Site Recovery|VM Type"
     },
     "summary|MOID": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|MOID"
     },
     "summary|UUID": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|UUID"
     },
     "summary|config|appliance": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Summary|Configuration|(DEP) Appliance"
     },
     "summary|config|isSrmPlaceholder": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Configuration|SRM Placeholder"
     },
     "summary|config|isTemplate": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Configuration|VM Template"
     },
     "summary|config|numEthernetCards": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Configuration|Number of NICs"
     },
     "summary|config|productName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Configuration|Product Name"
     },
     "summary|config|reserved_profile_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Configuration|Reserved Class Based"
     },
     "summary|config|type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Configuration|Type"
     },
     "summary|customTag|customTagValue": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Custom Tag|Value"
     },
     "summary|datastore": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Datastore(s)"
     },
     "summary|datastoreClusters": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Datastore Cluster(s)"
     },
     "summary|folder": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Folder"
     },
     "summary|guest|fullName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Guest Operating System|Guest OS from Tools"
     },
     "summary|guest|guestFamily": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Guest Operating System|Guest Family"
     },
     "summary|guest|hostName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Guest Operating System|Hostname"
     },
     "summary|guest|ipAddress": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Guest Operating System|Guest OS IP Address"
     },
     "summary|guest|toolsRunningStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Guest Operating System|Tools Running Status"
     },
     "summary|guest|toolsVersion": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Guest Operating System|Tools Version"
     },
     "summary|guest|toolsVersionStatus2": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Guest Operating System|Tools Version Status"
     },
     "summary|guest|vrealize_operations_agent_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Guest Operating System|VMware Cloud Foundation Operations Agent ID"
     },
     "summary|guest|vrealize_operations_euc_agent_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Guest Operating System|VMware Cloud Foundation Operations Euc Agent ID"
     },
     "summary|horizon_vm_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Horizon VM Type"
     },
     "summary|isHorizonManaged": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Is Horizon Managed"
     },
     "summary|isInstantClone": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Is Instant Clone"
     },
     "summary|parentCluster": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent Cluster"
     },
     "summary|parentDatacenter": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent Datacenter"
     },
     "summary|parentFolder": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent Folder"
     },
     "summary|parentGuestCluster": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent Kubernetes cluster"
     },
     "summary|parentHost": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent Host"
     },
     "summary|parentHostVersion": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent Host Version"
     },
     "summary|parentNamespace": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent Namespace"
     },
     "summary|parentVcenter": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Parent vCenter"
     },
     "summary|runtime|connectionState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Runtime|Connection State"
     },
     "summary|runtime|isIdle": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Runtime|Idleness indicator"
     },
     "summary|runtime|powerState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Runtime|Power State"
     },
     "summary|smbiosUUID": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|SMBIOS UUID"
     },
     "summary|swapOnlyDatastore": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|Datastore with only swap file"
     },
     "summary|tag": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Tag"
     },
     "summary|tagJson": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Summary|vSphere Tag Json"
     },
     "sys|notes": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "System|Notes"
     },
     "vcm|compscoreupdated": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Compliance score updated"
     },
     "vcm|template|active": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Active"
     },
     "vcm|template|checktime": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Checktime"
     },
     "vcm|template|failedchecks": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Failed Checks"
     },
     "vcm|template|lastevaluated": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Last data collection"
     },
     "vcm|template|link": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Link"
     },
     "vcm|template|mappingname": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Mapping name"
     },
     "vcm|template|score": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Score"
     },
     "vcm|template|templatename": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Template name"
     },
     "vcm|template|totalchecks": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "VCM|Template|Total checks"
     },
     "vgpu|vgpu_configured": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vGPU|vGPU Profile Name"
     },
     "vgpu|vgpu_profile_name": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vGPU|vGPU Profile Name"
     },
     "virtualDisk|compatibilityMode": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Compatibility Mode"
     },
     "virtualDisk|configuredGB": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Configured Size"
     },
     "virtualDisk|datastore": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Datastore"
     },
     "virtualDisk|diskMode": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Disk Mode"
     },
     "virtualDisk|encryptionStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Encryption Status"
     },
     "virtualDisk|fileName": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|File Name"
     },
     "virtualDisk|iopsLimit": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|IOPS Limit"
     },
     "virtualDisk|isRDM": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Is RDM"
     },
     "virtualDisk|label": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Label"
     },
     "virtualDisk|policy_name": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Policy Name"
     },
     "virtualDisk|provisioning_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Provisioning Type"
     },
     "virtualDisk|scsiBusSharing": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|SCSI Bus Sharing"
     },
     "virtualDisk|scsiController": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Virtual Device Node"
     },
     "virtualDisk|scsiControllerType": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|SCSI Controller Type"
     },
     "virtualDisk|sharing": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Virtual Disk Sharing"
     },
     "virtualDisk|storagePolicy|cacheReservation": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Storage Policy|Cache Reservation"
     },
     "virtualDisk|storagePolicy|checksumDisabled": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Storage Policy|Checksum Deactivated"
     },
     "virtualDisk|storagePolicy|datastoreSpaceEfficiency": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Storage Policy|Space Efficiency"
     },
     "virtualDisk|storagePolicy|encryptionService": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Storage Policy|Encryption Service"
     },
     "virtualDisk|storagePolicy|forceProvisioning": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Storage Policy|Force Provisioning"
     },
     "virtualDisk|storagePolicy|hostFailuresToTolerate": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Storage Policy|Failures to Tolerate"
     },
     "virtualDisk|storagePolicy|proportionalCapacity": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Storage Policy|Object Space Reservation"
     },
     "virtualDisk|storagePolicy|replicaPreference": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Storage Policy|Replica Preference"
     },
     "virtualDisk|storagePolicy|storagePolicyName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Storage Policy|Storage Policy in Use"
     },
     "virtualDisk|storagePolicy|stripeWidth": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Storage Policy|Stripe Width"
     },
     "virtualDisk|storagePolicy|subFailuresToTolerate": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "Virtual Disk|Storage Policy|Site Disaster Tolerance"
     },
     "vrm|direction": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Direction"
     },
     "vrm|hbrServerName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|HBR Server name"
     },
     "vrm|replication_server|autoReplicateNewDisks": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Replication|Auto-replicate New Disks"
     },
     "vrm|replication_server|dataSetsEnabled": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Replication|Data Sets Enabled"
     },
     "vrm|replication_server|encryption": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Replication|Encryption"
     },
     "vrm|replication_server|managedBy": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Replication|Managed by"
     },
     "vrm|replication_server|mpit": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Replication|MPIT"
     },
     "vrm|replication_server|networkCompression": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Replication|Network compression"
     },
     "vrm|replication_server|quiescing": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Replication|Quiescing"
     },
     "vrm|replication_server|targetSiteName": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Replication|Target Site name"
     },
     "vrm|replication_server|targetSiteType": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Replication|Target Site type"
     },
     "vrm|replication_server|vrReplicationStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Replication|VR Replication Status"
     },
     "vrm|vm|isPeerHealthy": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Virtual Machine|Is peer healthy"
     },
     "vrm|vm|replicationType": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Virtual Machine|Replication type"
     },
     "vrm|vm|testRecoveryState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Virtual Machine|Test Recovery State"
     },
     "vrm|vm|vmStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSphere Replication Manager|Virtual Machine|Status"
     },
     "vsan|policy|compliance": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
       "name": "vSAN|VM Storage Policies|Compliance"
     }
   },
