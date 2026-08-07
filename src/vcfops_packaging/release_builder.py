@@ -16,6 +16,12 @@ expected_artifact_path(release, dest_root) -> Path
 artifact_already_exists(release, dest_root) -> bool
     True iff a zip with the expected filename already exists at dest_root/<subdir>/.
 
+find_builtin_metric_enables_for_discrete_item(content_type, item_name) -> list
+    Look up a release manifest's builtin_metric_enables declaration for a
+    discrete item, keyed by content type + item name. Used by the
+    build-discrete CLI command so --strict-deps can see the same
+    declarations the release/publish path already threads through.
+
 Naming convention
 -----------------
 Output zip: ``<release-name>.zip``  (versionless consumer artifact)
@@ -133,6 +139,73 @@ def _read_name_from_yaml(path: Path) -> str:
     if not name:
         raise ValueError(f"{path}: missing 'name:' field")
     return str(name).strip()
+
+
+def find_builtin_metric_enables_for_discrete_item(
+    content_type: str,
+    item_name: str,
+    *,
+    releases_dir: "str | Path" = "bundles/releases",
+    repo_root: "Path | None" = None,
+) -> list:
+    """Find the ``builtin_metric_enables`` list declared for a discrete item.
+
+    A discrete component (dashboard/view/supermetric/customgroup/report) has
+    no bundle YAML of its own to carry a ``builtin_metric_enables:`` block.
+    When it ships as a release headline, that declaration lives on the
+    release manifest instead (``ReleaseDef.builtin_metric_enables`` — see the
+    schema note at the top of ``releases.py``). ``build_release`` already
+    threads it through for the ``release``/``publish`` path
+    (``_build_component_headline`` above); this helper gives the standalone
+    ``build-discrete`` CLI command the same lookup, keyed by content type +
+    item name instead of by manifest path, since that command has no release
+    manifest path on its command line.
+
+    Args:
+        content_type: Discrete builder type string ("dashboard", "view",
+                       "supermetric", "customgroup", "report") — matches the
+                       ``content_type`` argument to ``discrete_builder.build_discrete``.
+        item_name:    The content item's ``name:`` field, as passed to
+                       ``build-discrete``.
+        releases_dir: Directory to scan for release manifests (defaults to
+                       ``bundles/releases``).
+        repo_root:    Repo root for resolving manifest source paths. When
+                       None, defaults to ``Path.cwd()``.
+
+    Returns:
+        The matching release's ``builtin_metric_enables`` list, or an empty
+        list if no release headline matches (no release found, item not
+        released yet, or the release declares nothing).
+    """
+    from .releases import load_all_releases, ReleaseValidationError
+
+    if repo_root is None:
+        repo_root = Path.cwd()
+
+    try:
+        releases = load_all_releases(releases_dir, repo_root=repo_root)
+    except ReleaseValidationError:
+        # Manifest corpus is invalid — not this lookup's job to report that;
+        # the `validate` command already covers it. Fail soft to "no enables
+        # found" rather than blocking an otherwise-valid discrete build.
+        return []
+
+    for release in releases:
+        for artifact in release.artifacts:
+            if not artifact.headline:
+                continue
+            source_prefix = artifact.source_path.parent.name
+            mapped_type = _PARENT_DIR_TO_DISCRETE_TYPE.get(source_prefix)
+            if mapped_type != content_type:
+                continue
+            try:
+                name = _read_name_from_yaml(artifact.source_path)
+            except ValueError:
+                continue
+            if name == item_name:
+                return list(release.builtin_metric_enables)
+
+    return []
 
 
 def _zip_filename(release_name: str, release_version: str = "") -> str:

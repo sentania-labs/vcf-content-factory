@@ -378,10 +378,21 @@ class TestAuditGateRegressionRealContent:
         assert zip_path.exists()
 
     def test_vm_snapshot_inventory_dashboard_survives_audit(self, tmp_path):
-        """B2: instanced_group columns (driver's literal "Instance Name" and
-        member columns' "prefix:instance|suffix" synthetic form) must not be
-        walked into the audit as if they were static describe keys — this is
-        the very dashboard this builtin_metric_enables fix exists to ship."""
+        """B2 (original fix) + PR #70 Codex P1 follow-up: the driver column's
+        literal "Instance Name" sentinel still has no describe-cache key and
+        is skipped, but member columns' "prefix:instance|suffix" synthetic
+        form is now normalized back to its flat describe-cache key and IS
+        walked into the audit (see test_deps_instanced_group_columns.py).
+        This dashboard's Creator/Description member columns resolve to
+        default_monitored=false keys. This test builds with the default
+        audit_mode="auto" and no builtin_metric_enables argument, so the
+        release manifest is never read here — the audit passes because auto
+        mode auto-adds the two newly-detected keys, not because they are
+        "corroborated" by the release manifest's manual
+        builtin_metric_enables declarations. See
+        test_vm_snapshot_inventory_dashboard_survives_strict_audit_via_cli
+        below for the strict-mode coverage that does exercise the release
+        manifest's declarations (via the build-discrete CLI wiring)."""
         zip_path = build_discrete(
             content_type="dashboard",
             item_name="[VCF Content Factory] VM Snapshot Inventory",
@@ -402,6 +413,36 @@ class TestAuditGateRegressionRealContent:
             live_describe=False,
         )
         assert zip_path.exists()
+
+    def test_vm_snapshot_inventory_dashboard_survives_strict_audit_via_cli(self, tmp_path):
+        """Framework review B1 (packaging-deps-instanced-group-2026-08-06.md):
+        `build-discrete --strict-deps` on a released discrete item must not
+        hard-fail on defaultMonitored=false keys that ARE already declared in
+        the item's release manifest (bundles/releases/vm-snapshot-inventory-
+        dashboard.yaml). Before the fix, cmd_build_discrete never loaded the
+        release manifest, so --strict-deps was structurally unsatisfiable for
+        this dashboard: the error told the operator to add declarations that
+        were already sitting in the manifest it never read. This drives the
+        actual CLI entry point (not build_discrete() directly) so the
+        release-manifest lookup wiring in cmd_build_discrete is exercised."""
+        from types import SimpleNamespace
+        from vcfops_packaging.cli import cmd_build_discrete
+
+        args = SimpleNamespace(
+            content_type="dashboard",
+            item_name="[VCF Content Factory] VM Snapshot Inventory",
+            output_dir=str(tmp_path / "out"),
+            strict_deps=True,
+            lax_deps=False,
+            no_live_describe=True,
+            skip_audit=False,
+        )
+        rc = cmd_build_discrete(args)
+        assert rc == 0, (
+            "build-discrete --strict-deps should succeed: the required "
+            "builtin_metric_enables are declared in "
+            "bundles/releases/vm-snapshot-inventory-dashboard.yaml"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -92,11 +92,28 @@ _SUPER_METRIC_PREFIX = "super metric|"
 # built-in metric key.
 _UNRESOLVED_SM_REF_PREFIX = "supermetric:"
 
-# Pattern for instanced metric keys in SM formulas:
-#   "net:Aggregate of all instances|packetsPerSec"  ->  "net|packetsPerSec"
-#   "cpu:core 0|usage"                              ->  "cpu|usage"
-# The describe cache stores only the base group|stat form.
-_INSTANCED_KEY_RE = re.compile(r"^([^|:]+):[^|]+\|(.+)$")
+
+def _normalize_instanced_group_key(attribute: str) -> str:
+    """Derive the describe-cache base key from a loader-synthesized
+    instanced_group member column ``attribute`` string.
+
+    Member columns synthesize ``attribute`` as
+    ``f"{prefix}:{sample_instance}|{suffix}"`` (see
+    ``InstancedGroupSpec``/``ViewColumn`` in vcfops_dashboards/loader.py).
+    ``sample_instance`` itself may contain further ``:`` / ``|`` tokens
+    (e.g. ``"356893|snapshot:snapshot-16"``), so the synthesized string can
+    have more than one "|"-delimited segment. The describe cache stores the
+    flat, un-instanced form: split on "|", drop the ``:<instance>`` suffix
+    from each segment, and rejoin.
+
+    Example: prefix "diskspace", sample_instance "356893|snapshot:snapshot-16",
+    suffix "creator" synthesizes to
+    ``"diskspace:356893|snapshot:snapshot-16|creator"``, which normalizes to
+    ``"diskspace|snapshot|creator"`` — matching the describe cache's
+    ``diskspace|snapshot|creator`` property key.
+    """
+    segments = attribute.split("|")
+    return "|".join(seg.split(":", 1)[0] for seg in segments)
 
 
 def _is_sm_ref(metric_key: str) -> bool:
@@ -114,16 +131,21 @@ def _normalize_metric_key(metric_key: str) -> str:
 
     The VCF Ops super metric DSL allows referencing instanced stat keys with
     the syntax ``group:instance_spec|stat`` (e.g.
-    ``net:Aggregate of all instances|packetsPerSec``).  The adapter describe
-    surface only exposes the base form ``group|stat``.  Strip the instance
-    specifier so cache lookups succeed.
+    ``net:Aggregate of all instances|packetsPerSec``), and multi-segment
+    property keys carry the same ``:<instance>`` token on any ``|``-delimited
+    segment, not just the first (e.g.
+    ``diskspace:262|snapshot:snapshot-1|used`` or
+    ``vCommunity|Licensing:Evaluation Mode|Edition Key``). The adapter
+    describe surface only exposes the flat, un-instanced form. Delegate to
+    ``_normalize_instanced_group_key``'s segment-local rule (split on "|",
+    strip ``:<instance>`` from each segment, rejoin) — verified against the
+    full vendor ``isInstancedGroup`` corpus to be a strict superset of the
+    single-segment form this function previously handled alone, so callers
+    that expected only the leading-segment case still get identical output.
 
     Non-instanced keys (e.g. ``cpu|usage_average``) are returned unchanged.
     """
-    m = _INSTANCED_KEY_RE.match(metric_key.strip())
-    if m:
-        return f"{m.group(1)}|{m.group(2)}"
-    return metric_key
+    return _normalize_instanced_group_key(metric_key.strip())
 
 
 # ---------------------------------------------------------------------------
@@ -188,17 +210,33 @@ def _refs_from_view(view) -> list[MetricReference]:
     rk = view.resource_kind
     source_desc = f"view {view.name!r}"
     for col in view.columns:
-        # instanced_group columns carry a loader-synthesized attribute that
-        # is NOT a describe key: the driver column is the literal string
-        # "Instance Name", and member columns are
-        # "{prefix}:{sample_instance}|{suffix}" — the instance token sits in
-        # the *middle* segment, which _INSTANCED_KEY_RE (below) does not
-        # normalise (it only strips a leading "group:instance|" form). The
-        # underlying base key (e.g. "diskspace|snapshot|used") is audited
-        # separately when referenced directly; instanced_group's synthetic
-        # per-column form has no static describe-cache entry to look up.
-        # See knowledge/context/investigations/vm-snapshot-instanced-fanout-2026-07-27.md.
-        if getattr(col, "instanced_group", None) is not None:
+        ig = getattr(col, "instanced_group", None)
+        if ig is not None:
+            # The driver column ("Instance Name" sentinel — prefix and
+            # suffix both unset) has no describe-cache key at all: it turns
+            # on fan-out mode for the view and carries no metric/property
+            # reference of its own, so it is (correctly) skipped.
+            #
+            # Member columns DO reference a real describe-cache key: the
+            # loader synthesizes their `attribute` as
+            # "{prefix}:{sample_instance}|{suffix}", which embeds the
+            # instance token in the middle segment(s). Without deriving and
+            # auditing the base key here, any built-in whose *only*
+            # reference in the bundle is via an instanced_group member
+            # column silently skips the dependency/enable gate (see
+            # knowledge/context/investigations/vm-snapshot-instanced-fanout-2026-07-27.md
+            # and the DEF-016/PR#70 review that caught this). Emit a
+            # reference using the normalized base key so it is audited
+            # exactly like a direct reference.
+            if ig.is_driver:
+                continue
+            attr = _normalize_instanced_group_key(col.attribute.strip())
+            refs.append(MetricReference(
+                adapter_kind=ak,
+                resource_kind=rk,
+                metric_key=attr,
+                source_desc=source_desc,
+            ))
             continue
         attr = col.attribute.strip()
         if _is_sm_ref(attr):

@@ -422,6 +422,7 @@ def cmd_build_discrete(args) -> int:
     from .audit import AuditError
     from .describe import DescribeCacheError
     from .discrete_builder import build_discrete, DiscreteBuilderError
+    from .release_builder import find_builtin_metric_enables_for_discrete_item
 
     output_dir = getattr(args, "output_dir", "dist/discrete") or "dist/discrete"
 
@@ -433,6 +434,18 @@ def cmd_build_discrete(args) -> int:
     live_describe = not getattr(args, "no_live_describe", False)
     skip_audit = getattr(args, "skip_audit", False)
 
+    # A discrete item has no bundle YAML of its own to carry
+    # `builtin_metric_enables:` — when it ships as a release headline, that
+    # declaration lives on the release manifest instead (see
+    # release_builder.find_builtin_metric_enables_for_discrete_item). Thread
+    # it through here the same way the release/publish path already does
+    # (release_builder._build_component_headline), so --strict-deps can see
+    # declarations an operator has already made.
+    builtin_metric_enables = find_builtin_metric_enables_for_discrete_item(
+        content_type=args.content_type,
+        item_name=args.item_name,
+    )
+
     try:
         out = build_discrete(
             content_type=args.content_type,
@@ -441,6 +454,7 @@ def cmd_build_discrete(args) -> int:
             audit_mode=audit_mode,
             live_describe=live_describe,
             skip_audit=skip_audit,
+            builtin_metric_enables=builtin_metric_enables,
         )
         print(f"built  {out}")
         return 0
