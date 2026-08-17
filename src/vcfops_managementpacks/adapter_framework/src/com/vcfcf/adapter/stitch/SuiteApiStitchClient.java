@@ -36,10 +36,22 @@ import java.util.Map;
  * {@code knowledge/context/investigations/synology-b23-devel-pkix-2026-07-01.md} and
  * {@code knowledge/context/defects.md} DEF-005. It also eliminates the earlier
  * {@code java.net.http.HttpClient} + {@code insecureSslContext()} path, which
- * could not inject a {@code HostnameVerifier} and failed with
- * {@code certificate_unknown(46)} on production appliances whose
+ * failed with {@code certificate_unknown(46)} on production appliances whose
  * operator-replaced cert has no {@code localhost} SAN (see §5 of
- * {@code specs/20-suiteapi-client-behavioral-contract.md}).
+ * {@code specs/20-suiteapi-client-behavioral-contract.md}). At the time that
+ * path was retired, {@code HttpClient} offered no way to inject a custom
+ * {@code HostnameVerifier} at all, which read as a hard capability gap. Issue
+ * #82's fix (reimplementing {@code insecureSslContext()}'s trust manager as
+ * {@code X509ExtendedTrustManager}) has since closed that specific gap:
+ * {@code insecureSslContext()} now suppresses hostname verification outright
+ * on both transports, so an unconditional all-true verifier (which is all
+ * the vendor-mirror posture below needs) is expressible over
+ * {@code HttpClient} too. This class keeps {@code openPlatformConnection()} /
+ * {@code HttpsURLConnection} anyway, not because of that now-closed gap, but
+ * because it is the vendor-mirror transport (see the DEF-005 discussion
+ * above): matching {@code aria-ops-core SuiteAPIClient} byte-for-byte was the
+ * explicit goal, not inventing a new transport once one became technically
+ * possible.
  *
  * <p>The credential mechanism still determines the Suite API endpoint:
  * <ul>

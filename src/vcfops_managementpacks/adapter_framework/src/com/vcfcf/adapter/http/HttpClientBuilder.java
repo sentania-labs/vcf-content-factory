@@ -18,9 +18,11 @@ import java.util.List;
  * <p>By default, no custom SSL context is set — the JVM's default trust store
  * is used. To use the platform's trust store (recommended for production,
  * ensures user-trusted certs from VCF Ops certificate management are honoured),
- * call {@link #platformSsl(VcfCfAdapter)}. To skip certificate verification
- * in lab environments with self-signed certs, call {@link #allowInsecure(boolean)}
- * — this is an explicit, documented opt-out, not the default.
+ * call {@link #platformSsl(VcfCfAdapter)}. To disable both certificate chain
+ * validation and hostname verification in lab environments with self-signed
+ * certs (or a certificate name that does not match the configured address),
+ * call {@link #allowInsecure(boolean)}. This is an explicit, documented
+ * opt-out, not the default.
  *
  * <p>Usage:
  * <pre>{@code
@@ -83,14 +85,15 @@ public final class HttpClientBuilder {
     }
 
     /**
-     * Disable SSL certificate verification.
+     * Disable SSL certificate chain validation AND hostname verification.
      *
      * <p><strong>Explicit opt-out — use ONLY in lab/dev environments with
      * self-signed certificates.</strong> Do not use in production adapters.
      * If both {@link #platformSsl} and {@link #allowInsecure(boolean)} are
      * called, the last call wins.
      *
-     * @param insecure {@code true} to trust all certificates without verification
+     * @param insecure {@code true} to trust all certificates and skip
+     *                 hostname verification, without any validation
      */
     public HttpClientBuilder allowInsecure(boolean insecure) {
         if (insecure) {
