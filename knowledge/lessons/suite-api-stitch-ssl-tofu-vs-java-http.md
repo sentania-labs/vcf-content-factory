@@ -100,12 +100,19 @@ devel's cert became trusted, it's that the strict trust manager was never
 consulted.
 
 **This vindicates this lesson's original generalizable rule.** Strict-TOFU on
-the loopback Suite API hop cannot self-heal for framework adapters — not
+the loopback Suite API hop cannot self-heal for framework adapters, not
 because of a hostname-verifier gap (that was the 2026-06-30 correction's
-finding, and it's still true), but because the *persistence* half of TOFU
-depends on a platform capability (adapter-declared cert-renewal URL set) that
-this framework's adapters do not — and, per the vendor ground truth below,
-should not need to — have.
+finding; issue #82 later closed the underlying `HttpClient` capability gap
+itself by reimplementing `insecureSslContext()`'s trust manager as
+`X509ExtendedTrustManager`, so `HttpClient` can now express an unconditional
+all-true hostname posture too, see `VcfCfAdapter.java` `insecureSslContext()`
+javadoc), but because the *persistence* half of TOFU depends on a platform
+capability (adapter-declared cert-renewal URL set) that this framework's
+adapters do not, and, per the vendor ground truth below, should not need to,
+have. `SuiteApiStitchClient` still uses `openPlatformConnection()` /
+`HttpsURLConnection` for the Suite API hop, but that is now a vendor-transport-mirror
+choice (matching `aria-ops-core SuiteAPIClient` byte-for-byte), not a
+`HttpClient` capability limit.
 
 **Filed as `knowledge/context/defects.md` DEF-005 (blocking)** and fixed by mirroring
 the Broadcom vendor transport exactly instead of re-deriving a TOFU posture:

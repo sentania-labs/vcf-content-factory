@@ -1019,7 +1019,7 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
      * that behavior directly rather than inventing a new transport posture.
      *
      * <h3>Non-FIPS branch (implemented)</h3>
-     * <p>{@link #insecureSslContext()} (trust-all {@code X509TrustManager}) +
+     * <p>{@link #insecureSslContext()} (trust-all {@code X509ExtendedTrustManager}) +
      * an all-true {@link javax.net.ssl.HostnameVerifier} — unconditionally,
      * for both loopback (ambient) and explicit/remote (collector) Suite API
      * endpoints, exactly matching the vendor's unconditional
@@ -1148,23 +1148,55 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
     }
 
     /**
-     * Build an insecure (trust-all) {@link javax.net.ssl.SSLContext}.
+     * Build an insecure (trust-all, hostname-check-off) {@link javax.net.ssl.SSLContext}.
      *
-     * <p><strong>Explicit, documented opt-out.</strong> Use ONLY in lab / dev
-     * environments with self-signed certificates. Do not use as the default path.
-     * In production adapters use {@link #getPlatformSslContext()} instead.
-     * Do NOT use this for the loopback Suite API transport — use
-     * {@link #openPlatformConnection(String)} instead, which also handles the
-     * hostname-verifier gap that {@code java.net.http.HttpClient} cannot.
+     * <p><strong>Disables both certificate chain validation AND hostname
+     * verification.</strong> Use ONLY in lab / dev environments with
+     * self-signed certificates or where the certificate name does not match
+     * the address the admin configured. Do not use as the default path. In
+     * production adapters use {@link #getPlatformSslContext()} instead. Do
+     * NOT use this for the loopback Suite API transport. Use
+     * {@link #openPlatformConnection(String)} instead.
      *
-     * @return an SSLContext that trusts all certificates without validation
+     * <p><strong>Implementation note (why the trust manager type matters, and
+     * on which transports).</strong> A legacy {@link javax.net.ssl.X509TrustManager}
+     * gets silently wrapped by JSSE in {@code sun.security.ssl.AbstractTrustManagerWrapper},
+     * which re-applies an endpoint identity (hostname) check on top of whatever
+     * the wrapped {@code checkServerTrusted} decides. So a trust-all
+     * {@code X509TrustManager} alone does NOT suppress hostname mismatches (see
+     * issue #82). Implementing {@link javax.net.ssl.X509ExtendedTrustManager}
+     * here (with no-op {@code Socket}/{@code SSLEngine} overloads) makes JSSE
+     * use the manager directly instead of wrapping it, so the hostname check
+     * never runs.
+     *
+     * <p>This is <strong>not</strong> limited to {@code java.net.http.HttpClient}.
+     * It also disables hostname verification on the
+     * {@link javax.net.ssl.HttpsURLConnection} transport, including for a
+     * caller that sets the JDK's own default {@link javax.net.ssl.HostnameVerifier}
+     * (i.e. never calls {@code setHostnameVerifier} at all, or does and passes
+     * the platform default): {@code HttpsURLConnection}'s underlying
+     * {@code HttpsClient} sets an endpoint identification algorithm on the
+     * socket whenever the verifier in effect is the default one. At that
+     * point JSSE, not the {@code HostnameVerifier}, decides the outcome, and
+     * this extended trust manager no-ops that decision the same way it does for
+     * {@code HttpClient}. Measured: an insecure-factory connection against a
+     * hostname-mismatched cert, using the default {@code HostnameVerifier},
+     * fails before this fix and succeeds after it. A caller that wants
+     * "trust-all but still enforce hostname" must set its own
+     * {@code HostnameVerifier} explicitly on the {@code HttpsURLConnection}.
+     * This context supplies no such enforcement on its own, on either
+     * transport.
+     *
+     * @return an SSLContext that trusts all certificates and skips hostname
+     *         verification on both {@code java.net.http.HttpClient} and
+     *         {@code HttpsURLConnection}, without validation
      * @throws RuntimeException if context construction fails
      */
     public static javax.net.ssl.SSLContext insecureSslContext() {
         try {
             javax.net.ssl.SSLContext ctx = javax.net.ssl.SSLContext.getInstance("TLS");
             ctx.init(null, new javax.net.ssl.TrustManager[]{
-                new javax.net.ssl.X509TrustManager() {
+                new javax.net.ssl.X509ExtendedTrustManager() {
                     public java.security.cert.X509Certificate[] getAcceptedIssuers() {
                         return new java.security.cert.X509Certificate[0];
                     }
@@ -1172,6 +1204,18 @@ public abstract class VcfCfAdapter<C> extends AdapterBase {
                             java.security.cert.X509Certificate[] c, String a) {}
                     public void checkServerTrusted(
                             java.security.cert.X509Certificate[] c, String a) {}
+                    public void checkClientTrusted(
+                            java.security.cert.X509Certificate[] c, String a,
+                            java.net.Socket socket) {}
+                    public void checkServerTrusted(
+                            java.security.cert.X509Certificate[] c, String a,
+                            java.net.Socket socket) {}
+                    public void checkClientTrusted(
+                            java.security.cert.X509Certificate[] c, String a,
+                            javax.net.ssl.SSLEngine engine) {}
+                    public void checkServerTrusted(
+                            java.security.cert.X509Certificate[] c, String a,
+                            javax.net.ssl.SSLEngine engine) {}
                 }
             }, null);
             return ctx;
