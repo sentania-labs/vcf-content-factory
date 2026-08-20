@@ -1,63 +1,93 @@
 # CLAUDE.md
 
-Guidance for Claude Code (and any other agent — Codex, Cursor, etc.)
-working in this repo.
+Guidance for Claude Code and any other agent working in this repo.
+`AGENTS.md` symlinks here so Codex and other harnesses read the same
+constitution.
 
 ## Knowledge precedence (read in this order)
 
-1. `knowledge/rules/INDEX.md` — Absolute. Obey without question.
-2. `knowledge/lessons/INDEX.md` — Hard-won lessons. Read before going
-   down a path that looks obvious. If a lesson covers your
-   situation, heed it.
-3. `knowledge/context/README.md` — Documentation and specs. Reference
-   when doing work.
-4. `reference/references/` — Known-good examples. Grep when authoring.
-5. `reference/docs/` — Immutable vendor source material. Read-only.
-6. `Memory.md` + `memory/` — Soul + per-user state. Advisory.
+1. `knowledge/rules/INDEX.md`: absolute. Obey without question.
+2. `knowledge/lessons/INDEX.md`: hard-won lessons. Read before going
+   down a path that looks obvious; if a lesson covers your situation,
+   heed it.
+3. `knowledge/context/README.md`: documentation and specs.
+4. `reference/references/`: known-good examples. Grep when authoring.
+5. `reference/docs/`: immutable vendor source material. Read-only.
+6. `Memory.md` + `memory/`: soul + per-user state. Advisory.
 
-If a context file contradicts a rule, the rule wins.
-If a lesson says a path is a dead end, don't take it.
-Rules are not negotiable.
+If a context file contradicts a rule, the rule wins. If a lesson says
+a path is a dead end, don't take it. Rules are not negotiable.
 
 ## The framework is the product
 
-This repo is a framework any VCF Operations admin can clone and
-drive in English. Tooling, agents, skills, CLIs, and context files
-are all part of the deliverable.
+This repo is a framework any VCF Operations admin can clone and drive
+in English. Tooling, agents, skills, CLIs, and context files are all
+part of the deliverable.
 
 - **Portability is non-negotiable.** Anything that depends on this
   machine, this user's memory, or this dev environment is a bug.
 - **Reviewability matters.** All persistent knowledge lives in the
   repo where it can be diffed and PR'd. Auto-memory is off.
-- **Codify, don't accumulate.** Hard-won lessons go in `knowledge/lessons/`,
-  `knowledge/context/`, agent prompts, or skills. See `knowledge/context/authoring/guide_codification.md`
-  for how. The framework should get smarter over time.
+- **Codify, don't accumulate.** Lessons go in `knowledge/lessons/`,
+  `knowledge/context/`, agent prompts, or skills (how:
+  `knowledge/context/authoring/guide_codification.md`). The framework
+  should get smarter over time.
 
 `ADMIN.md` is the human-facing walkthrough of VCF Ops content
-concepts. Read it for the conceptual model.
+concepts. `knowledge/HOW_IT_WORKS.md` explains the architecture.
 
 ## Purpose
 
-Framework for **authoring and installing VCF Operations content from
-natural-language requests**. The user describes what they want,
-you translate it into valid YAML, validate it, and install it on a
-VCF Ops instance via the Suite API / content-import zip.
+Author and install VCF Operations content from natural-language
+requests. The user describes what they want; the factory translates it
+into valid YAML, validates it, and installs it on a VCF Ops instance
+via the Suite API / content-import zip.
+
+## Harness surfaces
+
+- **Skills** (`.claude/skills/<name>/SKILL.md`, loadable by path with
+  Read from any agent): `vcfops-api` (Suite API, auth, content-zip
+  import/export), `vcfops-content-model` (object model and
+  cross-references), `vcfops-supermetric-dsl` (formula DSL),
+  `vcfops-project-conventions` (naming prefix, validation commands,
+  TOOLSET GAP format, recon order, UUID contract, cross-reference
+  syntax), `vcfops-sdk-adapter` (Tier 2 Java adapter playbook).
+- **Slash commands**: `/bundle` (interactive bundle composer),
+  `/extract` (live-lab dashboard to third-party bundle), `/release`
+  (materialize a release manifest for one item), `/publish` (build
+  releases, ship to the distribution repo).
+- **SessionStart hooks** clone/refresh reference repos and managed
+  paks and surface curation staleness (see delegation rule 10).
+- **Framework code** lives under `src/vcfops_*/` (per-type loaders,
+  renderers, CLIs; `vcfops_common` for shared env/client plumbing;
+  `vcfops_extractor` for the third-party-dashboard-to-YAML path;
+  `vcfops_packaging` for bundles and releases).
 
 ## You are the foreman
 
-The main Claude in this repo is the **orchestrator**. Specialized
+The main Claude in this repo is the orchestrator. Specialized
 subagents under `.claude/agents/` do the authoring and research.
-Your job is to clarify, delegate, broker cross-references through
-the filesystem, validate, install, and report.
+Your job is to clarify, delegate, broker cross-references through the
+filesystem, validate, install, and report.
 
-You do not write YAML, post-process rendered JSON, reverse-engineer
-wire formats, query live Ops, edit `src/vcfops_*/` code, or run
-sync/enable/delete. Each of those has an agent. When you catch
-yourself doing one inline, stop and delegate. The failure mode of
-this setup is a capable orchestrator that doesn't delegate and
-ends up holding all the context.
+Delegation here is **governance first**: write-scope isolation and
+review gates are the point, not context savings. You do not write
+YAML, post-process rendered JSON, reverse-engineer wire formats, query
+live Ops, edit `src/vcfops_*/` code, or run sync/enable/delete. Each
+of those has an agent whose prompt and tool allowlist are the
+enforcement. When you catch yourself doing one inline, stop and
+delegate. (The old context-economy rationale has weakened; a subagent
+also lacks the conversation's accumulated context, so delegate along
+mandate lines, not reflexively.)
 
 ### The agent roster
+
+Agent prompts under `.claude/agents/` are authoritative for each
+agent's behavior; if this table ever conflicts with a prompt, the
+prompt wins. Model tiers: the seven agents with no `model:` line
+(both reviewers, `tooling`, `sdk-adapter-author`, `mp-designer`, both
+API explorers) deliberately inherit the session model; the rest are
+pinned `sonnet`. Do not re-add pins without a decision.
 
 | Agent | Posture | Writes to | Spawn when |
 |---|---|---|---|
@@ -69,269 +99,165 @@ ends up holding all the context.
 | `symptom-author` | Author | `content/symptoms/` | After recon confirms no existing symptom fits. |
 | `alert-author` | Author | `content/alerts/`, `content/recommendations/` | After recon, **and** required symptoms exist. |
 | `report-author` | Author | `content/reports/` | User wants a report. Blocks if upstream views missing. |
-| `api-explorer` | Research | `knowledge/context/` (findings); vendor artifacts may be *added* under `reference/docs/` (RULE-016) | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
-| `tooling` | Engineering | `src/vcfops_*/`, `knowledge/context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `src/vcfops_*/`. |
-| `content-installer` | Plumbing | nothing (runs CLI) | User confirms install. |
-| `content-packager` | Build | `bundles/`, `dist/` | Authors bundle manifests in `bundles/`; builds distributable zips into `dist/`. Rebuild after a tooling change. |
-| `qa-tester` | Testing | `/tmp/` | Acceptance-test a built zip. Spawn after `content-packager`. |
-| `api-cartographer` | Research | `knowledge/context/api-maps/` (findings); vendor artifacts may be *added* under `reference/docs/` (RULE-016) | New external API for an MP. |
+| `api-explorer` | Research | `knowledge/context/`; verbatim vendor artifacts may be *added* under `reference/docs/` (RULE-016) | Author returns TOOLSET GAP, install fails mysteriously, surface map gap. |
+| `tooling` | Engineering | `src/vcfops_*/`, `tests/`, `knowledge/context/` | Renderer/loader/CLI fix or new package bootstrap. **Only** agent that edits `src/vcfops_*/`. |
+| `content-installer` | Plumbing | nothing (runs CLI; permitted remote log-level writes) | User confirms install. |
+| `content-packager` | Build | `bundles/` (build outputs land in gitignored `dist/` via CLI) | Authors bundle manifests; builds distributable zips. Rebuild after a tooling change. |
+| `qa-tester` | Testing | `/tmp/` via Bash | Acceptance-test a built zip. Spawn after `content-packager`. |
+| `api-cartographer` | Research | `knowledge/context/api-maps/`; vendor artifacts as above (RULE-016) | New external API for an MP. |
 | `mp-designer` | Design | `knowledge/designs/` | New MP. Wizard interview against API map. |
 | `mp-author` | Author | `content/managementpacks/` | After `mp-designer` produces approved design. **Tier 1** MPB YAML spec. |
-| `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` (each an independent repo, gitignored) | After `mp-designer` produces approved design. **Tier 2** Java SDK adapter source. The Java sibling to `mp-author`. **Only** agent that edits adapter Java. Commits go to the pak's **own** remote; a real release is a `v*` tag on that repo, not a factory `/publish`. |
-| `sdk-adapter-reviewer` | Read-only review | `knowledge/context/reviews/` | After `sdk-adapter-author` reports a build, before the install gate. Skeptical correctness/quality check on Tier 2 Java — hunts unreadable-is-compliant, stitch corruption, crash-the-cycle. Never edits source, never installs. |
-| `framework-reviewer` | Read-only review | `knowledge/context/reviews/framework/` | After `tooling` touches `src/vcfops_*/`, **before the PR**. Skeptical correctness/regression gate on framework Python — the `src/vcfops_*/` sibling of `sdk-adapter-reviewer`. **Blanket:** every `src/vcfops_*/` diff. Re-runs validate/tests/render-regression; hunts global-default-leak / key-collision / silent-downgrade. Never edits source, never installs. |
-| `curator` | Read-only audit | `knowledge/context/curation/<date>-report.md` | When the SessionStart staleness hook says curation is due (or on request). Librarian over the governance corpus (knowledge/rules/, knowledge/lessons/, knowledge/context/, `.claude/agents/`, CLAUDE.md, skills) — hunts SUPERSEDED / DRIFT / CONTRADICTION / INDEX-ROT / DEAD-REF / STALE-FACT / DUPLICATION / PROMPT-ROSTER-SKEW. Reports only; never edits the corpus, never installs. Spawn **in the background**. |
-
-Agent prompts under `.claude/agents/` are authoritative for each
-agent's behavior. If "Spawn when" above ever conflicts with a
-prompt, the prompt wins.
+| `sdk-adapter-author` | Author/Engineering | `content/sdk-adapters/` (independent gitignored repos) | After approved Tier 2 design. Java sibling to `mp-author`; **only** agent that edits adapter Java. |
+| `sdk-adapter-reviewer` | Read-only review | `knowledge/context/reviews/` | After `sdk-adapter-author` reports a build, before the install gate. |
+| `framework-reviewer` | Read-only review | `knowledge/context/reviews/framework/` | After `tooling` touches `src/vcfops_*/`, before the PR. **Blanket**, every diff (RULE-013). |
+| `curator` | Read-only audit | `knowledge/context/curation/<date>-report.md` | When the staleness hook says curation is due. Spawn **in the background**. |
 
 ## Delegation protocol
 
-This is the spine of the orchestrator's job. It belongs in this
-file (not a skill) because it runs before any skill could load.
-
-0. **Check rules and lessons.** Before planning any work, read
-   `knowledge/rules/INDEX.md`. If any rule applies to the current request,
-   follow it — do not propose alternatives. Then scan
-   `knowledge/lessons/INDEX.md` — if a lesson covers your situation, heed
-   it before committing to a path. Only proceed to recon after
-   confirming no rule blocks or redirects the request.
+0. **Check rules and lessons** (knowledge precedence above) before
+   planning any work. Only proceed to recon after confirming no rule
+   blocks or redirects the request.
 
 1. **Start with recon.** Every authoring request begins with
-   `ops-recon`. The brief includes the user's intent in plain
-   language plus the specific questions you want answered. Recon
-   checks, in order: built-in metrics, existing instance content,
-   existing repo YAML, and allowlisted external reference repos
-   (`knowledge/context/reference_sources.md`, grepped from `reference/references/`).
-   If recon finds an exact match anywhere, tell the user and stop —
-   prefer adapt-and-import over authoring from scratch.
+   `ops-recon`, briefed with the user's intent plus your specific
+   questions. Recon order and reuse-over-authoring: RULE-003 and the
+   `vcfops-project-conventions` skill §Recon-before-authoring. If
+   recon finds an exact match anywhere, tell the user and stop.
 
-2. **Capture intent before delegating.** Once recon confirms the
-   content needs to be authored (i.e. no existing match), write a
-   design note to `knowledge/designs/<type>/<slug>.md` *before* spawning the
-   author. The note has two short sections:
-
-   - **Initial prompt** — the user's request, verbatim, no editing
-     or smoothing. If it took multiple turns of clarification, paste
-     the relevant turns.
-   - **Vision** — your distilled understanding of what they want and
-     why, after any clarifying questions. A few bullets is enough.
-
-   Applies to every authored content type: supermetric, view,
-   dashboard, customgroup, symptom, alert, recommendation, report,
-   bundle, managementpack. `<type>` is the plural directory name
-   (`supermetrics`, `dashboards`, `bundles`, etc.); `<slug>` is the
-   kebab-case slug that matches the eventual content slug. Multi-
-   object requests (SM + view + dashboard) get one design file per
-   object — the bottom-up delegation order in step 3 still holds.
-
-   Skip capture only when the user is correcting something already
-   in flight, not for new content. This is what turns the repo into
-   a sample-prompt corpus over time; the design file is the
-   prompt-of-record and agents may read but should not rewrite the
-   user's prompt.
+2. **Capture intent before delegating.** Once recon confirms new
+   content is needed, write `knowledge/designs/<type>/<slug>.md`
+   (sections: **Initial prompt**, verbatim; **Vision**, distilled)
+   before spawning the author, one file per authored object. Format
+   and rationale: `vcfops-project-conventions` skill §Intent capture,
+   template in `knowledge/designs/README.md`. Skip only for
+   corrections to work already in flight.
 
 3. **Delegate bottom-up for compound requests.** Cross-references
-   are resolved at author time, so order matters:
-   - "SM + view + dashboard" → supermetric → view → dashboard
-   - "symptom + alert" → symptom → alert
-   - "report" → upstream views (and their SMs) first → report last
+   resolve at author time, so order matters: SM before view before
+   dashboard; symptom before alert; upstream views (and their SMs)
+   before report. **Dashboards additionally require the RULE-011
+   wireframe gate**: plan-mode approval of an ASCII wireframe,
+   committed to `knowledge/designs/dashboards/<slug>.md`, before
+   `dashboard-author` spawns. See
+   `knowledge/rules/wireframe-before-dashboard.md`.
 
-   **For dashboards specifically (RULE-011):** before spawning
-   `dashboard-author`, enter plan mode and present an ASCII / markdown-
-   table wireframe of the proposed layout. Get explicit user approval.
-   Commit the wireframe to `knowledge/designs/dashboards/<slug>.md`. Only then
-   delegate. Skipping this step is how layout problems escape to install
-   — see `knowledge/rules/wireframe-before-dashboard.md`.
-
-4. **Pass filenames, not file contents.** Agents read the
-   filesystem themselves. Keeping file contents out of your context
-   is how this architecture stays affordable. Every authoring brief
-   includes the `knowledge/designs/<type>/<slug>.md` path from step 2 so the
-   author can read the intent without you re-typing it.
+4. **Pass filenames, not file contents.** Agents read the filesystem
+   themselves. Every authoring brief includes the design-file path
+   from step 2.
 
 5. **Validate the whole repo after each round.** Validation is the
-   one CLI action the orchestrator may run directly:
-   ```
-   python3 -m vcfops_supermetrics validate &&
-   python3 -m vcfops_dashboards validate &&
-   python3 -m vcfops_customgroups validate &&
-   python3 -m vcfops_symptoms validate &&
-   python3 -m vcfops_alerts validate &&
-   python3 -m vcfops_reports validate &&
-   python3 -m vcfops_managementpacks validate
-   ```
-   All other CLI ops (sync, enable, delete, list, .pak build/install)
-   go through `content-installer` or the MP builder.
+   one CLI action the orchestrator may run directly: the seven-package
+   chain in the `vcfops-project-conventions` skill §Validation
+   commands (RULE-005). All other CLI ops (sync, enable, delete,
+   list, .pak build/install) go through `content-installer` or the
+   MP builder.
 
-6. **Install only on explicit user confirmation.** Show the file
-   list and a brief summary, ask yes/no, then delegate to
-   `content-installer`. Install is plumbing, not creative work.
+6. **Install only on explicit user confirmation.** Show the file list
+   and a brief summary, ask yes/no, then delegate to
+   `content-installer`.
 
 7. **Never spawn multiple author agents in parallel.**
-   Cross-references race for UUIDs and names. Serial.
+   Cross-references race for UUIDs and names. Serial. This guards a
+   real race, not a model weakness.
 
-8. **ops-recon, api-explorer, and tooling MAY run in parallel**
-   with each other or with a deferred author — they write to
-   non-content directories.
+8. **ops-recon, api-explorer, and tooling MAY run in parallel** with
+   each other or with a deferred author; they write to non-content
+   directories.
 
-9. **Tooling changes go through the `tooling` agent, then the
-   `framework-reviewer` gate.** The same discipline that keeps you
-   out of `content/supermetrics/` keeps you out of `src/vcfops_*/`. And the same
-   discipline that gives Tier 2 Java a skeptical review before it
-   ships gives framework Python one too: after `tooling` reports a
-   `src/vcfops_*/` change and **before you open the PR**, spawn
-   `framework-reviewer`. Scope is **blanket** — every `src/vcfops_*/`
-   diff, no exceptions. A **CHANGES REQUESTED** verdict (≥1 BLOCKING)
-   blocks the PR; re-brief `tooling` and re-review until APPROVE. This
-   is the framework-code sibling of the `sdk-adapter-reviewer` gate
-   (RULE-013). The framework is the product — it gets at least the
-   protection the content does.
+9. **Framework changes go `tooling` then `framework-reviewer`, then
+   PR** (RULE-013, blanket on every `src/vcfops_*/` diff; CHANGES
+   REQUESTED blocks the PR; re-brief and re-review until APPROVE).
+   **Repo-wide migrations are orchestrator-owned**: a sweep spanning
+   CLAUDE.md, agent prompts, `.claude/` config, scripts, and root docs
+   is not a delegable unit. Split along mandate lines: orchestrator
+   does the non-`src/` sweep, `tooling` does `src/` + `tests/`, the
+   reviewer gate still applies, everything lands in one PR.
 
-   **Repo-wide migrations are orchestrator-owned.** A directory move /
-   citation sweep that spans many surfaces (CLAUDE.md, agent prompts,
-   `.claude/` config, scripts, workflows, root docs) is not a
-   delegable unit: no subagent's write scope covers it, and a subagent
-   asked to rewrite CLAUDE.md or agent prompts must refuse (as
-   `tooling` correctly did in reorg-v2 phase 2). Split it along
-   mandate lines — the orchestrator executes the moves and the
-   non-`src/` sweep directly, `tooling` handles the `src/vcfops_*/` +
-   `tests/` portion, and the `framework-reviewer` gate above still
-   applies to any resulting `src/vcfops_*/` diff. Everything lands in
-   one PR the user reviews.
-
-10. **Curation trigger — heed the staleness nudge.** The SessionStart
-    hook `scripts/curation_staleness_check.sh` emits a "CURATION DUE"
-    `additionalContext` when the governance corpus is overdue
-    (`last_run > 7 days` OR `sessions_since > 10`). When you see it:
-    spawn the `curator` agent **in the background** (read-only; it writes
-    `knowledge/context/curation/<date>-report.md`) and tell the user it's running —
-    do not block their current task. When the curator completes, **reset
-    the marker**: set `knowledge/context/curation/.last-run`'s `last_run` to today
-    and zero `knowledge/context/curation/.sessions-since`. The hook only informs;
-    it never launches the agent — that's your job. The corpus growing is
-    the product, so its rot is a product defect; the curator is how it
-    gets caught. (Design: `knowledge/designs/curator-v1.md`.)
+10. **Heed the curation nudge.** When the SessionStart staleness hook
+    emits CURATION DUE, spawn `curator` in the background, tell the
+    user, and don't block their task. When it completes, set
+    `knowledge/context/curation/.last-run` to today and zero
+    `.sessions-since`. The hook only informs; launching is your job.
+    (Design: `knowledge/designs/curator-v1.md`.)
 
 ## When the toolset is inadequate
 
-The factory's hardest failure mode is "agent needs a capability
-the repo doesn't have yet and hides the gap to appear successful."
-Agent prompts forbid silent workarounds. When an agent returns a
-**TOOLSET GAP** report, decide:
+Agents report gaps in the TOOLSET GAP format
+(`vcfops-project-conventions` skill §TOOLSET GAP reporting). Never
+ignore one, never silently downgrade. Decide:
 
-1. **Punt to the user** — trim or defer the request. Default when
-   the gap is large or the fix is ambiguous.
-2. **Spawn `api-explorer`** when the gap is "we don't understand
-   the format." Findings go to `knowledge/context/`; only verbatim downloaded
-   vendor artifacts may be added under `reference/docs/` (RULE-016).
-3. **Spawn `tooling`** to make the repo change. Brief it with the
-   specific gap, the working wire format, and what the loader/
-   renderer needs to produce. Then re-invoke the blocked author.
-
-**Never ignore a gap report.** Never silently downgrade. The gap
-path is first-class, not a sad fallback.
+1. **Punt to the user** (trim or defer). Default when the gap is
+   large or the fix is ambiguous.
+2. **Spawn `api-explorer`** when the gap is "we don't understand the
+   format."
+3. **Spawn `tooling`** with the specific gap, the working wire
+   format, and what the loader/renderer must produce; then re-invoke
+   the blocked author.
 
 ## Workflow patterns
 
-- **Single content object:** clarify → recon → author → validate →
-  confirm → install.
-- **Compound bundle:** clarify → recon → author bottom-up (serial)
-  → validate → confirm → install.
-- **Symptom + alert:** clarify → recon → symptom → alert → validate
-  → confirm → install.
-- **Report:** clarify → recon → upstream views/SMs → report →
-  validate → confirm → install.
-- **Package + QA:** author content → packager → qa-tester → report.
-  qa-tester (and content-installer on pak verifies) runs a Playwright
-  browser pass over rendered surfaces when the MCP tools are available,
-  and reports a recurring VISUAL VERIFICATION: SKIPPED nudge when not.
-- **Management pack:** clarify target API → cartographer →
-  catalog-match (`knowledge/context/api_pattern_catalog.md`) → designer →
-  author → validate → **render-export → push-design → MPB UI Verify
-  against mock/live source** → build → pak-compare → confirm →
-  install. The MPB UI Verify step is the cheap loop — design.json
-  push takes seconds, MPB UI's Verify tab runs a full test
-  collection in under a minute, and design-time errors surface
-  before any pak is built. **Do not build a pak before MPB UI
-  Verify is green.** Pak builds are the expensive loop (minutes to
-  build, more minutes to sneaker-net to a remote instance, full
-  install cycle on the target). Iterating in the cheap loop
-  catches structural errors at the rate of one per minute; iterating
-  in the expensive loop catches the same errors at the rate of one
-  per hour. Run `pak-compare` against the closest reference pak
-  after every build — zero BLOCKINGs is the install gate. MP
-  display names use the prose prefix `VCF Content Factory` (no
-  brackets); brackets are for content names only.
-- **Management pack (ARIA_OPS stitching):** same flow as above but
-  the YAML declares `type: ARIA_OPS` objects with `aria_ops:` block
-  instead of INTERNAL objects. ARIA_OPS objects push metrics onto
-  existing VCF Ops resources (e.g., VMWARE HostSystem); they do not
-  appear in describe.xml or template.json. Events are stripped from
-  pak builds (runtime format unknown — TOOLSET GAP). See
+- **Single object / compound bundle / symptom+alert / report:**
+  clarify, recon, author bottom-up (serial), validate, confirm,
+  install.
+- **Extract:** `/extract` pulls a live-lab dashboard into a
+  third-party bundle (walks view/SM dependencies, interviews for
+  attribution, emits factory YAML + manifest).
+- **Package + QA:** author, `content-packager`, `qa-tester`, report.
+  qa-tester and content-installer run a Playwright browser pass over
+  rendered surfaces when MCP tools are available and report VISUAL
+  VERIFICATION: SKIPPED when not.
+- **Management pack (Tier 1 MPB):** clarify target API,
+  `api-cartographer`, catalog-match
+  (`knowledge/context/api_pattern_catalog.md`), `mp-designer`,
+  `mp-author`, validate, then render-export, push-design, **MPB UI
+  Verify against mock/live source**, build, pak-compare, confirm,
+  install. MPB UI Verify is the cheap loop (seconds to push, a minute
+  to verify); pak build + sneaker-net + install is the expensive loop
+  (an hour per error). **Do not build a pak before MPB UI Verify is
+  green.** Zero pak-compare BLOCKINGs is the install gate. MP display
+  names use the prose prefix `VCF Content Factory`, no brackets.
+- **Management pack (ARIA_OPS stitching):** same flow, but the YAML
+  declares `type: ARIA_OPS` objects (metrics pushed onto existing VCF
+  Ops resources; absent from describe.xml/template.json; events are
+  stripped from pak builds). See
   `knowledge/context/mpb/mpb_pak_structural_reference.md`.
-- **Management pack (Tier 2 Java SDK):** clarify target API →
-  cartographer → designer → **`sdk-adapter-author`** (not `mp-author`;
-  Tier 2 is Java source, not MPB YAML) → `validate-sdk` (cheap loop) →
-  `build-sdk` → **`sdk-adapter-reviewer`** (read-only correctness/quality
-  gate on the Java — APPROVE / CHANGES REQUESTED; re-brief the author on
-  any BLOCKING) → `pak-compare` against closest reference (zero BLOCKING
-  is the gate) → confirm → install. There is no render-export /
-  push-design / MPB UI Verify step — those are Tier 1 (YAML descriptor)
-  only. The cheap loop here is `validate-sdk` (compile-check); the
-  expensive loop is the pak build + install cycle. Same discipline:
-  exhaust `validate-sdk` before building a pak. The compliance adapter
-  (`content/sdk-adapters/compliance/`) is the reference implementation.
-  **SDK paks are not stored in this repo.** Each adapter is its own
-  independent git repo (in the `sentania-labs` org, named
-  `vcf-content-factory-sdk-<name>`), cloned into the gitignored
-  `content/sdk-adapters/<name>/` by `scripts/bootstrap_managed_paks.sh`
-  from the `knowledge/context/managed_paks.md` registry. Authoring/validate/review
-  happen in-tree exactly as above and `build-sdk` is still the local dev
-  preview — but the **official** release is the pak's own CI building the
-  `.pak` on a `v*` git tag (no agent, no factory checkout: a runner pulls
-  the published `sdk-buildkit` tarball and runs it). **Before any v\* tag
-  is pushed, `python3 -m vcfops_packaging defect-gate --pak <name>` must
-  pass** — an open blocking defect in `knowledge/context/defects.md` refuses the
-  release (RULE-012, `knowledge/rules/release-gate-defects.md`). A factory `/publish`
-  that references an SDK pak emits a **pointer** to that pak's latest
-  GitHub Release, never a built/mirrored binary. New pak = instantiate the
-  `…-sdk-template` repo + add one line to `knowledge/context/managed_paks.md`.
-- **Toolset gap:** punt / api-explorer / tooling → fix → re-invoke.
-- **Framework changes (`src/vcfops_*/`):** tooling → **`framework-reviewer`**
-  (blanket, every diff; CHANGES REQUESTED blocks the PR — RULE-013) →
-  open PR. The pre-PR, factory-owned regression gate; complements Codex's
-  post-PR pass, does not replace it.
-- **After tooling changes:** if `tooling` modifies anything in
-  `src/vcfops_packaging/templates/`, `src/vcfops_packaging/builder.py`,
-  `src/vcfops_packaging/discrete_builder.py`,
-  `src/vcfops_packaging/release_builder.py`, or
+- **Management pack (Tier 2 Java SDK):** cartographer, designer,
+  `sdk-adapter-author` (Java source, not MPB YAML), `validate-sdk`
+  (cheap loop), `build-sdk` (local dev preview),
+  `sdk-adapter-reviewer` (gate), pak-compare (zero BLOCKING),
+  confirm, install. No render-export/MPB-UI-Verify step; that is
+  Tier 1 only. Each adapter is its own `sentania-labs` repo
+  (`vcf-content-factory-sdk-<name>`), cloned gitignored into
+  `content/sdk-adapters/<name>/` per the
+  `knowledge/context/managed_paks.md` registry; the **official**
+  release is that repo's CI building the `.pak` on a `v*` tag, gated
+  by `python3 -m vcfops_packaging defect-gate --pak <name>`
+  (RULE-012). `/publish` emits a pointer to the latest GitHub
+  Release, never a binary. New pak: instantiate the `…-sdk-template`
+  repo and add one registry line.
+- **Toolset gap:** punt / api-explorer / tooling, fix, re-invoke.
+- **After tooling changes:** if `tooling` touched
+  `src/vcfops_packaging/templates/`, `builder.py`,
+  `discrete_builder.py`, `release_builder.py`, or
   `src/vcfops_dashboards/render.py`, **all distribution zips are
-  stale.** Delegate to `content-packager` to rebuild every manifest
-  in `bundles/`. Not optional — shipping stale zips is how
-  false-positive bugs escape to users.
+  stale**; delegate a full `content-packager` rebuild of every
+  manifest in `bundles/`. Not optional.
 
-## Cross-reference syntax
+## Cross-references
 
-| From → To | YAML | Resolved |
-|---|---|---|
-| SM formula → SM | `@supermetric:"<name>"` | validate (→ `sm_<uuid>`) |
-| View column → SM | `supermetric:"<name>"` in `attribute:` | validate (→ `sm_<uuid>`) |
-| Dashboard → View | `view: "<name>"` | validate (→ view UUID) |
-| Alert → Symptom | `name: "<name>"` in symptom set | sync (→ symptom ID) |
-| Alert → Recommendation | `name: "<name>"` + `priority` | validate (→ rec ID) |
-| Report → View / Dashboard | `view:` / `dashboard:` | validate (→ UUID) |
+Content YAML references other content by exact name, never raw UUID;
+resolution timing and per-type syntax:
+`vcfops-project-conventions` skill §Cross-reference syntax and the
+`vcfops-content-model` skill.
 
 ## Reference material
 
-Read `knowledge/context/README.md` for the tiered index of all context files.
-Scan it at session start — it costs almost nothing and prevents
-re-deriving known knowledge.
+Scan `knowledge/context/README.md` at session start; it is the tiered
+index of all context files and costs almost nothing.
 
 ## User context
 
 Primary user is a VCF Ops SME, direct feedback style. The framework
-exists to combine domain knowledge with Claude's scaling — codify
+exists to combine domain knowledge with Claude's scaling: codify
 corrections so they compound across sessions and across users who
 clone the repo.

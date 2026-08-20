@@ -152,7 +152,8 @@ willingness to propose.
 
 ## The codification loop
 
-Auto-memory is disabled by design (CLAUDE.md Hard Rule 8). The
+Auto-memory is disabled by design (CLAUDE.md, "The framework is the
+product": reviewability matters, auto-memory is off). The
 framework does not silently remember corrections across sessions.
 Instead, every hard-won lesson goes somewhere reviewable:
 

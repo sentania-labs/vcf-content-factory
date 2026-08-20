@@ -7,7 +7,8 @@ description: >
   format, and the recon-before-authoring requirement. Use this
   skill whenever authoring content in this repo, reporting gaps,
   or validating content. For delegation protocol and workflow
-  patterns, use vcfops-orchestration instead. This skill is
+  patterns, see CLAUDE.md (the vcfops-orchestration skill was
+  deleted 2026-05-09 and folded into CLAUDE.md). This skill is
   specific to this project — the domain knowledge lives in the
   vcfops-api, vcfops-content-model, and vcfops-supermetric-dsl
   global skills.
@@ -28,6 +29,9 @@ Example: `[VCF Content Factory] Cluster - Avg Powered-On VM CPU Usage (%)`
 - Do NOT skip the prefix for brevity.
 - Dashboards additionally live under the `VCF Content Factory`
   folder (the `name_path` field).
+- **Exception: management pack display names** use the prose prefix
+  `VCF Content Factory ` with NO brackets. Brackets are for content
+  object names only, never MP names.
 
 ## Never fabricate
 
@@ -61,7 +65,8 @@ python3 -m vcfops_dashboards validate &&
 python3 -m vcfops_customgroups validate &&
 python3 -m vcfops_symptoms validate &&
 python3 -m vcfops_alerts validate &&
-python3 -m vcfops_reports validate
+python3 -m vcfops_reports validate &&
+python3 -m vcfops_managementpacks validate
 ```
 
 ## Recon-before-authoring
