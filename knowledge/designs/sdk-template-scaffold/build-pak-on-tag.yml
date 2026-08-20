@@ -79,7 +79,7 @@ jobs:
             exit 1
           fi
           # DATA only (inert markdown), fetched live from factory main:
-          curl -fsSL "https://raw.githubusercontent.com/sentania-labs/vcf-content-factory/main/context/defects.md" -o defects.md
+          curl -fsSL "https://raw.githubusercontent.com/sentania-labs/vcf-content-factory/main/knowledge/context/defects.md" -o defects.md
           echo "Gating pak '$NAME' against the live factory defect registry (vendored gate)..."
           python3 ci/defect_gate.py --pak "$NAME" --registry defects.md
           # exit 0 = clear; 2 = blocked (defect lines printed above); 1 = bad registry.
