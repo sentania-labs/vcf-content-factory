@@ -104,6 +104,7 @@ SDK adapter reviews.
 | File | Purpose |
 |---|---|
 | `content_api_surface.md` | Content API (public + internal + content-zip) |
+| `content_upload_methodology.md` | Digest: which upload path each content type takes, and the import/enable/verify order |
 | `vcf_operations_api_surface.md` | VCF Ops API surface snapshot |
 | `install_and_enable.md` | Install path + policy enablement |
 | `internal_supermetrics_assign.md` | Internal supermetrics assign endpoint |
