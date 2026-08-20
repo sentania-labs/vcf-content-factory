@@ -1,7 +1,6 @@
 ---
 name: api-explorer
 description: Reverse-engineers undocumented VCF Ops wire formats and API behaviors. Writes findings to knowledge/context/; may add verbatim vendor artifacts under reference/docs/ (never generated content — RULE-016). Never authors content YAML. Spawn when authoring agents hit a toolset gap needing empirical investigation.
-model: opus
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 

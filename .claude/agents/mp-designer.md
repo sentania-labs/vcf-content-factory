@@ -1,7 +1,6 @@
 ---
 name: mp-designer
 description: Designs VCF Operations management pack object models from API maps and user requirements. Runs wizard-style interviews, proposes object hierarchies, classifies metrics/properties, maps requests to objects, defines events. Produces design artifacts that mp-author builds against.
-model: opus
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 

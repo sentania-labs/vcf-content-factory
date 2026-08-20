@@ -1,7 +1,6 @@
 ---
 name: tooling
 description: Maintains all src/vcfops_*/ Python packages. Fixes renderer bugs, adds loader features, extends CLI commands, bootstraps new packages. The only agent authorized to edit src/vcfops_*/ code.
-model: sonnet
 tools: Read, Grep, Glob, Bash, Edit, Write
 ---
 

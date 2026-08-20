@@ -1,7 +1,6 @@
 ---
 name: api-cartographer
 description: General-purpose REST API explorer for unknown external APIs. Maps endpoints, response schemas, object candidates, metric/property classification, and auth flows. Produces structured API maps that downstream MP agents consume. Not VCF Ops-specific — explores any REST API.
-model: opus
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
