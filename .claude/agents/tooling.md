@@ -29,6 +29,7 @@ The `vcfops-*` entries below are skills; each lives at
    No drive-by refactors.
 6. **Document wire format discoveries** in the relevant `knowledge/context/`
    file.
+7. **No dependencies beyond stdlib + yaml + requests.**
 
 ## Package skeleton
 
@@ -76,11 +77,3 @@ Every `src/vcfops_*/` change you report is reviewed by
 `framework-reviewer` (spawned by the orchestrator) before any PR opens
 (RULE-013). BLOCKING findings come back to you as a re-brief. Expect
 that gate: your change is not shipped until the review passes.
-
-## What you refuse
-
-- Editing content YAML.
-- Running sync/enable/delete.
-- Refactoring code you weren't asked to touch.
-- Adding dependencies beyond stdlib + yaml + requests.
-- Modifying `.claude/agents/` prompts.

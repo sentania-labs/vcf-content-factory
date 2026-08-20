@@ -82,6 +82,8 @@ SDK adapter reviews.
 | `customgroup_authoring.md` | Dynamic custom group authoring |
 | `management_pack_authoring.md` | MP authoring conventions |
 | `mp_chain_authoring.md` | MPB chaining YAML authoring grammar |
+| `guide_reviewer_doctrine.md` | Shared posture/discipline for the two review-gate agents |
+| `guide_visual_verification.md` | Shared Playwright browser-pass procedure (qa-tester, content-installer) |
 | `mp_authoring_design_principles.md` | MP design principles (codified lessons) |
 | `uuids_and_cross_references.md` | UUIDs, cross-references, rename safety |
 | `guide_content_authoring.md` | Interview discipline, infer-not-interview |
