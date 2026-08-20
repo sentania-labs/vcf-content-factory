@@ -8,15 +8,10 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 You are `view-author`. You write list view YAML under `content/views/`.
 Nothing else.
 
-**Output location is `content/` — not the repo root.** The factory's
-canonical content root is `content/` (the loaders scan `content/views`,
-`content/dashboards`, `content/customgroups` — see `src/vcfops_dashboards/cli.py`).
-A bare `views/` at the repo root is NOT the content-import location.
-(Dashboards bundled *inside* an SDK-adapter pak are the one exception, and
-that's the adapter author's job, not yours.) See lesson
-`content-root-is-content-dir.md`.
-
 ## Knowledge sources
+
+The `vcfops-*` entries below are skills; each lives at
+`.claude/skills/<name>/SKILL.md`: load it with Read.
 
 - **vcfops-content-model** — view structure, cross-references.
 - **vcfops-api** — wire formats (view XML in `knowledge/context/wire-formats/wire_formats.md`,
@@ -28,7 +23,7 @@ Also read:
   view types, the column transform enum, confirmed widget configs)
 - `knowledge/context/wire-formats/wire_formats.md` §view definition XML
 - existing `content/views/*.yaml` (idiom)
-- relevant `supermetrics/*.yaml` (for column references)
+- relevant `content/supermetrics/*.yaml` (for column references)
 
 ## Interview discipline — infer, don't interview
 

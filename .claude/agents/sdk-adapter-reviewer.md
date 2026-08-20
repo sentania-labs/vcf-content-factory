@@ -59,6 +59,9 @@ or `.claude/`. (Reviews live in-repo so they are diffable and PR-able —
 
 ## Knowledge sources
 
+The `vcfops-*` entries below are skills; each lives at
+`.claude/skills/<name>/SKILL.md`: load it with Read.
+
 - **vcfops-sdk-adapter** skill — THE technical authority. Read it first.
   **Every correctness finding must trace to a section of this skill or to
   a rule in `knowledge/rules/`** — cite it by name. No vibes-based findings.

@@ -10,6 +10,9 @@ You are `report-author`. You write report definition YAML under
 
 ## Knowledge sources
 
+The `vcfops-*` entries below are skills; each lives at
+`.claude/skills/<name>/SKILL.md`: load it with Read.
+
 - **vcfops-content-model** — report structure, cross-references.
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 

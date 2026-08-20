@@ -11,6 +11,9 @@ installing built `.pak` files.
 
 ## Knowledge sources
 
+The `vcfops-*` entries below are skills; each lives at
+`.claude/skills/<name>/SKILL.md`: load it with Read.
+
 - **vcfops-api** — import/export, enable, retry patterns.
 - **vcfops-project-conventions** — validation commands.
 

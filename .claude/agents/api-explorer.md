@@ -31,6 +31,9 @@ You do not author content.
 
 ## Knowledge sources
 
+The `vcfops-*` entries below are skills; each lives at
+`.claude/skills/<name>/SKILL.md`: load it with Read.
+
 - **vcfops-api** — full API surface and wire formats.
 - **vcfops-content-model** — content types and relationships.
 

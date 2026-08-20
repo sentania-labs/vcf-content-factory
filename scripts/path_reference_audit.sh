@@ -121,6 +121,26 @@
 #      exist — that not-yet-existing is the entire point of a gitignore
 #      pattern, not a dead reference.
 #
+#   9. Agent-name pass: backticked kebab-case tokens whose final segment
+#      matches an agent-role suffix derived from the real roster
+#      (`author`, `reviewer`, `recon`, ...) must resolve to an actual
+#      .claude/agents/<name>.md file. Catches dead agent references
+#      like a prompt routing to a renamed/nonexistent agent, a class
+#      invisible to the path rules above. STRUCTURE.md and .gitignore
+#      are excluded (prose about names, not references).
+#  10. Bare-directory pass: a backticked single-segment token with a
+#      trailing slash (`` `managementpacks/` ``) claims a directory.
+#      Valid if it is a top-level entry, resolves relative to the
+#      citing file's directory or its parent, exists anywhere under
+#      the citing file's own directory (non-root citing files only:
+#      a directory README legitimately names nested subdirs), or is a
+#      generic SDK-pak-internal convention (docs/, dashboards/, views/,
+#      lib/, ...; accepted when the managed-pak registry is non-empty).
+#      Otherwise it is reported, with a "did you mean" suggestion when
+#      a tracked directory of that name exists elsewhere. Catches the
+#      bare `managementpacks/` (moved to `content/managementpacks/`)
+#      class. Same STRUCTURE.md / .gitignore exclusion as #9.
+#
 # This heuristic is deliberately generous about NOT reporting ambiguous
 # prose — the goal is signal, not noise. It will not catch every future
 # dead reference; it is a net, not a prover.
@@ -619,6 +639,66 @@ while IFS= read -r hit; do
     check_candidates "${file}" "${lineno}" "${line}" "" "${candidates[@]}"
   fi
 done < <(grep -rnH 'knowledge/' --include='*.py' --include='README.md' src tests 2>/dev/null || true)
+
+
+# --- Third pass: agent-name references (rule #9) ----------------------------
+declare -A AGENT_NAMES=()
+declare -A AGENT_SUFFIXES=()
+for f in .claude/agents/*.md; do
+  [[ -f "${f}" ]] || continue
+  agent_name="$(basename "${f}" .md)"
+  AGENT_NAMES["${agent_name}"]=1
+  [[ "${agent_name}" == *-* ]] && AGENT_SUFFIXES["${agent_name##*-}"]=1
+done
+
+for file in "${TARGET_FILES[@]}"; do
+  case "${file}" in STRUCTURE.md|.gitignore) continue ;; esac
+  while IFS=: read -r lineno tok; do
+    [[ -z "${tok}" ]] && continue
+    suffix="${tok##*-}"
+    [[ -n "${AGENT_SUFFIXES[${suffix}]:-}" ]] || continue
+    [[ -n "${AGENT_NAMES[${tok}]:-}" ]] && continue
+    echo "${file}:${lineno} -> \`${tok}\` (dead agent reference: no .claude/agents/${tok}.md)"
+    FOUND_DEAD=1
+  done < <(grep -noP '(?<=\`)[a-z][a-z0-9]*(?:-[a-z0-9]+)+(?=\`)' "${file}" 2>/dev/null || true)
+done
+
+# --- Fourth pass: bare single-segment directory citations (rule #10) --------
+PAK_INTERNAL_DIRS="docs dashboards views icons profiles lib resources conf src"
+
+for file in "${TARGET_FILES[@]}"; do
+  case "${file}" in STRUCTURE.md|.gitignore) continue ;; esac
+  citing_dir="$(dirname -- "${file}")"
+  while IFS=: read -r lineno tok; do
+    [[ -z "${tok}" ]] && continue
+    seg="${tok%/}"
+    [[ -n "${TOPLEVEL_SET[${seg}]:-}" ]] && continue
+    if is_git_tracked "${citing_dir}/${seg}" || [[ -d "${citing_dir}/${seg}" ]]; then
+      continue
+    fi
+    parent_dir="$(dirname -- "${citing_dir}")"
+    if is_git_tracked "${parent_dir}/${seg}" || [[ -d "${parent_dir}/${seg}" ]]; then
+      continue
+    fi
+    if [[ "${citing_dir}" != "." ]] && git ls-files -- "${citing_dir}/" 2>/dev/null | grep -q "/${seg}/"; then
+      continue
+    fi
+    pak_conv=0
+    for c in ${PAK_INTERNAL_DIRS}; do
+      [[ "${seg}" == "${c}" ]] && pak_conv=1
+    done
+    if [[ "${pak_conv}" -eq 1 && ${#MANAGED_PAK_NAMES[@]} -gt 0 ]]; then
+      continue
+    fi
+    suggestion="$(git ls-files | grep -m1 -oP "^.*?/${seg}/" || true)"
+    if [[ -n "${suggestion}" ]]; then
+      echo "${file}:${lineno} -> \`${tok}\` (bare directory citation: did you mean \`${suggestion}\`?)"
+    else
+      echo "${file}:${lineno} -> \`${tok}\` (bare directory citation: no such directory anywhere in the tree)"
+    fi
+    FOUND_DEAD=1
+  done < <(grep -noP '(?<=\`)[A-Za-z0-9_-]+/(?=\`)' "${file}" 2>/dev/null || true)
+done
 
 if [[ "${FOUND_DEAD}" -eq 1 ]]; then
   echo >&2

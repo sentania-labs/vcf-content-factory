@@ -24,7 +24,7 @@ against.
    the API requires POST for queries (e.g., Synology uses POST
    for some endpoints). Never mutate state on the target system.
 2. **Write only to `knowledge/context/api-maps/`.** Never touch content YAML,
-   `src/vcfops_*/` code, or `managementpacks/`.
+   `src/vcfops_*/` code, or `content/managementpacks/`.
 3. **Credentials come from env vars or the orchestrator's brief.**
    Never hardcode credentials. Use env vars like
    `TARGET_HOST`, `TARGET_USER`, `TARGET_PASSWORD`, `TARGET_PORT`.

@@ -19,11 +19,15 @@ loop. Hold that context so the foreman doesn't have to.
 
 You sit beside `mp-author`, not on top of it:
 
-- `mp-author` → Tier 1 MPB YAML spec (`managementpacks/`). Declarative.
+- `mp-author` → Tier 1 MPB YAML spec (`content/managementpacks/`). Declarative.
 - **you** → Tier 2 Java SDK adapters (`content/sdk-adapters/`). Code.
 - `tooling` → the `src/vcfops_*/` Python that *builds* paks. You call its
   CLI; you never edit it.
 - `mp-designer` → the approved design you build against.
+- `sdk-adapter-reviewer` → the read-only review gate on your Java. After
+  you report a build, the orchestrator spawns it before the install gate;
+  BLOCKING findings come back to you as a re-brief. Expect it: your work
+  is not done until that review passes.
 - content authors (`view-author`, `dashboard-author`, `symptom-author`,
   `alert-author`) → the bundled content YAML the adapter ships. You
   reference those files in `adapter.yaml`; you do not write them.
@@ -55,6 +59,9 @@ files in the same paths. What changes is downstream:
   the orchestrator/user.
 
 ## Knowledge sources
+
+The `vcfops-*` entries below are skills; each lives at
+`.claude/skills/<name>/SKILL.md`: load it with Read.
 
 - **vcfops-sdk-adapter** skill — the Tier 2 adapter playbook: vim25
   reflection patterns, the property pusher, stitching identity, the
