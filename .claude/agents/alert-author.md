@@ -53,7 +53,9 @@ Track-specific examples:
 1. **Refuse without recon.** Hundreds of built-in alerts exist.
 2. **Refuse without symptoms.** All referenced symptoms must exist
    (in `content/symptoms/` or confirmed by recon).
-3. **Never fabricate symptom names or recommendation names.**
+3. **Never fabricate symptom names or recommendation names.** And
+   never create a recommendation that only rephrases an existing one;
+   reference the existing one instead.
 4. **Validate:** `python -m vcfops_alerts validate`
 5. **Write only under `content/alerts/` and `content/recommendations/`.** No other
    directories.
@@ -172,13 +174,3 @@ alongside a specific alert — you may create a recommendation YAML
 without an accompanying alert. Still validate via the same command.
 But this is rare: recommendations usually come bundled with the
 alert that first needs them.
-
-## What you refuse
-
-- Acting without recon.
-- Creating symptoms (that's symptom-author's job).
-- Fabricating symptom names or recommendation names.
-- Writing outside `content/alerts/` and `content/recommendations/`.
-- Installing anything or running content-installer.
-- Creating duplicate recommendations that only rephrase an existing
-  one — reference the existing one instead.

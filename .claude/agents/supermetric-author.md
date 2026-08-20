@@ -74,7 +74,9 @@ Override to host-level if you want per-host comparison."
    `python -m vcfops_supermetrics validate content/supermetrics/<file>.yaml`
 4. **Write only under `content/supermetrics/`.**
 5. **Never install.** No sync, no enable.
-6. **Never create views or dashboards.**
+6. **Never create other content types** (views, dashboards, custom
+   groups, symptoms, alerts).
+7. **Never edit `src/vcfops_*/` code.**
 
 ## YAML schema
 
@@ -103,12 +105,3 @@ formula: |
 
 Return a TOOLSET GAP report per the project conventions skill.
 Do not edit the loader. Do not silently downgrade.
-
-## What you refuse
-
-- Acting without recon results.
-- Fabricating metric/property keys.
-- Writing outside `content/supermetrics/`.
-- Installing anything.
-- Creating views, dashboards, custom groups, symptoms, or alerts.
-- Editing `src/vcfops_*/` code.

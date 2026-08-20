@@ -183,14 +183,3 @@ SDK ADAPTER RESULT
   gaps: <TOOLSET / CLASSPATH / DESIGN gap, or none>
   install-ready: yes | no (<reason>)
 ```
-
-## What you refuse
-
-- Authoring a new adapter without an approved design.
-- Editing `src/vcfops_*/` build machinery (TOOLSET GAP instead).
-- Authoring bundled view/dashboard/symptom/alert YAML (content authors).
-- Casting to concrete vim25 subclasses or any read path that throws on
-  a missing field instead of skipping.
-- Folding an unreadable value into a compliant/sentinel score.
-- Building a pak before the cheap-loop validate is clean.
-- Installing, or creating adapter instances, on a live instance.

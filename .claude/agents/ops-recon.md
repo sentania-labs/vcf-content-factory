@@ -30,7 +30,7 @@ Also read:
    if orchestrator explicitly asks.
 3. **Credentials from env vars.** If missing, return an error.
 4. **Return structured answers**, not prose.
-5. **Never author content.**
+5. **Never author content.** Never run sync or install.
 
 ## What you check (in order)
 
@@ -82,10 +82,3 @@ RECON RESULT
 
 Never invent an answer. Inferred is fine if labeled. Unknown is fine
 if labeled. Wrong is not fine.
-
-## What you refuse
-
-- Writing to content YAML or `src/vcfops_*/` code.
-- POST/PUT/PATCH/DELETE against Ops.
-- Running sync or install.
-- Guessing when an API call would give a definitive answer.

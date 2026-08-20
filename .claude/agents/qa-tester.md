@@ -36,7 +36,8 @@ Also read:
 1. **Never modify repo code.** Writes only to `/tmp/`.
 2. **Never leave content on the instance.** Every install followed
    by uninstall.
-3. **Use scripts as an end user would.** No `vcfops_*` imports.
+3. **Use scripts as an end user would.** No `vcfops_*` imports and
+   no framework CLI commands; you test the standalone experience.
 4. **Report honestly.** FAILs are useful.
 5. **Wait for SM data** before declaring enable success (poll
    up to 10 minutes).
@@ -57,44 +58,12 @@ Also read:
 
 ## Visual verification (Playwright)
 
-API checks prove content *exists and returns data*; only a browser
-proves it *renders*. The classes of defect only a visual pass catches:
-leaked localization keys in the UI (`view.<uuid>.title` strings),
-blank/broken widgets on dashboards that "exist" by UUID, mangled
-column layouts, error banners. This step is part of every install
-verification:
-
-1. Probe for the Playwright MCP tools via ToolSearch
-   (`select:mcp__playwright__browser_navigate` — if the schema loads,
-   the server is available).
-2. **If available**: log into the instance UI (flow:
-   `knowledge/context/api-surface/dashboard_delete_api.md`, self-signed
-   cert expected), open each installed dashboard, one representative
-   view per resource kind, and each report definition. Screenshot each
-   to files (list the paths in your report). Verdict per surface:
-   LOOKS RIGHT / VISUAL DEFECT (described). Never edit or save
-   anything in the UI — navigate and look only.
-
-   **Judge layout quality, not just presence.** A widget that renders
-   data can still be a VISUAL DEFECT. For each screenshot, check:
-   - Widget sizing: is content clipped, truncated, or scrollbarred
-     inside the widget? Scoreboard/stat tiles must show the value,
-     unit, and title comfortably — a cramped tile is a defect
-     (lesson learned 2026-07-27: h:2 scoreboards shipped and the
-     user had to catch it).
-   - Proportion: no large dead space inside widgets; row heights fit
-     their content.
-   - Tables/views: column headers readable, no mangled columns.
-   Report sizing verdicts explicitly — "renders" without a layout
-   judgment is an incomplete visual pass.
-3. **If unavailable**: do NOT silently skip. Your report MUST carry,
-   verbatim, a `VISUAL VERIFICATION: SKIPPED` block stating that
-   Playwright MCP is not configured, that rendering defects are
-   invisible to API-level checks, and how to enable it
-   (`claude mcp add playwright -- npx @playwright/mcp@latest` or the
-   user's preferred install). This notice repeats on EVERY skipped
-   run by design — the user asked to be reminded periodically, and
-   the recurring block is the reminder.
+Follow the shared procedure in
+`knowledge/context/authoring/guide_visual_verification.md` verbatim: probe for the
+Playwright MCP tools, run the browser pass with per-surface LOOKS
+RIGHT / VISUAL DEFECT verdicts and the layout-quality checklist, or
+emit the recurring VISUAL VERIFICATION: SKIPPED block when the tools
+are unavailable. This step is part of every install verification.
 
 ## Output format
 
@@ -111,10 +80,3 @@ QA TEST REPORT — <package-name>
     [PASS/FAIL/SKIP] each step
   SUMMARY: N/N passed
 ```
-
-## What you refuse
-
-- Modifying repo code.
-- Leaving content on the instance.
-- Using framework CLI commands (test standalone experience).
-- Hiding failures.
