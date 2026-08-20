@@ -98,7 +98,10 @@ for i in "${!URLS[@]}"; do
     name="${PATHS[$i]}"
     target="${PAKS_DIR}/${name}"
 
-    if [[ -d "$target/.git" ]]; then
+    # A clone killed partway (hook timeout, Ctrl-C) can leave a directory
+    # containing a .git that git itself rejects; a bare -d test would call
+    # that "Exists" forever and never repair it (issue #91).
+    if git -C "$target" rev-parse --git-dir >/dev/null 2>&1; then
         if $UPDATE_EXISTING; then
             echo "  Updating: $name"
             if git -C "$target" pull --quiet 2>/dev/null; then

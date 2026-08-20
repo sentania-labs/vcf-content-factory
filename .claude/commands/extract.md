@@ -14,11 +14,15 @@ Drive a conversational flow to pull a dashboard and its dependencies off the liv
 
 ## Prerequisites
 
-- `.env` must be sourceable at `/home/scott/pka/workspaces/vcf-content-factory/.env`. Source it in every bash command that calls the CLI:
-  ```
-  source /home/scott/pka/workspaces/vcf-content-factory/.env && <command>
-  ```
-- Working directory: `/home/scott/pka/workspaces/vcf-content-factory/`.
+- Credentials come from `.env` at the repo root, loaded automatically by
+  `src/vcfops_common/_env.py`. **Never source `.env` in a bash command**
+  (RULE-008): sourcing exports every secret into that shell, where any
+  later `env`, `printenv`, or error dump lands them in the transcript.
+  The CLIs resolve credentials themselves; just pass `--profile <name>`.
+  If `.env` is missing or a profile is incomplete, the preflight doctor
+  says so at session start and the credential wizard
+  (`python3 -m vcfops_common setup`) creates it.
+- Run commands from the repo root.
 - The `.env` defines three credential profiles: `prod` (primary lab, read-only `claude`), `qa` (primary lab, `admin` for uninstall round-trips), `devel` (devel lab, `admin` for destructive playground). `/extract` defaults to `devel` because authoring iterations happen on devel by policy. Override with `from <profile>` in `$ARGUMENTS` (e.g. `from prod`, `from qa`).
 
 ## Flow
@@ -29,7 +33,7 @@ Drive a conversational flow to pull a dashboard and its dependencies off the liv
 - If `$ARGUMENTS` contains a dashboard name, use it as the candidate. Confirm with the user that this is the right one.
 - Otherwise, run:
   ```
-  source .env && python3 -m vcfops_extractor list-dashboards --profile <name>
+  python3 -m vcfops_extractor list-dashboards --profile <name>
   ```
   Present the list to the user, ask them to pick one by name. If the instance has many dashboards and a substring is obvious from context, `list-dashboards --profile <name> --folder <substring>` filters.
 - Capture both the dashboard **name** and **UUID** — UUID is more reliable downstream (no ambiguity).
@@ -80,7 +84,7 @@ Ask for confirmation. If the user says anything other than explicit yes, stop an
 Invoke `vcfops_extractor` with the full flag set — `--yes` is safe here because the user already confirmed:
 
 ```
-source .env && python3 -m vcfops_extractor extract dashboard \
+python3 -m vcfops_extractor extract dashboard \
   --profile <profile-from-step-1> \
   --dashboard-id <uuid> \
   --bundle-slug <slug> \
@@ -106,12 +110,12 @@ Use whatever build intent was captured in Step 1:
 
 When building:
 ```
-source .env && python3 -m vcfops_packaging build bundles/third_party/<slug>.yaml
+python3 -m vcfops_packaging build bundles/third_party/<slug>.yaml
 ```
 
 When skipping, surface the exact command so the user can run it later:
 ```
-source .env && python3 -m vcfops_packaging build bundles/third_party/<slug>.yaml
+python3 -m vcfops_packaging build bundles/third_party/<slug>.yaml
 ```
 
 ### 7. Report back to the user
@@ -145,7 +149,7 @@ Final summary:
 The entire flow collapses to a single flag-driven CLI call for power users or CI:
 
 ```
-source .env && python3 -m vcfops_extractor extract dashboard \
+python3 -m vcfops_extractor extract dashboard \
   --profile devel \
   --dashboard-name "IDPS Planner" \
   --bundle-slug idps-planner \
