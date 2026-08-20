@@ -8,24 +8,31 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import List, Optional
 
 import pytest
 
 from vcfops_common.doctor import (
     GREETING,
+    KNOWN_BOOTSTRAP_SCRIPTS,
     STALE_AFTER_HOURS,
     TIMESTAMP_KEY,
     Commit,
+    build_checklist,
     _safe_age_hours,
     classify_commit,
     classify_path,
+    find_env_file,
     inspect_credentials,
     is_first_run,
     inspect_environment,
     read_bootstrap_status,
     run_doctor,
+    unrecorded_bootstrap_scripts,
+    venv_python,
     _parse_commit_log,
 )
 
@@ -37,30 +44,52 @@ from vcfops_common.doctor import (
 FAKE_SECRET = "synthetic-not-a-real-password-42"
 
 
+def write_fresh_bootstrap_status(root: Path) -> None:
+    """Both known scripts recorded, fresh, zero failures."""
+    (root / ".bootstrap-status").write_text(
+        f"{ts(hours_ago=1)} bootstrap_references cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts(hours_ago=1)} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+
+
 def make_configured_root(tmp_path: Path) -> Path:
     """A tmp repo root that looks fully configured."""
-    (tmp_path / ".env").write_text(
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / ".env").write_text(
         "VCFOPS_PROD_HOST=ops.example.test\n"
         "VCFOPS_PROD_USER=admin\n"
         f"VCFOPS_PROD_PASSWORD={FAKE_SECRET}\n"
     )
-    (tmp_path / ".venv").mkdir()
-    runtime = tmp_path / "src" / "vcfops_managementpacks" / "adapter_runtime"
-    runtime.mkdir(parents=True)
+    (root / ".venv").mkdir()
+    runtime = root / "src" / "vcfops_managementpacks" / "adapter_runtime"
+    (runtime / "lib").mkdir(parents=True)
     (runtime / "mpb_adapter3.jar").write_bytes(b"jar")
-    return tmp_path
+    (runtime / "lib" / "mpb_adapter-9.0.1.jar").write_bytes(b"jar")
+    write_fresh_bootstrap_status(root)
+    return root
 
 
 def fake_git(*, behind_log: str = "", ahead_log: str = "", dirty: bool = False,
-             fetch_rc: int = 0):
+             fetch_rc: int = 0, remotes: str = "origin\n",
+             tracking_remote: str = "origin", upstream: str = "origin/main\n",
+             fetch_log: Optional[List[str]] = None):
     def run(args, timeout=0):
         args = list(args)
         if args[:2] == ["rev-parse", "--git-dir"]:
             return 0, ".git\n"
         if args[0] == "fetch":
+            if fetch_log is not None:
+                fetch_log.append(args[1] if len(args) > 1 else "")
             return fetch_rc, ""
+        if args == ["remote"]:
+            return 0, remotes
+        if args[:2] == ["config", "--get"]:
+            return (0, tracking_remote + "\n") if tracking_remote else (1, "")
         if args == ["rev-parse", "--abbrev-ref", "@{upstream}"]:
-            return 0, "origin/main\n"
+            return (0, upstream) if upstream else (1, "")
+        if args == ["rev-parse", "--abbrev-ref", "HEAD"]:
+            return 0, "main\n"
         if args[0] == "status":
             return 0, (" M src/<fixture-a>.py\n" if dirty else "")
         if args[0] == "log":
@@ -72,12 +101,14 @@ def fake_git(*, behind_log: str = "", ahead_log: str = "", dirty: bool = False,
     return run
 
 
-def collect(root, git, imports_ok=True, environ=None):
+def collect(root, git, imports_ok=True, environ=None, check_import=None):
     lines = []
+    if check_import is None and imports_ok is not None:
+        check_import = lambda name: imports_ok  # noqa: E731
     run_doctor(
         root,
         git=git,
-        check_import=lambda name: imports_ok,
+        check_import=check_import,
         environ={} if environ is None else environ,  # isolate from real shell
         out=lines.append,
     )
@@ -187,7 +218,7 @@ def test_behind_dirty_tree_never_offers_pull(tmp_path):
     behind = "\x01ddd4444\x02fix\n\nsrc/<fixture-a>.py\n"
     lines = collect(root, fake_git(behind_log=behind, dirty=True))
     text = "\n".join(lines)
-    assert "uncommitted changes" in text
+    assert "uncommitted or untracked changes" in text
     assert "git pull --ff-only" not in text
 
 
@@ -358,6 +389,8 @@ def test_fresh_bootstrap_data_emits_no_age_line(tmp_path):
     (root / ".bootstrap-status").write_text(
         f"{ts(hours_ago=STALE_AFTER_HOURS - 1)} bootstrap_references "
         "cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts(hours_ago=STALE_AFTER_HOURS - 1)} bootstrap_managed_paks "
+        "cloned=1 updated=0 failed=0 failures=-\n"
     )
     lines = collect(root, fake_git())
     assert len(lines) == 1  # still the green line: exception-only
@@ -417,16 +450,287 @@ def test_timestamp_key_cannot_be_spoofed_by_a_token(tmp_path):
     stamp = ts(hours_ago=1)
     (root / ".bootstrap-status").write_text(
         f"{stamp} bootstrap_references cloned=1 failed=0 {TIMESTAMP_KEY}=1999-01-01T00:00:00Z\n"
+        f"{stamp} bootstrap_managed_paks cloned=1 failed=0 failures=-\n"
     )
     status, _ = read_bootstrap_status(root)
     assert status["bootstrap_references"][TIMESTAMP_KEY] == stamp
     assert "stale" not in "\n".join(collect(root, fake_git()))
 
 
-def test_missing_bootstrap_status_is_silent_when_configured(tmp_path):
-    root = make_configured_root(tmp_path)
+def test_both_scripts_recorded_is_silent(tmp_path):
+    root = make_configured_root(tmp_path)  # writes both fresh records
     lines = collect(root, fake_git())
     assert len(lines) == 1  # still the green line
+
+
+def test_one_missing_script_record_is_its_own_delta(tmp_path):
+    """A clean record from one script must not cover for the other,
+    which may have died before its status write (hook timeout, missing
+    registry)."""
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts(hours_ago=1)} bootstrap_references cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    lines = collect(root, fake_git())
+    text = "\n".join(lines)
+    assert "no bootstrap run recorded for bootstrap_managed_paks" in text
+    assert "bootstrap_references" not in text.split("recorded for")[1]
+
+
+def test_absent_status_file_reports_both_scripts(tmp_path):
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").unlink()
+    text = "\n".join(collect(root, fake_git()))
+    for script in KNOWN_BOOTSTRAP_SCRIPTS:
+        assert script in text
+
+
+def test_unrecorded_bootstrap_scripts_helper():
+    assert unrecorded_bootstrap_scripts({}) == list(KNOWN_BOOTSTRAP_SCRIPTS)
+    assert unrecorded_bootstrap_scripts(
+        {"bootstrap_references": {}}
+    ) == ["bootstrap_managed_paks"]
+    assert unrecorded_bootstrap_scripts(
+        {s: {} for s in KNOWN_BOOTSTRAP_SCRIPTS}
+    ) == []
+
+
+# ---------------------------------------------------------------------------
+# Codex PR #93: empty credential values are not credentials
+# ---------------------------------------------------------------------------
+
+def test_empty_password_in_env_file_is_missing(tmp_path):
+    """resolve_profile_credentials() rejects empty required values, so
+    the doctor must not call the profile ready."""
+    root = make_configured_root(tmp_path)
+    (root / ".env").write_text(
+        "VCFOPS_PROD_HOST=ops.example.test\n"
+        "VCFOPS_PROD_USER=admin\n"
+        "VCFOPS_PROD_PASSWORD=\n"
+    )
+    exists, profiles, note = inspect_credentials(root, environ={})
+    assert exists and not note
+    assert profiles[0].missing == ["VCFOPS_PROD_PASSWORD"]
+    text = "\n".join(collect(root, fake_git()))
+    assert "profile 'prod' is incomplete" in text
+    assert "profiles ready" not in text
+
+
+def test_empty_quoted_value_is_missing(tmp_path):
+    root = make_configured_root(tmp_path)
+    (root / ".env").write_text(
+        "VCFOPS_PROD_HOST=ops.example.test\n"
+        "VCFOPS_PROD_USER=admin\n"
+        'VCFOPS_PROD_PASSWORD=""\n'
+    )
+    _, profiles, _ = inspect_credentials(root, environ={})
+    assert profiles[0].missing == ["VCFOPS_PROD_PASSWORD"]
+
+
+def test_empty_exported_value_is_missing(tmp_path):
+    root = make_configured_root(tmp_path)
+    (root / ".env").unlink()
+    environ = {
+        "VCFOPS_PROD_HOST": "ops.example.test",
+        "VCFOPS_PROD_USER": "admin",
+        "VCFOPS_PROD_PASSWORD": "   ",  # whitespace only
+    }
+    _, profiles, _ = inspect_credentials(root, environ=environ)
+    assert profiles[0].missing == ["VCFOPS_PROD_PASSWORD"]
+
+
+# ---------------------------------------------------------------------------
+# Codex PR #93: parent-directory .env, venv deps, tracking remote, JAR set
+# ---------------------------------------------------------------------------
+
+def test_env_file_in_parent_directory_is_honored(tmp_path):
+    """_env.load_dotenv walks upward, so a .env above the repo root is a
+    supported setup and must not read as unconfigured."""
+    root = make_configured_root(tmp_path)
+    (root / ".env").unlink()
+    (tmp_path / ".env").write_text(
+        "VCFOPS_PROD_HOST=ops.example.test\n"
+        "VCFOPS_PROD_USER=admin\n"
+        f"VCFOPS_PROD_PASSWORD={FAKE_SECRET}\n"
+    )
+    assert find_env_file(root) == tmp_path / ".env"
+    lines = collect(root, fake_git())
+    assert len(lines) == 1
+    assert lines[0].startswith("doctor: all green")
+    assert FAKE_SECRET not in lines[0]
+
+
+def install_venv_python(root: Path, script: str = "") -> Path:
+    """Put an executable at <root>/.venv/bin/python3.
+
+    Default: a symlink to the real interpreter running the suite. With
+    `script`, a shell stub whose stdout the probe must cope with.
+    """
+    bindir = root / ".venv" / "bin"
+    bindir.mkdir(parents=True, exist_ok=True)
+    target = bindir / "python3"
+    if script:
+        target.write_text(script)
+        target.chmod(0o755)
+    else:
+        target.symlink_to(sys.executable)
+    return target
+
+
+def test_deps_are_checked_in_the_repo_venv(tmp_path):
+    """Claude may run outside the venv the concierge created; deps that
+    live only in <root>/.venv must count as present."""
+    root = make_configured_root(tmp_path)
+    vpy = install_venv_python(root)
+    assert venv_python(root) == vpy
+    # Current interpreter has nothing; the venv (the real interpreter
+    # running this suite) has everything. Intersection: nothing missing.
+    env = inspect_environment(root, check_import=lambda n: False)
+    assert env.missing_modules == []
+    assert str(vpy) in env.checked_interpreter
+
+
+def test_ambient_deps_survive_a_depless_venv(tmp_path):
+    """BLOCKING regression guard: a bare `python -m venv --without-pip`
+    next to a fully provisioned system python must NOT produce
+    FIRST-RUN DETECTED. Missing means missing in BOTH interpreters."""
+    root = make_configured_root(tmp_path)
+    # A venv python that reports every module missing.
+    install_venv_python(
+        root,
+        "#!/bin/sh\necho 'requests yaml jmespath'\n",
+    )
+    env = inspect_environment(root)  # ambient interpreter has the deps
+    assert env.missing_modules == []
+    assert not is_first_run(root, env, env_file_exists=True)
+    lines = collect(root, fake_git(), imports_ok=None)
+    assert len(lines) == 1
+    assert lines[0].startswith("doctor: all green")
+
+
+def test_probe_rejects_unexpected_child_stdout(tmp_path):
+    """BLOCKING regression guard: tokens the child prints that are not
+    module names we asked about must not become fabricated 'missing
+    modules' (nor a giant CHECKLIST-JSON dump)."""
+    root = make_configured_root(tmp_path)
+    install_venv_python(
+        root,
+        "#!/bin/sh\necho 'Warning: nonstandard site dir'\necho 'yaml'\n",
+    )
+    env = inspect_environment(root, check_import=lambda n: False)
+    # Probe rejected wholesale, so we fall back to the current
+    # interpreter's answer rather than inventing names.
+    assert env.checked_interpreter == "current"
+    for token in ("Warning:", "nonstandard", "site", "dir"):
+        assert token not in env.missing_modules
+
+
+def test_probe_rejects_flood_of_child_stdout(tmp_path):
+    root = make_configured_root(tmp_path)
+    install_venv_python(
+        root,
+        "#!/bin/sh\npython3 -c \"print('junk ' * 50000)\"\n",
+    )
+    env = inspect_environment(root, check_import=lambda n: False)
+    assert env.checked_interpreter == "current"
+    assert all(m in ("requests", "yaml", "jmespath") for m in env.missing_modules)
+    # And nothing enormous reaches the checklist.
+    checklist = build_checklist(root, env, True, [], {})
+    assert len(json.dumps({"items": checklist})) < 4000
+
+
+def test_venv_probe_falls_back_when_interpreter_is_broken(tmp_path):
+    root = make_configured_root(tmp_path)
+    install_venv_python(root, "#!/nonexistent/interpreter\n")
+    env = inspect_environment(root, check_import=lambda n: False)
+    assert env.checked_interpreter == "current"
+
+
+def test_no_venv_uses_current_interpreter(tmp_path):
+    root = make_configured_root(tmp_path)
+    env = inspect_environment(root)  # .venv exists but holds no interpreter
+    assert env.checked_interpreter == "current"
+
+
+def test_missing_module_line_names_the_interpreter(tmp_path):
+    """jmespath alone missing is not first-run, so the delta line shows,
+    and it must say which interpreter was consulted."""
+    root = make_configured_root(tmp_path)
+    lines = collect(root, fake_git(), imports_ok=None,
+                    check_import=lambda n: n != "jmespath")
+    text = "\n".join(lines)
+    assert "missing python module(s): jmespath" in text
+    assert "[checked: current]" in text
+
+
+def test_fetches_the_configured_tracking_remote(tmp_path):
+    """Fetching a hardcoded 'origin' cannot refresh a checkout tracking
+    upstream/main, which would yield a stale comparison."""
+    root = make_configured_root(tmp_path)
+    fetched: List[str] = []
+    git = fake_git(
+        remotes="origin\nupstream\n",
+        tracking_remote="upstream",
+        upstream="upstream/main\n",
+        fetch_log=fetched,
+    )
+    lines = collect(root, git)
+    assert fetched == ["upstream"]
+    assert "upstream/main" in lines[0]
+
+
+def test_falls_back_to_origin_when_no_tracking_remote_configured(tmp_path):
+    root = make_configured_root(tmp_path)
+    fetched: List[str] = []
+    git = fake_git(tracking_remote="", fetch_log=fetched)
+    collect(root, git)
+    assert fetched == ["origin"]
+
+
+def test_untracked_only_work_counts_as_dirty(tmp_path):
+    """--untracked-files=no would call this tree clean and offer a pull
+    while the user has local work sitting in it."""
+    root = make_configured_root(tmp_path)
+    behind = "\x01ddd4444\x02upstream fix\n\nsrc/<fixture-a>.py\n"
+
+    def git(args, timeout=0):
+        args = list(args)
+        if args[0] == "status":
+            assert "--untracked-files=no" not in args
+            return 0, "?? scratch-notes.md\n"  # untracked only
+        return fake_git(behind_log=behind)(args, timeout)
+
+    text = "\n".join(collect(root, git))
+    assert "uncommitted or untracked changes" in text
+    assert "git pull --ff-only" not in text
+
+
+def test_tier1_runtime_needs_adapter_jar_and_lib_jars(tmp_path):
+    root = make_configured_root(tmp_path)
+    runtime = root / "src" / "vcfops_managementpacks" / "adapter_runtime"
+
+    # A Tier 2 SDK jar alone must NOT satisfy the Tier 1 runtime check.
+    (runtime / "mpb_adapter3.jar").unlink()
+    (runtime / "lib" / "mpb_adapter-9.0.1.jar").unlink()
+    (runtime / "vrops-adapters-sdk-2.2.jar").write_bytes(b"jar")
+    env = inspect_environment(root, lambda n: True)
+    assert env.missing_jars == [
+        "adapter_runtime/mpb_adapter3.jar",
+        "adapter_runtime/lib/*.jar",
+    ]
+    text = "\n".join(collect(root, fake_git()))
+    assert "ADAPTER_JAR_GAP" in text and "LIB_GAP" in text
+
+    # adapter jar present but no lib jars: still incomplete (LIB_GAP).
+    (runtime / "mpb_adapter3.jar").write_bytes(b"jar")
+    env = inspect_environment(root, lambda n: True)
+    assert env.missing_jars == ["adapter_runtime/lib/*.jar"]
+
+    # Both present: complete.
+    (runtime / "lib" / "mpb_adapter-9.0.1.jar").write_bytes(b"jar")
+    env = inspect_environment(root, lambda n: True)
+    assert env.missing_jars == []
+    assert env.jars_present
 
 
 # ---------------------------------------------------------------------------
@@ -512,8 +816,10 @@ def test_non_numeric_failed_count_degrades_not_crashes(tmp_path):
 def test_non_numeric_failed_count_in_first_run_checklist(tmp_path):
     root = make_configured_root(tmp_path)
     (root / ".env").unlink()  # first-run path
+    # Both scripts recorded, so the unparseable count is the only problem.
     (root / ".bootstrap-status").write_text(
         f"{ts()} bootstrap_references cloned=1 updated=0 failed=oops failures=-\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
     )
     lines = collect(root, fake_git())
     json_line = next(ln for ln in lines if ln.startswith("CHECKLIST-JSON: "))
@@ -583,9 +889,9 @@ def test_export_only_credentials_are_not_first_run(tmp_path):
     root = make_configured_root(tmp_path)
     (root / ".env").unlink()  # no file at all; exports only
     environ = {
-        "VCFOPS_PROD_HOST": "",
-        "VCFOPS_PROD_USER": "",
-        "VCFOPS_PROD_PASSWORD": "",
+        "VCFOPS_PROD_HOST": "ops.example.test",
+        "VCFOPS_PROD_USER": "admin",
+        "VCFOPS_PROD_PASSWORD": FAKE_SECRET,
     }
     lines = collect(root, fake_git(), environ=environ)
     text = "\n".join(lines)

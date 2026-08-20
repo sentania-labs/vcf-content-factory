@@ -59,8 +59,11 @@ GREETING = (
 # e.g.  2026-08-20T14:03:11Z bootstrap_references cloned=2 updated=1 failed=1 failures=dell-emc-mp
 #
 # The doctor takes the LAST line per script name, which is robust to a
-# hand-edited or legacy append-style file as well. Absent file = no delta
-# (nothing has run yet; only surfaced inside the first-run checklist).
+# hand-edited or legacy append-style file as well. BOTH scripts in
+# KNOWN_BOOTSTRAP_SCRIPTS must have a line: a script that dies before its
+# status write (hook timeout, missing registry) leaves none, and the
+# other script's clean record must not cover for it, so a missing record
+# (or a missing file) is its own delta.
 # Field 1 (the timestamp) is parsed: the SessionStart hook runs both
 # bootstrap scripts and then the doctor sequentially in one composite
 # command, so data older than STALE_AFTER_HOURS means a script did not
@@ -69,6 +72,12 @@ GREETING = (
 # (trailing `Z` accepted); an unparseable one degrades to an "age
 # unknown" line, never a crash.
 BOOTSTRAP_STATUS_FILE = ".bootstrap-status"
+
+# Both scripts must have a line before bootstrap health counts as good.
+KNOWN_BOOTSTRAP_SCRIPTS: Tuple[str, ...] = (
+    "bootstrap_references",
+    "bootstrap_managed_paks",
+)
 
 # Paths that are environment/state: local by nature, never PR-nudged.
 # Everything NOT matching this list is classified core (portable and a
@@ -83,6 +92,7 @@ LOCAL_STATE_PREFIXES: Tuple[str, ...] = (
 
 _GIT_TIMEOUT = 10          # seconds, per plumbing call
 _FETCH_TIMEOUT = 15        # seconds; fail-open when offline
+_PROBE_TIMEOUT = 10        # seconds; venv interpreter dependency probe
 
 _REQUIRED_PROFILE_SUFFIXES = ("HOST", "USER", "PASSWORD")
 # Longest-first so _AUTH_SOURCE is not misparsed as _SOURCE etc.
@@ -242,6 +252,29 @@ class UpstreamState:
     note: str = ""
 
 
+def _tracking_remote(git: GitRunner) -> str:
+    """Name of the remote this branch tracks, defaulting to 'origin'.
+
+    Fetching a hardcoded 'origin' cannot refresh a checkout that tracks
+    e.g. 'upstream/main', which would silently produce a stale (and
+    possibly wrongly green) comparison.
+    """
+    rc, out = git(["rev-parse", "--abbrev-ref", "HEAD"], _GIT_TIMEOUT)
+    branch = out.strip() if rc == 0 else ""
+    remotes: List[str] = []
+    rc, out = git(["remote"], _GIT_TIMEOUT)
+    if rc == 0:
+        remotes = [r.strip() for r in out.splitlines() if r.strip()]
+    if branch:
+        rc, out = git(["config", "--get", f"branch.{branch}.remote"], _GIT_TIMEOUT)
+        configured = out.strip() if rc == 0 else ""
+        if configured and (not remotes or configured in remotes):
+            return configured
+    if remotes:
+        return "origin" if "origin" in remotes else remotes[0]
+    return "origin"
+
+
 def inspect_upstream(git: GitRunner) -> UpstreamState:
     st = UpstreamState()
     rc, _ = git(["rev-parse", "--git-dir"], _GIT_TIMEOUT)
@@ -249,7 +282,8 @@ def inspect_upstream(git: GitRunner) -> UpstreamState:
         st.note = "git not available; upstream check skipped"
         return st
 
-    rc, out = git(["fetch", "origin", "--quiet"], _FETCH_TIMEOUT)
+    remote = _tracking_remote(git)
+    rc, out = git(["fetch", remote, "--quiet"], _FETCH_TIMEOUT)
     st.fetch_ok = rc == 0
 
     rc, out = git(["rev-parse", "--abbrev-ref", "@{upstream}"], _GIT_TIMEOUT)
@@ -259,7 +293,7 @@ def inspect_upstream(git: GitRunner) -> UpstreamState:
         rc, out = git(["rev-parse", "--abbrev-ref", "HEAD"], _GIT_TIMEOUT)
         branch = out.strip() if rc == 0 else ""
         if branch:
-            candidate = f"origin/{branch}"
+            candidate = f"{remote}/{branch}"
             rc, _ = git(["rev-parse", "--verify", "--quiet", candidate], _GIT_TIMEOUT)
             if rc == 0:
                 st.upstream = candidate
@@ -268,7 +302,9 @@ def inspect_upstream(git: GitRunner) -> UpstreamState:
         return st
     st.available = True
 
-    rc, out = git(["status", "--porcelain", "--untracked-files=no"], _GIT_TIMEOUT)
+    # Untracked files count as dirty: offering a pull while the user has
+    # local work sitting in the tree violates never-touch-a-dirty-tree.
+    rc, out = git(["status", "--porcelain"], _GIT_TIMEOUT)
     st.dirty = rc == 0 and bool(out.strip())
 
     log_fmt = ["log", "--pretty=format:\x01%h\x02%s", "--name-only"]
@@ -292,7 +328,8 @@ def _render_behind(st: UpstreamState) -> List[str]:
             lines.append(f"    - {c.subject}")
     if st.dirty:
         lines.append(
-            "  local tree has uncommitted changes; resolve them before pulling"
+            "  local tree has uncommitted or untracked changes; resolve them "
+            "before pulling"
         )
     elif st.ahead:
         # Diverged: a fast-forward pull cannot succeed, do not offer one.
@@ -347,9 +384,29 @@ class ProfileStatus:
         return not self.missing
 
 
+def find_env_file(start: Path) -> Optional[Path]:
+    """First `.env` found walking up from `start`, or None.
+
+    Mirrors ``_env.load_dotenv``, which walks upward through every
+    parent: a `.env` kept above the repo root is a supported setup that
+    the CLIs resolve fine, so the doctor must not call it unconfigured.
+    """
+    here = start.resolve()
+    for candidate in [here, *here.parents]:
+        env_file = candidate / ".env"
+        if env_file.is_file():
+            return env_file
+    return None
+
+
 def _env_keys(env_file: Path) -> List[str]:
-    """Return KEY names defined in a .env file. Values are never read
-    into any structure that leaves this function.
+    """Return KEY names with a NON-EMPTY value in a .env file.
+
+    Values are inspected only for emptiness and never returned, stored,
+    or logged (RULE-008). Empty values are treated as undefined because
+    ``resolve_profile_credentials()`` rejects them, so counting
+    ``VCFOPS_PROD_PASSWORD=`` as present would let the doctor print
+    "profiles ready" right before every real CLI call fails.
 
     May raise OSError / UnicodeDecodeError (e.g. a Windows editor saved
     the file as UTF-16, or the file is unreadable); the caller degrades.
@@ -363,8 +420,24 @@ def _env_keys(env_file: Path) -> List[str]:
             line = line[len("export "):].lstrip()
         if "=" not in line:
             continue
-        key = line.partition("=")[0].strip()
-        if key:
+        key, _, val = line.partition("=")
+        key = key.strip()
+        val = val.strip()
+        # Same trivial unquoting as _env._parse_into_environ, so a value
+        # of "" or '' is recognized as empty rather than two characters.
+        # Note one deliberate divergence: this strips AFTER unquoting
+        # (_env.py:83-84 does not), so a quoted all-whitespace value like
+        # PASSWORD="  " is called missing here even though the real
+        # loader would accept it. That errs toward telling the user to
+        # fix a credential that almost certainly does not work, which is
+        # the safe direction for a preflight.
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in ("'", '"'):
+            val = val[1:-1].strip()
+        elif val and val[0] not in ("'", '"'):
+            hash_idx = val.find("#")
+            if hash_idx != -1:
+                val = val[:hash_idx].strip()
+        if key and val:
             keys.append(key)
     return keys
 
@@ -373,30 +446,44 @@ def inspect_credentials(
     root: Path,
     environ: Optional[Dict[str, str]] = None,
 ) -> Tuple[bool, List[ProfileStatus], str]:
-    """Return (env_file_exists, per-profile status, note) for <root>/.env.
+    """Return (env_file_found, per-profile status, note).
 
-    Profile/key NAMES are unioned with ``VCFOPS_*`` names present in the
-    process environment, matching _env.py's contract that a real shell
-    export always wins over the file (a user configured entirely via
-    exports is configured, not first-run). Names only, never values
-    (RULE-008). ``note`` is non-empty when .env exists but could not be
-    parsed; the credential check then runs on environ names alone.
+    The `.env` is located by the same upward walk `_env.load_dotenv`
+    uses, so a file kept above the repo root counts. Profile/key NAMES
+    are unioned with ``VCFOPS_*`` names carrying a non-empty value in
+    the process environment, matching _env.py's contract that a real
+    shell export always wins over the file. Only NAMES are ever
+    retained or printed; values are inspected for emptiness and
+    discarded (RULE-008). ``note`` is non-empty when a `.env` was found
+    but could not be parsed; the check then runs on exported vars alone.
     """
     if environ is None:
-        environ = dict.fromkeys(os.environ, "")  # names only
-    env_file = root / ".env"
-    env_file_exists = env_file.is_file()
+        # Blanked at the boundary (RULE-008 defense in depth): the only
+        # property this function needs from a value is empty vs
+        # non-empty, so no real secret is ever held in doctor memory.
+        environ = {
+            k: ("x" if (v or "").strip() else "")
+            for k, v in os.environ.items()
+            if k.startswith("VCFOPS_")
+        }
+    env_file = find_env_file(root)
+    env_file_exists = env_file is not None
     note = ""
     keys: set = set()
-    if env_file_exists:
+    if env_file is not None:
         try:
             keys = set(_env_keys(env_file))
         except (OSError, UnicodeDecodeError) as exc:
             note = (
-                f".env exists but could not be read "
+                f".env exists but could not be read: {env_file} "
                 f"({type(exc).__name__}); checking exported vars only"
             )
-    keys |= {k for k in environ if k.startswith("VCFOPS_")}
+    # Empty exported values are undefined too: resolve_profile_credentials()
+    # rejects them, so `export VCFOPS_PROD_PASSWORD=` is not a credential.
+    keys |= {
+        k for k, v in environ.items()
+        if k.startswith("VCFOPS_") and (v or "").strip()
+    }
     seen: Dict[str, set] = {}
     for key in keys:
         if not key.startswith("VCFOPS_"):
@@ -432,25 +519,132 @@ class EnvSanity:
     python_ok: bool = True
     python_version: str = ""
     missing_modules: List[str] = field(default_factory=list)
-    jars_present: bool = True
+    missing_jars: List[str] = field(default_factory=list)
+    checked_interpreter: str = "current"  # "current" or the venv python path
+
+    @property
+    def jars_present(self) -> bool:
+        return not self.missing_jars
+
+
+def venv_python(root: Path) -> Optional[Path]:
+    """Path to the repo venv's interpreter, or None if there is no venv."""
+    for rel in ("bin/python3", "bin/python", "Scripts/python.exe"):
+        candidate = root / ".venv" / rel
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _probe_modules(interpreter: Path, modules: Sequence[str]) -> Optional[List[str]]:
+    """Ask another interpreter which of `modules` it cannot import.
+
+    Returns the missing list, or None if the probe could not run (the
+    caller then falls back to checking the current interpreter). Uses
+    find_spec in the child, so nothing is actually imported.
+    """
+    code = (
+        "import importlib.util, sys\n"
+        "missing = []\n"
+        "for m in sys.argv[1:]:\n"
+        "    try:\n"
+        "        found = importlib.util.find_spec(m) is not None\n"
+        "    except Exception:\n"
+        "        found = False\n"
+        "    if not found:\n"
+        "        missing.append(m)\n"
+        "print(' '.join(missing))\n"
+    )
+    try:
+        proc = subprocess.run(
+            [str(interpreter), "-c", code, *modules],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=_PROBE_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired, UnicodeDecodeError, ValueError):
+        return None
+    if proc.returncode != 0:
+        return None
+    # Only the names we asked about may come back. A venv python that
+    # prints anything else on stdout (site warnings, banners, a chatty
+    # sitecustomize) would otherwise fabricate "missing modules" and, in
+    # the first-run path, dump every token into the CHECKLIST-JSON line.
+    # Any unexpected token means the probe is untrustworthy: fail it and
+    # let the caller fall back to the current interpreter.
+    expected = set(modules)
+    reported = proc.stdout.split()
+    if any(tok not in expected for tok in reported):
+        return None
+    return reported
 
 
 def inspect_environment(
     root: Path,
     check_import: Optional[Callable[[str], bool]] = None,
+    *,
+    probe: Callable[[Path, Sequence[str]], Optional[List[str]]] = _probe_modules,
 ) -> EnvSanity:
+    es = EnvSanity()
+    es.python_version = "%d.%d.%d" % sys.version_info[:3]
+    es.python_ok = sys.version_info >= (3, 9)
+
+    # Dependency check, reconciled across BOTH interpreters. The hook's
+    # interpreter is often NOT the repo venv (Claude may be started
+    # outside an activated virtualenv) and the concierge installs deps
+    # into <root>/.venv, so checking only the current interpreter reports
+    # FIRST-RUN forever on a correctly set up machine (Codex P1). But
+    # checking only the venv has the mirror-image failure: an ambient
+    # python3 that has everything, next to a bare or dep-less .venv,
+    # would also report FIRST-RUN forever. A module therefore counts as
+    # missing only when BOTH interpreters lack it, i.e. when no
+    # interpreter on this machine can run the CLIs.
     if check_import is None:
-        def check_import(name: str) -> bool:
+        def check_import(name: str) -> bool:  # noqa: F811
             try:
                 return importlib.util.find_spec(name) is not None
             except (ImportError, ValueError):
                 return False
-    es = EnvSanity()
-    es.python_version = "%d.%d.%d" % sys.version_info[:3]
-    es.python_ok = sys.version_info >= (3, 9)
-    es.missing_modules = [m for m in _CHECK_MODULES if not check_import(m)]
+    current_missing = [m for m in _CHECK_MODULES if not check_import(m)]
+
+    venv_missing: Optional[List[str]] = None
+    # Nothing missing here means nothing can be missing in the
+    # intersection, so skip the subprocess entirely in the common case.
+    if current_missing:
+        vpy = venv_python(root)
+        # Skip the subprocess only when we are ALREADY running inside
+        # that venv (sys.prefix points at it); a same-named interpreter
+        # is not the same environment.
+        already_in_venv = False
+        try:
+            already_in_venv = Path(sys.prefix).resolve() == (root / ".venv").resolve()
+        except OSError:
+            pass
+        if vpy is not None and not already_in_venv:
+            venv_missing = probe(vpy, _CHECK_MODULES)
+            if venv_missing is not None:
+                es.checked_interpreter = f"current + {vpy}"
+
+    if venv_missing is None:
+        es.missing_modules = current_missing
+    else:
+        # Intersection: missing here AND missing there.
+        venv_set = set(venv_missing)
+        es.missing_modules = [m for m in current_missing if m in venv_set]
+
+    # Tier 1 MPB runtime: the builder needs adapter_runtime/mpb_adapter3.jar
+    # (constant-pool source for the per-adapter JAR) AND at least one
+    # adapter_runtime/lib/*.jar. Without either it still emits a pak, but
+    # one carrying ADAPTER_JAR_GAP / LIB_GAP placeholders that cannot run
+    # (src/vcfops_managementpacks/builder.py). Any-jar-present was too
+    # loose: a Tier 2 SDK jar alone would have passed.
     runtime_dir = root / _ADAPTER_RUNTIME_REL
-    es.jars_present = runtime_dir.is_dir() and any(runtime_dir.glob("*.jar"))
+    if not (runtime_dir / "mpb_adapter3.jar").is_file():
+        es.missing_jars.append("adapter_runtime/mpb_adapter3.jar")
+    lib_dir = runtime_dir / "lib"
+    if not (lib_dir.is_dir() and any(lib_dir.glob("*.jar"))):
+        es.missing_jars.append("adapter_runtime/lib/*.jar")
     return es
 
 
@@ -501,6 +695,18 @@ def _safe_age_hours(stamp: str, *, now: Optional[datetime] = None) -> Optional[f
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
     return (current - parsed).total_seconds() / 3600.0
+
+
+def unrecorded_bootstrap_scripts(
+    bootstrap: Dict[str, Dict[str, str]],
+) -> List[str]:
+    """Known bootstrap scripts with no line in `.bootstrap-status`.
+
+    A script that dies before its status write (hook timeout, missing
+    registry) leaves no line, and the other script's clean record must
+    not stand in for it: an absent record is its own delta.
+    """
+    return [s for s in KNOWN_BOOTSTRAP_SCRIPTS if s not in bootstrap]
 
 
 def read_bootstrap_status(root: Path) -> Tuple[Dict[str, Dict[str, str]], str]:
@@ -592,27 +798,28 @@ def build_checklist(
             "run the credential wizard"
         ),
     })
-    if bootstrap:
-        counts = [_safe_int(kv.get("failed", "0") or "0") for kv in bootstrap.values()]
-        unparseable = any(c is None for c in counts)
-        failed_total = sum(c for c in counts if c is not None)
-        if unparseable:
-            boot_status = "unknown"
-            boot_detail = (
-                f"{BOOTSTRAP_STATUS_FILE} has unparseable status line(s); "
-                "re-run the bootstrap fetches"
-            )
-        else:
-            boot_status = "ok" if failed_total == 0 else "fail"
-            boot_detail = f"{len(bootstrap)} bootstrap script(s) recorded, {failed_total} failure(s)"
-    else:
+    unrecorded = unrecorded_bootstrap_scripts(bootstrap)
+    counts = [_safe_int(kv.get("failed", "0") or "0") for kv in bootstrap.values()]
+    unparseable = any(c is None for c in counts)
+    failed_total = sum(c for c in counts if c is not None)
+    if unrecorded:
         boot_status = "unknown"
         boot_detail = (
-            "no bootstrap run recorded; fetch the reference repos and "
-            "managed paks (scripts/bootstrap_references.sh and "
+            "no run recorded for " + ", ".join(unrecorded)
+            + "; fetch the reference repos and managed paks "
+            "(scripts/bootstrap_references.sh and "
             "scripts/bootstrap_managed_paks.sh on unix; a native Windows "
             "port is tracked as issue #89)"
         )
+    elif unparseable:
+        boot_status = "unknown"
+        boot_detail = (
+            f"{BOOTSTRAP_STATUS_FILE} has unparseable status line(s); "
+            "re-run the bootstrap fetches"
+        )
+    else:
+        boot_status = "ok" if failed_total == 0 else "fail"
+        boot_detail = f"{len(bootstrap)} bootstrap script(s) recorded, {failed_total} failure(s)"
     items.append({"id": "bootstrap-clones", "status": boot_status, "detail": boot_detail})
     items.append({
         "id": "recheck",
@@ -700,18 +907,29 @@ def run_doctor(
     if env.missing_modules:
         attention.append(
             "missing python module(s): " + ", ".join(env.missing_modules)
+            + f" [checked: {env.checked_interpreter}]"
             + " (pip install -r requirements.txt)"
         )
     if not env.jars_present:
         attention.append(
-            "MPB runtime JARs missing from src/vcfops_managementpacks/"
-            "adapter_runtime/; Tier 1 pak builds will fail. See "
+            "MPB Tier 1 runtime incomplete under src/vcfops_managementpacks/, "
+            "missing: " + ", ".join(env.missing_jars)
+            + "; pak builds would still succeed but produce a nonfunctional "
+            "pak (an ADAPTER_JAR_GAP or LIB_GAP placeholder, or, when lib/ "
+            "exists but is empty, silently no library JARs at all). See "
             "Getting_Started.md for how to obtain them (warn only)."
         )
 
     # --- Bootstrap health -------------------------------------------------
     if bootstrap_note:
         attention.append(bootstrap_note)
+    unrecorded = unrecorded_bootstrap_scripts(bootstrap)
+    if unrecorded and not bootstrap_note:
+        attention.append(
+            "no bootstrap run recorded for " + ", ".join(unrecorded)
+            + "; reference repos and/or managed pak clones may be missing or "
+            "stale (the script may have failed or timed out before writing)"
+        )
     for script, kv in sorted(bootstrap.items()):
         # Age: the hook runs the doctor right after both bootstrap
         # scripts, so a stale line means a script did not run at all

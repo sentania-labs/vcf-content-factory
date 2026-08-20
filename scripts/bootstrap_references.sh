@@ -15,6 +15,22 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REFERENCES_DIR="${REPO_ROOT}/reference/references"
 SOURCES_FILE="${REPO_ROOT}/knowledge/context/reference_sources.md"
 
+# Record this run for the preflight doctor (contract: src/vcfops_common/doctor.py
+# header). Called at EVERY exit path, including the early ones: an empty registry
+# and a missing registry file are both real, reportable outcomes, and a script
+# that exits without recording leaves the doctor with a delta nothing can clear.
+# Replaces this script's own line rather than appending, so the file stays
+# bounded at one line per script and neither script can evict the other.
+write_status() {
+    local c="${1:-0}" u="${2:-0}" f="${3:-0}" fl="${4:--}"
+    local sf="${REPO_ROOT}/.bootstrap-status"
+    local line tmp
+    line="$(date -u +%Y-%m-%dT%H:%M:%SZ) bootstrap_references cloned=$c updated=$u failed=$f failures=$fl"
+    tmp="${sf}.tmp"
+    { grep -v " bootstrap_references " "$sf" 2>/dev/null || true; echo "$line"; } > "$tmp" 2>/dev/null \
+      && mv "$tmp" "$sf" 2>/dev/null || true
+}
+
 UPDATE_EXISTING=false
 if [[ "${1:-}" == "--update" ]]; then
     UPDATE_EXISTING=true
@@ -22,6 +38,7 @@ fi
 
 if [[ ! -f "$SOURCES_FILE" ]]; then
     echo "ERROR: $SOURCES_FILE not found" >&2
+    write_status 0 0 1 "registry-file-missing"
     exit 1
 fi
 
@@ -49,6 +66,7 @@ done < "$SOURCES_FILE"
 
 if [[ ${#URLS[@]} -eq 0 ]]; then
     echo "No reference sources found in $SOURCES_FILE"
+    write_status 0 0 0 -
     exit 0
 fi
 
@@ -95,15 +113,6 @@ done
 echo ""
 echo "Done: cloned=$cloned updated=$updated skipped=$skipped failed=$failed"
 
-# Summary line for the preflight doctor (contract documented in
-# src/vcfops_common/doctor.py header). Local state; gitignored.
-# Each script REPLACES its own line rather than appending, so the file
-# stays bounded at one line per script and neither script can ever
-# evict the other's health from the doctor's view.
-STATUS_FILE="${REPO_ROOT}/.bootstrap-status"
 fl="-"
 [[ ${#failures[@]} -gt 0 ]] && fl="$(IFS=,; echo "${failures[*]}")"
-status_line="$(date -u +%Y-%m-%dT%H:%M:%SZ) bootstrap_references cloned=$cloned updated=$updated failed=$failed failures=$fl"
-status_tmp="${STATUS_FILE}.tmp"
-{ grep -v " bootstrap_references " "$STATUS_FILE" 2>/dev/null || true; echo "$status_line"; } > "$status_tmp" 2>/dev/null \
-  && mv "$status_tmp" "$STATUS_FILE" 2>/dev/null || true
+write_status "$cloned" "$updated" "$failed" "$fl"

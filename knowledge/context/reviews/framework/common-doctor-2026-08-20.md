@@ -471,3 +471,409 @@ local clone with the three uncommitted files copied in, which reproduced
   script(s) recorded, 0 failure(s)`. Defensible (the checklist asks
   "did anything run"), but the first-run concierge is the audience most
   likely to have an ancient or inherited `.bootstrap-status`.
+
+---
+
+# Round 5 (2026-08-20) - Codex PR #93 remediation (7 findings)
+
+- **Change re-reviewed:** uncommitted working-tree diff against the
+  approved Phase 1 commit `1749377`, branch `pr4-bootstrap-phase1`:
+  `src/vcfops_common/doctor.py`, `tests/test_common_doctor.py`, plus
+  `.claude/settings.json` (the hook's missing-interpreter fallback,
+  which is in the diff even though the brief named only the two files).
+- **Round-5 verdict:** CHANGES REQUESTED (2 BLOCKING, 3 WARNING, 7 NIT).
+  Five of the seven Codex findings are correctly and independently
+  confirmed fixed. The venv dependency probe (Codex P1) fixes one false
+  FIRST-RUN by introducing its opposite, and trusts unvalidated child
+  stdout.
+
+## Checks re-run (independent)
+
+| Check | Result |
+|---|---|
+| Full pytest suite | 713 passed, 4 skipped, 178 deselected (was 699; +14 matches the claim) |
+| Full validate chain (7 packages) | all green |
+| `scripts/path_reference_audit.sh` | exit 0, "clear", plus the two pre-existing RULE-015 standing-exception WARNINGs |
+| Real CLI in this repo (`python3 src/vcfops_common/doctor.py`) | exit 0, one green line, 0.48 s |
+| Corrupt-input re-probes (UTF-16 `.env`, chmod 000 `.env`, corrupt parent `.env`) | rc 0, degraded line, no secret in output |
+| New subprocess paths (hang, non-executable, exit!=0, 2 MB stdout, invalid UTF-8, real dep-less venv) | rc 0 in every case, no crash, no hang beyond the 10 s timeout |
+| RULE-008 with the real `os.environ` default path | no secret in any emitted line |
+| Render regression / pak-compare / stale-zip (dimensions 3, 5, 6, 9) | n/a re-confirmed: no renderer, builder, template, or wire-format file in the diff |
+| Escape anchors `00d3382` / `6c59f6b` | n/a: no global default, coordinate convention, or key/label derivation touched |
+
+## BLOCKING
+
+### B-5. The venv probe replaces the current interpreter's answer, producing a NEW false FIRST-RUN
+
+`doctor.py:586-598`. When `<root>/.venv` holds an interpreter, the
+probe's result **overwrites** `missing_modules` outright; the current
+interpreter is consulted only when the probe fails to run. So a machine
+whose ambient `python3` has every dep, but which also has a bare or
+dep-less `.venv`, is now reported unconfigured.
+
+Reproduced end to end against the real `run_doctor` (a real
+`python3 -m venv --without-pip .venv`, ambient interpreter carrying
+`yaml`/`requests`/`jmespath`, everything else configured):
+
+```
+checked_interpreter: <root>/.venv/bin/python3
+missing_modules: ['requests', 'yaml', 'jmespath']
+FIRST-RUN DETECTED
+additionalContext: Hello, it looks like this is an unconfigured copy ...
+```
+
+Under `HEAD` the same root prints one green line. This is the mirror of
+the Codex finding it fixes, and it is plausible, not exotic: the
+concierge's own checklist item 2 tells the user to `python -m venv .venv`
+*then* `pip install -r requirements.txt` (CLAUDE.md:201-205), so any
+machine where the venv exists and the pip step failed, was skipped, or
+was satisfied by distro packages instead (a normal infra box) now gets
+the full first-run greeting every session while `python3 -m vcfops_*
+validate` works fine. Note the repo's documented invocation is a bare
+`python3 -m vcfops_*` (CLAUDE.md step 5) and nothing in
+`.claude/settings.json` selects the venv interpreter, so the ambient
+interpreter is the one that actually runs the CLIs.
+
+This breaks the module's own guarantee that a healthy repo prints
+exactly one green line, and it is permanent (it never self-heals).
+
+Smallest correct fix: reconcile instead of replace. Compute the current
+interpreter's missing set as well and report a module missing only when
+it is missing in **both** (`venv_missing & current_missing`). That still
+satisfies Codex's case (deps only in the venv -> nothing missing) and
+does not regress the inverse. Add a test for ambient-has-deps +
+dep-less-venv.
+
+### B-6. `_probe_modules` trusts arbitrary child stdout as a list of module names
+
+`doctor.py:557` returns `proc.stdout.split()` verbatim. Any token the
+child interpreter writes to stdout becomes a fabricated "missing
+module", which forces `core_missing` non-empty and therefore
+FIRST-RUN. Verified:
+
+| Venv interpreter behavior | `missing_modules` |
+|---|---|
+| prints `Warning: nonstandard site dir` then execs the real python | `['Warning:', 'nonstandard', 'site', 'dir']` -> FIRST-RUN |
+| emits 500 KB of stdout, exit 0 | 7423 fabricated names; the emitted `CHECKLIST-JSON` line totals **55 152 characters** injected into session context |
+| emits invalid UTF-8 | one fabricated name (no crash, `errors="replace"` holds) |
+
+Wrapper interpreters that chatter on stdout are real (conda/pyenv
+shims, corporate wrappers, a `sitecustomize.py` with a print). rc stays
+0 and nothing crashes, so this is not a contract break, but it is a
+false first-run plus an unbounded context dump from untrusted output.
+
+Smallest correct fix: validate the child's answer against what was
+asked, e.g. `names = proc.stdout.split()`; if any name is not in
+`set(modules)` treat the probe as failed (`return None`, fall back),
+otherwise return the filtered list.
+
+## WARNING
+
+### W-4. The environ default no longer blanks credential values at the boundary
+
+`doctor.py:453`: `environ = {k: v for k, v in os.environ.items() if
+k.startswith("VCFOPS_")}` replaces round 2's
+`dict.fromkeys(os.environ, "")`. Real passwords now live in a dict for
+the duration of `inspect_credentials`, where round 2 explicitly credited
+the boundary blanking as the reason no `.env`/environ value could reach
+a frame captured by a traceback. RULE-008 (`knowledge/rules/no-secrets-on-disk.md`)
+is not violated: nothing is written to disk, the emitted strings are
+built from name components only, `main()`'s catch-all prints only
+`type(exc).__name__`, and my real-`os.environ` probe leaked nothing. But
+the defense-in-depth property the brief asks me to re-verify ("never
+retained") is weaker than it was. Fix that keeps both properties:
+blank at the boundary while preserving the emptiness signal, e.g.
+`{k: ("x" if (v or "").strip() else "") for k, v in os.environ.items()
+if k.startswith("VCFOPS_")}`.
+
+### W-5. The new unrecorded-script delta is permanent and unclearable in two supported states
+
+`doctor.py:665-672` and `build_checklist` now demand a line from both
+`KNOWN_BOOTSTRAP_SCRIPTS`. But the scripts themselves do not always
+write one:
+
+- `scripts/bootstrap_references.sh:52` and
+  `scripts/bootstrap_managed_paks.sh:66` `exit 0` on "no sources /
+  no paks registered" **before** the status write
+  (`bootstrap_references.sh:103`, `bootstrap_managed_paks.sh:117`).
+  An empty managed-pak registry is an explicitly supported state
+  (CLAUDE.md: "New pak = ... add one line to `knowledge/context/managed_paks.md`"),
+  so a clone that registers no SDK paks gets `no bootstrap run recorded
+  for bootstrap_managed_paks` every session forever, and no amount of
+  re-running clears it.
+- Both scripts `exit 1` on a missing registry file (lines 25 / 26),
+  same result.
+- On native Windows neither script can run at all (issue #89), so a
+  Windows user gets both scripts named in a permanent delta line where
+  previously the file's absence was silent.
+
+Tooling's "self-heals after one session" claim holds only on unix with a
+non-empty registry. A permanent, unactionable line is how operators
+learn to ignore the doctor. The fix belongs in `scripts/` (move the
+status write before the early exits, recording `cloned=0 failed=0`), not
+in the doctor; the diff changed the consumer without changing the
+producers.
+
+### W-6. The regression in B-5 is exactly the case the new tests do not cover
+
+`test_deps_are_checked_in_the_repo_venv` pins only the positive
+direction (venv interpreter has the deps).
+`test_venv_probe_falls_back_when_interpreter_is_broken` and
+`test_no_venv_uses_current_interpreter` pin the probe-cannot-run
+fallbacks. Nothing pins "ambient interpreter has the deps, venv does
+not", and nothing pins that the child's stdout is validated. Dimension
+10: a `doctor.py` behavior that decides FIRST-RUN needs its
+false-positive direction pinned, not just its false-negative one.
+
+## Codex findings 2 to 7: confirmed fixed
+
+- **P2 empty credential values.** Verified `_env_keys`
+  (`doctor.py:409-434`) against the real `_env._parse_into_environ`
+  (`_env.py:65-86`) line by line. The branch order is swapped but the
+  conditions are mutually exclusive, so the emptiness verdict matches on
+  every form I checked (`KEY=`, `KEY=""`, `KEY=''`, `KEY=#c`, a lone
+  quote, mismatched quotes, inline `#`). Empty exported values are
+  filtered too (`doctor.py:469-472`). RULE-008 holds on this path: values
+  are local, never returned, never printed; my probes with the synthetic
+  secret in both `.env` and `os.environ` leaked nothing. One documented
+  divergence, in the safe direction, in N-15.
+- **P2 untracked work.** `--untracked-files=no` is gone
+  (`doctor.py:305-307`); an untracked-only tree marks dirty, and
+  `_render_behind` says "uncommitted or untracked changes" with no
+  `git pull --ff-only` offer. The test asserts the flag's absence, which
+  is the right thing to pin.
+- **P2 tracking remote.** `_tracking_remote` (`doctor.py:255-274`)
+  probed across 9 configurations: tracked remote present -> fetches it;
+  no `branch.<b>.remote` -> origin; `git remote` failing -> trusts the
+  configured value; detached HEAD, a URL as the remote value, and
+  whitespace junk -> origin. Fail-open and offline behavior are intact
+  (`available=True`, `fetch_ok=False`, the `(offline?)` annotation still
+  renders), and the non-repo short-circuit still fires before any of the
+  3 added plumbing calls. See N-16 for the one odd fallback.
+- **P2 parent `.env`.** `find_env_file` (`doctor.py:387-399`) matches
+  `_env.load_dotenv` (`_env.py:56-62`) exactly, including the
+  `[here, *here.parents]` iteration and the "walk to the filesystem
+  root" stopping condition. Corrupt parent `.env` still degrades to the
+  attention line with rc 0.
+- **P2 Tier 1 JAR set.** Read `builder.py:1647-1681`: `ADAPTER_JAR_GAP`
+  is gated on `_GENERIC_ADAPTER_JAR.exists()`
+  (`adapter_runtime/mpb_adapter3.jar`) and the lib branch on
+  `lib_dir.exists()`. The doctor's requirement (adapter jar **and** at
+  least one `lib/*.jar`) matches the builder's real functional
+  requirement and is deliberately one notch stricter than its literal
+  gate; still warn-only, never a failure. Wording nit in N-14.
+- **P2 both bootstrap scripts.** Implemented as described; see W-5 for
+  the consequence.
+- **P1 missing python3** (`.claude/settings.json:13`): the `for c in
+  python3 python` probe plus an echoed greeting is a reasonable
+  non-Python fallback. See N-17.
+
+## Behavior changes tooling flagged
+
+- **Unrecorded-script delta:** correct in intent, but not universally
+  self-healing. W-5.
+- **`EnvSanity.jars_present` as a derived property:** fine. Read-only,
+  `not self.missing_jars`, no writer anywhere in the module or tests, so
+  no silent-downgrade path. Not a problem.
+
+## NIT (round 5)
+
+- N-12. `checked_interpreter` (`doctor.py:510`) is set but never
+  surfaced anywhere. When the doctor says "missing python module(s)",
+  the operator cannot tell which interpreter was checked, which is the
+  single most useful fact once the answer can come from a different
+  interpreter than the shell they are typing in.
+- N-13. The `.env` degrade line says ".env exists but could not be read"
+  without naming the path. With the upward walk that file may be several
+  directories above the repo, so the message no longer identifies what
+  to fix.
+- N-14. The JAR attention line claims builds "would emit
+  ADAPTER_JAR_GAP / LIB_GAP placeholders". For an existing but empty
+  `adapter_runtime/lib/`, `builder.py:1668` emits **neither** placeholder
+  (the `else` fires only when the directory is absent); the pak just
+  silently ships no libs, which is worse. The check is right, the
+  sentence is not.
+- N-15. `_env_keys` applies `.strip()` after unquoting, `_env.py` does
+  not. `VCFOPS_PROD_PASSWORD="  "` is accepted by
+  `resolve_profile_credentials` (truthy) but reported missing by the
+  doctor. Safe direction, worth a comment.
+- N-16. When `branch.<b>.remote` names a remote that no longer exists,
+  `_tracking_remote` falls back to origin or the first configured
+  remote, i.e. it fetches a remote the branch does not track. Harmless
+  (the `@{upstream}` comparison is independent and the result is
+  fail-open) but it can leave a genuinely stale comparison looking
+  green.
+- N-17. `.claude/settings.json:13`: the `python` fallback can be a
+  Python 2 interpreter, which would emit a `SyntaxError` traceback into
+  session context where the previous behavior was silence; guarding with
+  `$c -c 'import sys; sys.exit(sys.version_info < (3,9))'` would pick a
+  usable interpreter instead of merely a present one. Also the
+  no-interpreter greeting duplicates `GREETING` (`doctor.py:59`) as a
+  literal string in JSON, so the two will drift.
+- N-18. `find_env_file(root)` walks up from the repo root;
+  `_env.load_dotenv()` walks up from **cwd**. Identical under the
+  SessionStart hook, divergent for a `.env` in a subdirectory of the
+  repo.
+- N-19. `make_configured_root` now depends on no `.env` existing in any
+  parent of `tmp_path`; a stray `/tmp/.env` on a dev machine would flip
+  several tests. Cheap guard: assert `find_env_file(root)` is the file
+  the fixture wrote.
+
+## If shipped as-is
+
+An operator whose ambient python has the dependencies but who also has
+a bare `.venv` (the state produced by following step 2 of the
+concierge's own checklist and then having pip fail, or by an infra box
+with distro-packaged deps) is greeted with FIRST-RUN DETECTED at every
+session start on a fully working repo, and is walked through a setup
+they do not need. An operator whose venv interpreter prints anything to
+stdout gets the same greeting plus up to tens of kilobytes of fabricated
+module names in the session context. A clone with no SDK paks
+registered, or any Windows clone, gets a bootstrap delta line every
+session that nothing they do can clear.
+
+---
+
+# Round 6 (2026-08-20) - confirm-only pass on the round-5 remediation
+
+- **Scope:** the round-5 findings only (B-5, B-6, W-4, W-5, W-6 and the
+  addressed NITs), plus the producer-side change to
+  `scripts/bootstrap_references.sh` / `scripts/bootstrap_managed_paks.sh`.
+  Dimensions cleared in rounds 1 to 4 were not re-walked.
+- **Round-6 verdict:** APPROVE. Both BLOCKINGs are resolved, and the
+  applied fix for B-5 is better than the one I prescribed (it also
+  removes the subprocess from the healthy path entirely). 0 BLOCKING,
+  0 WARNING, 4 NIT.
+
+## Checks re-run
+
+| Check | Result |
+|---|---|
+| Full pytest suite | 717 passed, 4 skipped, 178 deselected (matches the claim; was 713) |
+| `scripts/path_reference_audit.sh` | exit 0, "clear", plus the two pre-existing RULE-015 standing-exception WARNINGs |
+| B-5 reproduction re-run (real `python3 -m venv --without-pip .venv` beside a provisioned ambient python) | `missing_modules: []`, `checked: current`, **one green line**, rc 0 (was FIRST-RUN DETECTED) |
+| B-6 re-run, probe path forced live (8 child-stdout shapes) | see table below; rc 0 in all, no fabricated names, checklist bounded |
+| Corrupt-input re-probes (UTF-16 `.env`, chmod 000 `.env`, corrupt parent `.env`) | rc 0, degraded line now naming the offending path, no leak |
+| RULE-008 with the real `os.environ` default path | no secret in any emitted line; values blanked at the boundary again |
+| Real CLI in this repo, both invocation forms | exit 0; honest exception-only output (an unrelated ahead-commit), 1.5 s |
+| Producer-side scripts (copies driven in a scratch tree) | see "Bootstrap producers" below |
+| Em-dash scan over added `src`/`tests`/`scripts` lines (rule 7) | 0 |
+
+## B-5 - RESOLVED, better than prescribed
+
+`inspect_environment` (`doctor.py:582-634`) now computes
+`current_missing` first and treats the venv probe as a second opinion,
+intersecting the two (`[m for m in current_missing if m in venv_set]`).
+Two things follow that I did not ask for and that are strictly better:
+
+- The subprocess is **skipped entirely** when the current interpreter
+  already has everything (`if current_missing:` guards the whole venv
+  branch), so the common healthy machine pays zero subprocess cost per
+  session, and the 10 s worst-case probe timeout can now only be paid on
+  a machine that is already degraded. Measured: hang stub costs 10.0 s
+  when `current_missing` is non-empty, 0.0 s when it is not.
+- `checked_interpreter` reads `current + <venv path>`, which is the
+  honest description of an intersection.
+
+## B-6 - RESOLVED
+
+`_probe_modules` (`doctor.py:573-580`) rejects the whole answer when any
+returned token is outside the set it asked about. Driven live against
+the real subprocess with `check_import` forcing `current_missing`
+non-empty (so the probe genuinely runs):
+
+| Child stdout | missing_modules | checked | CHECKLIST-JSON |
+|---|---|---|---|
+| `Warning: nonstandard site dir` + `yaml` | `['requests','yaml','jmespath']` (fallback) | current | 896 B |
+| 200 000 `junk ` tokens (~1 MB) | `['requests','yaml','jmespath']` (fallback) | current | 896 B (was 55 152 chars) |
+| `yaml` | `['yaml']` | current + venv | 886 B |
+| empty | `[]` -> green line | current + venv | 807 B |
+| `yaml yaml requests` (dupes) | `['requests','yaml']` | current + venv | 896 B |
+| chatter on **stderr** only, `jmespath` on stdout | `['jmespath']` | current + venv | 807 B |
+| sleeps 60 s | fallback after 10.0 s | current | 896 B |
+| `yaml` then `exit 2` | fallback | current | 896 B |
+
+rc 0 and no synthetic-secret leak in every case. Duplicate tokens are
+handled because the intersection is set-based, and stderr is correctly
+ignored.
+
+## W-4, W-5, W-6 and NITs - RESOLVED
+
+- **W-4.** `inspect_credentials` (`doctor.py:460-468`) blanks at the
+  boundary again with `{k: ("x" if (v or "").strip() else "") ...}`,
+  keeping only the empty/non-empty distinction. The round-2 RULE-008
+  property is restored, and the real-`os.environ` probe still emits the
+  green line with `profiles ready: qa` and no value.
+- **W-5.** Fixed on the producer side, verified below.
+- **W-6.** `test_ambient_deps_survive_a_depless_venv` pins B-5's
+  regression through the real `inspect_environment` with a venv stub
+  reporting everything missing, and asserts the single green line and
+  `not is_first_run`. `test_probe_rejects_unexpected_child_stdout` and
+  `test_probe_rejects_flood_of_child_stdout` pin B-6, the latter with a
+  real 50 000-token flood through a real subprocess plus a `< 4000` byte
+  assertion on the rendered checklist. `test_missing_module_line_names_
+  the_interpreter` uses the jmespath-alone case (deliberately not
+  first-run) so the delta line actually renders. None are tautologies:
+  all four drive real code paths, three of them across a real process
+  boundary, and each fails if its finding is reintroduced.
+- **N-12/N-13/N-14/N-15.** The missing-module line ends with
+  `[checked: <interpreter>]`; the `.env` degrade line names the path
+  (confirmed in the probe output); the JAR warning now states the
+  empty-`lib/` case honestly ("silently no library JARs at all") instead
+  of overclaiming `LIB_GAP`; `_env_keys` documents the
+  strip-after-unquote divergence from `_env.py`.
+
+## Bootstrap producers (the W-5 fix)
+
+Verified by copying both scripts into a scratch tree (nothing in the
+repo touched) and driving every exit path:
+
+| Case | Result |
+|---|---|
+| `bash -n` on both scripts | syntax ok |
+| registry file missing (the `exit 1` path) | rc 1, and a line **is** written: `... failed=1 failures=registry-file-missing` |
+| registry present but with zero entries (the early `exit 0` path) | rc 0, line written with `cloned=0 failed=0 failures=-` |
+| both scripts run twice | file stays at exactly 2 lines (one per script, replace-not-append preserved) |
+| doctor reading the result | `unrecorded_bootstrap_scripts(...) == []`, no delta |
+
+The unclearable delta is gone, and the missing-registry case now
+surfaces as an honest `1 clone/update failure(s): registry-file-missing`
+rather than silence or an unfixable "no run recorded".
+
+## NIT (round 6)
+
+- N-20. The new keyword-only `probe=` seam (`doctor.py:585`) is used by
+  **no test** (`grep -n "probe=" tests/test_common_doctor.py` returns
+  nothing). The tests drive the real subprocess with shell stubs
+  instead, which is stronger evidence. So the parameter is currently
+  dead indirection widening a public signature: either use it or drop
+  it. Not a smell in kind (an injectable probe is a legitimate seam),
+  only in that it earns nothing today.
+- N-21. Residual, inherent to the intersection and worth stating out
+  loud: the inverse machine (ambient python lacks the deps, venv has
+  them) now reports green while the repo's documented invocation
+  `python3 -m vcfops_*` (CLAUDE.md step 5) would fail, because nothing
+  in `.claude/settings.json` or the CLI docs selects the venv
+  interpreter. This is what the Codex P1 asked for and what
+  `knowledge/designs/bootstrap-v2.md:151-156` intends ("everything goes
+  through the venv"), so it is a follow-up, not a ship blocker: either
+  wire the CLIs to the venv or annotate the green line with the
+  interpreter that satisfied it.
+- N-22. `[checked: current + <absolute venv path>]` puts a full absolute
+  path in the attention line. Fine on a short path, noisy on a deep one.
+- N-23. `test_ambient_deps_survive_a_depless_venv` depends on the
+  interpreter running the suite genuinely having `requests`/`yaml`/
+  `jmespath`. True anywhere the suite can import at all, so acceptable,
+  but it is an environmental dependency rather than a hermetic one.
+
+## If shipped as-is (round 6)
+
+An operator gets one green line on a healthy repo, with no subprocess
+spawned at all in that case; a machine that is genuinely missing a
+dependency in **both** interpreters gets one line naming the module and
+which interpreter was consulted; a chatty or flooding venv interpreter
+can no longer fabricate missing modules or dump kilobytes into the
+session; credential values are blanked at the boundary again; and the
+bootstrap delta is now self-clearing on every exit path of both
+producer scripts. The always-exit-0 contract survived every probe in
+this round.
