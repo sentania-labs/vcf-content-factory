@@ -87,13 +87,6 @@ jobs:
 
       # The sentania-labs runner image ships NO JDK. build-sdk needs javac+jar.
       # If you bake a JDK into the runner image, delete this step.
-      - name: Set up JDK 17
-        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      # The kit is pure stdlib + pyyaml. The image has python3 + pip on PATH.
       - name: Ensure PyYAML
         run: python3 -m pip install --quiet --disable-pip-version-check pyyaml
 
@@ -113,6 +106,13 @@ jobs:
           fi
           echo "Tag ${GITHUB_REF_NAME} matches adapter.yaml (${expected})."
 
+      - name: Set up JDK 17
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # The kit is pure stdlib + pyyaml. The image has python3 + pip on PATH.
       - name: Download sdk-buildkit from factory releases
         env:
           # The factory repo is public, so the job's github.token can read its
