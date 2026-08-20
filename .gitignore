@@ -63,3 +63,5 @@ memory/environment/
 shots-*/
 .playwright-mcp/
 search-debug*.png
+# preflight doctor's bootstrap summary (local state)
+.bootstrap-status*

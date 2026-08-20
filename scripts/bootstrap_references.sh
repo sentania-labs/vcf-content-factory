@@ -59,6 +59,7 @@ cloned=0
 updated=0
 skipped=0
 failed=0
+failures=()
 
 for i in "${!URLS[@]}"; do
     url="${URLS[$i]}"
@@ -73,6 +74,7 @@ for i in "${!URLS[@]}"; do
             else
                 echo "    WARNING: git pull failed for $slug" >&2
                 failed=$((failed + 1))
+                failures+=("${slug}")
             fi
         else
             echo "  Exists:   $slug (use --update to pull)"
@@ -85,9 +87,23 @@ for i in "${!URLS[@]}"; do
         else
             echo "    WARNING: git clone failed for $slug" >&2
             failed=$((failed + 1))
+            failures+=("${slug}")
         fi
     fi
 done
 
 echo ""
 echo "Done: cloned=$cloned updated=$updated skipped=$skipped failed=$failed"
+
+# Summary line for the preflight doctor (contract documented in
+# src/vcfops_common/doctor.py header). Local state; gitignored.
+# Each script REPLACES its own line rather than appending, so the file
+# stays bounded at one line per script and neither script can ever
+# evict the other's health from the doctor's view.
+STATUS_FILE="${REPO_ROOT}/.bootstrap-status"
+fl="-"
+[[ ${#failures[@]} -gt 0 ]] && fl="$(IFS=,; echo "${failures[*]}")"
+status_line="$(date -u +%Y-%m-%dT%H:%M:%SZ) bootstrap_references cloned=$cloned updated=$updated failed=$failed failures=$fl"
+status_tmp="${STATUS_FILE}.tmp"
+{ grep -v " bootstrap_references " "$STATUS_FILE" 2>/dev/null || true; echo "$status_line"; } > "$status_tmp" 2>/dev/null \
+  && mv "$status_tmp" "$STATUS_FILE" 2>/dev/null || true

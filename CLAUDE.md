@@ -57,7 +57,12 @@ via the Suite API / content-import zip.
   (materialize a release manifest for one item), `/publish` (build
   releases, ship to the distribution repo).
 - **SessionStart hooks** clone/refresh reference repos and managed
-  paks and surface curation staleness (see delegation rule 10).
+  paks, surface curation staleness (see delegation rule 10), and run
+  the preflight doctor (`src/vcfops_common/doctor.py`, invoked by path
+  so it needs no `PYTHONPATH`; it runs in the same sequential hook as
+  the two bootstrap scripts because it reports their results), which
+  reports by exception: upstream drift, credential readiness,
+  environment sanity, bootstrap health, first-run state.
 - **Framework code** lives under `src/vcfops_*/` (per-type loaders,
   renderers, CLIs; `vcfops_common` for shared env/client plumbing;
   `vcfops_extractor` for the third-party-dashboard-to-YAML path;
@@ -180,6 +185,38 @@ pinned `sonnet`. Do not re-add pins without a decision.
     today and zero `.sessions-since`. The hook only informs;
     launching is your job.
     (Design: `knowledge/designs/curator-v1.md`.)
+
+## First-run concierge
+
+When the doctor's SessionStart output carries the first-run greeting
+and its `CHECKLIST-JSON:` block, open the session with the greeting
+("Hello, it looks like this is an unconfigured copy of the VCF
+Content Factory. Do you want me to get it ready for you?"). On yes,
+walk the doctor's checklist one item at a time, re-running the doctor
+after each fix, and finish with a re-run so the user sees one green
+line:
+
+1. **Python** (>=3.9): if missing, give the OS-appropriate install
+   instruction (apt / winget / brew), then re-check.
+2. **Venv + deps**: create `.venv`, `pip install -r
+   requirements.txt`. On a pip failure that looks like a blocked
+   network (timeout / SSL to pypi.org), ask for a corporate mirror
+   index URL or proxy, write it to `.venv/pip.conf` (never global),
+   retry.
+3. **Credentials**: never let a secret touch the transcript, argv,
+   or shell history (RULE-008). Until the credential wizard ships
+   (bootstrap-v2 Phase 2), guide the user to create `.env` from
+   `.env.example` in their own editor; never ask them to paste a
+   password into chat, and never echo one.
+4. **Reference + pak clones**: run the bootstrap scripts; on clone
+   failures that look like the same firewall, offer to skip and
+   record which references are absent.
+
+Outside first-run, the doctor's other signals get the same
+by-exception handling: behind upstream on a clean tree, offer a
+fast-forward pull (never auto-pull, never touch a dirty tree); ahead
+commits, relay the doctor's core vs environment/state classification
+and suggest a PR only for core.
 
 ## When the toolset is inadequate
 
