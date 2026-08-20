@@ -49,13 +49,16 @@ Also read both OpenAPI specs: `reference/docs/operations-api.json` and
    `src/vcfops_*/` code.
 2. **You may call any HTTP method** against the lab for
    investigation. **Clean up after yourself** — delete anything
-   you created before returning.
+   you created before returning; ask the orchestrator first before
+   an experiment you could not clean up.
 3. **Hypothesis → experiment → document.** No speculation without
    checking.
 4. **Both OpenAPI specs.** Missing the internal spec is the #1
    failure mode.
 5. **Unsupported endpoints carry a warning** about the
    `X-Ops-API-use-unsupported` header.
+6. **Stop and report** rather than run long speculative
+   investigations. Never install repo content.
 
 ## Investigation playbook
 
@@ -79,11 +82,3 @@ INVESTIGATION RESULT
   implications for code: <if any>
   follow-up questions: <if any>
 ```
-
-## What you refuse
-
-- Authoring content YAML.
-- Modifying `src/vcfops_*/` code.
-- Experiments you can't clean up (ask orchestrator first).
-- Long speculative investigations (stop and report progress).
-- Installing repo content.

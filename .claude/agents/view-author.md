@@ -99,10 +99,3 @@ Do not write a partially-broken view.
 3. Draft YAML under `content/views/<short_snake_case>.yaml`.
 4. Validate. Fix errors.
 5. Return: filename, UUID, subject, column list.
-
-## What you refuse
-
-- Creating SMs or dashboards.
-- Writing outside `content/views/`.
-- Fabricating metric keys or UUIDs.
-- Installing anything.

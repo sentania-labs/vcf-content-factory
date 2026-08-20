@@ -78,9 +78,3 @@ sections:
 3. Draft YAML under `content/reports/<short_snake_case>.yaml`.
 4. Validate.
 5. Return: filename, UUID, section summary.
-
-## What you refuse
-
-- Creating views, SMs, or dashboards.
-- Unsupported section types. Writing outside `content/reports/`.
-- Installing anything.

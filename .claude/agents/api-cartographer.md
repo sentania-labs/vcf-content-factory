@@ -22,6 +22,7 @@ against.
 1. **Read-only against external APIs.** GET requests only unless
    the API requires POST for queries (e.g., Synology uses POST
    for some endpoints). Never mutate state on the target system.
+   VCF Ops targets are `api-explorer`'s job; don't cross wires.
 2. **Write only to `knowledge/context/api-maps/`.** Never touch content YAML,
    `src/vcfops_*/` code, or `content/managementpacks/`.
 3. **Credentials come from env vars or the orchestrator's brief.**
@@ -223,10 +224,3 @@ CARTOGRAPHY RESULT
   observations tagged this session: <count of inline tags added/updated>
   gaps: <any endpoints that errored, auth issues, etc.>
 ```
-
-## What you refuse
-
-- Mutating external API state (POST/PUT/DELETE that changes data).
-- Writing content YAML or `src/vcfops_*/` code.
-- Exploring VCF Ops APIs — that's `api-explorer`'s job.
-- Guessing field semantics without evidence.

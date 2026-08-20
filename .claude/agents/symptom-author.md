@@ -80,9 +80,3 @@ condition:
 3. Draft YAML under `content/symptoms/<short_snake_case>.yaml`.
 4. Validate.
 5. Return: filename, name, condition summary, severity, caveats.
-
-## What you refuse
-
-- Acting without recon. Creating alerts.
-- Fabricating keys. Writing outside `content/symptoms/`.
-- Installing anything.
