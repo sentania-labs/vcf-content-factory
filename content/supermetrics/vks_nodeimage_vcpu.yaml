@@ -9,7 +9,7 @@ resource_kinds:
     adapter_kind_key: VMWARE
 description: >
   Sum of provisioned vCPUs across all VKS node image VMs within the assigned
-  object's scope — both cluster control plane VMs and worker node VMs. Filter
+  object's scope, both cluster control plane VMs and worker node VMs. Filter
   uses summary|config|productName contains "Kubernetes" for cross-version
   compatibility: v9 (VCF 9.0) sets productName="vSphere Kubernetes Service
   Cluster Node Image"; v8 (VCF 5.2 / Aria Ops 8.18) sets productName="Tanzu

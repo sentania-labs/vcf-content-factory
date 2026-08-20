@@ -8,7 +8,7 @@ description: >
   diskspace|total_usage (GB used across all datastores visible to the cluster)
   by diskspace|total_capacity (total GB across those same datastores) and
   multiplies by 100. Both metrics are collected directly on
-  ClusterComputeResource by the VMWARE adapter — no depth traversal is
+  ClusterComputeResource by the VMWARE adapter, no depth traversal is
   needed. Intended as a view column for quarterly capacity review reporting.
 formula: |
   (${this, metric=diskspace|total_usage} / ${this, metric=diskspace|total_capacity}) * 100

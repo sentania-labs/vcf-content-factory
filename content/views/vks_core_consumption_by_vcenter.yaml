@@ -2,7 +2,7 @@ id: 53569330-f96d-479e-a764-6ac127df5a95
 name: "[VCF Content Factory] VKS Core Consumption by vCenter"
 description: >
   One row per vCenter. Columns match the PowerShell VKS core consumption script
-  output exactly: Total VM vCPU, VKS vCPU (all node image VMs — CP+Worker),
+  output exactly: Total VM vCPU, VKS vCPU (all node image VMs, CP+Worker),
   Supervisor vCPU, Pod vCPU, VM Service vCPU, Regular vCPU, vCLS vCPU,
   Physical Cores, Global Ratio, and Calculated VKS Cores.
 

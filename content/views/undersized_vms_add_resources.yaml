@@ -1,5 +1,5 @@
 id: 4b12808a-1002-4146-b16f-38fc999f3634
-name: "[VCF Content Factory] Undersized VMs — Add Resources"
+name: "[VCF Content Factory] Undersized VMs, Add Resources"
 description: >
   Per-VM resource-addition list for undersized virtual machines. Shows the
   parent cluster, vCPUs to add, and memory to add (KB source, displayed in GB)
@@ -7,7 +7,7 @@ description: >
   (summary|undersized == 1). Intended as Band D-2 of the Fleet Capacity &
   Rightsizing dashboard; receives ClusterComputeResource resourceId from the
   upstream cluster-selector widget to scope the list to the selected cluster.
-  Sort by vCPUs to Add descending (largest need first) — apply at the dashboard
+  Sort by vCPUs to Add descending (largest need first), apply at the dashboard
   widget level (sort_by_column: "vCPUs to Add", sort_by_dir: desc);
   view-level default sort is not a loader-supported field.
   View will be empty until at least one VM is flagged undersized; this is
@@ -21,7 +21,7 @@ customgroup: "[VCF Content Factory] VMs - Undersized Only"
 summary: false
 
 columns:
-  # Parent cluster — same relationship property used in the sibling
+  # Parent cluster, same relationship property used in the sibling
   # oversized_vms_reclaimable.yaml and vm_rightsizing_candidates.yaml.
   - attribute: summary|parentCluster
     display_name: "Cluster"

@@ -10,12 +10,12 @@ description: >
   hosts, per Broadcom KB 318697
   (https://knowledge.broadcom.com/external/article/318697/). Legend
   (monotonic in severity, corrected 2026-07-22 per Codex review P1
-  finding on the bundles PR — see
+  finding on the bundles PR, see
   knowledge/designs/supermetrics/cluster-cpu-support-worst-status.md):
   0 = all hosts supported, 1 = worst host is deprecated, 2 = worst host
   is discontinued starting from VCF 9.2, 3 = worst host is
   discontinued, 4 = worst host is unsupported (pre-9.0, not in KB
-  318697 scope). Tier 4 added 2026-07-23 — see
+  318697 scope). Tier 4 added 2026-07-23, see
   knowledge/designs/supermetrics/cpu-support-status.md. The formula
   (max()) is unchanged; only the upstream host-level SM's code
   assignment was corrected/extended, which this max() roll-up now

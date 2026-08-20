@@ -6,7 +6,7 @@ resource_kinds:
 description: >
   Percentage of cluster memory capacity free after subtracting vSphere HA slot
   reservations. 0% = fully saturated, 100% = idle. Use as the authoritative
-  memory headroom figure for capacity planning — raw capacity ignores HA and
+  memory headroom figure for capacity planning, raw capacity ignores HA and
   overstates real headroom. Demand-based (uses mem|host_demand) rather than
   allocation-based because memory demand is what determines actual pressure on
   the hypervisor.

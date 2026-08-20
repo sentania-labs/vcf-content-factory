@@ -1,7 +1,7 @@
 id: fc6504b8-138d-4786-8f8c-d33b7368ad06
 name: "[VCF Content Factory] Cluster Capacity Overview"
 description: >
-  Per-cluster capacity assessment — shows post-HA free capacity percentages,
+  Per-cluster capacity assessment, shows post-HA free capacity percentages,
   days-until-runout projections from VCF Ops capacity analytics, and 'how many
   more VMs fit' counts for both CPU and memory. Drives the capacity assessment
   section of the Capacity Assessment & Right-Sizing dashboard. Use the color

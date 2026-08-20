@@ -19,6 +19,6 @@ description: >
   severity signals that the host has drifted from the hardened baseline but has
   not yet crossed the critical threshold. wait_cycles and cancel_cycles are both
   set to 1 so the symptom fires on the first breach and clears as soon as the
-  score recovers — compliance drift is actionable immediately and should not be
+  score recovers, compliance drift is actionable immediately and should not be
   filtered by a noise window. Intended to feed into a tiered compliance alert
   alongside the CRITICAL (<80%) counterpart.

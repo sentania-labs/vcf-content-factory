@@ -6,8 +6,8 @@ description: >
   ClusterComputeResource resourceId interaction from an upstream cluster overview
   widget (the consuming dashboard wires that interaction so rows are scoped to
   the selected cluster's descendant hosts). Columns surface the signals that
-  identify which hosts are outliers — where VMs are starving for CPU or memory
-  is contended compared to cluster peers — over a 24-hour window.
+  identify which hosts are outliers, where VMs are starving for CPU or memory
+  is contended compared to cluster peers, over a 24-hour window.
   Purely built-in VMWARE adapter metrics; no super metric columns.
 
 subject:
@@ -50,7 +50,7 @@ columns:
     ascending_range: false
 
   # Max VM CPU Ready (P95): highest per-VM CPU Ready observed on this host,
-  # at the 95th percentile. Raw milliseconds — site-dependent scale, no bounds.
+  # at the 95th percentile. Raw milliseconds, site-dependent scale, no bounds.
   # A high value here means at least one VM on the host is badly starved even
   # if the host-aggregate percentage looks modest.
   - attribute: cpu|max_cpu_ready
@@ -62,7 +62,7 @@ columns:
   # --- Memory contention block ---
 
   # Mem Contention Avg: host-reported memory contention percentage, averaged
-  # over 24h. Low thresholds — any measurable contention is notable.
+  # over 24h. Low thresholds, any measurable contention is notable.
   - attribute: mem|host_contentionPct
     display_name: "Mem Contention Avg (24h)"
     unit: percent

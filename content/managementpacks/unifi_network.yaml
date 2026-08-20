@@ -1,4 +1,4 @@
-# UniFi Network Management Pack — v2
+# UniFi Network Management Pack, v2
 #
 # Design artifact: designs/unifi-mp-v2.md (round 3, mp-author-ready 2026-04-30)
 # API map: context/api-maps/unifi-network-api.md
@@ -7,19 +7,19 @@
 # Architecture summary (designs/unifi-mp-v2.md §"Object Model"):
 #   Four object kinds. Zero world kinds (adapter instance is the implicit root).
 #
-#   UniFi Site — is_singleton: true. One per adapter instance. Carries
+#   UniFi Site, is_singleton: true. One per adapter instance. Carries
 #     Network App version/build metadata (from stat/sysinfo) and per-subsystem
 #     health aggregates (wlan/wan/www/lan/vpn from stat/health via JMESPath
 #     filter predicates). Hardware metrics for the controller appliance moved
 #     to Gateway (round-3 topology pivot: UDM Pro appears once as a Gateway row).
 #
-#   Access Point — list, source stat/device filtered by type=='uap'. Per-radio
+#   Access Point, list, source stat/device filtered by type=='uap'. Per-radio
 #     metrics via JMESPath filter predicates on radio_table_stats[].
 #
-#   Switch — list, source stat/device filtered by type=='usw'. Per-port
+#   Switch, list, source stat/device filtered by type=='usw'. Per-port
 #     aggregate counts via JMESPath length() predicates.
 #
-#   Gateway — list, source stat/device filtered by type=='udm'||type=='ugw'.
+#   Gateway, list, source stat/device filtered by type=='udm'||type=='ugw'.
 #     UDM Pro appears here (once only) carrying hardware metrics (CPU, memory,
 #     system load, uptime) and WAN metrics (wan1/wan2/uplink).
 #
@@ -36,12 +36,12 @@
 #   as a metricSet and promote site_desc to name_expression.
 #
 # Substrate gaps exercised:
-#   Gap B (list-of-extracts auth grammar) — landed 2026-04-30; used here.
-#   Gap F (JMESPath filter predicates in metric source paths) — landed 2026-04-30; used here.
-#   Gap D (coerce: number for string-typed numeric fields) — landed 2026-04-30; used here.
-#   Question C (singleton consuming first row of list) — NOT landed; fallback used.
+#   Gap B (list-of-extracts auth grammar), landed 2026-04-30; used here.
+#   Gap F (JMESPath filter predicates in metric source paths), landed 2026-04-30; used here.
+#   Gap D (coerce: number for string-typed numeric fields), landed 2026-04-30; used here.
+#   Question C (singleton consuming first row of list), NOT landed; fallback used.
 #   Question E (single request feeding multiple list objects with different list_path
-#     filters) — verified by this YAML (AP/Switch/Gateway all consume dev_inventory
+#     filters), verified by this YAML (AP/Switch/Gateway all consume dev_inventory
 #     with different list_path values; renderer must support this pattern).
 #
 name: VCF Content Factory UniFi
@@ -79,14 +79,14 @@ source:
       path: "/api/auth/login"
       body: '{"username": "${credentials.username}", "password": "${credentials.password}", "rememberMe": false}'
 
-    # Gap B: two-value extract — TOKEN cookie AND CSRF header.
+    # Gap B: two-value extract, TOKEN cookie AND CSRF header.
     # IMPORTANT: header name MUST match the on-wire case exactly.
     # MPB's HTTP client does case-sensitive header lookup (violates RFC 7230).
     # UniFi sends two equivalent CSRF headers on the login response:
-    #   X-Csrf-Token        (Title-Case — current CSRF value)
-    #   x-updated-csrf-token (all lowercase — rotated CSRF after this request)
+    #   X-Csrf-Token        (Title-Case, current CSRF value)
+    #   x-updated-csrf-token (all lowercase, rotated CSRF after this request)
     # We bind x-updated-csrf-token because it is already lowercase and is the
-    # documented rotation header. Do NOT normalize this to "x-csrf-token" —
+    # documented rotation header. Do NOT normalize this to "x-csrf-token",
     # that was the build-3 bug (curl -i lowercases header names in its output,
     # masking the true on-wire casing). The inject side uses "x-csrf-token"
     # (lowercase) on outgoing requests, which is fine: UniFi's API normalizes
@@ -118,12 +118,12 @@ source:
 
 
 requests:
-  # Request 1: stat/sysinfo — controller-software metadata.
-  # Response envelope: {meta:{rc:"ok"}, data:[{...}]} — single-element array.
+  # Request 1: stat/sysinfo, controller-software metadata.
+  # Response envelope: {meta:{rc:"ok"}, data:[{...}]}, single-element array.
   # response_path: "data" does NOT unwrap the array; the singleton metricSet
   # consumes the root-of-data which is the array. Metrics reference
   # data[0].field via JMESPath array index on the singleton's scalar context.
-  # NOTE: For singleton objects the loader requires list_path: "" — i.e. consume
+  # NOTE: For singleton objects the loader requires list_path: "", i.e. consume
   # the entire response_path root. stat/sysinfo's data[] is a single-element
   # array; we set response_path to "data[0]" so the scalar metricSet receives
   # the unwrapped object directly.
@@ -133,8 +133,8 @@ requests:
     params: []
     response_path: "data[0]"
 
-  # Request 2: stat/health — 5 subsystem rows (wlan/wan/www/lan/vpn).
-  # Response envelope: {meta:{rc:"ok"}, data:[...]} — 5-element array.
+  # Request 2: stat/health, 5 subsystem rows (wlan/wan/www/lan/vpn).
+  # Response envelope: {meta:{rc:"ok"}, data:[...]}, 5-element array.
   # response_path: "data" exposes the array; metrics use JMESPath filter
   # predicates [?subsystem=='X'] to extract per-subsystem scalar fields.
   - name: site_health
@@ -143,8 +143,8 @@ requests:
     params: []
     response_path: "data"
 
-  # Request 3: stat/device — all adopted devices, ~385 KB on a 15-device lab.
-  # Response envelope: {meta:{rc:"ok"}, data:[...]} — one row per device.
+  # Request 3: stat/device, all adopted devices, ~385 KB on a 15-device lab.
+  # Response envelope: {meta:{rc:"ok"}, data:[...]}, one row per device.
   # Consumed by three list object types (AP, Switch, Gateway) each with a
   # different list_path JMESPath filter on type field.
   # TOOLSET QUESTION E: single request feeding 3 list objects with different
@@ -159,7 +159,7 @@ requests:
 object_types:
 
   # ---------------------------------------------------------------------------
-  # UniFi Site — is_singleton: true
+  # UniFi Site, is_singleton: true
   # One per adapter instance. Carries controller software metadata and
   # per-subsystem health aggregates. Hardware device metrics live on Gateway.
   # ---------------------------------------------------------------------------
@@ -428,7 +428,7 @@ object_types:
 
 
   # ---------------------------------------------------------------------------
-  # Access Point — list
+  # Access Point, list
   # Source: stat/device filtered by type=='uap'. One row per adopted AP.
   # Per-radio metrics use JMESPath filter predicates on radio_table_stats[].
   # ---------------------------------------------------------------------------
@@ -646,7 +646,7 @@ object_types:
 
 
   # ---------------------------------------------------------------------------
-  # Switch — list
+  # Switch, list
   # Source: stat/device filtered by type=='usw'. One row per adopted switch.
   # Per-port aggregates via JMESPath length() predicates.
   # ---------------------------------------------------------------------------
@@ -798,7 +798,7 @@ object_types:
 
 
   # ---------------------------------------------------------------------------
-  # Gateway — list
+  # Gateway, list
   # Source: stat/device filtered by type=='udm' or type=='ugw'.
   # UDM Pro appears once here. Carries hardware metrics (CPU, mem, system load,
   # uptime), WAN link metrics (wan1/wan2), active-WAN speedtest (uplink), and
@@ -1101,10 +1101,10 @@ object_types:
         type: NUMBER
         source: "metricset:dev_inventory.uplink.uptime"
 
-      # --- Temperatures (UDM only — absent on USG-split deployments) ---
+      # --- Temperatures (UDM only, absent on USG-split deployments) ---
       # API map confirms temperatures[] is array-of-objects {name, type, value}.
       # Sensor names on UDM Pro: "CPU", "Local" (board), "PHY" (board).
-      # v1's [?name=='System'] filter does NOT match — corrected to [?name=='CPU'].
+      # v1's [?name=='System'] filter does NOT match, corrected to [?name=='CPU'].
       - key: cpu_temp_c
         label: "CPU Temperature (°C)"
         usage: METRIC
