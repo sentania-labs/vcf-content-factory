@@ -103,6 +103,10 @@ SDK adapter reviews.
 ## Read on demand
 
 ### `api-surface/` — API endpoint documentation
+
+When you add a file under `api-surface/`, add its row to this table in the
+**same commit**. This table drifted from disk for four straight curation
+cycles because that did not happen.
 | File | Purpose |
 |---|---|
 | `content_api_surface.md` | Content API (public + internal + content-zip) |
@@ -115,6 +119,7 @@ SDK adapter reviews.
 | `pak_install_api_exploration.md` | .pak install API exploration |
 | `pak_uninstall_api_exploration.md` | .pak uninstall API exploration |
 | `pak_ui_upload_investigation.md` | .pak UI upload investigation |
+| `compliance_enablement_markers.md` | Compliance enablement markers (per-profile enablement wire state) |
 | `auth_vidb_oauth_flow.md` | VIDB OAuth flow |
 | `struts_import_endpoints.md` | Struts/Ext.Direct endpoint catalog |
 | `struts_exploration_backlog.md` | Struts exploration backlog |
@@ -124,6 +129,7 @@ SDK adapter reviews.
 | `ui_deep_links.md` | UI deep-link routes for dashboards/views (global search does NOT deep-link) |
 | `distribution_view_no_data.md` | DEF-012 root cause: property distributions rendered as numeric histograms |
 | `dashboard_selfprovider_pin_wire_format.md` | Self-provider widget pin wire format (View traversalSpecId, HealthChart) |
+| `resourcelist_column_state_wire_format.md` | ResourceList column-state wire format (widget `states[]` presets) |
 | `casa-inventory-access.md` | CaSA / Cloud-Proxy adapter inventory-read mechanism |
 | `casa-injected-vs-raw-client.md` | CaSA routing: raw SDK SuiteAPIClient vs injected UnlicensedAdapter client |
 | `per-instance-suiteapi-credential-contract.md` | Per-instance Suite API credential contract (bytecode-proven) |
