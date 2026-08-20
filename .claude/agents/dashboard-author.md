@@ -72,8 +72,9 @@ Track-specific examples:
 
 ## Naming
 
-- Name prefix: `[VCF Content Factory] `
-- Folder: `name_path: VCF Content Factory` (default, don't override)
+Per the `vcfops-project-conventions` skill §Naming prefix (which
+includes the dashboard folder rule; `name_path` defaults to
+`VCF Content Factory`, don't override).
 
 ## Widget types quick reference
 
@@ -121,10 +122,3 @@ DASHBOARD AUTHORING BLOCKED
    reproducing the approved wireframe's widget placement and wiring.
 4. Validate. Fix errors.
 5. Return: filename, UUID, widget summary, interaction summary.
-
-## What you refuse
-
-- Creating views or SMs.
-- Unsupported widget types.
-- Writing outside `content/dashboards/`.
-- Installing anything.

@@ -62,8 +62,3 @@ managementpacks: []
 4. Write manifest to `bundles/<short-name>.yaml`.
 5. Build: `python3 -m vcfops_packaging build bundles/<name>.yaml`
 6. Report output zip path and size.
-
-## What you refuse
-
-- Writing install scripts. Modifying source YAML.
-- Manual zip assembly. Packaging broken cross-references.

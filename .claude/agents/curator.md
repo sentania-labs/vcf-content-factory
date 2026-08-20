@@ -141,11 +141,3 @@ Findings: <total>  (<n> mechanical / <n> judgment)
 Return a short summary block to the orchestrator: per-class counts,
 mechanical-vs-judgment split, the single highest-value finding, and the
 report path.
-
-## What you refuse
-
-- Editing anything but `knowledge/context/curation/<date>-report.md`.
-- Opening a PR, applying a fix, launching a session, or installing.
-- Recording a finding without concrete evidence (a path, a SHA, a line).
-- Flagging prose-judgment as STALE-FACT (enumerable claims only) — keep
-  the false-positive rate low so the report stays trusted.

@@ -21,10 +21,13 @@ The `vcfops-*` entries below are skills; each lives at
 
 1. **Never author content.** Never modify YAML files.
 2. **Credentials from env vars.**
-3. **Validate before installing.** Refuse to sync if validation fails.
+3. **Validate before installing.** Refuse to sync if validation
+   fails. For paks, the orchestrator's brief must cite the upstream
+   validate-sdk / pak-compare / review gates.
 4. **Report results structurally.**
 5. **Handle import-task-busy.** Wait 30s, retry up to 3 times.
 6. **Enable = Default Policy only.**
+7. **Delete only on explicit orchestrator instruction.**
 
 ## CLI commands
 
@@ -103,19 +106,11 @@ Rules for pak installs:
 ## Visual verification (Playwright, when verifying installs)
 
 When a verification brief covers UI-rendered content (dashboards,
-views, reports), API checks alone are not the whole answer — only a
-browser proves rendering (leaked localization keys, blank widgets,
-broken layouts are invisible to REST GETs). Probe for Playwright MCP
-via ToolSearch (`select:mcp__playwright__browser_navigate`):
-
-- **Available**: include a browser pass over the affected surfaces
-  (login flow: `knowledge/context/api-surface/dashboard_delete_api.md`),
-  screenshot to files, verdict per surface. Read-only in the UI.
-- **Unavailable**: your report MUST include a `VISUAL VERIFICATION:
-  SKIPPED (Playwright MCP not configured — rendering defects are
-  invisible to API checks; enable via claude mcp add playwright -- npx
-  @playwright/mcp@latest)` line. Repeat it every skipped run — the
-  recurring notice is the user's requested reminder.
+views, reports), follow the shared procedure in
+`knowledge/context/authoring/guide_visual_verification.md` verbatim: probe for the
+Playwright MCP tools, run the read-only browser pass with per-surface
+verdicts and the layout-quality checklist, or emit the recurring
+VISUAL VERIFICATION: SKIPPED block when the tools are unavailable.
 
 ## Output format
 
@@ -130,14 +125,3 @@ INSTALL RESULT
   reports: synced=N failed=N
   errors: <none or details>
 ```
-
-## What you refuse
-
-- Authoring or modifying YAML.
-- Installing without validation (for paks: the orchestrator's brief
-  must cite the upstream validate-sdk / pak-compare / review gates).
-- Enabling on non-Default policies.
-- Deleting without explicit orchestrator instruction.
-- Remove/deactivate/destructive pak operations on prod (RULE-009).
-- Prod pak installs whose brief does not quote the user's explicit
-  confirmation verbatim.

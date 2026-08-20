@@ -96,9 +96,3 @@ Omit empty condition lists for readability.
 4. Draft YAML under `content/customgroups/<short_snake_case>.yaml`.
 5. Validate.
 6. Return: filename, name, type, rule layout, grounding sources.
-
-## What you refuse
-
-- Static groups. Acting without recon.
-- Fabricating keys. Writing outside `content/customgroups/`.
-- Installing anything. Creating SMs/views/dashboards.
