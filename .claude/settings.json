@@ -10,17 +10,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "scripts/bootstrap_references.sh 2>/dev/null || true",
-            "timeout": 60000
+            "command": "TO=\"\"; command -v timeout >/dev/null 2>&1 && TO=\"timeout 60\" || true; $TO \"$CLAUDE_PROJECT_DIR\"/scripts/bootstrap_references.sh 2>/dev/null || true; $TO \"$CLAUDE_PROJECT_DIR\"/scripts/bootstrap_managed_paks.sh 2>/dev/null || true; PY=\"\"; for c in python3 python; do command -v $c >/dev/null 2>&1 && $c -c \"import sys; sys.exit(0 if sys.version_info >= (3,9) else 1)\" 2>/dev/null && { PY=$c; break; }; done; if [ -n \"$PY\" ]; then $PY \"$CLAUDE_PROJECT_DIR\"/src/vcfops_common/doctor.py || true; else echo \"VCF Content Factory preflight skipped: no Python 3.9+ interpreter on PATH. This copy cannot be set up until one is installed (apt install python3 / winget install Python.Python.3 / brew install python). Install it and restart this session, and setup will continue automatically.\"; fi",
+            "timeout": 180000
           },
           {
             "type": "command",
-            "command": "scripts/bootstrap_managed_paks.sh 2>/dev/null || true",
-            "timeout": 60000
-          },
-          {
-            "type": "command",
-            "command": "scripts/curation_staleness_check.sh 2>/dev/null || true",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/curation_staleness_check.sh 2>/dev/null || true",
             "timeout": 15000
           }
         ]

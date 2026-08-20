@@ -16,6 +16,22 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PAKS_DIR="${REPO_ROOT}/content/sdk-adapters"
 REGISTRY_FILE="${REPO_ROOT}/knowledge/context/managed_paks.md"
 
+# Record this run for the preflight doctor (contract: src/vcfops_common/doctor.py
+# header). Called at EVERY exit path, including the early ones: an empty registry
+# and a missing registry file are both real, reportable outcomes, and a script
+# that exits without recording leaves the doctor with a delta nothing can clear.
+# Replaces this script's own line rather than appending, so the file stays
+# bounded at one line per script and neither script can evict the other.
+write_status() {
+    local c="${1:-0}" u="${2:-0}" f="${3:-0}" fl="${4:--}"
+    local sf="${REPO_ROOT}/.bootstrap-status"
+    local line tmp
+    line="$(date -u +%Y-%m-%dT%H:%M:%SZ) bootstrap_managed_paks cloned=$c updated=$u failed=$f failures=$fl"
+    tmp="${sf}.tmp"
+    { grep -v " bootstrap_managed_paks " "$sf" 2>/dev/null || true; echo "$line"; } > "$tmp" 2>/dev/null \
+      && mv "$tmp" "$sf" 2>/dev/null || true
+}
+
 UPDATE_EXISTING=false
 if [[ "${1:-}" == "--update" ]]; then
     UPDATE_EXISTING=true
@@ -23,6 +39,7 @@ fi
 
 if [[ ! -f "$REGISTRY_FILE" ]]; then
     echo "ERROR: $REGISTRY_FILE not found" >&2
+    write_status 0 0 1 "registry-file-missing"
     exit 1
 fi
 
@@ -63,6 +80,7 @@ done < "$REGISTRY_FILE"
 
 if [[ ${#URLS[@]} -eq 0 ]]; then
     echo "No managed paks registered in $REGISTRY_FILE"
+    write_status 0 0 0 -
     exit 0
 fi
 
@@ -73,6 +91,7 @@ cloned=0
 updated=0
 skipped=0
 failed=0
+failures=()
 
 for i in "${!URLS[@]}"; do
     url="${URLS[$i]}"
@@ -87,6 +106,7 @@ for i in "${!URLS[@]}"; do
             else
                 echo "    WARNING: git pull failed for $name" >&2
                 failed=$((failed + 1))
+                failures+=("${name}")
             fi
         else
             echo "  Exists:   $name (use --update to pull)"
@@ -99,9 +119,14 @@ for i in "${!URLS[@]}"; do
         else
             echo "    WARNING: git clone failed for $name" >&2
             failed=$((failed + 1))
+            failures+=("${name}")
         fi
     fi
 done
 
 echo ""
 echo "Done: cloned=$cloned updated=$updated skipped=$skipped failed=$failed"
+
+fl="-"
+[[ ${#failures[@]} -gt 0 ]] && fl="$(IFS=,; echo "${failures[*]}")"
+write_status "$cloned" "$updated" "$failed" "$fl"
