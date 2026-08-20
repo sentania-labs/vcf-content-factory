@@ -35,7 +35,7 @@ Usage (programmatic)::
     from vcfops_packaging.readme_gen import update_readme
     changed = update_readme(Path("../vcf-content-factory-bundles/README.md"))
 
-    # Phase 3 — release-manifest-driven generation:
+    # Phase 3, release-manifest-driven generation:
     from vcfops_packaging.readme_gen import update_readme_release
     changed = update_readme_release(
         Path("../vcf-content-factory-bundles/README.md"),
@@ -322,7 +322,7 @@ def update_readme(
 
         collector = _SECTION_COLLECTORS.get(section_name)
         if collector is None:
-            # Unknown section — leave unchanged
+            # Unknown section, leave unchanged
             return m.group(0)
 
         items = collector(repo_root)
@@ -363,7 +363,7 @@ def _slug_to_display_name(slug: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Phase 3 — release-manifest-driven README generation
+# Phase 3, release-manifest-driven README generation
 # ---------------------------------------------------------------------------
 
 # Canonical display name for each dist subdir.
@@ -417,7 +417,7 @@ def _first_sentence(desc: str) -> str:
     match = re.search(r"\.(?:\s|$)", desc)
     if match:
         return desc[: match.start() + 1].strip()
-    # No sentence-ending period found — use the whole description.
+    # No sentence-ending period found, use the whole description.
     return desc if desc.endswith(".") else desc + "."
 
 
@@ -531,7 +531,7 @@ def _resolve_sdk_pointer_for_artifact(artifact) -> "Optional[dict]":
     """Look up managed-paks registry for an SDK adapter artifact.
 
     Returns the pointer-info dict (same shape as ``_resolve_sdk_mp_pointer``)
-    or None if the adapter is not registered.  Does NOT raise — the caller
+    or None if the adapter is not registered.  Does NOT raise, the caller
     falls back to the normal table row if None is returned.
     """
     try:
@@ -565,7 +565,7 @@ def _render_sdk_mp_table(rows: list[dict]) -> str:
     Schema: Name | Released | Description | Download
     - Name links to the pak's GitHub repo page (living README lives there).
     - Download links to releases/latest (always the current pak).
-    No version column — "latest" is evergreen by design.
+    No version column, "latest" is evergreen by design.
     Returns empty string if rows is empty.
     """
     if not rows:
@@ -580,12 +580,12 @@ def _render_sdk_mp_table(rows: list[dict]) -> str:
         description = str(row.get("description", "")).replace("|", "\\|")
         repo = str(row.get("repo", ""))
         latest = str(row.get("latest_release_url", ""))
-        # Name links to the pak repo page (primary — GitHub renders the pak README there).
+        # Name links to the pak repo page (primary, GitHub renders the pak README there).
         if repo:
             name_cell = f"[{raw_name}]({repo})"
         else:
             name_cell = raw_name
-        # Download links to releases/latest (evergreen — never pins a version).
+        # Download links to releases/latest (evergreen, never pins a version).
         if latest:
             download_cell = f"[Download latest]({latest})"
         else:
@@ -610,22 +610,22 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
     from .release_builder import _artifact_dest_subdir, _zip_filename
 
     # Build the set of manifest paths that are deprecated by another manifest.
-    # Deprecated releases are shown only in the Retired section — they must not
+    # Deprecated releases are shown only in the Retired section, they must not
     # also appear in the active catalog tables.
     deprecated_manifest_paths: set[Path] = set()
     for r in releases:
         for dep_path in r.deprecates:
             deprecated_manifest_paths.add(dep_path.resolve())
 
-    # Group releases by subdir — factory-native, third-party, and SDK MPs separately.
+    # Group releases by subdir, factory-native, third-party, and SDK MPs separately.
     # SDK adapter (Tier 2) pointer releases are tracked separately from Tier 1
     # management-packs so they can be rendered in a dedicated README subsection.
     by_subdir: dict[str, list] = {s: [] for s in _SUBDIR_ORDER}
     by_third_party: dict[str, list] = {s: [] for s in _THIRD_PARTY_SUBDIR_ORDER}
-    sdk_mp_rows: list[dict] = []  # SDK pointer releases — README entry only
+    sdk_mp_rows: list[dict] = []  # SDK pointer releases, README entry only
 
     for r in releases:
-        # Skip releases that are deprecated by another manifest — they belong
+        # Skip releases that are deprecated by another manifest, they belong
         # only in the Retired section.
         if r.manifest_path.resolve() in deprecated_manifest_paths:
             continue
@@ -653,7 +653,7 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
                     .strftime("%Y-%m-%d")
                 )
             else:
-                released_date = "—"
+                released_date = "-"
 
             # Description: first sentence of the release manifest description.
             # _first_sentence() treats a period as a sentence boundary only
@@ -678,7 +678,7 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
                         "latest_release_url": _latest_url,
                     })
                 else:
-                    # Registry lookup failed — add a degraded row so the release
+                    # Registry lookup failed, add a degraded row so the release
                     # still appears rather than silently disappearing.
                     sdk_mp_rows.append({
                         "name": r.name,
@@ -707,7 +707,7 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
                     install_cell = "`python3 install.py`"
 
             if subdir in by_third_party:
-                # Third-party row — load license + author from bundle YAML.
+                # Third-party row, load license + author from bundle YAML.
                 bundle_data = _load_bundle_yaml_for_release(a)
                 by_third_party[subdir].append({
                     "name": r.name,
@@ -724,7 +724,7 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
                     by_subdir[subdir] = []
                 by_subdir[subdir].append({
                     "name": r.name,
-                    # version is intentionally omitted — internal-only field;
+                    # version is intentionally omitted, internal-only field;
                     # the catalog table does not show version to consumers.
                     "released": released_date,
                     "description": first_sentence,
@@ -748,14 +748,14 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
         else:
             parts.append("_No releases yet._\n")
 
-        # SDK MP subsection — appended immediately after the Management Packs
+        # SDK MP subsection, appended immediately after the Management Packs
         # Tier 1 table so it reads as "Management Packs → SDK Adapters".
         if subdir == "management-packs" and sdk_mp_rows:
             parts.append("\n### SDK Adapter Management Packs\n")
             parts.append(
                 "_These management packs are built and released independently "
                 "by their own CI pipeline. The pak binary lives on the pak's own "
-                "GitHub repo — click the pak name or 'Download latest' to get the "
+                "GitHub repo, click the pak name or 'Download latest' to get the "
                 "current release. No version is pinned here; the link always "
                 "resolves to the latest published release._\n"
             )
@@ -789,7 +789,7 @@ def _render_release_catalog(dist_repo: Path, releases: list) -> str:
         for row in retired_rows:
             name = str(row.get("name", "")).replace("|", "\\|")
             subdir_val = str(row.get("subdir", "")).replace("|", "\\|")
-            retired_date = str(row.get("retired_date", "—")).replace("|", "\\|")
+            retired_date = str(row.get("retired_date", "-")).replace("|", "\\|")
             reason = str(row.get("reason", "")).replace("|", "\\|")
             # Download link uses retired/<subdir>/<filename> path.
             zip_name = str(row.get("name", ""))
@@ -854,7 +854,7 @@ def _collect_retired_rows(dist_repo: Path, releases: list) -> list[dict]:
                     .strftime("%Y-%m-%d")
                 )
             else:
-                retired_date = "—"
+                retired_date = "-"
             reason = (
                 f"deprecated by {deprecated_by[key]!r}"
                 if key in deprecated_by

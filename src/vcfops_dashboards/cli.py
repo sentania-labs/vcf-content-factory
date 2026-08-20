@@ -53,7 +53,7 @@ def cmd_validate(args) -> int:
     validate_profile_arg(args)  # validate --profile name if supplied; exits on unknown profile
     # Determine whether this is a full-corpus validate (no explicit path overrides).
     # Only the full-corpus path does dashboard-embedding suppression of the
-    # time_window warning — single-file / explicit-path invocations keep the
+    # time_window warning, single-file / explicit-path invocations keep the
     # warning live since there is no dashboard context to consult.
     using_defaults = (
         args.views_dir == str(DEFAULT_VIEWS)
@@ -96,10 +96,10 @@ def cmd_validate(args) -> int:
         try:
             from vcfops_packaging.project import check_slug_uniqueness, check_project_membership
         except ImportError:
-            # vcfops_packaging not available — re-emit captured warnings and exit
+            # vcfops_packaging not available, re-emit captured warnings and exit
             _replay_non_time_window_warnings(captured_warnings)
             _replay_time_window_warnings_for_standalone_views(captured_warnings, dashboards)
-            return rc  # vcfops_packaging not available — skip checks
+            return rc  # vcfops_packaging not available, skip checks
 
         # Slug uniqueness for views and dashboards
         for content_type, default_dir in (
@@ -258,7 +258,7 @@ def _replay_time_window_warnings_for_standalone_views(captured: list, all_dashbo
     try:
         from vcfops_common.dep_walker import extract_view_names_from_dashboards
     except ImportError:
-        # dep_walker unavailable — re-emit all time_window warnings unchanged
+        # dep_walker unavailable, re-emit all time_window warnings unchanged
         for w in captured:
             if issubclass(w.category, UserWarning) and _is_time_window_warning(str(w.message)):
                 warnings.warn_explicit(
@@ -362,7 +362,7 @@ def _run_dep_walker(
 
     Loads the SM YAML from supermetrics_dir (if it exists) to build the
     sm_name_map so SM refs discovered by UUID can be annotated with names.
-    The SM definitions themselves are NOT re-synced here — they're passed
+    The SM definitions themselves are NOT re-synced here, they're passed
     to the walker only for the name map and to tell the walker which SMs
     are in the current sync batch (the walker skips those for the enable
     check, since the SM sync+enable flow handles them).
@@ -376,7 +376,7 @@ def _run_dep_walker(
         print(f"WARN  dep walker unavailable: {e}", file=sys.stderr)
         return 0
 
-    # Load SM defs for name map (optional — walker degrades gracefully if absent)
+    # Load SM defs for name map (optional, walker degrades gracefully if absent)
     sm_defs: list = []
     sm_dir = Path(supermetrics_dir)
     if sm_dir.exists():
@@ -388,7 +388,7 @@ def _run_dep_walker(
 
     sm_name_map = {d.name: d.id for d in sm_defs}
 
-    # Load customgroup defs for ref validation (optional — walker degrades gracefully)
+    # Load customgroup defs for ref validation (optional, walker degrades gracefully)
     cg_defs: list = []
     cg_dir = Path(customgroups_dir)
     if cg_dir.exists():
@@ -398,7 +398,7 @@ def _run_dep_walker(
         except Exception:
             pass  # non-fatal: customgroup validation will be skipped
 
-    # For dashboard-only syncs, supermetrics list is empty — the walker
+    # For dashboard-only syncs, supermetrics list is empty, the walker
     # will still check pre-existing SM refs from views/dashboards.
     walk = walk_and_check(
         client=client,
@@ -571,7 +571,7 @@ def cmd_delete_view(args) -> int:
     Uses the unsupported VCF Ops UI session (Ext.Direct RPC layer), not the
     Suite API. Credentials come from the standard VCFOPS_* env vars.
     Unlike dashboard delete, deleting a non-existent view UUID raises an
-    error — this command surfaces that as a non-zero exit.
+    error, this command surfaces that as a non-zero exit.
     """
     try:
         profile, default = resolve_profile_from_args(args)

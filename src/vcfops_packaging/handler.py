@@ -20,12 +20,12 @@ Adding a new content type:
     4. No changes needed in this file or in the CLI.
 
 Sync order contract (enforced by the registry, not the handlers):
-    1  supermetrics   — no deps
-    2  customgroups   — may reference super metrics
-    3  views          — reference super metrics
-    4  dashboards     — reference views
-    5  symptoms       — reference metrics/super metrics
-    6  alerts         — reference symptoms
+    1  supermetrics, no deps
+    2  customgroups, may reference super metrics
+    3  views, reference super metrics
+    4  dashboards, reference views
+    5  symptoms, reference metrics/super metrics
+    6  alerts, reference symptoms
 
 Exit codes produced by sync/delete results:
     All items OK        -> 0
@@ -107,7 +107,7 @@ class ContentHandler:
     authenticated.  Custom-group handlers that need a
     ``VCFOpsCustomGroupClient`` should construct one from the same env vars
     (the session object carries the token in its headers, but the two client
-    types are not interchangeable today — create a fresh
+    types are not interchangeable today, create a fresh
     VCFOpsCustomGroupClient.from_env() inside the handler instead).
     """
 
@@ -215,14 +215,14 @@ def discover_handlers() -> List[ContentHandler]:
                 if not found:
                     print(
                         f"  WARN  {module_name}: no HANDLER or HANDLERS defined"
-                        f" — skipping",
+                        f", skipping",
                         file=sys.stderr,
                     )
                     continue
                 handlers.extend(found)
             except Exception as exc:
                 print(
-                    f"  WARN  {module_name}: import failed ({exc}) — skipping",
+                    f"  WARN  {module_name}: import failed ({exc}), skipping",
                     file=sys.stderr,
                 )
 

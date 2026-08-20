@@ -1007,7 +1007,7 @@ function Enable-BuiltinMetricsOnDefaultPolicy {
         if (Test-Path -LiteralPath $tmpZip) { Remove-Item -LiteralPath $tmpZip -Force -ErrorAction SilentlyContinue }
     }
 
-    # NOTE: comma operator required — returning a HashSet (IEnumerable) without it causes
+    # NOTE: comma operator required, returning a HashSet (IEnumerable) without it causes
     # PowerShell to enumerate the collection through the pipeline, yielding AutomationNull
     # (empty), a bare string (1 item), or Object[] (N items) instead of the HashSet.
     # Same pattern as New-ZipBytes (line 1148) and New-DashboardZip (line 1235).

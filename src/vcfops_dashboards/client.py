@@ -30,8 +30,8 @@ def discover_marker_filename(client: VCFOpsClient, timeout_s: int = 120) -> str:
     The importer rejects bundles whose marker filename does not match
     the server's own value (verified by probing: 6844548499441080431L.v1
     imports fine, 6844548499441080432L.v1 returns INVALID_FILE_FORMAT).
-    Every export from the same cluster uses the same marker — it's a
-    stable per-instance fingerprint — so we discover it by triggering a
+    Every export from the same cluster uses the same marker, it's a
+    stable per-instance fingerprint, so we discover it by triggering a
     tiny SUPER_METRICS export, downloading the resulting zip, and
     reading the one entry that ends in ``L.v1``.
 
@@ -108,7 +108,7 @@ def import_content_zip(client: VCFOpsClient, zip_bytes: bytes, timeout_s: int = 
     suppressed so requests can set the multipart boundary.
 
     The POST response's ``id`` is a *stable pipeline id* for the content
-    importer, not a per-operation id — every import on a given instance
+    importer, not a per-operation id, every import on a given instance
     returns the same id. The GET status endpoint returns the summary of
     the last import operation. To tell "our" import apart from a prior
     one, snapshot ``endTime`` before POST and poll until it advances.

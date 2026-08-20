@@ -1,7 +1,7 @@
 """UI session client for VCF Ops dashboard/view delete operations.
 
 These operations use the Struts/.action + Ext.Direct RPC layer that backs
-the VCF Operations web console — NOT the Suite API. The two session systems
+the VCF Operations web console, NOT the Suite API. The two session systems
 are completely independent; a Suite API bearer token cannot authenticate to
 *.action endpoints.
 
@@ -14,16 +14,16 @@ AUTH FLOW
 
 SUPPORTABILITY CAVEAT
 ---------------------
-These are **unsupported internal UI endpoints** — not part of any public API
+These are **unsupported internal UI endpoints**, not part of any public API
 contract. They can change between VCF Ops releases without notice. Tested
 against VCF Operations 9.0.2.0 build 25137838.
 
 Credentials are read from environment variables:
-  VCFOPS_HOST       — hostname (no scheme)
-  VCFOPS_USER       — username
-  VCFOPS_PASSWORD   — password
-  VCFOPS_AUTH_SOURCE — auth source id (default: localItem for local accounts)
-  VCFOPS_VERIFY_SSL — set to "true" to enable SSL verification (default: false)
+  VCFOPS_HOST, hostname (no scheme)
+  VCFOPS_USER, username
+  VCFOPS_PASSWORD, password
+  VCFOPS_AUTH_SOURCE, auth source id (default: localItem for local accounts)
+  VCFOPS_VERIFY_SSL, set to "true" to enable SSL verification (default: false)
 """
 from __future__ import annotations
 
@@ -118,12 +118,12 @@ class VCFOpsUIClient:
         """Authenticate to the VCF Ops UI and capture the CSRF token.
 
         Three-step flow documented in knowledge/context/api-surface/dashboard_delete_api.md:
-        1. GET /ui/login.action?vcf=1 — seeds JSESSIONID
-        2. POST /ui/login.action (form creds) — validates credentials
-        3. GET /ui/index.action (no redirect) — OPS_SESSION cookie with csrfToken
+        1. GET /ui/login.action?vcf=1, seeds JSESSIONID
+        2. POST /ui/login.action (form creds), validates credentials
+        3. GET /ui/index.action (no redirect), OPS_SESSION cookie with csrfToken
 
         The OPS_SESSION cookie is base64-encoded JSON. It is set on the 302
-        response from step 3 but CLEARED if the redirect is followed — so we
+        response from step 3 but CLEARED if the redirect is followed, so we
         must capture it without following the redirect.
         """
         s = requests.Session()
@@ -160,7 +160,7 @@ class VCFOpsUIClient:
         ops_cookie = resp.cookies.get("OPS_SESSION") or s.cookies.get("OPS_SESSION")
         if not ops_cookie:
             raise UIClientError(
-                "OPS_SESSION cookie not received after /ui/index.action — "
+                "OPS_SESSION cookie not received after /ui/index.action, "
                 "check credentials and auth source"
             )
         try:
@@ -192,7 +192,7 @@ class VCFOpsUIClient:
 
     def _require_auth(self) -> tuple[requests.Session, str]:
         if self._session is None or self._csrf_token is None:
-            raise UIClientError("Not logged in — call login() first")
+            raise UIClientError("Not logged in, call login() first")
         return self._session, self._csrf_token
 
     # ------------------------------------------------------------------
@@ -257,7 +257,7 @@ class VCFOpsUIClient:
         """List all view definitions via Ext.Direct RPC.
 
         Uses viewServiceController.getGroupedViewDefinitionThumbnails
-        (no parameters) — returns a grouped list of all views the user
+        (no parameters), returns a grouped list of all views the user
         can see.
 
         WARNING: unsupported internal endpoint; may change between releases.

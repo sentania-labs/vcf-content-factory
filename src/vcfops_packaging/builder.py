@@ -26,7 +26,7 @@ A built package is a zip at dist/<bundle-name>.zip with the layout:
           alerts.json
           reports_content.xml
 
-Template stamping is removed entirely — install.py and install.ps1 are
+Template stamping is removed entirely, install.py and install.ps1 are
 static and read everything from bundle.json at runtime.
 """
 from __future__ import annotations
@@ -382,7 +382,7 @@ def _generate_bundle_readme(bundle: Bundle, display_name: str) -> str:
             lines.append(f"**License:** {bundle.license}")
             lines.append("")
         # NOTE: no auto-injected boilerplate prose here.  When factory_native is
-        # False, bundle.description is the DESCRIPTION.md the user authored —
+        # False, bundle.description is the DESCRIPTION.md the user authored,
         # it already provides the narrative (origin, context, usage notes).
         # The ## Provenance block above supplies the structured metadata
         # (source URL, captured date, version, author, license).
@@ -506,7 +506,7 @@ def _generate_bundle_readme(bundle: Bundle, display_name: str) -> str:
         "> **Policy enablement caveat.** The install script enables imported super",
         "> metrics on the **Default Policy** only. If your deployment uses",
         "> non-default, non-inheriting policies, you may need to manually enable the",
-        "> imported super metrics in those policies — otherwise dashboard cells and",
+        "> imported super metrics in those policies, otherwise dashboard cells and",
         "> view columns that depend on those metrics will appear blank for resources",
         "> scoped under those policies. Check `Administration > Policies` after",
         "> install to confirm enablement on every policy that needs to see the",
@@ -572,7 +572,7 @@ def build_bundle(
         bundle_path: Path to a bundles/*.yaml manifest.
         output_dir: Directory where the output zip is written.
             Defaults to 'dist/'.
-        audit_mode: Dependency audit mode — "auto" (default), "strict", or
+        audit_mode: Dependency audit mode, "auto" (default), "strict", or
             "lax".  See vcfops_packaging/audit.py for semantics.
         live_describe: If True (default) and VCFOPS_HOST/USER/PASSWORD are in
             the environment, refresh the describe cache for all adapter/resource
@@ -586,47 +586,23 @@ def build_bundle(
     Returns:
         Path to the built zip file.
     """
-    from .audit import audit_bundle_dependencies, print_audit_summary
-    from .describe import make_cache, DescribeCacheError
+    from .audit import print_audit_summary, run_dependency_audit
 
     bundle = load_bundle(bundle_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # --- Dependency audit ---
-    if skip_audit:
-        import sys as _sys
-        print(
-            f"  WARN: --skip-audit is set; dependency audit skipped for {bundle_path}. "
-            "Metric references will NOT be validated.",
-            file=_sys.stderr,
-        )
-        audit_result = None
-    else:
-        describe_cache = make_cache(live=live_describe)
-
-        # If live mode and client is attached, refresh relevant kind pairs first.
-        if live_describe and describe_cache._client is not None:
-            from .deps import extract_metric_references
-            refs = extract_metric_references(bundle)
-            pairs_needed: set[tuple[str, str]] = {
-                (r.adapter_kind, r.resource_kind) for r in refs
-            }
-            for ak, rk in sorted(pairs_needed):
-                try:
-                    describe_cache.refresh(ak, rk)
-                except DescribeCacheError as exc:
-                    print(f"  WARN: could not refresh describe cache for {ak}/{rk}: {exc}",
-                          file=__import__("sys").stderr)
-
-        audit_result = audit_bundle_dependencies(
-            bundle, describe_cache, mode=audit_mode
-        )
-
-        # In auto mode, merge auto-added entries into the bundle's list before
-        # bundle.json serialization.
-        if audit_result.auto_added:
-            bundle.builtin_metric_enables = list(bundle.builtin_metric_enables) + audit_result.auto_added
+    # Shared with discrete_builder.build_discrete, see audit.run_dependency_audit
+    # (issue #77). Auto-added entries are merged into bundle.builtin_metric_enables
+    # in place before bundle.json serialization below.
+    audit_result = run_dependency_audit(
+        bundle,
+        str(bundle_path),
+        live_describe=live_describe,
+        audit_mode=audit_mode,
+        skip_audit=skip_audit,
+    )
 
     slug = bundle.name  # bundle slug = manifest name
     # Derive the display name: prefer manifest's explicit display_name, else
@@ -655,7 +631,7 @@ def build_bundle(
     sm_json = json.dumps(sm_dict, indent=2) if sm_dict else None
 
     # Build the SM scope for the renderer: the set of SM YAML files declared
-    # in this bundle's manifest.  This prevents cross-bundle UUID leakage —
+    # in this bundle's manifest.  This prevents cross-bundle UUID leakage,
     # a third-party bundle's views resolve only against its own SMs, never
     # against native SMs or another bundle's SMs.
     # bundle_context label is included in any resolution-error messages.
@@ -714,7 +690,7 @@ def build_bundle(
     else:
         alerts_json = None
 
-    # AlertContent.xml — synthesised when the bundle has symptoms, alerts,
+    # AlertContent.xml, synthesised when the bundle has symptoms, alerts,
     # or recommendations.  A bundle with only recommendations (unusual but
     # valid) still emits AlertContent.xml so the recommendations are importable.
     alert_content_xml = None

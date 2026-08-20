@@ -3,10 +3,10 @@
 Implements the /bundle CLI subcommand (Phase 4 of content-structure-v3.md).
 
 Flow:
-  1. Slug validation — unique across bundles/ and bundles/releases/.
+  1. Slug validation, unique across bundles/ and bundles/releases/.
   2. Display name + description.
-  3. Component picking by type — factory + third-party, grouped by provenance.
-  4. Dependency consistency check — walker finds dashboard deps missing from picks.
+  3. Component picking by type, factory + third-party, grouped by provenance.
+  4. Dependency consistency check, walker finds dashboard deps missing from picks.
   5. Write bundles/<slug>.yaml (or print on --dry-run).
 
 Public API
@@ -206,7 +206,7 @@ def _display_entries(entries: List[ComponentEntry], content_type: str, output_fn
             current_provenance = e.provenance
             label = "factory" if e.provenance == "factory" else f"third-party [{e.provenance}]"
             output_fn(f"  [{label}]")
-        output_fn(f"    {i:3d}. {e.slug}  —  {e.display_name}")
+        output_fn(f"    {i:3d}. {e.slug}, {e.display_name}")
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +223,7 @@ def _check_deps(
     """Run the dep walker on picked dashboards, return list of missing-dep warnings.
 
     Cross-provenance composition is explicitly allowed here (bundles are the
-    legitimate place to compose across project boundaries) — we pass
+    legitimate place to compose across project boundaries), we pass
     project_scope=None to the walker so no scope errors are raised.
     """
     if not picked_dashboards:
@@ -271,7 +271,7 @@ def _check_deps(
         if not dashboards:
             return []
 
-        # Walk with no scope enforcement — bundles allow cross-provenance.
+        # Walk with no scope enforcement, bundles allow cross-provenance.
         graph = collect_deps(
             dashboards=dashboards,
             all_views=views,
@@ -351,8 +351,8 @@ def compose_bundle(
         dry_run:    Print proposed YAML, do not write.
         force:      Overwrite existing bundles/<slug>.yaml.
         repo_root:  Repo root directory. Defaults to cwd.
-        input_fn:   Replacement for input() — useful for tests.
-        output_fn:  Replacement for print() to stdout — useful for capturing.
+        input_fn:   Replacement for input(), useful for tests.
+        output_fn:  Replacement for print() to stdout, useful for capturing.
 
     Returns:
         0 on success, 1 on error.

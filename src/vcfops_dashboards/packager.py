@@ -50,7 +50,7 @@ DEFAULT_OWNER_USER_ID = "00000000-0000-0000-0000-00a1c0ffee01"
 def _default_marker_filename() -> str:
     # Fallback for offline `package` invocations: a 19-digit prefix in
     # the right shape. The importer will reject this as
-    # INVALID_FILE_FORMAT — the marker filename is a per-instance
+    # INVALID_FILE_FORMAT, the marker filename is a per-instance
     # fingerprint, so the sync path must discover the real value from
     # the target cluster (see client.discover_marker_filename) and
     # pass it in via `marker_filename=`.
@@ -68,7 +68,7 @@ def _build_dashboards_inner_zip(dashboard_json: str) -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("dashboard/dashboard.json", dashboard_json)
-        # Empty i18n bundles — present in every real export, kept
+        # Empty i18n bundles, present in every real export, kept
         # defensively in case the importer expects them.
         for lang in ("", "_es", "_fr", "_ja"):
             z.writestr(f"dashboard/resources/resources{lang}.properties", "")
@@ -91,7 +91,7 @@ def build_import_zip(
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as outer:
         # Marker is the exporting user's UUID with no trailing
-        # newline — real exports are exactly 36 bytes.
+        # newline, real exports are exactly 36 bytes.
         outer.writestr(marker_filename or _default_marker_filename(), owner_user_id)
 
         if views:

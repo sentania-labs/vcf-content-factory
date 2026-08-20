@@ -28,7 +28,7 @@ Output zip: ``<release-name>.zip``  (versionless consumer artifact)
   e.g. ``demand-driven-capacity-v2.zip``
 
 The ``release_version`` field in :class:`ReleaseArtifact` still carries the
-version string from the release manifest — it is used internally for change
+version string from the release manifest, it is used internally for change
 detection, audit, and commit messages.  The version never appears in the
 consumer-facing zip filename so the distribution repo always contains exactly
 one zip per release slug.
@@ -57,6 +57,12 @@ import yaml
 
 from .releases import ReleaseDef, ReleaseArtifact as _ManifestArtifact, load_release
 from .release_types import headline_to_dir
+
+# Repo root, anchored to this module's location rather than the process's
+# current working directory, matches the convention used by describe.py and
+# discrete_builder.py so build-discrete behaves the same regardless of the
+# directory it is invoked from (see issue #76).
+_REPO_ROOT = Path(__file__).parent.parent.parent
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +159,7 @@ def find_builtin_metric_enables_for_discrete_item(
     A discrete component (dashboard/view/supermetric/customgroup/report) has
     no bundle YAML of its own to carry a ``builtin_metric_enables:`` block.
     When it ships as a release headline, that declaration lives on the
-    release manifest instead (``ReleaseDef.builtin_metric_enables`` — see the
+    release manifest instead (``ReleaseDef.builtin_metric_enables``, see the
     schema note at the top of ``releases.py``). ``build_release`` already
     threads it through for the ``release``/``publish`` path
     (``_build_component_headline`` above); this helper gives the standalone
@@ -163,31 +169,72 @@ def find_builtin_metric_enables_for_discrete_item(
 
     Args:
         content_type: Discrete builder type string ("dashboard", "view",
-                       "supermetric", "customgroup", "report") — matches the
+                       "supermetric", "customgroup", "report"), matches the
                        ``content_type`` argument to ``discrete_builder.build_discrete``.
         item_name:    The content item's ``name:`` field, as passed to
                        ``build-discrete``.
         releases_dir: Directory to scan for release manifests (defaults to
-                       ``bundles/releases``).
-        repo_root:    Repo root for resolving manifest source paths. When
-                       None, defaults to ``Path.cwd()``.
+                       ``bundles/releases``). A relative path is anchored to
+                       ``repo_root`` here, NOT to the process's cwd:
+                       ``load_all_releases`` itself resolves a relative
+                       ``releases_dir`` against ``Path.cwd()`` and returns
+                       ``[]`` without raising when the directory is missing,
+                       so without this anchoring a build-discrete invoked
+                       from outside the repo root would silently drop every
+                       curated enable (issue #76 / framework review B1).
+        repo_root:    Repo root for resolving manifest source paths and for
+                       anchoring a relative ``releases_dir``. When None,
+                       defaults to the repo root this package lives in
+                       (``_REPO_ROOT``), matching every other build-discrete
+                       path.
 
     Returns:
         The matching release's ``builtin_metric_enables`` list, or an empty
         list if no release headline matches (no release found, item not
         released yet, or the release declares nothing).
     """
+    import sys
+
     from .releases import load_all_releases, ReleaseValidationError
 
     if repo_root is None:
-        repo_root = Path.cwd()
+        repo_root = _REPO_ROOT
+
+    releases_dir = Path(releases_dir)
+    if not releases_dir.is_absolute():
+        releases_dir = repo_root / releases_dir
+
+    if not releases_dir.exists():
+        # load_all_releases returns [] without raising for a missing
+        # directory, which would silently drop declared enables (the exact
+        # escape issue #76 records). Warn so the operator can tell the
+        # lookup found nothing because the directory is absent, not because
+        # the item is unreleased.
+        print(
+            f"WARNING: release manifests directory {str(releases_dir)!r} does "
+            f"not exist while looking up builtin_metric_enables for "
+            f"{content_type}/{item_name!r}. Proceeding with an empty enables "
+            f"list.",
+            file=sys.stderr,
+        )
+        return []
 
     try:
         releases = load_all_releases(releases_dir, repo_root=repo_root)
-    except ReleaseValidationError:
-        # Manifest corpus is invalid — not this lookup's job to report that;
-        # the `validate` command already covers it. Fail soft to "no enables
-        # found" rather than blocking an otherwise-valid discrete build.
+    except ReleaseValidationError as exc:
+        # Manifest corpus is invalid, not this lookup's job to abort the
+        # build (the `validate` command already covers that). Fail soft to
+        # "no enables found" rather than blocking an otherwise-valid discrete
+        # build, but warn: silently downgrading declared enables to
+        # auto-generated ones (or failing --strict-deps on an already-
+        # declared metric) is exactly the surprise this warning exists to
+        # prevent (issue #76).
+        print(
+            f"WARNING: could not load release manifests from {releases_dir!r} "
+            f"while looking up builtin_metric_enables for {content_type}/"
+            f"{item_name!r}: {exc}. Proceeding with an empty enables list.",
+            file=sys.stderr,
+        )
         return []
 
     for release in releases:
@@ -214,7 +261,7 @@ def _zip_filename(release_name: str, release_version: str = "") -> str:
     Convention: ``<release-name>.zip``  (versionless)
     e.g.  ``demand-driven-capacity-v2.zip``
 
-    The ``release_version`` parameter is accepted but ignored — it is kept in
+    The ``release_version`` parameter is accepted but ignored, it is kept in
     the signature so callers that still pass it (e.g. the retirement handler,
     which needs the OLD versioned name for deprecated releases) can work without
     changes.  Only the retirement handler and the legacy-sweep need the version-
@@ -227,6 +274,9 @@ def _build_bundle_headline(
     source_path: Path,
     tmp_dir: Path,
     skip_audit: bool,
+    *,
+    audit_mode: str = "auto",
+    live_describe: bool = True,
 ) -> Path:
     """Build a bundle headline zip using the bundle builder.
 
@@ -237,6 +287,8 @@ def _build_bundle_headline(
     built = build_bundle(
         bundle_path=source_path,
         output_dir=tmp_dir,
+        audit_mode=audit_mode,
+        live_describe=live_describe,
         skip_audit=skip_audit,
     )
     return built
@@ -250,6 +302,8 @@ def _build_component_headline(
     *,
     builtin_metric_enables: "list | None" = None,
     skip_audit: bool = True,
+    audit_mode: str = "auto",
+    live_describe: bool = True,
 ) -> Path:
     """Build a component headline zip using the discrete builder.
 
@@ -290,6 +344,8 @@ def _build_component_headline(
         output_dir=tmp_dir,
         extra_search_dirs=extra_search_dirs,
         builtin_metric_enables=builtin_metric_enables,
+        audit_mode=audit_mode,
+        live_describe=live_describe,
         skip_audit=skip_audit,
     )
     return built
@@ -321,7 +377,7 @@ def _resolve_sdk_mp_pointer(source_path: Path) -> dict:
 
     Raises:
         ValueError: if the adapter is not found in the managed-paks registry.
-            This is a hard failure — add the registry entry in
+            This is a hard failure, add the registry entry in
             ``knowledge/context/managed_paks.md`` before publishing.
     """
     from .managed_paks import (
@@ -341,7 +397,7 @@ def _resolve_sdk_mp_pointer(source_path: Path) -> dict:
             f"This means the adapter has not been extracted to its own remote repo and "
             f"registered in the managed-paks registry yet. "
             f"Complete Workstream D (de-track migration) before publishing this adapter. "
-            f"Do NOT fall back to a local build — add the registry entry instead."
+            f"Do NOT fall back to a local build, add the registry entry instead."
         )
 
     return {
@@ -358,7 +414,7 @@ def _resolve_sdk_mp_pointer(source_path: Path) -> dict:
 # Keep the old name as a deprecated alias for any external callers.
 # Internal publish path no longer calls it.
 def _build_sdk_mp_headline(source_path: Path, tmp_dir: Path) -> Path:  # pragma: no cover
-    """Deprecated — use ``_resolve_sdk_mp_pointer`` instead.
+    """Deprecated, use ``_resolve_sdk_mp_pointer`` instead.
 
     Previously wrote a pointer zip to ``tmp_dir``.  The publish pipeline no
     longer produces a zip for SDK MP releases; this shim is preserved only for
@@ -398,7 +454,7 @@ def _build_mp_headline(
 
     mp = load_file(str(source_path))
 
-    # Build the .pak file — build_pak returns the path to the created .pak
+    # Build the .pak file, build_pak returns the path to the created .pak
     pak_path = build_pak(mp, output_dir=tmp_dir)
 
     # Render the MPB UI exchange JSON
@@ -426,6 +482,8 @@ def build_release(
     output_dir: Path,
     *,
     skip_audit: bool = True,
+    audit_mode: str = "auto",
+    live_describe: bool = True,
 ) -> List[ReleaseArtifact]:
     """Load the release manifest at release_path, build one zip per headline.
 
@@ -447,6 +505,12 @@ def build_release(
                        also has any ``builtin_metric_enables:`` declared on the
                        release manifest threaded through, since it has no
                        bundle YAML of its own to carry that list.
+        audit_mode:    Dependency audit mode passed through to the bundle and
+                       discrete builders: "auto" (default), "strict", or "lax".
+        live_describe: Passed through to the bundle and discrete builders. If
+                       True (default) and VCFOPS_HOST/USER/PASSWORD are set,
+                       refresh the describe cache before auditing; if False,
+                       use the cache as-is.
 
     Returns:
         One ``ReleaseArtifact`` per headline artifact in the manifest.
@@ -510,7 +574,7 @@ def build_release(
             dest_subdir = headline_to_dir(source_prefix + "/dummy.yaml", bundle_data=bundle_data)
 
         # -----------------------------------------------------------------------
-        # SDK adapter headlines: pointer-only release — no zip produced.
+        # SDK adapter headlines: pointer-only release, no zip produced.
         # The artifact carries pointer_info from the registry; the publish
         # orchestrator and README generator consume it directly.  Nothing is
         # written to output_dir for these releases.
@@ -540,14 +604,22 @@ def build_release(
                     extra_search_dirs=[source_path.parent.parent],
                     builtin_metric_enables=release.builtin_metric_enables,
                     skip_audit=skip_audit,
+                    audit_mode=audit_mode,
+                    live_describe=live_describe,
                 )
             elif source_prefix == "bundles":
-                built_path = _build_bundle_headline(source_path, tmp_dir, skip_audit)
+                built_path = _build_bundle_headline(
+                    source_path, tmp_dir, skip_audit,
+                    audit_mode=audit_mode,
+                    live_describe=live_describe,
+                )
             elif source_prefix in _SOURCE_PREFIX_TO_DISCRETE_TYPE:
                 built_path = _build_component_headline(
                     source_path, source_prefix, tmp_dir,
                     builtin_metric_enables=release.builtin_metric_enables,
                     skip_audit=skip_audit,
+                    audit_mode=audit_mode,
+                    live_describe=live_describe,
                 )
             elif source_prefix == "managementpacks":
                 built_path = _build_mp_headline(source_path, tmp_dir)
@@ -629,7 +701,7 @@ def _artifact_dest_subdir(artifact: "_ManifestArtifact") -> str:
     """
     source_prefix = artifact.source_path.parent.name
 
-    # Phase 5: direct third-party component — shape is
+    # Phase 5: direct third-party component, shape is
     # third_party/<project>/<type>/<file>.yaml, so great-grandparent == "third_party".
     _is_third_party_component = (
         source_prefix in _SOURCE_PREFIX_TO_DISCRETE_TYPE

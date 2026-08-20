@@ -269,13 +269,13 @@ def load_project(path: str | Path) -> ProjectDef:
                     )
                 validated.append(entry.strip())
             setattr(cross_links_obj, cl_key, validated)
-        # Warn about unknown keys (non-fatal — allows future expansion)
+        # Warn about unknown keys (non-fatal, allows future expansion)
         unknown_cl_keys = set(cross_links_raw.keys()) - {"views", "supermetrics", "customgroups"}
         if unknown_cl_keys:
             import warnings as _warnings
             _warnings.warn(
                 f"{path}: cross_links contains unrecognised keys: "
-                f"{sorted(unknown_cl_keys)} — ignored",
+                f"{sorted(unknown_cl_keys)}, ignored",
                 stacklevel=2,
             )
 
@@ -319,7 +319,7 @@ def load_all_projects(third_party_dir: str | Path = "third_party") -> List[Proje
 
     Scans immediate subdirectories of ``third_party_dir`` for PROJECT.yaml files.
     A subdirectory that contains at least one recognised content-type directory
-    (dashboards/, views/, etc.) must have a PROJECT.yaml — its absence is an
+    (dashboards/, views/, etc.) must have a PROJECT.yaml, its absence is an
     error.  Subdirectories with no recognised content-type dirs are skipped
     (they may be scratch/debug directories, not content projects).
 
@@ -348,7 +348,7 @@ def load_all_projects(third_party_dir: str | Path = "third_party") -> List[Proje
             if _has_content_subdirs(entry):
                 raise ProjectValidationError(
                     f"third_party/{entry.name}/ contains content but is missing "
-                    f"PROJECT.yaml — every content-bearing third-party project "
+                    f"PROJECT.yaml, every content-bearing third-party project "
                     f"must have an attribution file",
                     loc=project_yaml,
                 )
@@ -435,7 +435,7 @@ def check_project_membership(
     its PROJECT.yaml (if present).  Any scope violations recorded in
     ``DepGraph.errors`` are returned as errors here.
 
-    Factory-native dashboards (provenance="factory") are unconstrained —
+    Factory-native dashboards (provenance="factory") are unconstrained,
     they may reference any factory-native component freely.
 
     Dashboards with empty provenance (test fixtures, programmatically

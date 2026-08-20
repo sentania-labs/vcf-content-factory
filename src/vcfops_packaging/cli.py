@@ -62,7 +62,13 @@ def cmd_build(args) -> int:
         manifest = Path(manifest)
         try:
             if _is_release_manifest(manifest):
-                outs = _build_release_to_dist(manifest, DEFAULT_OUTPUT_DIR, skip_audit=skip_audit)
+                outs = _build_release_to_dist(
+                    manifest,
+                    DEFAULT_OUTPUT_DIR,
+                    skip_audit=skip_audit,
+                    audit_mode=audit_mode,
+                    live_describe=live_describe,
+                )
                 for out in outs:
                     print(f"built  {out}")
             else:
@@ -108,6 +114,8 @@ def _build_release_to_dist(
     output_dir: "str | Path",
     *,
     skip_audit: bool = False,
+    audit_mode: str = "auto",
+    live_describe: bool = True,
 ) -> "list[Path]":
     """Build a release manifest and write artifacts to dist/<subdir>/<slug>.zip.
 
@@ -127,10 +135,23 @@ def _build_release_to_dist(
             release_path=manifest,
             output_dir=tmp_dir,
             skip_audit=skip_audit,
+            audit_mode=audit_mode,
+            live_describe=live_describe,
         )
 
         written: list[Path] = []
         for art in artifacts:
+            if art.is_sdk_pointer:
+                # SDK pointer release: no zip is built (release_builder sets
+                # zip_path=None). Report the pointer instead of copying a
+                # file, mirroring the publish codepath (publish.py).
+                pointer = art.pointer_info or {}
+                print(
+                    f"pointer  {art.release_name} v{art.release_version} -> "
+                    f"{pointer.get('remote', art.headline_source)} "
+                    f"(SDK pointer release, no zip built)"
+                )
+                continue
             dest_dir = output_dir / art.dest_subdir
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest_file = dest_dir / art.zip_path.name
@@ -382,7 +403,7 @@ def cmd_analyze(args) -> int:
     # Print human-readable summary to stderr.
     print_audit_summary(result, "analyze")
 
-    # Emit JSON to stdout — shaped as builtin_metric_enables items list.
+    # Emit JSON to stdout, shaped as builtin_metric_enables items list.
     output_items = []
     for r in result.needs_enable:
         output_items.append({
@@ -435,7 +456,7 @@ def cmd_build_discrete(args) -> int:
     skip_audit = getattr(args, "skip_audit", False)
 
     # A discrete item has no bundle YAML of its own to carry
-    # `builtin_metric_enables:` — when it ships as a release headline, that
+    # `builtin_metric_enables:`, when it ships as a release headline, that
     # declaration lives on the release manifest instead (see
     # release_builder.find_builtin_metric_enables_for_discrete_item). Thread
     # it through here the same way the release/publish path already does
@@ -679,7 +700,7 @@ def cmd_release(args) -> int:
     repo_root = Path.cwd()
 
     # -----------------------------------------------------------------------
-    # Validate type argument — symptoms and alerts unsupported in v1.
+    # Validate type argument, symptoms and alerts unsupported in v1.
     # -----------------------------------------------------------------------
     content_type = args.content_type
     _SUPPORTED = {"dashboard", "view", "supermetric", "customgroup", "report", "bundle", "managementpack", "sdk-adapter"}
@@ -973,7 +994,7 @@ def cmd_release(args) -> int:
             if stem_candidate_yml.exists():
                 source_path = stem_candidate_yml
 
-    # 3. Display name match — scan all YAMLs in the directory for matching name: field
+    # 3. Display name match, scan all YAMLs in the directory for matching name: field
     if source_path is None:
         search_dir = repo_root / content_dir
         if search_dir.exists():
@@ -988,8 +1009,8 @@ def cmd_release(args) -> int:
                 except Exception:
                     continue
 
-    # 4. Third-party project search — scan third_party/*/<type>/ directories.
-    #    Only for discrete content types (not bundles — those still use bundles/ or PROJECT.yaml).
+    # 4. Third-party project search, scan third_party/*/<type>/ directories.
+    #    Only for discrete content types (not bundles, those still use bundles/ or PROJECT.yaml).
     _THIRD_PARTY_TYPE_DIR = {
         "dashboard":      "dashboards",
         "view":           "views",
@@ -1145,13 +1166,13 @@ def cmd_release(args) -> int:
         deprecates_paths.append(f"bundles/releases/{dep_slug}.yaml")
 
     # -----------------------------------------------------------------------
-    # RULE-012: Defect gate — refuse before writing anything on disk.
+    # RULE-012: Defect gate, refuse before writing anything on disk.
     # For sdk-adapter type the gate was already run above (in the sdk-adapter
     # branch).  Here we gate the general content types.
     # For bundle type we also gate by the bundle slug (checked against
     # Affects: tokens in the defect registry).
     # TOOLSET GAP: bundles can reference content/managementpacks/*.yaml via
-    # their managementpacks: field, but those are Tier 1 MP YAML files — not
+    # their managementpacks: field, but those are Tier 1 MP YAML files, not
     # the same as Tier 2 SDK adapter names registered in managed_paks.md.
     # There is no reliable path from a bundle's managementpacks: entry to a
     # managed-pak name without a separate lookup table.  The gate therefore
@@ -1282,7 +1303,7 @@ def cmd_release(args) -> int:
         )
         if r.returncode != 0:
             if "nothing to commit" in r.stdout + r.stderr:
-                pass  # Already committed — that's fine.
+                pass  # Already committed, that's fine.
             else:
                 print(f"ERROR: git commit failed: {r.stdout.strip()} {r.stderr.strip()}", file=sys.stderr)
                 return 1
@@ -1313,7 +1334,7 @@ def cmd_release(args) -> int:
 
 
 def cmd_bundle(args) -> int:
-    """Interactive bundle composer — produces bundles/<slug>.yaml."""
+    """Interactive bundle composer, produces bundles/<slug>.yaml."""
     from .composer import compose_bundle
 
     slug = getattr(args, "name", None) or None
@@ -1659,7 +1680,7 @@ def build_parser() -> argparse.ArgumentParser:
     # -----------------------------------------------------------------------
     pbun = sub.add_parser(
         "bundle",
-        help="interactive bundle composer — walks you through picking components and writes bundles/<name>.yaml",
+        help="interactive bundle composer, walks you through picking components and writes bundles/<name>.yaml",
     )
     pbun.add_argument(
         "name",

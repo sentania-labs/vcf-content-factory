@@ -3,17 +3,17 @@
 Orchestrates a full publish operation from the factory repo to the
 distribution repo:
 
-  1. Lockfile guard — refuse concurrent publishes.
-  2. Validate factory repo — seven per-package validators + vcfops_packaging.
-  3. Clean-tree check on dist repo — refuse if dirty / not on main / behind origin.
+  1. Lockfile guard, refuse concurrent publishes.
+  2. Validate factory repo, seven per-package validators + vcfops_packaging.
+  3. Clean-tree check on dist repo, refuse if dirty / not on main / behind origin.
   4. Enumerate release manifests from bundles/releases/.
-  5. Per-release build + copy — always build; git diff decides whether to commit.
-  6. Legacy-zip sweep — delete in-place any ``<slug>-<X.Y>.zip`` that corresponds
+  5. Per-release build + copy, always build; git diff decides whether to commit.
+  6. Legacy-zip sweep, delete in-place any ``<slug>-<X.Y>.zip`` that corresponds
      to a current release slug (the slug itself is now the canonical versionless
-     artifact name).  Does NOT move to retired/ — these are versioned filenames
+     artifact name).  Does NOT move to retired/, these are versioned filenames
      from the pre-versionless era, not actually deprecated content.
-  7. Process retirements — move deprecated zips to retired/<subdir>/.
-  8. Stale-zip sweep — move other orphaned zips to retired/<subdir>/.
+  7. Process retirements, move deprecated zips to retired/<subdir>/.
+  8. Stale-zip sweep, move other orphaned zips to retired/<subdir>/.
   9. Regenerate README between AUTO markers.
   10. Commit + branch/PR or direct push:
         - PR mode (default): create release branch, push, open PR via gh CLI.
@@ -23,7 +23,7 @@ distribution repo:
         - no_push mode (--no-push): commit to release branch locally, no push,
           no PR.  Lockfile released after commit.
         - dry_run: no commit/push/PR; lockfile released at end.
-  11. Cleanup — staging dir + lockfile.
+  11. Cleanup, staging dir + lockfile.
 
 Public API
 ----------
@@ -107,7 +107,7 @@ def _zip_content_hash(path: Path) -> str:
     member embeds a ``built_at`` wall-clock timestamp, and nested inner zips
     (``Dashboard.zip``, ``Views.zip``, etc.) embed per-entry date_time fields
     that also reflect the build clock.  None of these timestamps carry
-    semantic content — they are all overwritten by VCF Ops on import.
+    semantic content, they are all overwritten by VCF Ops on import.
 
     This function computes a content-only hash by:
       1. Skipping ``vcfops_manifest.json`` at any nesting level.
@@ -274,7 +274,7 @@ def _assert_clean_dist_repo(dist_repo: Path) -> None:
             f"Switch to main before publishing."
         )
 
-    # Working tree must be clean (ignore the publish lockfile itself — it is
+    # Working tree must be clean (ignore the publish lockfile itself, it is
     # a transient in-flight marker written by _acquire_lock before this check).
     r = _git(dist_repo, "status", "--porcelain")
     if r.returncode != 0:
@@ -293,7 +293,7 @@ def _assert_clean_dist_repo(dist_repo: Path) -> None:
             f"Commit or stash them before publishing."
         )
 
-    # Not behind origin/main.  Fetch first (best-effort — no-op if offline).
+    # Not behind origin/main.  Fetch first (best-effort, no-op if offline).
     _git(dist_repo, "fetch", "origin", "main")
     r = _git(dist_repo, "rev-list", "--count", "HEAD..origin/main")
     if r.returncode == 0:
@@ -415,7 +415,7 @@ def _create_and_push_release_branch(
     """Create ``branch_name`` at current HEAD and push to origin.
 
     Raises PublishError if the branch already exists locally or remotely
-    (idempotence guard — signals a retry situation).
+    (idempotence guard, signals a retry situation).
     """
     # Check local branch.
     r_local = _git(dist_repo, "branch", "--list", branch_name)
@@ -435,7 +435,7 @@ def _create_and_push_release_branch(
     # Push it to origin.
     r = _git(dist_repo, "push", "origin", branch_name)
     if r.returncode != 0:
-        # Push failed — clean up the local branch and raise.
+        # Push failed, clean up the local branch and raise.
         _git(dist_repo, "checkout", "main")
         _git(dist_repo, "branch", "-D", branch_name)
         err = r.stderr.strip()
@@ -489,7 +489,7 @@ def _assemble_pr_body(
         diff_text = r_diff.stdout.strip()
         _DIFF_TRUNCATE = 3000
         if len(diff_text) > _DIFF_TRUNCATE:
-            diff_text = diff_text[:_DIFF_TRUNCATE] + "\n\n…(diff truncated — see full diff in PR files view)"
+            diff_text = diff_text[:_DIFF_TRUNCATE] + "\n\n…(diff truncated, see full diff in PR files view)"
         parts.append(f"## README diff\n\n```diff\n{diff_text}\n```")
 
     # --- Files summary ---
@@ -594,7 +594,7 @@ def _print_manual_pr_instructions(
     """Print manual PR instructions when gh is absent or unauthenticated."""
     print(
         "\nINFO  gh CLI is not available or not authenticated.\n"
-        "      The release branch has been pushed — open the PR manually:\n\n"
+        "      The release branch has been pushed, open the PR manually:\n\n"
         f"  git -C {dist_repo} push origin {branch_name}  # (if not already pushed)\n\n"
         "  Then open a PR:\n"
         f"    Base  : main\n"
@@ -679,7 +679,7 @@ def _all_headline_paths(releases) -> set[str]:
         for a in r.artifacts:
             if a.headline:
                 if _is_sdk_adapter_source(a.source_path):
-                    # SDK pointer — no zip expected in the dist repo.
+                    # SDK pointer, no zip expected in the dist repo.
                     continue
                 subdir = _artifact_dest_subdir(a)
                 filename = _zip_filename(r.name)
@@ -700,10 +700,10 @@ def _gate_publish(releases, factory_repo: Path) -> None:
 
     When the registry is absent from ``factory_repo/knowledge/context/defects.md`` the
     gate vacuously passes and prints a clearly visible WARNING.  It never falls
-    back to the package-relative copy — that would couple test fixtures and any
+    back to the package-relative copy, that would couple test fixtures and any
     other factory checkout to this repo's live defect state.
 
-    Applies in both dry-run and real mode — dry-run must also refuse
+    Applies in both dry-run and real mode, dry-run must also refuse
     (it is the preview of the real behaviour).
 
     For sdk-adapter headline sources the gate token is the adapter directory
@@ -733,14 +733,14 @@ def _gate_publish(releases, factory_repo: Path) -> None:
     # (e.g. a test fixture that copies only content/ without knowledge/context/)
     # the gate vacuously passes with a visible warning rather than falling back
     # to the package-relative copy.  Falling back to the package-relative copy
-    # would couple any checkout — including test fixtures — to THIS repo's live
+    # would couple any checkout, including test fixtures, to THIS repo's live
     # defect state, which causes spurious failures when the live registry is
     # malformed.
     registry_path = factory_repo / "knowledge" / "context" / "defects.md"
     if not registry_path.exists():
         print(
             f"WARNING: no defect registry at {registry_path} "
-            f"— RULE-012 gate vacuously passes",
+            f", RULE-012 gate vacuously passes",
             flush=True,
         )
         return
@@ -841,7 +841,7 @@ def _sweep_legacy_versioned_zips(
     """Delete in-place any ``<slug>-<X.Y>.zip`` whose slug matches a current release.
 
     These are leftover artifacts from the pre-versionless era.  They are NOT
-    moved to ``retired/`` — the user's intent is "delete and let git history
+    moved to ``retired/``, the user's intent is "delete and let git history
     record it."  ``retired/`` is reserved for genuinely deprecated content
     (entries listed in a release's ``deprecates:`` field).
 
@@ -1025,9 +1025,9 @@ def _update_dist_readme(
 
     has_markers = _check_readme_markers(readme)
     if not has_markers:
-        # TOOLSET GAP — document but don't fail.
+        # TOOLSET GAP, document but don't fail.
         print(
-            "WARN  README has no AUTO markers — skipping regeneration.\n"
+            "WARN  README has no AUTO markers, skipping regeneration.\n"
             "      To enable auto-generation, add markers to the README:\n"
             "        <!-- AUTO:START release-catalog -->\n"
             "        <!-- AUTO:END -->"
@@ -1121,7 +1121,7 @@ def _publish_inner(
     auto_merge: bool,
     result: PublishResult,
 ) -> None:
-    """Inner body of publish() — runs inside the lockfile try/finally."""
+    """Inner body of publish(), runs inside the lockfile try/finally."""
     # -----------------------------------------------------------------------
     # Step 2: Validate factory repo
     # -----------------------------------------------------------------------
@@ -1142,12 +1142,12 @@ def _publish_inner(
     known_filenames = _all_headline_paths(releases)
 
     # -----------------------------------------------------------------------
-    # Step 4b: RULE-012 Defect gate — refuse before building anything.
-    # Runs in both dry-run and real mode (dry-run must also refuse — it is the
+    # Step 4b: RULE-012 Defect gate, refuse before building anything.
+    # Runs in both dry-run and real mode (dry-run must also refuse, it is the
     # preview of the real behaviour).  Checks every headline artifact:
     #   - sdk-adapter sources  → gate by pak name (adapter directory name)
     #   - all other sources    → gate by <content_type>/<slug> token
-    # A malformed registry is a hard stop (exit 1 analogue — raises PublishError).
+    # A malformed registry is a hard stop (exit 1 analogue, raises PublishError).
     # -----------------------------------------------------------------------
     _gate_publish(releases, factory_repo)
 
@@ -1268,7 +1268,7 @@ def _publish_inner(
                     f"{r_cb.stderr.strip()}"
                 )
 
-            # Release the lockfile before staging — the branch itself now acts
+            # Release the lockfile before staging, the branch itself now acts
             # as the in-flight signal for anyone checking the dist repo.
             # The outer try/finally calls _release_lock again; idempotent.
             _release_lock(dist_repo)

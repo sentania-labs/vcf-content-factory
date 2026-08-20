@@ -62,11 +62,11 @@ class AuditError(RuntimeError):
 @dataclass
 class AuditResult:
     """Output of an audit run."""
-    refs: list                      # list[MetricReference] — all unique refs
-    unknown: list                   # list[MetricReference] — not in describe
-    enabled: list                   # list[MetricReference] — defaultMonitored=true
-    needs_enable: list              # list[MetricReference] — defaultMonitored=false
-    auto_added: list                # list[BuiltinMetricEnable] — auto-created
+    refs: list                      # list[MetricReference], all unique refs
+    unknown: list                   # list[MetricReference], not in describe
+    enabled: list                   # list[MetricReference], defaultMonitored=true
+    needs_enable: list              # list[MetricReference], defaultMonitored=false
+    auto_added: list                # list[BuiltinMetricEnable], auto-created
 
 
 # ---------------------------------------------------------------------------
@@ -103,11 +103,11 @@ def audit_bundle_dependencies(
         bundle: Loaded Bundle object.
         describe_cache: Populated DescribeCache (may be live or offline).
         mode: One of:
-            "auto"   — auto-add any defaultMonitored=false refs that are not
+            "auto", auto-add any defaultMonitored=false refs that are not
                        already declared in builtin_metric_enables (default).
-            "strict" — fail the build if any defaultMonitored=false ref is
+            "strict", fail the build if any defaultMonitored=false ref is
                        not explicitly declared in the bundle manifest.
-            "lax"    — log but never fail; no auto-adds.
+            "lax", log but never fail; no auto-adds.
 
     Returns:
         AuditResult dataclass.
@@ -169,10 +169,24 @@ def audit_bundle_dependencies(
                     f"  (from {r.source_desc})"
                 )
             lines.append("")
-            lines.append(
-                "Add these entries to the 'builtin_metric_enables' section of the "
-                "bundle manifest, or use the default (auto) mode to add them automatically."
-            )
+            if getattr(bundle, "source_path", None) is None:
+                # Synthetic bundle fabricated by discrete_builder (no bundle
+                # YAML of its own, see _make_synthetic_bundle). Pointing the
+                # operator at "the bundle manifest" here is a dead end: no
+                # such file exists to edit (issue #73).
+                lines.append(
+                    "This is a discrete build (build-discrete), which has no bundle "
+                    "manifest of its own. Add these entries to the 'builtin_metric_enables:' "
+                    "section of the release manifest that ships this item as a headline "
+                    "(bundles/releases/<slug>.yaml, see release_builder."
+                    "find_builtin_metric_enables_for_discrete_item), or use the default "
+                    "(auto) mode to add them automatically."
+                )
+            else:
+                lines.append(
+                    "Add these entries to the 'builtin_metric_enables' section of the "
+                    "bundle manifest, or use the default (auto) mode to add them automatically."
+                )
             raise AuditError("\n".join(lines))
 
     elif mode == "auto":
@@ -195,6 +209,76 @@ def audit_bundle_dependencies(
         needs_enable=needs_enable,
         auto_added=auto_added,
     )
+
+
+def run_dependency_audit(
+    bundle: "Bundle",
+    label: str,
+    *,
+    live_describe: bool,
+    audit_mode: "Literal['auto', 'strict', 'lax']" = "auto",
+    skip_audit: bool = False,
+) -> "AuditResult | None":
+    """Run the build-time dependency audit for ``bundle``, in place.
+
+    Shared implementation for the "make/refresh a describe cache, optionally
+    live-refresh the pairs this bundle references, run the audit, merge any
+    auto-added entries into bundle.builtin_metric_enables" sequence that used
+    to be duplicated near-verbatim in ``builder.build_bundle`` and
+    ``discrete_builder.build_discrete`` (issue #77).
+
+    Args:
+        bundle:        The (real or synthetic) Bundle to audit.
+        label:         Human-readable label for the --skip-audit warning
+                       message (e.g. a bundle path or "dashboard 'Foo'").
+        live_describe: If True and a live client is configured, refresh the
+                       describe cache for every adapter/resource kind pair
+                       this bundle references before auditing.
+        audit_mode:    "auto" (default), "strict", or "lax", see
+                       ``audit_bundle_dependencies``.
+        skip_audit:    If True, skip the audit entirely (returns None).
+
+    Returns:
+        The ``AuditResult``, or ``None`` if ``skip_audit`` is True. Callers
+        are responsible for calling ``print_audit_summary`` themselves (the
+        two call sites print it at slightly different points relative to the
+        zip build) and for handling ``AuditError`` raised by
+        ``audit_bundle_dependencies``.
+    """
+    if skip_audit:
+        print(
+            f"  WARN: --skip-audit is set; dependency audit skipped for {label}. "
+            "Metric references will NOT be validated.",
+            file=sys.stderr,
+        )
+        return None
+
+    from .describe import make_cache, DescribeCacheError
+
+    describe_cache = make_cache(live=live_describe)
+
+    if live_describe and describe_cache._client is not None:
+        from .deps import extract_metric_references
+
+        refs = extract_metric_references(bundle)
+        pairs_needed: set[tuple[str, str]] = {
+            (r.adapter_kind, r.resource_kind) for r in refs
+        }
+        for ak, rk in sorted(pairs_needed):
+            try:
+                describe_cache.refresh(ak, rk)
+            except DescribeCacheError as exc:
+                print(
+                    f"  WARN: could not refresh describe cache for {ak}/{rk}: {exc}",
+                    file=sys.stderr,
+                )
+
+    audit_result = audit_bundle_dependencies(bundle, describe_cache, mode=audit_mode)
+
+    if audit_result.auto_added:
+        bundle.builtin_metric_enables = list(bundle.builtin_metric_enables) + audit_result.auto_added
+
+    return audit_result
 
 
 def _check_cache_coverage(refs: list[MetricReference], cache: DescribeCache) -> None:
@@ -244,7 +328,7 @@ def print_audit_summary(result: AuditResult, mode: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Staged-bundle analyzer (Step 2.4 — analyze CLI)
+# Staged-bundle analyzer (Step 2.4, analyze CLI)
 # ---------------------------------------------------------------------------
 
 
@@ -264,7 +348,7 @@ def analyze_staged_bundle(
         describe_cache: Populated DescribeCache.
 
     Returns:
-        AuditResult (no auto_added list — analyze is read-only).
+        AuditResult (no auto_added list, analyze is read-only).
 
     Raises:
         AuditError on unknown keys or missing cache files.
@@ -340,7 +424,7 @@ def analyze_staged_bundle(
 # XML/JSON parsers for staged-bundle analysis
 # ---------------------------------------------------------------------------
 
-# Pattern for SM formula resource entries — reused from deps.py
+# Pattern for SM formula resource entries, reused from deps.py
 _RESOURCE_ENTRY_RE = re.compile(r"\$\{([^}]*)\}", re.DOTALL)
 
 
@@ -348,7 +432,18 @@ def _refs_from_views_xml(views_path: Path) -> list[MetricReference]:
     """Extract metric references from a views_content.xml artifact.
 
     Parses ViewDef elements, reads their adapterKind/resourceKind from the
-    ResourceKind element, then walks Column elements for attributeKey values.
+    <SubjectType> element, then walks the attributeInfos column list for
+    attributeKey values and the SubjectType filter= JSON for subject-filter
+    metricKey values.
+
+    Wire shape (see knowledge/context/wire-formats/view_column_wire_format.md
+    and vcfops_dashboards/render.py:_render_view_def_fragment /
+    _xml_attribute_item): the factory does NOT emit a bare <Column
+    attributeKey=.../> element or a <ResourceKind> element. Per-column keys
+    live at ``Control[@type='attributes-selector']/Property[@name=
+    'attributeInfos']/List/Item/Value/Property[@name='attributeKey']``, and
+    the view's own adapter/resource kind lives on ``<SubjectType
+    adapterKind=... resourceKind=... filter="<json>"/>``.
     """
     refs: list[MetricReference] = []
     try:
@@ -364,23 +459,41 @@ def _refs_from_views_xml(views_path: Path) -> list[MetricReference]:
     for viewdef in root.iter("ViewDef"):
         ak = ""
         rk = ""
-        view_name = viewdef.get("name", "unknown view")
+        filter_json = ""
+        # Factory XML carries the view title in a <Title> child element,
+        # not a name attribute (see render.py:_render_view_def_fragment).
+        title_el = viewdef.find("Title")
+        view_name = (title_el.text or "").strip() if title_el is not None else ""
+        if not view_name:
+            view_name = viewdef.get("name", "unknown view")
         source_desc = f"view {view_name!r}"
 
-        # ResourceKind element specifies the target object type.
-        rk_el = viewdef.find(".//ResourceKind")
-        if rk_el is not None:
-            rk = rk_el.get("resourceKind", "") or ""
-            ak = rk_el.get("adapterKind", "") or ""
+        # SubjectType carries the view's target adapter/resource kind, and
+        # (optionally) a JSON-encoded metric/property filter.
+        st_el = viewdef.find(".//SubjectType")
+        if st_el is not None:
+            ak = st_el.get("adapterKind", "") or ""
+            rk = st_el.get("resourceKind", "") or ""
+            filter_json = st_el.get("filter", "") or ""
 
         if not ak or not rk:
             continue
 
-        # Column elements carry the metric key in their attributeKey attribute.
-        for col in viewdef.iter("Column"):
-            attr = col.get("attributeKey") or col.get("attribute") or ""
-            attr = attr.strip()
-            if not attr or _is_sm_ref(attr):
+        # Per-column attributeKey values live inside the attributeInfos
+        # Property, one <Item><Value>...<Property name="attributeKey"
+        # value="..."/>...</Value></Item> per column.
+        for item in viewdef.iter("Item"):
+            value_el = item.find("Value")
+            if value_el is None:
+                continue
+            attr = ""
+            for prop in value_el.findall("Property"):
+                if prop.get("name") == "attributeKey":
+                    attr = (prop.get("value") or "").strip()
+                    break
+            # "Instance Name" is the instanced-group driver sentinel, it has
+            # no describe-cache key of its own (see deps.py._refs_from_view).
+            if not attr or attr == "Instance Name" or _is_sm_ref(attr):
                 continue
             attr = _normalize_metric_key(attr)
             refs.append(MetricReference(
@@ -389,6 +502,30 @@ def _refs_from_views_xml(views_path: Path) -> list[MetricReference]:
                 metric_key=attr,
                 source_desc=source_desc,
             ))
+
+        # Subject-filter metric keys, same blind spot as the column walker
+        # (see deps.py._refs_from_view and issue #72). The filter is a JSON
+        # array-of-arrays of condition objects; each condition carries a
+        # "metricKey" field.
+        if filter_json:
+            try:
+                filter_data = json.loads(filter_json)
+            except (ValueError, TypeError):
+                filter_data = None
+            if filter_data:
+                for group in filter_data:
+                    for cond in group or []:
+                        key = (cond or {}).get("metricKey", "")
+                        key = str(key).strip()
+                        if not key or _is_sm_ref(key):
+                            continue
+                        key = _normalize_metric_key(key)
+                        refs.append(MetricReference(
+                            adapter_kind=ak,
+                            resource_kind=rk,
+                            metric_key=key,
+                            source_desc=source_desc,
+                        ))
 
     return refs
 
@@ -400,7 +537,7 @@ def _refs_from_dashboard_json(dash_path: Path) -> list[MetricReference]:
     has a ``widgetList``.  Widget configs vary by type; we extract keys from
     the same fields as the YAML-based walker in deps.py.
 
-    This is a best-effort parser — widget config shapes differ.  Unknown
+    This is a best-effort parser, widget config shapes differ.  Unknown
     structures are silently skipped (the cache will flag unknown keys).
     """
     refs: list[MetricReference] = []

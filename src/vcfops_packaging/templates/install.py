@@ -49,7 +49,7 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-# Template version stamp — injected at build time by vcfops_packaging builder.
+# Template version stamp, injected at build time by vcfops_packaging builder.
 # Used by `python3 -m vcfops_packaging check-staleness <zip>` to detect stale
 # distribution zips after framework template changes.
 TEMPLATE_VERSION = "2026-04-18-1"
@@ -160,7 +160,7 @@ def _discover_bundles() -> List[Dict]:
                 "manifest": manifest,
             })
         elif legacy_content_dir.exists():
-            # Minimal fallback with no manifest at all — synthesise from files.
+            # Minimal fallback with no manifest at all, synthesise from files.
             manifest = {"name": "bundle", "description": "", "content": {}}
             legacy_files = {
                 "supermetrics": "supermetrics.json",
@@ -481,7 +481,7 @@ class Client:
     def list_supermetrics_by_name(self, names: List[str]) -> Dict[str, str]:
         """Return {name: id} for the given SM names (case-sensitive exact match).
 
-        Uses the server-resolved ID for the enable step — the content-zip
+        Uses the server-resolved ID for the enable step, the content-zip
         importer may assign a different server-side ID than the UUID in the
         YAML, so we resolve by name after import rather than trusting the
         pre-import UUID.
@@ -513,12 +513,12 @@ class Client:
 
         Two-step approach required for content-zip-imported SMs:
 
-        Step 1 — resource-kind assignment via PUT /internal/supermetrics/assign
+        Step 1: resource-kind assignment via PUT /internal/supermetrics/assign
           (without policyIds).  Wires the SM to adapter/resource kind so it
           appears in views.  The policyIds variant does NOT enable content-zip
-          SMs on any policy — it is a no-op for this import path.
+          SMs on any policy, it is a no-op for this import path.
 
-        Step 2 — policy enablement via policy export -> edit XML -> re-import.
+        Step 2: policy enablement via policy export -> edit XML -> re-import.
           Stale entries for this SM are removed from ALL <SuperMetrics> blocks
           before injecting fresh ones, making this call idempotent/self-healing.
         """
@@ -590,7 +590,7 @@ class Client:
                 policy_elem = root.find(".//Policy")
             if policy_elem is None:
                 raise RuntimeError(
-                    f"Policy XML has no <Policy> element — cannot inject SM '{sm_name}'"
+                    f"Policy XML has no <Policy> element, cannot inject SM '{sm_name}'"
                 )
             pkg_settings = ET.SubElement(policy_elem, "PackageSettings")
 
@@ -855,7 +855,7 @@ class Client:
                     for g in (chk.json().get("groups") or [])
                 ) if chk.status_code == 200 else False
                 if found:
-                    _warn(f"Custom group PUT returned 500 but group exists — treating as success: {name}")
+                    _warn(f"Custom group PUT returned 500 but group exists, treating as success: {name}")
                 else:
                     _die(f"Custom group PUT failed ({r.status_code}): {r.text}")
             elif r.status_code not in (200, 201, 204):
@@ -1310,7 +1310,7 @@ def _prompt_credentials(args: argparse.Namespace, mode: str) -> tuple:
     # Auth-source support contract (see README_framework.md "Authentication"):
     # Supported: Local (recommended), vCenter SSO (VC/VC_GROUP), Active Directory
     # (UPN form), LDAP (per spec; untested by us).  Not supported: VIDB ("VCF SSO")
-    # and VIDM (Workspace ONE Access) — both are federated SSO sources that refuse
+    # and VIDM (Workspace ONE Access), both are federated SSO sources that refuse
     # programmatic password grants.  Use a Local service account for those deployments.
     auth_source_raw = args.auth_source
     if not auth_source_raw:
@@ -1339,7 +1339,7 @@ def _prompt_credentials(args: argparse.Namespace, mode: str) -> tuple:
 # uninstall iteration, replacing the previous hard-coded if/elif chains.
 #
 # Adding a new content type (e.g. "symptoms") means adding a single entry
-# here — the install/uninstall loops below require no changes.
+# here, the install/uninstall loops below require no changes.
 #
 # Registry entry keys:
 #   content_type   str   key in bundle.json content map (e.g. "supermetrics")
@@ -1389,7 +1389,7 @@ def _install_supermetrics(ctx: Dict) -> None:
         total_skipped = sum(int(s.get("skipped") or 0) for s in sm_summaries)
         if total_imported == 0 and total_skipped > 0:
             print(f"    [ghost-state recovery] all {total_skipped} SM(s) skipped on first "
-                  f"import — retrying to re-register in SM catalog...")
+                  f"import, retrying to re-register in SM catalog...")
             ctx["client"].import_content_zip(sm_zip, "super metrics (retry)")
 
     _ok(f"Imported {len(sm_dict)} super metric(s)")
@@ -1516,7 +1516,7 @@ def _install_sm_enable(ctx: Dict) -> None:
 def _install_builtin_metric_enables(ctx: Dict) -> None:
     """Enable built-in object-type metrics on the Default Policy.
 
-    Reads manifest["content"]["builtin_metric_enables"]["items"] — a list of
+    Reads manifest["content"]["builtin_metric_enables"]["items"], a list of
     dicts with adapter_kind, resource_kind, metric_key.  No-ops cleanly when
     the section is absent (most bundles won't have it).
     """

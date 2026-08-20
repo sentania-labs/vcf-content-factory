@@ -20,7 +20,7 @@ import yaml
 from vcfops_dashboards.yaml_utils import strict_load as _strict_load
 
 # Stable namespace for derived UUIDs. Do NOT change once content has
-# been deployed — every dashboard/view id is derived from this.
+# been deployed, every dashboard/view id is derived from this.
 NS = uuid.UUID("4b8d2c10-1f9e-4f4f-9b90-0e8f6a8e2a12")
 
 
@@ -32,7 +32,7 @@ def stable_id(kind: str, name: str) -> str:
     return str(uuid.uuid5(NS, f"{kind}::{name}"))
 
 
-# Transformation enum whitelist — verified against real exported view XML.
+# Transformation enum whitelist, verified against real exported view XML.
 # See knowledge/context/wire-formats/view_column_wire_format.md §Per-column transformations.
 # MIN/SUM/LAST/TIMESTAMP/TIME_POINT confirmed present in live 13.6 MB export
 # (ops-recon 2026-05-27): MIN=15 uses, SUM=59, LAST=138, TIMESTAMP=24, TIME_POINT=12.
@@ -59,7 +59,7 @@ class ViewTimeWindow:
 
     This window applies to ALL aggregating columns in the view (AVG, MAX,
     PERCENTILE, TRANSFORM_EXPRESSION). Per-column time windows are not
-    supported by VCF Ops — one view, one window.
+    supported by VCF Ops, one view, one window.
     See knowledge/context/wire-formats/view_column_wire_format.md §Limitations.
     """
     unit: str   # MONTHS|WEEKS|DAYS|HOURS|MINUTES|YEARS
@@ -67,9 +67,9 @@ class ViewTimeWindow:
     advanced_time_mode: bool = False
     # start_period/end_period: only observed pairing in the vendor corpus is
     # PREVIOUS/NOW (the sole advancedTimeMode=true control found across the
-    # full reference corpus — "vSphere Cluster HA Admission Control status",
+    # full reference corpus, "vSphere Cluster HA Admission Control status",
     # View - Set 3.xml, ViewDef fc64c67a-d5b0-4a03-a10b-767b9b247120). Left
-    # free-form (not a closed enum) since the wider vocabulary is unknown —
+    # free-form (not a closed enum) since the wider vocabulary is unknown,
     # see FB-011 / knowledge/context/feedback_queue.md. The renderer defaults
     # both to PREVIOUS/NOW when advanced_time_mode is true and these are
     # unset, since advanced mode with no range is the leading suspect for
@@ -80,7 +80,7 @@ class ViewTimeWindow:
 
 @dataclass
 class InstancedGroupSpec:
-    """Instanced-group column config — one row/column-set per instance of a
+    """Instanced-group column config, one row/column-set per instance of a
     colon-syntax metric group (e.g. one row per license name under
     ``vCommunity|Licensing:<name>|...``).
 
@@ -99,7 +99,7 @@ class InstancedGroupSpec:
       ``vCommunity|Configuration|Packages:atlantic|Package Name``,
       ``vCommunity|Guest OS|Services:DHCP Client|Service Name``). VCF Ops
       expands these into one row per instance found on the resource at
-      render time — the embedded instance name is a *sample* used to
+      render time, the embedded instance name is a *sample* used to
       identify the group+suffix pattern, not a filter.
 
     AMBIguity (flagged per brief, not guessed): whether the *value* of the
@@ -114,11 +114,11 @@ class InstancedGroupSpec:
     ``name`` (-> instanceGroupName) is emitted verbatim. The vendor pak
     uses the literal ``GROUP_vCommunity`` for every one of its own
     user-defined instanced groups (Licensing, Packages, Guest OS Services)
-    regardless of the underlying metric family — see the three files
+    regardless of the underlying metric family, see the three files
     above. VMware's own built-in instanced groups use different literal
     tokens (``GROUP_net``, ``GROUP_cpu``, ``GROUP_disk``, ...; see
     ``View - Set 4.xml`` in the same directory). The factory does not
-    validate ``name`` against a known enum — treat it as an opaque
+    validate ``name`` against a known enum, treat it as an opaque
     wire-format token the author supplies.
 
     Two column roles, distinguished by whether ``prefix``/``suffix`` are set:
@@ -131,7 +131,7 @@ class InstancedGroupSpec:
       belonging to the group. The loader synthesizes the wire
       ``attributeKey`` as ``f"{prefix}:{sample_instance}|{suffix}"``.
       Authors must NOT also set ``attribute:`` on a member (or driver)
-      column — see ``ViewDef.validate()`` for the rejection.
+      column, see ``ViewDef.validate()`` for the rejection.
     """
     name: str
     prefix: Optional[str] = None
@@ -211,7 +211,7 @@ _VALID_PRESENTATIONS: dict[str, set[str]] = {
 # knowledge/context/api-surface/distribution_view_no_data.md. A
 # `data_type: distribution` column that is really a string property but is
 # declared `is_property: false` (the default) renders with a fixed numeric
-# histogram (buckets min/max/count) instead of a DISCRETE bucket set — the
+# histogram (buckets min/max/count) instead of a DISCRETE bucket set, the
 # widget then queries the metric subsystem for a numeric metric that does
 # not exist and silently shows "No data to display" / "Metrics displaying
 # 0 of N". The fix shape is `is_property: true` + `is_string_attribute:
@@ -222,7 +222,7 @@ _VALID_PRESENTATIONS: dict[str, set[str]] = {
 # catch) is acceptable for a WARNING; a false positive on a genuinely
 # numeric metric distribution is not. Calibrated against every real
 # `data_type: distribution` view attribute in
-# content/sdk-adapters/vcommunity-vsphere/views/ (2026-07-14, tooling) —
+# content/sdk-adapters/vcommunity-vsphere/views/ (2026-07-14, tooling),
 # zero collisions with the numeric set (counts, sizes, GHz, percentages,
 # reservations, limits, latencies, capacities, VMDK/RDM counts, datastore/
 # host counts) while catching the version/model/enabled/policy/available/
@@ -256,7 +256,7 @@ class SubjectFilterCondition:
 
     Vendor wire format (ground truth, RULE-016 read-only reference):
       reference/references/vmbro_vcf_operations_vcommunity/Management Pack/
-        content/reports/View - Collection01.xml:7-9 — ``VM Network Top
+        content/reports/View - Collection01.xml:7-9, ``VM Network Top
         Talkers``:
           <SubjectType adapterKind="VMWARE" filter="[[{&quot;condition&quot;:
             &quot;GREATER_THAN&quot;,&quot;transform&quot;:&quot;AVG&quot;,
@@ -268,7 +268,7 @@ class SubjectFilterCondition:
 
     Decoded, the ``filter=`` attribute is a JSON array-of-arrays:
     the outer array is OR'd groups, each inner array is AND'd
-    conditions within that group — confirmed by surveying every
+    conditions within that group, confirmed by surveying every
     ``filter="..."`` occurrence across the vendor reference corpus
     (``View - Collection01.xml``, ``View - Set {1,2,3,4}.xml``,
     ``Dell EMC Server Details Workbench.xml``, ~35 unique filter
@@ -286,24 +286,24 @@ class SubjectFilterCondition:
         elsewhere in this loader (e.g. ``net|usage_average``).
       - ``condition``: ``"EQUALS"`` | ``"NOT_EQUALS"`` | ``"GREATER_THAN"``
         (no LESS_THAN or other comparator observed anywhere in corpus).
-      - ``metricValue``: ``{"isStringMetric": bool, "value": ...}`` —
+      - ``metricValue``: ``{"isStringMetric": bool, "value": ...}``,
         ``isStringMetric`` is derived from the Python type of ``value``
         (str -> true, int/float -> false); every observed occurrence is
         consistent with this rule, including string-typed "true"/"false"
         literals (e.g. ``config|extraConfig|vcpu_hotadd == "true"`` has
         ``isStringMetric: true`` despite looking boolean).
-      - ``transform`` (optional): ``"AVG"`` | ``"CURRENT"`` — omitted
+      - ``transform`` (optional): ``"AVG"`` | ``"CURRENT"``, omitted
         entirely in several vendor examples, never any other value.
-      - ``businessHours`` (optional bool) — omitted in several vendor
+      - ``businessHours`` (optional bool), omitted in several vendor
         examples; when present, always paired with a metrics-type,
         transform-bearing condition in the corpus (co-occurrence, not
-        a proven hard requirement — the loader does not enforce the
+        a proven hard requirement, the loader does not enforce the
         pairing since no counter-example was found to test against).
 
     Key order on the JSON object mirrors the ``VM Network Top Talkers``
     fixture exactly (``condition``, ``transform``, ``metricKey``,
     ``metricValue``, ``businessHours``, ``filterType``) so the byte-exact
-    regression test can assert against the vendor XML verbatim — the
+    regression test can assert against the vendor XML verbatim, the
     corpus shows the key order varies vendor-side (JS object literal
     insertion order, not a schema constraint), so this is a rendering
     choice, not a proven requirement, but it keeps our one currently-
@@ -339,12 +339,12 @@ class SubjectFilterCondition:
                 f"view {view_name}: subject_filter.condition must be one of "
                 f"{sorted(self._VALID_CONDITIONS)}; got {self.condition!r} "
                 "(only these are proven present in the vendor reference "
-                "corpus — fail closed rather than guess)"
+                "corpus, fail closed rather than guess)"
             )
         if isinstance(self.value, bool):
             raise DashboardValidationError(
                 f"view {view_name}: subject_filter.value must not be a bare "
-                "boolean — the vendor corpus only shows string \"true\"/"
+                "boolean, the vendor corpus only shows string \"true\"/"
                 "\"false\" literals or numeric thresholds; use a quoted "
                 "string if that's the intent"
             )
@@ -362,7 +362,7 @@ class SubjectFilterCondition:
             raise DashboardValidationError(
                 f"view {view_name}: subject_filter.business_hours must be a bool "
                 f"(unquoted true/false in YAML); got {type(self.business_hours).__name__} "
-                f"{self.business_hours!r} — a quoted \"true\"/\"false\" string is not "
+                f"{self.business_hours!r}, a quoted \"true\"/\"false\" string is not "
                 "accepted and is not silently coerced"
             )
 
@@ -376,7 +376,7 @@ class ViewDef:
     columns: List[ViewColumn]
     id: str = ""
     source_path: Path | None = None
-    # Optional SubjectType metric/property filter — OR of AND-groups.
+    # Optional SubjectType metric/property filter, OR of AND-groups.
     # Applied identically to both the "descendant" and "self" SubjectType
     # elements (the vendor corpus always carries the same filter= value on
     # both). See SubjectFilterCondition docstring for the wire format.
@@ -424,7 +424,7 @@ class ViewDef:
                 f"exceeding the 1024-character limit. On VCF Operations 9.1, a "
                 f"VIEW_DEFINITIONS content-zip import with a description over 1024 "
                 f"characters fails SILENTLY server-side (state=FAILED, skipped=1, "
-                f"empty errorMessages) — see "
+                f"empty errorMessages), see "
                 f"knowledge/context/wire-formats/view_column_wire_format.md "
                 f'"View-level field limits" and knowledge/context/known_limitations.md '
                 f"§14. Shorten the description."
@@ -447,7 +447,7 @@ class ViewDef:
         # must have a matching driver column somewhere in the same view.
         # Without the driver, VCF Ops has no isInstancedGroup/instanceGroupName
         # signal and the member columns render as ordinary (non-expanding)
-        # single-instance columns — the exact bug this capability fixes.
+        # single-instance columns, the exact bug this capability fixes.
         driver_names = {
             c.instanced_group.name
             for c in self.columns
@@ -463,7 +463,7 @@ class ViewDef:
                     "is present in this view. Add the 'Instance Name' driver "
                     "column first."
                 )
-        # SubjectType metric filter — OR of AND-groups.
+        # SubjectType metric filter, OR of AND-groups.
         if self.subject_filter is not None:
             if not self.subject_filter:
                 raise DashboardValidationError(
@@ -490,7 +490,7 @@ class ViewDef:
         # Distribution-view "no data" footgun (DEF-012): a
         # property-looking attribute rendered with a fixed numeric histogram
         # (buckets not dynamic) instead of a DISCRETE bucket set silently
-        # produces "No data to display". WARNING only — existing
+        # produces "No data to display". WARNING only, existing
         # intentionally-numeric distributions (buckets not set, or set
         # non-dynamic on purpose) must not break. See
         # knowledge/context/api-surface/distribution_view_no_data.md.
@@ -499,7 +499,7 @@ class ViewDef:
         # column: `is_property: true` AND view-level dynamic DISCRETE
         # buckets (`buckets: {dynamic: true, calc_function: DISCRETE}`).
         # Either piece alone is a *partial* fix that still renders "No data
-        # to display" (Codex PR #57 P2 finding — the original guard's
+        # to display" (Codex PR #57 P2 finding, the original guard's
         # outer/column gates each independently suppressed on a partial
         # fix). `is_string_attribute` is deliberately NOT part of the
         # suppression condition: two legitimate vendor views (vSphere
@@ -520,7 +520,7 @@ class ViewDef:
                 if not any(hint in attr_lower for hint in _DISTRIBUTION_PROPERTY_ATTR_HINTS):
                     continue
                 if c.is_property and buckets_dynamic_discrete:
-                    # Fully-fixed shape — silent.
+                    # Fully-fixed shape, silent.
                     continue
                 missing: list[str] = []
                 if not c.is_property:
@@ -535,7 +535,7 @@ class ViewDef:
                     "'distribution' and this attribute looks like a "
                     "string/enum resource property, but "
                     + " and ".join(missing)
-                    + " — it will render as a fixed numeric histogram "
+                    + ", it will render as a fixed numeric histogram "
                     "(min/max/count) instead of a discrete bucket set, "
                     "which silently produces \"No data to display\" "
                     "(DEF-012; see knowledge/context/api-surface/"
@@ -599,13 +599,13 @@ class ViewDef:
         # evidence for CURRENT, MAX, TRANSFORM_EXPRESSION, and TIMESTAMP on
         # instanced-group member columns (e.g. "View - Set 4.xml": "Windows CPU
         # Usage" MAX, "Linux Disk Performance" TRANSFORM_EXPRESSION, "VM
-        # Snapshots List" TIMESTAMP) — _xml_instanced_group_item() mirrors their
+        # Snapshots List" TIMESTAMP), _xml_instanced_group_item() mirrors their
         # companion-property shape exactly (see that function's docstring).
         # PERCENTILE and TIME_POINT have NO vendor example on an instanced-group
         # member column anywhere in the surveyed corpus, despite both appearing
         # on plenty of *non*-instanced columns in the same files. Per the
         # framework's no-silent-downgrade posture, an unproven combination is
-        # rejected here rather than guessed at render time — the importer's
+        # rejected here rather than guessed at render time, the importer's
         # actual behavior for e.g. a per-instance percentile is unknown.
         if (
             c.instanced_group is not None
@@ -614,7 +614,7 @@ class ViewDef:
         ):
             raise DashboardValidationError(
                 f"{name_ctx}: transformation {transform!r} is not supported on "
-                "instanced_group member columns — no vendor XML example of this "
+                "instanced_group member columns, no vendor XML example of this "
                 "combination exists in the surveyed reference corpus (RULE-016), "
                 "so the wire shape is unproven and the factory will not guess it. "
                 "See knowledge/context/wire-formats/view_column_wire_format.md "
@@ -818,7 +818,7 @@ class TextDisplayConfig:
 class HealthChartConfig:
     """Type-specific config for a HealthChart widget.
 
-    Uses a FLAT metric spec — a single metric key and resourceKindId
+    Uses a FLAT metric spec, a single metric key and resourceKindId
     referenced directly in config, not in a resourceKindMetrics[] array.
     This is different from Scoreboard/MetricChart which use the array pattern.
 
@@ -958,7 +958,7 @@ class HeatmapColorThreshold:
     color strings for each band. Color count distribution observed on the
     live instance: 3 colors (59 tabs), 5 colors (18), 6 colors (10),
     4 colors (7). There is no strict relationship between values and colors
-    length enforced by Ops — the UI sets them together.
+    length enforced by Ops, the UI sets them together.
     """
     min_value: float = 0
     max_value: Optional[float] = None
@@ -1067,7 +1067,7 @@ class ResourceRelationshipAdvancedConfig:
     self_provider: bool = False
 
 
-# ResourceList "Show Columns" grid-state presets. Closed enum — see
+# ResourceList "Show Columns" grid-state presets. Closed enum, see
 # Widget.column_preset docstring-comment for why this isn't a raw-blob
 # passthrough. Keys are the YAML-facing values; ``render.py`` maps
 # "name-only" to the verbatim captured wire-format constant.
@@ -1086,11 +1086,11 @@ class Widget:
     # Wire format: a top-level widget `states[]` array carrying a captured
     # ExtJS grid-state blob, keyed `permResGrid_widget_<dashUuid>_<widgetUuid>`.
     # See knowledge/context/api-surface/resourcelist_column_state_wire_format.md
-    # for the full investigation — the blob is an internal, unpublished Ops
+    # for the full investigation, the blob is an internal, unpublished Ops
     # UI persistence artefact (no OpenAPI schema) reproduced verbatim from a
     # captured ground-truth export, not re-derived. Only "name-only" (h15 =
     # Name is the sole visible column) is verified; this is a closed enum by
-    # design — extend it only after capturing and verifying a new preset the
+    # design, extend it only after capturing and verifying a new preset the
     # same way, not by accepting arbitrary blobs. ``None`` (default) emits no
     # `states[]`, i.e. current/unchanged behavior (Ops falls back to its
     # built-in default column set).
@@ -1106,17 +1106,17 @@ class Widget:
     # Whether the widget auto-selects its first row and fires a
     # downstream resourceId interaction as soon as data loads. Wire
     # format: config.selectFirstRow.selectFirstRow (View and
-    # ResourceList widgets). Defaults to True — the historical,
+    # ResourceList widgets). Defaults to True, the historical,
     # byte-identical-with-existing-content behavior. Set to False as a
     # strict opt-out on a *middle* tier of a picker -> intermediate view
     # -> terminal view drill chain when the intermediate view's
     # auto-select re-fires on every upstream refresh and permanently
-    # pins the terminal widget to the intermediate view's first row —
+    # pins the terminal widget to the intermediate view's first row,
     # this is what blocks a wider upstream selection (e.g. World/
     # vCenter) from ever reaching the terminal widget. See the CPU
     # Support Status v2 dashboard investigation
     # (knowledge/context/investigations/) and the vendor corpus, which
-    # emits selectFirstRow:false 132 times vs true 16 times —
+    # emits selectFirstRow:false 132 times vs true 16 times,
     # overwhelmingly the norm on multi-tier drill dashboards.
     select_first_row: bool = True
     # Type-specific config for chart/text widgets
@@ -1132,13 +1132,13 @@ class Widget:
     resource_relationship_advanced_config: ResourceRelationshipAdvancedConfig | None = None
     # Optional traversal mode for MetricChart widgets.
     # Maps to a scalar integer in config.relationshipMode (NOT an array).
-    # ``None`` (default) → 0 — no traversal.
-    # ``"children"``     → -1 — one line per child of the selected parent.
-    # ``"parents"``      → 1  — one line per parent of the selected child.
+    # ``None`` (default) → 0, no traversal.
+    # ``"children"``     → -1, one line per child of the selected parent.
+    # ``"parents"``      → 1, one line per parent of the selected child.
     # Other values are rejected at load time.
     relationship_mode: Optional[str] = None
     # Set by load_dashboard so widget UUIDs are namespaced by dashboard
-    # name — otherwise two dashboards reusing the same local_id (e.g.
+    # name, otherwise two dashboards reusing the same local_id (e.g.
     # "vm_perf_view") generate identical widget UUIDs and their
     # interaction wiring collides in the rendered bundle.
     dashboard_name: str = ""
@@ -1161,12 +1161,12 @@ class Dashboard:
     description: str
     widgets: List[Widget]
     interactions: List[Interaction]
-    # Ops dashboard folder path — lands in the Ops UI's dashboard
+    # Ops dashboard folder path, lands in the Ops UI's dashboard
     # sidebar under this folder. Default is the framework folder; can
     # be overridden per-dashboard if an author has a specific reason.
     name_path: str = "VCF Content Factory"
     # Whether the dashboard is shared with other Ops users. Defaults
-    # to True — a dashboard nobody else can see defeats the purpose
+    # to True, a dashboard nobody else can see defeats the purpose
     # of the framework. Can be overridden per-dashboard via YAML.
     shared: bool = True
     # Whether the dashboard is hidden in the Ops sidebar by default.
@@ -1391,7 +1391,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
             if attribute_raw:
                 raise DashboardValidationError(
                     f"view column {c.get('display_name')!r}: instanced_group columns "
-                    "must not also set `attribute` — the attributeKey is synthesized "
+                    "must not also set `attribute`, the attributeKey is synthesized "
                     "by the loader (driver -> 'Instance Name'; member -> "
                     "'{prefix}:{sample_instance}|{suffix}'). Setting `attribute` "
                     "here would hardcode a single instance and defeat the "
@@ -1431,7 +1431,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
                         f"view column {c.get('display_name')!r}: instanced_group member "
                         "columns require sample_instance (a representative instance name "
                         "embedded in the synthesized attributeKey; see InstancedGroupSpec "
-                        "docstring — the factory does not guess this value)."
+                        "docstring, the factory does not guess this value)."
                     )
                 attribute = f"{instanced_group.prefix}:{instanced_group.sample_instance}|{instanced_group.suffix}"
         else:
@@ -1469,7 +1469,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
         # must NOT type-coerce a field into a value that happens to already
         # be valid before SubjectFilterCondition.validate() gets a chance to
         # reject the wrong type. `bool(raw["business_hours"])` was the
-        # concrete instance — bool() of ANY truthy value (including the
+        # concrete instance, bool() of ANY truthy value (including the
         # string "false") is True, so a quoted `business_hours: "false"`
         # silently became `True` instead of failing validation, and the
         # renderer emitted `"businessHours":true`. Fixed by passing raw
@@ -1480,7 +1480,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
         # transform) the same failure *shape* (str(x) coincidentally
         # equalling a valid enum token) cannot happen for any YAML-typed
         # value, but a non-str input was still being silently stringified
-        # here rather than reported with a clear type error — fixed the
+        # here rather than reported with a clear type error, fixed the
         # same way: reject non-str values at load time instead of masking
         # them via str().
         def _str_field(key: str, upper: bool = False) -> str:
@@ -1512,7 +1512,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
             business_hours=business_hours,
         )
 
-    # subject.filter — flat list of condition mappings (single implicit AND
+    # subject.filter, flat list of condition mappings (single implicit AND
     # group) or a nested list-of-lists (explicit OR-of-AND groups), mirroring
     # the vendor JSON shape 1:1. See SubjectFilterCondition docstring.
     subject_filter: Optional[List[List["SubjectFilterCondition"]]] = None
@@ -1544,7 +1544,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
             column_indexes=col_idx,
         )
 
-    # data_type and presentation — defaults depend on each other
+    # data_type and presentation, defaults depend on each other
     data_type = str(data.get("data_type", "list") or "list").strip().lower()
     # Derive default presentation from data_type when not explicitly set
     _default_presentation = {
@@ -1604,7 +1604,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
     released = bool(released_raw) if isinstance(released_raw, bool) else False
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
 
-    # customgroup: str | list[str] — names of custom groups this view is scoped to.
+    # customgroup: str | list[str], names of custom groups this view is scoped to.
     cg_raw = data.get("customgroup")
     if cg_raw is None:
         view_customgroups: List[str] = []

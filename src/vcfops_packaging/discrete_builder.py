@@ -323,7 +323,7 @@ def _generate_discrete_readme(
         "> **Policy enablement caveat.** The install script enables imported super",
         "> metrics on the **Default Policy** only. If your deployment uses",
         "> non-default, non-inheriting policies, you may need to manually enable the",
-        "> imported super metrics in those policies — otherwise dashboard cells and",
+        "> imported super metrics in those policies, otherwise dashboard cells and",
         "> view columns that depend on those metrics will appear blank for resources",
         "> scoped under those policies. Check `Administration > Policies` after",
         "> install to confirm enablement on every policy that needs to see the",
@@ -389,10 +389,10 @@ def build_discrete(
                             a third-party project root (e.g. ``third_party/idps-planner/``).
         builtin_metric_enables: Optional pre-declared built-in metric enablements
                             (e.g. from a release manifest's ``builtin_metric_enables:``
-                            field — discrete releases have no bundle YAML of their
+                            field, discrete releases have no bundle YAML of their
                             own to carry this list).  Merged with any entries the
                             dependency audit auto-adds.
-        audit_mode:         Dependency audit mode — "auto" (default), "strict", or
+        audit_mode:         Dependency audit mode, "auto" (default), "strict", or
                             "lax".  See vcfops_packaging/audit.py for semantics.
                             Same auto-add/fail behavior as ``build_bundle``.
         live_describe:      If True (default) and VCFOPS_HOST/USER/PASSWORD are in
@@ -418,7 +418,7 @@ def build_discrete(
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Load all content — extra_search_dirs content is prepended so it takes
+    # Load all content, extra_search_dirs content is prepended so it takes
     # priority when resolving the target item and its dependencies.
     all_sms = _load_all_sms(extra_search_dirs=extra_search_dirs)
     all_views, all_dashboards = _load_all_views_and_dashboards(extra_search_dirs=extra_search_dirs)
@@ -534,42 +534,24 @@ def build_discrete(
         raise DiscreteBuilderError(f"Unhandled content type: {ct!r}")
 
     # --- Dependency audit ---
-    # Same gate build_bundle() runs (audit.py) — a discrete release that
+    # Same gate build_bundle() runs (audit.py), a discrete release that
     # references a policy-disabled built-in metric/property must fail loudly
     # at build time rather than shipping silently broken.  Same auto-add/fail
     # semantics as build_bundle: "auto" (default) auto-adds defaultMonitored=
     # false refs into bundle.builtin_metric_enables; "strict" fails on any
     # undeclared one; unknown keys are always a hard error regardless of mode.
-    if skip_audit:
-        print(
-            f"  WARN: --skip-audit is set; dependency audit skipped for "
-            f"{ct} {item_name!r}. Metric references will NOT be validated.",
-            file=sys.stderr,
-        )
-        audit_result = None
-    else:
-        from .audit import audit_bundle_dependencies, print_audit_summary
-        from .describe import make_cache, DescribeCacheError
+    # Shared with builder.build_bundle, see audit.run_dependency_audit
+    # (issue #77). Auto-added entries are merged into bundle.builtin_metric_enables
+    # in place.
+    from .audit import print_audit_summary, run_dependency_audit
 
-        describe_cache = make_cache(live=live_describe)
-
-        if live_describe and describe_cache._client is not None:
-            from .deps import extract_metric_references
-            refs = extract_metric_references(bundle)
-            pairs_needed: set[tuple[str, str]] = {
-                (r.adapter_kind, r.resource_kind) for r in refs
-            }
-            for ak, rk in sorted(pairs_needed):
-                try:
-                    describe_cache.refresh(ak, rk)
-                except DescribeCacheError as exc:
-                    print(f"  WARN: could not refresh describe cache for {ak}/{rk}: {exc}",
-                          file=sys.stderr)
-
-        audit_result = audit_bundle_dependencies(bundle, describe_cache, mode=audit_mode)
-
-        if audit_result.auto_added:
-            bundle.builtin_metric_enables = list(bundle.builtin_metric_enables) + audit_result.auto_added
+    audit_result = run_dependency_audit(
+        bundle,
+        f"{ct} {item_name!r}",
+        live_describe=live_describe,
+        audit_mode=audit_mode,
+        skip_audit=skip_audit,
+    )
 
     # Build the zip using the same rendering infrastructure as build_bundle
     out_path = _assemble_zip(
