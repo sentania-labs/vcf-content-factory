@@ -15,9 +15,9 @@ description: >
   instanced key directly (that key is fanned out per snapshot, not a
   single per-VM value a super metric can aggregate over), so it uses the
   flat, per-VM property diskspace|snapshot|snapshotAge as the count
-  predicate instead — same underlying age gate, expressed at VM
+  predicate instead, same underlying age gate, expressed at VM
   granularity. diskspace|snapshot|snapshotAge is PROPERTY-ONLY on this
-  platform (absent from /statkeys — confirmed live, recon 2026-07-27);
+  platform (absent from /statkeys, confirmed live, recon 2026-07-27);
   per the DSL's documented property-vs-metric addressing (the metric=
   slot accepts both real metric keys and property keys, and Dialect A
   where clauses already use bare property keys, e.g. the canonical

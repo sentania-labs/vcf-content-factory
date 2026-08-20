@@ -1,14 +1,14 @@
-# vSphere Storage Paths Management Pack — v2 (ARIA_OPS stitching)
+# vSphere Storage Paths Management Pack, v2 (ARIA_OPS stitching)
 #
 # Design artifact: designs/vsphere-storage-paths-mp-v1.md (mp-author-ready 2026-05-13)
 # API map: context/api-maps/vsphere-data-api.md
 # Adapter kind: mpb_vcf_content_factory_vsphere_storage_paths
 #
-# Architecture summary (v2 — ARIA_OPS stitching grammar):
+# Architecture summary (v2, ARIA_OPS stitching grammar):
 #   Two ARIA_OPS object kinds. No INTERNAL object kinds. No world kind
 #   (adapter instance is the implicit root).
 #
-#   Host Storage Health — type: ARIA_OPS, stitches onto VMWARE HostSystem.
+#   Host Storage Health, type: ARIA_OPS, stitches onto VMWARE HostSystem.
 #     Source: host_path_summary -> data[]. One row per ESXi host.
 #     Join: stitch_match_field: hostname (FQDN) matches VMWARE HostSystem
 #           VMEntityName via aria_ops.bind_metric.
@@ -18,7 +18,7 @@
 #     3 properties: hostname, vcenter, host_moid
 #     No identifiers, no name_expression, no icon (ARIA_OPS rules).
 #
-#   Datastore Storage Health — type: ARIA_OPS, stitches onto VMWARE Datastore.
+#   Datastore Storage Health, type: ARIA_OPS, stitches onto VMWARE Datastore.
 #     Source: datastore_path_summary -> data[]. One row per datastore.
 #     Join: stitch_match_field: datastore_moid matches VMWARE Datastore
 #           VMEntityObjectID via aria_ops.bind_metric.
@@ -31,11 +31,11 @@
 #     NOTE: data[] is empty in vSAN-only environments. Will populate in
 #     FC/iSCSI environments with VMFS-backed datastores.
 #
-# Auth: preset: none — API is fully unauthenticated.
+# Auth: preset: none, API is fully unauthenticated.
 #
 # Events (on Host Storage Health):
-#   Dead Storage Paths Detected (CRITICAL) — dead_paths > 0
-#   Storage Path Health Degraded (WARNING) — path_health_pct < 100
+#   Dead Storage Paths Detected (CRITICAL), dead_paths > 0
+#   Storage Path Health Degraded (WARNING), path_health_pct < 100
 #   Events reference API response field names (not metric keys).
 #
 # No explicit relationships. No chained metricSets. No pagination.
@@ -46,7 +46,7 @@ build_number: 10
 author: VCF Content Factory
 adapter_kind: mpb_vcf_content_factory_vsphere_storage_paths
 description: >
-  Monitors ESXi host and datastore storage path health via the vSphere Data API — a
+  Monitors ESXi host and datastore storage path health via the vSphere Data API, a
   custom FastAPI service that caches path state from multiple vCenters and exposes it
   as flat REST endpoints. Stitches VCF-CF - prefixed metrics directly onto existing
   VMWARE HostSystem and Datastore objects in VCF Ops so they appear alongside native
@@ -73,7 +73,7 @@ source:
 
 
 requests:
-  # host_path_summary — primary collection request for host storage health.
+  # host_path_summary, primary collection request for host storage health.
   # Returns one row per ESXi host across all polled vCenters.
   # response_path is empty; the metricSet uses list_path: "data" to iterate
   # the data[] array. Metric paths are flat keys on each row object.
@@ -83,7 +83,7 @@ requests:
     params: []
     response_path: ""
 
-  # datastore_path_summary — primary collection request for datastore storage health.
+  # datastore_path_summary, primary collection request for datastore storage health.
   # Returns one row per datastore (VMFS/NFS) across all polled vCenters.
   # NOTE: Returns empty data[] in vSAN-only environments. Will populate in
   # FC/iSCSI environments with VMFS-backed datastores.
@@ -97,10 +97,10 @@ requests:
 object_types:
 
   # ---------------------------------------------------------------------------
-  # Host Storage Health — ARIA_OPS, stitches onto VMWARE HostSystem
+  # Host Storage Health, ARIA_OPS, stitches onto VMWARE HostSystem
   # Source: host_path_summary -> data[]. One row per ESXi host.
   # Join: hostname (ESXi FQDN) -> VMWARE HostSystem VMEntityObjectID
-  # No identifiers, name_expression, or icon — ARIA_OPS objects push
+  # No identifiers, name_expression, or icon, ARIA_OPS objects push
   # metrics onto existing VCF Ops resource instances; they do not own
   # their own identity, name, or icon.
   # ---------------------------------------------------------------------------
@@ -197,10 +197,10 @@ object_types:
 
 
   # ---------------------------------------------------------------------------
-  # Datastore Storage Health — ARIA_OPS, stitches onto VMWARE Datastore
+  # Datastore Storage Health, ARIA_OPS, stitches onto VMWARE Datastore
   # Source: datastore_path_summary -> data[]. One row per datastore.
   # Join: datastore_moid -> VMWARE Datastore VMEntityObjectID
-  # No identifiers, name_expression, or icon — ARIA_OPS rules.
+  # No identifiers, name_expression, or icon, ARIA_OPS rules.
   # NOTE: data[] will be empty in vSAN-only labs. Grammar validates; data
   #       populates automatically when FC/iSCSI datastores are present.
   # ---------------------------------------------------------------------------
@@ -244,7 +244,7 @@ object_types:
         source: "metricset:datastore_path_summary.datastore_moid"
 
       # --- Metrics (VCF-CF - prefix; stitched onto VMWARE Datastore) ---
-      # psp_policies is an array field — skipped (cannot map to a single metric).
+      # psp_policies is an array field, skipped (cannot map to a single metric).
       - key: vcf_cf_ds_host_count
         label: "VCF-CF - Host Count"
         usage: METRIC
@@ -306,17 +306,17 @@ object_types:
 
 # No explicit relationships. Both ARIA_OPS objects stitch directly onto
 # existing VMWARE resource instances via aria_ops.bind_metric. The model
-# is flat — no peer edges needed between the two stitched kinds.
+# is flat, no peer edges needed between the two stitched kinds.
 relationships: []
 
 
-# NOTE — Events intentionally removed (2026-05-15).
+# NOTE, Events intentionally removed (2026-05-15).
 #
 # Earlier drafts of this MP defined an `mpb_events:` block with two
 # threshold-style alerts ("Dead Storage Paths Detected" CRITICAL,
 # "Storage Path Health Degraded" WARNING). They were removed because:
 #
-#   1. The vSphere Data API doesn't expose an event stream — those
+#   1. The vSphere Data API doesn't expose an event stream, those
 #      were synthetic alerts derived from match rules on metric values
 #      (dead_paths != 0, path_health_pct != 100). MPB's `events:` is
 #      the wrong tool for that pattern.

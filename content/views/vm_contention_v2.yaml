@@ -33,7 +33,7 @@ columns:
     ascending_range: false
 
   # CPU Ready P95: catches bursty ready spikes that the average softens.
-  # Same thresholds — a P95 ≥ 20% means at least 5% of samples are severe.
+  # Same thresholds, a P95 ≥ 20% means at least 5% of samples are severe.
   # Primary sort column for the consuming dashboard widget (worst-first).
   - attribute: cpu|readyPct
     display_name: "CPU Ready P95 (24h)"
@@ -60,7 +60,7 @@ columns:
   # --- Memory contention block ---
 
   # Memory contention (host-reported): hypervisor-level pressure expressed as
-  # a percentage. Low thresholds — any measurable contention is notable.
+  # a percentage. Low thresholds, any measurable contention is notable.
   - attribute: mem|host_contentionPct
     display_name: "Mem Contention Avg (24h)"
     unit: percent
@@ -73,14 +73,14 @@ columns:
   # --- Storage latency block ---
 
   # Read Latency Avg: average datastore read latency seen by the VM guest over
-  # the 24-hour window. No thresholds — surface the raw value; operators apply
+  # the 24-hour window. No thresholds, surface the raw value; operators apply
   # judgment based on storage tier (flash vs. spinning).
   - attribute: storage|totalReadLatency_average
     display_name: "Read Latency Avg (24h)"
     transformation: AVG
 
   # Write Latency Avg: average datastore write latency seen by the VM guest.
-  # Same rationale as read latency — no thresholds, tier-dependent judgment.
+  # Same rationale as read latency, no thresholds, tier-dependent judgment.
   - attribute: storage|totalWriteLatency_average
     display_name: "Write Latency Avg (24h)"
     transformation: AVG

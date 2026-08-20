@@ -20,7 +20,7 @@ description: >
 
   Both referenced SMs must be installed and enabled in policy for this SM to
   produce data. If the ratio SM is zero (no hosts/vCPUs), this formula returns
-  no-data rather than divide-by-zero — Ops handles division by zero as
+  no-data rather than divide-by-zero, Ops handles division by zero as
   no-data by default.
 formula: |
   ${this, metric=Super Metric|sm_dd8a6df8-7454-4b8e-a6fe-65a662f9cbd4}

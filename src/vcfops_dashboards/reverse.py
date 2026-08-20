@@ -188,7 +188,7 @@ def _resolve_rk_id(
     rk_id = rk_id.strip()
     m = _SYNTHETIC_RK_RE.match(rk_id)
     if not m:
-        # Not a synthetic ref — caller handles non-synthetic forms directly.
+        # Not a synthetic ref, caller handles non-synthetic forms directly.
         return None, None
     idx = int(m.group(1))
     entry = kind_lookup.get(idx)
@@ -387,7 +387,7 @@ def _parse_column_value_to_dataclass(value_elem) -> Optional[ViewColumn]:
             ascending = ascending_raw.lower() == "true"
     else:
         # ascendingRange is absent from the wire.  When all three numeric bounds are
-        # present the loader requires ascending_range — derive it from bound ordering,
+        # present the loader requires ascending_range, derive it from bound ordering,
         # which is the same signal the forward renderer encodes:
         #   yellow < orange < red  →  False  (higher-is-worse: CPU %, latency)
         #   yellow > orange > red  →  True   (lower-is-worse: free capacity, headroom)
@@ -408,14 +408,14 @@ def _parse_column_value_to_dataclass(value_elem) -> Optional[ViewColumn]:
                 # Lower-is-worse ordering (capacity / headroom metrics).
                 ascending = True
             else:
-                # Ambiguous ordering — default to higher-is-worse and warn so the
+                # Ambiguous ordering, default to higher-is-worse and warn so the
                 # human can review the reversed YAML rather than silently misclassify.
                 ascending = False
                 _warn(
                     f"column {display_name!r}: all three numeric bounds are set but "
                     f"ascendingRange is absent and ordering is ambiguous "
                     f"(yellow={y}, orange={o}, red={r}); defaulting to "
-                    "ascending_range=False (higher-is-worse) — review reversed YAML"
+                    "ascending_range=False (higher-is-worse), review reversed YAML"
                 )
 
     return ViewColumn(
@@ -486,11 +486,11 @@ def _parse_metric_specs_from_wire(
             f"widget '{widget_label}' MetricSpec",
         )
         if ak is not None:
-            # Resolved from synthetic ref — use the lookup values.
+            # Resolved from synthetic ref, use the lookup values.
             adapter_kind = ak
             resource_kind = rk
         else:
-            # Not a synthetic ref or no ref at all — fall back to resourceKindName.
+            # Not a synthetic ref or no ref at all, fall back to resourceKindName.
             # adapter_kind cannot be recovered from the wire without the lookup;
             # retain VMWARE as the default for non-synthetic refs (e.g. live-instance
             # forms that embed the full kind string directly).
@@ -631,7 +631,7 @@ def _parse_health_chart_config(
         adapter_kind = ak
         resource_kind = rk
     elif rk_id:
-        # Non-synthetic form (e.g. "002006VMWAREVirtualMachine") — keep as-is.
+        # Non-synthetic form (e.g. "002006VMWAREVirtualMachine"), keep as-is.
         resource_kind = rk_id
         adapter_kind = "VMWARE"
     else:
@@ -681,7 +681,7 @@ def _parse_pareto_analysis_config(
     raw_metric = cfg.get("metric") or {}
     metric_key = str(raw_metric.get("metricKey") or "").strip()
     metric_name = str(raw_metric.get("name") or cfg.get("metricName") or metric_key).strip()
-    # resource kind from resourceKind[0].id — may be a synthetic ref.
+    # resource kind from resourceKind[0].id, may be a synthetic ref.
     rk_list = cfg.get("resourceKind") or []
     resource_kind = ""
     adapter_kind = "VMWARE"
@@ -693,7 +693,7 @@ def _parse_pareto_analysis_config(
             adapter_kind = ak
             resource_kind = rk
         elif rk_id:
-            # Non-synthetic form — keep as-is.
+            # Non-synthetic form, keep as-is.
             resource_kind = rk_id
     mode = str(cfg.get("mode") or "all").strip()
     bars_count = int(cfg.get("barsCount") or 10)
@@ -781,7 +781,7 @@ def _parse_heatmap_config(
             adapter_kind = ak
             resource_kind = rk
         elif rk_id:
-            # Non-synthetic form — keep as-is.
+            # Non-synthetic form, keep as-is.
             resource_kind = rk_id
             adapter_kind = "VMWARE"
         else:
@@ -980,10 +980,10 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
     shared = bool(dash_json.get("shared", True))
 
     # Build lookup tables from entries so widget parsers can resolve synthetic refs.
-    # kind_lookup: entries.resourceKind[] — resolves "resourceKind:id:N_::_" refs
+    # kind_lookup: entries.resourceKind[], resolves "resourceKind:id:N_::_" refs
     #   used by ResourceList, Heatmap, Scoreboard, MetricChart, HealthChart,
     #   ParetoAnalysis widget configs.
-    # resource_lookup: entries.resource[] — resolves "resource:id:N_::_" refs
+    # resource_lookup: entries.resource[], resolves "resource:id:N_::_" refs
     #   used by self-provider View and ProblemAlertsList pin configs.
     kind_lookup = _build_kind_lookup(dash_json)
     resource_lookup = _build_resource_lookup(dash_json)
@@ -1064,7 +1064,7 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
                     if ak is not None and ak and rk:
                         pin = WidgetResourceKindRef(adapter_kind=ak, resource_kind=rk)
                     elif ak is None:
-                        # Not a synthetic ref — try to recover from resourceKindId or resourceName
+                        # Not a synthetic ref, try to recover from resourceKindId or resourceName
                         # in the config.resource block (live-instance export may embed real values).
                         rk_from_cfg = str(res_cfg.get("resourceName") or "").strip()
                         if rk_from_cfg:
@@ -1124,7 +1124,7 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
             if not resource_kinds and (kinds or (tag_filter.get("path") or [])):
                 _warn(
                     f"dashboard '{display_name}': ResourceList widget '{local_id}' "
-                    "could not resolve any resource kind refs — "
+                    "could not resolve any resource kind refs, "
                     "check that entries.resourceKind[] is populated"
                 )
 

@@ -1,5 +1,5 @@
 description: 'Executive quarterly capacity review. Scope picker on the left drives
-  all downstream panels — select vSphere World for the full environment, a Datacenter
+  all downstream panels, select vSphere World for the full environment, a Datacenter
   for a site, or a Cluster for detail. Row 1 shows scope context and VM inventory.
   Row 2 shows CPU/memory demand, storage utilization, and per-cluster VM counts side
   by side. Row 3 shows a 90-day CPU demand trend for the selected cluster. P95 figures
@@ -50,10 +50,10 @@ widgets:
     w: 4
     x: 3
     y: 1
-  html: '<p><strong>Quarterly Capacity Review</strong></p> <p>Select a scope at left
-    — vSphere World for the full environment, a Datacenter for a specific site, or
+  html: '<p><strong>Quarterly Capacity Review</strong></p> <p>Select a scope at left,
+    vSphere World for the full environment, a Datacenter for a specific site, or
     a Cluster for detail.</p> <p>Statistics reflect a <strong>90-day window</strong>.
-    <strong>P95</strong> values give a conservative demand picture — use these, not
+    <strong>P95</strong> values give a conservative demand picture, use these, not
     averages, for growth projections and expansion justification.</p>
 
     '
@@ -108,5 +108,5 @@ widgets:
     metric_key: cpu|demandPct
     metric_name: CPU Demand %
     resource_kind: ClusterComputeResource
-  title: CPU Demand % — 90-Day Trend
+  title: CPU Demand %, 90-Day Trend
   type: MetricChart

@@ -10,7 +10,7 @@ resource_kinds:
 description: >
   Sum of provisioned vCPUs across all Supervisor control plane VMs within the
   assigned object's scope. Filter uses config|name contains
-  "SupervisorControlPlaneVM" — the VM naming convention is provisioner-
+  "SupervisorControlPlaneVM", the VM naming convention is provisioner-
   controlled and stable across VCF versions. This replaces the earlier
   productName-equals filter, which diverges between versions: v9 sets
   productName="vSphere Supervisor" but v8 (VCF 5.2 / Aria Ops 8.18) sets

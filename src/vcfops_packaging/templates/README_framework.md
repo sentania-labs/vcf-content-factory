@@ -1,4 +1,4 @@
-# VCF Content Factory — Distribution Package
+# VCF Content Factory: Distribution Package
 
 This archive is a VCF Content Factory distribution package.  It may contain
 one or more **bundles**, each of which packages a set of super metrics, views,
@@ -34,7 +34,7 @@ bundles/
       reports_content.xml
 ```
 
-Not all bundles include every file — only those relevant to the bundle's
+Not all bundles include every file, only those relevant to the bundle's
 content are present.
 
 ---
@@ -46,21 +46,21 @@ auth-source-attached identity providers that support server-side password
 validation.
 
 **Supported** (programmatic install):
-- **Local** — a local VCF Ops admin or service account (recommended)
-- **vCenter SSO** (`VC` / `VC_GROUP`) — vCenter SSO credentials, configured
+- **Local**, a local VCF Ops admin or service account (recommended)
+- **vCenter SSO** (`VC` / `VC_GROUP`), vCenter SSO credentials, configured
   as an auth source in VCF Ops
-- **Active Directory** — domain credentials in UPN form
+- **Active Directory**, domain credentials in UPN form
   (`user@corp.example.com`)
-- **LDAP** — per the VCF Operations Suite API documentation; bind-validatable
+- **LDAP**, per the VCF Operations Suite API documentation; bind-validatable
   LDAP credentials should work, but this path is not yet covered by our
   test matrix
 
 **Not supported** (use a Local service account instead):
-- **VCF Identity Broker** ("VCF SSO" / `VIDB`) — federated SSO; the Suite API
+- **VCF Identity Broker** ("VCF SSO" / `VIDB`), federated SSO; the Suite API
   refuses programmatic password authentication for VIDB-typed sources. A
   future VCF Operations release is expected to address this; check Broadcom
   support documentation for updates.
-- **VMware Identity Manager / Workspace ONE Access** (`VIDM`) — federated SSO;
+- **VMware Identity Manager / Workspace ONE Access** (`VIDM`), federated SSO;
   programmatic password authentication was empirically refused on the
   Ops versions we tested. Treat as unsupported until verified against your
   specific environment.
@@ -108,7 +108,7 @@ Run with `--help` (Python) or `-?` (PowerShell) for all options.
 > **Policy enablement caveat.** The install script enables imported super
 > metrics on the **Default Policy** only. If your deployment uses
 > non-default, non-inheriting policies, you may need to manually enable the
-> imported super metrics in those policies — otherwise dashboard cells and
+> imported super metrics in those policies, otherwise dashboard cells and
 > view columns that depend on those metrics will appear blank for resources
 > scoped under those policies. Check `Administration > Policies` after
 > install to confirm enablement on every policy that needs to see the
@@ -134,22 +134,22 @@ directory and drag the relevant file into the matching UI dialog:
 The installer handles steps that cannot be pre-baked into the drag-drop
 artifacts:
 
-- **Instance marker file** — The VCF Ops content-zip importer requires a
+- **Instance marker file**: The VCF Ops content-zip importer requires a
   per-instance marker file (a filename that ends `L.v1`) to be present in
   the outer zip.  This value is instance-specific and is discovered by the
   installer at runtime.  Drag-drop zips cannot carry this value.
 
-- **Owner UUID stamping** — Dashboard JSON embeds the importing user's UUID.
+- **Owner UUID stamping**: Dashboard JSON embeds the importing user's UUID.
   The installer resolves the real UUID at runtime; the drag-drop
   `Dashboard.zip` uses the nil UUID (`00000000-0000-0000-0000-000000000000`)
   as a best-effort placeholder that the UI may replace on import.
 
-- **Super metric policy enablement** — After importing super metrics the
+- **Super metric policy enablement**: After importing super metrics the
   installer automatically enables them on the Default Policy via the internal
   API.  Manual import requires a separate enablement step in
   Administration > Policies > Default Policy > Super Metrics.
 
-- **Symptom/alert REST ordering** — The installer syncs symptoms before
+- **Symptom/alert REST ordering**: The installer syncs symptoms before
   alerts (alerts reference symptoms by server-assigned ID).  When importing
   manually, import symptoms first, then alerts.
 

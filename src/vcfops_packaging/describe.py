@@ -34,10 +34,10 @@ Cache file layout::
       }
     }
 
-The ``properties`` section is optional — existing cache files without it are
+The ``properties`` section is optional, existing cache files without it are
 valid.  ``default_monitored`` / ``instance_type`` are the real values
 returned by the ``/properties`` endpoint for that key (see
-``knowledge/context/investigations/adapter_describe_exploration.md`` — the
+``knowledge/context/investigations/adapter_describe_exploration.md``, the
 endpoint returns the *same* schema as ``/statkeys``, only the ``property``
 discriminator differs, so properties are **not** always
 ``defaultMonitored: true``).  Cache files written by ``refresh()`` before
@@ -148,7 +148,7 @@ class DescribeCache:
             )
         self._cache[(adapter_kind, resource_kind)] = metrics
 
-        # Load properties section (optional — older cache files omit it)
+        # Load properties section (optional, older cache files omit it)
         props_raw = raw.get("properties") or {}
         self._props[(adapter_kind, resource_kind)] = dict(props_raw)
 
@@ -165,7 +165,7 @@ class DescribeCache:
         """Return MetricInfo for a key, or None if it is not in the cache.
 
         Loads the cache file lazily on first access for each kind pair.
-        Does NOT perform a live refresh — call ``refresh()`` explicitly.
+        Does NOT perform a live refresh, call ``refresh()`` explicitly.
 
         Raises DescribeCacheError if the cache file exists but is corrupt, or
         if the kind pair has no cache file at all (caller must check for None
@@ -176,15 +176,15 @@ class DescribeCache:
         if pair not in self._cache:
             found = self._load_from_disk(adapter_kind, resource_kind)
             if not found:
-                # No cache file — return sentinel None; caller decides severity.
+                # No cache file, return sentinel None; caller decides severity.
                 self._cache[pair] = {}  # mark as "attempted but missing"
         result = self._cache.get(pair, {}).get(metric_key)
         if result is not None:
             return result
-        # Not found in metrics cache.  Check the properties cache — if this key
+        # Not found in metrics cache.  Check the properties cache, if this key
         # is a known property (e.g. summary|guest|toolsVersion) return a
         # MetricInfo using the property's own defaultMonitored value from the
-        # describe API.  Properties are NOT always defaultMonitored=true —
+        # describe API.  Properties are NOT always defaultMonitored=true,
         # e.g. VMWARE property counts across VM/HostSystem/Cluster/Datastore
         # show a real mix (see knowledge/context/investigations/
         # adapter_describe_exploration.md). Cache files written before this
@@ -198,7 +198,7 @@ class DescribeCache:
                 print(
                     f"  WARN: {adapter_kind}/{resource_kind} describe cache has "
                     f"legacy name-only property entries (no persisted "
-                    f"default_monitored) — properties are guessed as "
+                    f"default_monitored), properties are guessed as "
                     f"defaultMonitored=true, which is wrong for a real fraction "
                     f"of them on some resource kinds. Run "
                     f"'python3 -m vcfops_packaging refresh-describe "
@@ -243,7 +243,7 @@ class DescribeCache:
         """
         if self._client is None:
             raise DescribeCacheError(
-                "DescribeCache.refresh() requires a client — "
+                "DescribeCache.refresh() requires a client, "
                 "construct with client=VCFOpsClient.from_env()"
             )
 
@@ -261,7 +261,7 @@ class DescribeCache:
         body = resp.json()
 
         # Observed response key on VCF Ops 9.0.2 lab instance:
-        #   "resourceTypeAttributes" — 929 entries for VMWARE/VirtualMachine
+        #   "resourceTypeAttributes", 929 entries for VMWARE/VirtualMachine
         # Earlier drafts expected "statKey" / "statKeys" (from API schema);
         # the live instance uses "resourceTypeAttributes".  Try all known
         # variants so we stay compatible across releases.
@@ -280,7 +280,7 @@ class DescribeCache:
             # Observed field names on VCF Ops 9.0.2:
             #   "key", "name", "defaultMonitored", "type", "description", ...
             # "defaultMonitored" is boolean. Some entries omit it entirely
-            # (treat as False — if it were true they would declare it).
+            # (treat as False, if it were true they would declare it).
             name = entry.get("name") or entry.get("displayName") or key
             default_monitored = bool(entry.get("defaultMonitored", False))
             metrics[key] = {
@@ -299,6 +299,8 @@ class DescribeCache:
             f"/api/adapterkinds/{adapter_kind}/resourcekinds/{resource_kind}/properties"
         )
         properties: dict[str, dict] = {}
+        properties_fetch_failed = False
+        properties_failure_desc = ""
         try:
             props_resp = self._client._request("GET", props_url_path)
             if props_resp.status_code == 200:
@@ -316,7 +318,7 @@ class DescribeCache:
                     if not key:
                         continue
                     name = entry.get("name") or entry.get("displayName") or key
-                    # Properties carry their own defaultMonitored flag — it is
+                    # Properties carry their own defaultMonitored flag, it is
                     # NOT always True (see adapter_describe_exploration.md).
                     # instanceType is persisted too, observed as always
                     # "INSTANCED" in practice but not assumed here.
@@ -325,9 +327,39 @@ class DescribeCache:
                         "default_monitored": bool(entry.get("defaultMonitored", False)),
                         "instance_type": entry.get("instanceType", "") or "",
                     }
-        except Exception:
+            else:
+                # Non-200: fetch failed, don't let an empty properties dict
+                # clobber whatever was cached before (see issue #75).
+                properties_fetch_failed = True
+                properties_failure_desc = f"HTTP {props_resp.status_code}"
+        except Exception as exc:
             # Properties fetch is best-effort; don't abort the statkeys refresh.
-            pass
+            properties_fetch_failed = True
+            properties_failure_desc = f"{type(exc).__name__}: {exc}"
+
+        if properties_fetch_failed:
+            # Preserve the previously-cached properties rather than writing
+            # an empty dict over a good cache. A single failed /properties
+            # call must not corrupt knowledge/context/adapter_describe_cache/
+            # for subsequent offline builds.
+            existing_cache_path = self._cache_path(adapter_kind, resource_kind)
+            if existing_cache_path.exists():
+                try:
+                    existing_doc = json.loads(existing_cache_path.read_text(encoding="utf-8"))
+                    properties = existing_doc.get("properties", {}) or {}
+                except Exception:
+                    properties = {}
+            # Warn so the operator can tell this refresh half-failed: the
+            # "refreshed describe cache ... (N property keys)" success line
+            # below would otherwise present preserved stale properties as
+            # freshly fetched (framework review W1 on issue #75).
+            print(
+                f"  WARN: /properties fetch failed for {adapter_kind}/"
+                f"{resource_kind} ({properties_failure_desc}); preserving "
+                f"{len(properties)} previously-cached property key(s), NOT "
+                f"freshly fetched.",
+                file=sys.stderr,
+            )
 
         cache_doc = {
             "adapter_kind": adapter_kind,
@@ -399,7 +431,7 @@ def make_cache(live: bool = True, cache_dir: Optional[Path] = None) -> DescribeC
     client so the cache can be refreshed.  Otherwise returns an offline cache.
 
     Credentials are resolved from the active profile (VCFOPS_PROFILE env var
-    or ``"prod"`` default — build-time describe refreshes default to prod since
+    or ``"prod"`` default, build-time describe refreshes default to prod since
     they are read-only observations). If no profile credentials are available,
     falls back to offline mode (no error).
 

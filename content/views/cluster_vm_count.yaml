@@ -8,7 +8,7 @@ description: >
   a supported VCF Ops view transformation; P5 (5th percentile) is used instead
   as a low-water-mark proxy over the 90-day window. Running Hosts
   (Current) provides the denominator for VMs-per-host calculations in the
-  dashboard. No thresholds applied — this view is a raw-count reference used
+  dashboard. No thresholds applied, this view is a raw-count reference used
   alongside the MetricChart widget that renders the actual timeline per cluster.
 
 subject:

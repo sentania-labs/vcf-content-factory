@@ -7,7 +7,7 @@ description: >
   Count of VMs under this cluster that VCF Ops's capacity engine has flagged as
   oversized (summary|oversized == 1). Use as the cluster-level rollup for the
   right-sizing opportunities scoreboard. A high count indicates reclamation
-  opportunity — each flagged VM has reclaimable vCPUs and memory per the
+  opportunity, each flagged VM has reclaimable vCPUs and memory per the
   companion summary|oversized|vcpus and summary|oversized|memory metrics.
   depth=2 walks from ClusterComputeResource down through HostSystem to
   VirtualMachine.

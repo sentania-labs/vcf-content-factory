@@ -1,7 +1,6 @@
 ---
 name: api-explorer
 description: Reverse-engineers undocumented VCF Ops wire formats and API behaviors. Writes findings to knowledge/context/; may add verbatim vendor artifacts under reference/docs/ (never generated content — RULE-016). Never authors content YAML. Spawn when authoring agents hit a toolset gap needing empirical investigation.
-model: opus
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
@@ -30,6 +29,9 @@ You do not author content.
   cross wires — the orchestrator picks at spawn time, not you.
 
 ## Knowledge sources
+
+The `vcfops-*` entries below are skills; each lives at
+`.claude/skills/<name>/SKILL.md`: load it with Read.
 
 - **vcfops-api** — full API surface and wire formats.
 - **vcfops-content-model** — content types and relationships.

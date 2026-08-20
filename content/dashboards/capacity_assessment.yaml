@@ -1,7 +1,7 @@
 description: 'Single-dashboard capacity review for a VCF Ops admin. Top section shows
   environment-wide capacity headroom at cluster granularity with post-HA adjustments,
   days-until-runout projections from VCF Ops capacity analytics, and ''how many more
-  VMs fit'' counts. Bottom section identifies right-sizing opportunities — VMs VCF
+  VMs fit'' counts. Bottom section identifies right-sizing opportunities, VMs VCF
   Ops''s capacity engine has flagged as oversized, undersized, or idle, with 95th-percentile
   demand justification columns and explicit current-to-target resize recommendations.
   Colors follow the standard three-band stoplight throughout. Use for quarterly capacity
@@ -18,9 +18,9 @@ widgets:
     x: 1
     y: 1
   html: '<p>This section answers three questions about your vSphere environment using
-    <strong>post-HA adjusted figures</strong> — the capacity vSphere will actually
+    <strong>post-HA adjusted figures</strong>, the capacity vSphere will actually
     admit, not raw totals. First: how many more VMs fit before a cluster reaches its
-    post-HA limit? Second: how fast is headroom shrinking — days until runout? Third:
+    post-HA limit? Second: how fast is headroom shrinking, days until runout? Third:
     which clusters are already tight and should be prioritised for expansion or workload
     migration? Cells color <span style="color:#74B43B">green</span> (healthy), <span
     style="color:#ECC33E">yellow</span> (watch), <span style="color:#E07720">orange</span>
@@ -138,10 +138,10 @@ widgets:
     w: 12
     x: 1
     y: 22
-  html: '<p>VCF Ops capacity engine flags every VM into one of three categories: <strong>Oversized</strong>
-    — allocated resources consistently exceed demand, reclaim vCPUs and memory to
-    free capacity; <strong>Undersized</strong> — demand regularly exceeds allocation,
-    a performance risk requiring additional resources; or <strong>Idle</strong> —
+  html: '<p>VCF Ops capacity engine flags every VM into one of three categories: <strong>Oversized</strong>,
+    allocated resources consistently exceed demand, reclaim vCPUs and memory to
+    free capacity; <strong>Undersized</strong>, demand regularly exceeds allocation,
+    a performance risk requiring additional resources; or <strong>Idle</strong>,
     negligible activity sustained over the analysis window, a candidate for retirement
     or consolidation. The table below lists all flagged VMs with flag columns colored
     red when triggered and 95th-percentile demand justification columns colored on

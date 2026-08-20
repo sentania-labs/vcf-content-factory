@@ -10,9 +10,9 @@ This module drives the sync/uninstall workflow:
    - If no handler is available for a type that has entries: WARN and skip.
 
 Exit code contract:
-    0  — all items OK (or no items to process)
-    1  — fatal (auth failure, bundle load error)
-    2  — partial failure (at least one item failed; others may have succeeded)
+    0, all items OK (or no items to process)
+    1, fatal (auth failure, bundle load error)
+    2, partial failure (at least one item failed; others may have succeeded)
 """
 from __future__ import annotations
 
@@ -298,7 +298,7 @@ def uninstall_bundle(
             if shared:
                 _print_warn(
                     f"{content_type}: {len(shared)} file(s) shared with other "
-                    f"sync-enabled bundle(s) — skipping deletion. "
+                    f"sync-enabled bundle(s), skipping deletion. "
                     f"Use --force to override."
                 )
                 continue
@@ -308,7 +308,7 @@ def uninstall_bundle(
         names = _get_names_for_type(bundle, content_type)
         if not names:
             # For types where we can't resolve names (symptoms/alerts without
-            # their packages), pass yaml_paths as "names" — the handler
+            # their packages), pass yaml_paths as "names", the handler
             # is responsible for resolving.
             names = yaml_paths
 

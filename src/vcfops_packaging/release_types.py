@@ -44,7 +44,7 @@ The existing PROJECT.yaml-style routing (which passes a ``bundles``-prefix
 path + loaded bundle_data with ``factory_native: false``) is unchanged and
 continues to work for back-compat.
 
-Symptoms and alerts are deliberately absent from v1 — they ship inside
+Symptoms and alerts are deliberately absent from v1, they ship inside
 bundles only.  If a headline path begins with symptoms/ or alerts/, this
 function raises a clear error rather than silently routing incorrectly.
 """
@@ -147,7 +147,7 @@ def headline_to_dir(
         if len(parts) < 4:
             raise ValueError(
                 f"source path {source_path!r} looks like a third_party path but is "
-                f"malformed — expected at least 4 components "
+                f"malformed, expected at least 4 components "
                 f"(third_party/<project>/<type>/<file>.yaml), got {len(parts)}."
             )
         type_dir = parts[2]

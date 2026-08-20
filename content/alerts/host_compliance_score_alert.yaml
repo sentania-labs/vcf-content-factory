@@ -26,7 +26,7 @@ impact:
 # The WARNING symptom (<95%) fires first; if the score continues to drop
 # below 80% the CRITICAL symptom also fires and SYMPTOM_BASED escalates
 # the alert criticality automatically. Each set uses ALL with a single
-# symptom — the canonical pattern for independent threshold tiers.
+# symptom, the canonical pattern for independent threshold tiers.
 symptom_sets:
   operator: ANY
   sets:

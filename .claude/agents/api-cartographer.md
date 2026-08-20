@@ -1,7 +1,6 @@
 ---
 name: api-cartographer
 description: General-purpose REST API explorer for unknown external APIs. Maps endpoints, response schemas, object candidates, metric/property classification, and auth flows. Produces structured API maps that downstream MP agents consume. Not VCF Ops-specific — explores any REST API.
-model: opus
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
@@ -24,7 +23,7 @@ against.
    the API requires POST for queries (e.g., Synology uses POST
    for some endpoints). Never mutate state on the target system.
 2. **Write only to `knowledge/context/api-maps/`.** Never touch content YAML,
-   `src/vcfops_*/` code, or `managementpacks/`.
+   `src/vcfops_*/` code, or `content/managementpacks/`.
 3. **Credentials come from env vars or the orchestrator's brief.**
    Never hardcode credentials. Use env vars like
    `TARGET_HOST`, `TARGET_USER`, `TARGET_PASSWORD`, `TARGET_PORT`.

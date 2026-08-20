@@ -1,4 +1,4 @@
-# Dell PowerEdge v5 — VCF Content Factory Management Pack
+# Dell PowerEdge v5, VCF Content Factory Management Pack
 #
 # Architecture:
 #   v5 collapses the 8 intermediate collection-container object types from v4
@@ -11,17 +11,17 @@
 #   No explicit relationships[] are required and none are declared.
 #
 # Object types (12 total):
-#   1  Dell PowerEdge Server   — is_singleton; binds all 11 request base listIds
-#   2  Processor               — list; fans out from processor_list.Members
-#   3  Memory DIMM             — list; fans out from memory_inventory.Members
-#   4  Network Interface       — list; fans out from nic_inventory.Members
-#   5  Firmware Component      — list; fans out from firmware_inventory.Members
-#   6  Physical Drive          — list; fans out from storage_controller_cpu1.Drives
-#   7  Fan                     — list; fans out from thermal.Fans
-#   8  Temperature Sensor      — list; fans out from thermal.Temperatures
-#   9  Power Supply            — list; fans out from power.PowerSupplies
-#   10 Power Control           — list; fans out from power.PowerControl
-#   11 Dell OEM Sensor         — list; fans out from oem_numeric_sensors.Members
+#   1  Dell PowerEdge Server   - is_singleton; binds all 11 request base listIds
+#   2  Processor               - list; fans out from processor_list.Members
+#   3  Memory DIMM             - list; fans out from memory_inventory.Members
+#   4  Network Interface       - list; fans out from nic_inventory.Members
+#   5  Firmware Component      - list; fans out from firmware_inventory.Members
+#   6  Physical Drive          - list; fans out from storage_controller_cpu1.Drives
+#   7  Fan                     - list; fans out from thermal.Fans
+#   8  Temperature Sensor      - list; fans out from thermal.Temperatures
+#   9  Power Supply            - list; fans out from power.PowerSupplies
+#   10 Power Control           - list; fans out from power.PowerControl
+#   11 Dell OEM Sensor         - list; fans out from oem_numeric_sensors.Members
 #
 # Adapter identity:
 #   adapter_kind: mpb_vcf_content_factory_dell_poweredge_v5
@@ -111,7 +111,7 @@ source:
       description: "The minimum event severity to collect."
 
 # -----------------------------------------------------------------------
-# Requests — all 11 Redfish endpoints, unchanged from v4
+# Requests, all 11 Redfish endpoints, unchanged from v4
 # -----------------------------------------------------------------------
 requests:
   # system_info: primary server identity + health summary
@@ -188,7 +188,7 @@ requests:
 object_types:
 
   # =====================================================================
-  # 1. Dell PowerEdge Server — singleton (one per adapter instance)
+  # 1. Dell PowerEdge Server, singleton (one per adapter instance)
   #    Binds all 11 request base listIds; serves as chaining anchor for
   #    all fan-out component objects.
   # =====================================================================
@@ -202,37 +202,37 @@ object_types:
         source: "metricset:system_info.SerialNumber"
     name_expression: hostname
     metricSets:
-      # Primary: system_info base — server identity and health summary
+      # Primary: system_info base, server identity and health summary
       - from_request: system_info
         list_path: ""
-      # manager_info base — iDRAC firmware and model
+      # manager_info base, iDRAC firmware and model
       - from_request: manager_info
         list_path: ""
-      # oem_dell_system base — Dell OEM slot inventory and health rollups
+      # oem_dell_system base, Dell OEM slot inventory and health rollups
       - from_request: oem_dell_system
         list_path: ""
-      # thermal base — binds thermal request so Fans/Temperatures can chain from it
+      # thermal base, binds thermal request so Fans/Temperatures can chain from it
       - from_request: thermal
         list_path: ""
-      # power base — binds power request so PowerSupplies/PowerControl can chain from it
+      # power base, binds power request so PowerSupplies/PowerControl can chain from it
       - from_request: power
         list_path: ""
-      # processor_list base — binds request so Processor can chain from it
+      # processor_list base, binds request so Processor can chain from it
       - from_request: processor_list
         list_path: ""
-      # memory_inventory base — binds request so Memory DIMM can chain from it
+      # memory_inventory base, binds request so Memory DIMM can chain from it
       - from_request: memory_inventory
         list_path: ""
-      # nic_inventory base — binds request so Network Interface can chain from it
+      # nic_inventory base, binds request so Network Interface can chain from it
       - from_request: nic_inventory
         list_path: ""
-      # firmware_inventory base — binds request so Firmware Component can chain from it
+      # firmware_inventory base, binds request so Firmware Component can chain from it
       - from_request: firmware_inventory
         list_path: ""
-      # storage_controller_cpu1 base — binds request so Physical Drive can chain from it
+      # storage_controller_cpu1 base, binds request so Physical Drive can chain from it
       - from_request: storage_controller_cpu1
         list_path: ""
-      # oem_numeric_sensors base — binds request so Dell OEM Sensor can chain from it
+      # oem_numeric_sensors base, binds request so Dell OEM Sensor can chain from it
       - from_request: oem_numeric_sensors
         list_path: ""
     metrics:
@@ -475,7 +475,7 @@ object_types:
         source: "metricset:oem_dell_system.MaxSystemMemoryMiB"
 
   # =====================================================================
-  # 2. Processor — one per physical CPU socket
+  # 2. Processor, one per physical CPU socket
   # =====================================================================
   - name: Processor
     key: processor
@@ -631,7 +631,7 @@ object_types:
         source: "metricset:processor_list.Status.State"
 
   # =====================================================================
-  # 3. Memory DIMM — one per installed memory module
+  # 3. Memory DIMM, one per installed memory module
   # =====================================================================
   - name: Memory DIMM
     key: memory_dimm
@@ -769,7 +769,7 @@ object_types:
         source: "metricset:memory_inventory.Status.State"
 
   # =====================================================================
-  # 4. Network Interface — one per Ethernet interface
+  # 4. Network Interface, one per Ethernet interface
   # =====================================================================
   - name: Network Interface
     key: network_interface
@@ -877,7 +877,7 @@ object_types:
         source: "metricset:nic_inventory.Status.State"
 
   # =====================================================================
-  # 5. Firmware Component — one per firmware inventory entry
+  # 5. Firmware Component, one per firmware inventory entry
   # =====================================================================
   - name: Firmware Component
     key: firmware_component
@@ -943,7 +943,7 @@ object_types:
         source: "metricset:firmware_inventory.Status.State"
 
   # =====================================================================
-  # 6. Physical Drive — one per drive in the storage controller
+  # 6. Physical Drive, one per drive in the storage controller
   #    NOTE: The v4 intermediate "CPU.1" was a Redfish path artifact
   #    (storage controller endpoint named CPU.1), NOT a CPU object.
   #    Physical Drive chains directly from the Server in v5.
@@ -1066,7 +1066,7 @@ object_types:
         source: "metricset:storage_controller_cpu1.Status.State"
 
   # =====================================================================
-  # 7. Fan — one per chassis fan
+  # 7. Fan, one per chassis fan
   # =====================================================================
   - name: Fan
     key: fan
@@ -1144,7 +1144,7 @@ object_types:
         source: "metricset:thermal.Status.State"
 
   # =====================================================================
-  # 8. Temperature Sensor — one per chassis temperature probe
+  # 8. Temperature Sensor, one per chassis temperature probe
   # =====================================================================
   - name: Temperature Sensor
     key: temperature_sensor
@@ -1217,7 +1217,7 @@ object_types:
         source: "metricset:thermal_temps.Status.State"
 
   # =====================================================================
-  # 9. Power Supply — one per PSU bay
+  # 9. Power Supply, one per PSU bay
   # =====================================================================
   - name: Power Supply
     key: power_supply
@@ -1343,7 +1343,7 @@ object_types:
         source: "metricset:power.Status.State"
 
   # =====================================================================
-  # 10. Power Control — one per power control zone (typically one per server)
+  # 10. Power Control, one per power control zone (typically one per server)
   # =====================================================================
   - name: Power Control
     key: power_control
@@ -1428,7 +1428,7 @@ object_types:
         source: "metricset:power_ctrl.PowerMetrics.MinConsumedWatts"
 
   # =====================================================================
-  # 11. Dell OEM Sensor — one per Dell OEM numeric sensor
+  # 11. Dell OEM Sensor, one per Dell OEM numeric sensor
   # =====================================================================
   - name: Dell OEM Sensor
     key: dell_oem_sensor

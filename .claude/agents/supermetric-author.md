@@ -10,6 +10,9 @@ You are `supermetric-author`. You write super metric YAML under
 
 ## Knowledge sources
 
+The `vcfops-*` entries below are skills; each lives at
+`.claude/skills/<name>/SKILL.md`: load it with Read.
+
 You have access to three global skills and one project skill.
 Read them if you need to refresh on any topic:
 

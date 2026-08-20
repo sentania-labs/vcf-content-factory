@@ -50,7 +50,7 @@ from typing import List, Optional
 
 import yaml
 
-from .loader import BuiltinMetricEnable
+from .loader import BuiltinMetricEnable, parse_builtin_metric_enables
 
 
 VERSION_RE = re.compile(r"^\d+\.\d+$")
@@ -77,7 +77,7 @@ RELEASE_TYPE_SUFFIXES = frozenset({
 
 #: Release manifest names that predate the convention (or shipped before the
 #: convention was enforced) and are permanently grandfathered.  The WARN check
-#: skips these.  Shipped release names are part of the distribution contract —
+#: skips these.  Shipped release names are part of the distribution contract,
 #: renaming one changes artifact paths in the distribution repo.
 _LEGACY_RELEASE_NAMES: frozenset[str] = frozenset({
     "demand-driven-capacity-v2",
@@ -111,7 +111,7 @@ class ReleaseDef:
     deprecates: List[Path]           # resolved absolute paths
     manifest_path: Path
     release_date: Optional[str] = None   # YYYY-MM-DD; None if not present
-    # Only consumed by the discrete (component) build path — see schema note
+    # Only consumed by the discrete (component) build path, see schema note
     # at the top of this module.  Empty list for bundle-headline releases.
     builtin_metric_enables: List["BuiltinMetricEnable"] = field(default_factory=list)
 
@@ -134,7 +134,7 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
     """Load a single release manifest YAML and validate its schema.
 
     Does NOT perform cross-manifest duplicate-name checks or flag-state
-    consistency checks (those require the full corpus — see
+    consistency checks (those require the full corpus, see
     ``load_all_releases`` and ``validate_flag_state``).
 
     Args:
@@ -206,13 +206,13 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
             return candidate
         # Provide a specific actionable message for SDK adapter sources that are
         # missing because their repo has not been cloned yet.  On a clean checkout
-        # content/sdk-adapters/ is gitignored — each adapter lives in its own
+        # content/sdk-adapters/ is gitignored, each adapter lives in its own
         # independent repo.  Running bootstrap_managed_paks.sh populates them.
         ref_parts = Path(ref).parts
         if len(ref_parts) >= 2 and ref_parts[0] == "content" and ref_parts[1] == "sdk-adapters":
             raise ReleaseValidationError(
                 f"{path}: artifact source not found: {ref!r} (tried {candidate}).\n"
-                "  This source is under content/sdk-adapters/ which is gitignored — "
+                "  This source is under content/sdk-adapters/ which is gitignored, "
                 "each SDK adapter lives in its own independent repo.\n"
                 "  Clone all managed pak repos by running:\n"
                 "    bash scripts/bootstrap_managed_paks.sh\n"
@@ -272,49 +272,19 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
                 f"{path}: deprecates[{i}] must be a non-empty path string"
             )
         dep_candidate = repo_root / dep_str
-        # A deprecated manifest that no longer exists on disk is acceptable —
+        # A deprecated manifest that no longer exists on disk is acceptable,
         # it was retired and removed.  Record the path for catalog filtering even
         # if the file is absent; callers that need the contents use load_release()
         # themselves and catch the resulting error.
         deprecates.append(dep_candidate)
 
     # --- builtin_metric_enables (optional) ---
-    raw_bmes = data.get("builtin_metric_enables") or []
-    if not isinstance(raw_bmes, list):
-        raise ReleaseValidationError(
-            f"{path}: 'builtin_metric_enables' must be a list, "
-            f"got {type(raw_bmes).__name__}"
-        )
-    builtin_metric_enables: List[BuiltinMetricEnable] = []
-    for i, entry in enumerate(raw_bmes):
-        if not isinstance(entry, dict):
-            raise ReleaseValidationError(
-                f"{path}: builtin_metric_enables[{i}] must be a mapping, "
-                f"got {type(entry).__name__}"
-            )
-        # Mirror vcfops_packaging.loader's builtin_metric_enables validation
-        # exactly (same field is documented as "same entry shape as the
-        # bundle manifest field") — required fields must be non-empty
-        # strings (not merely str()-coercible), and reason must be a string
-        # if present, not silently stringified (e.g. a YAML list/dict).
-        for required_field in ("adapter_kind", "resource_kind", "metric_key"):
-            val = entry.get(required_field)
-            if not val or not isinstance(val, str) or not val.strip():
-                raise ReleaseValidationError(
-                    f"{path}: builtin_metric_enables[{i}].{required_field} "
-                    f"is required and must be a non-empty string"
-                )
-        reason = entry.get("reason", "") or ""
-        if not isinstance(reason, str):
-            raise ReleaseValidationError(
-                f"{path}: builtin_metric_enables[{i}].reason must be a string"
-            )
-        builtin_metric_enables.append(BuiltinMetricEnable(
-            adapter_kind=entry["adapter_kind"].strip(),
-            resource_kind=entry["resource_kind"].strip(),
-            metric_key=entry["metric_key"].strip(),
-            reason=reason.strip(),
-        ))
+    # Same entry shape as the bundle manifest field, shared parsing lives in
+    # vcfops_packaging.loader.parse_builtin_metric_enables (issue #77); only
+    # the exception class differs between the two callers.
+    builtin_metric_enables: List[BuiltinMetricEnable] = parse_builtin_metric_enables(
+        data.get("builtin_metric_enables"), path, exc=ReleaseValidationError
+    )
 
     return ReleaseDef(
         name=name,
@@ -376,7 +346,7 @@ def validate_flag_state(
 ) -> List[str]:
     """Check flag-state consistency between release manifests and content YAMLs.
 
-    Two error directions — both are hard errors:
+    Two error directions, both are hard errors:
     (a) A release manifest exists but its headline component has
         ``released: false`` (or the field is absent).
     (b) A component/bundle YAML has ``released: true`` but no release
@@ -392,7 +362,7 @@ def validate_flag_state(
     - reports/
 
     Deprecated manifests (referenced in another manifest's ``deprecates:``
-    list) are exempt from direction (a) — their source's flag state is not
+    list) are exempt from direction (a), their source's flag state is not
     checked because they have been superseded by the deprecating release.
 
     Args:
@@ -470,7 +440,7 @@ def check_bundle_release_collision(
     manifest ``name:`` field.  If the same slug appears in both sets, returns
     an error string naming both files.
 
-    Exception — legitimate bundle-release pairing: when a release manifest
+    Exception, legitimate bundle-release pairing: when a release manifest
     shares its slug with a bundle file AND its headline artifact's source
     points at that same bundle file (``bundles/<slug>.yaml`` or
     ``bundles/<slug>.yml``), the release manifest exists precisely to publish
@@ -510,7 +480,7 @@ def check_bundle_release_collision(
             Path(f"bundles/{slug}.yml"),
         }
         if headline_sources & expected_sources:
-            # The headline source IS this bundle — legitimate pairing, not a collision.
+            # The headline source IS this bundle, legitimate pairing, not a collision.
             continue
         errors.append(
             f"slug collision: '{slug}' appears as both "

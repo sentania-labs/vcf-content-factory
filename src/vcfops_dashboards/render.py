@@ -6,7 +6,7 @@ engineering an export from a live VCF Ops 9 instance plus reference
 content from the AriaOperationsContent and operations_dashboards
 GitHub repos.
 
-This module deliberately produces the *minimum viable* shape — only
+This module deliberately produces the *minimum viable* shape, only
 the fields the importer demonstrably needs for the v1 widget set
 (ResourceList + View) and a list-style view definition. Every other
 property is omitted, defaulted, or left empty.
@@ -35,7 +35,7 @@ from .loader import (
 
 # Stable per-adapter-kind prefix used in `resourceKindId` fields inside
 # dashboard widget configs. Harvested from reference bundles under
-# `reference/references/` — the value is the same on every Ops instance for a
+# `reference/references/`, the value is the same on every Ops instance for a
 # given adapter. Extend as new adapter kinds get pinned; there is no
 # API to derive these at runtime (checked /api/adapterkinds and
 # /api/adapterkinds/*/resourcekinds; no numeric id is exposed).
@@ -50,8 +50,8 @@ _ADAPTER_KIND_PREFIX = {
 }
 
 # When a self-provider View (or ProblemAlertsList) widget is pinned to a leaf
-# resource kind — one where no single resource carries the kind name as its
-# display name — the importer cannot resolve "entries.resource[name=<kind>]"
+# resource kind, one where no single resource carries the kind name as its
+# display name, the importer cannot resolve "entries.resource[name=<kind>]"
 # because the resource doesn't exist under that name on the instance.  The
 # correct container to pin to is the adapter's world singleton, which always
 # exists.  This table maps (adapter_kind, leaf_resource_kind) to the
@@ -73,7 +73,7 @@ _VIEW_PIN_CONTAINER: dict[tuple[str, str], tuple[str, str, str]] = {
     ("VMWARE", "Datastore"):         ("VMWARE", "vSphere World", "vSphere World"),
     ("VMWARE", "ClusterComputeResource"): ("VMWARE", "vSphere World", "vSphere World"),
     ("VMWARE", "Datacenter"):        ("VMWARE", "vSphere World", "vSphere World"),
-    # World singletons pass through unchanged (no entry needed — the helper
+    # World singletons pass through unchanged (no entry needed, the helper
     # falls back to (adapter_kind, resource_kind, resource_kind) for unknowns)
 }
 
@@ -89,8 +89,8 @@ _VIEW_PIN_CONTAINER: dict[tuple[str, str], tuple[str, str, str]] = {
 # `content/dashboards/vks_core_consumption.yaml` pins a View to VMWARE/
 # vSphere World, but the view's subject
 # (`content/views/vks_core_consumption_by_vcenter.yaml`) is
-# `VMwareAdapter Instance` — not in the "Hosts and Clusters" hierarchy the
-# spec traverses — and the checked-in WORKING export of that exact widget
+# `VMwareAdapter Instance`, not in the "Hosts and Clusters" hierarchy the
+# spec traverses, and the checked-in WORKING export of that exact widget
 # (`knowledge/context/exports/working_dashboards.json` ~L412-424) carries
 # an EMPTY nested `traversalSpecId`. Emitting the spec string there would
 # have been a wire-format regression on real, shipped, working content.
@@ -102,12 +102,12 @@ _VIEW_PIN_CONTAINER: dict[tuple[str, str], tuple[str, str, str]] = {
 # ships five pinned View widgets with an empty nested traversalSpecId; our
 # own checked-in VKS working export (cited above) does the same; and the
 # api-explorer's content-import round-trips succeeded either way. No
-# evidence anywhere shows the spec string is REQUIRED for a pin to bind —
+# evidence anywhere shows the spec string is REQUIRED for a pin to bind,
 # only that one vendor export (Cluster Performance 2.0.json) happens to
 # carry one for a widget whose view subject IS in the Hosts-and-Clusters
 # hierarchy. If a future visual QA pass shows a specific widget failing to
 # scope data without a spec string, add a narrowly-scoped, evidence-backed
-# mechanism then (keyed on view subject, not container) — not a blanket
+# mechanism then (keyed on view subject, not container), not a blanket
 # container-keyed table.
 #
 # Evidence: knowledge/context/api-surface/dashboard_selfprovider_pin_wire_format.md
@@ -147,23 +147,23 @@ def _self_provider_pin_container(
     """Resolve the container pin for a self-provider widget.
 
     Prefers an explicit ``w.pin`` (the generic ``pin:`` YAML block used by
-    View/ProblemAlertsList) — an explicit pin is always honored, whatever
+    View/ProblemAlertsList), an explicit pin is always honored, whatever
     kind it names.
 
     Falls back to the widget's own declared ``adapter_kind``/
     ``resource_kind`` (e.g. a self-provider HealthChart's
     ``health_chart_config``) ONLY when that kind already resolves to itself
-    through ``_resolve_view_pin`` — i.e. it's already a world/singleton
+    through ``_resolve_view_pin``, i.e. it's already a world/singleton
     container (`vSphere World`, `ComplianceWorld`, etc.), not a leaf kind
     that `_resolve_view_pin` would redirect (e.g. VMWARE `HostSystem` →
     `vSphere World`). There is no vendor evidence for silently world-pinning
-    a self-provider HealthChart authored on a leaf kind — that redirect is
+    a self-provider HealthChart authored on a leaf kind, that redirect is
     only proven for View/ProblemAlertsList widgets carrying an *explicit*
     `pin:` block. Without this gate, a future self-provider HealthChart on a
     leaf kind (any `mode`) would silently become world-pinned with no basis.
 
     Returns None when no pin applies (not self-provider, no resource kind
-    declared, or an implicit leaf-kind fallback that isn't gated) — the
+    declared, or an implicit leaf-kind fallback that isn't gated), the
     caller keeps the historic ``resource: []`` shape in that case.
     """
     if w.pin:
@@ -184,7 +184,7 @@ def _subject_filter_json(groups: list[list["SubjectFilterCondition"]]) -> str:
 
     Key order per condition object mirrors the vendor ``VM Network Top
     Talkers`` fixture exactly (``condition``, ``transform``, ``metricKey``,
-    ``metricValue``, ``businessHours``, ``filterType``) — see
+    ``metricValue``, ``businessHours``, ``filterType``), see
     SubjectFilterCondition docstring in loader.py for the citation and the
     caveat that vendor key order otherwise varies (not schema-significant).
     """
@@ -216,7 +216,7 @@ def _xml_property(name: str, value: str, localization_key: Optional[str] = None)
 # The platform's ViewDef Localization Property `key` attribute is XSD-capped
 # at maxLength=64 (`#AnonType_keyPropertyLocaleLocalizationViewDefViewsContent`).
 # This helper is dormant for view columns today (displayName carries no
-# localizationKey — see the module docstring note near _xml_column below),
+# localizationKey, see the module docstring note near _xml_column below),
 # but the twin in vcfops_managementpacks/sdk_builder.py hit a real 69-char
 # key that aborted a whole colocated content/reports/ batch. Capped here too
 # so this class of bug can't resurface if column localizationKeys are ever
@@ -229,7 +229,7 @@ def _cap_localization_key(key: str, max_len: int = _LOCALIZATION_KEY_MAX_LEN) ->
     """Deterministically shorten *key* to at most *max_len* chars.
 
     A blind truncate risks two long attribute keys colliding on the same
-    truncated prefix — Java properties would then silently keep only the
+    truncated prefix, Java properties would then silently keep only the
     last-written line, dropping a column's localized label. To preserve
     uniqueness, an over-length key is shortened to a prefix of the original
     plus an underscore and an 8-hex-char SHA-1 digest of the *full* original
@@ -252,8 +252,8 @@ def _attribute_to_localization_key(attribute: str) -> str:
 
     Removes the 'Super Metric|' prefix, replaces '|' with '_', spaces with '_',
     and strips non-(alphanumeric/hyphen/underscore) characters. The result is
-    capped at ``_LOCALIZATION_KEY_MAX_LEN`` chars (platform XSD maxLength=64)
-    — see ``_cap_localization_key``.
+    capped at ``_LOCALIZATION_KEY_MAX_LEN`` chars (platform XSD maxLength=64);
+    see ``_cap_localization_key``.
 
     Examples:
         "VCF-CF Compliance|score"       → "VCF-CF_Compliance_score"
@@ -297,7 +297,7 @@ def _xml_time_interval_selector(view: ViewDef, control_id: str = "time-interval-
     Otherwise falls back to the prior default (HOURS/24).
 
     ``startPeriod``/``endPeriod`` (FB-011): the vendor wire format pairs
-    ``advancedTimeMode=true`` with a ``startPeriod``/``endPeriod`` range —
+    ``advancedTimeMode=true`` with a ``startPeriod``/``endPeriod`` range,
     across the full reference corpus (250+ time-interval-selector controls
     surveyed) the *only* control with ``advancedTimeMode=true`` carries
     ``startPeriod=PREVIOUS``/``endPeriod=NOW`` ("vSphere Cluster HA
@@ -306,7 +306,7 @@ def _xml_time_interval_selector(view: ViewDef, control_id: str = "time-interval-
     advancedTimeMode=true without a range, or of a range value other than
     PREVIOUS/NOW. We therefore default start_period/end_period to
     PREVIOUS/NOW whenever advanced_time_mode is true and the author left
-    them unset — advanced mode with no defined range is the leading
+    them unset, advanced mode with no defined range is the leading
     suspect for the "View request timed out" bug this control produced
     (knowledge/context/feedback_queue.md FB-011). Authors may still set
     explicit values in time_window.start_period/end_period to override.
@@ -385,12 +385,12 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     The License view's driver omits displayName; the other two include it
     ("Instance" / "Service"). Since this loader always has a non-empty
     display_name (required field on every ViewColumn), always emitting it
-    matches the two-of-three observed variant and is harmless — VCF Ops
+    matches the two-of-three observed variant and is harmless, VCF Ops
     accepts a displayName on the driver as evidenced by those exports.
 
     Member Item property order (all three files, identical):
       objectType, attributeKey, isStringAttribute, adapterKind, resourceKind,
-      [rollUpType — metric columns only, e.g. "NONE" for Remaining Days;
+      [rollUpType, metric columns only, e.g. "NONE" for Remaining Days;
        property columns (isProperty=true) omit rollUpType entirely],
       rollUpCount="0", [transformExpression], transformations=[CURRENT],
       isProperty, [color bounds], displayName, addTimestampAsColumn="false",
@@ -399,7 +399,7 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     AMBIGUITY: whether rollUpType-omission-for-properties is specific to
     this pak's instanced-group columns or a broader vCommunity-pak-wide
     convention (ESXi Host Details vCommunity.xml:44-76 shows the same
-    omission on a *non*-instanced property column) was not resolved here —
+    omission on a *non*-instanced property column) was not resolved here,
     out of scope for this instanced-group capability. Only the
     instanced-group code path below mirrors it; the generic
     _xml_attribute_item() path is untouched.
@@ -407,26 +407,26 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     Non-CURRENT transformations on member columns (2026-07-10 follow-up,
     Codex P2 on PR #46): a full survey of every isInstancedGroup Item across
     all reference/references/vmbro_* content/reports/*.xml files found
-    additional vendor evidence beyond the three files above —
+    additional vendor evidence beyond the three files above,
     "View - Set 4.xml" (same vmbro_vcf_operations_vcommunity pak) bundles
     several *other* instanced-group views whose member columns use MAX,
     TRANSFORM_EXPRESSION, and TIMESTAMP:
-      "Windows CPU Usage" — cpu:0|Percent.DPC.Time, transform=MAX,
+      "Windows CPU Usage", cpu:0|Percent.DPC.Time, transform=MAX,
         rollUpType="NONE", plus yellowBound/orangeBound/redBound/
         ascendingRange color bounds (same shape this function already
         supports).
-      "Linux Disk Performance" — diskio:dm-0|read.time,
+      "Linux Disk Performance", diskio:dm-0|read.time,
         transform=TRANSFORM_EXPRESSION, transformExpression=
         "(current-first)/60000" emitted as a sibling Property
         **immediately before** the transformations Property (same
         ordering as the generic _xml_attribute_item() path),
         rollUpType="NONE".
-      "VM Snapshots List" — diskspace:262|snapshot:snapshot-1|accessTime,
+      "VM Snapshots List", diskspace:262|snapshot:snapshot-1|accessTime,
         transform=TIMESTAMP, rollUpType="NONE", no extra sibling
         properties (matches the generic path's TIMESTAMP handling).
     Critically, **every** non-property instanced-group member column found
-    in this wider survey — CURRENT, MAX, TRANSFORM_EXPRESSION, and
-    TIMESTAMP alike — carries rollUpType="NONE". There is no vendor
+    in this wider survey, CURRENT, MAX, TRANSFORM_EXPRESSION, and
+    TIMESTAMP alike, carries rollUpType="NONE". There is no vendor
     evidence anywhere in the corpus for a non-"NONE" rollUpType on an
     instanced-group member column; the previous "AVG" fallback for
     non-CURRENT/NONE transforms here was an unproven guess (not vendor
@@ -436,7 +436,7 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     member column was found anywhere in the surveyed corpus (both DO
     appear on plenty of *non*-instanced columns in the same files, so
     their absence here is not merely "these files don't use that
-    transformation" — it's specific to instanced-group columns). Per the
+    transformation", it's specific to instanced-group columns). Per the
     framework's no-silent-downgrade posture, `ViewDef._validate_column`
     rejects both on instanced_group member columns rather than guessing
     their wire shape.
@@ -455,7 +455,7 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
 
     # Member column.
     props.append(_xml_property("attributeKey", col.attribute))
-    # preferredUnitId — same field/YAML convention as the generic column
+    # preferredUnitId, same field/YAML convention as the generic column
     # path (`col.unit` / `unit:` in YAML), same emission position
     # (immediately after attributeKey, before isStringAttribute). Vendor-
     # confirmed on an instanced-group member column: reference/references/
@@ -477,13 +477,13 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     transform = (col.transformation or "CURRENT").upper()
     if not col.is_property:
         # Every non-property instanced-group member column found in the
-        # vendor survey — CURRENT, MAX, TRANSFORM_EXPRESSION, TIMESTAMP —
+        # vendor survey, CURRENT, MAX, TRANSFORM_EXPRESSION, TIMESTAMP,
         # carries rollUpType="NONE" (see docstring). No vendor evidence
         # supports a different rollUpType here for any transformation.
         props.append(_xml_property("rollUpType", "NONE"))
     props.append(_xml_property("rollUpCount", "0"))
     # transformExpression is a sibling Property emitted immediately before
-    # the transformations block — matches both the generic column path
+    # the transformations block, matches both the generic column path
     # ordering and the vendor's "Linux Disk Performance" instanced example
     # (see docstring). PERCENTILE/TIME_POINT companion properties are not
     # handled here: ViewDef._validate_column rejects those transformations
@@ -550,13 +550,13 @@ def _xml_attribute_item(
         return _xml_instanced_group_item(view, col)
 
     # Super metric columns live in their own namespace and need the
-    # "Super Metric|sm_<uuid>" attributeKey form — bare "sm_<uuid>"
+    # "Super Metric|sm_<uuid>" attributeKey form, bare "sm_<uuid>"
     # renders as a blank column in the UI. Reference: exported views
     # from the sentania/AriaOperationsContent VCF License Consumption
     # bundle. Super metric columns also use rollUpType=NONE, not AVG.
     raw = col.attribute
     if raw.startswith('supermetric:"') or raw.startswith("supermetric:'"):
-        # Author wrote supermetric:"<name>" — resolve to sm_<uuid> using
+        # Author wrote supermetric:"<name>", resolve to sm_<uuid> using
         # the SM name map built from supermetrics/ YAML at render time.
         m = re.match(r'''supermetric:["'](.+?)["']$''', raw)
         if m:
@@ -636,7 +636,7 @@ def _xml_attribute_item(
             f'</Property>'
         )
     props.append(_xml_property("isProperty", "true" if col.is_property else "false"))
-    # Color bound Properties — emitted between isProperty and displayName
+    # Color bound Properties, emitted between isProperty and displayName
     # in order: yellow, orange, red, ascendingRange.
     # See knowledge/context/wire-formats/view_column_wire_format.md §Per-column color thresholds.
     def _bound_str(v) -> str:
@@ -676,7 +676,7 @@ def _xml_attribute_item(
 
     # displayName is emitted as a plain name/value Property with no
     # localizationKey.  Real VCF Ops exports (brockpeterson_operations_dashboards,
-    # AriaOperationsContent — every reference checked) never carry a
+    # AriaOperationsContent, every reference checked) never carry a
     # localizationKey on displayName.  Emitting one caused collision for
     # transformed columns of the same metric (e.g. cpu|demandPct → AVG, MAX,
     # P95 all resolved to "cpu_demandPct"), making them indistinguishable in
@@ -726,19 +726,19 @@ def _render_view_def_fragment(
     # NO localizationKey attribute. VCF Ops 8.18's server-side view importer
     # (ViewDefinitionDataServiceImpl.validate) hard-rejects a ViewDef whose
     # Title/Description carry a localizationKey that has no backing
-    # content.properties bundle in the SAME import unit — and our
+    # content.properties bundle in the SAME import unit, and our
     # content-import zips (dist/**/Views.zip, built by
     # vcfops_dashboards/packager.py) ship no localization properties files at
     # all. 9.1 tolerates the dangling reference and falls back to the inline
     # text, which is what masked this for 9.1-only testing. Reference-corpus
     # scan (all zips under reference/references/, including nested zips):
-    # 934 Title/Description elements total, 14 carry localizationKey — and
+    # 934 Title/Description elements total, 14 carry localizationKey, and
     # every one of those 14 lives in an import unit that also ships
     # resources/content.properties in the same unit (e.g.
     # AriaOperationsContent/VM Encryption Reporting/Views.zip,
     # AriaOperationsContent/Cost Reporting/Cost Reporting.zip::Views.zip, and
     # four brockpeterson_operations_dashboards view zips). Zero vendor units
-    # carry the key without a bundle — localizationKey on Title/Description
+    # carry the key without a bundle, localizationKey on Title/Description
     # is bundle-coupled, never dangling. Our content-import zips ship no
     # properties bundle, so this renderer emits plain elements to match. The
     # one place a matching content.properties bundle IS
@@ -748,7 +748,7 @@ def _render_view_def_fragment(
     # always present; it is left in place as a harmless, already-populated
     # resources/ subdirectory (spec A3 still wants that directory non-empty).
     desc_elem = f'<Description>{escape(view.description)}</Description>'
-    # Optional SubjectType metric/property filter — applied identically to
+    # Optional SubjectType metric/property filter, applied identically to
     # both the "descendant" and "self" SubjectType elements (matches the
     # vendor corpus, which always carries the same filter= value on both).
     if view.subject_filter:
@@ -878,7 +878,7 @@ def render_view_def_fragments(
     also lets callers that need to co-bundle ViewDefs inside another
     document's ``<Content>`` element (e.g. ``vcfops_managementpacks``
     embedding a report's referenced views in the same ``<Content>`` as its
-    ``<ReportDef>``, matching the vendor TVS pak shape — see
+    ``<ReportDef>``, matching the vendor TVS pak shape, see
     ``knowledge/context/investigations/sdk_pak_content_import_gap.md``)
     reuse the exact same rendering path as standalone view subdirs, instead
     of hand-rolling a second XML emitter that could drift.
@@ -891,7 +891,7 @@ def render_view_def_fragments(
             this scope raises ``ValueError`` with a descriptive message naming
             the view, the unresolved reference, and the bundle context.
             When ``None`` (default), the full ``supermetrics/`` directory tree
-            is scanned — the existing native-content behaviour.
+            is scanned, the existing native-content behaviour.
         bundle_context: Human-readable bundle name used in scoped-mode error
             messages (e.g. ``'"idps-planner" (factory_native=False)'``).
             Ignored when ``sm_scope`` is None.
@@ -918,7 +918,7 @@ def render_view_def_fragments(
 
     if sm_scope_active:
         # Scoped mode: load only the SM files declared in the bundle manifest.
-        # An empty list is valid — it means the bundle has no SMs, and any SM
+        # An empty list is valid, it means the bundle has no SMs, and any SM
         # reference in a view will be caught as an error below.
         try:
             from vcfops_supermetrics.loader import load_file as _sm_load_file
@@ -1007,14 +1007,14 @@ def _clamp_gridster_floor(coords: dict) -> dict:
 
     The dashboard grid is **1-indexed**: every ``gridsterCoords`` observed
     across the entire known-good corpus (vendor MP exports under
-    ``reference/references/`` — over 100 widgets surveyed — plus every
+    ``reference/references/``, over 100 widgets surveyed, plus every
     ``knowledge/context/exports/*.json`` capture) uses ``x >= 1`` and
     ``y >= 1``. None use 0 for either axis.
 
     DEF-013: an authored ``coords`` block using 0-based x/y (e.g.
     ``{x: 0, y: 0, ...}``, the natural DX default for someone thinking in
     array-index terms) produces a dashboard where the picker/top widget
-    renders *below* a widget declared later in y-order — an inverted
+    renders *below* a widget declared later in y-order, an inverted
     vertical stack relative to the authored layout. 0 is outside the grid's
     valid coordinate space; downstream the UI's placement engine appears to
     treat it as unset/auto rather than "first row", so the widget falls
@@ -1022,12 +1022,12 @@ def _clamp_gridster_floor(coords: dict) -> dict:
     grid's 1-indexed floor here fixes the wire output without an author
     having to know this quirk, and without touching any authored YAML.
 
-    Only the floor is clamped (``max(1, x)`` / ``max(1, y)``) — relative
+    Only the floor is clamped (``max(1, x)`` / ``max(1, y)``), relative
     ordering of already-valid (>=1) coordinates in the same dashboard is
     left untouched, so multi-row layouts that were already 1-indexed are
     unaffected. This is deliberately NOT a reintroduction of the
     `_gridster_coords()` helper deleted in 00d3382 (see
-    ``tests/test_renderer_regression_phase16.py`` Test A) — that helper
+    ``tests/test_renderer_regression_phase16.py`` Test A), that helper
     unconditionally shifted every x/y by +1 regardless of whether the input
     was already 1-based, corrupting valid layouts. This helper is a no-op
     (`max(1, v) == v`) for every coordinate that was already >= 1, and only
@@ -1041,12 +1041,12 @@ def _clamp_gridster_floor(coords: dict) -> dict:
 
 # Verbatim ExtJS grid-state blob for a ResourceList "Show Columns ->
 # Name only" preset (h15 = Name; the sole hidden=b:0 column). This is NOT
-# the raw capture from the live dashboard — the raw capture left 5
+# the raw capture from the live dashboard, the raw capture left 5
 # columns (h2, h4, h5, h6, h14) with no `hidden` attribute at all, and an
 # unflagged column defaults to VISIBLE (empirically confirmed on
 # vcf-lab-operations-devel 2026-07-22; an earlier draft of this doc
 # wrongly assumed default-hidden). A truly Name-only blob must carry an
-# explicit `^hidden=b:1^width=n:100` on every non-Name column — no column
+# explicit `^hidden=b:1^width=n:100` on every non-Name column, no column
 # may rely on an implicit default. This constant is the raw capture with
 # that explicit hidden flag patched onto those 5 columns; every other
 # byte is byte-identical to the ground-truth capture (see the decode/
@@ -1055,8 +1055,8 @@ def _clamp_gridster_floor(coords: dict) -> dict:
 # Captured ground truth, decode grammar, and the empirical default-
 # visible correction:
 # knowledge/context/api-surface/resourcelist_column_state_wire_format.md
-# Column ids are generic (h1..h47, resourceRating) — they do not embed
-# any widget/dashboard UUID — so this value is a reusable constant across
+# Column ids are generic (h1..h47, resourceRating), they do not embed
+# any widget/dashboard UUID, so this value is a reusable constant across
 # every ResourceList widget. Only the sibling `key` is per-widget. This
 # is an internal, unpublished Ops UI (ExtJS) persistence artefact with no
 # OpenAPI schema; paste verbatim, do not re-derive the multi-pass
@@ -1064,7 +1064,7 @@ def _clamp_gridster_floor(coords: dict) -> dict:
 #
 # PRINCIPLE: never rely on default-hidden (or any other implicit
 # default) for this blob. Every column except the requested-visible set
-# must carry an explicit `hidden=b:1` — an unflagged column is not a
+# must carry an explicit `hidden=b:1`, an unflagged column is not a
 # hidden column, it is a visible one.
 _RESOURCE_LIST_COLUMN_STATE_NAME_ONLY = (
     "o%2525253Acolumns%2525253Da%2525253Ao%2525253Aid%2525253Ds%2525253Ah1%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah2%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah3%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah4%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah5%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah6%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah7%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah8%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah9%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah10%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah11%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah12%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah13%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah14%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah15%2525255Ehidden%2525253Db%2525253A0%2525255Eo%2525253Aid%2525253Ds%2525253Ah16%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253AresourceRating%2525255Ehidden%2525253Db%2525253A1%2525255Eo%2525253Aid%2525253Ds%2525253Ah18%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah19%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah20%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah21%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah22%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah23%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah24%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah25%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah26%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah27%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah28%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah29%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah30%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah31%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah32%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah33%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah34%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah35%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah36%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah37%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah38%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah39%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah40%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah41%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah42%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah43%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah44%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah45%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah46%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100%2525255Eo%2525253Aid%2525253Ds%2525253Ah47%2525255Ehidden%2525253Db%2525253A1%2525255Ewidth%2525253Dn%2525253A100"
@@ -1123,12 +1123,12 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
                   resource_index: dict[tuple[str, str], int]) -> dict:
     # A self-provider View widget enumerates its own subject set instead
     # of waiting for an incoming interaction. Ops requires the widget to
-    # be pinned to a container resource — typically `vSphere World` for
-    # VMWARE subjects — whose descendants the view walks.
+    # be pinned to a container resource, typically `vSphere World` for
+    # VMWARE subjects, whose descendants the view walks.
     #
     # The `resourceKindId` field format is `<6-digit prefix><adapterKey>
     # <resourceKey>`. The 6-digit prefix is **per adapter kind**, not
-    # dashboard-local — it's a stable Ops-internal identifier that is
+    # dashboard-local, it's a stable Ops-internal identifier that is
     # the same across every instance and every dashboard. Harvested
     # empirically from the reference bundles (brockpeterson +
     # AriaOperationsContent + tkopton) by grepping every dashboard.json
@@ -1137,7 +1137,7 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
     # render at view time with no diagnostic.
     # External view passthrough: when `view` is a raw UUID string (not a bundled
     # ViewDef), the platform resolves it at install time.  Emit the UUID verbatim
-    # as viewDefinitionId. `self_provider`+`pin` is honored on this branch too —
+    # as viewDefinitionId. `self_provider`+`pin` is honored on this branch too,
     # the vendor's own Cluster Performance 2.0.json export pins its "vSphere
     # Clusters" widget (an external built-in UUID) exactly this way
     # (selfProvider:true + bound vSphere World resource entry); a bare
@@ -1161,15 +1161,15 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
         if prefix is None:
             raise ValueError(
                 f"no known resourceKindId prefix for adapter kind "
-                f"{c_adapter!r} — extend _ADAPTER_KIND_PREFIX "
+                f"{c_adapter!r}, extend _ADAPTER_KIND_PREFIX "
                 f"after harvesting from an exported reference dashboard"
             )
         # Widget config.resource.resourceId is 0-indexed, matching the
         # entries.resource[].internalId values (resource:id:0_::_, etc.).
         # The Ext.vcops.chrome.model.Resource-N id is 1-based in exports
-        # but Ops reassigns it on import — any positive integer works.
+        # but Ops reassigns it on import, any positive integer works.
         res_idx = resource_index[container_key]
-        # Nested traversalSpecId is unconditionally empty — see the NOTE
+        # Nested traversalSpecId is unconditionally empty, see the NOTE
         # above `_resolve_view_pin` for why a container-keyed enrichment
         # here was wrong and was removed. Top-level traversalSpecId (below)
         # is always null and refreshContent is always false, matching the
@@ -1349,9 +1349,9 @@ def _metric_chart_widget(
     MetricChart ``config.relationshipMode`` is a **scalar integer** wrapped in
     the outer object: ``{"relationshipMode": <int>}``.  Allowed values:
 
-    - ``0``  — no traversal (default).
-    - ``-1`` — children/descendants (one line per child of the selected parent).
-    - ``1``  — parents/ancestors (one line per parent of the selected child).
+    - ``0``, no traversal (default).
+    - ``-1``, children/descendants (one line per child of the selected parent).
+    - ``1``, parents/ancestors (one line per parent of the selected child).
 
     Verified against 146 live MetricChart widgets: zero use any array form.
     The array form ``[1, -1, 0]`` is Heatmap/AlertList-only and causes a 500
@@ -1396,17 +1396,17 @@ def _health_chart_widget(
 ) -> dict:
     """Render a HealthChart (ranked health-bar) widget.
 
-    Uses a FLAT metric spec — metricKey and resourceKindId are top-level
+    Uses a FLAT metric spec, metricKey and resourceKindId are top-level
     config fields, NOT inside a metric.resourceKindMetrics[] array. This
     is the key structural difference from Scoreboard and MetricChart.
 
     A self-provider HealthChart (``self_provider: true``) must be pinned to
-    a container resource the same way a self-provider View is — the vendor
+    a container resource the same way a self-provider View is, the vendor
     wire format is ``selfProvider:true`` + ``resource:[{"name","id"}]``
     (NOT the impossible ``selfProvider:true`` + ``resource:[]``, which
     causes the UI to list every resource on the instance instead of just
     the pinned container). The binding is derived from ``w.pin`` if set, else
-    from the widget's own declared ``adapter_kind``/``resource_kind`` — see
+    from the widget's own declared ``adapter_kind``/``resource_kind``, see
     ``_self_provider_pin_container``.
 
     Wire format reference: knowledge/context/api-surface/widget_types_survey.md §HealthChart;
@@ -1443,7 +1443,7 @@ def _health_chart_widget(
             "customFilter": {
                 "filter": [], "excludedResources": None, "includedResources": None,
             },
-            # Flat metric spec — these are direct config fields, not nested
+            # Flat metric spec, these are direct config fields, not nested
             "metricKey": cfg.metric_key,
             "metricName": cfg.metric_name,
             "metricFullName": cfg.metric_full_name or cfg.metric_name,
@@ -1470,7 +1470,7 @@ def _pareto_analysis_widget(
     w: Widget,
     kind_index: dict[tuple[str, str], int],
 ) -> dict:
-    """Render a ParetoAnalysis (Top-N bar chart) widget — Shape 1 only.
+    """Render a ParetoAnalysis (Top-N bar chart) widget, Shape 1 only.
 
     Shape 1 covers mode=all and mode=resource. It uses a flat
     ``metric: {metricKey, name}`` field and a ``resourceKind: [{id}]``
@@ -1516,7 +1516,7 @@ def _pareto_analysis_widget(
             "metricName": cfg.metric_name,
             "metricUnit": {"metricUnitId": -1, "metricUnitName": "Auto"},
             "additionalColumns": [],
-            # Flat metric spec — {metricKey, name} NOT the array pattern
+            # Flat metric spec, {metricKey, name} NOT the array pattern
             "metric": {
                 "metricKey": cfg.metric_key,
                 "name": cfg.metric_name,
@@ -1530,7 +1530,7 @@ def _pareto_analysis_widget(
 def _alert_list_widget(w: Widget) -> dict:
     """Render an AlertList (alert grid) widget.
 
-    Typically interaction-driven — receives a resource selection from another
+    Typically interaction-driven, receives a resource selection from another
     widget (e.g. ResourceList or View) and shows that resource's alerts.
     Can also be self-provider when self_provider=True is set on the widget.
 
@@ -1675,7 +1675,7 @@ def _heatmap_widget(
        ``_ADAPTER_KIND_PREFIX``). Example: ``004null002006VMWAREClusterComputeResource``.
 
     4. ``groupBy.typeId`` uses ``resourceKind:id:N_::_`` and MUST appear in
-       ``entries.resourceKind[]`` — the kind_index pass adds it automatically.
+       ``entries.resourceKind[]``, the kind_index pass adds it automatically.
 
     5. When ``group_by_kind`` is empty, ``groupBy`` is emitted as a
        **self-grouping** block using the subject resource kind.  An empty
@@ -1699,19 +1699,19 @@ def _heatmap_widget(
         subj_key = (tab.adapter_kind, tab.resource_kind)
         subj_rk_id = f"resourceKind:id:{kind_index[subj_key]}_::_"
 
-        # colorBy — always present
+        # colorBy, always present
         color_by: dict = {
             "metricKey": tab.color_by_key,
             "value": tab.color_by_label or tab.color_by_key,
         }
 
-        # sizeBy — None key means uniform cell sizing (no size metric)
+        # sizeBy, None key means uniform cell sizing (no size metric)
         size_by: dict = {
             "metricKey": tab.size_by_key,
             "value": tab.size_by_label if tab.size_by_key is not None else "",
         }
 
-        # groupBy — when no grouping kind is specified, emit a self-grouping block
+        # groupBy, when no grouping kind is specified, emit a self-grouping block
         # using the subject resource kind itself.  Ops requires all 9 keys to be
         # present; an empty {} causes HeatMapAction.initParam to throw
         # JSONException("type not found") and the widget returns blank.
@@ -1729,7 +1729,7 @@ def _heatmap_widget(
         if gb_prefix is None:
             raise ValueError(
                 f"Heatmap groupBy: no known resourceKindId prefix for adapter kind "
-                f"{gb_adapter!r} — extend _ADAPTER_KIND_PREFIX after harvesting "
+                f"{gb_adapter!r}, extend _ADAPTER_KIND_PREFIX after harvesting "
                 f"from an exported reference dashboard"
             )
         gb_key = (gb_adapter, gb_kind)
@@ -1810,14 +1810,14 @@ def _property_list_widget(
     """Render a PropertyList (vertical property/metric details panel) widget.
 
     Displays a list of metric or property values for the selected resource.
-    Structurally similar to Scoreboard — both use the same
+    Structurally similar to Scoreboard, both use the same
     ``metric.resourceKindMetrics[]`` envelope via ``_render_metric_spec()``.
 
     Key differences from Scoreboard:
     - Always interaction-driven (``selfProvider: false``); no self-provider mode
       observed across 47 live + 67 reference samples.
     - Uses ``showMetricFullName: {"metricFullName": <bool>}`` (inner key is
-      ``metricFullName``, not ``showMetricFullName`` — verified from reference
+      ``metricFullName``, not ``showMetricFullName``, verified from reference
       exports in ``reference/references/vmbro_vcf_operations_vcommunity/``).
     - ``relationshipMode`` is a plain integer ``0``, not wrapped in an object
       (verified from reference samples).
@@ -1863,7 +1863,7 @@ def _resource_relationship_advanced_widget(
     """Render a ResourceRelationshipAdvanced (topology tree) widget.
 
     Displays a relationship graph rooted at the selected resource.
-    The ``tagFilter`` shape mirrors ResourceList — ``tagFilter.value.kind[]``
+    The ``tagFilter`` shape mirrors ResourceList, ``tagFilter.value.kind[]``
     holds ``resourceKind:id:N_::_`` synthetic refs from the kind_index table.
     When ``resource_kinds`` is empty the filter lists are also empty (the
     widget accepts any resource pushed via interaction).
@@ -1929,14 +1929,14 @@ def _build_dashboard_obj(
         elif w.type == "View":
             # Resolve to a bundled ViewDef when available; fall back to the raw
             # UUID for external (platform/other-MP) views.  A bare name that
-            # isn't bundled cannot reach here — loader.validate() already rejects
+            # isn't bundled cannot reach here, loader.validate() already rejects
             # that case as an authoring error.
             _view_ref: "ViewDef | str" = views_by_name.get(w.view_name, w.view_name)
             if _view_ref is w.view_name and _view_ref not in views_by_name:
                 import sys as _sys
                 print(
                     f"  INFO: dashboard {w.dashboard_name!r} widget {w.local_id!r}: "
-                    f"external view UUID {w.view_name!r} — emitted verbatim",
+                    f"external view UUID {w.view_name!r}, emitted verbatim",
                     file=_sys.stderr,
                 )
             widgets_json.append(_view_widget(w, _view_ref, kind_index, resource_index))
@@ -1979,7 +1979,7 @@ def _build_dashboard_obj(
     return {
         # Default dashboards to shared so other Ops users can see them.
         # The framework's audience is "an average vSphere admin needs
-        # to find and use this" — private-to-author dashboards defeat
+        # to find and use this", private-to-author dashboards defeat
         # the point. Can be overridden per-dashboard via the YAML's
         # `shared:` field.
         "shared": dashboard.shared,
@@ -2063,7 +2063,7 @@ def render_dashboards_bundle_json(
                     key = (spec.adapter_kind, spec.resource_kind)
                     if key not in kind_index:
                         kind_index[key] = len(kind_index)
-            # HealthChart and ParetoAnalysis use a flat single metric spec —
+            # HealthChart and ParetoAnalysis use a flat single metric spec,
             # one (adapter_kind, resource_kind) pair per widget
             elif w.type == "HealthChart" and w.health_chart_config:
                 key = (w.health_chart_config.adapter_kind, w.health_chart_config.resource_kind)
@@ -2111,7 +2111,7 @@ def render_dashboards_bundle_json(
     # (e.g. vcfcf_compliance/ComplianceWorld) the kind name equals the resource
     # name, so _resolve_view_pin returns them unchanged.
     #
-    # HealthChart widgets don't require a ``pin:`` block — a self-provider
+    # HealthChart widgets don't require a ``pin:`` block, a self-provider
     # HealthChart's own ``adapter_kind``/``resource_kind`` (already required
     # for the metric's resourceKindId) doubles as the implicit pin target via
     # ``_self_provider_pin_container``. An explicit ``pin:`` still wins if set.
@@ -2174,7 +2174,7 @@ def render_dashboards_bundle_json(
         entries["resource"] = entries_resource
     # Derive the envelope UUID deterministically from the sorted dashboard
     # IDs so that repeated builds of identical content yield the same bytes.
-    # The envelope UUID is an import-session identifier only — VCF Ops does
+    # The envelope UUID is an import-session identifier only, VCF Ops does
     # not persist it after import.
     _id_seed = ",".join(sorted(d.id for d in dashboards)).encode()
     _envelope_uuid = str(uuid.UUID(bytes=hashlib.sha256(_id_seed).digest()[:16], version=4))

@@ -5,7 +5,7 @@ resource_kinds:
     adapter_kind_key: VMWARE
 description: >
   Count of VMs under this cluster that VCF Ops's capacity engine has flagged as
-  undersized (summary|undersized == 1). A high count indicates performance risk —
+  undersized (summary|undersized == 1). A high count indicates performance risk,
   each flagged VM has insufficient vCPU or memory allocation for its observed demand
   per the companion summary|undersized|vcpus and summary|undersized|memory metrics.
   Pair with the Oversized count as the two halves of the right-sizing story:

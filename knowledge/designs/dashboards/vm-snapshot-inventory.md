@@ -19,11 +19,12 @@ table answers "which snapshots?".
 ```
 +----------------------------------------------------------------------+
 | Row 1 (short)                                                        |
-| +----------------------+  +----------------------+                   |
-| | Scoreboard:          |  | Scoreboard:          |                   |
-| | VMs with snapshots   |  | Total snapshot       |                   |
-| | (count)              |  | space (GB, fleet)    |                   |
-| +----------------------+  +----------------------+                   |
+| +----------------------+  +----------------------+  +--------------+ |
+| | Scoreboard:          |  | Scoreboard:          |  | TextDisplay: | |
+| | VMs with snapshots   |  | Total snapshot       |  | 24h snapshot | |
+| | (count)              |  | space (GB, fleet)    |  | visibility   | |
+| |                      |  |                      |  | note         | |
+| +----------------------+  +----------------------+  +--------------+ |
 +----------------------------------------------------------------------+
 | Row 2 (tall, full width)                                             |
 | +------------------------------------------------------------------+ |
@@ -35,6 +36,10 @@ table answers "which snapshots?".
 ```
 
 Notes:
+- Reconciled 2026-08-20 with the shipped layout (issue #79): the
+  TextDisplay note tile (`snapshot_visibility_note`, x:9 y:1) was added
+  during the 24h-materialization work after the original approval; this
+  wireframe now shows every shipped widget per RULE-011.
 - Coords are 1-indexed on the wire (DEF-013) — author accordingly.
 - Scoreboards driven by flat metrics (`summary|snapshotSpace` /
   `diskspace|snapshot`) so they need no instanced plumbing.

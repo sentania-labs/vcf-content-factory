@@ -86,7 +86,7 @@ _SUPER_METRIC_PREFIX = "super metric|"
 # Unresolved authoring-time SM cross-reference, e.g. supermetric:"<name>"
 # (CLAUDE.md "Cross-reference syntax" table, View column -> SM row). Views
 # carry this literal form until render_views_xml() resolves it to sm_<uuid>
-# (see vcfops_dashboards/render.py:558-585) — code that walks *loader*
+# (see vcfops_dashboards/render.py:558-585), code that walks *loader*
 # objects (as the dependency auditor does) sees the unresolved form and must
 # recognise it too, or it hard-fails treating the SM name as an unknown
 # built-in metric key.
@@ -109,7 +109,7 @@ def _normalize_instanced_group_key(attribute: str) -> str:
     Example: prefix "diskspace", sample_instance "356893|snapshot:snapshot-16",
     suffix "creator" synthesizes to
     ``"diskspace:356893|snapshot:snapshot-16|creator"``, which normalizes to
-    ``"diskspace|snapshot|creator"`` — matching the describe cache's
+    ``"diskspace|snapshot|creator"``, matching the describe cache's
     ``diskspace|snapshot|creator`` property key.
     """
     segments = attribute.split("|")
@@ -138,7 +138,7 @@ def _normalize_metric_key(metric_key: str) -> str:
     ``vCommunity|Licensing:Evaluation Mode|Edition Key``). The adapter
     describe surface only exposes the flat, un-instanced form. Delegate to
     ``_normalize_instanced_group_key``'s segment-local rule (split on "|",
-    strip ``:<instance>`` from each segment, rejoin) — verified against the
+    strip ``:<instance>`` from each segment, rejoin), verified against the
     full vendor ``isInstancedGroup`` corpus to be a strict superset of the
     single-segment form this function previously handled alone, so callers
     that expected only the leading-segment case still get identical output.
@@ -157,7 +157,7 @@ def _refs_from_formula(formula: str, sm_name: str) -> list[MetricReference]:
     """Extract built-in metric references from a super metric formula.
 
     Parses ``${adaptertype=X, objecttype=Y, metric=KEY, ...}`` entries.
-    Skips ``${this, ...}`` entries (bound to the assigned object — no
+    Skips ``${this, ...}`` entries (bound to the assigned object, no
     explicit adaptertype/objecttype, handled by resource_kinds assignment).
     Also skips entries whose ``metric=`` value is a super-metric reference.
     """
@@ -165,7 +165,7 @@ def _refs_from_formula(formula: str, sm_name: str) -> list[MetricReference]:
     source_desc = f"SM {sm_name!r}"
     for m in _RESOURCE_ENTRY_RE.finditer(formula):
         inner = m.group(1).strip()
-        # ${this, ...} — no adaptertype, skip
+        # ${this, ...}, no adaptertype, skip
         head = inner.split(",", 1)[0].strip().lower()
         if head == "this":
             continue
@@ -174,7 +174,7 @@ def _refs_from_formula(formula: str, sm_name: str) -> list[MetricReference]:
         adapter_kind = kv.get("adaptertype", "").strip()
         resource_kind = kv.get("objecttype", "").strip()
         metric_key = kv.get("metric", "").strip()
-        # Attribute= is also used (property references) — treat the same way.
+        # Attribute= is also used (property references), treat the same way.
         if not metric_key:
             metric_key = kv.get("attribute", "").strip()
         if not metric_key or not adapter_kind or not resource_kind:
@@ -202,7 +202,7 @@ def _refs_from_view(view) -> list[MetricReference]:
     """Extract built-in metric references from a ViewDef's columns.
 
     View columns reference metrics via their ``attribute`` field.  The
-    renderer auto-prefixes Super Metric|sm_<uuid> — we skip those.
+    renderer auto-prefixes Super Metric|sm_<uuid>, we skip those.
     The adapter_kind / resource_kind come from the view's subject.
     """
     refs: list[MetricReference] = []
@@ -212,7 +212,7 @@ def _refs_from_view(view) -> list[MetricReference]:
     for col in view.columns:
         ig = getattr(col, "instanced_group", None)
         if ig is not None:
-            # The driver column ("Instance Name" sentinel — prefix and
+            # The driver column ("Instance Name" sentinel, prefix and
             # suffix both unset) has no describe-cache key at all: it turns
             # on fan-out mode for the view and carries no metric/property
             # reference of its own, so it is (correctly) skipped.
@@ -251,6 +251,23 @@ def _refs_from_view(view) -> list[MetricReference]:
             metric_key=attr,
             source_desc=source_desc,
         ))
+
+    # Subject-filter metric keys (SubjectType filter= JSON) are never emitted
+    # as columns of their own, but they still reference a describe-cache key
+    # and must be audited the same way, see issue #72 / the Codex P1 sibling
+    # blind spot in audit.py's staged-bundle XML walker.
+    for group in (view.subject_filter or []):
+        for cond in group:
+            key = (cond.metric_key or "").strip()
+            if not key or _is_sm_ref(key):
+                continue
+            key = _normalize_metric_key(key)
+            refs.append(MetricReference(
+                adapter_kind=ak,
+                resource_kind=rk,
+                metric_key=key,
+                source_desc=source_desc,
+            ))
     return refs
 
 
@@ -263,14 +280,14 @@ def _refs_from_widgets(dashboard) -> list[MetricReference]:
     """Extract built-in metric references from all supported widget types.
 
     Widget types handled:
-      ResourceList, View, TextDisplay, AlertList, ProblemAlertsList
-        — no metric keys to extract.
-      Scoreboard, MetricChart
-        — metrics[] each have adapter_kind, resource_kind, metric_key.
-      HealthChart, ParetoAnalysis
-        — flat adapter_kind + resource_kind + metric_key fields.
-      Heatmap
-        — configs[].color_by_key and configs[].size_by_key per tab.
+      ResourceList, View, TextDisplay, AlertList, ProblemAlertsList:
+        no metric keys to extract.
+      Scoreboard, MetricChart:
+        metrics[] each have adapter_kind, resource_kind, metric_key.
+      HealthChart, ParetoAnalysis:
+        flat adapter_kind + resource_kind + metric_key fields.
+      Heatmap:
+        configs[].color_by_key and configs[].size_by_key per tab.
     """
     refs: list[MetricReference] = []
     source_prefix = f"dashboard {dashboard.name!r}"

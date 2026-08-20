@@ -4,7 +4,7 @@ description: |
   collection cycle (default 60 minutes) to confirm the score recovers above
   the alert threshold. The VCF-CF Compliance score metric is pushed onto the
   HostSystem resource by the vcfcf_compliance adapter on each collection
-  interval — the alert will not auto-cancel until the score metric is
+  interval, the alert will not auto-cancel until the score metric is
   re-evaluated and the symptom condition clears.
 
   If using a custom benchmark profile, verify the profile CSV is up to date

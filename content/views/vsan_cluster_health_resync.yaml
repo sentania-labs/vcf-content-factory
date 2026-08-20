@@ -67,7 +67,7 @@ columns:
 
   # --- Capacity block ---
   # Raw byte values; unit: "" (auto) lets the server scale to GiB/TiB as
-  # appropriate. No color bounds — absolute capacity pressure is tracked
+  # appropriate. No color bounds, absolute capacity pressure is tracked
   # elsewhere in the capacity planning dashboard.
   - attribute: vsan|diskSpace|usedDiskSpace
     display_name: "vSAN Space Used (bytes)"

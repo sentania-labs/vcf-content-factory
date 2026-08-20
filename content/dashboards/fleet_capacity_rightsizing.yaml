@@ -2,7 +2,7 @@ id: 762fc025-1609-4e9c-9612-a5d0232b77bc
 name: "[VCF Content Factory] Fleet Capacity & Rightsizing"
 description: >
   Fleet-level capacity and rightsizing dashboard built entirely on built-in
-  VCF Ops demand-model metrics — no super metrics required. Top-down layout:
+  VCF Ops demand-model metrics, no super metrics required. Top-down layout:
   a vSphere World scoreboard summarising cluster/host/VM counts and reclaimable
   resources; a per-cluster capacity table that doubles as the primary selector;
   three side-by-side heatmaps for CPU, memory, and storage pressure; oversized
@@ -15,7 +15,7 @@ version: "1.0.0"
 
 widgets:
 
-  # ── Band A · Scoreboard — Fleet Summary  (y:1, x:1, w:12, h:2) ─────────────
+  # ── Band A · Scoreboard, Fleet Summary  (y:1, x:1, w:12, h:2) ─────────────
   # Subject = vSphere World singleton. Self-provider pinned to world so the
   # scoreboard queries immediately on load without requiring an interaction.
   # All seven metric keys are built-in on vSphere World (demand model confirmed).
@@ -80,7 +80,7 @@ widgets:
         label: "Potential $ Savings"
         color_method: 1
 
-  # ── Band B · View — Cluster Capacity Breakdown  (y:3, x:1, w:12, h:4) ─────
+  # ── Band B · View, Cluster Capacity Breakdown  (y:3, x:1, w:12, h:4) ─────
   # PRIMARY SELECTOR, self-provider, fleet-wide. Self-provider pinned to
   # vSphere World so the view loads fleet-wide on open without requiring an
   # upstream interaction. Sorted ascending by capacity-remaining-pct so the
@@ -98,7 +98,7 @@ widgets:
       resource_kind: vSphere World
     view: "[VCF Content Factory] Cluster Capacity Breakdown"
 
-  # ── Band C · Heatmaps — CPU / Memory / Storage  (y:7, h:4) ─────────────────
+  # ── Band C · Heatmaps, CPU / Memory / Storage  (y:7, h:4) ─────────────────
   # Three heatmaps side-by-side, each showing all ClusterComputeResource objects.
   # No group_by specified → renderer emits self-grouping block (build 29 fix);
   # an empty groupBy JSON object would crash HeatMapAction.initParam.
@@ -192,27 +192,27 @@ widgets:
         solid_coloring: false
         focus_on_groups: false
 
-  # ── Band D-1 · View — Oversized VMs  (y:11, x:1, w:6, h:4) ────────────────
+  # ── Band D-1 · View, Oversized VMs  (y:11, x:1, w:6, h:4) ────────────────
   # Driven by cluster_capacity_view selection. Default (no selection) = fleet-wide.
   # Sort by reclaimable vCPUs descending is set in the view definition.
 
   - id: oversized_vms_view
     type: View
-    title: "Oversized VMs — Reclaimable"
+    title: "Oversized VMs, Reclaimable"
     coords: {x: 1, y: 11, w: 6, h: 4}
-    view: "[VCF Content Factory] Oversized VMs — Reclaimable"
+    view: "[VCF Content Factory] Oversized VMs, Reclaimable"
 
-  # ── Band D-2 · View — Undersized VMs  (y:11, x:7, w:6, h:4) ───────────────
+  # ── Band D-2 · View, Undersized VMs  (y:11, x:7, w:6, h:4) ───────────────
   # Driven by cluster_capacity_view selection. Default (no selection) = fleet-wide.
   # Sort by vCPUs-to-add descending is set in the view definition.
 
   - id: undersized_vms_view
     type: View
-    title: "Undersized VMs — Add Resources"
+    title: "Undersized VMs, Add Resources"
     coords: {x: 7, y: 11, w: 6, h: 4}
-    view: "[VCF Content Factory] Undersized VMs — Add Resources"
+    view: "[VCF Content Factory] Undersized VMs, Add Resources"
 
-  # ── Band E · View — Datastore Reclaimable Space  (y:15, x:1, w:12, h:4) ───
+  # ── Band E · View, Datastore Reclaimable Space  (y:15, x:1, w:12, h:4) ───
   # Driven by cluster_capacity_view selection. Default (no selection) = fleet-wide.
   # Sort by snapshot space descending is set in the view definition.
 

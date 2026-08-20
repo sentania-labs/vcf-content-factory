@@ -11,6 +11,9 @@ answers the orchestrator uses to decide whether authoring is needed.
 
 ## Knowledge sources
 
+The `vcfops-*` entries below are skills; each lives at
+`.claude/skills/<name>/SKILL.md`: load it with Read.
+
 - **vcfops-api** — endpoints, authentication, API surface map.
 - **vcfops-content-model** — content types and relationships.
 - **vcfops-project-conventions** — naming prefix, reference sources.

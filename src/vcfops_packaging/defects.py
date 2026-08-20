@@ -9,7 +9,7 @@ load_registry(registry_path) -> List[DefectEntry]
     Parse the registry file.  Raises :class:`DefectRegistryError` on any
     malformed entry.  Hard errors on:
       - unknown ``Severity:`` (only ``blocking`` or ``tracked`` are valid)
-      - ``waived`` status (explicitly rejected — no waivers exist)
+      - ``waived`` status (explicitly rejected, no waivers exist)
       - unknown ``Status:`` (only ``open`` or ``closed`` are valid)
       - ``status: closed`` without a non-empty ``Closing-evidence:`` field
       - duplicate IDs
@@ -43,7 +43,7 @@ Each entry is a ``### DEF-NNN`` section.  Field lines are:
 Required fields: Title, Severity, Status, Affects, First-seen, Source, Summary.
 Optional fields: Closing-evidence (required when Status is ``closed``), Related.
 
-``Affects:`` is exactly one token — a managed-pak name (e.g. ``synology``), a
+``Affects:`` is exactly one token, a managed-pak name (e.g. ``synology``), a
 ``<type>/<slug>`` path (e.g. ``dashboard/demand_driven_capacity_v2``), or a
 ``factory:<area>`` string for framework-level defects.
 """
@@ -130,7 +130,7 @@ def load_registry(
     - ``waived`` status raises :class:`DefectRegistryError` explicitly.
     - Unknown ``Status:`` values raise :class:`DefectRegistryError`.
     - ``Status: closed`` without a non-empty ``Closing-evidence:`` raises
-      :class:`DefectRegistryError` — an unevidenced close is treated as
+      :class:`DefectRegistryError`, an unevidenced close is treated as
       malformed, never as closed.
     - Duplicate IDs raise :class:`DefectRegistryError`.
     - Missing required fields raise :class:`DefectRegistryError`.
@@ -275,21 +275,21 @@ def _validate_and_emit(
     if status == "waived":
         raise DefectRegistryError(
             f"{loc}: 'waived' is not a valid Status. "
-            f"To ship a defect, downgrade Severity to 'tracked' with a dated note — "
+            f"To ship a defect, downgrade Severity to 'tracked' with a dated note, "
             f"the git diff is the audit trail. See knowledge/rules/release-gate-defects.md."
         )
     if status not in _VALID_STATUSES:
         raise DefectRegistryError(
             f"{loc}: invalid Status {status!r}. "
             f"Allowed: {', '.join(sorted(_VALID_STATUSES))}. "
-            f"Note: 'waived' is not accepted — see knowledge/rules/release-gate-defects.md."
+            f"Note: 'waived' is not accepted, see knowledge/rules/release-gate-defects.md."
         )
 
     # --- Closed-without-evidence check ---
     if status == "closed" and not closing_evidence:
         raise DefectRegistryError(
             f"{loc}: Status is 'closed' but Closing-evidence is absent or empty. "
-            f"A close without evidence is invalid — provide concrete proof "
+            f"A close without evidence is invalid, provide concrete proof "
             f"(fix commit/build, devel proof, lesson). "
             f"See knowledge/context/defects.md schema and knowledge/rules/release-gate-defects.md."
         )
@@ -318,7 +318,7 @@ def gate_pak(
 ) -> List[DefectEntry]:
     """Return all open blocking defects that affect ``pak_name``.
 
-    ``pak_name`` is matched against the ``Affects:`` token directly —
+    ``pak_name`` is matched against the ``Affects:`` token directly,
     it must be the exact managed-pak name as registered in
     ``knowledge/context/managed_paks.md`` (e.g. ``"synology"``, ``"unifi"``).
 
@@ -420,7 +420,7 @@ def format_defect_line(entry: DefectEntry) -> str:
 # Standalone entrypoint
 #
 # This block makes defects.py runnable as a bare script with no package
-# install — intended for pak-repo CI that curl's this file alongside
+# install, intended for pak-repo CI that curl's this file alongside
 # knowledge/context/defects.md and invokes:
 #
 #   python3 defects.py --pak <name> [--registry <path>]
@@ -432,9 +432,9 @@ def format_defect_line(entry: DefectEntry) -> str:
 # the file is run as a script and when it is imported as a module.
 #
 # Exit codes (match cmd_defect_gate in cli.py):
-#   0 — no open blocking defects affect the named pak / no open blockers at all
-#   1 — malformed or missing registry (hard error)
-#   2 — one or more open blocking defects found
+#   0, no open blocking defects affect the named pak / no open blockers at all
+#   1, malformed or missing registry (hard error)
+#   2, one or more open blocking defects found
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":

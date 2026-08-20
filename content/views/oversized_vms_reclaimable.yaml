@@ -1,5 +1,5 @@
 id: 9d8d048c-6472-4175-ae90-71d36d8bc70b
-name: "[VCF Content Factory] Oversized VMs — Reclaimable"
+name: "[VCF Content Factory] Oversized VMs, Reclaimable"
 description: >
   Per-VM reclaimable-resource list for oversized virtual machines. Shows the
   parent cluster, vCPUs to remove, and memory to reclaim (KB source, displayed
@@ -7,7 +7,7 @@ description: >
   (summary|oversized == 1). Intended as Band D-1 of the Fleet Capacity &
   Rightsizing dashboard; receives ClusterComputeResource resourceId from the
   upstream cluster-selector widget to scope the list to the selected cluster.
-  Sort by vCPUs to Remove descending (biggest reclaim first) — apply at the
+  Sort by vCPUs to Remove descending (biggest reclaim first), apply at the
   dashboard widget level (sort_by_column: "vCPUs to Remove",
   sort_by_dir: desc); view-level default sort is not a loader-supported field.
 subject:
@@ -19,7 +19,7 @@ customgroup: "[VCF Content Factory] VMs - Oversized Only"
 summary: false
 
 columns:
-  # Parent cluster — summary|parentCluster is the standard relationship
+  # Parent cluster, summary|parentCluster is the standard relationship
   # property the VMWARE adapter populates for every VM; used in the sibling
   # vm_rightsizing_candidates.yaml (same form confirmed working).
   - attribute: summary|parentCluster

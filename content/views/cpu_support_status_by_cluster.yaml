@@ -17,7 +17,7 @@ columns:
   # per-host KB-318697 super metric across the cluster's child hosts.
   # 0=supported (green/uncolored), 1=deprecated (yellow), 2=discontinued
   # starting from VCF 9.2 (orange), 3=discontinued (red), 4=unsupported
-  # (pre-9.0, not in KB 318697 scope; also red — red_bound: 3 colors
+  # (pre-9.0, not in KB 318697 scope; also red, red_bound: 3 colors
   # everything >= 3, including tier 4). Higher code = worse, so
   # ascending_range: false.
   - attribute: supermetric:"[VCF Content Factory] Cluster CPU Support Worst Status (KB318697)"

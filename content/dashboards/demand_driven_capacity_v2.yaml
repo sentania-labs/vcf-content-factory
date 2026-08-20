@@ -59,19 +59,19 @@ widgets:
     w: 3
     x: 10
     y: 1
-  html: '<p><strong>Provisioned CPU (GHz)</strong> — total vCPU capacity
+  html: '<p><strong>Provisioned CPU (GHz)</strong>, total vCPU capacity
 
     allocated across all VMs in the cluster, expressed in GHz. This is what
 
     you have promised to workloads, not what they are consuming right now.</p>
 
-    <p><strong>Usable CPU (GHz)</strong> — total cluster CPU after the HA
+    <p><strong>Usable CPU (GHz)</strong>, total cluster CPU after the HA
 
     reservation is set aside. This is the capacity vSphere will actually
 
     admit; the remaining headroom is held back for failover.</p>
 
-    <p><strong>CPU Demand %</strong> — active demand from running VMs as a
+    <p><strong>CPU Demand %</strong>, active demand from running VMs as a
 
     fraction of usable capacity. Elevated demand is expected during business
 

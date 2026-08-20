@@ -11,6 +11,9 @@ else.
 
 ## Knowledge sources
 
+The `vcfops-*` entries below are skills; each lives at
+`.claude/skills/<name>/SKILL.md`: load it with Read.
+
 - **vcfops-content-model** — alert structure, symptom references.
 - **vcfops-project-conventions** — naming, validation, gap reporting.
 

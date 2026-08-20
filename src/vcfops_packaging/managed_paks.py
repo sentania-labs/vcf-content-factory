@@ -108,7 +108,7 @@ def load_registry(registry_path: "str | Path | None" = None) -> List[ManagedPak]
 
     lines = registry_path.read_text(encoding="utf-8").splitlines()
     for line in lines:
-        # Track HTML comment blocks — skip all content inside them.
+        # Track HTML comment blocks, skip all content inside them.
         # A line may open and close the same comment (e.g. <!-- foo -->).
         if "<!--" in line:
             in_comment = True
@@ -134,7 +134,7 @@ def load_registry(registry_path: "str | Path | None" = None) -> List[ManagedPak]
         m = _ADAPTER_KIND_RE.search(line)
         if m:
             current_adapter_kind = m.group(1)
-            # All three required fields collected — emit the entry.
+            # All three required fields collected, emit the entry.
             if current_remote and current_name and current_adapter_kind:
                 entries.append(ManagedPak(
                     name=current_name,

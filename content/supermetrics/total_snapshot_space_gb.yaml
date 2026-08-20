@@ -15,19 +15,19 @@ description: >
   once the snapshot is 24 hours old; RECLAIM_SNAPSHOTS_DAYS governs
   reclamation/cost math only, not property materialization). The where
   clause gates on the flat, per-VM property
-  diskspace|snapshot|snapshotAge > 0 — the same age predicate used by the
-  companion "[VCF Content Factory] VMs with Snapshots (Count)" SM — since a
+  diskspace|snapshot|snapshotAge > 0, the same age predicate used by the
+  companion "[VCF Content Factory] VMs with Snapshots (Count)" SM, since a
   super metric cannot aggregate the view's per-snapshot instanced key
   directly (that key is fanned out per snapshot, not a single per-VM value).
   diskspace|snapshot|snapshotAge is PROPERTY-ONLY on this platform (absent
-  from /statkeys — confirmed live, recon 2026-07-27); per the DSL's
+  from /statkeys, confirmed live, recon 2026-07-27); per the DSL's
   documented property-vs-metric addressing (the metric= and where= slots
   both accept property keys, e.g. the canonical `summary|config|type equals
   VMOperator` example), a numeric where clause on this property key is
   expressible using the same grammar.
 
   Semantics note: because diskspace|snapshot is a flat per-VM total, this
-  sums the WHOLE snapshot space of any VM with at least one aged snapshot —
+  sums the WHOLE snapshot space of any VM with at least one aged snapshot,
   it cannot split young vs. aged space within a single VM. On current
   devel data this is identical to a strict per-snapshot aged sum (no VM
   currently mixes aged and non-aged snapshots). Shipped, not yet

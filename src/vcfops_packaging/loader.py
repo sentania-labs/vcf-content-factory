@@ -89,19 +89,78 @@ class BuiltinMetricEnable:
     reason: str = ""
 
 
+def parse_builtin_metric_enables(
+    raw: "list | None",
+    path: "str | Path",
+    *,
+    exc: type = BundleValidationError,
+) -> "List[BuiltinMetricEnable]":
+    """Validate and parse a raw ``builtin_metric_enables:`` YAML list.
+
+    Shared by ``load_bundle`` (this module) and ``vcfops_packaging.releases.
+    load_release`` (which carries the same-shaped field, "same entry shape as
+    the bundle manifest field"), previously duplicated byte-for-byte in both
+    modules modulo the exception class raised on validation failure
+    (issue #77).
+
+    Args:
+        raw:  The raw value of the ``builtin_metric_enables:`` YAML key
+              (``None``/absent is treated as an empty list).
+        path: Source file path, used only in error messages.
+        exc:  Exception class to raise on validation failure, callers pass
+              their own module's validation error class
+              (``BundleValidationError`` / ``ReleaseValidationError``) so
+              error handling stays consistent with the rest of that module.
+
+    Returns:
+        A list of validated ``BuiltinMetricEnable`` instances.
+    """
+    raw = raw or []
+    if not isinstance(raw, list):
+        raise exc(
+            f"{path}: 'builtin_metric_enables' must be a list, got {type(raw).__name__}"
+        )
+    result: "List[BuiltinMetricEnable]" = []
+    for i, entry in enumerate(raw):
+        if not isinstance(entry, dict):
+            raise exc(
+                f"{path}: builtin_metric_enables[{i}] must be a mapping, "
+                f"got {type(entry).__name__}"
+            )
+        for required_field in ("adapter_kind", "resource_kind", "metric_key"):
+            val = entry.get(required_field)
+            if not val or not isinstance(val, str) or not val.strip():
+                raise exc(
+                    f"{path}: builtin_metric_enables[{i}].{required_field} "
+                    f"is required and must be a non-empty string"
+                )
+        reason = entry.get("reason", "") or ""
+        if not isinstance(reason, str):
+            raise exc(
+                f"{path}: builtin_metric_enables[{i}].reason must be a string"
+            )
+        result.append(BuiltinMetricEnable(
+            adapter_kind=entry["adapter_kind"].strip(),
+            resource_kind=entry["resource_kind"].strip(),
+            metric_key=entry["metric_key"].strip(),
+            reason=reason.strip(),
+        ))
+    return result
+
+
 def render_bme_items(bmes: "List[BuiltinMetricEnable]") -> list:
     """Render a list of BuiltinMetricEnable into the wire-format dict shape.
 
-    Shared by both build paths that emit ``builtin_metric_enables`` —
+    Shared by both build paths that emit ``builtin_metric_enables``,
     ``builder.py`` (bundle headlines) and ``discrete_builder.py`` (component
-    headlines) — so the ``content/builtin_metric_enables.json`` payload and
+    headlines), so the ``content/builtin_metric_enables.json`` payload and
     the ``bundle.json`` content-block ``items`` list stay byte-identical
     between the two builders without relying on four independent copies of
     the same list comprehension staying in sync by hand.
 
     ``name`` (= ``metric_key``) is the uninstall-name contract read by
     ``templates/install.py``'s registry predicate
-    (``item["name"]`` — see ``_install_builtin_metric_enables`` and
+    (``item["name"]``, see ``_install_builtin_metric_enables`` and
     ``_uninstall_builtin_metric_enables_note``).
     """
     return [
@@ -143,7 +202,7 @@ class Bundle:
     factory_native: bool = True
     display_name: str = ""
     design: str = ""  # explicit design artifact path from manifest (optional)
-    released: bool = False   # publish gate — True means include in /publish output
+    released: bool = False   # publish gate, True means include in /publish output
     version: str = "1.0.0"  # internal semver for duplicate-version guard
 
 
@@ -154,7 +213,7 @@ def load_bundle(path: str | Path) -> Bundle:
     appropriate per-type loader (which also validates the content).
 
     For content types whose tooling package is not yet installed (symptoms,
-    alerts), the files are verified to exist on disk but are not parsed —
+    alerts), the files are verified to exist on disk but are not parsed,
     parsing is deferred to the handler at sync time.
 
     Args:
@@ -250,36 +309,9 @@ def load_bundle(path: str | Path) -> Bundle:
                 data[k] = discovered
 
     # Validate and load builtin_metric_enables (inline list, not file paths).
-    raw_bme = data.get("builtin_metric_enables") or []
-    if not isinstance(raw_bme, list):
-        raise BundleValidationError(
-            f"{path}: 'builtin_metric_enables' must be a list, got {type(raw_bme).__name__}"
-        )
-    builtin_metric_enables = []
-    for i, entry in enumerate(raw_bme):
-        if not isinstance(entry, dict):
-            raise BundleValidationError(
-                f"{path}: builtin_metric_enables[{i}] must be a mapping, "
-                f"got {type(entry).__name__}"
-            )
-        for required_field in ("adapter_kind", "resource_kind", "metric_key"):
-            val = entry.get(required_field)
-            if not val or not isinstance(val, str) or not val.strip():
-                raise BundleValidationError(
-                    f"{path}: builtin_metric_enables[{i}].{required_field} "
-                    f"is required and must be a non-empty string"
-                )
-        reason = entry.get("reason", "") or ""
-        if not isinstance(reason, str):
-            raise BundleValidationError(
-                f"{path}: builtin_metric_enables[{i}].reason must be a string"
-            )
-        builtin_metric_enables.append(BuiltinMetricEnable(
-            adapter_kind=entry["adapter_kind"].strip(),
-            resource_kind=entry["resource_kind"].strip(),
-            metric_key=entry["metric_key"].strip(),
-            reason=reason.strip(),
-        ))
+    builtin_metric_enables = parse_builtin_metric_enables(
+        data.get("builtin_metric_enables"), path, exc=BundleValidationError
+    )
 
     sm_paths = [_resolve(r) for r in (data.get("supermetrics") or [])]
     view_paths = [_resolve(r) for r in (data.get("views") or [])]
@@ -292,7 +324,7 @@ def load_bundle(path: str | Path) -> Bundle:
 
     # Load and validate each content object.
     # For third-party (factory_native=False) bundles, SM names are not required
-    # to carry the "[VCF Content Factory]" prefix — they use the original author's
+    # to carry the "[VCF Content Factory]" prefix, they use the original author's
     # naming convention.  Skip prefix enforcement for those bundles.
     try:
         supermetrics = [load_sm(p, enforce_framework_prefix=factory_native) for p in sm_paths]

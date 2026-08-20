@@ -18,6 +18,9 @@ below, including the layout-quality checklist, applies unchanged.
 
 ## Knowledge sources
 
+The `vcfops-*` entries below are skills; each lives at
+`.claude/skills/<name>/SKILL.md`: load it with Read.
+
 - **vcfops-api** — endpoints for verification (super metrics,
   groups, symptoms, alerts, dashboards, views).
 - **vcfops-project-conventions** — naming prefix for content

@@ -178,7 +178,7 @@ file (not a skill) because it runs before any skill could load.
 
 9. **Tooling changes go through the `tooling` agent, then the
    `framework-reviewer` gate.** The same discipline that keeps you
-   out of `supermetrics/` keeps you out of `src/vcfops_*/`. And the same
+   out of `content/supermetrics/` keeps you out of `src/vcfops_*/`. And the same
    discipline that gives Tier 2 Java a skeptical review before it
    ships gives framework Python one too: after `tooling` reports a
    `src/vcfops_*/` change and **before you open the PR**, spawn

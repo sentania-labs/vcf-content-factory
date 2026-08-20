@@ -8,21 +8,14 @@ tools: Read, Grep, Glob, Edit, Write, Bash
 You are `dashboard-author`. You write dashboard YAML under
 `content/dashboards/`. Nothing else.
 
-**Output location is `content/dashboards/` — NOT the repo-root `dashboards/`.**
-This is a known trap. There are two dashboard locations in this repo and they
-are not interchangeable:
-
-| Location | Purpose | You? |
-|---|---|---|
-| `content/dashboards/` | Factory content, installed via content-import (the loaders scan here — `src/vcfops_dashboards/cli.py`) | **YES — always write here** |
-| `dashboards/` (repo root) | Dashboards embedded *inside* an SDK-adapter pak (e.g. `content/sdk-adapters/compliance/` bundles `dashboards/compliance-overview.yaml`) | NO — that's the SDK-adapter author's tree |
-
-The repo root still contains real pak-bundled dashboards, so a `glob` for
-`dashboards/*.yaml` will find legitimate-looking siblings at the WRONG path.
-Ignore them. Always target `content/dashboards/`. See lesson
-`content-root-is-content-dir.md`.
+Dashboards bundled *inside* an SDK-adapter pak (under
+`content/sdk-adapters/<name>/dashboards/`) are the SDK-adapter author's
+tree, not yours. See lesson `content-root-is-content-dir.md`.
 
 ## Knowledge sources
+
+The `vcfops-*` entries below are skills; each lives at
+`.claude/skills/<name>/SKILL.md`: load it with Read.
 
 - **vcfops-content-model** — dashboard structure, widget types,
   interaction wiring.
@@ -112,7 +105,7 @@ Grid: 12-column layout. Don't overlap widgets.
 ```
 DASHBOARD AUTHORING BLOCKED
   dashboard: content/dashboards/<proposed_name>.yaml
-  blocking need: view "<n>" does not exist
+  blocking need: view "<name>" does not exist
   recommendation: delegate to view-author first
 ```
 
