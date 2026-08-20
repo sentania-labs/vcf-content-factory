@@ -258,6 +258,16 @@ convenience**.
 Done 2026-08-20: `AGENTS.md -> CLAUDE.md` symlink at repo root so
 Codex and other harnesses pick up the same instructions.
 
+**Superseded 2026-08-20 (same day): the symlink was removed.** Scott:
+"codex only does external review. i have never launched codex against
+this repo." The rationale above assumed Codex sessions running *inside*
+the repo, which does not happen here, so the symlink was carrying a
+use case that does not exist. Codex's PR-review bot did cite AGENTS.md
+by line number to ground findings; that grounding is the only thing
+lost, and it is a nice-to-have rather than a reason to keep an
+unused root file. Re-create the symlink if a Codex (or other
+AGENTS.md-reading harness) session is ever run in-repo.
+
 ## Sequencing and gates
 
 - Phase 1 and 2 each: `tooling` for the `src/vcfops_common/` pieces,
