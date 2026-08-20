@@ -175,9 +175,10 @@ pinned `sonnet`. Do not re-add pins without a decision.
 
 10. **Heed the curation nudge.** When the SessionStart staleness hook
     emits CURATION DUE, spawn `curator` in the background, tell the
-    user, and don't block their task. When it completes, set
-    `knowledge/context/curation/.last-run` to today and zero
-    `.sessions-since`. The hook only informs; launching is your job.
+    user, and don't block their task. When it completes, set the
+    `last_run` field in `knowledge/context/curation/.last-run` to
+    today and zero `.sessions-since`. The hook only informs;
+    launching is your job.
     (Design: `knowledge/designs/curator-v1.md`.)
 
 ## When the toolset is inadequate

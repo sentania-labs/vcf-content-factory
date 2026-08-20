@@ -127,6 +127,9 @@ Use names in YAML, never raw UUIDs:
 - View column → SM: `supermetric:"<exact name>"`
 - Dashboard → view: `view: "<exact name>"`
 - Alert → symptom: `name: "<exact name>"` in symptom set
+  (resolves at sync, to a symptom ID)
+- Alert → recommendation: `name: "<exact name>"` + `priority`
+  (resolves at validate, to a rec ID)
 - Report → view/dashboard: `view:` / `dashboard:` by exact name
 
 ## Source of truth
