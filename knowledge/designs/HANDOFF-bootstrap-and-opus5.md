@@ -15,9 +15,9 @@ bootstrapping, CLAUDE.md, and agent optimization for the Opus 5 /
 Fable 5 era. A fourth (Codex parity) was explicitly parked.
 
 Source documents, both uncommitted at time of writing:
-- `knowledge/designs/bootstrap-v2.md` — the bootstrap plan, revised
+- `knowledge/designs/bootstrap-v2.md`, the bootstrap plan, revised
   once with Scott's feedback.
-- `knowledge/designs/claude-md-review-2026-08.md` — the CLAUDE.md and
+- `knowledge/designs/claude-md-review-2026-08.md`, the CLAUDE.md and
   agent-prompt review, plus the consolidated four-PR plan. **Read this
   one first; its "THE PLAN" section is the authoritative sequence.**
 
@@ -35,15 +35,15 @@ Source documents, both uncommitted at time of writing:
    unconfigured copy, want me to get it ready?" and walks python, venv,
    deps (asking for a corporate mirror if PyPI is blocked), creds, and
    reference clones.
-2. **Upstream reporting is ELI5** — plain-language summary of what
+2. **Upstream reporting is ELI5**, plain-language summary of what
    changed, grouped by area, not "behind by 7."
 3. **Ahead-commits get classified** core vs environment/state; only
    core earns a "worth a PR" nudge. Nothing auto-pushes.
-4. **No gh-axi dependency** — degrade gh-axi → gh → git-only.
+4. **No gh-axi dependency**, degrade gh-axi → gh → git-only.
 5. **Everything new is Python-first** so Windows works. No bash in hook
    command lines.
 6. **Model tiers accepted** (see below), with no floor.
-7. **Codex parity parked** — "I'm not ready to fully tackle this yet."
+7. **Codex parity parked**, "I'm not ready to fully tackle this yet."
 
 ## The model-tier decision (the least obvious part)
 
@@ -54,7 +54,7 @@ indirection for subagent models.
 Consequence: every `model:` line in the current roster is an active
 *downgrade* from the session model. The 15 `sonnet` agents sit below
 whatever Scott runs, and the 5 `opus` agents sit below him too whenever
-he runs Fable 5 — including both review gates.
+he runs Fable 5, including both review gates.
 
 Accepted split:
 
@@ -74,7 +74,7 @@ the review gates too. Reversible in one line per agent.
 
 Note for whoever executes: Scott switched to Fable 5 on 2026-08-20
 (the pending-credits blocker cleared). With `inherit`, the roster
-follows whatever he is on — no action needed either way. One escape
+follows whatever he is on, no action needed either way. One escape
 hatch the original analysis missed: the Agent spawn call accepts a
 per-spawn model override, so a soft floor for the two review gates on
 a Sonnet-session day is a one-sentence CLAUDE.md instruction, not a
@@ -88,21 +88,21 @@ and let curator spend attention on judgment-shaped rot.
 
 Full detail in `claude-md-review-2026-08.md` §THE PLAN. Summary:
 
-**PR 1 — correctness + model tiers.** No judgment calls; everything is
+**PR 1, correctness + model tiers.** No judgment calls; everything is
 either factually wrong or already decided. Seven items: stale
 content-root traps, content-packager schema, dead refs, skill
 reachability, author→reviewer handoff lines, model tiers (separate
 commit), path-audit script extension. **Start here.**
 
-**PR 2 — CLAUDE.md v2.** Doc-only. Citation-over-restatement, name the
+**PR 2, CLAUDE.md v2.** Doc-only. Citation-over-restatement, name the
 skills and slash commands, add the extractor workflow, governance-first
 delegation framing, roster write-scope fixes, inbound stale citations.
 
-**PR 3 — agent prompt optimization.** House-style judgment calls worth
+**PR 3, agent prompt optimization.** House-style judgment calls worth
 Scott's eyes: collapse refuse-into-hard-rules, factor the reviewer
 twins, extract the Playwright block, skill citations.
 
-**PR 4+ — bootstrap-v2** phases 1-4 per `bootstrap-v2.md`, landing the
+**PR 4+, bootstrap-v2** phases 1-4 per `bootstrap-v2.md`, landing the
 concierge playbook in the restructured CLAUDE.md rather than the old
 one.
 
@@ -111,7 +111,7 @@ one.
 These were checked against the filesystem during the review, not
 inferred:
 
-- Repo-root `dashboards/`, `views/`, `customgroups/` **do not exist** —
+- Repo-root `dashboards/`, `views/`, `customgroups/` **do not exist**,
   the trap warnings in three author prompts are describing a vanished
   world, and `dashboard-author.md:20-21` states it as present fact.
 - **No agent has `Skill` in its `tools:` line** (`grep -l "Skill"
@@ -122,7 +122,7 @@ inferred:
   agent file exists.
 - `scripts/path_reference_audit.sh` reports **"clear"** while both the
   `sdk-author` dead agent name and the bare `managementpacks/`
-  citations are live — it covers neither class.
+  citations are live, it covers neither class.
 - Roster model pinning today: 15 sonnet, 5 opus.
 - CLAUDE.md is 336 lines / 2,810 words; ~60-65% restates something with
   an authoritative copy elsewhere. Session-start reading floor is
@@ -133,7 +133,7 @@ inferred:
 The reason to cut duplication is **single-source-of-truth, not token
 savings.** At 1M context the 15.6k floor is ~1.5% of the window; the
 old "keep CLAUDE.md lean" argument has largely expired. The goal is
-fewer *copies*, not a shorter file — anything genuinely unique stays
+fewer *copies*, not a shorter file, anything genuinely unique stays
 however long it is. Evidence the maintenance cost is real: the
 cross-reference table exists in four places, and the stale
 `vcfops-orchestration` pointer has survived eight curation cycles.

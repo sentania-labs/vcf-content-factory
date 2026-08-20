@@ -1,8 +1,8 @@
-# CLAUDE.md / AGENTS.md review — Opus 5 / Fable era
+# CLAUDE.md / AGENTS.md review, Opus 5 / Fable era
 
 Status: ASSESSMENT (no changes made beyond the AGENTS.md symlink)
 Date: 2026-08-20
-Trigger: Scott, before committing to bootstrap-v2 — "a review of
+Trigger: Scott, before committing to bootstrap-v2, "a review of
 CLAUDE.md/AGENTS.md is in order given the changes in LLM capabilities
 from opus 4.x to Opus 5/fable/sol era models"
 
@@ -49,7 +49,7 @@ RULE-005" instead of pasting seven commands.
 ### 2. The token floor matters less than it looks
 
 At 200k context, 15.6k fixed was ~8% of the window and worth fighting.
-At 1M it is ~1.5%. **Do not trim CLAUDE.md to save tokens** — that was
+At 1M it is ~1.5%. **Do not trim CLAUDE.md to save tokens**, that was
 the old reason and it has largely expired. Trim it for
 single-source-of-truth, which is a maintenance argument and still fully
 valid. This distinction matters: it means the goal is fewer *copies*,
@@ -60,7 +60,7 @@ long it is.
 
 "Pass filenames, not file contents", "keeping file contents out of your
 context is how this architecture stays affordable", "the failure mode
-is a capable orchestrator that doesn't delegate" — this is
+is a capable orchestrator that doesn't delegate", this is
 context-economy reasoning from an era when the orchestrator would
 genuinely run out of room.
 
@@ -73,7 +73,7 @@ Two rationales are tangled here and they age differently:
 - **Context economy** (delegate so the foreman's context survives):
   substantially weakened. A 1M-context orchestrator can hold what it
   used to shed, and subagents now carry a *disadvantage* the old
-  framing ignored — they lack the conversation's accumulated context,
+  framing ignored, they lack the conversation's accumulated context,
   so a reflexive hand-off can produce worse work than doing it inline.
 
 Direction: keep the "you do not write YAML / edit src / query live Ops"
@@ -212,7 +212,7 @@ Assessed 2026-08-20, same Opus 5-era lens.
 Better shape than expected. All 20 files have explicit refusal
 conditions, 18/20 declare knowledge sources, and the heavy domain
 content is already factored out into skills. **The 4.x-era failure
-pattern (long because defensive) is largely absent** — the biggest
+pattern (long because defensive) is largely absent**, the biggest
 files are big because they encode real failure taxonomies with named
 provenance, and those earn their length. Zero instances of "think step
 by step" anywhere.
@@ -228,7 +228,7 @@ duplication.
    `customgroup-author.md:12-16` warn about repo-root `dashboards/`,
    `views/`, `customgroups/` directories. Verified: **none of the three
    exist.** `dashboard-author.md:20-21` asserts as present-tense fact
-   that "the repo root still contains real pak-bundled dashboards" —
+   that "the repo root still contains real pak-bundled dashboards",
    now false; those live under `content/sdk-adapters/<adapter>/`.
    Actively misleading text, safe to delete.
 2. **`content-packager.md:26-42` manifest schema is wrong.** Shows
@@ -253,7 +253,7 @@ duplication.
 ### The Skill tool gap (verified)
 
 16 of 20 prompts instruct the agent to read a `vcfops-*` skill, several
-in strong terms (`sdk-adapter-reviewer.md:62` — "THE technical
+in strong terms (`sdk-adapter-reviewer.md:62`, "THE technical
 authority. Read it first"). **Not one `tools:` line includes `Skill`**
 (verified: `grep -l "Skill" .claude/agents/*.md` returns nothing). With
 an explicit allowlist the Skill tool is not callable, and the prompts
@@ -265,7 +265,7 @@ unreachable by the agents told to treat it as authoritative. Fix is
 either adding `Skill` to those allowlists or replacing names with
 concrete paths. Confirm empirically which before choosing.
 
-### Model routing — the core Opus 5-era question
+### Model routing, the core Opus 5-era question
 
 Current pinning: **15 `sonnet`, 5 `opus`** (`opus` on
 `api-cartographer`, `api-explorer`, `framework-reviewer`,
@@ -306,18 +306,18 @@ upgrade:
 - The 15 `model: sonnet` agents are pinned below whatever Scott is
   running.
 - The 5 `model: opus` agents are *also* pinned below the session when
-  he runs Fable 5 — including `framework-reviewer` and
+  he runs Fable 5, including `framework-reviewer` and
   `sdk-adapter-reviewer`, the two most consequential gates in the repo.
 
 So the answer is not "move them all to Opus" and not a bootstrap
 preference prompt. **It is to delete the `model:` line from the
 top-tier agents and let them inherit.** That delivers exactly the
-behavior Scott described — top-tier work follows his stated preference,
-switching between Fable and Opus re-points the whole roster — using a
+behavior Scott described, top-tier work follows his stated preference,
+switching between Fable and Opus re-points the whole roster, using a
 built-in default, with no generator, no config file, no bootstrap
 question, and no drift surface. His `/model` setting is the dial.
 
-**ACCEPTED — Scott, 2026-08-20: "your split seems reasonable."**
+**ACCEPTED, Scott, 2026-08-20: "your split seems reasonable."**
 
 Tiers:
 
@@ -341,7 +341,7 @@ calling for a floor, so **the default stands: pure `inherit`, no
 floor.** Reversible in one line per agent if a Sonnet-session review
 ever proves too thin.
 
-**`curator` is a separate answer — do not promote it.** Its miss is
+**`curator` is a separate answer, do not promote it.** Its miss is
 mechanical, not cognitive, and `scripts/path_reference_audit.sh`
 already runs in CI (`.github/workflows/ci.yml:78`) for exactly this.
 Verified today: the script reports "clear" while these dead references
@@ -381,7 +381,7 @@ that a script genuinely cannot detect.
   diverging (only qa-tester has the layout-quality checklist). Not in
   any skill; prime extraction candidate.
 
-TOOLSET GAP handling is the proof the citation pattern works here — 8
+TOOLSET GAP handling is the proof the citation pattern works here, 8
 files reference it, none inline the format. The rest should follow it.
 
 ### Workflow gap
@@ -423,7 +423,7 @@ own for external Codex review (global rule 3) and costs nothing.
 Scope per Scott, 2026-08-20: bootstrapping, CLAUDE.md, and agent
 optimization for Opus 5 / Fable 5. Codex parity parked.
 
-### PR 1 — Correctness + model tiers
+### PR 1, Correctness + model tiers
 
 Nothing here is a judgment call; it is all either factually wrong or an
 accepted decision. Safe to land without a style debate.
@@ -449,13 +449,13 @@ accepted decision. Safe to land without a style debate.
 6. Model tiers (accepted above): delete `model:` from the 7 top-tier
    agents. Separate commit so it reverts independently.
 7. Extend `scripts/path_reference_audit.sh` to catch agent-name
-   references and bare single-segment directory citations — the two
+   references and bare single-segment directory citations, the two
    classes it currently reports "clear" on while they are live.
 
 Gate: `framework-reviewer` if item 7 touches anything under
 `src/vcfops_*/` (it does not today; the script is standalone).
 
-### PR 2 — CLAUDE.md v2
+### PR 2, CLAUDE.md v2
 
 Doc-only. Citation-over-restatement for the seven duplicated blocks;
 name the five skills and four slash commands; add the extractor
@@ -472,7 +472,7 @@ and the `vcfops-orchestration` back-pointer in
 curation cycles. Same PR fixes that skill's missing
 `vcfops_managementpacks validate` and its missing MP prefix carve-out.
 
-### PR 3 — Agent prompt optimization
+### PR 3, Agent prompt optimization
 
 Judgment calls about house style; worth Scott's eyes. Collapse
 `What you refuse` into `Hard rules` (~75 lines, removes a live
@@ -482,7 +482,7 @@ doc or skill; replace the prefix/validate/recon restatements with
 skill citations (~40 lines); trim the quadruple-stated reviewer
 principles; delete the meta-justifications.
 
-### PR 4+ — bootstrap-v2
+### PR 4+, bootstrap-v2
 
 Phases 1-4 per `knowledge/designs/bootstrap-v2.md`, landing the
 concierge playbook in the restructured CLAUDE.md rather than the old
