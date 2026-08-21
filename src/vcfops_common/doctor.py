@@ -795,7 +795,12 @@ def build_checklist(
         "detail": (
             "profiles ready: " + ", ".join(complete) if complete
             else "no complete VCFOPS profile in .env or exported vars; "
-            "run the credential wizard"
+            "have the USER run the credential wizard themselves, in their "
+            "own terminal (in a Claude session, typed with a leading `!` so "
+            "it runs interactively): `! python3 -m vcfops_common setup`. "
+            "Never run it for them and never ask for a password in chat: "
+            "the wizard reads it silently so it stays out of the transcript "
+            "(RULE-008), and it refuses to run without a TTY"
         ),
     })
     unrecorded = unrecorded_bootstrap_scripts(bootstrap)
@@ -896,7 +901,10 @@ def run_doctor(
         attention.append("no VCFOPS profiles defined (.env or exported vars)")
         attention.append(
             "additionalContext: no credential profiles are configured; offer "
-            "the user the credential setup wizard."
+            "the user the credential setup wizard. They run it themselves: "
+            "tell them to type `! python3 -m vcfops_common setup` (the `!` "
+            "prefix runs it interactively in-session). Do not run it for "
+            "them and do not ask for a password in chat."
         )
 
     # --- Environment ------------------------------------------------------
