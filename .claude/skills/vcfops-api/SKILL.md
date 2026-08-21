@@ -79,10 +79,32 @@ Poll `GET /api/content/operations/import` until
    (content readable by ID but invisible to list/assign) and the
    verified fix is re-importing the same zip, which the SM paths do
    automatically. That cause and that remedy are evidence **only for
-   super metrics**: do not assume they generalize. For dashboards and
-   views the factory warns and does not retry, because nothing has
-   bisected what the signature means there (issue #97). Read
+   super metrics**: do not assume they generalize. Read
    `references/wire-formats.md` §"SM ghost state" for full details.
+
+   For **dashboards and views** the same signature has a different
+   cause, bisected 2026-08-21 (issue #97). It is not ghost state: it
+   is the importer's create-only mode, produced by `force=false` on
+   the import query string and by nothing else reproducible. The
+   pre-existing content stays fully usable; only the new revision
+   fails to land. The skip is **idempotent**, so re-importing is a
+   guaranteed no-op and the SM remedy does not transfer. The factory
+   warns and does not retry, and that is correct. Full evidence:
+   `knowledge/context/api-surface/content_import_skip_semantics.md`.
+6. **`force` semantics are counter-intuitive**: `force=true`
+   overwrites, `force` **omitted** also overwrites, only an explicit
+   `force=false` skips existing content. All factory call sites
+   hard-code `force=true`.
+7. **`imported=N` means "written", not "changed".** There is no
+   content comparison; an unchanged re-import still reports
+   `imported=N`.
+8. **Dashboard import identity is the NAME, not the UUID.** Importing
+   a same-named dashboard under a new UUID replaces the existing one
+   and silently orphans the old UUID, reporting `imported=1` with
+   nothing in the envelope saying so. Changing `id:` in a dashboard
+   YAML while keeping the name breaks every deep link and summary-tab
+   association pinned to the old UUID. Views behave differently: they
+   duplicate with a numeric suffix.
 
 ## API surface map
 

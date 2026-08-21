@@ -111,6 +111,7 @@ cycles because that did not happen.
 |---|---|
 | `content_api_surface.md` | Content API (public + internal + content-zip) |
 | `content_upload_methodology.md` | Digest: which upload path each content type takes, and the import/enable/verify order |
+| `content_import_skip_semantics.md` | Bisection of `imported=0/skipped=N` on DASHBOARDS + VIEW_DEFINITIONS: it is `force=false` create-only mode, not ghost state, and re-import does not fix it |
 | `vcf_operations_api_surface.md` | VCF Ops API surface snapshot |
 | `install_and_enable.md` | Install path + policy enablement |
 | `internal_supermetrics_assign.md` | Internal supermetrics assign endpoint |

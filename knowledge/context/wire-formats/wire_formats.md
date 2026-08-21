@@ -253,12 +253,24 @@ either generalizes to other content types.
 
 ### imported=0 / skipped>0 on DASHBOARDS and VIEW_DEFINITIONS
 
-Observed signature (reported by another team, not yet bisected here):
-`total:3 skipped:3 imported:0 errorCode:NONE` on a dashboard import,
-i.e. a FINISHED import that changed nothing on the instance.
+**Bisected 2026-08-21. Full evidence and verbatim envelopes:
+`knowledge/context/api-surface/content_import_skip_semantics.md`.**
+Summary: this is the importer's create-only mode, produced by
+`force=false` on the import query string, and nothing else that could
+be reproduced. It is **not** ghost state: the pre-existing dashboard
+stays listed, readable by UUID, correctly rendered and assignable to a
+resource kind. Only the new revision failed to land. The skip is
+idempotent, so the SM re-import remedy does **not** work here; the fix
+is `force=true`, which all four factory call sites already send, which
+means the signature is currently unreachable through factory code.
 
-Whatever the cause, the operator-visible fact is the same: the content
-on the instance is still the old version. The factory therefore treats
+Originally observed signature (reported by another team):
+`total:3 skipped:3 imported:0 errorCode:NONE` on a dashboard import,
+i.e. a FINISHED import that changed nothing on the instance. Almost
+certainly a client sending `force=false`.
+
+The operator-visible fact is the same either way: the content on the
+instance is still the old version. The factory therefore treats
 `imported == 0 and skipped > 0` on `DASHBOARDS` / `VIEW_DEFINITIONS`
 as a loud warning naming the affected content, in all four paths.
 
@@ -314,12 +326,21 @@ these reads happens after content has already landed on the instance,
 so the throw leaves a partial install. `install.py` is immune only
 because `dict.get()` returns `None`.
 
-It does **not** auto-retry the import the way the SM path does: the
-re-import remedy is evidence only for SUPER_METRICS, and a blind second
-import of dashboard content has never been tested here. Bisecting the
-dashboard case (does re-import help? does deleting first help?) is open
-work; until then, delete-and-re-sync is the documented way to force an
-update.
+It does **not** auto-retry the import the way the SM path does, and it
+must not start. Measured: three consecutive `force=false` imports of
+the same zip each returned `imported=0 skipped=1` for both content
+types, with the instance still holding the prior revision. The skip is
+idempotent, so a retry is a guaranteed no-op that also risks the
+import-busy 403 backoff. The remedy is `force=true` (already sent by
+every factory path), which updates in place, same UUID; deleting first
+also works but is not required. Evidence:
+`knowledge/context/api-surface/content_import_skip_semantics.md`.
+
+Related gotcha from the same bisection: dashboard import identity is
+the **name**, not the UUID. Importing a dashboard whose name already
+exists under a different UUID replaces the existing one and silently
+orphans the old UUID (`imported=1`, list count unchanged, old id no
+longer readable). Views instead duplicate with a numeric name suffix.
 
 ## Policy export XML
 
