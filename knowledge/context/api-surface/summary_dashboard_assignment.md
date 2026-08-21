@@ -93,96 +93,81 @@ Validated against all 363 resource kinds on the devel instance across 14
 distinct adapter-kind name lengths: zero mismatches. A generator needs no
 lookup call to build the map.
 
-## Reference implementation: VMware uses this mechanism itself
+## Two mechanisms share one field: native pages and dashboard-backed pages
 
-Checked read-only on prod (9.1.0.0400 build 25541561) and corroborated on
-devel. An earlier hypothesis that VMware's summary pages were native UI
-unrelated to this mechanism is **false**.
+This was got wrong twice before it was got right, so read the
+discriminator before drawing conclusions from `resourceKindTemplate`.
 
-Every core VMWARE kind carries a non-default template:
-
-| Resource kind | `resourceKindTemplate` |
-|---|---|
-| `VirtualMachine` | `Virtual Machine Summary` |
-| `HostSystem` | `Host System Summary` |
-| `ClusterComputeResource` | `Cluster Compute Resource Summary` |
-| `Datastore` | `Datastore Summary` |
-| `vSphere World` | `vSphere World Summary` |
-
-They surface through the same `getResourceKindList&appendDetailPageMappings=true`
-read that backs the Manage Summary Dashboards dialog. If they were native
-UI they would read `Summary Detail` like the other 481 kinds do.
-
-VMware assigns **selectively**: `Folder`, `VMFolder`, `HostFolder`,
-`DatastoreFolder`, `DistributedVirtualPortgroup` and `SupervisorCluster`
-are all left at the default.
-
-Instance-wide, **32 of 513** resource kinds carry a non-default template
-out of the box, across six adapter kinds: `VMWARE` (14),
-`VirtualAndPhysicalSANAdapter` (9), `VCFAutomation` (3), `VcfAdapter` (3),
-`APPOSUCP` (2), `SupervisorAdapter` (1). Devel independently showed 25 of
-363, same adapters, same names. This is shipped product state on two
-instances, not anything a human set.
-
-### The detail that matters most
-
-Several shipped assignments carry **numeric collision suffixes**:
+The object Summary tab branches on exactly one call:
 
 ```
-APPOSUCP          dsm_mysql_cluster      -> 'DSM MySQL Metrics 3'
-SupervisorAdapter GuestCluster           -> 'VKS Cluster Summary Page 3'
-VCFAutomation     VCFAOrganization       -> 'VCFA Provider Organization Summary 3'
-VMWARE            NamespaceV2            -> 'VCFA Provider Namespace Summary 3'
-VirtualAndPhysicalSANAdapter VirtualSANFaultDomain
-                                         -> 'New Summary Page: vSAN Fault Domain 7'
+POST /ui/dashboard.action  mainAction=getSummaryTabId
+     &resourceKindId=&traversalSpecId=&resourceKindType=&resourceId=
+  -> {"tabId": <uuid>}  render that dashboard
+  -> {"tabId": null}    ResourceSummaryBuilder.getSummaryPanel(...)  [native JS]
 ```
 
-That ` 3` / ` 7` is the **same dedup artifact** produced by assigning one
-dashboard to several kinds in a controlled devel experiment. So VMware's
-newer content (VCFA, VKS, DSM, vSAN ESA) goes through this same server-side
-association path and has been re-pushed enough times to collide with
-itself. `New Summary Page: vSAN Fault Domain 7` reads like an un-renamed
-working title that shipped.
+`ResourceSummaryBuilder` (SPA `app.part4`, class
+`Ext.vcops.objectview.Summary`) holds a hardcoded static map
+`RESKND_ASSOCIATION` of **51** entries from `resourceKindId` to a compiled
+Ext JS class, e.g.
+`"002006VMWAREVirtualMachine" -> summaryDetail.vsphere.VMSummaryDetail`.
 
-The older, rounder names (`Virtual Machine Summary`, `Host System Summary`)
-carry no suffix, consistent with being seeded once at first install rather
-than re-pushed on upgrade.
+**So a non-default `resourceKindTemplate` does NOT imply a dashboard
+exists.** On prod, of the 32 non-default kinds:
 
-**Read that as a warning, not a curiosity.** The naming drift that
-re-assignment causes is not hypothetical; it is visible in Broadcom's own
-shipped content on a production instance today.
+- **23 return `tabId: null`** and have a native class. Every classic
+  vSphere, vSAN and VCF summary page is here: `VirtualMachine`,
+  `HostSystem`, `Datastore`, `ClusterComputeResource`, `vSphere World`.
+  Their `resourceKindTemplate` value is a **label describing the compiled
+  page**, not a content pointer. No dashboard exists behind them, and the
+  product seeds these by a path no pak or API can reach.
+- **9 return a real dashboard UUID** and are genuinely dashboard-backed
+  through the association mechanism: VCF Automation, VKS
+  (`SupervisorAdapter:GuestCluster`), vSAN Fault Domain, App Monitoring
+  DSM.
 
-### Templates are a separate object class from dashboards
+**Every dashboard-backed one carries a numeric name suffix; none of the
+native ones do.** The suffix is a reliable tell in practice, but
+`getSummaryTabId` is the authoritative discriminator since it is what the
+UI itself branches on.
 
-- Prod carries **249 dashboards**. **Zero** of the 33 template names appear
-  among them, `Summary Detail` included. Same on devel.
-- Assigning a dashboard to three kinds created three template records and
-  left the dashboard count unchanged. Nothing is cloned.
+### The template namespace is invisible to the dashboard list
 
-So `resourceKindTemplate` points at a **detail page template**.
-`Summary Detail` is the built-in generic template and the server's
-`defaultTemplateName`, meaning "no association". Assigning a dashboard makes
-the platform **materialize a new template from it**, name it after the
-dashboard, and suffix on collision.
+Materialized templates live in a separate namespace that
+`getDashboardList` never returns, under any filter. Confirmed: identical
+249 dashboards with `isTemplate` absent, `false`, and `true`, and with
+`filterDisabledTabs=false` / `isTemporary=false`. They are readable only
+**by UUID**:
 
-**A template cannot be authored directly.** `getTemplateList` exists in the
-SPA bundle but returns the errorPanel on 9.1 (the known
-registered-action/unregistered-mainAction signature), so it is dead or
-legacy. Templates are readable only indirectly, through the
-`resourceKindTemplate` field. We can author a dashboard and ask the platform
-to materialize a template from it; we cannot see, enumerate, diff, or
-version the resulting templates.
+```
+getDashboardConfig?tabId=<uuid>&isTemplate=true
+  -> name='New Summary Page: vSAN Fault Domain 7'  widgets=5
+  -> name='VKS Cluster Summary Page 3'            widgets=17
+```
 
-### What the precedent does and does not give us
+Real dashboards with widgets, whose name is exactly the grid label
+including the suffix. There is **no list endpoint for this namespace**, so
+materialized templates cannot be enumerated, diffed, or garbage-collected
+without knowing their UUIDs in advance. Capture the UUID at assign time or
+lose track of it.
 
-It **does** establish the mechanism is legitimate and load-bearing: six
-shipped adapters including VMware's flagship vSphere and vSAN content
-populate this exact slot.
+### What the precedent is actually worth
 
-It does **not** give us a shippable artifact to copy. These associations are
-not in a pak; no binding exists in any of the 51 vendor paks examined. They
-are seeded by the product's own install/upgrade path into the association
-store, which is not a surface a third-party pak can reach.
+Narrower than a first read suggests, and newer:
+
+- We would **not** be doing what VMware does for `VirtualMachine` and
+  `HostSystem`. Those are compiled UI on a privileged path.
+- We **would** be doing what Broadcom does for its own *modern* adapters:
+  VCF Automation, VKS, vSAN Fault Domain and DSM all ship dashboard-backed
+  summary pages through this exact call, in 9.1.
+- The `... 3` / `... 7` suffixes on those shipped names prove Broadcom's
+  own build pipeline re-runs the association and collides with itself when
+  it does.
+
+For a **new** adapter with no native classes and no prospect of getting
+any, the dashboard-backed path is the only path, and it is the same one
+Broadcom uses for its own new adapters.
 
 ## The caveat that decides any design, and is UNVERIFIED
 
