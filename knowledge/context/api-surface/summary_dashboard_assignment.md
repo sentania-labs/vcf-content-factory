@@ -93,6 +93,97 @@ Validated against all 363 resource kinds on the devel instance across 14
 distinct adapter-kind name lengths: zero mismatches. A generator needs no
 lookup call to build the map.
 
+## Reference implementation: VMware uses this mechanism itself
+
+Checked read-only on prod (9.1.0.0400 build 25541561) and corroborated on
+devel. An earlier hypothesis that VMware's summary pages were native UI
+unrelated to this mechanism is **false**.
+
+Every core VMWARE kind carries a non-default template:
+
+| Resource kind | `resourceKindTemplate` |
+|---|---|
+| `VirtualMachine` | `Virtual Machine Summary` |
+| `HostSystem` | `Host System Summary` |
+| `ClusterComputeResource` | `Cluster Compute Resource Summary` |
+| `Datastore` | `Datastore Summary` |
+| `vSphere World` | `vSphere World Summary` |
+
+They surface through the same `getResourceKindList&appendDetailPageMappings=true`
+read that backs the Manage Summary Dashboards dialog. If they were native
+UI they would read `Summary Detail` like the other 481 kinds do.
+
+VMware assigns **selectively**: `Folder`, `VMFolder`, `HostFolder`,
+`DatastoreFolder`, `DistributedVirtualPortgroup` and `SupervisorCluster`
+are all left at the default.
+
+Instance-wide, **32 of 513** resource kinds carry a non-default template
+out of the box, across six adapter kinds: `VMWARE` (14),
+`VirtualAndPhysicalSANAdapter` (9), `VCFAutomation` (3), `VcfAdapter` (3),
+`APPOSUCP` (2), `SupervisorAdapter` (1). Devel independently showed 25 of
+363, same adapters, same names. This is shipped product state on two
+instances, not anything a human set.
+
+### The detail that matters most
+
+Several shipped assignments carry **numeric collision suffixes**:
+
+```
+APPOSUCP          dsm_mysql_cluster      -> 'DSM MySQL Metrics 3'
+SupervisorAdapter GuestCluster           -> 'VKS Cluster Summary Page 3'
+VCFAutomation     VCFAOrganization       -> 'VCFA Provider Organization Summary 3'
+VMWARE            NamespaceV2            -> 'VCFA Provider Namespace Summary 3'
+VirtualAndPhysicalSANAdapter VirtualSANFaultDomain
+                                         -> 'New Summary Page: vSAN Fault Domain 7'
+```
+
+That ` 3` / ` 7` is the **same dedup artifact** produced by assigning one
+dashboard to several kinds in a controlled devel experiment. So VMware's
+newer content (VCFA, VKS, DSM, vSAN ESA) goes through this same server-side
+association path and has been re-pushed enough times to collide with
+itself. `New Summary Page: vSAN Fault Domain 7` reads like an un-renamed
+working title that shipped.
+
+The older, rounder names (`Virtual Machine Summary`, `Host System Summary`)
+carry no suffix, consistent with being seeded once at first install rather
+than re-pushed on upgrade.
+
+**Read that as a warning, not a curiosity.** The naming drift that
+re-assignment causes is not hypothetical; it is visible in Broadcom's own
+shipped content on a production instance today.
+
+### Templates are a separate object class from dashboards
+
+- Prod carries **249 dashboards**. **Zero** of the 33 template names appear
+  among them, `Summary Detail` included. Same on devel.
+- Assigning a dashboard to three kinds created three template records and
+  left the dashboard count unchanged. Nothing is cloned.
+
+So `resourceKindTemplate` points at a **detail page template**.
+`Summary Detail` is the built-in generic template and the server's
+`defaultTemplateName`, meaning "no association". Assigning a dashboard makes
+the platform **materialize a new template from it**, name it after the
+dashboard, and suffix on collision.
+
+**A template cannot be authored directly.** `getTemplateList` exists in the
+SPA bundle but returns the errorPanel on 9.1 (the known
+registered-action/unregistered-mainAction signature), so it is dead or
+legacy. Templates are readable only indirectly, through the
+`resourceKindTemplate` field. We can author a dashboard and ask the platform
+to materialize a template from it; we cannot see, enumerate, diff, or
+version the resulting templates.
+
+### What the precedent does and does not give us
+
+It **does** establish the mechanism is legitimate and load-bearing: six
+shipped adapters including VMware's flagship vSphere and vSAN content
+populate this exact slot.
+
+It does **not** give us a shippable artifact to copy. These associations are
+not in a pak; no binding exists in any of the 51 vendor paks examined. They
+are seeded by the product's own install/upgrade path into the association
+store, which is not a surface a third-party pak can reach.
+
 ## The caveat that decides any design, and is UNVERIFIED
 
 The platform does **not** share one dashboard across several kinds. Each
