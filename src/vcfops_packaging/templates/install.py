@@ -42,10 +42,10 @@ import getpass
 import io
 import json
 import os
-import re
 import subprocess
 import sys
 import time
+import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -281,7 +281,6 @@ def _warn(msg: str) -> None:
 
 def _verify_supermetrics_enabled(policy_xml: str, sm_ids: list) -> dict:
     """Check which SM IDs appear as enabled in policy XML."""
-    import xml.etree.ElementTree as ET
     root = ET.fromstring(policy_xml)
     enabled_ids = set()
     for elem in root.iter("SuperMetric"):
@@ -523,7 +522,6 @@ class Client:
           Stale entries for this SM are removed from ALL <SuperMetrics> blocks
           before injecting fresh ones, making this call idempotent/self-healing.
         """
-        import xml.etree.ElementTree as ET
         import re as _re
 
         policy_id = self.get_default_policy_id()
@@ -684,7 +682,6 @@ class Client:
             dict mapping metric_key -> bool (True = was already enabled before
             this call).
         """
-        import xml.etree.ElementTree as ET
         import re as _re
         from collections import defaultdict
 
@@ -1283,17 +1280,58 @@ def _extract_dashboard_names(dashboard_json: str) -> list:
     return [d.get("name") or d.get("id") or "?" for d in (data.get("dashboards") or [])]
 
 
-def _extract_view_names(views_xml: str) -> list:
+# Bounds for the view names interpolated into the "NOT updated" advisory.
+# That string prints twice (inline WARN plus the ATTENTION trailer), so a
+# single pathological <Title> or a bundle carrying dozens of views must
+# not fill the operator's screen. Same echo-safe discipline as the
+# doctor's _clip, deliberately re-stated rather than imported: this
+# template ships standalone inside every bundle zip.
+_VIEW_NAME_MAX_CHARS = 120
+_VIEW_NAMES_MAX = 20
+
+
+def _extract_view_names(views_xml) -> list:
     """Titles of the views in a rendered views_content.xml, best effort.
 
-    Regex rather than an XML parse: this is a message-decoration helper
-    on the install path and a malformed or unexpected document must
-    degrade to "no names" rather than raise mid-install.
+    Parses with xml.etree.ElementTree (stdlib) exactly the way
+    vcfops_packaging/audit.py reads view titles: walk every ViewDef, take
+    its <Title> child text, fall back to a name attribute. The renderer
+    emits <Title> once per ViewDef and nowhere else, so extraction is 1:1
+    with views.
+
+    A real parse buys three things the previous regex did not have: it is
+    linear (the regex rescanned to end-of-string from every unclosed
+    <Title>), it ignores attributes on <Title> (the pre-DEF-018
+    localizationKey form extracted nothing), and it hands back decoded
+    text, so a view named "CPU & Memory" prints that way instead of
+    "CPU &amp; Memory" beside the unescaped dashboard names.
+
+    Never raises: this is a message-decoration helper on the install
+    path, so a malformed document (ParseError), a non-str argument, or
+    undecodable text degrades to "no names" rather than failing an
+    install that otherwise succeeded.
     """
+    names: list = []
     try:
-        return re.findall(r"<Title>(.*?)</Title>", views_xml or "", re.DOTALL)
+        if not views_xml:
+            return []
+        root = ET.fromstring(views_xml)
+        for viewdef in root.iter("ViewDef"):
+            title_el = viewdef.find("Title")
+            name = (title_el.text or "").strip() if title_el is not None else ""
+            if not name:
+                name = (viewdef.get("name") or "").strip()
+            if not name:
+                name = "unnamed view"
+            if len(name) > _VIEW_NAME_MAX_CHARS:
+                name = name[:_VIEW_NAME_MAX_CHARS] + "..."
+            names.append(name)
     except Exception:  # noqa: BLE001
         return []
+    if len(names) > _VIEW_NAMES_MAX:
+        extra = len(names) - _VIEW_NAMES_MAX
+        names = names[:_VIEW_NAMES_MAX] + [f"and {extra} more"]
+    return names
 
 
 def _all_skipped_summaries(result: dict, content_types) -> dict:
@@ -2462,7 +2500,13 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
         sys.exit(2)
     else:
         if all_advisories:
-            print("Done. No failures, but see the attention list below.")
+            # N-18: not "below". The 5-minute NOTE block prints between
+            # this line and the advisories, so the list is seven lines
+            # away, not immediately under. The ordering is deliberate
+            # (NOTE is boilerplate, the advisory is the delta and must be
+            # the last thing the operator reads), so the wording moves.
+            print("Done. No failures, but see the attention list at the "
+                  "end of this output.")
         else:
             print("Done. All content installed successfully.")
         print()

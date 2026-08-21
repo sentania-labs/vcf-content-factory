@@ -528,6 +528,30 @@ class TestInstallerAdvisoryTrailer:
             warnings=[],
         )  # no SystemExit means rc 0
 
+    def test_success_line_does_not_promise_the_list_is_immediately_below(
+        self, install_mod, monkeypatch, tmp_path, capsys
+    ):
+        """N-18 (issue #103): the 5-minute NOTE block prints between the
+        success line and the attention list, so "below" was seven lines
+        optimistic. The ordering is deliberate, so the wording moved."""
+        self._drive_summary(
+            install_mod, monkeypatch, tmp_path,
+            advisories=["[b] Import changed no dashboards ..."],
+            warnings=[],
+        )
+        out = capsys.readouterr().out
+        assert "see the attention list below" not in out
+        assert "see the attention list at the end of this output." in out
+        lines = [ln for ln in out.splitlines() if ln.strip()]
+        # The claim the wording makes must be true: the list really is at
+        # the end, and the NOTE block really does sit in between.
+        assert lines[-1].startswith("  ATTENTION  ")
+        pointer = next(
+            i for i, ln in enumerate(lines) if "at the end of this output." in ln
+        )
+        header = next(i for i, ln in enumerate(lines) if "need attention" in ln)
+        assert any("NOTE: VCF Operations needs" in ln for ln in lines[pointer:header])
+
     def test_trailer_also_prints_in_the_warning_branch(
         self, install_mod, monkeypatch, tmp_path, capsys
     ):
@@ -570,3 +594,179 @@ def test_extract_view_names_degrades_on_garbage(install_mod):
     assert install_mod._extract_view_names("") == []
     assert install_mod._extract_view_names("not xml at all") == []
     assert install_mod._extract_view_names(None) == []
+
+
+# ---------------------------------------------------------------------------
+# Issue #103: _extract_view_names was a regex over <Title>...</Title>.
+# Quadratic on unclosed opens, unbounded output, defeated by any attribute
+# on <Title>, and it handed the operator XML-escaped names beside
+# unescaped dashboard names. It is now an ElementTree parse, modelled on
+# vcfops_packaging/audit.py's ViewDef/Title walk.
+# ---------------------------------------------------------------------------
+
+_FACTORY_XML = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    "<Content><Views>"
+    '<ViewDef id="v1"><Title>[VCF Content Factory] Alpha</Title>'
+    '<Description>a</Description></ViewDef>'
+    '<ViewDef id="v2"><Title>[VCF Content Factory] Beta</Title>'
+    '<Description>b</Description></ViewDef>'
+    "</Views></Content>"
+)
+
+
+class TestExtractViewNames:
+    def test_factory_shape_extracts_exactly_the_titles(self, install_mod):
+        assert install_mod._extract_view_names(_FACTORY_XML) == [
+            "[VCF Content Factory] Alpha",
+            "[VCF Content Factory] Beta",
+        ]
+
+    def test_pre_def018_localization_key_attribute_no_longer_defeats_it(
+        self, install_mod
+    ):
+        """The regex extracted ZERO names from this shape (commit 8ad7dd2's
+        markup) and silently degraded to the generic "view(s)"."""
+        xml_text = (
+            "<Content><Views>"
+            '<ViewDef id="v1">'
+            '<Title localizationKey="k1">[VCF Content Factory] Alpha</Title>'
+            "</ViewDef>"
+            "</Views></Content>"
+        )
+        assert install_mod._extract_view_names(xml_text) == [
+            "[VCF Content Factory] Alpha"
+        ]
+
+    def test_names_reach_the_operator_unescaped(self, install_mod):
+        """N-17: the renderer escapes, so the parse must decode. Dashboard
+        names print raw; these must match that fidelity."""
+        xml_text = (
+            "<Content><Views>"
+            '<ViewDef id="v1"><Title>CPU &amp; Memory &lt;top&gt;</Title></ViewDef>'
+            "</Views></Content>"
+        )
+        assert install_mod._extract_view_names(xml_text) == ["CPU & Memory <top>"]
+
+    def test_unclosed_titles_return_empty_fast(self, install_mod):
+        """N-14: the reviewer's pathological input. 20,000 unclosed opens
+        took 21s under the regex (`.*?` with re.DOTALL rescans to
+        end-of-string from every open tag). The parse rejects it outright."""
+        import time
+
+        pathological = "<Title>" * 20000
+        start = time.perf_counter()
+        assert install_mod._extract_view_names(pathological) == []
+        elapsed = time.perf_counter() - start
+        assert elapsed < 1.0, f"took {elapsed:.3f}s; regression to the O(n^2) scan"
+
+    def test_a_very_long_name_is_clipped(self, install_mod):
+        xml_text = (
+            "<Content><Views>"
+            f'<ViewDef id="v1"><Title>{"A" * 500_000}</Title></ViewDef>'
+            "</Views></Content>"
+        )
+        names = install_mod._extract_view_names(xml_text)
+        assert len(names) == 1
+        assert len(names[0]) == install_mod._VIEW_NAME_MAX_CHARS + 3
+        assert names[0].endswith("...")
+
+    def test_many_names_get_an_and_n_more_tail(self, install_mod):
+        n = install_mod._VIEW_NAMES_MAX + 7
+        xml_text = (
+            "<Content><Views>"
+            + "".join(
+                f'<ViewDef id="v{i}"><Title>View {i}</Title></ViewDef>'
+                for i in range(n)
+            )
+            + "</Views></Content>"
+        )
+        names = install_mod._extract_view_names(xml_text)
+        assert len(names) == install_mod._VIEW_NAMES_MAX + 1
+        assert names[-1] == "and 7 more"
+        assert names[0] == "View 0"
+
+    def test_viewdef_without_a_title_falls_back_to_the_name_attribute(
+        self, install_mod
+    ):
+        xml_text = (
+            "<Content><Views>"
+            '<ViewDef id="v1" name="Legacy View"/>'
+            '<ViewDef id="v2"/>'
+            "</Views></Content>"
+        )
+        assert install_mod._extract_view_names(xml_text) == [
+            "Legacy View",
+            "unnamed view",
+        ]
+
+    @pytest.mark.parametrize(
+        "hostile",
+        [
+            None,
+            "",
+            0,
+            42,
+            b"<Content><Views></Views></Content>",
+            b"\x00\x01\x02",
+            [],
+            ["<Title>x</Title>"],
+            {},
+            {"a": 1},
+            "not xml at all",
+            "<Title>orphan",
+            "</Title>",
+            "<Content><Views><ViewDef><Title>a<Title>b</Title></Title>"
+            "</ViewDef></Views></Content>",
+            "<Content><Views><ViewDef><Title>a\x00b</Title></ViewDef></Views></Content>",
+            "<Content><Views><ViewDef><Title>\ud800</Title></ViewDef></Views></Content>",
+            "<Content><Views><ViewDef><Title>a</Title></ViewDef></Views>",
+            "<Title>" * 5000,
+        ],
+        ids=lambda v: repr(v)[:40],
+    )
+    def test_hostile_inputs_never_raise(self, install_mod, hostile):
+        out = install_mod._extract_view_names(hostile)
+        assert isinstance(out, list)
+
+    def test_extraction_matches_real_renderer_output(self, install_mod, tmp_path):
+        """Pins the coupling to src/vcfops_dashboards/render.py, which emits
+        <Title>{escape(view.name)}</Title> once per ViewDef and nowhere
+        else. Nothing pinned this before, so the extractor could drift out
+        of step with the renderer silently (issue #103 item 3)."""
+        import yaml
+
+        from vcfops_dashboards.loader import load_view
+        from vcfops_dashboards.render import render_views_xml
+
+        names = [
+            "[VCF Content Factory] VM Network Top Talkers",
+            "[VCF Content Factory] CPU & Memory <top>",
+        ]
+        views = []
+        for i, name in enumerate(names):
+            data = {
+                "name": name,
+                "description": "Rendered through the real renderer.",
+                "subject": {
+                    "adapter_kind": "VMWARE",
+                    "resource_kind": "VirtualMachine",
+                },
+                "columns": [
+                    {
+                        "display_name": "Name",
+                        "attribute": "summary|name",
+                        "is_property": True,
+                        "is_string_attribute": True,
+                    }
+                ],
+            }
+            p = tmp_path / f"view{i}.yaml"
+            p.write_text(yaml.dump(data, default_flow_style=False))
+            views.append(load_view(p, enforce_framework_prefix=False))
+
+        xml_text = render_views_xml(views)
+        # Guard the premise: the renderer really does escape.
+        assert "CPU &amp; Memory &lt;top&gt;" in xml_text
+        assert xml_text.count("<Title") == len(names)
+        assert install_mod._extract_view_names(xml_text) == names
