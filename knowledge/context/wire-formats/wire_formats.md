@@ -260,7 +260,7 @@ i.e. a FINISHED import that changed nothing on the instance.
 Whatever the cause, the operator-visible fact is the same: the content
 on the instance is still the old version. The factory therefore treats
 `imported == 0 and skipped > 0` on `DASHBOARDS` / `VIEW_DEFINITIONS`
-as a loud warning naming the affected content, in all three paths.
+as a loud warning naming the affected content, in all four paths.
 
 **Attribute per content type.** Every dashboard zip the factory sends
 carries BOTH types (the dashboards sync handler deliberately re-imports
@@ -287,9 +287,32 @@ the one type it speaks for:
   install that genuinely succeeded. It goes to `ctx["advisories"]`,
   which prints as a trailer in BOTH summary branches and changes the
   final line from "Done. All content installed successfully." to
-  "Done. No failures, but see the attention list below.". The last line
-  an operator reads is the one they remember, so it must never claim
-  success over a WARN saying content was not updated.
+  "Done. No failures, but see the attention list at the end of this
+  output.". The last line an operator reads is the one they remember,
+  so it must never claim success over a WARN saying content was not
+  updated.
+- `src/vcfops_packaging/templates/install.ps1:Install-Dashboard` is the
+  Windows sibling of the above and mirrors it line for line
+  (`Get-AllSkippedSummaries` / `Get-DashboardAdvisoryNames` /
+  `Get-ViewAdvisoryNames` / `Get-BoundedNames` /
+  `Write-AdvisoryTrailer`, same 120-char / 20-name bounds, same
+  non-fatal `$Ctx.Advisories` list). Both installers ship in every
+  bundle zip, so a fix applied to only one of them leaves half the
+  operators reading a no-op import as a clean install. Nothing is
+  shared between them by construction: each template must stand alone
+  inside the zip. Parity is exact for DASHBOARDS / VIEW_DEFINITIONS.
+  It is **not** exact for SUPER_METRICS: `install.py` auto-retries the
+  import once on the all-skipped ghost-state signal above, and
+  `install.ps1:Install-Supermetrics` does not.
+
+Reading the status envelope: the PowerShell side must probe with
+`PSObject.Properties[...]` (see `install.ps1:Get-PropValue`), never
+dot-access. Under `Set-StrictMode -Version Latest` plus
+`$ErrorActionPreference='Stop'`, `$status.operationSummaries` on a
+response that omits the field is a terminating error, and every one of
+these reads happens after content has already landed on the instance,
+so the throw leaves a partial install. `install.py` is immune only
+because `dict.get()` returns `None`.
 
 It does **not** auto-retry the import the way the SM path does: the
 re-import remedy is evidence only for SUPER_METRICS, and a blind second

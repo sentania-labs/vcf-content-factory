@@ -94,22 +94,61 @@ if ($Force -and -not $Uninstall) {
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# Template version stamp -- injected at build time by vcfops_packaging builder.
-# Used by `python3 -m vcfops_packaging check-staleness <zip>` to detect stale
-# distribution zips after framework template changes.
-$TEMPLATE_VERSION = "2026-04-18-1"
-
 # Tracks whether the interactive SSL prompt (in Get-Credentials) chose to
 # disable verification.  Initialized to $false; Get-Credentials sets it to
 # $true if the user answers 'n'.
-$script:SkipSslVerify = $false
+#
+# This deliberately does NOT share a name with the -SkipSslVerify parameter.
+# In a script, param() variables already live in the script scope, so the
+# former "$script:SkipSslVerify = $false" here was the SAME variable as the
+# switch the operator passed on the command line, and it overwrote it before
+# any call site could read it.  That made "if ($SkipSslVerify)" below dead
+# code and made the post-prompt guard "$script:SkipSslVerify -and -not
+# $SkipSslVerify" a self-cancelling "X -and -not X": -SkipSslVerify and
+# VCFOPS_VERIFY_SSL=false were silently ignored on every path.
+$script:SslPromptDeclined = $false
+
+# ---------------------------------------------------------------------------
+# TLS protocol: force TLS 1.2 on Windows PowerShell 5.1
+# ---------------------------------------------------------------------------
+# Windows PowerShell 5.1 runs on .NET Framework, which inherits a default
+# protocol list that on many machines still resolves to SSL3/TLS 1.0.  VCF
+# Operations requires TLS 1.2 or later, so without this every request fails at
+# connection time.  PowerShell 7+ runs on .NET Core and negotiates the system
+# default, so this is deliberately scoped to Major -lt 6.
+#
+# This runs unconditionally and before the first request.  It used to be nested
+# inside the -SkipSslVerify branch, which meant the operator doing the MORE
+# secure thing (valid certificate, no bypass flag) was the only one who never
+# got TLS 1.2.  Protocol selection and certificate verification are unrelated
+# concerns and must not be gated on each other.
+#
+# -bor rather than assignment, so an explicitly-configured protocol list is
+# preserved.  Where the current value is SystemDefault (0, the .NET Framework
+# 4.7+ default) the result is TLS 1.2 only: OS-negotiated TLS 1.3 is
+# deliberately traded away.  That tradeoff is accepted rather than made
+# conditional -- pinning wrongly costs one installer process TLS 1.3, skipping
+# wrongly costs a hard connection failure, and SecurityProtocol -eq 0 is not a
+# reliable proxy for healthy OS negotiation on a hardened box.
+if ($PSVersionTable.PSVersion.Major -lt 6) {
+    [System.Net.ServicePointManager]::SecurityProtocol =
+        [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+}
 
 # ---------------------------------------------------------------------------
 # SSL: disable verification if requested (lab use only)
 # ---------------------------------------------------------------------------
-if ($SkipSslVerify) {
-    Write-Warning "TLS certificate verification disabled."
-    if ($PSVersionTable.PSVersion.Major -lt 6) {
+function Disable-CertificateValidationLegacy {
+    # Windows PowerShell 5.1 / .NET Framework only.  PS 7+ call sites pass
+    # -SkipCertificateCheck (or a per-handler callback) instead.
+    #
+    # Add-Type cannot redefine a type that already exists in the session, so
+    # the class is created once and the policy is re-applied on later calls.
+    # That constraint is what produced the former TrustAllCertsVcf /
+    # TrustAllCertsVcf2 pair; a type-existence guard removes the need for a
+    # second near-identical class.
+    if ($PSVersionTable.PSVersion.Major -ge 6) { return }
+    if (-not ('TrustAllCertsVcf' -as [type])) {
         Add-Type @"
 using System.Net;
 using System.Security.Cryptography.X509Certificates;
@@ -118,9 +157,13 @@ public class TrustAllCertsVcf : ICertificatePolicy {
         WebRequest req, int problem) { return true; }
 }
 "@
-        [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsVcf
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
     }
+    [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsVcf
+}
+
+if ($SkipSslVerify) {
+    Write-Warning "TLS certificate verification disabled."
+    Disable-CertificateValidationLegacy
 }
 
 # ---------------------------------------------------------------------------
@@ -142,6 +185,34 @@ function Write-Warn($msg) {
 function Write-Fail($msg) {
     Write-Error "ERROR: $msg"
     exit 1
+}
+
+function Get-PropValue {
+    param($Object, [string]$Name)
+    # StrictMode-safe member read: returns $null when the member is absent
+    # rather than throwing PropertyNotFoundException.
+    #
+    # Set-StrictMode -Version Latest plus $ErrorActionPreference='Stop' turns
+    # "$response.someMissingField" into a terminating error.  On the import
+    # path that aborts the installer AFTER content has already landed on the
+    # instance, leaving a partial install with a raw stack trace -- the exact
+    # failure the advisory work exists to prevent.  install.py cannot hit this
+    # because it reads the same envelope with dict.get().
+    #
+    # Handles both shapes Invoke-Api can return: a PSCustomObject from
+    # ConvertFrom-Json, or the plain hashtable it builds on an HTTP error.
+    #
+    # Note for callers: an array-valued member returns the array, which the
+    # pipeline may unwrap to a bare element when it holds exactly one item.
+    # Wrap in @( ) before iterating.
+    if ($null -eq $Object) { return $null }
+    if ($Object -is [System.Collections.IDictionary]) {
+        if ($Object.Contains($Name)) { return $Object[$Name] }
+        return $null
+    }
+    $prop = $Object.PSObject.Properties[$Name]
+    if ($null -eq $prop) { return $null }
+    return $prop.Value
 }
 
 function Resolve-AuthSource($raw) {
@@ -378,7 +449,9 @@ function Get-Credentials {
     if (-not $SkipSslVerify) {
         $sslAns = Read-Host "Verify SSL certificate? [Y/n]"
         if ($sslAns -eq 'n' -or $sslAns -eq 'no' -or $sslAns -eq 'N' -or $sslAns -eq 'No') {
-            $script:SkipSslVerify = $true
+            # Recorded under its own name; the caller promotes it to the real
+            # $SkipSslVerify switch after Get-Credentials returns.
+            $script:SslPromptDeclined = $true
         }
     }
 
@@ -562,6 +635,45 @@ function Get-MarkerFilename {
     return $marker
 }
 
+function Write-ImportSummaryWarnings {
+    param($Status)
+    # Reports per-content-type summaries that failed, skipped anything, or
+    # ended in an unexpected state, even when the top-level state is FINISHED.
+    #
+    # The condition is deliberately identical to install.py:454, including the
+    # skipped>0 term.  Narrowing it here (to imported=0 only) looked like a
+    # cry-wolf fix and was a regression: the named, per-content-type advisory
+    # that replaced it covers DASHBOARDS and VIEW_DEFINITIONS ONLY, so
+    # SUPER_METRICS and REPORTS were left with no signal at all.  An operator
+    # whose super metrics all skipped got "OK  Imported 4 super metric(s)" as
+    # the last line over an instance that did not change.
+    #
+    # If this line is ever narrowed, narrow install.py:454 in the same commit.
+    # The two installers drifting is the defect class this whole area exists
+    # to close.
+    #
+    # Split out of Import-ContentZip so it can be exercised without an
+    # appliance: this runs after content has been imported, so any error
+    # escaping it leaves a partial install.  Every read is probe-based; a
+    # status envelope with no operationSummaries is normal, not exceptional.
+    $summaries = Get-PropValue $Status "operationSummaries"
+    if (-not $summaries) { return }
+    foreach ($os in @($summaries)) {
+        if ($null -eq $os) { continue }
+        $osState = [string](Get-PropValue $os "state")
+        $osFailedRaw = Get-PropValue $os "failed"
+        $osFailed = if ($osFailedRaw) { [int]$osFailedRaw } else { 0 }
+        $osSkippedRaw = Get-PropValue $os "skipped"
+        $osSkipped = if ($osSkippedRaw) { [int]$osSkippedRaw } else { 0 }
+        $osImported = Get-PropValue $os "imported"
+        $osType = [string](Get-PropValue $os "contentType")
+        if (($osState -ne "FINISHED" -and $osState -ne "") -or $osFailed -gt 0 -or $osSkipped -gt 0) {
+            Write-Host ("WARN: content type ${osType}: " +
+                "imported=$osImported skipped=$osSkipped failed=$osFailed state=$osState")
+        }
+    }
+}
+
 function Import-ContentZip {
     param(
         [byte[]]$ZipBytes,
@@ -629,24 +741,20 @@ function Import-ContentZip {
     $deadline = [System.DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ($true) {
         $s = Invoke-Api -Method GET -Path "/api/content/operations/import"
-        $state = $s.state
-        $endTime = if ($s.endTime) { [long]$s.endTime } else { 0 }
+        # Probe-safe reads: the status envelope is not guaranteed to carry
+        # every field, and a dot-access on a missing one is a terminating
+        # error here (see Get-PropValue).
+        $state = [string](Get-PropValue $s "state")
+        $endTimeRaw = Get-PropValue $s "endTime"
+        $endTime = if ($endTimeRaw) { [long]$endTimeRaw } else { 0 }
         if ($endTime -gt $priorEnd -and $state -ne "RUNNING" -and $state -ne "INITIALIZED") {
             if ($state.ToUpper() -like "*FAIL*") { Write-Fail "Import of $Label finished with state=$state" }
-            # Check per-content-type summaries for partial failures even when
-            # the top-level state is FINISHED.
-            if ($s.operationSummaries) {
-                foreach ($os in $s.operationSummaries) {
-                    $osState = if ($os.state) { $os.state } else { "" }
-                    $osFailed = if ($os.failed) { [int]$os.failed } else { 0 }
-                    $osSkipped = if ($os.skipped) { [int]$os.skipped } else { 0 }
-                    if ($osState -ne "FINISHED" -and $osState -ne "" -or $osFailed -gt 0 -or $osSkipped -gt 0) {
-                        Write-Host ("WARN: content type $($os.contentType): " +
-                            "imported=$($os.imported) skipped=$osSkipped failed=$osFailed state=$osState")
-                    }
-                }
-            }
-            return
+            Write-ImportSummaryWarnings -Status $s
+            # Returns the import-status object so callers can inspect
+            # operationSummaries.  Call sites that do not need it must assign
+            # to $null: an uncaptured return value would join the calling
+            # function's output stream.
+            return $s
         }
         if ([System.DateTime]::UtcNow -gt $deadline) { Write-Fail "Import of $Label timed out; state=$state" }
         Start-Sleep -Seconds 2
@@ -1256,6 +1364,175 @@ function Get-DashboardIds {
     return @($data.dashboards | Where-Object { $_.id } | ForEach-Object { $_.id })
 }
 
+# ---------------------------------------------------------------------------
+# Advisory helpers (parity with install.py: _bounded_names,
+# _extract_dashboard_names, _extract_view_names, _all_skipped_summaries)
+# ---------------------------------------------------------------------------
+# Bounds for the content names interpolated into the "NOT updated" advisory.
+# That string prints twice (inline WARN plus the ATTENTION trailer), so a
+# single pathological name or a bundle carrying dozens of objects must not
+# fill the operator's screen.  Deliberately re-stated rather than imported:
+# this script ships standalone inside every bundle zip.
+#
+# CALLING CONVENTION for the three name helpers below: each returns a
+# comma-wrapped array, so a one-name or zero-name result survives the pipeline
+# as an array rather than unwrapping to a bare string or $null.  Assign the
+# result directly.  Do NOT write @(Get-BoundedNames ...): wrapping an already
+# comma-wrapped return produces a one-element array whose single element is
+# the real array, and .Count then reads 1 for every input.
+$script:AdvisoryNameMaxChars = 120
+$script:AdvisoryNamesMax = 20
+
+function Get-BoundedNames {
+    param([object[]]$Names)
+    # Coerce, clip and cap content names bound for an advisory line.
+    # Never throws: every caller runs AFTER content has been imported, so an
+    # escaping error from a message-decoration helper would abort the
+    # installer mid-run and leave a partial install.
+    $out = New-Object System.Collections.Generic.List[string]
+    try {
+        foreach ($name in $Names) {
+            $text = [string]$name
+            if ($text.Length -gt $script:AdvisoryNameMaxChars) {
+                $text = $text.Substring(0, $script:AdvisoryNameMaxChars) + "..."
+            }
+            $out.Add($text)
+        }
+    } catch {
+        return ,@()
+    }
+    if ($out.Count -gt $script:AdvisoryNamesMax) {
+        $extra = $out.Count - $script:AdvisoryNamesMax
+        $kept = $out.GetRange(0, $script:AdvisoryNamesMax)
+        $kept.Add("and $extra more")
+        return ,$kept.ToArray()
+    }
+    # Comma-wrapped: PowerShell unwraps single-element collections on return.
+    return ,$out.ToArray()
+}
+
+function Get-DashboardAdvisoryNames {
+    param([string]$DashJson, [string]$OwnerId)
+    # Names of the dashboards in a rendered dashboard.json, best effort.
+    $names = New-Object System.Collections.Generic.List[string]
+    try {
+        $patched = $DashJson -replace "PLACEHOLDER_USER_ID", $OwnerId
+        $data = $patched | ConvertFrom-Json
+        if ($null -eq $data) { return ,@() }
+        # ConvertFrom-Json happily returns an array, a string or a number.
+        # PSObject.Properties probe is StrictMode-safe; dot-notation throws.
+        $prop = $data.PSObject.Properties["dashboards"]
+        if (-not $prop -or $null -eq $prop.Value) { return ,@() }
+        # Must be a JSON array.  A string or a lone object here means the
+        # document is not what the renderer emits, and naming "?" would be
+        # worse than naming nothing: install.py returns [] for the same input
+        # and the advisory falls back to the generic word "dashboard".
+        if ($prop.Value -isnot [System.Array]) { return ,@() }
+        foreach ($d in @($prop.Value)) {
+            $name = ""
+            if ($null -ne $d) {
+                $nameProp = $d.PSObject.Properties["name"]
+                if ($nameProp -and $nameProp.Value) { $name = [string]$nameProp.Value }
+                if (-not $name) {
+                    $idProp = $d.PSObject.Properties["id"]
+                    if ($idProp -and $idProp.Value) { $name = [string]$idProp.Value }
+                }
+            }
+            if (-not $name) { $name = "?" }
+            $names.Add($name)
+        }
+    } catch {
+        return ,@()
+    }
+    $bounded = Get-BoundedNames -Names $names.ToArray()
+    return ,$bounded
+}
+
+function Get-ViewAdvisoryNames {
+    param([string]$ViewsXml)
+    # Titles of the views in a rendered views_content.xml, best effort.
+    # Walks every ViewDef and takes its direct <Title> child, falling back to
+    # a name attribute -- the same extraction install.py performs.  A real
+    # parse (rather than a regex) ignores attributes on <Title> and hands back
+    # decoded text, so a view named "CPU & Memory" prints that way instead of
+    # "CPU &amp; Memory" beside the unescaped dashboard names.
+    $names = New-Object System.Collections.Generic.List[string]
+    try {
+        if (-not $ViewsXml) { return ,@() }
+        $doc = New-Object System.Xml.XmlDocument
+        # No external entity resolution: this parses a file off disk.
+        $doc.XmlResolver = $null
+        $doc.LoadXml($ViewsXml)
+        foreach ($viewDef in $doc.SelectNodes("//ViewDef")) {
+            $name = ""
+            $titleNode = $viewDef.SelectSingleNode("Title")
+            if ($null -ne $titleNode) { $name = ([string]$titleNode.InnerText).Trim() }
+            if (-not $name) { $name = ([string]$viewDef.GetAttribute("name")).Trim() }
+            if (-not $name) { $name = "unnamed view" }
+            $names.Add($name)
+        }
+    } catch {
+        return ,@()
+    }
+    $bounded = Get-BoundedNames -Names $names.ToArray()
+    return ,$bounded
+}
+
+function Get-AllSkippedSummaries {
+    param($Result, [string[]]$ContentTypes)
+    # Returns @{ contentType = @{ Imported = N; Skipped = N } } for the
+    # per-content-type summaries that imported nothing while skipping
+    # something.  A FINISHED import with imported=0/skipped=N left the
+    # instance unchanged, so it must not be reported as a clean install.
+    #
+    # imported=0 AND skipped>0 is the whole test for the ADVISORY: a re-sync
+    # that imports 1 and skips 1 is not an advisory and must stay quiet here.
+    # This is a narrower test than the mid-stream WARN in
+    # Write-ImportSummaryWarnings, deliberately: this line names the affected
+    # objects and is the last thing the operator reads, so it must only fire
+    # when the instance genuinely did not change.
+    #
+    # Hashtable return survives the pipeline intact (no unwrap).
+    $flagged = @{}
+    if ($null -eq $Result) { return $flagged }
+    $summaries = Get-PropValue $Result "operationSummaries"
+    if (-not $summaries) { return $flagged }
+    foreach ($entry in @($summaries)) {
+        if ($null -eq $entry) { continue }
+        $ct = [string](Get-PropValue $entry "contentType")
+        if (-not $ct) { $ct = "?" }
+        if ($ContentTypes -and $ContentTypes.Count -gt 0 -and ($ContentTypes -notcontains $ct)) { continue }
+        $imported = 0
+        $skipped = 0
+        try {
+            $impRaw = Get-PropValue $entry "imported"
+            if ($null -ne $impRaw) { $imported = [int]$impRaw }
+            $skpRaw = Get-PropValue $entry "skipped"
+            if ($null -ne $skpRaw) { $skipped = [int]$skpRaw }
+        } catch {
+            continue
+        }
+        if ($imported -eq 0 -and $skipped -gt 0) {
+            $flagged[$ct] = @{ Imported = $imported; Skipped = $skipped }
+        }
+    }
+    return $flagged
+}
+
+function Write-AdvisoryTrailer {
+    param([object[]]$Advisories)
+    # Trailer printed in BOTH summary branches.  Without it, a run whose
+    # dashboard import changed nothing ends on "Done. All content installed
+    # successfully.", which is the green-while-broken defect this check exists
+    # to kill, relocated to the summary.  The last line is what an operator
+    # remembers.  Advisories never touch the exit code.
+    if ($null -eq $Advisories -or $Advisories.Count -eq 0) { return }
+    Write-Host ""
+    Write-Host ("$($Advisories.Count) item(s) need attention " +
+        "(nothing failed, but content on the instance did not change):")
+    foreach ($a in $Advisories) { Write-Host "  ATTENTION  $a" }
+}
+
 function New-ReportsZip {
     param([string]$ReportsXml, [string]$Marker, [string]$OwnerId)
     # Build inner reports.zip containing content.xml
@@ -1725,7 +2002,7 @@ function Install-Supermetrics($Ctx) {
     $smFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.supermetrics.file
     $smDict = Load-JsonFile $smFile
     $smZip = New-SmZip -SmDict $smDict -Marker $Ctx.Marker -OwnerId $Ctx.OwnerId
-    Import-ContentZip -ZipBytes $smZip -Label "super metrics"
+    $null = Import-ContentZip -ZipBytes $smZip -Label "super metrics"
     $smCount = @($smDict.PSObject.Properties.Name).Count
     Write-Ok "Imported $smCount super metric(s)"
 }
@@ -1745,8 +2022,55 @@ function Install-Dashboard($Ctx) {
     $nViews = if ($viewsXml) { 1 } else { 0 }
     $dashZip = New-DashboardZip -ViewsXml $viewsXml -DashJson $dashJson -Marker $Ctx.Marker `
         -OwnerId $Ctx.OwnerId -NViews $nViews -NDashboards 1 -DashboardIds $dashIds
-    Import-ContentZip -ZipBytes $dashZip -Label "dashboard + view"
-    Write-Ok "Imported $nViews view(s) + 1 dashboard"
+    $importResult = Import-ContentZip -ZipBytes $dashZip -Label "dashboard + view"
+
+    # A FINISHED import that imported nothing and skipped everything left the
+    # instance untouched: the dashboard on screen is still the old one.
+    # Previously only the top-level state was consulted, so this was reported
+    # as a clean install.
+    #
+    # Attribution is PER CONTENT TYPE.  This zip always carries two of them,
+    # so flagging the dashboard because the co-shipped view was skipped (or
+    # vice versa) would be a false statement contradicted by the same
+    # envelope.  Each type gets its own line, and the type that imported
+    # normally still gets its success line.
+    $flagged = Get-AllSkippedSummaries -Result $importResult -ContentTypes @("DASHBOARDS", "VIEW_DEFINITIONS")
+    $unchangedTail = (" Verify on the instance; deleting the existing object and " +
+        "re-installing is the reliable way to force an update.")
+
+    if ($flagged.ContainsKey("DASHBOARDS")) {
+        $counts = $flagged["DASHBOARDS"]
+        $dashNames = Get-DashboardAdvisoryNames -DashJson $dashJson -OwnerId $Ctx.OwnerId
+        $named = if ($dashNames.Count -gt 0) { $dashNames -join ", " } else { "dashboard" }
+        $advisory = ("Import changed no dashboards (DASHBOARDS imported=$($counts.Imported) " +
+            "skipped=$($counts.Skipped)); the existing dashboard was NOT updated: " +
+            "$named." + $unchangedTail)
+        Write-Warn $advisory
+        $Ctx.Advisories.Add($advisory)
+    } else {
+        Write-Ok "Imported 1 dashboard"
+    }
+
+    if ($nViews -gt 0) {
+        if ($flagged.ContainsKey("VIEW_DEFINITIONS")) {
+            $counts = $flagged["VIEW_DEFINITIONS"]
+            $viewNames = Get-ViewAdvisoryNames -ViewsXml $viewsXml
+            $named = if ($viewNames.Count -gt 0) { $viewNames -join ", " } else { "view(s)" }
+            $advisory = ("Import changed no views (VIEW_DEFINITIONS imported=$($counts.Imported) " +
+                "skipped=$($counts.Skipped)); the existing views were NOT updated: " +
+                "$named." + $unchangedTail)
+            Write-Warn $advisory
+            $Ctx.Advisories.Add($advisory)
+        } else {
+            Write-Ok "Imported $nViews view(s)"
+        }
+    }
+
+    # Deliberately NOT added to $Ctx.Warnings: that list drives exit 2, and
+    # this class of finding must not fail an install that genuinely succeeded.
+    # Advisories print as a trailer in BOTH summary branches instead, so the
+    # operator's last line is never an unqualified "all successful" over a
+    # warning saying content was not updated.
 }
 
 function Install-SmEnable($Ctx) {
@@ -1934,7 +2258,7 @@ function Install-Reports($Ctx) {
     $reportsFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.reports.file
     $reportsXml = Load-RawTextFile $reportsFile
     $reportsZip = New-ReportsZip -ReportsXml $reportsXml -Marker $Ctx.Marker -OwnerId $Ctx.OwnerId
-    Import-ContentZip -ZipBytes $reportsZip -Label "reports"
+    $null = Import-ContentZip -ZipBytes $reportsZip -Label "reports"
     $nReports = ([regex]::Matches($reportsXml, "<ReportDef ")).Count
     Write-Ok "Imported $nReports report definition(s)"
     # Note: report uninstall (like dashboard and view uninstall) requires the
@@ -2262,19 +2586,31 @@ function Invoke-InstallBundle {
     } | Sort-Object { $_.InstallOrder })
 
     $warnings = [System.Collections.Generic.List[string]]::new()
+    # Advisories are collected separately from warnings: they never affect the
+    # exit code.  They are handed to the caller through $GlobalCtx rather than
+    # the return value so this function's return shape stays a plain warnings
+    # list (a second returned object would be flattened into the same stream).
+    $advisories = [System.Collections.Generic.List[string]]::new()
     $ctx = @{
-        BundleDir = $Bundle.Dir
-        Manifest  = $manifest
-        Marker    = $GlobalCtx.Marker
-        OwnerId   = $GlobalCtx.OwnerId
-        Warnings  = $warnings
-        Names     = @()
+        BundleDir  = $Bundle.Dir
+        Manifest   = $manifest
+        Marker     = $GlobalCtx.Marker
+        OwnerId    = $GlobalCtx.OwnerId
+        Warnings   = $warnings
+        Advisories = $advisories
+        Names      = @()
     }
 
     foreach ($entry in $active) {
         $Step.Value++
         Write-Step $Step.Value $TotalSteps "[$bname] $($entry.InstallLabel)"
         & $entry.InstallFn $ctx
+    }
+    # $null -ne, not truthiness: an empty collection is falsy in PowerShell,
+    # so a plain "if ($GlobalCtx.Advisories)" would drop every advisory from
+    # the first bundle that produced one.
+    if ($null -ne $GlobalCtx.Advisories) {
+        foreach ($a in $advisories) { $GlobalCtx.Advisories.Add("[$bname] $a") }
     }
     return $warnings
 }
@@ -2347,9 +2683,11 @@ function Invoke-Install {
     $ownerId = $currentUser.id
     Write-Ok "Owner user ID: $ownerId"
 
+    $allAdvisories = [System.Collections.Generic.List[string]]::new()
     $globalCtx = @{
-        Marker  = $marker
-        OwnerId = $ownerId
+        Marker     = $marker
+        OwnerId    = $ownerId
+        Advisories = $allAdvisories
     }
 
     $allWarnings = [System.Collections.Generic.List[string]]::new()
@@ -2375,9 +2713,19 @@ function Invoke-Install {
         Write-Host "  - View columns may show 'No data'"
         Write-Host "  - Newly enabled super metrics will report no values"
         Write-Host "This is expected. Refresh after ~5 minutes."
+        Write-AdvisoryTrailer -Advisories $allAdvisories.ToArray()
         exit 2
     } else {
-        Write-Host "Done. All content installed successfully."
+        if ($allAdvisories.Count -gt 0) {
+            # Not "below": the 5-minute NOTE block prints between this line
+            # and the advisories, so the list is seven lines away, not
+            # immediately under.  The ordering is deliberate (NOTE is
+            # boilerplate, the advisory is the delta and must be the last
+            # thing the operator reads), so the wording moves.
+            Write-Host "Done. No failures, but see the attention list at the end of this output."
+        } else {
+            Write-Host "Done. All content installed successfully."
+        }
         Write-Host ""
         Write-Host "NOTE: VCF Operations needs roughly 5 minutes to finish ingesting and"
         Write-Host "configuring imported content. Until that completes:"
@@ -2385,6 +2733,7 @@ function Invoke-Install {
         Write-Host "  - View columns may show 'No data'"
         Write-Host "  - Newly enabled super metrics will report no values"
         Write-Host "This is expected. Refresh after ~5 minutes."
+        Write-AdvisoryTrailer -Advisories $allAdvisories.ToArray()
     }
 }
 
@@ -2560,23 +2909,15 @@ if ($Uninstall) {
 $credMode = if ($Uninstall) { "uninstaller" } else { "installer" }
 Get-Credentials -Mode $credMode
 
-# If the interactive SSL prompt in Get-Credentials set $script:SkipSslVerify,
-# apply the same bypass logic that ran earlier for the -SkipSslVerify flag.
-if ($script:SkipSslVerify -and -not $SkipSslVerify) {
+# If the interactive SSL prompt in Get-Credentials was declined, promote that
+# answer to the real -SkipSslVerify switch (every per-request PS 7+ call site
+# reads $SkipSslVerify) and apply the same bypass logic that ran earlier for
+# the flag.  This block cannot have run already: the prompt only appears when
+# $SkipSslVerify was $false.
+if ($script:SslPromptDeclined) {
     Set-Variable -Name SkipSslVerify -Value ([switch]$true) -Scope Script
     Write-Warning "TLS certificate verification disabled."
-    if ($PSVersionTable.PSVersion.Major -lt 6) {
-        Add-Type @"
-using System.Net;
-using System.Security.Cryptography.X509Certificates;
-public class TrustAllCertsVcf2 : ICertificatePolicy {
-    public bool CheckValidationResult(ServicePoint sp, X509Certificate cert,
-        WebRequest req, int problem) { return true; }
-}
-"@
-        [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsVcf2
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-    }
+    Disable-CertificateValidationLegacy
 }
 
 $script:BaseUrl = "https://$($script:OpsHost)/suite-api"
