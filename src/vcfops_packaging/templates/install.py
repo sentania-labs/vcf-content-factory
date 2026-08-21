@@ -1272,22 +1272,82 @@ def _extract_dashboard_ids(dashboard_json: str) -> list:
     return [d["id"] for d in (data.get("dashboards") or []) if d.get("id")]
 
 
+# Bounds for the content names interpolated into the "NOT updated"
+# advisory. That string prints twice (inline WARN plus the ATTENTION
+# trailer), so a single pathological name or a bundle carrying dozens of
+# objects must not fill the operator's screen. Same echo-safe discipline
+# as the doctor's _clip, deliberately re-stated rather than imported:
+# this template ships standalone inside every bundle zip.
+_ADVISORY_NAME_MAX_CHARS = 120
+_ADVISORY_NAMES_MAX = 20
+
+
+def _bounded_names(names) -> list:
+    """Coerce, clip and cap content names bound for an advisory line.
+
+    Shared by _extract_dashboard_names and _extract_view_names so both
+    halves of the "the existing X was NOT updated: <names>" sentence
+    behave alike.
+
+    The str() coercion is load-bearing, not defensive tidying: the
+    advisory is built with ", ".join(...) OUTSIDE any try, so a non-string
+    name (JSON permits {"name": 123}) raised TypeError and aborted the
+    installer AFTER content had already been imported, leaving a partial
+    install. A decoration helper must never be able to do that.
+
+    Carries its own try for the same reason. Both current callers are
+    already safe (one calls inside its try, the other pre-filters), so
+    this is unreachable today, but this is now a SHARED helper: a third
+    caller passing a non-iterable, or an element whose __str__ raises,
+    would otherwise reintroduce exactly the crash class above.
+    """
+    out: list = []
+    try:
+        for name in names:
+            if not isinstance(name, str):
+                name = str(name)
+            if len(name) > _ADVISORY_NAME_MAX_CHARS:
+                name = name[:_ADVISORY_NAME_MAX_CHARS] + "..."
+            out.append(name)
+    except Exception:  # noqa: BLE001
+        return []
+    if len(out) > _ADVISORY_NAMES_MAX:
+        extra = len(out) - _ADVISORY_NAMES_MAX
+        out = out[:_ADVISORY_NAMES_MAX] + [f"and {extra} more"]
+    return out
+
+
 def _extract_dashboard_names(dashboard_json: str) -> list:
+    """Names of the dashboards in a rendered dashboard.json, best effort.
+
+    Same never-raise contract as _extract_view_names, and deliberately
+    the same bare `except Exception` as that sibling rather than a
+    narrower tuple. `except (TypeError, ValueError)` was not wide enough:
+    json.loads raises RecursionError on deeply nested input, and
+    RecursionError subclasses RuntimeError, not ValueError, so it escaped
+    to the post-import call site. Every caller of this function runs
+    AFTER content has been imported, so an escaping exception leaves a
+    partial install; that consequence, not the odds, sets the width.
+    """
     try:
         data = json.loads(dashboard_json)
-    except (TypeError, ValueError):
+        # json.loads happily returns a list, a string or a number, none
+        # of which have .get; that AttributeError is not a ValueError.
+        if not isinstance(data, dict):
+            return []
+        entries = data.get("dashboards") or []
+        # Without this, a string value iterates character by character
+        # and yields one "?" per character: no exception, but the
+        # operator reads "NOT updated: ?, ?, ?, ?".
+        if not isinstance(entries, list):
+            return []
+        names = [
+            (d.get("name") or d.get("id") or "?") if isinstance(d, dict) else "?"
+            for d in entries
+        ]
+    except Exception:  # noqa: BLE001
         return []
-    return [d.get("name") or d.get("id") or "?" for d in (data.get("dashboards") or [])]
-
-
-# Bounds for the view names interpolated into the "NOT updated" advisory.
-# That string prints twice (inline WARN plus the ATTENTION trailer), so a
-# single pathological <Title> or a bundle carrying dozens of views must
-# not fill the operator's screen. Same echo-safe discipline as the
-# doctor's _clip, deliberately re-stated rather than imported: this
-# template ships standalone inside every bundle zip.
-_VIEW_NAME_MAX_CHARS = 120
-_VIEW_NAMES_MAX = 20
+    return _bounded_names(names)
 
 
 def _extract_view_names(views_xml) -> list:
@@ -1323,15 +1383,10 @@ def _extract_view_names(views_xml) -> list:
                 name = (viewdef.get("name") or "").strip()
             if not name:
                 name = "unnamed view"
-            if len(name) > _VIEW_NAME_MAX_CHARS:
-                name = name[:_VIEW_NAME_MAX_CHARS] + "..."
             names.append(name)
     except Exception:  # noqa: BLE001
         return []
-    if len(names) > _VIEW_NAMES_MAX:
-        extra = len(names) - _VIEW_NAMES_MAX
-        names = names[:_VIEW_NAMES_MAX] + [f"and {extra} more"]
-    return names
+    return _bounded_names(names)
 
 
 def _all_skipped_summaries(result: dict, content_types) -> dict:

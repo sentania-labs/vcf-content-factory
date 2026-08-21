@@ -12,6 +12,7 @@ No network: the import call is stubbed in every test.
 """
 from __future__ import annotations
 
+import json
 import sys
 import types
 from pathlib import Path
@@ -668,11 +669,11 @@ class TestExtractViewNames:
         )
         names = install_mod._extract_view_names(xml_text)
         assert len(names) == 1
-        assert len(names[0]) == install_mod._VIEW_NAME_MAX_CHARS + 3
+        assert len(names[0]) == install_mod._ADVISORY_NAME_MAX_CHARS + 3
         assert names[0].endswith("...")
 
     def test_many_names_get_an_and_n_more_tail(self, install_mod):
-        n = install_mod._VIEW_NAMES_MAX + 7
+        n = install_mod._ADVISORY_NAMES_MAX + 7
         xml_text = (
             "<Content><Views>"
             + "".join(
@@ -682,7 +683,7 @@ class TestExtractViewNames:
             + "</Views></Content>"
         )
         names = install_mod._extract_view_names(xml_text)
-        assert len(names) == install_mod._VIEW_NAMES_MAX + 1
+        assert len(names) == install_mod._ADVISORY_NAMES_MAX + 1
         assert names[-1] == "and 7 more"
         assert names[0] == "View 0"
 
@@ -770,3 +771,175 @@ class TestExtractViewNames:
         assert "CPU &amp; Memory &lt;top&gt;" in xml_text
         assert xml_text.count("<Title") == len(names)
         assert install_mod._extract_view_names(xml_text) == names
+
+
+# ---------------------------------------------------------------------------
+# _extract_dashboard_names, the other half of the same advisory sentence.
+# It returned d.get("name") unconverted, so a non-string JSON name reached
+# ", ".join(...) at install.py:1526 -- which sits OUTSIDE any try -- and
+# aborted the installer AFTER content had been imported, leaving a partial
+# install. It also had neither the clip nor the cap the view side gained.
+# ---------------------------------------------------------------------------
+
+class TestExtractDashboardNames:
+    def test_factory_shape_extracts_the_names(self, install_mod):
+        payload = json.dumps({"dashboards": [
+            {"id": "d1", "name": "[VCF Content Factory] Alpha"},
+            {"id": "d2", "name": "[VCF Content Factory] Beta"},
+        ]})
+        assert install_mod._extract_dashboard_names(payload) == [
+            "[VCF Content Factory] Alpha",
+            "[VCF Content Factory] Beta",
+        ]
+
+    def test_falls_back_to_id_then_placeholder(self, install_mod):
+        payload = json.dumps({"dashboards": [{"id": "d1"}, {}]})
+        assert install_mod._extract_dashboard_names(payload) == ["d1", "?"]
+
+    def test_non_string_name_is_coerced_not_returned_raw(self, install_mod):
+        """The crash: [123] joined with ", " raises TypeError."""
+        payload = '{"dashboards":[{"name":123}]}'
+        names = install_mod._extract_dashboard_names(payload)
+        assert names == ["123"]
+        assert all(isinstance(n, str) for n in names)
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            '{"dashboards":[{"name":123}]}',
+            '{"dashboards":[{"name":1.5}]}',
+            '{"dashboards":[{"name":true}]}',
+            '{"dashboards":[{"name":null,"id":7}]}',
+            '{"dashboards":[{"name":["a","b"]}]}',
+            '{"dashboards":[{"name":{"k":"v"}}]}',
+            '{"dashboards":[null]}',
+            '{"dashboards":["just a string"]}',
+            '{"dashboards":[1,2,3]}',
+            '{"dashboards":{"not":"a list"}}',
+            '{"dashboards":"nope"}',
+            '{"dashboards":[]}',
+            "[1,2,3]",
+            '"just a json string"',
+            "42",
+            "null",
+            "not json at all",
+            "",
+            None,
+            42,
+            b'{"dashboards":[{"name":"Bytes Dash"}]}',
+        ],
+        ids=lambda v: repr(v)[:44],
+    )
+    def test_hostile_payloads_never_raise_and_always_join(
+        self, install_mod, payload
+    ):
+        """Every element must survive the join that builds the advisory.
+        This is the property the installer actually depends on."""
+        names = install_mod._extract_dashboard_names(payload)
+        assert isinstance(names, list)
+        assert all(isinstance(n, str) for n in names)
+        ", ".join(names)  # must not raise
+
+    def test_deeply_nested_json_does_not_escape_as_recursionerror(
+        self, install_mod
+    ):
+        """W-2: json.loads raises RecursionError here, and RecursionError
+        subclasses RuntimeError, so the old `except (TypeError,
+        ValueError)` did not catch it. Every caller runs AFTER the import,
+        so an escape leaves a partial install."""
+        payload = '{"dashboards":' + "[" * 40000 + "]" * 40000 + "}"
+        assert install_mod._extract_dashboard_names(payload) == []
+
+    def test_view_sibling_also_survives_deep_nesting(self, install_mod):
+        """The symmetry claim, driven rather than assumed. Note the view
+        side survives by PARSING deep XML successfully (ElementTree's C
+        accelerator does not recurse in Python), not by degrading to []:
+        50,000 nested ViewDefs come back as 50,000 unnamed views, capped.
+        The property that matters is the same either way -- it does not
+        raise, and the result is join-safe."""
+        deep = (
+            "<Content><Views>"
+            + "<ViewDef>" * 50000
+            + "</ViewDef>" * 50000
+            + "</Views></Content>"
+        )
+        names = install_mod._extract_view_names(deep)
+        assert isinstance(names, list)
+        assert len(names) == install_mod._ADVISORY_NAMES_MAX + 1
+        assert names[-1] == "and 49980 more"
+        ", ".join(names)  # must not raise
+
+    def test_dashboards_as_a_string_is_rejected_not_iterated(
+        self, install_mod
+    ):
+        """N-9: pins the isinstance(entries, list) guard. Without it the
+        string iterates character by character and returns ['?','?','?',
+        '?'] -- no exception, both other properties still hold, and the
+        operator reads "NOT updated: ?, ?, ?, ?". The guard was the only
+        one of the four that no test killed when mutated out."""
+        assert install_mod._extract_dashboard_names('{"dashboards":"nope"}') == []
+
+    def test_bounded_names_cannot_raise_on_its_own(self, install_mod):
+        """It is a shared helper now, so its contract is its own, not the
+        callers'. A third caller must not be able to reintroduce the
+        crash-after-import class."""
+        class _BadStr:
+            def __str__(self):
+                raise RuntimeError("boom")
+
+        def _raising_iter():
+            yield "ok"
+            raise RuntimeError("boom")
+
+        for bad in (None, 42, object(), [_BadStr()], _raising_iter()):
+            out = install_mod._bounded_names(bad)
+            assert isinstance(out, list)
+            assert all(isinstance(n, str) for n in out)
+            ", ".join(out)  # must not raise
+
+    def test_a_very_long_name_is_clipped(self, install_mod):
+        payload = json.dumps({"dashboards": [{"name": "A" * 500_000}]})
+        names = install_mod._extract_dashboard_names(payload)
+        assert len(names) == 1
+        assert len(names[0]) == install_mod._ADVISORY_NAME_MAX_CHARS + 3
+        assert names[0].endswith("...")
+
+    def test_many_names_get_an_and_n_more_tail(self, install_mod):
+        n = install_mod._ADVISORY_NAMES_MAX + 7
+        payload = json.dumps(
+            {"dashboards": [{"name": f"Dash {i}"} for i in range(n)]}
+        )
+        names = install_mod._extract_dashboard_names(payload)
+        assert len(names) == install_mod._ADVISORY_NAMES_MAX + 1
+        assert names[-1] == "and 7 more"
+        assert names[0] == "Dash 0"
+
+    def test_bounds_match_the_view_side(self, install_mod):
+        """The asymmetry this fix closes: both halves of the sentence are
+        clipped and capped by the same shared helper."""
+        long_name = "B" * 500_000
+        dash = install_mod._extract_dashboard_names(
+            json.dumps({"dashboards": [{"name": long_name}]})
+        )
+        view = install_mod._extract_view_names(
+            f"<Content><Views><ViewDef><Title>{long_name}</Title></ViewDef>"
+            "</Views></Content>"
+        )
+        assert dash == view
+
+    def test_installer_dashboard_advisory_survives_a_non_string_name(
+        self, install_mod, tmp_path, capsys
+    ):
+        """End to end through the real _install_dashboards: the join at
+        :1526 is outside every try, so this used to abort mid-install."""
+        ctx = TestInstallTemplateDashboards._make_ctx(
+            install_mod, tmp_path, _mixed_result(dash=(0, 1), views=(1, 0)),
+            with_views=True,
+        )
+        (ctx["bundle_dir"] / "content" / "dashboard.json").write_text(
+            '{"dashboards":[{"id":"d1","name":123}]}'
+        )
+        install_mod._install_dashboards(ctx)  # must not raise
+        out = capsys.readouterr().out
+        assert "Import changed no dashboards" in out
+        assert "123" in out

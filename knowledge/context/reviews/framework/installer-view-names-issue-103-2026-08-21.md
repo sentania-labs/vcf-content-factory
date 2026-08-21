@@ -286,3 +286,183 @@ one. The `Done.` line no longer points "below" at a list seven lines away.
 Nothing regresses on the 19-view real corpus. **Caveat:** none of this
 reaches a customer until `content-packager` rebuilds `dist/`, where 2 of 3
 zips still carry the old quadratic regex (W-1).
+
+---
+
+# Round 2 confirm: `_extract_dashboard_names` hardening (N-1 taken inline)
+
+- **Reviewed:** uncommitted delta vs `687bb02` (round-1 change, merged) in
+  `src/vcfops_packaging/templates/install.py` and
+  `tests/test_dashboard_import_all_skipped.py`
+- **Change:** new shared `_bounded_names()` helper routes both extractors
+  through one coerce/clip/cap path; `_extract_dashboard_names` gains `str`
+  coercion plus two `isinstance` guards; constants renamed
+  `_VIEW_NAME_*` -> `_ADVISORY_NAME_*` (values unchanged).
+- **Verdict: APPROVE** (0 BLOCKING, 1 WARNING, 3 NIT)
+
+## Checks re-run
+
+| Check | Result |
+|---|---|
+| Validate chain (7 packages) | **all OK** |
+| `pytest -q` | **907 passed, 4 skipped, 178 deselected** (+28, matches the claim) |
+| `tests/test_dashboard_import_all_skipped.py` | 84 passed (56 -> 84) |
+| Dashboard payload probe, old vs new, 31 shapes | **17 crashes fixed, 0 regressions** |
+| Escape hunt, 12 further shapes incl. non-`TypeError`/`ValueError` classes | **1 residual found (W-2)** |
+| View-side equivalence vs `687bb02` (19 real views + 27 cases) | **0 behavioral diffs** |
+| Bound symmetry (view vs dashboard) | **byte-identical** at 500k name and at n=20/21/27 |
+| Guard mutation (4 new guards, one at a time) | **3 of 4 pinned by tests** (see N-9) |
+| New tests run against the old module | 4 assertion/attribute kills, 15 of 21 hostile params killed |
+| Constant rename leakage, repo-wide | **fully contained** |
+| `py_compile`, standalone `--help`, em-dash scan | OK / exit 0 / 0 hits |
+
+## The three claimed payloads: confirmed exactly
+
+Driven against the committed `687bb02` module and the working tree side by side:
+
+| Payload | Old (`687bb02`) | New |
+|---|---|---|
+| `{"dashboards":[{"name":123}]}` | returns `[123]`, then `", ".join` raises `TypeError` | `['123']` |
+| `[1,2,3]` | `AttributeError` from `.get` | `[]` |
+| `{"dashboards":[null]}` | `AttributeError` from `.get` | `['?']` |
+
+## The scope expansion was right, and I found 14 more shapes it fixes
+
+The author's argument holds. The two `isinstance` guards are not defensive
+tidying bolted onto an unrelated fix: they are the **same** crash-after-import
+defect, in the **same five lines**, reachable from the **same** input. Fixing
+only the `str` case would have left `[1,2,3]` and `{"dashboards":[null]}`
+crashing at exactly the same place for exactly the same reason. That is a half
+fix by any reading.
+
+The scale is larger than the three payloads suggest. Of 31 shapes I probed,
+**17 crashed the old implementation and are clean now**, including 14 the
+brief did not claim:
+
+`"just a string"`, `42`, `null`, `true`, `3.14`, `{"dashboards":{"a":1}}`,
+`{"dashboards":"notalist"}`, `{"dashboards":123}`, `{"dashboards":[[1,2]]}`,
+`{"dashboards":["str"]}`, `{"dashboards":[true]}`,
+`{"dashboards":[{"name":{"a":1}}]}`, `{"dashboards":[{"name":[1,2]}]}`,
+`{"dashboards":[{"name":1e999}]}` (Infinity), and a 400-digit integer name
+(now coerced then clipped).
+
+**Zero regressions:** across all 31 shapes there is no input where the new
+implementation raises and the old one did not.
+
+## The guards are correct, and the preserved behavior really is preserved
+
+- **`name` -> `id` -> `?` fallback: intact, byte-identical to old.** Verified
+  on 8 fallback shapes, all matching `687bb02` exactly:
+  `{"name":null,"id":null}` -> `['?']`, `{}` -> `['?']`, `{"id":"d1"}` -> `['d1']`,
+  `{"name":"","id":""}` -> `['?']`.
+- **Degrade-to-`[]` contract: intact.** `{"dashboards":[]}`, `{"dashboards":null}`,
+  `{}`, `None`, `12345`, `[]`, `{}` all return `[]` in both.
+- **Bytes still work:** `b'{"dashboards":[{"name":"B"}]}'` -> `['B']` in both.
+- **`_bounded_names` did not disturb the view side.** This was the specific
+  regression risk in a shared-helper refactor, and it is clean: **0
+  behavioral diffs** between `687bb02` and the working tree across all 19
+  real repo views (rendered through the real loader + renderer), the whole
+  19-view corpus document, and 27 synthetic and hostile cases (clip, cap
+  boundary, unescape, the DEF-018 attribute form, `name`-attribute fallback,
+  the 20,000-tag quadratic input, and the full round-1 hostile set).
+- **The symmetry claim is true, not approximate.** For the same 500,000-char
+  name both extractors return byte-identical output (one element, 123 chars,
+  `...` tail). At the cap boundary they agree exactly: n=20 -> no tail,
+  n=21 -> `and 1 more`, n=27 -> `and 7 more`. The off-by-one is right.
+- **Leaving `_extract_dashboard_ids` (`:1270`) alone was principled, not an
+  oversight.** It has the identical unguarded `.get` shape and still raises
+  `AttributeError` on `[1,2,3]`, `{"dashboards":[null]}` and `42`. But it is
+  called at **`:1532`, before `import_content_zip` at `:1538`**, so it fails
+  *pre*-import: a clean abort with nothing installed, not a partial install.
+  Different blast radius, correctly out of scope.
+
+## Constant rename: fully contained
+
+Repo-wide grep for `_VIEW_NAME_MAX_CHARS` / `_VIEW_NAMES_MAX` returns **zero
+hits** anywhere (`src/`, `tests/`, `scripts/`, `bundles/`, docs, workflows).
+The new `_ADVISORY_NAME_*` names appear only in `install.py` (7 uses) and
+`tests/test_dashboard_import_all_skipped.py` (6 uses). Nothing outside this
+file and its tests referenced the old names, so the rename could not have
+broken a caller. `dist/` zips excluded from the grep as stale by definition.
+
+## W-2 (WARNING): `RecursionError` still escapes, on the post-import path
+
+The one shape I found that the new guards do not stop. `json.loads` on deeply
+nested JSON raises **`RecursionError`**, which is a subclass of `RuntimeError`,
+**not** of `TypeError` or `ValueError`, so the existing
+`except (TypeError, ValueError)` at `:1339` does not catch it:
+
+```
+_extract_dashboard_names('{"dashboards":' + '['*40000 + ']'*40000 + '}')
+  -> RecursionError: maximum recursion depth exceeded while decoding a JSON object
+```
+
+Why this matters more than the other residuals: **the view sibling already
+handles it.** `_extract_view_names` uses a bare `except Exception`, which
+catches `RecursionError` and returns `[]` (verified: 100,000-deep XML -> `[]`).
+So the symmetry this delta exists to establish is complete on bounds and
+coercion but **incomplete on exception handling**, which is the axis the
+crash-after-import defect actually lives on. The call site is the same
+post-import one, so the consequence is the same partial install.
+
+Not BLOCKING: it is pre-existing rather than a regression (identical in
+`687bb02`), and it is unreachable from factory-rendered `dashboard.json`,
+whose nesting depth is small and fixed by the builder. Same same-zip
+provenance argument as everything else in this review. But the fix is
+**one word** (`except (TypeError, ValueError)` -> `except Exception`), it
+makes the two halves genuinely identical, and it is worth folding in before
+the `dist/` rebuild puts this on customer machines rather than filing it.
+
+## NITs
+
+- **N-9. One of the four new guards is not pinned by any test.** Mutating
+  each guard out and re-running the 21 parametrized hostile payloads:
+  dropping `isinstance(data, dict)` breaks 4 payloads, dropping
+  `isinstance(d, dict)` breaks 3, dropping the `str()` coercion breaks 6, so
+  all three are caught. But dropping **`isinstance(entries, list)`** breaks
+  **0 of 21**: with it gone, `{"dashboards":"nope"}` iterates the string
+  character by character and returns `['?', '?', '?', '?']`, which still
+  satisfies both properties the tests assert (all-`str`, joinable). The
+  operator would read `the existing dashboard was NOT updated: ?, ?, ?, ?`
+  and no test would fail. The guard is correct and worth keeping; it just has
+  no regression protection. One assertion closes it:
+  `assert _extract_dashboard_names('{"dashboards":"nope"}') == []`.
+- **N-10. `_bounded_names` has no internal guard and is now called outside
+  the `try` on the view path.** `_extract_view_names` ends with
+  `return _bounded_names(names)` at `:1372`, *after* its `except Exception`
+  block, so the helper is no longer covered by it. The helper raises on
+  `None` and on an `int` (`TypeError`), and on any element whose `__str__`
+  raises. Unreachable from both current call sites (view elements are always
+  `str` from ElementTree; dashboard elements always come from `json.loads`,
+  which cannot produce an object with a raising `__str__`), so no action
+  needed today. Worth recording because `_bounded_names` is now a shared
+  module-level helper: a third caller handing it arbitrary objects would
+  reintroduce precisely the crash class this delta closed. A `try` around the
+  body, or moving the call back inside the existing `try`, removes the
+  possibility.
+- **N-11. Falsy-but-legitimate names still collapse to the fallback.**
+  `{"name":0}` -> `['?']` and `{"name":false}` -> `['?']`, because `str()` is
+  applied *after* the `d.get("name") or d.get("id") or "?"` chain, so a
+  dashboard legitimately named `0` prints as `?`. Identical in `687bb02`
+  (also `['?']`), so this is **not** a regression and not introduced here;
+  recorded only so the `or`-chain ordering is a known, deliberate property
+  rather than something re-derived next round.
+- **N-12 (informational, out of scope).** The PowerShell sibling
+  `src/vcfops_packaging/templates/install.ps1` (2,588 lines) has **no
+  advisory feature at all**: zero matches for "advisor" or "NOT updated". The
+  entire "content was NOT updated" advisory and ATTENTION trailer, including
+  both extractors reviewed here, exist only on the Python side. An operator
+  installing the same bundle from Windows gets no such warning. Pre-existing,
+  unrelated to this diff, and a much larger scope question than this PR;
+  noted once so the divergence is on the record.
+
+## If shipped as-is
+
+Both halves of the "the existing X was NOT updated: `<names>`" sentence are
+now bounded identically and cannot crash the installer after content has
+already been imported. The 17 malformed-`dashboard.json` shapes that
+previously aborted a partially-completed install now degrade to a name list
+or to no names. Nothing on the view side changes from what round 1 approved.
+The residual `RecursionError` path (W-2) remains, unreachable from
+factory-rendered JSON. `dist/` is still stale and the rebuild remains the
+gate on any of this reaching a customer (W-1).
