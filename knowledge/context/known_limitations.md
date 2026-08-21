@@ -364,53 +364,40 @@ Authority:
 §"Per-row filtering: IT EXISTS" (15-variant matrix, devel 9.1).
 Mechanism discovered by the user, 2026-07-27.
 
-## Object summary dashboards cannot be assigned programmatically
+## Summary dashboards: no Suite API, no pak binding, UI layer only
 
-**What it is.** VCF Ops can show a chosen dashboard on an object's Summary
-tab instead of the built-in one, per object type. The UI calls it
-"Manage Summary Dashboards" (Dashboards & Reports > Dashboards > Manage >
-(...) > Manage Summary Dashboards), where you "Assign a Dashboard" against
-an Adapter Type, or "Use Default" to restore the built-in.
-Vendor doc: `reference/docs/vcf9/dashboards.md` lines 450-506.
+VCF Ops can show a chosen dashboard on an object's Summary tab per object
+type ("Manage Summary Dashboards" in the UI). Two paths that look like they
+should work do not, and one undocumented path does.
 
-**The limitation.** The factory cannot ship this association. Recon
-2026-08-21 (prod, read-only) established:
+**Does not work: the Suite API.** No endpoint, public or internal. All four
+OpenAPI specs searched by path and full body text (990 paths); zero contain
+"dash". Consistent with dashboards having no REST CRUD at all.
 
-- **No API, public or internal.** All four OpenAPI specs were searched by
-  path and by full body text (operations-api 250 paths, internal-api 180,
-  operations-api-9.1 343, internal-api-9.1 217). Zero paths contain
-  "dash" in any of them. The single body hit across all four is the
-  `DASHBOARDS` content-type enum on
-  `GET /api/content/operations/import`. This is consistent with the
-  standing finding that dashboards have no REST CRUD at all
-  (`api-surface/content_api_surface.md`).
-- **The content-zip does not carry it.** The full per-dashboard field
-  inventory in `wire-formats/wire_formats.md` §Dashboard JSON was checked
-  against five-plus real specimens (factory builds plus community
-  dashboards). No field expresses a summary mapping. Two fields are close
-  in spirit and are **not** it: `homeTab` is the per-user landing tab
-  (vendor doc line 676), and `dashboardNavigations` was empty `{}` in
-  every specimen examined, so its populated shape is unknown.
-- **Association shape is inferred, not schema-confirmed.** UI prose reads
-  as one dashboard per object type, instance-wide, with no evidence of
-  per-user, per-role, or per-policy scoping. No schema anywhere confirms
-  whether the key is `resourceKindKey` + `adapterKindKey` or coarser.
+**Does not work: shipping it in a pak.** Hard negative, established across
+51 vendor paks. `describeSchema.xsd` is byte-identical across pak
+generations and `ResourceKindType` has eight attributes, none binding a
+dashboard. Pak content is a closed taxonomy with no mapping file, and the
+string "summary" appears in zero install scripts corpus-wide.
 
-**What this means in practice.** Assigning a summary dashboard is a
-manual UI action, and a fast one. Automating it would require
-reverse-engineering an undiscovered `mainAction` on the Struts UI layer
-(`/ui/dashboard.action`, session-cookie auth, the same tier as the known
-`deleteTab` / `getDashboardConfig` / `getDashboardList` actions), which
-would need a browser network trace of the Manage Summary Dashboards
-dialog. Even then the ceiling is "POST one opaque form action per
-resource kind", not declarative YAML content the way super metrics,
-views, and dashboards are.
+**Does not work: the content-import zip.** The per-dashboard field
+inventory carries no summary/default field (checked against 5+ specimens).
+`homeTab` is the per-user landing tab, not this; `dashboardNavigations` is
+widget-to-widget drill-down.
 
-**If you author a dashboard intended as a Summary tab**, ship it as an
-ordinary dashboard and tell the user to assign it in the UI. Do not
-imply the install path sets it. Naming a dashboard "VM Details" or
-"ESXi Host Details" does not wire it to anything; several community
-dashboards carry such names while being ordinary navigable dashboards.
+**Does work: the Struts UI layer.** `POST /ui/dashboard.action` with
+`mainAction=associateResourceKindDashboards`, session-cookie auth plus CSRF
+token, keyed by resourceKind, bulk (one call carries the whole map). Full
+wire shape, the deterministic resourceKindId formula, and the support
+caveats are in
+[`api-surface/summary_dashboard_assignment.md`](api-surface/summary_dashboard_assignment.md).
+
+**Two traps.** A dashboard *named* "Summary" or "Details" is not wired to
+anything; several vendor paks ship such names as ordinary navigable
+dashboards. And each assignment materializes an independent server-side
+template rather than sharing one dashboard, so whether an edit to the
+source dashboard propagates to existing assignments is unverified and
+should be answered before designing around it.
 
 ## Pak install is UI-only (not scriptable via Suite API)
 

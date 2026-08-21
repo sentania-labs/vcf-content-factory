@@ -115,6 +115,7 @@ cycles because that did not happen.
 | `install_and_enable.md` | Install path + policy enablement |
 | `internal_supermetrics_assign.md` | Internal supermetrics assign endpoint |
 | `dashboard_delete_api.md` | Dashboard delete API |
+| `summary_dashboard_assignment.md` | Binding a dashboard to an object type's Summary tab (Struts; no Suite API, no pak binding) |
 | `reports_api_surface.md` | Reports API surface |
 | `pak_install_api_exploration.md` | .pak install API exploration |
 | `pak_uninstall_api_exploration.md` | .pak uninstall API exploration |
