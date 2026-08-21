@@ -816,7 +816,7 @@ def extract_to_yaml(exchange_path: str) -> str:
 
     This is the main entry point for the extract CLI command.
     """
-    with open(exchange_path) as f:
+    with open(exchange_path, encoding="utf-8") as f:
         exchange = json.load(f)
 
     design = exchange.get("design", {}).get("design", {})

@@ -627,20 +627,40 @@ class TestRoundTrip:
         from vcfops_packaging.composer import compose_bundle, discover_components
         from vcfops_packaging.loader import load_bundle, BundleValidationError
 
-        # Copy the real content tree symlink-style so loader paths resolve.
+        # Copy the real content tree so loader paths resolve. symlink_to()
+        # requires SeCreateSymbolicLinkPrivilege, which corporate policy can
+        # deny on Windows even with Developer Mode; copytree needs no
+        # privilege and this content is read-only for the test. sdk-adapters/
+        # is excluded because it holds gitignored pak clones (~18 MB) that
+        # are irrelevant to this test and would dominate copy time.
         content_src = REPO_ROOT / "content"
         if not content_src.exists():
             pytest.skip("content/ directory not found")
 
-        # Symlink content/ and third_party/ into tmp_path so the bundle loader
-        # can resolve component paths from there.
-        (tmp_path / "content").symlink_to(content_src.resolve())
+        shutil.copytree(
+            content_src,
+            tmp_path / "content",
+            ignore=shutil.ignore_patterns("sdk-adapters", "__pycache__"),
+        )
         third_party_src = REPO_ROOT / "third_party"
         if third_party_src.exists():
-            (tmp_path / "third_party").symlink_to(third_party_src.resolve())
+            shutil.copytree(
+                third_party_src,
+                tmp_path / "third_party",
+                ignore=shutil.ignore_patterns("__pycache__"),
+            )
 
-        # Also symlink vcfops_common (needed by loader to find repo_root).
-        (tmp_path / "vcfops_common").symlink_to((REPO_ROOT / "src" / "vcfops_common").resolve())
+        # NOTE: vcfops_common is deliberately NOT copied/symlinked here.
+        # compose_bundle() is called below with repo_root=tmp_path explicitly,
+        # and vcfops_common.provenance._find_repo_root() walks up looking for
+        # a content/ or third_party/ child dir -- it does not key off
+        # vcfops_common's presence. load_bundle() (vcfops_packaging/loader.py)
+        # has its own, differently-named _find_repo_root() that DOES look for
+        # a vcfops_common/ or src/vcfops_common/ child, but its search is
+        # bounded to 5 levels up from the manifest path and falls back to
+        # the manifest's grandparent (== tmp_path here) when nothing is
+        # found -- which is the same tmp_path this test wants anyway. So the
+        # absence of vcfops_common/ under tmp_path is a no-op for this test.
 
         # Pick 2 supermetrics (indices 1 and 2)
         sm_entries = discover_components(REPO_ROOT, "supermetrics")

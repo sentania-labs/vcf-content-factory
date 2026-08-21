@@ -783,7 +783,7 @@ def cmd_release(args) -> int:
 
         # Compute slug from the adapter's name field.
         try:
-            adapter_data = yaml.safe_load(source_path.read_text()) or {}
+            adapter_data = yaml.safe_load(source_path.read_text(encoding="utf-8")) or {}
             adapter_name = str(adapter_data.get("name", "")).strip()
         except Exception as e:
             print(f"ERROR: could not read adapter.yaml {source_path}: {e}", file=sys.stderr)
@@ -816,7 +816,7 @@ def cmd_release(args) -> int:
             version = explicit_version
         elif manifest_path.exists():
             try:
-                existing = yaml.safe_load(manifest_path.read_text()) or {}
+                existing = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
                 existing_version = str(existing.get("version", "1.0")).strip()
                 major, minor = existing_version.split(".")
                 version = f"{major}.{int(minor) + 1}"
@@ -827,7 +827,7 @@ def cmd_release(args) -> int:
 
         if explicit_version and manifest_path.exists():
             try:
-                existing = yaml.safe_load(manifest_path.read_text()) or {}
+                existing = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
                 if (
                     str(existing.get("name", "")).strip() == slug
                     and str(existing.get("version", "")).strip() == version
@@ -1010,7 +1010,7 @@ def cmd_release(args) -> int:
         if search_dir.exists():
             for yaml_file in sorted(search_dir.glob("*.y*ml")):
                 try:
-                    data = yaml.safe_load(yaml_file.read_text()) or {}
+                    data = yaml.safe_load(yaml_file.read_text(encoding="utf-8")) or {}
                     if isinstance(data, dict):
                         file_name = str(data.get("name", "")).strip()
                         if file_name == name_arg:
@@ -1052,7 +1052,7 @@ def cmd_release(args) -> int:
                 if source_path is None:
                     for yaml_file in sorted(type_dir.glob("*.y*ml")):
                         try:
-                            data = yaml.safe_load(yaml_file.read_text()) or {}
+                            data = yaml.safe_load(yaml_file.read_text(encoding="utf-8")) or {}
                             if isinstance(data, dict):
                                 file_name = str(data.get("name", "")).strip()
                                 if file_name == name_arg:
@@ -1109,7 +1109,7 @@ def cmd_release(args) -> int:
     elif manifest_path.exists():
         # Auto-bump minor from existing manifest.
         try:
-            existing = yaml.safe_load(manifest_path.read_text()) or {}
+            existing = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
             existing_version = str(existing.get("version", "1.0")).strip()
             major, minor = existing_version.split(".")
             version = f"{major}.{int(minor) + 1}"
@@ -1123,7 +1123,7 @@ def cmd_release(args) -> int:
     # -----------------------------------------------------------------------
     if explicit_version and manifest_path.exists():
         try:
-            existing = yaml.safe_load(manifest_path.read_text()) or {}
+            existing = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
             if (
                 str(existing.get("name", "")).strip() == slug
                 and str(existing.get("version", "")).strip() == version
@@ -1141,7 +1141,7 @@ def cmd_release(args) -> int:
     # Load description from source YAML (fall back to stub).
     # -----------------------------------------------------------------------
     try:
-        source_data = yaml.safe_load(source_path.read_text()) or {}
+        source_data = yaml.safe_load(source_path.read_text(encoding="utf-8")) or {}
         description = str(source_data.get("description", "")).strip()
     except Exception:
         description = ""

@@ -218,8 +218,8 @@ class ReportDef:
 def _mint_id_into_file(path: Path) -> str:
     """Prepend ``id: <uuid4>`` to the YAML file, same contract as dashboards."""
     new_id = str(uuid.uuid4())
-    original = path.read_text()
-    path.write_text(f"id: {new_id}\n{original}")
+    original = path.read_text(encoding="utf-8")
+    path.write_text(f"id: {new_id}\n{original}", encoding="utf-8")
     return new_id
 
 
@@ -230,7 +230,7 @@ def _build_view_index(views_dir: Path) -> dict[str, str]:
         return index
     for p in sorted(views_dir.rglob("*.y*ml")):
         try:
-            data = yaml.safe_load(p.read_text()) or {}
+            data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
             vname = str(data.get("name", "")).strip()
             vid = str(data.get("id", "") or "").strip().lower()
             if vname and vid and _UUID_RE.match(vid):
@@ -247,7 +247,7 @@ def _build_dashboard_index(dashboards_dir: Path) -> dict[str, str]:
         return index
     for p in sorted(dashboards_dir.rglob("*.y*ml")):
         try:
-            data = yaml.safe_load(p.read_text()) or {}
+            data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
             dname = str(data.get("name", "")).strip()
             did = str(data.get("id", "") or "").strip().lower()
             if dname and did and _UUID_RE.match(did):
@@ -286,7 +286,7 @@ def load_file(
     dashboards_dir = Path(dashboards_dir)
 
     try:
-        data = _strict_load(path.read_text()) or {}
+        data = _strict_load(path.read_text(encoding="utf-8")) or {}
     except yaml.constructor.ConstructorError as exc:
         raise ReportValidationError(f"{path}: {exc}") from exc
     if not isinstance(data, dict):

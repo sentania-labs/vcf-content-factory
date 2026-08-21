@@ -838,7 +838,7 @@ def _assemble_zip(
 
     # LICENSE
     license_path = _REPO_ROOT / "LICENSE"
-    license_text = license_path.read_text() if license_path.exists() else None
+    license_text = license_path.read_text(encoding="utf-8") if license_path.exists() else None
 
     # vcfops_manifest.json
     import datetime as _dt

@@ -118,7 +118,7 @@ def load_project(path: str | Path) -> ProjectDef:
         )
 
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as exc:
         raise ProjectValidationError(
             f"{path}: YAML parse error: {exc}", loc=path

@@ -719,7 +719,7 @@ def build_bundle(
     # --- Repo root LICENSE ---
     repo_root = Path(__file__).parent.parent.parent
     license_path = repo_root / "LICENSE"
-    license_text = license_path.read_text() if license_path.exists() else None
+    license_text = license_path.read_text(encoding="utf-8") if license_path.exists() else None
 
     # --- Assemble zip ---
     # --- vcfops_manifest.json: in-zip metadata for staleness detection ---

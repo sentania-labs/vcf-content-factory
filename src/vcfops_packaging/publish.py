@@ -192,7 +192,7 @@ def _acquire_lock(dist_repo: Path) -> None:
     if lock.exists():
         contents = ""
         try:
-            contents = lock.read_text().strip()
+            contents = lock.read_text(encoding="utf-8").strip()
         except Exception:
             pass
         raise PublishError(
@@ -202,7 +202,7 @@ def _acquire_lock(dist_repo: Path) -> None:
             f"  Remove the lockfile manually if you are sure no other publish is active."
         )
     lock.write_text(
-        f"pid={os.getpid()} started={datetime.datetime.utcnow().isoformat()}Z\n"
+        f"pid={os.getpid()} started={datetime.datetime.utcnow().isoformat()}Z\n", encoding="utf-8"
     )
 
 

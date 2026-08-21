@@ -16,6 +16,7 @@ never written to, and the real vcf-content-factory-bundles/ is never touched.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -101,13 +102,23 @@ def _make_factory_copy(tmp_path: Path) -> Path:
     else:
         (factory / "content").mkdir(exist_ok=True)
 
-    # symlink vcfops_* packages and vcfops_common back to the real location
-    # so imports work, without creating duplicate symlinks.
-    _linked: set[str] = set()
-    for pkg in (REPO_ROOT / "src").glob("vcfops_*"):
-        if pkg.is_dir() and pkg.name not in _linked:
-            (factory / pkg.name).symlink_to(pkg.resolve())
-            _linked.add(pkg.name)
+    # cmd_release/cmd_publish (vcfops_packaging/cli.py) shell out to
+    # `sys.executable -m vcfops_packaging validate` with cwd=repo_root (==
+    # this factory copy) as a post-write sanity check, and pass no explicit
+    # `env=`, so the child inherits os.environ as-is. Python's `-m` adds the
+    # child's cwd to sys.path[0], so for that import to resolve, something
+    # importable named `vcfops_packaging` (etc.) has to be reachable from
+    # sys.path in the child. Historically that was done by symlinking the
+    # real vcfops_* packages flat into factory/ (relying on symlink_to(),
+    # which needs SeCreateSymbolicLinkPrivilege -- deniable by corporate
+    # policy on Windows). Pointing PYTHONPATH at the real, absolute
+    # REPO_ROOT/src instead achieves the same import resolution without
+    # any privileged syscall, and -- because it's an absolute path -- is
+    # immune to the child's cwd being a tmp_path copy rather than the real
+    # repo. This does not change which content/ tree is validated: cwd is
+    # still `factory`, so any cwd-relative content path resolution inside
+    # vcfops_packaging still targets factory/content, exactly as before.
+    os.environ["PYTHONPATH"] = str(REPO_ROOT / "src")
 
     # Copy describe cache if present (needed for validators).
     describe_cache = REPO_ROOT / ".describe_cache.json"

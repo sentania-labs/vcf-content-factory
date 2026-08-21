@@ -119,7 +119,7 @@ class ReleaseDef:
 def _load_released_flag(path: Path) -> Optional[bool]:
     """Return the ``released:`` flag from a content YAML, or None on load failure."""
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         if not isinstance(data, dict):
             return None
         raw = data.get("released", False)
@@ -154,7 +154,7 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
     if not path.exists():
         raise ReleaseValidationError(f"release manifest not found: {path}")
 
-    data = yaml.safe_load(path.read_text()) or {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         raise ReleaseValidationError(f"{path}: expected a YAML mapping")
 

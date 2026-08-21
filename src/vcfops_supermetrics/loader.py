@@ -165,15 +165,15 @@ def _mint_id_into_file(path: Path) -> str:
     identifiers — generated once, never changed after.
     """
     new_id = str(uuid.uuid4())
-    original = path.read_text()
-    path.write_text(f"id: {new_id}\n{original}")
+    original = path.read_text(encoding="utf-8")
+    path.write_text(f"id: {new_id}\n{original}", encoding="utf-8")
     return new_id
 
 
 def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SuperMetricDef:
     path = Path(path)
     try:
-        data = _strict_load(path.read_text()) or {}
+        data = _strict_load(path.read_text(encoding="utf-8")) or {}
     except yaml.constructor.ConstructorError as exc:
         raise SuperMetricValidationError(f"{path}: {exc}") from exc
     if not isinstance(data, dict):

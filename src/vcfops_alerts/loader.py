@@ -422,7 +422,7 @@ def load_recommendation_file(path: str | Path, enforce_framework_prefix: bool = 
     """Load a single recommendation YAML file."""
     path = Path(path)
     try:
-        data = _strict_load(path.read_text()) or {}
+        data = _strict_load(path.read_text(encoding="utf-8")) or {}
     except yaml.constructor.ConstructorError as exc:
         raise AlertValidationError(f"{path}: {exc}") from exc
     if not isinstance(data, dict):
@@ -518,7 +518,7 @@ def resolve_alert_recommendations(
 def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> AlertDef:
     path = Path(path)
     try:
-        data = _strict_load(path.read_text()) or {}
+        data = _strict_load(path.read_text(encoding="utf-8")) or {}
     except yaml.constructor.ConstructorError as exc:
         raise AlertValidationError(f"{path}: {exc}") from exc
     if not isinstance(data, dict):

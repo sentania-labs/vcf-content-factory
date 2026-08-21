@@ -556,7 +556,7 @@ def main() -> int:
             _emit(format_report(result))
 
         if output_file:
-            Path(output_file).write_text("".join(out_lines))
+            Path(output_file).write_text("".join(out_lines), encoding="utf-8")
             print(f"Report written to: {output_file}", file=sys.stderr)
         return 0
 
@@ -810,7 +810,7 @@ def assemble_buildkit(
         # The tarball contains sdk_buildkit/ at the top level so that
         # tar xzf sdk-buildkit-N.tgz && python3 -m sdk_buildkit works
         # from the extraction directory.
-        with tarfile.open(str(tarball_path), "w:gz") as tf:
+        with tarfile.open(str(tarball_path), "w:gz", encoding="utf-8") as tf:
             tf.add(str(kit_dir), arcname="sdk_buildkit")
 
         _log(f"  packed tarball: {tarball_path}")

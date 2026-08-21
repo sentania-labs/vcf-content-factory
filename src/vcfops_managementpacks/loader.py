@@ -2975,7 +2975,7 @@ def _parse_mpb_event(raw: dict, parent_tag: str) -> MPBEventDef:
 def load_file(path: str | Path) -> ManagementPackDef:
     path = Path(path)
     try:
-        data = _strict_load(path.read_text()) or {}
+        data = _strict_load(path.read_text(encoding="utf-8")) or {}
     except yaml.constructor.ConstructorError as exc:
         raise ManagementPackValidationError(f"{path}: {exc}") from exc
     if not isinstance(data, dict):

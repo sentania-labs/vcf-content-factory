@@ -205,7 +205,7 @@ def cmd_render(args) -> int:
     output_str = json.dumps(rendered, indent=2)
 
     if args.output:
-        Path(args.output).write_text(output_str)
+        Path(args.output).write_text(output_str, encoding="utf-8")
         print(f"Wrote {args.output}", file=sys.stderr)
     else:
         print(output_str)
@@ -244,7 +244,7 @@ def cmd_render_export(args) -> int:
 
     out_path = args.out
     if out_path:
-        Path(out_path).write_text(output_str)
+        Path(out_path).write_text(output_str, encoding="utf-8")
         byte_size = len(output_str.encode("utf-8"))
         top_keys = list(rendered.keys())
         print(f"Wrote {out_path}  ({byte_size:,} bytes, top-level keys: {top_keys})",
@@ -282,7 +282,7 @@ def cmd_extract(args) -> int:
         return 1
 
     if out:
-        Path(out).write_text(yaml_text)
+        Path(out).write_text(yaml_text, encoding="utf-8")
         print(f"Extracted {src} → {out}", file=sys.stderr)
     else:
         print(yaml_text)
@@ -592,7 +592,7 @@ def cmd_pak_compare(args) -> int:
         _emit(format_report(result))
 
     if output_file:
-        Path(output_file).write_text("".join(out_lines))
+        Path(output_file).write_text("".join(out_lines), encoding="utf-8")
         print(f"Report written to: {output_file}", file=sys.stderr)
 
     return 0

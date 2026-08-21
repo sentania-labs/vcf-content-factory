@@ -480,7 +480,7 @@ def _load_bundle_yaml_for_release(artifact) -> dict:
     """Load the raw bundle YAML dict for a release artifact, or return {}."""
     try:
         import yaml as _yaml
-        data = _yaml.safe_load(artifact.source_path.read_text()) or {}
+        data = _yaml.safe_load(artifact.source_path.read_text(encoding="utf-8")) or {}
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}

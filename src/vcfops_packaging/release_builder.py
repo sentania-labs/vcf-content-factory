@@ -136,7 +136,7 @@ def _read_name_from_yaml(path: Path) -> str:
         ValueError: If the file cannot be parsed or has no ``name:`` field.
     """
     try:
-        data = yaml.safe_load(path.read_text()) or {}
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception as exc:
         raise ValueError(f"cannot parse YAML at {path}: {exc}") from exc
     if not isinstance(data, dict):
@@ -461,7 +461,7 @@ def _build_mp_headline(
     exchange = render_mpb_exchange_json(mp)
     exchange_filename = f"{mp.adapter_kind}_exchange.json"
     exchange_path = tmp_dir / exchange_filename
-    exchange_path.write_text(json.dumps(exchange, indent=2))
+    exchange_path.write_text(json.dumps(exchange, indent=2), encoding="utf-8")
 
     # Package both into a single zip
     zip_name = f"{mp.adapter_kind}.zip"
@@ -671,7 +671,7 @@ def _load_bundle_data_if_bundle(source_path: Path) -> "dict | None":
     if not is_bundle:
         return None
     try:
-        data = yaml.safe_load(source_path.read_text()) or {}
+        data = yaml.safe_load(source_path.read_text(encoding="utf-8")) or {}
         if not isinstance(data, dict):
             return None
         # For PROJECT.yaml with no explicit dashboards list, discover from subdir.

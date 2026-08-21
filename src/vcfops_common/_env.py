@@ -63,7 +63,7 @@ def load_dotenv(start: Optional[Path] = None) -> Optional[Path]:
 
 
 def _parse_into_environ(path: Path) -> None:
-    for raw in path.read_text().splitlines():
+    for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue

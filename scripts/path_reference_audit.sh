@@ -312,6 +312,55 @@ if [[ -f knowledge/context/reference_sources.md ]]; then
   done < knowledge/context/reference_sources.md
 fi
 
+# --- Tracked-file index (built ONCE, replaces a per-citation `git ls-files`
+# subprocess spawn) ----------------------------------------------------------
+# is_git_tracked() used to spawn up to 4 `git ls-files` subprocesses per
+# candidate citation. On MSYS2/Git-Bash (no real fork — every spawn pays
+# Windows process-creation cost) that measured ~199ms/spawn; against this
+# corpus's citation volume that put full-script wall time at 20+ minutes
+# (vs ~30s on Linux, where a spawn is ~5ms) — see
+# knowledge/lessons/windows-host-portability.md. Building one index up front
+# from a single `git ls-files -z` and doing O(1) hash lookups per candidate
+# fixes this on every platform identically (no platform branch); it is not
+# Windows-specific, it's just faster everywhere, and MUST produce
+# byte-identical results to the old per-call `git ls-files` invocations.
+#
+# Two traps, both load-bearing for correctness:
+#   1. MUST read with `-z` / `read -r -d ''`. Plain `git ls-files` C-escapes
+#      non-ASCII paths (`"kn\303\244.md"`) — an index built from that output
+#      would never match the real (decoded) path a citation names.
+#   2. The old `git ls-files -- "${p}/"` check is a PREFIX test (true if
+#      ANYTHING is tracked under p/), not an exact-path match. A hash of
+#      exact tracked file paths cannot answer that; TRACKED_DIR_PREFIX_SET
+#      below is a precomputed set of every ancestor directory of every
+#      tracked file, so `TRACKED_DIR_PREFIX_SET[p]` is set iff some tracked
+#      file lives under `p/` — the same condition the old prefix scan
+#      tested for.
+declare -A TRACKED_FILE_SET=()
+declare -A TRACKED_DIR_PREFIX_SET=()
+# Ordered (== `git ls-files`'s own sort order) list of every tracked path —
+# feeds the "did you mean" suggestion lookup in the fourth pass below,
+# replacing its own repeated `git ls-files` (whole-repo listing!) call with
+# an in-memory scan of this array.
+declare -a TRACKED_FILES_LIST=()
+while IFS= read -r -d '' _tf; do
+  TRACKED_FILE_SET["${_tf}"]=1
+  TRACKED_FILES_LIST+=("${_tf}")
+  case "${_tf}" in
+    */*)
+      _tdir="${_tf%/*}"
+      while :; do
+        TRACKED_DIR_PREFIX_SET["${_tdir}"]=1
+        case "${_tdir}" in
+          */*) _tdir="${_tdir%/*}" ;;
+          *) break ;;
+        esac
+      done
+      ;;
+  esac
+done < <(git ls-files -z)
+unset _tf _tdir
+
 # --- Extraction + verification ----------------------------------------------
 FOUND_DEAD=0
 
@@ -346,17 +395,19 @@ strip_trailing_punct() {
 }
 
 is_git_tracked() {
-  # Rule #5a: COMMITTED check via `git ls-files` — never bare
-  # filesystem existence. A tracked FILE (literal, or with a `.md`/
-  # `.py` extension appended) or a tracked-DIRECTORY prefix match both
-  # count. Deterministic on any checkout regardless of local clones.
+  # Rule #5a: COMMITTED check — never bare filesystem existence. A tracked
+  # FILE (literal, or with a `.md`/`.py` extension appended) or a
+  # tracked-DIRECTORY prefix match both count. Deterministic on any
+  # checkout regardless of local clones. O(1) lookups against the
+  # TRACKED_FILE_SET / TRACKED_DIR_PREFIX_SET index built once above from
+  # a single `git ls-files -z` — see that block's comment for why (no
+  # per-candidate subprocess spawn).
   local p="$1"
-  git ls-files --error-unmatch -- "${p}" >/dev/null 2>&1 && return 0
-  git ls-files --error-unmatch -- "${p}.md" >/dev/null 2>&1 && return 0
-  git ls-files --error-unmatch -- "${p}.py" >/dev/null 2>&1 && return 0
-  if git ls-files -- "${p}/" 2>/dev/null | grep -q .; then
-    return 0
-  fi
+  p="${p%/}"   # normalize a possible trailing slash before lookup
+  [[ -n "${TRACKED_FILE_SET[${p}]:-}" ]] && return 0
+  [[ -n "${TRACKED_FILE_SET[${p}.md]:-}" ]] && return 0
+  [[ -n "${TRACKED_FILE_SET[${p}.py]:-}" ]] && return 0
+  [[ -n "${TRACKED_DIR_PREFIX_SET[${p}]:-}" ]] && return 0
   return 1
 }
 
@@ -666,6 +717,32 @@ done
 # --- Fourth pass: bare single-segment directory citations (rule #10) --------
 PAK_INTERNAL_DIRS="docs dashboards views icons profiles lib resources conf src"
 
+# Precompute, ONCE per DISTINCT citing_dir (not per candidate token), the set
+# of every path-component name appearing anywhere in a tracked path under
+# `${citing_dir}/` — replaces the loop's own
+# `git ls-files -- "${citing_dir}/" | grep -q "/${seg}/"` (a subprocess pair
+# spawned per candidate) with an O(1) hash lookup per candidate. The set of
+# distinct citing_dir values is small and fixed (one per TARGET_FILES
+# subdirectory — CLAUDE.md's, each agent prompt's, each skill's, etc.), so
+# this is a handful of `git ls-files` calls total, not one per citation. See
+# knowledge/lessons/windows-host-portability.md.
+declare -A DIR_SEG_SET=()
+declare -A _seen_citing_dir=()
+for file in "${TARGET_FILES[@]}"; do
+  case "${file}" in STRUCTURE.md|.gitignore) continue ;; esac
+  citing_dir="$(dirname -- "${file}")"
+  [[ "${citing_dir}" == "." ]] && continue
+  [[ -n "${_seen_citing_dir[${citing_dir}]:-}" ]] && continue
+  _seen_citing_dir["${citing_dir}"]=1
+  while IFS= read -r -d '' _dline; do
+    IFS='/' read -r -a _dparts <<< "${_dline}"
+    for _dp in "${_dparts[@]}"; do
+      DIR_SEG_SET["${citing_dir}|${_dp}"]=1
+    done
+  done < <(git ls-files -z -- "${citing_dir}/" 2>/dev/null)
+done
+unset _seen_citing_dir _dline _dparts _dp
+
 for file in "${TARGET_FILES[@]}"; do
   case "${file}" in STRUCTURE.md|.gitignore) continue ;; esac
   citing_dir="$(dirname -- "${file}")"
@@ -680,7 +757,7 @@ for file in "${TARGET_FILES[@]}"; do
     if is_git_tracked "${parent_dir}/${seg}" || [[ -d "${parent_dir}/${seg}" ]]; then
       continue
     fi
-    if [[ "${citing_dir}" != "." ]] && git ls-files -- "${citing_dir}/" 2>/dev/null | grep -q "/${seg}/"; then
+    if [[ "${citing_dir}" != "." && -n "${DIR_SEG_SET[${citing_dir}|${seg}]:-}" ]]; then
       continue
     fi
     pak_conv=0
@@ -690,7 +767,19 @@ for file in "${TARGET_FILES[@]}"; do
     if [[ "${pak_conv}" -eq 1 && ${#MANAGED_PAK_NAMES[@]} -gt 0 ]]; then
       continue
     fi
-    suggestion="$(git ls-files | grep -m1 -oP "^.*?/${seg}/" || true)"
+    # "did you mean" suggestion: first tracked path (in `git ls-files`
+    # sort order, replicated by TRACKED_FILES_LIST's insertion order)
+    # containing "/${seg}/" — an in-memory scan of the index built once
+    # at startup instead of a fresh whole-repo `git ls-files` spawn here.
+    suggestion=""
+    for _f in "${TRACKED_FILES_LIST[@]}"; do
+      case "${_f}" in
+        */"${seg}"/*)
+          suggestion="${_f%%/"${seg}"/*}/${seg}/"
+          break
+          ;;
+      esac
+    done
     if [[ -n "${suggestion}" ]]; then
       echo "${file}:${lineno} -> \`${tok}\` (bare directory citation: did you mean \`${suggestion}\`?)"
     else
@@ -699,6 +788,7 @@ for file in "${TARGET_FILES[@]}"; do
     FOUND_DEAD=1
   done < <(grep -noP '(?<=\`)[A-Za-z0-9_-]+/(?=\`)' "${file}" 2>/dev/null || true)
 done
+unset _f
 
 if [[ "${FOUND_DEAD}" -eq 1 ]]; then
   echo >&2

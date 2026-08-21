@@ -94,7 +94,7 @@ SCRIPT_DIR = Path(__file__).parent
 
 
 def _load_json_from_path(p: Path) -> Any:
-    return json.loads(p.read_text())
+    return json.loads(p.read_text(encoding="utf-8"))
 
 
 def _bundle_display_name(bundle: Dict) -> str:
@@ -128,7 +128,7 @@ def _discover_bundles() -> List[Dict]:
         for bundle_json_path in sorted(bundles_root.glob("*/bundle.json")):
             slug = bundle_json_path.parent.name
             try:
-                manifest = json.loads(bundle_json_path.read_text())
+                manifest = json.loads(bundle_json_path.read_text(encoding="utf-8"))
             except Exception as exc:
                 print(f"  WARN  Could not parse {bundle_json_path}: {exc} -- skipping")
                 continue
@@ -144,7 +144,7 @@ def _discover_bundles() -> List[Dict]:
         legacy_content_dir = SCRIPT_DIR / "content"
         if legacy_manifest_path.exists() and legacy_content_dir.exists():
             try:
-                manifest = json.loads(legacy_manifest_path.read_text())
+                manifest = json.loads(legacy_manifest_path.read_text(encoding="utf-8"))
             except Exception:
                 manifest = {"name": "bundle", "description": "", "content": {}}
             # Synthesise a content map pointing to the legacy content/ directory.
@@ -1443,14 +1443,14 @@ def _install_dashboards(ctx: Dict) -> None:
     bundle_dir = ctx["bundle_dir"]
     manifest = ctx["manifest"]
     dash_file = bundle_dir / manifest["content"]["dashboards"]["file"]
-    dash_json = dash_file.read_text()
+    dash_json = dash_file.read_text(encoding="utf-8")
 
     # Views XML (in same bundle content dir, via views manifest key if present)
     views_xml = ""
     if "views" in manifest.get("content", {}):
         views_file = bundle_dir / manifest["content"]["views"]["file"]
         if views_file.exists():
-            views_xml = views_file.read_text()
+            views_xml = views_file.read_text(encoding="utf-8")
 
     owner_id = ctx["owner_id"]
     dash_ids = _extract_dashboard_ids(dash_json.replace("PLACEHOLDER_USER_ID", owner_id))

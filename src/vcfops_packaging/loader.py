@@ -230,7 +230,7 @@ def load_bundle(path: str | Path) -> Bundle:
     if not path.exists():
         raise BundleValidationError(f"bundle manifest not found: {path}")
 
-    data = yaml.safe_load(path.read_text()) or {}
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     if not isinstance(data, dict):
         raise BundleValidationError(f"{path}: expected a YAML mapping")
 

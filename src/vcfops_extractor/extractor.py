@@ -239,7 +239,7 @@ def _scan_existing_ids(kind: str) -> dict[str, Path]:
     target_dir = dir_map.get(kind)
     if target_dir and target_dir.exists():
         for p in target_dir.rglob("*.y*ml"):
-            text = p.read_text(errors="replace")
+            text = p.read_text(errors="replace", encoding="utf-8")
             for m in uuid_re.finditer(text):
                 result[m.group(1).lower()] = p
     return result

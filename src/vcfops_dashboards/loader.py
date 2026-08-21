@@ -1316,14 +1316,14 @@ def _mint_id_into_file(path: Path) -> str:
     knowledge/context/authoring/uuids_and_cross_references.md.
     """
     new_id = str(uuid.uuid4())
-    original = path.read_text()
-    path.write_text(f"id: {new_id}\n{original}")
+    original = path.read_text(encoding="utf-8")
+    path.write_text(f"id: {new_id}\n{original}", encoding="utf-8")
     return new_id
 
 
 def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_dashboard: bool = False) -> ViewDef:
     try:
-        data = _strict_load(path.read_text()) or {}
+        data = _strict_load(path.read_text(encoding="utf-8")) or {}
     except yaml.constructor.ConstructorError as exc:
         raise DashboardValidationError(
             f"{path}: {exc}"
@@ -1644,7 +1644,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
 
 def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_name_path: str = "VCF Content Factory") -> Dashboard:
     try:
-        data = _strict_load(path.read_text()) or {}
+        data = _strict_load(path.read_text(encoding="utf-8")) or {}
     except yaml.constructor.ConstructorError as exc:
         raise DashboardValidationError(
             f"{path}: {exc}"

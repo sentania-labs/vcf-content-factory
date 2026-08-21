@@ -294,7 +294,7 @@ def _condition_to_wire(cond: dict) -> dict:
 def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SymptomDef:
     path = Path(path)
     try:
-        data = _strict_load(path.read_text()) or {}
+        data = _strict_load(path.read_text(encoding="utf-8")) or {}
     except yaml.constructor.ConstructorError as exc:
         raise SymptomValidationError(f"{path}: {exc}") from exc
     if not isinstance(data, dict):
