@@ -177,11 +177,27 @@ Walk all of these against the change. Each is tied to its authority.
    framework analog of "unreadable is not compliant." A silent downgrade
    is BLOCKING; a loud, documented one is at most a WARNING.
 
-9. **Stale-zip discipline.** If the change touches
-   `src/vcfops_packaging/templates/`, `src/vcfops_packaging/builder.py`, or
-   `src/vcfops_dashboards/render.py`, **all dist zips are stale** (CLAUDE.md
-   "After tooling changes"). The change must flag a `content-packager`
-   rebuild; if it doesn't, that's a finding.
+9. **Stale-zip discipline, and the signal that announces it.** If the
+   change touches `src/vcfops_packaging/templates/`,
+   `src/vcfops_packaging/builder.py`, or `src/vcfops_dashboards/render.py`,
+   **all dist zips are stale** (CLAUDE.md "After tooling changes"). The
+   change must flag a `content-packager` rebuild; if it doesn't, that's a
+   finding.
+
+   **Check the version stamp too, not just the artifact.** A rebuild fixes
+   *our* copy; `CURRENT_TEMPLATE_VERSION` in
+   `src/vcfops_packaging/template_version.py` is what tells *every already
+   distributed* copy it is stale. The builders write it into
+   `vcfops_manifest.json` and `check-staleness` compares only that value, so
+   a templates change without a bump leaves every previously built bundle
+   reporting **current** and no operator is ever prompted to rebuild. The
+   fix reaches the zips and nothing tells anyone the old zips are obsolete.
+   Missing this is BLOCKING, not a NIT: it is the reports-green-while-broken
+   class, aimed at people who cannot see the repo.
+
+   Provenance: caught by Codex on PR #105 after this gate had already
+   cleared the same diff, having checked the artifact but not the signal
+   about the artifact.
 
 10. **Test coverage of the change.** Did `tooling` add/extend tests for
     the changed behavior? The render surface was untested when both
