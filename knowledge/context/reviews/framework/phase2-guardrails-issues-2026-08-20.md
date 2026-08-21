@@ -592,3 +592,200 @@ corrupt input I could construct, and cannot reproduce a value typed on
 its command line. The two loose ends are cosmetic-but-real: the
 installer's closing line still says everything succeeded when a WARN
 above says otherwise (W-7), and every dist zip is still stale (W-5).
+
+---
+
+# Round 3 (2026-08-21) - confirm pass on W-7 and the three nits
+
+- **Scope:** round-2 W-7 plus N-9, N-11, N-8. Commit `6a02f24` (working
+  tree clean, diffed against `9d52c2f`). Dimensions cleared in rounds 1
+  and 2 were not re-walked.
+- **Round-3 verdict:** APPROVE. 0 BLOCKING, 1 WARNING (the standing W-5),
+  6 NIT. Every property the brief asked me to confirm was driven, not
+  read.
+
+## Checks re-run (round 3)
+
+| Check | Result |
+|---|---|
+| Full default suite | **852 passed, 4 skipped, 178 deselected** (matches the claim; was 846) |
+| `tests/test_dashboard_import_all_skipped.py` alone | 29 passed (was 23, +6 as claimed) |
+| Full validate chain (7 packages) | all green |
+| `scripts/path_reference_audit.sh` | exit 0, "clear", plus the two pre-existing RULE-015 standing-exception WARNINGs |
+| Em-dash scan over every added line, `9d52c2f..6a02f24` | **0** |
+| Real `_run_install` + real `_install_one_bundle`, 4 envelope shapes | see table below |
+| `_extract_view_names`, 24 malformed/hostile inputs | never raised; two behavioral edges, N-14/N-15 |
+| `_extract_view_names` against real rendered XML (`dist/vks-core-consumption-bundle.zip`) | 1 title, exact view name, `<Title>` count in the document is 1 |
+| Mutation test on the dropped assert's replacement | mutant killed (see below) |
+| `doctor.py` under `python3 -O` | imports clean; no module-level asserts remain |
+| Dist zip staleness (W-5) | 3 of 3 zips carry a **different** `install.py` than the repo template |
+
+## W-7 - RESOLVED, and the trailer really is last
+
+Driven end to end through the **real** `_run_install` calling the
+**real** `_install_one_bundle` (not the test's stubbed seam), with a stub
+`Client` and a staged bundle carrying one dashboard and one view:
+
+| Envelope | rc | "Done." line | Actual last line printed |
+|---|---|---|---|
+| DASH 0/1, VIEWS 2/0 | **0** | `Done. No failures, but see the attention list below.` | `  ATTENTION  [mybundle] Import changed no dashboards ...` |
+| DASH 1/0, VIEWS 1/0 (clean) | **0** | `Done. All content installed successfully.` | the NOTE block; **no** attention section at all |
+| DASH 0/1 + VIEWS 0/2 + a genuine `ctx["warnings"]` entry | **2** | `Done with 1 warning(s):` | `  ATTENTION  [mybundle] Import changed no views ...` |
+| DASH 0/1, VIEWS 0/2, no warnings | **0** | `Done. No failures, but see the attention list below.` | `  ATTENTION  [mybundle] Import changed no views ...` |
+
+All four properties the brief named hold:
+
+- the trailer is the **last** thing printed on a flagged run, in both
+  branches (it sits after the 5-minute NOTE block, which is the right
+  order: NOTE is boilerplate, the advisory is the delta);
+- a clean run still prints the unqualified success line and emits no
+  "need attention" text at all, so the new channel is inert when nothing
+  is flagged;
+- advisories alone exit 0, and a genuine warning still exits 2 with both
+  advisories surviving beside it, correctly counted (`2 item(s) need
+  attention` alongside `Done with 1 warning(s)`);
+- the `[{bundle}]` prefix is applied at the `_install_one_bundle` return
+  (`install.py:2329`) and shows up on every trailer line.
+
+Wiring checked rather than assumed: `ctx["advisories"]` has exactly one
+producer (`_install_dashboards`, `:1492`/`:1507`), one collector
+(`_run_install`, `:2425`), one printer (`_print_advisories`, `:2427`),
+and one call site for `_install_one_bundle`. No path discards the list.
+The uninstall ctx has no `advisories` key, and `_install_dashboards` is
+unreachable from it (`_CONTENT_REGISTRY` install/uninstall functions are
+separate), so the `setdefault` is defensive rather than load-bearing.
+
+## `_extract_view_names` cannot raise - confirmed, with two edges
+
+24 inputs through the real function: `None`, `int`, `bytes`, `list`,
+`dict`, empty, non-XML, unclosed `<Title>`, orphan `</Title>`, nested
+`<Title>`, embedded NUL, a `</Foo>...<Bar>` span that exercises
+`re.DOTALL`, lowercase `<title>`, `<Title>` carrying an attribute, an XML
+entity, a lone surrogate, 10,000 titles, and a 5 MB title. **Nothing
+raised.** The `views_xml or ""` guard handles `None`/falsy and the bare
+`except Exception` catches the `TypeError` from a non-str, so the
+"degrade to no names" contract holds. On the real rendered corpus it is
+exact: `render.py:761` emits `<Title>` once per `ViewDef` and nowhere
+else, so the regex is 1:1 with views, and the one dist bundle that ships
+views extracts its single view name verbatim.
+
+Two edges, both NITs (N-14, N-15) rather than warnings, because the input
+is factory-rendered XML from the same zip, not operator or network input.
+
+## The dropped assert - the property IS genuinely covered
+
+I did not take this on the test's existence. I mutated
+`KNOWN_BOOTSTRAP_SCRIPTS` to add `"bootstrap-Refs2"` (hyphen and capitals,
+which `_SCRIPT_NAME_RE` rejects) and re-ran
+`test_known_bootstrap_scripts_all_match_the_name_guard`: **rc 1, test
+FAILED**, naming the offending entry. Restored and byte-compared. The
+test is in the default (non-slow) tier, so CI runs it on every push.
+`doctor.py` now imports clean under `python3 -O` with no module-level
+asserts. Agreeing with the call: the assert and the test proved the same
+thing, but only one of them survives `-O`, and only one of them fails in
+CI instead of at SessionStart. Dropping the assert is the correct
+resolution of N-8, and the comment at `doctor.py:692-699` names the test
+by full node id so the next reader can find the coverage.
+
+## N-9, N-11 - RESOLVED
+
+- **N-9.** The stray double blank line in `handler.py`'s import block is
+  gone; the block reads cleanly into `_all_skipped_message`.
+- **N-11.** `cli.py:381-392` now builds `unaffected` from
+  `names_by_type`, so both the affected and not-affected lines speak in
+  item names. Verified in round 2's shapes: the "not affected (imported
+  normally)" line names content items, not `DASHBOARDS`/`VIEW_DEFINITIONS`.
+- **N-10** (from round 2) is also closed: `_extract_view_names` gives the
+  view WARN the same naming fidelity as the dashboard WARN, verified live
+  (`the existing views were NOT updated: [VCF Content Factory] Alpha.`).
+
+## WARNING (round 3)
+
+### W-5 (rounds 1 and 2) - STILL OPEN, now measured
+
+Not a new finding, and the orchestrator has stated the
+`content-packager` rebuild lands in this same PR. Recording the
+measurement so the PR has the evidence: SHA-256 of the repo template
+`src/vcfops_packaging/templates/install.py` is `8f59cee8cdd9...`, and the
+`install.py` inside all three `dist/*.zip` differs
+(`b90012b0e83b`, `2368ebe58aae`, `3dfaf8c4f934`). Every shipped zip
+therefore still carries the installer that ends a no-op dashboard import
+on `Done. All content installed successfully.` and exits 0 with no
+attention list, which is exactly the defect this round fixes. Closes when
+the rebuild lands.
+
+## NIT (round 3)
+
+- N-14. `_extract_view_names` is quadratic on unclosed `<Title>` opens.
+  `"<Title>" * n` measured: 1,000 -> 0.05s, 5,000 -> 1.3s, 20,000 ->
+  **21s**, 50,000 and 200,000 -> still running at my 30s cutoff. `.*?`
+  under `re.DOTALL` rescans to end-of-string from every open tag. Not
+  reachable from `render.py` output (always balanced) and a truncated
+  file yields at most one unclosed tag, so this is a hang only on a
+  deliberately crafted `views_content.xml`. Bounding the input
+  (`views_xml[:200_000]`) or using `[^<]*?` instead of `.*?` removes it.
+- N-15. The advisory string is unbounded. A 5 MB `<Title>` produces a
+  5 MB line, printed twice (inline `WARN` plus the `ATTENTION` trailer);
+  a bundle with 40 views produces one very long line. This is the same
+  class as W-3, which this very round fixed in `doctor.py` with `_clip`.
+  The input here is factory-rendered rather than untrusted, which is why
+  it is a NIT and not a repeat of W-3, but `install.py` has no `_clip`
+  equivalent and `_extract_dashboard_names` shares the shape.
+- N-16. The regex is brittle against any attribute on `<Title>`:
+  `<Title localizationKey="k">x</Title>` extracts **zero** names and the
+  message degrades to the generic `view(s)`. That exact markup is what
+  the renderer emitted before DEF-018 (`8ad7dd2`), and
+  `sdk_builder.py:3264` still discusses emitting it on the MP path, so
+  the coupling to `render.py:761`'s precise output is live history, not
+  hypothetical. `audit.py:508` does the same extraction with a real
+  `ElementTree` parse, which is attribute-immune and would degrade
+  identically inside the existing `try`. Nothing pins the coupling with a
+  test; a fixture built from real `render.py` output would.
+- N-17. View names reach the operator XML-escaped, dashboard names do
+  not. A view named `CPU & Memory <top>` prints as
+  `CPU &amp; Memory &lt;top&gt;` (verified through `render.py`'s own
+  `escape()` then `_extract_view_names`), while `_extract_dashboard_names`
+  reads JSON and prints the raw name. The two lines the operator reads
+  side by side are at different fidelity.
+- N-18. `Done. No failures, but see the attention list below.` is
+  followed by the seven-line 5-minute NOTE block before the list actually
+  appears, so "below" is seven lines away. Correct order (the delta ends
+  the output), just a slightly optimistic "below".
+- N-19. `TestInstallerAdvisoryTrailer._drive_summary`
+  (`test_dashboard_import_all_skipped.py:487-490`) monkeypatches
+  `_install_one_bundle` to return canned lists, so the four new tests pin
+  the summary block precisely but not the `[{bundle}]` prefixing at
+  `:2329` or the `ctx["advisories"]` wiring from `_install_dashboards`.
+  Both are correct, but I had to verify them with my own end-to-end
+  harness rather than the suite. One test driving the real
+  `_install_one_bundle` over a staged bundle would close the seam. The
+  stub is otherwise a good choice: it keeps the four summary cases fast
+  and independent of the import machinery.
+
+## Test quality (round 3)
+
+The 6 added tests pin the fix in the direction that failed.
+`test_advisory_run_does_not_end_on_all_successful` asserts the **absence**
+of the old string, which is the actual W-7 symptom, not merely the
+presence of the new one. `test_clean_run_still_says_all_successful`
+asserts `"need attention" not in out`, so a fix that unconditionally
+prints the trailer would fail it. `test_advisories_do_not_change_the_exit_code`
+pins rc 0 by the absence of `SystemExit`, and
+`test_trailer_also_prints_in_the_warning_branch` pins both halves of the
+harder case (exit 2 **and** the advisory surviving). `test_installer_view_warning_names_the_views`
+asserts both view titles individually rather than a substring of the
+line. `test_extract_view_names_degrades_on_garbage` covers three of the
+degradation shapes; my probe covered 24 and found no raise.
+
+## If shipped as-is (round 3)
+
+An operator whose re-install skips everything now ends on an explicit
+attention list naming the bundle, the content type, the affected objects
+and the remedy, and the installer still exits 0 because nothing failed.
+An operator whose install genuinely succeeds sees the unqualified success
+line and no attention section. An operator who hits a real warning gets
+exit 2, the warning list, and the advisories beside it rather than behind
+it. A corrupt or truncated `views_content.xml` degrades the message to
+`view(s)` instead of crashing the install. The one thing still true from
+round 1 is that every zip in `dist/` predates all of this (W-5); the
+rebuild is the last thing this PR needs.
