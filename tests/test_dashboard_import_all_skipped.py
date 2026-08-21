@@ -12,6 +12,7 @@ No network: the import call is stubbed in every test.
 """
 from __future__ import annotations
 
+import json
 import sys
 import types
 from pathlib import Path
@@ -528,6 +529,30 @@ class TestInstallerAdvisoryTrailer:
             warnings=[],
         )  # no SystemExit means rc 0
 
+    def test_success_line_does_not_promise_the_list_is_immediately_below(
+        self, install_mod, monkeypatch, tmp_path, capsys
+    ):
+        """N-18 (issue #103): the 5-minute NOTE block prints between the
+        success line and the attention list, so "below" was seven lines
+        optimistic. The ordering is deliberate, so the wording moved."""
+        self._drive_summary(
+            install_mod, monkeypatch, tmp_path,
+            advisories=["[b] Import changed no dashboards ..."],
+            warnings=[],
+        )
+        out = capsys.readouterr().out
+        assert "see the attention list below" not in out
+        assert "see the attention list at the end of this output." in out
+        lines = [ln for ln in out.splitlines() if ln.strip()]
+        # The claim the wording makes must be true: the list really is at
+        # the end, and the NOTE block really does sit in between.
+        assert lines[-1].startswith("  ATTENTION  ")
+        pointer = next(
+            i for i, ln in enumerate(lines) if "at the end of this output." in ln
+        )
+        header = next(i for i, ln in enumerate(lines) if "need attention" in ln)
+        assert any("NOTE: VCF Operations needs" in ln for ln in lines[pointer:header])
+
     def test_trailer_also_prints_in_the_warning_branch(
         self, install_mod, monkeypatch, tmp_path, capsys
     ):
@@ -570,3 +595,351 @@ def test_extract_view_names_degrades_on_garbage(install_mod):
     assert install_mod._extract_view_names("") == []
     assert install_mod._extract_view_names("not xml at all") == []
     assert install_mod._extract_view_names(None) == []
+
+
+# ---------------------------------------------------------------------------
+# Issue #103: _extract_view_names was a regex over <Title>...</Title>.
+# Quadratic on unclosed opens, unbounded output, defeated by any attribute
+# on <Title>, and it handed the operator XML-escaped names beside
+# unescaped dashboard names. It is now an ElementTree parse, modelled on
+# vcfops_packaging/audit.py's ViewDef/Title walk.
+# ---------------------------------------------------------------------------
+
+_FACTORY_XML = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    "<Content><Views>"
+    '<ViewDef id="v1"><Title>[VCF Content Factory] Alpha</Title>'
+    '<Description>a</Description></ViewDef>'
+    '<ViewDef id="v2"><Title>[VCF Content Factory] Beta</Title>'
+    '<Description>b</Description></ViewDef>'
+    "</Views></Content>"
+)
+
+
+class TestExtractViewNames:
+    def test_factory_shape_extracts_exactly_the_titles(self, install_mod):
+        assert install_mod._extract_view_names(_FACTORY_XML) == [
+            "[VCF Content Factory] Alpha",
+            "[VCF Content Factory] Beta",
+        ]
+
+    def test_pre_def018_localization_key_attribute_no_longer_defeats_it(
+        self, install_mod
+    ):
+        """The regex extracted ZERO names from this shape (commit 8ad7dd2's
+        markup) and silently degraded to the generic "view(s)"."""
+        xml_text = (
+            "<Content><Views>"
+            '<ViewDef id="v1">'
+            '<Title localizationKey="k1">[VCF Content Factory] Alpha</Title>'
+            "</ViewDef>"
+            "</Views></Content>"
+        )
+        assert install_mod._extract_view_names(xml_text) == [
+            "[VCF Content Factory] Alpha"
+        ]
+
+    def test_names_reach_the_operator_unescaped(self, install_mod):
+        """N-17: the renderer escapes, so the parse must decode. Dashboard
+        names print raw; these must match that fidelity."""
+        xml_text = (
+            "<Content><Views>"
+            '<ViewDef id="v1"><Title>CPU &amp; Memory &lt;top&gt;</Title></ViewDef>'
+            "</Views></Content>"
+        )
+        assert install_mod._extract_view_names(xml_text) == ["CPU & Memory <top>"]
+
+    def test_unclosed_titles_return_empty_fast(self, install_mod):
+        """N-14: the reviewer's pathological input. 20,000 unclosed opens
+        took 21s under the regex (`.*?` with re.DOTALL rescans to
+        end-of-string from every open tag). The parse rejects it outright."""
+        import time
+
+        pathological = "<Title>" * 20000
+        start = time.perf_counter()
+        assert install_mod._extract_view_names(pathological) == []
+        elapsed = time.perf_counter() - start
+        assert elapsed < 1.0, f"took {elapsed:.3f}s; regression to the O(n^2) scan"
+
+    def test_a_very_long_name_is_clipped(self, install_mod):
+        xml_text = (
+            "<Content><Views>"
+            f'<ViewDef id="v1"><Title>{"A" * 500_000}</Title></ViewDef>'
+            "</Views></Content>"
+        )
+        names = install_mod._extract_view_names(xml_text)
+        assert len(names) == 1
+        assert len(names[0]) == install_mod._ADVISORY_NAME_MAX_CHARS + 3
+        assert names[0].endswith("...")
+
+    def test_many_names_get_an_and_n_more_tail(self, install_mod):
+        n = install_mod._ADVISORY_NAMES_MAX + 7
+        xml_text = (
+            "<Content><Views>"
+            + "".join(
+                f'<ViewDef id="v{i}"><Title>View {i}</Title></ViewDef>'
+                for i in range(n)
+            )
+            + "</Views></Content>"
+        )
+        names = install_mod._extract_view_names(xml_text)
+        assert len(names) == install_mod._ADVISORY_NAMES_MAX + 1
+        assert names[-1] == "and 7 more"
+        assert names[0] == "View 0"
+
+    def test_viewdef_without_a_title_falls_back_to_the_name_attribute(
+        self, install_mod
+    ):
+        xml_text = (
+            "<Content><Views>"
+            '<ViewDef id="v1" name="Legacy View"/>'
+            '<ViewDef id="v2"/>'
+            "</Views></Content>"
+        )
+        assert install_mod._extract_view_names(xml_text) == [
+            "Legacy View",
+            "unnamed view",
+        ]
+
+    @pytest.mark.parametrize(
+        "hostile",
+        [
+            None,
+            "",
+            0,
+            42,
+            b"<Content><Views></Views></Content>",
+            b"\x00\x01\x02",
+            [],
+            ["<Title>x</Title>"],
+            {},
+            {"a": 1},
+            "not xml at all",
+            "<Title>orphan",
+            "</Title>",
+            "<Content><Views><ViewDef><Title>a<Title>b</Title></Title>"
+            "</ViewDef></Views></Content>",
+            "<Content><Views><ViewDef><Title>a\x00b</Title></ViewDef></Views></Content>",
+            "<Content><Views><ViewDef><Title>\ud800</Title></ViewDef></Views></Content>",
+            "<Content><Views><ViewDef><Title>a</Title></ViewDef></Views>",
+            "<Title>" * 5000,
+        ],
+        ids=lambda v: repr(v)[:40],
+    )
+    def test_hostile_inputs_never_raise(self, install_mod, hostile):
+        out = install_mod._extract_view_names(hostile)
+        assert isinstance(out, list)
+
+    def test_extraction_matches_real_renderer_output(self, install_mod, tmp_path):
+        """Pins the coupling to src/vcfops_dashboards/render.py, which emits
+        <Title>{escape(view.name)}</Title> once per ViewDef and nowhere
+        else. Nothing pinned this before, so the extractor could drift out
+        of step with the renderer silently (issue #103 item 3)."""
+        import yaml
+
+        from vcfops_dashboards.loader import load_view
+        from vcfops_dashboards.render import render_views_xml
+
+        names = [
+            "[VCF Content Factory] VM Network Top Talkers",
+            "[VCF Content Factory] CPU & Memory <top>",
+        ]
+        views = []
+        for i, name in enumerate(names):
+            data = {
+                "name": name,
+                "description": "Rendered through the real renderer.",
+                "subject": {
+                    "adapter_kind": "VMWARE",
+                    "resource_kind": "VirtualMachine",
+                },
+                "columns": [
+                    {
+                        "display_name": "Name",
+                        "attribute": "summary|name",
+                        "is_property": True,
+                        "is_string_attribute": True,
+                    }
+                ],
+            }
+            p = tmp_path / f"view{i}.yaml"
+            p.write_text(yaml.dump(data, default_flow_style=False))
+            views.append(load_view(p, enforce_framework_prefix=False))
+
+        xml_text = render_views_xml(views)
+        # Guard the premise: the renderer really does escape.
+        assert "CPU &amp; Memory &lt;top&gt;" in xml_text
+        assert xml_text.count("<Title") == len(names)
+        assert install_mod._extract_view_names(xml_text) == names
+
+
+# ---------------------------------------------------------------------------
+# _extract_dashboard_names, the other half of the same advisory sentence.
+# It returned d.get("name") unconverted, so a non-string JSON name reached
+# ", ".join(...) at install.py:1526 -- which sits OUTSIDE any try -- and
+# aborted the installer AFTER content had been imported, leaving a partial
+# install. It also had neither the clip nor the cap the view side gained.
+# ---------------------------------------------------------------------------
+
+class TestExtractDashboardNames:
+    def test_factory_shape_extracts_the_names(self, install_mod):
+        payload = json.dumps({"dashboards": [
+            {"id": "d1", "name": "[VCF Content Factory] Alpha"},
+            {"id": "d2", "name": "[VCF Content Factory] Beta"},
+        ]})
+        assert install_mod._extract_dashboard_names(payload) == [
+            "[VCF Content Factory] Alpha",
+            "[VCF Content Factory] Beta",
+        ]
+
+    def test_falls_back_to_id_then_placeholder(self, install_mod):
+        payload = json.dumps({"dashboards": [{"id": "d1"}, {}]})
+        assert install_mod._extract_dashboard_names(payload) == ["d1", "?"]
+
+    def test_non_string_name_is_coerced_not_returned_raw(self, install_mod):
+        """The crash: [123] joined with ", " raises TypeError."""
+        payload = '{"dashboards":[{"name":123}]}'
+        names = install_mod._extract_dashboard_names(payload)
+        assert names == ["123"]
+        assert all(isinstance(n, str) for n in names)
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            '{"dashboards":[{"name":123}]}',
+            '{"dashboards":[{"name":1.5}]}',
+            '{"dashboards":[{"name":true}]}',
+            '{"dashboards":[{"name":null,"id":7}]}',
+            '{"dashboards":[{"name":["a","b"]}]}',
+            '{"dashboards":[{"name":{"k":"v"}}]}',
+            '{"dashboards":[null]}',
+            '{"dashboards":["just a string"]}',
+            '{"dashboards":[1,2,3]}',
+            '{"dashboards":{"not":"a list"}}',
+            '{"dashboards":"nope"}',
+            '{"dashboards":[]}',
+            "[1,2,3]",
+            '"just a json string"',
+            "42",
+            "null",
+            "not json at all",
+            "",
+            None,
+            42,
+            b'{"dashboards":[{"name":"Bytes Dash"}]}',
+        ],
+        ids=lambda v: repr(v)[:44],
+    )
+    def test_hostile_payloads_never_raise_and_always_join(
+        self, install_mod, payload
+    ):
+        """Every element must survive the join that builds the advisory.
+        This is the property the installer actually depends on."""
+        names = install_mod._extract_dashboard_names(payload)
+        assert isinstance(names, list)
+        assert all(isinstance(n, str) for n in names)
+        ", ".join(names)  # must not raise
+
+    def test_deeply_nested_json_does_not_escape_as_recursionerror(
+        self, install_mod
+    ):
+        """W-2: json.loads raises RecursionError here, and RecursionError
+        subclasses RuntimeError, so the old `except (TypeError,
+        ValueError)` did not catch it. Every caller runs AFTER the import,
+        so an escape leaves a partial install."""
+        payload = '{"dashboards":' + "[" * 40000 + "]" * 40000 + "}"
+        assert install_mod._extract_dashboard_names(payload) == []
+
+    def test_view_sibling_also_survives_deep_nesting(self, install_mod):
+        """The symmetry claim, driven rather than assumed. Note the view
+        side survives by PARSING deep XML successfully (ElementTree's C
+        accelerator does not recurse in Python), not by degrading to []:
+        50,000 nested ViewDefs come back as 50,000 unnamed views, capped.
+        The property that matters is the same either way -- it does not
+        raise, and the result is join-safe."""
+        deep = (
+            "<Content><Views>"
+            + "<ViewDef>" * 50000
+            + "</ViewDef>" * 50000
+            + "</Views></Content>"
+        )
+        names = install_mod._extract_view_names(deep)
+        assert isinstance(names, list)
+        assert len(names) == install_mod._ADVISORY_NAMES_MAX + 1
+        assert names[-1] == "and 49980 more"
+        ", ".join(names)  # must not raise
+
+    def test_dashboards_as_a_string_is_rejected_not_iterated(
+        self, install_mod
+    ):
+        """N-9: pins the isinstance(entries, list) guard. Without it the
+        string iterates character by character and returns ['?','?','?',
+        '?'] -- no exception, both other properties still hold, and the
+        operator reads "NOT updated: ?, ?, ?, ?". The guard was the only
+        one of the four that no test killed when mutated out."""
+        assert install_mod._extract_dashboard_names('{"dashboards":"nope"}') == []
+
+    def test_bounded_names_cannot_raise_on_its_own(self, install_mod):
+        """It is a shared helper now, so its contract is its own, not the
+        callers'. A third caller must not be able to reintroduce the
+        crash-after-import class."""
+        class _BadStr:
+            def __str__(self):
+                raise RuntimeError("boom")
+
+        def _raising_iter():
+            yield "ok"
+            raise RuntimeError("boom")
+
+        for bad in (None, 42, object(), [_BadStr()], _raising_iter()):
+            out = install_mod._bounded_names(bad)
+            assert isinstance(out, list)
+            assert all(isinstance(n, str) for n in out)
+            ", ".join(out)  # must not raise
+
+    def test_a_very_long_name_is_clipped(self, install_mod):
+        payload = json.dumps({"dashboards": [{"name": "A" * 500_000}]})
+        names = install_mod._extract_dashboard_names(payload)
+        assert len(names) == 1
+        assert len(names[0]) == install_mod._ADVISORY_NAME_MAX_CHARS + 3
+        assert names[0].endswith("...")
+
+    def test_many_names_get_an_and_n_more_tail(self, install_mod):
+        n = install_mod._ADVISORY_NAMES_MAX + 7
+        payload = json.dumps(
+            {"dashboards": [{"name": f"Dash {i}"} for i in range(n)]}
+        )
+        names = install_mod._extract_dashboard_names(payload)
+        assert len(names) == install_mod._ADVISORY_NAMES_MAX + 1
+        assert names[-1] == "and 7 more"
+        assert names[0] == "Dash 0"
+
+    def test_bounds_match_the_view_side(self, install_mod):
+        """The asymmetry this fix closes: both halves of the sentence are
+        clipped and capped by the same shared helper."""
+        long_name = "B" * 500_000
+        dash = install_mod._extract_dashboard_names(
+            json.dumps({"dashboards": [{"name": long_name}]})
+        )
+        view = install_mod._extract_view_names(
+            f"<Content><Views><ViewDef><Title>{long_name}</Title></ViewDef>"
+            "</Views></Content>"
+        )
+        assert dash == view
+
+    def test_installer_dashboard_advisory_survives_a_non_string_name(
+        self, install_mod, tmp_path, capsys
+    ):
+        """End to end through the real _install_dashboards: the join at
+        :1526 is outside every try, so this used to abort mid-install."""
+        ctx = TestInstallTemplateDashboards._make_ctx(
+            install_mod, tmp_path, _mixed_result(dash=(0, 1), views=(1, 0)),
+            with_views=True,
+        )
+        (ctx["bundle_dir"] / "content" / "dashboard.json").write_text(
+            '{"dashboards":[{"id":"d1","name":123}]}'
+        )
+        install_mod._install_dashboards(ctx)  # must not raise
+        out = capsys.readouterr().out
+        assert "Import changed no dashboards" in out
+        assert "123" in out

@@ -364,6 +364,41 @@ Authority:
 §"Per-row filtering: IT EXISTS" (15-variant matrix, devel 9.1).
 Mechanism discovered by the user, 2026-07-27.
 
+## Summary dashboards: no Suite API, no pak binding, UI layer only
+
+VCF Ops can show a chosen dashboard on an object's Summary tab per object
+type ("Manage Summary Dashboards" in the UI). Two paths that look like they
+should work do not, and one undocumented path does.
+
+**Does not work: the Suite API.** No endpoint, public or internal. All four
+OpenAPI specs searched by path and full body text (990 paths); zero contain
+"dash". Consistent with dashboards having no REST CRUD at all.
+
+**Does not work: shipping it in a pak.** Hard negative, established across
+51 vendor paks. `describeSchema.xsd` is byte-identical across pak
+generations and `ResourceKindType` has eight attributes, none binding a
+dashboard. Pak content is a closed taxonomy with no mapping file, and the
+string "summary" appears in zero install scripts corpus-wide.
+
+**Does not work: the content-import zip.** The per-dashboard field
+inventory carries no summary/default field (checked against 5+ specimens).
+`homeTab` is the per-user landing tab, not this; `dashboardNavigations` is
+widget-to-widget drill-down.
+
+**Does work: the Struts UI layer.** `POST /ui/dashboard.action` with
+`mainAction=associateResourceKindDashboards`, session-cookie auth plus CSRF
+token, keyed by resourceKind, bulk (one call carries the whole map). Full
+wire shape, the deterministic resourceKindId formula, and the support
+caveats are in
+[`api-surface/summary_dashboard_assignment.md`](api-surface/summary_dashboard_assignment.md).
+
+**Two traps.** A dashboard *named* "Summary" or "Details" is not wired to
+anything; several vendor paks ship such names as ordinary navigable
+dashboards. And each assignment materializes an independent server-side
+template rather than sharing one dashboard, so whether an edit to the
+source dashboard propagates to existing assignments is unverified and
+should be answered before designing around it.
+
 ## Pak install is UI-only (not scriptable via Suite API)
 
 The Suite API has no pak install endpoint. `.pak` files must be
