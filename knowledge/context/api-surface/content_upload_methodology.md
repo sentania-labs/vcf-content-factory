@@ -65,14 +65,18 @@ Non-negotiables the factory bakes into every import:
    that automatically. That cause and that remedy are **evidence only
    for SUPER_METRICS**.
    For **DASHBOARDS / VIEW_DEFINITIONS** the same signature was bisected
-   2026-08-21 and means something different: the importer's create-only
-   mode, triggered by `force=false` on the import query string. The
-   existing content stays fully usable (listed, readable by UUID,
-   renders, assignable to a resource kind); only the new revision failed
-   to land. The skip is idempotent, so re-importing does not help and the
-   factory correctly warns without retrying. Every factory path sends
-   `force=true`, so the signature is not reachable through factory code
-   today. Evidence and verbatim envelopes:
+   2026-08-21 to one reproducible cause, and it is not ghost state: the
+   importer's create-only mode, triggered by `force=false` on the import
+   query string. There the existing content survives (listed, readable by
+   UUID, structurally intact, assignable to a resource kind, all verified
+   at the API layer only, no browser pass per §5 below); only the new
+   revision failed to land. The skip is idempotent, so re-importing does
+   not help and the factory correctly warns without retrying.
+   **Every factory path sends `force=true`, which means a skip observed
+   through factory code is not explained by this cause and should be
+   treated as a new finding.** Three untested contexts remain: UI-locked
+   dashboards, non-admin import of another user's content, and
+   pak-supplied solution content. Evidence and verbatim envelopes:
    `content_import_skip_semantics.md` in this directory.
 4. **`force=true` on every import.** Omitting `force` also overwrites
    (measured); only an explicit `force=false` skips existing content.

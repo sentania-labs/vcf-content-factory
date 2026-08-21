@@ -255,14 +255,19 @@ either generalizes to other content types.
 
 **Bisected 2026-08-21. Full evidence and verbatim envelopes:
 `knowledge/context/api-surface/content_import_skip_semantics.md`.**
-Summary: this is the importer's create-only mode, produced by
-`force=false` on the import query string, and nothing else that could
-be reproduced. It is **not** ghost state: the pre-existing dashboard
-stays listed, readable by UUID, correctly rendered and assignable to a
-resource kind. Only the new revision failed to land. The skip is
-idempotent, so the SM re-import remedy does **not** work here; the fix
-is `force=true`, which all four factory call sites already send, which
-means the signature is currently unreachable through factory code.
+Summary: the one reproducible cause is the importer's create-only mode,
+produced by `force=false` on the import query string. In that case it
+is **not** ghost state: the pre-existing dashboard stays listed,
+readable by UUID, structurally intact, and assignable to a resource
+kind (four API-level probes; no browser pass). Only the new revision
+failed to land. The skip is idempotent, so the SM re-import remedy does
+**not** work here; the fix is `force=true`.
+
+**All four factory call sites already send `force=true`, so a skip seen
+through factory code has no reproduced explanation.** Three contexts
+were never tested (UI-locked dashboards, non-admin import of another
+user's content, pak-supplied solution content). Treat a `force=true`
+skip as an open finding, not as this cause.
 
 Originally observed signature (reported by another team):
 `total:3 skipped:3 imported:0 errorCode:NONE` on a dashboard import,

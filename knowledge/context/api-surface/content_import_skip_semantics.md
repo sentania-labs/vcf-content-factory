@@ -14,12 +14,24 @@ normative rule and should point here for the evidence.
 
 ## The one-line answer
 
-`imported=0 / skipped=N` on `DASHBOARDS` / `VIEW_DEFINITIONS` is
-**not** ghost state. It is the importer's create-only mode: the query
-parameter `force=false` on `POST /api/content/operations/import` means
-"do not overwrite anything that already exists". The skip is a clean,
-idempotent no-op. The pre-existing content stays fully usable; the
-*new* version simply did not land.
+`imported=0 / skipped=N` on `DASHBOARDS` / `VIEW_DEFINITIONS` is **not**
+ghost state in the one cause reproduced here. That cause is the
+importer's create-only mode: the query parameter `force=false` on
+`POST /api/content/operations/import` means "do not overwrite anything
+that already exists". The skip is a clean, idempotent no-op, and the
+pre-existing content survives it intact; the *new* version simply did
+not land.
+
+**Read that as a demonstrated cause, not as the meaning of the
+signature.** `force=false` is the only trigger that could be
+reproduced, but three contexts were never tested (§What was not ruled
+out): UI-locked dashboards, a non-admin importer against another user's
+content, and pak-supplied solution content, which is what the spec's
+`force` wording literally addresses. A `force=true` import that reports
+this signature is therefore **unexplained**, not benign, and should be
+treated as a new finding rather than diagnosed from this document.
+Since every factory call site hard-codes `force=true`, any occurrence
+seen through the factory falls into exactly that unexplained category.
 
 The super metric ghost-state remedy (re-import the same zip) does
 **not** transfer. Re-importing an identical zip under `force=false`
@@ -216,8 +228,16 @@ old UUID breaks with no error anywhere in the import envelope.
 
 ## Question 2: when it happens, is the content usable?
 
-Yes. Four probes, each run against the dashboard immediately after a
-`force=false` skip. Naming each explicitly, per the brief:
+Yes at the API layer, which is as far as this investigation went. Four
+probes, each run against the dashboard immediately after a
+`force=false` skip. Naming each explicitly, per the brief.
+
+**Scope limit, stated up front:** all four are API-level. No browser
+pass was run, so "listed, readable, structurally intact, assignable"
+is what is established. That is deliberately weaker than the
+"done means seen working" bar in
+`content_upload_methodology.md` §5, which requires a rendered-surface
+check for dashboards and views. Nothing here substitutes for that.
 
 1. **Dashboard list** (`POST /ui/dashboard.action
    mainAction=getDashboardList`): present, one hit, correct id and
