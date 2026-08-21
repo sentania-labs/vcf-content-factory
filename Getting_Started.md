@@ -17,13 +17,18 @@ framework writes the YAML for you.
 git clone https://github.com/sentania-labs/vcf-content-factory.git
 cd vcf-content-factory
 python3 -m venv .venv
-. .venv/bin/activate          # Windows: .venv\Scripts\activate
+. .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Python 3.9 or newer. The virtualenv matters on Debian, Ubuntu, Fedora
-and other PEP-668 distros, where a bare `pip install` into the system
-interpreter is refused outright.
+Python 3.9 or newer, on **Linux, macOS, or WSL**. Native Windows is not
+supported (RULE-018): on Windows, install WSL and work inside it. VS Code's
+WSL extension makes that a first-class workflow, so this costs one
+extension and nothing ongoing.
+
+The virtualenv matters on Debian, Ubuntu, Fedora and other PEP-668 distros,
+where a bare `pip install` into the system interpreter is refused
+outright.
 
 **Behind a corporate firewall?** If `pip` cannot reach pypi.org (a
 timeout or an SSL error naming pypi.org), point it at your internal
@@ -88,10 +93,8 @@ Both run automatically at session start too. The second clones the
 managed SDK adapter repos listed in `knowledge/context/managed_paks.md`
 into `content/sdk-adapters/`; they are separate repos and gitignored here.
 
-**Windows note:** these two are still shell scripts, so on native Windows
-without Git Bash they do not run and you get no reference clones. Tracked
-as issue #89. Everything else, including the preflight check, is pure
-Python.
+Both run automatically at session start under WSL, macOS, and Linux, which
+are the supported environments (RULE-018).
 
 ### 4. Building Tier 2 SDK paks (optional)
 
