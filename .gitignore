@@ -65,3 +65,9 @@ shots-*/
 search-debug*.png
 # preflight doctor's bootstrap summary (local state)
 .bootstrap-status*
+
+# Product-bound / embargoed work. Anything here is hand-carried, never
+# committed: work that may ship in a Broadcom product, pre-release
+# engineering asks, and their recon and artifacts. Keep the whole tree
+# out of git rather than deciding file by file.
+embargo/
