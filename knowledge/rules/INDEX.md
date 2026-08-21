@@ -21,3 +21,4 @@ Read every rule at session start. Rules are absolute — obey without question.
 | RULE-015 | Cited artifacts must be committed or registry-fetchable — no ephemeral citations | [cited-artifacts-reproducible.md](cited-artifacts-reproducible.md) |
 | RULE-016 | `reference/**` is read-only; corrections live in `knowledge/context/` | [reference-immutable.md](reference-immutable.md) |
 | RULE-017 | Distilled docs carry provenance: verbatim extract → `reference/docs/extracted/`, digest → `knowledge/context/` with citation | [distilled-doc-provenance.md](distilled-doc-provenance.md) |
+| RULE-018 | The factory runs on POSIX only (Linux, macOS, WSL); shipped installers still must work on native Windows | [posix-only.md](posix-only.md) |

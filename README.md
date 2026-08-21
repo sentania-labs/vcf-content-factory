@@ -43,10 +43,14 @@ are in [HOW_IT_WORKS.md](knowledge/HOW_IT_WORKS.md).*
 ```bash
 git clone https://github.com/sentania-labs/vcf-content-factory.git
 cd vcf-content-factory
-python3 -m venv .venv && . .venv/bin/activate    # Windows: .venv\Scripts\activate
+python3 -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
 claude
 ```
+
+Runs on Linux, macOS, or WSL. On Windows, use WSL: VS Code's WSL extension
+makes it a first-class workflow, and native Windows is not supported
+(RULE-018).
 
 That is the whole setup. The session takes it from there: a preflight
 check runs at start, and if anything is missing (credentials, reference
