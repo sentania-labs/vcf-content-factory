@@ -42,6 +42,7 @@ import getpass
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -1274,6 +1275,49 @@ def _extract_dashboard_ids(dashboard_json: str) -> list:
     return [d["id"] for d in (data.get("dashboards") or []) if d.get("id")]
 
 
+def _extract_dashboard_names(dashboard_json: str) -> list:
+    try:
+        data = json.loads(dashboard_json)
+    except (TypeError, ValueError):
+        return []
+    return [d.get("name") or d.get("id") or "?" for d in (data.get("dashboards") or [])]
+
+
+def _extract_view_names(views_xml: str) -> list:
+    """Titles of the views in a rendered views_content.xml, best effort.
+
+    Regex rather than an XML parse: this is a message-decoration helper
+    on the install path and a malformed or unexpected document must
+    degrade to "no names" rather than raise mid-install.
+    """
+    try:
+        return re.findall(r"<Title>(.*?)</Title>", views_xml or "", re.DOTALL)
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _all_skipped_summaries(result: dict, content_types) -> dict:
+    """{contentType: (imported, skipped)} for summaries that imported
+    nothing while skipping something.
+
+    A FINISHED import with imported=0/skipped=N left the instance
+    unchanged, so it must not be reported as a clean install.
+    """
+    flagged = {}
+    for entry in (result or {}).get("operationSummaries") or []:
+        ct = entry.get("contentType") or "?"
+        if content_types and ct not in content_types:
+            continue
+        try:
+            imported = int(entry.get("imported") or 0)
+            skipped = int(entry.get("skipped") or 0)
+        except (TypeError, ValueError):
+            continue
+        if imported == 0 and skipped > 0:
+            flagged[ct] = (imported, skipped)
+    return flagged
+
+
 # ---------------------------------------------------------------------------
 # Interactive credential prompts (shared by install and uninstall)
 # ---------------------------------------------------------------------------
@@ -1415,8 +1459,61 @@ def _install_dashboards(ctx: Dict) -> None:
         views_xml, dash_json, ctx["marker"], owner_id, ctx["username"],
         n_views=n_views, n_dashboards=1, dashboard_ids=dash_ids,
     )
-    ctx["client"].import_content_zip(dash_zip, "dashboard + view")
-    _ok(f"Imported {n_views} view(s) + 1 dashboard")
+    result = ctx["client"].import_content_zip(dash_zip, "dashboard + view") or {}
+
+    # A FINISHED import that imported nothing and skipped everything left
+    # the instance untouched: the dashboard on screen is still the old
+    # one. Previously only the top-level state was consulted, so this was
+    # reported as a clean install.
+    #
+    # Attribution is PER CONTENT TYPE. This zip always carries two of
+    # them, so flagging the dashboard because the co-shipped view was
+    # skipped (or vice versa) would be a false statement contradicted by
+    # the same envelope. Each type gets its own line, and the type that
+    # imported normally still gets its success line.
+    flagged = _all_skipped_summaries(result, ("DASHBOARDS", "VIEW_DEFINITIONS"))
+    dash_names = _extract_dashboard_names(
+        dash_json.replace("PLACEHOLDER_USER_ID", owner_id)
+    )
+    unchanged_tail = (
+        " Verify on the instance; deleting the existing object and "
+        "re-installing is the reliable way to force an update."
+    )
+
+    if "DASHBOARDS" in flagged:
+        imp, skp = flagged["DASHBOARDS"]
+        advisory = (
+            f"Import changed no dashboards (DASHBOARDS imported={imp} "
+            f"skipped={skp}); the existing dashboard was NOT updated: "
+            f"{', '.join(dash_names) if dash_names else 'dashboard'}."
+            + unchanged_tail
+        )
+        _warn(advisory)
+        ctx.setdefault("advisories", []).append(advisory)
+    else:
+        _ok("Imported 1 dashboard")
+
+    if n_views:
+        if "VIEW_DEFINITIONS" in flagged:
+            imp, skp = flagged["VIEW_DEFINITIONS"]
+            view_names = _extract_view_names(views_xml)
+            named = ", ".join(view_names) if view_names else "view(s)"
+            advisory = (
+                f"Import changed no views (VIEW_DEFINITIONS imported={imp} "
+                f"skipped={skp}); the existing views were NOT updated: "
+                f"{named}." + unchanged_tail
+            )
+            _warn(advisory)
+            ctx.setdefault("advisories", []).append(advisory)
+        else:
+            _ok(f"Imported {n_views} view(s)")
+
+    # Deliberately NOT appended to ctx["warnings"]: that list drives
+    # sys.exit(2), and this class must not fail an install that genuinely
+    # succeeded. It goes to ctx["advisories"] instead, which prints as a
+    # trailer in BOTH summary branches so the operator's last line is
+    # never an unqualified "all successful" over a WARN saying content
+    # was not updated.
 
 
 def _install_sm_enable(ctx: Dict) -> None:
@@ -2190,8 +2287,16 @@ _CONTENT_REGISTRY: List[Dict] = [
 # ---------------------------------------------------------------------------
 
 def _install_one_bundle(bundle: Dict, global_ctx: Dict, step_base: int,
-                        total_steps: int) -> Tuple[int, List[str]]:
-    """Install one bundle.  Returns (steps_used, warnings)."""
+                        total_steps: int) -> Tuple[int, List[str], List[str]]:
+    """Install one bundle.  Returns (steps_used, warnings, advisories).
+
+    ``warnings`` fail the install (exit 2).  ``advisories`` do not: they
+    are things the operator must SEE but that did not break anything,
+    e.g. an import that finished without changing existing content.
+    They are printed as a trailer in BOTH summary branches so the last
+    line an operator reads is never an unqualified "all successful"
+    while a WARN above it says content was not updated.
+    """
     manifest = bundle["manifest"]
     bundle_dir = bundle["dir"]
     name = _bundle_display_name(bundle)
@@ -2205,11 +2310,13 @@ def _install_one_bundle(bundle: Dict, global_ctx: Dict, step_base: int,
     active.sort(key=lambda e: e["install_order"])
 
     warnings: List[str] = []
+    advisories: List[str] = []
     ctx: Dict = {
         **global_ctx,
         "bundle_dir": bundle_dir,
         "manifest": manifest,
         "warnings": warnings,
+        "advisories": advisories,
         "names": [],
     }
 
@@ -2219,7 +2326,7 @@ def _install_one_bundle(bundle: Dict, global_ctx: Dict, step_base: int,
         _step(step, total_steps, f"[{name}] {entry['install_label']}")
         entry["install_fn"](ctx)
 
-    return step - step_base, warnings
+    return step - step_base, warnings, [f"[{name}] {a}" for a in advisories]
 
 
 def _uninstall_one_bundle(bundle: Dict, global_ctx: Dict, step_base: int,
@@ -2308,10 +2415,31 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
     }
 
     all_warnings: List[str] = []
+    all_advisories: List[str] = []
     for bundle in selected_bundles:
-        used, warnings = _install_one_bundle(bundle, global_ctx, step, TOTAL_STEPS)
+        used, warnings, advisories = _install_one_bundle(
+            bundle, global_ctx, step, TOTAL_STEPS
+        )
         step += used
         all_warnings.extend(warnings)
+        all_advisories.extend(advisories)
+
+    def _print_advisories() -> None:
+        """Trailer printed in BOTH summary branches.
+
+        Without it, a run whose dashboard import changed nothing ends on
+        "Done. All content installed successfully.", which is the
+        reports-green-while-broken defect this check exists to kill,
+        relocated to the summary. The last line is what an operator
+        remembers. Advisories never touch the exit code.
+        """
+        if not all_advisories:
+            return
+        print()
+        print(f"{len(all_advisories)} item(s) need attention "
+              f"(nothing failed, but content on the instance did not change):")
+        for a in all_advisories:
+            print(f"  ATTENTION  {a}")
 
     print()
     enable_warnings = [w for w in all_warnings if "enable" in w.lower() or "resolve" in w.lower()]
@@ -2330,9 +2458,13 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
         print("  - View columns may show 'No data'")
         print("  - Newly enabled super metrics will report no values")
         print("This is expected. Refresh after ~5 minutes.")
+        _print_advisories()
         sys.exit(2)
     else:
-        print("Done. All content installed successfully.")
+        if all_advisories:
+            print("Done. No failures, but see the attention list below.")
+        else:
+            print("Done. All content installed successfully.")
         print()
         print("NOTE: VCF Operations needs roughly 5 minutes to finish ingesting and")
         print("configuring imported content. Until that completes:")
@@ -2340,6 +2472,7 @@ def _run_install(args: argparse.Namespace, host: str, user: str,
         print("  - View columns may show 'No data'")
         print("  - Newly enabled super metrics will report no values")
         print("This is expected. Refresh after ~5 minutes.")
+        _print_advisories()
 
 
 # ---------------------------------------------------------------------------

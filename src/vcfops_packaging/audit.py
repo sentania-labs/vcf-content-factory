@@ -332,6 +332,48 @@ def print_audit_summary(result: AuditResult, mode: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def staged_bundle_problem(bundle_dir: Path) -> Optional[str]:
+    """Why ``bundle_dir`` is not a staged bundle directory, or None.
+
+    Issue #85: pointing ``analyze`` at a .zip, at an arbitrary directory,
+    or at an extracted *pak* used to exit 0 with "no metric references
+    found", which an operator reads as "nothing needs enabling" when in
+    fact nothing was inspected.
+
+    Two markers, both present in every builder-produced staged bundle and
+    in neither of the wrong-path shapes:
+
+    * ``content/`` as a directory (rules out a .zip and most stray paths)
+    * ``bundle.json`` beside it (rules out an extracted pak, whose
+      ``content/`` holds per-type SUBDIRECTORIES rather than the flat
+      ``supermetrics.json`` / ``views_content.xml`` / ``dashboard.json``
+      artifacts this function reads)
+
+    Single source of truth so the CLI and library callers cannot drift to
+    two different wordings.
+    """
+    tail = (
+        " analyze expects a staged bundle directory (the builder's "
+        "bundle.json + content/ layout), not a .zip, an extracted .pak, "
+        "or an arbitrary path."
+    )
+    if not (bundle_dir / "content").is_dir():
+        return f"not a staged bundle directory: {bundle_dir} has no content/ subdirectory." + tail
+    if not (bundle_dir / "bundle.json").is_file():
+        return (
+            f"not a staged bundle directory: {bundle_dir} has a content/ "
+            f"subdirectory but no bundle.json beside it." + tail
+        )
+    return None
+
+
+def check_staged_bundle_dir(bundle_dir: Path) -> None:
+    """Raise AuditError unless ``bundle_dir`` is a staged bundle dir."""
+    problem = staged_bundle_problem(bundle_dir)
+    if problem:
+        raise AuditError(problem)
+
+
 def analyze_staged_bundle(
     bundle_dir: Path,
     describe_cache: DescribeCache,
@@ -362,6 +404,7 @@ def analyze_staged_bundle(
         if k not in seen:
             seen[k] = ref
 
+    check_staged_bundle_dir(bundle_dir)  # raises AuditError, issue #85
     content_dir = bundle_dir / "content"
 
     # --- Super metrics ---

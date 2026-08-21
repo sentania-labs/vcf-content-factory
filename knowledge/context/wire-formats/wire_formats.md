@@ -247,6 +247,57 @@ the all-skipped signal and retry automatically.
 the SM is registered in the internal catalog. Always validate
 post-import by checking the `operationSummaries` imported count.
 
+**Scope:** the ghost-state cause and the re-import remedy above are
+bisected for `SUPER_METRICS` only. Nothing in this repo tests whether
+either generalizes to other content types.
+
+### imported=0 / skipped>0 on DASHBOARDS and VIEW_DEFINITIONS
+
+Observed signature (reported by another team, not yet bisected here):
+`total:3 skipped:3 imported:0 errorCode:NONE` on a dashboard import,
+i.e. a FINISHED import that changed nothing on the instance.
+
+Whatever the cause, the operator-visible fact is the same: the content
+on the instance is still the old version. The factory therefore treats
+`imported == 0 and skipped > 0` on `DASHBOARDS` / `VIEW_DEFINITIONS`
+as a loud warning naming the affected content, in all three paths.
+
+**Attribute per content type.** Every dashboard zip the factory sends
+carries BOTH types (the dashboards sync handler deliberately re-imports
+the views the views handler just imported, and the packaged installer
+ships `views_content.xml` + `dashboard.json` in one zip). So the
+summaries are routinely mixed, e.g. `DASHBOARDS imported=1` next to
+`VIEW_DEFINITIONS imported=0 skipped=2`. Checking the summaries without
+a content-type filter reports the dashboard that imported fine as
+"changed nothing", which is a false statement contradicted by data in
+the same envelope, on the ordinary sync path. Each call site filters to
+the one type it speaks for:
+
+- `src/vcfops_dashboards/cli.py:cmd_sync` names dashboards for a
+  `DASHBOARDS` flag and views for a `VIEW_DEFINITIONS` flag (stderr
+  WARNING lines), and says which type was not affected.
+- `src/vcfops_dashboards/handler.py`: `DashboardsHandler` speaks for
+  `DASHBOARDS` only, `ViewsHandler` for `VIEW_DEFINITIONS` only
+  (per-item `status="warn"`, plus a one-line trailer count from the
+  bundle syncer).
+- `src/vcfops_packaging/templates/install.py:_install_dashboards` emits
+  one line per type, so the type that imported normally still gets its
+  success line. It does NOT append to the installer's warnings list:
+  that list drives `sys.exit(2)`, and an advisory must not fail an
+  install that genuinely succeeded. It goes to `ctx["advisories"]`,
+  which prints as a trailer in BOTH summary branches and changes the
+  final line from "Done. All content installed successfully." to
+  "Done. No failures, but see the attention list below.". The last line
+  an operator reads is the one they remember, so it must never claim
+  success over a WARN saying content was not updated.
+
+It does **not** auto-retry the import the way the SM path does: the
+re-import remedy is evidence only for SUPER_METRICS, and a blind second
+import of dashboard content has never been tested here. Bisecting the
+dashboard case (does re-import help? does deleting first help?) is open
+work; until then, delete-and-re-sync is the documented way to force an
+update.
+
 ## Policy export XML
 
 Different zip, same instance. `GET /api/policies/export?id=<uuid>`

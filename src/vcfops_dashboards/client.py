@@ -12,6 +12,41 @@ import zipfile
 from vcfops_common.client import VCFOpsClient, VCFOpsError
 
 
+# Content types this package imports, as they appear in the import
+# result's ``operationSummaries[].contentType``.
+DASHBOARD_CONTENT_TYPES = ("DASHBOARDS", "VIEW_DEFINITIONS")
+
+
+def all_skipped_content_types(result: dict, content_types=None) -> dict:
+    """Content types the importer imported NOTHING for while skipping some.
+
+    Returns ``{contentType: (imported, skipped)}`` for every summary
+    where ``imported == 0 and skipped > 0``, i.e. the import ran to
+    FINISHED but changed nothing. Callers must not report such a run as
+    a plain success: the operator's edits did not land on the instance.
+
+    Scope note: the automatic re-import that recovers this signal is
+    bisected for SUPER_METRICS only (see the SM ghost-state section in
+    knowledge/context/wire-formats/wire_formats.md). Nothing here claims
+    the same cause or the same remedy applies to other content types;
+    this helper only reports the counts.
+    """
+    wanted = tuple(content_types) if content_types else None
+    flagged: dict = {}
+    for s in (result or {}).get("operationSummaries") or []:
+        ct = s.get("contentType") or "?"
+        if wanted is not None and ct not in wanted:
+            continue
+        try:
+            imported = int(s.get("imported") or 0)
+            skipped = int(s.get("skipped") or 0)
+        except (TypeError, ValueError):
+            continue
+        if imported == 0 and skipped > 0:
+            flagged[ct] = (imported, skipped)
+    return flagged
+
+
 def get_current_user(client: VCFOpsClient) -> dict:
     """Return ``{id, username, firstName, lastName}`` for the
     authenticated user. Used by the sync path so generated content

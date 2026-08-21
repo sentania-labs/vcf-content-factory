@@ -30,10 +30,41 @@ from vcfops_packaging.handler import (
 )
 from vcfops_supermetrics.client import VCFOpsClient, VCFOpsError
 
-from .client import discover_marker_filename, get_current_user, import_content_zip
+from .client import (
+    all_skipped_content_types,
+    discover_marker_filename,
+    get_current_user,
+    import_content_zip,
+)
 from .loader import DashboardValidationError, load_view, load_dashboard
 from .packager import build_import_zip
 from .ui_client import UIClientError, VCFOpsUIClient
+
+
+def _all_skipped_message(api_result: dict, content_type: str) -> str:
+    """WARN text when THIS content type imported nothing, else "".
+
+    ``state == FINISHED`` on its own used to be reported as ok, so an
+    import that skipped every object (existing content left untouched)
+    looked like a successful sync.
+
+    The content-type filter is not optional. Every zip these handlers
+    send carries two content types (the dashboards handler deliberately
+    re-imports the views the views handler just imported), so an
+    unfiltered check reports a dashboard that imported fine as "changed
+    nothing" whenever the co-shipped views were skipped. Each handler
+    speaks only for its own type.
+    """
+    flagged = all_skipped_content_types(api_result, (content_type,))
+    if content_type not in flagged:
+        return ""
+    imported, skipped = flagged[content_type]
+    return (
+        f"import finished but changed nothing for {content_type} "
+        f"(imported={imported} skipped={skipped}); the existing object on "
+        f"the instance was NOT updated. Verify on the instance, or delete "
+        f"and re-sync to force an update."
+    )
 
 
 class ViewsHandler(ContentHandler):
@@ -86,8 +117,13 @@ class ViewsHandler(ContentHandler):
             return result
 
         state = api_result.get("state", "")
+        all_skipped = _all_skipped_message(api_result, "VIEW_DEFINITIONS")
         for v in views:
-            if state == "FINISHED":
+            if state == "FINISHED" and all_skipped:
+                result.items.append(
+                    ItemResult(name=v.name, status="warn", message=all_skipped)
+                )
+            elif state == "FINISHED":
                 result.items.append(ItemResult(name=v.name, status="ok"))
             else:
                 result.items.append(
@@ -253,8 +289,13 @@ class DashboardsHandler(ContentHandler):
             return result
 
         state = api_result.get("state", "")
+        all_skipped = _all_skipped_message(api_result, "DASHBOARDS")
         for d in dashboards:
-            if state == "FINISHED":
+            if state == "FINISHED" and all_skipped:
+                result.items.append(
+                    ItemResult(name=d.name, status="warn", message=all_skipped)
+                )
+            elif state == "FINISHED":
                 result.items.append(ItemResult(name=d.name, status="ok"))
             else:
                 result.items.append(
