@@ -72,11 +72,17 @@ Poll `GET /api/content/operations/import` until
 3. **Field name is `contentFile`**, not `file`. Wrong name → 500.
 4. **One import at a time**: 403 "Task is already running" if an
    import is in progress. Retry with 30-second intervals, max 3.
-5. **Ghost state**: After import, if `operationSummaries` shows
-   `imported=0, skipped>0`, the content is in ghost state (readable
-   by ID but invisible to list/assign). Re-import the same zip to
-   fix. Read `references/wire-formats.md` §"SM ghost state" for
-   full details.
+5. **Imported nothing**: after import, `imported=0, skipped>0` in
+   `operationSummaries` means the import finished without changing
+   anything. Never report that as a successful install. For
+   **SUPER_METRICS** this is the bisected "ghost state" signature
+   (content readable by ID but invisible to list/assign) and the
+   verified fix is re-importing the same zip, which the SM paths do
+   automatically. That cause and that remedy are evidence **only for
+   super metrics**: do not assume they generalize. For dashboards and
+   views the factory warns and does not retry, because nothing has
+   bisected what the signature means there (issue #97). Read
+   `references/wire-formats.md` §"SM ghost state" for full details.
 
 ## API surface map
 

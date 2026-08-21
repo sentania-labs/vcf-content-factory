@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from .handler import ContentHandler, DeleteResult, ItemResult, SyncResult, discover_handlers
 from .loader import Bundle, BundleValidationError, load_bundle, load_all_bundles
@@ -150,6 +150,11 @@ def sync_bundle(
         print(f"  {first_line}")
 
     any_failure = False
+    # Warn/skip counts per content type, for the end-of-run trailer. The
+    # per-item warn lines print inline among the OK lines and scroll
+    # away on a bundle with a dozen views, so a run that changed nothing
+    # could end on a success exit code with no summary anywhere.
+    warn_counts: Dict[str, int] = {}
 
     for handler in handlers:
         content_type = handler.content_type
@@ -171,6 +176,7 @@ def sync_bundle(
             elif item.status in ("skipped", "warn"):
                 msg = f": {item.message}" if item.message else ""
                 _print_warn(f"{item.name}{msg}")
+                warn_counts[content_type] = warn_counts.get(content_type, 0) + 1
             else:
                 msg = f": {item.message}" if item.message else ""
                 _print_fail(f"{item.name}{msg}")
@@ -187,6 +193,15 @@ def sync_bundle(
             _print_warn(
                 f"no handler for '{content_type}' ({len(yaml_paths)} file(s) skipped)"
             )
+
+    if warn_counts:
+        detail = ", ".join(
+            f"{n} {ct}" for ct, n in sorted(warn_counts.items())
+        )
+        _print_warn(
+            f"{sum(warn_counts.values())} item(s) need attention ({detail}); "
+            f"see the WARN lines above before treating this sync as applied"
+        )
 
     return 2 if any_failure else 0
 

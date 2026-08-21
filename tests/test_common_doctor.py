@@ -587,7 +587,9 @@ def test_deps_are_checked_in_the_repo_venv(tmp_path):
     # running this suite) has everything. Intersection: nothing missing.
     env = inspect_environment(root, check_import=lambda n: False)
     assert env.missing_modules == []
-    assert str(vpy) in env.checked_interpreter
+    # Repo-relative, never the absolute path (issue #96 item 3).
+    assert env.checked_interpreter == "current + .venv/bin/python3"
+    assert str(vpy.parent) not in env.checked_interpreter
 
 
 def test_ambient_deps_survive_a_depless_venv(tmp_path):
@@ -923,3 +925,337 @@ def test_diverged_branch_suppresses_ff_pull_offer(tmp_path):
     assert "git pull --ff-only" not in text
     assert "diverged" in text
     assert "do not pull blindly" in text
+
+
+# ---------------------------------------------------------------------------
+# Issue #90: argv, diverged+dirty shadowing, absurd failed counts
+# ---------------------------------------------------------------------------
+
+def test_help_prints_usage_not_the_report(capsys):
+    import vcfops_common.doctor as doctor_mod
+
+    rc = doctor_mod.main(["--help"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert out.startswith("usage: python -m vcfops_common doctor")
+    assert "doctor: all green" not in out
+    assert "FIRST-RUN DETECTED" not in out
+
+
+def test_stray_argument_is_reported_not_silently_ignored(monkeypatch, capsys):
+    import vcfops_common.doctor as doctor_mod
+
+    monkeypatch.setattr(doctor_mod, "run_doctor", lambda: 0)
+    rc = doctor_mod.main(["--verbose"])
+    err = capsys.readouterr().err
+    assert rc == 0  # hook contract outranks argument strictness
+    assert "ignoring 1 unrecognized argument(s): --verbose" in err
+
+
+def test_no_argv_still_runs_the_report(monkeypatch, capsys):
+    import vcfops_common.doctor as doctor_mod
+
+    ran = []
+    monkeypatch.setattr(doctor_mod, "run_doctor", lambda: ran.append(True) or 0)
+    assert doctor_mod.main([]) == 0
+    assert ran == [True]
+    assert capsys.readouterr().err == ""
+
+
+def test_diverged_and_dirty_reports_both(tmp_path):
+    """A dirty tree must not shadow the divergence warning: 'resolve them
+    before pulling' alone implies a pull is the next step, which is wrong
+    on a diverged branch."""
+    root = make_configured_root(tmp_path)
+    behind = "\x01ddd4444\x02upstream fix\n\nsrc/<fixture-a>.py\n"
+    ahead = "\x01aaa1111\x02local fix\n\nsrc/<fixture-b>.py\n"
+    lines = collect(
+        root, fake_git(behind_log=behind, ahead_log=ahead, dirty=True)
+    )
+    text = "\n".join(lines)
+    assert "diverged" in text
+    assert "do not pull blindly" in text
+    assert "uncommitted or untracked changes" in text
+    assert "git pull --ff-only" not in text
+
+
+def test_behind_and_dirty_only_still_warns_about_the_tree(tmp_path):
+    root = make_configured_root(tmp_path)
+    behind = "\x01ddd4444\x02upstream fix\n\nsrc/<fixture-a>.py\n"
+    lines = collect(root, fake_git(behind_log=behind, dirty=True))
+    text = "\n".join(lines)
+    assert "uncommitted or untracked changes" in text
+    assert "diverged" not in text
+    assert "git pull --ff-only" not in text
+
+
+def test_negative_failed_count_is_treated_as_corrupt(tmp_path):
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts()} bootstrap_references cloned=1 updated=0 failed=-5 failures=-\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    lines = collect(root, fake_git())
+    text = "\n".join(lines)
+    assert "unparseable" in text
+    assert "-5 clone/update failure(s)" not in text
+
+
+def test_absurd_failed_count_is_treated_as_corrupt(tmp_path):
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts()} bootstrap_references cloned=1 updated=0 failed=999999999 failures=-\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    lines = collect(root, fake_git())
+    text = "\n".join(lines)
+    assert "unparseable" in text
+    assert "999999999 clone/update failure(s)" not in text
+
+
+def test_plausible_failed_count_still_reported(tmp_path):
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts()} bootstrap_references cloned=1 updated=0 failed=2 failures=a,b\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    lines = collect(root, fake_git())
+    assert "bootstrap_references: 2 clone/update failure(s): a,b" in "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Issue #92: corrupt line must not become a phantom script
+# ---------------------------------------------------------------------------
+
+def test_corrupt_line_does_not_create_a_phantom_script(tmp_path):
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        "GARBAGE PARTIAL LINE cloned=1\n"
+        f"{ts()} bootstrap_references cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    status, note = read_bootstrap_status(root)
+    assert note == ""
+    assert set(status) == set(KNOWN_BOOTSTRAP_SCRIPTS)
+    assert "PARTIAL" not in status
+    # And the corrupt line earns no report line of its own.
+    lines = collect(root, fake_git())
+    assert len(lines) == 1
+    assert lines[0].startswith("doctor: all green")
+
+
+def test_non_bootstrap_script_names_are_rejected(tmp_path):
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts()} BOOTSTRAP_REFERENCES cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts()} bootstrap-references cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts()} ../../etc/passwd cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    status, _ = read_bootstrap_status(root)
+    assert status == {}
+
+
+# ---------------------------------------------------------------------------
+# Issue #94: clock skew, echo truncation, checklist age
+# ---------------------------------------------------------------------------
+
+def test_future_timestamp_reports_clock_skew(tmp_path):
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts(hours_ago=-72)} bootstrap_references cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "records a run in the future" in text
+    assert "clock may be wrong" in text
+
+
+def test_small_future_skew_is_tolerated(tmp_path):
+    """Ordinary NTP/timezone jitter must not produce a delta line."""
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts(hours_ago=-0.2)} bootstrap_references cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    lines = collect(root, fake_git())
+    assert len(lines) == 1
+    assert lines[0].startswith("doctor: all green")
+
+
+def test_garbage_timestamp_is_truncated_in_the_report(tmp_path):
+    root = make_configured_root(tmp_path)
+    garbage = "X" * 5000
+    (root / ".bootstrap-status").write_text(
+        f"{garbage} bootstrap_references cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "unparseable timestamp" in text
+    assert garbage not in text
+    assert len(text) < 1500
+
+
+def test_garbage_failures_field_is_truncated(tmp_path):
+    root = make_configured_root(tmp_path)
+    garbage = "y" * 5000
+    (root / ".bootstrap-status").write_text(
+        f"{ts()} bootstrap_references cloned=0 updated=0 failed=1 failures={garbage}\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "1 clone/update failure(s)" in text
+    assert garbage not in text
+    assert len(text) < 1500
+
+
+def test_first_run_checklist_flags_an_ancient_bootstrap_run(tmp_path):
+    root = make_configured_root(tmp_path)
+    old = ts(hours_ago=100 * 24)  # a run recorded 100 days ago
+    (root / ".bootstrap-status").write_text(
+        f"{old} bootstrap_references cloned=1 updated=0 failed=0 failures=-\n"
+        f"{old} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    bootstrap, _ = read_bootstrap_status(root)
+    env = inspect_environment(root, lambda n: True)
+    checklist = build_checklist(root, env, True, [], bootstrap)
+    boot = next(i for i in checklist if i["id"] == "bootstrap-clones")
+    assert boot["status"] != "ok"
+    assert "stale" in boot["detail"]
+
+
+def test_first_run_checklist_flags_a_future_bootstrap_run(tmp_path):
+    root = make_configured_root(tmp_path)
+    future = ts(hours_ago=-72)
+    (root / ".bootstrap-status").write_text(
+        f"{future} bootstrap_references cloned=1 updated=0 failed=0 failures=-\n"
+        f"{future} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    bootstrap, _ = read_bootstrap_status(root)
+    env = inspect_environment(root, lambda n: True)
+    checklist = build_checklist(root, env, True, [], bootstrap)
+    boot = next(i for i in checklist if i["id"] == "bootstrap-clones")
+    assert boot["status"] == "unknown"
+    assert "clock" in boot["detail"]
+
+
+def test_first_run_checklist_ok_on_a_fresh_bootstrap_run(tmp_path):
+    root = make_configured_root(tmp_path)  # fresh status written by helper
+    bootstrap, _ = read_bootstrap_status(root)
+    env = inspect_environment(root, lambda n: True)
+    checklist = build_checklist(root, env, True, [], bootstrap)
+    boot = next(i for i in checklist if i["id"] == "bootstrap-clones")
+    assert boot["status"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# Issue #96: no absolute path in the attention line
+# ---------------------------------------------------------------------------
+
+def test_no_absolute_venv_path_in_the_missing_module_line(tmp_path):
+    """The venv interpreter is named repo-relatively, so no absolute
+    filesystem path reaches session context."""
+    root = make_configured_root(tmp_path)
+    install_venv_python(root, "#!/bin/sh\necho 'jmespath'\n")
+    lines = collect(root, fake_git(), check_import=lambda n: n != "jmespath")
+    text = "\n".join(lines)
+    assert "missing python module(s): jmespath" in text
+    assert "[checked: current + .venv/bin/python3]" in text
+    assert str(root) not in text
+
+
+def test_probe_seam_is_gone(tmp_path):
+    """The unused keyword-only probe= seam was dropped (issue #96 item 1);
+    the venv probe is exercised through real child processes instead."""
+    import inspect as _inspect
+
+    params = _inspect.signature(inspect_environment).parameters
+    assert "probe" not in params
+
+
+# ---------------------------------------------------------------------------
+# Framework review round 1 on this batch: W-3, W-4, N-2, N-5
+# ---------------------------------------------------------------------------
+
+def test_long_script_name_does_not_flood_session_context(tmp_path):
+    """W-3: the script-name field is as untrusted as the rest of the line.
+    A 50,000-character field 2 must not reach session context."""
+    root = make_configured_root(tmp_path)
+    huge = "bootstrap_" + "a" * 50_000
+    (root / ".bootstrap-status").write_text(
+        f"{ts()} {huge} cloned=1 updated=0 failed=1 failures=x\n"
+    )
+    lines = collect(root, fake_git())
+    text = "\n".join(lines)
+    assert len(text) < 2000
+    assert "a" * 200 not in text
+
+
+def test_known_bootstrap_scripts_all_match_the_name_guard():
+    """W-4: the two gates must agree, or a known script's line is dropped
+    at parse time and then reported 'no run recorded' forever."""
+    import vcfops_common.doctor as doctor_mod
+
+    for name in KNOWN_BOOTSTRAP_SCRIPTS:
+        assert doctor_mod._SCRIPT_NAME_RE.match(name), name
+
+
+def test_script_names_with_digits_are_accepted(tmp_path):
+    """W-4: `bootstrap_scg_v9` is this repo's naming house style; a
+    future script must not be silently dropped."""
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts()} bootstrap_references cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts()} bootstrap_scg_v9 cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    status, _ = read_bootstrap_status(root)
+    assert "bootstrap_scg_v9" in status
+
+
+def test_sh_suffixed_script_name_records_the_same_script(tmp_path):
+    """W-4: `bootstrap_references.sh` in field 2 is the same script as
+    `bootstrap_references`, not a second, permanently-unrecorded one."""
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts()} bootstrap_references.sh cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    status, _ = read_bootstrap_status(root)
+    assert set(status) == set(KNOWN_BOOTSTRAP_SCRIPTS)
+    assert unrecorded_bootstrap_scripts(status) == []
+    lines = collect(root, fake_git())
+    assert len(lines) == 1
+    assert lines[0].startswith("doctor: all green")
+
+
+def test_argv_echo_never_reproduces_a_value(monkeypatch, capsys):
+    """N-2 (upgraded): this module promises credential values are never
+    printed; argv is no exception."""
+    import vcfops_common.doctor as doctor_mod
+
+    monkeypatch.setattr(doctor_mod, "run_doctor", lambda: 0)
+    rc = doctor_mod.main([f"--password={FAKE_SECRET}", FAKE_SECRET, "--verbose"])
+    err = capsys.readouterr().err
+    assert rc == 0
+    assert FAKE_SECRET not in err
+    assert "--password=<redacted>" in err  # the NAME still reaches the user
+    assert "--verbose" in err
+    assert "<value>" in err                # bare positional, name-less
+
+
+def test_checklist_names_failures_even_on_a_stale_record(tmp_path):
+    """N-5: an old record that also carries failures must not report
+    staleness only; the failure count is the actionable half."""
+    root = make_configured_root(tmp_path)
+    old = ts(hours_ago=100 * 24)
+    (root / ".bootstrap-status").write_text(
+        f"{old} bootstrap_references cloned=0 updated=0 failed=2 failures=a,b\n"
+        f"{old} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    bootstrap, _ = read_bootstrap_status(root)
+    env = inspect_environment(root, lambda n: True)
+    checklist = build_checklist(root, env, True, [], bootstrap)
+    boot = next(i for i in checklist if i["id"] == "bootstrap-clones")
+    assert boot["status"] == "fail"
+    assert "2 clone/update failure(s)" in boot["detail"]
+    assert "stale" in boot["detail"]

@@ -11,59 +11,107 @@ framework writes the YAML for you.
 
 ## Setup (5 minutes)
 
-### 1. Clone the repo and install Python deps
+### 1. Clone and install into a virtualenv
 
 ```bash
 git clone https://github.com/sentania-labs/vcf-content-factory.git
 cd vcf-content-factory
+python3 -m venv .venv
+. .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Put your VCF Operations credentials in `.env`
+Python 3.9 or newer. The virtualenv matters on Debian, Ubuntu, Fedora
+and other PEP-668 distros, where a bare `pip install` into the system
+interpreter is refused outright.
+
+**Behind a corporate firewall?** If `pip` cannot reach pypi.org (a
+timeout or an SSL error naming pypi.org), point it at your internal
+mirror. Write it to the venv, never globally:
 
 ```bash
-cp .env.example .env
-chmod 600 .env
+printf '[global]\nindex-url = https://mirror.example.com/pypi/simple\ntrusted-host = mirror.example.com\n' > .venv/pip.conf
+pip install -r requirements.txt
 ```
 
-Edit `.env`. The minimum that needs to work is one profile (any of
-`prod`, `qa`, or `devel`):
+The same firewall usually blocks the reference-content clones in step 3.
+That is survivable: the framework works without them, it just has fewer
+examples to consult.
+
+### 2. Create your credentials
+
+Run the wizard. It prompts for host, user and profile normally, then
+reads the password with a silent prompt, so the secret is typed but never
+displayed, never stored in shell history, and never written into a Claude
+transcript (RULE-008). It validates the credentials against the instance
+before writing anything.
 
 ```bash
-export VCFOPS_DEVEL_HOST=vcfops-devel.example.com
-export VCFOPS_DEVEL_USER=admin
-export VCFOPS_DEVEL_PASSWORD='your-password'
-export VCFOPS_DEVEL_AUTH_SOURCE=Local
-export VCFOPS_DEVEL_VERIFY_SSL=false
-
-export VCFOPS_PROFILE=devel
+python3 -m vcfops_common setup
 ```
 
-Three profiles exist by convention — `prod` (read-only recon),
-`qa` (admin for round-trips), `devel` (destructive playground).
-Validate and list commands default to `prod`; sync, enable, and
-delete default to `devel`. Override on any command with
-`--profile <name>`.
+Inside a Claude session, type it with a leading `!` so it runs
+interactively in your terminal:
 
-Federated SSO sources (VIDB, VIDM) aren't supported on the install
-path — create a Local service account if those are the only
-options available.
+```
+! python3 -m vcfops_common setup
+```
+
+Run it again any time to add another profile or rotate a password.
+
+Prefer to do it by hand? Copy `.env.example` to `.env`, `chmod 600` it,
+and fill in one profile. **Do not `source` the file**: the CLIs load it
+themselves, so `--profile <name>` is all they need, and sourcing exports
+every secret into that shell where any later `env` or error dump prints
+them.
+
+Three profiles exist by convention: `prod` (read-only recon), `qa` (admin
+for round-trips), `devel` (destructive playground). Validate and list
+commands default to `prod`; sync, enable and delete default to `devel`.
+Override on any command with `--profile <name>`.
+
+Federated SSO sources (VIDB, VIDM) are not supported on the install path.
+Create a Local service account if those are the only options available.
 
 ### 3. Populate reference content (optional but recommended)
 
-The framework grep-checks community content before authoring so it
-doesn't reinvent patterns that exist. Skip this and the framework
-just won't have those references to consult.
+The framework greps community content before authoring so it does not
+reinvent patterns that already exist. Skip this and it simply has fewer
+references to consult.
 
 ```bash
 ./scripts/bootstrap_references.sh
+./scripts/bootstrap_managed_paks.sh     # only if you develop Tier 2 SDK paks
 ```
 
-### 4. Open Claude Code in this directory
+Both run automatically at session start too. The second clones the
+managed SDK adapter repos listed in `knowledge/context/managed_paks.md`
+into `content/sdk-adapters/`; they are separate repos and gitignored here.
+
+**Windows note:** these two are still shell scripts, so on native Windows
+without Git Bash they do not run and you get no reference clones. Tracked
+as issue #89. Everything else, including the preflight check, is pure
+Python.
+
+### 4. Building Tier 2 SDK paks (optional)
+
+Only if you author Java SDK adapters. Needs a JDK 17 with `javac` and
+`jar` on PATH, plus the Broadcom adapter SDK jar, which is not
+redistributable and so is not bundled here. Point `VCFCF_SDK_JAR` at your
+copy. The official pak build is the adapter repo's own CI on a `v*` tag
+(RULE-014); local builds are dev previews and stamp `0.0.0.<build>` so
+they can never be confused with a release.
+
+### 5. Open Claude Code in this directory
 
 ```bash
 claude
 ```
+
+A preflight check runs at session start and reports only what needs
+attention: upstream drift, missing or incomplete credentials, missing
+dependencies, stale reference clones. On a healthy clone it prints one
+green line. On a fresh one it offers to walk you through the rest.
 
 You're ready.
 
@@ -75,7 +123,7 @@ There's no special syntax. You just say what you want. The framework
 clarifies what it needs to clarify and proposes content where it
 already has enough to propose.
 
-A simple opener — try this verbatim if you've got a VCF Ops instance
+A simple opener, try this verbatim if you've got a VCF Ops instance
 with some VMs on it:
 
 > Show me a super metric for total provisioned vCPUs across all
@@ -87,7 +135,7 @@ What you'll see:
    super metrics that already cover this.
 2. It looks up the metric keys it needs (`config|hardware|numCpu`,
    `summary|runtime|powerState`) and confirms they exist.
-3. It proposes a YAML — including the formula, the resource kind
+3. It proposes a YAML, including the formula, the resource kind
    assignment, and the rollup definition.
 4. It shows you the YAML and asks: install on `devel`?
 5. You say yes. It validates, syncs, enables the super metric on the
@@ -97,8 +145,8 @@ Whole thing is ~2 minutes if everything matches.
 
 ### How the framework asks for help
 
-When the framework is missing information it can't infer, it asks
-— but it does so with a proposal already on the table, not a blank
+When the framework is missing information it can't infer, it asks,
+but it does so with a proposal already on the table, not a blank
 form:
 
 > "I see you want firmware reporting for your servers. The Redfish
@@ -275,7 +323,7 @@ The framework leaves a trail. If an install fails:
   [knowledge/lessons/pak-install-reliability.md](knowledge/lessons/pak-install-reliability.md)
   and [knowledge/context/api-surface/install_and_enable.md](knowledge/context/api-surface/install_and_enable.md).
 - If the framework hits something it doesn't understand, it will say
-  so explicitly and emit a **TOOLSET GAP** report — never silently
+  so explicitly and emit a **TOOLSET GAP** report, never silently
   work around. You decide whether to defer, spawn an investigator
   agent, or shrink the request.
 
@@ -291,7 +339,7 @@ ambiguities that actually matter. Two examples:
 label?" (Answer is always yes; it's handled.)
 
 **It will ask:** "I see two existing super metrics that compute 'VM
-CPU ready' — one rolls up at the cluster level, one doesn't. Are you
+CPU ready', one rolls up at the cluster level, one doesn't. Are you
 asking for the cluster version, or do you want a new formula?"
 (Genuine ambiguity that affects the output.)
 
@@ -303,12 +351,12 @@ already knows the framework, not like filling out a form.
 ## Next steps
 
 - Skim [vcf_ops_concepts.md](knowledge/vcf_ops_concepts.md) for a
-  reference on what each VCF Ops content type actually is — useful
+  reference on what each VCF Ops content type actually is, useful
   if "what's a super metric vs a custom group?" is a real question
   for you.
 - Read [HOW_IT_WORKS.md](knowledge/HOW_IT_WORKS.md) if you want to understand
   the orchestrator + agents architecture before extending it.
-- Read [CLAUDE.md](CLAUDE.md) if you're forking or contributing — it's
+- Read [CLAUDE.md](CLAUDE.md) if you're forking or contributing, it's
   the rules the orchestrator follows.
 - Look at the `bundles/` directory for examples of factory-built
   content you can install today.

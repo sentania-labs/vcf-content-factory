@@ -326,18 +326,22 @@ def _render_behind(st: UpstreamState) -> List[str]:
         lines.append(f"  {area}: {len(grouped[area])}")
         for c in grouped[area]:
             lines.append(f"    - {c.subject}")
-    if st.dirty:
-        lines.append(
-            "  local tree has uncommitted or untracked changes; resolve them "
-            "before pulling"
-        )
-    elif st.ahead:
+    # Both conditions are reported when both hold: a dirty tree does not
+    # make divergence go away, and "resolve them before pulling" on its
+    # own would imply a pull is the next step once the tree is clean,
+    # which is wrong on a diverged branch (issue #90 item 2).
+    if st.ahead:
         # Diverged: a fast-forward pull cannot succeed, do not offer one.
         lines.append(
             "  branch has diverged (both ahead and behind); a rebase or "
             "merge decision is needed, do not pull blindly"
         )
-    else:
+    if st.dirty:
+        lines.append(
+            "  local tree has uncommitted or untracked changes; resolve them "
+            "before pulling"
+        )
+    if not st.dirty and not st.ahead:
         lines.append(
             "additionalContext: repo is behind "
             f"{st.upstream} on a clean tree; offer the user a fast-forward "
@@ -580,11 +584,26 @@ def _probe_modules(interpreter: Path, modules: Sequence[str]) -> Optional[List[s
     return reported
 
 
+def _display_path(path: Path, root: Path) -> str:
+    """Repo-relative rendering of a path, so no absolute filesystem path
+    reaches the report (issue #96 item 3). Falls back to the file name."""
+    # The unresolved path first: the venv interpreter is often a symlink
+    # to a system python OUTSIDE the repo, and resolving it would defeat
+    # the relative form.
+    for candidate, base in ((path, root), (path, root.resolve())):
+        try:
+            return str(candidate.relative_to(base)).replace("\\", "/")
+        except (ValueError, OSError):
+            continue
+    try:
+        return str(path.resolve().relative_to(root.resolve())).replace("\\", "/")
+    except (ValueError, OSError):
+        return path.name
+
+
 def inspect_environment(
     root: Path,
     check_import: Optional[Callable[[str], bool]] = None,
-    *,
-    probe: Callable[[Path, Sequence[str]], Optional[List[str]]] = _probe_modules,
 ) -> EnvSanity:
     es = EnvSanity()
     es.python_version = "%d.%d.%d" % sys.version_info[:3]
@@ -622,9 +641,9 @@ def inspect_environment(
         except OSError:
             pass
         if vpy is not None and not already_in_venv:
-            venv_missing = probe(vpy, _CHECK_MODULES)
+            venv_missing = _probe_modules(vpy, _CHECK_MODULES)
             if venv_missing is not None:
-                es.checked_interpreter = f"current + {vpy}"
+                es.checked_interpreter = f"current + {_display_path(vpy, root)}"
 
     if venv_missing is None:
         es.missing_modules = current_missing
@@ -654,6 +673,43 @@ def inspect_environment(
 
 _STATUS_LINE_RE = re.compile(r"^(\S+)\s+(\S+)\s+(.*)$")
 
+# Field 2 must look like a bootstrap script name. Without this, a corrupt
+# line such as `GARBAGE PARTIAL LINE cloned=1` parses as a phantom script
+# named "PARTIAL" and earns its own report line (issue #92). Anything not
+# matching is treated as an unparseable line, which the doctor already
+# degrades on gracefully.
+#
+# Digits are allowed because this repo's script-naming house style uses
+# them (scripts/normalize_scg_v9.py), so `bootstrap_scg_v9` is a
+# plausible future name and must not be silently dropped. The length
+# bound keeps a corrupt field from being echoed at unbounded length: a
+# 50,000-character "script name" would otherwise dump ~100KB into
+# session context on every session start. A `.sh` suffix is tolerated
+# for the same reason: a future writer emitting `bootstrap_paks.sh` in
+# field 2 should be understood, not dropped.
+_SCRIPT_NAME_RE = re.compile(r"^bootstrap_[a-z0-9_]{1,40}(\.sh)?$")
+
+# The two gates must agree: a KNOWN_BOOTSTRAP_SCRIPTS entry the regex
+# rejects would be dropped at parse time and then reported as "no run
+# recorded" forever, with nothing the operator could do to clear it.
+# That property is pinned by
+# tests/test_common_doctor.py::test_known_bootstrap_scripts_all_match_the_name_guard
+# rather than a module-level assert: an assert here would vanish under
+# `python -O` and, if it ever did fire, would break session start
+# instead of a test run. The doctor's first duty is to never be the
+# reason a session fails to start.
+
+# Upper bound for a plausible `failed=` count. The writers are the repo's
+# own bootstrap scripts (a handful of clones each), so anything outside
+# 0..this is corrupt data, not a real failure count, and is reported as
+# unparseable rather than rendered verbatim (issue #90 item 3).
+MAX_PLAUSIBLE_FAILED = 1000
+
+# Longest garbage field we will ever echo back. A corrupt .bootstrap-status
+# must not dump thousands of characters into session context every session
+# (issue #94 item 2).
+_ECHO_MAX = 40
+
 # Reserved key under which the parsed line's field-1 timestamp is stored,
 # chosen so it cannot collide with a real `key=value` token.
 TIMESTAMP_KEY = "__ts__"
@@ -663,6 +719,14 @@ TIMESTAMP_KEY = "__ts__"
 # means a script did not run at all (failed, or a read-only checkout).
 STALE_AFTER_HOURS = 24
 
+# A timestamp this far in the future means the clock (here or on the
+# machine that wrote the file) is wrong. Without this branch a future
+# timestamp yields a negative age, which is never >= STALE_AFTER_HOURS,
+# so a clock-skewed machine would silently never report stale bootstrap
+# health (issue #94 item 1). One hour of tolerance absorbs ordinary
+# timezone/NTP jitter.
+CLOCK_SKEW_TOLERANCE_HOURS = 1
+
 
 def _safe_int(value: str) -> Optional[int]:
     """int() that returns None on garbage instead of raising."""
@@ -670,6 +734,27 @@ def _safe_int(value: str) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _failed_count(value: str) -> Optional[int]:
+    """Parse a `failed=` token, returning None for garbage OR nonsense.
+
+    Negative and absurdly large counts are data corruption, not failure
+    counts, so they degrade down the same "unparseable" path instead of
+    rendering verbatim ("-5 clone/update failure(s)").
+    """
+    parsed = _safe_int(value)
+    if parsed is None or parsed < 0 or parsed > MAX_PLAUSIBLE_FAILED:
+        return None
+    return parsed
+
+
+def _clip(text: str, limit: int = _ECHO_MAX) -> str:
+    """Echo-safe truncation of untrusted file content."""
+    text = text or ""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "..."
 
 
 def _safe_age_hours(stamp: str, *, now: Optional[datetime] = None) -> Optional[float]:
@@ -732,6 +817,15 @@ def read_bootstrap_status(root: Path) -> Tuple[Dict[str, Dict[str, str]], str]:
         if not m:
             continue
         stamp, script, rest = m.groups()
+        if not _SCRIPT_NAME_RE.match(script):
+            # Field 2 is not a plausible script name: corrupt line, not a
+            # record for some script we have never heard of (issue #92).
+            continue
+        # A `.sh`-suffixed field 2 records the same script as the bare
+        # name; keying them apart would report the bare name as "no run
+        # recorded" forever while the suffixed one sat right beside it.
+        if script.endswith(".sh"):
+            script = script[: -len(".sh")]
         kv: Dict[str, str] = {}
         for tok in rest.split():
             if "=" in tok:
@@ -795,13 +889,25 @@ def build_checklist(
         "detail": (
             "profiles ready: " + ", ".join(complete) if complete
             else "no complete VCFOPS profile in .env or exported vars; "
-            "run the credential wizard"
+            "have the USER run the credential wizard themselves, in their "
+            "own terminal (in a Claude session, typed with a leading `!` so "
+            "it runs interactively): `! python3 -m vcfops_common setup`. "
+            "Never run it for them and never ask for a password in chat: "
+            "the wizard reads it silently so it stays out of the transcript "
+            "(RULE-008), and it refuses to run without a TTY"
         ),
     })
     unrecorded = unrecorded_bootstrap_scripts(bootstrap)
-    counts = [_safe_int(kv.get("failed", "0") or "0") for kv in bootstrap.values()]
+    counts = [_failed_count(kv.get("failed", "0") or "0") for kv in bootstrap.values()]
     unparseable = any(c is None for c in counts)
     failed_total = sum(c for c in counts if c is not None)
+    # Age matters here too: a run recorded 700,000 days ago (or in the
+    # future, on a clock-skewed machine) is not a healthy record, so the
+    # checklist must not call it ok just because failed=0 (issue #94).
+    ages = [_safe_age_hours(kv.get(TIMESTAMP_KEY, "")) for kv in bootstrap.values()]
+    stale_ages = [a for a in ages if a is not None and a >= STALE_AFTER_HOURS]
+    skewed = [a for a in ages if a is not None and a < -CLOCK_SKEW_TOLERANCE_HOURS]
+    unparseable_age = any(a is None for a in ages)
     if unrecorded:
         boot_status = "unknown"
         boot_detail = (
@@ -811,15 +917,40 @@ def build_checklist(
             "scripts/bootstrap_managed_paks.sh on unix; a native Windows "
             "port is tracked as issue #89)"
         )
-    elif unparseable:
+    elif unparseable or unparseable_age:
         boot_status = "unknown"
         boot_detail = (
             f"{BOOTSTRAP_STATUS_FILE} has unparseable status line(s); "
             "re-run the bootstrap fetches"
         )
+    elif skewed:
+        boot_status = "unknown"
+        boot_detail = (
+            f"{BOOTSTRAP_STATUS_FILE} records a run in the future; this "
+            "machine's clock may be wrong, so bootstrap freshness cannot "
+            "be judged"
+        )
+    elif failed_total or stale_ages:
+        # Failures are named first: a record that is both old AND carries
+        # clone failures used to report staleness only, so the actionable
+        # half (which clones failed) never reached the operator.
+        boot_status = "fail"
+        parts = []
+        if failed_total:
+            parts.append(
+                f"{failed_total} clone/update failure(s) across "
+                f"{len(bootstrap)} bootstrap script(s)"
+            )
+        if stale_ages:
+            oldest_days = max(stale_ages) / 24.0
+            parts.append(
+                f"last run recorded {oldest_days:.0f} day(s) ago "
+                f"(stale after {STALE_AFTER_HOURS}h)"
+            )
+        boot_detail = "; ".join(parts) + "; re-run the bootstrap fetches"
     else:
-        boot_status = "ok" if failed_total == 0 else "fail"
-        boot_detail = f"{len(bootstrap)} bootstrap script(s) recorded, {failed_total} failure(s)"
+        boot_status = "ok"
+        boot_detail = f"{len(bootstrap)} bootstrap script(s) recorded, 0 failure(s)"
     items.append({"id": "bootstrap-clones", "status": boot_status, "detail": boot_detail})
     items.append({
         "id": "recheck",
@@ -896,7 +1027,10 @@ def run_doctor(
         attention.append("no VCFOPS profiles defined (.env or exported vars)")
         attention.append(
             "additionalContext: no credential profiles are configured; offer "
-            "the user the credential setup wizard."
+            "the user the credential setup wizard. They run it themselves: "
+            "tell them to type `! python3 -m vcfops_common setup` (the `!` "
+            "prefix runs it interactively in-session). Do not run it for "
+            "them and do not ask for a password in chat."
         )
 
     # --- Environment ------------------------------------------------------
@@ -931,6 +1065,11 @@ def run_doctor(
             "stale (the script may have failed or timed out before writing)"
         )
     for script, kv in sorted(bootstrap.items()):
+        # Every echoed field is clipped, the script name included: it
+        # comes from the same untrusted file as the rest of the line and
+        # a long one would otherwise dump the whole field into session
+        # context on every session start (issue #94 item 2).
+        script = _clip(script)
         # Age: the hook runs the doctor right after both bootstrap
         # scripts, so a stale line means a script did not run at all
         # (failed, or a read-only checkout kept an old file).
@@ -939,7 +1078,13 @@ def run_doctor(
         if age_hours is None:
             attention.append(
                 f"{script}: unparseable timestamp in {BOOTSTRAP_STATUS_FILE} "
-                f"({stamp!r}); bootstrap age unknown"
+                f"({_clip(stamp)!r}); bootstrap age unknown"
+            )
+        elif age_hours < -CLOCK_SKEW_TOLERANCE_HOURS:
+            attention.append(
+                f"{script}: {BOOTSTRAP_STATUS_FILE} records a run in the "
+                f"future ({_clip(stamp)}); this machine's clock may be wrong, "
+                "so bootstrap freshness cannot be judged"
             )
         elif age_hours >= STALE_AFTER_HOURS:
             days = age_hours / 24.0
@@ -948,16 +1093,17 @@ def run_doctor(
             )
             attention.append(
                 f"{script}: bootstrap health is {age_text} stale (last recorded "
-                f"run {stamp}); the script may not be running"
+                f"run {_clip(stamp)}); the script may not be running"
             )
-        failed = _safe_int(kv.get("failed", "0") or "0")
+        failed = _failed_count(kv.get("failed", "0") or "0")
         if failed is None:
             attention.append(
                 f"{script}: unparseable {BOOTSTRAP_STATUS_FILE} line "
-                f"(failed={kv.get('failed', '')!r}); re-run the bootstrap script"
+                f"(failed={_clip(kv.get('failed', ''))!r}); re-run the "
+                "bootstrap script"
             )
         elif failed:
-            failures = kv.get("failures", "-")
+            failures = _clip(kv.get("failures", "-"), 200)
             attention.append(
                 f"{script}: {failed} clone/update failure(s): {failures}"
             )
@@ -977,10 +1123,52 @@ def run_doctor(
     return 0
 
 
+def _redact_arg(arg: str) -> str:
+    """Flag NAME only, never a value, for echoing an unrecognized argv.
+
+    ``--password=hunter2`` renders as ``--password=<redacted>``; a bare
+    positional renders as ``<value>``. Names are clipped like every
+    other untrusted echo in this module.
+    """
+    text = (arg or "").strip()
+    if not text.startswith("-"):
+        return "<value>"
+    name, sep, _value = text.partition("=")
+    return _clip(name) + ("=<redacted>" if sep else "")
+
+
+DOCTOR_USAGE = """usage: python -m vcfops_common doctor
+
+Session-start preflight: upstream alignment, credential readiness,
+environment sanity, bootstrap health, first-run concierge checklist.
+Takes no options and always exits 0; the output is informational for
+the SessionStart hook. Credential VALUES are never printed (RULE-008).
+"""
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     """CLI entry. Belt-and-braces: no bug in the doctor may ever break
     session start, so any unexpected exception degrades to one line and
     exit 0 (the hook contract)."""
+    args = list(sys.argv[1:] if argv is None else argv)
+    if args and args[0] in ("-h", "--help", "help"):
+        print(DOCTOR_USAGE, end="")
+        return 0
+    if args:
+        # argv used to be accepted and ignored. Say so rather than
+        # silently running the full report on a typo'd flag, but still
+        # run it: the hook contract outranks argument strictness.
+        #
+        # Only the COUNT and the flag NAMES are echoed. `doctor
+        # --password=SECRET` must not reproduce the value on stderr:
+        # this module promises credential values are never printed, and
+        # argv is as untrusted as any other input here.
+        print(
+            f"doctor: ignoring {len(args)} unrecognized argument(s): "
+            + ", ".join(_redact_arg(a) for a in args)
+            + " (doctor takes no options; --help for usage)",
+            file=sys.stderr,
+        )
     try:
         return run_doctor()
     except Exception as exc:  # noqa: BLE001 (deliberate catch-all, hook contract)

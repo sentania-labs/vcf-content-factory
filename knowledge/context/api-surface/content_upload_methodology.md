@@ -56,9 +56,17 @@ Non-negotiables the factory bakes into every import:
    throwaway export against the target instance first.
 2. **One import at a time.** A concurrent import returns 403
    "Task is already running": retry at 30s intervals, max 3.
-3. **Ghost-state check.** `imported=0, skipped>0` in the summaries
-   means the content is readable by id but invisible to list/assign.
-   Recovery: re-import the same zip. (Details:
+3. **Imported-nothing check.** `imported=0, skipped>0` in the
+   summaries means the import finished without changing anything on
+   the instance: never report that as a successful install.
+   For **SUPER_METRICS** specifically, this is the bisected ghost-state
+   signature (content readable by id but invisible to list/assign) and
+   the verified recovery is re-importing the same zip; the SM paths do
+   that automatically. That cause and that remedy are **evidence only
+   for SUPER_METRICS**, so do not assume they generalize. For dashboards
+   and views the factory reports a loud warning, per content type, naming
+   the affected content, and does not retry, because nothing has bisected what
+   `imported=0/skipped>0` means there (issue #97). (Details:
    `vcfops-api` skill `references/wire-formats.md`.)
 
 Exact zip layouts per type (`SUPER_METRICS`, `VIEW_DEFINITIONS`,

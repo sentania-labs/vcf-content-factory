@@ -372,6 +372,16 @@ def cmd_analyze(args) -> int:
     if not bundle_dir.exists():
         print(f"ERROR: bundle directory not found: {bundle_dir}", file=sys.stderr)
         return 1
+    # Fail before any describe/live work: a zip path, an extracted pak or
+    # any other non-bundle directory used to exit 0 with "no metric
+    # references found", which reads as "nothing needs enabling"
+    # (issue #85). Same predicate the library gate uses, so the operator
+    # sees one wording no matter which caller trips it.
+    from .audit import staged_bundle_problem
+    problem = staged_bundle_problem(bundle_dir)
+    if problem:
+        print(f"ERROR: {problem}", file=sys.stderr)
+        return 1
 
     live_describe = not getattr(args, "no_live_describe", False)
     cache = make_cache(live=live_describe)

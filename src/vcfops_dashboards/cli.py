@@ -10,7 +10,13 @@ from pathlib import Path
 from vcfops_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
 from vcfops_supermetrics.client import VCFOpsClient, VCFOpsError
 
-from .client import discover_marker_filename, get_current_user, import_content_zip
+from .client import (
+    DASHBOARD_CONTENT_TYPES,
+    all_skipped_content_types,
+    discover_marker_filename,
+    get_current_user,
+    import_content_zip,
+)
 from .loader import DashboardValidationError, load_all
 from .packager import build_import_zip
 from .ui_client import UIClientError, VCFOpsUIClient
@@ -336,6 +342,56 @@ def cmd_sync(args) -> int:
             print(f"    ERROR: {msg}")
     if result.get("state") != "FINISHED":
         return 1
+
+    # A FINISHED import that imported nothing and skipped everything is
+    # not a successful sync: the instance still holds the old content.
+    # State alone used to gate this, so an all-skipped import reported ok.
+    #
+    # This zip carries BOTH content types, so each flag is attributed to
+    # the content of its own type only. Naming dashboards because the
+    # co-shipped views were skipped would be a false statement about
+    # content the same envelope reports as imported.
+    names_by_type = {
+        "DASHBOARDS": [d.name for d in dashboards],
+        "VIEW_DEFINITIONS": [v.name for v in views],
+    }
+    flagged = all_skipped_content_types(result, DASHBOARD_CONTENT_TYPES)
+    if flagged:
+        for ct, (imported, skipped) in sorted(flagged.items()):
+            print(
+                f"WARNING: content type {ct}: imported={imported} "
+                f"skipped={skipped}. The import finished but changed nothing "
+                f"of this type on the instance.",
+                file=sys.stderr,
+            )
+            affected = names_by_type.get(ct) or []
+            if affected:
+                print(
+                    f"WARNING: affected {ct} content: " + ", ".join(affected),
+                    file=sys.stderr,
+                )
+        print(
+            "WARNING: existing objects with the same ids/names were left as "
+            "they were. Verify on the instance before treating this sync as "
+            "applied; deleting the existing object and re-syncing is the "
+            "reliable way to force an update.",
+            file=sys.stderr,
+        )
+        # Same units as the affected line above: item names, not type
+        # names, so the operator does not have to translate between two
+        # vocabularies to work out what actually landed.
+        unaffected = [
+            name
+            for ct in sorted(names_by_type)
+            if ct not in flagged
+            for name in names_by_type[ct]
+        ]
+        if unaffected:
+            print(
+                "WARNING: not affected (imported normally): "
+                + ", ".join(unaffected),
+                file=sys.stderr,
+            )
 
     # --- Dependency walker: check SM enablement + OOTB metric collection state ---
     dep_rc = _run_dep_walker(

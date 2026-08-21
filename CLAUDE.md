@@ -1,8 +1,6 @@
 # CLAUDE.md
 
 Guidance for Claude Code and any other agent working in this repo.
-`AGENTS.md` symlinks here so Codex and other harnesses read the same
-constitution.
 
 ## Knowledge precedence (read in this order)
 
