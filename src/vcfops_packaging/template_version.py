@@ -11,4 +11,4 @@ Bump this value whenever any of the following change:
   - vcfops_dashboards/render.py  (dashboard wire format changes)
 """
 
-CURRENT_TEMPLATE_VERSION = "2026-08-20-1"
+CURRENT_TEMPLATE_VERSION = "2026-08-21-1"
