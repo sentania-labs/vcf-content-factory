@@ -63,11 +63,25 @@ Non-negotiables the factory bakes into every import:
    signature (content readable by id but invisible to list/assign) and
    the verified recovery is re-importing the same zip; the SM paths do
    that automatically. That cause and that remedy are **evidence only
-   for SUPER_METRICS**, so do not assume they generalize. For dashboards
-   and views the factory reports a loud warning, per content type, naming
-   the affected content, and does not retry, because nothing has bisected what
-   `imported=0/skipped>0` means there (issue #97). (Details:
-   `vcfops-api` skill `references/wire-formats.md`.)
+   for SUPER_METRICS**.
+   For **DASHBOARDS / VIEW_DEFINITIONS** the same signature was bisected
+   2026-08-21 to one reproducible cause, and it is not ghost state: the
+   importer's create-only mode, triggered by `force=false` on the import
+   query string. There the existing content survives (listed, readable by
+   UUID, structurally intact, assignable to a resource kind, all verified
+   at the API layer only, no browser pass per §5 below); only the new
+   revision failed to land. The skip is idempotent, so re-importing does
+   not help and the factory correctly warns without retrying.
+   **Every factory path sends `force=true`, which means a skip observed
+   through factory code is not explained by this cause and should be
+   treated as a new finding.** Three untested contexts remain: UI-locked
+   dashboards, non-admin import of another user's content, and
+   pak-supplied solution content. Evidence and verbatim envelopes:
+   `content_import_skip_semantics.md` in this directory.
+4. **`force=true` on every import.** Omitting `force` also overwrites
+   (measured); only an explicit `force=false` skips existing content.
+   Note `imported=N` means "written", not "changed": there is no content
+   comparison, so an unchanged re-import still reports `imported=N`.
 
 Exact zip layouts per type (`SUPER_METRICS`, `VIEW_DEFINITIONS`,
 `DASHBOARDS`, `REPORT_DEFINITIONS`) are in that same wire-formats
