@@ -525,6 +525,12 @@ class EnvSanity:
     missing_modules: List[str] = field(default_factory=list)
     missing_jars: List[str] = field(default_factory=list)
     checked_interpreter: str = "current"  # "current" or the venv python path
+    # Modules the venv HAS and the current interpreter does NOT. Not
+    # "missing" (some interpreter here can run the CLIs, so this is not a
+    # first-run machine), but not ready either: the documented commands
+    # are `python3 -m vcfops_* ...`, and that python3 is this one
+    # (issue #96 item 2).
+    venv_only_modules: List[str] = field(default_factory=list)
 
     @property
     def jars_present(self) -> bool:
@@ -635,6 +641,20 @@ def inspect_environment(
         # Skip the subprocess only when we are ALREADY running inside
         # that venv (sys.prefix points at it); a same-named interpreter
         # is not the same environment.
+        #
+        # This branch is also why the venv-only check below is
+        # ONE-DIRECTIONAL by design, which is not the same thing as the
+        # "mirror-image failure" the comment above describes: when the
+        # doctor is already inside the venv, the ambient interpreter is
+        # never probed, so a depless ambient python3 next to a
+        # fully-provisioned venv still reports green. Detecting that
+        # would mean guessing what `python3` resolves to in a future
+        # shell that does not exist yet, from inside a venv whose PATH
+        # already shadows it, so the doctor stays silent about the
+        # direction it cannot see rather than guessing: checked_interpreter
+        # stays "current" and claims nothing about any other interpreter.
+        # The real fix is wiring the CLIs to the venv, not better
+        # detection (issue #96 item 2).
         already_in_venv = False
         try:
             already_in_venv = Path(sys.prefix).resolve() == (root / ".venv").resolve()
@@ -651,6 +671,12 @@ def inspect_environment(
         # Intersection: missing here AND missing there.
         venv_set = set(venv_missing)
         es.missing_modules = [m for m in current_missing if m in venv_set]
+        # The other half of the intersection is not "fine": the deps are
+        # in the venv only, nothing wires the CLIs to the venv, and
+        # `python3 -m vcfops_* validate` runs on THIS interpreter. Record
+        # it so the report can say so instead of printing all green
+        # (issue #96 item 2).
+        es.venv_only_modules = [m for m in current_missing if m not in venv_set]
 
     # Tier 1 MPB runtime: the builder needs adapter_runtime/mpb_adapter3.jar
     # (constant-pool source for the per-adapter JAR) AND at least one
@@ -1044,6 +1070,39 @@ def run_doctor(
             + f" [checked: {env.checked_interpreter}]"
             + " (pip install -r requirements.txt)"
         )
+    if env.venv_only_modules:
+        # Not a missing dependency (the venv has it) and not first-run,
+        # but not ready either: the documented CLI form is
+        # `python3 -m vcfops_* ...`, which runs on the interpreter this
+        # doctor is running on, and nothing activates .venv for it.
+        #
+        # jmespath is carved out exactly as it is everywhere else in this
+        # module (is_first_run, build_checklist): it is a SOFT dependency,
+        # and vcfops_managementpacks/loader.py degrades to a UserWarning
+        # without it. Telling an operator whose ambient python3 has
+        # requests and yaml that validate "would fail" would be a lie,
+        # and a doctor that lies about a healthy install is the same
+        # defect this line exists to fix, only inverted.
+        core_venv_only = [m for m in env.venv_only_modules if m != "jmespath"]
+        checked = f" [checked: {env.checked_interpreter}]"
+        if core_venv_only:
+            attention.append(
+                "python module(s) " + ", ".join(core_venv_only)
+                + " are installed in .venv only, not in the python3 running "
+                "this session, so `python3 -m vcfops_* validate` would fail "
+                "here" + checked + "; activate the venv first "
+                "(source .venv/bin/activate), or run the CLIs as "
+                ".venv/bin/python3 -m vcfops_..."
+            )
+        else:
+            attention.append(
+                "python module 'jmespath' is installed in .venv only, not "
+                "in the python3 running this session" + checked + "; it is a "
+                "soft dependency, so the CLIs still run here, but management "
+                "pack filter predicates go unchecked (the loader downgrades "
+                "to a warning). Activate the venv "
+                "(source .venv/bin/activate) to get that checking back."
+            )
     if not env.jars_present:
         attention.append(
             "MPB Tier 1 runtime incomplete under src/vcfops_managementpacks/, "
