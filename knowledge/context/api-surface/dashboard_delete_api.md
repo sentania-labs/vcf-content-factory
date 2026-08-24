@@ -578,6 +578,97 @@ and dashboards.
 **See also:** `context/view_report_delete_investigation.md` for the original
 (now-corrected) endpoint survey and the stranded item cleanup notes.
 
+## Reading the envelope: the client-side contract (2026-08-24, issue #116)
+
+The wire format above is right; what was missing was how a client must
+*read* it. Every Ext.Direct response is an **array** of envelopes, and
+`result[0]` is an index into an array that can be empty. That is a
+failure mode in front of, and separate from, the missing-member one.
+
+Three shapes an operator will actually hit:
+
+| Shape | Meaning |
+|---|---|
+| `[{"type":"rpc","tid":1,"result":{...}}]` | success |
+| `[{"type":"rpc"}]` | success with no payload (see line 94: `deleteReportDefinitions`) |
+| `[{"type":"exception","message":"..."}]`  | the server handled it and refused |
+| empty / no array at all | session expired, redirect to the login form, error page |
+| `[{}]`, `[{"type":""}]`, unknown type | malformed; **not** a success |
+
+The fourth one is the one that bites. There is no `[0]` to read.
+
+**`type` is the success signal, not the presence of `result`.** Ext.Direct
+defines exactly two types, and every success recorded in this file carries
+`"rpc"` — including the result-less one at line 94, which is why a client
+must not infer failure from a missing `result`.
+
+That makes the accept list exactly `{"rpc"}`, and it has to be written as
+an accept list rather than as `if type == "exception"`. Testing only for
+the exception makes a malformed-but-parseable `[{}]` a **success**: a
+tolerant reader returns `""` for the absent member, the exception test
+misses, and a delete that the server never acknowledged gets reported to
+the operator as `Deleted`. That defect was shipped and caught in review
+(#123); the fix is to accept `"rpc"`, handle `"exception"`, and refuse
+everything else with a sentence naming what arrived. Report an **absent**
+`type` differently from a **blank** one — they are different bugs, and a
+tolerant reader renders both as `""`.
+
+### The `result` member's own shape is per-endpoint, and NOT symmetrical
+
+Once you have a `result`, what counts as a *valid* one differs by
+endpoint. This looks like an inconsistency and is not; do not "fix" the
+two into agreement.
+
+| Endpoint | valid `result` shapes | `[]` means |
+|---|---|---|
+| views (`getViewsThumbnailData`) | an object keyed by view type (`{}` = no views) | **wrong shape** — refuse, do not report "no views" |
+| reports (`getReportsList`) | a bare array, **or** `{"records":[...],"total":N}` | a legitimately empty report list — accept |
+
+So an empty array is a healthy answer from reports and a malformed one
+from views. `{}` is the empty answer for views.
+
+**Why this matters more than it looks.** A client that treats every
+unrecognised `result` as "nothing found" will tell the operator
+*"not found (already removed?)"* about content that is still on the
+instance — a confident sentence derived from a response it did not
+understand. That is the failure the residual-else lesson names
+(`knowledge/lessons/unenumerated-exit-status-is-not-a-verdict.md`).
+`install.ps1` refuses on an unrecognised shape and names what arrived
+(`Object[]`, `String`, `Boolean`, `Int64`), and pins the legitimate-empty
+cases separately so the refusal can never fire on a genuinely empty
+instance.
+
+**PowerShell clients additionally need this**, verified under pwsh 7 with
+`Set-StrictMode -Version Latest` (the mode `install.ps1` runs in):
+
+- `@()[0]` raises **IndexOutOfRangeException**.
+- A missing member raises **PropertyNotFoundException** — and this is
+  true of a **hashtable's missing key** as well, not only a
+  `PSCustomObject`'s missing property. A hashtable is not a safe
+  fallback shape.
+- `@($null)` has `Count` **1**, not 0, so a null response and an empty
+  array are different cases and cannot share one guard.
+- A function that does `return $prop.Value` **unrolls the array**: a
+  one-element result list arrives at the caller as a bare object and an
+  empty one arrives as `$null`. Read a collection-valued member into a
+  variable directly, or wrap the return with the unary comma (`,$x`).
+  A generic "safe member read" helper is the wrong tool for a
+  collection-valued member unless it does one of those.
+
+The decision hazard, which is the same class as `Assert-LookupOk`:
+these calls sit on the **uninstall** path, so an unreadable envelope
+degraded to "empty list" makes the installer print
+`not found (already removed?)` about content that is still on the
+instance. `install.ps1`'s `Get-ExtDirectResult` refuses instead, and
+its `-RequireResult` switch is what marks the callers whose next step
+is a claim about instance state.
+
+Note `dashboard.action` (`getDashboardList`, `deleteTab`) is **not**
+Ext.Direct: it answers with a single object carrying `dashboards`, no
+envelope array and no `type`. A genuinely empty instance returns
+`"dashboards": []` — present and empty — which is how "no dashboards"
+stays distinguishable from "we could not read the response".
+
 ## Supportability caveat
 
 These are **unsupported internal UI endpoints** — not part of any

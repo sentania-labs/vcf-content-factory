@@ -181,6 +181,69 @@ excuses the exact bug the check exists to catch — that is not a weaker check,
 it is a broken one, and it is easy to write while quoting the ArrayList
 example in the comment directly above it.
 
+### `Get-Content` with no `-Encoding` is not UTF-8 (issue #119)
+
+The default differs by runtime, so the *same* script decodes the *same*
+bundle differently depending on which PowerShell the customer runs:
+
+- **5.1** (.NET Framework): the system **ANSI** code page, cp1252 on a
+  US box.
+- **7** (.NET Core): UTF-8, no BOM.
+
+The failure is not a crash. Read UTF-8 bytes through a cp1252 decoder
+and `ConvertFrom-Json` parses the mojibake without complaint, so the
+install *succeeds* with corrupted content names on the instance.
+Measured on Linux by forcing the cp1252 decoder explicitly:
+`Café Überblick` came back as `CafÃ© Ãœberblick` and parsed fine.
+
+Pin every read: `Get-Content -LiteralPath $p -Raw -Encoding UTF8`.
+
+Two things worth knowing before "fixing" a neighbouring site:
+
+- The BOM difference 5.1 has for `-Encoding UTF8` is a **write-side**
+  behaviour (5.1 emits a BOM, 7 does not). On a **read** it only
+  selects the decoder, and the `StreamReader` strips a leading BOM
+  either way — verified: a BOM'd and a bare UTF-8 file decode
+  identically. A future *write* site must still pin deliberately.
+- `[System.IO.File]::ReadAllText($path)` already defaults to UTF-8 with
+  BOM detection on **both** runtimes. It has never had this split.
+  Leave it alone; do not convert it to `Get-Content` for consistency.
+- **The pin trades one failure for another, and that is the choice.**
+  On 5.1, `-Encoding UTF8` applied to a file that genuinely *is* ANSI
+  turns every high byte into U+FFFD, so a hand-edited `bundle.json`
+  saved as cp1252 loses characters instead of being read correctly.
+  That trade is correct here because the factory writes bundles as
+  UTF-8 and there are **zero** PowerShell write sites in the shipped
+  installer, so no ANSI bundle can originate from us. Weigh it again
+  before pinning a read whose input a human is expected to author by
+  hand in a Windows editor.
+
+The Python sibling is `encoding="utf-8"` on every `open` / `read_text` /
+`write_text`, plus `sys.stdout.reconfigure(encoding="utf-8",
+errors="replace")` so that **printing** a content name can never fail an
+install that already succeeded (issue #118).
+
+### Two failures in front of one read (issue #116)
+
+`$result[0].type` is not one risky access, it is two, and they raise
+**different** exceptions:
+
+```powershell
+@()[0]                  # IndexOutOfRangeException
+(json '{}').missing     # PropertyNotFoundException
+```
+
+So routing the member read through `Get-PropValue` and stopping there
+converts one raw .NET exception into another and looks fixed. Guard the
+index first. Two traps while doing it:
+
+- `@($null).Count` is **1**, not 0. A null response and an empty array
+  are separate cases; folding them into one `Count` check leaves the
+  null one live.
+- A returned empty array becomes `$null` at the caller, so at *caller*
+  level "empty array" and "null" collapse. Both branches still have to
+  exist because parameter binding preserves `@()`.
+
 ### Pipeline unwrap of single-element arrays
 PowerShell unwraps single-element collections on function return. Fix:
 wrap in `@(...)` or use `Write-Output -NoEnumerate`.
