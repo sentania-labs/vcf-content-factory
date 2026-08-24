@@ -77,9 +77,20 @@ consumer with a different policy appears.
      multi-release publishes).
    - Push the branch.
    - Open a PR via `gh pr create`:
-     - Title: `release: <release-names> (<N> built, <M> retired)`
-     - Body: auto-generated from each release manifest's
-       `release_notes:` field. README diff included as a section.
+     - Title: `release: <N> built, <M> retired` — counts only. The
+       release names are deliberately NOT in the title: at 13 items the
+       old name-listing subject ran past 400 characters, which every
+       consumer (`git log --oneline`, PR lists, terminal output)
+       truncates, so the detail was invisible where it landed and noisy
+       where it did not.
+     - Body: a `## Released in this batch` section naming every built
+       release with its version, then auto-generated notes from each
+       manifest's `release_notes:` field, then the README diff.
+       The batch list is unconditional rather than folded into the notes
+       loop: a release with empty `release_notes` whose rebuild was
+       byte-identical contributes no files-changed entry either, so it
+       would otherwise vanish from the body entirely once names left the
+       title.
      - Base: `main`. Head: the release branch.
    - Print the PR URL.
 
