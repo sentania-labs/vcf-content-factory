@@ -670,13 +670,45 @@ function Get-MarkerFilename {
     # none of these members, and a raw dot-access on it is a terminating error
     # under StrictMode.  In the try/catch loops that surfaced as a misleading
     # "timed out" after the full timeout; at the uncaught site it was a crash.
+    #
+    # This first loop waits for any PRIOR export to finish before the probe
+    # POST below starts one of ours.  Its exit condition is therefore a state
+    # claim about the instance, and Get-PropValue's safe default (empty string
+    # for a member that is not there) is indistinguishable from a legitimate
+    # idle answer.  Without the status gate, one transient 5xx -- whose error
+    # envelope carries no "state" at all -- read as "nothing is running", the
+    # probe POST overlapped a live export, and the install died task-busy.
+    # Same class as the create-on-failed-lookup guard (Assert-LookupOk), one
+    # layer down: this is a POLL, not a pre-mutation lookup.
+    #
+    # Assert-LookupOk is deliberately NOT used here.  It refuses on the first
+    # non-200, which is right before a mutation and wrong for a poll whose
+    # whole job is to outlast a transient.  An unknown status keeps polling
+    # and, only at the deadline, fails with a sentence naming what we last
+    # saw.  Structure and behaviour match install.py:360-368 line for line;
+    # the two installers drifting here is its own defect class.
+    #
+    # BOUNDARY (matches install.py:362-365, do not "fix" without fixing both):
+    # a 200 whose body carries no "state" IS treated as idle.  That is the
+    # never-exported instance, and refusing there would burn the full timeout
+    # and then abort first install on a clean box.  Only a non-200 means "we
+    # do not know".
+    $lastSeen = "no status response yet"
     while ($true) {
         try {
             $g = Invoke-Api -Method GET -Path "/api/content/operations/export"
-            $st = [string](Get-PropValue $g "state")
-            if ($st -ne "RUNNING" -and $st -ne "INITIALIZED") { break }
-        } catch {}
-        if ([System.DateTime]::UtcNow -gt $deadline) { Write-Fail "Timed out waiting for prior export" }
+            $sc = Get-StatusCode $g
+            if ($sc -eq 200) {
+                $st = [string](Get-PropValue $g "state")
+                $lastSeen = "state=$st"
+                if ($st -ne "RUNNING" -and $st -ne "INITIALIZED") { break }
+            } else {
+                $lastSeen = "HTTP $sc"
+            }
+        } catch {
+            $lastSeen = "status request threw: $_"
+        }
+        if ([System.DateTime]::UtcNow -gt $deadline) { Write-Fail "Timed out waiting for prior export to finish (last seen: $lastSeen)" }
         Start-Sleep -Seconds 2
     }
 
@@ -699,7 +731,14 @@ function Get-MarkerFilename {
         $startTimeRaw = Get-PropValue $g "startTime"
         $startTime = if ($startTimeRaw) { [long]$startTimeRaw } else { 0 }
         if ($startTime -gt $priorStart -and $st -like "FINI*") { break }
-        if ([System.DateTime]::UtcNow -gt $deadline) { Write-Fail "Marker-probe export timed out; state=$st" }
+        # $st is "" for an error envelope as well as for a 200 that omits the
+        # member, so the timeout sentence names the HTTP status too; "state="
+        # alone sent an operator looking at the wrong thing.  Unlike
+        # install.py:383, a non-200 here keeps polling rather than dying on
+        # the first transient: this loop is already past the probe POST, the
+        # export is running, and outlasting a blip is the recoverable answer.
+        $sc = Get-StatusCode $g
+        if ([System.DateTime]::UtcNow -gt $deadline) { Write-Fail "Marker-probe export timed out; state=$st (last status HTTP $sc)" }
         Start-Sleep -Seconds 2
     }
 

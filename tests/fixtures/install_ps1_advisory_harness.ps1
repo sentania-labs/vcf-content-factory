@@ -301,6 +301,9 @@ function Invoke-Api {
     return $script:ApiResponses[$i]
 }
 function Write-Fail($msg) { throw "WRITE-FAIL: $msg" }
+# Stubbed so a poll that is SUPPOSED to retry costs no wall clock.  The
+# ApiCalls counter, not the clock, is what proves a loop terminates.
+function Start-Sleep { param([int]$Seconds) }
 function Reset-Api($responses) {
     $script:ApiResponses = @($responses)
     $script:ApiCalls = 0
@@ -441,11 +444,53 @@ Assert ((Get-Thrown { Get-OwnerId }) -like "*currentuser failed*") "an error env
 
 # Get-MarkerFilename: the four export-status conversions.  -TimeoutSeconds 0
 # makes each deadline immediate, so this costs no wall clock.
+#
+# THE CODEX P2 GUARD (PR #120).  The prior-export wait loop is a POLL whose
+# exit condition is "no export is running".  Get-PropValue returns "" for a
+# member that is not there, and an error envelope has no "state" at all, so
+# before the status gate ONE transient 5xx concluded idle, the probe POST
+# below overlapped a live export, and the install died task-busy.  The
+# assertion this replaces pinned exactly that: it asserted the error envelope
+# "reaches the export POST status check", i.e. it pinned the defect.
 Reset-Api @($errShape)
 $msg = Get-Thrown { Get-MarkerFilename -TimeoutSeconds 0 }
-Assert ($msg -like "*Marker-probe export failed (500)*") "an error envelope reaches the export POST status check; pre-fix it threw inside the first try/catch and died as a misleading 'Timed out waiting for prior export'"
+Assert ($msg -like "*Timed out waiting for prior export to finish*HTTP 500*") "an error envelope on the prior-export poll does NOT conclude idle; it polls to the deadline and fails naming the status"
+Assert ((Get-MutationCount) -eq 0) "and no marker-probe export is POSTed while the instance state is unknown"
+
+# The same envelope, transient rather than sticky: the poll is supposed to
+# outlast it.  This is why Assert-LookupOk is not the right instrument here --
+# it would refuse on the first non-200 and abort a recoverable install.
+# Start-Sleep is stubbed away above, so the retry costs no wall clock.
+# The 503 is the POST response, so reaching it is the proof the poll recovered;
+# the run stops there rather than walking on into the zip download.
+$busyShape = @{ __statusCode = 503; __body = "busy" }
+$finished = '{"state":"FINISHED","startTime":1}' | ConvertFrom-Json
+Reset-Api @($errShape, $finished, $finished, $busyShape)
+$msg = Get-Thrown { Get-MarkerFilename -TimeoutSeconds 30 }
+Assert ($msg -like "*Marker-probe export failed (503)*") "a TRANSIENT error on the poll is outlasted, not fatal: the poll recovers and reaches the probe POST"
+Assert (@($script:ApiLog | Where-Object { $_ -like "POST *" }).Count -eq 1) "and the probe export is POSTed exactly once"
+
+# BOUNDARY, pinned deliberately: a 200 carrying no "state" IS idle.  That is
+# the never-exported instance, and it is what install.py:362-365 does.
+# Refusing there would burn the full timeout and abort first install on a
+# clean box.  Only a non-200 means "we do not know".
+Reset-Api @(('{"ok":true}' | ConvertFrom-Json))
+$msg = Get-Thrown { Get-MarkerFilename -TimeoutSeconds 0 }
+Assert ($msg -notlike "*Timed out waiting for prior export*") "a 200 with no state is treated as idle (never-exported instance), not as a stall"
+Assert ($msg -like "*Marker-probe export timed out*") "and the run proceeds to the probe export"
+
 Reset-Api @(('{"state":"RUNNING"}' | ConvertFrom-Json))
-Assert ((Get-Thrown { Get-MarkerFilename -TimeoutSeconds 0 }) -like "*Timed out waiting for prior export*") "a genuinely RUNNING prior export still times out"
+$msg = Get-Thrown { Get-MarkerFilename -TimeoutSeconds 0 }
+Assert ($msg -like "*Timed out waiting for prior export*state=RUNNING*") "a genuinely RUNNING prior export still times out, and the sentence names the state"
+Assert ((Get-MutationCount) -eq 0) "and still POSTs nothing"
+
+# The post-POST wait loop, same class: a non-200 there must not satisfy the
+# exit condition either.  It keeps polling (the export is already running;
+# outlasting a blip is the recoverable answer) and names the status at the
+# deadline.
+Reset-Api @(('{"state":"FINISHED","startTime":1}' | ConvertFrom-Json), ('{"state":"FINISHED","startTime":1}' | ConvertFrom-Json), ('{"ok":true}' | ConvertFrom-Json), $errShape)
+$msg = Get-Thrown { Get-MarkerFilename -TimeoutSeconds 0 }
+Assert ($msg -like "*Marker-probe export timed out*HTTP 500*") "an error envelope on the post-POST wait loop does not read as FINISHED, and the timeout sentence names the status"
 $fin = '{"state":"FINISHED","startTime":1}' | ConvertFrom-Json
 Reset-Api @($fin, $fin, ('{"ok":true}' | ConvertFrom-Json), ('{"state":"FINISHED"}' | ConvertFrom-Json))
 Assert ((Get-Thrown { Get-MarkerFilename -TimeoutSeconds 0 }) -like "*Marker-probe export timed out; state=FINISHED*") "the third loop reads a status envelope with no startTime without throwing"
