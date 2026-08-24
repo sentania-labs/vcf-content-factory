@@ -824,8 +824,13 @@ def _gitignore_status(env_file: Path) -> str:
             "it is NOT git-ignored, and its directory IS a git repo, so a "
             "password written there could be committed"
         )
-    # 128 == not a git repository, plus anything unexpected.
-    return "its directory is not a git repo, so nothing there could commit it"
+    # `git check-ignore` documents 128 as a FATAL error, not as "no git
+    # repo here": a real repo with an unreadable or malformed
+    # `.git/config` exits 128 too. Reporting that as "not a git repo,
+    # nothing could commit it" would be a false assurance on the one
+    # prompt where the operator decides whether to write a plaintext
+    # password outside this repo. Unknown is reported as unknown.
+    return "could not determine whether anything git-ignores it"
 
 
 def _resolve_env_target(

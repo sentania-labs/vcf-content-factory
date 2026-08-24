@@ -1198,3 +1198,39 @@ def test_read_failure_on_the_parent_env_names_the_parent_file(tmp_path):
     assert str(root / ".env") not in d.stderr
     assert parent.read_bytes() == before
     assert SECRET not in d.streams
+
+
+def _stub_git(tmp_path: Path, exit_code: int) -> Path:
+    """A directory holding a `git` that does nothing but exit `exit_code`."""
+    bindir = tmp_path / f"stubbin{exit_code}"
+    bindir.mkdir()
+    git = bindir / "git"
+    git.write_text(f"#!/bin/sh\nexit {exit_code}\n")
+    git.chmod(0o755)
+    return bindir
+
+
+def test_a_fatal_git_check_ignore_is_reported_as_unknown_not_as_safe(
+    tmp_path, monkeypatch
+):
+    """Codex P2 on PR #117: `git check-ignore` exits 128 on a FATAL
+    error, which a real repo with an unreadable or malformed
+    `.git/config` also hits. Reporting 128 as "not a git repo, nothing
+    could commit it" tells the operator a plaintext password is safe
+    where it is merely unknown, on the one prompt where that decision is
+    made. Unknown must read as unknown."""
+    monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 128)))
+    verdict = sc._gitignore_status(tmp_path / ".env")
+    assert verdict == "could not determine whether anything git-ignores it"
+    assert "not a git repo" not in verdict
+
+
+def test_git_check_ignore_exit_codes_zero_and_one_keep_their_verdicts(
+    tmp_path, monkeypatch
+):
+    """The 128 fix must not blur the two statuses git actually
+    documents: 0 is ignored, 1 is not ignored."""
+    monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 0)))
+    assert "DOES ignore it" in sc._gitignore_status(tmp_path / ".env")
+    monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 1)))
+    assert "NOT git-ignored" in sc._gitignore_status(tmp_path / ".env")
