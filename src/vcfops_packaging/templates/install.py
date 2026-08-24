@@ -50,6 +50,48 @@ import zipfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+
+# ---------------------------------------------------------------------------
+# Narration must never be able to fail an install (issue #118).
+#
+# #101 pinned encoding= on this file's text I/O. That covers files only. This
+# installer also PRINTS bundle-sourced content names -- view names, dashboard
+# names -- and on a customer's native-Windows box with stdout redirected to a
+# file or a pipe, Python encodes stdout with the locale encoding (cp1252 on a
+# US box). A content name carrying a character outside cp1252 then raises
+# UnicodeEncodeError *after the object has already been created on the
+# instance*: the work succeeded and the report of it crashed, leaving the
+# operator with a traceback over a partially narrated install.
+#
+# errors="replace" is the load-bearing half. Pinning utf-8 alone would still
+# raise on a surrogate or an unencodable code point; "replace" guarantees the
+# print always completes. A mangled character in a printed name is cosmetic.
+# A traceback after a successful import is not.
+#
+# stderr gets the same treatment: _die() writes there, and a message about a
+# failure must not itself fail.
+#
+# This runs at import time, before _bootstrap_requests(), because the
+# bootstrap prints a temp-directory path that can carry a non-ASCII Windows
+# username -- so main() would already be too late.
+def _pin_stdio_encoding() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        # hasattr guard: sys.stdout is only guaranteed to be a TextIOWrapper
+        # when it is a real stream. Under a capture harness, or when stdout is
+        # closed, it may be some other file-like object with no reconfigure().
+        # Failing to pin is the status quo ante; raising here would break the
+        # installer on the very platforms it already worked on.
+        try:
+            reconfigure = getattr(stream, "reconfigure", None)
+            if reconfigure is not None:
+                reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
+_pin_stdio_encoding()
+
+
 # ---------------------------------------------------------------------------
 # Bootstrap: ensure `requests` is available. If not, create a temp venv,
 # install it, and re-exec this script inside the venv with all original args.
@@ -357,14 +399,26 @@ class Client:
         FINISHED state from a prior export isn't mistaken for our new one.
         """
         deadline = time.monotonic() + timeout_s
+        # This loop deliberately keeps polling through a non-200 rather than
+        # dying on the first transient, so at timeout `st` is not evidence of
+        # anything: it holds the last value seen on a 200, or "" if there
+        # never was one. Naming the last-seen signal is what tells an operator
+        # whether the API was returning 500s the whole time or genuinely
+        # reported a stuck export. install.ps1's sibling loop got this in
+        # #120; this is the Python half of the same parity (issue #121).
+        last_seen = "no status response yet"
         while True:
             g = self._req("GET", "/api/content/operations/export")
             if g.status_code == 200:
                 st = (g.json() or {}).get("state", "")
+                last_seen = f"state={st}"
                 if st not in ("RUNNING", "INITIALIZED"):
                     break
+            else:
+                last_seen = f"HTTP {g.status_code}"
             if time.monotonic() > deadline:
-                _die("Timed out waiting for prior export to finish")
+                _die("Timed out waiting for prior export to finish "
+                     f"(last seen: {last_seen})")
             time.sleep(2)
 
         prior_start = 0

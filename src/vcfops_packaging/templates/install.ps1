@@ -278,6 +278,121 @@ function Assert-LookupOk {
         "lookup -- this step stopped before acting")
 }
 
+function Get-ExtDirectResult {
+    param($Response, [string]$What, [switch]$Fatal, [switch]$RequireResult)
+    # The Ext.Direct sibling of Get-PropValue + Assert-LookupOk (#116).
+    #
+    # The #109 sweep put every Invoke-Api-derived read onto Get-PropValue.  The
+    # UI Ext.Direct path was not in that sweep and has the same StrictMode
+    # exposure, plus one the API path does not have.  These responses come from
+    # Invoke-WebRequest + ConvertFrom-Json, i.e. a THIRD envelope shape:
+    #
+    #     [ { "type":"rpc", "tid":1, "result": {...} } ]
+    #
+    # an ARRAY of envelopes, where the callers read $result[0].type.  So there
+    # are two independent failures in front of each read, not one:
+    #
+    #   1. $result[0] is an index into a possibly-empty array.  An error page,
+    #      a redirect to the login form, or a bare `{}` all yield something
+    #      that indexes to nothing.  Routing the member read through
+    #      Get-PropValue and stopping there only converts a
+    #      PropertyNotFoundException into an IndexOutOfRangeException.
+    #   2. .type / .result are absent members under Set-StrictMode.
+    #
+    # Both are guarded here.  Get-PropValue does the member reads, so this is
+    # an extension of the existing helper rather than a second idiom for the
+    # same job.
+    #
+    # -RequireResult is deliberately a SEPARATE switch from -Fatal even though
+    # today's four call sites happen to set both or neither.  They answer
+    # different questions and must not be merged:
+    #
+    #   -Fatal          how to report:  Write-Fail (exit) vs throw (the
+    #                   caller's try/catch downgrades it to a per-item warning)
+    #   -RequireResult  whether an ABSENT `result` member is an error at all.
+    #                   For the two list callers it is: they feed a name->id
+    #                   map that an uninstall then branches on, so degrading a
+    #                   broken envelope to "no such content" prints
+    #                   "not found (already removed?)" about content that is
+    #                   still there.  Same class as Assert-LookupOk.  For the
+    #                   two delete callers it is not: they discard the result,
+    #                   and demanding one would invent a new failure on a
+    #                   currently working path.
+    #
+    # -RequireResult rejects a null VALUE as well as an absent member.  Both
+    # thumbnail endpoints answer with an object, never null, so a null result
+    # is "the server did not answer the question we asked" and not a legitimate
+    # empty list -- and Get-AllReports goes on to dereference it, which would
+    # be a raw null-reference exception mid-uninstall.  A real empty instance
+    # still passes: it arrives as an object whose collections are empty.
+    $fail = {
+        param([string]$Message)
+        if ($Fatal) { Write-Fail $Message }
+        throw $Message
+    }
+
+    # @($null) is a ONE-element array containing $null, not an empty one, so
+    # the null case cannot be folded into the Count check below.
+    if ($null -eq $Response) {
+        & $fail "$What failed: the UI API returned no response body"
+    }
+    $envelopes = @($Response)
+    if ($envelopes.Count -eq 0) {
+        & $fail "$What failed: the UI API returned an empty response envelope"
+    }
+    $first = $envelopes[0]
+    if ($null -eq $first) {
+        & $fail "$What failed: the UI API returned an empty response envelope"
+    }
+
+    $type = [string](Get-PropValue $first "type")
+    if ($type -eq "exception") {
+        $msg = [string](Get-PropValue $first "message")
+        if (-not $msg) { $msg = "no message supplied" }
+        & $fail "$What failed: $msg"
+    }
+
+    # Deliberately NOT `Get-PropValue $first "result"`, and this is the one
+    # read in the file where that helper is the wrong tool.  Get-PropValue
+    # returns its value, and PowerShell unrolls a returned array: a result
+    # list holding exactly one report arrives as a bare object, and an empty
+    # one arrives as $null, which -RequireResult below would then refuse on a
+    # perfectly healthy empty instance.  Get-PropValue's own header documents
+    # that caveat.  A property read straight into a variable does not unroll,
+    # so the payload survives with its shape intact.  `type` and `message`
+    # above are scalars and go through the helper as normal.
+    $payload = $null
+    if ($first -is [System.Collections.IDictionary]) {
+        if ($first.Contains("result")) { $payload = $first["result"] }
+    } else {
+        $resultProp = $first.PSObject.Properties["result"]
+        if ($null -ne $resultProp) { $payload = $resultProp.Value }
+    }
+    if ($RequireResult -and $null -eq $payload) {
+        # Unknown is never the reassuring branch: an envelope with neither an
+        # exception nor a result told us nothing, and the caller's next move is
+        # a claim about what exists on the instance.
+        & $fail ("$What failed: the UI API returned an unrecognised response " +
+            "envelope (type='$type', no result payload); refusing to treat " +
+            "that as an empty list")
+    }
+    # The unary comma is load-bearing for collection-valued payloads, and its
+    # absence would be a silent behaviour change from the `$result[0].result`
+    # this replaced.  PowerShell unrolls an array on return, so a bare
+    # `return $payload` turns a 1-element result list into a bare element and
+    # an empty one into $null -- Get-AllReports' `$raw -is [System.Array]`
+    # branch would then miss, and it would fall through to the property probe
+    # on an object that is not one.  Direct assignment never had that problem.
+    # Scalars and PSCustomObjects are returned plainly: wrapping those would
+    # hand callers a 1-element array instead of the object.
+    if ($null -ne $payload -and
+        $payload -is [System.Collections.IEnumerable] -and
+        $payload -isnot [string]) {
+        return ,$payload
+    }
+    return $payload
+}
+
 function Resolve-AuthSource($raw) {
     # Returns the canonical value used by the Suite API ('Local' for local accounts).
     # The UI login helper translates 'Local' -> 'localItem' internally.
@@ -286,11 +401,30 @@ function Resolve-AuthSource($raw) {
 }
 
 function Load-JsonFile($Path) {
+    # -Encoding UTF8 is load-bearing, not decoration (#119).  Get-Content with
+    # no -Encoding defaults to the system ANSI code page on Windows PowerShell
+    # 5.1 (.NET Framework) and to UTF-8 on PowerShell 7 (.NET Core), so the
+    # same installer reading the same bundle decodes differently depending on
+    # which PowerShell the customer happens to run.  The failure is NOT a
+    # crash: on 5.1 a UTF-8 bundle carrying a non-ASCII content name decodes
+    # to mojibake that ConvertFrom-Json parses happily, and the install
+    # succeeds with corrupted names on the instance.
+    #
+    # On READ, -Encoding UTF8 only selects the decoder; the BOM-vs-no-BOM
+    # difference 5.1 has for -Encoding UTF8 is a WRITE-side behaviour (5.1
+    # emits a BOM, 7 does not).  Reads go through a StreamReader that strips a
+    # leading BOM either way, so both a BOM'd and a bare UTF-8 file read
+    # identically here.  Any future WRITE site in this file must pin its
+    # encoding explicitly rather than copying this argument.
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
-    return Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+    return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
 }
 
 function Load-RawTextFile($Path) {
+    # NOT a Get-Content site on purpose (#119).  [System.IO.File]::ReadAllText
+    # already defaults to UTF-8 with BOM detection on BOTH .NET Framework and
+    # .NET Core, so it has never had the 5.1/7 split above.  Recorded so
+    # nobody "fixes" it into inconsistency with the -Encoding UTF8 sites.
     if (-not (Test-Path -LiteralPath $Path)) { return $null }
     return [System.IO.File]::ReadAllText($Path)
 }
@@ -320,7 +454,8 @@ function Get-Bundles {
             if ($f.Directory.Parent.FullName -ne $bundlesRoot) { continue }
             $slug = $f.Directory.Name
             try {
-                $manifest = Get-Content -LiteralPath $f.FullName -Raw | ConvertFrom-Json
+                # -Encoding UTF8: see Load-JsonFile (#119).
+                $manifest = Get-Content -LiteralPath $f.FullName -Raw -Encoding UTF8 | ConvertFrom-Json
             } catch {
                 Write-Host "  WARN  Could not parse $($f.FullName): $_ -- skipping"
                 continue
@@ -334,7 +469,8 @@ function Get-Bundles {
         $legacyManifest = Join-Path $ScriptDir "bundle.json"
         $legacyContent  = Join-Path $ScriptDir "content"
         if ((Test-Path -LiteralPath $legacyManifest) -and (Test-Path -LiteralPath $legacyContent)) {
-            try   { $manifest = Get-Content -LiteralPath $legacyManifest -Raw | ConvertFrom-Json }
+            # -Encoding UTF8: see Load-JsonFile (#119).
+            try   { $manifest = Get-Content -LiteralPath $legacyManifest -Raw -Encoding UTF8 | ConvertFrom-Json }
             catch { $manifest = [PSCustomObject]@{ name = "bundle"; description = ""; content = [PSCustomObject]@{} } }
             $entries.Add(@{ Slug = $manifest.name; Dir = $ScriptDir; Manifest = $manifest })
         } elseif (Test-Path -LiteralPath $legacyContent) {
@@ -867,11 +1003,21 @@ function Import-ContentZip {
     if (-not $success) { Write-Fail "Import POST for $Label failed after $Retries retries (task busy)" }
 
     $deadline = [System.DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    $sc = 0
     while ($true) {
         $s = Invoke-Api -Method GET -Path "/api/content/operations/import"
         # Probe-safe reads: the status envelope is not guaranteed to carry
         # every field, and a dot-access on a missing one is a terminating
         # error here (see Get-PropValue).
+        #
+        # $sc is read for the timeout sentence only (#121).  This loop
+        # deliberately keeps polling on a non-200, exactly as the marker-probe
+        # loop above does: the import is already running on the instance by
+        # this point, so outlasting a transient blip is the recoverable
+        # answer.  That tolerance is what makes the status worth naming --
+        # a run that 503'd for the whole timeout looks identical, from the
+        # message alone, to one that never started.
+        $sc = Get-StatusCode $s
         $state = [string](Get-PropValue $s "state")
         $endTimeRaw = Get-PropValue $s "endTime"
         $endTime = if ($endTimeRaw) { [long]$endTimeRaw } else { 0 }
@@ -884,7 +1030,12 @@ function Import-ContentZip {
             # function's output stream.
             return $s
         }
-        if ([System.DateTime]::UtcNow -gt $deadline) { Write-Fail "Import of $Label timed out; state=$state" }
+        # "state=" alone is not a verdict: an empty $state means BOTH "a 200
+        # that omitted the member" and "we never got a usable answer at all",
+        # and an operator reading the first meaning goes looking at the wrong
+        # thing.  Name the last-seen HTTP status too, the same way the
+        # marker-probe timeout above does (#121).
+        if ([System.DateTime]::UtcNow -gt $deadline) { Write-Fail "Import of $Label timed out; state=$state (last status HTTP $sc)" }
         Start-Sleep -Seconds 2
     }
 }
@@ -1907,7 +2058,34 @@ function Get-AllDashboards {
         currentComponentInfo = "TODO"
         globalDate           = '{"dateRange":"last6Hour"}'
     }
-    return @($result.dashboards | Where-Object { $_ })
+    # dashboard.action is NOT Ext.Direct: it answers with a single object, not
+    # an array of envelopes, so Get-ExtDirectResult does not apply here.  The
+    # StrictMode exposure is the same though ($result.dashboards throws when
+    # the member is absent), and so is the decision hazard: this list feeds a
+    # name->id map that Uninstall-Dashboards branches on, and degrading a
+    # broken response to an empty list prints "not found (already removed?)"
+    # about dashboards that are still on the instance (#116).
+    #
+    # The read is a direct property probe, not Get-PropValue, for the same
+    # reason as in Get-ExtDirectResult: Get-PropValue RETURNS its value and
+    # PowerShell unrolls a returned array, so a genuinely empty instance
+    # ("dashboards":[]) would come back as $null and be refused as broken.
+    # Measured, not assumed.  Probing PSObject.Properties distinguishes the
+    # member being absent from its value being an empty list.
+    $dashboards = $null
+    if ($null -ne $result) {
+        if ($result -is [System.Collections.IDictionary]) {
+            if ($result.Contains("dashboards")) { $dashboards = $result["dashboards"] }
+        } else {
+            $dashProp = $result.PSObject.Properties["dashboards"]
+            if ($null -ne $dashProp) { $dashboards = $dashProp.Value }
+        }
+    }
+    if ($null -eq $dashboards) {
+        Write-Fail ("Dashboard list failed: the UI API response carried no " +
+            "'dashboards' field; refusing to treat that as an empty dashboard list")
+    }
+    return @($dashboards | Where-Object { $_ })
 }
 
 function Remove-Dashboards {
@@ -1958,11 +2136,11 @@ function Get-AllViews {
         type   = "rpc"
         tid    = $tid
     })
-    if ($result[0].type -eq "exception") {
-        Write-Fail "View list failed: $($result[0].message)"
-    }
     $allViews = [System.Collections.Generic.List[object]]::new()
-    $grouped = $result[0].result
+    # -RequireResult: this list feeds Uninstall-Views' name->id map, so an
+    # unreadable envelope must stop the run rather than degrade to "no views
+    # exist" and print "not found (already removed?)" (#116).
+    $grouped = Get-ExtDirectResult -Response $result -What "View list" -Fatal -RequireResult
     # API returns a dict keyed by view type (LIST, IMAGE, etc.),
     # each value is a dict keyed by subject name (HostSystem, etc.),
     # each subject value is a list of view objects.
@@ -1978,6 +2156,21 @@ function Get-AllViews {
                 }
             }
         }
+    } else {
+        # The residual else, and it must not carry a confident sentence.
+        # -RequireResult closes absent, null, and empty-envelope.  It does NOT
+        # close WRONG SHAPE: a present result that is a string, a bool, or an
+        # array falls straight through the -is test above, and without this
+        # branch Get-AllViews would return an empty list.  Uninstall-Views then
+        # prints "View not found (already removed?)" about views that are
+        # still on the instance -- the exact sentence
+        # knowledge/lessons/unenumerated-exit-status-is-not-a-verdict.md lists
+        # as an instance of this defect.  An unenumerated shape is unknown, and
+        # unknown is never the reassuring branch.
+        $shape = if ($null -eq $grouped) { "null" } else { $grouped.GetType().Name }
+        Write-Fail ("View list failed: the UI API returned a result of an " +
+            "unrecognised shape ($shape, expected an object keyed by view " +
+            "type); refusing to treat that as an empty view list")
     }
     return $allViews
 }
@@ -1997,9 +2190,11 @@ function Remove-View {
         type   = "rpc"
         tid    = $tid
     })
-    if ($result[0].type -eq "exception") {
-        throw "deleteView $ViewId failed: $($result[0].message)"
-    }
+    # No -Fatal: Uninstall-Views catches this and downgrades it to a per-view
+    # warning so one undeletable view does not abandon the rest of the
+    # uninstall.  No -RequireResult: the result payload is discarded, and
+    # demanding one would invent a failure on a working path (#116).
+    $null = Get-ExtDirectResult -Response $result -What "deleteView $ViewId"
 }
 
 function Get-AllReports {
@@ -2018,10 +2213,9 @@ function Get-AllReports {
         type   = "rpc"
         tid    = $tid
     })
-    if ($result[0].type -eq "exception") {
-        Write-Fail "Report list failed: $($result[0].message)"
-    }
-    $raw = $result[0].result
+    # -RequireResult: same reasoning as Get-AllViews -- this feeds
+    # Uninstall-Reports' name->id map (#116).
+    $raw = Get-ExtDirectResult -Response $result -What "Report list" -Fatal -RequireResult
     # getReportDefinitionThumbnails returns:
     #   {"records":[...], "total":N, "metaData":{...}, "success":true}
     if ($raw -is [System.Array]) { return $raw }
@@ -2041,6 +2235,16 @@ function Get-AllReports {
                 foreach ($item in $prop.Value) { $items.Add($item) }
             }
         }
+    } else {
+        # Same residual-else defect as Get-AllViews, one function over.  A
+        # string or bool result reaches here (a bare array already returned
+        # above, which is a legitimate shape), and returning the empty $items
+        # would make Uninstall-Reports claim "already removed?" about reports
+        # that are still there.
+        $shape = if ($null -eq $raw) { "null" } else { $raw.GetType().Name }
+        Write-Fail ("Report list failed: the UI API returned a result of an " +
+            "unrecognised shape ($shape, expected an object or an array); " +
+            "refusing to treat that as an empty report list")
     }
     return $items
 }
@@ -2061,9 +2265,8 @@ function Remove-Reports {
         type   = "rpc"
         tid    = $tid
     })
-    if ($result[0].type -eq "exception") {
-        throw "deleteReportDefinitions failed: $($result[0].message)"
-    }
+    # No -Fatal / no -RequireResult: same reasoning as Remove-View (#116).
+    $null = Get-ExtDirectResult -Response $result -What "deleteReportDefinitions"
 }
 
 # ---------------------------------------------------------------------------
@@ -2718,7 +2921,12 @@ function Uninstall-Dashboards($Ctx) {
     $allDash = Get-AllDashboards
     $dashByName = @{}
     foreach ($d in $allDash) {
-        if ($d.name -and $d.id) { $dashByName[$d.name] = $d.id }
+        # Get-PropValue, not dot-access: these are ConvertFrom-Json objects
+        # from the UI API, and a thumbnail missing either member is a
+        # PropertyNotFoundException that aborts the uninstall partway (#116).
+        $dname = Get-PropValue $d "name"
+        $did = Get-PropValue $d "id"
+        if ($dname -and $did) { $dashByName[$dname] = $did }
     }
     $toDelete = [System.Collections.Generic.List[object]]::new()
     foreach ($name in $names) {
@@ -2747,8 +2955,15 @@ function Uninstall-Views($Ctx) {
     # Build name -> {Id, Name} map (keep Name for the delete shape).
     $viewByName = @{}
     foreach ($v in $allViews) {
-        $vid = if ($v.viewDefinitionKey) { $v.viewDefinitionKey } else { $v.id }
-        if ($v.name -and $vid) { $viewByName[$v.name] = @{ Id = $vid; Name = $v.name } }
+        # $v.viewDefinitionKey was the worst of the #116 sites: the if/else
+        # exists precisely BECAUSE some thumbnails carry viewDefinitionKey and
+        # some carry only id, so under StrictMode the condition itself throws
+        # on every view of the second kind -- an uninstall that dies with a
+        # raw PropertyNotFoundException before deleting anything.
+        $vkey = Get-PropValue $v "viewDefinitionKey"
+        $vid = if ($vkey) { $vkey } else { Get-PropValue $v "id" }
+        $vname = Get-PropValue $v "name"
+        if ($vname -and $vid) { $viewByName[$vname] = @{ Id = $vid; Name = $vname } }
     }
     foreach ($name in $names) {
         $entry = $viewByName[$name]
@@ -2773,8 +2988,9 @@ function Uninstall-Reports($Ctx) {
     $allReports = Get-AllReports
     $reportByName = @{}
     foreach ($r in $allReports) {
-        $rname = $r.name
-        $rid   = $r.id
+        # Get-PropValue: see Uninstall-Dashboards (#116).
+        $rname = Get-PropValue $r "name"
+        $rid   = Get-PropValue $r "id"
         if ($rname -and $rid) { $reportByName[$rname] = $rid }
     }
     $toDelete = [System.Collections.Generic.List[object]]::new()

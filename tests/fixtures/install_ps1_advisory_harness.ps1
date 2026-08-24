@@ -34,7 +34,11 @@ $want = @("Write-Ok", "Write-Warn", "Get-PropValue", "Get-BoundedNames",
           "Uninstall-CustomGroups", "Remove-Supermetric", "Remove-CustomGroup",
           "Get-OwnerId", "Get-CurrentUser", "Get-MarkerFilename",
           # issue #108 -- SM ghost-state retry
-          "Get-SmGhostStateSkipCount", "Install-Supermetrics")
+          "Get-SmGhostStateSkipCount", "Install-Supermetrics",
+          # issue #116 -- the Ext.Direct / dashboard.action envelope family
+          "Get-ExtDirectResult", "Get-AllViews", "Get-AllReports",
+          "Get-AllDashboards", "Remove-View", "Remove-Reports",
+          "Uninstall-Views", "Uninstall-Reports", "Uninstall-Dashboards")
 $found = New-Object System.Collections.Generic.List[string]
 $fns = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)
 foreach ($f in $fns) {
@@ -698,5 +702,275 @@ foreach ($fname in @("Install-Supermetrics", "Install-Dashboard")) {
     Assert ($first.Parent -is [System.Management.Automation.Language.PipelineAst] -and
             $first.Parent.Parent -is [System.Management.Automation.Language.AssignmentStatementAst]) "$fname captures the first Import-ContentZip return rather than discarding it"
 }
+
+# ===========================================================================
+# Issue #116 -- Ext.Direct / dashboard.action envelopes
+#
+# A THIRD envelope shape, distinct from the two Get-PropValue was written for.
+# Invoke-ExtDirect returns ConvertFrom-Json of an ARRAY:
+#     [ { "type":"rpc", "tid":1, "result": {...} } ]
+# and the callers read $result[0].type.  Verified against pwsh 7 under
+# Set-StrictMode -Version Latest, the mode this file and install.ps1 both run:
+#     @()[0]              -> IndexOutOfRangeException
+#     (json '{}').missing -> PropertyNotFoundException
+#     @{}.missingKey      -> PropertyNotFoundException
+# so there are TWO failures in front of each read, and a fix that only routes
+# the member read through Get-PropValue swaps the second for the first.
+# ===========================================================================
+
+$script:ExtResponses = @()
+$script:ExtCalls = 0
+function Invoke-ExtDirect {
+    param([object[]]$Calls)
+    $i = $script:ExtCalls
+    $script:ExtCalls++
+    if ($i -ge $script:ExtResponses.Count) { return $script:ExtResponses[-1] }
+    return $script:ExtResponses[$i]
+}
+function Invoke-DashboardAction {
+    param([hashtable]$FormFields)
+    $i = $script:ExtCalls
+    $script:ExtCalls++
+    if ($i -ge $script:ExtResponses.Count) { return $script:ExtResponses[-1] }
+    return $script:ExtResponses[$i]
+}
+function Reset-Ext($responses) {
+    $script:ExtResponses = @($responses)
+    $script:ExtCalls = 0
+}
+function Get-NextTid { return 1 }
+# StrictMode makes an unset variable a terminating error, and these UI
+# functions read script-scope session state that Start-UISession normally
+# populates.  Without them the assertions below would "pass" against a
+# cannot-be-retrieved error instead of the guard under test.
+$script:CsrfToken = "test-csrf"
+$script:OpsHost = "ops.test"
+# Stubbed rather than imported: it only formats a request body, and letting it
+# fail would make the Uninstall-Dashboards assertion below pass through the
+# catch block instead of through the member reads it is actually testing.
+function Remove-Dashboards { param([object[]]$Dashboards) }
+function New-UiCtx($names) {
+    return @{
+        Names      = @($names)
+        Warnings   = [System.Collections.Generic.List[string]]::new()
+        Advisories = [System.Collections.Generic.List[string]]::new()
+    }
+}
+
+# --- Get-ExtDirectResult: the index failure, IN FRONT of the member failure --
+$msg = Get-Thrown { Get-ExtDirectResult -Response $null -What "View list" }
+Assert ($msg -like "*no response body*") "null response yields a sentence, not a null-reference exception"
+Assert ($msg -notlike "*IndexOutOfRange*" -and $msg -notlike "*cannot be found on this object*") "and neither raw .NET exception survives"
+
+# @($null) has Count 1, NOT 0, so the null case above cannot be folded into
+# this one.  If it were, $first stays $null and the type read below throws.
+$msg = Get-Thrown { Get-ExtDirectResult -Response @() -What "View list" }
+Assert ($msg -like "*empty response envelope*") "empty array yields a sentence, not IndexOutOfRangeException"
+$msg = Get-Thrown { Get-ExtDirectResult -Response @($null) -What "View list" }
+Assert ($msg -like "*empty response envelope*") "a one-element array holding null is also empty"
+
+$exc = '[{"type":"exception","message":"Internal server error."}]' | ConvertFrom-Json
+$msg = Get-Thrown { Get-ExtDirectResult -Response $exc -What "deleteView v1" }
+Assert ($msg -like "*deleteView v1 failed: Internal server error.*") "an exception envelope keeps the server's own message"
+$excNoMsg = '[{"type":"exception"}]' | ConvertFrom-Json
+$msg = Get-Thrown { Get-ExtDirectResult -Response $excNoMsg -What "deleteView v1" }
+Assert ($msg -like "*no message supplied*") "an exception envelope with no message member does not throw reading it"
+
+# -Fatal picks the reporting channel, nothing else.  Write-Fail is stubbed at
+# the top of this file to throw WRITE-FAIL: rather than exit.
+$msg = Get-Thrown { Get-ExtDirectResult -Response @() -What "View list" -Fatal }
+Assert ($msg -like "WRITE-FAIL: *empty response envelope*") "-Fatal routes through Write-Fail"
+$msg = Get-Thrown { Get-ExtDirectResult -Response @() -What "View list" }
+Assert ($msg -notlike "WRITE-FAIL:*") "without -Fatal it throws, so the caller's try/catch can downgrade it to a warning"
+
+$ok = '[{"type":"rpc","tid":1,"result":{"a":1}}]' | ConvertFrom-Json
+Assert ((Get-ExtDirectResult -Response $ok -What "x").a -eq 1) "a healthy envelope returns its result payload"
+
+# The Invoke-Api hashtable shape reaches this helper only if someone wires it
+# up wrong, but Get-PropValue supports it and so must this.
+Assert ((Get-ExtDirectResult -Response @(@{ type = "rpc"; result = "payload" }) -What "x") -eq "payload") "IDictionary envelope supported, matching Get-PropValue's two branches"
+
+# -RequireResult is the Assert-LookupOk of this family: it is about DECISIONS,
+# not about reading.
+$noResult = '[{"type":"rpc","tid":1}]' | ConvertFrom-Json
+Assert ($null -eq (Get-ExtDirectResult -Response $noResult -What "deleteView v1")) "without -RequireResult an absent result is simply null: the delete callers discard it"
+$msg = Get-Thrown { Get-ExtDirectResult -Response $noResult -What "View list" -RequireResult }
+Assert ($msg -like "*refusing to treat that as an empty list*") "with -RequireResult an absent result refuses rather than degrading to 'nothing exists'"
+$nullResult = '[{"type":"rpc","tid":1,"result":null}]' | ConvertFrom-Json
+$msg = Get-Thrown { Get-ExtDirectResult -Response $nullResult -What "Report list" -RequireResult }
+Assert ($msg -like "*refusing to treat that as an empty list*") "a present-but-null result is also refused: Get-AllReports would dereference it"
+
+# The unary comma in the return.  Without it PowerShell unrolls the array and
+# a 1-element result list arrives at Get-AllReports as a bare object, missing
+# its `-is [System.Array]` branch.
+$oneItem = '[{"type":"rpc","result":[{"id":"r1"}]}]' | ConvertFrom-Json
+$got = Get-ExtDirectResult -Response $oneItem -What "Report list" -RequireResult
+Assert ($got -is [System.Array] -and $got.Count -eq 1) "a 1-element array result is NOT unrolled on return"
+$emptyItems = '[{"type":"rpc","result":[]}]' | ConvertFrom-Json
+$got = Get-ExtDirectResult -Response $emptyItems -What "Report list" -RequireResult
+Assert ($got -is [System.Array] -and $got.Count -eq 0) "an empty array result survives as an empty array, not as null"
+
+# --- Get-AllViews ----------------------------------------------------------
+# Note on the empty-array case at CALLER level: PowerShell unrolls a returned
+# array, so a transport that answers with @() delivers $null to its caller,
+# not an empty array.  Both collapse to the same operator sentence here, which
+# is why Get-ExtDirectResult guards $null and Count separately -- the unit
+# tests above bind @() as a PARAMETER, where it survives, and reach the other
+# branch.
+Reset-Ext @(, @())
+$msg = Get-Thrown { Get-AllViews }
+Assert ($msg -like "WRITE-FAIL: View list failed*") "Get-AllViews on an empty envelope array: operator sentence, not IndexOutOfRangeException"
+Reset-Ext @($exc)
+$msg = Get-Thrown { Get-AllViews }
+Assert ($msg -like "*View list failed: Internal server error.*") "Get-AllViews surfaces the server's exception message"
+Reset-Ext @($noResult)
+$msg = Get-Thrown { Get-AllViews }
+Assert ($msg -like "*refusing to treat that as an empty list*") "Get-AllViews refuses an envelope with no result rather than reporting zero views"
+
+$grouped = '[{"type":"rpc","result":{"LIST":{"HostSystem":[{"name":"V1","id":"i1"},{"name":"V2","viewDefinitionKey":"k2"}]}}}]' | ConvertFrom-Json
+Reset-Ext @($grouped)
+$views = Get-AllViews
+Assert ($views.Count -eq 2) "a healthy grouped payload still flattens to the view list"
+
+# WRONG SHAPE is the case -RequireResult does NOT close, and the one the
+# residual `else` used to swallow.  A present result that is a string, a bool,
+# or an array is not an exception, is not null, and is not absent -- it simply
+# is not the shape this endpoint documents.  Returning an empty list for it
+# makes the uninstall print "not found (already removed?)" about content that
+# is still on the instance, which is the sentence
+# knowledge/lessons/unenumerated-exit-status-is-not-a-verdict.md lists as an
+# instance of this defect.
+foreach ($bad in @('"a string"', 'true', '[]')) {
+    Reset-Ext @(("[{""type"":""rpc"",""result"":$bad}]" | ConvertFrom-Json))
+    $msg = Get-Thrown { Get-AllViews }
+    Assert ($msg -like "WRITE-FAIL: View list failed*unrecognised shape*") "Get-AllViews refuses a result of shape $bad rather than reporting zero views"
+    Assert ($msg -notlike "*already removed*") "and never reaches the sentence that claims the instance is clean"
+}
+# The shape that IS legitimate must still pass: an empty object is a real
+# instance with no views, not a broken envelope.
+Reset-Ext @(('[{"type":"rpc","result":{}}]' | ConvertFrom-Json))
+Assert ((@(Get-AllViews)).Count -eq 0) "an empty grouped object is a genuinely empty instance, and is NOT refused"
+
+# --- Remove-View -----------------------------------------------------------
+Reset-Ext @(, @())
+$msg = Get-Thrown { Remove-View -ViewId "v1" -ViewName "V1" }
+Assert ($msg -like "*deleteView v1 failed*") "Remove-View on an empty envelope array throws a sentence"
+Assert ($msg -notlike "*IndexOutOfRange*" -and $msg -notlike "*cannot be found on this object*") "and not a raw .NET exception partway through the uninstall"
+Assert ($msg -notlike "WRITE-FAIL:*") "and it throws rather than exiting, so one bad view does not abandon the uninstall"
+Reset-Ext @($exc)
+$msg = Get-Thrown { Remove-View -ViewId "v1" -ViewName "V1" }
+Assert ($msg -like "*deleteView v1 failed: Internal server error.*") "Remove-View keeps the server message"
+Reset-Ext @($noResult)
+Assert ($null -eq (Get-Thrown { Remove-View -ViewId "v1" -ViewName "V1" })) "a delete whose envelope carries no result payload still counts as success"
+
+# --- Get-AllReports --------------------------------------------------------
+Reset-Ext @(, @())
+$msg = Get-Thrown { Get-AllReports }
+Assert ($msg -like "WRITE-FAIL: Report list failed*") "Get-AllReports on an empty envelope array: operator sentence"
+Reset-Ext @($nullResult)
+$msg = Get-Thrown { Get-AllReports }
+Assert ($msg -like "*refusing to treat that as an empty list*") "Get-AllReports refuses result:null instead of dereferencing it"
+Assert ($msg -notlike "*null-valued expression*") "and the null-reference exception it used to raise is gone"
+$records = '[{"type":"rpc","result":{"records":[{"name":"R1","id":"ri1"}],"total":1}}]' | ConvertFrom-Json
+Reset-Ext @($records)
+$reports = @(Get-AllReports)
+Assert ($reports.Count -eq 1) "a healthy records payload still returns the reports"
+
+# Same residual-else in Get-AllReports.  Note the asymmetry with Get-AllViews:
+# a bare ARRAY is a documented shape here (returned as the list directly), so
+# only a scalar reaches the fallback.
+foreach ($bad in @('"a string"', 'true')) {
+    Reset-Ext @(("[{""type"":""rpc"",""result"":$bad}]" | ConvertFrom-Json))
+    $msg = Get-Thrown { Get-AllReports }
+    Assert ($msg -like "WRITE-FAIL: Report list failed*unrecognised shape*") "Get-AllReports refuses a result of shape $bad rather than reporting zero reports"
+}
+Reset-Ext @(('[{"type":"rpc","result":[]}]' | ConvertFrom-Json))
+Assert ($null -eq (Get-Thrown { Get-AllReports })) "a bare empty array IS a documented report-list shape and is not refused"
+Reset-Ext @(('[{"type":"rpc","result":{"records":[],"total":0}}]' | ConvertFrom-Json))
+Assert ((@(Get-AllReports)).Count -eq 0) "records:[] is a genuinely empty instance, and is NOT refused"
+
+# --- Get-AllDashboards (dashboard.action, NOT Ext.Direct) ------------------
+Reset-Ext @('{"other":1}' | ConvertFrom-Json)
+$msg = Get-Thrown { Get-AllDashboards }
+Assert ($msg -like "WRITE-FAIL: Dashboard list failed*refusing to treat that as an empty dashboard list*") "a response with no 'dashboards' field refuses rather than reporting zero dashboards"
+Assert ($msg -notlike "*cannot be found on this object*") "and the PropertyNotFoundException is gone"
+# The distinction the refusal above depends on: [] is PRESENT and empty.
+Reset-Ext @('{"dashboards":[]}' | ConvertFrom-Json)
+Assert ((@(Get-AllDashboards)).Count -eq 0) "a genuinely empty instance still reports zero, and does NOT refuse"
+Reset-Ext @('{"dashboards":[{"name":"D1","id":"di1"}]}' | ConvertFrom-Json)
+Assert ((@(Get-AllDashboards)).Count -eq 1) "a healthy dashboard list still comes through"
+
+# --- the per-item reads on the uninstall path ------------------------------
+# These objects come off the wire too, and #109's sweep never reached them.
+Reset-Ext @($grouped)
+$ctx = New-UiCtx @("V2")
+$msg = Get-Thrown { Uninstall-Views $ctx }
+Assert ($null -eq $msg) "a view thumbnail carrying viewDefinitionKey but NO id does not throw: the if/else condition itself was the exposure"
+Reset-Ext @(('[{"type":"rpc","result":{"LIST":{"HostSystem":[{"id":"i1"},{"name":"V2","viewDefinitionKey":"k2"}]}}}]' | ConvertFrom-Json))
+$ctx = New-UiCtx @("V2")
+$msg = Get-Thrown { Uninstall-Views $ctx }
+Assert ($null -eq $msg) "a view thumbnail with no name at all is skipped, not fatal"
+
+Reset-Ext @('{"dashboards":[{"id":"di1"},{"name":"D1","id":"di2"}]}' | ConvertFrom-Json)
+$ctx = New-UiCtx @("D1")
+$msg = Get-Thrown { Uninstall-Dashboards $ctx }
+Assert ($null -eq $msg) "a dashboard thumbnail missing 'name' does not abort the uninstall"
+
+Reset-Ext @(('[{"type":"rpc","result":{"records":[{"id":"ri1"},{"name":"R1","id":"ri2"}]}}]' | ConvertFrom-Json))
+$ctx = New-UiCtx @("R1")
+$msg = Get-Thrown { Uninstall-Reports $ctx }
+Assert ($null -eq $msg) "a report thumbnail missing 'name' does not abort the uninstall"
+
+# --- structural: no raw $result[0] survives in the four Ext.Direct callers --
+# The behavioural assertions above all drive the helper.  This one pins that
+# nobody reintroduces a direct index next to it.
+# Keyed on a NUMERIC index specifically: Get-AllDashboards legitimately does
+# $result["dashboards"], which is a key lookup on a different envelope shape,
+# not an index into an array of Ext.Direct envelopes.
+foreach ($fname in @("Get-AllViews", "Get-AllReports", "Remove-View", "Remove-Reports", "Get-AllDashboards")) {
+    $fn = $null
+    foreach ($f in $fns) { if ($f.Name -eq $fname) { $fn = $f } }
+    $bad = @()
+    foreach ($ix in $fn.Body.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.IndexExpressionAst]
+    }, $true)) {
+        $isNumeric = ($ix.Index -is [System.Management.Automation.Language.ConstantExpressionAst] -and
+                      $ix.Index.Value -is [int])
+        if ($ix.Target.Extent.Text -eq '$result' -and $isNumeric) {
+            $bad += "$($ix.Extent.StartLineNumber): $($ix.Extent.Text)"
+        }
+    }
+    Assert ($bad.Count -eq 0) "$fname never indexes the response array directly; the guard is Get-ExtDirectResult's job: $($bad -join ' | ')"
+}
+
+# ===========================================================================
+# Issue #121 -- the import-wait timeout names the last-seen HTTP status
+# ===========================================================================
+$icz2 = $null
+foreach ($f in $fns) { if ($f.Name -eq "Import-ContentZip") { $icz2 = $f } }
+$iczText = $icz2.Extent.Text
+Assert ($iczText -notmatch 'timed out; state=\$state"') "the bare state= timeout sentence is gone"
+Assert ($iczText -match 'timed out; state=\$state \(last status HTTP \$sc\)') "the import-wait timeout names the last-seen HTTP status, matching the marker-probe loop"
+Assert ($iczText -match '\$sc = Get-StatusCode \$s') "and the status is actually tracked each poll rather than interpolated from nothing"
+
+# ===========================================================================
+# Issue #119 -- Get-Content reads are encoding-pinned
+# ===========================================================================
+# Every Get-Content in the template must name -Encoding.  Unpinned, PowerShell
+# 5.1 decodes a UTF-8 bundle as the system ANSI code page and ConvertFrom-Json
+# parses the mojibake happily: a successful install with corrupted names.
+$unpinned = @()
+foreach ($c in $ast.FindAll({
+    param($n) $n -is [System.Management.Automation.Language.CommandAst]
+}, $true)) {
+    if ($c.GetCommandName() -ne "Get-Content") { continue }
+    $hasEncoding = $false
+    foreach ($el in $c.CommandElements) {
+        if ($el -is [System.Management.Automation.Language.CommandParameterAst] -and
+            $el.ParameterName -like "Encoding*") { $hasEncoding = $true }
+    }
+    if (-not $hasEncoding) { $unpinned += "$($c.Extent.StartLineNumber): $($c.Extent.Text)" }
+}
+Assert ($unpinned.Count -eq 0) "no Get-Content call decodes with the host default: $($unpinned -join ' | ')"
 
 Write-Host "ALL ASSERTIONS PASSED"

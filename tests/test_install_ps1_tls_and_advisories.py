@@ -568,6 +568,336 @@ class TestSkipSslVerifyIsReachable:
         )
 
 
+# ---------------------------------------------------------------------------
+# Issue #119 -- install.ps1's Get-Content reads must name their encoding
+# ---------------------------------------------------------------------------
+class TestPowerShellReadsArePinned:
+    """The PowerShell half of #101.
+
+    `Get-Content -Raw` with no `-Encoding` is the system ANSI code page on
+    Windows PowerShell 5.1 (.NET Framework) and UTF-8 on PowerShell 7 (.NET
+    Core), so the same installer decodes the same bundle differently depending
+    on which PowerShell the customer runs. Measured under pwsh 7 on Linux: the
+    same UTF-8 bytes read through a cp1252 decoder yield mojibake that
+    ConvertFrom-Json parses without complaint, so the customer gets a
+    SUCCESSFUL install carrying corrupted content names -- not a crash.
+
+    The authoritative version of this check is the AST-based one in the
+    harness. This line-based sibling exists so a runner with no PowerShell
+    still catches a regression; it is exact for this file because all three
+    Get-Content calls are single-line. If one ever wraps, the harness is the
+    one that stays right.
+    """
+
+    def test_every_get_content_names_an_encoding(self, script_text: str) -> None:
+        offenders = [
+            (i, ln.strip())
+            for i, ln in enumerate(script_text.splitlines(), 1)
+            if "Get-Content" in ln
+            and not ln.strip().startswith("#")
+            and "-Encoding" not in ln
+        ]
+        assert not offenders, (
+            "Get-Content with no -Encoding decodes as system ANSI on "
+            f"PowerShell 5.1: {offenders}"
+        )
+
+    def test_readalltext_site_is_left_alone(self, script_text: str) -> None:
+        """[System.IO.File]::ReadAllText already defaults to UTF-8 on both runtimes.
+
+        Pinned as a negative: #119 records this site explicitly so nobody
+        "fixes" it into inconsistency with the -Encoding UTF8 sites.
+        """
+        assert "[System.IO.File]::ReadAllText($Path)" in script_text
+
+
+# ---------------------------------------------------------------------------
+# Issue #118 -- narration must never be able to fail an install
+# ---------------------------------------------------------------------------
+class TestPythonInstallerPinsStdout:
+    """#101 pinned file I/O. This is the other half: stdout.
+
+    install.py prints bundle-sourced content names. On native Windows with
+    stdout redirected to a file or a pipe, Python encodes stdout with the
+    locale encoding, so a name outside cp1252 raises UnicodeEncodeError AFTER
+    the object has already been created on the instance.
+
+    Reproduced on Linux with PYTHONIOENCODING=cp1252 (the analogue the #101
+    review used, since there is no windows-latest runner): printing a CJK
+    content name exits 1 with UnicodeEncodeError before the fix and exits 0
+    with UTF-8 bytes on stdout after it.
+    """
+
+    @pytest.fixture(scope="class")
+    def py_text(self) -> str:
+        return (
+            REPO_ROOT / "src" / "vcfops_packaging" / "templates" / "install.py"
+        ).read_text(encoding="utf-8")
+
+    def test_stdio_is_reconfigured(self, py_text: str) -> None:
+        assert 'reconfigure(encoding="utf-8", errors="replace")' in py_text, (
+            "install.py must pin stdout/stderr to UTF-8"
+        )
+
+    def test_errors_replace_is_present(self, py_text: str) -> None:
+        """errors='replace' is the point, not utf-8 alone.
+
+        Pinning the encoding without it still raises on an unencodable code
+        point. A mangled character in a printed name is cosmetic; a traceback
+        after a successful import is not.
+        """
+        body = re.search(
+            r"def _pin_stdio_encoding\(\) -> None:(.*?)\n\n\n", py_text, re.S
+        )
+        assert body, "_pin_stdio_encoding not found in install.py"
+        assert 'errors="replace"' in body.group(1)
+        assert "sys.stdout" in body.group(1) and "sys.stderr" in body.group(1), (
+            "stderr needs it too: _die() writes there, and a message about a "
+            "failure must not itself fail"
+        )
+
+    def test_it_runs_before_the_bootstrap_print(self, py_text: str) -> None:
+        """Module scope, not main().
+
+        _bootstrap_requests() prints a temp-directory path that can carry a
+        non-ASCII Windows username, and it runs at import time, so a call
+        inside main() would already be too late.
+        """
+        call_at = py_text.index("\n_pin_stdio_encoding()")
+        bootstrap_at = py_text.index("\n_bootstrap_requests()")
+        main_at = py_text.index("\ndef main()")
+        assert call_at < bootstrap_at < main_at, (
+            "_pin_stdio_encoding() must run before _bootstrap_requests()"
+        )
+
+    def test_post_install_needs_no_equivalent(self) -> None:
+        """Recorded so the #118 sweep is closed, not just narrowed.
+
+        post-install.py runs on the VCF Ops appliance (Linux), and it prints
+        nothing: its only console write is one sys.stderr.write of an OSError
+        message. Everything else goes to a log file already opened with
+        encoding="utf-8" by #101.
+        """
+        text = (
+            REPO_ROOT / "src" / "vcfops_managementpacks" / "templates"
+            / "post-install.py"
+        ).read_text(encoding="utf-8")
+        prints = [
+            ln.strip()
+            for ln in text.splitlines()
+            if re.match(r"^\s*(print\(|sys\.stdout)", ln)
+        ]
+        assert not prints, (
+            "post-install.py has grown a print; re-open #118 for the "
+            f"appliance path: {prints}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Issue #116 -- the Ext.Direct / dashboard.action envelope family
+# ---------------------------------------------------------------------------
+class TestExtDirectEnvelopesAreGuarded:
+    """The third envelope shape, on the uninstall path.
+
+    #109 swept every Invoke-Api-derived read onto Get-PropValue. The UI
+    Ext.Direct path was not in that sweep: those responses come from
+    Invoke-WebRequest + ConvertFrom-Json as an ARRAY of envelopes, and the
+    callers read `$result[0].type`. That is TWO failures, not one, and
+    verified under pwsh 7 with Set-StrictMode -Version Latest they are
+    different exceptions: `@()[0]` is IndexOutOfRangeException, a missing
+    member is PropertyNotFoundException. Routing only the member read through
+    Get-PropValue swaps the second for the first.
+
+    Behavioural coverage is in the harness. These are the static pins that
+    survive a runner with no PowerShell.
+    """
+
+    # Every function that touches an Ext.Direct or dashboard.action response.
+    EXT_DIRECT_CALLERS = [
+        "Get-AllViews",
+        "Remove-View",
+        "Get-AllReports",
+        "Remove-Reports",
+    ]
+
+    @pytest.mark.parametrize("func", EXT_DIRECT_CALLERS)
+    def test_no_raw_envelope_index(self, script_text: str, func: str) -> None:
+        body = re.search(
+            rf"function {re.escape(func)}[ ({{](.*?)\n\}}\n", script_text, re.S
+        )
+        assert body, f"{func} not found in install.ps1"
+        assert "$result[0]" not in body.group(1), (
+            f"{func} indexes the envelope array directly; an empty array is "
+            "IndexOutOfRangeException before any member read is reached"
+        )
+        assert "Get-ExtDirectResult" in body.group(1), (
+            f"{func} must read its envelope through the guard"
+        )
+
+    def test_guard_handles_both_get_propvalue_shapes(
+        self, script_text: str
+    ) -> None:
+        body = re.search(
+            r"function Get-ExtDirectResult \{(.*?)\n\}\n", script_text, re.S
+        )
+        assert body, "Get-ExtDirectResult not found in install.ps1"
+        code = "\n".join(
+            ln for ln in body.group(1).splitlines() if not ln.strip().startswith("#")
+        )
+        # The null case cannot be folded into the Count case: @($null).Count
+        # is 1, not 0.
+        assert "$null -eq $Response" in code, (
+            "a null response must be rejected separately from an empty array"
+        )
+        assert ".Count -eq 0" in code, "the empty-array index guard is missing"
+        assert "Get-PropValue" in code, (
+            "member reads belong to the existing helper, not a second idiom"
+        )
+        assert "[System.Collections.IDictionary]" in code, (
+            "must classify with IDictionary, matching Get-PropValue and "
+            "Get-StatusCode"
+        )
+
+    def test_guard_refuses_rather_than_reporting_an_empty_list(
+        self, script_text: str
+    ) -> None:
+        """-RequireResult is this family's Assert-LookupOk.
+
+        An unreadable envelope degraded to "no such content" makes the
+        uninstall print "not found (already removed?)" about content that is
+        still on the instance. Same class as the create-on-failed-lookup
+        guard, one path over.
+        """
+        assert '-What "View list" -Fatal -RequireResult' in script_text
+        assert '-What "Report list" -Fatal -RequireResult' in script_text
+
+    @pytest.mark.parametrize(
+        "func,expected",
+        [("Get-AllViews", "View list"), ("Get-AllReports", "Report list")],
+    )
+    def test_no_residual_else_returns_an_empty_list(
+        self, script_text: str, func: str, expected: str
+    ) -> None:
+        """The case -RequireResult does NOT close: wrong shape.
+
+        A present `result` that is a string, a bool, or an array is not an
+        exception, not null and not absent, so it reaches the shape test and
+        falls through it. With no `else`, the function returns an empty list
+        and the uninstall prints "not found (already removed?)" about content
+        that is still on the instance. That is verbatim the third bullet in
+        knowledge/lessons/unenumerated-exit-status-is-not-a-verdict.md: a safe
+        default for READING became an unsafe default for DECIDING.
+        """
+        body = re.search(
+            rf"function {re.escape(func)} \{{(.*?)\n\}}\n", script_text, re.S
+        )
+        assert body, f"{func} not found in install.ps1"
+        code = body.group(1)
+        assert "} else {" in code, (
+            f"{func} has a shape test with no else; an unenumerated shape "
+            "falls through to an empty list"
+        )
+        assert "Write-Fail" in code, (
+            f"{func} must refuse an unrecognised shape, not report zero items"
+        )
+        assert "unrecognised shape" in code
+        assert f"{expected} failed" in code
+
+    # The per-item reads: these objects came off the wire the same way.
+    @pytest.mark.parametrize(
+        "func", ["Uninstall-Dashboards", "Uninstall-Views", "Uninstall-Reports"]
+    )
+    def test_thumbnail_reads_go_through_get_propvalue(
+        self, script_text: str, func: str
+    ) -> None:
+        body = re.search(
+            rf"function {re.escape(func)}\(\$Ctx\) \{{(.*?)\n\}}\n",
+            script_text,
+            re.S,
+        )
+        assert body, f"{func} not found in install.ps1"
+        code = "\n".join(
+            ln for ln in body.group(1).splitlines() if not ln.strip().startswith("#")
+        )
+        # Scoped to the loop that enumerates the WIRE objects
+        # (`foreach ($x in $allDash|$allViews|$allReports)`) and no further.
+        # The later `foreach ($d in $toDelete)` loops read hashtables this
+        # function literally built three lines earlier, so their keys are
+        # present by construction -- worth stating, because StrictMode throws
+        # PropertyNotFoundException on a missing hashtable key too, not only
+        # on a missing PSObject member.
+        loop = re.search(r"foreach \(\$(\w+) in \$all\w+\) \{(.*?)\n    \}", code, re.S)
+        assert loop, f"{func} no longer enumerates a UI-API list"
+        var, block = loop.group(1), loop.group(2)
+        offenders = re.findall(rf"\${var}\.\w+", block)
+        assert not offenders, (
+            f"{func} dot-accesses a UI-API object: {offenders}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Issue #121 -- the import-wait timeout names the last-seen HTTP status
+# ---------------------------------------------------------------------------
+class TestImportWaitTimeoutNamesTheStatus:
+    def test_timeout_sentence_carries_the_status(self, script_text: str) -> None:
+        assert 'timed out; state=$state (last status HTTP $sc)' in script_text, (
+            "an empty state= reads as 'the server said nothing was happening' "
+            "when the truth may be 'we never got a usable answer'"
+        )
+        assert 'timed out; state=$state"' not in script_text
+
+    def test_python_import_poll_cannot_reach_the_ambiguous_state(self) -> None:
+        """Scoped to install.py's IMPORT poll, and true only of that loop.
+
+        install.py's import poll `_die`s on the first non-200
+        ("Import status check failed (<code>)"), so its `state` at timeout is
+        always from a 200 and cannot be the ambiguous empty string.
+        install.ps1 deliberately keeps polling through a transient non-200
+        (the import is already running by then), which is what creates the
+        ambiguity the status name resolves there.
+
+        An earlier version of this docstring generalised that to "both
+        installers name a status on the path where one exists". That was
+        false: install.py's PRIOR-EXPORT wait does tolerate a non-200, exactly
+        as PowerShell does, and named neither status nor state. Covered by the
+        test below rather than by widening this claim.
+        """
+        py = (
+            REPO_ROOT / "src" / "vcfops_packaging" / "templates" / "install.py"
+        ).read_text(encoding="utf-8")
+        assert "Import status check failed ({s.status_code})" in py, (
+            "install.py's import poll must keep dying on a non-200; if it "
+            "starts tolerating one, it inherits install.ps1's ambiguity and "
+            "needs the same last-seen tracking"
+        )
+
+    def test_python_prior_export_wait_names_the_last_seen_signal(self) -> None:
+        """The real parity gap, one loop earlier than #121 pointed.
+
+        install.ps1's prior-export wait got `(last seen: $lastSeen)` in #120.
+        Its Python sibling tolerates a non-200 the same way and said neither
+        status nor state, so an empty `state` read as "the server said nothing
+        was happening" when the truth was "we never got a usable answer".
+        """
+        py = (
+            REPO_ROOT / "src" / "vcfops_packaging" / "templates" / "install.py"
+        ).read_text(encoding="utf-8")
+        assert '_die("Timed out waiting for prior export to finish")' not in py, (
+            "the bare prior-export timeout is back"
+        )
+        assert "(last seen: {last_seen})" in py
+        body = re.search(
+            r"deadline = time\.monotonic\(\) \+ timeout_s\n(.*?)\n\n",
+            py,
+            re.S,
+        )
+        assert body, "the prior-export wait loop moved"
+        assert 'last_seen = f"HTTP {g.status_code}"' in body.group(1), (
+            "a non-200 must be recorded, not silently skipped; that branch is "
+            "the whole reason the state at timeout is not evidence"
+        )
+
+
 @pytest.mark.skipif(shutil.which("pwsh") is None, reason="PowerShell not installed")
 def test_advisory_harness() -> None:
     proc = subprocess.run(
