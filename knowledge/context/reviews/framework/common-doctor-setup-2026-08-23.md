@@ -284,6 +284,29 @@ Declining still writes repo-local and prints the SHADOW warning.
 | `.env` in a subdir of a repo rooted above | 0 | "DOES ignore it" | yes |
 | git absent / hanging | n/a | "could not determine" | yes |
 
+> **Annotation added 2026-08-24. Row 3 of the table above is wrong, and
+> it is left in place deliberately.**
+>
+> `git check-ignore` returns **128** for a real repository whose
+> `.git/config` is malformed or unreadable, not only for a plain
+> non-repo directory. Verified against git 2.43.0: plain non-repo,
+> malformed config, and unreadable config all return 128 and are
+> indistinguishable by exit status. So the "correct: yes" on that row
+> was a miss by this gate, and the verdict it approved was a false
+> assurance on the one prompt where an operator decides whether to write
+> a plaintext credential outside the repo.
+>
+> Caught afterward by Codex (P2 on PR #117) and fixed in `de1cfe3`,
+> which maps 0 = ignored, 1 = not ignored, everything else = "could not
+> determine".
+>
+> The row is not edited to match the fix. Rewriting it would delete the
+> only evidence that this review cleared the exact thing that was then
+> caught downstream, and would leave a review artifact reporting green
+> about its own blind spot. Follow-up #122 tracks recovering the benign
+> non-repo case by walking for a `.git` entry rather than trusting the
+> exit status alone.
+
 The specific false-reassurance risk I went looking for does not exist: a
 **tracked** `.env` that also matches an ignore pattern (`git add -f`) returns
 **rc=1**, not 0, because `git check-ignore` excludes tracked paths by default.
