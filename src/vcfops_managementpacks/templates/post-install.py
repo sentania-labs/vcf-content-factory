@@ -53,15 +53,15 @@ class File:
         self.append(text + "\n")
 
     def append(self, text):
-        with open(self.filename, "a") as fh:
+        with open(self.filename, "a", encoding="utf-8") as fh:
             fh.write(text)
 
     def write(self, text):
-        with open(self.filename, "w") as fh:
+        with open(self.filename, "w", encoding="utf-8") as fh:
             fh.write(text)
 
     def read(self):
-        with open(self.filename, "r") as fh:
+        with open(self.filename, "r", encoding="utf-8") as fh:
             return fh.read()
 
     def copy_to(self, destination):

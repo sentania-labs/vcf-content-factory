@@ -271,6 +271,249 @@ def test_no_false_template_version_stamp(template: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Issue #101 -- shipped templates must pin text encoding explicitly
+# ---------------------------------------------------------------------------
+SHIPPED_PY_TEMPLATES = [
+    ("vcfops_packaging", "install.py"),
+    ("vcfops_managementpacks", "post-install.py"),
+]
+
+
+@pytest.mark.parametrize("package,template", SHIPPED_PY_TEMPLATES)
+def test_shipped_templates_pin_text_encoding(package: str, template: str) -> None:
+    """Every text-mode I/O call in a shipped Python template names its encoding.
+
+    RULE-018 makes the factory POSIX-only, but it explicitly does not govern
+    the artifacts the factory ships.  These two run on a customer's machine,
+    which may be native Windows, where Python defaults text I/O to cp1252.  A
+    view name carrying a non-cp1252 character then fails to decode on the
+    customer's box, not ours.  On POSIX this is a no-op (already UTF-8) except
+    under LANG=C, where it turns a crash into a success.
+
+    The scan is AST-based on purpose: a flat grep reports a multi-line call as
+    a violation when the argument is simply on a later line.
+    """
+    import ast
+
+    path = REPO_ROOT / "src" / package / "templates" / template
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    offenders = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        func = node.func
+        if isinstance(func, ast.Attribute):
+            name = func.attr
+        elif isinstance(func, ast.Name):
+            name = func.id
+        else:
+            continue
+        if name not in {"open", "read_text", "write_text"}:
+            continue
+        if name == "open":
+            mode = None
+            if len(node.args) >= 2 and isinstance(node.args[1], ast.Constant):
+                mode = node.args[1].value
+            for kw in node.keywords:
+                if kw.arg == "mode" and isinstance(kw.value, ast.Constant):
+                    mode = kw.value.value
+            # Binary mode has no encoding; passing one is a TypeError.
+            if isinstance(mode, str) and "b" in mode:
+                continue
+        if "encoding" not in {kw.arg for kw in node.keywords}:
+            offenders.append((node.lineno, name))
+    assert not offenders, (
+        f"{template} has text I/O with no explicit encoding= at {offenders}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Issue #108 -- the SM ghost-state retry is SUPER_METRICS only
+# ---------------------------------------------------------------------------
+class TestSmGhostStateRetryStaysNarrow:
+    """Anti-generalisation pins for the retry ported in #108.
+
+    #114 bisected the identical `imported=0/skipped=N` signature on the
+    dashboard and view paths and found an unrelated cause: create-only mode
+    (`force=false`), where the skip is idempotent and a retry is a guaranteed
+    no-op that still costs a round trip plus a 30s import-busy backoff.
+    Evidence: knowledge/context/api-surface/content_import_skip_semantics.md.
+
+    The behavioural half lives in the harness; these are the cheap static pins
+    that survive a runner with no PowerShell.
+    """
+
+    def test_only_super_metrics_content_type_is_tested(self, script_text: str) -> None:
+        body = re.search(
+            r"function Get-SmGhostStateSkipCount \{(.*?)\n\}\n",
+            script_text,
+            re.S,
+        )
+        assert body, "Get-SmGhostStateSkipCount not found in install.ps1"
+        code = "\n".join(
+            line for line in body.group(1).splitlines() if not line.strip().startswith("#")
+        )
+        for content_type in ("DASHBOARDS", "VIEW_DEFINITIONS", "REPORTS"):
+            assert content_type not in code, (
+                f"{content_type} must not participate in the SM ghost-state retry"
+            )
+        assert code.count("SUPER_METRICS") == 1, (
+            "exactly one contentType comparison, against SUPER_METRICS"
+        )
+
+    def test_install_dashboard_does_not_call_the_sm_retry(
+        self, script_text: str
+    ) -> None:
+        body = re.search(
+            r"function Install-Dashboard\(\$Ctx\) \{(.*?)\n\}\n", script_text, re.S
+        )
+        assert body, "Install-Dashboard not found in install.ps1"
+        assert "Get-SmGhostStateSkipCount" not in body.group(1), (
+            "the SM ghost-state retry must not be wired into the dashboard path"
+        )
+
+    def test_install_supermetrics_retries_the_same_zip(self, script_text: str) -> None:
+        body = re.search(
+            r"function Install-Supermetrics\(\$Ctx\) \{(.*?)\n\}\n", script_text, re.S
+        )
+        assert body, "Install-Supermetrics not found in install.ps1"
+        code = body.group(1)
+        assert "$null = Import-ContentZip" not in code.split("Get-SmGhostStateSkipCount")[0], (
+            "the first import's status must be captured, not discarded"
+        )
+        assert '-Label "super metrics (retry)"' in code, (
+            "the retry must re-import the same zip under a distinguishable label"
+        )
+
+    def test_python_installer_keeps_its_side_of_the_parity(self) -> None:
+        """The port is only meaningful while both sides agree."""
+        py = (
+            REPO_ROOT / "src" / "vcfops_packaging" / "templates" / "install.py"
+        ).read_text(encoding="utf-8")
+        assert 'contentType") == "SUPER_METRICS"' in py, (
+            "install.py lost the SUPER_METRICS filter the PowerShell port mirrors"
+        )
+        assert "super metrics (retry)" in py, (
+            "install.py lost the ghost-state retry install.ps1 now mirrors"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Create-on-failed-lookup: the class the #109 sweep introduced
+# ---------------------------------------------------------------------------
+class TestFailedLookupsDoNotMutate:
+    """A converted lookup must not let an error envelope look like "not found".
+
+    `Get-PropList` returns `@()` for an error envelope, which is right for a
+    reader and wrong for a decision. A lookup that branches on emptiness then
+    takes the not-found branch on a request it knows failed: on
+    `Upsert-CustomGroup` that CREATED a duplicate custom group and printed
+    "OK  Created", and on the uninstall paths it claimed "already removed?"
+    about an instance it had failed to read. Pre-sweep these sites threw,
+    which was uglier and safer.
+
+    The behavioural coverage is in the harness (it asserts zero POST/PUT/DELETE
+    after a failed lookup). These are the static pins that survive a runner
+    with no PowerShell.
+    """
+
+    # Every function whose lookup result drives a mutation or a state claim.
+    GUARDED = [
+        "Upsert-CustomGroup",
+        "Get-SupermetricsByName",
+        "Find-CustomGroupIds",
+        "Install-Symptoms",
+        "Install-Alerts",
+        "Uninstall-Symptoms",
+        "Uninstall-Alerts",
+    ]
+
+    @pytest.mark.parametrize("func", GUARDED)
+    def test_lookup_is_status_checked(self, script_text: str, func: str) -> None:
+        body = re.search(
+            rf"function {re.escape(func)}[ (](.*?)\n\}}\n", script_text, re.S
+        )
+        assert body, f"{func} not found in install.ps1"
+        assert "Assert-LookupOk" in body.group(1), (
+            f"{func} branches on a lookup result without checking the status "
+            "first; an error envelope will be read as 'not found'"
+        )
+
+    def test_guard_refuses_rather_than_warning(self, script_text: str) -> None:
+        body = re.search(
+            r"function Assert-LookupOk \{(.*?)\n\}\n", script_text, re.S
+        )
+        assert body, "Assert-LookupOk not found in install.ps1"
+        assert "Write-Fail" in body.group(1), (
+            "the guard must stop, not warn: we do not know what is on the "
+            "instance, so continuing means guessing"
+        )
+
+    def test_status_classification_is_consistent(self, script_text: str) -> None:
+        """Get-StatusCode and Get-PropValue must agree on what an error envelope is.
+
+        This diff routes the same object through both. If one treats a shape as
+        a hashtable error envelope and the other as a PSCustomObject, a
+        "checked the status" guard silently stops guarding.
+        """
+        body = re.search(r"function Get-StatusCode\(\$resp\) \{(.*?)\n\}\n", script_text, re.S)
+        assert body, "Get-StatusCode not found"
+        # Comments are stripped: the body explains why [hashtable] is wrong,
+        # and that prose must not trip the check on the code.
+        code = "\n".join(
+            ln for ln in body.group(1).splitlines() if not ln.strip().startswith("#")
+        )
+        assert "[System.Collections.IDictionary]" in code, (
+            "Get-StatusCode must classify with IDictionary, matching Get-PropValue"
+        )
+        assert "[hashtable]" not in code, (
+            "the narrower [hashtable] test diverges from Get-PropValue"
+        )
+
+
+# ---------------------------------------------------------------------------
+# The output-purity pin must stay receiver-keyed
+# ---------------------------------------------------------------------------
+def test_void_call_allowlist_is_receiver_keyed() -> None:
+    """The harness's void-call allowlist must key on RECEIVER.METHOD.
+
+    This pin exists because the first version of that allowlist keyed on the
+    method name and listed "Add" -- while its own comment cited
+    `ArrayList.Add()` as the classic instance of the bug. It therefore excused
+    exactly the trap it was written to catch: injecting an ArrayList `.Add()`
+    into `Import-ContentZip` passed the whole suite while flipping the return
+    type from PSCustomObject to Object[] and silently disabling the #108
+    ghost-state retry.
+
+    `[List[T]].Add` is void; `[ArrayList].Add` returns the insertion index.
+    The method name cannot decide, so an entry that is not receiver-qualified
+    is not a weaker check, it is a broken one.
+    """
+    text = HARNESS.read_text(encoding="utf-8")
+    block = re.search(r"\$voidCalls = @\((.*?)\n\)", text, re.S)
+    assert block, "the void-call allowlist is gone or was renamed"
+    entries = re.findall(r"'([^']+)'", block.group(1))
+    assert entries, "the void-call allowlist is empty"
+    unqualified = [e for e in entries if not e.startswith("$")]
+    assert not unqualified, (
+        "void-call allowlist entries must be receiver-qualified "
+        f"(e.g. '$content.Add'), not bare method names: {unqualified}"
+    )
+    assert "$voidMethods" not in text, (
+        "the name-keyed allowlist is back; it excuses ArrayList.Add"
+    )
+    # The three assertions above validate the DECLARATION. They do not, on
+    # their own, establish that the declaration is the list the live check
+    # consults -- a harness that leaves $voidCalls in place as a decoy while
+    # the comparison reverts to a name-keyed list passes all of them and
+    # excuses the ArrayList injection again. Pin the comparison itself.
+    assert "$voidCalls -notcontains" in text, (
+        "the void-call check no longer consults $voidCalls; the allowlist "
+        "above may be a decoy while the live comparison is name-keyed"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Behaviour harness
 # ---------------------------------------------------------------------------
 def _run_installer(tmp_path: Path, args: list[str], env_extra: dict | None = None):

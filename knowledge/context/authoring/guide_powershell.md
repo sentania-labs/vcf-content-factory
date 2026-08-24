@@ -105,6 +105,82 @@ exists to protect. This guide previously recommended
 exact class of syntax forbidden six lines above. Corrected 2026-08-21 after
 an agent following the guide would have broken 5.1.
 
+### The `if ($r.pageInfo)` guard cannot save itself
+Measured while sweeping `install.ps1` for issue #109. This looks defensive
+and is not:
+
+```powershell
+$total = if ($r.pageInfo) { $r.pageInfo.totalCount } else { 0 }
+```
+
+The guard's *own* `$r.pageInfo` is a member access, so on an envelope
+lacking `pageInfo` it throws before the `else` branch can ever run. Under
+StrictMode, "check it exists first" has to be done with a probe helper, not
+with the access you are trying to protect. `install.ps1` now has two
+derived helpers, both built on `Get-PropValue`:
+
+- `Get-PropList $obj $name` — collection-valued member, **always** returns
+  an array (absent, null, and empty all collapse to `@()`), so callers can
+  iterate it and read `.Count` without special cases. Its `return ,@(...)`
+  comma-wrap is load-bearing; see "Function return unwrap" below.
+- `Get-PageTotalCount $resp` — the two-hop `pageInfo.totalCount` read every
+  paging loop in the file uses. Returns `0`, which ends the loop.
+
+Nested reads need a probe at **every** hop, not just the last one:
+`$g.resourceKey.name` throws on the first dot when `resourceKey` is absent.
+
+### A safe reader can create an unsafe decision
+The trap the #109 sweep walked into, caught in review. Making a reader
+StrictMode-safe is not the whole job:
+
+```powershell
+$resp = Invoke-Api -Method GET -Path "/api/resources/groups" -Query @{ name = $name }
+foreach ($g in (Get-PropList $resp "groups")) { ... }   # safe read
+if ($existingId) { PUT } else { POST }                   # UNSAFE decision
+```
+
+`Get-PropList` correctly returns `@()` for an error envelope. But `@()` from
+a *failed request* is indistinguishable from `@()` meaning *no such object*,
+so a transient 500 on the lookup falls through to POST and **creates a
+duplicate**, printing `OK  Created`. Before the guard this site threw, which
+was uglier and strictly safer.
+
+The rule: whenever a lookup result drives a **mutation** (create vs update,
+delete vs skip) or a **claim about instance state** ("already removed?"),
+check the status *before* acting on emptiness. `install.ps1:Assert-LookupOk`
+does this and `Write-Fail`s; refusing is the only safe answer, because a
+failed read means you do not know what is there.
+
+Test it by asserting **zero mutating requests were sent**, not that something
+threw. An assertion that only checks for an exception passes when the stubbed
+mutation also errors, i.e. it tests the stub. Make the stubbed POST return
+200 and count the POST/PUT/DELETEs.
+
+### Void-by-receiver, never void-by-method-name
+PowerShell appends every uncaptured expression to the enclosing function's
+output stream, so one stray statement changes a function's return value. The
+classic instance is `.Add()`:
+
+```powershell
+$list = New-Object System.Collections.ArrayList
+$list.Add("x")        # returns the insertion INDEX -> lands on the output stream
+```
+
+`[List[T]].Add` returns void. `[ArrayList].Add` returns an int. `.Clear`,
+`.Write` and `.RemoveAll` are receiver-dependent the same way. **The method
+name cannot tell you whether a call is void; only the receiver can.**
+
+Measured consequence in this repo: injecting those two lines into
+`install.ps1:Import-ContentZip` flipped its return from `PSCustomObject` to
+`Object[]`, which made `Get-SmGhostStateSkipCount` read `0` instead of `4` and
+silently disabled the #108 super-metric ghost-state retry.
+
+If you write a static check for this, key the allowlist on
+`$receiver.Method`, not on `Method`. A name-keyed allowlist containing "Add"
+excuses the exact bug the check exists to catch — that is not a weaker check,
+it is a broken one, and it is easy to write while quoting the ArrayList
+example in the comment directly above it.
+
 ### Pipeline unwrap of single-element arrays
 PowerShell unwraps single-element collections on function return. Fix:
 wrap in `@(...)` or use `Write-Output -NoEnumerate`.

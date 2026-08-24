@@ -239,9 +239,16 @@ status and check `operationSummaries[contentType=SUPER_METRICS]`. If
 **Fix:** Re-import the same ZIP a second time. The second import finds
 the SM in ghost state, fully re-registers it, and reports `imported=N`.
 After re-import the SM appears in the list and assign/default returns
-200. Both `src/vcfops_supermetrics/client.py:import_supermetrics_bundle`
-and `src/vcfops_packaging/templates/install.py:_install_supermetrics` detect
-the all-skipped signal and retry automatically.
+200. Three call sites detect the all-skipped signal and retry
+automatically, and they must stay in step:
+`src/vcfops_supermetrics/client.py:import_supermetrics_bundle`,
+`src/vcfops_packaging/templates/install.py:_install_supermetrics`, and
+(since 2026-08-23, issue #108)
+`src/vcfops_packaging/templates/install.ps1:Install-Supermetrics` via
+`Get-SmGhostStateSkipCount`. The PowerShell one was missing for as long
+as that installer existed, so Windows operators got a clean-looking
+install whose SMs were invisible to list and assign while the Python
+path self-healed.
 
 **Note:** `GET /api/supermetrics` returning a result does NOT guarantee
 the SM is registered in the internal catalog. Always validate

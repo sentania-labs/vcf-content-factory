@@ -24,7 +24,17 @@ if ($errors) { throw "install.ps1 has parse errors" }
 $want = @("Write-Ok", "Write-Warn", "Get-PropValue", "Get-BoundedNames",
           "Get-DashboardAdvisoryNames", "Get-ViewAdvisoryNames",
           "Get-AllSkippedSummaries", "Write-AdvisoryTrailer",
-          "Write-ImportSummaryWarnings", "Install-Dashboard")
+          "Write-ImportSummaryWarnings", "Install-Dashboard",
+          # issue #109 -- StrictMode-safe reads of Invoke-Api results
+          "Get-PropList", "Get-PageTotalCount", "Get-GroupName",
+          "Get-StatusCode", "Get-DefaultPolicyId", "Get-SupermetricsByName",
+          "Find-CustomGroupIds", "Upsert-CustomGroup", "Uninstall-Alerts",
+          # the guard closing the create-on-failed-lookup class
+          "Assert-LookupOk", "Install-Symptoms", "Uninstall-Supermetrics",
+          "Uninstall-CustomGroups", "Remove-Supermetric", "Remove-CustomGroup",
+          "Get-OwnerId", "Get-CurrentUser", "Get-MarkerFilename",
+          # issue #108 -- SM ghost-state retry
+          "Get-SmGhostStateSkipCount", "Install-Supermetrics")
 $found = New-Object System.Collections.Generic.List[string]
 $fns = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)
 foreach ($f in $fns) {
@@ -234,5 +244,459 @@ $out = @(Write-AdvisoryTrailer -Advisories @("[bundle] something") 6>&1)
 Assert ($out.Count -eq 3 -and $out[1] -like "1 item(s) need attention*" -and $out[2] -like "  ATTENTION  *") "trailer shape"
 $empty = [System.Collections.Generic.List[string]]::new()
 Assert ((@(Write-AdvisoryTrailer -Advisories $empty.ToArray() 6>&1)).Count -eq 0) "empty List.ToArray() accepted by the typed parameter"
+
+# ===========================================================================
+# Issue #109 -- unguarded property reads on Invoke-Api results
+# ===========================================================================
+# Invoke-Api returns TWO shapes: a PSCustomObject from ConvertFrom-Json on
+# success, and a plain hashtable (@{__statusCode; __body; __error}) on any HTTP
+# error.  Under StrictMode a dot-access for a member absent from either shape
+# is a terminating error, so an API hiccup produced a raw .NET exception rather
+# than a sentence -- and several of these sites run AFTER content has already
+# been imported, so it aborted a half-modified instance.
+#
+# $errShape below is that error hashtable.  Every read tested here is driven
+# with it as well as with a well-formed envelope.
+$errShape = @{ __statusCode = 500; __body = "boom"; __error = "exc" }
+
+# --- Get-PropList ----------------------------------------------------------
+Assert ((Get-PropList $errShape "policySummaries").Count -eq 0) "error envelope: absent collection member is an empty array, not a throw"
+Assert ((Get-PropList $null "groups").Count -eq 0) "null object tolerated"
+Assert ((Get-PropList ('{"groups":[]}' | ConvertFrom-Json) "groups").Count -eq 0) "empty collection stays empty (not null)"
+$one = Get-PropList ('{"groups":[{"id":"g1"}]}' | ConvertFrom-Json) "groups"
+Assert ($one.Count -eq 1 -and (Get-PropValue $one[0] "id") -eq "g1") "single-element collection survives the return unroll as an array of 1"
+Assert ((Get-PropList ('{"groups":[{"id":"a"},{"id":"b"}]}' | ConvertFrom-Json) "groups").Count -eq 2) "multi-element collection passed through"
+
+# --- Get-PageTotalCount ----------------------------------------------------
+# The old `if ($r.pageInfo) { $r.pageInfo.totalCount }` guard could not save
+# itself: its own dot-access threw before the guard was evaluated.
+Assert ((Get-PageTotalCount $errShape) -eq 0) "error envelope: paging bound is 0, not a throw"
+Assert ((Get-PageTotalCount $null) -eq 0) "null tolerated"
+Assert ((Get-PageTotalCount ('{"pageInfo":{"totalCount":42}}' | ConvertFrom-Json)) -eq 42) "totalCount read"
+Assert ((Get-PageTotalCount ('{"pageInfo":{}}' | ConvertFrom-Json)) -eq 0) "pageInfo without totalCount ends the loop"
+Assert ((Get-PageTotalCount ('{"state":"FINISHED"}' | ConvertFrom-Json)) -eq 0) "envelope without pageInfo ends the loop"
+
+# --- Get-GroupName (two-hop read) ------------------------------------------
+Assert ((Get-GroupName ('{"resourceKey":{"name":"n"}}' | ConvertFrom-Json)) -eq "n") "nested name read"
+Assert ($null -eq (Get-GroupName ('{"id":"g"}' | ConvertFrom-Json))) "group without resourceKey: first hop guarded"
+Assert ($null -eq (Get-GroupName ('{"resourceKey":{}}' | ConvertFrom-Json))) "resourceKey without name: second hop guarded"
+Assert ($null -eq (Get-GroupName $null)) "null group tolerated"
+
+# --- functions that call Invoke-Api ----------------------------------------
+# Queue-driven stub: response N is returned for the Nth call, the last entry
+# repeats.  $script:ApiCalls doubles as the assertion that a paging loop
+# terminates instead of spinning on a degenerate bound.
+$script:ApiResponses = @()
+$script:ApiCalls = 0
+$script:ApiLog = [System.Collections.Generic.List[string]]::new()
+function Invoke-Api {
+    param($Method, $Path, $Headers, $Body, $Query)
+    $i = $script:ApiCalls
+    $script:ApiCalls++
+    # Logged so a test can assert that a MUTATION did not happen, rather than
+    # only that an error was raised.  Asserting the error alone is what let a
+    # create-on-failed-lookup defect pass review once already.
+    $script:ApiLog.Add("$Method $Path")
+    if ($i -ge $script:ApiResponses.Count) { return $script:ApiResponses[-1] }
+    return $script:ApiResponses[$i]
+}
+function Write-Fail($msg) { throw "WRITE-FAIL: $msg" }
+# Stubbed so a poll that is SUPPOSED to retry costs no wall clock.  The
+# ApiCalls counter, not the clock, is what proves a loop terminates.
+function Start-Sleep { param([int]$Seconds) }
+function Reset-Api($responses) {
+    $script:ApiResponses = @($responses)
+    $script:ApiCalls = 0
+    $script:ApiLog = [System.Collections.Generic.List[string]]::new()
+}
+function Get-MutationCount {
+    return @($script:ApiLog | Where-Object { $_ -match "^(POST|PUT|DELETE) " }).Count
+}
+function Get-Thrown($block) {
+    try { & $block; return $null } catch { return "$_" }
+}
+
+# Get-DefaultPolicyId: the site the review MEASURED throwing.  Verified against
+# the pre-fix template as PropertyNotFoundException: "The property
+# 'policySummaries' cannot be found on this object."  It runs at InstallOrder 3
+# via Install-SmEnable, i.e. after content has landed.
+Reset-Api @($errShape)
+$msg = Get-Thrown { Get-DefaultPolicyId }
+Assert ($msg -like "*WRITE-FAIL: No default policy found*HTTP 500*") "error envelope yields an operator sentence naming the status, not PropertyNotFoundException"
+Assert ($msg -notlike "*cannot be found on this object*") "the StrictMode PropertyNotFoundException is gone"
+# First summary deliberately omits defaultPolicy: JSON drops false booleans,
+# and the old $p.defaultPolicy threw on exactly that.
+Reset-Api @('{"policySummaries":[{"id":"p1"},{"id":"p2","defaultPolicy":true}]}' | ConvertFrom-Json)
+Assert ((Get-DefaultPolicyId) -eq "p2") "a summary lacking defaultPolicy is skipped, not fatal"
+Reset-Api @('{"policySummaries":[]}' | ConvertFrom-Json)
+Assert ((Get-Thrown { Get-DefaultPolicyId }) -like "*No default policy found*") "empty list still reaches the operator sentence"
+
+# Get-SupermetricsByName: paging loop bounded by pageInfo.totalCount.
+Reset-Api @($errShape)
+$msg = Get-Thrown { Get-SupermetricsByName -Names @("sm-a") }
+Assert ($msg -like "*Super metric lookup failed (HTTP 500)*") "a failed lookup refuses rather than returning an empty map"
+Assert ((Get-MutationCount) -eq 0) "and nothing is mutated"
+Reset-Api @('{"superMetrics":[{"name":"sm-a","id":"1"},{"id":"no-name"}],"pageInfo":{"totalCount":2}}' | ConvertFrom-Json)
+$f = Get-SupermetricsByName -Names @("sm-a")
+Assert ($f["sm-a"] -eq "1") "matching super metric mapped to its id"
+Assert ($f.Count -eq 1) "an item with no name is skipped rather than throwing"
+
+# Find-CustomGroupIds: same shape, different collection member.
+Reset-Api @($errShape)
+$msg = Get-Thrown { Find-CustomGroupIds -Names @("g") }
+Assert ($msg -like "*Custom group lookup failed (HTTP 500)*") "a failed lookup refuses rather than returning an empty map"
+Reset-Api @('{"groups":[{"id":"gid","resourceKey":{"name":"g"}},{"id":"other"}],"pageInfo":{"totalCount":2}}' | ConvertFrom-Json)
+$f = Find-CustomGroupIds -Names @("g")
+Assert ($f["g"] -eq "gid") "matching group mapped to its id"
+Assert ($f.Count -eq 1) "a group with no resourceKey is skipped rather than throwing"
+
+# Upsert-CustomGroup -- THE REGRESSION THE #109 SWEEP INTRODUCED.
+#
+# The lookup GET chooses between PUT (update) and POST (create).  Converting it
+# to Get-PropList made an error envelope yield @(), which is indistinguishable
+# from "no such group", so a transient 500 fell through to POST and created a
+# SECOND custom group with the same name, printing "OK  Created".  Pre-sweep
+# this site threw, which was uglier and safer.
+#
+# The assertion here previously checked only that SOMETHING threw.  It passed
+# because the stubbed POST also returned an error -- it was testing the stub.
+# It now asserts that ZERO mutating requests were sent, which is the property
+# that actually matters and which the buggy code could not satisfy.
+$payload = '{"resourceKey":{"name":"[VCF Content Factory] G"}}' | ConvertFrom-Json
+Reset-Api @($errShape, ('{"ok":true}' | ConvertFrom-Json))
+$msg = Get-Thrown { Upsert-CustomGroup -Payload $payload }
+# NOTE: no [ ] in this pattern.  -like treats them as a character class, and a
+# backtick escape inside a double-quoted string is consumed before -like sees
+# it, so a bracketed pattern silently never matches.
+Assert ($msg -like "*Custom group lookup for*G' failed (HTTP 500)*") "a failed lookup names itself and the status"
+Assert ($msg -like "*this step stopped before acting*") "and says it stopped before acting (a claim that stays true wherever the guard sits, unlike 'nothing was modified')"
+Assert ((Get-MutationCount) -eq 0) "NO POST/PUT/DELETE is sent after a failed lookup -- no duplicate group is created"
+Assert ($script:ApiLog.Count -eq 1) "and the run stops at the lookup itself"
+
+# Same shape via the 500-PUT verification path: "the group exists so the 500
+# was spurious" is a state claim that a failed verification lookup cannot make.
+Reset-Api @(('{"groups":[{"id":"gid","resourceKey":{"name":"[VCF Content Factory] G"}}]}' | ConvertFrom-Json), $errShape, $errShape)
+$msg = Get-Thrown { Upsert-CustomGroup -Payload $payload }
+Assert ($msg -like "*PUT verification lookup*failed (HTTP 500)*") "a failed verification lookup is not downgraded to 'PUT failed'"
+
+# Healthy paths still work, and still mutate exactly once.
+Reset-Api @(('{"groups":[{"id":"gid","resourceKey":{"name":"[VCF Content Factory] G"}}]}' | ConvertFrom-Json), ('{"ok":true}' | ConvertFrom-Json))
+Assert ($null -eq (Get-Thrown { Upsert-CustomGroup -Payload $payload })) "existing group takes the update branch cleanly"
+Assert ((Get-MutationCount) -eq 1 -and $script:ApiLog[1] -like "PUT *") "and updates rather than creating"
+Reset-Api @(('{"groups":[]}' | ConvertFrom-Json), ('{"ok":true}' | ConvertFrom-Json))
+Assert ($null -eq (Get-Thrown { Upsert-CustomGroup -Payload $payload })) "a genuine empty 200 result still creates"
+Assert ((Get-MutationCount) -eq 1 -and $script:ApiLog[1] -like "POST *") "and it is a POST"
+
+# Uninstall-Alerts: representative of the four symptom/alert paging loops.
+# W1: "not found (already removed?)" is a claim about instance state.  Derived
+# from a lookup that returned HTTP 500, it is a confident false statement that
+# lands in the advisory trailer.  All four uninstall paths must refuse instead.
+Reset-Api @($errShape)
+$ctx = @{ Names = @("[VCF Content Factory] A"); Warnings = [System.Collections.Generic.List[string]]::new() }
+$msg = Get-Thrown { $null = @(Uninstall-Alerts $ctx 6>&1 3>&1) }
+Assert ($msg -like "*Alert lookup (uninstall) failed (HTTP 500)*") "a failed uninstall lookup refuses"
+Assert ($ctx.Warnings.Count -eq 0) "and does NOT claim the alert was already removed"
+Assert ((Get-MutationCount) -eq 0) "and attempts no DELETE"
+
+Reset-Api @($errShape)
+$ctx = @{ Names = @("[VCF Content Factory] S"); Warnings = [System.Collections.Generic.List[string]]::new() }
+$msg = Get-Thrown { $null = @(Uninstall-Supermetrics $ctx 6>&1 3>&1) }
+Assert ($msg -like "*Super metric lookup failed (HTTP 500)*") "same for super metrics"
+Assert ($ctx.Warnings.Count -eq 0 -and (Get-MutationCount) -eq 0) "no false 'already removed', no DELETE"
+
+Reset-Api @($errShape)
+$ctx = @{ Names = @("[VCF Content Factory] G"); Warnings = [System.Collections.Generic.List[string]]::new() }
+$msg = Get-Thrown { $null = @(Uninstall-CustomGroups $ctx 6>&1 3>&1) }
+Assert ($msg -like "*Custom group lookup failed (HTTP 500)*") "same for custom groups"
+Assert ($ctx.Warnings.Count -eq 0 -and (Get-MutationCount) -eq 0) "no false 'already removed', no DELETE"
+
+# A genuine 200-with-no-match must STILL report not-found: the guard must not
+# have flattened the real not-found path into an error.
+Reset-Api @(('{"alertDefinitions":[],"pageInfo":{"totalCount":0}}' | ConvertFrom-Json))
+$ctx = @{ Names = @("[VCF Content Factory] A"); Warnings = [System.Collections.Generic.List[string]]::new() }
+$null = @(Uninstall-Alerts $ctx 6>&1 3>&1)
+Assert ($ctx.Warnings.Count -eq 1 -and $ctx.Warnings[0] -like "Alert not found*") "a real empty 200 still reports not-found"
+Assert ((Get-MutationCount) -eq 0) "and still attempts no DELETE"
+
+# Install-Symptoms: the create-on-failed-lookup shape on the symptom path.
+Reset-Api @($errShape, ('{"ok":true}' | ConvertFrom-Json))
+$script:StubSymptoms = @('{"name":"[VCF Content Factory] Sym"}' | ConvertFrom-Json)
+function Load-JsonFile($Path) { return $script:StubSymptoms }
+$msg = Get-Thrown { $null = @(Install-Symptoms @{ BundleDir = "/b"; Manifest = ([pscustomobject]@{ content = [pscustomobject]@{ symptoms = [pscustomobject]@{ file = "/b/s.json" } } }) } 6>&1) }
+Assert ($msg -like "*Symptom lookup for*failed (HTTP 500)*") "a failed symptom lookup refuses"
+Assert ((Get-MutationCount) -eq 0) "and creates no duplicate symptom"
+
+# BOUNDARY, pinned so it is not later mistaken for a gap in the guard: a 200
+# carrying an explicit null collection still CREATES, exactly as on main.  null
+# and [] both legitimately mean "empty instance", so refusing on either would
+# break first install on a clean box.  Only a non-200 means "we do not know".
+Reset-Api @(('{"groups":null}' | ConvertFrom-Json), ('{"ok":true}' | ConvertFrom-Json))
+Assert ($null -eq (Get-Thrown { Upsert-CustomGroup -Payload $payload })) "a 200 with a null collection still creates (clean-box first install)"
+Assert ((Get-MutationCount) -eq 1 -and $script:ApiLog[1] -like "POST *") "and it is a POST, not a refusal"
+
+# Get-OwnerId: extracted so this guard is reachable at all.
+Reset-Api @(('{"id":"u-123"}' | ConvertFrom-Json))
+Assert ((Get-OwnerId) -eq "u-123") "owner id read from a healthy currentuser response"
+Reset-Api @(('{"username":"admin"}' | ConvertFrom-Json))
+Assert ((Get-Thrown { Get-OwnerId }) -like "*returned no user id*") "a currentuser response with no id stops the install"
+Reset-Api @($errShape)
+Assert ((Get-Thrown { Get-OwnerId }) -like "*currentuser failed*") "an error envelope stops the install"
+
+# Get-MarkerFilename: the four export-status conversions.  -TimeoutSeconds 0
+# makes each deadline immediate, so this costs no wall clock.
+#
+# THE CODEX P2 GUARD (PR #120).  The prior-export wait loop is a POLL whose
+# exit condition is "no export is running".  Get-PropValue returns "" for a
+# member that is not there, and an error envelope has no "state" at all, so
+# before the status gate ONE transient 5xx concluded idle, the probe POST
+# below overlapped a live export, and the install died task-busy.  The
+# assertion this replaces pinned exactly that: it asserted the error envelope
+# "reaches the export POST status check", i.e. it pinned the defect.
+Reset-Api @($errShape)
+$msg = Get-Thrown { Get-MarkerFilename -TimeoutSeconds 0 }
+Assert ($msg -like "*Timed out waiting for prior export to finish*HTTP 500*") "an error envelope on the prior-export poll does NOT conclude idle; it polls to the deadline and fails naming the status"
+Assert ((Get-MutationCount) -eq 0) "and no marker-probe export is POSTed while the instance state is unknown"
+
+# The same envelope, transient rather than sticky: the poll is supposed to
+# outlast it.  This is why Assert-LookupOk is not the right instrument here --
+# it would refuse on the first non-200 and abort a recoverable install.
+# Start-Sleep is stubbed away above, so the retry costs no wall clock.
+# The 503 is the POST response, so reaching it is the proof the poll recovered;
+# the run stops there rather than walking on into the zip download.
+$busyShape = @{ __statusCode = 503; __body = "busy" }
+$finished = '{"state":"FINISHED","startTime":1}' | ConvertFrom-Json
+Reset-Api @($errShape, $finished, $finished, $busyShape)
+$msg = Get-Thrown { Get-MarkerFilename -TimeoutSeconds 30 }
+Assert ($msg -like "*Marker-probe export failed (503)*") "a TRANSIENT error on the poll is outlasted, not fatal: the poll recovers and reaches the probe POST"
+Assert (@($script:ApiLog | Where-Object { $_ -like "POST *" }).Count -eq 1) "and the probe export is POSTed exactly once"
+
+# BOUNDARY, pinned deliberately: a 200 carrying no "state" IS idle.  That is
+# the never-exported instance, and it is what install.py:362-365 does.
+# Refusing there would burn the full timeout and abort first install on a
+# clean box.  Only a non-200 means "we do not know".
+Reset-Api @(('{"ok":true}' | ConvertFrom-Json))
+$msg = Get-Thrown { Get-MarkerFilename -TimeoutSeconds 0 }
+Assert ($msg -notlike "*Timed out waiting for prior export*") "a 200 with no state is treated as idle (never-exported instance), not as a stall"
+Assert ($msg -like "*Marker-probe export timed out*") "and the run proceeds to the probe export"
+
+Reset-Api @(('{"state":"RUNNING"}' | ConvertFrom-Json))
+$msg = Get-Thrown { Get-MarkerFilename -TimeoutSeconds 0 }
+Assert ($msg -like "*Timed out waiting for prior export*state=RUNNING*") "a genuinely RUNNING prior export still times out, and the sentence names the state"
+Assert ((Get-MutationCount) -eq 0) "and still POSTs nothing"
+
+# The post-POST wait loop, same class: a non-200 there must not satisfy the
+# exit condition either.  It keeps polling (the export is already running;
+# outlasting a blip is the recoverable answer) and names the status at the
+# deadline.
+Reset-Api @(('{"state":"FINISHED","startTime":1}' | ConvertFrom-Json), ('{"state":"FINISHED","startTime":1}' | ConvertFrom-Json), ('{"ok":true}' | ConvertFrom-Json), $errShape)
+$msg = Get-Thrown { Get-MarkerFilename -TimeoutSeconds 0 }
+Assert ($msg -like "*Marker-probe export timed out*HTTP 500*") "an error envelope on the post-POST wait loop does not read as FINISHED, and the timeout sentence names the status"
+$fin = '{"state":"FINISHED","startTime":1}' | ConvertFrom-Json
+Reset-Api @($fin, $fin, ('{"ok":true}' | ConvertFrom-Json), ('{"state":"FINISHED"}' | ConvertFrom-Json))
+Assert ((Get-Thrown { Get-MarkerFilename -TimeoutSeconds 0 }) -like "*Marker-probe export timed out; state=FINISHED*") "the third loop reads a status envelope with no startTime without throwing"
+
+# ===========================================================================
+# Issue #108 -- SM ghost-state retry
+# ===========================================================================
+# Ghost state: an SM exists in the DB but never registered in the SM catalog,
+# so the importer skips it and a later enable 404s.  Re-importing the same zip
+# re-registers it.  install.py has done this since it was written; install.ps1
+# threw the import status away, so Windows operators got a clean-looking
+# install with invisible SMs.
+Assert ((Get-SmGhostStateSkipCount -Result $null) -eq 0) "null result: no retry"
+Assert ((Get-SmGhostStateSkipCount -Result $errShape) -eq 0) "error envelope: no retry, no throw"
+Assert ((Get-SmGhostStateSkipCount -Result ('{"state":"FINISHED"}' | ConvertFrom-Json)) -eq 0) "envelope with no operationSummaries: no retry"
+$ghost = '{"operationSummaries":[{"contentType":"SUPER_METRICS","imported":0,"skipped":4,"failed":0,"state":"FINISHED"}]}' | ConvertFrom-Json
+Assert ((Get-SmGhostStateSkipCount -Result $ghost) -eq 4) "imported=0/skipped=4 is the ghost signature; skip count returned"
+$partial = '{"operationSummaries":[{"contentType":"SUPER_METRICS","imported":1,"skipped":3}]}' | ConvertFrom-Json
+Assert ((Get-SmGhostStateSkipCount -Result $partial) -eq 0) "imported>0 is a partial import, not ghost state"
+$clean = '{"operationSummaries":[{"contentType":"SUPER_METRICS","imported":4,"skipped":0}]}' | ConvertFrom-Json
+Assert ((Get-SmGhostStateSkipCount -Result $clean) -eq 0) "a clean import does not retry"
+$noCounts = '{"operationSummaries":[{"contentType":"SUPER_METRICS"}]}' | ConvertFrom-Json
+Assert ((Get-SmGhostStateSkipCount -Result $noCounts) -eq 0) "summary with no counts: no retry, no throw"
+# install.py sums across SUPER_METRICS summaries; so must this.
+$multi = '{"operationSummaries":[{"contentType":"SUPER_METRICS","imported":0,"skipped":2},{"contentType":"SUPER_METRICS","imported":0,"skipped":3}]}' | ConvertFrom-Json
+Assert ((Get-SmGhostStateSkipCount -Result $multi) -eq 5) "skips summed across multiple SUPER_METRICS summaries"
+$multiMixed = '{"operationSummaries":[{"contentType":"SUPER_METRICS","imported":0,"skipped":2},{"contentType":"SUPER_METRICS","imported":1,"skipped":0}]}' | ConvertFrom-Json
+Assert ((Get-SmGhostStateSkipCount -Result $multiMixed) -eq 0) "any import across the summed summaries suppresses the retry"
+
+# THE #114 GUARD.  Do not delete this assertion to make a generalisation pass.
+# #114 bisected the identical imported=0/skipped=N signature on DASHBOARDS and
+# VIEW_DEFINITIONS and found a different cause: create-only mode (force=false),
+# where the skip is idempotent and a retry is a guaranteed no-op costing a
+# round trip plus a 30s import-busy backoff.  See
+# knowledge/context/api-surface/content_import_skip_semantics.md.
+$dashSkip = @'
+{"operationSummaries":[
+ {"contentType":"DASHBOARDS","imported":0,"skipped":1,"failed":0,"state":"FINISHED"},
+ {"contentType":"VIEW_DEFINITIONS","imported":0,"skipped":1,"failed":0,"state":"FINISHED"}]}
+'@ | ConvertFrom-Json
+Assert ((Get-SmGhostStateSkipCount -Result $dashSkip) -eq 0) "an all-skipped DASHBOARDS/VIEW_DEFINITIONS import NEVER triggers the SM retry"
+$reportsSkip = '{"operationSummaries":[{"contentType":"REPORTS","imported":0,"skipped":2}]}' | ConvertFrom-Json
+Assert ((Get-SmGhostStateSkipCount -Result $reportsSkip) -eq 0) "nor does an all-skipped REPORTS import"
+
+# --- Install-Supermetrics actually retries ---------------------------------
+# Redefines the Import-ContentZip stub used by the Install-Dashboard block
+# above; that block has already run.
+$script:SmImportLabels = [System.Collections.Generic.List[string]]::new()
+$script:SmImportResults = @()
+function Import-ContentZip {
+    param($ZipBytes, $Label, $TimeoutSeconds, $Retries)
+    $i = $script:SmImportLabels.Count
+    $script:SmImportLabels.Add($Label)
+    if ($i -ge $script:SmImportResults.Count) { return $script:SmImportResults[-1] }
+    return $script:SmImportResults[$i]
+}
+function Load-JsonFile($Path) { return $script:StubSmDict }
+function New-SmZip { param($SmDict, $Marker, $OwnerId) return [byte[]]@(1, 2) }
+$script:StubSmDict = [pscustomobject]@{ "sm-a" = 1; "sm-b" = 2 }
+function New-SmCtx {
+    return @{
+        BundleDir = "/b"
+        Manifest  = ([pscustomobject]@{ content = [pscustomobject]@{
+            supermetrics = [pscustomobject]@{ file = "/b/sm.json" } } })
+        Marker    = "m"
+        OwnerId   = "u1"
+    }
+}
+function Invoke-SmInstall($results) {
+    $script:SmImportLabels = [System.Collections.Generic.List[string]]::new()
+    $script:SmImportResults = @($results)
+    $out = @(Install-Supermetrics (New-SmCtx) 6>&1)
+    return $out
+}
+
+$out = Invoke-SmInstall @($ghost, $clean)
+Assert ($script:SmImportLabels.Count -eq 2) "ghost signature triggers exactly one retry"
+Assert ($script:SmImportLabels[0] -eq "super metrics" -and $script:SmImportLabels[1] -eq "super metrics (retry)") "the retry is the same zip under a distinguishable label, matching install.py"
+Assert ((($out | ForEach-Object { "$_" }) -join "`n") -like "*ghost-state recovery*4 SM(s) skipped*") "the operator is told a recovery happened, and how many"
+
+$null = Invoke-SmInstall @($clean)
+Assert ($script:SmImportLabels.Count -eq 1) "a clean import imports once"
+
+$null = Invoke-SmInstall @($errShape)
+Assert ($script:SmImportLabels.Count -eq 1) "an error envelope does not trigger a retry"
+
+$null = Invoke-SmInstall @($dashSkip)
+Assert ($script:SmImportLabels.Count -eq 1) "a dashboard-shaped skip envelope does not trigger the SM retry"
+
+$null = Invoke-SmInstall @(($multi), $clean)
+Assert ($script:SmImportLabels.Count -eq 2) "summed multi-summary ghost signature retries once"
+
+# The retry fires at most once even if it also comes back all-skipped: the
+# second envelope is never re-examined.
+$null = Invoke-SmInstall @($ghost, $ghost)
+Assert ($script:SmImportLabels.Count -eq 2) "retry is once, not a loop, even when the retry also reports all-skipped"
+
+# --- W4: Import-ContentZip must emit EXACTLY the status object -------------
+# Install-Supermetrics's retry reads operationSummaries off the value
+# Import-ContentZip returns.  PowerShell appends every uncaptured expression to
+# a function's output stream, so one future `$list.Add($x)` on an ArrayList, or
+# one un-piped cmdlet call, would make $importResult an ARRAY.  Get-PropList
+# would then find no operationSummaries on element 0, Get-SmGhostStateSkipCount
+# would return 0, and the ghost-state retry would silently stop happening --
+# with every behavioural assertion in this file still green, because they all
+# stub Import-ContentZip.
+#
+# This is therefore checked structurally against the REAL function.
+function Test-Captured($Node, $StopAt) {
+    # True when $Node's value is consumed (assigned, returned, used as a
+    # condition or argument) rather than falling onto the output stream.
+    $n = $Node.Parent
+    while ($null -ne $n -and $n -ne $StopAt) {
+        if ($n -is [System.Management.Automation.Language.AssignmentStatementAst] -or
+            $n -is [System.Management.Automation.Language.ParenExpressionAst] -or
+            $n -is [System.Management.Automation.Language.SubExpressionAst] -or
+            $n -is [System.Management.Automation.Language.ReturnStatementAst] -or
+            $n -is [System.Management.Automation.Language.IfStatementAst] -or
+            $n -is [System.Management.Automation.Language.CommandAst]) {
+            return $true
+        }
+        $n = $n.Parent
+    }
+    return $false
+}
+
+$icz = $null
+foreach ($f in $fns) { if ($f.Name -eq "Import-ContentZip") { $icz = $f } }
+Assert ($null -ne $icz) "Import-ContentZip located in the template"
+
+$returns = $icz.Body.FindAll({
+    param($n) $n -is [System.Management.Automation.Language.ReturnStatementAst]
+}, $true)
+Assert ($returns.Count -eq 1) "Import-ContentZip has exactly one return statement"
+Assert ($returns[0].Pipeline.Extent.Text -eq '$s') "and it returns the polled status object"
+
+# Commands are void-by-contract or captured; anything else lands on the
+# output stream and corrupts the return value.
+$voidCommands = @("Write-Host", "Write-Ok", "Write-Warn", "Write-Fail",
+                  "Write-Error", "Write-Output", "Start-Sleep", "Add-Type",
+                  "Out-Null", "Remove-Item", "Write-ImportSummaryWarnings",
+                  "Write-Step", "ForEach-Object", "Where-Object")
+$leaked = @()
+foreach ($c in $icz.Body.FindAll({
+    param($n) $n -is [System.Management.Automation.Language.CommandAst]
+}, $true)) {
+    $nm = $c.GetCommandName()
+    if ($nm -and ($voidCommands -contains $nm)) { continue }
+    if (-not (Test-Captured $c $icz)) { $leaked += "$($c.Extent.StartLineNumber): $($c.Extent.Text)" }
+}
+Assert ($leaked.Count -eq 0) "no uncaptured command output in Import-ContentZip (would corrupt the status return and silently disable the SM retry): $($leaked -join ' | ')"
+
+# Statement-level method calls must be void, and the allowlist is keyed by
+# RECEIVER.METHOD -- never by method name alone.
+#
+# Keying on the method name is not a weaker version of this check, it is a
+# broken one, and it broke on exactly the example its own comment cited.
+# [List[T]].Add returns void; [ArrayList].Add returns the insertion INDEX.
+# .Clear, .Write and .RemoveAll are receiver-dependent the same way.  So an
+# allowlist containing "Add" excuses the precise trap this pin exists to
+# catch: injecting
+#     $scratch = New-Object System.Collections.ArrayList
+#     $scratch.Add("x")
+# into Import-ContentZip turns its return value from PSCustomObject into
+# Object[], Get-SmGhostStateSkipCount then reads 0 instead of 4, and the #108
+# ghost-state retry silently stops happening with this entire file green.
+# That injection is the negative control for this assertion.
+#
+# The two Add sites below are void because of what they are called ON
+# (HttpRequestHeaders and MultipartFormDataContent), not because they are
+# called "Add" -- which is the whole point.  Deleting "Add" from a name-keyed
+# list would red the assert instead of fixing it; the receiver is the fact
+# that carries the meaning.
+#
+# Adding an entry here is a claim that THAT receiver's method returns void.
+# Verify it before adding one.
+$voidCalls = @(
+    '$httpClient.Dispose',                      # IDisposable.Dispose -> void
+    '$httpClient.DefaultRequestHeaders.Add',    # HttpRequestHeaders.Add -> void
+    '$content.Add'                              # MultipartFormDataContent.Add -> void
+)
+$badMethods = @()
+foreach ($st in $icz.Body.FindAll({
+    param($n) $n -is [System.Management.Automation.Language.CommandExpressionAst]
+}, $true)) {
+    $expr = $st.Expression
+    if ($expr -is [System.Management.Automation.Language.InvokeMemberExpressionAst]) {
+        if (Test-Captured $st $icz) { continue }
+        $call = "$($expr.Expression.Extent.Text).$($expr.Member.Extent.Text)"
+        if ($voidCalls -notcontains $call) {
+            $badMethods += "$($st.Extent.StartLineNumber): $call"
+        }
+    }
+}
+Assert ($badMethods.Count -eq 0) "statement-level method calls in Import-ContentZip are void-by-receiver: $($badMethods -join ' | ')"
+
+# And the callers actually capture it.
+foreach ($fname in @("Install-Supermetrics", "Install-Dashboard")) {
+    $fn = $null
+    foreach ($f in $fns) { if ($f.Name -eq $fname) { $fn = $f } }
+    $calls = $fn.Body.FindAll({
+        param($n) $n -is [System.Management.Automation.Language.CommandAst]
+    }, $true) | Where-Object { $_.GetCommandName() -eq "Import-ContentZip" }
+    $first = @($calls)[0]
+    Assert ($first.Parent -is [System.Management.Automation.Language.PipelineAst] -and
+            $first.Parent.Parent -is [System.Management.Automation.Language.AssignmentStatementAst]) "$fname captures the first Import-ContentZip return rather than discarding it"
+}
 
 Write-Host "ALL ASSERTIONS PASSED"

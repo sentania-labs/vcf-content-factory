@@ -215,6 +215,69 @@ function Get-PropValue {
     return $prop.Value
 }
 
+function Get-PropList {
+    param($Object, [string]$Name)
+    # StrictMode-safe read of a collection-valued member.  ALWAYS returns an
+    # array, so callers can both iterate it and read .Count without special
+    # cases.  Three shapes collapse to an empty array: member absent, member
+    # null, member an empty collection.
+    #
+    # Why this exists separately from Get-PropValue: a function returning a
+    # one-element array yields the bare element, and returning an empty array
+    # yields $null.  Paging loops in this file use .Count on the returned list
+    # as the "did this page have anything" test, and $null.Count / a scalar's
+    # .Count would either throw under StrictMode or read 1 for an empty page.
+    # The unary comma is load-bearing: PowerShell unrolls an array on return,
+    # which would turn @() back into $null and a 1-element array back into a
+    # bare object.  ,$array wraps it so the unroll yields the array itself.
+    $raw = Get-PropValue $Object $Name
+    if ($null -eq $raw) { return ,@() }
+    return ,@($raw)
+}
+
+function Get-PageTotalCount {
+    param($Response)
+    # StrictMode-safe read of pageInfo.totalCount, the bound every paging loop
+    # in this file uses.  Returns 0 when either hop is missing, which ends the
+    # loop -- the outcome the old `if ($r.pageInfo)` guards intended but could
+    # not reach, because the guard's own dot-access threw first on an error
+    # envelope.  Callers that prefer a page-size fallback to 0 apply it
+    # themselves; 0 here means "the server did not tell us".
+    $pageInfo = Get-PropValue $Response "pageInfo"
+    if ($null -eq $pageInfo) { return 0 }
+    $raw = Get-PropValue $pageInfo "totalCount"
+    if (-not $raw) { return 0 }
+    return [int]$raw
+}
+
+function Assert-LookupOk {
+    param($Response, [string]$What)
+    # Guards the ONE failure mode the #109 sweep introduced.
+    #
+    # Get-PropList deliberately returns @() for an error envelope.  That is
+    # right for a reader and wrong for a DECISION: an empty list from a failed
+    # request is indistinguishable from a genuine "no such object", so a caller
+    # that branches on emptiness will take the not-found branch on a lookup it
+    # knows failed.  Where that branch CREATES something, a transient 500 on
+    # the lookup produces a duplicate object and prints OK.  Where it DELETES
+    # or reports, it produces a confident false claim about instance state.
+    #
+    # Before the sweep these sites threw PropertyNotFoundException, which was
+    # ugly but safe.  Any converted lookup whose result drives a mutation or a
+    # state claim must therefore check the status BEFORE acting on emptiness.
+    # Refusing to act is the only safe answer: we do not know what is there.
+    $sc = Get-StatusCode $Response
+    if ($sc -eq 200) { return }
+    # "this step stopped before acting", NOT "nothing was created, deleted, or
+    # modified".  The stronger claim is true at all nine current call sites
+    # only because every one of them guards BEFORE its mutation; it would
+    # become a lie the first time someone placed the guard after one, and a
+    # false reassurance in a failure message is worse than none.  This wording
+    # stays true wherever the guard is placed.
+    Write-Fail ("$What failed (HTTP $sc); refusing to act on an incomplete " +
+        "lookup -- this step stopped before acting")
+}
+
 function Resolve-AuthSource($raw) {
     # Returns the canonical value used by the Suite API ('Local' for local accounts).
     # The UI login helper translates 'Local' -> 'localItem' internally.
@@ -540,7 +603,13 @@ function Invoke-Api {
 }
 
 function Get-StatusCode($resp) {
-    if ($resp -is [hashtable] -and $resp.ContainsKey("__statusCode")) {
+    # [System.Collections.IDictionary] and .Contains(), NOT [hashtable] and
+    # .ContainsKey(): this must classify an envelope exactly the way
+    # Get-PropValue does, because this diff routes the same object through
+    # both.  A shape one of them treats as an error envelope and the other
+    # as a PSCustomObject is how a "checked the status" guard silently stops
+    # guarding.
+    if ($resp -is [System.Collections.IDictionary] -and $resp.Contains("__statusCode")) {
         return [int]$resp["__statusCode"]
     }
     return 200
@@ -573,9 +642,21 @@ function Authenticate {
     }
 }
 
+function Get-OwnerId {
+    # Extracted from Invoke-Install so the missing-id guard below is reachable
+    # from the test harness.  Inline in a 200-line install driver it was
+    # unreachable, i.e. an untested guard, which is how guards rot.
+    $currentUser = Get-CurrentUser
+    $ownerId = Get-PropValue $currentUser "id"
+    if (-not $ownerId) {
+        Write-Fail "/api/auth/currentuser returned no user id; cannot stamp content ownership"
+    }
+    return $ownerId
+}
+
 function Get-CurrentUser {
     $resp = Invoke-Api -Method GET -Path "/api/auth/currentuser"
-    if ((Get-StatusCode $resp) -ne 200) { Write-Fail "currentuser failed: $($resp.__body)" }
+    if ((Get-StatusCode $resp) -ne 200) { Write-Fail "currentuser failed: $(Get-PropValue $resp '__body')" }
     return $resp
 }
 
@@ -584,34 +665,80 @@ function Get-MarkerFilename {
 
     $deadline = [System.DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
 
+    # Every read of an export-status envelope below goes through Get-PropValue.
+    # An error envelope (the hashtable Invoke-Api builds on an HTTP failure) has
+    # none of these members, and a raw dot-access on it is a terminating error
+    # under StrictMode.  In the try/catch loops that surfaced as a misleading
+    # "timed out" after the full timeout; at the uncaught site it was a crash.
+    #
+    # This first loop waits for any PRIOR export to finish before the probe
+    # POST below starts one of ours.  Its exit condition is therefore a state
+    # claim about the instance, and Get-PropValue's safe default (empty string
+    # for a member that is not there) is indistinguishable from a legitimate
+    # idle answer.  Without the status gate, one transient 5xx -- whose error
+    # envelope carries no "state" at all -- read as "nothing is running", the
+    # probe POST overlapped a live export, and the install died task-busy.
+    # Same class as the create-on-failed-lookup guard (Assert-LookupOk), one
+    # layer down: this is a POLL, not a pre-mutation lookup.
+    #
+    # Assert-LookupOk is deliberately NOT used here.  It refuses on the first
+    # non-200, which is right before a mutation and wrong for a poll whose
+    # whole job is to outlast a transient.  An unknown status keeps polling
+    # and, only at the deadline, fails with a sentence naming what we last
+    # saw.  Structure and behaviour match install.py:360-368 line for line;
+    # the two installers drifting here is its own defect class.
+    #
+    # BOUNDARY (matches install.py:362-365, do not "fix" without fixing both):
+    # a 200 whose body carries no "state" IS treated as idle.  That is the
+    # never-exported instance, and refusing there would burn the full timeout
+    # and then abort first install on a clean box.  Only a non-200 means "we
+    # do not know".
+    $lastSeen = "no status response yet"
     while ($true) {
         try {
             $g = Invoke-Api -Method GET -Path "/api/content/operations/export"
-            $st = $g.state
-            if ($st -ne "RUNNING" -and $st -ne "INITIALIZED") { break }
-        } catch {}
-        if ([System.DateTime]::UtcNow -gt $deadline) { Write-Fail "Timed out waiting for prior export" }
+            $sc = Get-StatusCode $g
+            if ($sc -eq 200) {
+                $st = [string](Get-PropValue $g "state")
+                $lastSeen = "state=$st"
+                if ($st -ne "RUNNING" -and $st -ne "INITIALIZED") { break }
+            } else {
+                $lastSeen = "HTTP $sc"
+            }
+        } catch {
+            $lastSeen = "status request threw: $_"
+        }
+        if ([System.DateTime]::UtcNow -gt $deadline) { Write-Fail "Timed out waiting for prior export to finish (last seen: $lastSeen)" }
         Start-Sleep -Seconds 2
     }
 
     $priorStart = 0
     try {
         $g = Invoke-Api -Method GET -Path "/api/content/operations/export"
-        if ($g.startTime) { $priorStart = [long]$g.startTime }
+        $priorStartRaw = Get-PropValue $g "startTime"
+        if ($priorStartRaw) { $priorStart = [long]$priorStartRaw }
     } catch {}
 
     $exportBody = @{ scope = "CUSTOM"; contentTypes = @("SUPER_METRICS") }
     $r = Invoke-Api -Method POST -Path "/api/content/operations/export" -Body $exportBody
     $sc = Get-StatusCode $r
-    if ($sc -ne 200 -and $sc -ne 202) { Write-Fail "Marker-probe export failed ($sc): $($r.__body)" }
+    if ($sc -ne 200 -and $sc -ne 202) { Write-Fail "Marker-probe export failed ($sc): $(Get-PropValue $r '__body')" }
 
     $deadline = [System.DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
     while ($true) {
         $g = Invoke-Api -Method GET -Path "/api/content/operations/export"
-        $st = $g.state
-        $startTime = if ($g.startTime) { [long]$g.startTime } else { 0 }
+        $st = [string](Get-PropValue $g "state")
+        $startTimeRaw = Get-PropValue $g "startTime"
+        $startTime = if ($startTimeRaw) { [long]$startTimeRaw } else { 0 }
         if ($startTime -gt $priorStart -and $st -like "FINI*") { break }
-        if ([System.DateTime]::UtcNow -gt $deadline) { Write-Fail "Marker-probe export timed out; state=$st" }
+        # $st is "" for an error envelope as well as for a 200 that omits the
+        # member, so the timeout sentence names the HTTP status too; "state="
+        # alone sent an operator looking at the wrong thing.  Unlike
+        # install.py:383, a non-200 here keeps polling rather than dying on
+        # the first transient: this loop is already past the probe POST, the
+        # export is running, and outlasting a blip is the recoverable answer.
+        $sc = Get-StatusCode $g
+        if ([System.DateTime]::UtcNow -gt $deadline) { Write-Fail "Marker-probe export timed out; state=$st (last status HTTP $sc)" }
         Start-Sleep -Seconds 2
     }
 
@@ -685,7 +812,8 @@ function Import-ContentZip {
     $priorEnd = 0
     try {
         $pre = Invoke-Api -Method GET -Path "/api/content/operations/import"
-        if ($pre.endTime) { $priorEnd = [long]$pre.endTime }
+        $priorEndRaw = Get-PropValue $pre "endTime"
+        if ($priorEndRaw) { $priorEnd = [long]$priorEndRaw }
     } catch {}
 
     $importUri = "$script:BaseUrl/api/content/operations/import?force=true"
@@ -762,11 +890,18 @@ function Import-ContentZip {
 }
 
 function Get-DefaultPolicyId {
+    # This is the site the #109 review measured throwing: on an error envelope
+    # $resp.policySummaries is a PropertyNotFoundException, and this runs at
+    # InstallOrder 3 via Install-SmEnable, i.e. AFTER content has landed.  The
+    # operator got a raw .NET stack trace over a half-modified instance where
+    # the Write-Fail below is the sentence they can act on.
     $resp = Invoke-Api -Method GET -Path "/api/policies"
-    foreach ($p in $resp.policySummaries) {
-        if ($p.defaultPolicy) { return $p.id }
+    foreach ($p in (Get-PropList $resp "policySummaries")) {
+        if ($null -eq $p) { continue }
+        if (Get-PropValue $p "defaultPolicy") { return (Get-PropValue $p "id") }
     }
-    Write-Fail "No default policy found in /api/policies"
+    $sc = Get-StatusCode $resp
+    Write-Fail "No default policy found in /api/policies (HTTP $sc)"
 }
 
 function Get-SupermetricsByName {
@@ -776,11 +911,17 @@ function Get-SupermetricsByName {
     $target = [System.Collections.Generic.HashSet[string]]::new($Names)
     do {
         $resp = Invoke-Api -Method GET -Path "/api/supermetrics" -Query @{ page = "$page"; pageSize = "$pageSize" }
-        $items = $resp.superMetrics
+        # Callers treat an absent name as "not on the instance" and either skip
+        # the enable or report "already removed".  Both are state claims.
+        Assert-LookupOk -Response $resp -What "Super metric lookup"
+        $items = Get-PropList $resp "superMetrics"
         foreach ($sm in $items) {
-            if ($target.Contains($sm.name)) { $found[$sm.name] = $sm.id }
+            if ($null -eq $sm) { continue }
+            $smName = [string](Get-PropValue $sm "name")
+            if ($smName -and $target.Contains($smName)) { $found[$smName] = Get-PropValue $sm "id" }
         }
-        $total = if ($resp.pageInfo -and $resp.pageInfo.totalCount) { [int]$resp.pageInfo.totalCount } else { $items.Count }
+        $total = Get-PageTotalCount $resp
+        if ($total -eq 0) { $total = $items.Count }
         $page++
     } while (($page * $pageSize) -lt $total -and $items.Count -gt 0)
     return $found
@@ -1176,13 +1317,28 @@ function Test-SupermetricsEnabled {
     return $result
 }
 
+function Get-GroupName {
+    param($Group)
+    # /api/resources/groups nests the display name two levels deep, so BOTH
+    # hops need the StrictMode-safe reader: a group whose envelope omits
+    # resourceKey throws on the first dot, before the .name is ever reached.
+    $rk = Get-PropValue $Group "resourceKey"
+    if ($null -eq $rk) { return $null }
+    return Get-PropValue $rk "name"
+}
+
 function Upsert-CustomGroup {
     param($Payload)
     $name = $Payload.resourceKey.name
     $resp = Invoke-Api -Method GET -Path "/api/resources/groups" -Query @{ name = $name; pageSize = "100" }
+    # This lookup chooses between PUT and POST.  Falling through to POST on a
+    # failed lookup creates a SECOND custom group with the same name and
+    # reports success.  Stop instead.
+    Assert-LookupOk -Response $resp -What "Custom group lookup for '$name'"
     $existingId = $null
-    foreach ($g in $resp.groups) {
-        if ($g.resourceKey.name -eq $name) { $existingId = $g.id; break }
+    foreach ($g in (Get-PropList $resp "groups")) {
+        if ($null -eq $g) { continue }
+        if ((Get-GroupName $g) -eq $name) { $existingId = Get-PropValue $g "id"; break }
     }
     if ($existingId) {
         $r = Invoke-Api -Method PUT -Path "/api/resources/groups/$existingId" -Body $Payload
@@ -1192,8 +1348,15 @@ function Upsert-CustomGroup {
             # update was applied (server-side race condition). Verify via GET
             # before treating as fatal.
             $chk = Invoke-Api -Method GET -Path "/api/resources/groups" -Query @{ name = $name; pageSize = "100" }
+            # "the group exists, so the 500 was spurious" is a claim about the
+            # instance.  If the verification lookup itself failed we cannot
+            # make it, and must not silently downgrade to "PUT failed".
+            Assert-LookupOk -Response $chk -What "Custom group PUT verification lookup for '$name'"
             $stillExists = $false
-            foreach ($g in $chk.groups) { if ($g.resourceKey.name -eq $name) { $stillExists = $true; break } }
+            foreach ($g in (Get-PropList $chk "groups")) {
+                if ($null -eq $g) { continue }
+                if ((Get-GroupName $g) -eq $name) { $stillExists = $true; break }
+            }
             if ($stillExists) {
                 Write-Warn "Custom group PUT returned 500 but group exists -- treating as success: $name"
             } else {
@@ -1224,15 +1387,16 @@ function Find-CustomGroupIds {
     do {
         $resp = Invoke-Api -Method GET -Path "/api/resources/groups" `
             -Query @{ page = "$page"; pageSize = "$pageSize" }
-        $groups = $resp.groups
-        if (-not $groups) { break }
+        Assert-LookupOk -Response $resp -What "Custom group lookup"
+        $groups = Get-PropList $resp "groups"
+        if ($groups.Count -eq 0) { break }
         foreach ($g in $groups) {
-            $n = $g.resourceKey.name
-            if ($target.Contains($n)) { $found[$n] = $g.id }
+            if ($null -eq $g) { continue }
+            $n = [string](Get-GroupName $g)
+            if ($n -and $target.Contains($n)) { $found[$n] = Get-PropValue $g "id" }
         }
-        $total = if ($resp.pageInfo -and $resp.pageInfo.totalCount) {
-            [int]$resp.pageInfo.totalCount
-        } else { $groups.Count }
+        $total = Get-PageTotalCount $resp
+        if ($total -eq 0) { $total = $groups.Count }
         $page++
     } while (($page * $pageSize) -lt $total -and $groups.Count -gt 0)
     return $found
@@ -1517,6 +1681,63 @@ function Get-AllSkippedSummaries {
         }
     }
     return $flagged
+}
+
+function Get-SmGhostStateSkipCount {
+    param($Result)
+    # Returns the number of skipped super metrics when the import shows the
+    # SM ghost-state signature, or 0 when it does not.  Non-zero means "retry
+    # the same zip once".
+    #
+    # Ghost state: an SM row exists in the DB but never fully registered in the
+    # internal SM catalog (typically a previous partial import).  The importer
+    # then treats it as already-present and skips it, so GET /{id} works while
+    # the list API and the assign endpoint do not see it -- an enable call
+    # 404s.  A second import of the same zip re-registers it.  Bisected and
+    # documented at knowledge/context/wire-formats/wire_formats.md, section
+    # "SM ghost state".
+    #
+    # SUPER_METRICS ONLY, and this is evidence, not caution.  #114 bisected the
+    # identical imported=0/skipped>0 signature on the DASHBOARDS and
+    # VIEW_DEFINITIONS paths and reproduced ONE cause: create-only mode
+    # (force=false), where the skip is idempotent and a retry is a guaranteed
+    # no-op that still costs a round trip plus a 30s import-busy backoff.
+    #
+    # READ THAT AS A CAUSE, NOT AS THE MEANING OF THE SIGNATURE.  force=false
+    # was the only trigger #114 could reproduce, and this installer hard-codes
+    # force=true (see Import-ContentZip).  Per
+    # knowledge/context/api-surface/content_import_skip_semantics.md, a
+    # force=true occurrence is "unexplained, not benign, and should be treated
+    # as a new finding" -- three contexts were never tested (UI-locked
+    # dashboards, non-admin importing another user's content, pak-supplied
+    # solution content).  So the reason NOT to retry dashboards is not "we know
+    # it is harmless"; it is that no evidence says a retry would help, and #114
+    # showed it demonstrably does not for the one cause we understand.  If you
+    # ever see this signature on a force=true dashboard import, investigate it
+    # -- do not reach for this function.
+    #
+    # Do not widen the contentType test here, and do not call this from
+    # Install-Dashboard.
+    #
+    # Mirrors install.py:_install_supermetrics exactly, including summing
+    # across multiple SUPER_METRICS summaries and treating "no SUPER_METRICS
+    # summary at all" as no-retry.  If one side changes, change both.
+    if ($null -eq $Result) { return 0 }
+    $matched = $false
+    $totalImported = 0
+    $totalSkipped = 0
+    foreach ($entry in (Get-PropList $Result "operationSummaries")) {
+        if ($null -eq $entry) { continue }
+        if ([string](Get-PropValue $entry "contentType") -ne "SUPER_METRICS") { continue }
+        $matched = $true
+        $imp = Get-PropValue $entry "imported"
+        if ($imp) { $totalImported += [int]$imp }
+        $skp = Get-PropValue $entry "skipped"
+        if ($skp) { $totalSkipped += [int]$skp }
+    }
+    if (-not $matched) { return 0 }
+    if ($totalImported -eq 0 -and $totalSkipped -gt 0) { return $totalSkipped }
+    return 0
 }
 
 function Write-AdvisoryTrailer {
@@ -2002,7 +2223,20 @@ function Install-Supermetrics($Ctx) {
     $smFile = Join-Path $Ctx.BundleDir $Ctx.Manifest.content.supermetrics.file
     $smDict = Load-JsonFile $smFile
     $smZip = New-SmZip -SmDict $smDict -Marker $Ctx.Marker -OwnerId $Ctx.OwnerId
-    $null = Import-ContentZip -ZipBytes $smZip -Label "super metrics"
+    $importResult = Import-ContentZip -ZipBytes $smZip -Label "super metrics"
+
+    # Ghost-state recovery, ported from install.py:_install_supermetrics.  The
+    # drift this closes: the Python installer self-heals here and the
+    # PowerShell one did not, so a Windows operator got a clean-looking install
+    # whose SMs are readable by id but invisible to list and assign.
+    # See Get-SmGhostStateSkipCount for why this is SUPER_METRICS only.
+    $ghostSkipped = Get-SmGhostStateSkipCount -Result $importResult
+    if ($ghostSkipped -gt 0) {
+        Write-Host ("    [ghost-state recovery] all $ghostSkipped SM(s) skipped on first " +
+            "import, retrying to re-register in SM catalog...")
+        $null = Import-ContentZip -ZipBytes $smZip -Label "super metrics (retry)"
+    }
+
     $smCount = @($smDict.PSObject.Properties.Name).Count
     Write-Ok "Imported $smCount super metric(s)"
 }
@@ -2275,15 +2509,32 @@ function Install-Symptoms($Ctx) {
         $page = 0; $pageSize = 1000
         :outer do {
             $r = Invoke-Api -Method GET -Path "/api/symptomdefinitions" -Query @{ page = "$page"; pageSize = "$pageSize" }
-            foreach ($sd in $r.symptomDefinitions) {
-                if ($sd.name -eq $name) { $existing = $sd; break outer }
+            # Chooses between updating the existing symptom and creating a
+            # new one, so an empty-on-error result creates a DUPLICATE by name.
+            #
+            # Sequence, stated precisely because it is easy to get wrong: on
+            # main this loop THREW under StrictMode (both on an error envelope
+            # and on a 200 missing the member).  The #109 sweep turned that
+            # crash into a silent duplicate-create.  This guard turns it into a
+            # refusal.  Net against main it is crash -> sentence; there was
+            # never a window where main created duplicates here.
+            #
+            # BOUNDARY, deliberately left as-is: a 200 carrying
+            # "symptomDefinitions": null still falls through to create, exactly
+            # as on main.  null and [] both legitimately mean "empty instance",
+            # so refusing on either would break first install on a clean box.
+            # Only a non-200 is treated as "we do not know".
+            Assert-LookupOk -Response $r -What "Symptom lookup for '$name'"
+            foreach ($sd in (Get-PropList $r "symptomDefinitions")) {
+                if ($null -eq $sd) { continue }
+                if ((Get-PropValue $sd "name") -eq $name) { $existing = $sd; break outer }
             }
-            $total = if ($r.pageInfo) { $r.pageInfo.totalCount } else { 0 }
+            $total = Get-PageTotalCount $r
             $page++
         } while (($page * $pageSize) -lt $total)
 
         if ($existing) {
-            $payload | Add-Member -NotePropertyName "id" -NotePropertyValue $existing.id -Force
+            $payload | Add-Member -NotePropertyName "id" -NotePropertyValue (Get-PropValue $existing "id") -Force
             $r = Invoke-Api -Method PUT -Path "/api/symptomdefinitions" -Body $payload
             Write-Ok "Updated: $name"
         } else {
@@ -2302,10 +2553,16 @@ function Install-Alerts($Ctx) {
     $page = 0; $pageSize = 1000
     do {
         $r = Invoke-Api -Method GET -Path "/api/symptomdefinitions" -Query @{ page = "$page"; pageSize = "$pageSize" }
-        foreach ($sd in $r.symptomDefinitions) {
-            if ($sd.name -and $sd.id) { $symptomMap[$sd.name] = $sd.id }
+        # An empty-on-error map would make every alert report "could not
+        # resolve symptom references", which is a false diagnosis.
+        Assert-LookupOk -Response $r -What "Symptom lookup (alert cross-reference)"
+        foreach ($sd in (Get-PropList $r "symptomDefinitions")) {
+            if ($null -eq $sd) { continue }
+            $sdName = Get-PropValue $sd "name"
+            $sdId = Get-PropValue $sd "id"
+            if ($sdName -and $sdId) { $symptomMap[$sdName] = $sdId }
         }
-        $total = if ($r.pageInfo) { $r.pageInfo.totalCount } else { 0 }
+        $total = Get-PageTotalCount $r
         $page++
     } while (($page * $pageSize) -lt $total)
 
@@ -2324,15 +2581,21 @@ function Install-Alerts($Ctx) {
         $page = 0
         :outer2 do {
             $r = Invoke-Api -Method GET -Path "/api/alertdefinitions" -Query @{ page = "$page"; pageSize = "1000" }
-            foreach ($ad in $r.alertDefinitions) {
-                if ($ad.name -eq $name) { $existing = $ad; break outer2 }
+            # Chooses between updating the existing alert and creating a new
+            # one, so an empty-on-error result creates a DUPLICATE by name.
+            # Same sequence and same null-vs-[] boundary as Install-Symptoms
+            # above; see the comment there.
+            Assert-LookupOk -Response $r -What "Alert lookup for '$name'"
+            foreach ($ad in (Get-PropList $r "alertDefinitions")) {
+                if ($null -eq $ad) { continue }
+                if ((Get-PropValue $ad "name") -eq $name) { $existing = $ad; break outer2 }
             }
-            $total = if ($r.pageInfo) { $r.pageInfo.totalCount } else { 0 }
+            $total = Get-PageTotalCount $r
             $page++
         } while (($page * 1000) -lt $total)
 
         if ($existing) {
-            $wire | Add-Member -NotePropertyName "id" -NotePropertyValue $existing.id -Force
+            $wire | Add-Member -NotePropertyName "id" -NotePropertyValue (Get-PropValue $existing "id") -Force
             $r = Invoke-Api -Method PUT -Path "/api/alertdefinitions" -Body $wire
             Write-Ok "Updated: $name"
         } else {
@@ -2394,10 +2657,15 @@ function Uninstall-Symptoms($Ctx) {
     $page = 0; $pageSize = 1000
     do {
         $r = Invoke-Api -Method GET -Path "/api/symptomdefinitions" -Query @{ page = "$page"; pageSize = "$pageSize" }
-        foreach ($sd in $r.symptomDefinitions) {
-            if ($sd.name -and $sd.id -and ($names -contains $sd.name)) { $symIds[$sd.name] = $sd.id }
+        # Absence here is reported to the operator as "already removed?".
+        Assert-LookupOk -Response $r -What "Symptom lookup (uninstall)"
+        foreach ($sd in (Get-PropList $r "symptomDefinitions")) {
+            if ($null -eq $sd) { continue }
+            $sdName = Get-PropValue $sd "name"
+            $sdId = Get-PropValue $sd "id"
+            if ($sdName -and $sdId -and ($names -contains $sdName)) { $symIds[$sdName] = $sdId }
         }
-        $total = if ($r.pageInfo) { $r.pageInfo.totalCount } else { 0 }
+        $total = Get-PageTotalCount $r
         $page++
     } while (($page * $pageSize) -lt $total)
     foreach ($name in $names) {
@@ -2418,10 +2686,15 @@ function Uninstall-Alerts($Ctx) {
     $page = 0
     do {
         $r = Invoke-Api -Method GET -Path "/api/alertdefinitions" -Query @{ page = "$page"; pageSize = "1000" }
-        foreach ($ad in $r.alertDefinitions) {
-            if ($ad.name -and $ad.id -and ($names -contains $ad.name)) { $alertIds[$ad.name] = $ad.id }
+        # Absence here is reported to the operator as "already removed?".
+        Assert-LookupOk -Response $r -What "Alert lookup (uninstall)"
+        foreach ($ad in (Get-PropList $r "alertDefinitions")) {
+            if ($null -eq $ad) { continue }
+            $adName = Get-PropValue $ad "name"
+            $adId = Get-PropValue $ad "id"
+            if ($adName -and $adId -and ($names -contains $adName)) { $alertIds[$adName] = $adId }
         }
-        $total = if ($r.pageInfo) { $r.pageInfo.totalCount } else { 0 }
+        $total = Get-PageTotalCount $r
         $page++
     } while (($page * 1000) -lt $total)
     foreach ($name in $names) {
@@ -2679,8 +2952,7 @@ function Invoke-Install {
 
     $step++
     Write-Step $step $TOTAL "Resolving current user ID..."
-    $currentUser = Get-CurrentUser
-    $ownerId = $currentUser.id
+    $ownerId = Get-OwnerId
     Write-Ok "Owner user ID: $ownerId"
 
     $allAdvisories = [System.Collections.Generic.List[string]]::new()
