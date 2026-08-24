@@ -5,7 +5,8 @@
 Run BY THE USER in their own terminal. Inside a Claude session the flow
 is: Claude tells the user to type ``! python3 -m vcfops_common setup``;
 the ``!`` prefix runs it interactively in-session, and because the
-password is read with :func:`getpass.getpass` it is typed but never
+password is read through :func:`read_password_silently` (getpass, with
+its echoing fallback promoted to a refusal) it is typed but never
 echoed, so no secret ever lands in the transcript.
 
 Design: knowledge/designs/bootstrap-v2.md
@@ -16,7 +17,11 @@ not taken here):
 
   - The password is read only via a silent prompt. It is never accepted
     on argv (``--password`` is rejected with a pointer to this wizard),
-    never echoed, never written to a temp file, never logged.
+    never echoed, never written to a temp file, never logged. Silence is
+    enforced, not assumed: when getpass cannot suppress terminal echo it
+    warns and reads with echo ON, so that warning is promoted to an
+    error and the wizard refuses before the first keystroke
+    (:func:`read_password_silently`).
   - Nothing that could carry the password is printed: not the token, not
     a response body, not a raw exception. Every string that reaches an
     output stream on a failure path goes through :func:`_scrub`, which
@@ -33,11 +38,14 @@ not taken here):
     that is both safer for the operator and RULE-008-clean, and for
     what happens when ``.env`` is a symlink.
 
-Windows portability: pure stdlib plus ``requests`` (imported lazily, and
-optional: without it the wizard offers to skip live validation).
-``getpass`` is silent on Windows too. No bash. The repo root is anchored
-to this module's location on disk exactly the way ``doctor.py`` does it,
-never to ``Path.cwd()``.
+Platform: POSIX only (Linux, macOS, WSL), per RULE-018. Dependencies are
+pure stdlib plus ``requests`` (imported lazily, and optional: without it
+the wizard offers to skip live validation). No bash. The repo root is
+anchored to this module's location on disk exactly the way ``doctor.py``
+does it, never to ``Path.cwd()``. Some native-Windows accommodations
+predating RULE-018 survive further down this file (the ``os.name == 'nt'``
+branches in :func:`write_env_file` and in the closing message); removing
+them is issue #115, not this module's business today.
 
 Non-interactive safety: if stdin is not a TTY the wizard refuses and
 exits 2 rather than reading a password from a pipe or hanging. The
@@ -48,10 +56,19 @@ from __future__ import annotations
 import getpass
 import os
 import re
+import subprocess
 import sys
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
+
+# The upward `.env` search is doctor.py's, not a second implementation:
+# _env.load_dotenv() walks up from the repo root, so a `.env` kept in a
+# parent of the checkout is the file the CLIs actually read. The wizard
+# must write THAT file, or it silently creates a shadowing second one
+# (issue #102 item 1).
+from .doctor import find_env_file
 
 # The profile scheme is _env.py's, not a parallel convention:
 #   VCFOPS_<PROFILE>_HOST / _USER / _PASSWORD / _AUTH_SOURCE / _VERIFY_SSL
@@ -77,6 +94,7 @@ _ACQUIRE_PATH = "/suite-api/api/auth/token/acquire"
 _ACQUIRE_TIMEOUT = 20  # seconds
 
 _MAX_DETAIL = 300  # cap on any scrubbed diagnostic string
+_GIT_CHECK_TIMEOUT = 5  # seconds; `git check-ignore` on a parent .env
 
 _USAGE = """usage: python3 -m vcfops_common setup [--profile NAME] [--no-validate]
 
@@ -87,8 +105,11 @@ Claude session type it with a leading `!`:
 
 Prompts for profile name, host, user, auth source and verify-SSL (these
 echo), then the password twice via a silent prompt (never echoed, never
-written to the transcript). Validates by acquiring a token, then merges
-the profile into .env at the repo root.
+written to the transcript; the wizard refuses to prompt at all on a
+terminal where echo cannot be switched off). Validates by acquiring a
+token, then merges the profile into the .env the CLIs read: normally
+<repo>/.env, and if a .env above the repo is what resolves today, that
+one is named and offered rather than silently shadowed.
 
 options:
   --profile NAME   pre-seed the profile name prompt (not a secret)
@@ -412,8 +433,15 @@ def merge_profile_into_env(
     root: Path,
     profile: str,
     values: Dict[str, str],
+    *,
+    env_path: Optional[Path] = None,
 ) -> Tuple[Path, bool]:
-    """Merge one profile into <root>/.env. Returns (path, created).
+    """Merge one profile into a .env file. Returns (path, created).
+
+    ``env_path`` defaults to ``<root>/.env``; the caller passes the file
+    the loaders actually resolve when that is a `.env` above the repo
+    (issue #102 item 1). The `.env.example` seed is always taken from
+    ``root``, since that is where the template lives.
 
     Creates the file from .env.example (assignments commented out) when
     absent. Never returns or prints file contents.
@@ -427,7 +455,7 @@ def merge_profile_into_env(
         if problem:
             # Names only, never the value (RULE-008).
             raise ValueError(f"VCFOPS_{profile.upper()}_{suffix}: {problem}")
-    path = root / ".env"
+    path = env_path or (root / ".env")
     created = False
     if path.is_file():
         try:
@@ -642,6 +670,59 @@ class Aborted(Exception):
     """User pressed Ctrl-D / Ctrl-C, or input ran out."""
 
 
+class EchoNotSuppressed(Exception):
+    """The terminal could not turn echo off, so no password may be read."""
+
+
+def read_password_silently(
+    prompt: str,
+    *,
+    getpass_fn: Optional[Callable[[str], str]] = None,
+) -> str:
+    """``getpass.getpass``, but refusing instead of falling back to echo.
+
+    When getpass cannot control the terminal (no /dev/tty, a wrapped or
+    emulated console, termios unavailable) it does NOT fail: it warns
+    with :class:`getpass.GetPassWarning`, prints "Password input may be
+    echoed", and reads the line with echo ON. The password then sits on
+    screen, in the scrollback and, inside a Claude session, in the
+    transcript, which is exactly what RULE-008 forbids. The wizard's
+    "never echoed" promise was assumed rather than enforced (issue #102
+    item 2).
+
+    The warning is emitted BEFORE the read, so promoting it to an error
+    aborts the prompt before a single keystroke is taken; inspecting a
+    recorded warning after the call returns would be too late, the
+    secret would already be visible.
+    """
+    fn = getpass_fn or getpass.getpass
+    with warnings.catch_warnings():
+        # Front-inserted filter for this category only; other filters,
+        # including anything PYTHONWARNINGS set, are left alone and are
+        # restored on exit.
+        warnings.simplefilter("error", getpass.GetPassWarning)
+        try:
+            return fn(prompt)
+        except getpass.GetPassWarning:
+            # Never chained: the exception's context could carry the
+            # prompt/stream state, and nothing derived from this call
+            # may reach an output stream.
+            raise EchoNotSuppressed() from None
+
+
+_ECHO_REFUSAL = (
+    "refusing to prompt for a password: this terminal cannot switch echo "
+    "off, so what you typed would appear on screen and stay in the "
+    "scrollback (and, in a Claude session, in the transcript). RULE-008 "
+    "forbids that, and getpass would otherwise have read it with echo on "
+    "anyway. Nothing was written.\n"
+    "Run the wizard in a real terminal (not an editor console, a piped "
+    "shell, or an IDE 'run' pane), or add the VCFOPS_<PROFILE>_HOST / "
+    "_USER / _PASSWORD / _AUTH_SOURCE / _VERIFY_SSL lines to .env "
+    "yourself in your own editor."
+)
+
+
 def _ask_line(
     ask: Callable[[str], str],
     out: Callable[[str], None],
@@ -717,6 +798,95 @@ def _ask_password(
 # Wizard
 # ---------------------------------------------------------------------------
 
+def _gitignore_status(env_file: Path) -> str:
+    """One clause saying whether `env_file` is protected from a commit.
+
+    A `.env` above the repo is outside this repo's `.gitignore`, so the
+    protection the operator is used to does not apply to it: the
+    directory may be its own git repo (a dotfiles checkout is the usual
+    case) in which nothing stops a plaintext password from being
+    committed. Best effort and never fatal: `git check-ignore` is asked
+    directly, and any failure degrades to "could not determine", which
+    is the honest answer and still puts the operator on notice.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(env_file.parent), "check-ignore", "--quiet", env_file.name],
+            capture_output=True,
+            timeout=_GIT_CHECK_TIMEOUT,
+        )
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return "could not determine whether anything git-ignores it"
+    if proc.returncode == 0:
+        return "a git repo there DOES ignore it"
+    if proc.returncode == 1:
+        return (
+            "it is NOT git-ignored, and its directory IS a git repo, so a "
+            "password written there could be committed"
+        )
+    # `git check-ignore` documents 128 as a FATAL error, not as "no git
+    # repo here": a real repo with an unreadable or malformed
+    # `.git/config` exits 128 too. Reporting that as "not a git repo,
+    # nothing could commit it" would be a false assurance on the one
+    # prompt where the operator decides whether to write a plaintext
+    # password outside this repo. Unknown is reported as unknown.
+    return "could not determine whether anything git-ignores it"
+
+
+def _resolve_env_target(
+    root: Path,
+    ask: Callable[[str], str],
+    out: Callable[[str], None],
+) -> Path:
+    """Decide WHICH .env this run writes, matching what the CLIs read.
+
+    ``_env.load_dotenv()`` (and the doctor) walk UPWARD from the repo
+    root and load the FIRST `.env` they find, so a `.env` kept in a
+    parent of the checkout is a supported setup and is the file the CLIs
+    actually resolve. Writing ``<root>/.env`` unconditionally would then
+    create a second file that shadows it: the profiles the operator
+    already had would stop resolving, with nothing on screen saying why
+    (issue #102 item 1).
+
+    So: if the resolved file is inside the repo (or there is none), use
+    ``<root>/.env`` silently. If it is above the repo, name it and let
+    the operator choose.
+
+    The prompt defaults to NO on purpose. The upward walk runs all the
+    way to ``/``, so the file it finds can be ``~/.env`` or ``/.env``,
+    neither of which this repo's `.gitignore` covers; a single Enter
+    must not be able to write a plaintext password outside the repo.
+    Writing there is legitimate and stays on offer, but it has to be
+    chosen, and the prompt says up front what protects the file (or does
+    not). Declining shadows the file found above, which is the other
+    legitimate setup, so that consequence is spelled out too rather than
+    discovered later.
+    """
+    found = find_env_file(root)
+    local = root / ".env"
+    if found is None:
+        return local
+    try:
+        same_dir = found.parent.resolve() == root.resolve()
+    except OSError:
+        same_dir = False
+    if same_dir:
+        return local
+    out("")
+    out(f"  An existing .env was found ABOVE this repo: {found}")
+    out("  That is the file the CLIs read: .env is resolved by walking up")
+    out("  from the repo, and the nearest one wins.")
+    out("  It is outside this repo, so this repo's .gitignore does not cover")
+    out(f"  it: {_gitignore_status(found)}.")
+    if _ask_bool(ask, out, f"  write the password into {found}?", False):
+        return found
+    out(f"  OK, writing {local} instead (inside the repo, where .gitignore")
+    out("  covers it). Note that it will SHADOW the file above: profiles")
+    out("  defined only there will stop resolving until you add them here")
+    out("  too.")
+    return local
+
+
 def _parse_args(argv: Sequence[str]) -> Tuple[Optional[Dict[str, object]], str, int]:
     """Return (options, message, exit_code). options is None to stop."""
     opts: Dict[str, object] = {"profile": None, "validate": True}
@@ -762,7 +932,9 @@ def run_setup(
     """
     root = root or find_repo_root()
     ask = ask or input
-    ask_secret = ask_secret or getpass.getpass
+    # Not getpass.getpass directly: the wrapper refuses when getpass
+    # would fall back to reading with echo ON (issue #102 item 2).
+    ask_secret = ask_secret or read_password_silently
     if err is None:
         def err(line: str) -> None:  # noqa: F811
             print(line, file=sys.stderr)
@@ -807,7 +979,7 @@ def run_setup(
             check=validate_profile_name,
         ).strip()
 
-        env_path = root / ".env"
+        env_path = _resolve_env_target(root, ask, out)
         prior = read_profile_defaults(env_path, profile)
         if prior:
             out(f"  profile '{profile}' already exists; press Enter to keep a value")
@@ -890,13 +1062,15 @@ def run_setup(
             "VERIFY_SSL": "true" if verify_ssl else "false",
         }
         try:
-            path, created = merge_profile_into_env(root, profile, values)
+            path, created = merge_profile_into_env(
+                root, profile, values, env_path=env_path
+            )
         except EnvReadError as exc:
             # Read failure, not a write failure: the existing file is
             # untouched, and telling the operator "could not write"
             # would send them after permissions when the real cause is
             # usually an editor that saved .env as UTF-16.
-            err(f"could not READ the existing {root / '.env'} "
+            err(f"could not READ the existing {env_path} "
                 f"({_scrub(exc, [password])}); it was left untouched and "
                 "nothing was written. Check the file's encoding (it must "
                 "be UTF-8) and that you can read it.")
@@ -911,6 +1085,11 @@ def run_setup(
                 "unchanged (the new file is written alongside and swapped "
                 "in only once it is complete).")
             return 1
+    except EchoNotSuppressed:
+        # Refusal, not an abort: same exit code as the non-TTY refusal,
+        # because the cause is the same class of unsafe environment.
+        err(_ECHO_REFUSAL)
+        return 2
     except Aborted:
         out("")
         out("Cancelled. Nothing was written.")

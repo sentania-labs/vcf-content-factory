@@ -1259,3 +1259,84 @@ def test_checklist_names_failures_even_on_a_stale_record(tmp_path):
     assert boot["status"] == "fail"
     assert "2 clone/update failure(s)" in boot["detail"]
     assert "stale" in boot["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Issue #96 item 2: deps that live ONLY in the venv are not "green"
+# ---------------------------------------------------------------------------
+
+def test_venv_only_deps_are_not_reported_green(tmp_path):
+    """The inverse machine: the ambient interpreter lacks the deps and
+    .venv has them. Nothing wires the CLIs to the venv, so the
+    documented `python3 -m vcfops_* validate` would fail here and the
+    doctor must say so instead of printing one green line."""
+    root = make_configured_root(tmp_path)
+    install_venv_python(root)  # the real interpreter running this suite
+    lines = collect(root, fake_git(), check_import=lambda n: False)
+    text = "\n".join(lines)
+    assert not text.startswith("doctor: all green")
+    assert "installed in .venv only" in text
+    assert "source .venv/bin/activate" in text
+    for module in ("requests", "yaml"):
+        assert module in text
+    # The operator is told WHICH interpreter was probed, as the
+    # missing-module line already does.
+    assert "[checked: current + .venv/bin/python3]" in text
+    # Still not a missing dependency, and still not a first-run machine.
+    assert "missing python module(s)" not in text
+    assert "FIRST-RUN DETECTED" not in text
+    # And no machine-specific path (issue #96 item 3 applies here too).
+    assert str(root) not in text
+
+
+def test_a_venv_only_jmespath_is_not_reported_as_a_broken_validate(tmp_path):
+    """jmespath is a SOFT dependency: vcfops_managementpacks/loader.py
+    degrades to a UserWarning without it, and this module carves it out
+    everywhere else. Telling an operator whose ambient python3 has
+    requests and yaml that `validate` would fail is a lie, and a doctor
+    that lies about a healthy install is this issue inverted."""
+    root = make_configured_root(tmp_path)
+    install_venv_python(root)
+    lines = collect(root, fake_git(), check_import=lambda n: n != "jmespath")
+    text = "\n".join(lines)
+    assert "jmespath" in text
+    assert "soft dependency" in text
+    assert "would fail" not in text          # the false claim
+    assert "missing python module(s)" not in text
+    assert "[checked: current + .venv/bin/python3]" in text
+    assert str(root) not in text
+
+
+def test_a_core_module_venv_only_still_reports_a_failing_validate(tmp_path):
+    """The claim is scoped to the core modules, and only they are named
+    in it: yaml venv-only really does break every CLI."""
+    root = make_configured_root(tmp_path)
+    install_venv_python(root)
+    lines = collect(root, fake_git(), check_import=lambda n: n not in ("yaml", "jmespath"))
+    text = "\n".join(lines)
+    assert "yaml" in text
+    assert "would fail" in text
+    # jmespath is venv-only too, but naming it in the failure claim would
+    # re-import the lie; activating the venv fixes both anyway.
+    assert "soft dependency" not in text
+
+
+def test_venv_only_modules_are_recorded_separately_from_missing(tmp_path):
+    root = make_configured_root(tmp_path)
+    install_venv_python(root)
+    env = inspect_environment(root, check_import=lambda n: False)
+    assert env.missing_modules == []          # the intersection is empty
+    assert set(env.venv_only_modules) == {"requests", "yaml", "jmespath"}
+    assert not is_first_run(root, env, env_file_exists=True)
+
+
+def test_deps_present_in_both_interpreters_stay_green(tmp_path):
+    """Regression guard on the fix: the ordinary, fully set-up machine
+    still gets exactly one green line."""
+    root = make_configured_root(tmp_path)
+    install_venv_python(root)
+    env = inspect_environment(root, check_import=lambda n: True)
+    assert env.venv_only_modules == []
+    lines = collect(root, fake_git(), imports_ok=True)
+    assert len(lines) == 1
+    assert lines[0].startswith("doctor: all green")

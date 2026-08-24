@@ -17,10 +17,12 @@ Covered per the Phase 2 brief:
 """
 from __future__ import annotations
 
+import getpass
 import os
 import re
 import stat
 import sys
+import warnings
 from pathlib import Path
 
 import pytest
@@ -961,3 +963,274 @@ def test_find_repo_root_is_not_cwd(tmp_path, monkeypatch):
     root = sc.find_repo_root()
     assert (root / "src" / "vcfops_common" / "setup_credentials.py").is_file()
     assert root != tmp_path
+
+
+# ---------------------------------------------------------------------------
+# Issue #102 item 2: getpass's echo fallback is refused, not tolerated
+# ---------------------------------------------------------------------------
+
+def echoing_getpass(reads):
+    """A getpass that cannot suppress echo: it warns, then reads anyway.
+
+    That is stdlib behavior (getpass.fallback_getpass), and the read is
+    what RULE-008 forbids, so `reads` staying empty is the assertion
+    that matters.
+    """
+    def _fn(prompt):
+        warnings.warn(
+            "Can not control echo on the terminal",
+            getpass.GetPassWarning,
+            stacklevel=2,
+        )
+        reads.append(prompt)
+        return SECRET
+    return _fn
+
+
+def test_echo_fallback_refuses_before_any_keystroke():
+    reads = []
+    with pytest.raises(sc.EchoNotSuppressed):
+        sc.read_password_silently("password: ", getpass_fn=echoing_getpass(reads))
+    assert reads == []
+
+
+def test_silent_prompt_passes_the_value_through_when_echo_is_off():
+    seen = []
+
+    def quiet(prompt):
+        seen.append(prompt)
+        return SECRET
+
+    assert sc.read_password_silently("password: ", getpass_fn=quiet) == SECRET
+    assert seen == ["password: "]
+
+
+def test_the_guard_restores_the_process_warning_filters():
+    """The filter promotion is scoped: it must not turn a
+    GetPassWarning into an error for anything else in the process."""
+    before = list(warnings.filters)
+    with pytest.raises(sc.EchoNotSuppressed):
+        sc.read_password_silently("p: ", getpass_fn=echoing_getpass([]))
+    assert list(warnings.filters) == before
+
+
+def test_wizard_refuses_on_a_terminal_that_would_echo(tmp_path, monkeypatch):
+    """End-to-end through the DEFAULT ask_secret wiring: run_setup must
+    go through the guard, refuse with exit 2, write nothing, and print
+    no secret."""
+    reads = []
+    monkeypatch.setattr(getpass, "getpass", echoing_getpass(reads))
+    d = Driver(["prod", "ops.example.com", "svc-user", "Local", "y"], [])
+    code = sc.run_setup(
+        [], root=tmp_path, ask=d.ask, out=d.out, err=d.err,
+        validator=ok_validator, isatty=lambda: True,
+    )
+    assert code == 2
+    assert reads == []                       # never prompted at all
+    assert not (tmp_path / ".env").exists()  # nothing written
+    assert SECRET not in d.streams
+    assert "RULE-008" in d.stderr
+
+
+# ---------------------------------------------------------------------------
+# Issue #102 item 1: the wizard writes the .env the CLIs actually read
+# ---------------------------------------------------------------------------
+
+PARENT_ENV = (
+    "VCFOPS_PROD_HOST=parent.example.com\n"
+    "VCFOPS_PROD_USER=parent-user\n"
+    "VCFOPS_PROD_PASSWORD=parent-pw\n"
+)
+
+
+def repo_under(tmp_path):
+    """A repo root with a real parent directory to hold a .env."""
+    root = tmp_path / "repo"
+    root.mkdir()
+    return root
+
+
+def run_at(root, answers, secrets, *, validator=ok_validator):
+    d = Driver(answers, secrets)
+    code = sc.run_setup(
+        [], root=root, ask=d.ask, ask_secret=d.ask_secret, out=d.out,
+        err=d.err, validator=validator, isatty=lambda: True,
+    )
+    return code, d
+
+
+def test_parent_env_is_named_and_updated_in_place(tmp_path):
+    """_env.load_dotenv walks upward, so a .env above the checkout is
+    the file the CLIs read. Writing a repo-local one instead would
+    shadow it silently."""
+    root = repo_under(tmp_path)
+    parent = tmp_path / ".env"
+    parent.write_text(PARENT_ENV)
+    code, d = run_at(
+        root,
+        ["devel", "y", "b.example.com", "u2", "Local", "y"],
+        [SIMPLE_SECRET, SIMPLE_SECRET],
+    )
+    assert code == 0
+    # Writing outside the repo has to be CHOSEN, so the prompt says what
+    # is at stake and defaults to No.
+    assert "write the password into" in d.prompt_text
+    assert "[y/N]" in d.prompt_text
+    assert ".gitignore does not cover" in d.stdout
+    assert not (root / ".env").exists()      # no second, shadowing file
+    text = parent.read_text(encoding="utf-8")
+    assert "VCFOPS_DEVEL_HOST=b.example.com" in text
+    assert "VCFOPS_PROD_HOST=parent.example.com" in text   # untouched
+    assert str(parent) in d.stdout           # the operator is told which file
+    assert SIMPLE_SECRET not in d.streams
+
+
+def test_declining_the_parent_env_writes_a_local_one_and_warns(tmp_path):
+    root = repo_under(tmp_path)
+    parent = tmp_path / ".env"
+    parent.write_text(PARENT_ENV)
+    code, d = run_at(
+        root,
+        ["devel", "n", "b.example.com", "u2", "Local", "y"],
+        [SIMPLE_SECRET, SIMPLE_SECRET],
+    )
+    assert code == 0
+    assert parent.read_text(encoding="utf-8") == PARENT_ENV  # untouched
+    local = (root / ".env").read_text(encoding="utf-8")
+    assert "VCFOPS_DEVEL_HOST=b.example.com" in local
+    assert "SHADOW" in d.stdout
+
+
+def test_a_repo_local_env_is_used_without_asking(tmp_path):
+    """The upward walk stops at the repo, so the common case gains no
+    prompt and no behavior change."""
+    root = repo_under(tmp_path)
+    parent = tmp_path / ".env"
+    parent.write_text(PARENT_ENV)
+    (root / ".env").write_text("# local\n")
+    code, d = run_at(
+        root,
+        ["prod", "a.example.com", "u1", "Local", "y"],
+        [SIMPLE_SECRET, SIMPLE_SECRET],
+    )
+    assert code == 0
+    assert "update" not in d.prompt_text
+    assert "VCFOPS_PROD_HOST=a.example.com" in (root / ".env").read_text()
+    assert parent.read_text(encoding="utf-8") == PARENT_ENV
+
+
+def test_parent_env_write_keeps_owner_only_permissions(tmp_path):
+    root = repo_under(tmp_path)
+    parent = tmp_path / ".env"
+    parent.write_text(PARENT_ENV)
+    parent.chmod(0o644)
+    code, _ = run_at(
+        root,
+        ["devel", "y", "b.example.com", "u2", "Local", "y"],
+        [SIMPLE_SECRET, SIMPLE_SECRET],
+    )
+    assert code == 0
+    assert stat.S_IMODE(parent.stat().st_mode) == 0o600
+
+
+def test_pressing_enter_does_not_write_a_password_outside_the_repo(tmp_path):
+    """W-3: `find_env_file` walks to `/`, so the file found can be
+    ~/.env or /.env, neither covered by this repo's .gitignore. One
+    Enter must not put a plaintext password there."""
+    root = repo_under(tmp_path)
+    parent = tmp_path / ".env"
+    parent.write_text(PARENT_ENV)
+    code, d = run_at(
+        root,
+        ["devel", "", "b.example.com", "u2", "Local", "y"],   # "" = accept default
+        [SIMPLE_SECRET, SIMPLE_SECRET],
+    )
+    assert code == 0
+    assert parent.read_text(encoding="utf-8") == PARENT_ENV   # untouched
+    assert "VCFOPS_DEVEL_HOST=b.example.com" in (root / ".env").read_text()
+    assert "SHADOW" in d.stdout
+    assert SIMPLE_SECRET not in d.streams
+
+
+def test_the_prompt_states_the_gitignore_status_of_the_file_found(tmp_path):
+    """The operator is told whether anything protects the file they are
+    being offered, before answering."""
+    root = repo_under(tmp_path)
+    (tmp_path / ".env").write_text(PARENT_ENV)
+    _, d = run_at(
+        root,
+        ["devel", "n", "b.example.com", "u2", "Local", "y"],
+        [SIMPLE_SECRET, SIMPLE_SECRET],
+    )
+    text = d.stdout
+    assert ".gitignore does not cover" in text
+    # One of the three honest verdicts, never silence.
+    assert any(phrase in text for phrase in (
+        "DOES ignore it",
+        "NOT git-ignored",
+        "not a git repo",
+        "could not determine",
+    ))
+
+
+def test_gitignore_status_never_raises_on_a_hostile_path(tmp_path):
+    """Best effort only: the wizard must not die because git is absent,
+    slow, or pointed at something odd."""
+    assert isinstance(sc._gitignore_status(tmp_path / "nope" / ".env"), str)
+
+
+def test_read_failure_on_the_parent_env_names_the_parent_file(tmp_path):
+    """W-2: the failure message must name the file actually read. Sending
+    the operator to <repo>/.env when the unreadable file is the parent
+    points at a path that may not even exist."""
+    root = repo_under(tmp_path)
+    parent = tmp_path / ".env"
+    parent.write_bytes(PARENT_ENV.encode("utf-16"))   # an editor saved UTF-16
+    before = parent.read_bytes()
+    code, d = run_at(
+        root,
+        ["devel", "y", "b.example.com", "u2", "Local", "y"],
+        [SECRET, SECRET],
+    )
+    assert code == 1
+    assert "could not READ" in d.stderr
+    assert str(parent) in d.stderr
+    assert str(root / ".env") not in d.stderr
+    assert parent.read_bytes() == before
+    assert SECRET not in d.streams
+
+
+def _stub_git(tmp_path: Path, exit_code: int) -> Path:
+    """A directory holding a `git` that does nothing but exit `exit_code`."""
+    bindir = tmp_path / f"stubbin{exit_code}"
+    bindir.mkdir()
+    git = bindir / "git"
+    git.write_text(f"#!/bin/sh\nexit {exit_code}\n")
+    git.chmod(0o755)
+    return bindir
+
+
+def test_a_fatal_git_check_ignore_is_reported_as_unknown_not_as_safe(
+    tmp_path, monkeypatch
+):
+    """Codex P2 on PR #117: `git check-ignore` exits 128 on a FATAL
+    error, which a real repo with an unreadable or malformed
+    `.git/config` also hits. Reporting 128 as "not a git repo, nothing
+    could commit it" tells the operator a plaintext password is safe
+    where it is merely unknown, on the one prompt where that decision is
+    made. Unknown must read as unknown."""
+    monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 128)))
+    verdict = sc._gitignore_status(tmp_path / ".env")
+    assert verdict == "could not determine whether anything git-ignores it"
+    assert "not a git repo" not in verdict
+
+
+def test_git_check_ignore_exit_codes_zero_and_one_keep_their_verdicts(
+    tmp_path, monkeypatch
+):
+    """The 128 fix must not blur the two statuses git actually
+    documents: 0 is ignored, 1 is not ignored."""
+    monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 0)))
+    assert "DOES ignore it" in sc._gitignore_status(tmp_path / ".env")
+    monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 1)))
+    assert "NOT git-ignored" in sc._gitignore_status(tmp_path / ".env")
