@@ -900,6 +900,74 @@ Assert ((@(Get-AllDashboards)).Count -eq 0) "a genuinely empty instance still re
 Reset-Ext @('{"dashboards":[{"name":"D1","id":"di1"}]}' | ConvertFrom-Json)
 Assert ((@(Get-AllDashboards)).Count -eq 1) "a healthy dashboard list still comes through"
 
+# --- the envelope TYPE must be enumerated, not just tested for "exception" --
+# Codex P2 on PR #123.  [{}] is malformed but parseable: Get-PropValue reads
+# the absent .type as "", the `-eq "exception"` test misses, and because the
+# two delete callers omit -RequireResult the helper used to return cleanly --
+# so the uninstall printed "Deleted" for a delete the server never
+# acknowledged.  Before the guard existed StrictMode threw and the caller
+# warned.  Quiet-and-wrong replacing loud-but-correct is the trade this whole
+# batch exists to reverse, so the guard had reintroduced, one level in, the
+# defect it was written to close.
+foreach ($bad in @('[{}]', '[{"type":""}]', '[{"type":"something-new"}]')) {
+    $msg = Get-Thrown { Get-ExtDirectResult -Response ($bad | ConvertFrom-Json) -What "deleteView v1" }
+    Assert ($null -ne $msg) "envelope $bad is refused, not silently accepted as success"
+    Assert ($msg -like "*refusing to report success for a call the server did not acknowledge*") "and the sentence says what was actually wrong: $bad"
+}
+# Absent and blank are DIFFERENT bugs and must not be reported identically.
+$msg = Get-Thrown { Get-ExtDirectResult -Response ('[{}]' | ConvertFrom-Json) -What "deleteView v1" }
+Assert ($msg -like "*whose type is absent*") "an absent type is named as absent"
+$msg = Get-Thrown { Get-ExtDirectResult -Response ('[{"type":""}]' | ConvertFrom-Json) -What "deleteView v1" }
+Assert ($msg -like "*whose type is ''*") "a present-but-blank type is named as blank"
+$msg = Get-Thrown { Get-ExtDirectResult -Response ('[{"type":"something-new"}]' | ConvertFrom-Json) -What "deleteView v1" }
+Assert ($msg -like "*whose type is 'something-new'*") "an unrecognised type is quoted back"
+
+# The IDictionary branch of the $hasType probe, which nothing else here
+# reaches.  It is defensive (Invoke-ExtDirect returns ConvertFrom-Json output,
+# never the hashtable Invoke-Api builds on an HTTP error), but uncovered code
+# is how a static pin comes to prove less than it appears to: asserting that
+# `$hasType = $false` appears in the source survives a mutation that INSERTS a
+# second copy of that literal over the probe.  Only executing the branch
+# distinguishes "the probe ran" from "the string is present".
+$msg = Get-Thrown { Get-ExtDirectResult -Response @(@{ type = "" }) -What "deleteView v1" }
+Assert ($msg -like "*whose type is ''*") "a hashtable envelope with a BLANK type reports blank, not absent (exercises the IDictionary probe)"
+$msg = Get-Thrown { Get-ExtDirectResult -Response @(@{ tid = 1 }) -What "deleteView v1" }
+Assert ($msg -like "*whose type is absent*") "a hashtable envelope with NO type reports absent"
+
+# POSITIVE CONTROL, and the reason this cannot simply reject a missing result:
+# dashboard_delete_api.md:94 records a real success as {"type":"rpc"} with no
+# result key at all.  That case must keep working for both delete callers.
+$rpcNoResult = '[{"type":"rpc"}]' | ConvertFrom-Json
+Reset-Ext @($rpcNoResult)
+Assert ($null -eq (Get-Thrown { Remove-View -ViewId "v1" -ViewName "V1" })) "Remove-View still succeeds on the recorded result-less rpc success"
+Reset-Ext @($rpcNoResult)
+Assert ($null -eq (Get-Thrown { Remove-Reports -Reports @(@{ Uuid = "r1"; Name = "R1" }) })) "Remove-Reports still succeeds on the recorded result-less rpc success"
+
+# ZERO DELETES REPORTED.  Asserting that the helper throws is not the same
+# claim as asserting the operator was never told a deletion happened; only the
+# second one is the defect.
+$goodViews = '[{"type":"rpc","result":{"LIST":{"HostSystem":[{"name":"V1","id":"i1"}]}}}]' | ConvertFrom-Json
+Reset-Ext @($goodViews, ('[{}]' | ConvertFrom-Json))
+$ctx = New-UiCtx @("V1")
+$out = @(Uninstall-Views $ctx 6>&1) | ForEach-Object { "$_" }
+Assert (@($out | Where-Object { $_ -like "*Deleted: V1*" }).Count -eq 0) "a malformed delete envelope reports NO deletion to the operator"
+Assert (@($out | Where-Object { $_ -like "*View delete failed*" }).Count -eq 1) "it reports a delete failure instead"
+Assert ($ctx.Warnings.Count -eq 1) "and the failure reaches the end-of-run warning list"
+
+$goodReports = '[{"type":"rpc","result":{"records":[{"name":"R1","id":"ri1"}]}}]' | ConvertFrom-Json
+Reset-Ext @($goodReports, ('[{"type":"something-new"}]' | ConvertFrom-Json))
+$ctx = New-UiCtx @("R1")
+$out = @(Uninstall-Reports $ctx 6>&1) | ForEach-Object { "$_" }
+Assert (@($out | Where-Object { $_ -like "*Deleted: R1*" }).Count -eq 0) "an unrecognised delete envelope reports NO deletion to the operator"
+Assert (@($out | Where-Object { $_ -like "*Report batch delete failed*" }).Count -eq 1) "it reports a delete failure instead"
+
+# The healthy path still prints the deletion, so the assertions above are not
+# passing because nothing ever reports success.
+Reset-Ext @($goodViews, $rpcNoResult)
+$ctx = New-UiCtx @("V1")
+$out = @(Uninstall-Views $ctx 6>&1) | ForEach-Object { "$_" }
+Assert (@($out | Where-Object { $_ -like "*Deleted: V1*" }).Count -eq 1) "a genuine rpc success DOES still report the deletion"
+
 # --- the per-item reads on the uninstall path ------------------------------
 # These objects come off the wire too, and #109's sweep never reached them.
 Reset-Ext @($grouped)

@@ -345,11 +345,45 @@ function Get-ExtDirectResult {
         & $fail "$What failed: the UI API returned an empty response envelope"
     }
 
+    # ENUMERATE the types we accept; everything else is unknown, and unknown is
+    # never the reassuring branch.
+    #
+    # This block previously tested only `$type -eq "exception"` and fell
+    # through on anything else.  That made a malformed-but-parseable envelope
+    # such as [{}] a SUCCESS: Get-PropValue reads the absent member as "", the
+    # exception test misses, and because Remove-View and Remove-Reports
+    # deliberately omit -RequireResult the helper then returns cleanly -- so
+    # the uninstall printed "Deleted" for a delete the server never
+    # acknowledged.  Before this guard existed, StrictMode threw on the
+    # missing .type and the caller reported a warning.  Loud-but-correct had
+    # become quiet-and-wrong, i.e. this guard had introduced a narrower
+    # instance of the exact defect it was written to close (Codex P2, PR #123).
+    #
+    # Ext.Direct defines exactly two envelope types, and every success
+    # recorded in knowledge/context/api-surface/dashboard_delete_api.md
+    # carries type "rpc" -- including the result-less deleteReportDefinitions
+    # success at line 94, which is the case -RequireResult is omitted for.
+    # So "rpc" is the whole accept list, and the residual bucket refuses.
+    $hasType = $false
+    if ($first -is [System.Collections.IDictionary]) {
+        $hasType = $first.Contains("type")
+    } elseif ($null -ne $first.PSObject.Properties["type"]) {
+        $hasType = $true
+    }
     $type = [string](Get-PropValue $first "type")
     if ($type -eq "exception") {
         $msg = [string](Get-PropValue $first "message")
         if (-not $msg) { $msg = "no message supplied" }
         & $fail "$What failed: $msg"
+    }
+    if ($type -ne "rpc") {
+        # Absent and empty are reported differently on purpose: "absent" tells
+        # the operator the envelope was malformed, "''" tells them the server
+        # sent the member and left it blank.  Those are different bugs.
+        $shown = if (-not $hasType) { "absent" } else { "'$type'" }
+        & $fail ("$What failed: the UI API returned an envelope whose type is " +
+            "$shown (expected 'rpc'); refusing to report success for a call " +
+            "the server did not acknowledge")
     }
 
     # Deliberately NOT `Get-PropValue $first "result"`, and this is the one

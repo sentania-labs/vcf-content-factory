@@ -758,6 +758,90 @@ class TestExtDirectEnvelopesAreGuarded:
             "Get-StatusCode"
         )
 
+    def test_envelope_type_is_enumerated_not_just_tested_for_exception(
+        self, script_text: str
+    ) -> None:
+        """Codex P2 on PR #123: the guard grew its own residual-else.
+
+        Testing only `$type -eq "exception"` and falling through on anything
+        else made `[{}]` a SUCCESS: Get-PropValue reads the absent member as
+        "", the exception test misses, and the two delete callers omit
+        -RequireResult, so the helper returned cleanly and the uninstall
+        printed "Deleted" for a delete the server never acknowledged.
+
+        StrictMode used to throw on the missing `.type` and the caller
+        reported a warning, so this guard turned loud-but-correct into
+        quiet-and-wrong -- a narrower instance of the defect it was written to
+        close. Accept "rpc" explicitly; everything else refuses.
+        """
+        body = re.search(
+            r"function Get-ExtDirectResult \{(.*?)\n\}\n", script_text, re.S
+        )
+        assert body, "Get-ExtDirectResult not found in install.ps1"
+        code = "\n".join(
+            ln for ln in body.group(1).splitlines() if not ln.strip().startswith("#")
+        )
+        assert '$type -ne "rpc"' in code, (
+            "the accept list must be enumerated; an unrecognised type cannot "
+            "fall through to the success path"
+        )
+        assert '$type -eq "exception"' in code, (
+            "the handled-refusal branch must still name the server's message"
+        )
+        assert "did not acknowledge" in code, (
+            "the residual branch must refuse with a sentence, not return"
+        )
+        # Absent and blank are different bugs and must read differently.
+        #
+        # A presence check on "$hasType" is NOT enough, and was caught by its
+        # own negative control: flipping the initialiser to $true leaves the
+        # token in place, keeps a token-match green, and makes every absent
+        # type report as blank. Pin the semantics, not the identifier.
+        assert "$hasType = $false" in code, (
+            "$hasType must start false, or an absent type reports as blank"
+        )
+        assert 'if (-not $hasType) { "absent" }' in code, (
+            "the 'absent' wording must be conditioned on the probe; "
+            'Get-PropValue reports both absent and blank as ""'
+        )
+
+    def test_result_less_rpc_success_is_still_accepted(
+        self, script_text: str
+    ) -> None:
+        """The positive control the enumeration must not break.
+
+        dashboard_delete_api.md:94 records a real deleteReportDefinitions
+        success as {"type":"rpc"} with no result key at all. That is precisely
+        why Remove-View and Remove-Reports omit -RequireResult, so the type
+        check must be what rejects a malformed envelope, never the presence of
+        a result.
+        """
+        body = re.search(
+            r"function Get-ExtDirectResult \{(.*?)\n\}\n", script_text, re.S
+        )
+        assert body, "Get-ExtDirectResult not found in install.ps1"
+        code = "\n".join(
+            ln for ln in body.group(1).splitlines() if not ln.strip().startswith("#")
+        )
+        assert "$RequireResult -and $null -eq $payload" in code, (
+            "an absent result may only refuse when the caller asked for one"
+        )
+        for func in ("Remove-View", "Remove-Reports"):
+            fn = re.search(
+                rf"function {re.escape(func)} \{{(.*?)\n\}}\n", script_text, re.S
+            )
+            assert fn, f"{func} not found"
+            # Comments explain WHY -RequireResult is omitted; that prose must
+            # not trip the check on the code.
+            fn_code = "\n".join(
+                ln for ln in fn.group(1).splitlines()
+                if not ln.strip().startswith("#")
+            )
+            assert "-RequireResult" not in fn_code, (
+                f"{func} must not demand a result payload; the recorded "
+                "success for this call carries none"
+            )
+
     def test_guard_refuses_rather_than_reporting_an_empty_list(
         self, script_text: str
     ) -> None:

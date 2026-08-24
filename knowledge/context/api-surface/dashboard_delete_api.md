@@ -590,10 +590,28 @@ Three shapes an operator will actually hit:
 | Shape | Meaning |
 |---|---|
 | `[{"type":"rpc","tid":1,"result":{...}}]` | success |
+| `[{"type":"rpc"}]` | success with no payload (see line 94: `deleteReportDefinitions`) |
 | `[{"type":"exception","message":"..."}]`  | the server handled it and refused |
 | empty / no array at all | session expired, redirect to the login form, error page |
+| `[{}]`, `[{"type":""}]`, unknown type | malformed; **not** a success |
 
-The third one is the one that bites. There is no `[0]` to read.
+The fourth one is the one that bites. There is no `[0]` to read.
+
+**`type` is the success signal, not the presence of `result`.** Ext.Direct
+defines exactly two types, and every success recorded in this file carries
+`"rpc"` — including the result-less one at line 94, which is why a client
+must not infer failure from a missing `result`.
+
+That makes the accept list exactly `{"rpc"}`, and it has to be written as
+an accept list rather than as `if type == "exception"`. Testing only for
+the exception makes a malformed-but-parseable `[{}]` a **success**: a
+tolerant reader returns `""` for the absent member, the exception test
+misses, and a delete that the server never acknowledged gets reported to
+the operator as `Deleted`. That defect was shipped and caught in review
+(#123); the fix is to accept `"rpc"`, handle `"exception"`, and refuse
+everything else with a sentence naming what arrived. Report an **absent**
+`type` differently from a **blank** one — they are different bugs, and a
+tolerant reader renders both as `""`.
 
 ### The `result` member's own shape is per-endpoint, and NOT symmetrical
 
