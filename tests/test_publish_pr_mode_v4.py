@@ -15,6 +15,8 @@ Covers:
   T08 — Existing release branch → fail with clear message.
   T09 — Lockfile: acquired before build, released after PR open (not merge).
   T10 — Branch naming: batched publishes use ``release/<date>-<n>`` form.
+  T11 — Commit subject is counts-only, names live in the body; the force
+         path matches the normal path.  Both PR mode and direct-push mode.
 """
 from __future__ import annotations
 
@@ -1148,7 +1150,12 @@ class TestBranchNaming:
 # ---------------------------------------------------------------------------
 
 class TestCommitMessageShape:
-    """The commit subject answers 'what happened', the body answers 'to what'."""
+    """The commit subject answers 'what happened', the body answers 'to what'.
+
+    The integration cases run against both commit paths (PR mode and
+    direct-push mode).  Each mode has its own duplicated force block, so a
+    pin on one mode does not guard the other.
+    """
 
     RELEASE_NAME = "demand-driven-capacity-v2"
 
@@ -1176,7 +1183,7 @@ class TestCommitMessageShape:
         subject, _, body = r.stdout.partition("\x00")
         return subject.strip(), body
 
-    def _publish_local(self, dist, force):
+    def _publish_local(self, dist, force, use_pr=True):
         from vcfops_packaging.publish import publish
 
         return publish(
@@ -1185,8 +1192,14 @@ class TestCommitMessageShape:
             dry_run=False,
             force=force,
             no_push=True,
-            use_pr=True,
+            use_pr=use_pr,
         )
+
+    @staticmethod
+    def _committed_ref(result):
+        """Where the commit landed: the release branch in PR mode, HEAD in
+        direct-push mode (which commits straight onto main)."""
+        return result.release_branch or "HEAD"
 
     # --- unit: message-arg construction ---------------------------------
 
@@ -1206,11 +1219,12 @@ class TestCommitMessageShape:
 
     # --- integration: normal path ---------------------------------------
 
-    def test_commit_subject_is_counts_only(self, tmp_path, monkeypatch):
+    @pytest.mark.parametrize("use_pr", [True, False], ids=["pr_mode", "direct_push"])
+    def test_commit_subject_is_counts_only(self, tmp_path, monkeypatch, use_pr):
         dist = self._setup(tmp_path, monkeypatch)
-        result = self._publish_local(dist, force=False)
+        result = self._publish_local(dist, force=False, use_pr=use_pr)
 
-        subject, body = self._subject_and_body(dist, result.release_branch)
+        subject, body = self._subject_and_body(dist, self._committed_ref(result))
 
         assert re.fullmatch(
             r"release-publish: \d+ built, \d+ retired, \d+ legacy deleted",
@@ -1230,16 +1244,17 @@ class TestCommitMessageShape:
 
     # --- integration: force path matches the normal path ----------------
 
-    def test_force_path_matches_normal_path(self, tmp_path, monkeypatch):
+    @pytest.mark.parametrize("use_pr", [True, False], ids=["pr_mode", "direct_push"])
+    def test_force_path_matches_normal_path(self, tmp_path, monkeypatch, use_pr):
         (tmp_path / "a").mkdir()
         (tmp_path / "b").mkdir()
         dist_a = self._setup(tmp_path / "a", monkeypatch)
-        result_a = self._publish_local(dist_a, force=False)
-        subject_a, body_a = self._subject_and_body(dist_a, result_a.release_branch)
+        result_a = self._publish_local(dist_a, force=False, use_pr=use_pr)
+        subject_a, body_a = self._subject_and_body(dist_a, self._committed_ref(result_a))
 
         dist_b = self._setup(tmp_path / "b", monkeypatch)
-        result_b = self._publish_local(dist_b, force=True)
-        subject_b, body_b = self._subject_and_body(dist_b, result_b.release_branch)
+        result_b = self._publish_local(dist_b, force=True, use_pr=use_pr)
+        subject_b, body_b = self._subject_and_body(dist_b, self._committed_ref(result_b))
 
         assert subject_a == subject_b, (
             f"Force path subject diverged: {subject_a!r} vs {subject_b!r}"
