@@ -500,8 +500,10 @@ option.
 
 The `version:` field in `releases/*.yaml` remains.  It is used for:
 - Auto-bump logic in `/release` (minor bump on each re-release).
-- The publish commit **body** and the PR body (`release-publish:` subjects
-  carry counts only; the names, with versions, go in the body below).
+- The **PR body** on publish, under `## Released in this batch`, which is
+  where the version appears. The commit subject carries counts only and
+  the commit body lists names **without** versions, so the commit message
+  is not a consumer of `version:` at all.
 - Audit trail in `vcfops_manifest.json` inside each distribution zip.
 
 The version is intentionally **not** propagated to the zip filename or to
