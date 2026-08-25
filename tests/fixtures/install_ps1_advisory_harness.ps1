@@ -889,6 +889,103 @@ Assert ($null -eq (Get-Thrown { Get-AllReports })) "a bare empty array IS a docu
 Reset-Ext @(('[{"type":"rpc","result":{"records":[],"total":0}}]' | ConvertFrom-Json))
 Assert ((@(Get-AllReports)).Count -eq 0) "records:[] is a genuinely empty instance, and is NOT refused"
 
+# ===========================================================================
+# Issue #124 -- the three INNER residual-else sites warn and continue
+#
+# Distinct from the outer refusals above: these are values one level down
+# (a view type's subject map, a subject's view list, a report envelope with
+# no recognised or array-valued key).  Recon (uninstall_empty_collection_
+# shapes.md) could not observe the honest-empty case for the view sites at
+# all, so a hard refusal there is a guess that could block every uninstall.
+# The decided behavior is an advisory warning that names the observed shape,
+# then a normal (possibly partial) return.  Every assertion below drives the
+# actual branch with a shape that only that branch handles, and checks the
+# warning text for data ONLY that branch could have interpolated (the bad
+# key's own name, its runtime type) -- a static copy of the message string
+# elsewhere cannot satisfy these.
+# ===========================================================================
+function Get-WarnLines($all) {
+    # Unary comma: a returned @() unrolls, and under StrictMode .Count on the
+    # unrolled single string (or on $null) is a terminating error.
+    return , @($all | Where-Object { "$_" -like "*WARN*" } | ForEach-Object { "$_" })
+}
+
+# --- Site 1: a view TYPE whose value is not an object ----------------------
+$site1 = '[{"type":"rpc","result":{"LIST":{"HostSystem":[{"name":"V1","id":"i1"}]},"WEIRD":"a string"}}]' | ConvertFrom-Json
+Reset-Ext @($site1)
+Assert ($null -eq (Get-Thrown { $null = Get-AllViews })) "a string-valued view type does not throw and does not Write-Fail: the uninstall keeps going"
+Reset-Ext @($site1)
+$all = @(Get-AllViews 6>&1)
+$warns = Get-WarnLines $all
+$views = @($all | Where-Object { "$_" -notlike "*WARN*" })
+Assert ($warns.Count -eq 1) "exactly one advisory for the one bad view type"
+Assert ($warns[0] -like "*view type 'WEIRD'*") "the advisory names the bad view type by its own key, so only the executing branch can produce it"
+Assert ($warns[0] -like "*unrecognised shape (String)*") "and names the observed runtime type"
+Assert ($warns[0] -like "*continuing, but content may be under-reported*") "and hedges: no claim about what the shape means"
+Assert ($warns[0] -notlike "*LIST*") "the healthy sibling type is not named: the warning is branch-scoped, not blanket"
+Assert ($views.Count -eq 1) "the healthy sibling type's views still come back: partial result, not empty"
+
+# --- Site 2: a SUBJECT whose value is not an array -------------------------
+$site2 = '[{"type":"rpc","result":{"LIST":{"HostSystem":[{"name":"V1","id":"i1"}],"Datastore":"oops"}}}]' | ConvertFrom-Json
+Reset-Ext @($site2)
+Assert ($null -eq (Get-Thrown { $null = Get-AllViews })) "a string-valued subject does not throw and does not Write-Fail"
+Reset-Ext @($site2)
+$all = @(Get-AllViews 6>&1)
+$warns = Get-WarnLines $all
+Assert ($warns.Count -eq 1) "exactly one advisory for the one bad subject"
+Assert ($warns[0] -like "*view subject 'Datastore'*") "the advisory names the bad subject key"
+Assert ($warns[0] -like "*view type 'LIST'*") "and the type it sits under"
+Assert ($warns[0] -like "*(String)*") "and the observed runtime type"
+Assert ($warns[0] -notlike "*'HostSystem'*") "the healthy sibling subject is not named"
+Assert (@($all | Where-Object { "$_" -notlike "*WARN*" }).Count -eq 1) "the healthy sibling subject's views still come back"
+# StrictMode safety: a JSON null subject must report as (null), not throw on
+# .GetType().
+$site2null = '[{"type":"rpc","result":{"LIST":{"Datastore":null}}}]' | ConvertFrom-Json
+Reset-Ext @($site2null)
+Assert ($null -eq (Get-Thrown { $null = Get-AllViews })) "a null subject value does not throw under StrictMode"
+Reset-Ext @($site2null)
+$warns = Get-WarnLines @(Get-AllViews 6>&1)
+Assert ($warns.Count -eq 1 -and $warns[0] -like "*(null)*") "a null subject value is named as (null)"
+
+# --- Site 3: a report envelope with no recognised or array-valued key ------
+$site3 = '[{"type":"rpc","result":{"foo":"bar","total":3}}]' | ConvertFrom-Json
+Reset-Ext @($site3)
+$msg = Get-Thrown { $null = Get-AllReports }
+Assert ($null -eq $msg) "a no-recognised-keys report envelope does not throw and does not Write-Fail"
+Reset-Ext @($site3)
+$all = @(Get-AllReports 6>&1)
+$warns = Get-WarnLines $all
+Assert ($warns.Count -eq 1) "exactly one advisory for the unrecognised report envelope"
+Assert ($warns[0] -like "*report list came back in an unrecognised shape*") "the advisory says what came back wrong"
+Assert ($warns[0] -like "*foo*" -and $warns[0] -like "*total*") "and names the keys actually observed, which only the executing branch knows"
+Assert ($warns[0] -like "*continuing, but content may be under-reported*") "and hedges rather than claiming empty"
+Assert (@($all | Where-Object { "$_" -notlike "*WARN*" }).Count -eq 0) "the returned list is still empty: warn changes visibility, not the decision"
+
+# --- Negative controls: healthy and honest-empty shapes stay silent --------
+Reset-Ext @($grouped)
+Assert ((Get-WarnLines @(Get-AllViews 6>&1)).Count -eq 0) "a fully healthy grouped payload emits NO under-reported advisory"
+Reset-Ext @(('[{"type":"rpc","result":{}}]' | ConvertFrom-Json))
+Assert ((Get-WarnLines @(Get-AllViews 6>&1)).Count -eq 0) "an empty grouped object (genuinely empty instance) emits NO advisory"
+Reset-Ext @(('[{"type":"rpc","result":{"records":[],"total":0}}]' | ConvertFrom-Json))
+Assert ((Get-WarnLines @(Get-AllReports 6>&1)).Count -eq 0) "the OBSERVED honest-empty report shape (records:[]) emits NO advisory"
+Reset-Ext @($records)
+Assert ((Get-WarnLines @(Get-AllReports 6>&1)).Count -eq 0) "a healthy records payload emits NO advisory"
+# The flatten fallback's own healthy case: an unrecognised key that DOES hold
+# an array is flattened, not warned about -- pins the saw-array guard to the
+# array test, not to item count (an empty array under an unknown key is still
+# an array-shaped envelope).
+Reset-Ext @(('[{"type":"rpc","result":{"weirdKey":[{"name":"R1","id":"ri1"}]}}]' | ConvertFrom-Json))
+$all = @(Get-AllReports 6>&1)
+Assert ((Get-WarnLines $all).Count -eq 0) "an array under an unrecognised key is flattened silently"
+Assert (@($all | Where-Object { "$_" -notlike "*WARN*" }).Count -eq 1) "and its items are returned"
+# The mutation this kills: guarding on $items.Count instead of on whether an
+# array-valued property EXISTED.  An EMPTY array under an unknown key is still
+# an array-shaped envelope: zero items flattened, but nothing unrecognised
+# about the shape, so it must stay silent.  (Verified: a count-only guard
+# passes every other assertion in this file and fails only this one.)
+Reset-Ext @(('[{"type":"rpc","result":{"weirdKey":[]}}]' | ConvertFrom-Json))
+Assert ((Get-WarnLines @(Get-AllReports 6>&1)).Count -eq 0) "an EMPTY array under an unrecognised key is array-shaped, not unrecognised: NO advisory"
+
 # --- Get-AllDashboards (dashboard.action, NOT Ext.Direct) ------------------
 Reset-Ext @('{"other":1}' | ConvertFrom-Json)
 $msg = Get-Thrown { Get-AllDashboards }

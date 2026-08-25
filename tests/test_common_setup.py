@@ -484,7 +484,6 @@ def test_no_export_prefix_style_is_preserved(tmp_path, monkeypatch):
     assert resolve(tmp_path, "prod", monkeypatch).password == SIMPLE_SECRET
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX permissions only")
 def test_env_file_is_owner_only(tmp_path):
     run(tmp_path, ["prod", "ops.example.com", "u", "Local", "y"],
         [SIMPLE_SECRET, SIMPLE_SECRET])
@@ -492,7 +491,6 @@ def test_env_file_is_owner_only(tmp_path):
     assert mode == 0o600
 
 
-@pytest.mark.skipif(os.name == "nt", reason="POSIX permissions only")
 def test_existing_loose_permissions_are_tightened(tmp_path):
     env = tmp_path / ".env"
     env.write_text("# pre-existing\n", encoding="utf-8")
@@ -814,6 +812,29 @@ def test_write_env_file_replaces_the_target_of_a_symlink(tmp_path):
     sc.write_env_file(link, ["VCFOPS_PROD_HOST=h"])
     assert link.is_symlink(), "the symlink was replaced by a regular file"
     assert real.read_text(encoding="utf-8").strip() == "VCFOPS_PROD_HOST=h"
+
+
+def test_write_env_file_survives_a_raising_chmod(tmp_path, monkeypatch):
+    """A chmod failure must not fail the write (issue #115 fold-in).
+
+    The belt-and-suspenders os.chmod after the fd write is best effort:
+    the temp file is already 0600 from its os.open mode, so a filesystem
+    that rejects chmod (some network mounts) must not cost the operator
+    their .env. Executes the except-OSError branch, not a string pin.
+    """
+    calls = []
+
+    def raising_chmod(*args, **kwargs):
+        calls.append(args)
+        raise PermissionError("chmod not supported here")
+
+    monkeypatch.setattr(os, "chmod", raising_chmod)
+    target = tmp_path / ".env"
+    sc.write_env_file(target, ["VCFOPS_PROD_HOST=h"])
+    assert calls, "the chmod branch did not execute"
+    assert target.read_text(encoding="utf-8").strip() == "VCFOPS_PROD_HOST=h"
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600  # from os.open, not chmod
+    assert list(tmp_path.iterdir()) == [target], "temp file leaked"
 
 
 # ---------------------------------------------------------------------------
@@ -1210,15 +1231,71 @@ def _stub_git(tmp_path: Path, exit_code: int) -> Path:
     return bindir
 
 
-def test_a_fatal_git_check_ignore_is_reported_as_unknown_not_as_safe(
+def test_a_fatal_git_check_ignore_in_a_repo_is_reported_as_unknown_not_as_safe(
     tmp_path, monkeypatch
 ):
     """Codex P2 on PR #117: `git check-ignore` exits 128 on a FATAL
     error, which a real repo with an unreadable or malformed
-    `.git/config` also hits. Reporting 128 as "not a git repo, nothing
-    could commit it" tells the operator a plaintext password is safe
-    where it is merely unknown, on the one prompt where that decision is
-    made. Unknown must read as unknown."""
+    `.git/config` also hits. When a `.git` entry IS present up the
+    tree, 128 means a repo git itself choked on: reporting that as
+    "not a git repo, nothing could commit it" tells the operator a
+    plaintext password is safe where it is merely unknown, on the one
+    prompt where that decision is made. Unknown must read as unknown."""
+    gitdir = tmp_path / ".git"
+    gitdir.mkdir()
+    (gitdir / "config").write_text("[core\nthis is not valid git config\n")
+    monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 128)))
+    verdict = sc._gitignore_status(tmp_path / ".env")
+    assert verdict == "could not determine whether anything git-ignores it"
+    assert "not a git repo" not in verdict
+
+
+def test_a_128_with_no_git_anywhere_above_reads_as_not_a_repo(
+    tmp_path, monkeypatch
+):
+    """Issue #122: the common benign case, a `.env` in an ordinary
+    directory that simply is not a repo, also exits 128. The exit
+    status cannot distinguish it from a broken repo, but the walk up
+    the tree can: no `.git` entry anywhere above means nothing there
+    could commit the file, and the confident wording is honest."""
+    monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 128)))
+    verdict = sc._gitignore_status(tmp_path / ".env")
+    assert verdict == "its directory is not a git repo, so nothing there could commit it"
+
+
+def test_a_failing_git_walk_degrades_to_could_not_determine(
+    tmp_path, monkeypatch
+):
+    """The walk is best effort: if it blows up for any reason, the
+    verdict must fall back to unknown, never raise, and never claim
+    safety. This is also the mutation check for the previous test:
+    silence the walk and the confident wording must NOT appear."""
+
+    def boom(_start):
+        raise OSError("permission denied somewhere up the tree")
+
+    monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 128)))
+    monkeypatch.setattr(sc, "_no_git_above", boom)
+    verdict = sc._gitignore_status(tmp_path / ".env")
+    assert verdict == "could not determine whether anything git-ignores it"
+    assert "not a git repo" not in verdict
+
+
+def test_an_unstattable_git_entry_is_not_read_as_absent(tmp_path, monkeypatch):
+    """Codex on PR #132: on Python 3.14, Path.exists() returns False
+    when the stat itself fails, so a `.git` behind a permission-denied
+    directory would read as absent and earn the confident 'not a git
+    repo' wording. The walk must treat only FileNotFoundError as
+    absent; a failed stat means 'cannot tell' and the verdict stays
+    unknown."""
+    real_lstat = Path.lstat
+
+    def lstat_denied(self, *args, **kwargs):
+        if self.name == ".git":
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_lstat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", lstat_denied)
     monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 128)))
     verdict = sc._gitignore_status(tmp_path / ".env")
     assert verdict == "could not determine whether anything git-ignores it"

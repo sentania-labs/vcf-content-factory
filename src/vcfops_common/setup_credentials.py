@@ -42,10 +42,7 @@ Platform: POSIX only (Linux, macOS, WSL), per RULE-018. Dependencies are
 pure stdlib plus ``requests`` (imported lazily, and optional: without it
 the wizard offers to skip live validation). No bash. The repo root is
 anchored to this module's location on disk exactly the way ``doctor.py``
-does it, never to ``Path.cwd()``. Some native-Windows accommodations
-predating RULE-018 survive further down this file (the ``os.name == 'nt'``
-branches in :func:`write_env_file` and in the closing message); removing
-them is issue #115, not this module's business today.
+does it, never to ``Path.cwd()``.
 
 Non-interactive safety: if stdin is not a TTY the wizard refuses and
 exits 2 rather than reading a password from a pipe or hanging. The
@@ -348,8 +345,8 @@ def write_env_file(path: Path, lines: Sequence[str]) -> None:
     value the UTF-8 encoder rejects) would leave a zero-byte `.env`:
     the operator adding a `devel` profile silently loses their working
     `prod` and `qa` ones. So: write a sibling temp file, then
-    ``os.replace`` it onto the target, which is atomic on POSIX and on
-    Windows. Either the old file survives intact or the new one is
+    ``os.replace`` it onto the target, which is atomic on POSIX.
+    Either the old file survives intact or the new one is
     complete; there is no in-between state.
 
     RULE-008 is satisfied by the temp file's PROPERTIES, not by its
@@ -364,10 +361,6 @@ def write_env_file(path: Path, lines: Sequence[str]) -> None:
     the TARGET is replaced, so a user who points `.env` at a shared
     location keeps that indirection instead of having the wizard
     silently overwrite the link with a regular file.
-
-    On Windows the ``os.open`` mode is ignored and ``os.chmod`` is
-    effectively a no-op, which is the documented "applied where
-    supported, silently skipped where not" behavior.
     """
     text = "\n".join(lines).rstrip("\n") + "\n"
 
@@ -404,11 +397,10 @@ def write_env_file(path: Path, lines: Sequence[str]) -> None:
                 os.fsync(fh.fileno())
             except OSError:
                 pass  # best effort; not all filesystems support it
-        if os.name != "nt":
-            try:
-                os.chmod(str(tmp), 0o600)
-            except OSError:
-                pass
+        try:
+            os.chmod(str(tmp), 0o600)
+        except OSError:
+            pass
         os.replace(str(tmp), str(target))
         tmp = None  # ownership transferred; nothing to clean up
     finally:
@@ -826,11 +818,46 @@ def _gitignore_status(env_file: Path) -> str:
         )
     # `git check-ignore` documents 128 as a FATAL error, not as "no git
     # repo here": a real repo with an unreadable or malformed
-    # `.git/config` exits 128 too. Reporting that as "not a git repo,
-    # nothing could commit it" would be a false assurance on the one
-    # prompt where the operator decides whether to write a plaintext
-    # password outside this repo. Unknown is reported as unknown.
+    # `.git/config` exits 128 too, so the exit status alone cannot say
+    # "nothing could commit it". The filesystem can (issue #122): no
+    # `.git` entry anywhere up the tree means there is unambiguously no
+    # repository, so the common benign case keeps its confident wording.
+    # A `.git` somewhere above means a repo git itself choked on, which
+    # stays unknown; unknown is never presented as safe.
+    try:
+        if _no_git_above(env_file.parent):
+            return "its directory is not a git repo, so nothing there could commit it"
+    except Exception:
+        pass
     return "could not determine whether anything git-ignores it"
+
+
+def _no_git_above(start: Path) -> bool:
+    """True only when NO `.git` entry exists in `start` or any ancestor.
+
+    A `.git` FILE counts too: worktrees and submodules use one. The
+    path is resolved once so a symlink loop cannot recurse, and the
+    walk is bounded by ``Path.parents``, which ends at the filesystem
+    root. Each candidate is probed with ``lstat`` rather than
+    ``exists()``: on Python 3.14 ``exists()`` returns False when it
+    cannot stat at all (Codex on PR #132), which would read an
+    inaccessible `.git` as absent and hand out the confident wording
+    where it belongs to "could not determine". Only FileNotFoundError
+    means genuinely absent; any other OSError means "cannot tell",
+    reported as `.git`-present so the caller stays on the unknown
+    verdict. Any other exception is the caller's cue for the same,
+    never a crash.
+    """
+    resolved = start.resolve()
+    for candidate in (resolved, *resolved.parents):
+        try:
+            (candidate / ".git").lstat()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return False  # cannot tell; keep "could not determine"
+        return False  # a .git entry exists here
+    return True
 
 
 def _resolve_env_target(
@@ -1097,9 +1124,7 @@ def run_setup(
 
     out("")
     verb = "created" if created else "updated"
-    out(f"Profile '{profile}' {verb} in {path} (owner-only permissions"
-        + ("; chmod is not applied on Windows" if os.name == "nt" else "")
-        + ").")
+    out(f"Profile '{profile}' {verb} in {path} (owner-only permissions).")
     out("  The file's contents are deliberately not shown.")
     if profile.lower() != DEFAULT_PROFILE:
         out(f"  '{profile}' is not the default profile: pass --profile "
