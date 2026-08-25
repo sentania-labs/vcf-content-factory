@@ -7,8 +7,15 @@ on:
 
 jobs:
   test:
-    # Fork-gate: do not run on PRs from outside the org (prevents RCE on runners)
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.owner.login == 'sentania-labs'
+    # Canonical-repo gate: this workflow targets the lab runner pool and
+    # only makes sense in the upstream repo. In a clone or fork of the
+    # framework, `runs-on: lab` matches no runner and the job would queue
+    # silently for ~24h; skip cleanly instead.
+    # Fork-gate (second clause): do not run on PRs from outside the org
+    # (prevents RCE on runners).
+    if: >-
+      github.repository == 'sentania-labs/vcf-content-factory' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.owner.login == 'sentania-labs')
     # Lab ARC runner pool (homelab-runner docs/ci-consumer-contract.md):
     # exact string "lab", ephemeral pod per job, no state between jobs.
     runs-on: lab
