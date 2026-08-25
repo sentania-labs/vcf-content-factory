@@ -846,13 +846,25 @@ def _no_git_above(start: Path) -> bool:
     A `.git` FILE counts too: worktrees and submodules use one. The
     path is resolved once so a symlink loop cannot recurse, and the
     walk is bounded by ``Path.parents``, which ends at the filesystem
-    root. Any exception is the caller's cue to report "could not
-    determine", never a crash.
+    root. Each candidate is probed with ``lstat`` rather than
+    ``exists()``: on Python 3.14 ``exists()`` returns False when it
+    cannot stat at all (Codex on PR #132), which would read an
+    inaccessible `.git` as absent and hand out the confident wording
+    where it belongs to "could not determine". Only FileNotFoundError
+    means genuinely absent; any other OSError means "cannot tell",
+    reported as `.git`-present so the caller stays on the unknown
+    verdict. Any other exception is the caller's cue for the same,
+    never a crash.
     """
     resolved = start.resolve()
     for candidate in (resolved, *resolved.parents):
-        if (candidate / ".git").exists():
-            return False
+        try:
+            (candidate / ".git").lstat()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return False  # cannot tell; keep "could not determine"
+        return False  # a .git entry exists here
     return True
 
 

@@ -1260,6 +1260,27 @@ def test_a_failing_git_walk_degrades_to_could_not_determine(
     assert "not a git repo" not in verdict
 
 
+def test_an_unstattable_git_entry_is_not_read_as_absent(tmp_path, monkeypatch):
+    """Codex on PR #132: on Python 3.14, Path.exists() returns False
+    when the stat itself fails, so a `.git` behind a permission-denied
+    directory would read as absent and earn the confident 'not a git
+    repo' wording. The walk must treat only FileNotFoundError as
+    absent; a failed stat means 'cannot tell' and the verdict stays
+    unknown."""
+    real_lstat = Path.lstat
+
+    def lstat_denied(self, *args, **kwargs):
+        if self.name == ".git":
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_lstat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", lstat_denied)
+    monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 128)))
+    verdict = sc._gitignore_status(tmp_path / ".env")
+    assert verdict == "could not determine whether anything git-ignores it"
+    assert "not a git repo" not in verdict
+
+
 def test_git_check_ignore_exit_codes_zero_and_one_keep_their_verdicts(
     tmp_path, monkeypatch
 ):
