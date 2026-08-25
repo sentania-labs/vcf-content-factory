@@ -77,6 +77,9 @@ jobs:
           if [ -n "${BASE}" ]; then
             python3 -m vcfops_dashboards validate --id-guard-baseline "${BASE}"
           else
+            if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+              echo "WARNING: id guard merge base unresolvable; committed re-ids in this PR are NOT checked (HEAD baseline only)"
+            fi
             python3 -m vcfops_dashboards validate
           fi
           python3 -m vcfops_customgroups validate
