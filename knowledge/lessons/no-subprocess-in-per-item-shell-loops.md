@@ -43,11 +43,16 @@ the subprocess out of the loop and do per-item work with bash builtins:
   paths, so hash keys built from it never match the real bytes.
 - Prefix/substring semantics do not survive a bare hash lookup. A
   pathspec like `git ls-files -- "$p/"` is a PREFIX test; precompute a
-  directory-prefix set (or scan a hoisted list in bash) instead.
-- Per-line extraction: one `grep -HnoP` over the whole file list, then
-  parse `file:line:match` in bash and bucket by key. Grep visits files
-  in argument order and matches in position order, so output order is
-  preservable exactly.
+  directory-prefix set (or scan a hoisted list in bash) instead. And
+  git NORMALIZES pathspecs (`a//b`, `a/./b`, `a/x/../b` all resolve)
+  where a hash key is byte-literal: canonicalize the candidate in pure
+  bash before the lookup or normalized citations go falsely dead.
+- Per-line extraction: one `grep -HZnoP` over the whole file list,
+  then parse in bash and bucket by key. It must be `-Z` (NUL after the
+  filename): `file:line:match` is ambiguous the moment a tracked
+  filename contains ":", and the split silently misattributes every
+  match in that file. Grep visits files in argument order and matches
+  in position order, so output order is preservable exactly.
 - `$(my_bash_function)` forks. Return values via a global variable or
   inline the expansion.
 - `dirname`/`basename` per item: use `${p%/*}` / `${p##*/}` (mind the

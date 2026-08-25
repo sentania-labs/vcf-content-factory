@@ -364,6 +364,38 @@ is_bare_non_path() {
   esac
 }
 
+# Pure-bash equivalent of git's pathspec normalization for empty, `.`,
+# and `..` segments (#112 review round 2): the old git-backed lookups
+# resolved `knowledge//lessons/INDEX.md` and
+# `knowledge/lessons/../lessons/INDEX.md`, so the hash tables must see
+# the same canonical form. Returns 1 when `..` would climb past the
+# repo root (git dies fatal there, which the old code treated as
+# no-match). Result lands in NORMALIZED_PATH; no fork.
+NORMALIZED_PATH=""
+normalize_pathspec() {
+  local -a parts=() out=()
+  local seg joined=""
+  local IFS='/'
+  read -r -a parts <<< "$1"
+  for seg in "${parts[@]}"; do
+    case "${seg}" in
+      ''|'.') ;;
+      '..')
+        [[ ${#out[@]} -eq 0 ]] && return 1
+        unset 'out[-1]'
+        ;;
+      *) out+=("${seg}") ;;
+    esac
+  done
+  if [[ ${#out[@]} -gt 0 ]]; then
+    printf -v joined '%s/' "${out[@]}"
+    joined="${joined%/}"
+  fi
+  [[ -z "${joined}" ]] && return 1
+  NORMALIZED_PATH="${joined}"
+  return 0
+}
+
 is_git_tracked() {
   # Rule #5a: COMMITTED check against the hoisted `git ls-files` index,
   # never bare filesystem existence. A tracked FILE (literal, or with a
@@ -372,6 +404,8 @@ is_git_tracked() {
   # `--error-unmatch` pathspecs also matched directory prefixes.
   # Deterministic on any checkout regardless of local clones.
   local p="$1"
+  normalize_pathspec "${p}" || return 1
+  p="${NORMALIZED_PATH}"
   [[ -n "${TRACKED[${p}]:-}" || -n "${TRACKED_DIR_PREFIX[${p}]:-}" ]] && return 0
   [[ -n "${TRACKED[${p}.md]:-}" || -n "${TRACKED_DIR_PREFIX[${p}.md]:-}" ]] && return 0
   [[ -n "${TRACKED[${p}.py]:-}" || -n "${TRACKED_DIR_PREFIX[${p}.py]:-}" ]] && return 0
@@ -609,17 +643,25 @@ declare -A rule2_by_line=()
 if [[ -n "${TOPLEVEL_RE}" ]]; then
   # Rule #1: backtick-quoted OR bare, both anchored on a real
   # top-level name immediately followed by "/".
-  while IFS=: read -r mfile mline m; do
-    [[ -n "${m}" ]] && rule1_by_line["${mfile}:${mline}"]+="${m}"$'\n'
-  done < <(grep -HnoP "(?<![/A-Za-z0-9_.-])(?:${TOPLEVEL_RE})/(?:[A-Za-z0-9_.\/-]*[A-Za-z0-9_-])?" "${TARGET_FILES[@]}" 2>/dev/null || true)
+  # `-Z` NUL-terminates the FILENAME (#112 round 2): a tracked corpus
+  # filename may itself contain ":", so `file:line:match` is ambiguous.
+  # Record shape: filename NUL "lineno:match" newline. Bucket keys use a
+  # \x1f separator for the same reason.
+  while IFS= read -r -d '' mfile && IFS= read -r mrec; do
+    mline="${mrec%%:*}"
+    m="${mrec#*:}"
+    [[ -n "${m}" ]] && rule1_by_line["${mfile}"$'\x1f'"${mline}"]+="${m}"$'\n'
+  done < <(grep -HZnoP "(?<![/A-Za-z0-9_.-])(?:${TOPLEVEL_RE})/(?:[A-Za-z0-9_.\/-]*[A-Za-z0-9_-])?" "${TARGET_FILES[@]}" 2>/dev/null || true)
 fi
 
 # Rule #2: lone backtick-quoted root files (`CLAUDE.md`), no slash.
 # shellcheck disable=SC2016 # single-quoted on purpose: literal regex,
 # nothing here is meant to expand.
-while IFS=: read -r mfile mline m; do
-  [[ -n "${m}" ]] && rule2_by_line["${mfile}:${mline}"]+="${m}"$'\n'
-done < <(grep -HnoP '(?<=`)[A-Za-z0-9_.-]+(?=`)' "${TARGET_FILES[@]}" 2>/dev/null || true)
+while IFS= read -r -d '' mfile && IFS= read -r mrec; do
+  mline="${mrec%%:*}"
+  m="${mrec#*:}"
+  [[ -n "${m}" ]] && rule2_by_line["${mfile}"$'\x1f'"${mline}"]+="${m}"$'\n'
+done < <(grep -HZnoP '(?<=`)[A-Za-z0-9_.-]+(?=`)' "${TARGET_FILES[@]}" 2>/dev/null || true)
 
 for file in "${TARGET_FILES[@]}"; do
   is_gitignore=0
@@ -628,7 +670,7 @@ for file in "${TARGET_FILES[@]}"; do
   mapfile -t file_lines < "${file}"
 
   for (( lineno = 1; lineno <= ${#file_lines[@]}; lineno++ )); do
-    joined="${rule1_by_line[${file}:${lineno}]:-}${rule2_by_line[${file}:${lineno}]:-}"
+    joined="${rule1_by_line[${file}$'\x1f'${lineno}]:-}${rule2_by_line[${file}$'\x1f'${lineno}]:-}"
     [[ -z "${joined}" ]] && continue
     line="${file_lines[$(( lineno - 1 ))]}"
 
@@ -672,22 +714,17 @@ done
 # `knowledge/` (see the corpus note in the header for why the scan is
 # restricted to this class).
 declare -A src_raw_lines=()
-while IFS= read -r hit; do
-  file="${hit%%:*}"
-  rest="${hit#*:}"
+while IFS= read -r -d '' file && IFS= read -r rest; do
   lineno="${rest%%:*}"
-  src_raw_lines["${file}:${lineno}"]="${rest#*:}"
-done < <(grep -rnH 'knowledge/' --include='*.py' --include='README.md' src tests 2>/dev/null || true)
+  src_raw_lines["${file}"$'\x1f'"${lineno}"]="${rest#*:}"
+done < <(grep -rnHZ 'knowledge/' --include='*.py' --include='README.md' src tests 2>/dev/null || true)
 
-while IFS= read -r hit; do
-  [[ -z "${hit}" ]] && continue
-  file="${hit%%:*}"
-  rest="${hit#*:}"
+while IFS= read -r -d '' file && IFS= read -r rest; do
   lineno="${rest%%:*}"
   m="${rest#*:}"
   [[ -z "${m}" ]] && continue
-  check_candidates "${file}" "${lineno}" "${src_raw_lines[${file}:${lineno}]:-}" "" "${m}"
-done < <(grep -rnHoP '(?<![/A-Za-z0-9_.-])knowledge/(?:[A-Za-z0-9_.\/-]*[A-Za-z0-9_-])?' --include='*.py' --include='README.md' src tests 2>/dev/null || true)
+  check_candidates "${file}" "${lineno}" "${src_raw_lines[${file}$'\x1f'${lineno}]:-}" "" "${m}"
+done < <(grep -rnHZoP '(?<![/A-Za-z0-9_.-])knowledge/(?:[A-Za-z0-9_.\/-]*[A-Za-z0-9_-])?' --include='*.py' --include='README.md' src tests 2>/dev/null || true)
 
 
 # --- Third pass: agent-name references (rule #9) ----------------------------
@@ -711,21 +748,25 @@ for file in "${TARGET_FILES[@]}"; do
 done
 
 if [[ ${#NAME_PASS_FILES[@]} -gt 0 ]]; then
-  while IFS=: read -r file lineno tok; do
+  while IFS= read -r -d '' file && IFS= read -r mrec; do
+    lineno="${mrec%%:*}"
+    tok="${mrec#*:}"
     [[ -z "${tok}" ]] && continue
     suffix="${tok##*-}"
     [[ -n "${AGENT_SUFFIXES[${suffix}]:-}" ]] || continue
     [[ -n "${AGENT_NAMES[${tok}]:-}" ]] && continue
     echo "${file}:${lineno} -> \`${tok}\` (dead agent reference: no .claude/agents/${tok}.md)"
     FOUND_DEAD=1
-  done < <(grep -HnoP '(?<=\`)[a-z][a-z0-9]*(?:-[a-z0-9]+)+(?=\`)' "${NAME_PASS_FILES[@]}" 2>/dev/null || true)
+  done < <(grep -HZnoP '(?<=\`)[a-z][a-z0-9]*(?:-[a-z0-9]+)+(?=\`)' "${NAME_PASS_FILES[@]}" 2>/dev/null || true)
 fi
 
 # --- Fourth pass: bare single-segment directory citations (rule #10) --------
 PAK_INTERNAL_DIRS="docs dashboards views icons profiles lib resources conf src"
 
 if [[ ${#NAME_PASS_FILES[@]} -gt 0 ]]; then
-  while IFS=: read -r file lineno tok; do
+  while IFS= read -r -d '' file && IFS= read -r mrec; do
+    lineno="${mrec%%:*}"
+    tok="${mrec#*:}"
     [[ -z "${tok}" ]] && continue
     citing_dir="."
     [[ "${file}" == */* ]] && citing_dir="${file%/*}"
@@ -781,7 +822,7 @@ if [[ ${#NAME_PASS_FILES[@]} -gt 0 ]]; then
       echo "${file}:${lineno} -> \`${tok}\` (bare directory citation: no such directory anywhere in the tree)"
     fi
     FOUND_DEAD=1
-  done < <(grep -HnoP '(?<=\`)[A-Za-z0-9_-]+/(?=\`)' "${NAME_PASS_FILES[@]}" 2>/dev/null || true)
+  done < <(grep -HZnoP '(?<=\`)[A-Za-z0-9_-]+/(?=\`)' "${NAME_PASS_FILES[@]}" 2>/dev/null || true)
 fi
 
 if [[ "${FOUND_DEAD}" -eq 1 ]]; then
