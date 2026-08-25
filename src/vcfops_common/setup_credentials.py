@@ -818,11 +818,46 @@ def _gitignore_status(env_file: Path) -> str:
         )
     # `git check-ignore` documents 128 as a FATAL error, not as "no git
     # repo here": a real repo with an unreadable or malformed
-    # `.git/config` exits 128 too. Reporting that as "not a git repo,
-    # nothing could commit it" would be a false assurance on the one
-    # prompt where the operator decides whether to write a plaintext
-    # password outside this repo. Unknown is reported as unknown.
+    # `.git/config` exits 128 too, so the exit status alone cannot say
+    # "nothing could commit it". The filesystem can (issue #122): no
+    # `.git` entry anywhere up the tree means there is unambiguously no
+    # repository, so the common benign case keeps its confident wording.
+    # A `.git` somewhere above means a repo git itself choked on, which
+    # stays unknown; unknown is never presented as safe.
+    try:
+        if _no_git_above(env_file.parent):
+            return "its directory is not a git repo, so nothing there could commit it"
+    except Exception:
+        pass
     return "could not determine whether anything git-ignores it"
+
+
+def _no_git_above(start: Path) -> bool:
+    """True only when NO `.git` entry exists in `start` or any ancestor.
+
+    A `.git` FILE counts too: worktrees and submodules use one. The
+    path is resolved once so a symlink loop cannot recurse, and the
+    walk is bounded by ``Path.parents``, which ends at the filesystem
+    root. Each candidate is probed with ``lstat`` rather than
+    ``exists()``: on Python 3.14 ``exists()`` returns False when it
+    cannot stat at all (Codex on PR #132), which would read an
+    inaccessible `.git` as absent and hand out the confident wording
+    where it belongs to "could not determine". Only FileNotFoundError
+    means genuinely absent; any other OSError means "cannot tell",
+    reported as `.git`-present so the caller stays on the unknown
+    verdict. Any other exception is the caller's cue for the same,
+    never a crash.
+    """
+    resolved = start.resolve()
+    for candidate in (resolved, *resolved.parents):
+        try:
+            (candidate / ".git").lstat()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            return False  # cannot tell; keep "could not determine"
+        return False  # a .git entry exists here
+    return True
 
 
 def _resolve_env_target(
