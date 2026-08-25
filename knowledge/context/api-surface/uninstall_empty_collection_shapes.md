@@ -167,11 +167,20 @@ The `records` key is **present**, not omitted, and is an array, not
 
 **Verdict on Q2: `Get-AllReports`'s `records` branch (the first key
 in the recognised-key list at `install.ps1:2028`) is confirmed
-correct for the true-empty case, and it is safe to treat any `result`
-object that has none of the five recognised keys as a genuinely
-unrecognised/malformed shape** — an honest empty result always
-carries `records: []` (present, typed as array) inside the same
-envelope, not an envelope lacking all five keys. The existing
+correct for the observed true-empty case.** One important caveat
+before generalising: the observed empty response came from
+`contentFilter.isTenant: true`, while `Get-AllReports` in production
+sends `isTenant: false`. The empty case for the *exact production
+filter* has not been observed, so "an honest empty result always
+carries `records: []`" is an inference from the tenant-scoped probe
+(same endpoint, same envelope, different filter value), not an
+observation of the production request. In the observed case the
+honest empty result carried `records: []` (present, typed as array)
+inside the same envelope, not an envelope lacking all five keys.
+Treating a no-recognised-keys `result` as malformed is therefore
+well supported but not proven for the production filter; see #124
+for why the shipped fix is warn-and-continue rather than a hard
+refusal. The existing
 flatten fallback at `install.ps1:2036-2044` would also correctly
 return an empty list here (no array-typed properties to flatten),
 so both the primary path and the fallback already do the right thing
@@ -227,7 +236,7 @@ guard at `Get-AllDashboards` on the strength of that inference alone.**
 | Site | Empty case observed? | Safe to refuse on unrecognised shape? |
 |---|---|---|
 | `Get-AllViews` (view-type/subject-map checks) | No — not reachable, no server-side filter exists | **No.** Keep silent-skip; refusing risks blocking every uninstall on a shape actually meaning "empty," which this recon could not rule out. |
-| `Get-AllReports` (`records`-key fallback) | Yes — `contentFilter.isTenant: true` | **Yes**, for the `records`-array path already at the top of the recognised-key list. The true empty case matches the documented populated envelope with `records: []`, so refusing when none of the five keys are present is a real malformed-shape signal, not a false positive against an honest empty result. Per-owner/per-user-scoped empty lists were not tested. |
+| `Get-AllReports` (`records`-key fallback) | Yes — but under `contentFilter.isTenant: true`, not the `isTenant: false` the production call sends | **Qualified yes.** The observed empty case matches the documented populated envelope with `records: []`, so a no-recognised-keys `result` is very likely malformed rather than honestly empty. But the production filter's empty case was not itself observed (nor per-owner/per-user scopes), so this is a strong same-endpoint inference, not proof. Prefer warn-and-continue over a hard refusal until the production-filter empty case is observed. |
 | `Get-AllDashboards` (envelope) | No — not reachable, no server-side filter exists | **No.** Only an inference from the reports endpoint's pattern exists, not an observation of this endpoint; do not act on it as confirmed. |
 
 ## Method notes
