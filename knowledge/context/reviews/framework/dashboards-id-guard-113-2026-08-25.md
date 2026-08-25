@@ -1,10 +1,10 @@
 # Framework review: dashboards id-stability guard (issue #113)
 
-- Branch: fix/113-dashboard-id-guard, commits 557d446 + 99f2660 vs origin/main
+- Branch: fix/113-dashboard-id-guard, commits 557d446 + 99f2660 + 89af0f5 + 47d5adb + dc2f957 + 799955a vs origin/main
 - Files: src/vcfops_dashboards/id_guard.py (new), src/vcfops_dashboards/cli.py
   (validate hook), tests/test_dashboard_id_guard.py (new, 9 tests)
 - Reviewer: framework-reviewer, 2026-08-25 (delta re-check of 99f2660 same day)
-- Verdict: **APPROVE** (0 BLOCKING / 2 WARNING open / 2 NIT; original WARNING 1 resolved by 99f2660)
+- Verdict: **APPROVE** after the dc2f957/799955a round (0 BLOCKING / 2 WARNING open / 3 NIT open). The delta-2 BLOCKING (baseline substituted instead of widened) and the delta-2 ci.yml NIT are resolved; see Delta re-check 3.
 
 ## What the change does
 
@@ -132,3 +132,144 @@ warnings or passes (WARNING 1 and 3).
   both degrade loudly or require an unusual author action, and the
   fix for each is a doc/CI note or a one-time lab verification.
 - Verdict after delta: **APPROVE**.
+
+## Delta re-check 2: 89af0f5 + 47d5adb (baseline rev for CI, 2026-08-25)
+
+Addresses the Codex P1 on PR #133 (my carried post-commit-blindness
+WARNING). Verified first-hand in temp repos and against the 13-test
+suite (13/13 pass):
+
+- Committed re-id on a feature branch, baseline = merge-base: caught
+  (errors=1), where the default HEAD baseline is blind (errors=0).
+  The CI blindspot is closed for the simple re-id case.
+- Baseline equal to HEAD (sha) behaves identically to the default on
+  both a clean and a mutated tree (same errors, same warnings).
+- Non-ancestor baseline: hard validation error naming the rev, guard
+  refuses to run narrowed. Unresolvable baseline: loud warning,
+  falls back to HEAD, states exactly what is not covered.
+- ci.yml: merge-base resolution only on pull_request with
+  GITHUB_BASE_REF; checkout uses fetch-depth 0 (ci.yml line 28) so
+  origin/<base> and the merge-base are resolvable; empty BASE falls
+  back to the plain invocation; shell quoting and `|| true` fallbacks
+  are sound.
+
+### BLOCKING (new)
+
+1. [src/vcfops_dashboards/id_guard.py: baseline handling; also the
+   --id-guard-baseline help text and module docstring] The claimed
+   invariant "a baseline can only widen the comparison, never narrow
+   or disable it" is false: the baseline SUBSTITUTES the reference
+   rev, it is not unioned with HEAD, and the ancestor check constrains
+   which rev is used, not the comparison's strength. Two reproduced
+   counterexamples (temp-repo probes E1/E2):
+   - E1, the default CI path: a PR that renames a dashboard (id kept,
+     legitimate) in one commit and re-ids it under the new name in a
+     later commit passes `validate --id-guard-baseline <merge-base>`
+     with zero errors. The merge-base tree holds the old name, so the
+     path comparison sees a name change and the name scan finds no
+     collision. CI reports green on exactly the orphaning class the
+     gate exists to catch (issue #113, RULE-007), for consumers who
+     cannot see the repo: the reports-green-while-broken class.
+   - E2, local narrowing: with a rename committed since the merge-base
+     and an uncommitted re-id in the tree, default validate fails
+     (HEAD catches it) but `--id-guard-baseline <merge-base>` passes.
+     The flag can suppress an error the default catches, which is the
+     escape-hatch property the design forswears.
+   Smallest correct fix: when a baseline is supplied and resolves to a
+   commit different from HEAD, run the per-file comparison (and name
+   scan) against BOTH revs and union the errors. That makes "widen"
+   literally true, closes E1 and E2, and costs one extra pass only in
+   CI. Docstring/help text then match behavior.
+
+### NIT (new)
+
+3. [.github/workflows/ci.yml validate step] The comment and commit
+   message claim "the guard itself warns loudly" when the merge base
+   is unresolvable, but the empty-BASE branch runs the plain
+   invocation with no baseline argument, so nothing warns anywhere:
+   the narrowed comparison is silent in the CI log. Reachable only if
+   merge-base fails despite the fetch-depth-0 clone, hence NIT. Fix:
+   `echo` a warning in the empty-BASE branch.
+
+### Status of carried findings
+
+- Original WARNING 2 (post-commit blindness): resolved in principle by
+  89af0f5/47d5adb, but the residual E1 compound case above is the new
+  BLOCKING; fully resolved once the union fix lands.
+- Original WARNING 3 (case-sensitive name compare, unverified importer
+  case semantics): still open, still a follow-up, not a blocker.
+- Verdict after delta 2: **CHANGES REQUESTED** until the union fix
+  (or an equivalent that restores the widen-only invariant) lands;
+  then re-review.
+
+## Delta re-check 3: dc2f957 + 799955a (widen via baseline..HEAD scan, 2026-08-25)
+
+Resolves the delta-2 BLOCKING. The working tree is now compared against
+HEAD, the baseline, and every commit in ``git rev-list baseline..HEAD``,
+findings unioned and deduped on the full message string (which carries
+file, name, both ids, and the committed path, so distinct findings can
+never collapse). 799955a adds the echo warning in ci.yml's empty-BASE
+PR branch (delta-2 NIT 3: resolved).
+
+Independently verified (15/15 targeted tests, temp-repo probes):
+
+- E1 (rename commit then re-id commit): full scan catches it (1 error).
+  I also reproduced tooling's deviation evidence first-hand: scanning
+  only the two endpoints via _scan_rev(HEAD) + _scan_rev(merge-base)
+  yields ZERO errors: the working tree equals HEAD, and against the
+  merge-base both name and id differ, indistinguishable from
+  delete-plus-new. My prescribed two-rev union was insufficient;
+  tooling's intermediate-commit scan is the correct strict superset.
+  Deviation accepted, evidence confirmed.
+- E2 no-narrowing re-confirmed: uncommitted re-id after a committed
+  rename fails identically with and without the baseline flag (1, 1).
+- Dedup: same dashboard re-id'd twice across the range surfaces BOTH
+  distinct old ids (2 errors); an identical finding visible from three
+  revs dedupes to one. Distinct findings are not swallowed.
+- Non-ancestor still hard-fails; unresolvable baseline still degrades
+  loudly to HEAD-only (re-confirmed on the real corpus with a bogus
+  rev: warning present).
+- Cost: synthetic 50-commit PR range with 8 dashboards: 7.2s, 821 git
+  subprocess calls (~16 per rev). Real corpus with the actual 7-commit
+  merge-base range: 3.2s vs 1.1s without the flag. Default local
+  validate is unchanged (HEAD-only, ~17 calls). Acceptable: the
+  per-commit cost exists only in CI on PR events and is linear in
+  range x corpus.
+
+### WARNING (new, open)
+
+- [id_guard.py intermediate scan, by design] Revert-in-range false
+  failure, reproduced: a PR that commits a re-id mistake and then
+  reverts it has a clean tip (working tree == HEAD == baseline
+  identity) but still hard-fails, because the intermediate commit
+  published the name under the other id; worse, the error's advice is
+  inverted in this case ("Fix: restore the original id (<the bad
+  id>)"). This is the irreducible price of the E1 coverage (offline,
+  the guard cannot know which committed state was installed), and the
+  factory's install-per-round workflow justifies treating every
+  committed state as possibly installed. Recovery is squash/rebase of
+  the PR branch. Fix: when the working tree matches both endpoints,
+  reword the error to say an intermediate commit is the source and
+  name history rewrite as the remediation; document in the flag help.
+
+### NIT (new, open)
+
+- [id_guard.py rev-list] The scanned range is unbounded: a stale PR
+  branch that merged main mid-PR pulls main's commits into
+  baseline..HEAD, scaling CI cost linearly (extrapolated ~70s at 500
+  commits) and exposing the guard to findings originating in merged-in
+  main history. Consider --first-parent or a capped range with a loud
+  could-not-cover warning.
+
+### Ledger after delta 3
+
+- BLOCKING: none open (delta-2 BLOCKING resolved by dc2f957).
+- WARNING open: revert-in-range false failure with inverted advice
+  (above); case-sensitive name compare vs unverified importer case
+  semantics (carried, follow-up).
+- NIT open: unbounded rev-list range (above); duplicate names in a
+  committed tree collapse last-wins (carried); ls-tree parsed without
+  -z / quotepath (carried).
+- Resolved this round: delta-2 BLOCKING (substitute-not-widen);
+  delta-2 ci.yml silent-fallback NIT (799955a).
+- Verdict after delta 3: **APPROVE**.
