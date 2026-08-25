@@ -10,9 +10,14 @@ bookmarks pinned to the old UUID die with no error anywhere in the
 import envelope. A rename does not change the UUID, so a changed id
 under an unchanged name is always an authoring error (RULE-007).
 
-Reference point is OFFLINE: the last committed version of the content in
-git HEAD, never the live instance. Each working-tree dashboard YAML is
-compared against ``git show HEAD:<path>``; if the committed version (or
+Reference point is OFFLINE: the committed version of the content in git,
+never the live instance. The baseline rev defaults to HEAD; CI passes the
+PR merge-base instead (--id-guard-baseline) because in CI the re-id is
+already committed, so HEAD would be blind to it. A baseline can only move
+the comparison EARLIER (it must be an ancestor of HEAD); it can never
+narrow or disable the guard, and a non-ancestor baseline is a hard
+validation error, not a fallback. Each working-tree dashboard YAML is
+compared against ``git show <baseline>:<path>``; if the committed version (or
 any committed dashboard, for file renames) carries the same name under a
 different id, validation fails hard. No escape hatch.
 
@@ -85,14 +90,15 @@ def _parse_identity(text: str) -> Optional[Tuple[str, str]]:
 
 
 def _head_dashboard_names(
-    toplevel: Path, rel_dir: str, warnings_out: List[str]
+    toplevel: Path, rel_dir: str, warnings_out: List[str], base_rev: str = "HEAD"
 ) -> Dict[str, Tuple[str, str]]:
-    """Map name -> (id, path) for every dashboard YAML committed in HEAD
-    under rel_dir. Used for the file-rename case: a re-id'd dashboard in
-    a renamed file must not slip past the path-based comparison.
+    """Map name -> (id, path) for every dashboard YAML committed at
+    base_rev under rel_dir. Used for the file-rename case: a re-id'd
+    dashboard in a renamed file must not slip past the path-based
+    comparison.
     """
     rc, out, err = _run_git(
-        ["ls-tree", "-r", "--name-only", "HEAD", "--", rel_dir], toplevel
+        ["ls-tree", "-r", "--name-only", base_rev, "--", rel_dir], toplevel
     )
     if rc != 0:
         warnings_out.append(
@@ -106,7 +112,7 @@ def _head_dashboard_names(
         p = line.strip()
         if not p.endswith((".yaml", ".yml")):
             continue
-        rc2, blob, err2 = _run_git(["show", f"HEAD:{p}"], toplevel)
+        rc2, blob, err2 = _run_git(["show", f"{base_rev}:{p}"], toplevel)
         if rc2 != 0:
             warnings_out.append(
                 "dashboard id-stability guard: could not read committed "
@@ -120,13 +126,24 @@ def _head_dashboard_names(
     return result
 
 
-def check_dashboard_id_stability(dashboards_dir: Path) -> Tuple[List[str], List[str]]:
-    """Compare each working-tree dashboard YAML against git HEAD.
+def check_dashboard_id_stability(
+    dashboards_dir: Path, baseline: Optional[str] = None
+) -> Tuple[List[str], List[str]]:
+    """Compare each working-tree dashboard YAML against a committed baseline.
+
+    *baseline* is a git rev; None/empty means HEAD. A supplied baseline
+    must resolve to a commit that is an ancestor of HEAD (equal to HEAD
+    is fine): moving the reference point earlier widens the comparison,
+    anything else is a misconfiguration and fails validation outright.
+    An unresolvable baseline is an environment condition (e.g. CI could
+    not compute a merge-base): degrade to HEAD with a printed warning,
+    never silently.
 
     Returns (errors, warnings). Errors are hard validation failures: a
     committed dashboard shares the working-tree name but carries a
-    different id. Warnings mean the guard could not run (no git, not a
-    repo, unreadable HEAD); validation proceeds, but never silently.
+    different id. Warnings mean the guard (or part of it) could not run
+    (no git, not a repo, unreadable rev); validation proceeds, but never
+    silently.
     """
     errors: List[str] = []
     warns: List[str] = []
@@ -170,6 +187,52 @@ def check_dashboard_id_stability(dashboards_dir: Path) -> Tuple[List[str], List[
         )
         return errors, warns
 
+    base_rev = "HEAD"
+    if baseline and baseline != "HEAD":
+        rc, out, err = _run_git(
+            ["rev-parse", "--verify", "--quiet", f"{baseline}^{{commit}}"],
+            toplevel,
+        )
+        if rc != 0:
+            # Environment condition (e.g. CI failed to compute a
+            # merge-base): degrade to HEAD, loudly. HEAD is the narrower
+            # comparison, so say exactly what is no longer covered.
+            warns.append(
+                "dashboard id-stability guard: baseline rev "
+                f"'{baseline}' did not resolve to a commit (git rev-parse "
+                f"rc={rc}: {err.strip() or 'no output'}); falling back to "
+                "HEAD. A re-id already committed since the intended "
+                "baseline would NOT be caught in this run."
+            )
+        else:
+            resolved = out.strip()
+            rc, _, err = _run_git(
+                ["merge-base", "--is-ancestor", resolved, "HEAD"], toplevel
+            )
+            if rc == 0:
+                base_rev = resolved
+            elif rc == 1:
+                # Misconfiguration, not an environment condition: a
+                # baseline may only move the comparison to an ancestor of
+                # HEAD (widening it). Refuse, hard.
+                errors.append(
+                    f"id-guard baseline '{baseline}' ({resolved}) is not "
+                    "an ancestor of HEAD. --id-guard-baseline may only "
+                    "move the comparison to an earlier commit on this "
+                    "history; it can never narrow or disable the guard. "
+                    "Fix the baseline computation (CI passes the PR "
+                    "merge-base) or drop the flag to compare against HEAD."
+                )
+                return errors, warns
+            else:
+                warns.append(
+                    "dashboard id-stability guard: could not determine "
+                    f"whether baseline '{baseline}' is an ancestor of HEAD "
+                    f"(git merge-base rc={rc}: {err.strip() or 'no output'}); "
+                    "falling back to HEAD. A re-id already committed since "
+                    "the intended baseline would NOT be caught in this run."
+                )
+
     head_names: Optional[Dict[str, Tuple[str, str]]] = None  # lazy
 
     for f in files:
@@ -192,7 +255,7 @@ def check_dashboard_id_stability(dashboards_dir: Path) -> Tuple[List[str], List[
         # locale-independent: rc 0 + non-empty stdout = committed, rc 0 +
         # empty stdout = no committed version at this path. stderr text is
         # never consulted for a verdict (localized git would defeat it).
-        rc, tree_out, err = _run_git(["ls-tree", "HEAD", "--", rel], toplevel)
+        rc, tree_out, err = _run_git(["ls-tree", base_rev, "--", rel], toplevel)
         if rc != 0:
             warns.append(
                 "dashboard id-stability guard: could not determine whether "
@@ -203,7 +266,7 @@ def check_dashboard_id_stability(dashboards_dir: Path) -> Tuple[List[str], List[
             continue
         need_name_scan = False
         if tree_out.strip():
-            rc, blob, err = _run_git(["show", f"HEAD:{rel}"], toplevel)
+            rc, blob, err = _run_git(["show", f"{base_rev}:{rel}"], toplevel)
             if rc != 0:
                 warns.append(
                     "dashboard id-stability guard: could not read the "
@@ -234,7 +297,7 @@ def check_dashboard_id_stability(dashboards_dir: Path) -> Tuple[List[str], List[
                     rel_dir = dashboards_dir.relative_to(toplevel).as_posix()
                 except ValueError:
                     rel_dir = "."
-                head_names = _head_dashboard_names(toplevel, rel_dir, warns)
+                head_names = _head_dashboard_names(toplevel, rel_dir, warns, base_rev)
             hit = head_names.get(wt_name)
             if hit is not None:
                 head_id, head_path = hit

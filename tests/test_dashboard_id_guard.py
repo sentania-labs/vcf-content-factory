@@ -23,6 +23,13 @@ Covered branches, each in a temp git repo fixture:
   - mutation check: with the guard disabled, the failing scenario
     passes, proving the failure comes from the guard and nowhere else.
 
+Baseline plumbing (--id-guard-baseline, CI passes the PR merge-base
+because in CI the re-id is already committed and HEAD is blind to it):
+
+  - re-id COMMITTED on a branch, baseline=merge-base -> still fails
+  - unresolvable baseline rev -> warns, falls back to HEAD, passes
+  - non-ancestor baseline rev -> hard validation error (misconfig)
+
 No network, no real content/ writes; everything lives under tmp_path.
 """
 from __future__ import annotations
@@ -80,14 +87,26 @@ def _make_repo(tmp_path: Path, git_init: bool = True, commit: bool = True) -> Pa
     return repo
 
 
-def _validate(repo: Path) -> int:
+def _validate(repo: Path, *extra: str) -> int:
     return dashboards_main(
         [
             "--views-dir", str(repo / "content" / "views"),
             "--dashboards-dir", str(repo / "content" / "dashboards"),
             "validate",
+            *extra,
         ]
     )
+
+
+def _rev(repo: Path, rev: str = "HEAD") -> str:
+    out = subprocess.run(
+        ["git", "rev-parse", rev],
+        cwd=str(repo),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return out.stdout.strip()
 
 
 def test_id_mutated_name_kept_fails(tmp_path, capsys):
@@ -238,9 +257,68 @@ def test_mutation_check_guard_disabled_scenario_passes(tmp_path, capsys, monkeyp
     )
     import vcfops_dashboards.cli as cli_mod
     monkeypatch.setattr(
-        cli_mod, "check_dashboard_id_stability", lambda _dir: ([], [])
+        cli_mod, "check_dashboard_id_stability", lambda _dir, baseline=None: ([], [])
     )
     rc = _validate(repo)
     err = capsys.readouterr().err
     assert rc == 0
     assert "ID-STABILITY:" not in err
+
+
+# ---------------------------------------------------------------------------
+# Baseline plumbing (--id-guard-baseline): the CI blindspot from PR #133.
+# ---------------------------------------------------------------------------
+
+def test_committed_reid_caught_with_merge_base_baseline(tmp_path, capsys):
+    """CI shape: the re-id is already COMMITTED on the PR branch, so HEAD
+    matches the working tree and is blind. With the baseline set to the
+    merge-base (here: the pre-change commit), the guard still fails hard.
+    """
+    repo = _make_repo(tmp_path)
+    base = _rev(repo)  # the commit CI's merge-base would resolve to
+    (repo / "content/dashboards/probe.yaml").write_text(
+        _dashboard_yaml(NEW_ID, NAME)
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "re-id the probe dashboard")
+
+    # Sanity: against HEAD alone this passes (the blindspot).
+    assert _validate(repo) == 0
+    capsys.readouterr()
+
+    rc = _validate(repo, "--id-guard-baseline", base)
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "ID-STABILITY:" in err
+    assert OLD_ID in err and NEW_ID in err
+
+
+def test_unresolvable_baseline_warns_and_uses_head(tmp_path, capsys):
+    repo = _make_repo(tmp_path)
+    rc = _validate(repo, "--id-guard-baseline", "no-such-rev-anywhere")
+    err = capsys.readouterr().err
+    assert rc == 0
+    assert "did not resolve" in err
+    assert "falling back to" in err
+    assert "would NOT be caught" in err
+    assert "ID-STABILITY:" not in err
+
+
+def test_non_ancestor_baseline_is_hard_error(tmp_path, capsys):
+    """A baseline off this history is a misconfiguration: fail validation,
+    do not fall back (falling back would silently narrow the comparison).
+    """
+    repo = _make_repo(tmp_path)
+    # Build a commit that is NOT an ancestor of HEAD: an orphan branch.
+    _git(repo, "checkout", "-q", "--orphan", "stray")
+    (repo / "stray.txt").write_text("stray")
+    _git(repo, "add", "stray.txt")
+    _git(repo, "commit", "-q", "-m", "stray commit off the main history")
+    stray = _rev(repo)
+    _git(repo, "checkout", "-q", "master")
+
+    rc = _validate(repo, "--id-guard-baseline", stray)
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "not " in err and "ancestor of HEAD" in err
+    assert "never narrow or disable" in err

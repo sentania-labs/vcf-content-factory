@@ -103,7 +103,7 @@ def cmd_validate(args) -> int:
     # changed id: under an unchanged name: silently orphans the previously
     # installed UUID. Compare against the last committed version (git HEAD).
     guard_errors, guard_warnings = check_dashboard_id_stability(
-        Path(args.dashboards_dir)
+        Path(args.dashboards_dir), baseline=args.id_guard_baseline
     )
     for msg in guard_warnings:
         print(f"WARNING: {msg}", file=sys.stderr)
@@ -686,6 +686,21 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pv = sub.add_parser("validate", help="validate YAML")
+    pv.add_argument(
+        "--id-guard-baseline",
+        metavar="REV",
+        default=None,
+        help=(
+            "CI plumbing for the #113 dashboard id-stability guard, not an "
+            "operator switch: compare dashboard ids against this git rev "
+            "instead of HEAD. CI passes the PR merge-base so a re-id that "
+            "is already committed on the PR branch is still caught. The "
+            "rev must be an ancestor of HEAD (it can only widen the "
+            "comparison, never narrow or disable it); a non-ancestor rev "
+            "fails validation, an unresolvable rev warns and falls back "
+            "to HEAD."
+        ),
+    )
     add_profile_arg(pv, default="prod")
     pv.set_defaults(func=cmd_validate)
 
