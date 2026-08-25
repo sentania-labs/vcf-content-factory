@@ -42,10 +42,7 @@ Platform: POSIX only (Linux, macOS, WSL), per RULE-018. Dependencies are
 pure stdlib plus ``requests`` (imported lazily, and optional: without it
 the wizard offers to skip live validation). No bash. The repo root is
 anchored to this module's location on disk exactly the way ``doctor.py``
-does it, never to ``Path.cwd()``. Some native-Windows accommodations
-predating RULE-018 survive further down this file (the ``os.name == 'nt'``
-branches in :func:`write_env_file` and in the closing message); removing
-them is issue #115, not this module's business today.
+does it, never to ``Path.cwd()``.
 
 Non-interactive safety: if stdin is not a TTY the wizard refuses and
 exits 2 rather than reading a password from a pipe or hanging. The
@@ -348,8 +345,8 @@ def write_env_file(path: Path, lines: Sequence[str]) -> None:
     value the UTF-8 encoder rejects) would leave a zero-byte `.env`:
     the operator adding a `devel` profile silently loses their working
     `prod` and `qa` ones. So: write a sibling temp file, then
-    ``os.replace`` it onto the target, which is atomic on POSIX and on
-    Windows. Either the old file survives intact or the new one is
+    ``os.replace`` it onto the target, which is atomic on POSIX.
+    Either the old file survives intact or the new one is
     complete; there is no in-between state.
 
     RULE-008 is satisfied by the temp file's PROPERTIES, not by its
@@ -364,10 +361,6 @@ def write_env_file(path: Path, lines: Sequence[str]) -> None:
     the TARGET is replaced, so a user who points `.env` at a shared
     location keeps that indirection instead of having the wizard
     silently overwrite the link with a regular file.
-
-    On Windows the ``os.open`` mode is ignored and ``os.chmod`` is
-    effectively a no-op, which is the documented "applied where
-    supported, silently skipped where not" behavior.
     """
     text = "\n".join(lines).rstrip("\n") + "\n"
 
@@ -404,11 +397,10 @@ def write_env_file(path: Path, lines: Sequence[str]) -> None:
                 os.fsync(fh.fileno())
             except OSError:
                 pass  # best effort; not all filesystems support it
-        if os.name != "nt":
-            try:
-                os.chmod(str(tmp), 0o600)
-            except OSError:
-                pass
+        try:
+            os.chmod(str(tmp), 0o600)
+        except OSError:
+            pass
         os.replace(str(tmp), str(target))
         tmp = None  # ownership transferred; nothing to clean up
     finally:
@@ -1097,9 +1089,7 @@ def run_setup(
 
     out("")
     verb = "created" if created else "updated"
-    out(f"Profile '{profile}' {verb} in {path} (owner-only permissions"
-        + ("; chmod is not applied on Windows" if os.name == "nt" else "")
-        + ").")
+    out(f"Profile '{profile}' {verb} in {path} (owner-only permissions).")
     out("  The file's contents are deliberately not shown.")
     if profile.lower() != DEFAULT_PROFILE:
         out(f"  '{profile}' is not the default profile: pass --profile "
