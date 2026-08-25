@@ -940,8 +940,7 @@ def build_checklist(
             "no run recorded for " + ", ".join(unrecorded)
             + "; fetch the reference repos and managed paks "
             "(scripts/bootstrap_references.sh and "
-            "scripts/bootstrap_managed_paks.sh on unix; a native Windows "
-            "port is tracked as issue #89)"
+            "scripts/bootstrap_managed_paks.sh)"
         )
     elif unparseable or unparseable_age:
         boot_status = "unknown"
