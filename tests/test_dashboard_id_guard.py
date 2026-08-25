@@ -24,10 +24,17 @@ Covered branches, each in a temp git repo fixture:
     passes, proving the failure comes from the guard and nowhere else.
 
 Baseline plumbing (--id-guard-baseline, CI passes the PR merge-base
-because in CI the re-id is already committed and HEAD is blind to it):
+because in CI the re-id is already committed and HEAD is blind to it).
+The baseline ADDS comparisons (baseline, every intermediate commit,
+HEAD, findings unioned); it never replaces the HEAD comparison:
 
   - re-id COMMITTED on a branch, baseline=merge-base -> still fails
-  - unresolvable baseline rev -> warns, falls back to HEAD, passes
+  - E1: rename commit + re-id-under-new-name commit (violation only
+    visible at the intermediate commit; both endpoint diffs are clean)
+    -> still fails
+  - E2: rename committed since merge-base + UNCOMMITTED re-id (only
+    the HEAD comparison sees it) -> still fails with the flag set
+  - unresolvable baseline rev -> warns, degrades to HEAD-only, passes
   - non-ancestor baseline rev -> hard validation error (misconfig)
 
 No network, no real content/ writes; everything lives under tmp_path.
@@ -299,7 +306,7 @@ def test_unresolvable_baseline_warns_and_uses_head(tmp_path, capsys):
     err = capsys.readouterr().err
     assert rc == 0
     assert "did not resolve" in err
-    assert "falling back to" in err
+    assert "comparing against HEAD only" in " ".join(err.split())
     assert "would NOT be caught" in err
     assert "ID-STABILITY:" not in err
 
@@ -322,3 +329,67 @@ def test_non_ancestor_baseline_is_hard_error(tmp_path, capsys):
     assert rc == 1
     assert "not " in err and "ancestor of HEAD" in err
     assert "never narrow or disable" in err
+
+
+def test_e1_rename_then_reid_across_pr_commits_fails(tmp_path, capsys):
+    """E1 (reviewer BLOCKING repro): commit2 renames the dashboard (id
+    kept, legitimate); commit3 re-ids it under the new name. Both
+    endpoint comparisons are clean (working tree == HEAD; vs merge-base
+    both name and id differ, indistinguishable from delete-plus-new).
+    Only the intermediate-commit scan sees NAME2 published under OLD_ID,
+    so the union guard must fail.
+    """
+    repo = _make_repo(tmp_path)
+    base = _rev(repo)  # merge-base CI would compute
+
+    new_name = NAME + " Renamed"
+    (repo / "content/dashboards/probe.yaml").write_text(
+        _dashboard_yaml(OLD_ID, new_name)
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "rename dashboard, id kept")
+
+    (repo / "content/dashboards/probe.yaml").write_text(
+        _dashboard_yaml(NEW_ID, new_name)
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "re-id under the new name")
+
+    rc = _validate(repo, "--id-guard-baseline", base)
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "ID-STABILITY:" in err
+    assert OLD_ID in err and NEW_ID in err
+    assert new_name in err
+
+
+def test_e2_flag_never_suppresses_a_head_finding(tmp_path, capsys):
+    """E2 (reviewer BLOCKING repro): rename committed since merge-base,
+    re-id UNCOMMITTED in the working tree. Only the HEAD comparison sees
+    the same-name-different-id pair; with the old replace-the-baseline
+    behavior the flag suppressed it. The union must still fail.
+    """
+    repo = _make_repo(tmp_path)
+    base = _rev(repo)
+
+    new_name = NAME + " Renamed"
+    (repo / "content/dashboards/probe.yaml").write_text(
+        _dashboard_yaml(OLD_ID, new_name)
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "rename dashboard, id kept")
+
+    # Uncommitted re-id under the new name.
+    (repo / "content/dashboards/probe.yaml").write_text(
+        _dashboard_yaml(NEW_ID, new_name)
+    )
+
+    # Sanity: the plain HEAD guard catches this.
+    assert _validate(repo) == 1
+    capsys.readouterr()
+
+    rc = _validate(repo, "--id-guard-baseline", base)
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "ID-STABILITY:" in err
+    assert OLD_ID in err and NEW_ID in err

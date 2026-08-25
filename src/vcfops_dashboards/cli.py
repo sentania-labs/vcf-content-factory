@@ -692,13 +692,14 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "CI plumbing for the #113 dashboard id-stability guard, not an "
-            "operator switch: compare dashboard ids against this git rev "
-            "instead of HEAD. CI passes the PR merge-base so a re-id that "
-            "is already committed on the PR branch is still caught. The "
-            "rev must be an ancestor of HEAD (it can only widen the "
-            "comparison, never narrow or disable it); a non-ancestor rev "
-            "fails validation, an unresolvable rev warns and falls back "
-            "to HEAD."
+            "operator switch: in ADDITION to the always-on HEAD comparison, "
+            "compare dashboard ids against this git rev and every commit "
+            "between it and HEAD, unioning the findings. CI passes the PR "
+            "merge-base so a re-id committed anywhere on the PR branch is "
+            "still caught. The rev must be an ancestor of HEAD (it can "
+            "only widen the comparison, never narrow or disable it); a "
+            "non-ancestor rev fails validation, an unresolvable rev warns "
+            "and degrades to the HEAD-only comparison."
         ),
     )
     add_profile_arg(pv, default="prod")
