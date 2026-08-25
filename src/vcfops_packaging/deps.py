@@ -153,24 +153,65 @@ def _normalize_metric_key(metric_key: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _refs_from_formula(formula: str, sm_name: str) -> list[MetricReference]:
+def _refs_from_formula(
+    formula: str,
+    sm_name: str,
+    resource_kinds: "list | None" = None,
+) -> list[MetricReference]:
     """Extract built-in metric references from a super metric formula.
 
     Parses ``${adaptertype=X, objecttype=Y, metric=KEY, ...}`` entries.
-    Skips ``${this, ...}`` entries (bound to the assigned object, no
-    explicit adaptertype/objecttype, handled by resource_kinds assignment).
     Also skips entries whose ``metric=`` value is a super-metric reference.
+
+    ``${this, metric=KEY}`` entries carry no adaptertype/objecttype of their
+    own: they bind KEY to the object the super metric is assigned to. That
+    assignment is the SM's ``resource_kinds:`` declaration, so each declared
+    (adapterKindKey, resourceKindKey) pair yields one auditable reference for
+    KEY. Pass ``resource_kinds`` in the loader/wire shape (a list of
+    ``{"adapterKindKey": ..., "resourceKindKey": ...}`` mappings; the
+    snake_case authoring keys are accepted too). A ``this``-bound metric key
+    with no usable resource_kinds assignment is UNAUDITABLE and raises
+    AuditError; it must never be silently skipped (pre-2026-08 behavior
+    skipped every ``${this, ...}`` entry, leaving this-bound keys invisible
+    to the describe-cache audit in every build).
     """
     refs: list[MetricReference] = []
     source_desc = f"SM {sm_name!r}"
     for m in _RESOURCE_ENTRY_RE.finditer(formula):
         inner = m.group(1).strip()
-        # ${this, ...}, no adaptertype, skip
         head = inner.split(",", 1)[0].strip().lower()
-        if head == "this":
-            continue
         pairs = _split_kv(inner)
         kv: dict[str, str] = {k: v for k, v in pairs}
+        if head == "this":
+            metric_key = kv.get("metric", "").strip() or kv.get("attribute", "").strip()
+            if not metric_key or _is_sm_ref(metric_key):
+                continue
+            declared_pairs: list[tuple[str, str]] = []
+            for rk in (resource_kinds or []):
+                if not isinstance(rk, dict):
+                    continue
+                ak = str(rk.get("adapterKindKey") or rk.get("adapter_kind_key") or "").strip()
+                rkk = str(rk.get("resourceKindKey") or rk.get("resource_kind_key") or "").strip()
+                if ak and rkk:
+                    declared_pairs.append((ak, rkk))
+            if not declared_pairs:
+                from .audit import AuditError
+                raise AuditError(
+                    f"{source_desc} uses a ${{this, metric=...}} reference "
+                    f"({metric_key!r}) but declares no usable resource_kinds "
+                    "assignment, so the metric key cannot be audited against "
+                    "the describe cache. Declare resource_kinds: on the super "
+                    "metric (adapter_kind_key / resource_kind_key pairs)."
+                )
+            metric_key = _normalize_metric_key(metric_key)
+            for ak, rkk in declared_pairs:
+                refs.append(MetricReference(
+                    adapter_kind=ak,
+                    resource_kind=rkk,
+                    metric_key=metric_key,
+                    source_desc=source_desc,
+                ))
+            continue
         adapter_kind = kv.get("adaptertype", "").strip()
         resource_kind = kv.get("objecttype", "").strip()
         metric_key = kv.get("metric", "").strip()
@@ -386,7 +427,9 @@ def extract_metric_references(bundle: "Bundle") -> list[MetricReference]:
 
     # --- Super metrics ---
     for sm in bundle.supermetrics:
-        for ref in _refs_from_formula(sm.formula, sm.name):
+        for ref in _refs_from_formula(
+            sm.formula, sm.name, getattr(sm, "resource_kinds", None)
+        ):
             _add(ref)
 
     # --- Views ---

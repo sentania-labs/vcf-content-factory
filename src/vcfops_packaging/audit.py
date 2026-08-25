@@ -414,7 +414,12 @@ def analyze_staged_bundle(
         for sm_id, sm_obj in sm_data.items():
             formula = sm_obj.get("formula") or ""
             sm_name = sm_obj.get("name") or sm_id
-            for ref in _refs_from_formula(formula, sm_name):
+            # Wire form carries the SM's assignment as "resourceKinds"
+            # (list of {"adapterKindKey","resourceKindKey"}), needed to
+            # resolve ${this, metric=...} entries against the cache.
+            for ref in _refs_from_formula(
+                formula, sm_name, sm_obj.get("resourceKinds")
+            ):
                 _add(ref)
 
     # --- Views (XML) ---
