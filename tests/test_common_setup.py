@@ -1210,16 +1210,51 @@ def _stub_git(tmp_path: Path, exit_code: int) -> Path:
     return bindir
 
 
-def test_a_fatal_git_check_ignore_is_reported_as_unknown_not_as_safe(
+def test_a_fatal_git_check_ignore_in_a_repo_is_reported_as_unknown_not_as_safe(
     tmp_path, monkeypatch
 ):
     """Codex P2 on PR #117: `git check-ignore` exits 128 on a FATAL
     error, which a real repo with an unreadable or malformed
-    `.git/config` also hits. Reporting 128 as "not a git repo, nothing
-    could commit it" tells the operator a plaintext password is safe
-    where it is merely unknown, on the one prompt where that decision is
-    made. Unknown must read as unknown."""
+    `.git/config` also hits. When a `.git` entry IS present up the
+    tree, 128 means a repo git itself choked on: reporting that as
+    "not a git repo, nothing could commit it" tells the operator a
+    plaintext password is safe where it is merely unknown, on the one
+    prompt where that decision is made. Unknown must read as unknown."""
+    gitdir = tmp_path / ".git"
+    gitdir.mkdir()
+    (gitdir / "config").write_text("[core\nthis is not valid git config\n")
     monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 128)))
+    verdict = sc._gitignore_status(tmp_path / ".env")
+    assert verdict == "could not determine whether anything git-ignores it"
+    assert "not a git repo" not in verdict
+
+
+def test_a_128_with_no_git_anywhere_above_reads_as_not_a_repo(
+    tmp_path, monkeypatch
+):
+    """Issue #122: the common benign case, a `.env` in an ordinary
+    directory that simply is not a repo, also exits 128. The exit
+    status cannot distinguish it from a broken repo, but the walk up
+    the tree can: no `.git` entry anywhere above means nothing there
+    could commit the file, and the confident wording is honest."""
+    monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 128)))
+    verdict = sc._gitignore_status(tmp_path / ".env")
+    assert verdict == "its directory is not a git repo, so nothing there could commit it"
+
+
+def test_a_failing_git_walk_degrades_to_could_not_determine(
+    tmp_path, monkeypatch
+):
+    """The walk is best effort: if it blows up for any reason, the
+    verdict must fall back to unknown, never raise, and never claim
+    safety. This is also the mutation check for the previous test:
+    silence the walk and the confident wording must NOT appear."""
+
+    def boom(_start):
+        raise OSError("permission denied somewhere up the tree")
+
+    monkeypatch.setenv("PATH", str(_stub_git(tmp_path, 128)))
+    monkeypatch.setattr(sc, "_no_git_above", boom)
     verdict = sc._gitignore_status(tmp_path / ".env")
     assert verdict == "could not determine whether anything git-ignores it"
     assert "not a git repo" not in verdict
