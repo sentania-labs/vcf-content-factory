@@ -1,6 +1,6 @@
 # Framework review: release/publish audit-by-default (offline) + ${this} ref auditing
 
-- **Branch/commit:** `fix/release-audit-default-and-this-refs` @ `6ae322d` + fold-in `abf9ed5` vs `origin/main`
+- **Branch/commit:** `fix/release-audit-default-and-this-refs` @ `6ae322d` + fold-ins `abf9ed5`, `680c0ef` vs `origin/main`
 - **Reviewer:** framework-reviewer, 2026-08-25
 - **Area:** `src/vcfops_packaging/` (release_builder, publish, deps, audit, cli)
 - **Verdict:** **APPROVE** (0 BLOCKING / 0 open WARNING / 3 NIT; W1 resolved by `abf9ed5`)
@@ -91,3 +91,44 @@ Publish gains a real offline audit gate: an unknown or this-bound-invisible
 metric ref now aborts the publish loudly with a repair path and an explicit
 opt-out, with zero change to shipped zip content for passing releases and no
 network dependency introduced.
+
+## Delta re-check: `680c0ef` (extractor this-ref call sites, PR #137 Codex P1)
+
+Gap acknowledged: this gate's first pass scoped the diff to `src/vcfops_packaging/`
+and missed that `vcfops_extractor.extractor` called `deps._refs_from_formula` at
+two sites without the new `resource_kinds` argument, so extracting any
+this-bound SM would have aborted with the new AuditError. Caught by Codex on
+the PR. Lesson: a signature/contract change to a shared helper obligates a
+repo-wide caller sweep (`grep -rn _refs_from_formula src/`), not just the
+package under change.
+
+Re-verified by reviewer:
+
+- **Call sites:** the only remaining direct `_refs_from_formula` callers are
+  `deps.py`/`audit.py`/`cli.py` (packaging, already reviewed) and the new
+  wrapper itself. Both extractor sites (`extractor.py:2156` orphan/unresolved
+  check, `extractor.py:2261` enablement walk) now go through
+  `_sm_kinds_for_audit` + `_sm_formula_refs_for_audit`; `_policy_sm_assignments`
+  is in scope at both (defined `extractor.py:1916`).
+- **Resolution-order mirror:** `_sm_kinds_for_audit` order (policy scope,
+  REST `resourceKinds` normalized incl. `resourceKind`/`adapterKind` alternates
+  with the VMWARE default, formula-parse fallback) matches `_write_sm_yaml`'s
+  documented 1-2-3 order. Regex `\$\{\s*this\b` strip parity with deps'
+  lowercased-head check confirmed.
+- **No-metadata probe (reviewer-run):** this-only formula, no policy/REST/
+  formula kinds: extraction continues (no exception), loud per-SM WARN on
+  stderr, zero refs returned. Mixed formula with empty kinds: WARN emitted AND
+  the explicit `${adaptertype=...}` ref survives the strip. Formula-parse
+  fallback case: this-ref audited against the inferred kind, no WARN.
+- **No packaging-side behavior change:** commit touches only
+  `src/vcfops_extractor/extractor.py` + the new test file (2 files, +186/-5).
+- **Tests:** new file `tests/test_extractor_this_ref_audit.py` 7/7; combined
+  targeted set 110 passed; full suite 1106 passed, 4 skipped (+7 vs. `abf9ed5`
+  round).
+
+Downstream surfacing of the gap (empty `resource_kinds:` WARN in
+`_write_sm_yaml`, validator rejection before packaging) confirmed present in
+code, so the WARN-and-continue is a deferral to a loud gate, not a silent
+downgrade.
+
+Verdict unchanged: **APPROVE** (0 BLOCKING / 0 open WARNING / 3 NIT).
