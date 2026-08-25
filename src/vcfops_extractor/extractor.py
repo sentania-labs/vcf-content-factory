@@ -852,6 +852,79 @@ def _resource_kinds_from_formula(formula: str) -> list[dict]:
     return result
 
 
+# Matches a whole ${this, ...} formula entry (case-insensitive head).
+_THIS_ENTRY_RE = re.compile(r"\$\{\s*this\b[^}]*\}", re.IGNORECASE | re.DOTALL)
+
+
+def _sm_kinds_for_audit(
+    sm_data: dict, suuid: str, formula: str, policy_assignments: Optional[dict]
+) -> list[dict]:
+    """Resolve the resource-kind assignment used to audit ``${this, metric=...}``
+    refs in an extracted SM formula.
+
+    Mirrors ``_write_sm_yaml``'s resolution order: Default Policy assignment
+    (authoritative host scope), then the REST ``resourceKinds`` field, then the
+    formula-parse fallback.  Returns snake_case
+    ``{"adapter_kind_key", "resource_kind_key"}`` entries (the shape
+    ``vcfops_packaging.deps._refs_from_formula`` accepts), or ``[]`` when
+    nothing resolves.
+    """
+    sm_id_lower = (sm_data.get("id") or suuid).lower()
+    rks = (policy_assignments or {}).get(sm_id_lower)
+    if rks:
+        return list(rks)
+    out: list[dict] = []
+    for rk in (sm_data.get("resourceKinds") or []):
+        if not isinstance(rk, dict):
+            continue
+        rk_key = (
+            rk.get("resourceKindKey") or rk.get("resourceKind")
+            or rk.get("resource_kind_key") or ""
+        )
+        ak_key = (
+            rk.get("adapterKindKey") or rk.get("adapterKind")
+            or rk.get("adapter_kind_key") or "VMWARE"
+        )
+        if rk_key:
+            out.append({"resource_kind_key": rk_key, "adapter_kind_key": ak_key})
+    if out:
+        return out
+    return _resource_kinds_from_formula(formula)
+
+
+def _sm_formula_refs_for_audit(formula: str, sm_name: str, resource_kinds: list):
+    """Extract built-in metric refs from an extracted SM formula, never raising.
+
+    ``deps._refs_from_formula`` hard-fails (AuditError) on a ``${this,
+    metric=...}`` ref with no usable resource_kinds, which is right for the
+    packaging audit but must not abort a whole live-lab extraction over one
+    SM's assignment metadata (PR #137 Codex P1).  Extractor convention is a
+    loud per-SM WARN and carry on: warn, strip only the unauditable
+    ``${this, ...}`` entries, and still return every explicit
+    ``${adaptertype=..., objecttype=...}`` reference from the same formula.
+    The written YAML's empty/incorrect resource_kinds is separately WARNed by
+    ``_write_sm_yaml`` and rejected by the validator, so the gap is surfaced
+    twice, never silently dropped.
+    """
+    from vcfops_packaging.audit import AuditError
+    from vcfops_packaging.deps import _refs_from_formula
+
+    try:
+        return _refs_from_formula(formula or "", sm_name, resource_kinds)
+    except AuditError as exc:
+        print(
+            f"  WARN: super metric {sm_name!r}: a ${{this, metric=...}} reference "
+            f"cannot be audited: {exc}\n"
+            "  The extraction continues; correct resource_kinds: in the written "
+            "YAML before packaging (the packaging-time audit will then check "
+            "this reference).",
+            file=sys.stderr,
+        )
+        return _refs_from_formula(
+            _THIS_ENTRY_RE.sub("0", formula or ""), sm_name, resource_kinds
+        )
+
+
 def _write_sm_yaml(
     path: Path,
     sm_data: dict,
@@ -2076,9 +2149,15 @@ def extract_dashboard(
         sm_name_display = sm_data.get("name", suuid)
         formula = sm_formulas.get(sm_data.get("id", suuid), sm_data.get("formula", ""))
 
-        # Collect built-in metric refs from the (rewritten) formula
-        from vcfops_packaging.deps import _refs_from_formula, _is_sm_ref
-        formula_refs = [r for r in _refs_from_formula(formula, sm_name_display) if not _is_sm_ref(r.metric_key)]
+        # Collect built-in metric refs from the (rewritten) formula.
+        # ${this, metric=...} refs resolve against the SM's own assignment
+        # (policy scope preferred), same shape the packaging audit checks.
+        from vcfops_packaging.deps import _is_sm_ref
+        _audit_kinds = _sm_kinds_for_audit(sm_data, suuid, formula, _policy_sm_assignments)
+        formula_refs = [
+            r for r in _sm_formula_refs_for_audit(formula, sm_name_display, _audit_kinds)
+            if not _is_sm_ref(r.metric_key)
+        ]
 
         unresolved: list[str] = []
         for ref in formula_refs:
@@ -2164,7 +2243,6 @@ def extract_dashboard(
     # Import deps helpers inline to avoid circular-import at module level.
     from vcfops_packaging.deps import (
         MetricReference,
-        _refs_from_formula,
         _normalize_metric_key,
         _is_sm_ref,
     )
@@ -2180,7 +2258,8 @@ def extract_dashboard(
     for suuid, sm_data in sm_results.items():
         formula = sm_formulas.get(sm_data.get("id", suuid), sm_data.get("formula", ""))
         sm_name = sm_data.get("name", suuid)
-        for ref in _refs_from_formula(formula, sm_name):
+        _audit_kinds = _sm_kinds_for_audit(sm_data, suuid, formula, _policy_sm_assignments)
+        for ref in _sm_formula_refs_for_audit(formula, sm_name, _audit_kinds):
             _add_ref(ref)
 
     # View column refs (raw dict form — mirrors deps._refs_from_view logic)
