@@ -920,6 +920,108 @@ class TestExtDirectEnvelopesAreGuarded:
 
 
 # ---------------------------------------------------------------------------
+# Issue #124 -- the three INNER residual-else sites warn and continue
+# ---------------------------------------------------------------------------
+class TestInnerResidualElseWarnsAndContinues:
+    """Warn-and-continue at the three inner residual-else sites (#124).
+
+    Distinct from the OUTER residual elses pinned above, which refuse via
+    Write-Fail. These three sit one level down, where recon
+    (knowledge/context/api-surface/uninstall_empty_collection_shapes.md)
+    established the honest-empty case is NOT observable for the view sites, so
+    a hard refusal is a guess that could abort every uninstall (Get-AllReports
+    has no try/catch around it in Uninstall-Reports). The decided behavior:
+    an advisory that names the observed shape, claims nothing about what it
+    means, and never blocks.
+
+    These are the static pins. The executing-branch coverage (the lesson: an
+    assertion naming the right property but testing a proxy is not coverage)
+    lives in the pwsh harness, which drives each branch with a shape only
+    that branch handles and asserts on runtime-interpolated data (the bad
+    key's own name, its runtime type) that a stray copy of the message string
+    cannot fake.
+    """
+
+    ADVISORY = "continuing, but content may be under-reported"
+
+    @staticmethod
+    def _body(script_text: str, func: str) -> str:
+        m = re.search(
+            rf"function {re.escape(func)} \{{(.*?)\n\}}\n", script_text, re.S
+        )
+        assert m, f"{func} not found in install.ps1"
+        return m.group(1)
+
+    def test_get_allviews_carries_both_inner_advisories(
+        self, script_text: str
+    ) -> None:
+        body = self._body(script_text, "Get-AllViews")
+        assert body.count(self.ADVISORY) == 2, (
+            "Get-AllViews must warn at BOTH inner sites: the view-type value "
+            "and the subject value"
+        )
+        assert 'Write-Warn ("view type ' in body
+        assert 'Write-Warn ("view subject ' in body
+
+    def test_get_allreports_flatten_fallback_carries_the_advisory(
+        self, script_text: str
+    ) -> None:
+        body = self._body(script_text, "Get-AllReports")
+        assert body.count(self.ADVISORY) == 1, (
+            "Get-AllReports must warn exactly once, at the no-recognised-keys "
+            "flatten fallback"
+        )
+        assert 'Write-Warn ("report list came back in an unrecognised shape' in body
+        # The guard is "no array-valued property existed", NOT "zero items
+        # flattened": an empty array under an unknown key is still an
+        # array-shaped envelope and must stay silent.
+        assert "$sawArrayProp = $false" in body
+        assert "if (-not $sawArrayProp)" in body
+
+    @pytest.mark.parametrize("func", ["Get-AllViews", "Get-AllReports"])
+    def test_advisories_warn_and_never_exit(
+        self, script_text: str, func: str
+    ) -> None:
+        """The whole point: the advisory must never abort the uninstall.
+
+        Checked per warning-branch: every occurrence of the advisory sentence
+        must be emitted by Write-Warn, and no Write-Fail may share its
+        statement. (The OUTER residual elses in these same functions DO call
+        Write-Fail; those are pinned by TestExtDirectEnvelopeGuard and are
+        not what this measures.)
+        """
+        body = self._body(script_text, func)
+        for m in re.finditer(re.escape(self.ADVISORY), body):
+            stmt_start = body.rfind("Write-", 0, m.start())
+            assert stmt_start != -1
+            stmt = body[stmt_start:m.end()]
+            assert stmt.startswith("Write-Warn"), (
+                f"{func}: the advisory must go through Write-Warn, which "
+                f"cannot exit: {stmt[:60]!r}"
+            )
+            assert "Write-Fail" not in stmt
+
+    def test_advisories_name_the_shape_strictmode_safely(
+        self, script_text: str
+    ) -> None:
+        """Naming the shape must not itself throw on $null under StrictMode."""
+        body = self._body(script_text, "Get-AllViews")
+        assert body.count('{ "null" } else') >= 3, (
+            "every GetType().Name read in Get-AllViews (outer refusal plus "
+            "two inner advisories) must be guarded by a null check"
+        )
+
+    def test_advisories_make_no_positive_claim(self, script_text: str) -> None:
+        """The message may not assert emptiness or removal it cannot know."""
+        for func in ("Get-AllViews", "Get-AllReports"):
+            body = self._body(script_text, func)
+            for m in re.finditer(re.escape("Write-Warn"), body):
+                stmt = body[m.start():m.start() + 400]
+                assert "already removed" not in stmt
+                assert "no views exist" not in stmt and "no reports exist" not in stmt
+
+
+# ---------------------------------------------------------------------------
 # Issue #121 -- the import-wait timeout names the last-seen HTTP status
 # ---------------------------------------------------------------------------
 class TestImportWaitTimeoutNamesTheStatus:
