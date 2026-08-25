@@ -140,15 +140,39 @@ def audit_bundle_dependencies(
 
     # Unknown keys are always a hard error.
     if unknown:
+        resolved = enabled + needs_enable
+        had_partial = False
         lines = ["The following metric keys were not found in the adapter describe cache:"]
         for r in unknown:
             lines.append(
                 f"  {r.adapter_kind}/{r.resource_kind}  {r.metric_key}"
                 f"  (referenced by {r.source_desc})"
             )
+            # Partial-kind coverage: the same source (e.g. a multi-kind SM's
+            # ${this, metric=...} ref fanned out over resource_kinds) resolves
+            # this key on SOME declared kinds but not this one. That is a
+            # coverage problem, not a typo; say so explicitly instead of
+            # misdiagnosing a misspelled key (2026-08-25 review WARNING).
+            siblings = sorted({
+                f"{s.adapter_kind}/{s.resource_kind}"
+                for s in resolved
+                if s.metric_key == r.metric_key and s.source_desc == r.source_desc
+            })
+            if siblings:
+                had_partial = True
+                lines.append(
+                    f"    NOTE: this key DOES resolve on {', '.join(siblings)} "
+                    f"but NOT on {r.adapter_kind}/{r.resource_kind}. This is "
+                    "partial resource-kind coverage (the metric does not exist "
+                    "on every declared kind), not a misspelled key. Narrow the "
+                    "resource_kinds: declaration or pick a metric available on "
+                    "all declared kinds."
+                )
         lines.append("")
+        qualifier = "For keys with no NOTE above, this" if had_partial else "This"
         lines.append(
-            "This usually means the metric key is misspelled, or the describe cache needs "
+            f"{qualifier} usually means the metric key is misspelled, or the "
+            "describe cache needs "
             "refreshing. Run: python3 -m vcfops_packaging refresh-describe "
             f"--kind {unknown[0].adapter_kind}:{unknown[0].resource_kind}"
         )

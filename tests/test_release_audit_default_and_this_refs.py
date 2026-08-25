@@ -88,13 +88,15 @@ def _write_release_manifest(tmp_path: Path, proj: Path, name: str) -> Path:
     return p
 
 
-def _seed_describe_cache(cache_dir: Path, metrics: dict) -> Path:
-    """Write a minimal offline describe cache for VMWARE/VirtualMachine."""
+def _seed_describe_cache(
+    cache_dir: Path, metrics: dict, *, resource_kind: str = "VirtualMachine"
+) -> Path:
+    """Write a minimal offline describe cache for VMWARE/<resource_kind>."""
     ak_dir = cache_dir / "VMWARE"
     ak_dir.mkdir(parents=True, exist_ok=True)
-    (ak_dir / "VirtualMachine.json").write_text(__import__("json").dumps({
+    (ak_dir / f"{resource_kind}.json").write_text(__import__("json").dumps({
         "adapter_kind": "VMWARE",
-        "resource_kind": "VirtualMachine",
+        "resource_kind": resource_kind,
         "metrics": metrics,
         "properties": {},
     }))
@@ -416,6 +418,56 @@ class TestThisRefResolution:
             payload = json.loads(z.read(member[0]).decode("utf-8"))
         assert payload[0]["metric_key"] == "this_test_group|this_test_metric_v1"
         assert "Auto-detected" in payload[0].get("reason", "")
+
+
+    def test_partial_kind_coverage_names_both_sides(self, tmp_path, monkeypatch):
+        """2026-08-25 review WARNING: a multi-kind SM whose this-bound key
+        exists on only ONE declared kind must still fail loudly, but the
+        message must diagnose partial resource-kind coverage (naming the
+        kind(s) where the key resolves and the kind(s) where it does not)
+        instead of a misspelled key."""
+        import yaml as _yaml
+        from vcfops_packaging.discrete_builder import build_discrete
+
+        proj = tmp_path / "partial_proj"
+        sm_dir = proj / "supermetrics"
+        sm_dir.mkdir(parents=True)
+        (sm_dir / "partial_sm.yaml").write_text(_yaml.dump({
+            "name": "Partial Coverage SM",
+            "formula": _THIS_ONLY_FORMULA,
+            "description": "Multi-kind SM, key on one kind only.",
+            "resource_kinds": [
+                {"resource_kind_key": "VirtualMachine", "adapter_kind_key": "VMWARE"},
+                {"resource_kind_key": "HostSystem", "adapter_kind_key": "VMWARE"},
+            ],
+        }))
+
+        cache_dir = tmp_path / "cache"
+        # Key present on VirtualMachine, absent on HostSystem (whose cache
+        # file must exist, or _check_cache_coverage fires first).
+        _seed_describe_cache(cache_dir, {
+            "this_test_group|this_test_metric_v1": {
+                "name": "This Test Metric", "default_monitored": True,
+            },
+        }, resource_kind="VirtualMachine")
+        _seed_describe_cache(cache_dir, {}, resource_kind="HostSystem")
+        _patch_offline_cache(monkeypatch, cache_dir)
+
+        with pytest.raises(AuditError) as excinfo:
+            build_discrete(
+                content_type="supermetric",
+                item_name="Partial Coverage SM",
+                output_dir=tmp_path / "out",
+                extra_search_dirs=[proj],
+                skip_audit=False,
+                live_describe=False,
+            )
+        msg = str(excinfo.value)
+        assert "partial resource-kind coverage" in msg
+        assert "DOES resolve on VMWARE/VirtualMachine" in msg
+        assert "NOT on VMWARE/HostSystem" in msg
+        # The typo hint is qualified, not asserted for the partial-coverage key.
+        assert "For keys with no NOTE above" in msg
 
 
 # ---------------------------------------------------------------------------
