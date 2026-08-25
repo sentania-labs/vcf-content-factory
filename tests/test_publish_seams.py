@@ -16,9 +16,11 @@ only trusted when the branch that handles it is shown to execute):
   4. An injected validator is actually invoked, exactly once, with the
      factory repo path.
 
-All fast: no slow marker.  Nothing here reads or writes the real content/
-corpus (the validator is stubbed or monkeypatched in every test), so no
-real_corpus group either.
+All fast: no slow marker.  No test here runs validators over or writes to
+the real content/ corpus (the validator is stubbed or monkeypatched in every
+test); the only touch is a read-only existence/name check of one real
+content/dashboards/ YAML referenced by the test manifest, which does not
+need the real_corpus group.
 """
 from __future__ import annotations
 

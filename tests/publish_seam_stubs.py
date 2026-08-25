@@ -1,7 +1,7 @@
 """Injectable seam stubs for publish() shape tests (issue #125).
 
 ``publish()`` grew two keyword-only test seams, ``validator`` and
-``build_one_release``, because the real seven-package validator chain costs
+``build_one_release``, because the real eight-validator chain costs
 ~200s per call (vcfops_managementpacks validate alone is ~190s) and every
 shape-only assertion was paying it.  This module is the single shared home
 for the stub implementations so the two publish test files cannot drift
