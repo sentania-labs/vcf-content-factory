@@ -78,8 +78,6 @@ Files currently marked `slow` at module level:
 
 | File | Reason |
 |------|--------|
-| `test_publish_phase3.py` | zip builds + real corpus validators (~30s/test) |
-| `test_publish_pr_mode_v4.py` | zip builds + real corpus validators |
 | `test_third_party_routing.py` | zip builds + publish integration |
 | `test_third_party_component_routing_phase5.py` | zip builds + publish integration |
 | `test_cli_phase4.py` | factory copy + validators (~8s/test) |
@@ -98,10 +96,20 @@ validator scans interfere with each other.
 
 Files that carry both `slow` and `real_corpus`:
 
-- `test_publish_phase3.py`
-- `test_publish_pr_mode_v4.py`
 - `test_third_party_routing.py`
 - `test_third_party_component_routing_phase5.py`
+
+The publish test files (`test_publish_phase3.py`, `test_publish_pr_mode_v4.py`,
+`test_publish_seams.py`) are no longer slow-marked at module level: shape tests
+inject the validator/build seam stubs (`tests/publish_seam_stubs.py`, issue
+#125) so they neither run the ~200s validator chain nor touch the real corpus.
+The exceptions inside `test_publish_phase3.py`:
+
+- `test_real_run_zip_lands` is the #125 anti-drift end-to-end test (real
+  validators + real zip build); it alone carries `slow` + `real_corpus`.
+- `TestPolicyCaveatInReadme` injects the real builder (its assertions inspect
+  README members inside the built zip), so it carries `real_corpus` but not
+  `slow` (~3s/test with the validator stubbed).
 
 `test_validate_content_hook.py` is marked `slow` but **NOT** `real_corpus`.
 It is hermetic: it sets `VCFCF_CONTENT_ROOT` to a `tmp_path`-based copy of

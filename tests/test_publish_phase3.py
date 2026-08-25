@@ -36,12 +36,13 @@ from typing import List
 import pytest
 import yaml
 
-# All tests in this file call publish(factory_repo=REPO_ROOT) which runs the
-# full validator suite against the real content/ corpus.  Mark them slow
-# (zip-building + validator overhead, ~30s each) and colocate them on one
-# xdist worker so they never run concurrently with the hook tests that
-# temporarily write files into the same corpus directories.
-pytestmark = [pytest.mark.slow, pytest.mark.xdist_group("real_corpus")]
+# Most tests here assert on publish() orchestration shape, so they inject the
+# validator/build seam stubs (tests/publish_seam_stubs.py, issue #125) and run
+# in seconds with no slow marker: git, lockfile, sweeps, README and commit
+# behaviour stay real, only the ~200s validator chain and the real zip build
+# are stubbed.  The one deliberate exception is test_real_run_zip_lands, the
+# anti-drift end-to-end test that keeps the real validator + real zip build;
+# it alone carries the slow marker and the real_corpus xdist group.
 
 REPO_ROOT = Path(__file__).parent.parent
 
@@ -202,7 +203,8 @@ class TestDryRun:
     """S1: dry_run=True shows what would happen without writing files."""
 
     def test_dry_run_result(self, tmp_path, factory_with_release, monkeypatch):
-        from vcfops_packaging.publish import publish, PublishError
+        from vcfops_packaging.publish import PublishError
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         _patch_enumerate(monkeypatch, factory_with_release)
@@ -226,7 +228,7 @@ class TestDryRun:
         )
 
     def test_dry_run_no_files_copied(self, tmp_path, factory_with_release, monkeypatch):
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         _patch_enumerate(monkeypatch, factory_with_release)
@@ -248,7 +250,7 @@ class TestDryRun:
             )
 
     def test_dry_run_no_commit(self, tmp_path, factory_with_release, monkeypatch):
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         _patch_enumerate(monkeypatch, factory_with_release)
@@ -289,8 +291,16 @@ class TestDryRun:
 # S2 — real run, no_push
 # ---------------------------------------------------------------------------
 
+@pytest.mark.slow
+@pytest.mark.xdist_group("real_corpus")
 def test_real_run_zip_lands(tmp_path, monkeypatch):
-    """S2a: zip lands at <dist>/dashboards/<slug>.zip (versionless)."""
+    """S2a: zip lands at <dist>/dashboards/<slug>.zip (versionless).
+
+    THE #125 ANTI-DRIFT END-TO-END TEST.  Do not stub the seams here: this
+    is the one test that still drives the real eight-validator chain and the
+    real zip builder through publish(), so the seam stubs used by every
+    shape test cannot drift from what production actually does.
+    """
     from vcfops_packaging.publish import publish
 
     dist = _init_dist_repo(tmp_path)
@@ -322,10 +332,22 @@ def test_real_run_zip_lands(tmp_path, monkeypatch):
     assert len(result.built) == 1
     assert result.built[0].name == "demand-driven-capacity-v2.zip"
 
+    # The landed zip must be the REAL builder's output, not a seam stub:
+    # a genuine content-import zip with real members inside.
+    import zipfile
+    with zipfile.ZipFile(expected) as zf:
+        names = zf.namelist()
+    assert "stub.txt" not in names, (
+        f"End-to-end test got the seam stub artifact, not a real build: {names}"
+    )
+    assert len(names) >= 2, (
+        f"Real dashboard build should contain multiple members, got: {names}"
+    )
+
 
 def test_real_run_readme_regenerated(tmp_path, monkeypatch):
     """S2b: README is regenerated and human content outside markers is preserved."""
-    from vcfops_packaging.publish import publish
+    from publish_seam_stubs import stubbed_publish as publish
 
     dist = _init_dist_repo(tmp_path)
     releases_dir = tmp_path / "rr_releases2"
@@ -360,7 +382,7 @@ def test_real_run_readme_regenerated(tmp_path, monkeypatch):
 
 def test_real_run_commit_and_no_push(tmp_path, monkeypatch):
     """S2c: a commit is created, pushed=False."""
-    from vcfops_packaging.publish import publish
+    from publish_seam_stubs import stubbed_publish as publish
 
     dist = _init_dist_repo(tmp_path)
     releases_dir = tmp_path / "rr_releases3"
@@ -406,7 +428,7 @@ class TestNoOpSkip:
     """
 
     def test_second_publish_no_new_commit(self, tmp_path, monkeypatch):
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases2"
@@ -448,7 +470,7 @@ class TestNoOpSkip:
 
     def test_second_publish_commit_count_unchanged(self, tmp_path, monkeypatch):
         """Commit count must not increase when content is byte-identical."""
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases2b"
@@ -493,7 +515,7 @@ class TestStaleZipSweep:
     """S4: a manually-placed legacy zip with no release manifest is moved to retired/."""
 
     def test_stale_zip_moved_to_retired(self, tmp_path, monkeypatch):
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
 
@@ -551,7 +573,8 @@ class TestLockfileGuard:
     """S5: a pre-existing lockfile causes a clear PublishError."""
 
     def test_lockfile_blocks_publish(self, tmp_path, monkeypatch):
-        from vcfops_packaging.publish import publish, PublishError
+        from vcfops_packaging.publish import PublishError
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
 
@@ -571,7 +594,7 @@ class TestLockfileGuard:
             )
 
     def test_lockfile_released_on_success(self, tmp_path, monkeypatch):
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases_lock2"
@@ -591,19 +614,18 @@ class TestLockfileGuard:
 
     def test_lockfile_released_on_error(self, tmp_path, monkeypatch):
         """Lockfile must be cleaned up even when a validator fails."""
-        from vcfops_packaging.publish import publish, PublishError
+        from vcfops_packaging.publish import PublishError
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases_err"
         releases_dir.mkdir()
         _patch_enumerate(monkeypatch, releases_dir)
 
-        # Patch _run_validators to always raise.
-        import vcfops_packaging.publish as _pub
-        monkeypatch.setattr(
-            _pub, "_run_validators",
-            lambda _: (_ for _ in ()).throw(PublishError("injected validator failure")),
-        )
+        # Inject a failing validator through the #125 seam (an explicit
+        # keyword overrides the stubbed_publish default).
+        def _failing_validator(_factory_repo):
+            raise PublishError("injected validator failure")
 
         with pytest.raises(PublishError, match="injected"):
             publish(
@@ -612,6 +634,7 @@ class TestLockfileGuard:
                 dry_run=False,
                 no_push=True,
                 use_pr=False,
+                validator=_failing_validator,
             )
 
         lockfile = dist / ".publish.lock"
@@ -628,7 +651,7 @@ class TestReadmeNoMarkers:
     """When the dist repo README has no AUTO markers, publish warns but succeeds."""
 
     def test_no_markers_no_crash(self, tmp_path, monkeypatch):
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path, with_auto_markers=False)
         releases_dir = tmp_path / "releases_nomark"
@@ -658,7 +681,7 @@ class TestReadmeCellFormat:
 
     def _run_publish_and_read_readme(self, tmp_path, monkeypatch) -> str:
         """Helper: publish a dashboard release and return the README text."""
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "cell_fmt_releases"
@@ -780,7 +803,7 @@ class TestLockfileNotInCommit:
 
     def test_lockfile_absent_from_commit_tree(self, tmp_path, monkeypatch):
         """After a successful publish(), git ls-tree HEAD must not list .publish.lock."""
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases_lockcommit"
@@ -818,7 +841,7 @@ class TestLockfileNotInCommit:
 
     def test_lockfile_absent_from_commit_stat(self, tmp_path, monkeypatch):
         """git show HEAD --stat must not list .publish.lock in the diff."""
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases_lockstat"
@@ -855,7 +878,7 @@ class TestLockfileNotInCommit:
 
     def test_lockfile_also_not_on_disk_after_commit(self, tmp_path, monkeypatch):
         """The lockfile must be removed from disk (not just from the commit)."""
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases_lockdisk"
@@ -888,6 +911,7 @@ class TestLockfileNotInCommit:
 # S7 — policy caveat appears in per-zip READMEs  (Fix 1 regression)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.xdist_group("real_corpus")
 class TestPolicyCaveatInReadme:
     """S7: the Default Policy caveat must appear in every per-zip README surface.
 
@@ -895,6 +919,11 @@ class TestPolicyCaveatInReadme:
       (a) top-level README.md (from README_framework.md template)
       (b) bundle-level README (from builder._generate_bundle_readme)
       (c) discrete-level README (from discrete_builder._generate_discrete_readme)
+
+    The zip-inspecting tests assert on REAL builder output (README members
+    inside the artifact), so they inject the real ``_build_one_release``
+    through the #125 seam while keeping the validator stubbed.  They read the
+    real content/ corpus during the build, hence the real_corpus group.
     """
 
     _CAVEAT_FRAGMENT = "Default Policy"
@@ -914,7 +943,8 @@ class TestPolicyCaveatInReadme:
 
     def test_bundle_readme_has_caveat(self, tmp_path, monkeypatch):
         """A built bundle zip's top-level README.md contains the policy caveat."""
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
+        from vcfops_packaging.publish import _build_one_release
         import zipfile
 
         dist = _init_dist_repo(tmp_path)
@@ -936,6 +966,7 @@ class TestPolicyCaveatInReadme:
             dry_run=False,
             no_push=True,
             use_pr=False,
+            build_one_release=_build_one_release,
         )
 
         assert result.built, "Expected at least one built zip"
@@ -956,7 +987,8 @@ class TestPolicyCaveatInReadme:
 
     def test_bundle_inner_readme_has_caveat(self, tmp_path, monkeypatch):
         """A built bundle zip's bundle-level README.md contains the policy caveat."""
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
+        from vcfops_packaging.publish import _build_one_release
         import zipfile
 
         dist = _init_dist_repo(tmp_path)
@@ -978,6 +1010,7 @@ class TestPolicyCaveatInReadme:
             dry_run=False,
             no_push=True,
             use_pr=False,
+            build_one_release=_build_one_release,
         )
 
         assert result.built
@@ -1006,7 +1039,7 @@ class TestVersionlessNaming:
 
     def test_versionless_zip_lands_at_correct_path(self, tmp_path, monkeypatch):
         """A published release lands at <dist>/<subdir>/<slug>.zip, not <slug>-<version>.zip."""
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "vl_releases"
@@ -1042,7 +1075,7 @@ class TestVersionlessNaming:
 
     def test_legacy_versioned_zip_deleted_on_publish(self, tmp_path, monkeypatch):
         """A pre-existing legacy <slug>-<X.Y>.zip is deleted in-place on publish."""
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
 
@@ -1136,7 +1169,7 @@ class TestForceFlag:
 
     def test_force_commits_when_content_unchanged(self, tmp_path, monkeypatch):
         """After an identical second publish with force=True, a new commit exists."""
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "force_releases"
@@ -1193,7 +1226,7 @@ class TestForceFlag:
 
     def test_normal_second_publish_no_commit(self, tmp_path, monkeypatch):
         """Without --force, a second identical publish produces no commit."""
-        from vcfops_packaging.publish import publish
+        from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "force_normal_releases"
