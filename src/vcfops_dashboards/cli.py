@@ -17,6 +17,7 @@ from .client import (
     get_current_user,
     import_content_zip,
 )
+from .id_guard import check_dashboard_id_stability
 from .loader import DashboardValidationError, load_all
 from .packager import build_import_zip
 from .ui_client import UIClientError, VCFOpsUIClient
@@ -97,6 +98,19 @@ def cmd_validate(args) -> int:
         print(f"  dashboard  {d.id}  {d.name}")
 
     rc = 0
+
+    # Issue #113 identity guard: dashboard import identity is the NAME, so a
+    # changed id: under an unchanged name: silently orphans the previously
+    # installed UUID. Compare against the last committed version (git HEAD).
+    guard_errors, guard_warnings = check_dashboard_id_stability(
+        Path(args.dashboards_dir)
+    )
+    for msg in guard_warnings:
+        print(f"WARNING: {msg}", file=sys.stderr)
+    if guard_errors:
+        for msg in guard_errors:
+            print(f"ID-STABILITY: {msg}", file=sys.stderr)
+        rc = 1
 
     if using_defaults:
         try:
