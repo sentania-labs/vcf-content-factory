@@ -61,10 +61,17 @@ jobs:
         # ephemeral pod per job).
         # Test deps (pytest, pytest-xdist pin) live in requirements-dev.txt
         # so local and CI environments install the identical toolchain.
+        # One more pool quirk: bare `python3` on the image PATH is the
+        # baked /opt/pyenv venv (vSphere SDK), whose pip refuses --user.
+        # Shim PATH so `python3` is the real /usr/bin/python3 for every
+        # later step, then install to user site.
         run: |
-          python3 --version
-          python3 -m pip --version || python3 -m ensurepip --upgrade
-          python3 -m pip install --user --break-system-packages -r requirements.txt -r requirements-dev.txt
+          mkdir -p "$HOME/.ci-bin"
+          ln -sf /usr/bin/python3 "$HOME/.ci-bin/python3"
+          echo "$HOME/.ci-bin" >> "$GITHUB_PATH"
+          /usr/bin/python3 --version
+          /usr/bin/python3 -m pip --version || /usr/bin/python3 -m ensurepip --user
+          /usr/bin/python3 -m pip install --user --break-system-packages -r requirements.txt -r requirements-dev.txt
 
       - name: Bootstrap SDK adapter repos
         run: bash scripts/bootstrap_managed_paks.sh
