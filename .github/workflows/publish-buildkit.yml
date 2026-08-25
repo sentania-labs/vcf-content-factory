@@ -45,7 +45,9 @@ permissions:
 
 jobs:
   publish-buildkit:
-    runs-on: ubuntu-latest
+    # Lab ARC runner pool (homelab-runner docs/ci-consumer-contract.md).
+    # No JDK needed here: this workflow deliberately compiles nothing.
+    runs-on: lab
     env:
       # vcfops_managementpacks lives under src/ (see pyproject.toml
       # src-layout). Resolve it via PYTHONPATH — this workflow deliberately
