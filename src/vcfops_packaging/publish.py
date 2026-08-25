@@ -360,8 +360,12 @@ def _git_commit(
         commit_args.append("--allow-empty")
     r = _git(dist_repo, *commit_args, *_commit_message_args(message, body))
     if r.returncode != 0:
-        # "nothing to commit" is not a failure.
-        if "nothing to commit" in r.stdout + r.stderr:
+        # "nothing to commit" is not a failure, but only when an empty
+        # commit was not requested.  With --allow-empty a genuine no-op
+        # cannot happen, so any failure (e.g. a commit hook rejecting
+        # while echoing that phrase) must raise, not report a silent
+        # success with no commit.
+        if not allow_empty and "nothing to commit" in r.stdout + r.stderr:
             return None
         raise PublishError(
             f"git commit failed in {dist_repo}: {r.stdout.strip()} {r.stderr.strip()}"
