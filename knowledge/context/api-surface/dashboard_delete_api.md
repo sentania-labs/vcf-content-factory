@@ -665,9 +665,15 @@ is a claim about instance state.
 
 Note `dashboard.action` (`getDashboardList`, `deleteTab`) is **not**
 Ext.Direct: it answers with a single object carrying `dashboards`, no
-envelope array and no `type`. A genuinely empty instance returns
-`"dashboards": []` — present and empty — which is how "no dashboards"
-stays distinguishable from "we could not read the response".
+envelope array and no `type`. A genuinely empty instance is *expected*
+to return `"dashboards": []` — present and empty — which would keep
+"no dashboards" distinguishable from "we could not read the response".
+**That empty shape has never been observed**: no server-side filter
+narrows `getDashboardList`, so producing it would require deleting
+every dashboard. See
+`uninstall_empty_collection_shapes.md` (Q3) for the recon that tried
+and why the empty-dashboard contract remains unresolved; do not build
+a refuse-on-unrecognised-shape guard on this expectation alone.
 
 ## Supportability caveat
 
