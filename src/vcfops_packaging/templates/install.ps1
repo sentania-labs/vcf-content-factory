@@ -2186,8 +2186,27 @@ function Get-AllViews {
                     $viewList = $subjectProp.Value
                     if ($viewList -is [System.Array]) {
                         foreach ($v in $viewList) { $allViews.Add($v) }
+                    } else {
+                        # Residual else (#124): warn and continue, never abort.
+                        # Recon could not observe an empty subject list on a
+                        # live instance (the endpoint ignores all filters), so
+                        # a hard refusal here would guess in the dangerous
+                        # direction and could block every uninstall.  Name the
+                        # shape, make no claim about what it means, keep going.
+                        $shape = if ($null -eq $viewList) { "null" } else { $viewList.GetType().Name }
+                        Write-Warn ("view subject '$($subjectProp.Name)' under view type " +
+                            "'$($typeProp.Name)' came back in an unrecognised shape " +
+                            "($shape); continuing, but content may be under-reported")
                     }
                 }
+            } else {
+                # Residual else (#124): same warn-and-continue reasoning as the
+                # subject-list branch above.  This value is one view TYPE's
+                # subject map; dropping it silently under-reports every view of
+                # that type, and refusing would abort the entire uninstall.
+                $shape = if ($null -eq $subjectMap) { "null" } else { $subjectMap.GetType().Name }
+                Write-Warn ("view type '$($typeProp.Name)' came back in an unrecognised " +
+                    "shape ($shape); continuing, but content may be under-reported")
             }
         }
     } else {
@@ -2264,10 +2283,25 @@ function Get-AllReports {
     # Fallback: flatten any array properties one level deep
     $items = [System.Collections.Generic.List[object]]::new()
     if ($raw -is [PSCustomObject]) {
+        $sawArrayProp = $false
         foreach ($prop in $raw.PSObject.Properties) {
             if ($prop.Value -is [System.Array]) {
+                $sawArrayProp = $true
                 foreach ($item in $prop.Value) { $items.Add($item) }
             }
+        }
+        if (-not $sawArrayProp) {
+            # Residual else (#124): an object with none of the recognised keys
+            # and no array-valued property at all.  The one observed honest
+            # empty case carries records:[] and returns above, so this shape is
+            # unenumerated; but the production filter's empty case has not been
+            # observed, so returning the empty list with a warning beats a hard
+            # refusal that would abort the entire uninstall.  Name what was
+            # seen, claim nothing about what it means.
+            $keyNames = @($raw.PSObject.Properties | ForEach-Object { $_.Name }) -join ", "
+            Write-Warn ("report list came back in an unrecognised shape (object with " +
+                "keys: $keyNames; none recognised, none array-valued); " +
+                "continuing, but content may be under-reported")
         }
     } else {
         # Same residual-else defect as Get-AllViews, one function over.  A
