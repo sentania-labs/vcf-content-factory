@@ -27,8 +27,14 @@ distribution repo:
 
 Public API
 ----------
-publish(factory_repo, dist_repo, dry_run, force, no_push, use_pr, auto_merge)
+publish(factory_repo, dist_repo, dry_run, force, no_push, use_pr, auto_merge,
+        *, validator=None, build_one_release=None)
   -> PublishResult
+
+validator / build_one_release are keyword-only TEST SEAMS (issue #125): when
+omitted (all production callers), the real eight-validator chain and the real
+zip builder run.  Only tests inject stubs; there is no env-var or config
+switch that can disable validation.
 
 dry_run=True:
   - Skips clean-tree git checks on dist repo.
@@ -61,7 +67,7 @@ import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 # ---------------------------------------------------------------------------
 # Validator modules + arguments.  Each entry is (module_arg, extra_args).
@@ -1082,6 +1088,9 @@ def publish(
     no_push: bool = False,
     use_pr: bool = True,
     auto_merge: bool = False,
+    *,
+    validator: Optional[Callable[[Path], None]] = None,
+    build_one_release: Optional[Callable[..., list]] = None,
 ) -> PublishResult:
     """Orchestrate a full publish operation.
 
@@ -1102,6 +1111,21 @@ def publish(
                       and auto_merge=True is an error.
         auto_merge:   If True, call ``gh pr merge --auto --merge`` after opening the
                       PR.  Only valid when use_pr=True.
+        validator:    TEST SEAM (keyword-only).  Callable ``(factory_repo) -> None``
+                      that raises PublishError on validation failure.  Defaults to
+                      the real eight-validator subprocess chain
+                      (:func:`_run_validators`).  Production callers (the CLI)
+                      never pass this; only tests inject a stub so shape-only
+                      assertions do not pay ~200s of validator subprocesses per
+                      call (issue #125).  There is no env-var or config switch:
+                      the only way to skip real validation is an explicit
+                      argument at the call site.
+        build_one_release:
+                      TEST SEAM (keyword-only).  Callable
+                      ``(release, staging_dir, factory_repo) -> [ReleaseArtifact]``
+                      raising PublishError on build failure.  Defaults to the
+                      real zip builder (:func:`_build_one_release`).  Same
+                      contract as ``validator``: tests only.
 
     Returns:
         PublishResult with built/skipped/deleted/retired/readme_path/commit_sha/pushed/pr_url.
@@ -1133,6 +1157,8 @@ def publish(
             use_pr=use_pr,
             auto_merge=auto_merge,
             result=result,
+            validator=validator,
+            build_one_release=build_one_release,
         )
     finally:
         _release_lock(dist_repo)
@@ -1149,12 +1175,22 @@ def _publish_inner(
     use_pr: bool,
     auto_merge: bool,
     result: PublishResult,
+    validator: Optional[Callable[[Path], None]] = None,
+    build_one_release: Optional[Callable[..., list]] = None,
 ) -> None:
     """Inner body of publish(), runs inside the lockfile try/finally."""
+    # Resolve the test seams to the real implementations by default.  The
+    # module-global lookup happens here at call time (not at def time) so
+    # monkeypatching ``_run_validators`` / ``_build_one_release`` still works.
+    if validator is None:
+        validator = _run_validators
+    if build_one_release is None:
+        build_one_release = _build_one_release
+
     # -----------------------------------------------------------------------
     # Step 2: Validate factory repo
     # -----------------------------------------------------------------------
-    _run_validators(factory_repo)
+    validator(factory_repo)
 
     # -----------------------------------------------------------------------
     # Step 3: Clean-tree check on dist repo
@@ -1198,7 +1234,7 @@ def _publish_inner(
             # Always build and copy; git diff --staged decides whether content changed.
             built_this_release = False
             if not dry_run:
-                artifacts = _build_one_release(release, staging, factory_repo)
+                artifacts = build_one_release(release, staging, factory_repo)
             else:
                 artifacts = None  # dry-run: no actual build
 
