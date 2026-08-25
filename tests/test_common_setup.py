@@ -814,6 +814,29 @@ def test_write_env_file_replaces_the_target_of_a_symlink(tmp_path):
     assert real.read_text(encoding="utf-8").strip() == "VCFOPS_PROD_HOST=h"
 
 
+def test_write_env_file_survives_a_raising_chmod(tmp_path, monkeypatch):
+    """A chmod failure must not fail the write (issue #115 fold-in).
+
+    The belt-and-suspenders os.chmod after the fd write is best effort:
+    the temp file is already 0600 from its os.open mode, so a filesystem
+    that rejects chmod (some network mounts) must not cost the operator
+    their .env. Executes the except-OSError branch, not a string pin.
+    """
+    calls = []
+
+    def raising_chmod(*args, **kwargs):
+        calls.append(args)
+        raise PermissionError("chmod not supported here")
+
+    monkeypatch.setattr(os, "chmod", raising_chmod)
+    target = tmp_path / ".env"
+    sc.write_env_file(target, ["VCFOPS_PROD_HOST=h"])
+    assert calls, "the chmod branch did not execute"
+    assert target.read_text(encoding="utf-8").strip() == "VCFOPS_PROD_HOST=h"
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600  # from os.open, not chmod
+    assert list(tmp_path.iterdir()) == [target], "temp file leaked"
+
+
 # ---------------------------------------------------------------------------
 # Unstorable values (framework review W-1 / W-2)
 # ---------------------------------------------------------------------------
