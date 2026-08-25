@@ -45,6 +45,10 @@ permissions:
 
 jobs:
   publish-buildkit:
+    # Canonical-repo gate: releases are cut only from the upstream repo;
+    # a clone pushing a matching tag must not attempt (and on the lab
+    # label, silently queue) a release build of its own.
+    if: github.repository == 'sentania-labs/vcf-content-factory'
     # Lab ARC runner pool (homelab-runner docs/ci-consumer-contract.md).
     # No JDK needed here: this workflow deliberately compiles nothing.
     runs-on: lab
