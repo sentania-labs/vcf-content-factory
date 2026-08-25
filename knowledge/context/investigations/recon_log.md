@@ -3998,3 +3998,245 @@ author. Creator/Description keys exist in vocabulary but render empty
 on this instance (property collection appears disabled by default,
 consistent with docs marking them "disabled by default") — call this
 out explicitly if the requester wants those columns populated.
+
+---
+
+## 2026-08-25 — Disabled-metric recon for the 72 SCG 9.1 controls outside compliance-adapter reach (ops-recon)
+
+**Target:** the 9 components the VCF Content Factory compliance MP cannot
+reach (NSX, VCF Operations, Fleet Management, VCF Automation, Operations
+for Networks, Protection and Recovery, SDDC Manager, VCF umbrella, VCF
+installer). Full control inventory in the request body (see prior recon
+task context).
+
+**Instance:** devel profile, `vcf-lab-operations-devel.int.sentania.net`
+(RULE-009 default; not prod). Strictly read-only, GET only, no
+enable/sync/writes.
+
+### Adapter kind inventory (21 kinds installed, `GET /api/adapterkinds`)
+
+Present kinds relevant to the 9 components: `NSXTAdapter` (NSX),
+`VcfAdapter` (VMware Cloud Foundation / umbrella / SDDC Manager),
+`VMWARE_INFRA_HEALTH` / `VMWARE_INFRA_MANAGEMENT` (VCF Ops self-monitoring
+"cluster health" adapters, cross-domain "world" resource kinds for
+Automation, Networks, Logs, SRM, SDDC Manager, NSX, vIDM),
+`vCenter Operations Adapter`, `vRealizeOpsMgrAPI`, `DiagnosticsAdapter`
+(VCF Operations self-monitoring). **No adapter kind at all** exists for
+Fleet Management, VCF Automation as a standalone product, VCF Operations
+for Networks as a standalone product, Protection and Recovery, or the VCF
+installer — those only appear (if at all) as sub-resource-kinds inside
+`VMWARE_INFRA_HEALTH`'s cross-domain health rollup.
+
+### Adapter INSTANCE inventory (20 instances, `GET /api/adapters`) — the load-bearing finding
+
+Pak-installed ≠ configured. Cross-checking kinds against live instances:
+
+- `NSXTAdapter`: kind installed, **zero adapter instances configured**.
+  No NSX Manager is registered to this VCF Ops instance at all.
+- `VcfAdapter` (VMware Cloud Foundation umbrella / SDDC Manager): kind
+  installed, **zero adapter instances configured**.
+- `VMWARE_INFRA_HEALTH` / `VMWARE_INFRA_MANAGEMENT`: **one instance each**,
+  both named "...VMware Cloud Foundation Operations Cluster Node" — this
+  is VCF Ops's own self-monitoring rollup, not a federation of the other
+  VCF components.
+- `vCenter Operations Adapter`, `vRealizeOpsMgrAPI`, `DiagnosticsAdapter`:
+  one instance each, all self-monitoring VCF Operations (the platform
+  monitoring itself).
+- Confirmed via `GET /api/resources?resourceKind=<kind>` (pageSize 50)
+  that the `VMWARE_INFRA_HEALTH` cross-domain resource kinds
+  `SDDC_MANAGER_APP`, `SDDC_MANAGER_BACKUP_JOB`, `SDDC_MANAGER_SERVICE`,
+  `NSX_T_APP`, `NSXT_HEALTH_WORLD`, `NSX_BACKUP_JOB`, `ARIA_AUTO_APP`,
+  `CAS_HEALTH_WORLD` (Automation), `ARIA_NETWORKS_APP`,
+  `ARIA_NETWORKS_WORLD` (Operations for Networks), `SRM_APP`,
+  `SRM_HEALTH_WORLD` (Protection and Recovery / SRM lineage),
+  `ARIA_LOGS_APP`, `VCF_HEALTH_WORLD`, `VCF_DOMAIN`, `VCF_DEPLOYMENT`,
+  `VIDM_APP` **all return 0 live resources** on this instance, despite the
+  resource-kind schema existing in the adapter's vocabulary. This is not
+  a policy-disabled state — there is no object to monitor. The lab does
+  not have SDDC Manager, NSX, Automation, Networks, or P&R registered
+  into VCF Operations's cross-product health view.
+
+### Per-component summary
+
+**NSX** — adapter present (pak) / **NOT configured** (no instance). 0 of
+0 relevant metric keys checked (no live resource to query). Finding, not
+failure: NSX has no transport on this lab today, full stop — not a
+policy question. Existing content: built-in **`NSX Security Configuration
+Guide`** policy object exists (id `a8f1c249-6e65-4ad1-8634-51feffe5452b`)
+and dozens of built-in NSX alert/symptom defs exist in the vocabulary
+(`NSX is violating VMware NSX Security Configuration Guide`, `NSX
+Instance/Management Cluster/Logical Switch/Router is violating VMware
+Cloud Foundation Audit Guide for version 4.2–4.5`, cert-expiry and
+password-expiry alerts) — all **dark because zero NSX resources exist**,
+not because of policy. These target the older Audit Guide/SCG lineage,
+not the 72-control 9.1 SCG; PARTIAL inspiration at best, would need a
+live NSX Manager adapter instance to ever fire regardless.
+
+**VCF Operations (platform itself)** — adapter present AND configured
+(vCenter Operations Adapter, vRealizeOpsMgrAPI, DiagnosticsAdapter, all
+self-monitoring). Checked statkey vocab for `vC-Ops-Node` (636 keys),
+`vC-Ops-Suite-API` (84), `vC-Ops-CaSA` (70), `vC-Ops-Cluster` (320),
+`vC-Ops-Watchdog` (55) = **1,166 keys checked of 1,166 available** on
+these 5 resource kinds. Findings:
+  - Exact/plausible keys found: `ntp|serverCount`, `ntp|unreachableCount`,
+    `Service:ntp|Enabled` (vC-Ops-Node — operational, not a config
+    check), `ActiveSessionsCount` (vC-Ops-Suite-API), `AdminUI|SessionCount`
+    (vC-Ops-CaSA), `UI|TotalSessionCount` (vC-Ops-Cluster). Live-data
+    check (`GET /api/resources/{id}/stats/latest`) confirms
+    `ntp|*`, `AdminUI|SessionCount`, `UI|TotalSessionCount` **are
+    actively collecting** (non-empty series); `ActiveSessionsCount` on
+    Suite-API returned empty (`values: []`) — genuinely dark, cause
+    unconfirmed (policy vs. build-specific non-population).
+  - **None of these are configuration/posture properties.** They are
+    session *counts*, not the configured *limit*
+    (`ops.concurrent-sessions`); NTP service state, not a security
+    control in this list. **Zero of the 19 `ops.*` controls
+    (account-lockout threshold, CEIP flag, cert-validation flag,
+    password-complexity policy, login banner text, log retention days,
+    concurrent-session limit, credential-ownership-enforcement,
+    firewall-hardening, unsigned-pak) have a corresponding key in either
+    `/statkeys` or `/properties` on any of the 5 resource kinds
+    checked.** Vocabulary gap, not a policy-disabled state: nothing
+    exists to enable. The rest of the ~1,160 keys are operational
+    telemetry (CPU/disk/heap capacity, per-API-endpoint latency/
+    throughput counters, DRS/cert-handling task timers) — useful for
+    performance, not for these controls.
+  - `defaultMonitored` vs `monitoring` fields on the
+    `/api/adapterkinds/{ak}/resourcekinds/{rk}/statkeys` vocab endpoint:
+    observed `monitoring=False` for **100% of all 636 vC-Ops-Node keys**
+    regardless of `defaultMonitored` value, including keys independently
+    confirmed live-collecting via `/stats/latest`. **This field is not a
+    reliable active-policy signal on this endpoint** — treat as an API
+    gap (the vocab endpoint's `monitoring` flag does not reflect the
+    resource's actual assigned policy; per-resource policy assignment
+    would need a different call, not attempted here to stay in budget).
+  - Existing symptoms/alerts: built-ins found by name search across all
+    1,145 alert definitions (note: `adapterKindKey` query param on
+    `/api/alertdefinitions` is **ignored** — confirmed by identical
+    `totalCount: 1145` for a real kind, a bogus kind, and no filter at
+    all; API gap, filtered by client-side name-match instead): `VCF
+    Operations certificate has expired`, `VCF Operations certificate
+    expiring in next 30 days`, `VCF Operations Instance Lifecycle
+    certificate/password has expired/expiring` — all live under
+    `VMWARE_INFRA_HEALTH`'s `ARIA_OPS_*` resource kinds, which DO have a
+    live instance (`ARIA_OPS_WORLD`/`ARIA_OPS_APP`, id
+    `a74da74f-c5be-4551-b3d1-bbd711b2649f` seen in the resource scan) —
+    these can plausibly serve `ops.certificates-validation` as a
+    cert-expiry proxy, not the config flag itself.
+
+**Fleet Management** — **no adapter of any kind.** 0 of 0. Not present
+even as a `VMWARE_INFRA_HEALTH` sub-resource-kind (searched the 49-kind
+list, no Fleet Management entry). Genuine gap, not a policy question.
+One built-in alert found by name: `VCF Operations Fleet Management
+certificate has expired` / `expiring in next 30 days`, under
+`VMWARE_INFRA_HEALTH` — but no live resource kind backs it on this
+instance (would need the world/app resource kind populated; not
+enumerated among the 49 `VMWARE_INFRA_HEALTH` resource kinds returned,
+so this alert's subject resource kind isn't even in the vocabulary here —
+unconfirmed whether it's addressable at all without a newer adapter
+build).
+
+**VCF Automation** — adapter kind absent as a standalone product; exists
+only as `ARIA_AUTO_APP` / `CAS_HEALTH_WORLD` sub-kinds under
+`VMWARE_INFRA_HEALTH`, **0 live resources** of either kind. Built-in
+alert found: `VCF Automation certificate has expired` /
+`expiring in next 30 days` — same caveat, dark because no live
+Automation resource is registered, not a policy toggle.
+
+**VCF Operations for Networks** — same pattern: `ARIA_NETWORKS_APP` /
+`ARIA_NETWORKS_WORLD` sub-kinds exist in the `VMWARE_INFRA_HEALTH`
+vocabulary, **0 live resources**. No dedicated alert found by name
+search (searched "networks", nothing hit besides generic NSX/vSwitch
+matches already listed above under NSX). Finding: no coverage, not
+policy-disabled.
+
+**VCF Protection and Recovery** — no dedicated adapter; closest kin in
+the vocabulary is `SRM_APP` / `SRM_HEALTH_WORLD` (legacy Site Recovery
+Manager lineage) under `VMWARE_INFRA_HEALTH`, **0 live resources**. No
+"Protection and Recovery"-named alert found. Genuine gap.
+
+**SDDC Manager** — no dedicated adapter kind; `SDDC_MANAGER_APP` /
+`SDDC_MANAGER_BACKUP_JOB` / `SDDC_MANAGER_SERVICE` sub-kinds exist under
+`VMWARE_INFRA_HEALTH`, **0 live resources**, confirming SDDC Manager is
+not registered/federated into this VCF Ops instance. Existing built-in
+alert defs found (dark, no backing resource): `SDDC Manager app health is
+affected` (id `AlertDefinition-SDDCManagerAPPHealthStatus`, confirmed
+readable via `/api/alertdefinitions`), `SDDC Manager is violating VMware
+Cloud Foundation Audit Guide for version 4.2/4.3/4.4/4.5 and above`.
+These are the closest thing to a backup-status / service-state check
+requested in the original ask, but cannot fire without a live SDDC
+Manager resource.
+
+**VCF umbrella / VCF installer** — no adapter models either. `VcfAdapter`
+kind installed but 0 instances (see above); its 4 resource kinds
+(`PhysicalDatacenter`, `VCFDomain`, `VCFWorld`, `VcfAdapterInstance`) are
+schema-only on this lab, 0 populated. No installer-appliance resource
+kind exists anywhere in the 21 installed adapter kinds. Full gap for
+both, not a policy question.
+
+### Denominators
+
+- Adapter kinds enumerated: 21 of 21 (`/api/adapterkinds`, complete).
+- Adapter instances enumerated: 20 of 20 (`/api/adapters`, complete).
+- VCF Operations self-monitoring statkeys checked: 1,166 of 1,166 across
+  5 resource kinds (vC-Ops-Node, vC-Ops-Suite-API, vC-Ops-CaSA,
+  vC-Ops-Cluster, vC-Ops-Watchdog) — exhaustive for those kinds.
+- `VMWARE_INFRA_HEALTH` cross-domain resource kinds checked for live
+  population: 17 of 49 (the 17 relevant to the 9 target components);
+  remaining 32 are vCenter/vSAN/generic health kinds out of scope for
+  this ask.
+- Alert definitions scanned: 1,145 of 1,145 (full instance, paginated,
+  name-matched against a keyword list — not exhaustive against the 72
+  control titles individually, budget-limited).
+- Symptom definitions: **not scanned** (budget cut here; alert
+  definitions cover the fired-state layer, which was the ask's item 4).
+
+### API/client gaps found
+
+1. `adapterKindKey` query param on `/api/alertdefinitions` (and observed
+   same pattern on `/api/symptomdefinitions`) is **silently ignored** —
+   confirmed identical `totalCount` for a real kind, a bogus kind, and no
+   filter. No convenience method filters correctly either; any future
+   caller must fetch the full list and filter client-side by name/
+   subject resource kind.
+2. `GET /api/policies/default` returns `500 Internal Server error, cause
+   unknown` on this instance — could not confirm which policy is the
+   instance-wide default via that endpoint; fell back to listing all 20
+   policy objects by name (`Default Policy` id
+   `88243e50-c4bc-48ea-ac16-9095a87caa80` is presumed default by name/
+   convention only, unverified).
+3. The `monitoring` field on
+   `/api/adapterkinds/{ak}/resourcekinds/{rk}/statkeys` does **not**
+   reflect a resource's actual active-policy enablement state — it read
+   `False` for 100% of 636 keys on `vC-Ops-Node` including keys proven
+   live via `/stats/latest`. Do not use this field as a policy-disabled
+   signal; cross-check with `/stats/latest` on an actual resource
+   instead.
+
+### Recommendation
+
+For 7 of 9 components (NSX, Fleet Management, VCF Automation, Operations
+for Networks, Protection and Recovery, SDDC Manager, VCF umbrella/
+installer) there is **no live transport today** — this is a genuine
+day-zero coverage gap, not a matter of flipping a policy switch. Nothing
+to enable; nothing to author against yet either, since there's no
+resource to attach a symptom/alert to. Any authoring here would need
+either (a) the missing product actually registered/federated into this
+VCF Ops instance first, or (b) a Tier 2 SDK adapter built against each
+product's own API (SDDC Manager, NSX Manager, etc.) — a `sdk-adapter-
+author` conversation, not a content-authoring one.
+
+For VCF Operations (the platform itself), the adapter is live and
+richly instrumented, but **none of the 19 `ops.*` controls have a
+corresponding metric or property in the existing vocabulary** — this is
+a vocabulary gap on the self-monitoring adapters, not a disabled-by-
+default one. Closest usable proxies today: session-count metrics
+(`AdminUI|SessionCount`, `UI|TotalSessionCount`) as a coarse signal for
+`ops.concurrent-sessions`, and the existing cert-expiry alert set as a
+partial proxy for `ops.certificates-validation`. Everything else in the
+19 would need a new SDK adapter reading VCF Operations's own
+configuration API (not its self-monitoring telemetry) to ever be
+checkable from inside VCF Ops.
+
+**Clean-up verified:** yes — all calls were GET only, no
+enable/disable/import/policy-assignment calls were made.
