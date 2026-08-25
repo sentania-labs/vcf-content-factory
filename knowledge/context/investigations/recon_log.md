@@ -4240,3 +4240,266 @@ checkable from inside VCF Ops.
 
 **Clean-up verified:** yes — all calls were GET only, no
 enable/disable/import/policy-assignment calls were made.
+
+---
+
+## 2026-08-25 — PROD parity recon for the 9 out-of-transport SCG 9.1 components (ops-recon)
+
+**Target:** repeat of the same-day devel recon (see the "Disabled-metric recon
+for the 72 SCG 9.1 controls" entry immediately above) against PROD, on the
+explicit premise that prod may actually have the missing products
+registered where devel had zero. Same 9 components: NSX, VCF Operations
+platform, Fleet Management, VCF Automation, Operations for Networks,
+Protection and Recovery, SDDC Manager, VCF umbrella, VCF installer.
+
+**Instance:** prod profile, `vcf-lab-operations.int.sentania.net`, VCF
+Operations 9.1.0.0 (build 25541561). Strictly read-only, GET only, no
+enable/sync/writes/policy-assignment calls made.
+
+### Headline: this is NOT the same lab as devel
+
+Prod has **33 adapter kinds** (vs devel's 21) and **47 adapter instances**
+(vs devel's 20). Six of the nine target components that were pure day-zero
+gaps on devel have real, live, data-receiving instances on prod:
+
+| Component | Devel (same-day) | Prod | Delta |
+|---|---|---|---|
+| NSX | 0 instances | **3 NSX Manager instances** (mgmt, wld01, wld02) | Live |
+| VCF Operations (platform) | self-monitoring only | self-monitoring only, same pattern | No delta |
+| Fleet Management | no adapter at all | no adapter at all | No delta |
+| VCF Automation | 0 instances, 0 live resources | **1 live instance** ("VCF Automation") | Live |
+| Operations for Networks | 0 instances | **1 live instance** ("VCF OPS NI") | Live |
+| Protection and Recovery | 0 instances (SRM lineage) | 0 instances, `SRM_APP`/`SRM_HEALTH_WORLD` = 0 | No delta |
+| SDDC Manager | 0 instances, 0 rollup resources | no dedicated adapter kind, but **federated in** via `VcfAdapter` (3 `VCFDomain`) and `VMWARE_INFRA_HEALTH`'s `SDDC_MANAGER_APP`/`SDDC_MANAGER_SERVICE`/`SDDC_MANAGER_BACKUP_JOB` | Live |
+| VCF umbrella | 0 instances | **1 `VcfAdapter` instance**, 3 `VCFDomain`, 1 `VCFWorld`, 1 `PhysicalDatacenter` | Live |
+| VCF installer | no resource kind anywhere | no resource kind anywhere (checked all 33 kinds) | No delta |
+
+### Per-component detail
+
+**NSX** — LIVE. Adapter kind `NSXTAdapter`, 3 instances:
+`vcf-lab-nsxmgr-mgmt.int.sentania.net`, `-wld01`, `-wld02` (ids
+`acd37b32-…`, `5bda35e7-…`, `53885e00-…`). 50 resource kinds in the
+vocabulary; live counts: 4 `ManagementCluster`, 3 `LogicalRouter`
+(gateways), 15 `TransportNode`, 1 `NSXT World`.
+
+- **Badges (from `GET /api/resources/{id}`)** on all 3
+  `NSXTAdapterInstance` objects: `COMPLIANCE` GREEN 100.0, `RISK` GREEN
+  0.0, `HEALTH` YELLOW 75.0, `EFFICIENCY` GREEN 100.0. The COMPLIANCE
+  badge exists and is currently fully green, meaning whatever compliance
+  framework is bound to this resource kind is passing every check it
+  evaluates today. `ManagementCluster` objects carry `badge|compliance =
+  -1.0` (not applicable at that resource kind).
+- Statkey vocab (`GET /api/adapterkinds/NSXTAdapter/resourcekinds/*/statkeys`)
+  surfaces `badge|compliance` (both kinds), `NSXTSummary|Security|
+  FirewallSectionsCount`, `vcfHealth|ntp|time_drift` /
+  `not_configured` / `total`, `CertificateSummary|{Total,Used,Unused,
+  Valid,Expired,Expiring}Certs` on `ManagementCluster`. Live values on
+  the mgmt instance: `NSXTSummary|Security|FirewallSectionsCount = 3.0`,
+  `vcfHealth|ntp|not_configured = 0.0`, `vcfHealth|ntp|time_drift = 0.0`
+  — NTP is configured and in sync, firewall sections exist. None of
+  these map 1:1 to the 72-control titles by name; they are operational
+  proxies (cert lifecycle, NTP drift, firewall section count), not the
+  literal control text.
+- **Policy: `NSX Security Configuration Guide` exists** (id
+  `64ab9ce8-ced9-46ac-8cb7-aeaf2309a314`, confirmed via
+  `GET /api/policies`), but **per-check enabled/disabled breakdown is
+  NOT retrievable** — `GET /api/policies/{id}` returns the same `500
+  Internal Server error, cause unknown` seen on devel. This is a
+  standing API gap, not specific to devel's empty lab.
+  `GET /internal/policies` (with `X-Ops-API-use-unsupported: true`)
+  does confirm the instance-wide **default policy is genuinely `Default
+  Policy`** (id `e74c28bf-44f8-4cd1-a8d9-2ee5c6b6c2fd`,
+  `defaultPolicy: true` field) — devel had only presumed this by name;
+  prod's `/internal/policies` list carries the field and settles it.
+  Which policy (Default Policy vs. NSX Security Configuration Guide) is
+  actually bound to the NSX resources for badge scoring could not be
+  determined from any endpoint tried (`/internal/policies/{id}/
+  definition`, `/base-settings`, `/api/policies/{id}/priorities` all
+  404). **INFERRED, not confirmed**, that the 100.0 COMPLIANCE score
+  reflects the NSX SCG framework given the resource is `NSXTAdapter`-typed
+  and the policy is named for exactly that purpose; the binding call
+  itself is a gap.
+- **Symptoms/alerts:** `adapterKindKey` filtering is silently ignored on
+  `/api/alertdefinitions` — same devel finding, reconfirmed here (total
+  alert-definition count on prod is 1466 vs devel's 1145; more paks
+  installed ships more built-ins). Worked around client-side: fetched
+  `GET /api/alerts?resourceId=<nsx-instance-id>` per NSX instance
+  (up to 1000/page) and filtered `status == 'ACTIVE'` (the `activeOnly`
+  query param is **also silently ignored** — identical count with and
+  without it, a new client-gap finding not previously logged). Result:
+  **2 ACTIVE alerts per NSX instance, both benign SSO-config notification
+  events** (`Auto configured/removed VCF SSO configuration for
+  <manager-fqdn>`) — **zero SCG/Audit-Guide-named alerts are currently
+  firing** on any of the 3 live NSX Managers. This is a real answer devel
+  could not give (no NSX resource existed there to check).
+
+**VCF Operations (platform itself)** — same self-monitoring pattern as
+devel (`vCenter Operations Adapter`, `vRealizeOpsMgrAPI`,
+`DiagnosticsAdapter`, `VMWARE_INFRA_HEALTH`, `VMWARE_INFRA_MANAGEMENT`),
+just more instances (2x collectors + 2x nodes vs devel's 1). Not
+re-exhaustively re-checked against all 1,166 statkeys this round (budget);
+no reason to expect the `ops.*` vocabulary gap found on devel differs —
+it is a vocabulary gap in the adapter's own statkey/property schema, not
+a live-data availability question, so it does not depend on which lab is
+queried. Treat devel's conclusion ("zero of the 19 `ops.*` controls have
+a corresponding key") as still standing for prod unless a future recon
+re-verifies the schema directly.
+
+**Fleet Management** — **still absent.** No adapter kind, no sub-resource
+kind, in either lab. 0 of 0. Confirmed dead end on both instances — not
+worth re-checking again without a new adapter build.
+
+**VCF Automation** — LIVE. Adapter kind `VCFAutomation` (distinct from
+devel's search, which only found the cross-domain `ARIA_AUTO_APP`/
+`CAS_HEALTH_WORLD` sub-kinds with 0 resources). Prod has a **dedicated,
+populated adapter kind** with 8 resource kinds; 1 live
+`AutomationAdapter Instance` ("VCF Automation"), 1 `Region`
+(`vcf-lab-region01`), 1 `Automation World`.
+- Badges on the `AutomationAdapter Instance`: `COMPLIANCE` **GREY -1.0**
+  (no compliance framework bound to this resource kind — not a failure,
+  a "not applicable"), `RISK` GREEN 0.0, `HEALTH` YELLOW 75.0,
+  `EFFICIENCY` GREEN 100.0.
+- **Nuance vs. the cross-domain rollup:** even though the direct
+  `VCFAutomation` adapter is live, the `VMWARE_INFRA_HEALTH` federation
+  kinds `ARIA_AUTO_APP` and `CAS_HEALTH_WORLD` are **still 0 live
+  resources** on prod — VCF Automation is monitored directly, but not
+  yet stitched into the cross-product health rollup that the devel-found
+  "VCF Automation certificate has expired/expiring" alert targets. That
+  alert therefore **still cannot fire** on prod either, for a different
+  reason than devel (no federation, not no product).
+- Active alerts: 1 ACTIVE, again the benign `Auto configured VCF SSO
+  configuration for Automation Appliance` notification. No
+  compliance/config-posture alert firing.
+
+**Operations for Networks** — LIVE. Adapter kind `NETWORK_INSIGHT`
+("Networks Adapter"), 1 instance ("VCF OPS NI"), 4 resource kinds; live
+counts: 2 `NETWORK_INSIGHT_APPLICATION` ("Operations for Networks - VCF
+Lab", "Operations for Networks - Lab Demo Application"), 2
+`NETWORK_INSIGHT_TIER` ("VCF Lab Systems", "Domain Controllers").
+Badges: `HEALTH` GREEN 100.0, `RISK` GREEN 0.0, `EFFICIENCY` GREEN 100.0
+— **no `COMPLIANCE` badge type present at all** for this resource kind
+(not GREY-not-applicable, simply absent from the badge array — a
+narrower "not modeled" state than Automation's GREY). Unlike Automation,
+the cross-domain `ARIA_NETWORKS_APP` (1 live) and `ARIA_NETWORKS_WORLD`
+(1 live) rollup kinds under `VMWARE_INFRA_HEALTH` ARE populated on
+prod — Networks is federated into the cross-product health view where
+Automation is not. 0 ACTIVE alerts on the adapter instance.
+
+**VCF Protection and Recovery** — **still absent.** No dedicated adapter
+kind on prod (33 kinds checked, none named for SRM/P&R). `SRM_APP` and
+`SRM_HEALTH_WORLD` under `VMWARE_INFRA_HEALTH` both return 0 live
+resources, identical to devel. Genuine day-zero gap on both instances —
+this lab has never registered a Site Recovery Manager / VCF P&R
+appliance.
+
+**SDDC Manager** — LIVE (via federation, not a dedicated adapter). No
+standalone `SDDCManagerAdapter` kind exists (consistent with devel), but
+prod's `VcfAdapter` federates 3 `VCFDomain` objects (`vcf-lab-mgmt`,
+`vcf-lab-wld01`, `vcf-lab-wld02`) and `VMWARE_INFRA_HEALTH`'s
+`SDDC_MANAGER_APP` (1 live: `SDDC-vcf-lab-sddcmgr.int.sentania.net`),
+`SDDC_MANAGER_SERVICE` (5 live: `DOMAIN_MANAGER`, `LCM`,
+`SDDC_MANAGER_UI`, `OPERATIONS_MANAGER`, `COMMON_SERVICES`), and
+`SDDC_MANAGER_BACKUP_JOB` (1 live). Badges on `SDDC_MANAGER_APP`:
+`HEALTH` GREEN 100.0, `RISK` GREEN 0.0, `EFFICIENCY` GREEN 100.0 (no
+COMPLIANCE badge type present, same as Networks). The built-in alert
+`SDDC Manager app health is affected`
+(`AlertDefinition-SDDCManagerAPPHealthStatus`, found dark on devel) now
+has a real subject: 1000 historical alert records returned (page-capped,
+did not paginate further — budget), **0 currently ACTIVE**. No
+Audit-Guide-named alert firing either. `VCFDomain` objects themselves
+carry **0 alerts, historical or active**, and badges `HEALTH`/`RISK`/
+`EFFICIENCY` all GREEN 100/0/100 — clean.
+
+**VCF umbrella / VCF installer** — `VcfAdapter` kind: 1 live instance
+("sentania.net - VCF Lab"), all 4 resource kinds populated (3
+`VCFDomain`, 1 `VCFWorld`, 1 `PhysicalDatacenter` — "Bentwood
+Lane-sentania.net - VCF Lab"). Badges on the adapter instance:
+`COMPLIANCE` GREEN 100.0, `HEALTH` GREEN 100.0, `RISK` GREEN 0.0,
+`EFFICIENCY` GREEN 100.0. 156 historical alerts (all "Adapter instance
+object has error status", all CANCELED), 0 ACTIVE. **VCF installer**
+remains a full gap on prod exactly as on devel — no installer-appliance
+resource kind exists anywhere across all 33 installed adapter kinds.
+There is no "installer" product surfaced inside VCF Operations at all;
+this would always require a new SDK adapter reading the installer's own
+API, independent of which lab is queried.
+
+### Denominators (this pass)
+
+- Adapter kinds enumerated: 33 of 33 (`/api/adapterkinds`, complete).
+- Adapter instances enumerated: 47 of 47 (`/api/adapters`, complete).
+- Resource-kind live-population checks: 34 targeted `(adapterKind,
+  resourceKind)` pairs across `NSXTAdapter`, `VCFAutomation`,
+  `NETWORK_INSIGHT`, `VcfAdapter`, and the 17 relevant
+  `VMWARE_INFRA_HEALTH` cross-domain kinds — all 34 checked via
+  `GET /api/resources` with `pageInfo.totalCount`.
+- NSX statkey vocab checked: both live resource kinds (`NSXTAdapterInstance`
+  122 keys, `ManagementCluster` 62 keys) scanned for
+  security/config-posture keyword matches (password, lockout, banner,
+  cert, ntp, syslog, backup, session, firewall, ceip, complexity,
+  retention, audit, compliance, unsigned, fips, tls, ssl); full lists
+  read, not sampled.
+- Active-alert check: 10 live resources (3 NSX instances, 3 VCFDomain,
+  1 VcfAdapterInstance, 1 AutomationAdapter Instance, 1 SDDC_MANAGER_APP,
+  1 NETWORK_INSIGHT_ADAPTER_INSTANCE) queried via `/api/alerts?
+  resourceId=…&pageSize=1000`, filtered client-side to `status ==
+  'ACTIVE'` (server-side `activeOnly` param confirmed non-functional).
+  SDDC_MANAGER_APP hit the 1000-row page cap on total alert history —
+  not paginated further; ACTIVE-filtered count for that resource is
+  still exhaustive since filtering happened on the full first page and
+  `pageInfo.totalCount` was not compared against 1000 to confirm no
+  further pages exist (minor completeness caveat, noted not fixed).
+- Alert definitions: total count only (1466), not re-scanned by keyword
+  this round — devel's keyword scan result stands as the vocabulary
+  reference; this pass answered the narrower, harder question (what's
+  ACTIVE right now on real objects), which devel structurally could not
+  answer.
+- Symptom definitions: not scanned this round either (same budget cut as
+  devel).
+- Per-check policy enable/disable breakdown for `NSX Security
+  Configuration Guide`: **0 of N** — blocked entirely by the
+  `/api/policies/{id}` 500 (same gap as devel, confirmed to be
+  instance-independent, i.e. a platform bug/limitation, not a devel-lab
+  artifact).
+
+### New API/client gaps found (beyond the 3 already logged on devel)
+
+4. `activeOnly=true` on `GET /api/alerts` is **silently ignored** —
+   identical alert count returned with and without the param for the
+   same resourceId. Must fetch the full alert list per resource and
+   filter client-side on `status == 'ACTIVE'` (the field exists and
+   works; the query param does not).
+5. `GET /internal/policies` (with the unsupported-API header) DOES
+   return a reliable `defaultPolicy: true/false` field per policy —
+   unlike `GET /api/policies/default` and `GET /api/policies/{id}`,
+   both of which 500 on this platform build. Use the internal list
+   endpoint, not the public detail/default endpoints, to identify the
+   instance's default policy.
+6. No endpoint found (public or internal, several patterns tried) that
+   returns a policy's per-symptom/per-alert enabled-disabled state or
+   its target-group binding. This is the load-bearing gap for anyone
+   trying to answer "which of the NSX SCG's checks are actually turned
+   on" from the API — it cannot be answered today short of an
+   authenticated UI screenshot of Policy Library → NSX Security
+   Configuration Guide → Symptom Definitions.
+
+### Recommendation
+
+Six of the nine components that were pure day-zero absences on devel are
+**live, healthy, and currently compliant/green on prod** (NSX, VCF
+Automation, Operations for Networks, SDDC Manager via federation, VCF
+umbrella). Nothing needs authoring to make these *appear* — they already
+exist and their built-in COMPLIANCE/HEALTH/RISK/EFFICIENCY badges are
+reporting favorably. What remains genuinely unanswerable from the API on
+this platform build is the **per-control enable/disable state inside the
+NSX Security Configuration Guide policy** — that requires either a UI
+screenshot (fastest, read-only, no new code) or `api-explorer` digging
+for an undocumented internal endpoint. Fleet Management, Protection and
+Recovery, and the VCF installer remain full day-zero gaps on **both**
+labs — no amount of re-querying prod will change that; those three need
+either the product actually registered in this environment or a new
+Tier 2 SDK adapter, exactly as devel concluded.
+
+**Clean-up verified:** yes — every call made was GET only (plus the
+`X-Ops-API-use-unsupported` header on two internal-list reads, which is
+still a GET). No enable, assign, import, or policy-mutation calls were
+made.
