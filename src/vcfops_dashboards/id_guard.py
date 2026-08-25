@@ -20,10 +20,14 @@ Git-outcome handling follows
 knowledge/lessons/unenumerated-exit-status-is-not-a-verdict.md: every
 status we branch on is enumerated, and everything else degrades to
 "guard could not run" with a printed warning, never to a silent pass and
-never to a confident claim.
+never to a confident claim. Presence-in-HEAD is decided from
+``git ls-tree HEAD -- <path>`` stdout (empty vs non-empty under rc 0),
+never by parsing localized stderr text; ``_run_git`` additionally pins
+LC_ALL=C so any stderr we embed in warnings is stable English.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -31,15 +35,6 @@ from typing import Dict, List, Optional, Tuple
 import yaml
 
 __all__ = ["check_dashboard_id_stability"]
-
-# git show HEAD:<path> stderr fragments that mean "this path has no
-# committed version" (git 2.x wording, both variants observed):
-#   "fatal: path '<p>' exists on disk, but not in 'HEAD'"
-#   "fatal: path '<p>' does not exist in 'HEAD'"
-_PATH_NOT_IN_HEAD_FRAGMENTS = (
-    "exists on disk, but not in",
-    "does not exist in",
-)
 
 
 def _run_git(args: List[str], cwd: Path) -> Tuple[Optional[int], str, str]:
@@ -49,13 +44,20 @@ def _run_git(args: List[str], cwd: Path) -> Tuple[Optional[int], str, str]:
     installed / not on PATH). Callers must treat None and any
     non-enumerated returncode as "could not determine", never as a pass
     verdict in disguise.
+
+    LC_ALL/LANG are pinned to C so no branch here can ever depend on a
+    localized message, and stderr text embedded in warnings is stable.
+    Verdicts must still come from return codes and stdout content, not
+    from stderr wording.
     """
+    env = dict(os.environ, LC_ALL="C", LANG="C")
     try:
         proc = subprocess.run(
             ["git", *args],
             cwd=str(cwd),
             capture_output=True,
             text=True,
+            env=env,
         )
     except (FileNotFoundError, OSError) as exc:
         return None, "", str(exc)
@@ -186,9 +188,30 @@ def check_dashboard_id_stability(dashboards_dir: Path) -> Tuple[List[str], List[
             )
             continue
 
-        rc, blob, err = _run_git(["show", f"HEAD:{rel}"], toplevel)
+        # Presence-in-HEAD is decided from ls-tree stdout, which is
+        # locale-independent: rc 0 + non-empty stdout = committed, rc 0 +
+        # empty stdout = no committed version at this path. stderr text is
+        # never consulted for a verdict (localized git would defeat it).
+        rc, tree_out, err = _run_git(["ls-tree", "HEAD", "--", rel], toplevel)
+        if rc != 0:
+            warns.append(
+                "dashboard id-stability guard: could not determine whether "
+                f"'{rel}' has a committed version (git ls-tree rc={rc}: "
+                f"{err.strip() or 'git unavailable'}); identity not checked "
+                "for this file"
+            )
+            continue
         need_name_scan = False
-        if rc == 0:
+        if tree_out.strip():
+            rc, blob, err = _run_git(["show", f"HEAD:{rel}"], toplevel)
+            if rc != 0:
+                warns.append(
+                    "dashboard id-stability guard: could not read the "
+                    f"committed version of '{rel}' (git show rc={rc}: "
+                    f"{err.strip() or 'git unavailable'}); identity not "
+                    "checked for this file"
+                )
+                continue
             head_identity = _parse_identity(blob)
             if head_identity is not None:
                 head_name, head_id = head_identity
@@ -200,20 +223,10 @@ def check_dashboard_id_stability(dashboards_dir: Path) -> Tuple[List[str], List[
                     # file was repurposed; either way its new name must
                     # not collide with a different committed dashboard.
                     need_name_scan = True
-        elif rc == 128 and any(
-            frag in err for frag in _PATH_NOT_IN_HEAD_FRAGMENTS
-        ):
+        else:
             # New path: could be a genuinely new dashboard, or a file
             # rename. The name scan decides.
             need_name_scan = True
-        else:
-            warns.append(
-                "dashboard id-stability guard: could not read the committed "
-                f"version of '{rel}' (git show rc={rc}: "
-                f"{err.strip() or 'git unavailable'}); identity not checked "
-                "for this file"
-            )
-            continue
 
         if need_name_scan:
             if head_names is None:

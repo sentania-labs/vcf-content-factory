@@ -14,6 +14,9 @@ Covered branches, each in a temp git repo fixture:
   - brand-new dashboard file     -> passes
   - file renamed + re-id'd       -> fails (name scan catches it)
   - file renamed, identity kept  -> passes
+  - localized git stderr         -> rename+re-id STILL fails hard
+    (verdicts come from return codes and ls-tree stdout, never from
+    stderr wording; _run_git also pins LC_ALL=C)
   - not a git repo               -> warns "could not run", passes
   - git binary unavailable       -> warns "could not run", passes
   - unborn HEAD (no commits)     -> warns "no baseline", passes
@@ -134,6 +137,45 @@ def test_file_rename_plus_reid_fails(tmp_path, capsys):
     assert rc == 1
     assert "ID-STABILITY:" in err
     assert "probe.yaml" in err  # points at where the committed identity lives
+
+
+def test_localized_git_stderr_still_fails_hard(tmp_path, capsys, monkeypatch):
+    """A localized git must not degrade the guard from error to warning.
+
+    Wraps subprocess.run so every git call keeps its real return code and
+    stdout but gets its stderr replaced with a non-English fatal message,
+    and asserts the guard pins LC_ALL=C on each call. The rename+re-id
+    scenario must still be a hard ID-STABILITY failure.
+    """
+    repo = _make_repo(tmp_path)
+    (repo / "content/dashboards/probe.yaml").unlink()
+    (repo / "content/dashboards/renamed.yaml").write_text(
+        _dashboard_yaml(NEW_ID, NAME)
+    )
+
+    real_run = subprocess.run
+    seen_envs = []
+
+    def _localized_run(cmd, **kwargs):
+        seen_envs.append(kwargs.get("env"))
+        proc = real_run(cmd, **kwargs)
+        if proc.stderr:
+            proc = subprocess.CompletedProcess(
+                proc.args,
+                proc.returncode,
+                stdout=proc.stdout,
+                stderr="schwerwiegend: Pfad existiert nicht in 'HEAD'",
+            )
+        return proc
+
+    monkeypatch.setattr(id_guard.subprocess, "run", _localized_run)
+    rc = _validate(repo)
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "ID-STABILITY:" in err
+    assert seen_envs, "guard never went through _run_git"
+    for env in seen_envs:
+        assert env is not None and env.get("LC_ALL") == "C"
 
 
 def test_file_rename_identity_kept_passes(tmp_path, capsys):
