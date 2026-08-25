@@ -5,8 +5,8 @@ Invoked by the SessionStart hook by file path, i.e.
 ``python -m vcfops_common doctor`` form also works, but depends on an
 ambient PYTHONPATH=src, which the hook cannot assume).
 Pure stdlib (yaml/requests/jmespath are only *checked* for importability,
-never imported). No bash: git is invoked directly via subprocess. POSIX only
-(Linux, macOS, WSL), per RULE-018. pathlib throughout; the repo root is
+never imported). No bash: git is invoked directly via subprocess so the
+doctor works on native Windows. pathlib throughout; the repo root is
 anchored to this module's location, never to Path.cwd() (issue #76).
 
 Report-by-exception: one green line when everything is fine, deltas only
@@ -539,7 +539,7 @@ class EnvSanity:
 
 def venv_python(root: Path) -> Optional[Path]:
     """Path to the repo venv's interpreter, or None if there is no venv."""
-    for rel in ("bin/python3", "bin/python"):
+    for rel in ("bin/python3", "bin/python", "Scripts/python.exe"):
         candidate = root / ".venv" / rel
         if candidate.is_file():
             return candidate

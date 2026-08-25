@@ -484,6 +484,7 @@ def test_no_export_prefix_style_is_preserved(tmp_path, monkeypatch):
     assert resolve(tmp_path, "prod", monkeypatch).password == SIMPLE_SECRET
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permissions only")
 def test_env_file_is_owner_only(tmp_path):
     run(tmp_path, ["prod", "ops.example.com", "u", "Local", "y"],
         [SIMPLE_SECRET, SIMPLE_SECRET])
@@ -491,6 +492,7 @@ def test_env_file_is_owner_only(tmp_path):
     assert mode == 0o600
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permissions only")
 def test_existing_loose_permissions_are_tightened(tmp_path):
     env = tmp_path / ".env"
     env.write_text("# pre-existing\n", encoding="utf-8")
