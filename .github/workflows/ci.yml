@@ -64,7 +64,24 @@ jobs:
       - name: Validate content corpus
         run: |
           python3 -m vcfops_supermetrics validate
-          python3 -m vcfops_dashboards validate
+          # Dashboard id-stability guard (#113): on PRs, compare against the
+          # merge base so a re-id that is already committed is still caught.
+          # BASE empty (merge-base unresolvable) falls back to the plain
+          # invocation; the guard itself warns loudly in that case.
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ] && [ -n "${GITHUB_BASE_REF}" ]; then
+            git fetch --no-tags --quiet origin "${GITHUB_BASE_REF}" || true
+            BASE="$(git merge-base "origin/${GITHUB_BASE_REF}" HEAD || true)"
+          else
+            BASE=""
+          fi
+          if [ -n "${BASE}" ]; then
+            python3 -m vcfops_dashboards validate --id-guard-baseline "${BASE}"
+          else
+            if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+              echo "WARNING: id guard merge base unresolvable; committed re-ids in this PR are NOT checked (HEAD baseline only)"
+            fi
+            python3 -m vcfops_dashboards validate
+          fi
           python3 -m vcfops_customgroups validate
           python3 -m vcfops_symptoms validate
           python3 -m vcfops_alerts validate

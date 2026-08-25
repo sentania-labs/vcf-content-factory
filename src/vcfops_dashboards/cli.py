@@ -17,6 +17,7 @@ from .client import (
     get_current_user,
     import_content_zip,
 )
+from .id_guard import check_dashboard_id_stability
 from .loader import DashboardValidationError, load_all
 from .packager import build_import_zip
 from .ui_client import UIClientError, VCFOpsUIClient
@@ -97,6 +98,19 @@ def cmd_validate(args) -> int:
         print(f"  dashboard  {d.id}  {d.name}")
 
     rc = 0
+
+    # Issue #113 identity guard: dashboard import identity is the NAME, so a
+    # changed id: under an unchanged name: silently orphans the previously
+    # installed UUID. Compare against the last committed version (git HEAD).
+    guard_errors, guard_warnings = check_dashboard_id_stability(
+        Path(args.dashboards_dir), baseline=args.id_guard_baseline
+    )
+    for msg in guard_warnings:
+        print(f"WARNING: {msg}", file=sys.stderr)
+    if guard_errors:
+        for msg in guard_errors:
+            print(f"ID-STABILITY: {msg}", file=sys.stderr)
+        rc = 1
 
     if using_defaults:
         try:
@@ -672,6 +686,22 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pv = sub.add_parser("validate", help="validate YAML")
+    pv.add_argument(
+        "--id-guard-baseline",
+        metavar="REV",
+        default=None,
+        help=(
+            "CI plumbing for the #113 dashboard id-stability guard, not an "
+            "operator switch: in ADDITION to the always-on HEAD comparison, "
+            "compare dashboard ids against this git rev and every commit "
+            "between it and HEAD, unioning the findings. CI passes the PR "
+            "merge-base so a re-id committed anywhere on the PR branch is "
+            "still caught. The rev must be an ancestor of HEAD (it can "
+            "only widen the comparison, never narrow or disable it); a "
+            "non-ancestor rev fails validation, an unresolvable rev warns "
+            "and degrades to the HEAD-only comparison."
+        ),
+    )
     add_profile_arg(pv, default="prod")
     pv.set_defaults(func=cmd_validate)
 
