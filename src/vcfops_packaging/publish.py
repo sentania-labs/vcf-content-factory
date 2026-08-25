@@ -328,11 +328,19 @@ def _commit_message_args(subject: str, body: str = "") -> List[str]:
     return args
 
 
-def _git_commit(dist_repo: Path, message: str, body: str = "") -> Optional[str]:
+def _git_commit(
+    dist_repo: Path,
+    message: str,
+    body: str = "",
+    allow_empty: bool = False,
+) -> Optional[str]:
     """Stage all changes, commit, and return the new commit SHA.
 
     ``message`` becomes the commit subject; ``body``, when non-empty, becomes
     the commit body (see :func:`_commit_message_args`).
+
+    ``allow_empty`` passes ``--allow-empty`` to git commit (used by
+    ``--force`` publishes, where a commit must land even with no changes).
 
     Returns None if there was nothing to commit.
     """
@@ -347,7 +355,10 @@ def _git_commit(dist_repo: Path, message: str, body: str = "") -> Optional[str]:
             f"git add failed in {dist_repo}: {r.stderr.strip()}"
         )
 
-    r = _git(dist_repo, "commit", *_commit_message_args(message, body))
+    commit_args = ["commit"]
+    if allow_empty:
+        commit_args.append("--allow-empty")
+    r = _git(dist_repo, *commit_args, *_commit_message_args(message, body))
     if r.returncode != 0:
         # "nothing to commit" is not a failure.
         if "nothing to commit" in r.stdout + r.stderr:
@@ -1346,28 +1357,10 @@ def _publish_inner(
             _release_lock(dist_repo)
 
             # Stage + commit on the release branch.
-            if force:
-                r = _git(dist_repo, "add", "-A", "--", ":!.publish.lock")
-                if r.returncode != 0:
-                    raise PublishError(
-                        f"git add failed in {dist_repo}: {r.stderr.strip()}"
-                    )
-                r = _git(
-                    dist_repo,
-                    "commit",
-                    "--allow-empty",
-                    *_commit_message_args(commit_msg, commit_body),
-                )
-                if r.returncode != 0:
-                    raise PublishError(
-                        f"git commit (force) failed in {dist_repo}: "
-                        f"{r.stdout.strip()} {r.stderr.strip()}"
-                    )
-                r2 = _git(dist_repo, "rev-parse", "HEAD")
-                result.commit_sha = r2.stdout.strip() if r2.returncode == 0 else None
-            else:
-                sha = _git_commit(dist_repo, commit_msg, commit_body)
-                result.commit_sha = sha
+            sha = _git_commit(
+                dist_repo, commit_msg, commit_body, allow_empty=force
+            )
+            result.commit_sha = sha
 
             if no_push:
                 # --no-push: branch committed locally, no remote push, no PR.
@@ -1423,28 +1416,10 @@ def _publish_inner(
             # _release_lock is idempotent (missing_ok=True).
             _release_lock(dist_repo)
 
-            if force:
-                r = _git(dist_repo, "add", "-A", "--", ":!.publish.lock")
-                if r.returncode != 0:
-                    raise PublishError(
-                        f"git add failed in {dist_repo}: {r.stderr.strip()}"
-                    )
-                r = _git(
-                    dist_repo,
-                    "commit",
-                    "--allow-empty",
-                    *_commit_message_args(commit_msg, commit_body),
-                )
-                if r.returncode != 0:
-                    raise PublishError(
-                        f"git commit (force) failed in {dist_repo}: "
-                        f"{r.stdout.strip()} {r.stderr.strip()}"
-                    )
-                r2 = _git(dist_repo, "rev-parse", "HEAD")
-                result.commit_sha = r2.stdout.strip() if r2.returncode == 0 else None
-            else:
-                sha = _git_commit(dist_repo, commit_msg, commit_body)
-                result.commit_sha = sha
+            sha = _git_commit(
+                dist_repo, commit_msg, commit_body, allow_empty=force
+            )
+            result.commit_sha = sha
 
             if result.commit_sha and not no_push:
                 _git_push(dist_repo)
