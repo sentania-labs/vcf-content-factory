@@ -202,3 +202,47 @@ class TestDefaultsAreReal:
         assert builder_calls == ["demand-driven-capacity-v2"], (
             "publish() without injection did not call the real builder hook"
         )
+
+
+class TestGitCommitAllowEmptyBranch:
+    """Executing-branch coverage for _git_commit(allow_empty=) (#126 Codex round).
+
+    The "nothing to commit" suppression must only apply when allow_empty is
+    False.  With --allow-empty a genuine no-op cannot happen, so a failing
+    commit that happens to echo that phrase (e.g. a rejecting pre-commit
+    hook) must raise PublishError, not return None: in direct-push mode a
+    None here would report success without pushing anything.
+    """
+
+    @staticmethod
+    def _install_rejecting_hook(dist: Path) -> None:
+        hook = dist / ".git" / "hooks" / "pre-commit"
+        hook.write_text(
+            "#!/bin/sh\necho 'nothing to commit, hook rejected' >&2\nexit 1\n"
+        )
+        hook.chmod(0o755)
+
+    def test_allow_empty_failure_raises_even_with_noop_phrase(self, tmp_path):
+        from vcfops_packaging.publish import PublishError, _git_commit
+
+        dist = _init_dist_repo(tmp_path)
+        self._install_rejecting_hook(dist)
+        with pytest.raises(PublishError, match="git commit failed"):
+            _git_commit(dist, "release: forced", allow_empty=True)
+
+    def test_genuine_noop_without_allow_empty_returns_none(self, tmp_path):
+        from vcfops_packaging.publish import _git_commit
+
+        dist = _init_dist_repo(tmp_path)
+        before = _commit_count(dist)
+        assert _git_commit(dist, "release: nothing new") is None
+        assert _commit_count(dist) == before
+
+    def test_allow_empty_noop_lands_an_empty_commit(self, tmp_path):
+        from vcfops_packaging.publish import _git_commit
+
+        dist = _init_dist_repo(tmp_path)
+        before = _commit_count(dist)
+        sha = _git_commit(dist, "release: forced empty", allow_empty=True)
+        assert sha is not None and len(sha) == 40
+        assert _commit_count(dist) == before + 1
