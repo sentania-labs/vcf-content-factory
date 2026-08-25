@@ -29,22 +29,6 @@ jobs:
           # against its base (merge-base needs reachable history).
           fetch-depth: 0
 
-      - name: Set up Python venv (system python3)
-        # Deliberately NOT actions/setup-python on this pool. Its toolcache
-        # build hardcodes RUNPATH=/opt/hostedtoolcache/.../lib; on the lab
-        # pod the toolcache lives at /home/runner/_work/_tool, so any test
-        # that spawns sys.executable with a scrubbed env (no
-        # LD_LIBRARY_PATH) silently picks up the SYSTEM libpython, resolves
-        # its prefix to /usr, and loses site-packages (observed: 5 tests
-        # failing "No module named yaml" on the first pool run). A venv on
-        # the image's python3 (Ubuntu 24.04 = 3.12) resolves via pyvenv.cfg,
-        # env-independent, and skips the per-job toolchain download the
-        # runner contract warns about.
-        run: |
-          python3 --version
-          python3 -m venv .ci-venv
-          echo "$PWD/.ci-venv/bin" >> "$GITHUB_PATH"
-
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           # The lab runner image ships no JDK; ubuntu-latest provided one
@@ -55,10 +39,32 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install dependencies
+      - name: Install dependencies (system python3, user site)
+        # Deliberately NOT actions/setup-python on this pool, and NOT a
+        # venv either. Two pool-specific traps, both hit on this PR's runs:
+        # 1. setup-python's toolcache build hardcodes
+        #    RUNPATH=/opt/hostedtoolcache/.../lib, which does not exist on
+        #    the lab pod, so tests spawning sys.executable with a scrubbed
+        #    env (no LD_LIBRARY_PATH) silently ran under the SYSTEM
+        #    libpython, lost site-packages, and failed with "No module
+        #    named yaml".
+        # 2. A venv python breaks the doctor tests that rebuild fixture
+        #    .venvs around sys.executable: a relocated venv interpreter
+        #    resolves packages via pyvenv.cfg at its own location, so the
+        #    fixture copies see nothing.
+        # The system interpreter with deps in user site (~/.local) has
+        # neither problem: it is what ubuntu-latest effectively provided,
+        # it survives relocation, and user site stays visible even to
+        # env-scrubbed subprocesses (expanduser falls back to the pwd
+        # database when HOME is stripped). --break-system-packages is safe
+        # here: the pod is destroyed after the job (runner contract, one
+        # ephemeral pod per job).
         # Test deps (pytest, pytest-xdist pin) live in requirements-dev.txt
         # so local and CI environments install the identical toolchain.
-        run: pip install -r requirements.txt -r requirements-dev.txt
+        run: |
+          python3 --version
+          python3 -m pip --version || python3 -m ensurepip --upgrade
+          python3 -m pip install --user --break-system-packages -r requirements.txt -r requirements-dev.txt
 
       - name: Bootstrap SDK adapter repos
         run: bash scripts/bootstrap_managed_paks.sh
