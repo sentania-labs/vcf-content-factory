@@ -145,6 +145,11 @@
 # prose — the goal is signal, not noise. It will not catch every future
 # dead reference; it is a net, not a prover.
 #
+# Known behavior delta vs the pre-#112 implementation (deliberate, kept):
+# a corpus file whose final line lacks a trailing newline now HAS that
+# line audited; the old `while read` loop silently dropped it. Everything
+# else is byte-identical.
+#
 # This script runs as an enforcing CI gate (.github/workflows/ci.yml,
 # "Path reference audit" step) — exit 2 fails the build.
 #
@@ -269,9 +274,15 @@ while IFS= read -r -d '' f; do
 done < <(find . -maxdepth 1 -mindepth 1 -type f -printf '%f\0')
 
 # Build an alternation regex, escaping regex metacharacters (mainly '.').
+# Pure-bash escaping (#112): the old `printf | sed` forked twice per
+# top-level entry. Backslash goes first so it never re-escapes the
+# escapes it inserts.
 TOPLEVEL_RE=""
 for t in "${TOPLEVEL[@]}"; do
-  esc="$(printf '%s' "${t}" | sed -e 's/[.[\*^$+?(){}|\\]/\\&/g')"
+  esc="${t//\\/\\\\}"
+  for mc in '.' '[' '*' '^' '$' '+' '?' '(' ')' '{' '}' '|'; do
+    esc="${esc//"${mc}"/\\${mc}}"
+  done
   if [[ -z "${TOPLEVEL_RE}" ]]; then
     TOPLEVEL_RE="${esc}"
   else
@@ -312,6 +323,26 @@ if [[ -f knowledge/context/reference_sources.md ]]; then
   done < knowledge/context/reference_sources.md
 fi
 
+# --- Tracked-file index (#112) ----------------------------------------------
+# `git ls-files` hoisted ONCE into hash tables; every per-candidate check
+# below is a bash lookup instead of a subprocess (a full run spent minutes
+# forking `git ls-files`/`grep` per candidate). Must be `-z` plus
+# `read -r -d ''`: plain ls-files C-escapes non-ASCII paths, and hash keys
+# built from the escaped form would never match the real byte sequences.
+declare -A TRACKED=()
+declare -A TRACKED_DIR_PREFIX=()
+declare -a TRACKED_LIST=()
+while IFS= read -r -d '' f; do
+  TRACKED["${f}"]=1
+  TRACKED_LIST+=("${f}")
+  d="${f}"
+  while [[ "${d}" == */* ]]; do
+    d="${d%/*}"
+    [[ -n "${TRACKED_DIR_PREFIX[${d}]:-}" ]] && break
+    TRACKED_DIR_PREFIX["${d}"]=1
+  done
+done < <(git ls-files -z)
+
 # --- Extraction + verification ----------------------------------------------
 FOUND_DEAD=0
 
@@ -333,30 +364,17 @@ is_bare_non_path() {
   esac
 }
 
-strip_trailing_punct() {
-  local p="$1"
-  p="${p%%,}"
-  p="${p%%.}"
-  p="${p%%;}"
-  p="${p%%:}"
-  p="${p%%)}"
-  p="${p%%\'}"
-  p="${p%%\"}"
-  printf '%s' "${p}"
-}
-
 is_git_tracked() {
-  # Rule #5a: COMMITTED check via `git ls-files` — never bare
-  # filesystem existence. A tracked FILE (literal, or with a `.md`/
-  # `.py` extension appended) or a tracked-DIRECTORY prefix match both
-  # count. Deterministic on any checkout regardless of local clones.
+  # Rule #5a: COMMITTED check against the hoisted `git ls-files` index,
+  # never bare filesystem existence. A tracked FILE (literal, or with a
+  # `.md`/`.py` extension appended) or a tracked-DIRECTORY prefix match
+  # both count. Each variant checks both tables because the original
+  # `--error-unmatch` pathspecs also matched directory prefixes.
+  # Deterministic on any checkout regardless of local clones.
   local p="$1"
-  git ls-files --error-unmatch -- "${p}" >/dev/null 2>&1 && return 0
-  git ls-files --error-unmatch -- "${p}.md" >/dev/null 2>&1 && return 0
-  git ls-files --error-unmatch -- "${p}.py" >/dev/null 2>&1 && return 0
-  if git ls-files -- "${p}/" 2>/dev/null | grep -q .; then
-    return 0
-  fi
+  [[ -n "${TRACKED[${p}]:-}" || -n "${TRACKED_DIR_PREFIX[${p}]:-}" ]] && return 0
+  [[ -n "${TRACKED[${p}.md]:-}" || -n "${TRACKED_DIR_PREFIX[${p}.md]:-}" ]] && return 0
+  [[ -n "${TRACKED[${p}.py]:-}" || -n "${TRACKED_DIR_PREFIX[${p}.py]:-}" ]] && return 0
   return 1
 }
 
@@ -374,8 +392,8 @@ citation_is_valid() {
   #           (CITATION_MSG set) — the references/tvs standing
   #           exception.
   local cand="$1" citing_file="$2"
-  local citing_dir
-  citing_dir="$(dirname -- "${citing_file}")"
+  local citing_dir="."
+  [[ "${citing_file}" == */* ]] && citing_dir="${citing_file%/*}"
   CITATION_MSG=""
 
   # A bare mention of a top-level directory itself (no sub-path —
@@ -548,7 +566,10 @@ check_candidates() {
   for cand in "$@"; do
     [[ -z "${cand}" ]] && continue
     is_placeholder "${cand}" && continue
-    cand="$(strip_trailing_punct "${cand}")"
+    # Trailing-punct strip, inlined (#112): a command-substitution call
+    # here forked a subshell per candidate.
+    cand="${cand%,}"; cand="${cand%.}"; cand="${cand%;}"; cand="${cand%:}"
+    cand="${cand%)}"; cand="${cand%\'}"; cand="${cand%\"}"
     [[ -z "${cand}" ]] && continue
     is_bare_non_path "${cand}" && continue
     preceded_by_example_marker "${raw_line}" "${prev_line}" "${cand}" && continue
@@ -575,16 +596,41 @@ check_candidates() {
   done
 }
 
+# ONE grep over the whole corpus per rule (#112) instead of two grep
+# forks per LINE: extract every `file:lineno:match` up front, bucket the
+# matches by file+line, then walk each file's lines once in pure bash.
+# grep visits files in argument order (= TARGET_FILES order) and matches
+# in position order, and rule #1 candidates stay ahead of rule #2
+# candidates on the same line, preserving the original report order.
+# Matches and corpus filenames never contain ":" or newlines (see the
+# character classes), so `IFS=:` parsing and $'\n'-joining are safe.
+declare -A rule1_by_line=()
+declare -A rule2_by_line=()
+if [[ -n "${TOPLEVEL_RE}" ]]; then
+  # Rule #1: backtick-quoted OR bare, both anchored on a real
+  # top-level name immediately followed by "/".
+  while IFS=: read -r mfile mline m; do
+    [[ -n "${m}" ]] && rule1_by_line["${mfile}:${mline}"]+="${m}"$'\n'
+  done < <(grep -HnoP "(?<![/A-Za-z0-9_.-])(?:${TOPLEVEL_RE})/(?:[A-Za-z0-9_.\/-]*[A-Za-z0-9_-])?" "${TARGET_FILES[@]}" 2>/dev/null || true)
+fi
+
+# Rule #2: lone backtick-quoted root files (`CLAUDE.md`), no slash.
+# shellcheck disable=SC2016 # single-quoted on purpose: literal regex,
+# nothing here is meant to expand.
+while IFS=: read -r mfile mline m; do
+  [[ -n "${m}" ]] && rule2_by_line["${mfile}:${mline}"]+="${m}"$'\n'
+done < <(grep -HnoP '(?<=`)[A-Za-z0-9_.-]+(?=`)' "${TARGET_FILES[@]}" 2>/dev/null || true)
+
 for file in "${TARGET_FILES[@]}"; do
   is_gitignore=0
   [[ "${file}" == ".gitignore" ]] && is_gitignore=1
 
-  lineno=0
-  prev_line=""
-  # shellcheck disable=SC2094 # false positive: nothing in this loop body
-  # writes to $file; check_candidates only reads its VALUE as an argument.
-  while IFS= read -r line; do
-    lineno=$((lineno + 1))
+  mapfile -t file_lines < "${file}"
+
+  for (( lineno = 1; lineno <= ${#file_lines[@]}; lineno++ )); do
+    joined="${rule1_by_line[${file}:${lineno}]:-}${rule2_by_line[${file}:${lineno}]:-}"
+    [[ -z "${joined}" ]] && continue
+    line="${file_lines[$(( lineno - 1 ))]}"
 
     # Rule #8: .gitignore — only comment lines are citations.
     if [[ "${is_gitignore}" -eq 1 ]]; then
@@ -594,51 +640,54 @@ for file in "${TARGET_FILES[@]}"; do
       esac
     fi
 
+    # prev_line for the rule #4 marker check. In .gitignore the original
+    # loop's `continue` on pattern lines meant prev_line only ever held
+    # the last preceding COMMENT line, never a pattern line; preserved by
+    # scanning back for one. Everywhere else it is the literal previous
+    # line.
+    prev_line=""
+    if [[ "${is_gitignore}" -eq 1 ]]; then
+      for (( pidx = lineno - 2; pidx >= 0; pidx-- )); do
+        case "${file_lines[${pidx}]}" in
+          \#*) prev_line="${file_lines[${pidx}]}"; break ;;
+        esac
+      done
+    else
+      [[ ${lineno} -gt 1 ]] && prev_line="${file_lines[$(( lineno - 2 ))]}"
+    fi
+
     declare -a candidates=()
-
-    if [[ -n "${TOPLEVEL_RE}" ]]; then
-      # Rule #1: backtick-quoted OR bare, both anchored on a real
-      # top-level name immediately followed by "/".
-      while IFS= read -r m; do
-        [[ -n "${m}" ]] && candidates+=("${m}")
-      done < <(grep -oP "(?<![/A-Za-z0-9_.-])(?:${TOPLEVEL_RE})/(?:[A-Za-z0-9_.\/-]*[A-Za-z0-9_-])?" <<< "${line}" 2>/dev/null || true)
-    fi
-
-    # Rule #2: lone backtick-quoted root files (`CLAUDE.md`), no slash.
-    # shellcheck disable=SC2016 # single-quoted on purpose: literal regex,
-    # nothing here is meant to expand.
-    while IFS= read -r m; do
-      [[ -n "${m}" ]] && candidates+=("${m}")
-    done < <(grep -oP '(?<=`)[A-Za-z0-9_.-]+(?=`)' <<< "${line}" 2>/dev/null || true)
-
-    if [[ ${#candidates[@]} -gt 0 ]]; then
-      # shellcheck disable=SC2094 # false positive: check_candidates only
-      # reads $file's VALUE (a path string) as an argument, it never
-      # touches the fd this loop is reading lines from.
-      check_candidates "${file}" "${lineno}" "${line}" "${prev_line}" "${candidates[@]}"
-    fi
-    prev_line="${line}"
-  done < "${file}"
+    mapfile -t candidates <<< "${joined%$'\n'}"
+    check_candidates "${file}" "${lineno}" "${line}" "${prev_line}" "${candidates[@]}"
+  done
 done
 
 # --- Second pass: src/ + tests/ knowledge/-anchored citations (W2) ----------
-# One pre-filtering grep over the whole framework source, then only the
-# hit lines go through the (subprocess-heavy) validity check — keeps the
-# CI gate fast. Scope: tokens starting with `knowledge/` (see the corpus
-# note in the header for why the scan is restricted to this class).
+# Two greps over the whole framework source (#112): one `-rnH` to capture
+# the raw hit lines (check_candidates needs them for the example-marker
+# and placeholder-truncation checks), one `-rnHoP` to extract every
+# candidate, then pure-bash parsing; no per-hit subprocess. Both greps
+# traverse the same tree in the same order, so candidates arrive in the
+# original file/line/position order. Scope: tokens starting with
+# `knowledge/` (see the corpus note in the header for why the scan is
+# restricted to this class).
+declare -A src_raw_lines=()
 while IFS= read -r hit; do
   file="${hit%%:*}"
   rest="${hit#*:}"
   lineno="${rest%%:*}"
-  line="${rest#*:}"
-  declare -a candidates=()
-  while IFS= read -r m; do
-    [[ -n "${m}" ]] && candidates+=("${m}")
-  done < <(grep -oP '(?<![/A-Za-z0-9_.-])knowledge/(?:[A-Za-z0-9_.\/-]*[A-Za-z0-9_-])?' <<< "${line}" 2>/dev/null || true)
-  if [[ ${#candidates[@]} -gt 0 ]]; then
-    check_candidates "${file}" "${lineno}" "${line}" "" "${candidates[@]}"
-  fi
+  src_raw_lines["${file}:${lineno}"]="${rest#*:}"
 done < <(grep -rnH 'knowledge/' --include='*.py' --include='README.md' src tests 2>/dev/null || true)
+
+while IFS= read -r hit; do
+  [[ -z "${hit}" ]] && continue
+  file="${hit%%:*}"
+  rest="${hit#*:}"
+  lineno="${rest%%:*}"
+  m="${rest#*:}"
+  [[ -z "${m}" ]] && continue
+  check_candidates "${file}" "${lineno}" "${src_raw_lines[${file}:${lineno}]:-}" "" "${m}"
+done < <(grep -rnHoP '(?<![/A-Za-z0-9_.-])knowledge/(?:[A-Za-z0-9_.\/-]*[A-Za-z0-9_-])?' --include='*.py' --include='README.md' src tests 2>/dev/null || true)
 
 
 # --- Third pass: agent-name references (rule #9) ----------------------------
@@ -651,37 +700,61 @@ for f in .claude/agents/*.md; do
   [[ "${agent_name}" == *-* ]] && AGENT_SUFFIXES["${agent_name##*-}"]=1
 done
 
+# STRUCTURE.md / .gitignore exclusion (rules #9/#10), applied once; the
+# third and fourth passes each run ONE grep over this list (#112) instead
+# of one per file, and grep's argument-order traversal preserves the
+# original per-file, per-line report order.
+declare -a NAME_PASS_FILES=()
 for file in "${TARGET_FILES[@]}"; do
   case "${file}" in STRUCTURE.md|.gitignore) continue ;; esac
-  while IFS=: read -r lineno tok; do
+  NAME_PASS_FILES+=("${file}")
+done
+
+if [[ ${#NAME_PASS_FILES[@]} -gt 0 ]]; then
+  while IFS=: read -r file lineno tok; do
     [[ -z "${tok}" ]] && continue
     suffix="${tok##*-}"
     [[ -n "${AGENT_SUFFIXES[${suffix}]:-}" ]] || continue
     [[ -n "${AGENT_NAMES[${tok}]:-}" ]] && continue
     echo "${file}:${lineno} -> \`${tok}\` (dead agent reference: no .claude/agents/${tok}.md)"
     FOUND_DEAD=1
-  done < <(grep -noP '(?<=\`)[a-z][a-z0-9]*(?:-[a-z0-9]+)+(?=\`)' "${file}" 2>/dev/null || true)
-done
+  done < <(grep -HnoP '(?<=\`)[a-z][a-z0-9]*(?:-[a-z0-9]+)+(?=\`)' "${NAME_PASS_FILES[@]}" 2>/dev/null || true)
+fi
 
 # --- Fourth pass: bare single-segment directory citations (rule #10) --------
 PAK_INTERNAL_DIRS="docs dashboards views icons profiles lib resources conf src"
 
-for file in "${TARGET_FILES[@]}"; do
-  case "${file}" in STRUCTURE.md|.gitignore) continue ;; esac
-  citing_dir="$(dirname -- "${file}")"
-  while IFS=: read -r lineno tok; do
+if [[ ${#NAME_PASS_FILES[@]} -gt 0 ]]; then
+  while IFS=: read -r file lineno tok; do
     [[ -z "${tok}" ]] && continue
+    citing_dir="."
+    [[ "${file}" == */* ]] && citing_dir="${file%/*}"
     seg="${tok%/}"
     [[ -n "${TOPLEVEL_SET[${seg}]:-}" ]] && continue
     if is_git_tracked "${citing_dir}/${seg}" || [[ -d "${citing_dir}/${seg}" ]]; then
       continue
     fi
-    parent_dir="$(dirname -- "${citing_dir}")"
+    parent_dir="."
+    [[ "${citing_dir}" == */* ]] && parent_dir="${citing_dir%/*}"
     if is_git_tracked "${parent_dir}/${seg}" || [[ -d "${parent_dir}/${seg}" ]]; then
       continue
     fi
-    if [[ "${citing_dir}" != "." ]] && git ls-files -- "${citing_dir}/" 2>/dev/null | grep -q "/${seg}/"; then
-      continue
+    # Any tracked path under the citing dir containing "/${seg}/": the
+    # hoisted list replaces the per-token `git ls-files | grep` (#112).
+    # The original grepped full repo-relative paths, so an occurrence
+    # inside the citing dir's own components counted too; preserved.
+    if [[ "${citing_dir}" != "." ]]; then
+      seg_found=0
+      for tf in "${TRACKED_LIST[@]}"; do
+        case "${tf}" in
+          "${citing_dir}/"*)
+            case "${tf}" in
+              *"/${seg}/"*) seg_found=1; break ;;
+            esac
+            ;;
+        esac
+      done
+      [[ "${seg_found}" -eq 1 ]] && continue
     fi
     pak_conv=0
     for c in ${PAK_INTERNAL_DIRS}; do
@@ -690,15 +763,26 @@ for file in "${TARGET_FILES[@]}"; do
     if [[ "${pak_conv}" -eq 1 && ${#MANAGED_PAK_NAMES[@]} -gt 0 ]]; then
       continue
     fi
-    suggestion="$(git ls-files | grep -m1 -oP "^.*?/${seg}/" || true)"
+    # First tracked path (ls-files order) containing "/${seg}/", trimmed
+    # non-greedily to its first occurrence, same result as the old
+    # `git ls-files | grep -m1 -oP "^.*?/${seg}/"` (#112).
+    suggestion=""
+    for tf in "${TRACKED_LIST[@]}"; do
+      case "${tf}" in
+        *"/${seg}/"*)
+          suggestion="${tf%%"/${seg}/"*}/${seg}/"
+          break
+          ;;
+      esac
+    done
     if [[ -n "${suggestion}" ]]; then
       echo "${file}:${lineno} -> \`${tok}\` (bare directory citation: did you mean \`${suggestion}\`?)"
     else
       echo "${file}:${lineno} -> \`${tok}\` (bare directory citation: no such directory anywhere in the tree)"
     fi
     FOUND_DEAD=1
-  done < <(grep -noP '(?<=\`)[A-Za-z0-9_-]+/(?=\`)' "${file}" 2>/dev/null || true)
-done
+  done < <(grep -HnoP '(?<=\`)[A-Za-z0-9_-]+/(?=\`)' "${NAME_PASS_FILES[@]}" 2>/dev/null || true)
+fi
 
 if [[ "${FOUND_DEAD}" -eq 1 ]]; then
   echo >&2
