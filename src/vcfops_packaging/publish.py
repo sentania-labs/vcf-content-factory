@@ -308,8 +308,25 @@ def _assert_clean_dist_repo(dist_repo: Path) -> None:
             )
 
 
-def _git_commit(dist_repo: Path, message: str) -> Optional[str]:
+def _commit_message_args(subject: str, body: str = "") -> List[str]:
+    """Build ``git commit`` message args from a subject and an optional body.
+
+    Git treats the first ``-m`` as the subject line and joins each subsequent
+    ``-m`` beneath it separated by a blank line, which is exactly the
+    subject/body split git tooling expects.  A subject answers "what
+    happened"; the body answers "to what".
+    """
+    args = ["-m", subject]
+    if body and body.strip():
+        args += ["-m", body.strip()]
+    return args
+
+
+def _git_commit(dist_repo: Path, message: str, body: str = "") -> Optional[str]:
     """Stage all changes, commit, and return the new commit SHA.
+
+    ``message`` becomes the commit subject; ``body``, when non-empty, becomes
+    the commit body (see :func:`_commit_message_args`).
 
     Returns None if there was nothing to commit.
     """
@@ -324,7 +341,7 @@ def _git_commit(dist_repo: Path, message: str) -> Optional[str]:
             f"git add failed in {dist_repo}: {r.stderr.strip()}"
         )
 
-    r = _git(dist_repo, "commit", "-m", message)
+    r = _git(dist_repo, "commit", *_commit_message_args(message, body))
     if r.returncode != 0:
         # "nothing to commit" is not a failure.
         if "nothing to commit" in r.stdout + r.stderr:
@@ -466,6 +483,18 @@ def _assemble_pr_body(
     README diff (truncated at 3000 chars), files-changed summary.
     """
     parts: list[str] = []
+
+    # --- Released-in-this-batch section ---
+    # Always present when anything was built.  Release notes are optional and
+    # the files-changed summary only lists files that actually changed, so
+    # without this a built release could appear nowhere in the body.
+    if built_names:
+        version_by_name = {r.name: r.version for r in releases}
+        batch_lines = []
+        for name in sorted(set(built_names)):
+            version = version_by_name.get(name)
+            batch_lines.append(f"- `{name}`" + (f" {version}" if version else ""))
+        parts.append("## Released in this batch\n\n" + "\n".join(batch_lines))
 
     # --- Per-release notes section ---
     release_notes_section: list[str] = []
@@ -1245,12 +1274,19 @@ def _publish_inner(
         n_built = len(result.built)
         n_retired = len(result.retired)
         n_deleted = len(result.deleted)
-        release_names_str = (
-            ", ".join(sorted(set(built_names))) if built_names else "none"
-        )
+        built_unique = sorted(set(built_names))
+        # The subject carries counts only.  Enumerating every release name
+        # here pushed the subject past 400 characters, which `git log
+        # --oneline`, PR listings and terminal output all truncate.  The
+        # names move down into the commit body, they are not dropped.
         commit_msg = (
             f"release-publish: {n_built} built, {n_retired} retired, "
-            f"{n_deleted} legacy deleted ({release_names_str})"
+            f"{n_deleted} legacy deleted"
+        )
+        commit_body = (
+            "Built releases:\n" + "\n".join(f"- {n}" for n in built_unique)
+            if built_unique
+            else ""
         )
 
         if use_pr:
@@ -1280,7 +1316,12 @@ def _publish_inner(
                     raise PublishError(
                         f"git add failed in {dist_repo}: {r.stderr.strip()}"
                     )
-                r = _git(dist_repo, "commit", "--allow-empty", "-m", commit_msg)
+                r = _git(
+                    dist_repo,
+                    "commit",
+                    "--allow-empty",
+                    *_commit_message_args(commit_msg, commit_body),
+                )
                 if r.returncode != 0:
                     raise PublishError(
                         f"git commit (force) failed in {dist_repo}: "
@@ -1289,7 +1330,7 @@ def _publish_inner(
                 r2 = _git(dist_repo, "rev-parse", "HEAD")
                 result.commit_sha = r2.stdout.strip() if r2.returncode == 0 else None
             else:
-                sha = _git_commit(dist_repo, commit_msg)
+                sha = _git_commit(dist_repo, commit_msg, commit_body)
                 result.commit_sha = sha
 
             if no_push:
@@ -1316,15 +1357,14 @@ def _publish_inner(
             _git(dist_repo, "checkout", "main")
 
             # Build PR title + body.
-            pr_title = (
-                f"release: {release_names_str} "
-                f"({n_built} built, {n_retired} retired)"
-            )
+            # Counts only, same reasoning as the commit subject.  The
+            # release names live in the PR body.
+            pr_title = f"release: {n_built} built, {n_retired} retired"
             pr_body = _assemble_pr_body(
                 releases=releases,
                 dist_repo=dist_repo,
                 branch_name=branch_name,
-                built_names=list(set(built_names)),
+                built_names=built_unique,
                 n_retired=n_retired,
                 n_deleted=n_deleted,
             )
@@ -1353,7 +1393,12 @@ def _publish_inner(
                     raise PublishError(
                         f"git add failed in {dist_repo}: {r.stderr.strip()}"
                     )
-                r = _git(dist_repo, "commit", "--allow-empty", "-m", commit_msg)
+                r = _git(
+                    dist_repo,
+                    "commit",
+                    "--allow-empty",
+                    *_commit_message_args(commit_msg, commit_body),
+                )
                 if r.returncode != 0:
                     raise PublishError(
                         f"git commit (force) failed in {dist_repo}: "
@@ -1362,7 +1407,7 @@ def _publish_inner(
                 r2 = _git(dist_repo, "rev-parse", "HEAD")
                 result.commit_sha = r2.stdout.strip() if r2.returncode == 0 else None
             else:
-                sha = _git_commit(dist_repo, commit_msg)
+                sha = _git_commit(dist_repo, commit_msg, commit_body)
                 result.commit_sha = sha
 
             if result.commit_sha and not no_push:
