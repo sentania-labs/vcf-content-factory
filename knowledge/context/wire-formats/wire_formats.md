@@ -693,3 +693,113 @@ Source: `reference/references/vmbro_vcf_operations_vcommunity/Management Pack/co
   forward renderer omits it (consistent with all other widget types).
 - Interaction-driven only in all observed instances (`selfProvider.selfProvider: false`).
   A self-provider mode may be possible but was not observed.
+
+## Scoreboard resource mode (dashboard JSON)
+
+- Date: 2026-08-26, tooling. Evidence: the `License Overview` widget of
+  Scott's public `VCF License Consumption Overview` export
+  (https://github.com/sentania/AriaOperationsContent, folder
+  `VCF License Consumption Overview`, `VCF Consumption Overview v2.zip` ->
+  `dashboard/dashboard.json`); trimmed copy at
+  `tests/fixtures/dashboards/license_overview_resource_mode.json`.
+
+A Scoreboard's `config.metric` has two modes. The factory historically
+emitted only `mode: "resourceKind"` (metrics resolved against the page
+object or self-provider subject kind through `resourceKindMetrics[]` and
+`entries.resourceKind[]`). The second mode pins every tile to ONE named
+resource:
+
+```json
+"metric": {
+  "mode": "resource",
+  "resourceMetrics": [
+    {
+      "metricKey": "Super Metric|sm_76801377-...",
+      "metricName": "Super Metrics|[...] VCF Total License Usage",
+      "isStringMetric": false,
+      "resourceId": "resource:id:0_::_",
+      "resourceName": "License Usage",
+      "resourceKindId": "002019VMWARE_INFRA_HEALTHLICENSE_USAGE_WORLD",
+      "colorMethod": 1, "handleOldColoring": false,
+      "id": "extModel2490-1", "label": "VCF Consumed Cores", "link": "",
+      "metricUnitId": null, "unit": "",
+      "yellowBound": null, "orangeBound": null, "redBound": null
+    }
+  ],
+  "resourceKindMetrics": []
+}
+```
+
+Differences from kind mode, entry by entry: `resourceId` (an
+`entries.resource[]` synthetic ref, the same table pinned View widgets
+use) and `resourceName` (the resource's display name) replace
+`resourceKindName`; `resourceKindId` is the literal
+`<prefix><adapterKind><resourceKind>` string, not a `resourceKind:id:N`
+ref; there is no `subMode`. The pinned resource does NOT get an
+`entries.resourceKind[]` slot (the export has none for
+LICENSE_USAGE_WORLD). `entries.resource[]` carries
+`{resourceKindKey, internalId, adapterKindKey, identifiers: [], name}` with
+`name` = display name (`License Usage`).
+
+Factory YAML (`ScoreboardConfig.metric_mode` / `.resource`):
+
+```yaml
+- id: license_overview
+  type: Scoreboard
+  self_provider: true
+  metric_mode: resource
+  resource:
+    adapter_kind: VMWARE_INFRA_HEALTH
+    resource_kind: LICENSE_USAGE_WORLD
+    name: License Usage          # display name on the target instance
+  metrics:
+    - metric_key: supermetric:"..."   # adapter_kind/resource_kind default to `resource`
+      metric_name: ...
+      label: VCF Consumed Cores
+      color_method: 1
+```
+
+`resource:` without `metric_mode: resource` is rejected; a metric naming a
+different kind than `resource` is rejected (one resource per widget, which
+is all the evidence shows). The reverse path (`reverse.py
+_parse_resource_mode_metrics`) resolves `resourceId` through
+`entries.resource[]` and emits `metric_mode: resource` + `resource:`; the
+`reverse-local` round-trip verdict now compares the metric signature (mode
+plus every metricKey/label) per widget, not just type/coords/view id, so a
+widget that comes back with `metrics: []` is PARTIAL, not MATCH.
+
+Residual cosmetic deltas vs the export, shared with kind mode and known
+harmless: the factory emits `maxValue: ""` (export omits it), `unit: null`
+for an empty unit (export `""`), and stringifies `metricUnitId` (`"-1"` vs
+`-1`).
+
+## Reverse-path field fidelity (dashboard JSON and view XML)
+
+- Date: 2026-08-26, tooling. Evidence: Scott's public VCF License
+  Consumption Overview export (trimmed fixtures
+  `tests/fixtures/dashboards/license_consumption_widgets.json` and
+  `tests/fixtures/license_consumption_views.xml`).
+
+Fields the reverse tools used to drop, with the YAML that now carries
+them (loader defaults are the historical hardcoded values, so untouched
+content renders byte-identical):
+
+| Wire | Where | YAML | Default |
+|---|---|---|---|
+| `config.selectFirstRow.selectFirstRow: false` | View, ResourceList | `select_first_row: false` | true |
+| `config.chartViewItems: ["legend"]` | View (trend) | `chart_view_items: [legend]` | `[]` |
+| `config.showDT.showDT: true` | Scoreboard | `show_dt: true` | false |
+| `config.roundDecimals: null` | Scoreboard | `round_decimals: null` (explicit null; absent key still means 1) | 1 |
+| `config.refreshContent.refreshContent: false` | Scoreboard | `refresh_content: false` | true |
+| per-column `forecastDays=90` + `transformations=[NONE,TREND,FORECAST]` | trend ViewDef | `forecast_days: 90` (the renderer derives the list; `transformations:` is only emitted when the export's list differs) | 0 |
+| metadata `hideObjectNameColumn="true"` | list ViewDef | `hide_object_name: true` | false |
+
+`roundDecimals: null` is the widget's own "no rounding" value (the three
+kind-mode Scoreboards in the export carry it; the resource-mode one
+carries `0`); the reverse used to turn it into `1.0`.
+
+Known remaining delta, not a drop: the renderer always emits a `metadata`
+control (`maxPointsCount`, `hideObjectNameColumn`, `listTopResultSize`,
+`includeResourceCreationTime`) on trend views, while the export omits the
+control entirely on its four trend views. Harmless (importer accepted the
+shape on vmbro content).

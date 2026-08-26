@@ -52,11 +52,14 @@ from .loader import (
     ResourceRelationshipAdvancedConfig,
     ScoreboardConfig,
     TextDisplayConfig,
+    TimeSegmentSpec,
     ViewDef,
+    ViewSubject,
     ViewColumn,
     ViewTimeWindow,
     Widget,
     WidgetResourceKindRef,
+    WidgetResourceRef,
 )
 
 
@@ -110,6 +113,7 @@ def _build_resource_lookup(dashboard_json: dict) -> dict[int, dict]:
         lookup[idx] = {
             "adapter_kind": str(entry.get("adapterKindKey") or "").strip(),
             "resource_kind": str(entry.get("resourceKindKey") or entry.get("name") or "").strip(),
+            "name": str(entry.get("name") or "").strip(),
         }
     return lookup
 
@@ -138,6 +142,20 @@ def _resolve_res_id(
         )
         return "", ""
     return entry["adapter_kind"], entry["resource_kind"]
+
+
+def _pin_name_override(res_id: str, resource_lookup: dict[int, dict], ak: str, rk: str) -> str:
+    """The ``entries.resource[].name`` behind a synthetic ref, or "" when the
+    forward renderer would derive the same name on its own (so reversed
+    YAML stays minimal and existing pins round-trip without a ``name:``)."""
+    m = _SYNTHETIC_RES_RE.match(res_id.strip())
+    if not m:
+        return ""
+    name = str((resource_lookup.get(int(m.group(1))) or {}).get("name") or "").strip()
+    if not name:
+        return ""
+    from .render import _resolve_view_pin
+    return "" if _resolve_view_pin(ak, rk)[2] == name else name
 
 
 def _build_kind_lookup(dashboard_json: dict) -> dict[int, dict]:
@@ -220,9 +238,11 @@ def parse_view_xml_element(elem) -> Optional[ViewDef]:
     description = ""
     adapter_kind = ""
     resource_kind = ""
+    subject_pairs: list[tuple[str, str]] = []
     data_type = "list"
     presentation = "list"
     columns: list[ViewColumn] = []
+    meta = {"hide_object_name": False, "forecast_days": 0, "transformations": None}
 
     for child in elem:
         tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
@@ -232,10 +252,17 @@ def parse_view_xml_element(elem) -> Optional[ViewDef]:
         elif tag == "Description":
             description = child.text or ""
         elif tag == "SubjectType":
+            # One ViewDef may carry several subject kinds, each as a
+            # descendant+self pair, in sequence (wire evidence:
+            # reference/docs/extracted/view-multi-subject/). Keep every
+            # distinct pair in document order; the first stays the scalar.
+            pair = (child.get("adapterKind", ""), child.get("resourceKind", ""))
+            if pair not in subject_pairs:
+                subject_pairs.append(pair)
             if not adapter_kind:
-                adapter_kind = child.get("adapterKind", "")
+                adapter_kind = pair[0]
             if not resource_kind:
-                resource_kind = child.get("resourceKind", "")
+                resource_kind = pair[1]
         elif tag == "DataProviders":
             for dp in child:
                 dp_tag = dp.tag.split("}")[-1] if "}" in dp.tag else dp.tag
@@ -253,6 +280,7 @@ def parse_view_xml_element(elem) -> Optional[ViewDef]:
                 presentation = ptype
         elif tag == "Controls":
             columns = _parse_controls_to_columns(child)
+            meta = _parse_controls_meta(child)
 
     if not title:
         _warn(f"ViewDef {view_id} has no Title element")
@@ -266,8 +294,79 @@ def parse_view_xml_element(elem) -> Optional[ViewDef]:
         columns=columns,
         data_type=data_type,
         presentation=presentation,
+        subjects=(
+            [ViewSubject(ak, rk) for ak, rk in subject_pairs]
+            if len(subject_pairs) > 1 else []
+        ),
+        forecast_days=meta["forecast_days"] if data_type == "trend" else 0,
+        transformations=_trend_transformations_to_emit(
+            data_type, meta["forecast_days"], meta["transformations"]
+        ),
+        hide_object_name=meta["hide_object_name"],
     )
     return vd
+
+def _parse_controls_meta(controls_elem) -> dict:
+    """View-level facts that live in <Controls> but are not columns.
+
+    Returns ``{"hide_object_name": bool, "forecast_days": int,
+    "transformations": list[str] | None}``. ``forecast_days`` and the
+    multi-item ``transformations`` list come from the first column that
+    carries them (trend views carry the same values on every column);
+    ``hide_object_name`` from the ``metadata`` control. Wire evidence:
+    reference/docs/extracted/view-time-segment/ (hideObjectNameColumn) and
+    the trend views of the same export (forecastDays=90,
+    transformations=[NONE, TREND, FORECAST]).
+    """
+    def _tag(e):
+        return e.tag.split("}")[-1] if "}" in e.tag else e.tag
+
+    meta = {"hide_object_name": False, "forecast_days": 0, "transformations": None}
+    for ctrl in controls_elem:
+        if _tag(ctrl) != "Control":
+            continue
+        ctype = ctrl.get("type")
+        if ctype == "metadata":
+            for prop in ctrl:
+                if _tag(prop) == "Property" and prop.get("name") == "hideObjectNameColumn":
+                    meta["hide_object_name"] = (prop.get("value") or "").strip().lower() == "true"
+        elif ctype == "attributes-selector":
+            for value in ctrl.iter():
+                if _tag(value) != "Value":
+                    continue
+                fd = None
+                tl: list[str] = []
+                for prop in value:
+                    if _tag(prop) != "Property":
+                        continue
+                    if prop.get("name") == "forecastDays" and prop.get("value"):
+                        try:
+                            fd = int(prop.get("value"))
+                        except ValueError:
+                            fd = None
+                    elif prop.get("name") == "transformations":
+                        for item in prop.iter():
+                            if _tag(item) == "Item" and item.get("value"):
+                                tl.append(item.get("value"))
+                if fd is not None and meta["forecast_days"] == 0:
+                    meta["forecast_days"] = fd
+                if len(tl) > 1 and meta["transformations"] is None:
+                    meta["transformations"] = tl
+                if meta["forecast_days"] and meta["transformations"] is not None:
+                    break
+    return meta
+
+
+def _trend_transformations_to_emit(data_type: str, forecast_days: int, transformations) -> "list | None":
+    """The explicit ``transformations:`` list a reversed trend view needs,
+    or None when the renderer derives the same list from
+    ``data_type``/``forecast_days`` on its own (NONE, TREND, +FORECAST when
+    forecast_days > 0)."""
+    if data_type != "trend" or not transformations:
+        return None
+    derived = ["NONE", "TREND"] + (["FORECAST"] if forecast_days > 0 else [])
+    return None if list(transformations) == derived else list(transformations)
+
 
 
 def _parse_controls_to_columns(controls_elem) -> list[ViewColumn]:
@@ -304,6 +403,19 @@ def _parse_controls_to_columns(controls_elem) -> list[ViewColumn]:
     return columns
 
 
+def _time_segment_from_props(props: dict) -> TimeSegmentSpec:
+    """Build a TimeSegmentSpec from a column's flat Property bag."""
+    try:
+        count = int(props.get("startingOnCount", "1") or 1)
+    except ValueError:
+        count = 1
+    return TimeSegmentSpec(
+        breakdown_by=props.get("breakdownBy", "").strip().upper(),
+        starting_on_unit=(props.get("startingOnUnit", "WEEKS") or "WEEKS").strip().upper(),
+        starting_on_count=count,
+    )
+
+
 def _parse_column_value_to_dataclass(value_elem) -> Optional[ViewColumn]:
     """Parse a <Value> element into a ViewColumn dataclass."""
 
@@ -334,6 +446,15 @@ def _parse_column_value_to_dataclass(value_elem) -> Optional[ViewColumn]:
         return None
 
     display_name = props.get("displayName", attribute_key)
+
+    # Time-segment ("Interval Breakdown") pseudo-column: not a metric column.
+    # See TimeSegmentSpec in loader.py for the wire shape.
+    if props.get("isTimeSegment", "").strip().lower() == "true":
+        return ViewColumn(
+            attribute="Interval Breakdown",
+            display_name=display_name,
+            time_segment=_time_segment_from_props(props),
+        )
 
     # Normalise super metric column keys
     if attribute_key.startswith("Super Metric|sm_"):
@@ -537,6 +658,81 @@ def _parse_metric_specs_from_wire(
     return specs
 
 
+def _parse_resource_mode_metrics(
+    raw_metric: dict,
+    widget_label: str,
+    resource_lookup: dict[int, dict] | None,
+) -> "tuple[list[MetricSpec], WidgetResourceRef | None]":
+    """Parse a ``metric.mode == "resource"`` object (``resourceMetrics[]``).
+
+    Every entry is pinned to one ``entries.resource[]`` ref; the first
+    entry's ref names the widget resource. Returns the specs and the
+    resolved WidgetResourceRef (None with a WARN when the ref cannot be
+    resolved, in which case the widget is emitted with no metrics rather
+    than with a guessed pin).
+    """
+    specs: list[MetricSpec] = []
+    resource_lookup = resource_lookup or {}
+    entries = raw_metric.get("resourceMetrics") or []
+    resource: WidgetResourceRef | None = None
+    for entry in entries:
+        metric_key = str(entry.get("metricKey") or "").strip()
+        if not metric_key:
+            continue
+        res_id_raw = str(entry.get("resourceId") or "").strip()
+        ak, rk = _resolve_res_id(res_id_raw, resource_lookup, f"widget '{widget_label}' resourceMetrics")
+        if not ak or not rk:
+            _warn(
+                f"widget '{widget_label}': resource-mode metric {metric_key!r} has "
+                f"resourceId={res_id_raw!r} that does not resolve via entries.resource[]; "
+                "metric dropped"
+            )
+            continue
+        m = _SYNTHETIC_RES_RE.match(res_id_raw)
+        name = str(resource_lookup[int(m.group(1))].get("name") or "").strip() if m else ""
+        name = name or str(entry.get("resourceName") or "").strip()
+        ref = WidgetResourceRef(adapter_kind=ak, resource_kind=rk, name=name)
+        if resource is None:
+            resource = ref
+        elif ref != resource:
+            _warn(
+                f"widget '{widget_label}': resource-mode metric {metric_key!r} is pinned to "
+                f"{ref.adapter_kind}/{ref.resource_kind}/{ref.name!r}, not the widget resource "
+                f"{resource.adapter_kind}/{resource.resource_kind}/{resource.name!r}; "
+                "the factory models one resource per widget, metric dropped"
+            )
+            continue
+        color_method_raw = entry.get("colorMethod", 2)
+        try:
+            color_method = int(color_method_raw)
+        except (TypeError, ValueError):
+            color_method = 2
+
+        def _to_bound(v):
+            if v is None:
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        specs.append(MetricSpec(
+            adapter_kind=ak,
+            resource_kind=rk,
+            metric_key=metric_key,
+            metric_name=str(entry.get("metricName") or metric_key).strip(),
+            unit_id=str(entry.get("metricUnitId") or "").strip() if entry.get("metricUnitId") else "",
+            unit=str(entry.get("unit") or "").strip() if entry.get("unit") else "",
+            color_method=color_method,
+            yellow_bound=_to_bound(entry.get("yellowBound")),
+            orange_bound=_to_bound(entry.get("orangeBound")),
+            red_bound=_to_bound(entry.get("redBound")),
+            label=str(entry.get("label") or "").strip(),
+            is_string_metric=bool(entry.get("isStringMetric", False)),
+        ))
+    return specs, resource
+
+
 def _parse_text_display_config(cfg: dict, dash_name: str, local_id: str) -> TextDisplayConfig:
     html = str(cfg.get("editorData") or cfg.get("locationUrl") or "<br>").strip()
     return TextDisplayConfig(html=html)
@@ -547,8 +743,19 @@ def _parse_scoreboard_config(
     dash_name: str,
     local_id: str,
     kind_lookup: dict[int, dict] | None = None,
+    resource_lookup: dict[int, dict] | None = None,
 ) -> ScoreboardConfig:
-    specs = _parse_metric_specs_from_wire(cfg.get("metric") or {}, local_id, kind_lookup)
+    raw_metric = cfg.get("metric") or {}
+    metric_mode = "resourceKind"
+    sb_resource: WidgetResourceRef | None = None
+    if str(raw_metric.get("mode") or "") == "resource":
+        specs, sb_resource = _parse_resource_mode_metrics(raw_metric, local_id, resource_lookup)
+        if sb_resource is not None:
+            metric_mode = "resource"
+        else:
+            specs = []
+    else:
+        specs = _parse_metric_specs_from_wire(raw_metric, local_id, kind_lookup)
     if not specs:
         _warn(f"dashboard '{dash_name}': Scoreboard widget '{local_id}' has no parseable metrics")
     visual_theme = cfg.get("visualTheme", 8)
@@ -578,13 +785,19 @@ def _parse_scoreboard_config(
         label_size = int(label_size_raw)
     except (TypeError, ValueError):
         label_size = 12
-    round_decimals_raw = cfg.get("roundDecimals")
-    round_decimals = float(round_decimals_raw) if round_decimals_raw is not None else 1.0
+    # roundDecimals: null is a real wire value ("no rounding"); keep it
+    # rather than turning it into 1.0. Only an absent key defaults.
+    round_decimals = (
+        (float(cfg["roundDecimals"]) if cfg["roundDecimals"] is not None else None)
+        if "roundDecimals" in cfg else 1.0
+    )
     max_cell_count_raw = cfg.get("maxCellCount", 100)
     try:
         max_cell_count = int(max_cell_count_raw)
     except (TypeError, ValueError):
         max_cell_count = 100
+    show_dt = bool((cfg.get("showDT") or {}).get("showDT", False))
+    refresh_content = bool((cfg.get("refreshContent") or {}).get("refreshContent", True))
     return ScoreboardConfig(
         metrics=specs,
         visual_theme=visual_theme,
@@ -599,6 +812,10 @@ def _parse_scoreboard_config(
         label_size=label_size,
         round_decimals=round_decimals,
         max_cell_count=max_cell_count,
+        metric_mode=metric_mode,
+        resource=sb_resource,
+        show_dt=show_dt,
+        refresh_content=refresh_content,
     )
 
 
@@ -1038,8 +1255,19 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
         resource_relationship_advanced_config = None
         self_provider = bool((cfg.get("selfProvider") or {}).get("selfProvider", False))
         pin = None
+        # config.selectFirstRow.selectFirstRow (View / ResourceList); the
+        # vendor norm is false, the loader default is true, so it must be
+        # carried or the reversed dashboard silently flips it.
+        sfr_raw = cfg.get("selectFirstRow")
+        select_first_row = True
+        if isinstance(sfr_raw, dict) and "selectFirstRow" in sfr_raw:
+            select_first_row = bool(sfr_raw.get("selectFirstRow"))
+        chart_view_items: list[str] = []
 
         if wtype == "View":
+            cvi_raw = cfg.get("chartViewItems")
+            if isinstance(cvi_raw, list):
+                chart_view_items = [str(x) for x in cvi_raw if isinstance(x, str) and x.strip()]
             view_def_id = str(cfg.get("viewDefinitionId") or "").strip().lower()
             vd = views_by_uuid.get(view_def_id)
             if vd:
@@ -1062,7 +1290,10 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
                     context = f"dashboard '{display_name}': View widget '{local_id}'"
                     ak, rk = _resolve_res_id(res_id_raw, resource_lookup, context)
                     if ak is not None and ak and rk:
-                        pin = WidgetResourceKindRef(adapter_kind=ak, resource_kind=rk)
+                        pin = WidgetResourceKindRef(
+                            adapter_kind=ak, resource_kind=rk,
+                            name=_pin_name_override(res_id_raw, resource_lookup, ak, rk),
+                        )
                     elif ak is None:
                         # Not a synthetic ref, try to recover from resourceKindId or resourceName
                         # in the config.resource block (live-instance export may embed real values).
@@ -1132,7 +1363,9 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
             text_display_config = _parse_text_display_config(cfg, display_name, local_id)
 
         elif wtype == "Scoreboard":
-            scoreboard_config = _parse_scoreboard_config(cfg, display_name, local_id, kind_lookup)
+            scoreboard_config = _parse_scoreboard_config(
+                cfg, display_name, local_id, kind_lookup, resource_lookup
+            )
 
         elif wtype == "MetricChart":
             metric_chart_config = _parse_metric_chart_config(cfg, display_name, local_id, kind_lookup)
@@ -1157,7 +1390,10 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
                     context = f"dashboard '{display_name}': ProblemAlertsList widget '{local_id}'"
                     ak, rk = _resolve_res_id(res_id_raw, resource_lookup, context)
                     if ak is not None and ak and rk:
-                        pin = WidgetResourceKindRef(adapter_kind=ak, resource_kind=rk)
+                        pin = WidgetResourceKindRef(
+                            adapter_kind=ak, resource_kind=rk,
+                            name=_pin_name_override(res_id_raw, resource_lookup, ak, rk),
+                        )
                     elif ak is None:
                         rk_from_cfg = str(res_cfg.get("resourceName") or "").strip()
                         if rk_from_cfg:
@@ -1183,6 +1419,8 @@ def parse_dashboard_json(dash_json: dict, views_by_id: dict[str, ViewDef]) -> Da
             view_name=view_name,
             self_provider=self_provider,
             pin=pin,
+            select_first_row=select_first_row,
+            chart_view_items=chart_view_items,
             scoreboard_config=scoreboard_config,
             metric_chart_config=metric_chart_config,
             text_display_config=text_display_config,

@@ -13,6 +13,7 @@ property is omitted, defaulted, or left empty.
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import re
@@ -24,6 +25,7 @@ from xml.sax.saxutils import escape
 
 from .loader import (
     Dashboard, Interaction, MetricSpec, ViewDef, ViewColumn, ViewTimeWindow, Widget,
+    WidgetResourceRef,
     SubjectFilterCondition,
     MetricChartConfig, ScoreboardConfig, TextDisplayConfig,
     HealthChartConfig, ParetoAnalysisConfig,
@@ -77,6 +79,27 @@ _VIEW_PIN_CONTAINER: dict[tuple[str, str], tuple[str, str, str]] = {
     # falls back to (adapter_kind, resource_kind, resource_kind) for unknowns)
 }
 
+# World singletons whose DISPLAY NAME differs from their kind key. The
+# importer resolves `entries.resource[].name` against resource display
+# names, never kind keys: live-verified 2026-08-26 on devel 9.1.1 with two
+# throwaway dashboards pinned to NSXTAdapter/NSXT World, name "NSX World"
+# materialized in ~2 min with a concrete resourceId, name "NSXT World" never
+# materialized (isLoading: true, skeleton config). See
+# knowledge/context/wire-formats/dashboard_view_pin_resolution.md.
+#
+#   key:   (adapter_kind, resource_kind)      value: display name
+#
+# "NSX World" is live-verified on 9.1.1 and 9.2; "Automation World" and
+# "License Usage" come from the public VCF License Consumption Overview
+# export (entries.resource[].name) and the VCFAutomation reference
+# dashboard. An author can override any of these, or supply a name for an
+# unlisted kind, with `pin: {..., name: <display name>}`.
+_WORLD_DISPLAY_NAME: dict[tuple[str, str], str] = {
+    ("NSXTAdapter", "NSXT World"): "NSX World",
+    ("CASAdapter", "CAS World"): "Automation World",
+    ("VMWARE_INFRA_HEALTH", "LICENSE_USAGE_WORLD"): "License Usage",
+}
+
 # NOTE on nested config.resource.traversalSpecId (removed enrichment,
 # 2026-07-13): an earlier revision of this module carried a
 # `_VIEW_PIN_TRAVERSAL_SPEC` table that filled in a known-good traversal
@@ -116,24 +139,34 @@ _VIEW_PIN_CONTAINER: dict[tuple[str, str], tuple[str, str, str]] = {
 def _resolve_view_pin(
     adapter_kind: str,
     resource_kind: str,
+    name: str = "",
 ) -> tuple[str, str, str]:
     """Return (container_adapter_kind, container_resource_kind, container_resource_name)
     for a self-provider View/ProblemAlertsList widget pin.
 
-    For leaf kinds that are registered in _VIEW_PIN_CONTAINER the function
-    returns the world-singleton container so that the importer can resolve
-    "entries.resource[name=<container_resource_name>]" against an actual
-    running resource on the target instance.
+    The name is what the importer resolves (``entries.resource[name=...]``
+    against resource DISPLAY names, live-verified 2026-08-26; a name that
+    is not a display name never binds). Resolution order:
 
-    For unregistered kinds (typically world singletons like ComplianceWorld,
-    Automation World, VRMS World) the resource name equals the kind name, so
-    the function falls back to (adapter_kind, resource_kind, resource_kind).
-    Those resources exist on every instance where the owning adapter is
-    installed.
+    1. explicit ``name`` (the YAML ``pin.name`` override), used verbatim
+       with the authored kind (world singletons only: the loader rejects a
+       name on a leaf kind in _VIEW_PIN_CONTAINER, unverified live);
+    2. leaf kinds registered in _VIEW_PIN_CONTAINER, redirected to their
+       world-singleton container (no resource carries a leaf kind key as
+       its display name);
+    3. world singletons whose display name differs from the kind key
+       (_WORLD_DISPLAY_NAME);
+    4. otherwise the kind key, which is the display name for the common
+       world singletons (vSphere World, ComplianceWorld, VRMS World, ...).
     """
+    if name:
+        return (adapter_kind, resource_kind, name)
     container = _VIEW_PIN_CONTAINER.get((adapter_kind, resource_kind))
     if container is not None:
         return container
+    display = _WORLD_DISPLAY_NAME.get((adapter_kind, resource_kind))
+    if display is not None:
+        return (adapter_kind, resource_kind, display)
     # World/singleton convention: the resource's display name equals the kind
     # name (e.g., ComplianceWorld resource is named "ComplianceWorld").
     return (adapter_kind, resource_kind, resource_kind)
@@ -167,7 +200,7 @@ def _self_provider_pin_container(
     caller keeps the historic ``resource: []`` shape in that case.
     """
     if w.pin:
-        return _resolve_view_pin(w.pin.adapter_kind, w.pin.resource_kind)
+        return _resolve_view_pin(w.pin.adapter_kind, w.pin.resource_kind, w.pin.name)
     if cfg_adapter_kind and cfg_resource_kind:
         resolved = _resolve_view_pin(cfg_adapter_kind, cfg_resource_kind)
         _, resolved_kind, _ = resolved
@@ -534,6 +567,31 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     return "<Item><Value>" + "".join(props) + "</Value></Item>"
 
 
+def _xml_time_segment_item(col) -> str:
+    """Render a time-segment ("Interval Breakdown") pseudo-column.
+
+    Exactly the nine Properties, in the order, of the vendor export in
+    reference/docs/extracted/view-time-segment/ (column 0 of the
+    ``VCF Licensing Overtime`` list view). No adapterKind/resourceKind,
+    no rollUpType, no transformations, no isProperty, no
+    addTimestampAsColumn/isShowRelativeTimestamp: the segment column is
+    not a metric column and the export carries none of them.
+    """
+    ts = col.time_segment
+    props = [
+        _xml_property("objectType", "RESOURCE"),
+        _xml_property("attributeKey", "Interval Breakdown"),
+        _xml_property("rollUpCount", "0"),
+        _xml_property("sortCriteria", "false"),
+        _xml_property("isTimeSegment", "true"),
+        _xml_property("breakdownBy", ts.breakdown_by),
+        _xml_property("startingOnUnit", ts.starting_on_unit),
+        _xml_property("startingOnCount", str(ts.starting_on_count)),
+        _xml_property("displayName", col.display_name),
+    ]
+    return "<Item><Value>" + "".join(props) + "</Value></Item>"
+
+
 def _xml_attribute_item(
     view: ViewDef,
     col,
@@ -548,6 +606,8 @@ def _xml_attribute_item(
     # vendor XML citations this mirrors.
     if getattr(col, "instanced_group", None) is not None:
         return _xml_instanced_group_item(view, col)
+    if getattr(col, "time_segment", None) is not None:
+        return _xml_time_segment_item(col)
 
     # Super metric columns live in their own namespace and need the
     # "Super Metric|sm_<uuid>" attributeKey form, bare "sm_<uuid>"
@@ -710,6 +770,10 @@ def _render_summary_infos(view: ViewDef) -> str:
     )
 
 
+def _bool_str(v: bool) -> str:
+    return "true" if v else "false"
+
+
 def _render_view_def_fragment(
     view: ViewDef,
     sm_map: dict[str, str] | None = None,
@@ -756,12 +820,21 @@ def _render_view_def_fragment(
         filter_attr = f' filter="{escape(filter_json, {chr(34): "&quot;"})}"'
     else:
         filter_attr = ""
+    # One descendant+self pair per subject kind, in authored order. Vendor
+    # multi-subject views carry exactly this shape (descendant then self
+    # per kind, kinds in sequence): reference/docs/extracted/
+    # view-multi-subject/. A single-subject view emits the same two
+    # elements it always has.
+    subject_types = "".join(
+        f'<SubjectType adapterKind="{escape(ak)}"{filter_attr} resourceKind="{escape(rk)}" type="descendant"/>'
+        f'<SubjectType adapterKind="{escape(ak)}"{filter_attr} resourceKind="{escape(rk)}" type="self"/>'
+        for ak, rk in view.subject_kinds
+    )
     header = (
         f'<ViewDef id="{view.id}">'
         f'<Title>{escape(view.name)}</Title>'
-        + desc_elem +
-        f'<SubjectType adapterKind="{escape(view.adapter_kind)}"{filter_attr} resourceKind="{escape(view.resource_kind)}" type="descendant"/>'
-        f'<SubjectType adapterKind="{escape(view.adapter_kind)}"{filter_attr} resourceKind="{escape(view.resource_kind)}" type="self"/>'
+        + desc_elem
+        + subject_types +
         "<Usage>dashboard</Usage><Usage>report</Usage><Usage>details</Usage><Usage>content</Usage>"
     )
 
@@ -782,7 +855,7 @@ def _render_view_def_fragment(
         metadata_ctrl = (
             '<Control id="metadata_id_1" type="metadata" visible="false">'
             '<Property name="maxPointsCount" value="5000"/>'
-            '<Property name="hideObjectNameColumn" value="false"/>'
+            f'<Property name="hideObjectNameColumn" value="{_bool_str(view.hide_object_name)}"/>'
             '<Property name="listTopResultSize" value="-1"/>'
             '<Property name="includeResourceCreationTime" value="false"/>'
             "</Control>"
@@ -809,7 +882,7 @@ def _render_view_def_fragment(
         metadata_ctrl = (
             '<Control id="metadata_id_1" type="metadata" visible="false">'
             '<Property name="maxPointsCount" value="5000"/>'
-            '<Property name="hideObjectNameColumn" value="false"/>'
+            f'<Property name="hideObjectNameColumn" value="{_bool_str(view.hide_object_name)}"/>'
             '<Property name="listTopResultSize" value="-1"/>'
             '<Property name="includeResourceCreationTime" value="false"/>'
             "</Control>"
@@ -845,7 +918,7 @@ def _render_view_def_fragment(
         metadata_ctrl = (
             '<Control id="metadata_id_1" type="metadata" visible="false">'
             '<Property name="maxPointsCount" value="5000"/>'
-            '<Property name="hideObjectNameColumn" value="false"/>'
+            f'<Property name="hideObjectNameColumn" value="{_bool_str(view.hide_object_name)}"/>'
             '<Property name="listTopResultSize" value="-1"/>'
             '<Property name="includeResourceCreationTime" value="false"/>'
             "</Control>"
@@ -1148,15 +1221,16 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
 
     if w.self_provider and w.pin:
         # Resolve the pin to a container resource that will exist on the
-        # target instance.  For leaf kinds (e.g. VMWARE/HostSystem) the
-        # importer cannot resolve "entries.resource[name='HostSystem']"
-        # because no resource has that display name.  _resolve_view_pin
-        # maps leaf kinds to their world-singleton containers, which always
-        # exist on any instance with the owning adapter installed.
+        # target instance.  The importer matches entries.resource[].name
+        # against resource DISPLAY names (live-verified 2026-08-26, see
+        # _WORLD_DISPLAY_NAME): leaf kinds (e.g. VMWARE/HostSystem) redirect
+        # to their world-singleton container, worlds whose display name
+        # differs from the kind key get the display name, and pin.name
+        # overrides everything.
         c_adapter, c_kind, c_name = _resolve_view_pin(
-            w.pin.adapter_kind, w.pin.resource_kind
+            w.pin.adapter_kind, w.pin.resource_kind, w.pin.name
         )
-        container_key = (c_adapter, c_kind)
+        container_key = (c_adapter, c_kind, c_name)
         prefix = _ADAPTER_KIND_PREFIX.get(c_adapter)
         if prefix is None:
             raise ValueError(
@@ -1201,13 +1275,122 @@ def _view_widget(w: Widget, view: "ViewDef | str", kind_index: dict[tuple[str, s
             # type, self-provider or not.
             "refreshContent": {"refreshContent": False},
             "isUpdatedView": True,
-            "chartViewItems": [],
+            "chartViewItems": list(w.chart_view_items),
             "selectFirstRow": {"selectFirstRow": w.select_first_row},
             "selfProvider": {"selfProvider": self_provider_flag},
             "title": w.title,
             "viewDefinitionId": view_def_id,
         },
         "height": 600,
+    }
+
+
+def _max_value_str(v: "float | None") -> str:
+    """Per-metric ``maxValue``: ``""`` when unset, else the number as the
+    UI text field would hold it (``"100"``, not ``"100.0"``)."""
+    if v is None:
+        return ""
+    if float(v).is_integer():
+        return str(int(v))
+    return repr(float(v))
+
+
+def _fan_out_summary_specs(
+    specs: list[MetricSpec],
+    summary_kinds: "list[tuple[str, str]] | None",
+    self_provider: bool,
+) -> list[MetricSpec]:
+    """Expand metric specs over a multi-kind ``summary_for`` list.
+
+    Live-proven (knowledge/context/api-surface/
+    dashboard_widgets_alertvolume_section_viewdetails.md, "Widgets bound to
+    many resource kinds"): with self-provider off the server keeps only the
+    ``resourceKindMetrics[]`` entries whose ``resourceKindId`` equals the
+    page object's kind and hides the rest; there is no wildcard kind. So a
+    dashboard bound to K kinds needs each metric once per kind.
+
+    Rule: when the dashboard lists more than one kind and the widget is
+    not self-provider, every spec whose ``(adapter_kind, resource_kind)``
+    is one of the listed kinds becomes one spec per listed kind of the
+    same adapter kind, in ``summary_for`` order, differing only in
+    ``resource_kind``. A spec whose kind is not listed is author-pinned
+    (a child kind, for example) and passes through untouched. Single-kind
+    and non-summary dashboards return ``specs`` as-is.
+    """
+    # self_provider: the loader already rejects self_provider on summary_for
+    # dashboards (load_dashboard raises first); this is a second fence for
+    # direct callers, not the primary gate. Keep both.
+    if not summary_kinds or len(summary_kinds) < 2 or self_provider:
+        return specs
+    out: list[MetricSpec] = []
+    for spec in specs:
+        key = (spec.adapter_kind, spec.resource_kind)
+        if key in summary_kinds:
+            for ak, rk in summary_kinds:
+                if ak == spec.adapter_kind:
+                    out.append(dataclasses.replace(spec, adapter_kind=ak, resource_kind=rk))
+        else:
+            out.append(spec)
+    return out
+
+
+def _render_resource_metric_spec(
+    specs: list[MetricSpec],
+    resource: "WidgetResourceRef",
+    resource_index: dict[tuple[str, str, str], int],
+    widget_id: str,
+) -> dict:
+    """Build the ``metric`` object of a resource-mode Scoreboard.
+
+    Every entry goes in ``resourceMetrics[]`` and points at the one pinned
+    resource through ``resourceId`` (an ``entries.resource[]`` synthetic
+    ref), ``resourceName`` (its display name) and the literal
+    ``resourceKindId`` (``<prefix><adapterKind><resourceKind>``, same form
+    as a pinned View widget). No ``resourceKindName``, no ``subMode``, and
+    ``resourceKindMetrics`` is empty: shape mirrors the ``License
+    Overview`` widget of the public VCF License Consumption Overview
+    export (knowledge/context/wire-formats/wire_formats.md §Scoreboard
+    resource mode).
+    """
+    prefix = _ADAPTER_KIND_PREFIX.get(resource.adapter_kind)
+    if prefix is None:
+        raise ValueError(
+            f"no known resourceKindId prefix for adapter kind "
+            f"{resource.adapter_kind!r}, extend _ADAPTER_KIND_PREFIX "
+            f"after harvesting from an exported reference dashboard"
+        )
+    res_idx = resource_index[(resource.adapter_kind, resource.resource_kind, resource.name)]
+    res_metrics = []
+    for seq, spec in enumerate(specs, start=1):
+        entry: dict = {
+            "metricKey": spec.metric_key,
+            "metricName": spec.metric_name,
+            "isStringMetric": spec.is_string_metric,
+            "resourceId": f"resource:id:{res_idx}_::_",
+            "resourceName": resource.name,
+            "resourceKindId": f"{prefix}{resource.adapter_kind}{resource.resource_kind}",
+            "colorMethod": spec.color_method,
+            "handleOldColoring": False,
+            "id": f"extModel{abs(hash(widget_id)) % 100000}-{seq}",
+            "label": spec.label,
+            "link": "",
+            "maxValue": _max_value_str(spec.max_value),
+            "metricUnitId": spec.unit_id or None,
+            "unit": spec.unit or None,
+        }
+        if spec.color_method == 0:
+            entry["yellowBound"] = spec.yellow_bound
+            entry["orangeBound"] = spec.orange_bound
+            entry["redBound"] = spec.red_bound
+        else:
+            entry["yellowBound"] = None
+            entry["orangeBound"] = None
+            entry["redBound"] = None
+        res_metrics.append(entry)
+    return {
+        "mode": "resource",
+        "resourceMetrics": res_metrics,
+        "resourceKindMetrics": [],
     }
 
 
@@ -1218,7 +1401,10 @@ def _render_metric_spec(
 ) -> dict:
     """Build the ``metric`` object shared by Scoreboard and MetricChart widgets.
 
-    Each MetricSpec entry is mapped to one ``resourceKindMetrics[]`` entry.
+    Each MetricSpec entry is mapped to one ``resourceKindMetrics[]`` entry
+    (after any ``summary_for`` fan-out, see ``_fan_out_summary_specs``; the
+    sequence suffix on ``id`` runs over the expanded list, so fanned entries
+    keep unique ids).
     The ``resourceKindId`` references the kind_index table that is stored in
     ``entries.resourceKind[]`` in the dashboard bundle JSON.
 
@@ -1235,14 +1421,19 @@ def _render_metric_spec(
             "metricName": spec.metric_name,
             "isStringMetric": spec.is_string_metric,
             "resourceKindId": rk_id,
-            "resourceKindName": spec.resource_kind,
+            # Cosmetic (not a binding field): exports carry the kind's
+            # display name here ("NSX World" for NSXT World), which for the
+            # world singletons is the same table _resolve_view_pin uses.
+            "resourceKindName": _WORLD_DISPLAY_NAME.get(key, spec.resource_kind),
             "colorMethod": spec.color_method,
             "handleOldColoring": False,
             # Stable per-widget, per-sequence ID.
             "id": f"extModel{abs(hash(widget_id)) % 100000}-{seq}",
             "label": spec.label,
             "link": "",
-            "maxValue": "",
+            # Gauge full-scale value; a string on the wire ("100"). "" when
+            # unset, the historical output.
+            "maxValue": _max_value_str(spec.max_value),
         }
         if spec.unit_id:
             entry["metricUnitId"] = spec.unit_id
@@ -1292,15 +1483,68 @@ def _text_display_widget(w: Widget) -> dict:
     }
 
 
+def _section_widget(w: Widget, widget_id_by_local: dict[str, str]) -> dict:
+    """Render a Section (collapsible full-width row header).
+
+    Shape follows the Suite API export form verbatim (see ``SectionConfig``
+    in loader.py and reference/docs/extracted/dashboard-widgets/): the
+    ``config`` block carries ``title`` / ``titleLocalized`` /
+    ``description`` and the ``widgets[]`` membership list (member widget
+    UUIDs), which the UI treats as authoritative at load.
+    ``gridsterCoords`` is always 12 wide and 1 high, ``height`` is 0. The
+    export's optional ``config.widgetId`` and ``state`` are not emitted
+    (documented as ignored noise; no other factory widget emits ``state``).
+    """
+    cfg = w.section_config
+    assert cfg is not None
+    coords = _clamp_gridster_floor(w.coords)
+    coords["w"] = 12
+    coords["h"] = 1
+    return {
+        "collapsed": cfg.collapsed,
+        "id": w.widget_id,
+        "gridsterCoords": coords,
+        "type": "Section",
+        "title": w.title,
+        "config": {
+            "title": w.title,
+            "titleLocalized": w.title,
+            "description": "",
+            "widgets": [widget_id_by_local[m] for m in cfg.member_ids],
+        },
+        "height": 0,
+    }
+
+
 def _scoreboard_widget(
     w: Widget,
     kind_index: dict[tuple[str, str], int],
+    summary_kinds: "list[tuple[str, str]] | None" = None,
+    resource_index: "dict[tuple[str, str, str], int] | None" = None,
 ) -> dict:
     """Render a Scoreboard (KPI tiles) widget."""
     cfg = w.scoreboard_config
     assert cfg is not None
-    metric_obj = _render_metric_spec(cfg.metrics, kind_index, w.widget_id)
+    if cfg.metric_mode == "resource" and cfg.resource is not None:
+        metric_obj = _render_resource_metric_spec(
+            cfg.metrics, cfg.resource, resource_index or {}, w.widget_id
+        )
+    else:
+        specs = _fan_out_summary_specs(cfg.metrics, summary_kinds, w.self_provider)
+        metric_obj = _render_metric_spec(specs, kind_index, w.widget_id)
     self_provider_flag = w.self_provider
+    # Gauge (visualTheme 9) switches; the component ignores them on other
+    # themes, so they are only emitted for a gauge to keep existing output
+    # byte-identical.
+    gauge_keys = (
+        {
+            "showRemaining": cfg.show_remaining,
+            "showPercentText": cfg.show_percent_text,
+            "focusOnPercent": cfg.focus_on_percent,
+        }
+        if cfg.visual_theme == 9
+        else {}
+    )
     return {
         "collapsed": False,
         "id": w.widget_id,
@@ -1311,7 +1555,7 @@ def _scoreboard_widget(
             "refreshInterval": 300,
             "metric": metric_obj,
             "resource": [],
-            "refreshContent": {"refreshContent": True},
+            "refreshContent": {"refreshContent": cfg.refresh_content},
             "relationshipMode": {"relationshipMode": 0},
             "customFilter": {
                 "filter": [], "excludedResources": None, "includedResources": None,
@@ -1321,11 +1565,11 @@ def _scoreboard_widget(
             "depth": 1,
             "resInteractionMode": None,
             "visualTheme": cfg.visual_theme,
-            "mode": {"layoutMode": "fixedView"},
+            "mode": {"layoutMode": cfg.layout_mode},
             "showResourceName": {"showResourceName": cfg.show_resource_name},
             "showMetricName": {"showMetricName": cfg.show_metric_name},
             "showMetricUnit": {"showMetricUnit": cfg.show_metric_unit},
-            "showDT": {"showDT": False},
+            "showDT": {"showDT": cfg.show_dt},
             "showSparkline": {"showSparkline": cfg.show_sparkline},
             "periodLength": cfg.period_length,
             "maxCellCount": cfg.max_cell_count,
@@ -1335,6 +1579,7 @@ def _scoreboard_widget(
             "labelSize": cfg.label_size,
             "boxHeight": cfg.box_height,
             "boxColumns": cfg.box_columns,
+            **gauge_keys,
         },
         "height": 600,
     }
@@ -1343,6 +1588,7 @@ def _scoreboard_widget(
 def _metric_chart_widget(
     w: Widget,
     kind_index: dict[tuple[str, str], int],
+    summary_kinds: "list[tuple[str, str]] | None" = None,
 ) -> dict:
     """Render a MetricChart (time-series line chart) widget.
 
@@ -1359,7 +1605,8 @@ def _metric_chart_widget(
     """
     cfg = w.metric_chart_config
     assert cfg is not None
-    metric_obj = _render_metric_spec(cfg.metrics, kind_index, w.widget_id)
+    specs = _fan_out_summary_specs(cfg.metrics, summary_kinds, w.self_provider)
+    metric_obj = _render_metric_spec(specs, kind_index, w.widget_id)
     self_provider_flag = w.self_provider
     relationship_mode_val = {
         "children": -1,
@@ -1421,7 +1668,7 @@ def _health_chart_widget(
         container = _self_provider_pin_container(w, cfg.adapter_kind, cfg.resource_kind)
         if container is not None:
             c_adapter, c_kind, c_name = container
-            res_idx = resource_index[(c_adapter, c_kind)]
+            res_idx = resource_index[(c_adapter, c_kind, c_name)]
             resource_list = [{"name": c_name, "id": f"resource:id:{res_idx}_::_"}]
     return {
         "collapsed": False,
@@ -1615,9 +1862,9 @@ def _problem_alerts_list_widget(
         # Leaf-kind pins (e.g. VMWARE/HostSystem) must redirect to the world
         # singleton so the importer can find the resource by name.
         c_adapter, c_kind, c_name = _resolve_view_pin(
-            w.pin.adapter_kind, w.pin.resource_kind
+            w.pin.adapter_kind, w.pin.resource_kind, w.pin.name
         )
-        container_key = (c_adapter, c_kind)
+        container_key = (c_adapter, c_kind, c_name)
         res_idx = resource_index[container_key]
         resource_obj = {
             "resourceId": f"resource:id:{res_idx}_::_",
@@ -1647,6 +1894,45 @@ def _problem_alerts_list_widget(
         "id": w.widget_id,
         "gridsterCoords": _clamp_gridster_floor(w.coords),
         "type": "ProblemAlertsList",
+        "title": w.title,
+        "config": config,
+        "height": 600,
+    }
+
+
+def _alert_volume_widget(
+    w: Widget,
+    resource_index: dict[tuple[str, str], int],
+) -> dict:
+    """Render an AlertVolume widget (wire type ``IntSummaryAlertVolume``).
+
+    Shape is the Suite API export form verbatim (see ``AlertVolumeConfig``
+    in loader.py): config is only refreshInterval, refreshContent,
+    selfProvider, title, and with self provider ON a single-object
+    ``resource: {resourceId, resourceName}`` bound through the shared
+    ``entries.resource`` table. With self provider OFF the ``resource`` key
+    is omitted, matching the vendor Home template.
+    """
+    cfg = w.alert_volume_config
+    assert cfg is not None
+    config: dict = {"refreshInterval": cfg.refresh_interval}
+    if w.self_provider and w.pin:
+        c_adapter, c_kind, c_name = _resolve_view_pin(
+            w.pin.adapter_kind, w.pin.resource_kind, w.pin.name
+        )
+        res_idx = resource_index[(c_adapter, c_kind, c_name)]
+        config["resource"] = {
+            "resourceId": f"resource:id:{res_idx}_::_",
+            "resourceName": c_name,
+        }
+    config["refreshContent"] = {"refreshContent": cfg.refresh_content}
+    config["selfProvider"] = {"selfProvider": bool(w.self_provider and w.pin)}
+    config["title"] = w.title
+    return {
+        "collapsed": False,
+        "id": w.widget_id,
+        "gridsterCoords": _clamp_gridster_floor(w.coords),
+        "type": "IntSummaryAlertVolume",
         "title": w.title,
         "config": config,
         "height": 600,
@@ -1806,6 +2092,7 @@ def _heatmap_widget(
 def _property_list_widget(
     w: Widget,
     kind_index: dict[tuple[str, str], int],
+    summary_kinds: "list[tuple[str, str]] | None" = None,
 ) -> dict:
     """Render a PropertyList (vertical property/metric details panel) widget.
 
@@ -1829,7 +2116,9 @@ def _property_list_widget(
     """
     cfg = w.property_list_config
     assert cfg is not None
-    metric_obj = _render_metric_spec(cfg.properties, kind_index, w.widget_id)
+    # PropertyList is always selfProvider:false, so it always fans out.
+    specs = _fan_out_summary_specs(cfg.properties, summary_kinds, False)
+    metric_obj = _render_metric_spec(specs, kind_index, w.widget_id)
     return {
         "collapsed": False,
         "id": w.widget_id,
@@ -1923,6 +2212,7 @@ def _build_dashboard_obj(
     owner_user_id: str,
 ) -> dict:
     widgets_json = []
+    widget_id_by_local = {w.local_id: w.widget_id for w in dashboard.widgets}
     for w in dashboard.widgets:
         if w.type == "ResourceList":
             widgets_json.append(_resource_list_widget(w, kind_index, dashboard.id))
@@ -1943,9 +2233,11 @@ def _build_dashboard_obj(
         elif w.type == "TextDisplay":
             widgets_json.append(_text_display_widget(w))
         elif w.type == "Scoreboard":
-            widgets_json.append(_scoreboard_widget(w, kind_index))
+            widgets_json.append(
+                _scoreboard_widget(w, kind_index, dashboard.summary_kinds, resource_index)
+            )
         elif w.type == "MetricChart":
-            widgets_json.append(_metric_chart_widget(w, kind_index))
+            widgets_json.append(_metric_chart_widget(w, kind_index, dashboard.summary_kinds))
         elif w.type == "HealthChart":
             widgets_json.append(_health_chart_widget(w, kind_index, resource_index))
         elif w.type == "ParetoAnalysis":
@@ -1957,11 +2249,19 @@ def _build_dashboard_obj(
         elif w.type == "Heatmap":
             widgets_json.append(_heatmap_widget(w, kind_index))
         elif w.type == "PropertyList":
-            widgets_json.append(_property_list_widget(w, kind_index))
+            widgets_json.append(_property_list_widget(w, kind_index, dashboard.summary_kinds))
         elif w.type == "ResourceRelationshipAdvanced":
             widgets_json.append(_resource_relationship_advanced_widget(w, kind_index))
+        elif w.type == "Section":
+            widgets_json.append(_section_widget(w, widget_id_by_local))
+        elif w.type == "AlertVolume":
+            widgets_json.append(_alert_volume_widget(w, resource_index))
+        # viewDetails passthrough: emitted only when authored, so content
+        # without it renders byte-identically. Sections never carry one
+        # (loader rejects it).
+        if w.view_details is not None and w.type != "Section" and widgets_json:
+            widgets_json[-1]["config"]["viewDetails"] = w.view_details
 
-    widget_id_by_local = {w.local_id: w.widget_id for w in dashboard.widgets}
     interactions_json = [
         {
             "widgetIdProvider": widget_id_by_local[ix.from_local_id],
@@ -2052,14 +2352,23 @@ def render_dashboards_bundle_json(
                 key = (rk.adapter_kind, rk.resource_kind)
                 if key not in kind_index:
                     kind_index[key] = len(kind_index)
-            # Scoreboard and MetricChart widgets contribute kinds via metric specs
-            if w.type == "Scoreboard" and w.scoreboard_config:
-                for spec in w.scoreboard_config.metrics:
+            # Scoreboard and MetricChart widgets contribute kinds via metric
+            # specs, after the multi-kind summary_for fan-out so every fanned
+            # kind gets an entries.resourceKind[] slot.
+            if (
+                w.type == "Scoreboard" and w.scoreboard_config
+                and w.scoreboard_config.metric_mode != "resource"
+            ):
+                for spec in _fan_out_summary_specs(
+                    w.scoreboard_config.metrics, d.summary_kinds, w.self_provider
+                ):
                     key = (spec.adapter_kind, spec.resource_kind)
                     if key not in kind_index:
                         kind_index[key] = len(kind_index)
             elif w.type == "MetricChart" and w.metric_chart_config:
-                for spec in w.metric_chart_config.metrics:
+                for spec in _fan_out_summary_specs(
+                    w.metric_chart_config.metrics, d.summary_kinds, w.self_provider
+                ):
                     key = (spec.adapter_kind, spec.resource_kind)
                     if key not in kind_index:
                         kind_index[key] = len(kind_index)
@@ -2087,7 +2396,9 @@ def render_dashboards_bundle_json(
                         if gb_key not in kind_index:
                             kind_index[gb_key] = len(kind_index)
             elif w.type == "PropertyList" and w.property_list_config:
-                for spec in w.property_list_config.properties:
+                for spec in _fan_out_summary_specs(
+                    w.property_list_config.properties, d.summary_kinds, False
+                ):
                     key = (spec.adapter_kind, spec.resource_kind)
                     if key not in kind_index:
                         kind_index[key] = len(kind_index)
@@ -2097,7 +2408,7 @@ def render_dashboards_bundle_json(
                     if key not in kind_index:
                         kind_index[key] = len(kind_index)
     # Build resource index for self-provider pinned View, ProblemAlertsList,
-    # and HealthChart widgets.  Those are the widget types that reference
+    # AlertVolume, and HealthChart widgets.  Those are the widget types that reference
     # entries.resource[] in their widget configs; other self-provider types
     # (Scoreboard, MetricChart, Heatmap, AlertList) use "resource": [] and
     # don't need an entry here.
@@ -2121,24 +2432,31 @@ def render_dashboards_bundle_json(
     # resource_name_map stores the display name for each container key, which
     # may differ from the resource_kind (e.g. "Virtual Machines" vs
     # "VirtualMachine" for a custom group).
-    resource_index: dict[tuple[str, str], int] = {}
-    resource_name_map: dict[tuple[str, str], str] = {}
+    #
+    # The key is the (adapter_kind, resource_kind, display name) triple: a
+    # resource-mode Scoreboard pins by display name ("License Usage") and
+    # must not share a slot with a kind-named pin of the same kind.
+    resource_index: dict[tuple[str, str, str], int] = {}
     for d in dashboards:
         for w in d.widgets:
             container = None
-            if w.self_provider and w.type in ("View", "ProblemAlertsList") and w.pin:
-                container = _resolve_view_pin(w.pin.adapter_kind, w.pin.resource_kind)
+            if w.self_provider and w.type in ("View", "ProblemAlertsList", "AlertVolume") and w.pin:
+                container = _resolve_view_pin(w.pin.adapter_kind, w.pin.resource_kind, w.pin.name)
             elif w.self_provider and w.type == "HealthChart" and w.health_chart_config:
                 cfg = w.health_chart_config
                 container = _self_provider_pin_container(
                     w, cfg.adapter_kind, cfg.resource_kind
                 )
+            elif (
+                w.type == "Scoreboard" and w.scoreboard_config
+                and w.scoreboard_config.metric_mode == "resource"
+                and w.scoreboard_config.resource is not None
+            ):
+                r = w.scoreboard_config.resource
+                container = (r.adapter_kind, r.resource_kind, r.name)
             if container is not None:
-                c_adapter, c_kind, c_name = container
-                container_key = (c_adapter, c_kind)
-                if container_key not in resource_index:
-                    resource_index[container_key] = len(resource_index)
-                    resource_name_map[container_key] = c_name
+                if container not in resource_index:
+                    resource_index[container] = len(resource_index)
 
     entries_resource_kind = [
         {
@@ -2154,9 +2472,9 @@ def render_dashboards_bundle_json(
             "internalId": f"resource:id:{idx}_::_",
             "adapterKindKey": res_adapter,
             "identifiers": [],
-            "name": resource_name_map[(res_adapter, res_kind)],
+            "name": res_name,
         }
-        for (res_adapter, res_kind), idx in resource_index.items()
+        for (res_adapter, res_kind, res_name), idx in resource_index.items()
     ]
     entries: dict = {"resourceKind": entries_resource_kind}
     # A1: emit entries.adapterKind when an owning adapter is specified.

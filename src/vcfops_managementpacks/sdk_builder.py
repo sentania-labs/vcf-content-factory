@@ -864,7 +864,7 @@ def _load_bundled_content(
         return [], [], [], [], [], [], []
 
     try:
-        from vcfops_dashboards.loader import load_view, load_dashboard
+        from vcfops_dashboards.loader import load_view, load_dashboard, check_unique_summary_for
     except ImportError as exc:
         raise SdkBuildError(
             f"bundled_content requires vcfops_dashboards to be installed: {exc}"
@@ -901,6 +901,10 @@ def _load_bundled_content(
                 f"bundled_content.dashboards: failed to load {path}: {exc}"
             ) from exc
         dashboards.append(d)
+    try:
+        check_unique_summary_for(dashboards)
+    except Exception as exc:
+        raise SdkBuildError(f"bundled_content.dashboards: {exc}") from exc
 
     # --- Super Metrics ---
     supermetrics = []
@@ -1965,6 +1969,11 @@ def _write_outer_pak(
             # A populated resources/ subdirectory with resources.properties is required
             # (spec A3).
             _OWNER_UUID = "00000000-0000-0000-0000-000000000000"
+            # Summary-tab bindings for the server-side pak installer:
+            # content/dashboards/dashboards.properties, one line per bound
+            # directory, `<dir>=<AdapterKind>:<ResourceKind>`. See
+            # knowledge/context/api-surface/summary_dashboard_pak_binding.md.
+            _summary_bindings: list[str] = []
             for d in dashboards:
                 dashboard_json = render_dashboards_bundle_json(
                     [d], views_by_name, _OWNER_UUID,
@@ -1986,6 +1995,22 @@ def _write_outer_pak(
                 )
                 print(
                     f"  bundled content: content/dashboards/{slug}/dashboard.json <- {d.name}",
+                    file=sys.stderr,
+                )
+                if getattr(d, "summary_for", None):
+                    # The installer splits the value on "," then each part on
+                    # ":" (summary_dashboard_pak_binding.md); one directory may
+                    # bind to several kinds.
+                    _summary_bindings.append(f"{slug}={','.join(d.summary_for)}")
+            if _summary_bindings:
+                props = "\n".join(
+                    ["# Summary-tab bindings: <dashboard dir>=<AdapterKind>:<ResourceKind>[,<AdapterKind>:<ResourceKind>...]"]
+                    + _summary_bindings
+                ) + "\n"
+                zf.writestr("content/dashboards/dashboards.properties", props)
+                print(
+                    "  bundled content: content/dashboards/dashboards.properties "
+                    f"({len(_summary_bindings)} binding(s))",
                     file=sys.stderr,
                 )
 

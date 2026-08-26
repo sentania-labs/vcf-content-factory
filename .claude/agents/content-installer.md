@@ -125,3 +125,27 @@ INSTALL RESULT
   reports: synced=N failed=N
   errors: <none or details>
 ```
+
+## Summary dashboards
+
+A dashboard whose YAML declares `summary_for` (one `"<AdapterKind>:<ResourceKind>"`
+string, a comma-separated string, or a YAML list of them) is meant to render
+on the Summary tab of every listed object type. Content-zip imports cannot
+carry the binding, so after `sync` succeeds run
+`python3 -m vcfops_dashboards bind-summary --profile <p> [--dashboard "<name>"]`
+(use `--dry-run` first). It resolves the installed dashboard by name, writes
+the association for every listed kind in one call, reads each back, and
+prints one `LIVE tabId` / template UUID line per kind; record every UUID in
+the install report, they are the only handles on the materialized copies.
+Kinds absent on the instance are reported as errors and skipped; the rest
+still bind. `--unbind` restores
+the built-in page. Pak installs bind at install time from
+`content/dashboards/dashboards.properties` instead; do not run bind-summary
+for those. Mechanism: `knowledge/context/api-surface/summary_dashboard_assignment.md`.
+
+## Waiting for materialization
+
+Poll `getDashboardList` for `isLoading: false` in a foreground loop (every
+30 s, up to 15 minutes). Never hand the wait to a background command or
+monitor and end your turn: nothing re-invokes you when it fires, and the
+install then sits half-done until the orchestrator notices.

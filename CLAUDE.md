@@ -139,8 +139,9 @@ pinned `sonnet`. Do not re-add pins without a decision.
    resolve at author time, so order matters: SM before view before
    dashboard; symptom before alert; upstream views (and their SMs)
    before report. **Dashboards additionally require the RULE-011
-   wireframe gate**: plan-mode approval of an ASCII wireframe,
-   committed to `knowledge/designs/dashboards/<slug>.md`, before
+   wireframe gate**: plan-mode approval of an HTML mock
+   (`knowledge/designs/dashboards/<slug>.html`) with its wireframe
+   table committed to `knowledge/designs/dashboards/<slug>.md`, before
    `dashboard-author` spawns. See
    `knowledge/rules/wireframe-before-dashboard.md`.
 

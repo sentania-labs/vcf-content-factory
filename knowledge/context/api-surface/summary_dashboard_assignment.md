@@ -9,6 +9,13 @@ Established 2026-08-21 by dissecting 51 real vendor paks offline and by
 tracing the live UI on devel (all mutations restored, verified against a
 pre-experiment snapshot of all 363 resource kinds).
 
+> **Correction 2026-08-25:** the "A pak cannot ship the binding" section
+> below is wrong. The server-side pak installer reads
+> `content/dashboards/dashboards.properties` and binds dashboards to
+> resource kinds at install time (present since at least 9.0). See
+> `summary_dashboard_pak_binding.md`. The UI mechanism documented here
+> is still accurate and is the same code path.
+
 ## Two things to know first
 
 **There is no Suite API for this.** All four OpenAPI specs were searched
@@ -67,18 +74,38 @@ GET /ui/resourceKind.action?mainAction=getResourceKindList
 Returns `resourceKindList[]`, each carrying `resourceKindTemplate` (the
 current assignment), plus a top-level `defaultTemplateName`.
 
-Write (bulk; one call carries the whole map):
+Entry keys (verbatim sample, filtered to public vSphere / vSAN / generic
+kinds: `reference/docs/extracted/summary-dashboard-assignment/`):
+`resourceKindId` (the computed id below), `resourceKind`, `adapterKind`,
+`name` (display label), `resourceKindTemplate`, and on kinds with a
+built-in summary page a per-entry `defaultTemplateName` (for example
+`HostSystem` -> `Host System Summary`, distinct from the top-level
+`Summary Detail`). There is no `id`, `key`, or `resourceKindKey`;
+`bind-summary` matches on `resourceKindId` and falls back to the
+(`adapterKind`, `resourceKind`) pair.
+
+Write (bulk; one call carries both maps, from the SPA's
+`DashboardAssociateWindow.save()` and the disassembled `DashboardAction`;
+provenance in the 2026-08-25 note at the end of this file):
 
 ```
 POST /ui/dashboard.action
   mainAction=associateResourceKindDashboards
-  dashboardAssociations={"resourceKind_<resourceKindId>":"<dashboardName>_::_<dashboardUuid>", ...}
+  assignedAssociations={"resourceKind_<resourceKindId>":"<dashboardName>_::_<dashboardUuid>", ...}
+  resetAssociations={"resourceKind_<resourceKindId>":"<defaultTemplateName>", ...}
   secureToken=<csrfToken>
 -> 200, body "ok"
 ```
 
-Restore to the built-in page ("Use Default") is the same POST with the
-value `"<defaultTemplateName>_::_null"`.
+Both parameters are always present (`{}` when empty); the server reads
+each with `request.getParameter` and a missing one NPEs into the generic
+ERRPANEL with HTTP 200. Binds go in `assignedAssociations`. Restore to the
+built-in page ("Use Default") goes in `resetAssociations`, whose value is
+the kind's **plain** `defaultTemplateName` (the per-entry one from
+`getResourceKindList` when present, e.g. `Host System Summary`; no
+`_::_null` suffix). The parameter name `dashboardAssociations` does not
+exist on any build and an earlier version of this section that used it was
+wrong.
 
 ### The key is resourceKind, not adapter kind
 
@@ -103,9 +130,13 @@ The object Summary tab branches on exactly one call:
 ```
 POST /ui/dashboard.action  mainAction=getSummaryTabId
      &resourceKindId=&traversalSpecId=&resourceKindType=&resourceId=
-  -> {"tabId": <uuid>}  render that dashboard
-  -> {"tabId": null}    ResourceSummaryBuilder.getSummaryPanel(...)  [native JS]
+  -> {"tabId": <uuid>, "isDashboard": true}  render that dashboard
+  -> {"isDashboard": false}                    ResourceSummaryBuilder.getSummaryPanel(...)  [native JS]
 ```
+
+A null `tabId` is encoded by OMITTING the key (org.json drops null
+values); clients treat a missing `tabId` as null. Full shape list in the
+2026-08-25 note at the end of this file.
 
 `ResourceSummaryBuilder` (SPA `app.part4`, class
 `Ext.vcops.objectview.Summary`) holds a hardcoded static map
@@ -160,7 +191,7 @@ Narrower than a first read suggests, and newer:
   `HostSystem`. Those are compiled UI on a privileged path.
 - We **would** be doing what Broadcom does for its own *modern* adapters:
   VCF Automation, VKS, vSAN Fault Domain and DSM all ship dashboard-backed
-  summary pages through this exact call, in 9.1.
+  summary tabs through this exact call, in 9.1.
 - The `... 3` / `... 7` suffixes on those shipped names prove Broadcom's
   own build pipeline re-runs the association and collides with itself when
   it does.
@@ -188,34 +219,35 @@ Consequences, all of which any design must handle:
 
 - **Editing the source dashboard after assignment does NOT propagate.**
   The materialized template is a point-in-time copy.
-- **Re-assigning to publish an update accumulates copies**, it does not
-  replace. The server dedups names with a numeric suffix, so you get
-  `X`, `X 1`, `X 2`. This is exactly the mechanism behind
-  `New Summary Page: vSAN Fault Domain 7` in Broadcom's shipped content.
-- **Unassigning does NOT garbage-collect the copy.** After restoring a kind
-  to default, `getSummaryTabId` returns null but the template record is
-  still readable by UUID. Orphans accumulate silently.
-- **An update story must therefore delete the old template, then assign
-  the new one.** There is no in-place update.
+- **Re-assigning to publish an update replaces the copy server-side.**
+  For each assigned entry the action calls `saveDashboardAsTemplate(...)`
+  and, if the kind already pointed at a different template id, deletes
+  the old one (`deleteDashboardTemplate(old)`) in the same call. The
+  numeric suffixes on Broadcom's shipped names (`New Summary Page: vSAN
+  Fault Domain 7`) come from the pak install path, not from this call.
+- **Unassigning through `resetAssociations` deletes the copy** when the
+  reset value's id matches the current one; `getSummaryTabId` then answers
+  `{"isDashboard": false}` (no `tabId` key).
+- **The update story is therefore "assign again."** There is no in-place
+  update and no client-side cleanup step.
 
-### Enumerating and deleting templates
+### Enumerating and deleting templates: no such actions
 
-`getTemplateList` is alive, but **privileged**: it returns the generic
-ERRPANEL for an unprivileged account (which is why it first looked dead)
-and a real list for `admin`. The `userPageId` field is the tabId:
+`dashboard.action` has **no** `getTemplateList` and **no** `deleteTemplate`
+branch on any build examined (the class contains neither string). Sending
+either falls through `execute()` to `SUCCESS` with no result mapping, and
+Struts renders the ERRPANEL; an earlier version of this section misread
+that fallthrough as a privilege check. The only `getTemplateList` /
+`deleteTemplate` in the webapp belong to `payloadTemplateList.action`
+(notification payloads) and are unrelated.
 
-```
-POST /ui/dashboard.action  mainAction=getTemplateList
-  -> entries with name + userPageId
+Template lifecycle is owned entirely by `associateResourceKindDashboards`
+(replace on re-assign, delete on reset). Materialized templates remain
+readable only by UUID (`getDashboardConfig?tabId=<uuid>&isTemplate=true`);
+capture the UUID at assign time from `getSummaryTabId`. A separate
+enumeration path, if one exists, is still to be found.
 
-POST /ui/dashboard.action  mainAction=deleteTemplate&templateId=<userPageId>
-  -> "ok"
-```
-
-Note there is an unrelated `deleteTemplate` on `payloadTemplateList.action`
-(notification payloads). Do not confuse them.
-
-## Native summary pages cannot be shipped or added
+## Native summary tabs cannot be shipped or added
 
 Both answers are no, and the evidence was gathered by trying to falsify
 them.
@@ -236,7 +268,7 @@ unconditionally. That is compile-time inclusion; runtime registration would
 only produce entries for adapters actually present.
 
 All 11 are Broadcom first-party. **Zero** third-party or factory adapters
-have one: `VMSP`, `synology_diskstation`, `unifi_controller`,
+have one: `synology_diskstation`, `unifi_controller`,
 `vcfcf_compliance`, `vcfcf_vcommunity_vsphere` and
 `ManagementPackBuilderAdapter` all come back negative. There is no
 counterexample of a pak-delivered adapter with a native page.
@@ -260,6 +292,68 @@ any adapter we ship, and it is the same one Broadcom uses for its own newer
 adapters. For a new adapter that will never have a native class, that is
 not a downgrade; it is the only door, and Broadcom uses it too.
 
+## Factory tooling (2026-08-25)
+
+Declared in dashboard YAML as `summary_for: "<AdapterKind>:<ResourceKind>"`
+(exactly two colon tokens; validated). One dashboard may bind to several
+kinds: `summary_for` also accepts a YAML list of such strings or one
+comma-separated string (`"VMWARE:HostSystem,VMWARE:VirtualMachine"`); the
+loader normalizes all three shapes to a list (`Dashboard.summary_for`,
+tokens stripped, order kept) and rejects a kind listed twice in one
+dashboard. The cross-dashboard uniqueness check is per kind, not per
+dashboard: any kind may be claimed by one dashboard only, whichever shape
+declared it. Validation then requires every non-Section widget to have
+`self_provider: false` and no pin / `pin_to_world`, because a summary
+dashboard inherits the page object.
+
+Two routes carry the binding, one implementation each:
+
+- **Pak** (Tier 2 SDK builds): `src/vcfops_managementpacks/sdk_builder.py`
+  writes `content/dashboards/dashboards.properties` with
+  `<dashboard dir>=<AK>:<RK>[,<AK>:<RK>...]` (the kinds comma-joined, the
+  shape the installer parses) for every bundled dashboard that declares
+  `summary_for`; the server-side installer binds at install time
+  (`summary_dashboard_pak_binding.md`). Tier 1 MPB paks do not bundle
+  dashboards at all (`builder.py` writes an empty `content/dashboards/`).
+- **Post-import** (content-zip installs): `python3 -m vcfops_dashboards
+  bind-summary --profile <p> [--dashboard <name>] [--unbind] [--dry-run]`,
+  implemented in `src/vcfops_dashboards/summary_bind.py` over the
+  `VCFOpsUIClient` methods `get_resource_kind_list`,
+  `associate_resource_kind_dashboards(assigned, reset)` and
+  `get_summary_tab_id` (`ui_client.py`; all send
+  `X-Requested-With: XMLHttpRequest` plus `secureToken`). Per dashboard it
+  resolves the installed dashboard **by name** (identity is the name,
+  `id_guard.py`), computes each listed kind's resource kind id offline,
+  reads every kind's current assignment (one `getResourceKindList` per
+  distinct adapter kind), writes ONE `associateResourceKindDashboards`
+  call whose `assignedAssociations` map carries every kind
+  (`{"resourceKind_<id>": "<name>_::_<uuid>", ...}`, with
+  `resetAssociations` `{}`; the map takes many entries and the server
+  materializes one template copy per kind), then reads `getSummaryTabId`
+  back per kind: the bind counts only when every answer carries
+  `isDashboard: true` and a `tabId`, printed per kind as `LIVE tabId` /
+  `template UUID` (that copy is what renders for that kind). A listed kind
+  absent on the instance is printed as `ERROR` (dashboard name and kind)
+  and left out of the map; the resolvable kinds are still bound and the
+  run exits 2 so the miss is not silent. This mirrors the pak installer,
+  which associates each kind independently, so the partial map is the
+  same state a pak install would leave; re-running after the adapter
+  catches up is idempotent. The dashboard is skipped whole only when none
+  of its kinds resolve. `--unbind` behaves the same. The server replaces a kind's
+  previous copy on every re-bind, so there is no client-side template
+  cleanup. `--unbind` writes `resetAssociations`
+  `{"resourceKind_<id>": "<defaultTemplateName>", ...}` for every listed
+  kind, using each kind's per-entry `defaultTemplateName` (top-level value
+  as fallback) with `assignedAssociations` `{}`, and expects a null
+  `tabId` back for each. A missing `tabId` key is treated as null
+  everywhere. `--dry-run` prints the full maps without a session.
+
+The wire shape is unit-tested with a fake client
+(`tests/test_dashboard_summary_for.py`) and the parameter names were
+confirmed with a no-op call (two empty maps) on 9.1 and 9.2 dailies. Live
+binds belong to `content-installer`, after install, on explicit
+confirmation.
+
 ## Support posture
 
 This is the undocumented Struts UI layer: session-cookie auth, no Suite
@@ -267,3 +361,130 @@ API, no OpenAPI coverage in any of the four specs. It is the same tier
 that carries the `X-Ops-API-use-unsupported` caveat and can change between
 releases without notice. Anything the factory builds on it should treat
 that as a stated, conscious dependency, not an implementation detail.
+
+## 2026-08-25 note: 9.2 pre-release build and the ERRPANEL failures
+
+Diagnosed against `DashboardAction.class` pulled read-only from the
+appliance UI webapp and disassembled, plus `web.log` on the appliance,
+plus the SPA's `DashboardAssociateWindow.save()`. Checked on two builds:
+a 9.2.0.0 pre-release build and the devel instance (its
+`lastbuildversion.txt` reads a 9.0.0.0 pre-release build). **Both builds carry
+byte-identical logic for the three actions below; nothing here is a 9.2
+change.** Classification for all three: **(c) request shape, client
+defect**, not a regression, not a privilege check, not environmental.
+
+### `associateResourceKindDashboards`: wrong parameter name
+
+`web.log` at the client call:
+
+```
+[com.vmware.vcops.ui.util.MainPortalListener.log] -  (
+Url: /ui/dashboard.action
+Params: mainAction=associateResourceKindDashboards
+)
+java.lang.NullPointerException
+	at java.util.Objects.requireNonNull
+	at java.io.StringReader.<init>
+	at org.json.JSONTokener.<init>(JSONTokener.java:101)
+	at org.json.JSONObject.<init>(JSONObject.java:534)
+	at com.vmware.vcops.ui.action.DashboardAction.associateResourceKindDashboards(DashboardAction.java:2073)
+	at com.vmware.vcops.ui.action.DashboardAction.execute(DashboardAction.java:261)
+```
+
+Lines 2071-2073 of the action read
+`request.getParameter("assignedAssociations")` and
+`request.getParameter("resetAssociations")`, then `new JSONObject(assigned)`.
+The string `dashboardAssociations` is not a request parameter on either
+build. The client sends `dashboardAssociations`, the server sees null,
+NPE, and the Struts error interceptor renders the generic ERRPANEL with
+HTTP 200. The SPA's `save()` sends exactly:
+
+```
+POST /ui/dashboard.action
+  mainAction=associateResourceKindDashboards
+  assignedAssociations={"resourceKind_<resourceKindId>":"<dashboardName>_::_<dashboardUuid>", ...}
+  resetAssociations={"resourceKind_<resourceKindId>":"<defaultTemplateName>", ...}
+  secureToken=<csrfToken>
+-> 200, body "ok"
+```
+
+Two maps, both always present (send `{}` when empty). Binds go in
+`assignedAssociations`; "Use Default" goes in `resetAssociations`, whose
+value is the plain default template name (the SPA does not append
+`_::_null` there). Verified: the corrected shape with two empty maps
+returns `200 ok` on both builds; the same call with `dashboardAssociations`
+returns the ERRPANEL on both builds. The earlier "Write (bulk)" section
+above is therefore wrong on the parameter name and on the restore value.
+
+Server-side behaviour of the corrected call, from the bytecode (not yet
+exercised live):
+
+- For each assigned entry, the server calls `saveDashboardAsTemplate(
+  uuid, name, TemplateSection.SUMMARY, userId, true)` and stores the
+  returned template id (the COPY semantics above hold).
+- **If the kind already had a different template id, the old template is
+  deleted server-side** (`deleteDashboardTemplate(old)`) in the same call.
+  Re-assigning therefore replaces rather than accumulates on these
+  builds; the accumulation claim above describes older behaviour or the
+  pak path, and should be re-verified before relying on it either way.
+- A reset entry removes the kind from the association map and deletes
+  its template if the reset value's id matches the current one.
+- Ids in `DataRetrieverUtils.ootbDashboardTemplateIds` (built-in
+  templates) are stored as-is without copying.
+- Every change is audit-logged as `DASHBOARD_ASSOCIATE` with the raw
+  `assignedAssociations` string.
+
+### `getTemplateList`: not a `dashboard.action` action at all
+
+`web.log`:
+
+```
+[com.vmware.vcops.ui.util.MainPortalListener.log] - No result defined for action com.vmware.vcops.ui.action.DashboardAction and result success (
+Url: /ui/dashboard.action
+Params: mainAction=getTemplateList
+)
+No result defined for action com.vmware.vcops.ui.action.DashboardAction and result success - action - file:/usr/lib/vmware-vcops/tomcat-web-app/webapps/ui/WEB-INF/classes/struts.xml:99:81
+	at org.apache.struts2.DefaultActionInvocation.executeResult(DefaultActionInvocation.java:392)
+```
+
+`DashboardAction.execute()` has no `getTemplateList` branch and no
+`deleteTemplate` branch on either build (the class contains neither
+string). An unknown `mainAction` falls through, `execute()` returns
+`SUCCESS`, and the `dashboard` action mapping in `struts.xml` defines
+only `Etalon` and `ContainerDetails` results, so Struts throws "No result
+defined" and the ERRPANEL is rendered. The only `getTemplateList` in the
+webapp is `PayloadTemplateListAction` (notification payloads), and the
+SPA never sends `mainAction=getTemplateList` to `dashboard.action`. The
+"Enumerating and deleting templates" section above is wrong: there is no
+template list or template delete on `dashboard.action`, and the
+"privileged, works for admin" explanation was a misread of this same
+fallthrough. Template cleanup is done by the association call itself
+(see above); a separate enumeration path, if one exists, is still to be
+found.
+
+### `getSummaryTabId` returning only `{"isDashboard": false}`
+
+From `execute()` lines 227-258 (identical on both builds):
+
+```
+tabId = dataRetriever.getSummaryDashboardId(resourceKindId)   // may be null
+isDashboard = tabId != null && UUID.fromString(tabId) parses
+json.put("tabId", tabId)            // org.json drops the key when the value is null
+json.put("isDashboard", isDashboard)
+if (tabId != null && !isDashboard) json.put("pluginExist", UtilityAction.pluginExist(tabId))
+```
+
+So `{"isDashboard": false}` is the null-tabId answer: `org.json` omits a
+key whose value is null, which is why `tabId` is absent rather than
+`null`. The shape is not a 9.2 change. Three shapes are possible:
+
+- `{"isDashboard": false}`: no association, native page renders.
+- `{"tabId": "<uuid>", "isDashboard": true}`: dashboard-backed.
+- `{"tabId": "<non-uuid id>", "isDashboard": false, "pluginExist": <bool>}`:
+  a legacy plugin-page id is stored for the kind.
+
+Clients must treat a missing `tabId` key as null. The `resourceKindId`
+parameter is also required non-blank; a blank one skips the lookup and
+returns `{"isDashboard": false}` as well. There is one hardcoded special
+case: for `resourceKindId` containing `002016AmazonAWSAdapter` the
+`tabId` is forced to null.
