@@ -237,7 +237,7 @@ resource from a ResourceList or View picker).
 - id: vm_properties
   type: PropertyList
   title: "VM Properties"
-  coords: {x: 1, y: 0, w: 4, h: 6}
+  coords: {x: 1, y: 1, w: 4, h: 6}
   property_list:
     visual_theme: 0          # 0–5, default 0
     depth: 1                 # default 1
@@ -320,13 +320,18 @@ MetricChart uses a scalar; Heatmap and AlertList accept array form.
 Coordinates use a 12-column grid:
 
 ```yaml
-coords: {x: 0, y: 0, w: 12, h: 4}    # full-width, 4 rows tall
+coords: {x: 1, y: 1, w: 12, h: 4}    # full-width, 4 rows tall, top row
 ```
 
-- `x`: column (0–11)
-- `y`: row (0-based, grows downward)
+- `x`: column (1-based, 1–12)
+- `y`: row (**1-based**, grows downward)
 - `w`: width in columns (1–12)
 - `h`: height in rows
+
+**`x` and `y` both start at 1, not 0.** Authoring a widget at `y: 0` renders the
+dashboard with an inverted vertical stack in the VCF Ops UI (DEF-013,
+closed 2026-07-22, proven on devel). The renderer floor-clamps to 1 as
+a backstop, but do not rely on it: author 1-based coordinates.
 
 ### Common layout patterns
 

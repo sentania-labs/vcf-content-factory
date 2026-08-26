@@ -22,6 +22,13 @@ implementation order with draft YAML schemas.
 YAML edits. A follow-up `tooling` agent invocation will implement
 the recommendations.
 
+> **Coordinates note (added 2026-08-26).** The draft YAML `coords:`
+> blocks below were authored before DEF-013 proved dashboard `x`/`y`
+> are **1-based**, and have been corrected to match. Raw
+> `gridsterCoords` values quoted inside JSON wire-format samples are
+> observed vendor output and are left verbatim. For authoring
+> guidance see `knowledge/context/authoring/view_dashboard_design_guide.md`.
+
 ---
 
 ## Current coverage
@@ -182,7 +189,7 @@ resource_kind)` joins the shared `kind_index`).
 - local_id: vm_properties
   type: PropertyList
   title: "Properties (for selected VM)"
-  coords: {x: 1, y: 0, w: 4, h: 6}
+  coords: {x: 1, y: 1, w: 4, h: 6}
   property_list:
     visual_theme: 2            # 1-5, default 2
     depth: 1                   # default 1
@@ -286,7 +293,7 @@ standard `interactions:` block. Config is mostly constants.
 - local_id: vm_topology
   type: ResourceRelationshipAdvanced
   title: "Topology (for selected VM)"
-  coords: {x: 8, y: 0, w: 4, h: 6}
+  coords: {x: 8, y: 1, w: 4, h: 6}
   resource_relationship:
     depth: "1,1"                              # string, default "1,1"
     traversal_spec_id: ""                     # empty = default
@@ -353,7 +360,7 @@ specify metrics like Scoreboard, it drops to CHEAP.
 - local_id: vm_disk_sparklines
   type: SparklineChart
   title: "Disk Metrics for VM"
-  coords: {x: 5, y: 0, w: 5, h: 5}
+  coords: {x: 5, y: 1, w: 5, h: 5}
   sparkline:
     column_sequence: graphFirst   # or tableFirst
     show_dt: true
@@ -467,7 +474,7 @@ self-provider + pin semantics via the existing `resource_index`.
 - local_id: env_health
   type: IntSummaryHealth     # or IntSummaryRisk / ... / IntSummaryAlertVolume
   title: "Environment Health"
-  coords: {x: 0, y: 0, w: 2, h: 2}
+  coords: {x: 1, y: 1, w: 2, h: 2}
   self_provider: true
   pin:
     adapter_kind: Container
@@ -520,7 +527,7 @@ index contribution needed for each entry.
 - local_id: env_skittles
   type: Skittles
   title: "Environment Overview"
-  coords: {x: 0, y: 0, w: 4, h: 3}
+  coords: {x: 1, y: 1, w: 4, h: 3}
   skittles:
     badges: [health, risk, efficiency]
     kinds:
