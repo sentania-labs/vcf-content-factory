@@ -1,8 +1,9 @@
 # SuiteApiStitcher loopback TLS + auth — spec question for the cleanup
 
-**Status:** DECIDED → **in implementation** (briefed to `tooling` 2026-06-30; `framework-reviewer`
-gate to follow). Chosen fix: **Option 2 via a `VcfCfAdapter` shim helper.** Prod cert will **not** be
-changed (S1 declined), so we go straight to the code fix.
+**Status:** **IMPLEMENTED** (2026-07-02). Chosen fix: **Option 2 via a `VcfCfAdapter` shim
+helper.** Prod cert was **not** changed (S1 declined), so the code fix was taken. Shipped and
+verified as `knowledge/context/defects.md` DEF-005 (closed, closing-evidence build 24,
+BC-mirror transport). Retained for the root-cause history below.
 **Date:** 2026-06-29 (spec §5 landed); 2026-06-30 (root-cause correction + decision)
 
 > **CORRECTION (2026-07-01) — §0's TOFU-survival premise falsified live; DEF-005.**
