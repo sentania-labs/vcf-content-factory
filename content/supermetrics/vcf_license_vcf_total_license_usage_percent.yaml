@@ -1,0 +1,41 @@
+id: 45c6c9c3-7d83-41ff-b936-22d896b939d7
+name: "[VCF Content Factory] VCF Total License Usage (%)"
+resource_kinds:
+  - resource_kind_key: LICENSE_USAGE_WORLD
+    adapter_kind_key: VMWARE_INFRA_HEALTH
+description: >
+  VCF core license consumption as a percentage of licensed capacity.
+  Assigned to the LICENSE_USAGE_WORLD rollup resource (1 object,
+  "License Usage") and computes usage / capacity * 100 by referencing
+  the two sibling super metrics rather than re-summing the raw
+  LicenseUsage keys, so the product-string where-clause filter lives
+  in one place: "[VCF Content Factory] VCF Total License Usage
+  (cores)" (numerator, sums Assets|TotalUsage) and "[VCF Content
+  Factory] VCF Total License Capacity (cores)" (denominator, sums
+  CostUnitAttributes|CostUnitLimit). Both siblings filter to
+  ProductId startsWith "vSphere 8 Enterprise Plus for VCF" and must
+  be authored, imported, and policy-enabled on LICENSE_USAGE_WORLD
+  before this super metric evaluates.
+
+  Targets VCF Operations 8.x (confirmed live and populated on
+  Aria/VCF Operations 8.18.7: LicenseUsage has 11 live objects with
+  populated Assets|TotalUsage, CostUnitAttributes|CostUnitLimit, and
+  ProductId; not populated on VCF Operations 9.1.0, where
+  LicenseUsage has zero live objects).
+
+  Cross-SM reference note: this super metric reads both sibling
+  super metrics' previous-cycle values (the platform does not
+  guarantee same-cycle recomputation across a super metric chain) -
+  accepted one-cycle lag, not expressible as a single self-contained
+  formula without duplicating the where-clause filter in two places.
+
+  Rebuilds "[VCF Consumption Overview v2] VCF Total License Usage
+  Percent" from Scott's community "VCF Consumption Overview v2"
+  bundle, which inlined both sums directly; this version references
+  the two sibling super metrics by name instead so the product-string
+  filter has one place to change if the SKU name is renamed. Feeds
+  the License Overview scoreboard (VCF License Usage %) and the VCF
+  Licensing Overtime month table (unit percent).
+formula: |
+  (${this, metric=Super Metric|@supermetric:"[VCF Content Factory] VCF Total License Usage (cores)"}
+   / ${this, metric=Super Metric|@supermetric:"[VCF Content Factory] VCF Total License Capacity (cores)"}) * 100

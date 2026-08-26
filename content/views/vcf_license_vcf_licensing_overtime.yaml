@@ -1,0 +1,51 @@
+id: 838427bb-84c4-49f9-ac25-9bdfe2491389
+name: "[VCF Content Factory] VCF Licensing by Month"
+description: >
+  Month-by-month VCF and vSAN license usage vs capacity, one row per month over the
+  trailing year, for reconciling license position with Broadcom. Targets VCF Operations
+  8.x (validated against Aria Operations 8.18.7 recon, adapter_kind VMWARE_INFRA_HEALTH /
+  resource_kind LICENSE_USAGE_WORLD). Rebuilt from Scott's public "VCF Consumption
+  Overview v2" community content (VCF Licensing Overtime).
+
+subject:
+  adapter_kind: VMWARE_INFRA_HEALTH
+  resource_kind: LICENSE_USAGE_WORLD
+
+time_window:
+  unit: YEARS
+  count: 1
+
+hide_object_name: true
+
+columns:
+  - display_name: Month
+    time_segment:
+      breakdown_by: MONTHS
+      starting_on_unit: WEEKS
+      starting_on_count: 1
+
+  - attribute: 'supermetric:"[VCF Content Factory] VCF Total License Usage (cores)"'
+    display_name: "VCF License Usage"
+    transformation: CURRENT
+
+  - attribute: 'supermetric:"[VCF Content Factory] VCF Total License Usage (%)"'
+    display_name: "VCF License Usage Percent"
+    unit: percent
+    transformation: CURRENT
+
+  - attribute: 'supermetric:"[VCF Content Factory] VCF Total License Capacity (cores)"'
+    display_name: "VCF License Capacity"
+    transformation: CURRENT
+
+  - attribute: 'supermetric:"[VCF Content Factory] vSAN Total License Usage (TiB)"'
+    display_name: "vSAN Total License Usage"
+    transformation: CURRENT
+
+  - attribute: 'supermetric:"[VCF Content Factory] vSAN Total License Usage (%)"'
+    display_name: "vSAN License Usage Percent"
+    unit: percent
+    transformation: CURRENT
+
+  - attribute: 'supermetric:"[VCF Content Factory] vSAN Total License Capacity (TiB)"'
+    display_name: "vSAN License Capacity"
+    transformation: CURRENT

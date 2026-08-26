@@ -1,0 +1,47 @@
+id: 4b01a4b4-fcd5-4ec5-b157-caccb20e2a54
+name: "[VCF Content Factory] VCF License Potential Cores"
+resource_kinds:
+  - resource_kind_key: vSphere World
+    adapter_kind_key: VMWARE
+description: >
+  Whole-environment gap between licensed and physical cores: total VCF
+  license cores the fleet would consume under Broadcom's per-core
+  licensing model (16-core-per-socket minimum) minus the actual physical
+  core count in the fleet. Zero means every socket already meets the
+  16-core minimum, so no license cores are being paid for without
+  matching hardware; a positive value is the count of "phantom" licensed
+  cores driven purely by small-core-count sockets. Assigned to the
+  vSphere World rollup resource (1 live object per instance): reads
+  "[VCF Content Factory] vSphere World VCF Licensed Cores" (the licensed
+  side, already a World-scoped sum) and subtracts a fresh sum of
+  cpu|corecount_provisioned across every HostSystem descendant
+  (depth=10, confirmed defined and populated, 56.0 on sampled ro818
+  8.18.7 hosts) - the actual physical core count.
+
+  Targets VCF Operations 8.x.
+
+  Corrects the source-formula defect in Scott's community "VCF
+  Consumption Overview v2" bundle's `[VCF Consumption Overview
+  v2]VCF License Potential Cores` (dashboard W6 still carries its
+  pre-rename label "License Waste Count"): that SM is assigned to
+  vSphere World but its formula reads
+  ${this, metric=cpu|corecount_provisioned} directly - a HostSystem-only
+  metric that does not exist at World scope, so the subtraction could
+  never evaluate on the source instance. This rebuild keeps the World
+  assignment (the dashboard reads the result there) and sums
+  cpu|corecount_provisioned over descendant hosts instead of reading it
+  unrolled on `this`, which is what the original formula was trying to
+  express. Confirmed by Scott 2026-08-26: world licensed cores minus
+  actual cores is the intended arithmetic.
+
+  Cross-SM reference note: the minuend reads
+  "[VCF Content Factory] vSphere World VCF Licensed Cores" via a
+  cross-SM reference, so this metric carries that upstream SM's
+  one-cycle collection lag (the platform does not guarantee the
+  referenced SM recomputes before this one within the same cycle) on
+  top of its own two-hop chain back to the per-host ternary SM -
+  accepted trade-off per the sibling SMs in this family, not
+  expressible as a single self-contained formula.
+formula: |
+  ${this, metric=Super Metric|@supermetric:"[VCF Content Factory] vSphere World VCF Licensed Cores"}
+    - sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=cpu|corecount_provisioned, depth=10})

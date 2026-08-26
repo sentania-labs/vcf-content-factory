@@ -1,0 +1,30 @@
+id: c43ec7e3-ae74-44ec-b4d6-a52f42e86a25
+name: "[VCF Content Factory] VCF Total License Usage (cores)"
+resource_kinds:
+  - resource_kind_key: LICENSE_USAGE_WORLD
+    adapter_kind_key: VMWARE_INFRA_HEALTH
+description: >
+  Total VCF core licenses consumed, summed from the platform's own license
+  usage objects. Assigned to the LICENSE_USAGE_WORLD rollup resource (1
+  object, "License Usage") and sums Assets|TotalUsage across its LicenseUsage
+  descendants (11 objects on ro818, one per license key/product), filtered to
+  ProductId startsWith "vSphere 8 Enterprise Plus for VCF".
+
+  Targets VCF Operations 8.x (confirmed live and populated on Aria/VCF
+  Operations 8.18.7: Assets|TotalUsage and ProductId both defined and
+  populated across 11 LicenseUsage objects; not populated on VCF Operations
+  9.1.0, where LicenseUsage has zero live objects).
+
+  Any product string other than the exact filter literal sums to zero
+  silently, with no error (DSL pitfall: misspelled/mismatched where-clause
+  literals import and validate cleanly but never produce data) - if
+  Broadcom renames this SKU string, the formula must be updated by hand.
+
+  Formula and where-clause literal kept verbatim from Scott's community
+  "VCF Consumption Overview v2" bundle (source SM: "[VCF Consumption
+  Overview v2] VCF Total License Usage"); only the name, description, and
+  prefix change for this rebuild. Feeds the License Overview scoreboard
+  (VCF Consumed Cores), the VCF License Usage Over Time trend, and the VCF
+  Licensing Overtime month table.
+formula: |
+  sum(${adaptertype=VMWARE_INFRA_HEALTH, objecttype=LicenseUsage, metric=Assets|TotalUsage, depth=10, where="ProductId startsWith vSphere 8 Enterprise Plus for VCF"})

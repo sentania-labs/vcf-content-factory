@@ -1,0 +1,31 @@
+id: c9c793cf-5ff6-4a9f-8077-2607e11b9d16
+name: "[VCF Content Factory] NSX Host Transport Node Count"
+resource_kinds:
+  - resource_kind_key: NSXT World
+    adapter_kind_key: NSXTAdapter
+description: >
+  Count of ESXi hosts prepared as NSX transport nodes (as opposed to edge
+  transport nodes) - the "how many hosts actually use NSX" figure meant to
+  be compared against total vSphere host count. Assigned to the NSXT World
+  rollup resource (1 live object, "NSX World", confirmed on ro818) and
+  counts TransportNode descendants (depth=10) filtered to
+  summary|NodeType startsWith "HostNode".
+
+  Targets VCF Operations 8.x. summary|NodeType is defined in the 8.18.7
+  statkey catalog as a TransportNode property (addressed via the DSL's
+  metric= selector, which accepts property keys) but ro818 and prod both
+  currently have zero live TransportNode objects, so this formula is
+  structurally verified only, not proven non-zero on either recon target -
+  needs a lab with real NSX transport nodes to confirm live values.
+
+  Formula kept verbatim from Scott's community "VCF Consumption Overview
+  v2" bundle (source SM: "[VCF Consumption Overview v2] Host Transport
+  Node Count"), with one cosmetic normalization: the source had a stray
+  space after where= and lowercase "nodetype" in the where-clause literal
+  while the metric= key uses "summary|NodeType"; this rebuild uses the
+  exact catalog spelling summary|NodeType in both places. The source
+  bundle's unused duplicate "Host Transport Node Core Count" (identical
+  formula, referenced by nothing) is dropped. Feeds NSX Usage Insights
+  (NSX vSphere Hosts), NSX Consumption Trend, and NSX Licensing Overtime.
+formula: |
+  count(${adaptertype=NSXTAdapter, objecttype=TransportNode, metric=summary|NodeType, depth=10, where="summary|NodeType startsWith HostNode"})

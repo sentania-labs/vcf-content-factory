@@ -1,0 +1,23 @@
+id: 8914ae0a-a0d3-48c8-a692-03cf822a1a92
+name: "[VCF Content Factory] VCF License Usage Trend"
+description: >
+  12-week trend of consumed VCF cores with a 90-day forecast. Targets VCF Operations 8.x
+  (validated against Aria Operations 8.18.7 recon, adapter_kind VMWARE_INFRA_HEALTH /
+  resource_kind LICENSE_USAGE_WORLD). Rebuilt from Scott's public "VCF Consumption
+  Overview v2" community content (VCF License Usage Over Time).
+
+subject:
+  adapter_kind: VMWARE_INFRA_HEALTH
+  resource_kind: LICENSE_USAGE_WORLD
+
+data_type: trend
+
+time_window:
+  unit: WEEKS
+  count: 12
+
+forecast_days: 90
+
+columns:
+  - attribute: 'supermetric:"[VCF Content Factory] VCF Total License Usage (cores)"'
+    display_name: "VCF License Usage"

@@ -1,0 +1,31 @@
+id: 8a280e60-5dc6-412d-a102-9fa489528992
+name: "[VCF Content Factory] Automation Consumption Trend"
+description: >
+  12-week Automation consumption pattern (licensed cores, managed hosts, managed VM count)
+  with a 90-day forecast. Targets VCF Operations 8.x (validated against Aria Operations
+  8.18.7 recon, adapter_kind CASAdapter / resource_kind CAS World; 0 CASAdapter resources
+  on ro818 today, structural only until a lab has a registered Automation cloud account).
+  Rebuilt from Scott's public "VCF Consumption Overview v2" community content (Automation
+  Consumption Trend).
+
+subject:
+  adapter_kind: CASAdapter
+  resource_kind: CAS World
+
+data_type: trend
+
+time_window:
+  unit: WEEKS
+  count: 12
+
+forecast_days: 90
+
+columns:
+  - attribute: 'supermetric:"[VCF Content Factory] Automation Licensed Cores"'
+    display_name: "Automation License Consumption"
+
+  - attribute: 'supermetric:"[VCF Content Factory] Automation Managed Host Count"'
+    display_name: "Managed Host Count"
+
+  - attribute: "summary|VMCount"
+    display_name: "Managed VM Count"
