@@ -36,16 +36,35 @@ __all__ = [
 ]
 
 
+# One hand-written ``Super Metric|`` prefix, in any spelling an author might
+# plausibly type: any case (``super metric|``, ``SUPER METRIC|``), any internal
+# or trailing whitespace (``Super  Metric |``, ``Super Metric| ``).  Case is
+# matched loosely on purpose: ``vcfops_packaging.deps._is_sm_ref`` lowercases
+# before comparing, which is this codebase's own admission that authored prefix
+# case varies.
+_PREFIX_SRC = r"(?:(?i:super\s*metric)\s*\|\s*)"
+
 # Regex matching @supermetric:"<name>" or @supermetric:'<name>' inside a formula.
 # Capture group 1 is the bare SM name.
 #
-# The optional leading ``Super Metric|`` is consumed deliberately.  The token
-# expands to the WHOLE wire term, prefix included, so an author who also writes
-# the prefix by hand (``metric=Super Metric|@supermetric:"X"``) would otherwise
-# get ``Super Metric|Super Metric|sm_<uuid>``, which VCF Ops cannot parse and
-# which no build step would flag.  Absorbing the adjacent prefix makes the
-# substitution prefix-idempotent, the same way it is already sm_<uuid>-idempotent.
-SM_CROSSREF_RE = re.compile(r'''(?:Super Metric\|)?@supermetric:["']([^"']+)["']''')
+# Any number of leading ``Super Metric|`` prefixes are consumed deliberately.
+# The token expands to the WHOLE wire term, prefix included, so an author who
+# also writes the prefix by hand (``metric=Super Metric|@supermetric:"X"``)
+# would otherwise get ``Super Metric|Super Metric|sm_<uuid>``, which VCF Ops
+# cannot parse and which no build step would flag.  Absorbing every adjacent
+# prefix, in every spelling, makes the substitution prefix-idempotent the same
+# way it is already sm_<uuid>-idempotent.
+SM_CROSSREF_RE = re.compile(
+    _PREFIX_SRC + r'''*@supermetric:["']([^"']+)["']'''
+)
+
+# Backstop for the same class: two or more adjacent prefixes surviving
+# substitution.  Absorption above should make this unreachable from an
+# ``@supermetric:`` token, but a formula can also arrive already doubled with no
+# token at all (hand-written, or copied out of a broken export).  Emitting that
+# is as unparseable as emitting the literal token, so it is a hard error rather
+# than a silent passthrough.
+_DOUBLED_PREFIX_RE = re.compile(_PREFIX_SRC + "{2,}")
 
 # Any surviving occurrence of this literal after substitution means the formula
 # carried a near-miss of the token syntax (a space after the colon, an unquoted
@@ -128,9 +147,13 @@ def resolve_sm_formula(
     (idempotent), so this function is safe to call on already-resolved formulas.
     A formula with no ``@supermetric:`` token is returned unchanged.
 
-    An immediately-preceding ``Super Metric|`` is absorbed into the match, so
-    ``metric=Super Metric|@supermetric:"X"`` resolves to a single
-    ``metric=Super Metric|sm_<uuid>`` rather than a doubled prefix.
+    Immediately-preceding ``Super Metric|`` prefixes are absorbed into the
+    match, in any case and spacing and however many of them there are, so
+    ``metric=Super Metric|@supermetric:"X"`` (and ``super metric| ``,
+    ``SUPER METRIC|``, ``Super Metric|Super Metric|``) all resolve to a single
+    ``metric=Super Metric|sm_<uuid>`` rather than a doubled prefix.  A doubled
+    prefix that survives anyway raises ``error_cls``: it can never be emitted
+    silently.
 
     A malformed near-miss (``@supermetric: "X"`` with a space, ``@supermetric:X``
     unquoted) raises ``error_cls`` instead of passing the literal token through.
@@ -160,9 +183,12 @@ def resolve_sm_formula(
 
     resolved = SM_CROSSREF_RE.sub(_replace, formula)
 
-    # Near-miss syntax guard: @supermetric: followed by a space, or an unquoted
-    # name, does not match SM_CROSSREF_RE and would otherwise ship the literal
-    # token into the pak / bundle / live instance.
+    # Post-substitution guards.  Both close the same class of defect: a formula
+    # that VCF Ops cannot parse leaving this function without anyone noticing.
+    #
+    # 1. Near-miss syntax: @supermetric: followed by a space, or an unquoted
+    #    name, does not match SM_CROSSREF_RE and would otherwise ship the
+    #    literal token into the pak / bundle / live instance.
     if _SM_CROSSREF_LITERAL in resolved:
         raise error_cls(
             f"Super metric '{sm_name}': formula still contains a literal "
@@ -170,5 +196,16 @@ def resolve_sm_formula(
             f"reference syntax is malformed.  The only accepted form is "
             f"@supermetric:\"<exact name>\" (double or single quotes, no "
             f"space after the colon)."
+        )
+
+    # 2. Doubled wire prefix.  Absorption should have prevented this, so a hit
+    #    means the formula arrived already doubled with no token to absorb it.
+    if _DOUBLED_PREFIX_RE.search(resolved):
+        raise error_cls(
+            f"Super metric '{sm_name}': formula contains a doubled "
+            f"'Super Metric|Super Metric|' prefix, which VCF Ops cannot parse. "
+            f"The wire form carries exactly one prefix: write "
+            f"metric=@supermetric:\"<exact name>\" and the resolver supplies "
+            f"the single 'Super Metric|' itself."
         )
     return resolved

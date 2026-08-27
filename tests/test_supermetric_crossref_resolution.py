@@ -166,6 +166,41 @@ class TestHandWrittenPrefixIsAbsorbed:
         )
         assert prefixed == bare
 
+    @pytest.mark.parametrize("prefix", [
+        "Super Metric|",                 # canonical
+        "super metric|",                 # lowercase
+        "SUPER METRIC|",                 # uppercase
+        "Super Metric| ",                # space after the pipe
+        "Super  Metric |",               # extra internal / pre-pipe whitespace
+        "Super Metric|Super Metric|",    # already doubled in source
+        "super metric|SUPER METRIC|",    # doubled and mixed case
+    ])
+    def test_prefix_variants_all_absorb_to_one_prefix(self, prefix):
+        """Absorption is case- and whitespace-insensitive, and repeats.
+
+        Round-2 review WARNING A: absorption used to be exact-case-and-spacing,
+        so each of these spellings emitted a doubled prefix silently while the
+        build reported success.
+        """
+        from vcfops_supermetrics.crossref import resolve_sm_formula
+
+        formula = (
+            'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+            'metric=' + prefix + '@supermetric:"' + REF_NAME + '", depth=5})'
+        )
+        out = resolve_sm_formula(formula, CONSUMER_NAME, {REF_NAME: REF_UUID})
+
+        assert out.count("Super Metric|") == 1, out
+        assert out.count(RESOLVED_TOKEN) == 1, out
+        assert f"metric={RESOLVED_TOKEN}" in out, out
+        assert "@supermetric" not in out
+        # Identical to the bare form, whatever the author typed.
+        assert out == resolve_sm_formula(
+            formula.replace(prefix + "@supermetric", "@supermetric"),
+            CONSUMER_NAME,
+            {REF_NAME: REF_UUID},
+        )
+
     def test_bundle_builder_emits_no_doubled_prefix(self, tmp_path):
         """End to end through the path that shipped the defect."""
         from vcfops_packaging.builder import _render_supermetrics_dict
@@ -385,6 +420,60 @@ class TestLiveSyncPath:
         client = _fake_client_cls()()
         out = _run_import(client, [_wire(sms["plain"])], monkeypatch)
         assert out[PLAIN_UUID]["formula"] == PLAIN_FORMULA
+
+
+class TestDoubledPrefixIsRejected:
+    """Backstop for the class absorption closes: a doubled prefix with no token.
+
+    Absorption only fires where there is an ``@supermetric:`` token to absorb
+    into.  A formula can arrive already doubled with no token at all (typed by
+    hand, or copied out of a broken export), and emitting that is as unparseable
+    as emitting the literal token.  It is a hard error on every emit path.
+    """
+
+    @pytest.mark.parametrize("doubled", [
+        "Super Metric|Super Metric|",
+        "super metric|super metric|",
+        "SUPER METRIC|SUPER METRIC|",
+        "Super Metric| Super Metric|",
+        "Super Metric|super metric|",
+        "Super Metric|Super Metric|Super Metric|",
+    ])
+    def test_doubled_prefix_without_a_token_is_a_hard_error(self, doubled):
+        from vcfops_supermetrics.crossref import (
+            SuperMetricCrossRefError,
+            resolve_sm_formula,
+        )
+
+        formula = (
+            'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+            'metric=' + doubled + 'sm_' + REF_UUID + ', depth=5})'
+        )
+        with pytest.raises(SuperMetricCrossRefError) as exc:
+            resolve_sm_formula(formula, CONSUMER_NAME, {REF_NAME: REF_UUID})
+        msg = str(exc.value)
+        assert CONSUMER_NAME in msg, msg
+        assert "doubled" in msg, msg
+
+    def test_single_prefix_is_left_alone(self):
+        """The guard must not fire on the correct, already-resolved wire form."""
+        from vcfops_supermetrics.crossref import resolve_sm_formula
+
+        formula = (
+            'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+            'metric=' + RESOLVED_TOKEN + ', depth=5})'
+        )
+        assert resolve_sm_formula(formula, CONSUMER_NAME, {}) == formula
+
+    def test_two_separate_prefixed_terms_are_left_alone(self):
+        """Two resolved terms in one formula are not a doubled prefix."""
+        from vcfops_supermetrics.crossref import resolve_sm_formula
+
+        formula = (
+            '${this, metric=' + RESOLVED_TOKEN + '} + '
+            '${this, metric=Super Metric|sm_' + PLAIN_UUID + '}'
+        )
+        assert resolve_sm_formula(formula, CONSUMER_NAME, {}) == formula
 
 
 # --- pak path still delegates to the shared resolver ------------------------

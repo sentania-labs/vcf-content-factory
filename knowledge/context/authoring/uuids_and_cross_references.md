@@ -43,9 +43,13 @@ an already-resolved `Super Metric|sm_<uuid>` is left alone.
 wire term, so the correct authoring form is `metric=@supermetric:"<name>"`,
 never `metric=Super Metric|@supermetric:"<name>"`. The hand-written prefix
 used to emit `Super Metric|Super Metric|sm_<uuid>`, which VCF Ops cannot parse
-and which no build step flagged (PR #141/#142). The regex now absorbs an
-immediately-preceding `Super Metric|`, so both forms resolve to a single
-prefix, but the second form is still wrong on the page.
+and which no build step flagged (PR #141/#142). The regex now absorbs every
+immediately-preceding `Super Metric|`, in any case and spacing and however many
+of them there are (`super metric|`, `SUPER METRIC|`, `Super Metric| `,
+`Super Metric|Super Metric|`), so both forms resolve to a single prefix, but the
+second form is still wrong on the page. A doubled prefix that survives anyway
+(hand-written with no token to absorb it) is a hard error on every emit path, so
+it can never ship silently.
 
 **Near-miss syntax is a hard error, not a passthrough.** `@supermetric: "X"`
 (space after the colon) and `@supermetric:X` (unquoted) do not match the
