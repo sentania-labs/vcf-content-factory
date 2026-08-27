@@ -1,6 +1,23 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-08-26T21:00:41Z",
+  "resource_kind": "vSphere World",
+  "fetched_at": "2026-07-27T22:10:40Z",
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys",
+  "merged_from": [
+    {
+      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys",
+      "fetched_at": "2026-07-27T22:10:40Z",
+      "platform": "VCF Operations 9.x",
+      "role": "primary"
+    },
+    {
+      "source": "https://ro818/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys",
+      "fetched_at": "2026-08-26T21:00:41Z",
+      "platform": "VCF Operations 8.18",
+      "role": "additive"
+    }
+  ],
+  "merge_note": "Union of two live instances. The primary supplies display names on key collisions (the 8.18 snapshot carries the older 'VMware Aria Operations' branding; default_monitored is identical on every collision). Keys present only on 8.18 are added; instance-local 'Super Metric|sm_<uuid>' keys from the additive snapshot are not imported. Refreshing this file against a single instance will drop the other platform's keys.",
   "metrics": {
     "Compliance|Critical|totalCount": {
       "default_monitored": true,
@@ -98,25 +115,9 @@
       "default_monitored": true,
       "name": "Risk|Average Score Of All Group Members"
     },
-    "Super Metric|sm_0ab11c9f-1fc1-4a24-8e65-dd31e4558e79": {
-      "default_monitored": true,
-      "name": "Super Metrics|Count of Oversized VMs"
-    },
     "Super Metric|sm_0c648c9c-cede-4403-b8fe-500067629bf0": {
       "default_monitored": true,
       "name": "Super Metrics|Total Network Configuration Issues"
-    },
-    "Super Metric|sm_1ae307ea-42e3-4aed-8ef9-da3bdc80828d": {
-      "default_monitored": true,
-      "name": "Super Metrics|Total HA Disabled Host"
-    },
-    "Super Metric|sm_2eb2d64b-736f-48c0-b539-c4d405319933": {
-      "default_monitored": true,
-      "name": "Super Metrics|test"
-    },
-    "Super Metric|sm_34c537b3-c719-4963-963b-c4fc1e6e083a": {
-      "default_monitored": true,
-      "name": "Super Metrics|SYNP - Provisioned vRAM (GB)"
     },
     "Super Metric|sm_3d21df83-083e-46b6-a6c0-5f7f2ae776c5": {
       "default_monitored": true,
@@ -126,17 +127,9 @@
       "default_monitored": true,
       "name": "Super Metrics|Unavailable ESXi Host"
     },
-    "Super Metric|sm_46ea1b2a-2281-48eb-9080-fe92d572d9b8": {
-      "default_monitored": true,
-      "name": "Super Metrics|SYNP - Remaining vRAM (minus 1 host)"
-    },
     "Super Metric|sm_77dca431-01ec-4a7c-824e-275908b89472": {
       "default_monitored": true,
       "name": "Super Metrics|[VCF Content Factory] VMs with Snapshots (Count)"
-    },
-    "Super Metric|sm_7f8f3389-ed11-4075-b248-e678b46490e8": {
-      "default_monitored": true,
-      "name": "Super Metrics|SYNP - Remaining vRAM (minus 1 host) (Updated)"
     },
     "Super Metric|sm_98997eae-62ba-4614-a622-11082c48ff00": {
       "default_monitored": true,
@@ -146,125 +139,105 @@
       "default_monitored": true,
       "name": "Super Metrics|Clusters Availability"
     },
-    "Super Metric|sm_b287c443-e4f2-48d8-b0e5-0c1a82b53d9b": {
-      "default_monitored": true,
-      "name": "Super Metrics|SYNP - Remaining vRAM (minus 1 host) (Updated2)"
-    },
-    "Super Metric|sm_c0ad26a1-62df-465e-af07-13c8065cd205": {
-      "default_monitored": true,
-      "name": "Super Metrics|SYNP - Available T-shirt size based on vRAM (30GB) (Updated)"
-    },
     "Super Metric|sm_dda97f70-65e0-4c5a-b6f0-7acec936a0bd": {
       "default_monitored": true,
-      "name": "Super Metrics|Count of Non-green Clusters"
+      "name": "Super Metrics|vSphere Clusters not Green"
     },
     "Super Metric|sm_eb874adf-1884-4576-91fd-0cc0fb54e58b": {
       "default_monitored": true,
-      "name": "Super Metrics|Average Clusters Performance"
-    },
-    "Super Metric|sm_ee1d0d0c-7ed0-4be7-9654-9077bb9e6852": {
-      "default_monitored": true,
-      "name": "Super Metrics|SYNP - Available T-shrit size based on vRAM (30GB)"
-    },
-    "Super Metric|sm_f2457468-8f3a-49b3-9a77-bec2394cbdff": {
-      "default_monitored": true,
-      "name": "Super Metrics|Number of Reclaimable Hosts"
+      "name": "Super Metrics|vSphere Clusters Performance"
     },
     "Super Metric|sm_faab0b29-40b7-4141-8132-7602b4a93338": {
       "default_monitored": true,
       "name": "Super Metrics|[VCF Content Factory] Total Snapshot Space (GB)"
     },
-    "Super Metric|sm_ff55995f-9a89-4a0f-a1ea-b04be95d3335": {
-      "default_monitored": true,
-      "name": "Super Metrics|Potential Savings from Reclaimable Hosts"
-    },
     "System Attributes|active_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - Active Anomaly Count"
+      "name": "VCF Operations Generated|Self - Active Anomaly Count"
     },
     "System Attributes|active_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - Active KPI Breach Count"
+      "name": "VCF Operations Generated|Self - Active KPI Breach Count"
     },
     "System Attributes|alert_count_critical": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Critical"
+      "name": "VCF Operations Generated|Alert Count Critical"
     },
     "System Attributes|alert_count_immediate": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Immediate"
+      "name": "VCF Operations Generated|Alert Count Immediate"
     },
     "System Attributes|alert_count_info": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Info"
+      "name": "VCF Operations Generated|Alert Count Info"
     },
     "System Attributes|alert_count_warning": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Warning"
+      "name": "VCF Operations Generated|Alert Count Warning"
     },
     "System Attributes|all_metrics": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Self - Metric Count"
+      "name": "VCF Operations Generated|Self - Metric Count"
     },
     "System Attributes|availability": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Availability"
+      "name": "VCF Operations Generated|Availability"
     },
     "System Attributes|change_index": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - Change Index"
+      "name": "VCF Operations Generated|Self - Change Index"
     },
     "System Attributes|child_active_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - Active Anomaly Count"
+      "name": "VCF Operations Generated|Full Set - Active Anomaly Count"
     },
     "System Attributes|child_active_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - Active KPI Breach Count"
+      "name": "VCF Operations Generated|Full Set - Active KPI Breach Count"
     },
     "System Attributes|child_all_metrics": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Full Set - Metric Count"
+      "name": "VCF Operations Generated|Full Set - Metric Count"
     },
     "System Attributes|child_ki_metrics": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - KPI Count"
+      "name": "VCF Operations Generated|Full Set - KPI Count"
     },
     "System Attributes|child_new_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - New Anomaly Count"
+      "name": "VCF Operations Generated|Full Set - New Anomaly Count"
     },
     "System Attributes|child_new_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - New KPI Breach Count"
+      "name": "VCF Operations Generated|Full Set - New KPI Breach Count"
     },
     "System Attributes|health": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Self - Health Score"
+      "name": "VCF Operations Generated|Self - Health Score"
     },
     "System Attributes|ki_metrics": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - KPI Count"
+      "name": "VCF Operations Generated|Self - KPI Count"
     },
     "System Attributes|new_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - New Anomaly Count"
+      "name": "VCF Operations Generated|Self - New Anomaly Count"
     },
     "System Attributes|new_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - New KPI Breach Count"
+      "name": "VCF Operations Generated|Self - New KPI Breach Count"
     },
     "System Attributes|self_alert_count": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Self - Alert Count"
+      "name": "VCF Operations Generated|Self - Alert Count"
     },
     "System Attributes|total_alarms": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Total Anomalies"
+      "name": "VCF Operations Generated|Total Anomalies"
     },
     "System Attributes|total_alert_count": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Total Alert Count"
+      "name": "VCF Operations Generated|Total Alert Count"
     },
     "TimeRemainingCapIQ|Critical|totalCount": {
       "default_monitored": true,
@@ -714,6 +687,26 @@
       "default_monitored": true,
       "name": "Disk|Workload"
     },
+    "gpu|mem.usage_average": {
+      "default_monitored": true,
+      "name": "GPU|Memory Usage"
+    },
+    "gpu|numberOfGPUs": {
+      "default_monitored": true,
+      "name": "GPU|Number of GPUs"
+    },
+    "gpu|numberOfHostsWithGpu": {
+      "default_monitored": true,
+      "name": "GPU|Number of hosts with GPU"
+    },
+    "gpu|numberOfVGpuConfiguredVms": {
+      "default_monitored": true,
+      "name": "GPU|Number of vGPU Configured VM-s"
+    },
+    "gpu|utilization_average": {
+      "default_monitored": true,
+      "name": "GPU|Compute Utilization"
+    },
     "mem|host_contentionPct": {
       "default_monitored": true,
       "name": "Memory|Contention"
@@ -892,11 +885,11 @@
     },
     "summary|total_number_private_vcenters": {
       "default_monitored": true,
-      "name": "Summary|Total Number of Private vCenter Server(s)"
+      "name": "Summary|Total Number of Private vCenter(s)"
     },
     "summary|total_number_public_vcenters": {
       "default_monitored": true,
-      "name": "Summary|Total Number of Public vCenter Server(s)"
+      "name": "Summary|Total Number of Public vCenter(s)"
     },
     "summary|total_number_reclaimable_hosts": {
       "default_monitored": true,
@@ -908,7 +901,7 @@
     },
     "summary|total_number_vcenters": {
       "default_monitored": true,
-      "name": "Summary|Total Number of vCenter Server(s)"
+      "name": "Summary|Total Number of vCenter(s)"
     },
     "summary|total_number_vms": {
       "default_monitored": true,
@@ -924,35 +917,35 @@
     },
     "sustainability|co2_emission": {
       "default_monitored": true,
-      "name": "Sustainability|CO2 Emission"
+      "name": "Green Score|CO2 Emission"
     },
     "sustainability|co2_emission_avoided": {
       "default_monitored": true,
-      "name": "Sustainability|CO2 Emission Avoided"
+      "name": "Green Score|CO2 Emission Avoided"
     },
     "sustainability|co2_emission_before_virtualization": {
       "default_monitored": true,
-      "name": "Sustainability|CO2 Emission before Virtualization"
+      "name": "Green Score|CO2 Emission before Virtualization"
     },
     "sustainability|electricity_cost_savings": {
       "default_monitored": true,
-      "name": "Sustainability|Electricity Cost Savings"
+      "name": "Green Score|Electricity Cost Savings"
     },
     "sustainability|power_savings_with_virtualization": {
       "default_monitored": true,
-      "name": "Sustainability|Power Savings with Virtualization"
+      "name": "Green Score|Power Savings with Virtualization"
     },
     "sustainability|power_usage": {
       "default_monitored": true,
-      "name": "Sustainability|Power usage"
+      "name": "Green Score|Power usage"
     },
     "sustainability|power_usage_before_virtualization": {
       "default_monitored": true,
-      "name": "Sustainability|Power usage Before Virtualization"
+      "name": "Green Score|Power usage Before Virtualization"
     },
     "sustainability|power_wasted_by_idle_vms": {
       "default_monitored": true,
-      "name": "Sustainability|Power Wasted by Idle VMs"
+      "name": "Green Score|Power Wasted by Idle VMs"
     },
     "vmop|inventoryChange|numClone_latest": {
       "default_monitored": true,
@@ -1006,9 +999,65 @@
       "default_monitored": true,
       "name": "Number of VM Operations|Location|VM Host and Datastore Change (powered-on VMs)"
     },
+    "vmop|provisioning|create_failure_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Failed Create Operations"
+    },
+    "vmop|provisioning|create_success_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Successful Create Operations"
+    },
+    "vmop|provisioning|delete_failure_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Failed Delete Operations"
+    },
+    "vmop|provisioning|delete_success_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Successful Delete Operations"
+    },
+    "vmop|provisioning|power_failure_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Failed Power Operations"
+    },
+    "vmop|provisioning|power_success_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Successful Power Operations"
+    },
+    "vmop|provisioning|provisioning_failures": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Failed Workload Operations"
+    },
+    "vmop|provisioning|provisions": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Successful Workload Operations"
+    },
+    "vmop|provisioning|reconfigure_failure_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Failed Reconfigure Operations"
+    },
+    "vmop|provisioning|reconfigure_success_count": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Workload Operations|Successful Reconfigure Operations"
+    },
+    "vmop|snapshots|long_running_snapshot_consolidation_events": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Snapshots|Long Running Snapshot Consolidation Events"
+    },
+    "vmop|snapshots|snapshot_events_less_than_FourHrs": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Snapshots|Snapshots Events (completed less than or equal to specified time)"
+    },
+    "vmop|snapshots|snapshot_events_more_than_FourHrs": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Snapshots|Snapshots Events (completed more than specified time)"
+    },
     "vmop|snapshots|snapshot_failures": {
       "default_monitored": true,
       "name": "Number of VM Operations|Snapshots|Snapshot Failures"
+    },
+    "vmop|snapshots|snapshot_in_progress_events_more_than_FourHrs": {
+      "default_monitored": true,
+      "name": "Number of VM Operations|Snapshots|Long Running Snapshot Events"
     },
     "vmop|snapshots|snapshots": {
       "default_monitored": true,
@@ -1048,36 +1097,34 @@
     },
     "vmop|vmotion|total_successes": {
       "default_monitored": true,
-      "name": "Number of VM Operations|vMotion|Total vMotions"
+      "name": "Number of VM Operations|vMotion|Total Successful vMotions Events"
     }
   },
   "properties": {
     "System Properties|host_collector_id": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Current Collector ID"
+      "name": "VCF Operations Generated Properties|Current Collector ID"
     },
     "System Properties|resource_kind_subtype": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Object Type Subclassification"
+      "name": "VCF Operations Generated Properties|Object Type Subclassification"
     },
     "System Properties|resource_kind_type": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Object Type Classification"
+      "name": "VCF Operations Generated Properties|Object Type Classification"
     },
     "metering|MeteringPolicyId": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Metering|Metering Policy ID"
+      "name": "Metering|(DEP) Metering Policy ID"
     },
     "metering|MeteringPolicyName": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Metering|Metering Policy Name"
+      "name": "Metering|(DEP) Metering Policy Name"
     }
-  },
-  "resource_kind": "vSphere World",
-  "source": "https://ro818/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys"
+  }
 }

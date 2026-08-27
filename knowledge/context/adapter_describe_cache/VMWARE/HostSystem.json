@@ -1,7 +1,28 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-08-26T21:00:41Z",
+  "resource_kind": "HostSystem",
+  "fetched_at": "2026-07-27T22:10:45Z",
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys",
+  "merged_from": [
+    {
+      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys",
+      "fetched_at": "2026-07-27T22:10:45Z",
+      "platform": "VCF Operations 9.x",
+      "role": "primary"
+    },
+    {
+      "source": "https://ro818/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys",
+      "fetched_at": "2026-08-26T21:00:41Z",
+      "platform": "VCF Operations 8.18",
+      "role": "additive"
+    }
+  ],
+  "merge_note": "Union of two live instances. The primary supplies display names on key collisions (the 8.18 snapshot carries the older 'VMware Aria Operations' branding; default_monitored is identical on every collision). Keys present only on 8.18 are added; instance-local 'Super Metric|sm_<uuid>' keys from the additive snapshot are not imported. Refreshing this file against a single instance will drop the other platform's keys.",
   "metrics": {
+    "NTP|DRIFT_IN_MILLS": {
+      "default_monitored": true,
+      "name": "NTP Summary|NTP Drift"
+    },
     "OnlineCapacityAnalytics|capacityRemainingPercentage": {
       "default_monitored": true,
       "name": "Capacity Analytics Generated|Capacity Remaining Percentage"
@@ -78,101 +99,29 @@
       "default_monitored": false,
       "name": "Sensor|Temperature|(DEP) Health State"
     },
-    "Super Metric|sm_090341f2-b43a-4202-ba5c-467fc9991150": {
-      "default_monitored": true,
-      "name": "Super Metrics|[E-SAMPLE] D2.ESXi \u30db\u30b9\u30c8-\u30d1\u30b1\u30c3\u30c8\u30c9\u30ed\u30c3\u30d7\u9001\u53d7\u4fe1\u5408\u8a08"
-    },
-    "Super Metric|sm_0a200668-9de1-4be6-9539-5e5a6d772ac8": {
-      "default_monitored": true,
-      "name": "Super Metrics|Peak Net Usage within cycle (All VMs)"
-    },
-    "Super Metric|sm_16bf73bd-a92c-4519-ae44-b488a683ac41": {
-      "default_monitored": true,
-      "name": "Super Metrics|[test]Memory Overcommitment rate(%)"
-    },
-    "Super Metric|sm_1add8269-20e4-4b76-9fbb-9cabebc26f90": {
-      "default_monitored": true,
-      "name": "Super Metrics|DA - VCF licenses needed"
-    },
-    "Super Metric|sm_1ae307ea-42e3-4aed-8ef9-da3bdc80828d": {
-      "default_monitored": true,
-      "name": "Super Metrics|Total HA Disabled Host"
-    },
-    "Super Metric|sm_2153e411-e011-4cbf-97bd-fabad3bd7b4f": {
-      "default_monitored": true,
-      "name": "Super Metrics|tk-SumPowerConsumptionofVMs"
-    },
-    "Super Metric|sm_2862a74b-6ef2-46db-9ff3-d02601e5f8fd": {
-      "default_monitored": true,
-      "name": "Super Metrics|Barclays - Available BCU - vDisk"
-    },
-    "Super Metric|sm_2b416760-618f-45cf-8c8c-bda7139fd3e7": {
-      "default_monitored": true,
-      "name": "Super Metrics|.MTEST.Total Host Storage Adapter Throughput"
-    },
-    "Super Metric|sm_34c9351b-ae5c-4a48-be2d-18df82609413": {
-      "default_monitored": true,
-      "name": "Super Metrics|tk-HostPowerUsageOverhead"
-    },
-    "Super Metric|sm_3bf93254-d346-4f2b-88d8-5b60b473e757": {
-      "default_monitored": true,
-      "name": "Super Metrics|Barclays - vSAN raw size"
-    },
     "Super Metric|sm_51613351-5865-478e-9f26-b9d5598fed4d": {
       "default_monitored": true,
       "name": "Super Metrics|Network Speed Degradation"
     },
+    "Super Metric|sm_55ef6c51-3b90-4a6e-800a-983d2e86a8a5": {
+      "default_monitored": true,
+      "name": "Super Metrics|[VCF Content Factory] Storage Active Path Count"
+    },
     "Super Metric|sm_57be077d-f61e-4d25-ae05-ae27eed15229": {
       "default_monitored": true,
-      "name": "Super Metrics|Net Transmit (All VMs)"
-    },
-    "Super Metric|sm_5dec5b85-4d56-4aa4-a0cf-bf227e2015db": {
-      "default_monitored": true,
-      "name": "Super Metrics|Cluster_Total_CPU_Capacity"
-    },
-    "Super Metric|sm_629cd1b0-7deb-4688-97eb-9c459ea1d4eb": {
-      "default_monitored": true,
-      "name": "Super Metrics|yada_test_supermetric"
-    },
-    "Super Metric|sm_6f8b5ce5-3c27-4d26-88e2-eb9562f2c7f1": {
-      "default_monitored": true,
-      "name": "Super Metrics|tk-CarbonEmissions-NEW"
-    },
-    "Super Metric|sm_79e4bbd5-c007-4f4f-8499-afc9261b0e0e": {
-      "default_monitored": true,
-      "name": "Super Metrics|[Custom] Host CPU Ready Per VM"
-    },
-    "Super Metric|sm_7b6c18c5-cee7-4d2e-9900-4ccd80d60622": {
-      "default_monitored": true,
-      "name": "Super Metrics|[test]CPU Overcommitment rate(%)"
-    },
-    "Super Metric|sm_7fca8dbe-25ff-4fa9-9b7b-733f3a065356": {
-      "default_monitored": true,
-      "name": "Super Metrics|[test2]_\u30db\u30b9\u30c8-\u30e1\u30e2\u30ea OC\u7387"
-    },
-    "Super Metric|sm_9d320da7-f834-414e-ac38-f6836b866bc3": {
-      "default_monitored": true,
-      "name": "Super Metrics|[PSO] ESXi \u30db\u30b9\u30c8\u306e\u30e1\u30e2\u30ea\u30aa\u30fc\u30d0\u30fc\u30b3\u30df\u30c3\u30c8\u500d\u7387 (\u5168\u3066\u306e VM \u5272\u5f53\u3066)"
+      "name": "Super Metrics|[IDPS] Net Transmit (All VMs)"
     },
     "Super Metric|sm_a5ada313-49da-4feb-b6de-86c49646c3fc": {
       "default_monitored": true,
-      "name": "Super Metrics|Packets per second (All VMs)"
+      "name": "Super Metrics|[IDPS] Packets per second (All VMs)"
     },
-    "Super Metric|sm_ae31cc83-73b9-4c3c-8c54-f4dccc2a81a8": {
+    "Super Metric|sm_a7becc4c-22f4-4946-acf9-6cb559672544": {
       "default_monitored": true,
-      "name": "Super Metrics|tk-CarbonEmissions"
-    },
-    "Super Metric|sm_b6916e5c-54b8-43dd-aa3a-658ce8327d2a": {
-      "default_monitored": true,
-      "name": "Super Metrics|tk-SumPowerReadingofVMs"
+      "name": "Super Metrics|[VCF Content Factory] CPU Support Status (KB318697)"
     },
     "Super Metric|sm_b6f20136-03bf-48d3-8b80-429f59d21374": {
       "default_monitored": true,
       "name": "Super Metrics|ESXi Host Availability"
-    },
-    "Super Metric|sm_b768483c-0b5d-47f8-a8db-6c7fa41ceca8": {
-      "default_monitored": true,
-      "name": "Super Metrics|[PSO] ESXi \u30db\u30b9\u30c8\u306e CPU \u30aa\u30fc\u30d0\u30fc\u30b3\u30df\u30c3\u30c8\u500d\u7387 (\u5168\u3066\u306e VM \u5272\u5f53\u3066)"
     },
     "Super Metric|sm_c0c98494-1147-4ec1-affd-fcaf54334563": {
       "default_monitored": true,
@@ -180,123 +129,103 @@
     },
     "Super Metric|sm_c458582f-b63f-4085-8465-fa32cb718271": {
       "default_monitored": true,
-      "name": "Super Metrics|Net Receive (All VMs)"
+      "name": "Super Metrics|[IDPS] Net Receive (All VMs)"
     },
     "Super Metric|sm_c6816ee1-2b94-43ae-baf3-180f95b0e94c": {
       "default_monitored": true,
-      "name": "Super Metrics|Peak PPS within cycle (All VMs)"
-    },
-    "Super Metric|sm_d109d764-a384-4210-b404-0991461ee432": {
-      "default_monitored": true,
-      "name": "Super Metrics|SLA % Availability"
-    },
-    "Super Metric|sm_d23e9a53-cd1a-47e8-ac14-2828c900060c": {
-      "default_monitored": true,
-      "name": "Super Metrics|Total Downtime (minutes)"
-    },
-    "Super Metric|sm_d35c2a47-61ca-40fc-bbc0-9458a57cd54e": {
-      "default_monitored": true,
-      "name": "Super Metrics|[test2]_\u30db\u30b9\u30c8-CPU OC\u7387"
-    },
-    "Super Metric|sm_efc4d473-3683-4d1d-a910-c673ea69cb26": {
-      "default_monitored": true,
-      "name": "Super Metrics|storageFPINHeap"
+      "name": "Super Metrics|[IDPS] Peak PPS within cycle (All VMs)"
     },
     "Super Metric|sm_f4acf93a-06b8-4450-8237-92cee270bc65": {
       "default_monitored": true,
-      "name": "Super Metrics|Net Usage (All VMs)"
-    },
-    "Super Metric|sm_fa8d40da-0a9f-4697-be34-f24bb08e63c2": {
-      "default_monitored": true,
-      "name": "Super Metrics|tk-EnergyCosts"
+      "name": "Super Metrics|[IDPS] Net Usage (All VMs)"
     },
     "System Attributes|active_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - Active Anomaly Count"
+      "name": "VCF Operations Generated|Self - Active Anomaly Count"
     },
     "System Attributes|active_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - Active KPI Breach Count"
+      "name": "VCF Operations Generated|Self - Active KPI Breach Count"
     },
     "System Attributes|alert_count_critical": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Critical"
+      "name": "VCF Operations Generated|Alert Count Critical"
     },
     "System Attributes|alert_count_immediate": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Immediate"
+      "name": "VCF Operations Generated|Alert Count Immediate"
     },
     "System Attributes|alert_count_info": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Info"
+      "name": "VCF Operations Generated|Alert Count Info"
     },
     "System Attributes|alert_count_warning": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Warning"
+      "name": "VCF Operations Generated|Alert Count Warning"
     },
     "System Attributes|all_metrics": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Self - Metric Count"
+      "name": "VCF Operations Generated|Self - Metric Count"
     },
     "System Attributes|availability": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Availability"
+      "name": "VCF Operations Generated|Availability"
     },
     "System Attributes|change_index": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - Change Index"
+      "name": "VCF Operations Generated|Self - Change Index"
     },
     "System Attributes|child_active_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - Active Anomaly Count"
+      "name": "VCF Operations Generated|Full Set - Active Anomaly Count"
     },
     "System Attributes|child_active_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - Active KPI Breach Count"
+      "name": "VCF Operations Generated|Full Set - Active KPI Breach Count"
     },
     "System Attributes|child_all_metrics": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Full Set - Metric Count"
+      "name": "VCF Operations Generated|Full Set - Metric Count"
     },
     "System Attributes|child_ki_metrics": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - KPI Count"
+      "name": "VCF Operations Generated|Full Set - KPI Count"
     },
     "System Attributes|child_new_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - New Anomaly Count"
+      "name": "VCF Operations Generated|Full Set - New Anomaly Count"
     },
     "System Attributes|child_new_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - New KPI Breach Count"
+      "name": "VCF Operations Generated|Full Set - New KPI Breach Count"
     },
     "System Attributes|health": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Self - Health Score"
+      "name": "VCF Operations Generated|Self - Health Score"
     },
     "System Attributes|ki_metrics": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - KPI Count"
+      "name": "VCF Operations Generated|Self - KPI Count"
     },
     "System Attributes|new_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - New Anomaly Count"
+      "name": "VCF Operations Generated|Self - New Anomaly Count"
     },
     "System Attributes|new_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - New KPI Breach Count"
+      "name": "VCF Operations Generated|Self - New KPI Breach Count"
     },
     "System Attributes|self_alert_count": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Self - Alert Count"
+      "name": "VCF Operations Generated|Self - Alert Count"
     },
     "System Attributes|total_alarms": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Total Anomalies"
+      "name": "VCF Operations Generated|Total Anomalies"
     },
     "System Attributes|total_alert_count": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Total Alert Count"
+      "name": "VCF Operations Generated|Total Alert Count"
     },
     "badge|alert_count_critical": {
       "default_monitored": false,
@@ -1040,11 +969,11 @@
     },
     "datastore|datastoreNormalReadLatency_latest": {
       "default_monitored": false,
-      "name": "Datastore|datastoreNormalReadLatency_latest"
+      "name": "Datastore|Storage DRS datastore normalized read latency"
     },
     "datastore|datastoreNormalWriteLatency_latest": {
       "default_monitored": false,
-      "name": "Datastore|datastoreNormalWriteLatency_latest"
+      "name": "Datastore|Storage DRS datastore normalized write latency"
     },
     "datastore|datastoreReadBytes_latest": {
       "default_monitored": false,
@@ -1706,6 +1635,18 @@
       "default_monitored": true,
       "name": "Disk|Write Throughput"
     },
+    "gpu|compute_clock_demand": {
+      "default_monitored": true,
+      "name": "GPU|GPU Compute Demand"
+    },
+    "gpu|compute_clock_limit": {
+      "default_monitored": true,
+      "name": "GPU|GPU Compute Limit"
+    },
+    "gpu|compute_clock_used": {
+      "default_monitored": true,
+      "name": "GPU|GPU Compute Usage"
+    },
     "gpu|mem.reserved_latest": {
       "default_monitored": true,
       "name": "GPU|Memory Reserved"
@@ -1718,9 +1659,17 @@
       "default_monitored": true,
       "name": "GPU|Memory Used"
     },
+    "gpu|memory_demand": {
+      "default_monitored": true,
+      "name": "GPU|GPU Memory Demand"
+    },
     "gpu|numberOfGPUs": {
       "default_monitored": true,
       "name": "GPU|Number of GPUs"
+    },
+    "gpu|numberOfVGpuConfiguredVms": {
+      "default_monitored": true,
+      "name": "GPU|Number of vGPU Configured VM-s"
     },
     "gpu|power.used_latest": {
       "default_monitored": true,
@@ -2960,7 +2909,7 @@
     },
     "summary|max_number_vms": {
       "default_monitored": true,
-      "name": "Summary|Maximum Supported VMs"
+      "name": "Summary|Maximum Supported VMs (deprecated)"
     },
     "summary|metering|deletedResources": {
       "default_monitored": false,
@@ -3160,7 +3109,7 @@
     },
     "vmop|vmotion|total_successes": {
       "default_monitored": true,
-      "name": "Number of VM Operations|vMotion|Total vMotions"
+      "name": "Number of VM Operations|vMotion|Total Successful vMotions Events"
     },
     "vsan|componentLimit|componentLimitUsed": {
       "default_monitored": true,
@@ -3194,6 +3143,78 @@
       "default_monitored": true,
       "name": "vSAN|Performance|PCPU|Usage"
     },
+    "vsan|performance|domClient|iopsRead": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|IOPS Read"
+    },
+    "vsan|performance|domClient|iopsWrite": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|IOPS Write"
+    },
+    "vsan|performance|domClient|latencyAvgRead": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|Latency Average Read"
+    },
+    "vsan|performance|domClient|latencyAvgWrite": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|Latency Average Write"
+    },
+    "vsan|performance|domClient|latencyMaxRead": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|Latency Max Read"
+    },
+    "vsan|performance|domClient|latencyMaxWrite": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|Latency Max Write"
+    },
+    "vsan|performance|domClient|latencyStddevRead": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|Latency Standard Dev Read"
+    },
+    "vsan|performance|domClient|latencyStddevWrite": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|Latency Standard Dev Write"
+    },
+    "vsan|performance|domClient|oioRead": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|Oio Read"
+    },
+    "vsan|performance|domClient|oioWrite": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|Oio Write"
+    },
+    "vsan|performance|domClient|readCongestion": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|Read Congestion"
+    },
+    "vsan|performance|domClient|throughputRead": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|Throughput Read"
+    },
+    "vsan|performance|domClient|throughputWrite": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|Throughput Write"
+    },
+    "vsan|performance|domClient|writeCongestion": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Client|Write Congestion"
+    },
+    "vsan|performance|domCompManager|latencyAvgRead": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Comp Manager|Latency Average Read"
+    },
+    "vsan|performance|domCompManager|latencyAvgWrite": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Comp Manager|Latency Average Write"
+    },
+    "vsan|performance|domOwner|highOIODurationPercentRead": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Owner|High OIO Duration Percent Read"
+    },
+    "vsan|performance|domOwner|highOIODurationPercentWrite": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|vSAN Host Dom Owner|High OIO Duration Percent Write"
+    },
     "vsan|performance|memory|usage": {
       "default_monitored": true,
       "name": "vSAN|Performance|Memory|Usage"
@@ -3213,6 +3234,22 @@
     "vsan|performance|network|rxThroughput": {
       "default_monitored": true,
       "name": "vSAN|Performance|Network|Throughput Inbound"
+    },
+    "vsan|performance|network|tcpRxErrRate": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|Network|TCP Inbound Error Rate"
+    },
+    "vsan|performance|network|tcpRxPackets": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|Network|TCP Inbound Packets Per Second"
+    },
+    "vsan|performance|network|tcpTxPackets": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|Network|TCP Outbound Packets Per Second"
+    },
+    "vsan|performance|network|tcpTxRexmitRate": {
+      "default_monitored": true,
+      "name": "vSAN|Performance|Network|TCP Outbound Re-transmit Rate"
     },
     "vsan|performance|network|txPackets": {
       "default_monitored": true,
@@ -3292,20 +3329,30 @@
       "instance_type": "INSTANCED",
       "name": "Certificate Summary|ESXi Host Certificate|Start Date"
     },
+    "DNS|DNS_SERVER": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "DNS Summary|DNS Server(s)"
+    },
     "DNS|FORWARD_LOOKUP_STATUS": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "DNS|Forward Lookup Status"
+      "name": "DNS Summary|Forward Lookup Status"
     },
     "DNS|REVERSE_LOOKUP_STATUS": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "DNS|Reverse Lookup Status"
+      "name": "DNS Summary|Reverse Lookup Status"
     },
     "NTP|MSG": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
       "name": "NTP Summary|Message"
+    },
+    "NTP|NTP_SERVER": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "NTP Summary|NTP Server(s)"
     },
     "NTP|STATUS": {
       "default_monitored": true,
@@ -3325,22 +3372,37 @@
     "System Properties|businessHours": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Business Hours"
+      "name": "VCF Operations Generated Properties|Business Hours"
     },
     "System Properties|host_collector_id": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Current Collector ID"
+      "name": "VCF Operations Generated Properties|Current Collector ID"
     },
     "System Properties|resource_kind_subtype": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Object Type Subclassification"
+      "name": "VCF Operations Generated Properties|Object Type Subclassification"
     },
     "System Properties|resource_kind_type": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Object Type Classification"
+      "name": "VCF Operations Generated Properties|Object Type Classification"
+    },
+    "VcfManagementInfo|vcf_mgmt_certificate_info|vcf_mgmt_certificate_num_days_to_expire": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "VCF Management Information|VCF Certificate Management Information|No. of Days to Expire"
+    },
+    "VcfManagementInfo|vcf_mgmt_password_info|vcf_mgmt_password_num_days_to_expire": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "VCF Management Information|VCF Password Management Information|No. of Days to Expire"
+    },
+    "capability|tpmVersion": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Capability|TPM Version"
     },
     "configManager|memoryManager|consoleReservationInfo|serviceConsoleReserved": {
       "default_monitored": true,
@@ -3432,6 +3494,36 @@
       "instance_type": "INSTANCED",
       "name": "Configuration|Product|Product Line ID"
     },
+    "config|security|audit_record_remote_enable": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Is Syslog Global Audit Record Remote Enabled"
+    },
+    "config|security|audit_record_storage_capacity": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Syslog Global Audit Record Storage Capacity"
+    },
+    "config|security|audit_record_storage_enable": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Is Syslog Global Audit Record Storage Enabled"
+    },
+    "config|security|bmc_network_enable": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Is BMC Network Enabled"
+    },
+    "config|security|certificate_strict_x509_compliance": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Is Syslog Global Strict X509 Compliant"
+    },
+    "config|security|current_scratch_location": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Scratch Folder Location"
+    },
     "config|security|dcui_access": {
       "default_monitored": false,
       "instance_type": "INSTANCED",
@@ -3472,10 +3564,25 @@
       "instance_type": "INSTANCED",
       "name": "Configuration|Security|Enable MOB (Config.HostAgent.plugins.solo.enableMob)"
     },
+    "config|security|esx_admins_group": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|ESX Admins Group"
+    },
     "config|security|execInstalledOnly": {
       "default_monitored": false,
       "instance_type": "INSTANCED",
       "name": "Configuration|Security|VMkernel Boot Exec Installed Only (VMkernel.Boot.execInstalledOnly)"
+    },
+    "config|security|firewallDefaultPolicy|incomingBlocked": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Firewall Default Policy|Incoming Blocked"
+    },
+    "config|security|firewallDefaultPolicy|outgoingBlocked": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Firewall Default Policy|Outgoing Blocked"
     },
     "config|security|firewallRule|allowedHosts": {
       "default_monitored": false,
@@ -3532,6 +3639,16 @@
       "instance_type": "INSTANCED",
       "name": "Configuration|Security|Lockdown|Lockdown Mode"
     },
+    "config|security|log_check_ssl_certs": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Is Syslog Global SSL Certificate Check Enabled"
+    },
+    "config|security|mem_eager_zero": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Memory Eager Zero"
+    },
     "config|security|net_block_guest_bpdu": {
       "default_monitored": false,
       "instance_type": "INSTANCED",
@@ -3546,6 +3663,11 @@
       "default_monitored": false,
       "instance_type": "INSTANCED",
       "name": "Configuration|Security|Password Max Days"
+    },
+    "config|security|requireSecureBoot": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Is Require Secure Boot Enabled"
     },
     "config|security|security_account_lock_failures": {
       "default_monitored": false,
@@ -3607,6 +3729,21 @@
       "instance_type": "INSTANCED",
       "name": "Configuration|Security|Log directory (Syslog.global.logDir)"
     },
+    "config|security|syslog_global_audit_record_storage_directory": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Syslog Global Audit Record Storage Directory"
+    },
+    "config|security|syslog_global_logLevel": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Syslog Global Log Level"
+    },
+    "config|security|syslog_global_log_filters_enable": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|Is Syslog Global Log Filters Enabled"
+    },
     "config|security|syslog_host": {
       "default_monitored": false,
       "instance_type": "INSTANCED",
@@ -3621,6 +3758,11 @@
       "default_monitored": false,
       "instance_type": "INSTANCED",
       "name": "Configuration|Security|Force TPS salting (Mem.ShareForceSalting)"
+    },
+    "config|security|vmacore_soap_session_timeout": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Configuration|Security|vSphere API SOAP Session Timeout"
     },
     "config|security|welcome_message": {
       "default_monitored": false,
@@ -3655,7 +3797,7 @@
     "cost|energyConsumed": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Cost|Energy Consumed (Joule)"
+      "name": "Cost|Energy Consumed"
     },
     "cost|numberOfRackUnits": {
       "default_monitored": true,
@@ -3746,6 +3888,21 @@
       "default_monitored": true,
       "instance_type": "INSTANCED",
       "name": "GPU|Device Name"
+    },
+    "gpu|power_limit": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "GPU|GPU Power limit (Max TDP)"
+    },
+    "gpu|shutdown_temperature": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "GPU|GPU Shutdown Temperature (Celsius)"
+    },
+    "gpu|slowdown_temperature": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "GPU|GPU Slowdown Temperature (Celsius)"
     },
     "gpu|vendor_name": {
       "default_monitored": true,
@@ -3977,6 +4134,11 @@
       "instance_type": "INSTANCED",
       "name": "Runtime|Connection State"
     },
+    "runtime|cryptoState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Runtime|Crypto State"
+    },
     "runtime|isUnavailable": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
@@ -3996,6 +4158,11 @@
       "default_monitored": true,
       "instance_type": "INSTANCED",
       "name": "Runtime|Power State"
+    },
+    "runtime|quarantineState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Runtime|Quarantine State"
     },
     "storageAdapter|hbaDriver": {
       "default_monitored": true,
@@ -4031,6 +4198,11 @@
       "default_monitored": true,
       "instance_type": "INSTANCED",
       "name": "Summary|Is Horizon Managed"
+    },
+    "summary|max_number_vms_property": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Maximum Supported VMs"
     },
     "summary|parentCluster": {
       "default_monitored": true,
@@ -4127,7 +4299,5 @@
       "instance_type": "INSTANCED",
       "name": "VCM|Template|Total checks"
     }
-  },
-  "resource_kind": "HostSystem",
-  "source": "https://ro818/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys"
+  }
 }
