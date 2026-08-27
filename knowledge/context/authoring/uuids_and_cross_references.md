@@ -39,6 +39,24 @@ token produces a super metric the platform silently fails to evaluate, so
 failing at build/push time is the cheaper failure. Resolution is idempotent:
 an already-resolved `Super Metric|sm_<uuid>` is left alone.
 
+**The token carries its own `Super Metric|` prefix.** It replaces the whole
+wire term, so the correct authoring form is `metric=@supermetric:"<name>"`,
+never `metric=Super Metric|@supermetric:"<name>"`. The hand-written prefix
+used to emit `Super Metric|Super Metric|sm_<uuid>`, which VCF Ops cannot parse
+and which no build step flagged (PR #141/#142). The regex now absorbs an
+immediately-preceding `Super Metric|`, so both forms resolve to a single
+prefix, but the second form is still wrong on the page.
+
+**Near-miss syntax is a hard error, not a passthrough.** `@supermetric: "X"`
+(space after the colon) and `@supermetric:X` (unquoted) do not match the
+token regex. Any literal `@supermetric` surviving substitution raises, because
+shipping it is the same corrupt-SM outcome as an unresolvable name.
+
+**`validate` proves nothing here.** The SM loader has no `@supermetric`
+awareness at all, by design (the formula stays in authoring form). The only
+real check on a cross-reference is building the bundle / pak and reading the
+emitted `supermetric.json`.
+
 The reverse direction (`vcfops_supermetrics.reverse.rewrite_formula`,
 `vcfops_extractor`) turns `sm_<uuid>` back into `@supermetric:"<name>"` so
 extracted content round-trips through the authoring form.
@@ -93,9 +111,11 @@ name at load time without round-tripping to the server:
   `attribute: supermetric:"<name>"`; loader looks up the super metric
   YAML by name, reads its `id`, emits `sm_<id>`.
 - **Super metric formulas referencing another super metric**: YAML
-  uses `@supermetric:"<name>"` inside the formula string; loader
-  rewrites to `sm_<id>` at validation time. Validation fails loudly
-  if the referenced name doesn't resolve.
+  uses `@supermetric:"<name>"` inside the formula string. This one is
+  **not** resolved at validate time: it is rewritten to
+  `Super Metric|sm_<id>` at emit/push time by
+  `vcfops_supermetrics.crossref` (see the section above), which fails
+  loudly if the referenced name doesn't resolve.
 
 ## Cross-reference syntax quick reference
 
@@ -105,7 +125,7 @@ validate or sync time.
 
 | From → To | YAML syntax | Loader output | When resolved |
 |---|---|---|---|
-| SM formula → other SM | `@supermetric:"<exact name>"` | `sm_<uuid>` | `validate` (SM loader) |
+| SM formula → other SM | `@supermetric:"<exact name>"` | `Super Metric|sm_<uuid>` | **emit/push** (`crossref`), not `validate` |
 | View column → SM | `supermetric:"<exact name>"` in `attribute:` | `sm_<uuid>` in `attributeKey` | `validate` (dashboard loader) |
 | Dashboard widget → View | `view: "<exact view name>"` | view UUID in widget config | `validate` (dashboard loader) |
 | Alert → Symptom | `name: "<exact symptom name>"` in symptom set | symptom definition ID | `sync` (alert installer, via `GET /api/symptomdefinitions`) |
