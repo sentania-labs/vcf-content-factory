@@ -81,13 +81,32 @@ class _SMExtendedClient(VCFOpsClient):
         return r.json()
 
     def find_by_name(self, name: str) -> Optional[dict]:
+        """Return the super metric whose name matches ``name`` exactly.
+
+        Raises when the instance holds more than one exact-name match: two
+        objects can legitimately share a display name here (sibling paks ship
+        the same view name), and silently binding a cross-reference to
+        whichever one the API listed first would pick a UUID nobody chose.
+        """
+        matches = self.find_all_by_name(name)
+        if len(matches) > 1:
+            ids = ", ".join(sorted(sm.get("id", "?") for sm in matches))
+            raise VCFOpsError(
+                f"super metric name '{name}' is ambiguous on this instance: "
+                f"{len(matches)} super metrics carry that exact name ({ids}). "
+                f"Rename or remove the duplicates, or reference the intended "
+                f"one by including it in this batch."
+            )
+        return matches[0] if matches else None
+
+    def find_all_by_name(self, name: str) -> list:
+        """Every super metric on the instance whose name matches ``name`` exactly."""
         r = self._request("GET", "/api/supermetrics", params={"name": name})
         if r.status_code != 200:
             raise VCFOpsError(f"find failed ({r.status_code}): {r.text}")
-        for sm in r.json().get("superMetrics") or []:
-            if sm.get("name") == name:
-                return sm
-        return None
+        return [
+            sm for sm in (r.json().get("superMetrics") or []) if sm.get("name") == name
+        ]
 
     @staticmethod
     def _normalize_formula(formula: str) -> str:
@@ -555,8 +574,18 @@ class _SMExtendedClient(VCFOpsClient):
 
         def _lookup_remote(ref_name: str):
             if ref_name not in remote_cache:
+                # find_by_name raises on an ambiguous (duplicate-name) hit
+                # rather than guessing which one the formula meant.
                 existing = self.find_by_name(ref_name)
-                remote_cache[ref_name] = (existing or {}).get("id")
+                found_id = (existing or {}).get("id")
+                remote_cache[ref_name] = found_id
+                if found_id:
+                    # The operator has to be able to see which UUID a formula
+                    # got bound to: this one was not in the pushed batch.
+                    print(
+                        f"  cross-reference resolved against the target "
+                        f"instance: {ref_name!r} -> sm_{found_id}"
+                    )
             return remote_cache[ref_name]
 
         sm_dict: dict = {}

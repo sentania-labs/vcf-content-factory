@@ -1647,18 +1647,14 @@ class Dashboard:
         self,
         known_views: dict[str, ViewDef],
         enforce_framework_prefix: bool = True,
-        allow_external_views: bool = False,
     ) -> None:
         """Check the cross-object invariants that ``load_dashboard()`` cannot.
 
-        ``allow_external_views`` widens the View-widget reference check to accept
-        a bare name that is absent from ``known_views``.  A pak bundles only its
-        own views, but a dashboard may legitimately reference a view shipped by a
-        sibling pak installed alongside it (e.g. vcommunity-vsphere's ``VM
-        Details`` referencing vcommunity's ``Windows Services vCommunity``), so
-        the pak path cannot treat an unmatched name as an authoring mistake the
-        way the repo-wide corpus can.  This is the by-name twin of the raw-UUID
-        external passthrough below.
+        A View widget must name a view in ``known_views`` or carry a raw UUID
+        (the external-view passthrough below).  There is deliberately no escape
+        hatch for an unmatched bare name: a cross-pak reference is authored as
+        the sibling view's UUID, which the passthrough already accepts, so a
+        bare name that matches nothing is always a typo.
         """
         if not self.name.strip():
             raise DashboardValidationError("dashboard: name is required")
@@ -1740,7 +1736,6 @@ class Dashboard:
                 if (
                     w.view_name not in known_views
                     and not _UUID_RE.match(w.view_name)
-                    and not allow_external_views
                 ):
                     raise DashboardValidationError(
                         f"dashboard {self.name}: widget {w.local_id}: "

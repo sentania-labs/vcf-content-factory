@@ -104,6 +104,10 @@ _DASH_UNKNOWN_VIEW = textwrap.dedent("""\
     interactions: []
     """)
 
+_DASH_EXTERNAL_VIEW_UUID = _DASH_UNKNOWN_VIEW.replace(
+    '"Nonexistent View"', "ae751947-1782-466f-b560-9a950be3c1f9"
+)
+
 
 def _bundled(tmp_path: Path, dashboard_yaml: str) -> tuple:
     project_dir = tmp_path / "adapter"
@@ -127,14 +131,28 @@ class TestSdkBundledDashboardValidation:
         assert "summary_for" in msg, msg
         assert "self_provider" in msg, msg
 
-    def test_cross_pak_view_reference_is_allowed(self, tmp_path):
-        """A pak bundles only its own views; a bare name it does not bundle may
-        be shipped by a sibling pak installed alongside it (real case:
-        vcommunity-vsphere's `VM Details` -> vcommunity's `Windows Services
-        vCommunity`).  The pak path must not treat that as an authoring error."""
-        from vcfops_managementpacks.sdk_builder import _load_bundled_content
+    def test_unknown_bare_view_name_is_rejected_on_the_pak_path_too(self, tmp_path):
+        """A pak bundles only its own views, but a cross-pak reference is
+        authored as the sibling view's UUID (real case: vcommunity-vsphere's
+        `VM Details` -> vcommunity's `Windows Services vCommunity`, referenced
+        by id).  A bare name matching nothing is a typo, and the pak path must
+        say so rather than shipping a silently blank widget."""
+        from vcfops_managementpacks.sdk_builder import (
+            SdkBuildError,
+            _load_bundled_content,
+        )
 
         raw, project_dir = _bundled(tmp_path, _DASH_UNKNOWN_VIEW)
+        with pytest.raises(SdkBuildError) as exc:
+            _load_bundled_content(raw, project_dir, project_dir)
+        assert "unknown view" in str(exc.value), str(exc.value)
+
+    def test_cross_pak_view_reference_by_uuid_is_allowed(self, tmp_path):
+        """The sanctioned cross-pak form: the sibling view's raw UUID, which
+        the loader's external passthrough accepts with no escape hatch."""
+        from vcfops_managementpacks.sdk_builder import _load_bundled_content
+
+        raw, project_dir = _bundled(tmp_path, _DASH_EXTERNAL_VIEW_UUID)
         dashboards = _load_bundled_content(raw, project_dir, project_dir)[1]
         assert [d.name for d in dashboards] == ["Probe View Dash"]
 

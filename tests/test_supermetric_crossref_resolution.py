@@ -127,6 +127,107 @@ class TestSharedResolver:
         assert RESOLVED_TOKEN in out
 
 
+
+
+class TestHandWrittenPrefixIsAbsorbed:
+    """PR #142 regression: authored ``metric=Super Metric|@supermetric:"X"``.
+
+    The token supplies its own ``Super Metric|``, so a hand-written prefix used
+    to emit ``Super Metric|Super Metric|sm_<uuid>`` — as unparseable as the
+    literal token, with the build reporting success throughout.  The match
+    absorbs an immediately-preceding prefix instead.
+    """
+
+    PREFIXED_FORMULA = (
+        'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+        'metric=Super Metric|@supermetric:"' + REF_NAME + '", depth=5})'
+    )
+
+    def test_no_doubled_prefix(self):
+        from vcfops_supermetrics.crossref import resolve_sm_formula
+
+        out = resolve_sm_formula(
+            self.PREFIXED_FORMULA, CONSUMER_NAME, {REF_NAME: REF_UUID}
+        )
+        assert "Super Metric|Super Metric" not in out, out
+        assert out.count(RESOLVED_TOKEN) == 1, out
+        assert "@supermetric" not in out
+
+    def test_matches_the_unprefixed_form(self):
+        from vcfops_supermetrics.crossref import resolve_sm_formula
+
+        prefixed = resolve_sm_formula(
+            self.PREFIXED_FORMULA, CONSUMER_NAME, {REF_NAME: REF_UUID}
+        )
+        bare = resolve_sm_formula(
+            self.PREFIXED_FORMULA.replace("Super Metric|@supermetric", "@supermetric"),
+            CONSUMER_NAME,
+            {REF_NAME: REF_UUID},
+        )
+        assert prefixed == bare
+
+    def test_bundle_builder_emits_no_doubled_prefix(self, tmp_path):
+        """End to end through the path that shipped the defect."""
+        from vcfops_packaging.builder import _render_supermetrics_dict
+
+        ref = _load(tmp_path, REF_UUID, REF_NAME, PLAIN_FORMULA)
+        consumer = _load(tmp_path, CONSUMER_UUID, CONSUMER_NAME, self.PREFIXED_FORMULA)
+
+        class _B:
+            supermetrics = [ref, consumer]
+
+        out = _render_supermetrics_dict(_B())
+        formula = out[CONSUMER_UUID]["formula"]
+        assert "Super Metric|Super Metric" not in formula, formula
+        assert f"metric={RESOLVED_TOKEN}" in formula, formula
+
+
+class TestNearMissSyntaxIsRejected:
+    """A near-miss that the regex does not match must not ship the literal."""
+
+    @pytest.mark.parametrize("formula", [
+        'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+        'metric=@supermetric: "' + REF_NAME + '", depth=5})',
+        'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+        "metric=@supermetric:" + REF_NAME + ", depth=5})",
+    ])
+    def test_literal_token_surviving_is_a_hard_error(self, formula):
+        from vcfops_supermetrics.crossref import (
+            SuperMetricCrossRefError,
+            resolve_sm_formula,
+        )
+
+        with pytest.raises(SuperMetricCrossRefError) as exc:
+            resolve_sm_formula(formula, CONSUMER_NAME, {REF_NAME: REF_UUID})
+        assert "@supermetric" in str(exc.value)
+
+
+class TestSupermetricWithoutIdIsNamed:
+    """An in-scope SM with no id gets its own diagnostic, not the generic one."""
+
+    def test_message_names_the_missing_id(self):
+        from vcfops_supermetrics.crossref import (
+            SuperMetricCrossRefError,
+            resolve_sm_formula,
+        )
+
+        with pytest.raises(SuperMetricCrossRefError) as exc:
+            resolve_sm_formula(CONSUMER_FORMULA, CONSUMER_NAME, {REF_NAME: None})
+        msg = str(exc.value)
+        assert REF_NAME in msg
+        assert "no id" in msg, msg
+
+    def test_map_builder_keeps_the_idless_entry(self):
+        from vcfops_supermetrics.crossref import sm_name_to_uuid_map
+
+        class _SM:
+            def __init__(self, name, sm_id):
+                self.name = name
+                self.id = sm_id
+
+        m = sm_name_to_uuid_map([_SM(REF_NAME, None), _SM(PLAIN_NAME, PLAIN_UUID)])
+        assert m == {REF_NAME: None, PLAIN_NAME: PLAIN_UUID}
+
 # --- native bundle builder (also feeds discrete + release builders) ---------
 
 class TestNativeBundleBuilder:

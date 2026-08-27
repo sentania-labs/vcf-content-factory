@@ -38,7 +38,20 @@ __all__ = [
 
 # Regex matching @supermetric:"<name>" or @supermetric:'<name>' inside a formula.
 # Capture group 1 is the bare SM name.
-SM_CROSSREF_RE = re.compile(r'''@supermetric:["']([^"']+)["']''')
+#
+# The optional leading ``Super Metric|`` is consumed deliberately.  The token
+# expands to the WHOLE wire term, prefix included, so an author who also writes
+# the prefix by hand (``metric=Super Metric|@supermetric:"X"``) would otherwise
+# get ``Super Metric|Super Metric|sm_<uuid>``, which VCF Ops cannot parse and
+# which no build step would flag.  Absorbing the adjacent prefix makes the
+# substitution prefix-idempotent, the same way it is already sm_<uuid>-idempotent.
+SM_CROSSREF_RE = re.compile(r'''(?:Super Metric\|)?@supermetric:["']([^"']+)["']''')
+
+# Any surviving occurrence of this literal after substitution means the formula
+# carried a near-miss of the token syntax (a space after the colon, an unquoted
+# name) that SM_CROSSREF_RE did not match.  Shipping it is the exact P1 this
+# module exists to eliminate, so it is a hard error rather than a passthrough.
+_SM_CROSSREF_LITERAL = "@supermetric"
 
 # Default remediation hint appended to the error message.  Callers that know a
 # more specific remedy (e.g. "add it to bundled_content.supermetrics in
@@ -63,18 +76,21 @@ def crossref_names(formula: str) -> List[str]:
     return SM_CROSSREF_RE.findall(formula or "")
 
 
-def sm_name_to_uuid_map(supermetrics: Iterable) -> Dict[str, str]:
+def sm_name_to_uuid_map(supermetrics: Iterable) -> Dict[str, Optional[str]]:
     """Build the ``{name: uuid}`` lookup from an iterable of SuperMetricDef.
 
-    Accepts anything exposing ``.name`` and ``.id``.
+    Accepts anything exposing ``.name`` and ``.id``.  An SM with no ``id`` is
+    kept with a ``None`` value rather than dropped, so that a reference to it
+    reports the real cause ("in scope but has no id") instead of the generic
+    "could not be resolved".
     """
-    return {sm.name: sm.id for sm in supermetrics if getattr(sm, "id", None)}
+    return {sm.name: (getattr(sm, "id", None) or None) for sm in supermetrics}
 
 
 def resolve_sm_formula(
     formula: str,
     sm_name: str,
-    sm_name_to_uuid: Mapping[str, str],
+    sm_name_to_uuid: Mapping[str, Optional[str]],
     *,
     error_cls: Type[Exception] = SuperMetricCrossRefError,
     hint: str = _DEFAULT_HINT,
@@ -105,11 +121,19 @@ def resolve_sm_formula(
 
     Raises:
         error_cls: If a token references a name that neither ``sm_name_to_uuid``
-            nor ``fallback_lookup`` can resolve.
+            nor ``fallback_lookup`` can resolve, or if a literal ``@supermetric``
+            survives substitution (malformed reference syntax).
 
     Already-resolved ``Super Metric|sm_<uuid>`` tokens are left untouched
     (idempotent), so this function is safe to call on already-resolved formulas.
     A formula with no ``@supermetric:`` token is returned unchanged.
+
+    An immediately-preceding ``Super Metric|`` is absorbed into the match, so
+    ``metric=Super Metric|@supermetric:"X"`` resolves to a single
+    ``metric=Super Metric|sm_<uuid>`` rather than a doubled prefix.
+
+    A malformed near-miss (``@supermetric: "X"`` with a space, ``@supermetric:X``
+    unquoted) raises ``error_cls`` instead of passing the literal token through.
     """
     if not formula:
         return formula
@@ -120,6 +144,13 @@ def resolve_sm_formula(
         if uuid is None and fallback_lookup is not None:
             uuid = fallback_lookup(ref_name)
         if uuid is None:
+            if ref_name in sm_name_to_uuid:
+                raise error_cls(
+                    f"Super metric '{sm_name}': formula references "
+                    f"@supermetric:\"{ref_name}\" and that super metric is in "
+                    f"scope but carries no id, so it has no sm_<uuid> to "
+                    f"reference.  Give it an 'id:' in its YAML."
+                )
             raise error_cls(
                 f"Super metric '{sm_name}': formula references "
                 f"@supermetric:\"{ref_name}\" but that super metric could not "
@@ -127,4 +158,17 @@ def resolve_sm_formula(
             )
         return f"Super Metric|sm_{uuid}"
 
-    return SM_CROSSREF_RE.sub(_replace, formula)
+    resolved = SM_CROSSREF_RE.sub(_replace, formula)
+
+    # Near-miss syntax guard: @supermetric: followed by a space, or an unquoted
+    # name, does not match SM_CROSSREF_RE and would otherwise ship the literal
+    # token into the pak / bundle / live instance.
+    if _SM_CROSSREF_LITERAL in resolved:
+        raise error_cls(
+            f"Super metric '{sm_name}': formula still contains a literal "
+            f"'@supermetric' after cross-reference resolution, so the "
+            f"reference syntax is malformed.  The only accepted form is "
+            f"@supermetric:\"<exact name>\" (double or single quotes, no "
+            f"space after the colon)."
+        )
+    return resolved

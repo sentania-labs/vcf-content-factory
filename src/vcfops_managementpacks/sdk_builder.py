@@ -914,14 +914,11 @@ def _load_bundled_content(
     _views_by_name = {v.name: v for v in views}
     for d in dashboards:
         try:
-            d.validate(
-                _views_by_name,
-                enforce_framework_prefix=False,
-                # A pak may reference a view shipped by a sibling pak installed
-                # alongside it, so an unmatched bare name is not an authoring
-                # mistake here the way it is in the repo-wide corpus.
-                allow_external_views=True,
-            )
+            # A pak may reference a view shipped by a sibling pak installed
+            # alongside it; that is authored as the sibling view's UUID, which
+            # the loader's raw-UUID passthrough accepts.  An unmatched bare
+            # name is a typo here exactly as it is in the repo-wide corpus.
+            d.validate(_views_by_name, enforce_framework_prefix=False)
         except Exception as exc:
             src = getattr(d, "source_path", None) or d.name
             raise SdkBuildError(

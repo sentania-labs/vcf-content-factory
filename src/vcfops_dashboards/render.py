@@ -32,6 +32,7 @@ from .loader import (
     AlertListConfig, ProblemAlertsListConfig,
     HeatmapConfig, HeatmapTab, HeatmapColorThreshold,
     PropertyListConfig, ResourceRelationshipAdvancedConfig,
+    _UUID_RE as _VIEW_UUID_RE,
 )
 
 
@@ -2218,15 +2219,27 @@ def _build_dashboard_obj(
             widgets_json.append(_resource_list_widget(w, kind_index, dashboard.id))
         elif w.type == "View":
             # Resolve to a bundled ViewDef when available; fall back to the raw
-            # UUID for external (platform/other-MP) views.  A bare name that
-            # isn't bundled cannot reach here, loader.validate() already rejects
-            # that case as an authoring error.
+            # UUID for external (platform/other-MP) views.  On a validated
+            # dashboard a bare name that isn't bundled cannot reach here:
+            # loader.validate() rejects it as an authoring error on every path,
+            # pak included.  render() can still be driven on unvalidated input,
+            # so the two cases are reported distinctly rather than both being
+            # called a UUID.
             _view_ref: "ViewDef | str" = views_by_name.get(w.view_name, w.view_name)
             if _view_ref is w.view_name and _view_ref not in views_by_name:
                 import sys as _sys
+                if _VIEW_UUID_RE.match(w.view_name or ""):
+                    _msg = f"external view UUID {w.view_name!r}, emitted verbatim"
+                else:
+                    _msg = (
+                        f"view {w.view_name!r} is not a bundled view and is not a "
+                        f"UUID, emitting it verbatim into viewDefinitionId; the "
+                        f"widget will render blank unless the platform resolves "
+                        f"that string"
+                    )
                 print(
                     f"  INFO: dashboard {w.dashboard_name!r} widget {w.local_id!r}: "
-                    f"external view UUID {w.view_name!r}, emitted verbatim",
+                    f"{_msg}",
                     file=_sys.stderr,
                 )
             widgets_json.append(_view_widget(w, _view_ref, kind_index, resource_index))

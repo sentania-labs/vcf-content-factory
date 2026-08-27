@@ -91,6 +91,13 @@ _SUPER_METRIC_PREFIX = "super metric|"
 # recognise it too, or it hard-fails treating the SM name as an unknown
 # built-in metric key.
 _UNRESOLVED_SM_REF_PREFIX = "supermetric:"
+# Unresolved authoring-time SM cross-reference inside an *SM formula*, e.g.
+# metric=@supermetric:"<name>" (same skill table, SM formula -> SM row). Note
+# the leading "@": the formula form and the view-column form differ by that one
+# character, so the view constant above does not cover it. Formulas keep this
+# token until emit/push time (vcfops_supermetrics.crossref), so the auditor,
+# which walks loader objects, sees the unresolved form and must skip it.
+_UNRESOLVED_SM_FORMULA_REF_PREFIX = "@supermetric:"
 
 
 def _normalize_instanced_group_key(attribute: str) -> str:
@@ -122,6 +129,7 @@ def _is_sm_ref(metric_key: str) -> bool:
     return (
         k.lower().startswith(_SUPER_METRIC_PREFIX)
         or k.lower().startswith(_UNRESOLVED_SM_REF_PREFIX)
+        or k.lower().startswith(_UNRESOLVED_SM_FORMULA_REF_PREFIX)
         or bool(_SM_KEY_RE.match(k))
     )
 
