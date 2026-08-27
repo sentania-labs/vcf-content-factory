@@ -1,0 +1,130 @@
+"""Shared resolver for ``@supermetric:"<name>"`` formula cross-references.
+
+Authors write SM-to-SM references in a formula by *name*, never by raw UUID
+(the ``vcfops-project-conventions`` skill, "Cross-reference syntax"):
+
+    ${this, metric=cpu|demandmhz} / ${this, attribute=@supermetric:"[VCF Content Factory] Cluster Capacity"}
+
+VCF Ops cannot parse ``@supermetric:``.  The wire form is
+``Super Metric|sm_<uuid>``, confirmed against the vCommunity source pak whose
+``describe.xml``-referenced SM formulas use exactly that prefix.  Every code
+path that *emits* a formula into a pak / bundle / zip, or *pushes* one to a
+live instance, must therefore resolve the token first.
+
+This module is the single home of that resolution.  It previously lived only
+in ``vcfops_managementpacks.sdk_builder`` (Tier 2 pak path), which meant the
+native bundle builder, the discrete/release builders and the live sync path
+all shipped the literal ``@supermetric:"..."`` token verbatim.
+
+An unresolvable name is always a hard error: emitting the literal token
+produces a corrupt super metric that VCF Ops silently fails to evaluate, so
+failing loudly at build/push time is strictly safer than shipping it.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Callable, Dict, Iterable, List, Mapping, Optional, Type
+
+__all__ = [
+    "SM_CROSSREF_RE",
+    "SuperMetricCrossRefError",
+    "crossref_names",
+    "has_crossref",
+    "resolve_sm_formula",
+    "sm_name_to_uuid_map",
+]
+
+
+# Regex matching @supermetric:"<name>" or @supermetric:'<name>' inside a formula.
+# Capture group 1 is the bare SM name.
+SM_CROSSREF_RE = re.compile(r'''@supermetric:["']([^"']+)["']''')
+
+# Default remediation hint appended to the error message.  Callers that know a
+# more specific remedy (e.g. "add it to bundled_content.supermetrics in
+# adapter.yaml") pass their own via ``hint``.
+_DEFAULT_HINT = (
+    "Add that super metric to this bundle, or remove the cross-reference "
+    "from the formula."
+)
+
+
+class SuperMetricCrossRefError(Exception):
+    """Raised when a formula references an SM name that cannot be resolved."""
+
+
+def has_crossref(formula: str) -> bool:
+    """Return True if ``formula`` carries at least one ``@supermetric:`` token."""
+    return bool(SM_CROSSREF_RE.search(formula or ""))
+
+
+def crossref_names(formula: str) -> List[str]:
+    """Return every SM name referenced by ``formula``, in order of appearance."""
+    return SM_CROSSREF_RE.findall(formula or "")
+
+
+def sm_name_to_uuid_map(supermetrics: Iterable) -> Dict[str, str]:
+    """Build the ``{name: uuid}`` lookup from an iterable of SuperMetricDef.
+
+    Accepts anything exposing ``.name`` and ``.id``.
+    """
+    return {sm.name: sm.id for sm in supermetrics if getattr(sm, "id", None)}
+
+
+def resolve_sm_formula(
+    formula: str,
+    sm_name: str,
+    sm_name_to_uuid: Mapping[str, str],
+    *,
+    error_cls: Type[Exception] = SuperMetricCrossRefError,
+    hint: str = _DEFAULT_HINT,
+    fallback_lookup: Optional[Callable[[str], Optional[str]]] = None,
+) -> str:
+    """Resolve ``@supermetric:"<name>"`` cross-reference tokens in a formula.
+
+    Replaces each ``@supermetric:"<name>"`` (or single-quoted variant) with the
+    wire token ``Super Metric|sm_<uuid>`` where ``<uuid>`` is the super metric
+    whose ``name`` matches ``<name>`` exactly.
+
+    Args:
+        formula:          Raw formula string from the YAML ``formula:`` field.
+        sm_name:          Display name of the SM being emitted (error messages).
+        sm_name_to_uuid:  Mapping of in-scope SM display name -> UUID.
+        error_cls:        Exception type raised on an unresolvable name, so each
+                          caller keeps its own error taxonomy (SdkBuildError for
+                          the pak path, VCFOpsError for the live sync path).
+        hint:             Caller-specific remediation sentence appended to the
+                          error message.
+        fallback_lookup:  Optional callable ``name -> uuid or None`` consulted
+                          only when ``sm_name_to_uuid`` misses.  The live sync
+                          path uses this to resolve against super metrics that
+                          already exist on the target instance.
+
+    Returns:
+        Formula with all ``@supermetric:`` tokens replaced.
+
+    Raises:
+        error_cls: If a token references a name that neither ``sm_name_to_uuid``
+            nor ``fallback_lookup`` can resolve.
+
+    Already-resolved ``Super Metric|sm_<uuid>`` tokens are left untouched
+    (idempotent), so this function is safe to call on already-resolved formulas.
+    A formula with no ``@supermetric:`` token is returned unchanged.
+    """
+    if not formula:
+        return formula
+
+    def _replace(m: "re.Match") -> str:
+        ref_name = m.group(1)
+        uuid = sm_name_to_uuid.get(ref_name)
+        if uuid is None and fallback_lookup is not None:
+            uuid = fallback_lookup(ref_name)
+        if uuid is None:
+            raise error_cls(
+                f"Super metric '{sm_name}': formula references "
+                f"@supermetric:\"{ref_name}\" but that super metric could not "
+                f"be resolved.  {hint}"
+            )
+        return f"Super Metric|sm_{uuid}"
+
+    return SM_CROSSREF_RE.sub(_replace, formula)

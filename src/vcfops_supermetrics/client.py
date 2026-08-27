@@ -25,6 +25,16 @@ from typing import Iterable, Iterator, Optional
 # Re-export from common so all existing callers keep working.
 from vcfops_common.client import VCFOpsClient, VCFOpsError  # noqa: F401
 
+from .crossref import resolve_sm_formula
+
+# Remediation sentence for a live sync: the referenced SM must be synced too, or
+# already exist on the target instance.
+_SM_CROSSREF_HINT_SYNC = (
+    "It is neither in this sync batch nor present on the target instance.  "
+    "Sync that super metric first (or in the same batch), or remove the "
+    "cross-reference from the formula."
+)
+
 # Supermetric-specific methods are mixed into VCFOpsClient via a
 # subclass approach that patches back onto the base name, preserving
 # the public API surface (VCFOpsClient.from_env() returns an object
@@ -533,6 +543,22 @@ class _SMExtendedClient(VCFOpsClient):
             self._marker_filename = discover_marker_filename(self)
         marker = self._marker_filename
 
+        # SM-to-SM cross-reference resolution.  Formulas carry the authoring-time
+        # token @supermetric:"<name>"; VCF Ops cannot parse it, so resolve to the
+        # native Super Metric|sm_<uuid> wire token before pushing.  Names are
+        # resolved against this batch first, then against super metrics already
+        # on the target instance (one GET per otherwise-unresolved name, cached).
+        name_to_uuid = {
+            sm["name"]: sm["id"] for sm in sms if sm.get("id") and sm.get("name")
+        }
+        remote_cache: dict = {}
+
+        def _lookup_remote(ref_name: str):
+            if ref_name not in remote_cache:
+                existing = self.find_by_name(ref_name)
+                remote_cache[ref_name] = (existing or {}).get("id")
+            return remote_cache[ref_name]
+
         sm_dict: dict = {}
         for sm in sms:
             sm_id = sm.get("id")
@@ -543,7 +569,14 @@ class _SMExtendedClient(VCFOpsClient):
                 )
             sm_dict[sm_id] = {
                 "name": sm["name"],
-                "formula": self._normalize_formula(sm["formula"]),
+                "formula": resolve_sm_formula(
+                    self._normalize_formula(sm["formula"]),
+                    sm["name"],
+                    name_to_uuid,
+                    error_cls=VCFOpsError,
+                    hint=_SM_CROSSREF_HINT_SYNC,
+                    fallback_lookup=_lookup_remote,
+                ),
                 "description": sm.get("description", "") or "",
                 "unitId": sm.get("unitId", "") or "",
                 "resourceKinds": sm.get("resourceKinds") or [],

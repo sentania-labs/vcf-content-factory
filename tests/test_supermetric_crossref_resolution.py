@@ -1,0 +1,301 @@
+"""``@supermetric:"<name>"`` must be resolved on every emit and push path.
+
+The resolver used to live only in ``vcfops_managementpacks.sdk_builder`` (the
+Tier 2 pak path).  Every other path that emits or pushes a formula copied the
+authoring-time token verbatim:
+
+  * ``vcfops_packaging.builder._render_supermetrics_dict`` (native bundle zip,
+    and via it the discrete and release builders) did
+    ``" ".join(sm.formula.split())`` and nothing else;
+  * ``vcfops_supermetrics.client.import_supermetrics_bundle`` (live sync)
+    normalized whitespace and pushed the literal token.
+
+VCF Ops cannot parse ``@supermetric:``, so the resulting super metric is silently
+broken.  The resolver now lives in ``vcfops_supermetrics.crossref`` and every
+path uses it.
+
+Per path this asserts the same three behaviours: a resolvable ref rewrites to
+``Super Metric|sm_<uuid>``, an unresolvable one raises with a useful message,
+and a formula with no token is unchanged.
+"""
+from __future__ import annotations
+
+import sys
+import textwrap
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SRC = REPO_ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+REF_UUID = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"
+CONSUMER_UUID = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"
+PLAIN_UUID = "cccccccc-3333-4333-8333-cccccccccccc"
+
+REF_NAME = "[VCF Content Factory] Ref SM"
+CONSUMER_NAME = "[VCF Content Factory] Consumer SM"
+PLAIN_NAME = "[VCF Content Factory] Plain SM"
+
+PLAIN_FORMULA = "avg(${adaptertype=VMWARE, objecttype=HostSystem, metric=cpu|usage_average, depth=5})"
+CONSUMER_FORMULA = (
+    'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+    'attribute=@supermetric:"' + REF_NAME + '", depth=5})'
+)
+MISSING_FORMULA = (
+    'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+    'attribute=@supermetric:"[VCF Content Factory] Nowhere SM", depth=5})'
+)
+
+RESOLVED_TOKEN = f"Super Metric|sm_{REF_UUID}"
+
+
+def _sm_yaml(sm_id: str, name: str, formula: str) -> str:
+    return textwrap.dedent(f"""\
+        id: {sm_id}
+        name: "{name}"
+        formula: '{formula}'
+        description: "probe"
+        unit_id: percent
+        resource_kinds:
+          - resource_kind_key: HostSystem
+            adapter_kind_key: VMWARE
+        """)
+
+
+def _load(tmp_path: Path, sm_id: str, name: str, formula: str):
+    from vcfops_supermetrics.loader import load_file
+
+    p = tmp_path / f"{sm_id}.yaml"
+    p.write_text(_sm_yaml(sm_id, name, formula))
+    return load_file(p)
+
+
+@pytest.fixture()
+def sms(tmp_path):
+    return {
+        "ref": _load(tmp_path, REF_UUID, REF_NAME, PLAIN_FORMULA),
+        "consumer": _load(tmp_path, CONSUMER_UUID, CONSUMER_NAME, CONSUMER_FORMULA),
+        "plain": _load(tmp_path, PLAIN_UUID, PLAIN_NAME, PLAIN_FORMULA),
+        "orphan": _load(tmp_path, CONSUMER_UUID, CONSUMER_NAME, MISSING_FORMULA),
+    }
+
+
+# --- the shared resolver itself ---------------------------------------------
+
+class TestSharedResolver:
+    def test_resolvable_ref_rewrites(self):
+        from vcfops_supermetrics.crossref import resolve_sm_formula
+
+        out = resolve_sm_formula(CONSUMER_FORMULA, CONSUMER_NAME, {REF_NAME: REF_UUID})
+        assert RESOLVED_TOKEN in out
+        assert "@supermetric:" not in out
+
+    def test_unresolvable_ref_raises_useful_message(self):
+        from vcfops_supermetrics.crossref import (
+            SuperMetricCrossRefError,
+            resolve_sm_formula,
+        )
+
+        with pytest.raises(SuperMetricCrossRefError) as exc:
+            resolve_sm_formula(MISSING_FORMULA, CONSUMER_NAME, {})
+        msg = str(exc.value)
+        assert CONSUMER_NAME in msg, "message must name the SM with the bad formula"
+        assert "[VCF Content Factory] Nowhere SM" in msg, "message must name the missing SM"
+
+    def test_formula_without_token_unchanged(self):
+        from vcfops_supermetrics.crossref import resolve_sm_formula
+
+        assert resolve_sm_formula(PLAIN_FORMULA, PLAIN_NAME, {}) == PLAIN_FORMULA
+
+    def test_already_resolved_token_is_idempotent(self):
+        from vcfops_supermetrics.crossref import resolve_sm_formula
+
+        once = resolve_sm_formula(CONSUMER_FORMULA, CONSUMER_NAME, {REF_NAME: REF_UUID})
+        twice = resolve_sm_formula(once, CONSUMER_NAME, {REF_NAME: REF_UUID})
+        assert once == twice
+
+    def test_fallback_lookup_used_when_map_misses(self):
+        from vcfops_supermetrics.crossref import resolve_sm_formula
+
+        out = resolve_sm_formula(
+            CONSUMER_FORMULA, CONSUMER_NAME, {},
+            fallback_lookup=lambda name: REF_UUID if name == REF_NAME else None,
+        )
+        assert RESOLVED_TOKEN in out
+
+
+# --- native bundle builder (also feeds discrete + release builders) ---------
+
+class TestNativeBundleBuilder:
+    @staticmethod
+    def _bundle(supermetrics):
+        from vcfops_packaging.loader import Bundle
+
+        return Bundle(
+            name="probe", description="", sync_enabled=True,
+            supermetrics=list(supermetrics), views=[], dashboards=[],
+            customgroups=[], reports=[], symptoms=[], alerts=[],
+            recommendations=[], builtin_metric_enables=[], source_path=None,
+        )
+
+    def test_resolvable_ref_rewrites(self, sms):
+        from vcfops_packaging.builder import _render_supermetrics_dict
+
+        out = _render_supermetrics_dict(self._bundle([sms["ref"], sms["consumer"]]))
+        assert RESOLVED_TOKEN in out[CONSUMER_UUID]["formula"]
+        assert "@supermetric:" not in out[CONSUMER_UUID]["formula"]
+
+    def test_unresolvable_ref_raises_useful_message(self, sms):
+        from vcfops_packaging.builder import _render_supermetrics_dict
+        from vcfops_packaging.loader import BundleValidationError
+
+        with pytest.raises(BundleValidationError) as exc:
+            _render_supermetrics_dict(self._bundle([sms["orphan"]]))
+        msg = str(exc.value)
+        assert CONSUMER_NAME in msg
+        assert "[VCF Content Factory] Nowhere SM" in msg
+
+    def test_formula_without_token_unchanged(self, sms):
+        from vcfops_packaging.builder import _render_supermetrics_dict
+
+        out = _render_supermetrics_dict(self._bundle([sms["plain"]]))
+        assert out[PLAIN_UUID]["formula"] == PLAIN_FORMULA
+
+
+# --- discrete builder: pulls the referent into the component ----------------
+
+class TestDiscreteBuilderCrossRefExpansion:
+    def test_referenced_sm_is_pulled_into_the_component(self, sms):
+        from vcfops_packaging.discrete_builder import _expand_sm_crossrefs
+
+        expanded = _expand_sm_crossrefs([sms["consumer"]], [sms["ref"], sms["consumer"]])
+        assert [s.name for s in expanded] == [CONSUMER_NAME, REF_NAME]
+
+    def test_unresolvable_ref_raises_useful_message(self, sms):
+        from vcfops_packaging.discrete_builder import (
+            DiscreteBuilderError,
+            _expand_sm_crossrefs,
+        )
+
+        with pytest.raises(DiscreteBuilderError) as exc:
+            _expand_sm_crossrefs([sms["orphan"]], [sms["orphan"]])
+        msg = str(exc.value)
+        assert CONSUMER_NAME in msg
+        assert "[VCF Content Factory] Nowhere SM" in msg
+
+    def test_formula_without_token_is_a_noop(self, sms):
+        from vcfops_packaging.discrete_builder import _expand_sm_crossrefs
+
+        expanded = _expand_sm_crossrefs([sms["plain"]], [sms["plain"], sms["ref"]])
+        assert [s.name for s in expanded] == [PLAIN_NAME]
+
+
+# --- live sync path ---------------------------------------------------------
+
+def _fake_client_cls():
+    """Subclass the real SM client so _normalize_formula and friends are real.
+
+    Only the pieces the resolver touches are exercised; the HTTP call is stubbed
+    out by the caller and the assembled sm_dict is captured from the zip.
+    """
+    from vcfops_supermetrics.client import VCFOpsClient
+
+    class _FakeClient(VCFOpsClient):
+        def __init__(self, remote_by_name=None):  # noqa: D107 - no HTTP session
+            self.remote_by_name = remote_by_name or {}
+            self.captured = None
+            self.find_calls = []
+            self._marker_filename = None
+
+        def find_by_name(self, name):
+            self.find_calls.append(name)
+            uuid = self.remote_by_name.get(name)
+            return {"id": uuid, "name": name} if uuid else None
+
+    return _FakeClient
+
+
+
+def _run_import(client, sms_wire, monkeypatch):
+    """Call the real import_supermetrics_bundle body against _FakeClient."""
+    import vcfops_supermetrics.client as sm_client
+    import vcfops_dashboards.client as dash_client
+
+    monkeypatch.setattr(dash_client, "get_current_user", lambda c: {"id": "owner"})
+    monkeypatch.setattr(dash_client, "discover_marker_filename", lambda c: "marker")
+
+    captured = {}
+
+    def _fake_import(c, zip_bytes):
+        import io
+        import json
+        import zipfile
+
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
+            captured.update(json.loads(z.read("supermetrics.json")))
+        return {"operationSummaries": [
+            {"contentType": "SUPER_METRICS", "imported": len(captured), "skipped": 0}
+        ]}
+
+    monkeypatch.setattr(dash_client, "import_content_zip", _fake_import)
+
+    real = sm_client.VCFOpsClient.import_supermetrics_bundle
+    client._marker_filename = None
+    real(client, sms_wire)
+    return captured
+
+
+def _wire(sm):
+    return {
+        "id": sm.id, "name": sm.name, "formula": sm.formula,
+        "description": sm.description, "unitId": sm.unit_id,
+        "resourceKinds": sm.resource_kinds,
+    }
+
+
+class TestLiveSyncPath:
+    def test_resolvable_ref_rewrites(self, sms, monkeypatch):
+        client = _fake_client_cls()()
+        out = _run_import(client, [_wire(sms["ref"]), _wire(sms["consumer"])], monkeypatch)
+        assert RESOLVED_TOKEN in out[CONSUMER_UUID]["formula"]
+        assert "@supermetric:" not in out[CONSUMER_UUID]["formula"]
+        assert client.find_calls == [], "in-batch names must not hit the server"
+
+    def test_ref_resolved_against_existing_instance_sm(self, sms, monkeypatch):
+        client = _fake_client_cls()(remote_by_name={REF_NAME: REF_UUID})
+        out = _run_import(client, [_wire(sms["consumer"])], monkeypatch)
+        assert RESOLVED_TOKEN in out[CONSUMER_UUID]["formula"]
+        assert client.find_calls == [REF_NAME]
+
+    def test_unresolvable_ref_raises_useful_message(self, sms, monkeypatch):
+        from vcfops_common.client import VCFOpsError
+
+        client = _fake_client_cls()()
+        with pytest.raises(VCFOpsError) as exc:
+            _run_import(client, [_wire(sms["orphan"])], monkeypatch)
+        msg = str(exc.value)
+        assert CONSUMER_NAME in msg
+        assert "[VCF Content Factory] Nowhere SM" in msg
+
+    def test_formula_without_token_unchanged(self, sms, monkeypatch):
+        client = _fake_client_cls()()
+        out = _run_import(client, [_wire(sms["plain"])], monkeypatch)
+        assert out[PLAIN_UUID]["formula"] == PLAIN_FORMULA
+
+
+# --- pak path still delegates to the shared resolver ------------------------
+
+def test_sdk_builder_uses_the_shared_resolver():
+    from vcfops_managementpacks import sdk_builder
+    from vcfops_supermetrics import crossref
+
+    assert sdk_builder._SM_CROSSREF_RE is crossref.SM_CROSSREF_RE, (
+        "sdk_builder must not carry a second copy of the cross-reference regex"
+    )
+    out = sdk_builder._resolve_sm_formula(
+        CONSUMER_FORMULA, CONSUMER_NAME, {REF_NAME: REF_UUID}
+    )
+    assert RESOLVED_TOKEN in out

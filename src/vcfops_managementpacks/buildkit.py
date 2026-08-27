@@ -97,6 +97,7 @@ _FACTORY_SOURCES = {
     "dashboard_render.py": _SRC_ROOT / "vcfops_dashboards" / "render.py",
     "dashboard_yaml_utils.py": _SRC_ROOT / "vcfops_dashboards" / "yaml_utils.py",
     "sm_loader.py": _SRC_ROOT / "vcfops_supermetrics" / "loader.py",
+    "sm_crossref.py": _SRC_ROOT / "vcfops_supermetrics" / "crossref.py",
     "symptoms_loader.py": _SRC_ROOT / "vcfops_symptoms" / "loader.py",
     "alerts_loader.py": _SRC_ROOT / "vcfops_alerts" / "loader.py",
     "alerts_render.py": _SRC_ROOT / "vcfops_alerts" / "render.py",
@@ -145,6 +146,12 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from vcfops_dashboards\.render import render_view_def_fragments",
             "from .dashboard_render import render_view_def_fragments",
+        ),
+        # from vcfops_supermetrics import crossref as _crossref  (module-level;
+        # the shared @supermetric:"<name>" formula cross-reference resolver)
+        (
+            r"from vcfops_supermetrics import crossref as _crossref",
+            "from . import sm_crossref as _crossref",
         ),
         # from vcfops_supermetrics.loader import load_file as _load_sm  (inline in _load_bundled_content)
         (

@@ -15,6 +15,34 @@ anything that creates or references content objects.
   dashboards) survives cross-instance installation only if every
   object lands with the **same UUID on every instance**.
 
+### Where `@supermetric:"<name>"` gets resolved
+
+Authors write the SM-to-SM reference by name, as
+`@supermetric:"<exact name>"` inside the formula. VCF Ops cannot parse that
+token; it must be rewritten to `Super Metric|sm_<uuid>` before the formula
+reaches the platform. Resolution therefore happens at **emit/push time**, not
+at load time: `SuperMetricDef.formula` still holds the authoring-time token
+after `load_file()`, by design, so the YAML stays UUID-free and diffable.
+
+The one resolver lives in `src/vcfops_supermetrics/crossref.py`
+(`resolve_sm_formula`). Every path that emits or pushes a formula calls it:
+
+| Path | Call site | Name scope |
+|---|---|---|
+| Native bundle zip | `vcfops_packaging.builder._render_supermetrics_dict` | the bundle's own SMs |
+| Discrete / release zip | same (via `discrete_builder`, `release_builder`) | component SMs, after `_expand_sm_crossrefs` pulls in referents |
+| Live sync | `vcfops_supermetrics.client.import_supermetrics_bundle` | the sync batch, then `find_by_name` against the target instance |
+| Tier 2 pak | `vcfops_managementpacks.sdk_builder._resolve_sm_formula` | `bundled_content.supermetrics` |
+
+An unresolvable name is a **hard error** on every path. Emitting the literal
+token produces a super metric the platform silently fails to evaluate, so
+failing at build/push time is the cheaper failure. Resolution is idempotent:
+an already-resolved `Super Metric|sm_<uuid>` is left alone.
+
+The reverse direction (`vcfops_supermetrics.reverse.rewrite_formula`,
+`vcfops_extractor`) turns `sm_<uuid>` back into `@supermetric:"<name>"` so
+extracted content round-trips through the authoring form.
+
 ## Why `POST /api/supermetrics` is a dead end
 
 The public create endpoint rejects caller-supplied `id`:

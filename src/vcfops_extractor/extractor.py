@@ -1069,6 +1069,10 @@ def _metric_spec_to_yaml(spec) -> dict:
         d["label"] = spec.label
     if spec.is_string_metric:
         d["is_string_metric"] = True
+    # Gauge full-scale ceiling; without it a re-render emits maxValue: "" and
+    # the component falls back to its own default instead of the authored one.
+    if getattr(spec, "max_value", None) is not None:
+        d["max_value"] = spec.max_value
     return d
 
 
@@ -1158,6 +1162,17 @@ def _widget_to_yaml_dict(widget, view_name_map: dict) -> dict:
                 d["show_dt"] = True
             if not getattr(cfg, "refresh_content", True):
                 d["refresh_content"] = False
+            # Gauge layout settings.  Emitted only when non-default so existing
+            # extracted YAML is unchanged; the loader supplies the same
+            # defaults, so the re-rendered wire payload round-trips either way.
+            if getattr(cfg, "layout_mode", "fixedView") != "fixedView":
+                d["layout_mode"] = cfg.layout_mode
+            if getattr(cfg, "show_remaining", False):
+                d["show_remaining"] = True
+            if getattr(cfg, "show_percent_text", False):
+                d["show_percent_text"] = True
+            if getattr(cfg, "focus_on_percent", False):
+                d["focus_on_percent"] = True
         else:
             _warn(f"widget '{w.local_id}' (Scoreboard): no config; emitting best-effort shape")
             d["metrics"] = []
