@@ -53,8 +53,18 @@ it can never ship silently.
 
 **Near-miss syntax is a hard error, not a passthrough.** `@supermetric: "X"`
 (space after the colon) and `@supermetric:X` (unquoted) do not match the
-token regex. Any literal `@supermetric` surviving substitution raises, because
-shipping it is the same corrupt-SM outcome as an unresolvable name.
+token regex. Any literal `@supermetric` surviving substitution raises, in any
+case spelling, because shipping it is the same corrupt-SM outcome as an
+unresolvable name.
+
+**The token itself is case-insensitive, like the prefix.**
+`@SuperMetric:"X"` and `@SUPERMETRIC:"X"` resolve exactly as `@supermetric:"X"`
+does. They used to pass straight through: the resolver matched the token
+case-sensitively, and `vcfops_packaging.deps._is_sm_ref` lowercases before
+comparing, so the dependency audit classified a mis-cased token as an
+already-good SM reference and skipped it. Audit green, build green, literal
+token in the zip (PR #141 round 3). Only the *token* is forgiving: the
+referenced SM **name** in the quotes is still matched exactly.
 
 **`validate` proves nothing here.** The SM loader has no `@supermetric`
 awareness at all, by design (the formula stays in authoring form). The only

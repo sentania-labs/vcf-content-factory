@@ -54,8 +54,16 @@ _PREFIX_SRC = r"(?:(?i:super\s*metric)\s*\|\s*)"
 # cannot parse and which no build step would flag.  Absorbing every adjacent
 # prefix, in every spelling, makes the substitution prefix-idempotent the same
 # way it is already sm_<uuid>-idempotent.
+#
+# The ``@supermetric:`` token itself is matched case-insensitively for the same
+# reason the prefix is: ``vcfops_packaging.deps._is_sm_ref`` lowercases before
+# comparing, so ``@SuperMetric:"X"`` is already treated as an SM reference by
+# the dependency audit and is therefore invisible to it.  Matching it here means
+# a mis-cased token *resolves* instead of shipping verbatim.  The captured NAME
+# is still matched case-sensitively against the SM display name: names are
+# exact, only the token spelling is forgiving.
 SM_CROSSREF_RE = re.compile(
-    _PREFIX_SRC + r'''*@supermetric:["']([^"']+)["']'''
+    _PREFIX_SRC + r'''*(?i:@supermetric):["']([^"']+)["']'''
 )
 
 # Backstop for the same class: two or more adjacent prefixes surviving
@@ -64,13 +72,22 @@ SM_CROSSREF_RE = re.compile(
 # token at all (hand-written, or copied out of a broken export).  Emitting that
 # is as unparseable as emitting the literal token, so it is a hard error rather
 # than a silent passthrough.
+#
+# Known, accepted breadth (PR #141 round 4): ``_PREFIX_SRC`` allows whitespace
+# between "super" and "metric", so this also fires on ``Supermetric|Supermetric|x``
+# and on a 3+-segment key such as ``summary|super metric|super metric|count``.
+# Zero occurrences repo-wide, including all six pak clones; recorded so a future
+# false positive is recognised rather than re-diagnosed.
 _DOUBLED_PREFIX_RE = re.compile(_PREFIX_SRC + "{2,}")
 
 # Any surviving occurrence of this literal after substitution means the formula
 # carried a near-miss of the token syntax (a space after the colon, an unquoted
 # name) that SM_CROSSREF_RE did not match.  Shipping it is the exact P1 this
 # module exists to eliminate, so it is a hard error rather than a passthrough.
-_SM_CROSSREF_LITERAL = "@supermetric"
+# Case-insensitive: a mis-cased near-miss (``@SuperMetric: "X"``) is exactly as
+# unparseable to VCF Ops as a lowercase one, and the dependency audit cannot see
+# either, so both must fail loudly here.
+_SM_CROSSREF_LITERAL_RE = re.compile(r"@supermetric", re.I)
 
 # Default remediation hint appended to the error message.  Callers that know a
 # more specific remedy (e.g. "add it to bundled_content.supermetrics in
@@ -156,7 +173,9 @@ def resolve_sm_formula(
     silently.
 
     A malformed near-miss (``@supermetric: "X"`` with a space, ``@supermetric:X``
-    unquoted) raises ``error_cls`` instead of passing the literal token through.
+    unquoted) raises ``error_cls`` instead of passing the literal token through,
+    in any case spelling (``@SuperMetric:``, ``@SUPERMETRIC:``).  A well-formed
+    token resolves in any case spelling too.
     """
     if not formula:
         return formula
@@ -189,7 +208,7 @@ def resolve_sm_formula(
     # 1. Near-miss syntax: @supermetric: followed by a space, or an unquoted
     #    name, does not match SM_CROSSREF_RE and would otherwise ship the
     #    literal token into the pak / bundle / live instance.
-    if _SM_CROSSREF_LITERAL in resolved:
+    if _SM_CROSSREF_LITERAL_RE.search(resolved):
         raise error_cls(
             f"Super metric '{sm_name}': formula still contains a literal "
             f"'@supermetric' after cross-reference resolution, so the "

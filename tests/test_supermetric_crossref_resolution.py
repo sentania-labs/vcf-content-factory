@@ -225,6 +225,14 @@ class TestNearMissSyntaxIsRejected:
         'metric=@supermetric: "' + REF_NAME + '", depth=5})',
         'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
         "metric=@supermetric:" + REF_NAME + ", depth=5})",
+        # Round-3 review: the near-miss guard was case-sensitive, so a
+        # mis-cased near-miss shipped the literal token verbatim.  The
+        # dependency audit cannot see it either (``_is_sm_ref`` lowercases),
+        # so this was the silent-ship path.
+        'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+        'metric=@SuperMetric: "' + REF_NAME + '", depth=5})',
+        'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+        "metric=@SUPERMETRIC:" + REF_NAME + ", depth=5})",
     ])
     def test_literal_token_surviving_is_a_hard_error(self, formula):
         from vcfops_supermetrics.crossref import (
@@ -489,3 +497,76 @@ def test_sdk_builder_uses_the_shared_resolver():
         CONSUMER_FORMULA, CONSUMER_NAME, {REF_NAME: REF_UUID}
     )
     assert RESOLVED_TOKEN in out
+
+
+class TestTokenCaseInsensitivity:
+    """A mis-cased ``@supermetric:`` token resolves; it never ships verbatim.
+
+    Round-3 review BLOCKING: the prefix was case-insensitive but the token was
+    not, so ``@SuperMetric:"X"`` passed through ``resolve_sm_formula``
+    unchanged and unflagged.  ``vcfops_packaging.deps._is_sm_ref`` lowercases
+    before comparing, so the dependency audit classified it as an already-good
+    SM reference and skipped it: audit green, build green, literal token in the
+    pak, super metric evaluates to nothing on the live instance.
+    """
+
+    @pytest.mark.parametrize("token", [
+        "@supermetric",   # canonical
+        "@SuperMetric",   # camel
+        "@SUPERMETRIC",   # upper
+        "@SuperMETRIC",   # mixed
+    ])
+    def test_token_case_variants_all_resolve(self, token):
+        from vcfops_supermetrics.crossref import (
+            crossref_names,
+            has_crossref,
+            resolve_sm_formula,
+        )
+
+        formula = (
+            'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+            'metric=' + token + ':"' + REF_NAME + '", depth=5})'
+        )
+        assert has_crossref(formula)
+        assert crossref_names(formula) == [REF_NAME]
+
+        out = resolve_sm_formula(formula, CONSUMER_NAME, {REF_NAME: REF_UUID})
+        assert f"metric={RESOLVED_TOKEN}" in out, out
+        assert out.count("Super Metric|") == 1, out
+        assert "supermetric" not in out.lower(), out
+
+    @pytest.mark.parametrize("token", ["@SuperMetric", "@SUPERMETRIC"])
+    def test_mis_cased_unresolvable_name_still_hard_errors(self, token):
+        from vcfops_supermetrics.crossref import (
+            SuperMetricCrossRefError,
+            resolve_sm_formula,
+        )
+
+        formula = (
+            'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+            'metric=' + token + ':"[VCF Content Factory] Nowhere SM", depth=5})'
+        )
+        with pytest.raises(SuperMetricCrossRefError):
+            resolve_sm_formula(formula, CONSUMER_NAME, {REF_NAME: REF_UUID})
+
+    @pytest.mark.parametrize("token", ["@SuperMetric", "@SUPERMETRIC"])
+    def test_mis_cased_token_survives_nothing_through_the_bundle_builder(
+        self, token, tmp_path
+    ):
+        """End to end through the path that would have shipped the literal."""
+        from vcfops_packaging.builder import _render_supermetrics_dict
+
+        formula = (
+            'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+            'metric=' + token + ':"' + REF_NAME + '", depth=5})'
+        )
+        ref = _load(tmp_path, REF_UUID, REF_NAME, PLAIN_FORMULA)
+        consumer = _load(tmp_path, CONSUMER_UUID, CONSUMER_NAME, formula)
+
+        class _B:
+            supermetrics = [ref, consumer]
+
+        out = _render_supermetrics_dict(_B())
+        emitted = out[CONSUMER_UUID]["formula"]
+        assert "supermetric" not in emitted.lower(), emitted
+        assert f"metric={RESOLVED_TOKEN}" in emitted, emitted
