@@ -44,4 +44,4 @@ description: >
   Feeds NSX Usage Insights (NSX Licensed Cores), NSX Consumption Trend,
   and NSX Licensing Overtime.
 formula: |
-  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=Super Metric|@supermetric:"[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)", depth=10})
+  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=@supermetric:"[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)", depth=10})

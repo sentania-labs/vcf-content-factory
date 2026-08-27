@@ -37,4 +37,4 @@ description: >
   Exists only to feed VCF License Potential Cores (this on vSphere
   World); not shown directly on any dashboard.
 formula: |
-  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=Super Metric|@supermetric:"[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)", depth=10})
+  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=@supermetric:"[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)", depth=10})

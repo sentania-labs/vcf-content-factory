@@ -47,4 +47,4 @@ description: >
   Feeds Automation Usage Insights (Automation License Consumption),
   Automation Consumption Trend, and Automation Licensing Overtime.
 formula: |
-  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=Super Metric|@supermetric:"[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)", depth=10})
+  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=@supermetric:"[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)", depth=10})

@@ -43,5 +43,5 @@ description: >
   accepted trade-off per the sibling SMs in this family, not
   expressible as a single self-contained formula.
 formula: |
-  ${this, metric=Super Metric|@supermetric:"[VCF Content Factory] vSphere World VCF Licensed Cores"}
+  ${this, metric=@supermetric:"[VCF Content Factory] vSphere World VCF Licensed Cores"}
     - sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=cpu|corecount_provisioned, depth=10})
