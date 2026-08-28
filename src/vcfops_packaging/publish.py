@@ -848,20 +848,60 @@ def _gate_publish(releases, factory_repo: Path) -> None:
 # Per-release build
 # ---------------------------------------------------------------------------
 
-def _build_one_release(release, staging_dir: Path, factory_repo: Path):
+def _build_one_release(release, staging_dir: Path, factory_repo: Path,
+                       *, skip_audit: bool = False):
     """Build one release into staging_dir.
 
     Returns a list of (zip_path_in_staging, dest_subdir, zip_filename) triples.
     Raises PublishError on build failure.
+
+    The build runs the describe-cache dependency audit by DEFAULT, in
+    offline mode (live_describe=False): the committed
+    knowledge/context/adapter_describe_cache/ files are the reference, so
+    publish keeps working with no live instance. Enumerated failure modes,
+    all of them loud (publish never degrades an audit problem to a warning):
+
+      - AuditError (unknown metric key, strict-mode violation, missing
+        cache file, unauditable ``${this}`` ref)  -> PublishError, publish
+        aborts.
+      - DescribeCacheError (corrupt cache file)   -> PublishError naming the
+        ``--skip-audit`` opt-out, publish aborts.
+      - Any other build exception                 -> PublishError, publish
+        aborts (pre-existing behavior).
+
+    ``skip_audit=True`` is the emergency opt-out (CLI ``--skip-audit``) for
+    the day the committed cache is broken and the content is known correct.
     """
+    from .audit import AuditError
+    from .describe import DescribeCacheError
     from .release_builder import build_release, ReleaseArtifact
 
     try:
         artifacts = build_release(
             release_path=release.manifest_path,
             output_dir=staging_dir,
-            skip_audit=True,
+            skip_audit=skip_audit,
+            live_describe=False,
         )
+    except AuditError as exc:
+        raise PublishError(
+            f"Dependency audit FAILED for release {release.name!r}:\n{exc}\n\n"
+            "Publish refuses to ship unaudited content. Fix the reference "
+            "or repair the committed describe cache "
+            "(knowledge/context/adapter_describe_cache/). If the cache "
+            "cannot be repaired right now and the content is known correct, "
+            "re-run publish with --skip-audit."
+        ) from exc
+    except DescribeCacheError as exc:
+        raise PublishError(
+            f"Describe cache missing or corrupt while auditing release "
+            f"{release.name!r}: {exc}\n\n"
+            "The committed knowledge/context/adapter_describe_cache/ files "
+            "are the offline audit reference. Restore them (git checkout, "
+            "or refresh-describe against a live instance). If the cache "
+            "cannot be repaired right now and the content is known correct, "
+            "re-run publish with --skip-audit."
+        ) from exc
     except Exception as exc:
         raise PublishError(
             f"Build failed for release {release.name!r}: {exc}"
@@ -1104,6 +1144,7 @@ def publish(
     use_pr: bool = True,
     auto_merge: bool = False,
     *,
+    skip_audit: bool = False,
     validator: Optional[Callable[[Path], None]] = None,
     build_one_release: Optional[Callable[..., list]] = None,
 ) -> PublishResult:
@@ -1126,6 +1167,13 @@ def publish(
                       and auto_merge=True is an error.
         auto_merge:   If True, call ``gh pr merge --auto --merge`` after opening the
                       PR.  Only valid when use_pr=True.
+        skip_audit:   If True, skip the offline dependency audit that release
+                      builds run by default. Emergency opt-out only (CLI
+                      ``--skip-audit``): metric references are NOT validated.
+                      Use only when the committed describe cache cannot be
+                      repaired and the content is known correct. Audit
+                      failures are otherwise hard publish failures, see
+                      :func:`_build_one_release`.
         validator:    TEST SEAM (keyword-only).  Callable ``(factory_repo) -> None``
                       that raises PublishError on validation failure.  Defaults to
                       the real eight-validator subprocess chain
@@ -1172,6 +1220,7 @@ def publish(
             use_pr=use_pr,
             auto_merge=auto_merge,
             result=result,
+            skip_audit=skip_audit,
             validator=validator,
             build_one_release=build_one_release,
         )
@@ -1190,6 +1239,7 @@ def _publish_inner(
     use_pr: bool,
     auto_merge: bool,
     result: PublishResult,
+    skip_audit: bool = False,
     validator: Optional[Callable[[Path], None]] = None,
     build_one_release: Optional[Callable[..., list]] = None,
 ) -> None:
@@ -1197,10 +1247,15 @@ def _publish_inner(
     # Resolve the test seams to the real implementations by default.  The
     # module-global lookup happens here at call time (not at def time) so
     # monkeypatching ``_run_validators`` / ``_build_one_release`` still works.
+    # skip_audit is bound here rather than passed at the call site so injected
+    # seam stubs keep their 3-positional-arg contract (issue #125).
     if validator is None:
         validator = _run_validators
     if build_one_release is None:
-        build_one_release = _build_one_release
+        import functools
+        build_one_release = functools.partial(
+            _build_one_release, skip_audit=skip_audit
+        )
 
     # -----------------------------------------------------------------------
     # Step 2: Validate factory repo

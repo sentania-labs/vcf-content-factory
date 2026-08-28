@@ -182,7 +182,9 @@ class TestDefaultsAreReal:
         )
         monkeypatch.setattr(
             _pub, "_build_one_release",
-            lambda release, staging, repo: (
+            # **kw mirrors the real _build_one_release contract, which now
+            # takes a keyword-only skip_audit bound by _publish_inner.
+            lambda release, staging, repo, **kw: (
                 builder_calls.append(release.name),
                 stub_build_one_release(release, staging, repo),
             )[1],

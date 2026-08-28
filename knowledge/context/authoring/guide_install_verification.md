@@ -37,6 +37,22 @@ resolves against adapter describe. Unknown key → fail build.
 Known + `defaultMonitored=false` → require `builtin_metric_enables`
 entry.
 
+Since 2026-08 the release/publish path also audits by DEFAULT, in
+offline mode: the committed
+`knowledge/context/adapter_describe_cache/` files are the reference,
+no live instance is contacted. An audit failure (or a missing/corrupt
+cache) is a hard publish failure, never a warning; the emergency
+opt-out is `--skip-audit` on `build` / `build-discrete` / `publish`
+(use only when the cache cannot be repaired and content is known
+correct).
+
+`${this, metric=KEY}` super-metric entries are audited too: KEY
+resolves against the SM's own `resource_kinds:` declaration (one
+check per declared adapter/resource-kind pair, defaultMonitored
+classification included, so auto-add works for them). A this-bound
+key with no usable `resource_kinds` is a hard audit error, not a
+silent skip.
+
 ### Check defaultMonitored before picking metrics
 Every metric key must have `defaultMonitored: true`. Keys with `false`
 produce no data without customer policy changes. Prefer

@@ -203,10 +203,15 @@ line:
    index URL or proxy, write it to `.venv/pip.conf` (never global),
    retry.
 3. **Credentials**: never let a secret touch the transcript, argv,
-   or shell history (RULE-008). Until the credential wizard ships
-   (bootstrap-v2 Phase 2), guide the user to create `.env` from
-   `.env.example` in their own editor; never ask them to paste a
-   password into chat, and never echo one.
+   or shell history (RULE-008). Offer the user the credential wizard
+   and have them run it themselves, in their own terminal: tell them
+   to type `! python3 -m vcfops_common setup` (the `!` prefix runs it
+   interactively in-session). Never run it for them, never ask them to
+   paste a password into chat, and never echo one. The wizard reads
+   the password silently so it stays out of the transcript, and it
+   refuses to run without a TTY. If there is no TTY, fall back to
+   having the user create `.env` from `.env.example` in their own
+   editor (see `Getting_Started.md`); never do it for them.
 4. **Reference + pak clones**: run the bootstrap scripts; on clone
    failures that look like the same firewall, offer to skip and
    record which references are absent.

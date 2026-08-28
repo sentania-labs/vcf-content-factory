@@ -89,9 +89,11 @@ not a gate.
 
 - **Scope:** synology (and the framework cross-MP relationship path generally)
 - **Kind:** bug
-- **Status:** open — **root cause revised 2026-06-30** (see update at end of entry). Active prod
-  blocker is the framework loopback Suite API transport, not describe.xml ResourcePath. Fix in flight:
-  `knowledge/designs/suite-api-stitcher-tls-auth-cleanup-v1.md`.
+- **Status:** **closed 2026-07-02**. Root cause was revised 2026-06-30 (see update at end of
+  entry) to the framework loopback Suite API transport, not describe.xml ResourcePath. That defect
+  is tracked and closed as `knowledge/context/defects.md` **DEF-005** (closing-evidence build 24,
+  BC-mirror transport, 2026-07-02: 7+ consecutive clean cycles on devel, zero PKIX). Design doc:
+  `knowledge/designs/suite-api-stitcher-tls-auth-cleanup-v1.md` (implemented).
 - **Raised:** 2026-06-25/26, deep investigation across devel SSH logs + Suite API.
 - **Detail:** The Datastore↔LUN/NFS cross-link (`emitDatastoreCrossLink` →
   `parentForeign(ds, child)`) is emitted correctly every cycle (devel log:
