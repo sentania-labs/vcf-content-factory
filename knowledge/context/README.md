@@ -61,6 +61,8 @@ These files cost almost nothing to scan and prevent re-deriving known knowledge.
 | `ui_import_formats.md` | UI import format investigation |
 | `alertdef_symptomset_import.md` | Alert content-import multi-tier SymptomSet encoding |
 | `symptomdef_severity_import.md` | SymptomDefinition severity: content-import XML vs REST JSON divergence |
+| `dashboard_section_gauge_viewdetails.md` | Factory mapping for Section (row header, membership by row), gauge scoreboard (`visualTheme: 9`), `viewDetails` link contract, AlertVolume (`IntSummaryAlertVolume`); 9.1.1 / 9.2 captures plus export samples |
+| `dashboard_view_pin_resolution.md` | Self-provider View pin binds by resource display name, not kind key (live-verified 2026-08-26); `_WORLD_DISPLAY_NAME` table and `pin.name` override |
 
 ### `tier2_architecture.md`
 Tier 2 (Java SDK) framework architecture — read when working on SDK adapters.
@@ -110,6 +112,7 @@ cycles because that did not happen.
 | File | Purpose |
 |---|---|
 | `content_api_surface.md` | Content API (public + internal + content-zip) |
+| `dashboard_widgets_alertvolume_section_viewdetails.md` | Alert Volume (`IntSummaryAlertVolume`), Section, `viewDetails` link syntax, Scoreboard gauge (`visualTheme: 9`): stored + export wire shapes, from source and live 9.2/9.1; multi-kind bound Scoreboard/PropertyList entries (server picks by page-object kind, no wildcard) |
 | `content_upload_methodology.md` | Digest: which upload path each content type takes, and the import/enable/verify order |
 | `content_import_skip_semantics.md` | Bisection of `imported=0/skipped=N` on DASHBOARDS + VIEW_DEFINITIONS: it is `force=false` create-only mode, not ghost state, and re-import does not fix it |
 | `vcf_operations_api_surface.md` | VCF Ops API surface snapshot |
@@ -117,7 +120,8 @@ cycles because that did not happen.
 | `internal_supermetrics_assign.md` | Internal supermetrics assign endpoint |
 | `dashboard_delete_api.md` | Dashboard delete API |
 | `uninstall_empty_collection_shapes.md` | What the UI API returns for empty report/view/dashboard collections (observed vs unresolved), for uninstaller shape guards |
-| `summary_dashboard_assignment.md` | Binding a dashboard to an object type's Summary tab (Struts; no Suite API, no pak binding) |
+| `summary_dashboard_assignment.md` | Binding a dashboard to an object type's Summary tab via the UI Struts call (no Suite API); pak-binding negative corrected 2026-08-25 |
+| `summary_dashboard_pak_binding.md` | Pak-side Summary binding: `<pak>/content/dashboards/dashboards.properties` (`<dir>=<AdapterKind>:<ResourceKind>`), installer behavior, template-clone semantics, uninstall gap, 9.0 through 9.2 |
 | `reports_api_surface.md` | Reports API surface |
 | `pak_install_api_exploration.md` | .pak install API exploration |
 | `pak_uninstall_api_exploration.md` | .pak uninstall API exploration |

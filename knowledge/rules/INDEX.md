@@ -14,7 +14,7 @@ Read every rule at session start. Rules are absolute — obey without question.
 | RULE-008 | Never write secrets to disk | [no-secrets-on-disk.md](no-secrets-on-disk.md) |
 | RULE-009 | No destructive actions on production instances | [no-destructive-on-prod.md](no-destructive-on-prod.md) |
 | RULE-010 | Never write framework output to reference/docs/ | [docs-immutable.md](docs-immutable.md) |
-| RULE-011 | Wireframe + plan-mode approval before dashboard authoring | [wireframe-before-dashboard.md](wireframe-before-dashboard.md) |
+| RULE-011 | Wireframe + HTML mock + plan-mode approval before dashboard authoring | [wireframe-before-dashboard.md](wireframe-before-dashboard.md) |
 | RULE-012 | No release while a blocking defect is open in `knowledge/context/defects.md` | [release-gate-defects.md](release-gate-defects.md) |
 | RULE-013 | Framework Python (`src/vcfops_*/`) changes pass `framework-reviewer` before merge | [framework-review-gate.md](framework-review-gate.md) |
 | RULE-014 | Pak version lines: `0.x` = hand-built, `1.x+` = CI release only | [pak-version-lines.md](pak-version-lines.md) |

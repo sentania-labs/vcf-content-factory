@@ -1,0 +1,1281 @@
+{
+ "resourceKindList": [
+  {
+   "resourceKindId": "002009ContainerBusinessService",
+   "name": "Business Application",
+   "resourceKind": "BusinessService",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": true,
+   "type": 2,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_BusinessService.png?dc=1787670998988"
+  },
+  {
+   "resourceKindId": "002028VirtualAndPhysicalSANAdapterCacheDisk",
+   "name": "Cache Disk",
+   "resourceKind": "CacheDisk",
+   "resourceKindTemplate": "vSAN Cache Disk Summary",
+   "defaultTemplateName": "vSAN Cache Disk Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VirtualAndPhysicalSANAdapter",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VirtualAndPhysicalSANAdapter_CacheDisk.svg?dc=1787670998988"
+  },
+  {
+   "resourceKindId": "002028VirtualAndPhysicalSANAdapterCapacityDisk",
+   "name": "Capacity Disk",
+   "resourceKind": "CapacityDisk",
+   "resourceKindTemplate": "vSAN Capacity Disk Summary",
+   "defaultTemplateName": "vSAN Capacity Disk Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VirtualAndPhysicalSANAdapter",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VirtualAndPhysicalSANAdapter_CapacityDisk.svg?dc=1787670998989"
+  },
+  {
+   "resourceKindId": "002006VMWAREClusterComputeResource",
+   "name": "Cluster Compute Resource",
+   "resourceKind": "ClusterComputeResource",
+   "resourceKindTemplate": "Cluster Compute Resource Summary",
+   "defaultTemplateName": "Cluster Compute Resource Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_ClusterComputeResource.svg?dc=1787670998990"
+  },
+  {
+   "resourceKindId": "002009ContainerContainerAdapterInstance",
+   "name": "Container Adapter Instance",
+   "resourceKind": "ContainerAdapterInstance",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 7,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_ContainerAdapterInstance.png?dc=1787670998990"
+  },
+  {
+   "resourceKindId": "002006VMWARECustomDatacenter",
+   "name": "Custom Datacenter",
+   "resourceKind": "CustomDatacenter",
+   "resourceKindTemplate": "Custom Datacenter Summary",
+   "defaultTemplateName": "Custom Datacenter Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_CustomDatacenter.svg?dc=1787670998990"
+  },
+  {
+   "resourceKindId": "002006VMWAREDatacenter",
+   "name": "Datacenter",
+   "resourceKind": "Datacenter",
+   "resourceKindTemplate": "Datacenter Summary",
+   "defaultTemplateName": "Datacenter Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_Datacenter.svg?dc=1787670998991"
+  },
+  {
+   "resourceKindId": "002006VMWAREDatastore",
+   "name": "Datastore",
+   "resourceKind": "Datastore",
+   "resourceKindTemplate": "Datastore Summary",
+   "defaultTemplateName": "Datastore Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_Datastore.svg?dc=1787670998991"
+  },
+  {
+   "resourceKindId": "002006VMWAREStoragePod",
+   "name": "Datastore Cluster",
+   "resourceKind": "StoragePod",
+   "resourceKindTemplate": "Datastore Cluster Summary",
+   "defaultTemplateName": "Datastore Cluster Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_StoragePod.svg?dc=1787670998991"
+  },
+  {
+   "resourceKindId": "002006VMWAREDatastoreFolder",
+   "name": "Datastore Folder",
+   "resourceKind": "DatastoreFolder",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 4,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_DatastoreFolder.svg?dc=1787670998991"
+  },
+  {
+   "resourceKindId": "002009ContainerDepartment",
+   "name": "Department",
+   "resourceKind": "Department",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 5,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Department.png?dc=1787670998991"
+  },
+  {
+   "resourceKindId": "002009ContainerEnterprise",
+   "name": "Entire Enterprise",
+   "resourceKind": "Enterprise",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": true,
+   "type": 4,
+   "subType": 3,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Enterprise.png?dc=1787670998992"
+  },
+  {
+   "resourceKindId": "002006VMWAREVM Entity Status",
+   "name": "Entity Status",
+   "resourceKind": "VM Entity Status",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 4,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_VM Entity Status.svg?dc=1787670998992"
+  },
+  {
+   "resourceKindId": "002009ContainerEnvironment",
+   "name": "Environment",
+   "resourceKind": "Environment",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 5,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Environment.png?dc=1787670998992"
+  },
+  {
+   "resourceKindId": "002006VMWAREFolder",
+   "name": "Folder",
+   "resourceKind": "Folder",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_Folder.svg?dc=1787670998993"
+  },
+  {
+   "resourceKindId": "002009ContainerFunction",
+   "name": "Function",
+   "resourceKind": "Function",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 5,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Function.png?dc=1787670998993"
+  },
+  {
+   "resourceKindId": "002009ContainerGeoTag",
+   "name": "GEO Location",
+   "resourceKind": "GeoTag",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 4,
+   "subType": 2,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_GeoTag.png?dc=1787670998994"
+  },
+  {
+   "resourceKindId": "002006VMWAREHostFolder",
+   "name": "Host Folder",
+   "resourceKind": "HostFolder",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 4,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_HostFolder.svg?dc=1787670998994"
+  },
+  {
+   "resourceKindId": "002006VMWAREHostSystem",
+   "name": "Host System",
+   "resourceKind": "HostSystem",
+   "resourceKindTemplate": "Host System Summary",
+   "defaultTemplateName": "Host System Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_HostSystem.svg?dc=1787670998994"
+  },
+  {
+   "resourceKindId": "002009ContainerIdentityBrokerClient",
+   "name": "Identity Broker Client",
+   "resourceKind": "IdentityBrokerClient",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/Container_IdentityBrokerClient.svg?dc=1787670998995"
+  },
+  {
+   "resourceKindId": "002009ContainerIdentityBrokerClientsGroup",
+   "name": "Identity Broker Clients Group",
+   "resourceKind": "IdentityBrokerClientsGroup",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/Container_IdentityBrokerClientsGroup.svg?dc=1787670998995"
+  },
+  {
+   "resourceKindId": "002009ContainerIdentityBrokerEmbedded",
+   "name": "Identity Broker Embedded",
+   "resourceKind": "IdentityBrokerEmbedded",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/Container_IdentityBrokerEmbedded.svg?dc=1787670998995"
+  },
+  {
+   "resourceKindId": "002009ContainerIdentityBrokerAppliance",
+   "name": "Identity Broker Instance",
+   "resourceKind": "IdentityBrokerAppliance",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/Container_IdentityBrokerAppliance.svg?dc=1787670998995"
+  },
+  {
+   "resourceKindId": "002006VMWARENamespace",
+   "name": "Legacy Namespace",
+   "resourceKind": "Namespace",
+   "resourceKindTemplate": "Namespace Summary",
+   "defaultTemplateName": "Namespace Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_Namespace.svg?dc=1787670998997"
+  },
+  {
+   "resourceKindId": "002009ContainerLicensing",
+   "name": "Licensing",
+   "resourceKind": "Licensing",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 5,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Licensing.png?dc=1787670998997"
+  },
+  {
+   "resourceKindId": "002009ContainerLocation",
+   "name": "Location",
+   "resourceKind": "Location",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 5,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Location.png?dc=1787670998998"
+  },
+  {
+   "resourceKindId": "002009ContainerAriaLogFallbackObject",
+   "name": "Log Fallback Object",
+   "resourceKind": "AriaLogFallbackObject",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_AriaLogFallbackObject.png?dc=1787670998998"
+  },
+  {
+   "resourceKindId": "002009ContainerMaintenance_group",
+   "name": "Maintenance_group",
+   "resourceKind": "Maintenance_group",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 5,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Maintenance_group.png?dc=1787670998998"
+  },
+  {
+   "resourceKindId": "002009ContainerManagementLifecycle",
+   "name": "Management Lifecycle",
+   "resourceKind": "ManagementLifecycle",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_ManagementLifecycle.png?dc=1787670998998"
+  },
+  {
+   "resourceKindId": "002009ContainerManual Application",
+   "name": "Manual Application",
+   "resourceKind": "Manual Application",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 5,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Manual Application.png?dc=1787670998999"
+  },
+  {
+   "resourceKindId": "002006VMWARENamespaceV2",
+   "name": "Namespace",
+   "resourceKind": "NamespaceV2",
+   "resourceKindTemplate": "VCFA Provider Namespace Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_NamespaceV2.svg?dc=1787670998999"
+  },
+  {
+   "resourceKindId": "002006VMWARENetworkFolder",
+   "name": "Network Folder",
+   "resourceKind": "NetworkFolder",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 4,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_NetworkFolder.svg?dc=1787670998999"
+  },
+  {
+   "resourceKindId": "002009ContainerOrganization",
+   "name": "Organization",
+   "resourceKind": "Organization",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Organization.png?dc=1787670999002"
+  },
+  {
+   "resourceKindId": "002009ContainerOpsOutboundPlugin",
+   "name": "Outbound Plugin",
+   "resourceKind": "OpsOutboundPlugin",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_OpsOutboundPlugin.png?dc=1787670999002"
+  },
+  {
+   "resourceKindId": "002009ContainerPhysicalDatacenter",
+   "name": "Physical Data Center",
+   "resourceKind": "PhysicalDatacenter",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_PhysicalDatacenter.png?dc=1787670999002"
+  },
+  {
+   "resourceKindId": "002006VMWAREPhysicalDatacenter",
+   "name": "Physical Data Center per Account",
+   "resourceKind": "PhysicalDatacenter",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/VMWARE_PhysicalDatacenter.png?dc=1787670999002"
+  },
+  {
+   "resourceKindId": "002006VMWAREPod",
+   "name": "Pod",
+   "resourceKind": "Pod",
+   "resourceKindTemplate": "Native Pod Summary",
+   "defaultTemplateName": "Native Pod Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_Pod.svg?dc=1787670999002"
+  },
+  {
+   "resourceKindId": "002009ContainerOpsPolicy",
+   "name": "Policy",
+   "resourceKind": "OpsPolicy",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/Container_OpsPolicy.svg?dc=1787670999002"
+  },
+  {
+   "resourceKindId": "002006VMWAREResourcePool",
+   "name": "Resource Pool",
+   "resourceKind": "ResourcePool",
+   "resourceKindTemplate": "Resource Pool Summary",
+   "defaultTemplateName": "Resource Pool Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_ResourcePool.svg?dc=1787670999003"
+  },
+  {
+   "resourceKindId": "002009ContainerSecurity Zone",
+   "name": "Security Zone",
+   "resourceKind": "Security Zone",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 5,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Security Zone.png?dc=1787670999003"
+  },
+  {
+   "resourceKindId": "002009ContainerService Level Objective",
+   "name": "Service Level Objective",
+   "resourceKind": "Service Level Objective",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 5,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Service Level Objective.png?dc=1787670999004"
+  },
+  {
+   "resourceKindId": "002006VMWARESupervisorCluster",
+   "name": "Supervisor Cluster",
+   "resourceKind": "SupervisorCluster",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_SupervisorCluster.svg?dc=1787670999017"
+  },
+  {
+   "resourceKindId": "002009ContainerFeature",
+   "name": "Tags Group",
+   "resourceKind": "Feature",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 5,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Feature.png?dc=1787670999017"
+  },
+  {
+   "resourceKindId": "002006VMWAREGuestCluster",
+   "name": "Tanzu Kubernetes Cluster",
+   "resourceKind": "GuestCluster",
+   "resourceKindTemplate": "Guest Cluster Summary",
+   "defaultTemplateName": "Guest Cluster Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_GuestCluster.svg?dc=1787670999017"
+  },
+  {
+   "resourceKindId": "002009ContainerTier",
+   "name": "Tier",
+   "resourceKind": "Tier",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": true,
+   "type": 3,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Tier.png?dc=1787670999018"
+  },
+  {
+   "resourceKindId": "002009ContainerUniverse",
+   "name": "Universe",
+   "resourceKind": "Universe",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 4,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_Universe.png?dc=1787670999018"
+  },
+  {
+   "resourceKindId": "002006VMWAREVMwareAdapter Instance",
+   "name": "vCenter",
+   "resourceKind": "VMwareAdapter Instance",
+   "resourceKindTemplate": "vCenter Summary",
+   "defaultTemplateName": "vCenter Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 7,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_VMwareAdapter Instance.svg?dc=1787670999018"
+  },
+  {
+   "resourceKindId": "002009ContainervC-Ops-Self-Monitoring",
+   "name": "VCF Operations Self Monitoring",
+   "resourceKind": "vC-Ops-Self-Monitoring",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 4,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/16x16/Container_vC-Ops-Self-Monitoring.png?dc=1787670999019"
+  },
+  {
+   "resourceKindId": "002009ContainerVcfSso",
+   "name": "VCF SSO",
+   "resourceKind": "VcfSso",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/Container_VcfSso.svg?dc=1787670999019"
+  },
+  {
+   "resourceKindId": "002006VMWAREVirtualMachine",
+   "name": "Virtual Machine",
+   "resourceKind": "VirtualMachine",
+   "resourceKindTemplate": "Virtual Machine Summary",
+   "defaultTemplateName": "Virtual Machine Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_VirtualMachine.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002006VMWAREVMFolder",
+   "name": "Virtual Machine Folder",
+   "resourceKind": "VMFolder",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 4,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_VMFolder.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002009ContainerVMware Cloud",
+   "name": "VMware Cloud",
+   "resourceKind": "VMware Cloud",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "Container",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 5,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/custom/16x16/Container_VMware Cloud.png?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002028VirtualAndPhysicalSANAdapterVirtualAndPhysicalSANAdapter Instance",
+   "name": "vSAN Adapter Instance",
+   "resourceKind": "VirtualAndPhysicalSANAdapter Instance",
+   "resourceKindTemplate": "vSAN Adapter Instance Summary",
+   "defaultTemplateName": "vSAN Adapter Instance Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VirtualAndPhysicalSANAdapter",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 7,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VirtualAndPhysicalSANAdapter_VirtualAndPhysicalSANAdapter Instance.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002028VirtualAndPhysicalSANAdapterVirtualSANDCCluster",
+   "name": "vSAN Cluster",
+   "resourceKind": "VirtualSANDCCluster",
+   "resourceKindTemplate": "vSAN Cluster Summary",
+   "defaultTemplateName": "vSAN Cluster Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VirtualAndPhysicalSANAdapter",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 4,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VirtualAndPhysicalSANAdapter_VirtualSANDCCluster.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002028VirtualAndPhysicalSANAdapterVirtualSANDiskGroup",
+   "name": "vSAN Disk Group",
+   "resourceKind": "VirtualSANDiskGroup",
+   "resourceKindTemplate": "vSAN Disk Disk Group Summary",
+   "defaultTemplateName": "vSAN Disk Disk Group Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VirtualAndPhysicalSANAdapter",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VirtualAndPhysicalSANAdapter_VirtualSANDiskGroup.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002028VirtualAndPhysicalSANAdapterVsan2Disk",
+   "name": "vSAN ESA Disk",
+   "resourceKind": "Vsan2Disk",
+   "resourceKindTemplate": "vSAN ESA Disk Summary",
+   "defaultTemplateName": "vSAN ESA Disk Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VirtualAndPhysicalSANAdapter",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VirtualAndPhysicalSANAdapter_Vsan2Disk.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002028VirtualAndPhysicalSANAdapterVirtualSANFaultDomain",
+   "name": "vSAN Fault Domain",
+   "resourceKind": "VirtualSANFaultDomain",
+   "resourceKindTemplate": "Summary Page: vSAN Fault Domain",
+   "isAdapterPlugin": false,
+   "adapterKind": "VirtualAndPhysicalSANAdapter",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 4,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VirtualAndPhysicalSANAdapter_VirtualSANFaultDomain.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002028VirtualAndPhysicalSANAdapterFileServer",
+   "name": "vSAN File Server",
+   "resourceKind": "FileServer",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VirtualAndPhysicalSANAdapter",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VirtualAndPhysicalSANAdapter_FileServer.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002028VirtualAndPhysicalSANAdapterFileShare",
+   "name": "vSAN File Share",
+   "resourceKind": "FileShare",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VirtualAndPhysicalSANAdapter",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VirtualAndPhysicalSANAdapter_FileShare.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002028VirtualAndPhysicalSANAdapterStoragePool",
+   "name": "vSAN Storage Pool",
+   "resourceKind": "StoragePool",
+   "resourceKindTemplate": "vSAN Storage Pool Summary",
+   "defaultTemplateName": "vSAN Storage Pool Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VirtualAndPhysicalSANAdapter",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VirtualAndPhysicalSANAdapter_StoragePool.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002028VirtualAndPhysicalSANAdapterVirtualSANWitnessHost",
+   "name": "vSAN Witness Host",
+   "resourceKind": "VirtualSANWitnessHost",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VirtualAndPhysicalSANAdapter",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 4,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VirtualAndPhysicalSANAdapter_VirtualSANWitnessHost.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002028VirtualAndPhysicalSANAdaptervSAN World",
+   "name": "vSAN World",
+   "resourceKind": "vSAN World",
+   "resourceKindTemplate": "vSAN World Summary",
+   "defaultTemplateName": "vSAN World Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VirtualAndPhysicalSANAdapter",
+   "showTag": false,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 6,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VirtualAndPhysicalSANAdapter_vSAN World.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002006VMWAREDistributedVirtualPortgroup",
+   "name": "vSphere Distributed Port Group",
+   "resourceKind": "DistributedVirtualPortgroup",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_DistributedVirtualPortgroup.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002006VMWAREVmwareDistributedVirtualSwitch",
+   "name": "vSphere Distributed Switch",
+   "resourceKind": "VmwareDistributedVirtualSwitch",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 1,
+   "subType": null,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_VmwareDistributedVirtualSwitch.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002006VMWAREvSphere Private World",
+   "name": "vSphere Private World",
+   "resourceKind": "vSphere Private World",
+   "resourceKindTemplate": "Summary Detail",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 6,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_vSphere Private World.svg?dc=1787670999020"
+  },
+  {
+   "resourceKindId": "002006VMWAREvSphere World",
+   "name": "vSphere World",
+   "resourceKind": "vSphere World",
+   "resourceKindTemplate": "vSphere World Summary",
+   "defaultTemplateName": "vSphere World Summary",
+   "isAdapterPlugin": false,
+   "adapterKind": "VMWARE",
+   "showTag": true,
+   "isLockedNode": false,
+   "type": 8,
+   "subType": 6,
+   "earlyWarningEnabled": {
+    "earlyWarningEnabled": false
+   },
+   "dtEnabled": {
+    "dtEnabled": false
+   },
+   "iconSrc": "images/resknd/default/vrops-light/VMWARE_vSphere World.svg?dc=1787670999020"
+  }
+ ],
+ "totalCount": 480,
+ "defaultTemplateName": "Summary Detail"
+}

@@ -1,0 +1,128 @@
+id: 3797d639-4623-486e-8633-1f7ce823c57c
+name: "[VCF Content Factory] Summary Widget Smoke (HostSystem)"
+description: >
+  Framework smoke test for the summary-dashboard widget set added on
+  this branch: Section, Alert Volume, gauge Scoreboard
+  (visual_theme: 9), view_details, and summary_for/bind-summary. Every
+  widget inherits the page object (self_provider: false, no pins). Not
+  released, not bundled; installed on a disposable build, bound to the
+  HostSystem Summary tab, verified, then unbound and deleted. See
+  knowledge/designs/dashboards/summary-widget-smoke.md.
+
+released: false
+
+summary_for: "VMWARE:HostSystem"
+
+widgets:
+
+  # ── Row 1: Section header, full width ────────────────────────────────────
+
+  - id: host_summary_smoke
+    type: Section
+    title: "Host Summary Smoke"
+    coords: {x: 1, y: 1}
+    collapsed: false
+
+  # ── Row 2: Host Facts (compact PropertyList) | Alerts Summary (Alert
+  #     Volume) | More (TextDisplay + view_details) ─────────────────────────
+
+  - id: host_facts
+    type: PropertyList
+    title: "Host Facts"
+    coords: {x: 1, y: 2, w: 4, h: 7}
+    self_provider: false
+    property_list:
+      visual_theme: 0
+      depth: 1
+      show_metric_full_name: true
+      properties:
+        - adapter_kind: VMWARE
+          resource_kind: HostSystem
+          metric_key: "summary|version"
+          metric_name: "Summary|Version"
+          label: "Version"
+          is_string_metric: true
+        - adapter_kind: VMWARE
+          resource_kind: HostSystem
+          metric_key: "sys|build"
+          metric_name: "System|Build Number"
+          label: "Build"
+          is_string_metric: true
+        - adapter_kind: VMWARE
+          resource_kind: HostSystem
+          metric_key: "hardware|vendorModel"
+          metric_name: "Hardware|Model"
+          label: "Vendor / Model"
+          is_string_metric: true
+        - adapter_kind: VMWARE
+          resource_kind: HostSystem
+          metric_key: "hardware|cpuInfo|numCpuCores"
+          metric_name: "Hardware|CPU Information|Number of CPU Cores"
+          label: "CPU Cores"
+          is_string_metric: false
+
+  - id: alerts_summary
+    type: AlertVolume
+    title: "Alerts Summary"
+    coords: {x: 5, y: 2, w: 5, h: 7}
+    self_provider: false
+
+  - id: more_details
+    type: TextDisplay
+    title: "More"
+    coords: {x: 10, y: 2, w: 3, h: 7}
+    self_provider: false
+    text: "Smoke widget for the Details URL passthrough."
+    view_details: "/ui/operate/dashboards/dashboards"
+
+  # ── Row 3: Utilization (gauge Scoreboard) | Alerts (classic Scoreboard) ──
+
+  - id: utilization
+    type: Scoreboard
+    title: "Utilization"
+    coords: {x: 1, y: 9, w: 7, h: 8}
+    self_provider: false
+    visual_theme: 9
+    box_columns: 2
+    show_percent_text: true
+    metrics:
+      - adapter_kind: VMWARE
+        resource_kind: HostSystem
+        metric_key: "cpu|usage_average"
+        metric_name: "CPU Usage"
+        unit: "%"
+        max_value: 100
+        color_method: 0
+        yellow_bound: 70
+        orange_bound: 85
+        red_bound: 100
+      - adapter_kind: VMWARE
+        resource_kind: HostSystem
+        metric_key: "mem|usage_average"
+        metric_name: "Memory Usage"
+        unit: "%"
+        max_value: 100
+        color_method: 0
+        yellow_bound: 70
+        orange_bound: 85
+        red_bound: 100
+
+  - id: alerts
+    type: Scoreboard
+    title: "Alerts"
+    coords: {x: 8, y: 9, w: 5, h: 8}
+    self_provider: false
+    visual_theme: 8
+    metrics:
+      - adapter_kind: VMWARE
+        resource_kind: HostSystem
+        metric_key: "System Attributes|alert_count_critical"
+        metric_name: "VCF Operations Generated|Alert Count Critical"
+        label: "Alert Count Critical"
+      - adapter_kind: VMWARE
+        resource_kind: HostSystem
+        metric_key: "System Attributes|alert_count_warning"
+        metric_name: "VCF Operations Generated|Alert Count Warning"
+        label: "Alert Count Warning"
+
+interactions: []

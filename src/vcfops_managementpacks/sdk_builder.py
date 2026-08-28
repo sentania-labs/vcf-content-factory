@@ -73,6 +73,8 @@ try:
 except ImportError:
     _YAML_AVAILABLE = False
 
+from vcfops_supermetrics import crossref as _crossref
+
 from .sdk_project import SdkProjectDef, SdkProjectError, load_sdk_project
 
 # ---------------------------------------------------------------------------
@@ -864,7 +866,7 @@ def _load_bundled_content(
         return [], [], [], [], [], [], []
 
     try:
-        from vcfops_dashboards.loader import load_view, load_dashboard
+        from vcfops_dashboards.loader import load_view, load_dashboard, check_unique_summary_for
     except ImportError as exc:
         raise SdkBuildError(
             f"bundled_content requires vcfops_dashboards to be installed: {exc}"
@@ -901,6 +903,31 @@ def _load_bundled_content(
                 f"bundled_content.dashboards: failed to load {path}: {exc}"
             ) from exc
         dashboards.append(d)
+
+    # Validate every bundled dashboard against the bundled views, mirroring
+    # vcfops_dashboards.loader.load_all().  load_dashboard() alone only parses;
+    # the cross-object invariants (widget/view resolution, and the Summary-page
+    # rule that a summary_for dashboard may not carry a pinned or self-provider
+    # widget) live in Dashboard.validate().  Without this the pak path could
+    # ship a Summary dashboard that stays pinned instead of inheriting the page
+    # object.
+    _views_by_name = {v.name: v for v in views}
+    for d in dashboards:
+        try:
+            # A pak may reference a view shipped by a sibling pak installed
+            # alongside it; that is authored as the sibling view's UUID, which
+            # the loader's raw-UUID passthrough accepts.  An unmatched bare
+            # name is a typo here exactly as it is in the repo-wide corpus.
+            d.validate(_views_by_name, enforce_framework_prefix=False)
+        except Exception as exc:
+            src = getattr(d, "source_path", None) or d.name
+            raise SdkBuildError(
+                f"bundled_content.dashboards: {src} failed validation: {exc}"
+            ) from exc
+    try:
+        check_unique_summary_for(dashboards)
+    except Exception as exc:
+        raise SdkBuildError(f"bundled_content.dashboards: {exc}") from exc
 
     # --- Super Metrics ---
     supermetrics = []
@@ -1560,9 +1587,21 @@ _ALL_CONTENT_DIRS = [
     "content/resources/",
 ]
 
-# Regex matching @supermetric:"<name>" or @supermetric:'<name>' inside a formula.
-# Capture group 1 is the bare SM name.
-_SM_CROSSREF_RE = re.compile(r'''@supermetric:["']([^"']+)["']''')
+# SM-to-SM formula cross-reference resolution.
+#
+# The resolver itself lives in vcfops_supermetrics.crossref, because every path
+# that emits or pushes a formula needs it (native bundle builder, discrete and
+# release builders, live sync) — not just this pak path, which is where it was
+# originally (and only) implemented.  This wrapper keeps the SDK-specific error
+# type and remediation hint.
+_SM_CROSSREF_RE = _crossref.SM_CROSSREF_RE
+
+# Remediation sentence for a pak build: the fix is an adapter.yaml edit.
+_SM_CROSSREF_HINT_SDK = (
+    "That SM is not in the bundled supermetrics list.  Add a path for it to "
+    "bundled_content.supermetrics in adapter.yaml, or remove the "
+    "cross-reference from the formula."
+)
 
 
 def _resolve_sm_formula(
@@ -1572,46 +1611,22 @@ def _resolve_sm_formula(
 ) -> str:
     """Resolve ``@supermetric:"<name>"`` cross-reference tokens in a formula string.
 
-    Replaces each ``@supermetric:"<name>"`` (or single-quoted variant) with the
-    wire token ``Super Metric|sm_<uuid>`` where ``<uuid>`` is the bundled SM
-    whose ``name`` matches ``<name>`` exactly.
+    Thin pak-path wrapper around
+    :func:`vcfops_supermetrics.crossref.resolve_sm_formula` that raises
+    :class:`SdkBuildError` (an unresolved token is a hard build error — VCF Ops
+    cannot parse ``@supermetric:`` and the pak would be corrupt) and points the
+    author at ``bundled_content.supermetrics`` in ``adapter.yaml``.
 
-    This mirrors the native VCF Ops wire format for SM-to-SM references inside
-    an ``attribute=`` clause (e.g. ``attribute=Super Metric|sm_b6f20136-...``).
-    The token form ``Super Metric|sm_<uuid>`` is confirmed by the vCommunity
-    source pak — the original ``describe.xml``-referenced SM formulas use exactly
-    this prefix.
-
-    Args:
-        formula:          Raw formula string from the YAML ``formula:`` field.
-        sm_name:          Display name of the SM being emitted (for error messages).
-        sm_name_to_uuid:  Mapping of bundled SM display name → UUID (id field).
-
-    Returns:
-        Formula with all ``@supermetric:`` tokens replaced.
-
-    Raises:
-        SdkBuildError: If a token references an SM name not found in
-            ``sm_name_to_uuid``.  An unresolved token is a hard build error —
-            VCF Ops cannot parse ``@supermetric:`` and the pak would be corrupt.
-
-    Already-resolved ``Super Metric|sm_<uuid>`` tokens are left untouched
-    (idempotent), so this function is safe to call on already-resolved formulas.
+    See the shared module for the full semantics, including idempotency on
+    already-resolved ``Super Metric|sm_<uuid>`` tokens.
     """
-    def _replace(m: re.Match) -> str:
-        ref_name = m.group(1)
-        uuid = sm_name_to_uuid.get(ref_name)
-        if uuid is None:
-            raise SdkBuildError(
-                f"Super metric '{sm_name}': formula references "
-                f"@supermetric:\"{ref_name}\" but that SM is not in the "
-                f"bundled supermetrics list.  Add a path for '{ref_name}' "
-                f"to bundled_content.supermetrics in adapter.yaml, or "
-                f"remove the cross-reference from the formula."
-            )
-        return f"Super Metric|sm_{uuid}"
-
-    return _SM_CROSSREF_RE.sub(_replace, formula)
+    return _crossref.resolve_sm_formula(
+        formula,
+        sm_name,
+        sm_name_to_uuid,
+        error_cls=SdkBuildError,
+        hint=_SM_CROSSREF_HINT_SDK,
+    )
 
 
 def _write_outer_pak(
@@ -1965,6 +1980,11 @@ def _write_outer_pak(
             # A populated resources/ subdirectory with resources.properties is required
             # (spec A3).
             _OWNER_UUID = "00000000-0000-0000-0000-000000000000"
+            # Summary-tab bindings for the server-side pak installer:
+            # content/dashboards/dashboards.properties, one line per bound
+            # directory, `<dir>=<AdapterKind>:<ResourceKind>`. See
+            # knowledge/context/api-surface/summary_dashboard_pak_binding.md.
+            _summary_bindings: list[str] = []
             for d in dashboards:
                 dashboard_json = render_dashboards_bundle_json(
                     [d], views_by_name, _OWNER_UUID,
@@ -1986,6 +2006,22 @@ def _write_outer_pak(
                 )
                 print(
                     f"  bundled content: content/dashboards/{slug}/dashboard.json <- {d.name}",
+                    file=sys.stderr,
+                )
+                if getattr(d, "summary_for", None):
+                    # The installer splits the value on "," then each part on
+                    # ":" (summary_dashboard_pak_binding.md); one directory may
+                    # bind to several kinds.
+                    _summary_bindings.append(f"{slug}={','.join(d.summary_for)}")
+            if _summary_bindings:
+                props = "\n".join(
+                    ["# Summary-tab bindings: <dashboard dir>=<AdapterKind>:<ResourceKind>[,<AdapterKind>:<ResourceKind>...]"]
+                    + _summary_bindings
+                ) + "\n"
+                zf.writestr("content/dashboards/dashboards.properties", props)
+                print(
+                    "  bundled content: content/dashboards/dashboards.properties "
+                    f"({len(_summary_bindings)} binding(s))",
                     file=sys.stderr,
                 )
 

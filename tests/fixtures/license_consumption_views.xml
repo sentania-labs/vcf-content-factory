@@ -1,0 +1,447 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Content><Views>
+<ViewDef id="e27925b5-1cf1-4fde-a835-41c84577be35">
+                        
+            <Title>[VCF Consumption Overview v2] VCF License Usage Over Time</Title>
+                        
+            <Description>This trend view is used to display the consumption of VCF license usage overtime</Description>
+                        
+            <SubjectType adapterKind="VMWARE_INFRA_HEALTH" resourceKind="LICENSE_USAGE_WORLD" type="descendant"/>
+                        
+            <SubjectType adapterKind="VMWARE_INFRA_HEALTH" resourceKind="LICENSE_USAGE_WORLD" type="self"/>
+                        
+            <Usage>dashboard</Usage>
+                        
+            <Usage>report</Usage>
+                        
+            <Usage>details</Usage>
+                        
+            <Usage>content</Usage>
+                        
+            <Controls>
+                                
+                <Control id="time-interval-selector_id_421" type="time-interval-selector" visible="false">
+                                        
+                    <Property name="advancedTimeMode" value="false"/>
+                                        
+                    <Property name="unit" value="WEEKS"/>
+                                        
+                    <Property name="count" value="12"/>
+                                    
+                </Control>
+                                
+                <Control id="attributes-selector_id_422" type="attributes-selector" visible="false">
+                                        
+                    <Property name="attributeInfos">
+                                                
+                        <List>
+                                                        
+                            <Item>
+                                
+                                <Value>
+                                        
+                                    <Property name="objectType" value="RESOURCE"/>
+                                        
+                                    <Property name="attributeKey" value="Super Metric|sm_76801377-1807-4a46-93d4-9b9dc0f0c54b"/>
+                                        
+                                    <Property name="isStringAttribute" value="false"/>
+                                        
+                                    <Property name="adapterKind" value="VMWARE_INFRA_HEALTH"/>
+                                        
+                                    <Property name="resourceKind" value="LICENSE_USAGE_WORLD"/>
+                                        
+                                    <Property name="rollUpType" value="NONE"/>
+                                        
+                                    <Property name="rollUpCount" value="0"/>
+                                        
+                                    <Property name="forecastDays" value="90"/>
+                                        
+                                    <Property name="transformations">
+                                                
+                                        <List>
+                                                        
+                                            <Item value="NONE"/>
+                                                        
+                                            <Item value="TREND"/>
+                                                        
+                                            <Item value="FORECAST"/>
+                                                    
+                                        </List>
+                                            
+                                    </Property>
+                                        
+                                    <Property name="isProperty" value="false"/>
+                                        
+                                    <Property name="displayName" value="VCF License Usage Overtime"/>
+                                    
+                                </Value>
+                                                            
+                            </Item>
+                                                    
+                        </List>
+                                            
+                    </Property>
+                                    
+                </Control>
+                                
+                <Control id="pagination-control_id_423" type="pagination-control" visible="true">
+                                        
+                    <Property name="start" value="0"/>
+                                        
+                    <Property name="size" value="25"/>
+                                    
+                </Control>
+                            
+            </Controls>
+                        
+            <DataProviders>
+                                
+                <DataProvider dataType="trend-view" id="trend-view_id_420"/>
+                            
+            </DataProviders>
+                        
+            <Presentation type="line-chart"/>
+                    
+        </ViewDef>
+<ViewDef id="6b512229-ff2c-490b-8cfb-ae70f3008de0">
+                        
+            <Title>[VCF Consumption Overview v2] VCF Licensing Overtime</Title>
+                        
+            <Description/>
+                        
+            <SubjectType adapterKind="VMWARE_INFRA_HEALTH" resourceKind="LICENSE_USAGE_WORLD" type="descendant"/>
+                        
+            <SubjectType adapterKind="VMWARE_INFRA_HEALTH" resourceKind="LICENSE_USAGE_WORLD" type="self"/>
+                        
+            <Usage>dashboard</Usage>
+                        
+            <Usage>report</Usage>
+                        
+            <Usage>details</Usage>
+                        
+            <Usage>content</Usage>
+                        
+            <Controls>
+                                
+                <Control id="time-interval-selector_id_175" type="time-interval-selector" visible="false">
+                                        
+                    <Property name="advancedTimeMode" value="false"/>
+                                        
+                    <Property name="unit" value="YEARS"/>
+                                        
+                    <Property name="count" value="1"/>
+                                    
+                </Control>
+                                
+                <Control id="attributes-selector_id_176" type="attributes-selector" visible="false">
+                                        
+                    <Property name="attributeInfos">
+                                                
+                        <List>
+                                                        
+                            <Item>
+                                
+                                <Value>
+                                        
+                                    <Property name="objectType" value="RESOURCE"/>
+                                        
+                                    <Property name="attributeKey" value="Interval Breakdown"/>
+                                        
+                                    <Property name="rollUpCount" value="0"/>
+                                        
+                                    <Property name="sortCriteria" value="false"/>
+                                        
+                                    <Property name="isTimeSegment" value="true"/>
+                                        
+                                    <Property name="breakdownBy" value="MONTHS"/>
+                                        
+                                    <Property name="startingOnUnit" value="WEEKS"/>
+                                        
+                                    <Property name="startingOnCount" value="1"/>
+                                        
+                                    <Property name="displayName" value="Month"/>
+                                    
+                                </Value>
+                                                            
+                            </Item>
+                                                        
+                            <Item>
+                                
+                                <Value>
+                                        
+                                    <Property name="objectType" value="RESOURCE"/>
+                                        
+                                    <Property name="attributeKey" value="Super Metric|sm_76801377-1807-4a46-93d4-9b9dc0f0c54b"/>
+                                        
+                                    <Property name="isStringAttribute" value="false"/>
+                                        
+                                    <Property name="adapterKind" value="VMWARE_INFRA_HEALTH"/>
+                                        
+                                    <Property name="resourceKind" value="LICENSE_USAGE_WORLD"/>
+                                        
+                                    <Property name="rollUpType" value="NONE"/>
+                                        
+                                    <Property name="rollUpCount" value="0"/>
+                                        
+                                    <Property name="transformations">
+                                                
+                                        <List>
+                                                        
+                                            <Item value="CURRENT"/>
+                                                    
+                                        </List>
+                                            
+                                    </Property>
+                                        
+                                    <Property name="isProperty" value="false"/>
+                                        
+                                    <Property name="displayName" value="VCF License Usage"/>
+                                        
+                                    <Property name="addTimestampAsColumn" value="false"/>
+                                        
+                                    <Property name="isShowRelativeTimestamp" value="false"/>
+                                    
+                                </Value>
+                                                            
+                            </Item>
+                                                        
+                            <Item>
+                                
+                                <Value>
+                                        
+                                    <Property name="objectType" value="RESOURCE"/>
+                                        
+                                    <Property name="attributeKey" value="Super Metric|sm_dc0b1bc5-478a-4be9-8442-6afa8fb4b4f8"/>
+                                        
+                                    <Property name="preferredUnitId" value="percent"/>
+                                        
+                                    <Property name="isStringAttribute" value="false"/>
+                                        
+                                    <Property name="adapterKind" value="VMWARE_INFRA_HEALTH"/>
+                                        
+                                    <Property name="resourceKind" value="LICENSE_USAGE_WORLD"/>
+                                        
+                                    <Property name="rollUpType" value="NONE"/>
+                                        
+                                    <Property name="rollUpCount" value="0"/>
+                                        
+                                    <Property name="transformations">
+                                                
+                                        <List>
+                                                        
+                                            <Item value="CURRENT"/>
+                                                    
+                                        </List>
+                                            
+                                    </Property>
+                                        
+                                    <Property name="isProperty" value="false"/>
+                                        
+                                    <Property name="displayName" value="VCF License Usage Percent"/>
+                                        
+                                    <Property name="addTimestampAsColumn" value="false"/>
+                                        
+                                    <Property name="isShowRelativeTimestamp" value="false"/>
+                                    
+                                </Value>
+                                                            
+                            </Item>
+                                                        
+                            <Item>
+                                
+                                <Value>
+                                        
+                                    <Property name="objectType" value="RESOURCE"/>
+                                        
+                                    <Property name="attributeKey" value="Super Metric|sm_ad810afa-73c8-412e-a05a-1ba59da79a32"/>
+                                        
+                                    <Property name="isStringAttribute" value="false"/>
+                                        
+                                    <Property name="adapterKind" value="VMWARE_INFRA_HEALTH"/>
+                                        
+                                    <Property name="resourceKind" value="LICENSE_USAGE_WORLD"/>
+                                        
+                                    <Property name="rollUpType" value="NONE"/>
+                                        
+                                    <Property name="rollUpCount" value="0"/>
+                                        
+                                    <Property name="transformations">
+                                                
+                                        <List>
+                                                        
+                                            <Item value="CURRENT"/>
+                                                    
+                                        </List>
+                                            
+                                    </Property>
+                                        
+                                    <Property name="isProperty" value="false"/>
+                                        
+                                    <Property name="displayName" value="VCF License Capacity"/>
+                                        
+                                    <Property name="addTimestampAsColumn" value="false"/>
+                                        
+                                    <Property name="isShowRelativeTimestamp" value="false"/>
+                                    
+                                </Value>
+                                                            
+                            </Item>
+                                                        
+                            <Item>
+                                
+                                <Value>
+                                        
+                                    <Property name="objectType" value="RESOURCE"/>
+                                        
+                                    <Property name="attributeKey" value="Super Metric|sm_ffdafb8e-3c04-4eee-9f33-1096328a6ee3"/>
+                                        
+                                    <Property name="isStringAttribute" value="false"/>
+                                        
+                                    <Property name="adapterKind" value="VMWARE_INFRA_HEALTH"/>
+                                        
+                                    <Property name="resourceKind" value="LICENSE_USAGE_WORLD"/>
+                                        
+                                    <Property name="rollUpType" value="NONE"/>
+                                        
+                                    <Property name="rollUpCount" value="0"/>
+                                        
+                                    <Property name="transformations">
+                                                
+                                        <List>
+                                                        
+                                            <Item value="CURRENT"/>
+                                                    
+                                        </List>
+                                            
+                                    </Property>
+                                        
+                                    <Property name="isProperty" value="false"/>
+                                        
+                                    <Property name="displayName" value="vSAN Total License Usage"/>
+                                        
+                                    <Property name="addTimestampAsColumn" value="false"/>
+                                        
+                                    <Property name="isShowRelativeTimestamp" value="false"/>
+                                    
+                                </Value>
+                                                            
+                            </Item>
+                                                        
+                            <Item>
+                                
+                                <Value>
+                                        
+                                    <Property name="objectType" value="RESOURCE"/>
+                                        
+                                    <Property name="attributeKey" value="Super Metric|sm_b907e551-0425-418c-90fc-c3132aefd7f0"/>
+                                        
+                                    <Property name="preferredUnitId" value="percent"/>
+                                        
+                                    <Property name="isStringAttribute" value="false"/>
+                                        
+                                    <Property name="adapterKind" value="VMWARE_INFRA_HEALTH"/>
+                                        
+                                    <Property name="resourceKind" value="LICENSE_USAGE_WORLD"/>
+                                        
+                                    <Property name="rollUpType" value="NONE"/>
+                                        
+                                    <Property name="rollUpCount" value="0"/>
+                                        
+                                    <Property name="transformations">
+                                                
+                                        <List>
+                                                        
+                                            <Item value="CURRENT"/>
+                                                    
+                                        </List>
+                                            
+                                    </Property>
+                                        
+                                    <Property name="isProperty" value="false"/>
+                                        
+                                    <Property name="displayName" value="vSAN License Usage Percent"/>
+                                        
+                                    <Property name="addTimestampAsColumn" value="false"/>
+                                        
+                                    <Property name="isShowRelativeTimestamp" value="false"/>
+                                    
+                                </Value>
+                                                            
+                            </Item>
+                                                        
+                            <Item>
+                                
+                                <Value>
+                                        
+                                    <Property name="objectType" value="RESOURCE"/>
+                                        
+                                    <Property name="attributeKey" value="Super Metric|sm_6e8310ed-1753-45a4-aacc-7f1025c03d11"/>
+                                        
+                                    <Property name="isStringAttribute" value="false"/>
+                                        
+                                    <Property name="adapterKind" value="VMWARE_INFRA_HEALTH"/>
+                                        
+                                    <Property name="resourceKind" value="LICENSE_USAGE_WORLD"/>
+                                        
+                                    <Property name="rollUpType" value="NONE"/>
+                                        
+                                    <Property name="rollUpCount" value="0"/>
+                                        
+                                    <Property name="transformations">
+                                                
+                                        <List>
+                                                        
+                                            <Item value="CURRENT"/>
+                                                    
+                                        </List>
+                                            
+                                    </Property>
+                                        
+                                    <Property name="isProperty" value="false"/>
+                                        
+                                    <Property name="displayName" value="vSAN License Capacity"/>
+                                        
+                                    <Property name="addTimestampAsColumn" value="false"/>
+                                        
+                                    <Property name="isShowRelativeTimestamp" value="false"/>
+                                    
+                                </Value>
+                                                            
+                            </Item>
+                                                    
+                        </List>
+                                            
+                    </Property>
+                                    
+                </Control>
+                                
+                <Control id="pagination-control_id_177" type="pagination-control" visible="true">
+                                        
+                    <Property name="start" value="0"/>
+                                        
+                    <Property name="size" value="50"/>
+                                    
+                </Control>
+                                
+                <Control id="metadata_id_178" type="metadata" visible="false">
+                                        
+                    <Property name="maxPointsCount" value="5000"/>
+                                        
+                    <Property name="hideObjectNameColumn" value="true"/>
+                                        
+                    <Property name="listTopResultSize" value="-1"/>
+                                    
+                </Control>
+                            
+            </Controls>
+                        
+            <DataProviders>
+                                
+                <DataProvider dataType="list-view" id="list-view_id_174"/>
+                            
+            </DataProviders>
+                        
+            <Presentation type="list"/>
+                    
+        </ViewDef>
+</Views></Content>

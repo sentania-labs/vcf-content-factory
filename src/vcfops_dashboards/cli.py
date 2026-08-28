@@ -20,6 +20,7 @@ from .client import (
 from .id_guard import check_dashboard_id_stability
 from .loader import DashboardValidationError, load_all
 from .packager import build_import_zip
+from .summary_bind import bind_summary
 from .ui_client import UIClientError, VCFOpsUIClient
 
 DEFAULT_VIEWS = Path("content/views")
@@ -677,6 +678,40 @@ def cmd_delete_view(args) -> int:
         ui.logout()
 
 
+def cmd_bind_summary(args) -> int:
+    """Bind every `summary_for` dashboard to every listed resource kind's Summary tab.
+
+    Post-import route over the unsupported UI session (Struts layer); a
+    pak carries the same binding in content/dashboards/dashboards.properties
+    instead. See vcfops_dashboards/summary_bind.py for the flow and
+    knowledge/context/api-surface/summary_dashboard_assignment.md for the
+    mechanism (binding is a template COPY; the printed template UUID is
+    the only handle on it).
+    """
+    validate_profile_arg(args)
+    try:
+        _views, dashboards = _load(args)
+    except DashboardValidationError as e:
+        print(f"FAILED (load): {e}", file=sys.stderr)
+        return 1
+    if args.dry_run:
+        return bind_summary(None, dashboards, only=args.dashboard, unbind=args.unbind, dry_run=True)
+    try:
+        profile, default = resolve_profile_from_args(args)
+        ui = VCFOpsUIClient.from_env(profile=profile, default_profile=default)
+        ui.login()
+    except UIClientError as e:
+        print(f"FAILED (UI login): {e}", file=sys.stderr)
+        return 2
+    try:
+        return bind_summary(ui, dashboards, only=args.dashboard, unbind=args.unbind)
+    except UIClientError as e:
+        print(f"FAILED: {e}", file=sys.stderr)
+        return 2
+    finally:
+        ui.logout()
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="vcfops_dashboards")
     p.add_argument("--views-dir", default=str(DEFAULT_VIEWS),
@@ -775,6 +810,29 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_profile_arg(pdv, default="devel")
     pdv.set_defaults(func=cmd_delete_view)
+
+    pbs = sub.add_parser(
+        "bind-summary",
+        help="bind summary_for dashboards to every listed resource kind's Summary tab via UI session",
+    )
+    pbs.add_argument(
+        "--dashboard",
+        metavar="NAME",
+        default=None,
+        help="only this dashboard (exact YAML name); default: every dashboard with summary_for",
+    )
+    pbs.add_argument(
+        "--unbind",
+        action="store_true",
+        help="restore the built-in Summary page (resetAssociations with the kind's defaultTemplateName) instead of binding",
+    )
+    pbs.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="print the association map only; no session, nothing written",
+    )
+    add_profile_arg(pbs, default="devel")
+    pbs.set_defaults(func=cmd_bind_summary)
 
     return p
 

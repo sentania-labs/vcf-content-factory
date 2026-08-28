@@ -77,3 +77,11 @@ Every `src/vcfops_*/` change you report is reviewed by
 `framework-reviewer` (spawned by the orchestrator) before any PR opens
 (RULE-013). BLOCKING findings come back to you as a re-brief. Expect
 that gate: your change is not shipped until the review passes.
+
+## Waiting on a live instance
+
+When a live check needs a dashboard to materialize (`isLoading: false`),
+poll in a foreground loop (every 30 s, up to 15 minutes). Never hand the
+wait to a background command and end your turn: nothing re-invokes you
+when it fires, and the deliverable sits half-done until the orchestrator
+notices.

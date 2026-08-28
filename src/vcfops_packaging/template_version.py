@@ -8,7 +8,12 @@ Bump this value whenever any of the following change:
   - vcfops_packaging/templates/install.py
   - vcfops_packaging/templates/install.ps1
   - vcfops_packaging/builder.py  (output structure changes)
+  - vcfops_packaging/discrete_builder.py  (output structure changes)
+  - vcfops_packaging/release_builder.py  (output structure changes)
   - vcfops_dashboards/render.py  (dashboard wire format changes)
+
+This list is the same one CLAUDE.md carries under "After tooling changes";
+keep the two in step.
 """
 
 CURRENT_TEMPLATE_VERSION = "2026-08-24-2"

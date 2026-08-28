@@ -2,7 +2,7 @@
 id: RULE-011
 ---
 
-# RULE-011: Wireframe + plan-mode approval before dashboard authoring
+# RULE-011: Wireframe + HTML mock + plan-mode approval before dashboard authoring
 
 Before delegating to `dashboard-author`, the orchestrator MUST enter plan
 mode and present an ASCII (or markdown table) wireframe of the proposed
@@ -27,6 +27,36 @@ The wireframe lives in the design note (`knowledge/designs/dashboards/<slug>.md`
 **not** in chat alone — so a future reader can diff it against the
 shipped YAML. The orchestrator commits the wireframe to the design note
 BEFORE spawning `dashboard-author`.
+
+## The HTML mock (required, added 2026-08-25)
+
+The wireframe table is what the author reads; it is not what the user
+approves. Alongside it, the orchestrator produces a **self-contained HTML
+mock** at `knowledge/designs/dashboards/<slug>.html` that simulates the
+dashboard as the user will see it, and the user approves the mock. The
+table must be the machine-readable twin of the mock: same grid, same
+widgets, same keys.
+
+The mock must:
+
+1. Use the Ops UI idiom (dark theme, 12-column grid, widget frames with
+   titles) so a user can judge it as a dashboard, not as a drawing.
+2. Show the real widget type per frame and the real metric or property
+   key per cell, in small muted monospace, so the reviewer can check
+   sources without opening the table. Keys come from recon, never
+   invented (RULE-002).
+3. Carry values that are either live (state the instance and timestamp
+   in the header) or visibly marked as simulated. Never present a
+   simulated value as observed.
+4. Render adapter-model gaps as gaps (dimmed tile, "GAP" label), not as
+   filled-in placeholders.
+5. Stay a local file: no external assets, no publishing to a hosted
+   artifact service. Embargoed or product-bound designs keep their mock
+   under the same private tree as the design note.
+
+Approval flow: mock first (what the user looks at), table second (what the
+author builds from). A change requested on the mock is applied to both
+before the author spawns.
 
 This rule does NOT apply to:
 

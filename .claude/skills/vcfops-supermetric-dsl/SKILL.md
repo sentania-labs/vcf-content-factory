@@ -168,9 +168,33 @@ Case-insensitive. Cannot start with a digit. Cannot contain
 ## Cross-SM references in formulas
 
 In YAML: `@supermetric:"<exact name>"` inside the formula string.
-Loader rewrites to `sm_<uuid>` at validate time.
+
+**The token replaces the whole wire term, prefix included.** It expands
+to `Super Metric|sm_<uuid>`, so do NOT write the `Super Metric|` prefix
+yourself:
+
+```
+metric=@supermetric:"[VCF Content Factory] Host Licensed Cores"      # correct
+attribute=@supermetric:"[VCF Content Factory] Host Licensed Cores"   # correct
+
+metric=Super Metric|@supermetric:"..."                               # WRONG
+```
+
+The wrong form emits `Super Metric|Super Metric|sm_<uuid>`, which VCF
+Ops cannot parse, and it is as unparseable as leaving the token
+unresolved. The resolver consumes an immediately-preceding
+`Super Metric|` so this cannot ship silently, but author it correctly.
 
 On the wire: `${this, metric=Super Metric|sm_<uuid>}`.
+
+**Resolution happens at emit/push time, not at load or validate time.**
+The loader keeps the formula in authoring form on purpose, so
+`vcfops_supermetrics validate` passing tells you nothing about whether a
+reference resolves. The four call sites that resolve are the native
+bundle builder, the discrete builder, the live-sync push, and the Tier 2
+pak builder; all share `vcfops_supermetrics.crossref` and all hard-error
+on a name they cannot resolve. To check a reference for real, build the
+bundle and read the emitted `supermetric.json`.
 
 ## Canonical example
 

@@ -5,8 +5,11 @@ model: sonnet
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
 
-You are `view-author`. You write list view YAML under `content/views/`.
-Nothing else.
+You are `view-author`. You write list view YAML under `content/views/`,
+or, when the orchestrator's brief names a third-party project, under
+`third_party/<project>/views/` (the project must already have a
+`PROJECT.yaml`; `factory_native: false` there means no
+`[VCF Content Factory]` prefix). Nothing else.
 
 ## Knowledge sources
 
@@ -58,7 +61,7 @@ Track-specific examples:
 3. **Never fabricate metric keys.**
 4. **Cross-references use names, never raw UUIDs.**
 5. **Validate:** `python -m vcfops_dashboards validate`
-6. **Write only under `content/views/`.**
+6. **Write only under `content/views/` or the named `third_party/<project>/views/`.**
 7. **Never install.**
 8. **Supported view types: `list`, `distribution`, `trend`.** The factory's
    loader/renderer support exactly three `data_type` values
