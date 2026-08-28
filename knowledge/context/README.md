@@ -121,7 +121,7 @@ cycles because that did not happen.
 | `dashboard_delete_api.md` | Dashboard delete API |
 | `uninstall_empty_collection_shapes.md` | What the UI API returns for empty report/view/dashboard collections (observed vs unresolved), for uninstaller shape guards |
 | `summary_dashboard_assignment.md` | Binding a dashboard to an object type's Summary tab via the UI Struts call (no Suite API); pak-binding negative corrected 2026-08-25 |
-| `summary_dashboard_pak_binding.md` | Pak-side Summary binding: `content/dashboards/dashboards.properties` (`<dir>=<AdapterKind>:<ResourceKind>`), installer behavior, template-clone semantics, uninstall gap, 9.0 through 9.2 |
+| `summary_dashboard_pak_binding.md` | Pak-side Summary binding: `<pak>/content/dashboards/dashboards.properties` (`<dir>=<AdapterKind>:<ResourceKind>`), installer behavior, template-clone semantics, uninstall gap, 9.0 through 9.2 |
 | `reports_api_surface.md` | Reports API surface |
 | `pak_install_api_exploration.md` | .pak install API exploration |
 | `pak_uninstall_api_exploration.md` | .pak uninstall API exploration |

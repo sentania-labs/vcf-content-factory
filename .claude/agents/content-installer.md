@@ -140,7 +140,7 @@ the install report, they are the only handles on the materialized copies.
 Kinds absent on the instance are reported as errors and skipped; the rest
 still bind. `--unbind` restores
 the built-in page. Pak installs bind at install time from
-`content/dashboards/dashboards.properties` instead; do not run bind-summary
+`<pak>/content/dashboards/dashboards.properties` instead; do not run bind-summary
 for those. Mechanism: `knowledge/context/api-surface/summary_dashboard_assignment.md`.
 
 ## Waiting for materialization
