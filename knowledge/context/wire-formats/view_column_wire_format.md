@@ -1265,9 +1265,42 @@ view-multi-subject/`, `vSphere Data Centers Inventory`):
 ```
 
 Per kind: `descendant` then `self`; kinds in sequence. The public
-Kubernetes MP views carry the same shape with three kinds. Per-column
-`adapterKind` / `resourceKind` properties name only the first kind in the
-vendor sample, and the factory does the same.
+Kubernetes MP views carry the same shape with three kinds.
+
+**Per-column `adapterKind` / `resourceKind` are a kind filter, not
+metadata** (2026-08-29, api-explorer, live render on a 9.2.0.0 lab:
+`knowledge/context/api-surface/view_multi_subject_column_binding.md`,
+verbatim vendor ViewDefs, 26 multi-subject views surveyed; the extract is held under embargo, see `embargo/reference/`).
+A column bound to one kind renders `null` on rows of every other kind;
+a column with neither Property resolves against all subject kinds.
+Broadcom's multi-subject list views leave 59 of 68 columns unbound and
+bind the rest to the single kind that owns the key (not necessarily the
+first). The vendor sample above also does this: its 4 metric columns
+are unbound, only the `summary|parentVcenter` property column names
+Datacenter. Until 2026-08-29 the factory bound every column to
+`subjects[0]`, which is why factory multi-subject views populated only
+first-kind rows (every other kind's row rendered a dash on the lab).
+
+**Renderer contract (2026-08-29, tooling, implements the api-surface
+finding):**
+
+1. A view with 2+ `subjects:` emits **no** `adapterKind` and **no**
+   `resourceKind` Property on a column by default (`isStringAttribute` is
+   followed directly by `rollUpType`); the column resolves `attributeKey`
+   against every subject kind. Applies to the generic column path and to
+   instanced-group member columns alike.
+2. A column may carry `subject: {adapter_kind, resource_kind}` in YAML. It
+   must be one of the view's `subjects:` entries (loader error otherwise,
+   and a loader error on a view that declares no `subjects:` list); the
+   renderer then emits both Properties naming that kind, in the historical
+   position, any index, not necessarily `subjects[0]`.
+3. Single-subject views (scalar `subject:` or a one-entry `subjects:`)
+   are unchanged: every column binds to the one kind, byte-identical to
+   the pre-change output (checked across all 31 single-subject factory and
+   bundle views at the time of the change).
+4. Reverse path: an unbound column maps to no `subject:`; a bound column
+   in a multi-subject view maps to the per-column `subject:`; on a
+   single-subject view the binding is implied and never written.
 
 ### YAML
 
@@ -1277,6 +1310,16 @@ subjects:
     resource_kind: Datacenter
   - adapter_kind: VMWARE
     resource_kind: vSphere World
+columns:
+  - attribute: summary|total_number_hosts   # unbound: populates for every kind
+    display_name: Hosts
+  - attribute: summary|parentVcenter        # bound: Datacenter rows only
+    display_name: vCenter
+    is_property: true
+    is_string_attribute: true
+    subject:
+      adapter_kind: VMWARE
+      resource_kind: Datacenter
 ```
 
 `subjects:` and `subject.adapter_kind` / `subject.resource_kind` are
@@ -1290,9 +1333,10 @@ byte-identical (checked across all 24 factory/bundle views at the time of
 the change).
 
 Loader: `src/vcfops_dashboards/loader.py` (`ViewSubject`,
-`ViewDef.subjects`, `ViewDef.subject_kinds`); renderer:
-`src/vcfops_dashboards/render.py::_render_view_def_fragment`; tests:
-`tests/test_view_multi_subject.py`. The reverse path (`reverse.py`,
+`ViewDef.subjects`, `ViewDef.subject_kinds`, `ViewColumn.subject`);
+renderer: `src/vcfops_dashboards/render.py::_render_view_def_fragment`
+and `_column_kind_binding`; tests: `tests/test_view_multi_subject.py`,
+`tests/test_view_multi_subject_column_binding.py`. The reverse path (`reverse.py`,
 `vcfops_extractor/extractor.py`, `vcfops_extractor/reverse_local.py`)
 collects every distinct (adapterKind, resourceKind) pair in document
 order; when more than one is present the written YAML carries

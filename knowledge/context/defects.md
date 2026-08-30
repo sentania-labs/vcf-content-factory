@@ -1078,3 +1078,60 @@ reused. Field lines are `- **Field:** value` (parsed by
   `dashboard_render.py`; benign for SDK paks (they always ship the
   matching localization bundle) — re-cut the kit on the next `v*`
   release rather than out-of-band.
+
+### DEF-019
+
+- **Title:** Reverse path (extractor / reverse_local) drops the SubjectType
+  `filter=` and the instanced-group member `isProperty` flag on round-trip
+- **Severity:** tracked
+- **Status:** open
+- **Affects:** factory:extractor (`src/vcfops_extractor/extractor.py`,
+  `src/vcfops_extractor/reverse_local.py`, `src/vcfops_dashboards/reverse.py`)
+- **First-seen:** commit b12bd2a (HEAD baseline of the 2026-08-29
+  multi-subject column binding review); pre-existing, date of introduction
+  not traced.
+- **Source:** `knowledge/context/reviews/framework/2026-08-29-multi-subject-column-binding.md`
+  (NIT 2). Recorded so the loss is not later attributed to the column
+  binding diff.
+- **Summary:** Rendering the four multi-subject views of an embargoed third-party project
+  views, parsing them back with either reverse writer, reloading and
+  re-rendering loses (a) the `filter=` JSON on `<SubjectType>` and (b)
+  `isProperty` on instanced-group member Items (`summaryInfos` also
+  differs). The residual XML diff is identical on the HEAD baseline, so
+  this is reverse-path lossiness, not a renderer defect. Forward render
+  and import are unaffected; only `/extract` of a view that carries a
+  subject filter or an instanced group with property members produces
+  YAML that does not reproduce the source XML.
+- **Close condition:** the reverse parsers carry `filter=` into
+  `subject_filter:` and instanced-group member `is_property` into YAML, and
+  the round-trip test in `tests/test_view_multi_subject_column_binding.py`
+  (or a sibling) asserts a byte-identical re-render for those views.
+- **Related:** none.
+
+### DEF-020
+
+- **Title:** `vcommunity-vsphere` pak dashboard "VM Details" references the
+  view `Windows Services vCommunity` by name, but that view ships only in
+  the sibling `vcommunity-os` pak; every build since the split wrote the
+  literal name into `viewDefinitionId`, which renders as "view does not
+  exist" on the instance
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** pak:vcommunity-vsphere
+  (`content/sdk-adapters/vcommunity-vsphere/dashboards/VM Details.yaml`
+  line ~606); exposed by the 2026-08-29 renderer guard, which now fails
+  the validate chain on this pak instead of shipping the defect.
+- **First-seen:** vcommunity-vsphere tag v1.0.0.12 (the os/vsphere split,
+  per that repo's CHANGELOG line ~764); detected 2026-08-29.
+- **Source:** `knowledge/context/reviews/framework/2026-08-29-view-reference-guard.md`;
+  same mechanism as the vodap incident recorded in
+  `knowledge/lessons/dashboard-import-without-views-corrupts-refs.md`.
+- **Summary:** The framework's external-view passthrough accepts only a
+  UUID; a bare name that is not among the bundled views was leaked into
+  the widget config. The validate chain stays red on this pak until the
+  content is fixed; a warning would report green while broken.
+- **Close condition:** `sdk-adapter-author` either references the os pak's
+  view by its stable UUID `ae751947-1782-466f-b560-9a950be3c1f9` (external
+  passthrough; the widget populates only when `vcommunity-os` is installed)
+  or removes the widget; version bump and CI release; managementpacks
+  validate passes for all Tier 2 paks.
