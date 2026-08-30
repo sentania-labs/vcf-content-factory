@@ -236,6 +236,16 @@ class ViewColumn:
     # "Interval Breakdown" and the column renders the isTimeSegment wire
     # shape instead of a metric column. See TimeSegmentSpec.
     time_segment: Optional["TimeSegmentSpec"] = None
+    # Per-column kind binding for multi-subject views (YAML `subject:` on
+    # the column, `{adapter_kind, resource_kind}`). On the product the
+    # column's adapterKind/resourceKind Properties are a kind FILTER, not
+    # metadata: a bound column renders null on rows of every other subject
+    # kind. So in a view with 2+ `subjects:` the renderer emits NO
+    # adapterKind/resourceKind for a column unless this is set, and then
+    # names exactly this kind (which must be one of the view's subjects).
+    # Single-subject views ignore it (they always bind to their one kind).
+    # Evidence: knowledge/context/api-surface/view_multi_subject_column_binding.md.
+    subject: Optional["ViewSubject"] = None
 
 
 @dataclass
@@ -447,9 +457,14 @@ class ViewDef:
     # Multi-subject views (YAML `subjects:`): every entry gets its own
     # descendant+self <SubjectType> pair, in authored order. Empty means
     # the single (adapter_kind, resource_kind) subject above; when set,
-    # adapter_kind/resource_kind mirror subjects[0] so per-column kinds and
-    # every other consumer of the scalar pair keep working unchanged.
-    # Wire evidence: reference/docs/extracted/view-multi-subject/.
+    # adapter_kind/resource_kind mirror subjects[0] so every other consumer
+    # of the scalar pair keeps working unchanged. Columns of a multi-
+    # subject view are NOT bound to subjects[0]: they carry no
+    # adapterKind/resourceKind unless ViewColumn.subject names one kind
+    # (see ViewColumn.subject).
+    # The product treats a column's adapterKind/resourceKind as a kind
+    # filter; vendor multi-subject views leave shared columns unbound.
+    # Wire format: knowledge/context/wire-formats/view_column_wire_format.md.
     subjects: List[ViewSubject] = field(default_factory=list)
     summary: SummaryRow | None = None
     # "list" (default), "distribution", or "trend"
@@ -543,6 +558,20 @@ class ViewDef:
                 raise DashboardValidationError(
                     f"view {self.name}: column requires attribute and display_name"
                 )
+            if c.subject is not None:
+                if not self.subjects:
+                    raise DashboardValidationError(
+                        f"view {self.name}: column {c.display_name!r} sets subject: "
+                        f"but the view declares no subjects: list; a per-column "
+                        f"subject only means something on a multi-subject view"
+                    )
+                if c.subject.key not in self.subject_kinds:
+                    raise DashboardValidationError(
+                        f"view {self.name}: column {c.display_name!r} subject "
+                        f"{c.subject.adapter_kind}:{c.subject.resource_kind} is not "
+                        f"one of the view's subjects: "
+                        + ", ".join(f"{ak}:{rk}" for ak, rk in self.subject_kinds)
+                    )
             if c.time_segment is not None:
                 self._validate_time_segment_column(c)
                 continue
@@ -2089,6 +2118,29 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
         else:
             attribute = str(attribute_raw or "").strip()
 
+        col_subject: Optional[ViewSubject] = None
+        col_subject_raw = c.get("subject")
+        if col_subject_raw is not None:
+            if not isinstance(col_subject_raw, dict):
+                raise DashboardValidationError(
+                    f"view column {c.get('display_name')!r}: subject must be a "
+                    f"mapping {{adapter_kind, resource_kind}}, got {col_subject_raw!r}"
+                )
+            unknown = set(col_subject_raw) - {"adapter_kind", "resource_kind"}
+            if unknown:
+                raise DashboardValidationError(
+                    f"view column {c.get('display_name')!r}: subject has unknown "
+                    f"key(s) {sorted(unknown)}"
+                )
+            cs_ak = str(col_subject_raw.get("adapter_kind", "") or "").strip()
+            cs_rk = str(col_subject_raw.get("resource_kind", "") or "").strip()
+            if not cs_ak or not cs_rk:
+                raise DashboardValidationError(
+                    f"view column {c.get('display_name')!r}: subject requires both "
+                    f"adapter_kind and resource_kind"
+                )
+            col_subject = ViewSubject(adapter_kind=cs_ak, resource_kind=cs_rk)
+
         return ViewColumn(
             attribute=attribute,
             display_name=str(c["display_name"]).strip(),
@@ -2107,6 +2159,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
             is_string_attribute=bool(c.get("is_string_attribute", False)),
             instanced_group=instanced_group,
             time_segment=time_segment,
+            subject=col_subject,
         )
 
     cols = [_load_column(c) for c in (data.get("columns") or [])]

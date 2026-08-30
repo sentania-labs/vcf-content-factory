@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Synthetic two-subject ViewDef in the vendor shape (public VMWARE kinds
+     only). Contract it documents: shared columns of a multi-subject view
+     carry no adapterKind/resourceKind (isStringAttribute is followed
+     directly by rollUpType); a column that belongs to one kind binds to
+     that kind, which need not be the first subject. See
+     knowledge/context/wire-formats/view_column_wire_format.md. -->
+<Content>
+  <Views>
+    <ViewDef id="9f1e2d3c-4b5a-4c6d-8e7f-0a1b2c3d4e5f">
+      <Title>Synthetic Multi-Subject Inventory</Title>
+      <Description>Two-subject fixture for column binding tests.</Description>
+      <SubjectType adapterKind="VMWARE" resourceKind="Datacenter" type="descendant"/>
+      <SubjectType adapterKind="VMWARE" resourceKind="Datacenter" type="self"/>
+      <SubjectType adapterKind="VMWARE" resourceKind="vSphere World" type="descendant"/>
+      <SubjectType adapterKind="VMWARE" resourceKind="vSphere World" type="self"/>
+      <Usage>dashboard</Usage>
+      <Usage>report</Usage>
+      <Controls>
+        <Control type="attributes-selector">
+          <Property name="attributeInfos">
+            <List>
+              <Item>
+                <Value>
+                  <Property name="objectType" value="RESOURCE"/>
+                  <Property name="attributeKey" value="summary|total_number_hosts"/>
+                  <Property name="isStringAttribute" value="false"/>
+                  <Property name="rollUpType" value="AVG"/>
+                  <Property name="rollUpCount" value="1"/>
+                  <Property name="transformations">
+                    <List>
+                      <Item value="CURRENT"/>
+                    </List>
+                  </Property>
+                  <Property name="isProperty" value="false"/>
+                  <Property name="displayName" value="Hosts"/>
+                </Value>
+              </Item>
+              <Item>
+                <Value>
+                  <Property name="objectType" value="RESOURCE"/>
+                  <Property name="attributeKey" value="summary|total_number_vms"/>
+                  <Property name="isStringAttribute" value="false"/>
+                  <Property name="adapterKind" value="VMWARE"/>
+                  <Property name="resourceKind" value="vSphere World"/>
+                  <Property name="rollUpType" value="AVG"/>
+                  <Property name="rollUpCount" value="1"/>
+                  <Property name="transformations">
+                    <List>
+                      <Item value="CURRENT"/>
+                    </List>
+                  </Property>
+                  <Property name="isProperty" value="false"/>
+                  <Property name="displayName" value="VMs"/>
+                </Value>
+              </Item>
+            </List>
+          </Property>
+        </Control>
+      </Controls>
+    </ViewDef>
+  </Views>
+</Content>

@@ -255,9 +255,15 @@ def _refs_from_view(view) -> list[MetricReference]:
     The adapter_kind / resource_kind come from the view's subject(s): a
     ``subjects:`` view is audited once per kind (``view.subject_kinds``),
     because a column can be policy-disabled on the second kind while
-    enabled on the first and would render blank there.
+    enabled on the first and would render blank there.  A column bound to
+    one kind via ``subject:`` only ever resolves against that kind on the
+    product (the adapterKind/resourceKind Properties are a kind filter,
+    see knowledge/context/api-surface/view_multi_subject_column_binding.md),
+    so it is audited against that one kind only; fanning it out would
+    raise a false "metric key not found" for the other kinds.
     """
-    keys: list[str] = []
+    # (metric key, kinds to audit it against); None means every subject kind.
+    keys: list[tuple[str, list[tuple[str, str]] | None]] = []
     source_desc = f"view {view.name!r}"
     for col in view.columns:
         if getattr(col, "time_segment", None) is not None:
@@ -288,7 +294,7 @@ def _refs_from_view(view) -> list[MetricReference]:
             # exactly like a direct reference.
             if ig.is_driver:
                 continue
-            keys.append(_normalize_instanced_group_key(col.attribute.strip()))
+            keys.append((_normalize_instanced_group_key(col.attribute.strip()), _column_kinds(col)))
             continue
         attr = col.attribute.strip()
         if _is_sm_ref(attr):
@@ -296,7 +302,7 @@ def _refs_from_view(view) -> list[MetricReference]:
         # Normalize instanced metric key form (e.g.
         # "net:Aggregate of all instances|packetsPerSec" -> "net|packetsPerSec").
         # The describe cache only stores the base group|stat form.
-        keys.append(_normalize_metric_key(attr))
+        keys.append((_normalize_metric_key(attr), _column_kinds(col)))
 
     # Subject-filter metric keys (SubjectType filter= JSON) are never emitted
     # as columns of their own, but they still reference a describe-cache key
@@ -307,11 +313,13 @@ def _refs_from_view(view) -> list[MetricReference]:
             key = (cond.metric_key or "").strip()
             if not key or _is_sm_ref(key):
                 continue
-            keys.append(_normalize_metric_key(key))
+            keys.append((_normalize_metric_key(key), None))
 
     refs: list[MetricReference] = []
     for ak, rk in view.subject_kinds:
-        for key in keys:
+        for key, kinds in keys:
+            if kinds is not None and (ak, rk) not in kinds:
+                continue
             refs.append(MetricReference(
                 adapter_kind=ak,
                 resource_kind=rk,
@@ -319,6 +327,15 @@ def _refs_from_view(view) -> list[MetricReference]:
                 source_desc=source_desc,
             ))
     return refs
+
+
+def _column_kinds(col) -> list[tuple[str, str]] | None:
+    """Kinds a column is audited against: its bound ``subject:`` only, or
+    None for every subject kind of the view (unbound column)."""
+    sub = getattr(col, "subject", None)
+    if sub is None:
+        return None
+    return [(sub.adapter_kind, sub.resource_kind)]
 
 
 # ---------------------------------------------------------------------------

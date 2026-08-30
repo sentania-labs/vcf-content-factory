@@ -208,6 +208,12 @@ def _parse_view_xml_to_dict(elem) -> dict:
             time_window = _parse_time_window(child)
             meta = _parse_controls_meta(child)
 
+    if len(subject_pairs) <= 1:
+        # Single-subject view: per-column binding is implied by the one
+        # SubjectType and the loader rejects `subject:` on a column.
+        for col in columns:
+            col.pop("subject", None)
+
     return {
         "id": view_id,
         "name": title,
@@ -424,6 +430,15 @@ def _parse_column_value_dict(value_elem) -> Optional[dict]:
                     stacklevel=3,
                 )
                 col["ascending_range"] = False
+
+    # Per-column kind binding (adapterKind/resourceKind Properties);
+    # _parse_view_xml_to_dict drops it on single-subject views. See
+    # knowledge/context/api-surface/view_multi_subject_column_binding.md.
+    if props.get("adapterKind") and props.get("resourceKind"):
+        col["subject"] = {
+            "adapter_kind": props["adapterKind"],
+            "resource_kind": props["resourceKind"],
+        }
 
     return col
 
@@ -725,7 +740,7 @@ def _compare_dashboard_round_trip(
       }
     """
     from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfops_dashboards.render import render_dashboards_bundle_json, UnresolvedViewReferenceError
 
     raw_name = (source_json.get("name") or "").strip()
     display_name = raw_name.split("/", 1)[-1].strip() if "/" in raw_name else raw_name
@@ -770,7 +785,7 @@ def _compare_dashboard_round_trip(
             owner_user_id="00000000-0000-0000-0000-000000000001",
         )
         rendered = json.loads(rendered_json_str)
-    except KeyError as e:
+    except (KeyError, UnresolvedViewReferenceError) as e:
         # A View widget references a view name that wasn't emitted (either a
         # missing source view or a UUID-fallback name).  This is an expected
         # gap when source views are absent from the reference tree.
