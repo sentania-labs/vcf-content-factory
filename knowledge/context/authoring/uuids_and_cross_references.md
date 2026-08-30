@@ -15,6 +15,66 @@ anything that creates or references content objects.
   dashboards) survives cross-instance installation only if every
   object lands with the **same UUID on every instance**.
 
+### Where `@supermetric:"<name>"` gets resolved
+
+Authors write the SM-to-SM reference by name, as
+`@supermetric:"<exact name>"` inside the formula. VCF Ops cannot parse that
+token; it must be rewritten to `Super Metric|sm_<uuid>` before the formula
+reaches the platform. Resolution therefore happens at **emit/push time**, not
+at load time: `SuperMetricDef.formula` still holds the authoring-time token
+after `load_file()`, by design, so the YAML stays UUID-free and diffable.
+
+The one resolver lives in `src/vcfops_supermetrics/crossref.py`
+(`resolve_sm_formula`). Every path that emits or pushes a formula calls it:
+
+| Path | Call site | Name scope |
+|---|---|---|
+| Native bundle zip | `vcfops_packaging.builder._render_supermetrics_dict` | the bundle's own SMs |
+| Discrete / release zip | same (via `discrete_builder`, `release_builder`) | component SMs, after `_expand_sm_crossrefs` pulls in referents |
+| Live sync | `vcfops_supermetrics.client.import_supermetrics_bundle` | the sync batch, then `find_by_name` against the target instance |
+| Tier 2 pak | `vcfops_managementpacks.sdk_builder._resolve_sm_formula` | `bundled_content.supermetrics` |
+
+An unresolvable name is a **hard error** on every path. Emitting the literal
+token produces a super metric the platform silently fails to evaluate, so
+failing at build/push time is the cheaper failure. Resolution is idempotent:
+an already-resolved `Super Metric|sm_<uuid>` is left alone.
+
+**The token carries its own `Super Metric|` prefix.** It replaces the whole
+wire term, so the correct authoring form is `metric=@supermetric:"<name>"`,
+never `metric=Super Metric|@supermetric:"<name>"`. The hand-written prefix
+used to emit `Super Metric|Super Metric|sm_<uuid>`, which VCF Ops cannot parse
+and which no build step flagged (PR #141/#142). The regex now absorbs every
+immediately-preceding `Super Metric|`, in any case and spacing and however many
+of them there are (`super metric|`, `SUPER METRIC|`, `Super Metric| `,
+`Super Metric|Super Metric|`), so both forms resolve to a single prefix, but the
+second form is still wrong on the page. A doubled prefix that survives anyway
+(hand-written with no token to absorb it) is a hard error on every emit path, so
+it can never ship silently.
+
+**Near-miss syntax is a hard error, not a passthrough.** `@supermetric: "X"`
+(space after the colon) and `@supermetric:X` (unquoted) do not match the
+token regex. Any literal `@supermetric` surviving substitution raises, in any
+case spelling, because shipping it is the same corrupt-SM outcome as an
+unresolvable name.
+
+**The token itself is case-insensitive, like the prefix.**
+`@SuperMetric:"X"` and `@SUPERMETRIC:"X"` resolve exactly as `@supermetric:"X"`
+does. They used to pass straight through: the resolver matched the token
+case-sensitively, and `vcfops_packaging.deps._is_sm_ref` lowercases before
+comparing, so the dependency audit classified a mis-cased token as an
+already-good SM reference and skipped it. Audit green, build green, literal
+token in the zip (PR #141 round 3). Only the *token* is forgiving: the
+referenced SM **name** in the quotes is still matched exactly.
+
+**`validate` proves nothing here.** The SM loader has no `@supermetric`
+awareness at all, by design (the formula stays in authoring form). The only
+real check on a cross-reference is building the bundle / pak and reading the
+emitted `supermetric.json`.
+
+The reverse direction (`vcfops_supermetrics.reverse.rewrite_formula`,
+`vcfops_extractor`) turns `sm_<uuid>` back into `@supermetric:"<name>"` so
+extracted content round-trips through the authoring form.
+
 ## Why `POST /api/supermetrics` is a dead end
 
 The public create endpoint rejects caller-supplied `id`:
@@ -65,9 +125,11 @@ name at load time without round-tripping to the server:
   `attribute: supermetric:"<name>"`; loader looks up the super metric
   YAML by name, reads its `id`, emits `sm_<id>`.
 - **Super metric formulas referencing another super metric**: YAML
-  uses `@supermetric:"<name>"` inside the formula string; loader
-  rewrites to `sm_<id>` at validation time. Validation fails loudly
-  if the referenced name doesn't resolve.
+  uses `@supermetric:"<name>"` inside the formula string. This one is
+  **not** resolved at validate time: it is rewritten to
+  `Super Metric|sm_<id>` at emit/push time by
+  `vcfops_supermetrics.crossref` (see the section above), which fails
+  loudly if the referenced name doesn't resolve.
 
 ## Cross-reference syntax quick reference
 
@@ -77,7 +139,7 @@ validate or sync time.
 
 | From → To | YAML syntax | Loader output | When resolved |
 |---|---|---|---|
-| SM formula → other SM | `@supermetric:"<exact name>"` | `sm_<uuid>` | `validate` (SM loader) |
+| SM formula → other SM | `@supermetric:"<exact name>"` | `Super Metric|sm_<uuid>` | **emit/push** (`crossref`), not `validate` |
 | View column → SM | `supermetric:"<exact name>"` in `attribute:` | `sm_<uuid>` in `attributeKey` | `validate` (dashboard loader) |
 | Dashboard widget → View | `view: "<exact view name>"` | view UUID in widget config | `validate` (dashboard loader) |
 | Alert → Symptom | `name: "<exact symptom name>"` in symptom set | symptom definition ID | `sync` (alert installer, via `GET /api/symptomdefinitions`) |

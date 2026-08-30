@@ -396,8 +396,18 @@ def cmd_analyze(args) -> int:
             from .deps import _refs_from_formula
             sm_data: dict = _json.loads(sm_path.read_text(encoding="utf-8"))
             for sm_obj in sm_data.values():
-                for ref in _refs_from_formula(sm_obj.get("formula", ""), ""):
-                    pairs.add((ref.adapter_kind, ref.resource_kind))
+                try:
+                    for ref in _refs_from_formula(
+                        sm_obj.get("formula", ""), "",
+                        sm_obj.get("resourceKinds"),
+                    ):
+                        pairs.add((ref.adapter_kind, ref.resource_kind))
+                except AuditError:
+                    # Unauditable ${this, ...} ref (no resourceKinds in the
+                    # wire object): skip pair discovery for this SM; the
+                    # analyze_staged_bundle() call below re-raises it with
+                    # the full error surface.
+                    continue
         for ak, rk in sorted(pairs):
             try:
                 cache.refresh(ak, rk)
@@ -1393,6 +1403,7 @@ def cmd_publish(args) -> int:
             no_push=no_push,
             use_pr=use_pr,
             auto_merge=auto_merge,
+            skip_audit=getattr(args, "skip_audit", False),
         )
     except PublishError as e:
         print(f"ERROR: {e}", file=sys.stderr)
@@ -1768,6 +1779,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--force",
         action="store_true",
         help="overwrite an existing zip at the same release name but different version",
+    )
+    ppub.add_argument(
+        "--skip-audit",
+        action="store_true",
+        help="skip dependency audit entirely; metric references are NOT validated. "
+             "Use only when describe cache cannot be refreshed and content is known correct.",
     )
     ppub.add_argument(
         "--no-push",

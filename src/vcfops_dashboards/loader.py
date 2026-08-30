@@ -1643,7 +1643,19 @@ class Dashboard:
             return []
         return [parse_summary_for(v) for v in self.summary_for]
 
-    def validate(self, known_views: dict[str, ViewDef], enforce_framework_prefix: bool = True) -> None:
+    def validate(
+        self,
+        known_views: dict[str, ViewDef],
+        enforce_framework_prefix: bool = True,
+    ) -> None:
+        """Check the cross-object invariants that ``load_dashboard()`` cannot.
+
+        A View widget must name a view in ``known_views`` or carry a raw UUID
+        (the external-view passthrough below).  There is deliberately no escape
+        hatch for an unmatched bare name: a cross-pak reference is authored as
+        the sibling view's UUID, which the passthrough already accepts, so a
+        bare name that matches nothing is always a typo.
+        """
         if not self.name.strip():
             raise DashboardValidationError("dashboard: name is required")
         if self.summary_for is not None:
@@ -1721,7 +1733,10 @@ class Dashboard:
                 # bundled view is treated as an EXTERNAL reference (a platform-
                 # or other-MP-provided view resolved at install time).  Only bare
                 # names that fail to match are authoring mistakes.
-                if w.view_name not in known_views and not _UUID_RE.match(w.view_name):
+                if (
+                    w.view_name not in known_views
+                    and not _UUID_RE.match(w.view_name)
+                ):
                     raise DashboardValidationError(
                         f"dashboard {self.name}: widget {w.local_id}: "
                         f"unknown view '{w.view_name}'"
@@ -2295,6 +2310,14 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
 
     from vcfops_common.provenance import provenance_from_path
 
+    hide_object_name_raw = data.get("hide_object_name", False)
+    if not isinstance(hide_object_name_raw, bool):
+        raise DashboardValidationError(
+            f"{path}: hide_object_name must be a bool (unquoted true/false in "
+            f"YAML); got {type(hide_object_name_raw).__name__} "
+            f"{hide_object_name_raw!r}"
+        )
+
     v = ViewDef(
         id=view_id,
         name=str(data.get("name", "")).strip(),
@@ -2312,7 +2335,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
         forecast_days=forecast_days,
         transformations=transformations,
         time_window=time_window,
-        hide_object_name=bool(data.get("hide_object_name", False)),
+        hide_object_name=hide_object_name_raw,
         released=released,
         version=version,
         customgroups=view_customgroups,

@@ -276,7 +276,7 @@ def _build_bundle_headline(
     skip_audit: bool,
     *,
     audit_mode: str = "auto",
-    live_describe: bool = True,
+    live_describe: bool = False,
 ) -> Path:
     """Build a bundle headline zip using the bundle builder.
 
@@ -301,9 +301,9 @@ def _build_component_headline(
     extra_search_dirs: "list[Path] | None" = None,
     *,
     builtin_metric_enables: "list | None" = None,
-    skip_audit: bool = True,
+    skip_audit: bool = False,
     audit_mode: str = "auto",
-    live_describe: bool = True,
+    live_describe: bool = False,
 ) -> Path:
     """Build a component headline zip using the discrete builder.
 
@@ -321,10 +321,11 @@ def _build_component_headline(
                             releases have no bundle YAML of their own to carry
                             this list, so it is threaded through from the
                             release manifest instead.
-        skip_audit:         Passed to the discrete builder to skip the
-                            describe-cache dependency audit (default True for
-                            offline release builds, matching the bundle
-                            headline path's default).
+        skip_audit:         Passed to the discrete builder. Release builds
+                            audit by default (skip_audit=False) against the
+                            committed offline describe cache
+                            (live_describe=False); pass True only when the
+                            cache is broken and the content is known correct.
 
     Returns the path to the zip written by the builder (before rename).
     """
@@ -481,9 +482,9 @@ def build_release(
     release_path: "str | Path",
     output_dir: Path,
     *,
-    skip_audit: bool = True,
+    skip_audit: bool = False,
     audit_mode: str = "auto",
-    live_describe: bool = True,
+    live_describe: bool = False,
 ) -> List[ReleaseArtifact]:
     """Load the release manifest at release_path, build one zip per headline.
 
@@ -500,17 +501,23 @@ def build_release(
         release_path:  Path to a ``bundles/releases/*.yaml`` manifest.
         output_dir:    Directory where output zips are written.
         skip_audit:    Passed to the bundle builder and the discrete (component)
-                       builder to skip the describe-cache dependency audit
-                       (default True for offline builds). A discrete headline
-                       also has any ``builtin_metric_enables:`` declared on the
-                       release manifest threaded through, since it has no
-                       bundle YAML of its own to carry that list.
+                       builder. Release builds run the describe-cache
+                       dependency audit by DEFAULT (skip_audit=False), in
+                       offline mode: the committed
+                       knowledge/context/adapter_describe_cache/ files are the
+                       reference and no live instance is needed. Pass True
+                       only when the cache cannot be repaired and the content
+                       is known correct. A discrete headline also has any
+                       ``builtin_metric_enables:`` declared on the release
+                       manifest threaded through, since it has no bundle YAML
+                       of its own to carry that list.
         audit_mode:    Dependency audit mode passed through to the bundle and
                        discrete builders: "auto" (default), "strict", or "lax".
-        live_describe: Passed through to the bundle and discrete builders. If
-                       True (default) and VCFOPS_HOST/USER/PASSWORD are set,
-                       refresh the describe cache before auditing; if False,
-                       use the cache as-is.
+        live_describe: Passed through to the bundle and discrete builders.
+                       Default False for release builds (publish must work
+                       with no live instance); if True and
+                       VCFOPS_HOST/USER/PASSWORD are set, refresh the
+                       describe cache before auditing.
 
     Returns:
         One ``ReleaseArtifact`` per headline artifact in the manifest.

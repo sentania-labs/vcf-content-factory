@@ -41,7 +41,8 @@ from typing import List, Optional
 from vcfops_dashboards.render import render_views_xml, render_dashboards_bundle_json
 from vcfops_reports.render import render_report_xml
 from vcfops_alerts.render import render_alert_content_xml
-from .loader import Bundle, load_bundle, render_bme_items
+from vcfops_supermetrics.crossref import resolve_sm_formula, sm_name_to_uuid_map
+from .loader import Bundle, BundleValidationError, load_bundle, render_bme_items
 from .template_version import CURRENT_TEMPLATE_VERSION
 
 # ---------------------------------------------------------------------------
@@ -172,11 +173,33 @@ def _build_bundle_json(bundle: Bundle, display_name: str) -> str:
     return json.dumps(manifest, indent=2)
 
 
+# Remediation sentence for a native bundle build: the fix is a manifest edit.
+_SM_CROSSREF_HINT_BUNDLE = (
+    "That super metric is not in this bundle.  Add it to the bundle manifest "
+    "(or to the same discrete/release component), or remove the "
+    "cross-reference from the formula."
+)
+
+
 def _render_supermetrics_dict(bundle: Bundle) -> dict:
-    """Render super metrics as a dict keyed by UUID (wire format)."""
+    """Render super metrics as a dict keyed by UUID (wire format).
+
+    ``@supermetric:"<name>"`` cross-reference tokens are resolved to the native
+    ``Super Metric|sm_<uuid>`` wire token against the bundle's own SM set.  VCF
+    Ops cannot parse the authoring-time token, so an unresolvable name is a hard
+    build error rather than a silently corrupt super metric.
+    """
+    name_to_uuid = sm_name_to_uuid_map(bundle.supermetrics)
     result = {}
     for sm in bundle.supermetrics:
         formula = " ".join(sm.formula.split())
+        formula = resolve_sm_formula(
+            formula,
+            sm.name,
+            name_to_uuid,
+            error_cls=BundleValidationError,
+            hint=_SM_CROSSREF_HINT_BUNDLE,
+        )
         result[sm.id] = {
             "name": sm.name,
             "formula": formula,

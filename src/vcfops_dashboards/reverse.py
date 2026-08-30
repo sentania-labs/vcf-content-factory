@@ -729,6 +729,11 @@ def _parse_resource_mode_metrics(
             red_bound=_to_bound(entry.get("redBound")),
             label=str(entry.get("label") or "").strip(),
             is_string_metric=bool(entry.get("isStringMetric", False)),
+            # maxValue is the gauge's full-scale ceiling, carried on the wire as
+            # a *string* ("100"), with "" meaning unset.  Dropping it made a
+            # re-render emit maxValue: "" and silently fall back to the
+            # component default instead of the authored ceiling.
+            max_value=_to_bound(entry.get("maxValue")),
         ))
     return specs, resource
 
@@ -798,6 +803,18 @@ def _parse_scoreboard_config(
         max_cell_count = 100
     show_dt = bool((cfg.get("showDT") or {}).get("showDT", False))
     refresh_content = bool((cfg.get("refreshContent") or {}).get("refreshContent", True))
+    # Gauge layout settings.  ``mode.layoutMode`` controls fixed vs floating
+    # (scrolling) tiles; the three switches are bare top-level booleans (not
+    # the self-named wrapper dict the older Scoreboard keys use) and are only
+    # emitted by the renderer on a gauge (visualTheme 9).  All four were
+    # previously dropped on reverse, so an extract/re-render cycle silently
+    # reset the gauge's scrolling and display behaviour to the defaults.
+    layout_mode = str(
+        (cfg.get("mode") or {}).get("layoutMode") or "fixedView"
+    ).strip() or "fixedView"
+    show_remaining = bool(cfg.get("showRemaining", False))
+    show_percent_text = bool(cfg.get("showPercentText", False))
+    focus_on_percent = bool(cfg.get("focusOnPercent", False))
     return ScoreboardConfig(
         metrics=specs,
         visual_theme=visual_theme,
@@ -816,6 +833,10 @@ def _parse_scoreboard_config(
         resource=sb_resource,
         show_dt=show_dt,
         refresh_content=refresh_content,
+        layout_mode=layout_mode,
+        show_remaining=show_remaining,
+        show_percent_text=show_percent_text,
+        focus_on_percent=focus_on_percent,
     )
 
 

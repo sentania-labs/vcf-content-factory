@@ -812,11 +812,13 @@ it contains no private `adapterLogger()` shadow anywhere. Every helper
 that needs a logger receives `componentLogger(HelperClass.class)` wired
 in `configureAdapter()`.
 
-**Compliance** still carries its historical private `adapterLogger()`
-shadow (introduced before `componentLogger` was public). It is the
-target of the pending compliance v2 fixup and will be cleaned up on the
-next touch. Until then, treat compliance as the negative example for §15
-and synology as the positive one.
+**Compliance** formerly carried a historical private `adapterLogger()`
+shadow (introduced before `componentLogger` was public). It was removed
+in build 49 (`eba91b2`, in the compliance adapter's own repo);
+`ComplianceAdapter.java` now has zero `adapterLogger()` definitions and
+uses `componentLogger(...)` at every call site. Every build since has
+carried the clean pattern with no regression. Both compliance and
+synology are positive examples for §15.
 
 ---
 
