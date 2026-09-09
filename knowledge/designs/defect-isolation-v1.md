@@ -12,19 +12,17 @@ of the same date, which recommended a more complicated merge rule.
 
 ## Recommendation
 
-Four decisions, in dependency order.
+Five decisions, in dependency order.
 
-1. **Gate against the registry that is authoritative for the artifact
-   being released.** For Scott's six paks that is the factory registry,
-   fetched over the network, because that is where he writes defects and
-   the pak repos have no registry of their own. For anyone else it is a
-   `defects.md` in their own repo, because they cannot write to his.
-   One rule, two locations, expressed as a registry location in the
-   workflow file.
-2. **A third party's registry is a separate file**, `defects.local.md`,
-   which the factory never ships. It starts empty because it does not
-   exist until they make one, and a pull can never conflict with it.
-   The factory's `defects.md` stays tracked (see "Why not gitignore").
+1. **Registry selection is by file presence, not configuration.** In a
+   factory checkout: use `defects.local.md` if it exists, otherwise
+   `defects.md`. No flag, no setting, no question. Scott's checkout has
+   no local file and so behaves exactly as it does today.
+2. **A consumer's registry is `defects.local.md`**, a filename the
+   factory never ships. It starts empty because it does not exist until
+   they make one, and a `git pull` can never conflict with a path
+   upstream does not carry. The factory's `defects.md` stays tracked
+   (see "Why not gitignore").
 3. **Per-entry fault isolation in the parser** so one malformed entry
    stops gating only the artifact it names, instead of every artifact
    everywhere.
@@ -38,6 +36,34 @@ Together these remove the reported failure without changing what gates
 a first-party release. Scott's own strictness is unchanged or higher;
 only the stranger's coupling to his working branch goes away.
 
+### The one place presence-detection cannot reach
+
+`defects.md` exists in exactly one repo: the factory, at
+`knowledge/context/defects.md`. Verified by inspection: none of the six
+pak repos carries a defects file of any name. A pak repo therefore has
+no local registry to detect, which is why its CI curls one.
+
+So for Scott's six paks the curl is not a fallback in a lookup order,
+it is the only channel that exists, and it stays. That is not a setting
+anyone configures: the curl line is already in
+`build-pak-on-tag.yml` today. The difference between a first-party pak
+and a stranger's is a line the template ships without.
+
+- **Factory checkout** (Scott's or a consumer's): presence-detection,
+  per decision 1.
+- **Scott's six pak repos**: keep the curl, unchanged. They only need
+  the re-vendored `ci/defect_gate.py` carrying the parser fix, which
+  already propagates alongside the workflow.
+- **Template pak repos**: no curl. The template ships a stub
+  `defects.local.md` with an explanatory header, so gating works on
+  instantiation with nothing for the user to create or be told about.
+
+The reason for the asymmetry is not that first-party paks are special.
+It is that Scott's factory is published at an address a runner can
+reach and a consumer's factory is a clone on their laptop, which is
+not. If a consumer ever publishes their factory, the same curl works
+for them unchanged.
+
 ## The differentiator, since that was the open question
 
 Not a GitHub login. The gate is a local CLI call with no auth context,
@@ -47,11 +73,12 @@ which loosens exactly the side that wants hardening. It would also make
 one artifact gate differently depending on who typed the command, which
 is unreadable in a diff six months later.
 
-Not a maintainer/consumer role flag either. The thing that actually
-differs is **where this pak's defect registry lives**, which is a
-property of the repo, set once at instantiation, and dull enough to be
-obviously correct when read. Strictness follows from it rather than
-being configured separately.
+Not a maintainer/consumer role flag either, and in the end not a
+setting at all. The thing that actually differs is **which registry
+file is sitting in the repo**, which the code can simply look at. A
+consumer who wants their own registry makes one; everyone else keeps
+today's behavior by doing nothing. Nothing to choose, nothing to get
+wrong, and the answer is visible in a directory listing.
 
 ## What is already correct, so it is not re-litigated later
 
@@ -158,15 +185,19 @@ review, which at roughly 40 entries it is not.
 - `src/vcfops_packaging/defects.py`: parser rework, plus the standalone
   mirror block vendored into each pak repo as `ci/defect_gate.py`.
   `tooling` then `framework-reviewer` per RULE-013.
-- The canonical `build-pak-on-tag.yml` and `sdk-template`: registry
-  location becomes a setting; fetch failure warns instead of refusing
-  in the template's default.
+- The canonical `build-pak-on-tag.yml`: unchanged for the six
+  first-party paks beyond the re-vendored gate script.
+- `sdk-template`: drop the curl step, ship a stub `defects.local.md`
+  with an explanatory header, and warn rather than refuse when no
+  registry is found.
 - Six pak repos: re-vendor `ci/defect_gate.py` and the workflow. The
   existing convention already propagates both together.
 - `knowledge/context/defects.md` schema section and RULE-012: document
   the per-entry failure mode and the optional `Origin:` field.
-- Doctor: surface whether a consumer registry exists, so a clone that
-  never made one is not silently ungated. No reset step needed.
+- Doctor: on a factory clone, offer to create `defects.local.md` at
+  first-run, and afterwards report by exception when content or a pak
+  has been authored and no local registry exists, since that means the
+  consumer's own defects gate nothing. Nothing to reset.
 - Tests: a malformed entry for pak X must not block pak Y; an entry
   whose `Affects:` cannot be read must warn and block nothing; an
   absent registry must warn and pass.
