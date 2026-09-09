@@ -184,6 +184,24 @@ class TestRealRegistryStructural:
         entries = load_registry(REAL_REGISTRY)
         assert isinstance(entries, list)
 
+    def test_no_entry_parse_errors(self):
+        """Per-entry isolation must not let real rot go unnoticed.
+
+        Since a malformed entry no longer raises, "it parsed" is no longer
+        proof the file is clean: the errors list is. This is the assertion
+        that keeps the live registry honest.
+        """
+        from vcfops_packaging.defects import parse_registry
+        registry = parse_registry(REAL_REGISTRY)
+        assert registry.errors == [], (
+            "knowledge/context/defects.md has malformed entries: "
+            + "; ".join(str(e) for e in registry.errors)
+        )
+
+    def test_no_synthetic_entries_in_a_clean_registry(self):
+        from vcfops_packaging.defects import load_registry
+        assert not [e for e in load_registry(REAL_REGISTRY) if e.synthetic]
+
     def test_every_entry_has_required_fields(self):
         from vcfops_packaging.defects import load_registry
         entries = load_registry(REAL_REGISTRY)
@@ -239,14 +257,29 @@ class TestRealRegistryStructural:
 
 
 # ---------------------------------------------------------------------------
-# Malformed entry rejections (fixture-based; unchanged)
+# Malformed entry rejections: per-entry fault isolation
+#
+# A malformed entry no longer raises out of the whole file (that was the
+# reported bug: one sloppy edit broke the gate for every artifact everywhere).
+# It is recorded as a ParseError and, when its Affects: token is readable,
+# fails CLOSED for exactly that scope as a synthetic open blocking defect.
+# See knowledge/designs/defect-isolation-v1.md.
 # ---------------------------------------------------------------------------
 
+def _one_error(reg) -> object:
+    """Parse a fixture registry expected to hold exactly one bad entry."""
+    from vcfops_packaging.defects import parse_registry
+    registry = parse_registry(reg)
+    assert len(registry.errors) == 1, (
+        f"expected exactly one parse error; got {[str(e) for e in registry.errors]}"
+    )
+    return registry.errors[0]
+
+
 class TestMalformedEntries:
-    """Each of these fixtures should raise DefectRegistryError."""
+    """Each fixture is recorded as a parse error, never raised for the file."""
 
     def test_bad_severity(self, tmp_path):
-        from vcfops_packaging.defects import load_registry, DefectRegistryError
         reg = _write_registry(tmp_path, """\
 # Defect registry
 
@@ -262,11 +295,11 @@ class TestMalformedEntries:
 - **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Test defect with bad severity.
 """)
-        with pytest.raises(DefectRegistryError, match="invalid Severity"):
-            load_registry(reg)
+        err = _one_error(reg)
+        assert "invalid Severity" in err.reason
+        assert err.affects == "synology"
 
     def test_waived_status_explicitly_rejected(self, tmp_path):
-        from vcfops_packaging.defects import load_registry, DefectRegistryError
         reg = _write_registry(tmp_path, """\
 # Defect registry
 
@@ -282,11 +315,10 @@ class TestMalformedEntries:
 - **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Test defect with waived status.
 """)
-        with pytest.raises(DefectRegistryError, match="waived"):
-            load_registry(reg)
+        err = _one_error(reg)
+        assert "waived" in err.reason
 
     def test_closed_without_evidence(self, tmp_path):
-        from vcfops_packaging.defects import load_registry, DefectRegistryError
         reg = _write_registry(tmp_path, """\
 # Defect registry
 
@@ -302,11 +334,10 @@ class TestMalformedEntries:
 - **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** This entry is closed but has no Closing-evidence.
 """)
-        with pytest.raises(DefectRegistryError, match="Closing-evidence"):
-            load_registry(reg)
+        err = _one_error(reg)
+        assert "Closing-evidence" in err.reason
 
     def test_duplicate_ids(self, tmp_path):
-        from vcfops_packaging.defects import load_registry, DefectRegistryError
         reg = _write_registry(tmp_path, """\
 # Defect registry
 
@@ -330,13 +361,12 @@ class TestMalformedEntries:
 - **Affects:** unifi
 - **First-seen:** build 2 (2026-01-02)
 - **Source:** knowledge/context/reviews/<synthetic-fixture-2>.md
-- **Summary:** Duplicate id — must be rejected.
+- **Summary:** Duplicate id, must be rejected.
 """)
-        with pytest.raises(DefectRegistryError, match="duplicate"):
-            load_registry(reg)
+        err = _one_error(reg)
+        assert "duplicate" in err.reason
 
     def test_missing_required_field_title(self, tmp_path):
-        from vcfops_packaging.defects import load_registry, DefectRegistryError
         reg = _write_registry(tmp_path, """\
 # Defect registry
 
@@ -351,11 +381,12 @@ class TestMalformedEntries:
 - **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Missing Title field.
 """)
-        with pytest.raises(DefectRegistryError, match="Title"):
-            load_registry(reg)
+        err = _one_error(reg)
+        assert "Title" in err.reason
+        # Affects is still readable, so the broken entry still gates synology.
+        assert err.affects == "synology"
 
     def test_unknown_status(self, tmp_path):
-        from vcfops_packaging.defects import load_registry, DefectRegistryError
         reg = _write_registry(tmp_path, """\
 # Defect registry
 
@@ -371,8 +402,186 @@ class TestMalformedEntries:
 - **Source:** knowledge/context/reviews/<synthetic-fixture>.md
 - **Summary:** Unknown status.
 """)
-        with pytest.raises(DefectRegistryError, match="invalid Status"):
-            load_registry(reg)
+        err = _one_error(reg)
+        assert "invalid Status" in err.reason
+
+
+class TestPerEntryFaultIsolation:
+    """The reported bug: one bad entry must not gate unrelated artifacts."""
+
+    _MIXED = """\
+# Defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** Broken entry for pak X
+- **Severity:** critical
+- **Status:** open
+- **Affects:** fixture-pak-x
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Severity is not a legal value, so this entry cannot be parsed.
+
+### DEF-002
+
+- **Title:** Healthy tracked entry for pak Y
+- **Severity:** tracked
+- **Status:** open
+- **Affects:** fixture-pak-y
+- **First-seen:** build 2 (2026-01-02)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Nothing wrong with this one.
+"""
+
+    def test_malformed_entry_for_x_does_not_block_y(self, tmp_path):
+        from vcfops_packaging.defects import gate_pak
+        reg = _write_registry(tmp_path, self._MIXED)
+        assert gate_pak("fixture-pak-y", reg) == [], (
+            "a malformed entry naming pak X must not gate pak Y"
+        )
+
+    def test_malformed_entry_with_readable_affects_blocks_that_scope(self, tmp_path):
+        from vcfops_packaging.defects import gate_pak
+        reg = _write_registry(tmp_path, self._MIXED)
+        blockers = gate_pak("fixture-pak-x", reg)
+        assert len(blockers) == 1, (
+            f"the broken entry must fail closed for its own scope; got {blockers}"
+        )
+        assert blockers[0].synthetic is True
+        assert blockers[0].severity == "blocking"
+        assert blockers[0].status == "open"
+        assert "malformed" in blockers[0].title
+
+    def test_unreadable_affects_blocks_nothing_but_is_reported(self, tmp_path, capsys):
+        from vcfops_packaging.defects import gate_all, parse_registry
+        reg = _write_registry(tmp_path, """\
+# Defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** No scope at all
+- **Severity:** blocking
+- **Status:** open
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Affects is missing entirely, so this entry names no artifact.
+""")
+        registry = parse_registry(reg)
+        assert len(registry.unscoped_errors) == 1
+        assert gate_all(reg) == [], (
+            "an entry whose scope cannot be read must block nothing"
+        )
+        combined = capsys.readouterr()
+        text = combined.out + combined.err
+        assert "WARNING" in text and "DEF-001" in text, (
+            f"an unscoped parse error must still surface loudly; got:\n{text}"
+        )
+
+    def test_prose_affects_is_not_a_readable_scope(self, tmp_path):
+        """Affects: is exactly one token. A sentence names no artifact."""
+        from vcfops_packaging.defects import parse_registry
+        reg = _write_registry(tmp_path, """\
+# Defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** Prose scope
+- **Severity:** blocking
+- **Status:** pending
+- **Affects:** all of the dashboards, probably
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** The Affects field is prose, not a token.
+""")
+        registry = parse_registry(reg)
+        assert len(registry.unscoped_errors) == 1
+
+    def test_gate_all_reports_every_parse_error(self, tmp_path, capsys):
+        from vcfops_packaging.defects import gate_all
+        reg = _write_registry(tmp_path, self._MIXED + """
+### DEF-003
+
+- **Title:** Second broken entry
+- **Severity:** blocking
+- **Status:** sideways
+- **Affects:** fixture-pak-z
+- **First-seen:** build 3 (2026-01-03)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Status is not a legal value either.
+""")
+        gate_all(reg)
+        text = capsys.readouterr().err
+        assert "DEF-001" in text and "DEF-003" in text, (
+            f"every parse error must be surfaced; got:\n{text}"
+        )
+
+
+class TestRegistryResolution:
+    """Selection by presence: defects.local.md wins, explicit path wins over both."""
+
+    def _local_and_shipped(self, tmp_path):
+        shipped = _write_registry(tmp_path, _FIXTURE_REGISTRY_TEXT)
+        local = tmp_path / "defects.local.md"
+        local.write_text("""\
+# Local defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** Local-only blocking defect
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** local-only-pak
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Only present in the consumer's own registry.
+""", encoding="utf-8")
+        return shipped, local
+
+    def test_local_registry_wins_when_present(self, tmp_path, monkeypatch):
+        from vcfops_packaging import defects as _defects_mod
+        shipped, local = self._local_and_shipped(tmp_path)
+        monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", shipped)
+        assert _defects_mod.resolve_registry_path() == local
+        # The shipped registry's blockers are invisible; the local one's fire.
+        assert _defects_mod.gate_pak("fixture-pak-alpha") == []
+        assert [e.id for e in _defects_mod.gate_pak("local-only-pak")] == ["DEF-001"]
+
+    def test_falls_back_to_shipped_registry_when_absent(self, tmp_path, monkeypatch):
+        from vcfops_packaging import defects as _defects_mod
+        shipped = _write_registry(tmp_path, _FIXTURE_REGISTRY_TEXT)
+        monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", shipped)
+        assert _defects_mod.resolve_registry_path() == shipped
+        assert [e.id for e in _defects_mod.gate_pak("fixture-pak-alpha")] == ["DEF-001"]
+
+    def test_explicit_path_beats_both(self, tmp_path, monkeypatch):
+        from vcfops_packaging import defects as _defects_mod
+        shipped, local = self._local_and_shipped(tmp_path)
+        monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", shipped)
+        # An explicit path is honoured verbatim, even though a local
+        # registry sits right beside it.
+        assert _defects_mod.resolve_registry_path(shipped) == shipped
+        assert [e.id for e in _defects_mod.gate_pak("fixture-pak-alpha", shipped)] == ["DEF-001"]
+        assert _defects_mod.gate_pak("local-only-pak", shipped) == []
+
+
+class TestAbsentRegistryWarnsAndPasses:
+    """RULE-012 gate has nothing to check, so it must not refuse."""
+
+    def test_gate_pak_warns_and_passes(self, tmp_path, capsys):
+        from vcfops_packaging.defects import gate_pak
+        missing = tmp_path / "no_such_dir" / "defects.md"
+        assert gate_pak("anything", missing) == []
+        err = capsys.readouterr().err
+        assert "WARNING" in err, f"absent registry must WARN; got:\n{err}"
+        assert "RULE-012" in err, f"WARNING must name RULE-012; got:\n{err}"
 
 
 # ---------------------------------------------------------------------------
@@ -546,8 +755,15 @@ class TestCLIDefectGate:
         assert "DEF-002" in out
         assert "DEF-003" not in out, "closed defect must not be listed"
 
-    def test_malformed_registry_exits_1(self, tmp_path, monkeypatch, capsys):
-        """A malformed registry must exit 1, not silently pass or exit 2."""
+    def test_malformed_entry_blocks_its_own_scope_exits_2(self, tmp_path, monkeypatch, capsys):
+        """A malformed entry fails CLOSED for the scope it names: exit 2.
+
+        This used to be exit 1 for EVERY artifact, which is the bug
+        knowledge/designs/defect-isolation-v1.md was written to remove. The
+        entry below names synology and cannot be parsed, so synology is
+        refused (and the reason says "malformed"), while every other
+        artifact gates normally.
+        """
         from vcfops_packaging import defects as _defects_mod
         bad_reg = _write_registry(tmp_path, """\
 # Defect registry
@@ -566,24 +782,35 @@ class TestCLIDefectGate:
 """)
         monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", bad_reg)
         rc = self._run(["defect-gate", "--pak", "synology"])
-        assert rc == 1, f"Expected exit 1 for malformed registry; got {rc}"
+        assert rc == 2, f"Expected exit 2 (scope blocked); got {rc}"
         captured = capsys.readouterr()
-        assert "malformed" in (captured.out + captured.err).lower()
+        combined = (captured.out + captured.err).lower()
+        assert "malformed" in combined, combined
+        # An unrelated pak in the same file still gates cleanly.
+        rc_other = self._run(["defect-gate", "--pak", "unifi"])
+        assert rc_other == 0, (
+            f"a malformed entry naming synology must not block unifi; got {rc_other}"
+        )
 
-    def test_missing_registry_exits_1(self, tmp_path, monkeypatch, capsys):
-        """A missing registry must cause the standalone CLI to exit 1 (hard error)."""
+    def test_missing_registry_warns_and_passes(self, tmp_path, monkeypatch, capsys):
+        """An absent registry warns and passes; it never refuses.
+
+        A registry that is not there has nothing to say about this artifact.
+        Refusing over its absence is the fail-closed coupling that broke
+        third-party releases (defect-isolation-v1, leak 3), and it already
+        was the publish path's behaviour: the CLI was the outlier.
+        """
         from vcfops_packaging import defects as _defects_mod
         missing = tmp_path / "does_not_exist" / "defects.md"
         monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", missing)
         rc = self._run(["defect-gate", "--pak", "synology"])
-        assert rc == 1, (
-            f"Missing registry must exit 1 for standalone CLI; got {rc}"
+        assert rc == 0, (
+            f"Missing registry must warn and pass; got {rc}"
         )
         captured = capsys.readouterr()
         combined = captured.out + captured.err
-        assert any(kw in combined.lower() for kw in ("defect", "registry", "not found")), (
-            f"Error output should mention the missing registry; got:\n{combined}"
-        )
+        assert "WARNING" in combined, combined
+        assert "RULE-012" in combined, combined
 
     def test_content_item_gate(self, tmp_path, monkeypatch, capsys):
         """<type> <name> mode gates by the Affects: token."""
@@ -921,6 +1148,119 @@ class TestGatePublish:
             f"WARNING must mention RULE-012; got:\n{combined}"
         )
 
+    def _fixture_adapter(self, tmp_path, pak: str = "synology"):
+        adapter_dir = tmp_path / "content" / "sdk-adapters" / pak
+        adapter_dir.mkdir(parents=True)
+        adapter_yaml = adapter_dir / "adapter.yaml"
+        adapter_yaml.write_text("name: test\n", encoding="utf-8")
+        return adapter_yaml
+
+    def test_local_registry_overrides_the_shipped_one(self, tmp_path):
+        """B1: /publish must honour defects.local.md like every other gate.
+
+        _gate_publish hand-builds the registry path, and an explicit path
+        correctly wins verbatim, so this was the one gate a consumer's local
+        registry never reached: an upstream blocker on a pak they inherited
+        refused their publish. That is the exact harm the whole change exists
+        to remove.
+        """
+        from vcfops_packaging.publish import _gate_publish
+
+        reg_dir = tmp_path / "knowledge" / "context"
+        reg_dir.mkdir(parents=True)
+        (reg_dir / "defects.md").write_text("""\
+# Defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** Upstream blocking defect for synology
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** synology
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Filed upstream; not this consumer's defect.
+""", encoding="utf-8")
+        # The consumer's own registry: empty of defects, and it wins.
+        (reg_dir / "defects.local.md").write_text(
+            "# Local defect registry\n\n## Defects\n", encoding="utf-8"
+        )
+
+        release = self._make_mock_release(
+            self._fixture_adapter(tmp_path), "synology-managementpack"
+        )
+        # Must NOT raise: nothing in the consumer's registry blocks synology.
+        _gate_publish([release], tmp_path)
+
+    def test_local_registry_still_gates_its_own_blockers(self, tmp_path):
+        """Selection is replacement, not a bypass: a local blocker refuses."""
+        from vcfops_packaging.publish import _gate_publish, PublishError
+
+        reg_dir = tmp_path / "knowledge" / "context"
+        reg_dir.mkdir(parents=True)
+        (reg_dir / "defects.md").write_text(
+            "# Defect registry\n\n## Defects\n", encoding="utf-8"
+        )
+        (reg_dir / "defects.local.md").write_text("""\
+# Local defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** The consumer's own blocking defect
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** synology
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Filed by the consumer against their own pak.
+""", encoding="utf-8")
+
+        release = self._make_mock_release(
+            self._fixture_adapter(tmp_path), "synology-managementpack"
+        )
+        with pytest.raises(PublishError) as exc_info:
+            _gate_publish([release], tmp_path)
+        msg = str(exc_info.value)
+        assert "DEF-001" in msg
+        # Refused by their own registry: nothing to tell them about creating one.
+        assert "create knowledge/context/defects.local.md" not in msg
+
+    def test_refusal_from_the_shipped_registry_names_the_local_option(self, tmp_path):
+        """B2: the "keep your own registry" sentence lives on the refusal,
+        where it is actionable, not on every session's standing report."""
+        from vcfops_packaging.publish import _gate_publish, PublishError
+
+        reg_dir = tmp_path / "knowledge" / "context"
+        reg_dir.mkdir(parents=True)
+        (reg_dir / "defects.md").write_text("""\
+# Defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** Upstream blocking defect for synology
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** synology
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Filed upstream.
+""", encoding="utf-8")
+
+        release = self._make_mock_release(
+            self._fixture_adapter(tmp_path), "synology-managementpack"
+        )
+        with pytest.raises(PublishError) as exc_info:
+            _gate_publish([release], tmp_path)
+        msg = str(exc_info.value)
+        assert "defects.local.md" in msg
+        assert "If these defects are not yours" in msg
+
     def test_fires_on_fixture_repo_own_registry(self, tmp_path):
         """When the fixture repo HAS its own knowledge/context/defects.md with an open
         blocking defect, _gate_publish must raise naming the defect — it must
@@ -1024,18 +1364,55 @@ class TestStandaloneEntrypoint:
         assert "DEF-002" in out, f"Output must list DEF-002; got:\n{out}"
         assert "DEF-003" not in out, "closed defect must not be listed"
 
-    def test_missing_registry_exits_1(self, tmp_path):
-        """--registry pointing at a nonexistent path → exit 1, clear error."""
+    def test_missing_registry_warns_and_passes(self, tmp_path):
+        """--registry pointing at a nonexistent path -> exit 0 with a WARNING.
+
+        The pre-push hook that replaces the pak CI gate runs in clones that
+        may have no registry beside them; it must warn and pass, never
+        refuse a push over a file that is not there.
+        """
         missing = tmp_path / "no_such_dir" / "defects.md"
         rc, out, err = self._run_script(
             self._DEFECTS_SCRIPT,
             ["--pak", "anything", "--registry", str(missing)],
         )
-        assert rc == 1, f"Expected exit 1 for missing registry; got {rc}\nstdout: {out}\nstderr: {err}"
+        assert rc == 0, f"Expected exit 0 for missing registry; got {rc}\nstdout: {out}\nstderr: {err}"
         combined = out + err
-        assert any(kw in combined.lower() for kw in ("not found", "registry", "error")), (
-            f"Error must mention the missing registry; got:\n{combined}"
+        assert "WARNING" in combined, combined
+        assert "RULE-012" in combined, combined
+
+    def test_local_registry_beside_the_script_wins(self, tmp_path):
+        """A bare copy with a defects.local.md sibling reads the local file."""
+        import shutil
+        script_copy = tmp_path / "defects.py"
+        shutil.copy2(str(self._DEFECTS_SCRIPT), str(script_copy))
+        (tmp_path / "defects.md").write_text(_FIXTURE_REGISTRY_TEXT, encoding="utf-8")
+        (tmp_path / "defects.local.md").write_text("""\
+# Local defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** Local-only blocking defect
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** local-only-pak
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Only present in the consumer's own registry.
+""", encoding="utf-8")
+
+        # The shipped fixture's blocker is invisible once a local file exists.
+        rc, out, err = self._run_script(
+            script_copy, ["--pak", "fixture-pak-alpha"], cwd=tmp_path
         )
+        assert rc == 0, f"local registry must win; got {rc}\nstdout: {out}\nstderr: {err}"
+        rc, out, err = self._run_script(
+            script_copy, ["--pak", "local-only-pak"], cwd=tmp_path
+        )
+        assert rc == 2, f"local registry blocker must fire; got {rc}\nstdout: {out}"
+        assert "DEF-001" in out
 
     # --- Bare-copy invocation: the load-bearing curl-and-run proof --------------
 
@@ -1096,3 +1473,173 @@ class TestStandaloneEntrypoint:
             f"Bare-copy run must exit 0 for a clean pak; "
             f"got {rc}\nstdout: {out}\nstderr: {err}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Refusal hint and warning volume
+# ---------------------------------------------------------------------------
+
+class TestLocalRegistryHint:
+    """B2: the "keep your own registry" sentence rides on the refusal."""
+
+    def test_hint_offered_when_gating_from_the_shipped_registry(self, tmp_path, monkeypatch):
+        from vcfops_packaging import defects as _defects_mod
+        reg = _fixture_registry(tmp_path)
+        monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", reg)
+        hint = _defects_mod.local_registry_hint()
+        assert "defects.local.md" in hint
+        assert "If these defects are not yours" in hint
+
+    def test_silent_when_the_caller_has_their_own_registry(self, tmp_path, monkeypatch):
+        from vcfops_packaging import defects as _defects_mod
+        reg = _fixture_registry(tmp_path)
+        (tmp_path / "defects.local.md").write_text("# local\n", encoding="utf-8")
+        monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", reg)
+        assert _defects_mod.local_registry_hint() == "", (
+            "a user being refused by their own registry has nothing to be told"
+        )
+
+    def test_cli_refusal_carries_the_hint(self, tmp_path, monkeypatch, capsys):
+        from vcfops_packaging import defects as _defects_mod
+        from vcfops_packaging.cli import build_parser
+        reg = _fixture_registry(tmp_path)
+        monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", reg)
+        parser = build_parser()
+        args = parser.parse_args(["defect-gate", "--pak", "fixture-pak-alpha"])
+        assert args.func(args) == 2
+        out = capsys.readouterr().out
+        assert "defects.local.md" in out
+
+    def test_clean_run_says_nothing_about_the_local_registry(self, tmp_path, monkeypatch, capsys):
+        from vcfops_packaging import defects as _defects_mod
+        from vcfops_packaging.cli import build_parser
+        reg = _fixture_registry(tmp_path)
+        monkeypatch.setattr(_defects_mod, "REGISTRY_PATH", reg)
+        parser = build_parser()
+        args = parser.parse_args(["defect-gate", "--pak", "fixture-pak-gamma"])
+        assert args.func(args) == 0
+        captured = capsys.readouterr()
+        assert "defects.local.md" not in (captured.out + captured.err), (
+            "the hint is for refusals only, never a standing line"
+        )
+
+
+class TestWarningVolume:
+    """W2: loud once, not loud N times."""
+
+    def test_parse_warning_is_emitted_once_per_registry_per_process(self, tmp_path, capsys):
+        from vcfops_packaging.defects import gate_pak, reset_warning_state
+        reset_warning_state()
+        reg = _write_registry(tmp_path, """\
+# Defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** Broken
+- **Severity:** critical
+- **Status:** open
+- **Affects:** fixture-pak-x
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Malformed entry.
+""")
+        for _ in range(5):
+            gate_pak("fixture-pak-x", reg)
+        err = capsys.readouterr().err
+        assert err.count("WARNING") == 1, (
+            f"N-times-loud trains people to skip the warning; got:\n{err}"
+        )
+
+    def test_absent_registry_warning_is_emitted_once(self, tmp_path, capsys):
+        from vcfops_packaging.defects import gate_pak, reset_warning_state
+        reset_warning_state()
+        missing = tmp_path / "nope" / "defects.md"
+        for _ in range(4):
+            gate_pak("anything", missing)
+        err = capsys.readouterr().err
+        assert err.count("WARNING") == 1, err
+
+    def test_a_second_registry_still_warns(self, tmp_path, capsys):
+        """Dedupe is per resolved path, not a global mute."""
+        from vcfops_packaging.defects import gate_pak, reset_warning_state
+        reset_warning_state()
+        gate_pak("anything", tmp_path / "a" / "defects.md")
+        gate_pak("anything", tmp_path / "b" / "defects.md")
+        assert capsys.readouterr().err.count("WARNING") == 2
+
+
+class TestSyntheticEntryIdentity:
+    """N2/N3: the synthetic entry must match what the warning claims."""
+
+    def test_over_length_affects_token_still_matches_its_scope(self, tmp_path):
+        from vcfops_packaging.defects import gate_pak
+        long_token = "p" * 300
+        reg = _write_registry(tmp_path, f"""\
+# Defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** Broken
+- **Severity:** critical
+- **Status:** open
+- **Affects:** {long_token}
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Malformed entry with a very long scope token.
+""")
+        blockers = gate_pak(long_token, reg)
+        assert len(blockers) == 1, (
+            "the warning claims this entry blocks that scope, so it must"
+        )
+
+    def test_over_length_token_is_clipped_in_the_warning(self, tmp_path, capsys):
+        from vcfops_packaging.defects import gate_pak, reset_warning_state
+        reset_warning_state()
+        long_token = "p" * 300
+        reg = _write_registry(tmp_path, f"""\
+# Defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** Broken
+- **Severity:** critical
+- **Status:** open
+- **Affects:** {long_token}
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Malformed entry with a very long scope token.
+""")
+        gate_pak(long_token, reg)
+        err = capsys.readouterr().err
+        assert long_token not in err, "untrusted content is clipped at the echo"
+        assert "WARNING" in err
+
+    def test_two_id_less_entries_do_not_collide(self, tmp_path):
+        from vcfops_packaging.defects import parse_registry
+        reg = _write_registry(tmp_path, """\
+# Defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** First
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** pak-a
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Fine.
+""")
+        from vcfops_packaging.defects import ParseError, _synthetic_entry
+        from pathlib import Path as _P
+        a = _synthetic_entry(ParseError("", 10, "bad", "pak-a"), _P("x"))
+        b = _synthetic_entry(ParseError("", 40, "bad", "pak-b"), _P("x"))
+        assert a.id != b.id, "id-less entries must not dedupe into one"
+        assert parse_registry(reg).errors == []

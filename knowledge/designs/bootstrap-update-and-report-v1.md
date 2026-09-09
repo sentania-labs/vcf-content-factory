@@ -114,10 +114,20 @@ part that keeps breaking.
 ### Three things to copy from firstmate
 
 1. **A longer timeout.** Firstmate's SessionStart hook gets `timeout
-   180`; ours gets 60 (`.claude/settings.json`). That also settles the
-   open question below: firstmate already decided a slower session open
-   is worth paying for. Take 180 and keep the daily throttle anyway, so
-   the budget is headroom rather than something normally spent.
+   180`; ours gets 60. That also settles the open question below:
+   firstmate already decided a slower session open is worth paying for.
+   Keep the daily throttle anyway, so the budget is headroom rather than
+   something normally spent.
+
+   Correction found while implementing: the two numbers are not
+   comparable as written. Firstmate's 180 is the budget for one script;
+   ours ran two bootstrap scripts at `timeout 60` each *inside* an outer
+   hook timeout of 180s, with the doctor still to run after them. Simply
+   raising the inner value to 180 would let the two scripts consume the
+   entire outer budget and starve the doctor, which is the component
+   that actually reports. Landed as inner 90 per script and outer 300s,
+   so the worst case (180s of bootstrap) still leaves the doctor room to
+   speak.
 2. **Explicit exit discipline.** Firstmate's header: a Claude
    SessionStart exit 2 blocks session initialization, so a failed
    session start must reach the agent as digest text it can act on,
@@ -169,7 +179,8 @@ the factory ever runs concurrent sessions against one checkout.
 ## Settled
 
 Throttle versus raising the timeout was an open question; it is both.
-Raise the hook to firstmate's 180 seconds so a slow run has room to
+Give the hook real headroom (landed: 90s per bootstrap script inside a
+300s outer budget, see the correction above) so a slow run has room to
 finish and report honestly, and keep the daily throttle so an ordinary
 session still opens fast. The headroom is for the sessions that need
 it, not a budget to spend every time.

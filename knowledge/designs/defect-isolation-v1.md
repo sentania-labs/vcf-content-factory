@@ -54,6 +54,17 @@ remote." RULE-012's factory-side check is therefore a procedural
 obligation with nothing enforcing it, and the pak CI gate exists as the
 only mechanical enforcement.
 
+**The hook holds no policy; it wires up work that already existed.**
+`scripts/version_line_guard.sh` already implements both release rules
+(RULE-014, the 0.x dev-preview line is never tagged; RULE-012, an open
+blocking defect refuses the pak), already parses the pre-push stdin
+format, and already derives the pak name from the origin remote exactly
+as CI does. Its own header says it "does not (yet) run automatically"
+and was written to be wired into a real git hook. This is that wiring.
+A first implementation pass reimplemented the RULE-012 half in the hook
+and silently dropped RULE-014; delegating instead is both smaller and
+strictly more correct.
+
 **Move the gate to a `pre-push` git hook in each pak clone.** The pak
 clones live at `content/sdk-adapters/<name>/`, inside the factory
 working tree, so the hook reads the factory registry over a relative
@@ -104,11 +115,28 @@ repo already instantiated from the old template, whose `curl` step
 lives in its own `.github/workflows/`; that changes when its owner
 changes it.
 
-Note that bootstrap currently **skips** existing clones rather than
-touching them (`bootstrap_managed_paks.sh:104-117`, the `Exists:` and
-`skipped` path), so setting `core.hooksPath` requires a step on the
-skip path. That and the session-opening report are specified in
-`knowledge/designs/bootstrap-update-and-report-v1.md`.
+Note that bootstrap **skipped** existing clones rather than touching
+them (the old `Exists:` path), so setting `core.hooksPath` required a
+step that runs on the skip path too. That and the session-opening report
+are specified in `knowledge/designs/bootstrap-update-and-report-v1.md`.
+
+### Rollout: both gates run during the transition
+
+The factory-side work (hook, presence-detection, parser isolation,
+bootstrap) lands first and on its own. The six pak repos and the
+`sdk-template` are independent repos, each needing its own PR, so their
+`curl`-based CI gate step stays in place for now.
+
+That is deliberate and safe rather than a loose end: during the
+transition a first-party pak is gated twice, once by the hook against
+the local registry and once by CI against the same registry over the
+network. Both consult the same file and agree, so the redundancy costs
+nothing and the rollout has no flag day. Deleting the CI step is a
+follow-up per pak repo, tracked as its own issue.
+
+Third parties get the benefit only once the template stops shipping the
+`curl` step, which is part of that same follow-up. Nothing about the
+factory-side change makes their situation worse in the meantime.
 
 ## The differentiator, since that was the open question
 
@@ -230,9 +258,11 @@ review, which at roughly 40 entries it is not.
 
 - `src/vcfops_packaging/defects.py`: parser rework. `tooling` then
   `framework-reviewer` per RULE-013.
-- New tracked `pre-push` hook body in the factory, invoked via
-  `core.hooksPath`. Gates the pak named by the clone directory against
-  the local registry, warns and passes when none is found.
+- New tracked `.githooks/pre-push` in the factory, invoked via
+  `core.hooksPath`. A thin dispatcher: it finds the factory above the
+  clone and hands stdin to `scripts/version_line_guard.sh`, which holds
+  all the policy. Refuses only on that script's RULE-014 (exit 2) and
+  RULE-012 (exit 3) verdicts; every other outcome warns and allows.
 - `build-pak-on-tag.yml` (canonical and all six copies) and
   `sdk-template`: delete the defect gate step and its `curl`, and drop
   the vendored `ci/defect_gate.py` that existed only to run it. No stub

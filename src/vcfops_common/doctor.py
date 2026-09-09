@@ -22,8 +22,17 @@ Sections:
     MPB runtime JARs present (warn, not fail).
   - Bootstrap health: surfaces the `.bootstrap-status` summary lines the
     bootstrap scripts write (see BOOTSTRAP_STATUS_CONTRACT below).
-  - Concierge first-run (Phase 1b): unconfigured clone => greeting line +
-    machine-readable CHECKLIST-JSON block for the orchestrator.
+  - Session bootstrap report: one voice for what the bootstrap scripts did
+    (hooks installed, repos updated, repos deliberately left alone and why,
+    whether an update check ran at all), plus the doctor's own by-exception
+    signals including a missing `defects.local.md`.
+  - Concierge first-run (Phase 1b): unconfigured clone => greeting naming
+    the missing prerequisites + machine-readable CHECKLIST-JSON block for
+    the orchestrator.
+
+Exit discipline: a SessionStart hook exiting 2 blocks session
+initialization, so this module ALWAYS exits 0 and reports every failure as
+text the agent can act on.
 """
 from __future__ import annotations
 
@@ -42,10 +51,31 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 # Constants and contracts
 # ---------------------------------------------------------------------------
 
+# Fallback greeting, used only when the checklist names nothing specific.
+# The real first-run greeting is composed by compose_greeting() so it NAMES
+# the missing items; the wording lives here rather than in CLAUDE.md prose
+# because a script can be tested and prose can only be advisory
+# (knowledge/designs/bootstrap-update-and-report-v1.md).
 GREETING = (
-    "Hello, it looks like this is an unconfigured copy of the "
-    "VCF Content Factory. Do you want me to get it ready for you?"
+    "This appears to be a new VCF Content Factory session. "
+    "Some prerequisites are missing. Should I install them?"
 )
+
+GREETING_OPENING = "This appears to be a new VCF Content Factory session."
+GREETING_CLOSING = "Should I install them?"
+
+# Plain-language name for each checklist item, used to build the greeting's
+# "You're missing X, Y, and Z" clause. An id with no label here is named by
+# its id, never silently dropped: an unnamed prerequisite is worse than an
+# ugly one.
+CHECKLIST_LABELS: Dict[str, str] = {
+    "python": "Python 3.9+",
+    "venv": "a virtualenv",
+    "deps": "the python dependencies (requests, PyYAML)",
+    "credentials": "credentials for at least one instance",
+    "bootstrap-clones": "the reference and managed-pak clones",
+    "defects-local": "a local defect registry (defects.local.md)",
+}
 
 # Contract for scripts/bootstrap_references.sh and
 # scripts/bootstrap_managed_paks.sh (orchestrator-owned): after each run,
@@ -71,7 +101,40 @@ GREETING = (
 # read-only) and the doctor says so. Timestamps must be ISO8601 UTC
 # (trailing `Z` accepted); an unparseable one degrades to an "age
 # unknown" line, never a crash.
+#
+# Extended contract (bootstrap-update-and-report-v1): the same single line
+# per script may additionally carry any of these keys. They are additive,
+# every old line stays valid, and values NEVER contain spaces:
+#
+#   skipped=<n>                      repos left alone
+#   ahead=<name>:<n>,<name>:<n>      local commits ahead, so NOT updated
+#   dirty=<name>,<name>              uncommitted changes, so NOT updated
+#   diverged=<name>:<ahead>:<behind> both ahead and behind, so NOT updated
+#   hooks=<name>,<name>              clones where core.hooksPath was set
+#   checked=yes|no|throttled         yes: update check ran
+#                                    no:  could not check (network/timeout)
+#                                    throttled: daily stamp suppressed it
+#
+# `-` is the empty-list sentinel for every list-valued key, matching the
+# existing `failures=-`. `checked=no` must always read as "not checked" and
+# never as "current": a stale run reported as fresh is the failure mode this
+# whole contract exists to prevent.
 BOOTSTRAP_STATUS_FILE = ".bootstrap-status"
+
+#: Empty-list sentinel in a status value.
+EMPTY_LIST = "-"
+
+#: Plain-language plural noun for what each bootstrap script manages, used
+#: in the session report. An unknown script degrades to a generic noun.
+SCRIPT_LABELS: Dict[str, str] = {
+    "bootstrap_references": "reference repos",
+    "bootstrap_managed_paks": "pak repos",
+}
+_GENERIC_LABEL = "repos"
+
+#: Consumer-owned defect registry, relative to the repo root. Presence, not
+#: configuration: see knowledge/designs/defect-isolation-v1.md.
+LOCAL_DEFECT_REGISTRY = Path("knowledge") / "context" / "defects.local.md"
 
 # Both scripts must have a line before bootstrap health counts as good.
 KNOWN_BOOTSTRAP_SCRIPTS: Tuple[str, ...] = (
@@ -740,6 +803,17 @@ _ECHO_MAX = 40
 # chosen so it cannot collide with a real `key=value` token.
 TIMESTAMP_KEY = "__ts__"
 
+# A `.bootstrap-status` record older than this is not this session's work.
+# The SessionStart hook runs both bootstrap scripts and then the doctor in one
+# sequential command, so a record for the run being reported is seconds old.
+# Neither script writes a line when it is killed mid-sweep (hook timeout,
+# `set -e` abort), so the PREVIOUS run's line survives; replaying it under
+# "here's your bootstrap report for this session" would report work that did
+# not happen this session, which is the "silent partial run" failure mode
+# knowledge/designs/bootstrap-update-and-report-v1.md names explicitly. One
+# hour is generous headroom for a slow sweep on a slow link.
+REPORT_FRESH_WITHIN_HOURS = 1.0
+
 # Bootstrap data older than this is reported as stale. The hook runs the
 # doctor immediately after both bootstrap scripts, so a stale timestamp
 # means a script did not run at all (failed, or a read-only checkout).
@@ -864,6 +938,228 @@ def read_bootstrap_status(root: Path) -> Tuple[Dict[str, Dict[str, str]], str]:
 
 
 # ---------------------------------------------------------------------------
+# Session bootstrap report (single voice)
+#
+# The doctor composes ONE report from the bootstrap scripts' status data plus
+# its own signals. Bootstrap reports what it DID to the other repos; the
+# doctor owns the factory's own ahead/behind line and the by-exception
+# signals, so no fact is stated twice in two voices.
+# Report by exception (CLAUDE.md rule 16): a session where everything was
+# current and nothing needs the user produces no report lines at all.
+# ---------------------------------------------------------------------------
+
+def _parse_list(value: str) -> List[str]:
+    """Parse a `name,name` list value. `-`, empty, or garbage -> []."""
+    text = (value or "").strip()
+    if not text or text == EMPTY_LIST:
+        return []
+    return [_clip(p) for p in text.split(",") if p and p != EMPTY_LIST]
+
+
+def _parse_counts(value: str) -> List[Tuple[str, Optional[int]]]:
+    """Parse a `name:n,name:n` list. A bad count degrades to None, not a crash."""
+    out: List[Tuple[str, Optional[int]]] = []
+    for item in _parse_list(value):
+        name, sep, num = item.partition(":")
+        if not name:
+            continue
+        out.append((_clip(name), _safe_int(num) if sep else None))
+    return out
+
+
+def _parse_diverged(value: str) -> List[Tuple[str, Optional[int], Optional[int]]]:
+    """Parse a `name:<ahead>:<behind>` list."""
+    out: List[Tuple[str, Optional[int], Optional[int]]] = []
+    for item in _parse_list(value):
+        parts = item.split(":")
+        name = parts[0] if parts else ""
+        if not name:
+            continue
+        ahead = _safe_int(parts[1]) if len(parts) > 1 else None
+        behind = _safe_int(parts[2]) if len(parts) > 2 else None
+        out.append((_clip(name), ahead, behind))
+    return out
+
+
+def _join_names(names: Sequence[str]) -> str:
+    """`a`, `a and b`, `a, b, and c`."""
+    items = [n for n in names if n]
+    if not items:
+        return ""
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} and {items[1]}"
+    return ", ".join(items[:-1]) + f", and {items[-1]}"
+
+
+def _script_label(script: str) -> str:
+    return SCRIPT_LABELS.get(script, _GENERIC_LABEL)
+
+
+def _record_is_current(kv: Dict[str, str], now: Optional[datetime] = None) -> bool:
+    """True when this `.bootstrap-status` record was written by THIS session.
+
+    An unparseable, future-dated, or old timestamp all answer False: none of
+    them is evidence that the run being described just happened, and the one
+    thing this report must never do is voice an old record in the present
+    tense.
+    """
+    age = _safe_age_hours(kv.get(TIMESTAMP_KEY, ""), now=now)
+    if age is None:
+        return False
+    if age < -CLOCK_SKEW_TOLERANCE_HOURS:
+        return False
+    return age <= REPORT_FRESH_WITHIN_HOURS
+
+
+def _has_voiceable_content(kv: Dict[str, str]) -> bool:
+    """True when this record would produce at least one present-tense line.
+
+    Used only to decide whether a STALE record is worth a past-tense line: a
+    record with nothing to say needs no line at all, stale or not.
+    """
+    if _parse_list(kv.get("hooks", "")) or _parse_list(kv.get("dirty", "")):
+        return True
+    if _parse_counts(kv.get("ahead", "")) or _parse_diverged(kv.get("diverged", "")):
+        return True
+    raw = (kv.get("updated", "") or "").strip()
+    if raw and raw != EMPTY_LIST:
+        count = _safe_int(raw)
+        if count is None:
+            if _parse_list(raw):
+                return True
+        elif count > 0:
+            return True
+    checked = (kv.get("checked", "") or "").strip().lower()
+    if checked and checked not in ("yes", "throttled"):
+        return True
+    return False
+
+
+def bootstrap_report_lines(
+    bootstrap: Dict[str, Dict[str, str]],
+    *,
+    now: Optional[datetime] = None,
+) -> List[str]:
+    """Compose the session bootstrap report from `.bootstrap-status` data.
+
+    Only records written by THIS session are voiced in the present tense. A
+    stale record gets one honest past-tense line saying this session's run did
+    not record itself, instead of replaying what some earlier run did.
+
+    Returns [] when there is nothing to say. Every value here comes from an
+    untrusted file, so every echoed fragment is clipped and every count is
+    parsed defensively: a corrupt line degrades to a shorter report, never to
+    an exception (the always-exit-0 contract).
+    """
+    lines: List[str] = []
+    current = {k: v for k, v in bootstrap.items() if _record_is_current(v, now)}
+    stale = {k: v for k, v in bootstrap.items() if k not in current}
+
+    # 1. What was set up. Hooks first: it is the thing the user did not ask
+    #    for and would otherwise never see happen.
+    hooked: List[str] = []
+    for _script, kv in sorted(current.items()):
+        hooked += _parse_list(kv.get("hooks", ""))
+    if hooked:
+        lines.append(
+            f"I added pre-push hooks to the {_join_names(hooked)} "
+            "repo(s) to ensure defects are tracked locally."
+        )
+
+    # 2. What was deliberately NOT updated, and why. One line per repo:
+    #    the reason is the actionable half.
+    for _script, kv in sorted(current.items()):
+        for name, count in _parse_counts(kv.get("ahead", "")):
+            how_many = f"{count} commit(s)" if count is not None else "commits"
+            lines.append(
+                f"I didn't update the {name} repo, because your local copy "
+                f"is {how_many} ahead of upstream."
+            )
+        for name in _parse_list(kv.get("dirty", "")):
+            lines.append(
+                f"I didn't update the {name} repo, because it has "
+                "uncommitted local changes."
+            )
+        for name, ahead, behind in _parse_diverged(kv.get("diverged", "")):
+            detail = (
+                f"{ahead} ahead and {behind} behind"
+                if ahead is not None and behind is not None
+                else "both ahead and behind"
+            )
+            lines.append(
+                f"I didn't update the {name} repo, because it has diverged "
+                f"from upstream ({detail}); that needs a rebase or merge "
+                "decision, not a pull."
+            )
+
+    # 3. What was updated.
+    for script, kv in sorted(current.items()):
+        raw = (kv.get("updated", "") or "").strip()
+        if not raw or raw == EMPTY_LIST:
+            continue
+        count = _safe_int(raw)
+        if count is None:
+            # A writer that names them instead of counting them.
+            names = _parse_list(raw)
+            if names:
+                lines.append(f"I updated {_join_names(names)}.")
+        elif count > 0:
+            lines.append(f"I updated {count} {_script_label(_clip(script))}.")
+
+    # 4. Freshness. "not checked" is never allowed to read as "current".
+    #    `yes` and `throttled` are both silent: the daily throttle working as
+    #    designed is the normal state on every session that is not the day's
+    #    first, and nothing about it needs the user (CLAUDE.md rule 16).
+    for script, kv in sorted(current.items()):
+        checked = _clip((kv.get("checked", "") or "").strip().lower())
+        label = _script_label(_clip(script))
+        if checked == "no":
+            lines.append(
+                f"I could NOT check the {label} for updates this session, so "
+                "they are not known to be current."
+            )
+        elif checked and checked not in ("yes", "throttled"):
+            lines.append(
+                f"{_clip(script)}: unrecognized checked={checked!r} in "
+                f"{BOOTSTRAP_STATUS_FILE}; update freshness is unknown."
+            )
+
+    # 5. Records that are not from this session. A stale record is never
+    #    replayed in the present tense; when it HAS something it would have
+    #    said, it gets one past-tense line naming the stamp instead. When it
+    #    would have said nothing, this stays silent: the separate
+    #    STALE_AFTER_HOURS health line already covers a script that has not
+    #    run in a long time, and saying it twice is not by exception.
+    for script, kv in sorted(stale.items()):
+        if not _has_voiceable_content(kv):
+            continue
+        stamp = _clip(kv.get(TIMESTAMP_KEY, "")) or "an unknown time"
+        label = _script_label(_clip(script))
+        lines.append(
+            f"{_clip(script)} did not record a run this session (its last "
+            f"record is from {stamp}), so the {label} are NOT known to be "
+            "current; the script may have been killed before it could report."
+        )
+    return lines
+
+
+def local_registry_path(root: Path) -> Path:
+    """Path to the consumer-owned defect registry in this checkout.
+
+    Presence of this file is reported at FIRST RUN (as an offer) and named in
+    a gate's refusal message when the refusal came from the factory's own
+    registry instead. It is deliberately NOT a standing session line:
+    "upstream defects may block you" is only information at the moment one
+    blocks you, and no predicate can usefully suppress it otherwise, since
+    content/ ships tracked and populated and is therefore non-empty on every
+    clone from the first second.
+    """
+    return root / LOCAL_DEFECT_REGISTRY
+
+
+# ---------------------------------------------------------------------------
 # First-run detection and concierge checklist (Phase 1b)
 # ---------------------------------------------------------------------------
 
@@ -977,12 +1273,51 @@ def build_checklist(
         boot_status = "ok"
         boot_detail = f"{len(bootstrap)} bootstrap script(s) recorded, 0 failure(s)"
     items.append({"id": "bootstrap-clones", "status": boot_status, "detail": boot_detail})
+    # Presence of the consumer-owned defect registry. Deliberately NOT a
+    # failure: a fresh clone with nothing authored needs no local registry,
+    # and naming it in the greeting would make the first thing a new user
+    # hears an item they do not need. "pending" is the concierge's cue to
+    # OFFER to create one.
+    has_local_registry = local_registry_path(root).is_file()
+    items.append({
+        "id": "defects-local",
+        "status": "ok" if has_local_registry else "pending",
+        "detail": (
+            "using knowledge/context/defects.local.md as the defect registry"
+            if has_local_registry
+            else "no knowledge/context/defects.local.md; the factory's own "
+            "defects.md gates this checkout, so upstream defects may block "
+            "your releases. Offer to create an empty local registry"
+        ),
+    })
     items.append({
         "id": "recheck",
         "status": "pending",
         "detail": "re-run `python -m vcfops_common doctor` after fixes for one green line",
     })
     return items
+
+
+def compose_greeting(items: Sequence[Dict[str, str]]) -> str:
+    """The first-run greeting, NAMING the missing prerequisites.
+
+    "these pre-reqs" and "get it ready for you" tell the user nothing about
+    what is about to happen to their machine, so the items are named. Only
+    genuinely blocking items (`fail`/`unknown`) are named; `pending` items
+    are things to offer later, not things that are missing now.
+    """
+    missing = [
+        CHECKLIST_LABELS.get(item.get("id", ""), item.get("id", ""))
+        for item in items
+        if item.get("status") in ("fail", "unknown")
+    ]
+    missing = [m for m in missing if m]
+    if not missing:
+        return GREETING
+    return (
+        f"{GREETING_OPENING} You're missing {_join_names(missing)}. "
+        f"{GREETING_CLOSING}"
+    )
 
 
 def is_first_run(
@@ -1012,6 +1347,15 @@ def run_doctor(
     environ: Optional[Dict[str, str]] = None,
     out: Callable[[str], None] = print,
 ) -> int:
+    """Emit the session preflight report and return 0. Always 0.
+
+    EXIT DISCIPLINE (load-bearing, do not "fix" this to return non-zero):
+    a Claude SessionStart hook that exits 2 BLOCKS session initialization.
+    Every failure this module can detect therefore arrives as text the agent
+    can act on, never as a refusal to open the session. ``main()`` wraps this
+    in a catch-all for the same reason; the branches here degrade rather than
+    raise so that catch-all stays a backstop instead of the normal path.
+    """
     root = root or find_repo_root()
     git = git or _make_git_runner(root)
 
@@ -1021,13 +1365,25 @@ def run_doctor(
 
     # --- Phase 1b: concierge first-run -----------------------------------
     if is_first_run(root, env, env_file_exists, profiles):
-        out("FIRST-RUN DETECTED")
-        out(f"additionalContext: {GREETING}")
         checklist = build_checklist(root, env, env_file_exists, profiles, bootstrap)
+        out("FIRST-RUN DETECTED")
+        # The greeting is emitted verbatim, composed from the checklist that
+        # is about to be printed, so the words the user hears and the items
+        # the orchestrator works through cannot drift apart.
+        out(f"additionalContext: {compose_greeting(checklist)}")
         out("CHECKLIST-JSON: " + json.dumps({"items": checklist}))
         return 0
 
     attention: List[str] = []
+
+    # --- Session bootstrap report (what the scripts DID) -------------------
+    # First, because it is the part the user did not ask for and cannot see
+    # any other way. Bootstrap never states the factory's own drift; that is
+    # the doctor's line, immediately below.
+    report = bootstrap_report_lines(bootstrap)
+    if report:
+        attention.append("here's your bootstrap report for this session:")
+        attention += report
 
     # --- Upstream ---------------------------------------------------------
     st = inspect_upstream(git)
@@ -1038,6 +1394,7 @@ def run_doctor(
             attention += _render_behind(st)
         if st.ahead:
             attention += _render_ahead(st)
+
 
     # --- Credentials ------------------------------------------------------
     if cred_note:

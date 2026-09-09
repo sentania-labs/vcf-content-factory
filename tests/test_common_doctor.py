@@ -17,6 +17,11 @@ import pytest
 
 from vcfops_common.doctor import (
     GREETING,
+    GREETING_OPENING,
+    GREETING_CLOSING,
+    bootstrap_report_lines,
+    compose_greeting,
+    local_registry_path,
     KNOWN_BOOTSTRAP_SCRIPTS,
     STALE_AFTER_HOURS,
     TIMESTAMP_KEY,
@@ -45,10 +50,17 @@ FAKE_SECRET = "synthetic-not-a-real-password-42"
 
 
 def write_fresh_bootstrap_status(root: Path) -> None:
-    """Both known scripts recorded, fresh, zero failures."""
+    """Both known scripts recorded, fresh, zero failures.
+
+    Written with a NOW timestamp, matching what the SessionStart hook
+    actually produces: it runs both scripts and then the doctor in one
+    sequential command, so a record for the run being reported is seconds
+    old. A record older than REPORT_FRESH_WITHIN_HOURS is deliberately not
+    voiced as this session's work (B3).
+    """
     (root / ".bootstrap-status").write_text(
-        f"{ts(hours_ago=1)} bootstrap_references cloned=1 updated=0 failed=0 failures=-\n"
-        f"{ts(hours_ago=1)} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts()} bootstrap_references cloned=1 updated=0 failed=0 failures=-\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
     )
 
 
@@ -342,12 +354,15 @@ def test_first_run_emits_greeting_and_checklist_json(tmp_path):
     lines = collect(root, fake_git())
     text = "\n".join(lines)
     assert "FIRST-RUN DETECTED" in lines[0]
-    assert GREETING in text
+    # The greeting NAMES what is missing, rather than saying "these pre-reqs".
+    assert GREETING_OPENING in text
+    assert "credentials for at least one instance" in text
+    assert GREETING_CLOSING in text
     json_line = next(ln for ln in lines if ln.startswith("CHECKLIST-JSON: "))
     payload = json.loads(json_line[len("CHECKLIST-JSON: "):])
     ids = [item["id"] for item in payload["items"]]
     assert ids == ["python", "venv", "deps", "credentials",
-                   "bootstrap-clones", "recheck"]
+                   "bootstrap-clones", "defects-local", "recheck"]
     by_id = {i["id"]: i for i in payload["items"]}
     assert by_id["credentials"]["status"] == "fail"
     assert by_id["python"]["status"] == "ok"
@@ -1340,3 +1355,365 @@ def test_deps_present_in_both_interpreters_stay_green(tmp_path):
     lines = collect(root, fake_git(), imports_ok=True)
     assert len(lines) == 1
     assert lines[0].startswith("doctor: all green")
+
+
+# ---------------------------------------------------------------------------
+# Session bootstrap report (bootstrap-update-and-report-v1)
+#
+# Each new .bootstrap-status key renders its own report line, in the user's
+# voice, by exception. The load-bearing property: `checked=no` must read as
+# "not checked" and never as "current".
+# ---------------------------------------------------------------------------
+
+def status_line(script: str, **kv) -> str:
+    fields = " ".join(f"{k}={v}" for k, v in kv.items())
+    return f"{ts()} {script} {fields}\n"
+
+
+def write_status(root: Path, *lines: str) -> None:
+    (root / ".bootstrap-status").write_text("".join(lines))
+
+
+def test_hooks_key_reports_installed_pre_push_hooks(tmp_path):
+    root = make_configured_root(tmp_path)
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes"),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes", hooks="netapp,synology"),
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "pre-push hooks" in text
+    assert "netapp and synology" in text
+
+
+def test_ahead_key_explains_why_a_repo_was_not_updated(tmp_path):
+    root = make_configured_root(tmp_path)
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes"),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes", ahead="netapp:5"),
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "I didn't update the netapp repo" in text
+    assert "5 commit(s) ahead" in text
+
+
+def test_dirty_key_explains_why_a_repo_was_not_updated(tmp_path):
+    root = make_configured_root(tmp_path)
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes", dirty="scott-references"),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes"),
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "I didn't update the scott-references repo" in text
+    assert "uncommitted" in text
+
+
+def test_diverged_key_reports_both_counts_and_no_pull(tmp_path):
+    root = make_configured_root(tmp_path)
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes"),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes", diverged="unifi:3:5"),
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "diverged" in text
+    assert "3 ahead and 5 behind" in text
+    assert "not a pull" in text
+
+
+def test_updated_count_is_reported(tmp_path):
+    root = make_configured_root(tmp_path)
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=2, failed=0,
+                    failures="-", checked="yes"),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes"),
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "I updated 2 reference repos." in text
+    assert "pak repos" not in text, "updated=0 must say nothing (by exception)"
+
+
+def test_checked_no_never_reads_as_current(tmp_path):
+    """The failure mode this contract exists to prevent."""
+    root = make_configured_root(tmp_path)
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=0, failed=0,
+                    failures="-", checked="no"),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes"),
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "could NOT check the reference repos" in text
+    assert "not known to be current" in text
+    assert "up to date" not in text.lower()
+    assert "all green" not in text, (
+        "a run that could not check must never be summarized as green"
+    )
+
+
+def test_checked_throttled_is_silent(tmp_path):
+    """The daily throttle working as designed is not a delta.
+
+    `checked=throttled` is the normal state on every session that is not the
+    day's first, and nothing about it needs the user (CLAUDE.md rule 16). It
+    is silent like `yes`; only `no` and unrecognized values speak.
+    """
+    root = make_configured_root(tmp_path)
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=0, failed=0,
+                    failures="-", checked="throttled"),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes"),
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "already checked today" not in text
+    assert "bootstrap report" not in text
+    assert "all green" in text
+
+
+def test_unrecognized_checked_value_still_speaks(tmp_path):
+    root = make_configured_root(tmp_path)
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=0, failed=0,
+                    failures="-", checked="maybe"),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes"),
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "freshness is unknown" in text
+
+
+def test_checked_yes_and_skipped_are_silent(tmp_path):
+    """Report by exception: a fully current session says nothing extra."""
+    root = make_configured_root(tmp_path)
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=0, skipped=6,
+                    failed=0, failures="-", checked="yes"),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, skipped=15,
+                    failed=0, failures="-", checked="yes"),
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "bootstrap report" not in text
+    assert "all green" in text
+
+
+def test_empty_list_sentinel_produces_no_lines(tmp_path):
+    root = make_configured_root(tmp_path)
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes", hooks="-", dirty="-",
+                    ahead="-", diverged="-"),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes", hooks="-"),
+    )
+    assert bootstrap_report_lines(read_bootstrap_status(root)[0]) == []
+
+
+def test_corrupt_status_line_still_exits_0(tmp_path):
+    """Garbage in the extended keys degrades the report, never the session."""
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts()} bootstrap_references cloned=x updated=y failed=0 failures=- "
+        f"ahead=:::: dirty=,,, diverged=netapp:a:b hooks= checked=weird\n"
+        "GARBAGE PARTIAL LINE cloned=1\n"
+        f"{ts()} bootstrap_managed_paks cloned=1 updated=0 failed=0 failures=-\n"
+    )
+    lines = []
+    rc = run_doctor(root, git=fake_git(), check_import=lambda n: True,
+                    environ={}, out=lines.append)
+    assert rc == 0
+    text = "\n".join(lines)
+    assert "PARTIAL" not in text
+
+
+def test_report_truncates_a_giant_repo_name(tmp_path):
+    root = make_configured_root(tmp_path)
+    garbage = "z" * 5000
+    write_status(
+        root,
+        status_line("bootstrap_references", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes", hooks=garbage),
+        status_line("bootstrap_managed_paks", cloned=0, updated=0, failed=0,
+                    failures="-", checked="yes"),
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert garbage not in text
+    assert len(text) < 2000
+
+
+# ---------------------------------------------------------------------------
+# Consumer-owned defect registry (defect-isolation-v1)
+# ---------------------------------------------------------------------------
+
+def test_no_standing_local_registry_line_in_the_session_report(tmp_path):
+    """B2: "upstream defects may block you" is not a standing session line.
+
+    content/ ships tracked and populated, so any "has this user authored
+    anything" predicate is true on every clone from the first second. The
+    fact belongs on the gate's refusal, where it is actionable, and in the
+    first-run checklist, where it is an offer. Not here, every session.
+    """
+    root = make_configured_root(tmp_path)
+    (root / "content" / "dashboards").mkdir(parents=True)
+    (root / "content" / "dashboards" / "<fixture>.yaml").write_text("name: x\n")
+    text = "\n".join(collect(root, fake_git()))
+    assert "defects.local.md" not in text
+    assert "all green" in text
+
+
+def test_local_registry_path_is_anchored_to_the_root(tmp_path):
+    root = make_configured_root(tmp_path)
+    assert local_registry_path(root) == (
+        root / "knowledge" / "context" / "defects.local.md"
+    )
+
+
+# ---------------------------------------------------------------------------
+# First-run greeting: names the missing items
+# ---------------------------------------------------------------------------
+
+def test_greeting_names_every_missing_item(tmp_path):
+    greeting = compose_greeting([
+        {"id": "python", "status": "fail"},
+        {"id": "venv", "status": "fail"},
+        {"id": "deps", "status": "ok"},
+        {"id": "credentials", "status": "fail"},
+        {"id": "defects-local", "status": "pending"},
+    ])
+    assert greeting == (
+        "This appears to be a new VCF Content Factory session. You're missing "
+        "Python 3.9+, a virtualenv, and credentials for at least one "
+        "instance. Should I install them?"
+    )
+
+
+def test_greeting_never_says_these_prereqs(tmp_path):
+    root = make_configured_root(tmp_path)
+    (root / ".env").unlink()
+    text = "\n".join(collect(root, fake_git()))
+    assert "these pre-reqs" not in text
+    assert "get it ready for you" not in text
+
+
+def test_greeting_falls_back_when_nothing_is_named(tmp_path):
+    assert compose_greeting([{"id": "recheck", "status": "pending"}]) == GREETING
+
+
+def test_checklist_carries_defects_local_presence(tmp_path):
+    root = make_configured_root(tmp_path)
+    env = inspect_environment(root, lambda n: True)
+    bootstrap, _ = read_bootstrap_status(root)
+    item = next(i for i in build_checklist(root, env, True, [], bootstrap)
+                if i["id"] == "defects-local")
+    assert item["status"] == "pending"
+    reg = root / "knowledge" / "context"
+    reg.mkdir(parents=True)
+    (reg / "defects.local.md").write_text("# local registry\n")
+    item = next(i for i in build_checklist(root, env, True, [], bootstrap)
+                if i["id"] == "defects-local")
+    assert item["status"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# B3: a run that never happened is never replayed as this session's work
+# ---------------------------------------------------------------------------
+
+def test_stale_record_is_not_replayed_in_the_present_tense(tmp_path):
+    """Neither bootstrap script writes a line when it is killed mid-sweep, so
+    the previous run's line survives. It must not be voiced as this session's
+    work: reports-green-while-broken is the failure mode the design names."""
+    root = make_configured_root(tmp_path)
+    old = ts(hours_ago=8 * 24)
+    (root / ".bootstrap-status").write_text(
+        f"{old} bootstrap_references cloned=0 updated=4 failed=0 failures=- checked=yes\n"
+        f"{ts()} bootstrap_managed_paks cloned=0 updated=0 failed=0 failures=- checked=yes\n"
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "I updated 4 reference repos." not in text
+    assert "did not record a run this session" in text
+    assert old in text, "the honest line names the stamp it is reporting"
+    assert "NOT known to be current" in text
+
+
+def test_stale_record_inside_the_stale_health_window_is_still_not_replayed(tmp_path):
+    """The gap the 24h health line does not cover: a record from earlier
+    today, after a killed run, is still not this session's work."""
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts(hours_ago=6)} bootstrap_references cloned=0 updated=4 failed=0 "
+        "failures=- checked=yes hooks=netapp\n"
+        f"{ts()} bootstrap_managed_paks cloned=0 updated=0 failed=0 failures=- checked=yes\n"
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "I updated 4" not in text
+    assert "I added pre-push hooks" not in text
+    assert "did not record a run this session" in text
+
+
+def test_stale_record_with_nothing_to_say_is_silent(tmp_path):
+    """A stale record that would have produced no line produces none. The
+    separate STALE_AFTER_HOURS health line covers a long-dead script."""
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts(hours_ago=6)} bootstrap_references cloned=0 updated=0 failed=0 "
+        "failures=- checked=yes\n"
+        f"{ts(hours_ago=6)} bootstrap_managed_paks cloned=0 updated=0 failed=0 "
+        "failures=- checked=yes\n"
+    )
+    lines = collect(root, fake_git())
+    assert len(lines) == 1, lines
+    assert "all green" in lines[0]
+
+
+def test_unparseable_timestamp_is_never_treated_as_this_session(tmp_path):
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        "not-a-timestamp bootstrap_references cloned=0 updated=4 failed=0 "
+        "failures=- checked=yes\n"
+        f"{ts()} bootstrap_managed_paks cloned=0 updated=0 failed=0 failures=- checked=yes\n"
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "I updated 4 reference repos." not in text
+
+
+def test_future_dated_record_is_never_treated_as_this_session(tmp_path):
+    root = make_configured_root(tmp_path)
+    (root / ".bootstrap-status").write_text(
+        f"{ts(hours_ago=-72)} bootstrap_references cloned=0 updated=4 failed=0 "
+        "failures=- checked=yes\n"
+        f"{ts()} bootstrap_managed_paks cloned=0 updated=0 failed=0 failures=- checked=yes\n"
+    )
+    text = "\n".join(collect(root, fake_git()))
+    assert "I updated 4 reference repos." not in text
+
+
+def test_report_lines_accept_an_injected_now(tmp_path):
+    """The freshness window is testable without wall-clock coupling."""
+    from datetime import datetime as _dt
+    stamp = "2026-09-01T00:00:00Z"
+    record = {"bootstrap_references": {"updated": "4", "checked": "yes",
+                                       TIMESTAMP_KEY: stamp}}
+    at_the_time = _dt(2026, 9, 1, 0, 0, 30, tzinfo=timezone.utc)
+    assert bootstrap_report_lines(record, now=at_the_time) == [
+        "I updated 4 reference repos."
+    ]
+    much_later = _dt(2026, 9, 9, 0, 0, 0, tzinfo=timezone.utc)
+    later_lines = bootstrap_report_lines(record, now=much_later)
+    assert later_lines and "did not record a run this session" in later_lines[0]

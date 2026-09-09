@@ -14,8 +14,19 @@ rule: `knowledge/rules/release-gate-defects.md` (RULE-012).
   registry — they live in the review docs.
 - **The gate consumes this file.** `python3 -m vcfops_packaging
   defect-gate` parses the entries; `release` and `publish` refuse, and a
-  v* tag must not be pushed, while an **open blocking** defect affects
-  the artifact (RULE-012). Refusals name defect ids.
+  v* tag push is refused by the `.githooks/pre-push` hook, while an
+  **open blocking** defect affects the artifact (RULE-012). Refusals
+  name defect ids.
+- **Or it consumes `defects.local.md` instead.** Selection is by
+  presence: a sibling `defects.local.md` wins over this file when it
+  exists. That is how someone working from a clone gates their own
+  artifacts without inheriting this registry. Upstream never ships a
+  `defects.local.md`, so pulls cannot conflict with one.
+- **A malformed entry blocks only itself.** The parser isolates per
+  entry rather than failing the whole file: a bad entry whose
+  `Affects:` is readable gates that artifact, one whose `Affects:` is
+  unreadable gates nothing, and both are reported. Keep the shape exact
+  anyway; a broken entry still stops gating what it names.
 - **The reviewer re-asserts.** `sdk-adapter-reviewer` reads this file
   every review and re-asserts each open defect affecting the pak under
   review; if a build resolves one, the verdict *proposes* closure with

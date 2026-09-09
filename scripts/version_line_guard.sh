@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # version_line_guard.sh — RULE-014 / RULE-012 pre-tag guard.
 #
-# Spec: memory/environment/TODO-top-level-reorg.md "New HOOKS" §1;
+# Spec: the (since-deleted) local reorg TODO's "New HOOKS" §1;
 # durable-output map: STRUCTURE.md (vcfops_*/, scripts/, knowledge/context/).
 #
 # Refuses a `v*` tag / push on an SDK adapter repo checkout when:
@@ -15,10 +15,13 @@
 # from CI (the real release path), but this cannot be proven from a local
 # checkout alone, so it is a warning, not a refusal.
 #
-# This script does not (yet) run automatically — see CLAUDE.md RULE-013/
-# RULE-014 and the reorg TODO's "New HOOKS" section for how it will be
-# wired into settings.json / a real git hook. Until then, invoke it by
-# hand, or from a CI step, before pushing a v* tag.
+# This script RUNS AUTOMATICALLY on a pak clone: .githooks/pre-push is a
+# thin dispatcher that hands it the pre-push stdin, and
+# scripts/bootstrap_managed_paks.sh points every registered clone at
+# that hooks directory via core.hooksPath. See
+# knowledge/designs/defect-isolation-v1.md. It remains directly
+# invokable by hand or from a CI step; the hook adds no policy of its
+# own, so both paths reach the same verdict.
 #
 # Usage:
 #   scripts/version_line_guard.sh [options]

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # immutability_guard.sh — RULE-010 generalization, pre-commit shape.
 #
-# Spec: memory/environment/TODO-top-level-reorg.md "New HOOKS" §2;
+# Spec: the (since-deleted) local reorg TODO's "New HOOKS" §2;
 # durable-output map: STRUCTURE.md's authorship x mutability grid — reference/
 # (which holds docs/ and references/, now reference/docs/ and
 # reference/references/) is "vendor / third-party, immutable (never edit;
@@ -40,10 +40,13 @@
 #   that config false, an unpatched invocation would show a pure
 #   in-reference/ rename as D+A and falsely refuse it.
 #
-# This script does not (yet) run automatically as a git hook — see
-# CLAUDE.md RULE-010/RULE-013 and the reorg TODO's "New HOOKS" section
-# for how it will be wired into .git/hooks/pre-commit. Until then,
-# invoke it by hand or from CI.
+# This script does not run automatically yet. The hook infrastructure it
+# was waiting for now exists (.githooks/ plus core.hooksPath, added for
+# the "New HOOKS" §1 sibling scripts/version_line_guard.sh), but wiring
+# a pre-commit guard on the FACTORY repo is a separate decision from
+# gating pak pushes: it changes this repo's own commit path, not a pak
+# clone's. Until that call is made, invoke it by hand or from CI.
+# See knowledge/designs/defect-isolation-v1.md for the hook mechanism.
 #
 # Usage:
 #   scripts/immutability_guard.sh                  # git diff --cached (staged)

@@ -7,9 +7,20 @@
 #
 # Usage:
 #   scripts/bootstrap_references.sh          # clone missing only
-#   scripts/bootstrap_references.sh --update # also git pull existing
+#   scripts/bootstrap_references.sh --update # force the refresh sweep now
+#
+# Update policy (knowledge/designs/bootstrap-update-and-report-v1.md):
+# fast-forward only what is clean and behind; report ahead, dirty and
+# diverged clones rather than touching them. References are read-only
+# vendor material, but a user may still have local edits or a pinned
+# checkout, and losing those to a background hook is exactly the failure
+# this policy exists to prevent. The sweep is throttled to once a day.
 
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/lib/repo_state.sh
+. "${SCRIPT_DIR}/lib/repo_state.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REFERENCES_DIR="${REPO_ROOT}/reference/references"
@@ -23,13 +34,39 @@ SOURCES_FILE="${REPO_ROOT}/knowledge/context/reference_sources.md"
 # bounded at one line per script and neither script can evict the other.
 write_status() {
     local c="${1:-0}" u="${2:-0}" f="${3:-0}" fl="${4:--}"
+    local sk="${5:-0}" ah="${6:--}" dt="${7:--}" dv="${8:--}" ck="${9:-yes}"
     local sf="${REPO_ROOT}/.bootstrap-status"
     local line tmp
-    line="$(date -u +%Y-%m-%dT%H:%M:%SZ) bootstrap_references cloned=$c updated=$u failed=$f failures=$fl"
+    line="$(date -u +%Y-%m-%dT%H:%M:%SZ) bootstrap_references cloned=$c updated=$u failed=$f failures=$fl skipped=$sk ahead=$ah dirty=$dt diverged=$dv checked=$ck"
+    RECORDED=true
     tmp="${sf}.tmp"
     { grep -v " bootstrap_references " "$sf" 2>/dev/null || true; echo "$line"; } > "$tmp" 2>/dev/null \
       && mv "$tmp" "$sf" 2>/dev/null || true
 }
+
+# A run killed part-way (the SessionStart `timeout`, Ctrl-C) used to write
+# nothing at all, leaving the PREVIOUS run's line in place for the doctor to
+# replay in present tense as this session's work: reports-green-while-broken,
+# the exact failure mode knowledge/designs/bootstrap-update-and-report-v1.md
+# names. Record the truncation instead, so the doctor can say it could not
+# check rather than repeating what a different run once did.
+RECORDED=false
+on_abort() {
+    # Fires for TERM and again for EXIT; only the first firing may write.
+    # `if` rather than `$RECORDED && ...` because a false short-circuit is a
+    # non-zero status, which `set -e` treats as fatal inside a trap handler.
+    if $RECORDED; then return 0; fi
+    trap - EXIT TERM INT
+    # references write_status has no hooks field: 9 args, not 10.
+    write_status "${cloned:-0}" "${updated:-0}" "${failed:-0}" "interrupted" \
+        "${skipped:-0}" - - - "no"
+    # Exit, do not return. Returning ABSORBS the delivered signal: the script
+    # would run on past its `timeout`, and its normal end-of-run write would
+    # overwrite the interrupted record with a clean one, which is the very
+    # replay this trap exists to prevent. 143 = 128 + SIGTERM.
+    exit 143
+}
+trap on_abort EXIT TERM INT
 
 UPDATE_EXISTING=false
 if [[ "${1:-}" == "--update" ]]; then
@@ -79,6 +116,21 @@ skipped=0
 failed=0
 failures=()
 
+THROTTLE_STAMP="${REPO_ROOT}/.bootstrap-status.refs-throttle"
+THROTTLE_SECONDS=86400
+
+if $UPDATE_EXISTING || throttle_due "$THROTTLE_STAMP" "$THROTTLE_SECONDS"; then
+    REFRESH=true
+else
+    REFRESH=false
+fi
+checked="yes"
+$REFRESH || checked="throttled"
+
+ahead_list=()
+dirty_list=()
+diverged_list=()
+
 for i in "${!URLS[@]}"; do
     url="${URLS[$i]}"
     slug="${PATHS[$i]}"
@@ -88,19 +140,52 @@ for i in "${!URLS[@]}"; do
     # containing a .git that git itself rejects; a bare -d test would call
     # that "Exists" forever and never repair it (issue #91).
     if git -C "$target" rev-parse --git-dir >/dev/null 2>&1; then
-        if $UPDATE_EXISTING; then
-            echo "  Updating: $slug"
-            if git -C "$target" pull --quiet 2>/dev/null; then
-                updated=$((updated + 1))
-            else
-                echo "    WARNING: git pull failed for $slug" >&2
-                failed=$((failed + 1))
-                failures+=("${slug}")
-            fi
-        else
-            echo "  Exists:   $slug (use --update to pull)"
+        if ! $REFRESH; then
+            echo "  Exists:   $slug (refresh throttled; --update to force)"
             skipped=$((skipped + 1))
+            continue
         fi
+
+        if ! repo_fetch "$target"; then
+            echo "    WARNING: git fetch failed for $slug (not checked)" >&2
+            skipped=$((skipped + 1))
+            checked="no"
+            continue
+        fi
+
+        case "$(repo_state "$target")" in
+            behind:*)
+                echo "  Updating: $slug"
+                if repo_ff_pull "$target"; then
+                    updated=$((updated + 1))
+                else
+                    echo "    WARNING: fast-forward pull failed for $slug" >&2
+                    failed=$((failed + 1))
+                    failures+=("${slug}")
+                fi
+                ;;
+            ahead:*)
+                st="$(repo_state "$target")"
+                echo "  Ahead:    $slug (${st#ahead:} local commit(s); not updated)"
+                ahead_list+=("${slug}:${st#ahead:}")
+                skipped=$((skipped + 1))
+                ;;
+            diverged:*)
+                st="$(repo_state "$target")"; st="${st#diverged:}"
+                echo "  Diverged: $slug (${st%%:*} ahead, ${st##*:} behind; not updated)"
+                diverged_list+=("${slug}:${st}")
+                skipped=$((skipped + 1))
+                ;;
+            dirty)
+                echo "  Dirty:    $slug (local changes; not updated)"
+                dirty_list+=("${slug}")
+                skipped=$((skipped + 1))
+                ;;
+            *)
+                echo "  Current:  $slug"
+                skipped=$((skipped + 1))
+                ;;
+        esac
     else
         echo "  Cloning:  $slug <- $url"
         if git clone --quiet "$url" "$target" 2>/dev/null; then
@@ -113,9 +198,16 @@ for i in "${!URLS[@]}"; do
     fi
 done
 
-echo ""
-echo "Done: cloned=$cloned updated=$updated skipped=$skipped failed=$failed"
+if $REFRESH && [ "$checked" = "yes" ]; then
+    : > "$THROTTLE_STAMP" 2>/dev/null || true
+fi
 
-fl="-"
-[[ ${#failures[@]} -gt 0 ]] && fl="$(IFS=,; echo "${failures[*]}")"
-write_status "$cloned" "$updated" "$failed" "$fl"
+echo ""
+echo "Done: cloned=$cloned updated=$updated skipped=$skipped failed=$failed checked=$checked"
+
+fl="$(csv_or_dash "${failures[@]+"${failures[@]}"}")"
+write_status "$cloned" "$updated" "$failed" "$fl" "$skipped" \
+    "$(csv_or_dash "${ahead_list[@]+"${ahead_list[@]}"}")" \
+    "$(csv_or_dash "${dirty_list[@]+"${dirty_list[@]}"}")" \
+    "$(csv_or_dash "${diverged_list[@]+"${diverged_list[@]}"}")" \
+    "$checked"

@@ -475,6 +475,16 @@ citation_is_valid() {
 
   # (b) REGISTRY-MANAGED roots.
   case "${cand}" in
+    knowledge/context/defects.local.md)
+      # Standing exception: the downstream defect registry
+      # (knowledge/designs/defect-isolation-v1.md, RULE-012). Selection
+      # is by presence, and upstream deliberately never ships this file:
+      # that is precisely what keeps a consumer's registry from
+      # conflicting with a pull. It is legitimately cited by name in the
+      # gate, the doctor and the rules, so it must not read as rot.
+      CITATION_MSG="RULE-015 standing exception: knowledge/context/defects.local.md exists only in a downstream checkout by design (RULE-012, knowledge/designs/defect-isolation-v1.md)"
+      return 3
+      ;;
     content/sdk-adapters/?*)
       local name="${cand#content/sdk-adapters/}"
       name="${name%%/*}"
