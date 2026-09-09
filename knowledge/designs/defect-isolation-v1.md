@@ -21,14 +21,18 @@ Four decisions, in dependency order.
    `defects.md` in their own repo, because they cannot write to his.
    One rule, two locations, expressed as a registry location in the
    workflow file.
-2. **A third party's registry starts empty**, reset at first-run, not
-   inherited. `defects.md` stays tracked (see "Why not gitignore").
+2. **A third party's registry is a separate file**, `defects.local.md`,
+   which the factory never ships. It starts empty because it does not
+   exist until they make one, and a pull can never conflict with it.
+   The factory's `defects.md` stays tracked (see "Why not gitignore").
 3. **Per-entry fault isolation in the parser** so one malformed entry
    stops gating only the artifact it names, instead of every artifact
    everywhere.
 4. **A missing or unreachable registry warns, it does not refuse.**
    This already is the behavior on the `publish` path; the pak CI is
    the outlier.
+5. **`/publish` and a `v*` tag get the same strictness.** Both are
+   shipping; there is no reason for one to be laxer than the other.
 
 Together these remove the reported failure without changing what gates
 a first-party release. Scott's own strictness is unchanged or higher;
@@ -124,17 +128,19 @@ fetch work for all six pak repos. Ignoring it would remove the audit
 trail and break every first-party release gate to solve a problem that
 belongs at setup time.
 
-Clean slate instead: the file stays tracked, and first-run resets a
-fresh clone's registry to an empty stub. The doctor already emits a
-concierge checklist for unconfigured clones (`doctor.py:988`,
-`is_first_run`), so this is one more checklist item rather than new
-machinery, and it ships working rather than asking the user to create a
-file by hand.
+Clean slate by separation instead of by reset: a consumer's registry is
+`defects.local.md`, a filename the factory never ships. The factory's
+own `defects.md` stays tracked and unchanged.
 
-Known friction, not yet resolved: a consumer who resets their registry
-and later pulls from upstream gets a conflict on `defects.md`. Worth
-deciding whether a consumer's registry should live at a path the
-factory does not ship at all.
+That gets the empty start for free, since their file does not exist
+until they create one, and there is nothing to reset on clone. It also
+avoids a pull conflict that a reset-in-place would have caused: a
+consumer who emptied the shipped `defects.md` and later pulled framework
+updates would hit a merge conflict on a file they never meant to share.
+A path the factory does not ship cannot conflict.
+
+The factory's inherited `defects.md` is then just reference material in
+their tree, read by nothing that gates their work.
 
 ## Rejected alternative
 
@@ -159,16 +165,10 @@ review, which at roughly 40 entries it is not.
   existing convention already propagates both together.
 - `knowledge/context/defects.md` schema section and RULE-012: document
   the per-entry failure mode and the optional `Origin:` field.
-- Doctor first-run checklist: registry reset for a fresh clone.
+- Doctor: surface whether a consumer registry exists, so a clone that
+  never made one is not silently ungated. No reset step needed.
 - Tests: a malformed entry for pak X must not block pak Y; an entry
   whose `Affects:` cannot be read must warn and block nothing; an
   absent registry must warn and pass.
 - No change to `feedback_queue.md`, RULE-012's gate points, or any
   existing DEF-NNN entry.
-
-## Open questions for Scott
-
-1. Should `/publish` inherit the same upstream-strict behavior as a
-   `v*` tag, or is the tag the only place strictness matters?
-2. Should a consumer's registry live at a path the factory does not
-   ship, to avoid the pull conflict noted above?
