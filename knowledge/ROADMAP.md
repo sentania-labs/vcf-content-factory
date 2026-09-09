@@ -81,8 +81,9 @@ what's on the horizon. Updated as capabilities land.
       the live lab.**
 - [x] **PowerShell `install.ps1` installer** — full parity with
       `install.py`. Supports PS 5.1 and PS 7+. Four PS-specific
-      bugs found and fixed during acceptance (see `memory/
-      feedback_powershell_idioms.md`). **6/6 QA acceptance on
+      bugs found and fixed during acceptance (PS-1 through PS-4,
+      each described in the 2026-04-11 entries of
+      `knowledge/context/investigations/qa_log.md`). **6/6 QA acceptance on
       PS 7.5.1.**
 - [x] **QA framework** — `qa-tester` agent runs end-to-end
       install / uninstall / multi-bundle / admin-guard /
@@ -134,8 +135,10 @@ subcommands. Two learning targets in flight:
 Open work: the **adapter JAR gap** (`<adapter_kind>_adapter3.jar`
 contains the adapter kind baked into its package path and cannot
 be regenerated without the MPB server-side build endpoint); lab
-verification of the 2026-04-19 chain1 renderer fix; and the
-manual-UI MPB tasks tracked under `memory/project_mpb_manual_ui_tasks_pending.md`.
+verification of the 2026-04-19 chain1 renderer fix; and a set of
+manual-UI MPB tasks whose only tracker was an uncommitted `memory/`
+file that no longer exists, so the list itself is lost. Re-derive it
+from `knowledge/context/mpb/` before relying on it.
 
 ## Next Up
 

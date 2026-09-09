@@ -539,8 +539,9 @@ may also be fixed at the same time.
   needed because uninstall requires `configuration.solutions.delete`
   privilege, which non-admin users don't carry, and also because the
   admin account is the one the SPA allows to manage integrations).
-- `memory/project_vcf_ops_902_ui_deadends.md` — earlier catalog of
-  `/ui/` SPA dead-ends. This investigation **updates that catalog**:
+- The earlier catalog of `/ui/` SPA dead-ends (an uncommitted `memory/`
+  file that no longer exists; its surviving equivalent is
+  `struts_import_endpoints.md`). This investigation **corrects it**:
   `/ui/solution.action` is NOT a dead stub. It is a live, registered
   Struts handler with a distinct mainAction surface from
   `/admin/solution.action`. The two must not be conflated.

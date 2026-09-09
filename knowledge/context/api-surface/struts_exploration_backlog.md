@@ -17,15 +17,18 @@ rather than a task list.
   Reports.zip flat shape
 - `context/struts_import_endpoints.md` — full Ext.Direct controller
   catalog enumeration and dead-endpoint survey
-- `memory/feedback_struts_priority.md` — when to use Struts vs REST
-- `memory/project_vcf_ops_902_ui_deadends.md` — the UI import dead-end
-  summary with traps to avoid
+
+(Two further sources cited here historically, `feedback_struts_priority.md`
+and `project_vcf_ops_902_ui_deadends.md`, lived under the old uncommitted
+`memory/` scheme and no longer exist. The Struts-vs-REST posture they
+carried is restated in the next section; the dead-end survey is in
+`struts_import_endpoints.md`.)
 
 ## What the framework actually uses
 
-**Posture** (`feedback_struts_priority.md`): the framework prefers
-REST / content-zip paths; Struts / Ext.Direct is last-ditch, only
-used where no REST alternative exists. **QA inverts this** — to
+**Posture:** the framework prefers REST / content-zip paths;
+Struts / Ext.Direct is last-ditch, only used where no REST
+alternative exists. **QA inverts this** — to
 catch real-world quirks, qa-tester drives the UI via the same
 endpoints an admin's browser hits.
 
