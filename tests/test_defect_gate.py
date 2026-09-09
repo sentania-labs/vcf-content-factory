@@ -522,6 +522,296 @@ class TestPerEntryFaultIsolation:
         )
 
 
+class TestMalformedHeadingIsolation:
+    """A DEF-prefixed heading that is not a valid id must not repoint a good entry.
+
+    Regression for framework review W3 (defects-doctor-2026-09-09): a heading
+    such as ``### DEF-1O2`` (letter O for zero) matched neither the section
+    regex nor the field regex, so it fell through to the continuation-line
+    branch and the FOLLOWING entry's field lines overwrote the PREVIOUS
+    entry's fields.  DEF-001 silently began gating pakB instead of pakA, with
+    no error, no warning and no synthetic blocker: fail-open registry
+    corruption.
+    """
+
+    # The reviewer's own repro, verbatim in shape.
+    _TYPO_HEADING = """\
+# Defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** Good entry
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** pakA
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** never gates anything.
+
+### DEF-1O2
+
+- **Title:** Typo'd id, letter O for zero
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** pakB
+- **First-seen:** build 2 (2026-01-02)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** second entry.
+"""
+
+    def test_typod_heading_does_not_overwrite_previous_entry(self, tmp_path):
+        """The corruption repro: DEF-001 must keep its own fields."""
+        from vcfops_packaging.defects import parse_registry
+        reg = _write_registry(tmp_path, self._TYPO_HEADING)
+        registry = parse_registry(reg)
+
+        valid = {e.id: e for e in registry.entries}
+        assert "DEF-001" in valid, (
+            f"the good entry must still parse; got {sorted(valid)}"
+        )
+        assert valid["DEF-001"].affects == "pakA", (
+            "DEF-001 must still gate the artifact it names, not the typo'd "
+            f"entry's scope; got {valid['DEF-001'].affects!r}"
+        )
+        assert valid["DEF-001"].summary == "never gates anything.", (
+            f"DEF-001's fields were overwritten: {valid['DEF-001'].summary!r}"
+        )
+        assert len(registry.errors) == 1, (
+            f"the typo'd heading must be a ParseError; got {registry.errors}"
+        )
+
+    def test_typod_heading_gates_its_own_scope_and_nothing_else(self, tmp_path):
+        from vcfops_packaging.defects import gate_pak
+        reg = _write_registry(tmp_path, self._TYPO_HEADING)
+
+        assert [e.id for e in gate_pak("pakA", reg)] == ["DEF-001"], (
+            "the good entry must still gate its own scope"
+        )
+        blockers = gate_pak("pakB", reg)
+        assert len(blockers) == 1, (
+            f"the typo'd entry must fail closed for its readable scope; got {blockers}"
+        )
+        assert blockers[0].synthetic is True
+        assert blockers[0].severity == "blocking"
+        assert blockers[0].status == "open"
+        assert gate_pak("pakC", reg) == [], (
+            "a malformed heading must not gate an unrelated artifact"
+        )
+
+    def test_typod_heading_without_readable_affects_blocks_nothing(self, tmp_path, capsys):
+        from vcfops_packaging.defects import gate_all, parse_registry, reset_warning_state
+        reset_warning_state()
+        reg = _write_registry(tmp_path, """\
+# Defect registry
+
+## Defects
+
+### DEF-001
+
+- **Title:** Good entry
+- **Severity:** blocking
+- **Status:** closed
+- **Affects:** pakA
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** closed, so it gates nothing.
+- **Closing-evidence:** fixed in build 2.
+
+### DEF-1O2 and then some trailing prose
+
+- **Title:** Typo'd id with no readable scope
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** all of the dashboards, probably
+- **First-seen:** build 2 (2026-01-02)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Affects is prose, so this names no artifact.
+""")
+        registry = parse_registry(reg)
+        assert len(registry.unscoped_errors) == 1, (
+            f"an unreadable scope must be unscoped; got {registry.errors}"
+        )
+        assert gate_all(reg) == [], (
+            "a malformed heading with no readable scope must block nothing"
+        )
+        combined = capsys.readouterr()
+        text = combined.out + combined.err
+        assert "WARNING" in text and "DEF-1O2" in text, (
+            f"it must still be reported loudly; got:\n{text}"
+        )
+
+    # One well-formed entry, reused by the heading-shape cases below.
+    _GOOD_ENTRY = """\
+### DEF-001
+
+- **Title:** Good entry
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** pakA
+- **First-seen:** build 1 (2026-01-01)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** Still parses cleanly.
+"""
+
+    def test_non_def_headings_and_prose_are_unaffected(self, tmp_path):
+        """Section headings and prose must keep their current no-op behaviour."""
+        from vcfops_packaging.defects import parse_registry
+        reg = _write_registry(tmp_path, """\
+# Defect registry
+
+## How it works
+
+Some prose about the registry.
+
+## Schema
+
+### Fields
+
+More prose, and a heading that is not DEF-prefixed.
+
+## Defects
+
+""" + self._GOOD_ENTRY)
+        registry = parse_registry(reg)
+        assert registry.errors == [], (
+            f"non-DEF headings must not become parse errors; got {registry.errors}"
+        )
+        assert [e.id for e in registry.entries] == ["DEF-001"]
+        assert registry.entries[0].affects == "pakA"
+
+    def test_lowercase_def_prose_heading_never_matches(self, tmp_path):
+        """`## Defects` is prose. The match is case-sensitive; assert that.
+
+        The suppression here is LEXICAL: a lowercase heading is not
+        DEF-prefixed at all, so it is skipped before the malformed-heading
+        branch is ever reached.  Stated explicitly because the previous
+        version of this test relied on it without saying so.
+        """
+        from vcfops_packaging.defects import _BAD_SECTION_RE, parse_registry
+        assert _BAD_SECTION_RE.match("## Defects") is None
+        assert _BAD_SECTION_RE.match("### Definitions") is None
+        assert _BAD_SECTION_RE.match("## Schema") is None
+
+        reg = _write_registry(
+            tmp_path,
+            "# Defect registry\n\n## Defects\n\n" + self._GOOD_ENTRY,
+        )
+        registry = parse_registry(reg)
+        assert registry.errors == []
+        assert [e.id for e in registry.entries] == ["DEF-001"]
+
+    def test_uppercase_def_prose_heading_matches_but_is_silent(self, tmp_path):
+        """`### DEFECTS` IS DEF-prefixed, and is silenced evidentially, not lexically.
+
+        The regex deliberately anchors on bare ``DEF`` rather than ``DEF-``,
+        because requiring the hyphen would let ``### DEF102`` fall through to
+        the continuation branch and reproduce the field-bleed.  The cost of
+        the wider anchor is paid at report time instead: a section that
+        collected no field lines has nothing that could have bled into the
+        previous entry, so it says nothing.  This matters for the
+        ``defects.local.md`` a stranger writes from scratch, where
+        ``### DEFECTS`` is a natural first-draft heading.
+        """
+        from vcfops_packaging.defects import _BAD_SECTION_RE, parse_registry
+        for heading in ("### DEFECTS", "### DEFECT LOG", "### DEFINITIONS"):
+            assert _BAD_SECTION_RE.match(heading) is not None, (
+                f"{heading!r} is DEF-prefixed and must match the regex"
+            )
+
+        for heading in ("### DEFECTS", "### DEFECT LOG", "### DEFINITIONS"):
+            reg = _write_registry(tmp_path, (
+                "# Defect registry\n\n"
+                + self._GOOD_ENTRY
+                + f"\n{heading}\n\nSome prose about defects.\n"
+            ))
+            registry = parse_registry(reg)
+            assert registry.errors == [], (
+                f"{heading!r} carries no field lines and must be silent; "
+                f"got {[str(e) for e in registry.errors]}"
+            )
+            assert [e.id for e in registry.entries] == ["DEF-001"]
+            assert registry.entries[0].affects == "pakA"
+
+    def test_uppercase_def_heading_with_fields_is_a_scoped_error(self, tmp_path):
+        """The other half of the split: same heading shape, but it has fields.
+
+        ``### DEF102`` (missing hyphen, same keystroke class as the letter-O
+        typo) followed by real field lines is exactly the corrupting case, so
+        it must be a scoped, fail-closed ParseError.
+        """
+        from vcfops_packaging.defects import gate_pak, parse_registry
+        reg = _write_registry(tmp_path, (
+            "# Defect registry\n\n"
+            + self._GOOD_ENTRY
+            + """
+### DEF102
+
+- **Title:** Missing hyphen
+- **Severity:** blocking
+- **Status:** open
+- **Affects:** pakB
+- **First-seen:** build 2 (2026-01-02)
+- **Source:** knowledge/context/reviews/<synthetic-fixture>.md
+- **Summary:** second entry.
+"""
+        ))
+        registry = parse_registry(reg)
+        assert len(registry.errors) == 1, (
+            f"a DEF-prefixed heading WITH field lines must be reported; "
+            f"got {[str(e) for e in registry.errors]}"
+        )
+        assert registry.errors[0].scoped is True
+        assert registry.errors[0].affects == "pakB"
+        assert registry.entries[0].affects == "pakA", (
+            "and the previous entry must be untouched"
+        )
+        assert [e.id for e in gate_pak("pakB", reg)] == ["DEF102"]
+
+    def test_prose_shaped_heading_still_terminates_the_previous_entry(self, tmp_path):
+        """Termination is unconditional; only REPORTING is conditional.
+
+        A heading that reads as prose (``### DEFECTS``) but is followed by
+        field lines is the case where the two conditions disagree.  It must
+        still terminate DEF-001 (that is the property that removes the
+        corruption) and, because it did collect field lines, it must also be
+        reported and gate the scope it names.
+        """
+        from vcfops_packaging.defects import parse_registry
+        reg = _write_registry(tmp_path, (
+            "# Defect registry\n\n"
+            + self._GOOD_ENTRY
+            + """
+### DEFECTS
+
+- **Affects:** pakB
+- **Summary:** these lines must not bleed upward into DEF-001.
+"""
+        ))
+        registry = parse_registry(reg)
+        good = [e for e in registry.entries if e.id == "DEF-001"]
+        assert len(good) == 1
+        assert good[0].affects == "pakA", (
+            f"DEF-001 was repointed by a silent heading; got {good[0].affects!r}"
+        )
+        assert good[0].summary == "Still parses cleanly.", (
+            f"DEF-001's fields were overwritten; got {good[0].summary!r}"
+        )
+        assert len(registry.errors) == 1, (
+            "field lines were collected, so this heading is NOT the silent case"
+        )
+        assert registry.errors[0].affects == "pakB"
+
+    def test_valid_registry_is_unaffected(self, tmp_path):
+        """The clean case must parse byte-identically to before the fix."""
+        from vcfops_packaging.defects import parse_registry
+        reg = _write_registry(tmp_path, _FIXTURE_REGISTRY_TEXT)
+        registry = parse_registry(reg)
+        assert registry.errors == []
+        assert len(registry.entries) == len(registry.gate_entries)
+
+
 class TestRegistryResolution:
     """Selection by presence: defects.local.md wins, explicit path wins over both."""
 

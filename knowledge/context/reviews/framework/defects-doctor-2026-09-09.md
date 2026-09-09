@@ -596,3 +596,325 @@ pre-existing parser shape that can silently repoint a defect after a heading typ
 CI backstop for the first-party registry but not for a consumer's), and an abort trap in the
 orchestrator's half that does not survive a real SIGTERM, neither of which the framework
 depends on for the properties this change was built to guarantee.
+
+---
+
+# Round 3 (incremental on `725cbef`, PR #151)
+
+Scope: `src/vcfops_packaging/defects.py` (+58/-5) and `tests/test_defect_gate.py` (+164).
+Subject: the round-2 **W3** finding (a `DEF`-prefixed heading whose id is not `DEF-NNN`
+silently repointed the previous entry), fixed rather than deferred at Scott's instruction.
+
+## Verdict: APPROVE
+
+0 BLOCKING / 1 WARNING / 1 NIT. The fix is correct, minimal, and does not regress anything
+approved in rounds 1 and 2. The WARNING is a refinement to the judgment call the coordinator
+asked me to adjudicate, not a defect in what was built.
+
+## Checks re-run
+
+| Check | Result |
+|---|---|
+| Seven-package validate chain | **pass**, rc=0 |
+| `pytest tests/ -q` | **1160 passed, 4 skipped** (was 1155, +5 as claimed) |
+| CI mode `-n auto --dist=loadgroup --override-ini="addopts=" -m ""` | **1288 passed, 4 skipped** (was 1283, +5 as claimed) |
+| `scripts/path_reference_audit.sh` | **clear** |
+| Real registry (`knowledge/context/defects.md`) | 18 entries, **0 errors, 0 synthetic**; no heading in it matches `_BAD_SECTION_RE` |
+
+## W3 verified fixed, with my own round-2 repro
+
+Same fixture that produced the corruption:
+
+```
+before: entries: [('DEF-001', 'pakB')]  errors: []      gate pakA: []   gate pakB: ['DEF-001']
+after : entries: [('DEF-001', 'pakA')]  errors: [1]     gate pakA: ['DEF-001' real]
+                                                        gate pakB: ['DEF-1O2' synthetic]
+        DEF-001 summary: 'real.'   (was 'never gates anything.')
+        error: DEF-1O2 (near line 10): heading 'DEF-1O2' is not a well-formed defect id
+               (expected 'DEF-NNN'), so this entry could not be read | affects='pakB'
+```
+
+Both halves of the harm are gone: the good entry keeps its own fields and its own scope, and
+the typo'd entry now fails **closed** against the scope it named instead of vanishing. It
+routes through the existing scoped/unscoped machinery rather than a parallel path, so the
+synthetic blocker, the warning wording and the exit codes all behave exactly as they do for
+every other malformed entry. Matches `tooling`'s reported before/after exactly.
+
+**Implementation is as described and as small as claimed.** `_BAD_SECTION_RE` is tried only
+after `_SECTION_RE`, so a well-formed heading can never reach it. The bad-heading branch
+terminates the previous entry the same way a good heading does, which is the property that
+actually removes the corruption: the previous entry's fields are simply no longer reachable
+for overwrite, whether or not an error is later recorded. Deferring the error to flush time
+so it can carry the entry's own `Affects:` is the right call and is what makes the fail-closed
+scoping possible. One boolean of new state, no change to the single-pass structure, and the
+bad id is correctly **not** registered in `seen_ids` (it is not an id).
+
+## No regression in the round-1/2 behaviour
+
+Re-ran the properties I approved earlier against this code, not just the suite:
+
+```
+1. per-entry isolation   : pakY=[]  pakX=['DEF-001']  pakZ=['DEF-002']
+2. publish honours local : PASSED  (upstream blocker + empty defects.local.md)
+3. resolution            : local-first=defects.local.md | explicit wins=defects.md
+                           | hint silent when local present=''
+4. doctor freshness      : 8d=past-tense | fresh='I updated 4 reference repos.'
+                           | throttled=[]  (silent)
+```
+
+Registry resolution, the six refusal paths' hint behaviour and the doctor's freshness gate are
+untouched by this change and still behave as approved.
+
+## WARNING
+
+### W5. The `DEF` anchor's false-positive population is larger and likelier than "no such heading exists today"
+
+This is the judgment call, and my adjudication is below. The finding is that the risk was
+assessed against the wrong file.
+
+`_BAD_SECTION_RE` is case-sensitive on uppercase `DEF`, so `## Defects` and `## Schema` are
+correctly untouched. Verified across a spread of headings:
+
+```
+### DEFECTS                   errors=1 warns=1   <- unscoped, gates nothing
+### DEFECT LOG                errors=1 warns=1   <- unscoped, gates nothing
+### DEFINITIONS               errors=1 warns=1   <- unscoped, gates nothing
+### DEF102 (prose under it)   errors=1 warns=1   <- unscoped, gates nothing
+## Defects                    errors=0 warns=0   <- correctly silent
+## Schema                     errors=0 warns=0   <- correctly silent
+```
+
+"No such heading exists in `knowledge/context/defects.md` today" is true and is the right
+check for **the factory's own registry**, which is curated, reviewed and covered by
+`test_ids_unique_and_sequential`. It is the wrong check for the file this whole change set
+exists to serve. `defects.local.md` is a file the framework tells a stranger to **create from
+scratch** ("create knowledge/context/defects.local.md and keep your own registry there"), with
+no template shipped, because shipping one would defeat the never-conflicts-on-pull property.
+`### DEFECTS` and `### DEFECT LOG` are entirely natural section headings for a hand-written
+file of that name, and both fire. So the false-positive population is not a hypothetical
+future edit to a curated file; it is a plausible first draft by exactly the user the design is
+for, who then gets a permanent stderr warning on every gate invocation about a heading that is
+not their problem.
+
+That is the coordinator's concern, and it is correct, and it is sharper than stated.
+
+## The adjudication you asked for
+
+**Between the two options as posed, `tooling` chose correctly. Keep the `DEF` anchor.**
+
+The tradeoff is not symmetric, and the asymmetry decides it. Requiring `DEF-` would leave
+prose alone, but `### DEF102` (dropped hyphen) would then match neither regex, fall through to
+the continuation branch, and reproduce **exactly the silent field-bleed W3 was filed to fix**:
+a real open blocking defect stops gating the artifact it names, with no error and no warning.
+A dropped hyphen is not an exotic typo; it is the same keystroke class as the letter-O typo
+that motivated the finding. So the choice is between a loud false alarm that gates nothing and
+a silent true negative that disables a release gate. Loud-and-wrong beats silent-and-wrong
+whenever the silent case turns a gate off, which is the whole thesis of RULE-012. `tooling`
+also flagged the consequence in the code comment rather than hiding it, which is the behaviour
+I want from an author making a judgment call.
+
+**But the tradeoff as posed is a false dilemma, and there is a refinement that gives up
+nothing on either side.** Discriminate on whether the section *behaves* like an entry rather
+than on how it is spelled: in the `not current_id_wellformed` branch of `_flush_entry`, record
+the `ParseError` only when the malformed section actually collected at least one field line
+(`current_fields` non-empty); otherwise treat the heading as the no-op it already is.
+
+- `### DEFECTS` / `### DEFECT LOG` / `### DEFINITIONS` followed by prose collect no
+  `- **Field:**` lines, so they go silent. The cry-wolf disappears.
+- `### DEF102` or `### DEF-1O2` followed by real field lines still becomes a scoped,
+  fail-closed ParseError. Nothing is given up on the catch side.
+- **There is no false negative for the actual harm.** The corruption W3 describes is caused by
+  field lines following the bad heading overwriting the previous entry's fields. A section with
+  no field lines has nothing to bleed. And the heading still terminates the previous entry
+  regardless, since that happens in the line loop before any error is recorded, so the safety
+  property is preserved even in the silent case.
+
+That is one condition, in the branch this round already added, and it makes the discriminator
+evidential rather than lexical. It is a refinement, not a correction: the current behaviour is
+safe, loud, gates nothing, and is fixable by renaming a heading, and no such heading exists in
+the shipped registry. Hence WARNING, not BLOCKING, and it does not hold PR #151.
+
+On the "trains people to ignore warnings" point: it is a real cost and it is the right instinct
+to raise, but note it is now bounded by the round-2 warn-once fix to **one line per process**,
+not one per gate call. That is what keeps this off the blocking line. It does not make the line
+correct, only survivable.
+
+## NIT
+
+8. **The uppercase-`DEF` prose heading is untested in either direction.**
+   `test_non_def_headings_and_prose_are_unaffected` uses `## How it works`, `## Schema`,
+   `### Fields` and `## Defects`; the last passes only because the regex is case-sensitive,
+   which the test neither states nor asserts. A reader could reasonably conclude `Defects` is
+   covered by the `DEF` anchor and be wrong about a load-bearing detail. Adding `### DEFECTS`
+   to that fixture with an explicit assertion of the intended behaviour would pin the decision
+   made here. The upside for whoever takes the W5 refinement: no existing test would have to be
+   inverted, because none currently pins the uppercase case.
+
+## If shipped as-is
+
+A typo in a defect heading now stops the entry it belongs to rather than silently repointing
+the one above it, on both the factory's registry and a consumer's, and the typo'd entry blocks
+the artifact it named instead of disappearing. The cost carried forward is that a consumer who
+titles a section of their hand-written `defects.local.md` with an uppercase `DEFECT...` heading
+gets one warning line per gate run about a heading that gates nothing.
+
+---
+
+# Round 4 (incremental; the round-3 W5 refinement applied)
+
+Scope: `src/vcfops_packaging/defects.py` (+78/-5 vs `725cbef`) and
+`tests/test_defect_gate.py` (+290). Subject: the evidential condition I prescribed in
+round 3, now implemented.
+
+**Disclosure, because it matters to the weight of this verdict.** I designed this change.
+A reviewer signing off on his own prescription is not an independent check, so I did not
+verify it through `tooling`'s tests: I ran the parser directly against cases those tests do
+not cover, including every placement of a malformed heading I could think of, and treated
+the tests as a separate artifact to review rather than as evidence. Everything below is from
+my own probes unless it says otherwise. A second pair of eyes on this specific round (Codex
+on PR #151) is worth more than usual.
+
+## Verdict: APPROVE
+
+0 BLOCKING / 0 WARNING / 2 NIT.
+
+## Checks re-run
+
+| Check | Result |
+|---|---|
+| Seven-package validate chain | **pass**, rc=0 |
+| `pytest tests/ -q` | **1164 passed, 4 skipped** (+4 this round, +9 over `725cbef`) |
+| CI mode `-n auto --dist=loadgroup --override-ini="addopts=" -m ""` | **1292 passed, 4 skipped** (+4 / +9) |
+| `scripts/path_reference_audit.sh` | **clear** |
+| Real registry | 18 entries, **0 errors, 0 synthetic** |
+
+All four claimed counts match exactly.
+
+## 1. Termination is genuinely unconditional
+
+This was the load-bearing property and it holds, structurally and empirically. The
+`_flush_entry(lineno)` call sits in the line loop, *before* and independent of the
+`if current_fields:` guard, which lives inside the reporting branch. So the previous entry
+is closed the moment a `DEF`-prefixed heading is seen, whether or not anything is later
+reported.
+
+Verified across every case, checking both `affects` **and** `summary` on the entry above
+(summary is the field the old continuation-bleed corrupted):
+
+```
+### DEFECTS      + prose         errors=0 warns=0  DEF-001=('pakA','mine.')
+### DEFECT LOG   + prose         errors=0 warns=0  DEF-001=('pakA','mine.')
+### DEFINITIONS  + prose         errors=0 warns=0  DEF-001=('pakA','mine.')
+### DEFECTS      + field lines   errors=1 warns=1  DEF-001=('pakA','mine.')  pakB=[('DEFECTS', synthetic)]
+### DEF102       + field lines   errors=1 warns=1  DEF-001=('pakA','mine.')  pakB=[('DEF102', synthetic)]
+### DEF-1O2      + field lines   errors=1 warns=1  DEF-001=('pakA','mine.')  pakB=[('DEF-1O2', synthetic)]
+### DEF-042 (closed) + fields    errors=1 warns=1  DEF-001=('pakA','mine.')  pakB=[('DEF-042 (closed)', synthetic)]
+## Defects       + prose         errors=0 warns=0  DEF-001=('pakA','mine.')   (never matches)
+```
+
+The disagreement case (row 4) is the one that decides it: a prose-shaped heading with real
+field lines under it both terminates DEF-001 and is reported as a scoped, fail-closed
+blocker on `pakB`. The silent rows are equally important, and there is **no bleed in any of
+them**: DEF-001 keeps `pakA` and `mine.` everywhere.
+
+I also probed placements `tooling`'s tests do not cover, all clean:
+
+```
+silent bad heading BETWEEN two good entries   -> both entries intact, errors=[]
+bad heading at START of file (no entry open)  -> DEF-001 intact, errors=[]
+bad heading at EOF with no fields             -> DEF-001 intact, errors=[]
+two bad prose headings in a row               -> both entries intact, errors=[]
+```
+
+## 2, 3. False positives silent; real typo classes still caught
+
+Confirmed above. `### DEFECTS`, `### DEFECT LOG` and `### DEFINITIONS` are now `errors=[]`
+with the entry above untouched, which closes round-3 W5 for the `defects.local.md`
+first-draft case it was raised about. `### DEF102` (dropped hyphen) with fields remains a
+scoped fail-closed error, which was the entire reason for keeping the bare `DEF` anchor over
+`DEF-`; had the anchor been narrowed instead, that row would silently reproduce the original
+corruption. `### DEF-1O2` is unchanged from round 3.
+
+The code comment now carries the whole argument, including why the wider anchor is paid for
+at report time rather than at match time. That is the right place for it: the next person to
+read `_BAD_SECTION_RE` will see why narrowing it is a trap.
+
+## 4. The NIT is properly closed
+
+Both directions are now asserted explicitly rather than one riding silently on
+case-sensitivity:
+
+- `test_lowercase_def_prose_heading_never_matches` asserts
+  `_BAD_SECTION_RE.match("## Defects") is None` directly, so the case-sensitivity is pinned
+  as a decision instead of an accident.
+- `test_uppercase_def_prose_heading_matches_but_is_silent` asserts the opposite half, that
+  `### DEFECTS` **does** match the regex and is silenced *evidentially*, at report time. That
+  is the honest way to pin it: it documents that the silence is a second condition, not the
+  regex missing.
+
+`test_prose_shaped_heading_still_terminates_the_previous_entry` covers the disagreement case
+and asserts both `affects` and `summary` on the entry above. Good test, correctly named after
+the property rather than the input.
+
+## 5. No regression in rounds 1 to 3
+
+Re-run directly against this code, not inferred from the suite:
+
+```
+R1 per-entry isolation  : pakY=[]  pakX=['DEF-001']  pakZ=['DEF-002']
+R1 absent registry      : []  (warns and passes)
+R2 publish honours local: PASSED
+R2 resolution           : local-first=defects.local.md | explicit=defects.md
+                          | hint silent when local present=''
+R2 doctor freshness     : 8d=past-tense | fresh=present-tense | throttled=silent
+R3 corruption repro     : entries=[('DEF-001','pakA')]  pakA=['DEF-001']
+                          pakB=[('DEF-1O2', synthetic)]
+```
+
+## NIT
+
+9. **Residual false positive, much narrower than before: a field-shaped bullet under a prose
+   heading.** A section such as `### DEFECTS` followed by `- **Note:** just a note` collects a
+   field line, so it is reported as an unscoped error (loud, gates nothing, no bleed). Verified.
+   This is the honest cost of an evidential test and it fails in the safe direction, so it is
+   fine as it stands. If it ever bites, the tighter discriminator is "collected at least one of
+   the seven *required* field names" rather than "any field line": a genuinely typo'd entry
+   always has `Title`/`Severity`/`Affects`, and a prose aside almost never does. Optional, and
+   I would not take it on speculation.
+10. **The silent-case test asserts `affects` but not `summary`.**
+   `test_uppercase_def_prose_heading_matches_but_is_silent` checks
+   `registry.entries[0].affects == "pakA"`, which catches a field-line bleed but not a
+   continuation-line bleed into `Summary`, the exact direction prose under a heading would take.
+   I verified it empirically (`summary` stays `mine.` in all three silent cases), but the test
+   should pin it, one extra assertion, since the sibling termination test already does.
+
+## On the scaffold edit (advisory; outside my `src/` mandate, not gated)
+
+You asked for a view. The removal itself is right and is the design's own rollout step: the
+`curl` from factory `main` could only ever return zero relevant hits for a stranger's pak,
+because `gate_pak` matches `Affects:` by exact string equality, while still failing their
+release on an upstream mid-edit, a raw.githubusercontent outage, or blocked egress. Two things
+I would not leave as they are:
+
+- **The replacement comment overstates the coverage.** It says RULE-012/014 "are enforced at
+  PUSH time by the factory's `.githooks/pre-push` hook, reached via `core.hooksPath`, which
+  `scripts/bootstrap_managed_paks.sh` sets on every clone it manages." True only for a clone
+  living under `content/sdk-adapters/` inside a factory checkout, which the hook itself checks
+  (`case "$repo_root" in */content/sdk-adapters/*`). A third party who clones the template
+  standalone, with no factory anywhere above it, now has **no** gate at all rather than a
+  differently-located one, and this comment reads to them as "you are covered". One sentence
+  naming the condition would fix it.
+- **The scaffold is now internally inconsistent.** `build-pak-on-tag.yml` says "there is
+  deliberately no defect-gate step here", while `README.md` still says the workflow "runs the
+  **defect gate**", still lists `ci/defect_gate.py` in the file tree, and still instructs
+  re-vendoring it "when the gate's parser changes". That last line is now actively misleading:
+  the parser changed substantially across rounds 1 to 4, and anyone who follows the
+  instruction vendors a copy nothing calls. The README needs the same edit, and per
+  `defect-isolation-v1.md` the vendored `ci/defect_gate.py` should go with it.
+
+## If shipped as-is
+
+A heading typo in either registry stops the entry it belongs to instead of silently repointing
+the one above it, and blocks the artifact it named. A consumer's hand-written
+`defects.local.md` can carry ordinary `DEFECT...`-titled prose sections without producing a
+warning on every gate run. Nothing from rounds 1 to 3 moved.

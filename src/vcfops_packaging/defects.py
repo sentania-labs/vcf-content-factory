@@ -44,6 +44,12 @@ load_registry(registry_path) -> List[DefectEntry]
       - duplicate IDs
       - missing required fields (Title, Severity, Status, Affects, First-seen,
         Source, Summary)
+      - a ``DEF``-prefixed heading whose id is not ``DEF-NNN`` (a typo such as
+        ``DEF-1O2``, or trailing text): it always terminates the previous entry,
+        so it can never repoint a good entry, and it becomes a parse error of
+        its own when it carried field lines.  A DEF-prefixed heading with no
+        field lines under it is prose (``### DEFECTS``), has nothing that could
+        have bled into the previous entry, and is silent.
 
 gate_pak(pak_name, registry_path) -> List[DefectEntry]
     Return all open blocking defects whose ``Affects:`` token is ``pak_name``.
@@ -204,6 +210,25 @@ class DefectRegistryError(ValueError):
 # ---------------------------------------------------------------------------
 
 _SECTION_RE = re.compile(r"^#{1,4}\s+(DEF-\d+)\s*$")
+
+#: A heading that MEANT to be an entry but whose id is not ``DEF-NNN``: a typo
+#: (``DEF-1O2``, letter O), a suffix, or trailing text.  Without this, such a
+#: heading matched nothing, fell through to the continuation-line branch, and
+#: the following entry's field lines silently overwrote the PREVIOUS entry's
+#: fields: a real defect stopped gating the artifact it named, with no error.
+#: Matching it here makes it a ParseError instead, so it goes through the same
+#: scoped/unscoped isolation as every other malformed entry.
+#:
+#: Anchored on bare ``DEF`` rather than ``DEF-`` on purpose: requiring the
+#: hyphen would let ``### DEF102`` fall back through to the continuation
+#: branch and reproduce the exact silent field-bleed this exists to remove,
+#: on a typo from the same keystroke class.  Matching here is only half the
+#: contract; ``_flush_entry`` decides whether to REPORT, and does so only
+#: when the section collected field lines, which is what keeps an all-caps
+#: prose heading (``### DEFECTS``) silent.  Lowercase prose (``## Defects``,
+#: ``## Schema``) never matches at all.
+_BAD_SECTION_RE = re.compile(r"^#{1,4}\s+(DEF.*?)\s*$")
+
 _FIELD_RE = re.compile(r"^-\s+\*\*([^:]+):\*\*\s*(.*)")
 
 # DEF-NNN id format.
@@ -356,20 +381,48 @@ def parse_registry(
     current_fields: dict[str, str] = {}
     current_last_field: Optional[str] = None
     current_id_lineno: int = 0
+    # False when the heading that opened this entry was DEF-prefixed but not a
+    # well-formed id.  Such an entry can never validate, so it is flushed
+    # straight to a ParseError carrying whatever Affects: it managed to state.
+    current_id_wellformed: bool = True
 
     def _flush_entry(lineno: int) -> None:
         """Validate the current entry, recording either it or its error."""
         nonlocal current_id, current_fields, current_last_field
+        nonlocal current_id_wellformed
         if current_id is None:
             return
-        err = _validate_and_emit(
-            current_id, current_fields, current_id_lineno, entries, seen_ids
-        )
-        if err is not None:
-            errors.append(err)
+        if not current_id_wellformed:
+            # Evidential, not lexical: report only when the section actually
+            # collected field lines.  Those field lines ARE the harm (they are
+            # what used to bleed upward into the previous entry), so a heading
+            # with none has nothing to bleed and nothing to say.  This keeps a
+            # prose heading that happens to start with uppercase DEF
+            # (``### DEFECTS``, ``### DEFINITIONS``) silent, which matters
+            # most in the defects.local.md a stranger writes from scratch.
+            # Note that TERMINATION of the previous entry is unconditional and
+            # happens above: that is the property that removes the corruption.
+            if current_fields:
+                errors.append(ParseError(
+                    entry_id=_clip(current_id, 40),
+                    lineno=current_id_lineno,
+                    reason=(
+                        f"heading {_clip(current_id, 40)!r} is not a well-formed "
+                        f"defect id (expected 'DEF-NNN'), so this entry could not "
+                        f"be read"
+                    ),
+                    affects=_readable_affects(current_fields),
+                ))
+        else:
+            err = _validate_and_emit(
+                current_id, current_fields, current_id_lineno, entries, seen_ids
+            )
+            if err is not None:
+                errors.append(err)
         current_id = None
         current_fields = {}
         current_last_field = None
+        current_id_wellformed = True
 
     for lineno, raw_line in enumerate(lines, start=1):
         line = raw_line.rstrip()
@@ -382,6 +435,21 @@ def parse_registry(
             current_id_lineno = lineno
             current_fields = {}
             current_last_field = None
+            current_id_wellformed = True
+            continue
+
+        # --- Malformed entry heading (DEF-prefixed, but not a valid id) ---
+        # Terminates the previous entry exactly as a valid heading does, so the
+        # previous entry's fields are no longer reachable for overwrite, and
+        # opens an entry that is already known to be unreadable.
+        m_bad_section = _BAD_SECTION_RE.match(line)
+        if m_bad_section:
+            _flush_entry(lineno)
+            current_id = m_bad_section.group(1)
+            current_id_lineno = lineno
+            current_fields = {}
+            current_last_field = None
+            current_id_wellformed = False
             continue
 
         # Skip lines before the first entry.
