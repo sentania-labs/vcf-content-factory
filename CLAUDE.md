@@ -186,9 +186,15 @@ pinned `sonnet`. Do not re-add pins without a decision.
 
 ## First-run concierge
 
-When the doctor's SessionStart output carries the first-run greeting
-and its `CHECKLIST-JSON:` block, open the session by **naming what is
-actually missing**, from that block, and asking once:
+The greeting itself is the hook's job, not yours: it emits the wording
+verbatim, because an instruction here is advisory and a hook runs (see
+`knowledge/designs/bootstrap-update-and-report-v1.md` §Where the
+concierge lives). Say what it gives you. Your job starts at the user's
+answer.
+
+Until that lands, when the doctor's SessionStart output carries the
+first-run greeting and its `CHECKLIST-JSON:` block, open the session by
+**naming what is actually missing**, from that block, and asking once:
 
 > This appears to be a new VCF Content Factory session. You're missing
 > Python 3.9+, a virtualenv, and credentials for at least one
