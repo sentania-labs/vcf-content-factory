@@ -36,33 +36,79 @@ Together these remove the reported failure without changing what gates
 a first-party release. Scott's own strictness is unchanged or higher;
 only the stranger's coupling to his working branch goes away.
 
-### The one place presence-detection cannot reach
+### Where the gate runs: a pre-push hook, not pak CI
 
 `defects.md` exists in exactly one repo: the factory, at
-`knowledge/context/defects.md`. Verified by inspection: none of the six
-pak repos carries a defects file of any name. A pak repo therefore has
-no local registry to detect, which is why its CI curls one.
+`knowledge/context/defects.md`. Verified by inspection, none of the six
+pak repos carries a defects file of any name. That is why the pak CI
+curls one, and it is the wrong shape: the registry lives in the
+factory, the decision to release is made in the factory, and the person
+tagging is standing in the factory. Shipping the registry over a
+network to the one place that does not have it is what causes all three
+leaks.
 
-So for Scott's six paks the curl is not a fallback in a lookup order,
-it is the only channel that exists, and it stays. That is not a setting
-anyone configures: the curl line is already in
-`build-pak-on-tag.yml` today. The difference between a first-party pak
-and a stranger's is a line the template ships without.
+There is no factory command that cuts a pak release today.
+`managed_paks.md:19` is explicit: "Authoring is normal git. `cd
+content/sdk-adapters/<name>`, edit, commit, push to the pak's own
+remote." RULE-012's factory-side check is therefore a procedural
+obligation with nothing enforcing it, and the pak CI gate exists as the
+only mechanical enforcement.
 
-- **Factory checkout** (Scott's or a consumer's): presence-detection,
-  per decision 1.
-- **Scott's six pak repos**: keep the curl, unchanged. They only need
-  the re-vendored `ci/defect_gate.py` carrying the parser fix, which
-  already propagates alongside the workflow.
-- **Template pak repos**: no curl. The template ships a stub
-  `defects.local.md` with an explanatory header, so gating works on
-  instantiation with nothing for the user to create or be told about.
+**Move the gate to a `pre-push` git hook in each pak clone.** The pak
+clones live at `content/sdk-adapters/<name>/`, inside the factory
+working tree, so the hook reads the factory registry over a relative
+filesystem path. No network, no curl, no reachability question, and a
+consumer's clone sits in the same position relative to their own
+factory reading their `defects.local.md`. The pak CI gate step is then
+deleted rather than rewritten, and the template ships without it.
 
-The reason for the asymmetry is not that first-party paks are special.
-It is that Scott's factory is published at an address a runner can
-reach and a consumer's factory is a clone on their laptop, which is
-not. If a consumer ever publishes their factory, the same curl works
-for them unchanged.
+Mechanics:
+
+- The hook body is a tracked, reviewable file, not a copy dropped into
+  `.git/hooks/`. Git cannot version anything inside `.git/`, but
+  `core.hooksPath` moves the hooks directory into the working tree.
+- `git config core.hooksPath <dir>` is set once per clone. It is a git
+  config value, so it is per-clone and not itself tracked; bootstrap
+  sets it. No symlink is involved, and the older
+  `.git/hooks -> ../.githooks` trick is strictly worse since a symlink
+  into `.git/` is easy to clobber and invisible when it breaks.
+- Because `core.hooksPath` may point outside the repo, one tracked
+  hook body in the factory can serve all six paks and every consumer
+  clone. That avoids the duplication the workflow file is stuck with:
+  GitHub only runs a workflow physically present in
+  `.github/workflows/` of the repo being built, so
+  `build-pak-on-tag.yml` is necessarily tracked twice (canonical at
+  `knowledge/designs/sdk-template-scaffold/build-pak-on-tag.yml`, plus
+  a copy per pak, currently identical across all six). A hook is under
+  no such constraint.
+- Bootstrap sets the config with an absolute path. Relative
+  `core.hooksPath` resolution has historically been inconsistent about
+  what it resolves against; an absolute path set by the script that
+  already knows the layout sidesteps it. **Verify this before
+  building.**
+
+Trade accepted: `git push --no-verify` bypasses a hook, and a tag
+pushed from the GitHub UI never meets one. Today's CI gate catches
+both. This makes the gate an explicit end-run rather than something CI
+blocks, in the same category as a force-push, and RULE-012 already
+frames the obligation that way ("no fast path around it"). The coupling
+being removed is causing real harm to real users now; the bypass it
+opens takes deliberate effort.
+
+Retrofit: everything except the config value is a tracked file, so an
+existing clone gets it by pulling, and bootstrap sets the config on the
+next session. A clone that never pulls has no hook and behaves exactly
+as today, so there is no flag day and no coordination with users who
+cannot be reached. The one thing a factory pull cannot fix is a pak
+repo already instantiated from the old template, whose `curl` step
+lives in its own `.github/workflows/`; that changes when its owner
+changes it.
+
+Note that bootstrap currently **skips** existing clones rather than
+touching them (`bootstrap_managed_paks.sh:104-117`, the `Exists:` and
+`skipped` path), so setting `core.hooksPath` requires a step on the
+skip path. That and the session-opening report are specified in
+`knowledge/designs/bootstrap-update-and-report-v1.md`.
 
 ## The differentiator, since that was the open question
 
@@ -182,16 +228,20 @@ review, which at roughly 40 entries it is not.
 
 ## Blast radius if built
 
-- `src/vcfops_packaging/defects.py`: parser rework, plus the standalone
-  mirror block vendored into each pak repo as `ci/defect_gate.py`.
-  `tooling` then `framework-reviewer` per RULE-013.
-- The canonical `build-pak-on-tag.yml`: unchanged for the six
-  first-party paks beyond the re-vendored gate script.
-- `sdk-template`: drop the curl step, ship a stub `defects.local.md`
-  with an explanatory header, and warn rather than refuse when no
-  registry is found.
-- Six pak repos: re-vendor `ci/defect_gate.py` and the workflow. The
-  existing convention already propagates both together.
+- `src/vcfops_packaging/defects.py`: parser rework. `tooling` then
+  `framework-reviewer` per RULE-013.
+- New tracked `pre-push` hook body in the factory, invoked via
+  `core.hooksPath`. Gates the pak named by the clone directory against
+  the local registry, warns and passes when none is found.
+- `build-pak-on-tag.yml` (canonical and all six copies) and
+  `sdk-template`: delete the defect gate step and its `curl`, and drop
+  the vendored `ci/defect_gate.py` that existed only to run it. No stub
+  registry in the pak repo: the hook reads the factory registry beside
+  it, so a third party's pak gates against their own
+  `defects.local.md` with nothing to ship into the pak.
+- `scripts/bootstrap_managed_paks.sh`: set `core.hooksPath` per clone,
+  on the skip path as well as the clone path. See
+  `knowledge/designs/bootstrap-update-and-report-v1.md`.
 - `knowledge/context/defects.md` schema section and RULE-012: document
   the per-entry failure mode and the optional `Origin:` field.
 - Doctor: on a factory clone, offer to create `defects.local.md` at
@@ -200,6 +250,7 @@ review, which at roughly 40 entries it is not.
   consumer's own defects gate nothing. Nothing to reset.
 - Tests: a malformed entry for pak X must not block pak Y; an entry
   whose `Affects:` cannot be read must warn and block nothing; an
-  absent registry must warn and pass.
+  absent registry must warn and pass; the hook refuses a `v*` tag push
+  for a pak with an open blocking defect and allows every other push.
 - No change to `feedback_queue.md`, RULE-012's gate points, or any
   existing DEF-NNN entry.
