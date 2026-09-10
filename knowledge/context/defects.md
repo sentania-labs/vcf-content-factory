@@ -1128,16 +1128,16 @@ reused. Field lines are `- **Field:** value` (parsed by
   exist" on the instance
 - **Severity:** blocking
 - **Status:** open
-- **Affects:** pak:vcommunity-vsphere
-  (`content/sdk-adapters/vcommunity-vsphere/dashboards/VM Details.yaml`
-  line ~606); exposed by the 2026-08-29 renderer guard, which now fails
-  the validate chain on this pak instead of shipping the defect.
+- **Affects:** vcommunity-vsphere
 - **First-seen:** vcommunity-vsphere tag v1.0.0.12 (the os/vsphere split,
   per that repo's CHANGELOG line ~764); detected 2026-08-29.
 - **Source:** `knowledge/context/reviews/framework/2026-08-29-view-reference-guard.md`;
   same mechanism as the vodap incident recorded in
   `knowledge/lessons/dashboard-import-without-views-corrupts-refs.md`.
-- **Summary:** The framework's external-view passthrough accepts only a
+- **Summary:** Location: `content/sdk-adapters/vcommunity-vsphere/dashboards/VM Details.yaml`
+  line ~606; exposed by the 2026-08-29 renderer guard, which now fails
+  the validate chain on this pak instead of shipping the defect.
+  The framework's external-view passthrough accepts only a
   UUID; a bare name that is not among the bundled views was leaked into
   the widget config. The validate chain stays red on this pak until the
   content is fixed; a warning would report green while broken.
