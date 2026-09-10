@@ -135,6 +135,7 @@ cycles because that did not happen.
 | `view_render_internal_endpoint.md` | Server-side view render (`/internal/views/{id}/data/export`) |
 | `ui_deep_links.md` | UI deep-link routes for dashboards/views (global search does NOT deep-link) |
 | `distribution_view_no_data.md` | DEF-012 root cause: property distributions rendered as numeric histograms |
+| `view_multi_subject_column_binding.md` | Multi-subject views: per-column `adapterKind`/`resourceKind` is a kind filter; `subject:` contract, accepted column kinds (driver and time-segment rejected), DEF-019/DEF-020 pointers |
 | `dashboard_selfprovider_pin_wire_format.md` | Self-provider widget pin wire format (View traversalSpecId, HealthChart) |
 | `resourcelist_column_state_wire_format.md` | ResourceList column-state wire format (widget `states[]` presets) |
 | `casa-inventory-access.md` | CaSA / Cloud-Proxy adapter inventory-read mechanism |

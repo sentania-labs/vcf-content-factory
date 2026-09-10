@@ -1,0 +1,30 @@
+id: 9d2add95-df25-490d-b9f2-6f5576b078bf
+name: "[VCF Content Factory] vSAN Total License Usage (TiB)"
+resource_kinds:
+  - resource_kind_key: LICENSE_USAGE_WORLD
+    adapter_kind_key: VMWARE_INFRA_HEALTH
+description: >
+  Total vSAN capacity licenses consumed, in TiB, summed from the platform's
+  own license usage objects. Assigned to the LICENSE_USAGE_WORLD rollup
+  resource (1 object, "License Usage") and sums Assets|TotalUsage across its
+  LicenseUsage descendants (11 objects on ro818, one per license key/
+  product), filtered to ProductId startsWith "vSAN" so every vSAN edition
+  (e.g. "vSAN Enterprise") is included by design.
+
+  Targets VCF Operations 8.x (confirmed live and populated on Aria/VCF
+  Operations 8.18.7: Assets|TotalUsage and ProductId both defined and
+  populated across 11 LicenseUsage objects; not populated on VCF Operations
+  9.1.0, where LicenseUsage has zero live objects).
+
+  Any product string other than the exact filter literal sums to zero
+  silently, with no error (DSL pitfall: misspelled/mismatched where-clause
+  literals import and validate cleanly but never produce data) - if
+  Broadcom renames this SKU string, the formula must be updated by hand.
+
+  Formula and where-clause literal kept verbatim from Scott's community
+  "VCF Consumption Overview v2" bundle (source SM: "vSAN Total License
+  Usage"); only the name, description, and prefix change for this rebuild.
+  Feeds the License Overview scoreboard (vSAN Consumed TiB), the vSAN Usage
+  Over Time trend, and the VCF Licensing Overtime month table.
+formula: |
+  sum(${adaptertype=VMWARE_INFRA_HEALTH, objecttype=LicenseUsage, metric=Assets|TotalUsage, depth=10, where="ProductId startsWith vSAN"})

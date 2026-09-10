@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>[VCF Content Factory] VCF License Consumption Overview (mock)</title>
+<style>
+  :root { --bg:#1b1f24; --panel:#23282f; --panel-2:#2a3038; --line:#363d47; --ink:#f2f4f7; --ink-2:#b7bfca; --ink-3:#7f8896; --accent:#3987e5; --s1:#3987e5; --s2:#d95926; --s3:#199e70; --warn:#e0a400; }
+  * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--ink); font:13px/1.4 "Metropolis","Segoe UI",system-ui,sans-serif }
+  .shell { padding:14px 18px 40px } .hdr { display:flex; align-items:center; gap:12px; margin-bottom:12px } .hdr h1 { font-size:18px; font-weight:600; margin:0 }
+  .badge { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--panel-2); color:var(--ink-2); border:1px solid var(--line) }
+  .grid { display:grid; grid-template-columns:repeat(12,1fr); grid-auto-rows:34px; gap:10px }
+  .w { background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:10px 12px; position:relative; overflow:hidden }
+  .w h2 { font-size:13px; font-weight:600; margin:0 0 8px; display:flex; align-items:center; gap:8px } .w h2 .type { margin-left:auto; font-weight:400; font-size:10px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.04em }
+  .note { position:absolute; right:10px; bottom:6px; font-size:10px; color:var(--ink-3) }
+  .tiles { display:grid; grid-template-columns:repeat(2,1fr); gap:8px } .tile { background:var(--panel-2); border-radius:4px; padding:8px; text-align:center } .tile .v { font-size:24px; font-weight:600 } .tile .l { font-size:11px; color:var(--ink-2) } .tile .k { font-size:9px; color:var(--ink-3); font-family:ui-monospace,Menlo,monospace; word-break:break-all }
+  .tiles4 { grid-template-columns:repeat(2,1fr) } .tiles4 .tile .v { font-size:20px }
+  .txt { color:var(--ink-2); font-size:12px; line-height:1.5 } .txt p { margin:0 0 6px }
+  .chart { width:100%; height:calc(100% - 40px) } .legend { display:flex; gap:14px; font-size:11px; color:var(--ink-2); margin-top:2px } .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px; vertical-align:-1px }
+  .lv { width:100%; border-collapse:collapse; font-size:12px } .lv th { text-align:left; color:var(--ink-3); font-weight:500; font-size:11px; padding:3px 6px; border-bottom:1px solid var(--line) } .lv td { padding:4px 6px; border-bottom:1px solid var(--line) } .lv .num { text-align:right; font-variant-numeric:tabular-nums }
+  .k { color:var(--ink-3); font-size:9px; font-family:ui-monospace,Menlo,monospace }
+  .keybox { grid-column:span 12; border:1px dashed var(--line); color:var(--ink-3); font-size:11px; padding:8px 12px; border-radius:4px; grid-row:span 3 } .keybox b { color:var(--ink-2) }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="hdr"><h1>[VCF Content Factory] VCF License Consumption Overview</h1><span class="badge">target: VCF Operations 8.x</span><span class="badge">values simulated; keys 8.18.7-verified where marked</span></div>
+  <div class="grid">
+
+    <!-- W1 -->
+    <div class="w" style="grid-column:1 / span 6; grid-row:1 / span 5">
+      <h2>License Overview <span class="type">Scoreboard, resource mode, License Usage</span></h2>
+      <div class="tiles">
+        <div class="tile"><div class="v">2,304</div><div class="l">VCF Consumed Cores</div><div class="k">SM VCF Total License Usage (cores)</div></div>
+        <div class="tile"><div class="v">184.2</div><div class="l">vSAN Consumed TiB</div><div class="k">SM vSAN Total License Usage (TiB)</div></div>
+        <div class="tile"><div class="v">3,072</div><div class="l">Total VCF License Capacity</div><div class="k">SM VCF Total License Capacity (cores)</div></div>
+        <div class="tile"><div class="v">250</div><div class="l">Total vSAN License Capacity (TiB)</div><div class="k">SM vSAN Total License Capacity (TiB)</div></div>
+        <div class="tile"><div class="v">75 %</div><div class="l">VCF License Usage %</div><div class="k">SM VCF Total License Usage (%)</div></div>
+        <div class="tile"><div class="v">74 %</div><div class="l">vSAN License Usage %</div><div class="k">SM vSAN Total License Usage (%)</div></div>
+      </div>
+      <div class="note">TOOLSET GAP: resource-mode scoreboard (tooling in progress)</div>
+    </div>
+
+    <!-- W2 -->
+    <div class="w" style="grid-column:7 / span 6; grid-row:1 / span 5">
+      <h2>Information on Licensing Policy <span class="type">TextDisplay, HTML</span></h2>
+      <div class="txt">
+        <p>This dashboard provides an overview of total VCF license consumption and its components: vSAN, Automation, and NSX.</p>
+        <p>VCF and vSAN consumption is measured directly from the platform. To understand the usage of NSX and Automation in your environment, review the NSX and Automation Insights vs. the vSphere Environment Insights.</p>
+        <p>It is normal to have some virtual machines, networks and hosts not managed by NSX or Automation (legacy workloads, management domains). Use the trend charts to understand the pattern of usage.</p>
+      </div>
+    </div>
+
+    <!-- W3 / W4 -->
+    <div class="w" style="grid-column:1 / span 6; grid-row:6 / span 7">
+      <h2>VCF License Usage Over Time <span class="type">View: VCF License Usage Trend, pin License Usage</span></h2>
+      <svg class="chart" viewBox="0 0 400 150" preserveAspectRatio="none"><line x1="0" y1="140" x2="400" y2="140" stroke="#363d47"/><polyline points="0,90 40,88 80,84 120,80 160,78 200,72 240,70 280,66 320,60 360,58 400,55" fill="none" stroke="#3987e5" stroke-width="2"/><polyline points="0,40 400,40" fill="none" stroke="#d95926" stroke-width="2"/><polyline points="400,55 440,50" fill="none" stroke="#3987e5" stroke-width="2" stroke-dasharray="4 3"/></svg>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Usage (cores)</span><span><i style="background:var(--s2)"></i>Capacity (cores)</span><span>WEEKS x 12, forecast 90 d</span></div>
+    </div>
+    <div class="w" style="grid-column:7 / span 6; grid-row:6 / span 7">
+      <h2>vSAN License Usage Over Time <span class="type">View: vSAN License Usage Trend, pin License Usage</span></h2>
+      <svg class="chart" viewBox="0 0 400 150" preserveAspectRatio="none"><line x1="0" y1="140" x2="400" y2="140" stroke="#363d47"/><polyline points="0,100 60,96 120,94 180,88 240,84 300,80 360,76 400,74" fill="none" stroke="#3987e5" stroke-width="2"/><polyline points="0,50 400,50" fill="none" stroke="#d95926" stroke-width="2"/></svg>
+      <div class="legend"><span><i style="background:var(--s1)"></i>Usage (TiB)</span><span><i style="background:var(--s2)"></i>Capacity (TiB)</span></div>
+    </div>
+
+    <!-- W5 / W6 / W7 -->
+    <div class="w" style="grid-column:1 / span 4; grid-row:13 / span 6">
+      <h2>NSX Usage Insights <span class="type">Scoreboard, NSXT World</span></h2>
+      <div class="tiles tiles4">
+        <div class="tile"><div class="v">28</div><div class="l">NSX vSphere Hosts</div><div class="k">SM NSX Host Transport Node Count</div></div>
+        <div class="tile"><div class="v">61</div><div class="l">Overlay Network Count</div><div class="k">Summary|LogicalSwitchCount</div></div>
+        <div class="tile"><div class="v">2</div><div class="l">Edge Cluster Count</div><div class="k">Summary|EdgeClusterCount</div></div>
+        <div class="tile"><div class="v">1,024</div><div class="l">NSX Licensed Cores</div><div class="k">SM NSX Licensed Cores (re-derived)</div></div>
+      </div>
+    </div>
+    <div class="w" style="grid-column:5 / span 4; grid-row:13 / span 6">
+      <h2>vSphere Environment Insights <span class="type">Scoreboard, vSphere World</span></h2>
+      <div class="tiles tiles4">
+        <div class="tile"><div class="v">42</div><div class="l">vSphere Hosts</div><div class="k">ObjectCountMetricGroup:HostSystem|count</div></div>
+        <div class="tile"><div class="v">722</div><div class="l">Virtual Machines</div><div class="k">ObjectCountMetricGroup:VirtualMachine|count</div></div>
+        <div class="tile"><div class="v">61</div><div class="l">Networks</div><div class="k">ObjectCountMetricGroup:DistributedVirtualPortgroup|count</div></div>
+        <div class="tile"><div class="v">256</div><div class="l">VCF License Potential Cores</div><div class="k">SM VCF License Potential Cores (fixed)</div></div>
+      </div>
+    </div>
+    <div class="w" style="grid-column:9 / span 4; grid-row:13 / span 6">
+      <h2>Automation Usage Insights <span class="type">Scoreboard, CAS World</span></h2>
+      <div class="tiles tiles4">
+        <div class="tile"><div class="v">18</div><div class="l">Managed vSphere Hosts</div><div class="k">SM Automation Managed Host Count</div></div>
+        <div class="tile"><div class="v">410</div><div class="l">Managed VM Count</div><div class="k">summary|VMCount</div></div>
+        <div class="tile"><div class="v">$12.4k</div><div class="l">Cost</div><div class="k">summary|Cost</div></div>
+        <div class="tile"><div class="v">640</div><div class="l">Automation License Consumption</div><div class="k">SM Automation Licensed Cores (re-derived)</div></div>
+      </div>
+      <div class="note">no CAS objects on 8.18.7: renders empty there</div>
+    </div>
+
+    <!-- W8 / W9 -->
+    <div class="w" style="grid-column:1 / span 6; grid-row:19 / span 6">
+      <h2>NSX Consumption Trend <span class="type">View: NSX Consumption Trend, pin NSX World</span></h2>
+      <svg class="chart" viewBox="0 0 400 120" preserveAspectRatio="none"><line x1="0" y1="110" x2="400" y2="110" stroke="#363d47"/><polyline points="0,80 80,78 160,70 240,66 320,60 400,58" fill="none" stroke="#199e70" stroke-width="2"/></svg>
+      <div class="legend"><span><i style="background:var(--s3)"></i>NSX Licensed Cores</span><span>WEEKS x 12, forecast 90 d</span></div>
+    </div>
+    <div class="w" style="grid-column:7 / span 6; grid-row:19 / span 6">
+      <h2>Automation Consumption Trend <span class="type">View: Automation Consumption Trend, pin Automation World</span></h2>
+      <svg class="chart" viewBox="0 0 400 120" preserveAspectRatio="none"><line x1="0" y1="110" x2="400" y2="110" stroke="#363d47"/><polyline points="0,90 80,86 160,84 240,78 320,74 400,70" fill="none" stroke="#199e70" stroke-width="2"/></svg>
+      <div class="legend"><span><i style="background:var(--s3)"></i>Automation Licensed Cores</span></div>
+    </div>
+
+    <!-- W10 / W11 / W12 -->
+    <div class="w" style="grid-column:1 / span 4; grid-row:25 / span 6">
+      <h2>VCF Consumption by Month <span class="type">View: VCF Licensing by Month</span></h2>
+      <table class="lv"><tr><th>Month</th><th class="num">Cores</th><th class="num">TiB</th></tr><tr><td>Aug 2026</td><td class="num">2,304</td><td class="num">184.2</td></tr><tr><td>Jul 2026</td><td class="num">2,240</td><td class="num">180.1</td></tr><tr><td>Jun 2026</td><td class="num">2,176</td><td class="num">176.9</td></tr></table>
+      <div class="note">TOOLSET GAP: month time-segment column (tooling in progress)</div>
+    </div>
+    <div class="w" style="grid-column:5 / span 4; grid-row:25 / span 6">
+      <h2>NSX Consumption by Month <span class="type">View: NSX Licensing by Month</span></h2>
+      <table class="lv"><tr><th>Month</th><th class="num">Hosts</th><th class="num">Cores</th></tr><tr><td>Aug 2026</td><td class="num">28</td><td class="num">1,024</td></tr><tr><td>Jul 2026</td><td class="num">28</td><td class="num">1,024</td></tr><tr><td>Jun 2026</td><td class="num">26</td><td class="num">960</td></tr></table>
+    </div>
+    <div class="w" style="grid-column:9 / span 4; grid-row:25 / span 6">
+      <h2>Automation Consumption by Month <span class="type">View: Automation Licensing by Month</span></h2>
+      <table class="lv"><tr><th>Month</th><th class="num">Hosts</th><th class="num">Cores</th></tr><tr><td>Aug 2026</td><td class="num">18</td><td class="num">640</td></tr><tr><td>Jul 2026</td><td class="num">18</td><td class="num">640</td></tr><tr><td>Jun 2026</td><td class="num">17</td><td class="num">608</td></tr></table>
+    </div>
+
+    <div class="keybox"><b>Mock notes.</b> Faithful copy of the source v2 grid (12 widgets, same coordinates). Values simulated. Grey monospace = feeding key or super metric; "re-derived" marks the two SMs missing from the export (rule pending Scott's confirmation); "fixed" marks the Potential Cores formula correction. Two framework gaps (resource-mode scoreboard, month time-segment columns) are being closed by tooling before authoring. No 8.x lab has RW access: numbers unproven until a lab with entitlements exists.</div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,40 @@
+id: 1691cba3-ab0c-465a-8352-e93d99ce3de3
+name: "[VCF Content Factory] vSphere World VCF Licensed Cores"
+resource_kinds:
+  - resource_kind_key: vSphere World
+    adapter_kind_key: VMWARE
+description: >
+  Whole-environment total of VCF license cores the fleet would consume
+  under Broadcom's per-core licensing model with the 16-core-per-socket
+  minimum. Assigned to the vSphere World rollup resource (1 live object
+  per instance) and sums the per-host
+  "[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)"
+  super metric over every HostSystem descendant (depth=10, walks
+  vSphere World > vCenter > Datacenter > Cluster > Host and standalone
+  hosts).
+
+  Targets VCF Operations 8.x.
+
+  Re-derives the dangling sm_3b4464fc-5dbc-4344-ba8e-e243818df6c6
+  reference from Scott's community "VCF Consumption Overview v2"
+  bundle (that SM is absent from the export and 404s live on both
+  ro818 8.18.7 and prod 9.1.0). Its one consumer, VCF License
+  Potential Cores, reads it as ${this, ...} on vSphere World and
+  subtracts a core count from it, which only makes sense if this SM
+  is a World-scoped core total - sum of the per-host SM is the only
+  reading consistent with the source description ("wasted due to
+  [sockets] smaller [than] 16 per socket"). Licensing assumption
+  (16-core-per-socket minimum, no cap) confirmed by Scott 2026-08-26,
+  same as the upstream per-host SM. This is a re-derivation, not a
+  recovery of the original formula.
+
+  Cross-SM reference note: this SM reads the upstream per-host SM's
+  previous-cycle value (platform does not guarantee same-cycle
+  recomputation across a super metric chain) - accepted one-cycle lag,
+  not expressible as a single self-contained formula since the per-host
+  ternary must run once per HostSystem before the World-level sum.
+
+  Exists only to feed VCF License Potential Cores (this on vSphere
+  World); not shown directly on any dashboard.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=@supermetric:"[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)", depth=10})

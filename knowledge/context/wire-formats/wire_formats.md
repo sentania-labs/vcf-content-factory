@@ -118,6 +118,20 @@ which must match the view's UUID. In this repo, the dashboard YAML's
 `view:` field names a view by name; the loader resolves it to the
 view YAML's `id` at build time.
 
+External view references: a `view:` value that is a canonical lowercase
+UUID (anchored `_UUID_RE` in `vcfops_dashboards/loader.py`) and matches no
+loaded view is emitted verbatim as `viewDefinitionId` (platform or
+other-MP views, resolved on the instance at install time). Anything else
+that is not a loaded view is rejected twice: `Dashboard.validate()` raises
+`unknown view`, and the renderer (`_build_dashboard_obj`) raises
+`UnresolvedViewReferenceError` naming the dashboard, widget, and view.
+The renderer guard exists because the import API accepts a bare name in
+`viewDefinitionId` without complaint; the widget then fails at view time
+with "view does not exist" and `GET /internal/views/{id}/data/export`
+returns 400 `Cannot convert ... to uuid` (9.2.0.0 lab, 2026-08-29). Every
+render path must load the referenced views alongside the dashboard; see
+`knowledge/lessons/dashboard-import-without-views-corrupts-refs.md`.
+
 #### getDashboardConfig vs. content-zip export (extractor note)
 
 `/ui/dashboard.action?mainAction=getDashboardConfig` returns an entirely

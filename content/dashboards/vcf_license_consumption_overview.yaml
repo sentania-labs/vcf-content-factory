@@ -1,0 +1,314 @@
+id: 1b53e065-4319-4b09-8dd2-6da8b732f0e8
+name: "[VCF Content Factory] VCF License Consumption Overview"
+description: >
+  One-screen license position for a VCF estate on VCF Operations 8.x: consumed vs owned
+  VCF cores and vSAN TiB (from the platform's own license usage objects), plus how much
+  of the vSphere estate NSX and Automation actually touch, with 12-week trends and month
+  tables. Rebuilt as a native factory dashboard from Scott's public "VCF Consumption
+  Overview v2" community content (sentania/AriaOperationsContent). Layout is a faithful
+  copy of that source's 12-widget grid; changes are confined to naming, two missing
+  super metrics that had to be re-derived, and the Potential Cores formula fix. Audience
+  is the admin reconciling license consumption with Broadcom, not a capacity tool.
+
+  Lab coverage note: ro818 has license data (VCF/vSAN half testable) but 0 TransportNode
+  and 0 CAS resources, so the NSX and Automation panels (W5, W7-W9, W11-W12) validate
+  structurally only there; expect empty tiles until a lab has NSX/Automation entitlements.
+
+released: false
+version: "1.0.0"
+
+widgets:
+
+  # ── W1 · Scoreboard, License Overview (resource mode)  (x:1 y:1 w:6 h:5) ──
+  # Pins all six tiles to the single License Usage object via
+  # metric_mode: resource (wire evidence: knowledge/context/wire-formats/
+  # wire_formats.md §Scoreboard resource mode). No pin.name override needed
+  # for the resource: block itself; name is required there (it names the
+  # one pinned resource, not a redirect lookup).
+
+  - id: license_overview
+    type: Scoreboard
+    title: "License Overview"
+    coords: {x: 1, y: 1, w: 6, h: 5}
+    self_provider: true
+    metric_mode: resource
+    resource:
+      adapter_kind: VMWARE_INFRA_HEALTH
+      resource_kind: LICENSE_USAGE_WORLD
+      name: "License Usage"
+    visual_theme: 5
+    box_columns: 2
+    show_metric_name: true
+    show_metric_unit: true
+    round_decimals: 0
+    metrics:
+      - metric_key: "Super Metric|sm_c43ec7e3-ae74-44ec-b4d6-a52f42e86a25"
+        metric_name: "VCF Total License Usage (cores)"
+        label: "VCF Consumed Cores"
+        color_method: 1
+      - metric_key: "Super Metric|sm_9d2add95-df25-490d-b9f2-6f5576b078bf"
+        metric_name: "vSAN Total License Usage (TiB)"
+        label: "vSAN Consumed TiB"
+        color_method: 1
+      - metric_key: "Super Metric|sm_e2560d5e-7379-4731-a102-11100c8647eb"
+        metric_name: "VCF Total License Capacity (cores)"
+        label: "Total VCF License Capacity"
+        color_method: 1
+      - metric_key: "Super Metric|sm_72517e70-514a-4efe-955b-a14d5a3c2697"
+        metric_name: "vSAN Total License Capacity (TiB)"
+        label: "Total vSAN License Capacity (TiB)"
+        color_method: 1
+      - metric_key: "Super Metric|sm_45c6c9c3-7d83-41ff-b936-22d896b939d7"
+        metric_name: "VCF Total License Usage (%)"
+        label: "VCF License Usage %"
+        color_method: 1
+        unit_id: "-1"
+        unit: "Auto"
+      - metric_key: "Super Metric|sm_c99ede65-6c99-4419-9054-a0f26a788144"
+        metric_name: "vSAN Total License Usage (%)"
+        label: "vSAN License Usage %"
+        color_method: 1
+        unit_id: "-1"
+        unit: "Auto"
+
+  # ── W2 · TextDisplay, Information on Licensing Policy  (x:7 y:1 w:6 h:5) ──
+  # Source HTML verbatim (knowledge/designs/dashboards/vcf-license-consumption-
+  # overview.md, W2 text note) with "Aria" replaced by "Automation" for 8.x
+  # naming consistency.
+
+  - id: licensing_policy_text
+    type: TextDisplay
+    title: "Information on Licensing Policy"
+    coords: {x: 7, y: 1, w: 6, h: 5}
+    html: >
+      <p>This Dashboard provides an overview of total VCF license consumption and it's
+      components: vSAN, Automation, and NSX.</p>
+
+      <p>VCF and vSAN consumption is measured directly from the platform.</p>
+
+      <p>To understand the usage of NSX and Automation in your environment, review the
+      NSX and Automation Insights vs. the vSphere Environment Insights.</p>
+
+      <p>It is normal to have some number of virtual machines, networks and hosts that
+      are not managed by NSX or Automation, as this indicates legacy workloads or
+      management domains.</p>
+
+      <p>Use the NSX and Automation Trends charts to understand the pattern of usage in
+      your environment.</p>
+
+  # ── W3 · View, VCF License Usage Over Time  (x:1 y:6 w:6 h:7) ─────────────
+
+  - id: vcf_usage_trend
+    type: View
+    title: "VCF License Usage Over Time"
+    coords: {x: 1, y: 6, w: 6, h: 7}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE_INFRA_HEALTH
+      resource_kind: LICENSE_USAGE_WORLD
+    view: "[VCF Content Factory] VCF License Usage Trend"
+    select_first_row: false
+    chart_view_items: [legend]
+
+  # ── W4 · View, vSAN License Usage Over Time  (x:7 y:6 w:6 h:7) ────────────
+
+  - id: vsan_usage_trend
+    type: View
+    title: "vSAN License Usage Over Time"
+    coords: {x: 7, y: 6, w: 6, h: 7}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE_INFRA_HEALTH
+      resource_kind: LICENSE_USAGE_WORLD
+    view: "[VCF Content Factory] vSAN License Usage Trend"
+    select_first_row: false
+    chart_view_items: [legend]
+
+  # ── W5 · Scoreboard, NSX Usage Insights (kind: NSXT World)  (x:1 y:13 w:4 h:6) ──
+
+  - id: nsx_insights
+    type: Scoreboard
+    title: "NSX Usage Insights"
+    coords: {x: 1, y: 13, w: 4, h: 6}
+    self_provider: true
+    pin:
+      adapter_kind: NSXTAdapter
+      resource_kind: NSXT World
+    visual_theme: 5
+    box_columns: 2
+    show_metric_name: true
+    show_metric_unit: true
+    metrics:
+      - adapter_kind: NSXTAdapter
+        resource_kind: NSXT World
+        metric_key: "Super Metric|sm_c9c793cf-5ff6-4a9f-8077-2607e11b9d16"
+        metric_name: "NSX Host Transport Node Count"
+        label: "NSX vSphere Hosts"
+        color_method: 1
+      - adapter_kind: NSXTAdapter
+        resource_kind: NSXT World
+        metric_key: "Summary|LogicalSwitchCount"
+        metric_name: "Overlay Network Count"
+        label: "Overlay Network Count"
+        color_method: 1
+      - adapter_kind: NSXTAdapter
+        resource_kind: NSXT World
+        metric_key: "Summary|EdgeClusterCount"
+        metric_name: "Edge Cluster Count"
+        label: "Edge Cluster Count"
+        color_method: 1
+      - adapter_kind: NSXTAdapter
+        resource_kind: NSXT World
+        metric_key: "Super Metric|sm_ca78bf94-3ea7-49b8-90fd-afd8b988bee7"
+        metric_name: "NSX Licensed Cores"
+        label: "NSX Licensed Cores"
+        color_method: 1
+
+  # ── W6 · Scoreboard, vSphere Environment Insights (kind: vSphere World)  (x:5 y:13 w:4 h:6) ──
+
+  - id: vsphere_insights
+    type: Scoreboard
+    title: "vSphere Environment Insights"
+    coords: {x: 5, y: 13, w: 4, h: 6}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE
+      resource_kind: vSphere World
+    visual_theme: 5
+    box_columns: 2
+    show_metric_name: true
+    show_metric_unit: true
+    metrics:
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: "ObjectCountMetricGroup:HostSystem|count"
+        metric_name: "vSphere Hosts"
+        label: "vSphere Hosts"
+        color_method: 1
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: "ObjectCountMetricGroup:VirtualMachine|count"
+        metric_name: "Virtual Machines"
+        label: "Virtual Machines"
+        color_method: 1
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: "ObjectCountMetricGroup:DistributedVirtualPortgroup|count"
+        metric_name: "Networks"
+        label: "Networks"
+        color_method: 1
+      - adapter_kind: VMWARE
+        resource_kind: vSphere World
+        metric_key: "Super Metric|sm_4b01a4b4-fcd5-4ec5-b157-caccb20e2a54"
+        metric_name: "VCF License Potential Cores"
+        label: "VCF License Potential Cores"
+        color_method: 1
+
+  # ── W7 · Scoreboard, Automation Usage Insights (kind: CAS World)  (x:9 y:13 w:4 h:6) ──
+
+  - id: automation_insights
+    type: Scoreboard
+    title: "Automation Usage Insights"
+    coords: {x: 9, y: 13, w: 4, h: 6}
+    self_provider: true
+    pin:
+      adapter_kind: CASAdapter
+      resource_kind: CAS World
+    visual_theme: 5
+    box_columns: 2
+    show_metric_name: true
+    show_metric_unit: true
+    metrics:
+      - adapter_kind: CASAdapter
+        resource_kind: CAS World
+        metric_key: "Super Metric|sm_5c08ad62-03b1-48f7-9bb2-2514dbf61b1e"
+        metric_name: "Automation Managed Host Count"
+        label: "Managed vSphere Hosts"
+        color_method: 1
+      - adapter_kind: CASAdapter
+        resource_kind: CAS World
+        metric_key: "summary|VMCount"
+        metric_name: "Managed VM Count"
+        label: "Managed VM Count"
+        color_method: 1
+      - adapter_kind: CASAdapter
+        resource_kind: CAS World
+        metric_key: "summary|Cost"
+        metric_name: "Cost"
+        label: "Cost"
+        color_method: 1
+      - adapter_kind: CASAdapter
+        resource_kind: CAS World
+        metric_key: "Super Metric|sm_2f9fa681-2625-4aeb-a2f4-90df2aea2321"
+        metric_name: "Automation Licensed Cores"
+        label: "Automation License Consumption"
+        color_method: 1
+
+  # ── W8 · View, NSX Consumption Trend  (x:1 y:19 w:6 h:6) ──────────────────
+
+  - id: nsx_trend
+    type: View
+    title: "NSX Consumption Trend"
+    coords: {x: 1, y: 19, w: 6, h: 6}
+    self_provider: true
+    pin:
+      adapter_kind: NSXTAdapter
+      resource_kind: NSXT World
+    view: "[VCF Content Factory] NSX Consumption Trend"
+    select_first_row: false
+    chart_view_items: [legend]
+
+  # ── W9 · View, Automation Consumption Trend  (x:7 y:19 w:6 h:6) ───────────
+
+  - id: automation_trend
+    type: View
+    title: "Automation Consumption Trend"
+    coords: {x: 7, y: 19, w: 6, h: 6}
+    self_provider: true
+    pin:
+      adapter_kind: CASAdapter
+      resource_kind: CAS World
+    view: "[VCF Content Factory] Automation Consumption Trend"
+    select_first_row: false
+    chart_view_items: [legend]
+
+  # ── W10 · View, VCF Consumption by Month  (x:1 y:25 w:4 h:6) ──────────────
+
+  - id: vcf_by_month
+    type: View
+    title: "VCF Consumption by Month"
+    coords: {x: 1, y: 25, w: 4, h: 6}
+    self_provider: true
+    pin:
+      adapter_kind: VMWARE_INFRA_HEALTH
+      resource_kind: LICENSE_USAGE_WORLD
+    view: "[VCF Content Factory] VCF Licensing by Month"
+    select_first_row: false
+
+  # ── W11 · View, NSX Consumption by Month  (x:5 y:25 w:4 h:6) ──────────────
+
+  - id: nsx_by_month
+    type: View
+    title: "NSX Consumption by Month"
+    coords: {x: 5, y: 25, w: 4, h: 6}
+    self_provider: true
+    pin:
+      adapter_kind: NSXTAdapter
+      resource_kind: NSXT World
+    view: "[VCF Content Factory] NSX Licensing by Month"
+    select_first_row: false
+
+  # ── W12 · View, Automation Consumption by Month  (x:9 y:25 w:4 h:6) ───────
+
+  - id: automation_by_month
+    type: View
+    title: "Automation Consumption by Month"
+    coords: {x: 9, y: 25, w: 4, h: 6}
+    self_provider: true
+    pin:
+      adapter_kind: CASAdapter
+      resource_kind: CAS World
+    view: "[VCF Content Factory] Automation Licensing by Month"
+    select_first_row: false
+
+interactions: []

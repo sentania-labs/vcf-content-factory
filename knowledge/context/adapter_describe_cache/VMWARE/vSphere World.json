@@ -1,6 +1,23 @@
 {
   "adapter_kind": "VMWARE",
+  "resource_kind": "vSphere World",
   "fetched_at": "2026-07-27T22:10:40Z",
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys",
+  "merged_from": [
+    {
+      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys",
+      "fetched_at": "2026-07-27T22:10:40Z",
+      "platform": "VCF Operations 9.x",
+      "role": "primary"
+    },
+    {
+      "source": "https://ro818/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys",
+      "fetched_at": "2026-08-26T21:00:41Z",
+      "platform": "VCF Operations 8.18",
+      "role": "additive"
+    }
+  ],
+  "merge_note": "Union of two live instances. The primary supplies display names on key collisions (the 8.18 snapshot carries the older 'VMware Aria Operations' branding; default_monitored is identical on every collision). Keys present only on 8.18 are added; instance-local 'Super Metric|sm_<uuid>' keys from the additive snapshot are not imported. Refreshing this file against a single instance will drop the other platform's keys.",
   "metrics": {
     "Compliance|Critical|totalCount": {
       "default_monitored": true,
@@ -1109,7 +1126,5 @@
       "instance_type": "INSTANCED",
       "name": "Metering|(DEP) Metering Policy Name"
     }
-  },
-  "resource_kind": "vSphere World",
-  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys"
+  }
 }

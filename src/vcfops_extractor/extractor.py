@@ -579,6 +579,12 @@ def _parse_view_def_element(elem) -> dict:
             time_window = _parse_time_window(child)
             meta = _parse_controls_meta(child)
 
+    if len(subject_pairs) <= 1:
+        # Single-subject view: per-column binding is implied by the one
+        # SubjectType and the loader rejects `subject:` on a column.
+        for col in columns:
+            col.pop("subject", None)
+
     return {
         "id": view_id,
         "name": title,
@@ -810,6 +816,17 @@ def _parse_column_value(value_elem) -> Optional[dict]:
         red_is_string = red_val is not None and not isinstance(red_val, (int, float))
         if not (red_is_string and not has_yellow and not has_orange):
             col["ascending_range"] = ascending.lower() == "true"
+
+    # Per-column kind binding (adapterKind/resourceKind Properties).
+    # _parse_view_def_element drops it on single-subject views (implied by
+    # the one SubjectType); on multi-subject views a bound column keeps it
+    # as `subject:` and an unbound column has none. See
+    # knowledge/context/api-surface/view_multi_subject_column_binding.md.
+    if props.get("adapterKind") and props.get("resourceKind"):
+        col["subject"] = {
+            "adapter_kind": props["adapterKind"],
+            "resource_kind": props["resourceKind"],
+        }
 
     return col
 
@@ -2368,14 +2385,22 @@ def extract_dashboard(
             (sub.get("adapter_kind", ""), sub.get("resource_kind", ""))
             for sub in (view_data.get("subjects") or [])
         ] or [(view_data.get("adapter_kind", ""), view_data.get("resource_kind", ""))]
-        for ak, rk in kinds:
-            if not (ak and rk):
+        for col in view_data.get("columns", []):
+            attr = (col.get("attribute") or "").strip()
+            if not attr or _is_sm_ref(attr):
                 continue
-            for col in view_data.get("columns", []):
-                attr = (col.get("attribute") or "").strip()
-                if not attr or _is_sm_ref(attr):
+            attr = _normalize_metric_key(attr)
+            # A column bound to one kind (`subject:`) only resolves against
+            # that kind on the product; audit it there only, same rule as
+            # deps._refs_from_view. Unbound columns fan out to every kind.
+            sub = col.get("subject") or {}
+            col_kinds = (
+                [(sub.get("adapter_kind", ""), sub.get("resource_kind", ""))]
+                if sub else kinds
+            )
+            for ak, rk in col_kinds:
+                if not (ak and rk):
                     continue
-                attr = _normalize_metric_key(attr)
                 _add_ref(MetricReference(
                     adapter_kind=ak,
                     resource_kind=rk,
