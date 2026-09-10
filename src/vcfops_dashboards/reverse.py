@@ -285,6 +285,12 @@ def parse_view_xml_element(elem) -> Optional[ViewDef]:
     if not title:
         _warn(f"ViewDef {view_id} has no Title element")
 
+    if len(subject_pairs) <= 1:
+        # Single-subject view: the per-column binding is the view's own
+        # kind, implied; the loader forbids `subject:` on a column here.
+        for col in columns:
+            col.subject = None
+
     vd = ViewDef(
         id=view_id,
         name=title,
@@ -539,6 +545,16 @@ def _parse_column_value_to_dataclass(value_elem) -> Optional[ViewColumn]:
                     "ascending_range=False (higher-is-worse), review reversed YAML"
                 )
 
+    # Per-column kind binding (adapterKind/resourceKind Properties). Kept
+    # here as ViewColumn.subject; parse_view_xml_element drops it again on
+    # single-subject views, where the binding is implied by the one
+    # SubjectType and the loader would reject it. On multi-subject views a
+    # bound column maps to `subject:` and an unbound one to no `subject:`.
+    # See knowledge/context/api-surface/view_multi_subject_column_binding.md.
+    col_subject = None
+    if props.get("adapterKind") and props.get("resourceKind"):
+        col_subject = ViewSubject(props["adapterKind"], props["resourceKind"])
+
     return ViewColumn(
         attribute=attr_yaml,
         display_name=display_name,
@@ -550,6 +566,7 @@ def _parse_column_value_to_dataclass(value_elem) -> Optional[ViewColumn]:
         orange_bound=orange,
         red_bound=red,
         ascending_range=ascending,
+        subject=col_subject,
     )
 
 

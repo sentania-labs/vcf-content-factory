@@ -118,9 +118,14 @@ class TestMultiSubject:
         assert v.subject_kinds == [("VMWARE", "Datacenter"), ("VMWARE", "vSphere World")]
         (tmp_path / "x").mkdir()
         xml = _render(tmp_path / "x", _view(subject=None, subjects=self.SUBJECTS))
-        # per-column kinds name the first subject only (vendor sample does the same)
-        assert '<Property name="resourceKind" value="Datacenter"/>' in xml
-        assert '<Property name="resourceKind" value="vSphere World"/>' not in xml
+        # Columns of a multi-subject view are unbound: no per-column
+        # adapterKind/resourceKind Property (the product treats them as a
+        # kind filter; see knowledge/context/api-surface/
+        # view_multi_subject_column_binding.md). The kinds live on the
+        # SubjectType elements only.
+        assert '<Property name="resourceKind"' not in xml
+        assert '<Property name="adapterKind"' not in xml
+        assert 'resourceKind="Datacenter" type="self"' in xml
 
     def test_subject_filter_applies_to_every_subject_type(self, tmp_path):
         xml = _render(tmp_path, _view(

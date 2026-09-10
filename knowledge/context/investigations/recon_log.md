@@ -4503,3 +4503,11 @@ Tier 2 SDK adapter, exactly as devel concluded.
 `X-Ops-API-use-unsupported` header on two internal-list reads, which is
 still a GET). No enable, assign, import, or policy-mutation calls were
 made.
+## 2026-08-29: multi-subject view column binding and view-reference investigations (embargoed)
+
+Seven recon entries from this date concern a product-bound adapter under
+embargo. They live in `embargo/recon/2026-08-29-recon-log-appends.md`
+(not in git). The generic findings they produced are public: the
+multi-subject column binding contract in
+`knowledge/context/wire-formats/view_column_wire_format.md` and the lesson
+`knowledge/lessons/dashboard-import-without-views-corrupts-refs.md`.

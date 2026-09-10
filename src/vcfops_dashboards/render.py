@@ -36,6 +36,16 @@ from .loader import (
 )
 
 
+class UnresolvedViewReferenceError(ValueError):
+    """A View widget names a view that is neither loaded nor a raw UUID.
+
+    Raised by the renderer instead of writing the bare name into
+    ``viewDefinitionId`` (the product accepts the import and then reports
+    "view does not exist" for the widget, see
+    ``knowledge/lessons/dashboard-import-without-views-corrupts-refs.md``).
+    """
+
+
 # Stable per-adapter-kind prefix used in `resourceKindId` fields inside
 # dashboard widget configs. Harvested from reference bundles under
 # `reference/references/`, the value is the same on every Ops instance for a
@@ -503,11 +513,12 @@ def _xml_instanced_group_item(view: ViewDef, col) -> str:
     if col.unit:
         props.append(_xml_property("preferredUnitId", col.unit))
     props.append(_xml_property("isStringAttribute", "true" if col.is_string_attribute else "false"))
-    # adapterKind/resourceKind are the view's own subject kinds, matching
+    # adapterKind/resourceKind are the view's own subject kind, matching
     # every observed instanced-group member column (all three cited files
-    # carry the same adapterKind/resourceKind as their <SubjectType>).
-    props.append(_xml_property("adapterKind", view.adapter_kind))
-    props.append(_xml_property("resourceKind", view.resource_kind))
+    # carry the same adapterKind/resourceKind as their <SubjectType>). On a
+    # multi-subject view they are omitted unless the column names a
+    # subject (see _column_kind_binding).
+    props.extend(_xml_kind_binding_props(view, col))
     transform = (col.transformation or "CURRENT").upper()
     if not col.is_property:
         # Every non-property instanced-group member column found in the
@@ -593,6 +604,34 @@ def _xml_time_segment_item(col) -> str:
     return "<Item><Value>" + "".join(props) + "</Value></Item>"
 
 
+def _column_kind_binding(view: ViewDef, col) -> tuple[str, str] | None:
+    """The (adapterKind, resourceKind) a column's Item should bind to, or
+    None to emit neither Property.
+
+    On the product the two per-column Properties are a kind FILTER: a bound
+    column renders null on rows of every other subject kind. Vendor
+    multi-subject views leave the shared columns unbound and bind only the
+    columns that belong to one kind (not necessarily the first). Wire
+    format: knowledge/context/wire-formats/view_column_wire_format.md.
+
+    - Single-subject view: bind to the one kind (unchanged, byte-identical
+      to the historical output).
+    - Multi-subject view (2+ `subjects:`): unbound by default; bound to
+      `col.subject` when the author set one (the loader has already checked
+      it is one of the view's subjects).
+    """
+    if len(view.subject_kinds) > 1:
+        return col.subject.key if col.subject is not None else None
+    return (view.adapter_kind, view.resource_kind)
+
+
+def _xml_kind_binding_props(view: ViewDef, col) -> list[str]:
+    binding = _column_kind_binding(view, col)
+    if binding is None:
+        return []
+    return [_xml_property("adapterKind", binding[0]), _xml_property("resourceKind", binding[1])]
+
+
 def _xml_attribute_item(
     view: ViewDef,
     col,
@@ -661,10 +700,12 @@ def _xml_attribute_item(
     ]
     if col.unit:
         props.append(_xml_property("preferredUnitId", col.unit))
+    props.append(_xml_property("isStringAttribute", "true" if col.is_string_attribute else "false"))
+    # adapterKind/resourceKind: the one subject kind on a single-subject
+    # view; on a multi-subject view omitted (column resolves against every
+    # kind) unless the column names a subject. See _column_kind_binding.
+    props.extend(_xml_kind_binding_props(view, col))
     props += [
-        _xml_property("isStringAttribute", "true" if col.is_string_attribute else "false"),
-        _xml_property("adapterKind", view.adapter_kind),
-        _xml_property("resourceKind", view.resource_kind),
         _xml_property("rollUpType", roll_up_type),
         _xml_property("rollUpCount", "1"),
     ]
@@ -2219,14 +2260,23 @@ def _build_dashboard_obj(
             widgets_json.append(_resource_list_widget(w, kind_index, dashboard.id))
         elif w.type == "View":
             # Resolve to a bundled ViewDef when available; fall back to the raw
-            # UUID for external (platform/other-MP) views.  On a validated
-            # dashboard a bare name that isn't bundled cannot reach here:
-            # loader.validate() rejects it as an authoring error on every path,
-            # pak included.  render() can still be driven on unvalidated input,
-            # so the two cases are reported distinctly rather than both being
-            # called a UUID.
+            # UUID for external (platform/other-MP) views.  The fallback is
+            # gated on the same anchored UUID regex loader.validate() uses:
+            # a bare name that is not in views_by_name means the caller
+            # rendered the dashboard without loading its views, and writing
+            # the name into viewDefinitionId imports cleanly but the widget
+            # then reports "view does not exist" (a dashboard rendered without
+            # its views leaked view names into viewDefinitionId; see
+            # knowledge/context/wire-formats/view_column_wire_format.md).
             _view_ref: "ViewDef | str" = views_by_name.get(w.view_name, w.view_name)
             if _view_ref is w.view_name and _view_ref not in views_by_name:
+                if not _VIEW_UUID_RE.match(w.view_name):
+                    raise UnresolvedViewReferenceError(
+                        f"dashboard {dashboard.name!r} widget {w.local_id!r}: "
+                        f"view {w.view_name!r} is not a loaded view and is not a "
+                        f"UUID; load the referenced views alongside the dashboard "
+                        f"(same views/ tree, same bundle) before rendering"
+                    )
                 import sys as _sys
                 if _VIEW_UUID_RE.match(w.view_name or ""):
                     _msg = f"external view UUID {w.view_name!r}, emitted verbatim"

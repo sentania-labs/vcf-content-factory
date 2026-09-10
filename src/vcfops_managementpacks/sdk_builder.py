@@ -902,6 +902,17 @@ def _load_bundled_content(
             raise SdkBuildError(
                 f"bundled_content.dashboards: failed to load {path}: {exc}"
             ) from exc
+        # Cross-validate View widgets against the bundled views now, so a
+        # dashboard listed without its views fails here with the view name
+        # instead of at render time (or, before the render guard, shipping a
+        # view NAME in viewDefinitionId).
+        try:
+            d.validate({v.name: v for v in views}, enforce_framework_prefix=False)
+        except Exception as exc:
+            raise SdkBuildError(
+                f"bundled_content.dashboards: {path}: {exc} "
+                f"(list the referenced views under bundled_content.views)"
+            ) from exc
         dashboards.append(d)
 
     # Validate every bundled dashboard against the bundled views, mirroring

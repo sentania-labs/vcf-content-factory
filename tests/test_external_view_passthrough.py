@@ -184,3 +184,60 @@ def test_case_d_unknown_bare_name_also_raises_when_other_views_exist():
     dashboard = _make_dashboard("Some Other View Not In Bundle")
     with pytest.raises(DashboardValidationError, match="unknown view"):
         dashboard.validate(known_views=known, enforce_framework_prefix=False)
+
+
+# ---------------------------------------------------------------------------
+# Render guard (2026-08-29): a non-UUID name that is not loaded must raise at
+# render time, not be written verbatim into viewDefinitionId.
+# ---------------------------------------------------------------------------
+
+from vcfops_dashboards.render import UnresolvedViewReferenceError  # noqa: E402
+
+
+def test_render_unresolved_bare_name_raises_not_leaks():
+    """Rendering with an empty views_by_name and a bare-name view raises."""
+    dashboard = _make_dashboard(_BUNDLED_VIEW_NAME)
+    with pytest.raises(UnresolvedViewReferenceError) as ei:
+        render_dashboards_bundle_json([dashboard], {}, _OWNER_ID)
+    msg = str(ei.value)
+    assert "Test Dashboard" in msg
+    assert "view1" in msg
+    assert _BUNDLED_VIEW_NAME in msg
+    assert "load the referenced views" in msg
+
+
+def test_render_guard_and_loader_validate_agree():
+    """Loader validate and the render guard accept and reject the same inputs.
+
+    Both gate on the anchored ``_UUID_RE``: canonical lowercase UUIDs pass
+    through verbatim, anything else that is not a loaded view is rejected.
+    """
+    cases = [
+        (_EXTERNAL_UUID, True),
+        ("Some External View Name", False),  
+        (_EXTERNAL_UUID.upper(), False),           # anchored, lowercase only
+        (f" {_EXTERNAL_UUID}", False),             # leading space
+        (f"{_EXTERNAL_UUID}x", False),             # trailing garbage
+        ("d8a3767e9d5e4bf2b6139e3bef977502", False),  # no dashes
+    ]
+    for ref, accepted in cases:
+        dashboard = _make_dashboard(ref)
+        if accepted:
+            dashboard.validate(known_views={}, enforce_framework_prefix=False)
+            bundle = json.loads(render_dashboards_bundle_json([dashboard], {}, _OWNER_ID))
+            assert bundle["dashboards"][0]["widgets"][0]["config"]["viewDefinitionId"] == ref
+        else:
+            with pytest.raises(DashboardValidationError):
+                dashboard.validate(known_views={}, enforce_framework_prefix=False)
+            with pytest.raises(UnresolvedViewReferenceError):
+                render_dashboards_bundle_json([dashboard], {}, _OWNER_ID)
+
+
+def test_render_loaded_name_still_resolves_when_guard_present():
+    """The guard does not fire when the view IS loaded (name resolves to UUID)."""
+    view = _make_bundled_view()
+    dashboard = _make_dashboard(_BUNDLED_VIEW_NAME)
+    bundle = json.loads(
+        render_dashboards_bundle_json([dashboard], {view.name: view}, _OWNER_ID)
+    )
+    assert bundle["dashboards"][0]["widgets"][0]["config"]["viewDefinitionId"] == _BUNDLED_VIEW_ID
