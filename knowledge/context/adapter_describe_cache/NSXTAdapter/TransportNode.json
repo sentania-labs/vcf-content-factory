@@ -1,0 +1,559 @@
+{
+  "adapter_kind": "NSXTAdapter",
+  "fetched_at": "2026-08-26T21:00:40Z",
+  "metrics": {
+    "Cpu|AvgDpdkCpuCoreUsage": {
+      "default_monitored": true,
+      "name": "CPU|DPDK CPU Core Average Usage"
+    },
+    "Cpu|AvgNonDpdkCpuCoreUsage": {
+      "default_monitored": true,
+      "name": "CPU|Non-DPDK CPU Core Average Usage"
+    },
+    "Cpu|Cores": {
+      "default_monitored": true,
+      "name": "CPU|CPU Cores"
+    },
+    "Cpu|DPDKCores": {
+      "default_monitored": true,
+      "name": "CPU|DPDK CPU Cores"
+    },
+    "Cpu|HighDpdkCpuCoreUsage": {
+      "default_monitored": true,
+      "name": "CPU|DPDK CPU Core Highest Usage"
+    },
+    "Cpu|HighNonDpdkCpuCoreUsage": {
+      "default_monitored": true,
+      "name": "CPU|Non-DPDK CPU Core Highest Usage"
+    },
+    "FileSystems|Used": {
+      "default_monitored": true,
+      "name": "File Systems|Used"
+    },
+    "FileSystems|UsedPercentage": {
+      "default_monitored": true,
+      "name": "File Systems|Used"
+    },
+    "Memory|Cache": {
+      "default_monitored": true,
+      "name": "Memory|Cache"
+    },
+    "Memory|Total": {
+      "default_monitored": true,
+      "name": "Memory|Total"
+    },
+    "Memory|TotalSwap": {
+      "default_monitored": true,
+      "name": "Memory|Total Swap"
+    },
+    "Memory|Used": {
+      "default_monitored": true,
+      "name": "Memory|Used"
+    },
+    "Memory|UsedPercentage": {
+      "default_monitored": true,
+      "name": "Memory|Used"
+    },
+    "Memory|UsedSwap": {
+      "default_monitored": true,
+      "name": "Memory|Used Swap"
+    },
+    "System Attributes|active_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - Active Anomaly Count"
+    },
+    "System Attributes|active_ki_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - Active KPI Breach Count"
+    },
+    "System Attributes|alert_count_critical": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Alert Count Critical"
+    },
+    "System Attributes|alert_count_immediate": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Alert Count Immediate"
+    },
+    "System Attributes|alert_count_info": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Alert Count Info"
+    },
+    "System Attributes|alert_count_warning": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Alert Count Warning"
+    },
+    "System Attributes|all_metrics": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Self - Metric Count"
+    },
+    "System Attributes|availability": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Availability"
+    },
+    "System Attributes|change_index": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - Change Index"
+    },
+    "System Attributes|child_active_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - Active Anomaly Count"
+    },
+    "System Attributes|child_active_ki_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - Active KPI Breach Count"
+    },
+    "System Attributes|child_all_metrics": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Full Set - Metric Count"
+    },
+    "System Attributes|child_ki_metrics": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - KPI Count"
+    },
+    "System Attributes|child_new_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - New Anomaly Count"
+    },
+    "System Attributes|child_new_ki_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - New KPI Breach Count"
+    },
+    "System Attributes|health": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Self - Health Score"
+    },
+    "System Attributes|ki_metrics": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - KPI Count"
+    },
+    "System Attributes|new_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - New Anomaly Count"
+    },
+    "System Attributes|new_ki_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - New KPI Breach Count"
+    },
+    "System Attributes|self_alert_count": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Self - Alert Count"
+    },
+    "System Attributes|total_alarms": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Total Anomalies"
+    },
+    "System Attributes|total_alert_count": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Total Alert Count"
+    },
+    "TransportNodeUptime": {
+      "default_monitored": true,
+      "name": "Uptime"
+    },
+    "badge|alert_count_critical": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Critical"
+    },
+    "badge|alert_count_immediate": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Immediate"
+    },
+    "badge|alert_count_info": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Info"
+    },
+    "badge|alert_count_warning": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Warning"
+    },
+    "badge|anomaly": {
+      "default_monitored": false,
+      "name": "Badge|Anomaly"
+    },
+    "badge|capacityRemaining": {
+      "default_monitored": false,
+      "name": "Badge|Capacity Remaining"
+    },
+    "badge|capacityRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Capacity Remaining with committed projects"
+    },
+    "badge|compliance": {
+      "default_monitored": true,
+      "name": "Badge|Compliance"
+    },
+    "badge|density": {
+      "default_monitored": false,
+      "name": "Badge|Density"
+    },
+    "badge|density_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Density with committed projects"
+    },
+    "badge|efficiency": {
+      "default_monitored": true,
+      "name": "Badge|Efficiency"
+    },
+    "badge|efficiency_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Efficiency"
+    },
+    "badge|efficiency_state": {
+      "default_monitored": false,
+      "name": "Badge|Efficiency State"
+    },
+    "badge|fault": {
+      "default_monitored": false,
+      "name": "Badge|Faults"
+    },
+    "badge|health": {
+      "default_monitored": true,
+      "name": "Badge|Health"
+    },
+    "badge|health_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Health"
+    },
+    "badge|health_state": {
+      "default_monitored": false,
+      "name": "Badge|Health State"
+    },
+    "badge|risk": {
+      "default_monitored": true,
+      "name": "Badge|Risk"
+    },
+    "badge|risk_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Risk"
+    },
+    "badge|risk_state": {
+      "default_monitored": false,
+      "name": "Badge|Risk State"
+    },
+    "badge|stress": {
+      "default_monitored": false,
+      "name": "Badge|Stress"
+    },
+    "badge|stress_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Stress with committed projects"
+    },
+    "badge|timeRemaining": {
+      "default_monitored": false,
+      "name": "Badge|Time Remaining"
+    },
+    "badge|timeRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Time Remaining with committed projects"
+    },
+    "badge|waste": {
+      "default_monitored": false,
+      "name": "Badge|Waste"
+    },
+    "stats|Interface|LinkStatus": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Link Status"
+    },
+    "stats|Interface|RxData": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Received Bytes Cumulative"
+    },
+    "stats|Interface|RxDataBPS": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Received Bytes (BPS)"
+    },
+    "stats|Interface|RxDataDiscrete": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Received Bytes Discrete"
+    },
+    "stats|Interface|RxDropped": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Received Packets Dropped Cumulative"
+    },
+    "stats|Interface|RxDroppedDiscrete": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Received Packets Dropped Discrete"
+    },
+    "stats|Interface|RxDroppedPPS": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Received Packets Dropped (PPS)"
+    },
+    "stats|Interface|RxErrors": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Received Packets errors"
+    },
+    "stats|Interface|RxFrame": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Received Framing errors"
+    },
+    "stats|Interface|RxPackets": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Received Packets Cumulative"
+    },
+    "stats|Interface|RxPacketsDiscrete": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Received Packets Discrete"
+    },
+    "stats|Interface|RxPacketsPPS": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Received Packets (PPS)"
+    },
+    "stats|Interface|TxCarrier": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Transmitted carrier losses detected"
+    },
+    "stats|Interface|TxColls": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Transmitted Collisions detected"
+    },
+    "stats|Interface|TxData": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Transmitted Bytes Cumulative"
+    },
+    "stats|Interface|TxDataBPS": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Transmitted Bytes (BPS)"
+    },
+    "stats|Interface|TxDataDiscrete": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Transmitted Bytes Discrete"
+    },
+    "stats|Interface|TxDropped": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Transmitted Packets Dropped Cumulative"
+    },
+    "stats|Interface|TxDroppedDiscrete": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Transmitted Packets Dropped Discrete"
+    },
+    "stats|Interface|TxDroppedPPS": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Transmitted Packets Dropped (PPS)"
+    },
+    "stats|Interface|TxErrors": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Transmitted Packets errors"
+    },
+    "stats|Interface|TxPackets": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Transmitted Packets Cumulative"
+    },
+    "stats|Interface|TxPacketsDiscrete": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Transmitted Packets Discrete"
+    },
+    "stats|Interface|TxPacketsPPS": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Transmitted Packets (PPS)"
+    }
+  },
+  "properties": {
+    "ConnectivityStatus|ClusterConnectivityProperty": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Status Summary|LCA Connectivity Status"
+    },
+    "ConnectivityStatus|ControlConnectionStatusProperty": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Status Summary|Controller connection status"
+    },
+    "ConnectivityStatus|EdgeNodeHostNodeStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Status Summary|Host Node Deployment Status"
+    },
+    "ConnectivityStatus|ManagementConnectionStatusProperty": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Status Summary|Management connection status"
+    },
+    "ConnectivityStatus|ManagerConnectivityProperty": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Status Summary|Management Plane Connectivity Status"
+    },
+    "ConnectivityStatus|TransportNodeDeploymentState": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Status Summary|Transport Node Deployment State"
+    },
+    "ConnectivityStatus|TransportNodeState": {
+      "default_monitored": false,
+      "instance_type": "INSTANCED",
+      "name": "Status Summary|Transport Node State"
+    },
+    "FileSystems|FileSystemId": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "File Systems|File System Id"
+    },
+    "FileSystems|Total": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "File Systems|Total"
+    },
+    "FileSystems|Type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "File Systems|File System Type"
+    },
+    "HostSwitches|SwitchMode": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Host Switches|Switch Mode"
+    },
+    "LoadBalancerServicePerNode|CurrentExtraLarge": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Current Extra Large LB services"
+    },
+    "LoadBalancerServicePerNode|CurrentLarge": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Current Large LB services"
+    },
+    "LoadBalancerServicePerNode|CurrentMedium": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Current Medium LB services"
+    },
+    "LoadBalancerServicePerNode|CurrentPoolMembers": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Current LB Pool Members"
+    },
+    "LoadBalancerServicePerNode|CurrentPools": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Current LB Pools"
+    },
+    "LoadBalancerServicePerNode|CurrentSmall": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Current Small LB services"
+    },
+    "LoadBalancerServicePerNode|CurrentVirtualServers": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Current LB Virtual Servers"
+    },
+    "LoadBalancerServicePerNode|EdgeLBCount": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Edge Load Balancer Count"
+    },
+    "LoadBalancerServicePerNode|RemainingExtraLargeLBService": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Remaining Extra Large LB services"
+    },
+    "LoadBalancerServicePerNode|RemainingLargeLBService": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Remaining Large LB services"
+    },
+    "LoadBalancerServicePerNode|RemainingMediumLBService": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Remaining Medium LB services"
+    },
+    "LoadBalancerServicePerNode|RemainingPoolMembers": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Remaining LB Pool Members"
+    },
+    "LoadBalancerServicePerNode|RemainingSmallLBService": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Remaining Small LB services"
+    },
+    "System Properties|host_collector_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "VMware Aria Operations Generated Properties|Current Collector ID"
+    },
+    "System Properties|resource_kind_subtype": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "VMware Aria Operations Generated Properties|Object Type Subclassification"
+    },
+    "System Properties|resource_kind_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "VMware Aria Operations Generated Properties|Object Type Classification"
+    },
+    "Tunnels|StatusProperty": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Tunnels|Status"
+    },
+    "summary|CreateTimeProperty": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Create Time"
+    },
+    "summary|CreateUserProperty": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Create User"
+    },
+    "summary|DeploymentType": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Deployment Type"
+    },
+    "summary|FQDN": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|FQDN"
+    },
+    "summary|InterfaceLevelDiscreteMetrics": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Interface Level Discrete Metrics"
+    },
+    "summary|LastModifiedTimeProperty": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Last Modified Time"
+    },
+    "summary|LastModifiedUserProperty": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Last Modified User"
+    },
+    "summary|MaintenanceMode": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Maintenance Mode"
+    },
+    "summary|NodeType": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Node Type"
+    },
+    "summary|ProtectionProperty": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Protection"
+    },
+    "summary|RevisionProperty": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Revision"
+    },
+    "summary|SoftwareVersion": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Software Version"
+    },
+    "summary|SystemOwnedProperty": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|System Owned"
+    }
+  },
+  "resource_kind": "TransportNode",
+  "source": "https://ro818/suite-api/api/adapterkinds/NSXTAdapter/resourcekinds/TransportNode/statkeys"
+}

@@ -1,6 +1,23 @@
 {
   "adapter_kind": "VMWARE",
+  "resource_kind": "HostSystem",
   "fetched_at": "2026-07-27T22:10:45Z",
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys",
+  "merged_from": [
+    {
+      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys",
+      "fetched_at": "2026-07-27T22:10:45Z",
+      "platform": "VCF Operations 9.x",
+      "role": "primary"
+    },
+    {
+      "source": "https://ro818/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys",
+      "fetched_at": "2026-08-26T21:00:41Z",
+      "platform": "VCF Operations 8.18",
+      "role": "additive"
+    }
+  ],
+  "merge_note": "Union of two live instances. The primary supplies display names on key collisions (the 8.18 snapshot carries the older 'VMware Aria Operations' branding; default_monitored is identical on every collision). Keys present only on 8.18 are added; instance-local 'Super Metric|sm_<uuid>' keys from the additive snapshot are not imported. Refreshing this file against a single instance will drop the other platform's keys.",
   "metrics": {
     "NTP|DRIFT_IN_MILLS": {
       "default_monitored": true,
@@ -2894,6 +2911,14 @@
       "default_monitored": true,
       "name": "Summary|Maximum Supported VMs (deprecated)"
     },
+    "summary|metering|deletedResources": {
+      "default_monitored": false,
+      "name": "Summary|Metering|Deleted descendent VMs price"
+    },
+    "summary|metering|value": {
+      "default_monitored": true,
+      "name": "Summary|Metering|Total price"
+    },
     "summary|number_running_vcpus": {
       "default_monitored": true,
       "name": "Summary|Number of vCPUs on Powered On VMs"
@@ -4274,7 +4299,5 @@
       "instance_type": "INSTANCED",
       "name": "VCM|Template|Total checks"
     }
-  },
-  "resource_kind": "HostSystem",
-  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys"
+  }
 }
