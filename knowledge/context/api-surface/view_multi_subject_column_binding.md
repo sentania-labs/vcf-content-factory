@@ -45,7 +45,8 @@ columns:
 
 | View shape | Column without `subject:` | Column with `subject:` |
 |---|---|---|
-| Single subject (scalar `subject:` or one-entry `subjects:`) | Bound to the one kind (unchanged, byte-identical to pre-change output) | Loader error: `declares no subjects: list` |
+| Single subject, scalar `subject:` | Bound to the one kind (unchanged, byte-identical to pre-change output) | Loader error: `declares no subjects: list` |
+| Single subject, one-entry `subjects:` list | Bound to the one kind (unchanged) | Accepted and bound to that one kind; output is byte-identical to leaving `subject:` off |
 | Multi-subject (2+ `subjects:`) | Unbound: no `adapterKind`, no `resourceKind`; `isStringAttribute` is followed directly by `rollUpType` | Bound to exactly that kind; must be one of the view's `subjects:` (loader error otherwise) |
 
 Loader: `src/vcfops_dashboards/loader.py` (`ViewColumn.subject`, parsed
@@ -120,4 +121,6 @@ lines. The `<SubjectType>` block is unaffected: one `descendant` then
   renderer guard (see `knowledge/context/wire-formats/wire_formats.md`
   §External view references); it is a content defect, not a binding one,
   and keeps the managementpacks validate step red until the content is
-  fixed.
+  fixed, in a checkout where the gitignored `vcommunity-vsphere` pak
+  clone is present. Without that clone the step has nothing to render
+  and passes.
