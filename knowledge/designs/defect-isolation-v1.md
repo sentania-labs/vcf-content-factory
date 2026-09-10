@@ -262,7 +262,13 @@ review, which at roughly 40 entries it is not.
   `core.hooksPath`. A thin dispatcher: it finds the factory above the
   clone and hands stdin to `scripts/version_line_guard.sh`, which holds
   all the policy. Refuses only on that script's RULE-014 (exit 2) and
-  RULE-012 (exit 3) verdicts; every other outcome warns and allows.
+  RULE-012 (exit 3) verdicts; every other outcome warns and allows,
+  including exit 4, which the guard reserves for a defect gate that
+  could not run at all (no interpreter, import failure, unreadable
+  registry): no verdict was reached, so nothing is refused. Every v*
+  tag on the push is checked, each against the adapter.yaml at its own
+  commit rather than the working tree, and a tag deletion (all-zero
+  local sha) is not a release and is never guarded.
 - `build-pak-on-tag.yml` (canonical and all six copies) and
   `sdk-template`: delete the defect gate step and its `curl`, and drop
   the vendored `ci/defect_gate.py` that existed only to run it. No stub
