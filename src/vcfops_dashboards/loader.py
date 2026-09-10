@@ -559,6 +559,31 @@ class ViewDef:
                     f"view {self.name}: column requires attribute and display_name"
                 )
             if c.subject is not None:
+                # Pseudo-columns have no adapterKind/resourceKind slot in
+                # their wire shape: _xml_time_segment_item emits exactly the
+                # nine vendor Properties and the instanced-group driver Item
+                # returns before _xml_kind_binding_props. Accepting `subject:`
+                # here would silently drop it at render time, so reject it
+                # (Codex P2 on PR #150). Instanced-group MEMBER columns do
+                # bind and are accepted. Boundary documented in
+                # knowledge/context/api-surface/view_multi_subject_column_binding.md.
+                if c.time_segment is not None:
+                    raise DashboardValidationError(
+                        f"view {self.name}: column {c.display_name!r} is a "
+                        f"time_segment column and cannot set subject:; the "
+                        f"isTimeSegment wire shape carries no adapterKind/"
+                        f"resourceKind, so the binding would be silently "
+                        f"dropped. Remove subject: from this column."
+                    )
+                if c.instanced_group is not None and c.instanced_group.is_driver:
+                    raise DashboardValidationError(
+                        f"view {self.name}: column {c.display_name!r} is an "
+                        f"instanced_group driver column (Instance Name) and "
+                        f"cannot set subject:; the driver Item carries no "
+                        f"adapterKind/resourceKind, so the binding would be "
+                        f"silently dropped. Set subject: on the group's member "
+                        f"columns instead."
+                    )
                 if not self.subjects:
                     raise DashboardValidationError(
                         f"view {self.name}: column {c.display_name!r} sets subject: "

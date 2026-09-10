@@ -246,6 +246,58 @@ class TestLoaderRejects:
         with pytest.raises(DashboardValidationError):
             _load(tmp_path, _view(subject=None, subjects=SUBJECTS, columns=cols))
 
+    # Pseudo-columns whose wire shape has no adapterKind/resourceKind slot:
+    # the renderer would silently drop the binding, so the loader rejects
+    # it (Codex P2 on PR #150). A valid subject is used on purpose so the
+    # failure is the kind check, not the membership check.
+
+    def test_subject_on_time_segment_column(self, tmp_path):
+        from vcfops_dashboards.loader import DashboardValidationError
+
+        cols = [
+            {
+                "display_name": "Month",
+                "time_segment": {"breakdown_by": "MONTHS"},
+                "subject": {"adapter_kind": "VMWARE", "resource_kind": "Datacenter"},
+            },
+            {"attribute": "summary|total_number_vms", "display_name": "VMs"},
+        ]
+        with pytest.raises(DashboardValidationError, match=r"'Month' is a time_segment column and cannot set subject:"):
+            _load(tmp_path, _view(subject=None, subjects=SUBJECTS, columns=cols))
+
+    def test_subject_on_instanced_group_driver_column(self, tmp_path):
+        from vcfops_dashboards.loader import DashboardValidationError
+
+        cols = [
+            {
+                "display_name": "Instance",
+                "instanced_group": {"name": "vmdk"},
+                "subject": {"adapter_kind": "VMWARE", "resource_kind": "Datacenter"},
+            },
+            {
+                "display_name": "Used",
+                "instanced_group": {
+                    "name": "vmdk", "prefix": "diskspace", "suffix": "used",
+                    "sample_instance": "vm-1",
+                },
+            },
+        ]
+        with pytest.raises(DashboardValidationError, match=r"'Instance' is an instanced_group driver column .* cannot set subject:"):
+            _load(tmp_path, _view(subject=None, subjects=SUBJECTS, columns=cols))
+
+    def test_pseudo_column_rejection_wins_over_single_subject_check(self, tmp_path):
+        """The kind check fires even on a single-subject view, so the error
+        names the real problem rather than the missing subjects: list."""
+        from vcfops_dashboards.loader import DashboardValidationError
+
+        cols = [{
+            "display_name": "Month",
+            "time_segment": {"breakdown_by": "MONTHS"},
+            "subject": {"adapter_kind": "VMWARE", "resource_kind": "Datacenter"},
+        }]
+        with pytest.raises(DashboardValidationError, match="time_segment column and cannot set subject:"):
+            _load(tmp_path, _view(columns=cols))
+
 
 # ---------------------------------------------------------------------------
 # 3. Single-subject views unchanged
