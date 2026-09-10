@@ -59,7 +59,7 @@ _BLOCKER_REGISTRY = f"""\
 - **Status:** open
 - **Affects:** {PAK}
 - **First-seen:** build 1 (2026-01-01)
-- **Source:** knowledge/context/reviews/fixture.md
+- **Source:** knowledge/context/reviews/framework/release-guard-pr151-2026-09-10.md
 - **Summary:** Open blocking defect naming the fixture pak.
 """
 
