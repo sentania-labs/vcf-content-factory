@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# RULE-012 / RULE-014 release guard, run at push time instead of pak CI.
+#
+# Design of record: knowledge/designs/defect-isolation-v1.md.
+#
+# This hook holds NO policy. All of it lives in
+# scripts/version_line_guard.sh, which already implements both rules
+# (RULE-014: the 0.x dev-preview line is never tagged; RULE-012: an open
+# blocking defect refuses the pak), derives the pak name from the origin
+# remote exactly as CI does, and reads this same pre-push stdin format.
+# That script was written to be wired into a real git hook and never was
+# (see its header). This is that wiring, and nothing more.
+#
+# Why at push time and not in pak CI: the defect registry lives in the
+# factory, the decision to release is made in the factory, and the person
+# tagging is standing in the factory. The pak clones live inside the
+# factory working tree, so the guard reads the registry over a relative
+# filesystem path. The old pak-CI gate curled the registry from factory
+# main, which made every pak repo's release depend on the tip of one
+# working branch and fail closed on an outage.
+#
+# Installed by scripts/bootstrap_managed_paks.sh via
+# `git config core.hooksPath <factory>/.githooks`, so this one tracked
+# copy serves every pak clone and updates with a normal factory pull.
+#
+# FAIL SAFE. Only a rule violation refuses. Anything that means the guard
+# could not run (no factory above this clone, no interpreter, a usage
+# error, an unreadable registry) warns and allows: an infrastructure
+# problem must never stop someone pushing a fix.
+#
+# Bypass: `git push --no-verify`. Deliberate and auditable, the same
+# category as a force-push.
+
+set -uo pipefail
+
+warn() { printf 'release guard: %s\n' "$1" >&2; }
+
+# pre-push stdin: <local_ref> <local_sha> <remote_ref> <remote_sha>, one
+# line per ref. Only a line that CREATES or MOVES a v* tag is a release:
+#   - the remote ref must be refs/tags/v*;
+#   - the local sha must not be all zeros, which is how git spells a
+#     deletion (`git push --delete origin vX` retracts a release, it does
+#     not make one, and must not be refused over the tree's current state).
+# Every surviving line is handed to the guard, which checks each tag
+# against the adapter.yaml AT THAT TAG'S COMMIT, not the working tree.
+refs="$(cat)"
+tag_lines="$(printf '%s\n' "$refs" | awk '$3 ~ /^refs\/tags\/v/ && $2 !~ /^0+$/')"
+[ -n "$tag_lines" ] || exit 0
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+
+# Only guard pak clones. The factory's own repo shares this hooks
+# directory and is not an SDK adapter checkout.
+case "$repo_root" in
+    */content/sdk-adapters/*) ;;
+    *) exit 0 ;;
+esac
+
+# The factory is the nearest ancestor carrying the guard.
+factory_root=""
+probe="$(cd "$repo_root/../../.." 2>/dev/null && pwd)" || probe=""
+while [ -n "$probe" ] && [ "$probe" != "/" ]; do
+    if [ -x "$probe/scripts/version_line_guard.sh" ]; then
+        factory_root="$probe"
+        break
+    fi
+    probe="$(dirname "$probe")"
+done
+if [ -z "$factory_root" ]; then
+    warn "no factory checkout found above $repo_root; not guarded"
+    exit 0
+fi
+
+out="$(printf '%s\n' "$tag_lines" \
+        | "$factory_root/scripts/version_line_guard.sh" --repo-dir "$repo_root" 2>&1)"
+rc=$?
+case $rc in
+    0)
+        # A clean verdict can still carry a warning worth seeing (an absent
+        # defect registry gates nothing, RULE-012). Surface it; allow.
+        case "$out" in *WARNING*) printf '%s\n' "$out" >&2 ;; esac
+        exit 0
+        ;;
+    2|3)
+        # 2 = RULE-014 (0.x line tagged), 3 = RULE-012 (blocking defect).
+        # These are the ONLY refusing codes; the guard reserves them for a
+        # verdict it actually reached.
+        printf '%s\n' "$out" >&2
+        warn "push refused. Fix the above, or push with --no-verify to override."
+        exit 1
+        ;;
+    *)
+        # 1 = usage error, 4 = the defect gate could not run (missing
+        # interpreter, unreadable registry, import failure), anything else
+        # = unexpected. No verdict was reached. Report loudly, let the
+        # push through.
+        printf '%s\n' "$out" >&2
+        warn "guard could not run (exit $rc); not guarded"
+        exit 0
+        ;;
+esac

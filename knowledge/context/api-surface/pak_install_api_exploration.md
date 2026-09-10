@@ -533,8 +533,9 @@ Operations 9.0.2.0 build 25137838 only.
 - `context/ui_import_formats.md` — earlier exploration of `/ui/*.action`
   dead-ends; confirms the empty-200 pattern is the Struts default for
   unregistered actions, which is what `/ui/solution.action` returns.
-- `memory/project_vcf_ops_902_ui_deadends.md` — prior catalog of UI
-  import dead stubs.
+- `struts_import_endpoints.md` — the surviving catalog of UI import
+  dead stubs. (A prior catalog under the old uncommitted `memory/`
+  scheme was cited here; that file no longer exists.)
 - Live admin SPA sources (read during investigation, not reproduced
   in repo): `/admin/js/components/initialConfiguration/solutions/{
   Select,ConfigurationWizard,Eula,ReleaseInfo,FinalStep}.js` and

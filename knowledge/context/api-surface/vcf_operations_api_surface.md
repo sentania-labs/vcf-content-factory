@@ -772,16 +772,17 @@ The following existing docs have URL claims that need updating in
 light of this drain. Corrections are trivial but route through the
 `tooling` agent to keep `context/` hygiene consistent.
 
-1. **`memory/project_vcf_operations_url_structure.md`** — the user
-   memory claim that `/vcf-operations/plug/ops/*.action` is a live
-   alias for `/ui/*.action` with local-account auth is **false** on
-   this lab. It's VIDB-gated. Memory should be updated to say
-   "`/vcf-operations/*` paths exist on VCF 9 but require the VCF
-   merged console SSO (VIDB/OAuth2 auth_code flow); for programmatic
-   access, use `/ui/*.action`, `/admin/*.action`, and
-   `/suite-api/*`, all of which accept local-account credentials and
-   cover every capability `/vcf-operations/rest/ops/*` exposes." Route
-   to Dalinar for memory update, not tooling.
+1. **`/vcf-operations/*` URL structure** (no doc to route: this
+   correction originally targeted an uncommitted `memory/` file that
+   no longer exists, so it is settled here instead). The claim that
+   `/vcf-operations/plug/ops/*.action` is a live alias for
+   `/ui/*.action` with local-account auth is **false** on this lab;
+   it is VIDB-gated. The correct statement: `/vcf-operations/*`
+   paths exist on VCF 9 but require the VCF merged console SSO
+   (VIDB/OAuth2 auth_code flow); for programmatic access use
+   `/ui/*.action`, `/admin/*.action`, and `/suite-api/*`, all of
+   which accept local-account credentials and cover every capability
+   `/vcf-operations/rest/ops/*` exposes.
 
 2. **`context/struts_import_endpoints.md`** §"Struts action
    registration probe" — the 2026-04-11 enumeration missed

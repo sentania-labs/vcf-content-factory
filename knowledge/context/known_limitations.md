@@ -97,7 +97,9 @@ artifacts (`supermetric.json`, `Dashboard.zip`, `Views.zip`,
 `Reports.zip`, `AlertContent.xml`) work for admins hand-dragging
 into the UI because the SPA does the envelope wrap, but (b)
 qa-tester cannot automate that drag-drop path headlessly — it's
-human-in-the-loop only. See `memory/project_vcf_ops_902_ui_deadends.md`.
+human-in-the-loop only. See
+`knowledge/context/api-surface/struts_import_endpoints.md` for the
+per-endpoint dead-end survey behind this.
 
 ## 8. MPB events not supported in factory-built paks
 

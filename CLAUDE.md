@@ -187,13 +187,29 @@ pinned `sonnet`. Do not re-add pins without a decision.
 
 ## First-run concierge
 
-When the doctor's SessionStart output carries the first-run greeting
-and its `CHECKLIST-JSON:` block, open the session with the greeting
-("Hello, it looks like this is an unconfigured copy of the VCF
-Content Factory. Do you want me to get it ready for you?"). On yes,
-walk the doctor's checklist one item at a time, re-running the doctor
-after each fix, and finish with a re-run so the user sees one green
-line:
+The greeting itself is the hook's job, not yours: it emits the wording
+verbatim, because an instruction here is advisory and a hook runs (see
+`knowledge/designs/bootstrap-update-and-report-v1.md` §Where the
+concierge lives). Say what it gives you. Your job starts at the user's
+answer.
+
+Until that lands, when the doctor's SessionStart output carries the
+first-run greeting and its `CHECKLIST-JSON:` block, open the session by
+**naming what is actually missing**, from that block, and asking once:
+
+> This appears to be a new VCF Content Factory session. You're missing
+> Python 3.9+, a virtualenv, and credentials for at least one
+> instance. Should I install them?
+
+Name the real items, never "these pre-reqs" or "get it ready for you":
+the checklist already carries them, and a user who can see the list can
+say no to it. One yes covers every mechanical item. Credentials are the
+exception and always break out separately (item 3), because the user
+types those themselves.
+
+On yes, walk the doctor's checklist one item at a time, re-running the
+doctor after each fix, and finish with a re-run so the user sees one
+green line:
 
 1. **Python** (>=3.9): if missing, give the OS-appropriate install
    instruction (apt / winget / brew), then re-check.
@@ -215,12 +231,24 @@ line:
 4. **Reference + pak clones**: run the bootstrap scripts; on clone
    failures that look like the same firewall, offer to skip and
    record which references are absent.
+5. **Defect registry**: offer to create `defects.local.md`. A clone
+   without one falls back to the factory's inherited `defects.md`,
+   which means the user's own defects gate nothing while upstream's
+   may surface. Design: `knowledge/designs/defect-isolation-v1.md`.
 
 Outside first-run, the doctor's other signals get the same
 by-exception handling: behind upstream on a clean tree, offer a
 fast-forward pull (never auto-pull, never touch a dirty tree); ahead
 commits, relay the doctor's core vs environment/state classification
-and suggest a PR only for core.
+and suggest a PR only for core; no `defects.local.md` once content or
+a pak has been authored, say so, since the user's own defects are
+gating nothing.
+
+The session-opening bootstrap report that carries these signals is
+specified in `knowledge/designs/bootstrap-update-and-report-v1.md`:
+repos update only when clean and behind, every other state is reported
+rather than touched, and the doctor owns the ahead/behind voice so it
+is not said twice.
 
 ## When the toolset is inadequate
 

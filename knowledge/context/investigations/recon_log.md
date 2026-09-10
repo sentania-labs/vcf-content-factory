@@ -4503,6 +4503,239 @@ Tier 2 SDK adapter, exactly as devel concluded.
 `X-Ops-API-use-unsupported` header on two internal-list reads, which is
 still a GET). No enable, assign, import, or policy-mutation calls were
 made.
+
+---
+
+## 2026-08-26 — VCF License Consumption Overview modernization (8.x → 9.x vocabulary recon)
+
+**Requested by:** orchestrator, on behalf of user modernizing the 8.x-era
+"VCF License Consumption Overview" dashboard (source bundle:
+`reference/references/AriaOperationsContent/VCF License Consumption Overview/`)
+for VCF Operations 9.0/9.1.
+
+### Profile versions (ground truth, `/api/versions/current`)
+
+| Profile | Host | `releaseName` | build |
+|---|---|---|---|
+| devel | vcf-lab-operations-devel.int.sentania.net | VCF Operations 9.0.2.0 | 25137838 |
+| prod | vcf-lab-operations.int.sentania.net | VCF Operations 9.1.0.0 | 25541561 |
+| qa | vcf-lab-operations.int.sentania.net (same host as prod) | VCF Operations 9.1.0.0 | 25541561 |
+
+No 8.x instance is reachable in this environment. devel is the only 9.0.x
+instance; prod/qa are the same 9.1.0.0 backend. All three answered.
+
+### Item 1 — `VMWARE_INFRA_HEALTH` / `LicenseUsage` / `LICENSE_USAGE_WORLD`
+
+**Schema exists on both 9.0 and 9.1**, identical resource-kind list under
+adapter kind `VMWARE_INFRA_HEALTH`:
+`LicenseUsage`, `LICENSE_USAGE_WORLD`, `LicensedAsset`, `LicensedVC` (plus
+`vCenterLicensing`, `vCenterLicense` seen elsewhere in the same kind list).
+
+**No live resources of any of these kinds exist in either lab.**
+`GET /api/resources?resourceKind=LicenseUsage&adapterKindKey=VMWARE_INFRA_HEALTH`
+→ `pageInfo.totalCount: 0` on both devel and prod. Same zero result for
+`LICENSE_USAGE_WORLD`, `LicensedAsset`, `LicensedVC`, `vCenterLicensing`,
+`vCenterLicense`. The `VMWARE_INFRA_HEALTH` adapter instance itself is
+running and collecting other resource kinds (`VMWARE_INFRA_HEALTH_INSTANCE`
+count = 1 on devel, 4 on prod), so this is not an adapter-down problem —
+license usage specifically is not populating in either lab.
+
+**UNVERIFIED (labeled, not guessed):** whether this is because the lab's
+vCenter/VCF is unlicensed or licensed in a mode that doesn't populate
+`LicenseUsage`, or because 9.x deprecated population of this kind in favor
+of something else. Schema presence + zero instances is the full extent of
+what could be verified read-only in this environment.
+
+### Item 2 — stat keys / properties on `LicenseUsage`, and `ProductId` values
+
+`GET /api/adapterkinds/VMWARE_INFRA_HEALTH/resourcekinds/LicenseUsage/statkeys`
+and `.../properties` — **byte-identical key sets on devel (9.0.2.0) and
+prod (9.1.0.0)**, confirmed via diff of the two dumps (no delta).
+
+- `Assets|TotalUsage` — **EXISTS**, as a stat key (metric), both versions.
+  `{"key": "Assets|TotalUsage", "name": "Licensed Asset Count|Total Usage", "dataType": "INTEGER", ...}`
+- `Assets|Total` also exists (`Licensed Asset Count|Licensed Assets`).
+- `CostUnitAttributes|CostUnitLimit` — **EXISTS, but as a PROPERTY, not a
+  stat key**, both versions. Full property list (6 keys) on both:
+  `ProductId`, `CostUnitAttributes|CostUnitType`,
+  `CostUnitAttributes|CostUnitLimit`, `System Properties|host_collector_id`,
+  `System Properties|resource_kind_subtype`,
+  `System Properties|resource_kind_type`.
+  (The 8.x supermetric this is modernizing presumably also treats it as a
+  property — worth confirming against the 8.x export before assuming a
+  behavior change; not itself a 9.x delta.)
+- `ProductId` property key — **EXISTS**, exact key `ProductId` (no group
+  prefix), both versions.
+
+**Distinct `ProductId` VALUES on 9.x: UNVERIFIED.** Because zero
+`LicenseUsage` resources exist in either lab (Item 1), there is no live
+resource to read the `ProductId` property value from, and there is no
+schema-level enum for property values in this API surface (properties are
+free-text/string at the schema level; only live resource property values
+would show the actual string). **This is the single most load-bearing
+unresolved question in the whole ask** — cannot confirm or refute whether
+the 8.x strings `"vSphere 8 Enterprise Plus for VCF"` / `"vSAN"` prefix-
+match still exist on 9.x, whether they changed to VCF 9 subscription/
+portfolio SKU names, or anything else. Do not guess the SKU strings.
+Recommend either (a) finding a licensed lab/production 9.x instance where
+`LicenseUsage` is actually populated, or (b) asking the user/vendor docs
+directly for the 9.x `ProductId` taxonomy before authoring any
+`where="ProductId startsWith ..."` supermetric.
+
+### Item 3 — new license/entitlement/subscription vocabulary in 9.x
+
+Full sweep: enumerated all adapter kinds on prod (9.1.0.0) — 33 total vs.
+21 on devel (9.0.2.0) — then all resource kinds under each, then all stat
+keys, grepped key/name/description for
+`licens|entitle|subscri|consum|core|capacity` (regex, case-insensitive).
+8,050 raw hits (dominated by generic vSphere CPU/memory "entitlement" and
+"capacity" terminology unrelated to licensing — e.g. VM CPU/memory dynamic
+entitlement, `badge|capacityRemaining` on nearly every resource kind).
+Filtered to `licens|entitle|subscri` specifically:
+
+- No new license/entitlement resource kind or metric group beyond the
+  already-known `LicenseUsage` / `LicensedAsset` / `LicensedVC` /
+  `vCenterLicensing` / `vCenterLicense` family under `VMWARE_INFRA_HEALTH`.
+- `VcfAdapter`/`VCFWorld` has `cost|total_hostOsl_cost` (Host OS License
+  Cost) and `cpu|corecount_provisioned` — both pre-existing 8.x-era metrics
+  (also present under plain `VMWARE`/`HostSystem`, `FDR_VMWARE`), not new.
+- New adapter kinds present only on prod/9.1 and absent on devel/9.0:
+  `VCFAutomation`, `VMSP`, `VCF_OBS_DATA_PLATFORM`, `NETWORK_INSIGHT`,
+  `OrchestratorAdapter`, `VsanSnapshotManagerAdapter`,
+  `VCFOperationsvCommunity`, `FDR_*` variants, `tammpak`,
+  `mpb_unifi_integration`. Of these, `VMSP` (fleet management: many
+  `vcf-fleet-*`, `salt-*` resource kinds) is VCF 9's fleet-management
+  substrate but its stat keys are generic health/CPU/memory/disk
+  utilization for fleet *services* (e.g. `vcf-fleet-lcm`,
+  `vcf-fleet-upgrade-service`), not license/entitlement/core-subscription
+  reporting. No entitled-vs-consumed-cores metric, no vSAN TiB-entitlement
+  metric group, found anywhere in the sweep.
+- **Caveat on adapter-kind presence:** devel is a smaller/older lab
+  (21 adapter kinds vs. prod's 33) so some of that delta may be
+  lab-configuration difference rather than a 9.0→9.1 version difference —
+  cannot separate the two variables with only one 9.0 instance available.
+  `VMSP` in particular could plausibly be new in 9.1 specifically or just
+  not deployed in the devel lab; UNVERIFIED which.
+
+**Conclusion for Item 3:** no evidence of a native per-core
+subscription/entitlement reporting surface in either 9.0.2.0 or 9.1.0.0 in
+this environment. If VCF 9's per-core subscription entitlement is tracked
+anywhere, it is not exposed as a VCF Ops stat key/property in this lab
+(possibly it lives only in the VCF Operations fleet/licensing service UI,
+not surfaced to the metrics pipeline — UNVERIFIED, no API to check that
+service directly from here).
+
+### Item 4 — NSX
+
+`NSXTAdapter` / `NSXT World`: `Summary|LogicalSwitchCount` and
+`Summary|EdgeClusterCount` **EXIST as stat keys on both 9.0 and 9.1**
+(1 live `NSXT World` resource on each, confirms schema is current).
+
+`NSXTAdapter` / `TransportNode`: `summary|NodeType` **EXISTS, but as a
+PROPERTY, not a stat key**, on both versions (schema-level check; devel
+has 0 live `TransportNode` resources, prod has 13).
+
+No license/core stat key or property found on `NSXT World` or
+`TransportNode` in the Item 3 sweep or a targeted property grep — NSX does
+not appear to report its own licensed-core figure in either version, in
+this lab.
+
+### Item 5 — Automation (`CASAdapter` → `VCFAutomation`)
+
+`CASAdapter` **does not exist as an adapter kind on either instance.**
+On prod (9.1.0.0) the equivalent adapter kind is **`VCFAutomation`**,
+whose resource kinds are: `ProjectAssignment`, `Region`, `RegionQuota`,
+`RegionQuotaStorageClass`, `RegionVMClass`, `AutomationAdapter Instance`,
+`Automation World`, `VCFAOrganization` — **no `CAS World` kind at all**,
+confirming the fold into VCF Automation changed both the adapter kind key
+and the resource-kind taxonomy, not just a rename.
+
+`summary|VMCount` does not exist under `VCFAutomation`; the nearest
+equivalents on `Automation World` are `summary|total_vms` and
+`summary|total_running_vms`. `summary|Cost` does not exist; the nearest
+equivalent is `Aggregate|VCFAOrganization|cost|aggregatedMtdTotalCost`
+under `Automation World`. These are **not drop-in renames** — the
+supermetric/view referencing the old keys would need a rewrite, not a
+find-replace.
+
+On devel (9.0.2.0), **no automation adapter of any kind (`CASAdapter` or
+`VCFAutomation`) is present at all** — 0 automation-related adapter kinds
+in the full list. UNVERIFIED whether that's a 9.0-vs-9.1 version
+difference or simply that the devel lab never had VCF Automation
+onboarded; cannot separate with one 9.0 instance.
+
+### Item 6 — vSphere World object counts
+
+Both confirmed **live** on devel and prod via `stats/latest` on the one
+live `vSphere World` resource on each instance (not just schema presence):
+`ObjectCountMetricGroup:HostSystem|count`,
+`ObjectCountMetricGroup:VirtualMachine|count`,
+`ObjectCountMetricGroup:DistributedVirtualPortgroup|count` all present
+with real timestamped values. Note the schema-level statkeys endpoint only
+exposes the un-instanced base key `ObjectCountMetricGroup|count`; the
+per-kind instanced key (`...:HostSystem|count` etc.) only appears in live
+stats output — worth remembering for future recon on any
+`ObjectCountMetricGroup:*` metric.
+
+`HostSystem` / `cpu|corecount_provisioned` — **EXISTS** as a stat key on
+both versions (schema-level, `VMWARE`/`HostSystem`, 10 live `HostSystem`
+resources on each instance).
+
+prod (9.1.0.0) has many more `ObjectCountMetricGroup:*` instance kinds
+live on `vSphere World` than devel (9.0.2.0) — mostly VCF-fleet-service
+object kinds (`vcf-fleet-lcm`, `vcf-depot-service`, `salt-*`,
+`log-processor-*`, etc.) that don't exist on devel's `vSphere World` at
+all. Consistent with Item 3's `VMSP` fleet-management finding.
+
+### Item 7 — built-in license/consumption dashboards/views/reports
+
+**Reports:** `GET /api/reportdefinitions` works (74 on devel, 97 on prod).
+Grepped both for `licens`/`consumption` in name — the only match on either
+is `[VCF Content Factory] VKS Core Consumption Report`, which is
+**this repo's own prior output** (naming-prefix match), not a vendor
+built-in. **No native VCF 9 licensing-overview report found.**
+
+**Dashboards and views: UNVERIFIED, and inherently so under the read-only
+constraint.** `GET /api/dashboards` → 404, `GET /api/resources/views` →
+400 on both instances. Confirmed against the vendor OpenAPI specs
+(`reference/docs/operations-api.json`, `reference/docs/internal-api.json`)
+that **no GET/list endpoint for dashboards or views exists in either spec**
+— this matches the documented api-surface-map note ("Dashboards: no REST
+CRUD ... Views: no REST CRUD"). The only way to enumerate them is the
+content-zip export flow (`POST /api/content/operations/export`) or the
+UI, both out of scope for a GET-only recon pass. **This means Item 7's
+dashboard/view half cannot be answered from this agent's read-only API
+posture at all** — it is an API gap, not a missing-content finding.
+Escalate to the user/orchestrator: either grant a one-off export read, or
+have a human check the VCF Ops UI's built-in dashboard list for a native
+licensing overview before authoring.
+
+### Reference-source grep (allowlist, `knowledge/context/reference_sources.md`)
+
+Only `sentania/AriaOperationsContent` has license-consumption content:
+`reference/references/AriaOperationsContent/VCF License Consumption Overview/`
+(`VCF Consumption Overview v2.zip`, `Views.zip`, `supermetric.json`) — this
+**is** the 8.x source bundle being modernized, confirmed verbatim in
+`supermetric.json`:
+`where="ProductId startsWith vSphere 8 Enterprise Plus for VCF"` and
+`where="ProductId startsWith vSAN"`. No other allowlisted source (Brock
+Peterson's four repos, tkopton, dalehassinger, johnddias, the MPB-only
+sources, the SCG compliance repo) contains license-consumption content —
+confirmed via `grep -rli` across all of `reference/references/` for
+`license.consumption|LICENSE_USAGE_WORLD|LicenseUsage|CostUnitAttributes`.
+No 9.x-native replacement bundle exists in the allowlist.
+
+### Clean-up verified
+
+All calls were GET only, against the live public REST API
+(`/api/versions/current`, `/api/adapterkinds*`, `/api/resources*`,
+`/api/resources/{id}/stats/latest`, `/api/reportdefinitions`,
+`/api/supermetrics`, `/api/adapters`). No import, export, enable, assign,
+or policy-mutation calls were made. No content YAML or `src/vcfops_*/`
+files were touched.
+
+---
+
 ## 2026-08-29: multi-subject view column binding and view-reference investigations (embargoed)
 
 Seven recon entries from this date concern a product-bound adapter under

@@ -748,10 +748,11 @@ def _gate_publish(releases, factory_repo: Path) -> None:
     - Any open blocking defect affects a release's headline artifact.
     - The defect registry is malformed.
 
-    When the registry is absent from ``factory_repo/knowledge/context/defects.md`` the
-    gate vacuously passes and prints a clearly visible WARNING.  It never falls
-    back to the package-relative copy, that would couple test fixtures and any
-    other factory checkout to this repo's live defect state.
+    The registry is selected by presence under ``factory_repo/knowledge/context/``:
+    ``defects.local.md`` when it exists, else ``defects.md``.  When neither is
+    there the gate vacuously passes and prints a clearly visible WARNING.  It
+    never falls back to the package-relative copy, that would couple test
+    fixtures and any other factory checkout to this repo's live defect state.
 
     Applies in both dry-run and real mode, dry-run must also refuse
     (it is the preview of the real behaviour).
@@ -775,6 +776,8 @@ def _gate_publish(releases, factory_repo: Path) -> None:
         gate_pak,
         gate_item,
         format_defect_line,
+        local_registry_hint,
+        preferred_registry,
         DefectRegistryError,
     )
     from .release_builder import _is_sdk_adapter_source
@@ -786,7 +789,15 @@ def _gate_publish(releases, factory_repo: Path) -> None:
     # would couple any checkout, including test fixtures, to THIS repo's live
     # defect state, which causes spurious failures when the live registry is
     # malformed.
-    registry_path = factory_repo / "knowledge" / "context" / "defects.md"
+    # Resolved through the module's one resolver so presence-based selection
+    # reaches this path too: a consumer's `defects.local.md` wins here exactly
+    # as it does on the CLI, release and pre-push-hook paths. Hand-building
+    # the path here (and passing it explicitly, which correctly wins verbatim)
+    # was the one gate that never saw a local registry, which is the harm
+    # knowledge/designs/defect-isolation-v1.md exists to remove.
+    registry_path = preferred_registry(
+        factory_repo / "knowledge" / "context" / "defects.md"
+    )
     if not registry_path.exists():
         print(
             f"WARNING: no defect registry at {registry_path} "
@@ -831,14 +842,19 @@ def _gate_publish(releases, factory_repo: Path) -> None:
         for release_name, entry in all_blockers:
             lines.append(f"  {format_defect_line(entry)}  [blocks: {release_name}]")
         defect_ids = sorted({e.id for _, e in all_blockers})
+        hint = local_registry_hint(registry_path)
         raise PublishError(
             f"RULE-012: {len(all_blockers)} open blocking defect(s) prevent publish:\n"
             + "\n".join(lines)
             + f"\n\nDefect ids: {', '.join(defect_ids)}"
-            + f"\nSee knowledge/context/defects.md to review or close these defects."
+            + f"\nSee {registry_path.name} to review or close these defects."
+            + (f"\n{hint}" if hint else "")
         )
 
     except DefectRegistryError as exc:
+        # Registry file present but unreadable. A malformed ENTRY no longer
+        # arrives here: it is isolated to the scope it names and surfaces as
+        # a blocker against that scope alone.
         raise PublishError(
             f"RULE-012: defect registry malformed: {exc}"
         ) from exc

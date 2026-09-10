@@ -45,45 +45,28 @@ jobs:
       - name: Checkout adapter source
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      # Defect gate (factory RULE-012). Runs FIRST — before any expensive
-      # setup/build — so a v* tag fails fast and never produces a .pak while
-      # an open *blocking* defect names this pak in the factory registry.
+      # NOTE: there is deliberately no defect-gate step here.
       #
-      # SECURITY (supply chain): the gate CODE is the VENDORED, in-repo
-      # ci/defect_gate.py — a committed, reviewable copy of the factory's
-      # gate script, run from THIS repo's checkout. It is NEVER fetched and
-      # executed from a mutable ref: doing so would run arbitrary
-      # factory-main code on a release runner that later holds
-      # SDK_RUNTIME_SSH_KEY (Codex PR-18 P1). Only the registry DATA
-      # (context/defects.md) is fetched live from factory main — it is inert
-      # markdown parsed locally, never executed — so a closed/opened defect
-      # takes effect immediately while no remote code crosses the boundary.
-      # Re-vendor ci/defect_gate.py from the factory when the gate's parser
-      # changes (it is propagated alongside this workflow).
+      # RULE-012 and RULE-014 are enforced at PUSH time by the factory's
+      # .githooks/pre-push hook, reached via core.hooksPath, which
+      # scripts/bootstrap_managed_paks.sh sets on every clone it manages.
+      # The hook reads the governing registry over a relative filesystem
+      # path: your own defects.local.md when you keep one, otherwise the
+      # factory's defects.md.
       #
-      # The pak name is derived from the repo name
-      # (vcf-content-factory-sdk-<name> -> <name>); override DEFECT_PAK_NAME
-      # below if your repo is named differently.
-      - name: Defect gate (RULE-012)
-        env:
-          DEFECT_PAK_NAME: ""   # leave empty to derive from the repo name
-        run: |
-          set -euo pipefail
-          NAME="${DEFECT_PAK_NAME:-}"
-          if [ -z "$NAME" ]; then
-            NAME="${GITHUB_REPOSITORY##*/}"          # owner/vcf-content-factory-sdk-foo -> vcf-content-factory-sdk-foo
-            NAME="${NAME#vcf-content-factory-sdk-}"   # -> foo
-          fi
-          if [ ! -f ci/defect_gate.py ]; then
-            echo "::error::ci/defect_gate.py (vendored gate script) is missing — re-vendor it from the factory. Refusing to fetch+execute remote code." >&2
-            exit 1
-          fi
-          # DATA only (inert markdown), fetched live from factory main:
-          curl -fsSL "https://raw.githubusercontent.com/sentania-labs/vcf-content-factory/main/knowledge/context/defects.md" -o defects.md
-          echo "Gating pak '$NAME' against the live factory defect registry (vendored gate)..."
-          python3 ci/defect_gate.py --pak "$NAME" --registry defects.md
-          # exit 0 = clear; 2 = blocked (defect lines printed above); 1 = bad registry.
-          # Any non-zero propagates via set -e and fails the build before it starts.
+      # THAT COVERS A CLONE INSIDE A FACTORY CHECKOUT ONLY. The hook checks
+      # that the repo sits under content/sdk-adapters/, so a standalone
+      # clone of a pak repo is not gated at all, and neither is a tag made
+      # in the GitHub UI or a push with --no-verify. Register the pak in
+      # knowledge/context/managed_paks.md and let bootstrap clone it.
+      #
+      # This step used to curl knowledge/context/defects.md from the
+      # factory's main branch on every release. For a pak the factory has
+      # no defects about, and gate_pak matches Affects: by exact string
+      # equality so that is the normal case, the fetch could only ever
+      # return zero relevant hits, while still failing the release on a
+      # mid-edit commit upstream, a raw.githubusercontent outage, or
+      # blocked runner egress. See knowledge/designs/defect-isolation-v1.md.
 
       # The sentania-labs runner image ships NO JDK. build-sdk needs javac+jar.
       # If you bake a JDK into the runner image, delete this step.

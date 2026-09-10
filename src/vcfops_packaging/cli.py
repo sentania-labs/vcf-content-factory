@@ -574,7 +574,7 @@ def cmd_defect_gate(args) -> int:
     """
     from .defects import (
         gate_pak, gate_item, gate_all, format_defect_line,
-        DefectRegistryError,
+        local_registry_hint, DefectRegistryError,
     )
 
     # Validate that exactly one mode was selected.
@@ -618,6 +618,9 @@ def cmd_defect_gate(args) -> int:
                 f"\n{len(blockers)} open blocking defect(s) found. "
                 f"See RULE-012 and knowledge/context/defects.md."
             )
+            _hint = local_registry_hint()
+            if _hint:
+                print(_hint)
             return 2
 
         # --- --pak <name> mode ---
@@ -632,6 +635,9 @@ def cmd_defect_gate(args) -> int:
                 f"\n{len(blockers)} open blocking defect(s) block release of {pak_name!r}. "
                 f"Refused by RULE-012. See knowledge/context/defects.md."
             )
+            _hint = local_registry_hint()
+            if _hint:
+                print(_hint)
             return 2
 
         # --- <type> <name> mode (content item) ---
@@ -647,13 +653,22 @@ def cmd_defect_gate(args) -> int:
             f"\n{len(blockers)} open blocking defect(s) block release of {token!r}. "
             f"Refused by RULE-012. See knowledge/context/defects.md."
         )
+        _hint = local_registry_hint()
+        if _hint:
+            print(_hint)
         return 2
 
     except FileNotFoundError as exc:
+        # Backstop only. An absent registry warns and passes inside the gate
+        # helpers now, so this branch is unreachable through them; it stays
+        # so a future direct load_registry() call cannot turn a missing file
+        # into a traceback out of a CLI command.
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     except DefectRegistryError as exc:
-        print(f"ERROR: defect registry malformed: {exc}", file=sys.stderr)
+        # Registry file present but unreadable. A malformed ENTRY no longer
+        # arrives here: it is isolated to the scope it names.
+        print(f"ERROR: defect registry unreadable: {exc}", file=sys.stderr)
         return 1
 
 
@@ -879,6 +894,7 @@ def cmd_release(args) -> int:
         # --- RULE-012: Defect gate for sdk-adapter (gate by pak name = dir name) ---
         from .defects import gate_pak as _gate_pak, format_defect_line as _fmt_defect
         from .defects import DefectRegistryError as _DefectRegistryError
+        from .defects import local_registry_hint as _local_hint
         try:
             _sdk_pak_name = source_path.parent.name  # e.g. "synology", "unifi"
             _sdk_blockers = _gate_pak(_sdk_pak_name)
@@ -890,6 +906,9 @@ def cmd_release(args) -> int:
                     f"{_sdk_pak_name!r}. Refused by RULE-012. See knowledge/context/defects.md.",
                     file=sys.stderr,
                 )
+                _sdk_hint = _local_hint()
+                if _sdk_hint:
+                    print(_sdk_hint, file=sys.stderr)
                 return 2
         except (FileNotFoundError, _DefectRegistryError) as _exc:
             print(f"ERROR: defect gate failed: {_exc}", file=sys.stderr)
@@ -1203,6 +1222,7 @@ def cmd_release(args) -> int:
     # -----------------------------------------------------------------------
     from .defects import gate_item as _gate_item, format_defect_line as _fmt_dl
     from .defects import DefectRegistryError as _DRE
+    from .defects import local_registry_hint as _rel_local_hint
     try:
         _gate_blockers: list = []
         if content_type == "sdk-adapter":
@@ -1223,6 +1243,9 @@ def cmd_release(args) -> int:
                 f"Refused by RULE-012. See knowledge/context/defects.md.",
                 file=sys.stderr,
             )
+            _rel_hint = _rel_local_hint()
+            if _rel_hint:
+                print(_rel_hint, file=sys.stderr)
             return 2
     except (FileNotFoundError, _DRE) as _exc:
         print(f"ERROR: defect gate failed: {_exc}", file=sys.stderr)

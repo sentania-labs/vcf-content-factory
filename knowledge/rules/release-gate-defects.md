@@ -3,8 +3,11 @@
 No artifact ships while `knowledge/context/defects.md` carries an **open
 `blocking`** defect affecting it. "Ships" means any of:
 
-1. **A v* tag on a managed pak repo.** Before pushing a `v*` tag to any
-   pak registered in `knowledge/context/managed_paks.md`, run:
+1. **A v* tag on a managed pak repo.** Enforced by the `pre-push` hook
+   in `.githooks/`, which runs the gate automatically when a `v*` tag is
+   pushed from a pak clone. Bootstrap points every registered clone at it
+   via `core.hooksPath`, so this needs no per-repo setup. To check ahead
+   of a push:
 
    ```
    python3 -m vcfops_packaging defect-gate --pak <name>
@@ -12,7 +15,14 @@ No artifact ships while `knowledge/context/defects.md` carries an **open
 
    Non-zero exit = the release is refused. Fix or legitimately close the
    named defects first. This applies to the orchestrator, every agent,
-   and the user alike — there is no fast path around it.
+   and the user alike; `git push --no-verify` bypasses the hook and is a
+   deliberate, auditable end-run, in the same category as a force-push,
+   not a fast path.
+
+   The hook fails safe: a missing interpreter, an absent registry or an
+   unfindable factory checkout warns and allows the push. Only an open
+   blocking defect naming that pak refuses it. An infrastructure problem
+   must never stop someone pushing a fix.
 
 2. **`/release` and `/publish`.** The `vcfops_packaging` `release` and
    `publish` commands run the same check mechanically and refuse,
@@ -46,5 +56,22 @@ Supporting obligations that keep the gate honest:
 - **Registry writes are orchestrator-only.** Reviewers and authors
   propose openings and closures in their verdicts; only the
   orchestrator (or the user) edits `knowledge/context/defects.md`.
+- **Which registry.** Selection is by file presence, not configuration:
+  a `defects.local.md` sibling of `knowledge/context/defects.md` wins
+  when it exists, otherwise that file. The local sibling is how someone
+  working from a clone of this framework gates their own artifacts
+  without inheriting, or being blocked by, upstream's registry.
+  Upstream never ships a `defects.local.md`, which is why a `git pull`
+  cannot conflict with one. It is a registered RULE-015 standing
+  exception in `scripts/path_reference_audit.sh` for exactly that
+  reason: cited by name across the gate, the doctor and this rule, but
+  present only in a downstream checkout.
+- **A malformed entry blocks only itself.** The parser isolates per
+  entry: a bad entry whose `Affects:` is readable gates exactly that
+  artifact, and one whose `Affects:` cannot be read gates nothing and is
+  reported loudly. One sloppy edit must never stop every release
+  everywhere, which is what it used to do.
+- **An absent registry warns, it does not refuse.** Gating nothing is
+  reported; it is not treated as a clean bill of health.
 
 Design of record: `knowledge/designs/defect-registry-v1.md`.
