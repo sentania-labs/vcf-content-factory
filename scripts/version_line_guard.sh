@@ -174,7 +174,7 @@ for i in "${!TAGS[@]}"; do
   tag="${TAGS[$i]}"
   ref="${REFS[$i]}"
   if [[ "${tag}" != v* ]]; then
-    echo "${SCRIPT_NAME}: '${tag}' is not a v* tag — nothing to guard for it." >&2
+    echo "${SCRIPT_NAME}: '${tag}' is not a v* tag: nothing to guard for it." >&2
     continue
   fi
   if [[ -n "${VERSION}" ]]; then
@@ -281,7 +281,7 @@ else
   case "${gate_rc}" in
     0) ;;
     2)
-      echo "${SCRIPT_NAME}: REFUSED (RULE-012) — open blocking defect(s) affect pak '${PAK_NAME}'." >&2
+      echo "${SCRIPT_NAME}: REFUSED (RULE-012): open blocking defect(s) affect pak '${PAK_NAME}'." >&2
       echo "See knowledge/context/defects.md. Fix or legitimately close the named defect(s) first." >&2
       exit 3
       ;;
@@ -294,12 +294,12 @@ else
 fi
 
 if [[ ${#UNREADABLE[@]} -gt 0 ]]; then
-  echo "${SCRIPT_NAME}: WARNING — no RULE-014 verdict for ${UNREADABLE[*]}: adapter.yaml unreadable at the tagged commit." >&2
+  echo "${SCRIPT_NAME}: WARNING: no RULE-014 verdict for ${UNREADABLE[*]}: adapter.yaml unreadable at the tagged commit." >&2
   if [[ ${#UNREADABLE[@]} -lt ${#TAGS[@]} ]]; then
     echo "  Every other tag in this push passed both checks." >&2
   fi
   exit 1
 fi
 
-echo "${SCRIPT_NAME}: clear — ${TAGS[*]} may proceed (pak '${PAK_NAME:-n/a}')."
+echo "${SCRIPT_NAME}: clear: ${TAGS[*]} may proceed (pak '${PAK_NAME:-n/a}')."
 exit 0
