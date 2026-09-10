@@ -34,10 +34,10 @@ SOURCES_FILE="${REPO_ROOT}/knowledge/context/reference_sources.md"
 # bounded at one line per script and neither script can evict the other.
 write_status() {
     local c="${1:-0}" u="${2:-0}" f="${3:-0}" fl="${4:--}"
-    local sk="${5:-0}" ah="${6:--}" dt="${7:--}" dv="${8:--}" ck="${9:-yes}"
+    local sk="${5:-0}" ah="${6:--}" dt="${7:--}" dv="${8:--}" ck="${9:-yes}" un="${10:--}"
     local sf="${REPO_ROOT}/.bootstrap-status"
     local line tmp
-    line="$(date -u +%Y-%m-%dT%H:%M:%SZ) bootstrap_references cloned=$c updated=$u failed=$f failures=$fl skipped=$sk ahead=$ah dirty=$dt diverged=$dv checked=$ck"
+    line="$(date -u +%Y-%m-%dT%H:%M:%SZ) bootstrap_references cloned=$c updated=$u failed=$f failures=$fl skipped=$sk ahead=$ah dirty=$dt diverged=$dv checked=$ck unknown=$un"
     RECORDED=true
     tmp="${sf}.tmp"
     { grep -v " bootstrap_references " "$sf" 2>/dev/null || true; echo "$line"; } > "$tmp" 2>/dev/null \
@@ -130,6 +130,7 @@ $REFRESH || checked="throttled"
 ahead_list=()
 dirty_list=()
 diverged_list=()
+unknown_list=()
 
 for i in "${!URLS[@]}"; do
     url="${URLS[$i]}"
@@ -181,8 +182,21 @@ for i in "${!URLS[@]}"; do
                 dirty_list+=("${slug}")
                 skipped=$((skipped + 1))
                 ;;
-            *)
+            no-upstream)
+                # A detached (pinned) checkout or a branch with no tracking
+                # ref: behind-ness cannot be known, so it is reported as
+                # unknown rather than rendered as current.
+                echo "  Unknown:  $slug (no upstream tracking; alignment not checked)"
+                unknown_list+=("${slug}")
+                skipped=$((skipped + 1))
+                ;;
+            current)
                 echo "  Current:  $slug"
+                skipped=$((skipped + 1))
+                ;;
+            *)
+                echo "  Unknown:  $slug (unrecognised repo state; not updated)"
+                unknown_list+=("${slug}")
                 skipped=$((skipped + 1))
                 ;;
         esac
@@ -210,4 +224,5 @@ write_status "$cloned" "$updated" "$failed" "$fl" "$skipped" \
     "$(csv_or_dash "${ahead_list[@]+"${ahead_list[@]}"}")" \
     "$(csv_or_dash "${dirty_list[@]+"${dirty_list[@]}"}")" \
     "$(csv_or_dash "${diverged_list[@]+"${diverged_list[@]}"}")" \
-    "$checked"
+    "$checked" \
+    "$(csv_or_dash "${unknown_list[@]+"${unknown_list[@]}"}")"

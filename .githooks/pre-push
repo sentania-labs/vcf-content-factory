@@ -25,8 +25,8 @@
 #
 # FAIL SAFE. Only a rule violation refuses. Anything that means the guard
 # could not run (no factory above this clone, no interpreter, a usage
-# error) warns and allows: an infrastructure problem must never stop
-# someone pushing a fix.
+# error, an unreadable registry) warns and allows: an infrastructure
+# problem must never stop someone pushing a fix.
 #
 # Bypass: `git push --no-verify`. Deliberate and auditable, the same
 # category as a force-push.
@@ -35,14 +35,17 @@ set -uo pipefail
 
 warn() { printf 'release guard: %s\n' "$1" >&2; }
 
-# pre-push stdin: <local_ref> <local_sha> <remote_ref> <remote_sha>.
-# Read it once, then hand the same text to the guard, which parses it
-# itself. Only a v* tag is a release; everything else goes straight out.
+# pre-push stdin: <local_ref> <local_sha> <remote_ref> <remote_sha>, one
+# line per ref. Only a line that CREATES or MOVES a v* tag is a release:
+#   - the remote ref must be refs/tags/v*;
+#   - the local sha must not be all zeros, which is how git spells a
+#     deletion (`git push --delete origin vX` retracts a release, it does
+#     not make one, and must not be refused over the tree's current state).
+# Every surviving line is handed to the guard, which checks each tag
+# against the adapter.yaml AT THAT TAG'S COMMIT, not the working tree.
 refs="$(cat)"
-case "$refs" in
-    *refs/tags/v*) ;;
-    *) exit 0 ;;
-esac
+tag_lines="$(printf '%s\n' "$refs" | awk '$3 ~ /^refs\/tags\/v/ && $2 !~ /^0+$/')"
+[ -n "$tag_lines" ] || exit 0
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 
@@ -68,20 +71,24 @@ if [ -z "$factory_root" ]; then
     exit 0
 fi
 
-out="$(printf '%s\n' "$refs" \
+out="$(printf '%s\n' "$tag_lines" \
         | "$factory_root/scripts/version_line_guard.sh" --repo-dir "$repo_root" 2>&1)"
 rc=$?
 case $rc in
     0) exit 0 ;;
     2|3)
         # 2 = RULE-014 (0.x line tagged), 3 = RULE-012 (blocking defect).
+        # These are the ONLY refusing codes; the guard reserves them for a
+        # verdict it actually reached.
         printf '%s\n' "$out" >&2
         warn "push refused. Fix the above, or push with --no-verify to override."
         exit 1
         ;;
     *)
-        # Usage error, unreadable registry, missing interpreter: the guard
-        # could not reach a verdict. Report loudly, let the push through.
+        # 1 = usage error, 4 = the defect gate could not run (missing
+        # interpreter, unreadable registry, import failure), anything else
+        # = unexpected. No verdict was reached. Report loudly, let the
+        # push through.
         printf '%s\n' "$out" >&2
         warn "guard could not run (exit $rc); not guarded"
         exit 0

@@ -41,10 +41,10 @@ REGISTRY_FILE="${REPO_ROOT}/knowledge/context/managed_paks.md"
 # need no version bump. `-` is the empty-list sentinel, matching failures.
 write_status() {
     local c="${1:-0}" u="${2:-0}" f="${3:-0}" fl="${4:--}"
-    local sk="${5:-0}" ah="${6:--}" dt="${7:--}" dv="${8:--}" hk="${9:--}" ck="${10:-yes}"
+    local sk="${5:-0}" ah="${6:--}" dt="${7:--}" dv="${8:--}" hk="${9:--}" ck="${10:-yes}" un="${11:--}"
     local sf="${REPO_ROOT}/.bootstrap-status"
     local line tmp
-    line="$(date -u +%Y-%m-%dT%H:%M:%SZ) bootstrap_managed_paks cloned=$c updated=$u failed=$f failures=$fl skipped=$sk ahead=$ah dirty=$dt diverged=$dv hooks=$hk checked=$ck"
+    line="$(date -u +%Y-%m-%dT%H:%M:%SZ) bootstrap_managed_paks cloned=$c updated=$u failed=$f failures=$fl skipped=$sk ahead=$ah dirty=$dt diverged=$dv hooks=$hk checked=$ck unknown=$un"
     RECORDED=true
     tmp="${sf}.tmp"
     { grep -v " bootstrap_managed_paks " "$sf" 2>/dev/null || true; echo "$line"; } > "$tmp" 2>/dev/null \
@@ -137,6 +137,7 @@ failures=()
 ahead_list=()
 dirty_list=()
 diverged_list=()
+unknown_list=()
 hooks_list=()
 
 HOOKS_DIR="${REPO_ROOT}/.githooks"
@@ -217,8 +218,21 @@ for i in "${!URLS[@]}"; do
                 dirty_list+=("${name}")
                 skipped=$((skipped + 1))
                 ;;
-            *)
+            no-upstream)
+                # A detached (pinned) checkout or a branch with no tracking
+                # ref: behind-ness cannot be known, so it is reported as
+                # unknown rather than rendered as current.
+                echo "  Unknown:  $name (no upstream tracking; alignment not checked)"
+                unknown_list+=("${name}")
+                skipped=$((skipped + 1))
+                ;;
+            current)
                 echo "  Current:  $name"
+                skipped=$((skipped + 1))
+                ;;
+            *)
+                echo "  Unknown:  $name (unrecognised repo state; not updated)"
+                unknown_list+=("${name}")
                 skipped=$((skipped + 1))
                 ;;
         esac
@@ -250,4 +264,5 @@ write_status "$cloned" "$updated" "$failed" "$fl" "$skipped" \
     "$(csv_or_dash "${dirty_list[@]+"${dirty_list[@]}"}")" \
     "$(csv_or_dash "${diverged_list[@]+"${diverged_list[@]}"}")" \
     "$(csv_or_dash "${hooks_list[@]+"${hooks_list[@]}"}")" \
-    "$checked"
+    "$checked" \
+    "$(csv_or_dash "${unknown_list[@]+"${unknown_list[@]}"}")"
