@@ -57,7 +57,10 @@
 #
 # Exit codes:
 #   0   clear to tag/push.
-#   1   usage error / could not determine version or tag.
+#   1   usage error / could not determine version or tag, or at least one
+#       tag's commit had no readable adapter.yaml. Returned only after
+#       every readable tag and the defect gate were checked, so a refusal
+#       elsewhere in the same push still wins (exit 2 or 3).
 #   2   RULE-014 violation — 0.x line tagged with a v* tag.
 #   3   RULE-012 violation — defect-gate refused the pak.
 #   4   the defect gate could not run (no interpreter, package import
@@ -70,7 +73,7 @@ set -euo pipefail
 SCRIPT_NAME="$(basename "$0")"
 
 usage() {
-  sed -n '2,66p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,69p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 VERSION=""
@@ -156,7 +159,7 @@ read_version() {
     text="$(cat "${adapter_yaml}")"
   fi
   local ver
-  ver="$(printf '%s\n' "${text}" | grep -E '^version:' | head -n1 | sed -E 's/^version:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/')"
+  ver="$(printf '%s\n' "${text}" | grep -E '^version:' | head -n1 | sed -E "s/^version:[[:space:]]*[\"']?([^\"'[:space:]]+)[\"']?.*/\\1/" || true)"
   if [[ -z "${ver}" ]]; then
     echo "${SCRIPT_NAME}: could not parse a 'version:' field out of adapter.yaml${ref:+ at ${ref}}." >&2
     return 1
@@ -166,6 +169,7 @@ read_version() {
 
 # --- RULE-014: 0.x is never tagged, checked per tag ------------------------
 RULE014_HITS=0
+UNREADABLE=()
 for i in "${!TAGS[@]}"; do
   tag="${TAGS[$i]}"
   ref="${REFS[$i]}"
@@ -176,7 +180,13 @@ for i in "${!TAGS[@]}"; do
   if [[ -n "${VERSION}" ]]; then
     ver="${VERSION}"
   else
-    ver="$(read_version "${ref}")" || exit 1
+    # An unreadable adapter.yaml at one tag is recorded and the loop goes
+    # on: bailing here would drop a RULE-014 verdict already reached for
+    # another tag in the same push and skip the defect gate entirely.
+    if ! ver="$(read_version "${ref}")"; then
+      UNREADABLE+=("${tag}")
+      continue
+    fi
   fi
   echo "${SCRIPT_NAME}: checking tag '${tag}' against adapter.yaml version '${ver}'${ref:+ at ${ref}}."
   if [[ "${ver}" =~ ^0(\.|$) ]]; then
@@ -210,7 +220,7 @@ fi
 if [[ -n "${DIST_DIR}" && -d "${DIST_DIR}" ]]; then
   ADAPTER_KIND=""
   if [[ -f "${REPO_DIR%/}/adapter.yaml" ]]; then
-    ADAPTER_KIND="$(grep -E '^adapter_kind:' "${REPO_DIR%/}/adapter.yaml" | head -n1 | sed -E 's/^adapter_kind:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/')"
+    ADAPTER_KIND="$(grep -E '^adapter_kind:' "${REPO_DIR%/}/adapter.yaml" | head -n1 | sed -E 's/^adapter_kind:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/' || true)"
     ADAPTER_KIND="${ADAPTER_KIND#vcfcf_}"
   fi
   if [[ -n "${ADAPTER_KIND}" ]]; then
@@ -258,8 +268,16 @@ else
   # means it could not run, and that is exit 4 here, never 3: refusing a
   # push because the gate's own plumbing broke is exactly the outage
   # coupling RULE-012's fail-safe clause forbids.
+  #
+  # Exit 2 alone is not proof of a verdict: argparse also exits 2 on a usage
+  # error. It counts as a refusal only when the gate printed its own
+  # "Refused by RULE-012" line; any other exit 2 is a gate that did not run.
   gate_rc=0
-  ( cd "${FACTORY_ROOT}" && PYTHONPATH="${FACTORY_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" python3 -m vcfops_packaging defect-gate --pak "${PAK_NAME}" ) || gate_rc=$?
+  gate_out="$( ( cd "${FACTORY_ROOT}" && PYTHONPATH="${FACTORY_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" python3 -m vcfops_packaging defect-gate --pak="${PAK_NAME}" ) 2>&1 )" || gate_rc=$?
+  [[ -n "${gate_out}" ]] && printf '%s\n' "${gate_out}"
+  if [[ "${gate_rc}" == 2 && "${gate_out}" != *"Refused by RULE-012"* ]]; then
+    gate_rc=4
+  fi
   case "${gate_rc}" in
     0) ;;
     2)
@@ -273,6 +291,14 @@ else
       exit 4
       ;;
   esac
+fi
+
+if [[ ${#UNREADABLE[@]} -gt 0 ]]; then
+  echo "${SCRIPT_NAME}: WARNING — no RULE-014 verdict for ${UNREADABLE[*]}: adapter.yaml unreadable at the tagged commit." >&2
+  if [[ ${#UNREADABLE[@]} -lt ${#TAGS[@]} ]]; then
+    echo "  Every other tag in this push passed both checks." >&2
+  fi
+  exit 1
 fi
 
 echo "${SCRIPT_NAME}: clear — ${TAGS[*]} may proceed (pak '${PAK_NAME:-n/a}')."

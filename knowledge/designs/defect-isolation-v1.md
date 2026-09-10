@@ -268,7 +268,13 @@ review, which at roughly 40 entries it is not.
   registry): no verdict was reached, so nothing is refused. Every v*
   tag on the push is checked, each against the adapter.yaml at its own
   commit rather than the working tree, and a tag deletion (all-zero
-  local sha) is not a release and is never guarded.
+  local sha) is not a release and is never guarded. A tag whose commit
+  has no readable adapter.yaml gets no verdict of its own, but it never
+  cancels the others: every readable tag and the defect gate still run,
+  and any refusal among them wins over the "could not check" exit. The
+  gate's exit 2 counts as a RULE-012 refusal only when the gate printed
+  its own "Refused by RULE-012" line, because argparse also exits 2 on a
+  usage error.
 - `build-pak-on-tag.yml` (canonical and all six copies) and
   `sdk-template`: delete the defect gate step and its `curl`, and drop
   the vendored `ci/defect_gate.py` that existed only to run it. No stub

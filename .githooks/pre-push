@@ -75,7 +75,12 @@ out="$(printf '%s\n' "$tag_lines" \
         | "$factory_root/scripts/version_line_guard.sh" --repo-dir "$repo_root" 2>&1)"
 rc=$?
 case $rc in
-    0) exit 0 ;;
+    0)
+        # A clean verdict can still carry a warning worth seeing (an absent
+        # defect registry gates nothing, RULE-012). Surface it; allow.
+        case "$out" in *WARNING*) printf '%s\n' "$out" >&2 ;; esac
+        exit 0
+        ;;
     2|3)
         # 2 = RULE-014 (0.x line tagged), 3 = RULE-012 (blocking defect).
         # These are the ONLY refusing codes; the guard reserves them for a
