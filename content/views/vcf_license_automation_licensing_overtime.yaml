@@ -1,0 +1,34 @@
+id: 7ec2d398-7bfa-4e3b-a4a8-084f7685dbea
+name: "[VCF Content Factory] Automation Licensing by Month"
+description: >
+  Month-by-month Automation-managed host count and licensed cores, one row per month over
+  the trailing year. Targets VCF Operations 8.x (validated against Aria Operations 8.18.7
+  recon, adapter_kind CASAdapter / resource_kind CAS World; 0 CASAdapter resources on
+  ro818 today, structural only until a lab has a registered Automation cloud account).
+  Rebuilt from Scott's public "VCF Consumption Overview v2" community content (Automation
+  Licensing Overtime).
+
+subject:
+  adapter_kind: CASAdapter
+  resource_kind: CAS World
+
+time_window:
+  unit: YEARS
+  count: 1
+
+hide_object_name: true
+
+columns:
+  - display_name: Month
+    time_segment:
+      breakdown_by: MONTHS
+      starting_on_unit: WEEKS
+      starting_on_count: 1
+
+  - attribute: 'supermetric:"[VCF Content Factory] Automation Managed Host Count"'
+    display_name: "Automation Host Count"
+    transformation: CURRENT
+
+  - attribute: 'supermetric:"[VCF Content Factory] Automation Licensed Cores"'
+    display_name: "Automation License Consumption"
+    transformation: CURRENT

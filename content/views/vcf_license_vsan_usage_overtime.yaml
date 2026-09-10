@@ -1,0 +1,23 @@
+id: 6b89b212-8d85-40bb-8b0a-c246cdfe8289
+name: "[VCF Content Factory] vSAN License Usage Trend"
+description: >
+  12-week trend of consumed vSAN TiB with a 90-day forecast. Targets VCF Operations 8.x
+  (validated against Aria Operations 8.18.7 recon, adapter_kind VMWARE_INFRA_HEALTH /
+  resource_kind LICENSE_USAGE_WORLD). Rebuilt from Scott's public "VCF Consumption
+  Overview v2" community content (vSAN Usage Overtime).
+
+subject:
+  adapter_kind: VMWARE_INFRA_HEALTH
+  resource_kind: LICENSE_USAGE_WORLD
+
+data_type: trend
+
+time_window:
+  unit: WEEKS
+  count: 12
+
+forecast_days: 90
+
+columns:
+  - attribute: 'supermetric:"[VCF Content Factory] vSAN Total License Usage (TiB)"'
+    display_name: "vSAN License Usage"

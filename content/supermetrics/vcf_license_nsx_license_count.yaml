@@ -1,0 +1,47 @@
+id: ca78bf94-3ea7-49b8-90fd-afd8b988bee7
+name: "[VCF Content Factory] NSX Licensed Cores"
+resource_kinds:
+  - resource_kind_key: NSXT World
+    adapter_kind_key: NSXTAdapter
+description: >
+  Licensed cores across the vSphere hosts NSX knows about - the "how much
+  of my VCF core count is NSX-bearing" figure. Assigned to the NSXT World
+  rollup resource (1 live object, "NSX World", confirmed on ro818) and
+  sums the per-host "[VCF Content Factory] Host VCF Licensed Cores
+  (16-core minimum)" super metric over VMWARE/HostSystem objects reached
+  from NSXT World at depth=10.
+
+  Targets VCF Operations 8.x.
+
+  Re-derives the dangling sm_5ea91f64-b7e9-4a77-baa7-1e8ebea1e322
+  reference from Scott's community "VCF Consumption Overview v2" bundle
+  (that SM is absent from the export and 404s live on both ro818 8.18.7
+  and prod 9.1.0). Only change from the source formula: the dangling
+  UUID becomes a name reference to the re-derived per-host SM. The
+  relationship path is otherwise reproduced exactly - a single
+  adaptertype=VMWARE, objecttype=HostSystem, depth=10 walk from the
+  NSXT World assignment object, the same shape as the sibling
+  "[VCF Content Factory] vSphere World VCF Licensed Cores" SM's walk
+  from vSphere World.
+
+  Cross-adapter caveat: this depth=10 walk from NSXT World to
+  VMWARE/HostSystem relies on the NSX adapter's relationship graph to
+  vCenter hosts (in practice, the hosts NSX has prepared as transport
+  nodes). Recon found 0 live TransportNode objects on ro818 and prod, so
+  neither the relationship nor non-zero output could be exercised live -
+  this SM is structurally verified only (imports and validates cleanly),
+  not proven against real NSX host transport node data. Needs a lab with
+  actual NSX transport nodes to confirm the walk resolves and the sum is
+  non-zero. The semantics are "hosts NSX can see", which may be broader
+  than "hosts prepared as transport nodes"; source behaviour kept.
+
+  Cross-SM reference note: this SM reads the upstream per-host SM's
+  previous-cycle value (platform does not guarantee same-cycle
+  recomputation across a super metric chain) - accepted one-cycle lag,
+  not expressible as a single self-contained formula since the per-host
+  ternary must run once per HostSystem before the NSXT-World-level sum.
+
+  Feeds NSX Usage Insights (NSX Licensed Cores), NSX Consumption Trend,
+  and NSX Licensing Overtime.
+formula: |
+  sum(${adaptertype=VMWARE, objecttype=HostSystem, metric=@supermetric:"[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)", depth=10})

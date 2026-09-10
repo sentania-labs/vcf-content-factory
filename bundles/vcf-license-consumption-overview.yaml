@@ -1,0 +1,49 @@
+name: vcf-license-consumption-overview
+display_name: VCF License Consumption Overview
+description: >
+  One-screen license position for a VCF estate: consumed vs owned VCF cores and vSAN
+  TiB, read directly from the platform's own license usage objects, plus how much of
+  the vSphere estate NSX and Automation actually touch. Targets VCF Operations 8.x
+  (Aria Operations 8.18.7 vocabulary: VMWARE_INFRA_HEALTH/LicenseUsage,
+  NSXTAdapter/NSXT World, CASAdapter/CAS World). The NSX and Automation halves of the
+  dashboard (transport node counts, licensed cores, managed hosts) only populate on an
+  instance where the NSX-T and VCF Automation (CAS) adapters are actually configured;
+  on a lab without those adapter instances they render structurally but stay empty.
+  Rebuilt from Scott's public "VCF Consumption Overview v2" community content
+  (sentania/AriaOperationsContent). Values are unproven end-to-end: the VCF/vSAN half
+  is confirmed live and populated on lab ro818 (Aria Operations 8.18.7, real license
+  entitlements), but the NSX and Automation halves have never been exercised against
+  live NSX transport nodes or a live CASAdapter instance on any recon target. See
+  knowledge/context/investigations/2026-08-26-vcf-license-consumption-recon-818.md
+  for the full recon trail.
+released: false
+supermetrics:
+  - content/supermetrics/vcf_license_automation_host_count.yaml
+  - content/supermetrics/vcf_license_automation_license_count.yaml
+  - content/supermetrics/vcf_license_host_licensed_cores.yaml
+  - content/supermetrics/vcf_license_host_transport_node_count.yaml
+  - content/supermetrics/vcf_license_nsx_license_count.yaml
+  - content/supermetrics/vcf_license_potential_cores.yaml
+  - content/supermetrics/vcf_license_vcf_total_license_count.yaml
+  - content/supermetrics/vcf_license_vcf_total_license_usage.yaml
+  - content/supermetrics/vcf_license_vcf_total_license_usage_percent.yaml
+  - content/supermetrics/vcf_license_vsan_total_license_capacity.yaml
+  - content/supermetrics/vcf_license_vsan_total_license_usage.yaml
+  - content/supermetrics/vcf_license_vsan_total_license_usage_percent.yaml
+  - content/supermetrics/vcf_license_vsphere_world_licensed_cores.yaml
+views:
+  - content/views/vcf_license_automation_consumption_trend.yaml
+  - content/views/vcf_license_automation_licensing_overtime.yaml
+  - content/views/vcf_license_nsx_consumption_trend.yaml
+  - content/views/vcf_license_nsx_licensing_overtime.yaml
+  - content/views/vcf_license_vcf_license_usage_over_time.yaml
+  - content/views/vcf_license_vcf_licensing_overtime.yaml
+  - content/views/vcf_license_vsan_usage_overtime.yaml
+dashboards:
+  - content/dashboards/vcf_license_consumption_overview.yaml
+customgroups: []
+symptoms: []
+alerts: []
+recommendations: []
+reports: []
+managementpacks: []

@@ -1,0 +1,401 @@
+{
+  "adapter_kind": "NSXTAdapter",
+  "fetched_at": "2026-08-26T21:00:39Z",
+  "metrics": {
+    "Compliance|Critical|totalCount": {
+      "default_monitored": true,
+      "name": "Compliance|Critical|Total Count"
+    },
+    "Compliance|Immediate|totalCount": {
+      "default_monitored": true,
+      "name": "Compliance|Immediate|Total Count"
+    },
+    "Compliance|Normal|totalCount": {
+      "default_monitored": true,
+      "name": "Compliance|Normal|Total Count"
+    },
+    "Compliance|Unknown|totalCount": {
+      "default_monitored": true,
+      "name": "Compliance|Unknown|Total Count"
+    },
+    "Compliance|Warning|totalCount": {
+      "default_monitored": true,
+      "name": "Compliance|Warning|Total Count"
+    },
+    "Efficiency|Critical|totalCount": {
+      "default_monitored": true,
+      "name": "Efficiency|Critical|Total Count"
+    },
+    "Efficiency|Immediate|totalCount": {
+      "default_monitored": true,
+      "name": "Efficiency|Immediate|Total Count"
+    },
+    "Efficiency|Normal|totalCount": {
+      "default_monitored": true,
+      "name": "Efficiency|Normal|Total Count"
+    },
+    "Efficiency|Unknown|totalCount": {
+      "default_monitored": true,
+      "name": "Efficiency|Unknown|Total Count"
+    },
+    "Efficiency|Warning|totalCount": {
+      "default_monitored": true,
+      "name": "Efficiency|Warning|Total Count"
+    },
+    "Efficiency|populationAverage": {
+      "default_monitored": true,
+      "name": "Efficiency|Average Score Of All Group Members"
+    },
+    "Health|Critical|totalCount": {
+      "default_monitored": true,
+      "name": "Health|Critical|Total Count"
+    },
+    "Health|Immediate|totalCount": {
+      "default_monitored": true,
+      "name": "Health|Immediate|Total Count"
+    },
+    "Health|Normal|totalCount": {
+      "default_monitored": true,
+      "name": "Health|Normal|Total Count"
+    },
+    "Health|Unknown|totalCount": {
+      "default_monitored": true,
+      "name": "Health|Unknown|Total Count"
+    },
+    "Health|Warning|totalCount": {
+      "default_monitored": true,
+      "name": "Health|Warning|Total Count"
+    },
+    "Health|populationAverage": {
+      "default_monitored": true,
+      "name": "Health|Average Score Of All Group Members"
+    },
+    "ObjectCountMetricGroup|count": {
+      "default_monitored": true,
+      "name": "Object Count|count"
+    },
+    "Risk|Critical|totalCount": {
+      "default_monitored": true,
+      "name": "Risk|Critical|Total Count"
+    },
+    "Risk|Immediate|totalCount": {
+      "default_monitored": true,
+      "name": "Risk|Immediate|Total Count"
+    },
+    "Risk|Normal|totalCount": {
+      "default_monitored": true,
+      "name": "Risk|Normal|Total Count"
+    },
+    "Risk|Unknown|totalCount": {
+      "default_monitored": true,
+      "name": "Risk|Unknown|Total Count"
+    },
+    "Risk|Warning|totalCount": {
+      "default_monitored": true,
+      "name": "Risk|Warning|Total Count"
+    },
+    "Risk|populationAverage": {
+      "default_monitored": true,
+      "name": "Risk|Average Score Of All Group Members"
+    },
+    "Summary|EdgeClusterCount": {
+      "default_monitored": true,
+      "name": "Summary|Edge Cluster Count"
+    },
+    "Summary|FirewallSectionsCount": {
+      "default_monitored": true,
+      "name": "Summary|Firewall Section Count"
+    },
+    "Summary|GroupsCount": {
+      "default_monitored": true,
+      "name": "Summary|Groups Count"
+    },
+    "Summary|LoadBalancerPoolCount": {
+      "default_monitored": true,
+      "name": "Summary|Load Balancer Pool Count"
+    },
+    "Summary|LoadBalancerVirtualServerCount": {
+      "default_monitored": true,
+      "name": "Summary|Load Balancer Virtual Server Count"
+    },
+    "Summary|LoadBalancersCount": {
+      "default_monitored": true,
+      "name": "Summary|Load Balancer Service Count"
+    },
+    "Summary|LogicalSwitchCount": {
+      "default_monitored": true,
+      "name": "Summary|Logical Switch Count"
+    },
+    "Summary|ManagementNodeCount": {
+      "default_monitored": true,
+      "name": "Summary|Management Node Count"
+    },
+    "Summary|Tier0LogicalRouterCount": {
+      "default_monitored": true,
+      "name": "Summary|Tier-0 Router Count"
+    },
+    "Summary|Tier1LogicalRouterCount": {
+      "default_monitored": true,
+      "name": "Summary|Tier-1 Router Count"
+    },
+    "Summary|TransportNodeCount": {
+      "default_monitored": true,
+      "name": "Summary|Transport Node Count"
+    },
+    "Summary|TransportZoneCount": {
+      "default_monitored": true,
+      "name": "Summary|Transport Zone Count"
+    },
+    "System Attributes|active_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - Active Anomaly Count"
+    },
+    "System Attributes|active_ki_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - Active KPI Breach Count"
+    },
+    "System Attributes|alert_count_critical": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Alert Count Critical"
+    },
+    "System Attributes|alert_count_immediate": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Alert Count Immediate"
+    },
+    "System Attributes|alert_count_info": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Alert Count Info"
+    },
+    "System Attributes|alert_count_warning": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Alert Count Warning"
+    },
+    "System Attributes|all_metrics": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Self - Metric Count"
+    },
+    "System Attributes|availability": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Availability"
+    },
+    "System Attributes|change_index": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - Change Index"
+    },
+    "System Attributes|child_active_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - Active Anomaly Count"
+    },
+    "System Attributes|child_active_ki_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - Active KPI Breach Count"
+    },
+    "System Attributes|child_all_metrics": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Full Set - Metric Count"
+    },
+    "System Attributes|child_ki_metrics": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - KPI Count"
+    },
+    "System Attributes|child_new_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - New Anomaly Count"
+    },
+    "System Attributes|child_new_ki_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - New KPI Breach Count"
+    },
+    "System Attributes|health": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Self - Health Score"
+    },
+    "System Attributes|ki_metrics": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - KPI Count"
+    },
+    "System Attributes|new_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - New Anomaly Count"
+    },
+    "System Attributes|new_ki_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - New KPI Breach Count"
+    },
+    "System Attributes|self_alert_count": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Self - Alert Count"
+    },
+    "System Attributes|total_alarms": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Total Anomalies"
+    },
+    "System Attributes|total_alert_count": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Total Alert Count"
+    },
+    "TimeRemainingCapIQ|Critical|totalCount": {
+      "default_monitored": true,
+      "name": "Time Remaining|Critical|Total Count"
+    },
+    "TimeRemainingCapIQ|Immediate|totalCount": {
+      "default_monitored": true,
+      "name": "Time Remaining|Immediate|Total Count"
+    },
+    "TimeRemainingCapIQ|Normal|totalCount": {
+      "default_monitored": true,
+      "name": "Time Remaining|Normal|Total Count"
+    },
+    "TimeRemainingCapIQ|Unknown|totalCount": {
+      "default_monitored": true,
+      "name": "Time Remaining|Unknown|Total Count"
+    },
+    "TimeRemainingCapIQ|Warning|totalCount": {
+      "default_monitored": true,
+      "name": "Time Remaining|Warning|Total Count"
+    },
+    "Workload|Critical|totalCount": {
+      "default_monitored": true,
+      "name": "Workload|Critical|Total Count"
+    },
+    "Workload|Immediate|totalCount": {
+      "default_monitored": true,
+      "name": "Workload|Immediate|Total Count"
+    },
+    "Workload|Normal|totalCount": {
+      "default_monitored": true,
+      "name": "Workload|Normal|Total Count"
+    },
+    "Workload|Unknown|totalCount": {
+      "default_monitored": true,
+      "name": "Workload|Unknown|Total Count"
+    },
+    "Workload|Warning|totalCount": {
+      "default_monitored": true,
+      "name": "Workload|Warning|Total Count"
+    },
+    "badge|alert_count_critical": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Critical"
+    },
+    "badge|alert_count_immediate": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Immediate"
+    },
+    "badge|alert_count_info": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Info"
+    },
+    "badge|alert_count_warning": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Warning"
+    },
+    "badge|anomaly": {
+      "default_monitored": false,
+      "name": "Badge|Anomaly"
+    },
+    "badge|capacityRemaining": {
+      "default_monitored": false,
+      "name": "Badge|Capacity Remaining"
+    },
+    "badge|capacityRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Capacity Remaining with committed projects"
+    },
+    "badge|compliance": {
+      "default_monitored": true,
+      "name": "Badge|Compliance"
+    },
+    "badge|density": {
+      "default_monitored": false,
+      "name": "Badge|Density"
+    },
+    "badge|density_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Density with committed projects"
+    },
+    "badge|efficiency": {
+      "default_monitored": true,
+      "name": "Badge|Efficiency"
+    },
+    "badge|efficiency_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Efficiency"
+    },
+    "badge|efficiency_state": {
+      "default_monitored": false,
+      "name": "Badge|Efficiency State"
+    },
+    "badge|fault": {
+      "default_monitored": false,
+      "name": "Badge|Faults"
+    },
+    "badge|health": {
+      "default_monitored": true,
+      "name": "Badge|Health"
+    },
+    "badge|health_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Health"
+    },
+    "badge|health_state": {
+      "default_monitored": false,
+      "name": "Badge|Health State"
+    },
+    "badge|risk": {
+      "default_monitored": true,
+      "name": "Badge|Risk"
+    },
+    "badge|risk_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Risk"
+    },
+    "badge|risk_state": {
+      "default_monitored": false,
+      "name": "Badge|Risk State"
+    },
+    "badge|stress": {
+      "default_monitored": false,
+      "name": "Badge|Stress"
+    },
+    "badge|stress_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Stress with committed projects"
+    },
+    "badge|timeRemaining": {
+      "default_monitored": false,
+      "name": "Badge|Time Remaining"
+    },
+    "badge|timeRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Time Remaining with committed projects"
+    },
+    "badge|waste": {
+      "default_monitored": false,
+      "name": "Badge|Waste"
+    },
+    "badge|workload": {
+      "default_monitored": true,
+      "name": "Badge|Workload"
+    }
+  },
+  "properties": {
+    "System Properties|host_collector_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "VMware Aria Operations Generated Properties|Current Collector ID"
+    },
+    "System Properties|resource_kind_subtype": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "VMware Aria Operations Generated Properties|Object Type Subclassification"
+    },
+    "System Properties|resource_kind_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "VMware Aria Operations Generated Properties|Object Type Classification"
+    }
+  },
+  "resource_kind": "NSXT World",
+  "source": "https://ro818/suite-api/api/adapterkinds/NSXTAdapter/resourcekinds/NSXT World/statkeys"
+}

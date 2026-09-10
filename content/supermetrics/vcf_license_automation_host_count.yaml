@@ -1,0 +1,33 @@
+id: 5c08ad62-03b1-48f7-9bb2-2514dbf61b1e
+name: "[VCF Content Factory] Automation Managed Host Count"
+resource_kinds:
+  - resource_kind_key: CAS World
+    adapter_kind_key: CASAdapter
+description: >
+  Count of vSphere hosts under every vCenter that VCF Automation has
+  registered as a cloud account. Assigned to the CAS World rollup
+  resource (CASAdapter) and counts VMWARE HostSystem descendants
+  (depth=10) by their config|name property - it counts every host
+  under any Automation-attached vCenter, not just hosts running
+  Automation-managed VMs.
+
+  Targets VCF Operations 8.x: CASAdapter / CAS World is the 8.18.7
+  adapter/resource kind for VCF Automation. On VCF Operations 9.x this
+  adapter kind is superseded by VCFAutomation / Automation World, which
+  does not carry the same statkeys - a 9.x rebuild needs different
+  vocabulary, not just a resource-kind rename.
+
+  Caveat: neither recon instance (ro818 8.18.7, prod 9.1.0) has a live
+  CASAdapter instance - 0 CASAdapter resources on both, so this formula
+  is structurally verified only (validated against the 8.18.7 statkey/
+  property catalog) and has not been proven to return non-zero data.
+  Needs a lab with a real VCF Automation cloud-account integration to
+  confirm live values.
+
+  Formula kept verbatim from Scott's community "VCF Consumption
+  Overview v2" bundle (source SM: "[VCF Consumption Overview v2]
+  Automation Host Count"). Feeds Automation Usage Insights (Managed
+  vSphere Hosts), Automation Consumption Trend, and Automation
+  Licensing Overtime.
+formula: |
+  count(${adaptertype=VMWARE, objecttype=HostSystem, attribute=config|name, depth=10})

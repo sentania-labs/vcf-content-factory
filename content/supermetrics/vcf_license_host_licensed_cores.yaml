@@ -1,0 +1,40 @@
+id: 8dd89969-0ad1-4c48-b03b-f2095c424c97
+name: "[VCF Content Factory] Host VCF Licensed Cores (16-core minimum)"
+resource_kinds:
+  - resource_kind_key: HostSystem
+    adapter_kind_key: VMWARE
+description: >
+  Per-host number of VCF license cores consumed under Broadcom's per-core
+  licensing model with the 16-core-per-socket minimum: licensed cores =
+  max(16, cores per socket) x sockets. A 2-socket host with 8 physical cores
+  per socket still licenses as 32 (16 minimum each), not 16; a 2-socket host
+  with 28 cores per socket licenses at its actual 56.
+
+  Targets VCF Operations 8.x. Reads the HostSystem properties
+  hardware|cpuInfo|numCpuCores (total physical cores) and
+  hardware|cpuInfo|numCpuPackages (socket count), both confirmed populated
+  on Aria/VCF Operations 8.18.7 (56 cores / 2 packages on sampled hosts,
+  28 cores/socket). The ternary compares cores-per-socket against the
+  16-core floor and substitutes 16 x sockets when the host falls below it;
+  otherwise it reports the host's actual physical core count. Ternary
+  syntax against ${this, ...} operands is proven live on 8.18.7 (36 of 292
+  existing super metrics use it, including the directly analogous
+  "DA - VCF licenses needed" formula this pattern is modeled on).
+
+  Re-derives the dangling sm_5ea91f64-b7e9-4a77-baa7-1e8ebea1e322 reference
+  from Scott's community "VCF Consumption Overview v2" bundle (that SM is
+  absent from the export and 404s live; its two consumers, NSX License
+  Count and Automation License Count, both sum this value with depth=10
+  from their respective World objects, confirming per-HostSystem scope and
+  a cores unit). This is a re-derivation, not a recovery of the original
+  formula. Upstream for NSX License Count, Automation License Count, and
+  (via a World-level roll-up) VCF License Potential Cores; not shown
+  directly on any dashboard.
+
+  Licensing rule confirmed by Scott 2026-08-26: per-host licensed cores =
+  max(16, cores per socket) x sockets, no per-socket cap, hyperthreads not
+  counted.
+formula: |
+  (${this, metric=hardware|cpuInfo|numCpuCores} / ${this, metric=hardware|cpuInfo|numCpuPackages}) < 16
+    ? 16 * ${this, metric=hardware|cpuInfo|numCpuPackages}
+    : ${this, metric=hardware|cpuInfo|numCpuCores}

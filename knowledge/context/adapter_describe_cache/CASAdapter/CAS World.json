@@ -1,0 +1,254 @@
+{
+  "adapter_kind": "CASAdapter",
+  "fetched_at": "2026-08-26T21:00:40Z",
+  "metrics": {
+    "System Attributes|active_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - Active Anomaly Count"
+    },
+    "System Attributes|active_ki_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - Active KPI Breach Count"
+    },
+    "System Attributes|alert_count_critical": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Alert Count Critical"
+    },
+    "System Attributes|alert_count_immediate": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Alert Count Immediate"
+    },
+    "System Attributes|alert_count_info": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Alert Count Info"
+    },
+    "System Attributes|alert_count_warning": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Alert Count Warning"
+    },
+    "System Attributes|all_metrics": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Self - Metric Count"
+    },
+    "System Attributes|availability": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Availability"
+    },
+    "System Attributes|change_index": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - Change Index"
+    },
+    "System Attributes|child_active_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - Active Anomaly Count"
+    },
+    "System Attributes|child_active_ki_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - Active KPI Breach Count"
+    },
+    "System Attributes|child_all_metrics": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Full Set - Metric Count"
+    },
+    "System Attributes|child_ki_metrics": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - KPI Count"
+    },
+    "System Attributes|child_new_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - New Anomaly Count"
+    },
+    "System Attributes|child_new_ki_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Full Set - New KPI Breach Count"
+    },
+    "System Attributes|health": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Self - Health Score"
+    },
+    "System Attributes|ki_metrics": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - KPI Count"
+    },
+    "System Attributes|new_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - New Anomaly Count"
+    },
+    "System Attributes|new_ki_alarms": {
+      "default_monitored": false,
+      "name": "VMware Aria Operations Generated|Self - New KPI Breach Count"
+    },
+    "System Attributes|self_alert_count": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Self - Alert Count"
+    },
+    "System Attributes|total_alarms": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Total Anomalies"
+    },
+    "System Attributes|total_alert_count": {
+      "default_monitored": true,
+      "name": "VMware Aria Operations Generated|Total Alert Count"
+    },
+    "badge|alert_count_critical": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Critical"
+    },
+    "badge|alert_count_immediate": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Immediate"
+    },
+    "badge|alert_count_info": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Info"
+    },
+    "badge|alert_count_warning": {
+      "default_monitored": false,
+      "name": "Badge|Alert Count Warning"
+    },
+    "badge|anomaly": {
+      "default_monitored": false,
+      "name": "Badge|Anomaly"
+    },
+    "badge|capacityRemaining": {
+      "default_monitored": false,
+      "name": "Badge|Capacity Remaining"
+    },
+    "badge|capacityRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Capacity Remaining with committed projects"
+    },
+    "badge|compliance": {
+      "default_monitored": true,
+      "name": "Badge|Compliance"
+    },
+    "badge|density": {
+      "default_monitored": false,
+      "name": "Badge|Density"
+    },
+    "badge|density_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Density with committed projects"
+    },
+    "badge|efficiency": {
+      "default_monitored": true,
+      "name": "Badge|Efficiency"
+    },
+    "badge|efficiency_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Efficiency"
+    },
+    "badge|efficiency_state": {
+      "default_monitored": false,
+      "name": "Badge|Efficiency State"
+    },
+    "badge|fault": {
+      "default_monitored": false,
+      "name": "Badge|Faults"
+    },
+    "badge|health": {
+      "default_monitored": true,
+      "name": "Badge|Health"
+    },
+    "badge|health_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Health"
+    },
+    "badge|health_state": {
+      "default_monitored": false,
+      "name": "Badge|Health State"
+    },
+    "badge|risk": {
+      "default_monitored": true,
+      "name": "Badge|Risk"
+    },
+    "badge|risk_classic": {
+      "default_monitored": false,
+      "name": "Badge|Legacy Risk"
+    },
+    "badge|risk_state": {
+      "default_monitored": false,
+      "name": "Badge|Risk State"
+    },
+    "badge|stress": {
+      "default_monitored": false,
+      "name": "Badge|Stress"
+    },
+    "badge|stress_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Stress with committed projects"
+    },
+    "badge|timeRemaining": {
+      "default_monitored": false,
+      "name": "Badge|Time Remaining"
+    },
+    "badge|timeRemaining_whatif": {
+      "default_monitored": false,
+      "name": "Badge|Time Remaining with committed projects"
+    },
+    "badge|waste": {
+      "default_monitored": false,
+      "name": "Badge|Waste"
+    },
+    "summary|Cost": {
+      "default_monitored": true,
+      "name": "Summary|Total Cost"
+    },
+    "summary|PublicCloudVMCount": {
+      "default_monitored": true,
+      "name": "Summary|Total Public Cloud virtual machines"
+    },
+    "summary|TotalBlueprints": {
+      "default_monitored": true,
+      "name": "Summary|Total Blueprints"
+    },
+    "summary|TotalCloudZones": {
+      "default_monitored": true,
+      "name": "Summary|Total Cloud Zones"
+    },
+    "summary|TotalCluster": {
+      "default_monitored": true,
+      "name": "Summary|Total Clusters"
+    },
+    "summary|TotalDeployments": {
+      "default_monitored": true,
+      "name": "Summary|Total Deployments"
+    },
+    "summary|TotalProjects": {
+      "default_monitored": true,
+      "name": "Summary|Total Projects"
+    },
+    "summary|TotalPublicCloudZones": {
+      "default_monitored": true,
+      "name": "Summary|Total Public Cloud Zones"
+    },
+    "summary|VMCount": {
+      "default_monitored": true,
+      "name": "Summary|Total virtual machines"
+    }
+  },
+  "properties": {
+    "System Properties|host_collector_id": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "VMware Aria Operations Generated Properties|Current Collector ID"
+    },
+    "System Properties|resource_kind_subtype": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "VMware Aria Operations Generated Properties|Object Type Subclassification"
+    },
+    "System Properties|resource_kind_type": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "VMware Aria Operations Generated Properties|Object Type Classification"
+    },
+    "metering|MeteringPolicyId": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Metering|Metering policy ID"
+    }
+  },
+  "resource_kind": "CAS World",
+  "source": "https://ro818/suite-api/api/adapterkinds/CASAdapter/resourcekinds/CAS World/statkeys"
+}

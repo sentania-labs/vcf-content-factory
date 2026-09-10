@@ -1,0 +1,30 @@
+id: 8e0fd51a-f3b6-4eed-a647-e9215e89ee9b
+name: "[VCF Content Factory] NSX Consumption Trend"
+description: >
+  12-week NSX consumption pattern (licensed cores, prepared hosts, logical segment count)
+  with a 90-day forecast. Targets VCF Operations 8.x (validated against Aria Operations
+  8.18.7 recon, adapter_kind NSXTAdapter / resource_kind NSXT World; segment count is 0.0
+  on ro818 today, structural only until a lab has real NSX segments). Rebuilt from Scott's
+  public "VCF Consumption Overview v2" community content (NSX Consumption Trend).
+
+subject:
+  adapter_kind: NSXTAdapter
+  resource_kind: NSXT World
+
+data_type: trend
+
+time_window:
+  unit: WEEKS
+  count: 12
+
+forecast_days: 90
+
+columns:
+  - attribute: 'supermetric:"[VCF Content Factory] NSX Licensed Cores"'
+    display_name: "NSX License Consumption"
+
+  - attribute: 'supermetric:"[VCF Content Factory] NSX Host Transport Node Count"'
+    display_name: "Prepared ESX Hosts"
+
+  - attribute: "Summary|LogicalSwitchCount"
+    display_name: "Segment Count"
