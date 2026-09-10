@@ -91,6 +91,13 @@ _SUPER_METRIC_PREFIX = "super metric|"
 # recognise it too, or it hard-fails treating the SM name as an unknown
 # built-in metric key.
 _UNRESOLVED_SM_REF_PREFIX = "supermetric:"
+# Unresolved authoring-time SM cross-reference inside an *SM formula*, e.g.
+# metric=@supermetric:"<name>" (same skill table, SM formula -> SM row). Note
+# the leading "@": the formula form and the view-column form differ by that one
+# character, so the view constant above does not cover it. Formulas keep this
+# token until emit/push time (vcfops_supermetrics.crossref), so the auditor,
+# which walks loader objects, sees the unresolved form and must skip it.
+_UNRESOLVED_SM_FORMULA_REF_PREFIX = "@supermetric:"
 
 
 def _normalize_instanced_group_key(attribute: str) -> str:
@@ -122,6 +129,7 @@ def _is_sm_ref(metric_key: str) -> bool:
     return (
         k.lower().startswith(_SUPER_METRIC_PREFIX)
         or k.lower().startswith(_UNRESOLVED_SM_REF_PREFIX)
+        or k.lower().startswith(_UNRESOLVED_SM_FORMULA_REF_PREFIX)
         or bool(_SM_KEY_RE.match(k))
     )
 
@@ -244,13 +252,22 @@ def _refs_from_view(view) -> list[MetricReference]:
 
     View columns reference metrics via their ``attribute`` field.  The
     renderer auto-prefixes Super Metric|sm_<uuid>, we skip those.
-    The adapter_kind / resource_kind come from the view's subject.
+    The adapter_kind / resource_kind come from the view's subject(s): a
+    ``subjects:`` view is audited once per kind (``view.subject_kinds``),
+    because a column can be policy-disabled on the second kind while
+    enabled on the first and would render blank there.
     """
-    refs: list[MetricReference] = []
-    ak = view.adapter_kind
-    rk = view.resource_kind
+    keys: list[str] = []
     source_desc = f"view {view.name!r}"
     for col in view.columns:
+        if getattr(col, "time_segment", None) is not None:
+            # A time-segment ("Interval Breakdown") pseudo-column carries no
+            # describe-cache key: its attributeKey is a literal the renderer
+            # synthesizes (see loader.TimeSegmentSpec), not a metric on the
+            # subject kind. Skip it exactly like the instanced-group driver
+            # column below; auditing it fails every bundle build with
+            # "metric key not found in the describe cache: Interval Breakdown".
+            continue
         ig = getattr(col, "instanced_group", None)
         if ig is not None:
             # The driver column ("Instance Name" sentinel, prefix and
@@ -271,13 +288,7 @@ def _refs_from_view(view) -> list[MetricReference]:
             # exactly like a direct reference.
             if ig.is_driver:
                 continue
-            attr = _normalize_instanced_group_key(col.attribute.strip())
-            refs.append(MetricReference(
-                adapter_kind=ak,
-                resource_kind=rk,
-                metric_key=attr,
-                source_desc=source_desc,
-            ))
+            keys.append(_normalize_instanced_group_key(col.attribute.strip()))
             continue
         attr = col.attribute.strip()
         if _is_sm_ref(attr):
@@ -285,13 +296,7 @@ def _refs_from_view(view) -> list[MetricReference]:
         # Normalize instanced metric key form (e.g.
         # "net:Aggregate of all instances|packetsPerSec" -> "net|packetsPerSec").
         # The describe cache only stores the base group|stat form.
-        attr = _normalize_metric_key(attr)
-        refs.append(MetricReference(
-            adapter_kind=ak,
-            resource_kind=rk,
-            metric_key=attr,
-            source_desc=source_desc,
-        ))
+        keys.append(_normalize_metric_key(attr))
 
     # Subject-filter metric keys (SubjectType filter= JSON) are never emitted
     # as columns of their own, but they still reference a describe-cache key
@@ -302,7 +307,11 @@ def _refs_from_view(view) -> list[MetricReference]:
             key = (cond.metric_key or "").strip()
             if not key or _is_sm_ref(key):
                 continue
-            key = _normalize_metric_key(key)
+            keys.append(_normalize_metric_key(key))
+
+    refs: list[MetricReference] = []
+    for ak, rk in view.subject_kinds:
+        for key in keys:
             refs.append(MetricReference(
                 adapter_kind=ak,
                 resource_kind=rk,

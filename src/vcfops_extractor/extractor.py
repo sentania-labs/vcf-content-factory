@@ -32,6 +32,8 @@ from typing import Optional
 
 import yaml
 
+from vcfops_dashboards.reverse import _parse_controls_meta, _trend_transformations_to_emit
+
 # Repo root: three levels above (src/vcfops_extractor/extractor.py -> repo root)
 _REPO_ROOT = Path(__file__).parent.parent.parent
 
@@ -530,11 +532,13 @@ def _parse_view_def_element(elem) -> dict:
     description = ""
     adapter_kind = ""
     resource_kind = ""
+    subject_pairs: list[tuple[str, str]] = []
     columns = []
     data_type = "list"
     presentation = "list"
 
     time_window: Optional[dict] = None
+    meta = {"hide_object_name": False, "forecast_days": 0, "transformations": None}
 
     for child in elem:
         tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
@@ -544,10 +548,17 @@ def _parse_view_def_element(elem) -> dict:
         elif tag == "Description":
             description = child.text or ""
         elif tag == "SubjectType":
+            # One ViewDef may carry several subject kinds, each as a
+            # descendant+self pair, in sequence (wire evidence:
+            # reference/docs/extracted/view-multi-subject/). Keep every
+            # distinct pair in document order; the first stays the scalar.
+            pair = (child.get("adapterKind", ""), child.get("resourceKind", ""))
+            if pair not in subject_pairs:
+                subject_pairs.append(pair)
             if not adapter_kind:
-                adapter_kind = child.get("adapterKind", "")
+                adapter_kind = pair[0]
             if not resource_kind:
-                resource_kind = child.get("resourceKind", "")
+                resource_kind = pair[1]
         elif tag == "DataProviders":
             for dp in child:
                 dp_tag = dp.tag.split("}")[-1] if "}" in dp.tag else dp.tag
@@ -566,6 +577,7 @@ def _parse_view_def_element(elem) -> dict:
         elif tag == "Controls":
             columns = _parse_controls_columns(child)
             time_window = _parse_time_window(child)
+            meta = _parse_controls_meta(child)
 
     return {
         "id": view_id,
@@ -573,11 +585,24 @@ def _parse_view_def_element(elem) -> dict:
         "description": description,
         "adapter_kind": adapter_kind,
         "resource_kind": resource_kind,
+        "subjects": (
+            [{"adapter_kind": ak, "resource_kind": rk} for ak, rk in subject_pairs]
+            if len(subject_pairs) > 1 else []
+        ),
         "columns": columns,
         "data_type": data_type,
         "presentation": presentation,
         "time_window": time_window,
+        "hide_object_name": meta["hide_object_name"],
+        "forecast_days": meta["forecast_days"] if data_type == "trend" else 0,
+        "transformations": _trend_transformations_to_emit(
+            data_type, meta["forecast_days"], meta["transformations"]
+        ),
     }
+
+# _parse_controls_meta / _trend_transformations_to_emit are shared with the
+# dashboards reverse path; one definition lives in vcfops_dashboards.reverse.
+
 
 
 def _parse_time_window(controls_elem) -> Optional[dict]:
@@ -702,13 +727,33 @@ def _parse_column_value(value_elem) -> Optional[dict]:
                                 if v:
                                     vals.append(v)
                 if name == "transformations" and vals:
-                    props["_transformations"] = vals[0] if len(vals) == 1 else ",".join(vals)
+                    # Per-column transformation is the first item; a
+                    # multi-item list (NONE, TREND, FORECAST on trend
+                    # views) is view-level and handled by
+                    # _parse_controls_meta, not a per-column value.
+                    props["_transformations"] = vals[0]
 
     attribute_key = props.get("attributeKey", "")
     if not attribute_key:
         return None
 
     display_name = props.get("displayName", attribute_key)
+
+    # Time-segment ("Interval Breakdown") pseudo-column: not a metric column.
+    # See TimeSegmentSpec in vcfops_dashboards/loader.py for the wire shape.
+    if props.get("isTimeSegment", "").strip().lower() == "true":
+        try:
+            _soc = int(props.get("startingOnCount", "1") or 1)
+        except ValueError:
+            _soc = 1
+        return {
+            "display_name": display_name,
+            "time_segment": {
+                "breakdown_by": props.get("breakdownBy", "").strip().upper(),
+                "starting_on_unit": (props.get("startingOnUnit", "WEEKS") or "WEEKS").strip().upper(),
+                "starting_on_count": _soc,
+            },
+        }
 
     # Detect super metric columns (warn, preserve verbatim)
     if attribute_key.startswith("Super Metric|sm_"):
@@ -1013,6 +1058,19 @@ def _write_sm_yaml(
     path.write_text(_to_yaml_str(doc), encoding="utf-8")
 
 
+def _emit_view_extras(doc: dict, view_data: dict) -> None:
+    """Emit hide_object_name / forecast_days / transformations when the
+    source carried them (all three default-off in the loader)."""
+    if view_data.get("hide_object_name"):
+        doc["hide_object_name"] = True
+    fd = int(view_data.get("forecast_days") or 0)
+    if fd > 0:
+        doc["forecast_days"] = fd
+    tr = view_data.get("transformations")
+    if tr:
+        doc["transformations"] = list(tr)
+
+
 def _write_view_yaml(path: Path, view_data: dict) -> None:
     """Write a view YAML file in factory shape."""
     doc: dict = {
@@ -1023,10 +1081,15 @@ def _write_view_yaml(path: Path, view_data: dict) -> None:
     if desc:
         doc["description"] = desc
 
-    doc["subject"] = {
-        "adapter_kind": view_data.get("adapter_kind", ""),
-        "resource_kind": view_data.get("resource_kind", ""),
-    }
+    if view_data.get("subjects"):
+        # Multi-subject ViewDef: `subjects:` (authored order = document
+        # order) replaces the scalar pair, which mirrors subjects[0].
+        doc["subjects"] = [dict(sub) for sub in view_data["subjects"]]
+    else:
+        doc["subject"] = {
+            "adapter_kind": view_data.get("adapter_kind", ""),
+            "resource_kind": view_data.get("resource_kind", ""),
+        }
 
     data_type = view_data.get("data_type", "list")
     if data_type != "list":
@@ -1037,6 +1100,7 @@ def _write_view_yaml(path: Path, view_data: dict) -> None:
         doc["presentation"] = pres
 
     doc["columns"] = view_data.get("columns", [])
+    _emit_view_extras(doc, view_data)
 
     tw = view_data.get("time_window")
     if tw and tw.get("unit") and tw.get("count"):
@@ -1078,6 +1142,10 @@ def _metric_spec_to_yaml(spec) -> dict:
         d["label"] = spec.label
     if spec.is_string_metric:
         d["is_string_metric"] = True
+    # Gauge full-scale ceiling; without it a re-render emits maxValue: "" and
+    # the component falls back to its own default instead of the authored one.
+    if getattr(spec, "max_value", None) is not None:
+        d["max_value"] = spec.max_value
     return d
 
 
@@ -1109,17 +1177,25 @@ def _widget_to_yaml_dict(widget, view_name_map: dict) -> dict:
             "adapter_kind": w.pin.adapter_kind,
             "resource_kind": w.pin.resource_kind,
         }
+        if getattr(w.pin, "name", ""):
+            d["pin"]["name"] = w.pin.name
 
     if w.type == "View":
         d["view"] = w.view_name
         if w.self_provider:
             d["self_provider"] = True
+        if not w.select_first_row:
+            d["select_first_row"] = False
+        if w.chart_view_items:
+            d["chart_view_items"] = list(w.chart_view_items)
 
     elif w.type == "ResourceList":
         d["resource_kinds"] = [
             {"adapter_kind": rk.adapter_kind, "resource_kind": rk.resource_kind}
             for rk in (w.resource_kinds or [])
         ]
+        if not w.select_first_row:
+            d["select_first_row"] = False
 
     elif w.type == "TextDisplay":
         cfg = w.text_display_config
@@ -1132,6 +1208,13 @@ def _widget_to_yaml_dict(widget, view_name_map: dict) -> dict:
     elif w.type == "Scoreboard":
         cfg = w.scoreboard_config
         if cfg:
+            if getattr(cfg, "metric_mode", "resourceKind") == "resource" and cfg.resource is not None:
+                d["metric_mode"] = "resource"
+                d["resource"] = {
+                    "adapter_kind": cfg.resource.adapter_kind,
+                    "resource_kind": cfg.resource.resource_kind,
+                    "name": cfg.resource.name,
+                }
             d["metrics"] = [_metric_spec_to_yaml(s) for s in cfg.metrics]
             d["visual_theme"] = cfg.visual_theme
             d["show_sparkline"] = cfg.show_sparkline
@@ -1145,8 +1228,24 @@ def _widget_to_yaml_dict(widget, view_name_map: dict) -> dict:
                 d["box_height"] = cfg.box_height
             d["value_size"] = cfg.value_size
             d["label_size"] = cfg.label_size
+            # None round-trips as `round_decimals: null` (a real wire value).
             d["round_decimals"] = cfg.round_decimals
             d["max_cell_count"] = cfg.max_cell_count
+            if getattr(cfg, "show_dt", False):
+                d["show_dt"] = True
+            if not getattr(cfg, "refresh_content", True):
+                d["refresh_content"] = False
+            # Gauge layout settings.  Emitted only when non-default so existing
+            # extracted YAML is unchanged; the loader supplies the same
+            # defaults, so the re-rendered wire payload round-trips either way.
+            if getattr(cfg, "layout_mode", "fixedView") != "fixedView":
+                d["layout_mode"] = cfg.layout_mode
+            if getattr(cfg, "show_remaining", False):
+                d["show_remaining"] = True
+            if getattr(cfg, "show_percent_text", False):
+                d["show_percent_text"] = True
+            if getattr(cfg, "focus_on_percent", False):
+                d["focus_on_percent"] = True
         else:
             _warn(f"widget '{w.local_id}' (Scoreboard): no config; emitting best-effort shape")
             d["metrics"] = []
@@ -2264,10 +2363,14 @@ def extract_dashboard(
 
     # View column refs (raw dict form — mirrors deps._refs_from_view logic)
     for vuuid, view_data in view_results.items():
-        ak = view_data.get("adapter_kind", "")
-        rk = view_data.get("resource_kind", "")
         view_name = view_data.get("name", vuuid)
-        if ak and rk:
+        kinds = [
+            (sub.get("adapter_kind", ""), sub.get("resource_kind", ""))
+            for sub in (view_data.get("subjects") or [])
+        ] or [(view_data.get("adapter_kind", ""), view_data.get("resource_kind", ""))]
+        for ak, rk in kinds:
+            if not (ak and rk):
+                continue
             for col in view_data.get("columns", []):
                 attr = (col.get("attribute") or "").strip()
                 if not attr or _is_sm_ref(attr):

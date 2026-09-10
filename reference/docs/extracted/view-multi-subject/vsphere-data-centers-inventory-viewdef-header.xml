@@ -1,0 +1,23 @@
+        <ViewDef id="3a88e1a7-511c-440d-868b-65df4a2c7898">
+                        
+            <Title>vSphere Data Centers Inventory</Title>
+                        
+            <Description>List of vSphere data centers. Only basic information is provided as this view is designed to be used in as a selector (filter).
+
+The vCenter column is required as the cluster name in VMware-based cloud is not unique.</Description>
+                        
+            <SubjectType adapterKind="VMWARE" resourceKind="Datacenter" type="descendant"/>
+                        
+            <SubjectType adapterKind="VMWARE" resourceKind="Datacenter" type="self"/>
+                        
+            <SubjectType adapterKind="VMWARE" resourceKind="vSphere World" type="descendant"/>
+                        
+            <SubjectType adapterKind="VMWARE" resourceKind="vSphere World" type="self"/>
+                        
+            <Usage>dashboard</Usage>
+                        
+            <Usage>report</Usage>
+                        
+            <Usage>details</Usage>
+                        
+            <Usage>content</Usage>

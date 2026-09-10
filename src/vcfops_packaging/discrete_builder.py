@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from vcfops_supermetrics.loader import SuperMetricDef, load_dir as load_sm_dir
+from vcfops_supermetrics.crossref import crossref_names
 from vcfops_dashboards.loader import ViewDef, Dashboard
 from vcfops_customgroups.loader import CustomGroupDef, load_dir as load_cg_dir
 from vcfops_reports.loader import ReportDef, load_dir as _load_reports_dir
@@ -107,6 +108,44 @@ def _sm_key_to_name(attr: str, sm_by_id: dict[str, SuperMetricDef]) -> Optional[
     sm_id = m.group(1).lower()
     sm = sm_by_id.get(sm_id)
     return sm.name if sm else None
+
+
+def _expand_sm_crossrefs(
+    sms: List[SuperMetricDef],
+    all_sms: List[SuperMetricDef],
+) -> List[SuperMetricDef]:
+    """Transitively add super metrics referenced by ``@supermetric:"<name>"``.
+
+    An SM formula may reference another SM by name (the authoring-time
+    cross-reference form).  The emit path resolves that token to the native
+    ``Super Metric|sm_<uuid>`` wire token and hard-errors when the referent is
+    not in the bundle, so a discrete component must carry its referents the same
+    way a view carries the SMs its columns use.
+
+    Preserves input order, appends newly pulled SMs after it, and is a no-op for
+    the (currently common) case of formulas with no cross-reference token.
+    """
+    by_name = {sm.name: sm for sm in all_sms}
+    result: List[SuperMetricDef] = []
+    seen: set = set()
+    queue = list(sms)
+    while queue:
+        sm = queue.pop(0)
+        key = (sm.id or "").lower() or sm.name
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(sm)
+        for ref_name in crossref_names(sm.formula):
+            ref = by_name.get(ref_name)
+            if ref is None:
+                raise DiscreteBuilderError(
+                    f"super metric {sm.name!r}: formula references "
+                    f'@supermetric:"{ref_name}" but no super metric with that '
+                    f"name was found in the corpus"
+                )
+            queue.append(ref)
+    return result
 
 
 def _resolve_view_deps(view: ViewDef, all_sms: List[SuperMetricDef]) -> List[SuperMetricDef]:
@@ -432,12 +471,13 @@ def build_discrete(
         item = _find_by_name(item_name, all_sms, "super metric")
         version = item.version
         description = item.description
+        dep_sms = _expand_sm_crossrefs([item], all_sms)
         bundle = _make_synthetic_bundle(
             slug=_item_slug(item_name),
             name=item_name,
             description=description,
-            supermetrics=[item],
-            sm_paths=[item.source_path] if item.source_path else [],
+            supermetrics=dep_sms,
+            sm_paths=[sm.source_path for sm in dep_sms if sm.source_path],
             builtin_metric_enables=builtin_metric_enables,
         )
 
@@ -445,7 +485,7 @@ def build_discrete(
         item = _find_by_name(item_name, all_views, "view")
         version = item.version
         description = item.description
-        dep_sms = _resolve_view_deps(item, all_sms)
+        dep_sms = _expand_sm_crossrefs(_resolve_view_deps(item, all_sms), all_sms)
         bundle = _make_synthetic_bundle(
             slug=_item_slug(item_name),
             name=item_name,
@@ -470,7 +510,7 @@ def build_discrete(
                 + "\n".join(f"  - {e}" for e in dep_graph.errors)
             )
         dep_views = dep_graph.views
-        dep_sms = dep_graph.supermetrics
+        dep_sms = _expand_sm_crossrefs(dep_graph.supermetrics, all_sms)
         dep_cgs = dep_graph.customgroups
         bundle = _make_synthetic_bundle(
             slug=_item_slug(item_name),
@@ -491,6 +531,7 @@ def build_discrete(
         dep_views, dep_dashboards, dep_sms = _resolve_report_deps(
             item, all_views, all_dashboards, all_sms
         )
+        dep_sms = _expand_sm_crossrefs(dep_sms, all_sms)
         bundle = _make_synthetic_bundle(
             slug=_item_slug(item_name),
             name=item_name,

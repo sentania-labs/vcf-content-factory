@@ -39,6 +39,11 @@ class UIClientError(RuntimeError):
     pass
 
 
+# The Struts read actions (resourceKind.action and friends) answer the
+# generic error panel unless the request identifies itself as XHR.
+_UI_XHR_HEADERS = {"X-Requested-With": "XMLHttpRequest"}
+
+
 class VCFOpsUIClient:
     """Thin UI-session client for dashboard and view delete operations.
 
@@ -216,6 +221,7 @@ class VCFOpsUIClient:
                 "currentComponentInfo": "TODO",
                 "globalDate": json.dumps({"dateRange": "last6Hour"}),
             },
+            headers=_UI_XHR_HEADERS,
         )
         resp.raise_for_status()
         return resp.json().get("dashboards") or []
@@ -249,6 +255,110 @@ class VCFOpsUIClient:
         )
         resp.raise_for_status()
         return resp.json()
+
+    # ------------------------------------------------------------------
+    # Summary-tab association (Manage Summary Dashboards)
+    # ------------------------------------------------------------------
+    # All three calls are the undocumented Struts UI layer documented in
+    # knowledge/context/api-surface/summary_dashboard_assignment.md. No
+    # Suite API exists for any of them. They may change between releases.
+    # Parameter names come from the disassembled DashboardAction (the
+    # 2026-08-25 note in that file), confirmed live on 9.1 and 9.2 dailies.
+
+    def get_resource_kind_list(self, adapter_kind: str, limit: int = 2000) -> dict:
+        """Return the raw ``getResourceKindList`` answer for one adapter kind
+        with detail-page mappings appended.
+
+        The body carries ``resourceKindList[]`` (each entry with its
+        ``resourceKindTemplate``, the current Summary-tab assignment label)
+        and a top-level ``defaultTemplateName``.
+        """
+        s, csrf = self._require_auth()
+        resp = s.get(
+            f"https://{self._host}/ui/resourceKind.action",
+            params={
+                "mainAction": "getResourceKindList",
+                "appendDetailPageMappings": "true",
+                "adapterKindId": adapter_kind,
+                "searchField": "name",
+                "searchText": "",
+                "page": "1",
+                "start": "0",
+                "limit": str(limit),
+                "secureToken": csrf,
+            },
+            headers=_UI_XHR_HEADERS,
+        )
+        resp.raise_for_status()
+        try:
+            return resp.json()
+        except ValueError as exc:
+            raise UIClientError(
+                f"getResourceKindList({adapter_kind!r}) did not return JSON: {resp.text[:200]!r}"
+            ) from exc
+
+    def associate_resource_kind_dashboards(
+        self, assigned: dict[str, str], reset: dict[str, str] | None = None
+    ) -> None:
+        """Bulk-write Summary-tab assignments (one call carries both maps).
+
+        ``assigned`` maps ``"resourceKind_<resourceKindId>"`` to
+        ``"<dashboardName>_::_<dashboardUuid>"`` (bind). ``reset`` maps the
+        same key to the kind's plain ``defaultTemplateName`` ("Use
+        Default"; no ``_::_null`` suffix). Both parameters are always sent,
+        as ``{}`` when empty: the server reads each with
+        ``request.getParameter`` and NPEs into the generic error panel
+        (HTTP 200) when either is absent. The server materializes an
+        independent template COPY of each bound dashboard and deletes the
+        kind's previous copy in the same call; the new copy's UUID is what
+        ``get_summary_tab_id`` returns afterwards.
+        """
+        s, csrf = self._require_auth()
+        resp = s.post(
+            f"https://{self._host}/ui/dashboard.action",
+            data={
+                "mainAction": "associateResourceKindDashboards",
+                "assignedAssociations": json.dumps(dict(assigned or {})),
+                "resetAssociations": json.dumps(dict(reset or {})),
+                "secureToken": csrf,
+            },
+            headers=_UI_XHR_HEADERS,
+        )
+        resp.raise_for_status()
+        if resp.text.strip() != "ok":
+            raise UIClientError(
+                f"associateResourceKindDashboards failed: {resp.text[:200]!r}"
+            )
+
+    def get_summary_tab_id(self, resource_kind_id: str) -> dict:
+        """Return the raw ``getSummaryTabId`` answer for a resource kind id.
+
+        Shapes: ``{"isDashboard": false}`` (no association; the server
+        drops the ``tabId`` key entirely when it is null, so callers must
+        treat a MISSING key as null), ``{"tabId": "<uuid>",
+        "isDashboard": true}`` (dashboard-backed), or ``{"tabId":
+        "<non-uuid>", "isDashboard": false, "pluginExist": <bool>}``
+        (legacy plugin page)."""
+        s, csrf = self._require_auth()
+        resp = s.post(
+            f"https://{self._host}/ui/dashboard.action",
+            data={
+                "mainAction": "getSummaryTabId",
+                "resourceKindId": resource_kind_id,
+                "traversalSpecId": "",
+                "resourceKindType": "",
+                "resourceId": "",
+                "secureToken": csrf,
+            },
+            headers=_UI_XHR_HEADERS,
+        )
+        resp.raise_for_status()
+        try:
+            return resp.json()
+        except ValueError as exc:
+            raise UIClientError(
+                f"getSummaryTabId({resource_kind_id!r}) did not return JSON: {resp.text[:200]!r}"
+            ) from exc
 
     # ------------------------------------------------------------------
     # View operations

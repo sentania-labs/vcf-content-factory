@@ -1248,3 +1248,114 @@ entities, "this instanced view happens to show only live things today" can
 be an artifact of *when a property was enabled in policy*, not a stable
 property of the design. Verify against an object whose stale instances
 predate any recent enablement before relying on a narrow row set.
+
+## Multiple subject kinds (`subjects:`)
+
+A single ViewDef may declare N subject kinds; the server accepts one
+`<SubjectType>` pair per kind and the view then lists objects of every
+kind (the product ships views with up to 11). Wire shape, verbatim from
+the public vCommunity vSphere pak (`reference/docs/extracted/
+view-multi-subject/`, `vSphere Data Centers Inventory`):
+
+```xml
+<SubjectType adapterKind="VMWARE" resourceKind="Datacenter" type="descendant"/>
+<SubjectType adapterKind="VMWARE" resourceKind="Datacenter" type="self"/>
+<SubjectType adapterKind="VMWARE" resourceKind="vSphere World" type="descendant"/>
+<SubjectType adapterKind="VMWARE" resourceKind="vSphere World" type="self"/>
+```
+
+Per kind: `descendant` then `self`; kinds in sequence. The public
+Kubernetes MP views carry the same shape with three kinds. Per-column
+`adapterKind` / `resourceKind` properties name only the first kind in the
+vendor sample, and the factory does the same.
+
+### YAML
+
+```yaml
+subjects:
+  - adapter_kind: VMWARE
+    resource_kind: Datacenter
+  - adapter_kind: VMWARE
+    resource_kind: vSphere World
+```
+
+`subjects:` and `subject.adapter_kind` / `subject.resource_kind` are
+mutually exclusive (one place for the kinds); `subject.filter` may still
+accompany `subjects:` and is emitted on every SubjectType element, as the
+single-subject path already does. Duplicate pairs are rejected. Existing
+single-subject YAML is untouched: `ViewDef.subject_kinds` falls back to
+the scalar pair, `ViewDef.adapter_kind` / `resource_kind` mirror
+`subjects[0]`, and the rendered XML for every existing view is
+byte-identical (checked across all 24 factory/bundle views at the time of
+the change).
+
+Loader: `src/vcfops_dashboards/loader.py` (`ViewSubject`,
+`ViewDef.subjects`, `ViewDef.subject_kinds`); renderer:
+`src/vcfops_dashboards/render.py::_render_view_def_fragment`; tests:
+`tests/test_view_multi_subject.py`. The reverse path (`reverse.py`,
+`vcfops_extractor/extractor.py`, `vcfops_extractor/reverse_local.py`)
+collects every distinct (adapterKind, resourceKind) pair in document
+order; when more than one is present the written YAML carries
+`subjects:` (first pair mirrored into the scalar fields) instead of
+`subject:`, so a multi-subject vendor view round-trips intact. The
+packaging dependency audit (`vcfops_packaging/deps.py::_refs_from_view`)
+emits one reference per subject kind for every column and subject-filter
+key.
+
+## Time-segment columns (`time_segment:`)
+
+- Date: 2026-08-26, tooling. Evidence: `reference/docs/extracted/view-time-segment/`
+  (verbatim ViewDef from Scott's public `VCF License Consumption Overview`
+  export; two sibling list views in the same export carry the same column).
+
+A list view can carry an "Interval Breakdown" pseudo-column that turns the
+result into one row per time bucket (for example one row per month across a
+`time_window: {unit: YEARS, count: 1}`), the sibling metric columns being
+sampled once per bucket. It is a first-class `Item` in `attributeInfos`,
+always column 0 in the evidence, with exactly these nine Properties in this
+order and nothing else:
+
+```xml
+<Item><Value>
+  <Property name="objectType" value="RESOURCE"/>
+  <Property name="attributeKey" value="Interval Breakdown"/>
+  <Property name="rollUpCount" value="0"/>
+  <Property name="sortCriteria" value="false"/>
+  <Property name="isTimeSegment" value="true"/>
+  <Property name="breakdownBy" value="MONTHS"/>
+  <Property name="startingOnUnit" value="WEEKS"/>
+  <Property name="startingOnCount" value="1"/>
+  <Property name="displayName" value="Month"/>
+</Value></Item>
+```
+
+No `adapterKind`/`resourceKind`, no `rollUpType`, no `transformations`, no
+`isProperty`, no `addTimestampAsColumn`/`isShowRelativeTimestamp`. The
+`attributeKey` is the literal string `Interval Breakdown`.
+
+Factory YAML (`vcfops_dashboards.loader.TimeSegmentSpec`):
+
+```yaml
+columns:
+  - display_name: Month
+    time_segment:
+      breakdown_by: MONTHS        # required
+      starting_on_unit: WEEKS     # optional, default WEEKS
+      starting_on_count: 1        # optional, default 1
+```
+
+`attribute:` must not be set (the loader synthesizes it). The renderer
+(`render._xml_time_segment_item`) emits the nine Properties above
+byte-for-byte. All three reverse paths (`reverse.py`,
+`extractor.py`, `reverse_local.py`) detect `isTimeSegment="true"` and emit
+`time_segment:` instead of a bogus metric column named `Interval Breakdown`.
+
+Limits: only `breakdownBy=MONTHS` / `startingOnUnit=WEEKS` /
+`startingOnCount=1` is evidence-backed; the loader accepts the other
+time-interval-selector units (MINUTES..YEARS) but they are unverified live.
+Evidence exists only on `data_type: list` views; the loader rejects the
+column on distribution and trend views.
+
+The same evidence ViewDef also carries `hideObjectNameColumn="true"` on the
+`metadata` control (the factory previously hardcoded `false`); see
+`ViewDef.hide_object_name`.

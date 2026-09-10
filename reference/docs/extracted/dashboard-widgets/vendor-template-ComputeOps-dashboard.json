@@ -1,0 +1,832 @@
+{
+   "entries": {
+      "resourceKind": [
+         {
+            "resourceKindKey": "VCFWorld",
+            "internalId": "resourceKind:id:0_::_",
+            "adapterKindKey": "VcfAdapter"
+         },
+         {
+            "resourceKindKey": "vSphere World",
+            "internalId": "resourceKind:id:1_::_",
+            "adapterKindKey": "VMWARE"
+         }
+      ],
+      "resource": [
+         {
+            "resourceKindKey": "vSphere World",
+            "internalId": "resource:id:0_::_",
+            "adapterKindKey": "VMWARE",
+            "identifiers": [],
+            "name": "vSphere World"
+         },
+         {
+            "resourceKindKey": "VCFWorld",
+            "internalId": "resource:id:1_::_",
+            "adapterKindKey": "VcfAdapter",
+            "identifiers": [],
+            "name": "VCF World"
+         }
+      ]
+   },
+   "dashboards": [{
+      "shared": false,
+      "hidden": true,
+      "creationTime": 1767989809515,
+      "autoswitchEnabled": false,
+      "importAttempts": 0,
+      "lastUpdateUserId": "56b72988-c934-4056-9c5f-21e2c37c4801",
+      "columnProportion": "1",
+      "importComplete": true,
+      "description": "",
+      "columnCount": 0,
+      "widgets": [
+         {
+            "tabId": "d9db4f67-f97c-4cd3-aee4-b983113e5e02",
+            "collapsed": false,
+            "id": "d57049c0-6834-4809-8a8b-d409b64085e6",
+            "gridsterCoords": {
+               "w": 3,
+               "x": 1,
+               "h": 4,
+               "y": 1
+            },
+            "state": "",
+            "type": "ResourceList",
+            "title": "Deployment Type",
+            "config": {
+               "refreshInterval": 300,
+               "resource": [
+                  {
+                     "name": "vSphere World",
+                     "id": "resource:id:0_::_"
+                  },
+                  {
+                     "name": "VCF World",
+                     "id": "resource:id:1_::_"
+                  }
+               ],
+               "widgetId": "1c6339a5-949f-4414-8671-a564ca223ff1",
+               "refreshContent": {"refreshContent": true},
+               "relationshipMode": {"relationshipMode": 0},
+               "description": "Deployment_Type_Description",
+               "title": "Deployment Type",
+               "additionalColumns": [],
+               "mode": "resource",
+               "filterMode": "tagPicker",
+               "tagFilter": null,
+               "depth": 1,
+               "titleLocalized": "Deployment Type",
+               "customFilter": {
+                  "filter": [],
+                  "filterMode": "tagPicker",
+                  "excludedResources": null,
+                  "includedResources": null
+               },
+               "selectFirstRow": {"selectFirstRow": true},
+               "viewDetails": "",
+               "selfProvider": {"selfProvider": true}
+            },
+            "height": 0,
+            "states": [{
+               "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253Ah1%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah2%255Eo%25253Aid%25253Ds%2525253Ah3%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah4%255Eo%25253Aid%25253Ds%2525253Ah5%255Eo%25253Aid%25253Ds%2525253Ah6%255Eo%25253Aid%25253Ds%2525253Ah7%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah8%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah9%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah10%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah11%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah12%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah13%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah14%255Eo%25253Aid%25253Ds%2525253Ah15%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253Ah16%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253AresourceRating%25255Ehidden%25253Db%2525253A1%255Eo%25253Aid%25253Ds%2525253Ah18%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah19%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah20%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah21%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah22%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah23%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah24%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah25%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah26%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah27%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah28%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah29%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah30%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah31%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah32%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah33%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah34%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah35%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah36%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah37%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah38%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah39%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah40%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah41%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah42%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah43%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah44%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah45%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah46%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100%255Eo%25253Aid%25253Ds%2525253Ah47%25255Ehidden%25253Db%2525253A1%25255Ewidth%25253Dn%2525253A100",
+               "key": "permResGrid_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_d57049c0-6834-4809-8a8b-d409b64085e6"
+            }]
+         },
+         {
+            "tabId": "d9db4f67-f97c-4cd3-aee4-b983113e5e02",
+            "collapsed": false,
+            "id": "4f66ac69-14af-4757-8adb-becfbf336666",
+            "gridsterCoords": {
+               "w": 9,
+               "x": 4,
+               "h": 4,
+               "y": 1
+            },
+            "state": "",
+            "type": "Scoreboard",
+            "title": "Inventory",
+            "config": {
+               "maxCellCount": 100,
+               "oldMetricValues": false,
+               "relationshipMode": {"relationshipMode": 0},
+               "description": "",
+               "valueSize": 24,
+               "title": "Inventory",
+               "boxHeight": null,
+               "showResourceName": {"showResourceName": false},
+               "roundDecimals": null,
+               "mode": {"layoutMode": "fixedView"},
+               "labelSize": 16,
+               "titleLocalized": "Inventory",
+               "customFilter": {
+                  "filter": [],
+                  "excludedResources": null,
+                  "includedResources": null
+               },
+               "viewDetails": "/vcf-operations/ui/operate/inventory;mode=tree;ts=vSphere%20Hosts%20and%20Clusters-VMWARE-vSphere%20World;tab=summary",
+               "selfProvider": {"selfProvider": false},
+               "resInteractionMode": null,
+               "visualTheme": 4,
+               "showMetricName": {"showMetricName": true},
+               "refreshInterval": 300,
+               "resource": [],
+               "widgetId": "b845e2fc-2cea-4bd7-808b-c1a6bc1dca89",
+               "showDT": {"showDT": false},
+               "showRemaining": false,
+               "refreshContent": {"refreshContent": true},
+               "focusOnPercent": false,
+               "showMetricUnit": {"showMetricUnit": true},
+               "depth": 1,
+               "metric": {
+                  "mode": "resourceKind",
+                  "resourceMetrics": [],
+                  "resourceKindMetrics": [
+                     {
+                        "yellowBound": null,
+                        "metricUnitId": null,
+                        "metricName": "Summary|Total Number of vCenter Server(s)",
+                        "metricKey": "summary|total_number_vcenters",
+                        "handleOldColoring": false,
+                        "maxValue": "",
+                        "link": "",
+                        "resourceKindName": "VCF World",
+                        "isStringMetric": false,
+                        "resourceKindId": "resourceKind:id:0_::_",
+                        "label": "vCenters",
+                        "orangeBound": null,
+                        "metricUnit": "",
+                        "labelOrig": "vCenters",
+                        "unit": "",
+                        "labelLocalized": "vCenters",
+                        "redBound": null,
+                        "id": "extModel1445-2",
+                        "colorMethod": 2
+                     },
+                     {
+                        "yellowBound": null,
+                        "metricUnitId": null,
+                        "metricName": "Summary|Total Number of Clusters",
+                        "metricKey": "summary|total_number_clusters",
+                        "handleOldColoring": false,
+                        "maxValue": "",
+                        "link": "",
+                        "resourceKindName": "VCF World",
+                        "isStringMetric": false,
+                        "resourceKindId": "resourceKind:id:0_::_",
+                        "label": "Clusters",
+                        "orangeBound": null,
+                        "metricUnit": "",
+                        "labelOrig": "Clusters",
+                        "unit": "",
+                        "labelLocalized": "Clusters",
+                        "redBound": null,
+                        "id": "extModel1445-1",
+                        "colorMethod": 2
+                     },
+                     {
+                        "yellowBound": null,
+                        "metricUnitId": null,
+                        "metricName": "Summary|Total Number of Hosts",
+                        "metricKey": "summary|total_number_hosts",
+                        "handleOldColoring": false,
+                        "maxValue": "",
+                        "link": "",
+                        "resourceKindName": "VCF World",
+                        "isStringMetric": false,
+                        "resourceKindId": "resourceKind:id:0_::_",
+                        "label": "Hosts",
+                        "orangeBound": null,
+                        "metricUnit": "",
+                        "labelOrig": "Hosts",
+                        "unit": "",
+                        "labelLocalized": "Hosts",
+                        "redBound": null,
+                        "id": "extModel1445-3",
+                        "colorMethod": 2
+                     },
+                     {
+                        "yellowBound": null,
+                        "metricUnitId": null,
+                        "metricName": "Summary|Total Number of VMs",
+                        "metricKey": "summary|total_number_vms",
+                        "handleOldColoring": false,
+                        "maxValue": "",
+                        "link": "",
+                        "resourceKindName": "VCF World",
+                        "isStringMetric": false,
+                        "resourceKindId": "resourceKind:id:0_::_",
+                        "label": "VMs",
+                        "orangeBound": null,
+                        "metricUnit": "",
+                        "labelOrig": "VMs",
+                        "unit": "",
+                        "labelLocalized": "VMs",
+                        "redBound": null,
+                        "id": "extModel1445-5",
+                        "colorMethod": 2
+                     },
+                     {
+                        "yellowBound": null,
+                        "metricUnitId": null,
+                        "metricName": "Summary|Total Number of Datacenters",
+                        "metricKey": "summary|total_number_datacenters",
+                        "handleOldColoring": false,
+                        "maxValue": "",
+                        "link": "",
+                        "resourceKindName": "VCF World",
+                        "isStringMetric": false,
+                        "resourceKindId": "resourceKind:id:0_::_",
+                        "label": "Datacenters",
+                        "orangeBound": null,
+                        "metricUnit": "",
+                        "labelOrig": "Datacenters",
+                        "unit": "",
+                        "labelLocalized": "Datacenters",
+                        "redBound": null,
+                        "id": "extModel1445-6",
+                        "colorMethod": 2
+                     },
+                     {
+                        "yellowBound": null,
+                        "metricUnitId": null,
+                        "metricName": "Summary|Total Number of Datastores",
+                        "metricKey": "summary|total_number_datastores",
+                        "handleOldColoring": false,
+                        "maxValue": "",
+                        "link": "",
+                        "resourceKindName": "VCF World",
+                        "isStringMetric": false,
+                        "resourceKindId": "resourceKind:id:0_::_",
+                        "label": "Datastores",
+                        "orangeBound": null,
+                        "metricUnit": "",
+                        "labelOrig": "Datastores",
+                        "unit": "",
+                        "labelLocalized": "Datastores",
+                        "redBound": null,
+                        "id": "extModel1445-4",
+                        "colorMethod": 2
+                     },
+                     {
+                        "yellowBound": null,
+                        "metricUnitId": null,
+                        "metricName": "Summary|Total Number of vCenter(s)",
+                        "metricKey": "summary|total_number_vcenters",
+                        "handleOldColoring": false,
+                        "maxValue": "",
+                        "link": "",
+                        "resourceKindName": "vSphere World",
+                        "isStringMetric": false,
+                        "resourceKindId": "resourceKind:id:1_::_",
+                        "label": "vCenters",
+                        "orangeBound": null,
+                        "metricUnit": "",
+                        "labelOrig": "vCenters",
+                        "unit": "",
+                        "labelLocalized": "vCenters",
+                        "redBound": null,
+                        "id": "extModel4354-5",
+                        "colorMethod": 2
+                     },
+                     {
+                        "yellowBound": null,
+                        "metricUnitId": null,
+                        "metricName": "Summary|Total Number of Clusters",
+                        "metricKey": "summary|total_number_clusters",
+                        "handleOldColoring": false,
+                        "maxValue": "",
+                        "link": "",
+                        "resourceKindName": "vSphere World",
+                        "isStringMetric": false,
+                        "resourceKindId": "resourceKind:id:1_::_",
+                        "label": "Clusters",
+                        "orangeBound": null,
+                        "metricUnit": "",
+                        "labelOrig": "Clusters",
+                        "unit": "",
+                        "labelLocalized": "Clusters",
+                        "redBound": null,
+                        "id": "extModel4354-1",
+                        "colorMethod": 2
+                     },
+                     {
+                        "yellowBound": null,
+                        "metricUnitId": null,
+                        "metricName": "Summary|Total Number of Hosts",
+                        "metricKey": "summary|total_number_hosts",
+                        "handleOldColoring": false,
+                        "maxValue": "",
+                        "link": "",
+                        "resourceKindName": "vSphere World",
+                        "isStringMetric": false,
+                        "resourceKindId": "resourceKind:id:1_::_",
+                        "label": "Hosts",
+                        "orangeBound": null,
+                        "metricUnit": "",
+                        "labelOrig": "Hosts",
+                        "unit": "",
+                        "labelLocalized": "Hosts",
+                        "redBound": null,
+                        "id": "extModel4354-4",
+                        "colorMethod": 2
+                     },
+                     {
+                        "yellowBound": null,
+                        "metricUnitId": null,
+                        "metricName": "Summary|Total Number of VMs",
+                        "metricKey": "summary|total_number_vms",
+                        "handleOldColoring": false,
+                        "maxValue": "",
+                        "link": "",
+                        "resourceKindName": "vSphere World",
+                        "isStringMetric": false,
+                        "resourceKindId": "resourceKind:id:1_::_",
+                        "label": "VMs",
+                        "orangeBound": null,
+                        "metricUnit": "",
+                        "labelOrig": "VMs",
+                        "unit": "",
+                        "labelLocalized": "VMs",
+                        "redBound": null,
+                        "id": "extModel4354-6",
+                        "colorMethod": 2
+                     },
+                     {
+                        "yellowBound": null,
+                        "metricUnitId": null,
+                        "metricName": "Summary|Total Number of Datacenters",
+                        "metricKey": "summary|total_number_datacenters",
+                        "handleOldColoring": false,
+                        "maxValue": "",
+                        "link": "",
+                        "resourceKindName": "vSphere World",
+                        "isStringMetric": false,
+                        "resourceKindId": "resourceKind:id:1_::_",
+                        "label": "Datacenters",
+                        "orangeBound": null,
+                        "metricUnit": "",
+                        "labelOrig": "Datacenters",
+                        "unit": "",
+                        "labelLocalized": "Datacenters",
+                        "redBound": null,
+                        "id": "extModel4354-2",
+                        "colorMethod": 2
+                     },
+                     {
+                        "yellowBound": null,
+                        "metricUnitId": null,
+                        "metricName": "Summary|Total Number of Datastores",
+                        "metricKey": "summary|total_number_datastores",
+                        "handleOldColoring": false,
+                        "maxValue": "",
+                        "link": "",
+                        "resourceKindName": "vSphere World",
+                        "isStringMetric": false,
+                        "resourceKindId": "resourceKind:id:1_::_",
+                        "label": "Datastores",
+                        "orangeBound": null,
+                        "metricUnit": "",
+                        "labelOrig": "Datastores",
+                        "unit": "",
+                        "labelLocalized": "Datastores",
+                        "redBound": null,
+                        "id": "extModel4354-3",
+                        "colorMethod": 2
+                     }
+                  ],
+                  "subMode": "resourceKindAll"
+               },
+               "showSparkline": {"showSparkline": false},
+               "showPercentText": false,
+               "boxColumns": 6,
+               "periodLength": null
+            },
+            "height": 0
+         },
+         {
+            "tabId": "d9db4f67-f97c-4cd3-aee4-b983113e5e02",
+            "collapsed": false,
+            "id": "78b9de12-718f-4f53-9974-295a9f48dabe",
+            "gridsterCoords": {
+               "w": 12,
+               "x": 1,
+               "h": 4,
+               "y": 5
+            },
+            "state": "",
+            "type": "HealthChart",
+            "title": "Critical Alerts",
+            "config": {
+               "metricName": "VCF Operations Generated|Alert Count Critical",
+               "metricKey": "System Attributes|alert_count_critical",
+               "relationshipMode": {"relationshipMode": 0},
+               "description": "",
+               "sortByDir": {"orderByDir": "asc"},
+               "title": "Critical Alerts",
+               "showResourceName": {"showResourceName": true},
+               "chartHeight": 135,
+               "metricUnit": {
+                  "metricUnitId": -1,
+                  "metricUnitName": "Default Unit"
+               },
+               "undefined": [],
+               "mode": "all",
+               "metricType": {"metricType": "custom"},
+               "filterMode": "tagPicker",
+               "tagFilter": null,
+               "paginationNumber": 15,
+               "titleLocalized": "Critical Alerts",
+               "customFilter": {
+                  "filter": [],
+                  "filterMode": "tagPicker",
+                  "excludedResources": null,
+                  "includedResources": null
+               },
+               "selectFirstRow": {"selectFirstRow": false},
+               "sortBy": "metricValue",
+               "viewDetails": "/vcf-operations/ui/operate/alerts;tab=alerts",
+               "selfProvider": {"selfProvider": false},
+               "refreshInterval": 300,
+               "resource": [],
+               "widgetId": "2937eb4f-45cb-472e-8828-8b95e7069e34",
+               "refreshContent": {"refreshContent": true},
+               "resourceKindId": "resourceKind:id:0_::_",
+               "metricFullName": "VCF Operations Generated|Alert Count Critical",
+               "showMetricLabel": {"showMetricLabel": false},
+               "depth": 1,
+               "metricLabel": ""
+            },
+            "height": 0,
+            "states": [{
+               "value": "s%3A%7B%22dateRange%22%3A%22dashboardTime%22%2C%22dateFrom%22%3Anull%2C%22dateTo%22%3Anull%2C%22timeFrom%22%3Anull%2C%22timeTo%22%3Anull%7D",
+               "key": "permDateRange_HealthChart_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_78b9de12-718f-4f53-9974-295a9f48dabe"
+            }]
+         },
+         {
+            "tabId": "d9db4f67-f97c-4cd3-aee4-b983113e5e02",
+            "collapsed": false,
+            "id": "bd8189ed-1621-4244-baea-a1c17f9d462a",
+            "gridsterCoords": {
+               "w": 6,
+               "x": 1,
+               "h": 6,
+               "y": 9
+            },
+            "state": "",
+            "type": "View",
+            "title": "Cluster Availability",
+            "config": {
+               "refreshInterval": 300,
+               "resource": null,
+               "widgetId": "a5ef2421-225b-4195-92f9-7be68f25a1d8",
+               "traversalSpecId": "",
+               "refreshContent": {"refreshContent": true},
+               "description": "",
+               "isUpdatedView": true,
+               "title": "Cluster Availability",
+               "viewDefinitionId": "9ee3402a-2187-4759-bd79-320cd0f5bfa1",
+               "titleLocalized": "Cluster Availability",
+               "viewType": "LIST",
+               "chartViewItems": [],
+               "selectFirstRow": {"selectFirstRow": false},
+               "viewDetails": "",
+               "selfProvider": {"selfProvider": false}
+            },
+            "height": 0,
+            "states": [
+               {
+                  "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_bd8189ed-1621-4244-baea-a1c17f9d462a-column-0%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_bd8189ed-1621-4244-baea-a1c17f9d462a-column-summary%2525257Ccluster_availability1%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_bd8189ed-1621-4244-baea-a1c17f9d462a-column-summary%2525257Cnumber_running_hosts2%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_bd8189ed-1621-4244-baea-a1c17f9d462a-column-configuration%2525257CvSANEnabled3%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_bd8189ed-1621-4244-baea-a1c17f9d462a-column-configuration%2525257CdasConfig%2525257CadmissionControlPolicyId4%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_bd8189ed-1621-4244-baea-a1c17f9d462a-column-configuration%2525257CdasConfig%2525257Cenabled5%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_bd8189ed-1621-4244-baea-a1c17f9d462a-column-configuration%2525257CdasConfig%2525257CcpuFailoverPercent6%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_bd8189ed-1621-4244-baea-a1c17f9d462a-column-configuration%2525257CdasConfig%2525257CmemFailoverPercent7%25255Ehidden%25253Db%2525253A0",
+                  "key": "permTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_bd8189ed-1621-4244-baea-a1c17f9d462a"
+               },
+               {
+                  "value": "b%3A0",
+                  "key": "perm_toolbarVisible_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_bd8189ed-1621-4244-baea-a1c17f9d462a"
+               }
+            ]
+         },
+         {
+            "tabId": "d9db4f67-f97c-4cd3-aee4-b983113e5e02",
+            "collapsed": false,
+            "id": "d9e34306-7f57-416c-85a4-f51a50337bf1",
+            "gridsterCoords": {
+               "w": 6,
+               "x": 7,
+               "h": 6,
+               "y": 9
+            },
+            "state": "",
+            "type": "View",
+            "title": "ESX Host Availability",
+            "config": {
+               "refreshInterval": 300,
+               "resource": null,
+               "widgetId": "c60ead07-8124-4085-b1d8-af04b6cc77f8",
+               "traversalSpecId": "",
+               "refreshContent": {"refreshContent": false},
+               "description": "",
+               "isUpdatedView": true,
+               "title": "ESX Host Availability",
+               "viewDefinitionId": "10a0d70d-d244-4e7e-b31b-96903e24dc8d",
+               "titleLocalized": "ESX Host Availability",
+               "viewType": "LIST",
+               "chartViewItems": [],
+               "selectFirstRow": {"selectFirstRow": false},
+               "viewDetails": "",
+               "selfProvider": {"selfProvider": false}
+            },
+            "height": 0,
+            "states": [{
+               "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_d9e34306-7f57-416c-85a4-f51a50337bf1-column-0%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_d9e34306-7f57-416c-85a4-f51a50337bf1-column-sys%2525257Cuptime_latest1%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_d9e34306-7f57-416c-85a4-f51a50337bf1-column-sys%2525257CpoweredOn2%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_d9e34306-7f57-416c-85a4-f51a50337bf1-column-hardware%2525257CvendorModel3%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_d9e34306-7f57-416c-85a4-f51a50337bf1-column-runtime%2525257CconnectionState4%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_d9e34306-7f57-416c-85a4-f51a50337bf1-column-runtime%2525257CconnectionState5%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_d9e34306-7f57-416c-85a4-f51a50337bf1-column-runtime%2525257CmaintenanceState6%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_d9e34306-7f57-416c-85a4-f51a50337bf1-column-runtime%2525257CpowerState7%25255Ehidden%25253Db%2525253A0",
+               "key": "permTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_d9e34306-7f57-416c-85a4-f51a50337bf1"
+            }]
+         },
+         {
+            "tabId": "d9db4f67-f97c-4cd3-aee4-b983113e5e02",
+            "collapsed": false,
+            "id": "bbb3ab2d-6fe3-42f1-90f2-30306491bf76",
+            "gridsterCoords": {
+               "w": 6,
+               "x": 1,
+               "h": 6,
+               "y": 15
+            },
+            "state": "",
+            "type": "View",
+            "title": "Cluster Capacity Remaining",
+            "config": {
+               "refreshInterval": 300,
+               "resource": null,
+               "widgetId": "0504c5ae-2cca-4a15-8ae2-917f99725f6e",
+               "traversalSpecId": "vSphere Hosts and Clusters-VMWARE-vSphere World",
+               "refreshContent": {"refreshContent": false},
+               "description": "",
+               "isUpdatedView": true,
+               "title": "Cluster Capacity Remaining",
+               "viewDefinitionId": "55bbf293-771b-470d-be60-0c678c96fcd8",
+               "titleLocalized": "Cluster Capacity Remaining",
+               "viewType": "POPULATION_DISTRIBUTION",
+               "chartViewItems": ["labels"],
+               "selectFirstRow": {"selectFirstRow": false},
+               "viewDetails": "/vcf-operations/ui/operate/dashboards/dashboards;tabId=18eb3df1-c8d0-4d59-b8a1-204c83444d7d",
+               "selfProvider": {"selfProvider": false}
+            },
+            "height": 0
+         },
+         {
+            "tabId": "d9db4f67-f97c-4cd3-aee4-b983113e5e02",
+            "collapsed": false,
+            "id": "907a6176-28c2-437f-bd8f-886afffdb15d",
+            "gridsterCoords": {
+               "w": 6,
+               "x": 7,
+               "h": 6,
+               "y": 15
+            },
+            "state": "",
+            "type": "View",
+            "title": "Cluster Capacity",
+            "config": {
+               "refreshInterval": 300,
+               "resource": null,
+               "widgetId": "366f5722-8c3d-4905-b8f5-f117cfc4a43a",
+               "traversalSpecId": "",
+               "refreshContent": {"refreshContent": true},
+               "description": "",
+               "isUpdatedView": true,
+               "title": "Cluster Capacity",
+               "viewDefinitionId": "0f50dd88-e06c-489f-95c2-1b83446327e6",
+               "titleLocalized": "Cluster Capacity",
+               "chartViewItems": [],
+               "selectFirstRow": {"selectFirstRow": false},
+               "viewDetails": "/vcf-operations/ui/operate/dashboards/dashboards;tabId=18eb3df1-c8d0-4d59-b8a1-204c83444d7d",
+               "selfProvider": {"selfProvider": false}
+            },
+            "height": 0,
+            "states": [{
+               "value": "o%3Acolumns%3Da%253Ao%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-0%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-summary%2525257Ctotal_number_hosts1%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-OnlineCapacityAnalytics%2525257CtimeRemaining2%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-OnlineCapacityAnalytics%2525257CcapacityRemainingPercentage3%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-OnlineCapacityAnalytics%2525257CcapacityRemainingProfile4%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-summary%2525257Cnumber_running_vms5%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-cpu%2525257Ccapacity_provisioned6%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-mem%2525257Chost_provisioned7%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-configuration%2525257CvSANEnabled8%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-summary%2525257CparentVcenter9%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-summary%2525257Ctag10%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-configuration%2525257CdasConfig%2525257CcpuFailoverPercent11%25255Ehidden%25253Db%2525253A0%255Eo%25253Aid%25253Ds%2525253ApermTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d-column-configuration%2525257CdasConfig%2525257CmemFailoverPercent12%25255Ehidden%25253Db%2525253A0",
+               "key": "permTableView_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_907a6176-28c2-437f-bd8f-886afffdb15d"
+            }]
+         },
+         {
+            "tabId": "d9db4f67-f97c-4cd3-aee4-b983113e5e02",
+            "collapsed": false,
+            "id": "673091fa-5452-494b-95bb-a87acce6b231",
+            "gridsterCoords": {
+               "w": 12,
+               "x": 1,
+               "h": 1,
+               "y": 21
+            },
+            "state": "",
+            "type": "Section",
+            "title": "VCF Health",
+            "config": {
+               "titleLocalized": "VCF Health",
+               "widgetId": "673091fa-5452-494b-95bb-a87acce6b231",
+               "description": "VCF_Health_Description",
+               "title": "VCF Health",
+               "widgets": [
+                  "0a6e7792-0259-4e03-81b6-8d220b537462",
+                  "44d4360f-acfe-4cfa-827d-4ae499a76c1f"
+               ]
+            },
+            "height": 0
+         },
+         {
+            "tabId": "d9db4f67-f97c-4cd3-aee4-b983113e5e02",
+            "collapsed": false,
+            "id": "0a6e7792-0259-4e03-81b6-8d220b537462",
+            "gridsterCoords": {
+               "w": 6,
+               "x": 1,
+               "h": 5,
+               "y": 22
+            },
+            "state": "",
+            "type": "HealthChart",
+            "title": "VCF vCenters with Critical Health Issues Over Time",
+            "config": {
+               "yellowBound": 1,
+               "metricName": "VCF Health|Number of VCs Requiring Attention",
+               "metricKey": "vcfHealth|numberOfVCsReqAttention",
+               "relationshipMode": {"relationshipMode": 0},
+               "description": "vCenters_Issues_Description",
+               "sortByDir": {"orderByDir": "asc"},
+               "title": "VCF vCenters with Critical Health Issues Over Time",
+               "showResourceName": {"showResourceName": false},
+               "chartHeight": 190,
+               "metricUnit": {
+                  "metricUnitId": -1,
+                  "metricUnitName": "Default Unit"
+               },
+               "undefined": [],
+               "mode": "all",
+               "metricType": {"metricType": "custom"},
+               "filterMode": "tagPicker",
+               "tagFilter": null,
+               "paginationNumber": 15,
+               "titleLocalized": "VCF vCenters with Critical Health Issues Over Time",
+               "customFilter": {
+                  "filter": [],
+                  "filterMode": "tagPicker",
+                  "excludedResources": null,
+                  "includedResources": null
+               },
+               "selectFirstRow": {"selectFirstRow": false},
+               "sortBy": "metricValue",
+               "viewDetails": "/vcf-operations/ui/observe/diagnostics/vcf-health/vcenterDetail?resourceId=software-defined-datacenters",
+               "selfProvider": {"selfProvider": false},
+               "refreshInterval": 300,
+               "resource": [{
+                  "name": "VCF World",
+                  "id": "resource:id:1_::_"
+               }],
+               "widgetId": "2887cec5-9547-4462-a193-b7381e047f3d",
+               "refreshContent": {"refreshContent": true},
+               "resourceKindId": "resourceKind:id:0_::_",
+               "orangeBound": 2,
+               "metricFullName": "VCF Health|Number of VCs Requiring Attention",
+               "showMetricLabel": {"showMetricLabel": false},
+               "depth": 1,
+               "metricLabel": "",
+               "redBound": 4
+            },
+            "height": 0,
+            "states": [{
+               "value": "s%3A%7B%22dateRange%22%3A%22dashboardTime%22%2C%22dateFrom%22%3Anull%2C%22dateTo%22%3Anull%2C%22timeFrom%22%3Anull%2C%22timeTo%22%3Anull%7D",
+               "key": "permDateRange_HealthChart_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_0a6e7792-0259-4e03-81b6-8d220b537462"
+            }]
+         },
+         {
+            "tabId": "d9db4f67-f97c-4cd3-aee4-b983113e5e02",
+            "collapsed": false,
+            "id": "44d4360f-acfe-4cfa-827d-4ae499a76c1f",
+            "gridsterCoords": {
+               "w": 6,
+               "x": 7,
+               "h": 5,
+               "y": 22
+            },
+            "state": "",
+            "type": "HealthChart",
+            "title": "VCF ESX hosts with critical Health issues over time",
+            "config": {
+               "yellowBound": 1,
+               "metricName": "VCF Health|ESX Host Issues|Total Number of Hosts with Critical Issues",
+               "metricKey": "vcfHealth|esx|no_hosts_with_critical_issues",
+               "relationshipMode": {"relationshipMode": 0},
+               "description": "Hosts_Issues_Description",
+               "sortByDir": {"orderByDir": "asc"},
+               "title": "VCF ESX hosts with critical Health issues over time",
+               "showResourceName": {"showResourceName": false},
+               "chartHeight": 190,
+               "metricUnit": {
+                  "metricUnitId": -1,
+                  "metricUnitName": "Default Unit"
+               },
+               "undefined": [],
+               "mode": "all",
+               "metricType": {"metricType": "custom"},
+               "filterMode": "tagPicker",
+               "tagFilter": null,
+               "paginationNumber": 15,
+               "titleLocalized": "VCF ESX hosts with critical Health issues over time",
+               "customFilter": {
+                  "filter": [],
+                  "filterMode": "tagPicker",
+                  "excludedResources": null,
+                  "includedResources": null
+               },
+               "selectFirstRow": {"selectFirstRow": false},
+               "sortBy": "metricValue",
+               "viewDetails": "/vcf-operations/ui/observe/diagnostics/vcf-health/esx?resourceId=software-defined-datacenters",
+               "selfProvider": {"selfProvider": false},
+               "refreshInterval": 300,
+               "resource": [{
+                  "name": "VCF World",
+                  "id": "resource:id:1_::_"
+               }],
+               "widgetId": "b139b21a-f1b2-4452-8796-e331dbd9de4f",
+               "refreshContent": {"refreshContent": true},
+               "resourceKindId": "resourceKind:id:0_::_",
+               "orangeBound": 5,
+               "metricFullName": "VCF Health|ESX Host Issues|Total Number of Hosts with Critical Issues",
+               "showMetricLabel": {"showMetricLabel": false},
+               "depth": 1,
+               "metricLabel": "",
+               "redBound": 25
+            },
+            "height": 0,
+            "states": [
+               {
+                  "value": "s%3A%7B%22dateRange%22%3A%22dashboardTime%22%2C%22dateFrom%22%3Anull%2C%22dateTo%22%3Anull%2C%22timeFrom%22%3Anull%2C%22timeTo%22%3Anull%7D",
+                  "key": "permDateRange_HealthChart_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_44d4360f-acfe-4cfa-827d-4ae499a76c1f"
+               },
+               {
+                  "value": "b%3A1",
+                  "key": "perm_toolbarVisible_widget_d9db4f67-f97c-4cd3-aee4-b983113e5e02_44d4360f-acfe-4cfa-827d-4ae499a76c1f"
+               }
+            ]
+         }
+      ],
+      "userId": "56b72988-c934-4056-9c5f-21e2c37c4801",
+      "states": [{
+         "value": "o%3AdateRange%3Ds%253Alast6Hour%5EdateRangeText%3Ds%253A6H",
+         "key": "permDashboardTime_dashboard_d9db4f67-f97c-4cd3-aee4-b983113e5e02"
+      }],
+      "editAllowed": true,
+      "homeTab": false,
+      "name": "Compute Ops Page",
+      "gridsterMaxColumns": 12,
+      "rank": 0,
+      "disabled": false,
+      "id": "d9db4f67-f97c-4cd3-aee4-b983113e5e02",
+      "locked": false,
+      "dashboardNavigations": {},
+      "widgetInteractions": [
+         {
+            "widgetIdProvider": "d57049c0-6834-4809-8a8b-d409b64085e6",
+            "type": "resourceId",
+            "widgetIdReceiver": "4f66ac69-14af-4757-8adb-becfbf336666"
+         },
+         {
+            "widgetIdProvider": "d57049c0-6834-4809-8a8b-d409b64085e6",
+            "type": "resourceId",
+            "widgetIdReceiver": "78b9de12-718f-4f53-9974-295a9f48dabe"
+         },
+         {
+            "widgetIdProvider": "d57049c0-6834-4809-8a8b-d409b64085e6",
+            "type": "resourceId",
+            "widgetIdReceiver": "44d4360f-acfe-4cfa-827d-4ae499a76c1f"
+         },
+         {
+            "widgetIdProvider": "d57049c0-6834-4809-8a8b-d409b64085e6",
+            "type": "resourceId",
+            "widgetIdReceiver": "0a6e7792-0259-4e03-81b6-8d220b537462"
+         },
+         {
+            "widgetIdProvider": "d57049c0-6834-4809-8a8b-d409b64085e6",
+            "type": "resourceId",
+            "widgetIdReceiver": "bd8189ed-1621-4244-baea-a1c17f9d462a"
+         },
+         {
+            "widgetIdProvider": "bd8189ed-1621-4244-baea-a1c17f9d462a",
+            "type": "resourceId",
+            "widgetIdReceiver": "d9e34306-7f57-416c-85a4-f51a50337bf1"
+         },
+         {
+            "widgetIdProvider": "d57049c0-6834-4809-8a8b-d409b64085e6",
+            "type": "resourceId",
+            "widgetIdReceiver": "bbb3ab2d-6fe3-42f1-90f2-30306491bf76"
+         },
+         {
+            "widgetIdProvider": "d57049c0-6834-4809-8a8b-d409b64085e6",
+            "type": "resourceId",
+            "widgetIdReceiver": "907a6176-28c2-437f-bd8f-886afffdb15d"
+         }
+      ],
+      "lastUpdateTime": 1767999012886
+   }],
+   "uuid": "a155d9a9-714e-4960-bf77-920d433029df"
+}

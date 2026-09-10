@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>[VCF Content Factory] Summary Widget Smoke (mock)</title>
+<style>
+  :root { --bg:#1b1f24; --panel:#23282f; --panel-2:#2a3038; --line:#363d47; --ink:#f2f4f7; --ink-2:#b7bfca; --ink-3:#7f8896; --accent:#3987e5; --good:#3ba55d; --warn:#e0a400; --crit:#e34948; }
+  * { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--ink); font:13px/1.4 "Metropolis","Segoe UI",system-ui,sans-serif }
+  .shell { padding:14px 18px 40px } .crumb { color:var(--ink-3); font-size:12px; margin-bottom:6px }
+  .objhdr { display:flex; align-items:center; gap:12px; margin-bottom:10px } .objhdr h1 { font-size:18px; font-weight:600; margin:0 }
+  .badge { font-size:11px; padding:2px 8px; border-radius:10px; background:var(--panel-2); color:var(--ink-2); border:1px solid var(--line) }
+  .tabs { display:flex; gap:22px; border-bottom:1px solid var(--line); margin-bottom:14px; font-size:13px; color:var(--ink-2) } .tabs span { padding:6px 0 } .tabs .on { color:var(--ink); border-bottom:2px solid var(--accent) }
+  .grid { display:grid; grid-template-columns:repeat(12,1fr); gap:10px }
+  .w { background:var(--panel); border:1px solid var(--line); border-radius:4px; padding:10px 12px; min-height:110px; position:relative }
+  .w h2 { font-size:13px; font-weight:600; margin:0 0 8px; display:flex; align-items:center; gap:8px } .w h2 .type { margin-left:auto; font-weight:400; font-size:10px; color:var(--ink-3); text-transform:uppercase; letter-spacing:.04em }
+  .link { color:var(--accent); font-size:11px; font-weight:600; letter-spacing:.04em } .note { position:absolute; right:10px; bottom:6px; font-size:10px; color:var(--ink-3) }
+  .kv { width:100%; border-collapse:collapse; font-size:12px } .kv td { padding:4px 0; border-bottom:1px solid var(--line) } .kv td:last-child { text-align:right } .kv td:first-child { color:var(--ink-2) } .kv .k { display:block; color:var(--ink-3); font-size:10px; font-family:ui-monospace,Menlo,monospace }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px } .tile { background:var(--panel-2); border-radius:4px; padding:10px; text-align:center } .tile .v { font-size:26px; font-weight:600 } .tile .l { font-size:11px; color:var(--ink-2) } .tile .k { font-size:9px; color:var(--ink-3); font-family:ui-monospace,Menlo,monospace; word-break:break-all } .tile.good { background:#1f3326 }
+  .gauges { display:grid; grid-template-columns:repeat(2,1fr); gap:8px } .gauge { text-align:center } .gauge svg { width:110px; height:66px } .gauge .v { font-size:20px; font-weight:600; margin-top:-8px } .gauge .l { font-size:11px; color:var(--ink-2) } .gauge .k { font-size:9px; color:var(--ink-3); font-family:ui-monospace,Menlo,monospace }
+  .section { grid-column:span 12; display:flex; align-items:center; gap:8px; color:var(--ink-2); font-size:12px; font-weight:600; padding:4px 2px; border-bottom:1px solid var(--line) } .section .type { margin-left:auto; font-weight:400; font-size:10px; color:var(--ink-3); text-transform:uppercase }
+  .keybox { grid-column:span 12; border:1px dashed var(--line); color:var(--ink-3); font-size:11px; padding:8px 12px; border-radius:4px } .keybox b { color:var(--ink-2) }
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="crumb">Operate &rsaquo; Inventory &rsaquo; vSphere Hosts and Clusters &rsaquo; <b>esx-01.lab.example.com</b></div>
+  <div class="objhdr"><h1>esx-01.lab.example.com</h1><span class="badge">Object Type: Host System</span><span class="badge">values simulated</span></div>
+  <div class="tabs"><span class="on">Summary</span><span>Metrics</span><span>Alerts</span><span>Topology</span><span>Capacity</span></div>
+  <div class="grid">
+    <div class="section">&#9660; Host Summary Smoke <span class="type">Section, collapsible, row 1</span></div>
+
+    <div class="w" style="grid-column:span 4">
+      <h2>Host Facts <span class="type">PropertyList, compact</span></h2>
+      <table class="kv">
+        <tr><td>Version<span class="k">summary|version</span></td><td>9.0.1.0</td></tr>
+        <tr><td>Build<span class="k">sys|build</span></td><td>24785</td></tr>
+        <tr><td>Vendor / Model<span class="k">hardware|vendorModel</span></td><td>Dell PowerEdge R760</td></tr>
+        <tr><td>CPU Cores<span class="k">hardware|cpuInfo|numCpuCores</span></td><td>64</td></tr>
+      </table>
+    </div>
+
+    <div class="w" style="grid-column:span 5">
+      <h2>Alerts Summary <span class="type">Alert Volume, last 7 days (fixed)</span></h2>
+      <div class="tiles" style="grid-template-columns:repeat(3,1fr)">
+        <div class="tile"><div class="v" style="color:var(--crit)">0</div><div class="l">Critical</div></div>
+        <div class="tile"><div class="v" style="color:#e5792a">1</div><div class="l">Immediate</div></div>
+        <div class="tile"><div class="v" style="color:var(--warn)">2</div><div class="l">Warning</div></div>
+      </div>
+      <div class="note">self_provider: false; inherits the page object</div>
+    </div>
+
+    <div class="w" style="grid-column:span 3">
+      <h2>More <span class="type">TextDisplay + view_details</span></h2>
+      <p style="color:var(--ink-2);margin:0 0 10px">Smoke widget for the Details URL passthrough.</p>
+      <span class="link">VIEW DETAILS &rsaquo;</span>
+      <div class="note">view_details: /ui/operate/dashboards/dashboards</div>
+    </div>
+
+    <div class="w" style="grid-column:span 7">
+      <h2>Utilization <span class="type">Scoreboard, gauge (theme 9), max 100</span></h2>
+      <div class="gauges">
+        <div class="gauge"><svg viewBox="0 0 110 66"><path d="M10,60 A45,45 0 0 1 100,60" fill="none" stroke="#313842" stroke-width="10"/><path d="M10,60 A45,45 0 0 1 45,17" fill="none" stroke="#3ba55d" stroke-width="10"/></svg><div class="v">37 %</div><div class="l">CPU Usage</div><div class="k">cpu|usage_average</div></div>
+        <div class="gauge"><svg viewBox="0 0 110 66"><path d="M10,60 A45,45 0 0 1 100,60" fill="none" stroke="#313842" stroke-width="10"/><path d="M10,60 A45,45 0 0 1 78,22" fill="none" stroke="#e0a400" stroke-width="10"/></svg><div class="v">74 %</div><div class="l">Memory Usage</div><div class="k">mem|usage_average</div></div>
+      </div>
+      <div class="note">bands green &lt; 70, yellow 70 to 85, red &gt; 85</div>
+    </div>
+
+    <div class="w" style="grid-column:span 5">
+      <h2>Alerts <span class="type">Scoreboard, classic (theme 8)</span></h2>
+      <div class="tiles">
+        <div class="tile good"><div class="v">0</div><div class="l">Alert Count Critical</div><div class="k">System Attributes|alert_count_critical</div></div>
+        <div class="tile"><div class="v">2</div><div class="l">Alert Count Warning</div><div class="k">System Attributes|alert_count_warning</div></div>
+      </div>
+    </div>
+
+    <div class="keybox"><b>Mock notes.</b> Framework smoke test for the summary-dashboard widget set (Section, Alert Volume, gauge Scoreboard, view_details) and the <code>summary_for: VMWARE:HostSystem</code> binding. Values simulated. Keys verified against the VMWARE HostSystem describe cache. Not a shipping dashboard; installed on a disposable build and unbound afterward.</div>
+  </div>
+</div>
+</body>
+</html>

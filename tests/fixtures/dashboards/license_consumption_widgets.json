@@ -1,0 +1,269 @@
+{
+ "entries": {
+  "resourceKind": [
+   {
+    "resourceKindKey": "NSXT World",
+    "internalId": "resourceKind:id:0_::_",
+    "adapterKindKey": "NSXTAdapter"
+   },
+   {
+    "resourceKindKey": "vSphere World",
+    "internalId": "resourceKind:id:2_::_",
+    "adapterKindKey": "VMWARE"
+   },
+   {
+    "resourceKindKey": "CAS World",
+    "internalId": "resourceKind:id:1_::_",
+    "adapterKindKey": "CASAdapter"
+   }
+  ],
+  "resource": [
+   {
+    "resourceKindKey": "CAS World",
+    "internalId": "resource:id:2_::_",
+    "adapterKindKey": "CASAdapter",
+    "identifiers": [],
+    "name": "Automation World"
+   },
+   {
+    "resourceKindKey": "LICENSE_USAGE_WORLD",
+    "internalId": "resource:id:0_::_",
+    "adapterKindKey": "VMWARE_INFRA_HEALTH",
+    "identifiers": [],
+    "name": "License Usage"
+   },
+   {
+    "resourceKindKey": "NSXT World",
+    "internalId": "resource:id:1_::_",
+    "adapterKindKey": "NSXTAdapter",
+    "identifiers": [],
+    "name": "NSX World"
+   }
+  ]
+ },
+ "dashboards": [
+  {
+   "id": "0488a094-01f7-417a-80a8-ca2e7fb2d748",
+   "name": "VCF Consumption Overview v2",
+   "description": "",
+   "shared": false,
+   "widgets": [
+    {
+     "collapsed": false,
+     "id": "94dc7128-775b-4299-8595-7c566a1d4815",
+     "gridsterCoords": {
+      "w": 6,
+      "x": 1,
+      "h": 7,
+      "y": 6
+     },
+     "type": "View",
+     "title": "VCF License Usage Over Time",
+     "config": {
+      "refreshInterval": 300,
+      "resource": {
+       "resourceId": "resource:id:0_::_",
+       "traversalSpecId": "",
+       "resourceName": "License Usage",
+       "resourceKindId": "002019VMWARE_INFRA_HEALTHLICENSE_USAGE_WORLD",
+       "id": "Ext.vcops.chrome.model.Resource-1"
+      },
+      "traversalSpecId": null,
+      "refreshContent": {
+       "refreshContent": false
+      },
+      "isUpdatedView": true,
+      "chartViewItems": [
+       "legend"
+      ],
+      "selectFirstRow": {
+       "selectFirstRow": false
+      },
+      "selfProvider": {
+       "selfProvider": true
+      },
+      "title": "VCF License Usage Over Time",
+      "viewDefinitionId": "e27925b5-1cf1-4fde-a835-41c84577be35"
+     },
+     "height": 381
+    },
+    {
+     "collapsed": false,
+     "id": "c38aa91e-7eb8-4930-bb54-0e71174c7b1c",
+     "gridsterCoords": {
+      "w": 4,
+      "x": 1,
+      "h": 6,
+      "y": 13
+     },
+     "type": "Scoreboard",
+     "title": "NSX Usage Insights",
+     "config": {
+      "maxCellCount": 1000,
+      "oldMetricValues": false,
+      "relationshipMode": {
+       "relationshipMode": 0
+      },
+      "valueSize": 24,
+      "title": "NSX Usage Insights",
+      "boxHeight": null,
+      "showResourceName": {
+       "showResourceName": false
+      },
+      "roundDecimals": null,
+      "mode": {
+       "layoutMode": "fixedView"
+      },
+      "labelSize": 16,
+      "customFilter": {
+       "filter": [],
+       "excludedResources": null,
+       "includedResources": null
+      },
+      "selfProvider": {
+       "selfProvider": true
+      },
+      "resInteractionMode": null,
+      "visualTheme": 5,
+      "showMetricName": {
+       "showMetricName": true
+      },
+      "refreshInterval": 300,
+      "resource": [],
+      "showDT": {
+       "showDT": true
+      },
+      "refreshContent": {
+       "refreshContent": false
+      },
+      "showMetricUnit": {
+       "showMetricUnit": true
+      },
+      "depth": 1,
+      "metric": {
+       "mode": "resourceKind",
+       "resourceMetrics": [],
+       "resourceKindMetrics": [
+        {
+         "yellowBound": null,
+         "metricUnitId": null,
+         "metricName": "Super Metrics|[VCF Consumption Overview v2] Host Transport Node Count",
+         "metricKey": "Super Metric|sm_52b1e5d9-3598-4f14-8c23-76b082b2c088",
+         "handleOldColoring": false,
+         "link": "",
+         "resourceKindName": "NSX World",
+         "isStringMetric": false,
+         "resourceKindId": "resourceKind:id:0_::_",
+         "label": "NSX vSphere Hosts ",
+         "orangeBound": null,
+         "unit": "",
+         "redBound": null,
+         "id": "extModel3403-1",
+         "colorMethod": 1
+        },
+        {
+         "yellowBound": null,
+         "metricUnitId": null,
+         "metricName": "Summary|Logical Switch Count",
+         "metricKey": "Summary|LogicalSwitchCount",
+         "handleOldColoring": false,
+         "link": "",
+         "resourceKindName": "NSX World",
+         "isStringMetric": false,
+         "resourceKindId": "resourceKind:id:0_::_",
+         "label": "Overlay Network Count",
+         "orangeBound": null,
+         "unit": "",
+         "redBound": null,
+         "id": "extModel3403-2",
+         "colorMethod": 1
+        },
+        {
+         "yellowBound": null,
+         "metricUnitId": null,
+         "metricName": "Summary|Edge Cluster Count",
+         "metricKey": "Summary|EdgeClusterCount",
+         "handleOldColoring": false,
+         "link": "",
+         "resourceKindName": "NSX World",
+         "isStringMetric": false,
+         "resourceKindId": "resourceKind:id:0_::_",
+         "label": "Edge Cluster Count",
+         "orangeBound": null,
+         "unit": "",
+         "redBound": null,
+         "id": "extModel3403-4",
+         "colorMethod": 1
+        },
+        {
+         "yellowBound": null,
+         "metricUnitId": null,
+         "metricName": "Super Metrics|[VCF Consumption Overview v2] NSX License Count",
+         "metricKey": "Super Metric|sm_bd174fd5-7cfe-4746-bfcd-436f81a94e50",
+         "handleOldColoring": false,
+         "link": "",
+         "resourceKindName": "NSX World",
+         "isStringMetric": false,
+         "resourceKindId": "resourceKind:id:0_::_",
+         "label": "NSX Licensed Cores",
+         "orangeBound": null,
+         "unit": "",
+         "redBound": null,
+         "id": "extModel5880-1",
+         "colorMethod": 1
+        }
+       ],
+       "subMode": "resourceKindAll"
+      },
+      "showSparkline": {
+       "showSparkline": false
+      },
+      "boxColumns": 2,
+      "periodLength": null
+     },
+     "height": 324
+    },
+    {
+     "collapsed": false,
+     "id": "04ad7b48-40ac-45a6-9a7a-92be97ea0ded",
+     "gridsterCoords": {
+      "w": 4,
+      "x": 1,
+      "h": 6,
+      "y": 25
+     },
+     "type": "View",
+     "title": "VCF Consumption Overtime",
+     "config": {
+      "refreshInterval": 300,
+      "resource": {
+       "resourceId": "resource:id:0_::_",
+       "traversalSpecId": "",
+       "resourceName": "License Usage",
+       "resourceKindId": "002019VMWARE_INFRA_HEALTHLICENSE_USAGE_WORLD",
+       "id": "Ext.vcops.chrome.model.Resource-36"
+      },
+      "traversalSpecId": null,
+      "refreshContent": {
+       "refreshContent": false
+      },
+      "isUpdatedView": true,
+      "chartViewItems": [],
+      "selectFirstRow": {
+       "selectFirstRow": false
+      },
+      "selfProvider": {
+       "selfProvider": true
+      },
+      "title": "VCF Consumption Overtime",
+      "viewDefinitionId": "6b512229-ff2c-490b-8cfb-ae70f3008de0"
+     },
+     "height": 324
+    }
+   ],
+   "widgetInteractions": [],
+   "dashboardNavigations": {}
+  }
+ ],
+ "uuid": "ca7efc85-8e29-4b8d-8bee-8e53e2f20e22"
+}

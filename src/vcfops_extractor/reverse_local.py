@@ -162,10 +162,12 @@ def _parse_view_xml_to_dict(elem) -> dict:
     description = ""
     adapter_kind = ""
     resource_kind = ""
+    subject_pairs: list[tuple[str, str]] = []
     data_type = "list"
     presentation = "list"
     columns: list[dict] = []
     time_window: Optional[dict] = None
+    meta = {"hide_object_name": False, "forecast_days": 0, "transformations": None}
 
     for child in elem:
         tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
@@ -175,10 +177,17 @@ def _parse_view_xml_to_dict(elem) -> dict:
         elif tag == "Description":
             description = (child.text or "").strip()
         elif tag == "SubjectType":
+            # One ViewDef may carry several subject kinds, each as a
+            # descendant+self pair, in sequence (wire evidence:
+            # reference/docs/extracted/view-multi-subject/). Keep every
+            # distinct pair in document order; the first stays the scalar.
+            pair = (child.get("adapterKind", ""), child.get("resourceKind", ""))
+            if pair not in subject_pairs:
+                subject_pairs.append(pair)
             if not adapter_kind:
-                adapter_kind = child.get("adapterKind", "")
+                adapter_kind = pair[0]
             if not resource_kind:
-                resource_kind = child.get("resourceKind", "")
+                resource_kind = pair[1]
         elif tag == "DataProviders":
             for dp in child:
                 dp_tag = dp.tag.split("}")[-1] if "}" in dp.tag else dp.tag
@@ -197,6 +206,7 @@ def _parse_view_xml_to_dict(elem) -> dict:
         elif tag == "Controls":
             columns = _parse_controls_to_column_dicts(child)
             time_window = _parse_time_window(child)
+            meta = _parse_controls_meta(child)
 
     return {
         "id": view_id,
@@ -204,10 +214,19 @@ def _parse_view_xml_to_dict(elem) -> dict:
         "description": description,
         "adapter_kind": adapter_kind,
         "resource_kind": resource_kind,
+        "subjects": (
+            [{"adapter_kind": ak, "resource_kind": rk} for ak, rk in subject_pairs]
+            if len(subject_pairs) > 1 else []
+        ),
         "columns": columns,
         "data_type": data_type,
         "presentation": presentation,
         "time_window": time_window,
+        "hide_object_name": meta["hide_object_name"],
+        "forecast_days": meta["forecast_days"] if data_type == "trend" else 0,
+        "transformations": _trend_transformations_to_emit(
+            data_type, meta["forecast_days"], meta["transformations"]
+        ),
     }
 
 
@@ -307,6 +326,22 @@ def _parse_column_value_dict(value_elem) -> Optional[dict]:
         return None
 
     display_name = props.get("displayName", attribute_key)
+
+    # Time-segment ("Interval Breakdown") pseudo-column: not a metric column.
+    # See TimeSegmentSpec in vcfops_dashboards/loader.py for the wire shape.
+    if props.get("isTimeSegment", "").strip().lower() == "true":
+        try:
+            _soc = int(props.get("startingOnCount", "1") or 1)
+        except ValueError:
+            _soc = 1
+        return {
+            "display_name": display_name,
+            "time_segment": {
+                "breakdown_by": props.get("breakdownBy", "").strip().upper(),
+                "starting_on_unit": (props.get("startingOnUnit", "WEEKS") or "WEEKS").strip().upper(),
+                "starting_on_count": _soc,
+            },
+        }
 
     # Strip "Super Metric|" prefix — YAML attribute uses sm_<uuid> form
     if attribute_key.startswith("Super Metric|sm_"):
@@ -441,6 +476,10 @@ def build_view_uuid_map(xml_dir: Path) -> dict[str, dict]:
 # View YAML writing
 # ---------------------------------------------------------------------------
 
+from vcfops_dashboards.reverse import _parse_controls_meta, _trend_transformations_to_emit  # noqa: E402
+from vcfops_extractor.extractor import _emit_view_extras  # noqa: E402
+
+
 def _write_view_yaml(path: Path, view_data: dict, uuid_to_name: dict[str, str]) -> None:
     """Write a view YAML file in factory shape, rewriting SM UUID refs."""
     doc: dict = {
@@ -451,10 +490,15 @@ def _write_view_yaml(path: Path, view_data: dict, uuid_to_name: dict[str, str]) 
     if desc:
         doc["description"] = desc
 
-    doc["subject"] = {
-        "adapter_kind": view_data.get("adapter_kind", ""),
-        "resource_kind": view_data.get("resource_kind", ""),
-    }
+    if view_data.get("subjects"):
+        # Multi-subject ViewDef: `subjects:` (authored order = document
+        # order) replaces the scalar pair, which mirrors subjects[0].
+        doc["subjects"] = [dict(sub) for sub in view_data["subjects"]]
+    else:
+        doc["subject"] = {
+            "adapter_kind": view_data.get("adapter_kind", ""),
+            "resource_kind": view_data.get("resource_kind", ""),
+        }
 
     data_type = view_data.get("data_type", "list")
     if data_type != "list":
@@ -468,9 +512,12 @@ def _write_view_yaml(path: Path, view_data: dict, uuid_to_name: dict[str, str]) 
     columns_out: list[dict] = []
     for col in (view_data.get("columns") or []):
         col_out = dict(col)
-        col_out["attribute"] = _rewrite_sm_attr(col.get("attribute", ""), uuid_to_name)
+        # time_segment columns carry no attribute (the loader synthesizes it).
+        if "attribute" in col:
+            col_out["attribute"] = _rewrite_sm_attr(col.get("attribute", ""), uuid_to_name)
         columns_out.append(col_out)
     doc["columns"] = columns_out
+    _emit_view_extras(doc, view_data)
 
     tw = view_data.get("time_window")
     if tw and tw.get("unit") and tw.get("count"):
@@ -615,11 +662,36 @@ def _write_dashboard_yaml(
 # Round-trip diff check
 # ---------------------------------------------------------------------------
 
+def _metric_signature(cfg: dict) -> tuple:
+    """Order-preserving (mode, ((metricKey, label), ...)) of a widget's
+    ``config.metric`` block, across both ``resourceKindMetrics[]`` and
+    ``resourceMetrics[]``. Empty tuple when the widget has no metric block.
+
+    This is what makes the round-trip verdict notice a widget that lost
+    its metrics: before 2026-08-26 the verdict compared only type, coords
+    and viewDefinitionId, and reported MATCH on a resource-mode Scoreboard
+    that had come back as ``metrics: []``.
+    """
+    metric = cfg.get("metric")
+    if not isinstance(metric, dict):
+        return ()
+    entries = list(metric.get("resourceKindMetrics") or []) + list(metric.get("resourceMetrics") or [])
+    return (
+        str(metric.get("mode") or ""),
+        tuple(
+            (str(e.get("metricKey") or "").strip(), str(e.get("label") or "").strip())
+            for e in entries if isinstance(e, dict)
+        ),
+    )
+
+
 def _structural_key(widget_json: dict) -> tuple:
     """Extract a structural key from a rendered widget for comparison.
 
-    Compares: type, gridsterCoords (x,y,w,h), config keys (viewDefinitionId,
-    metricKey, etc.).  Ignores install-time stamps (locked, owner, userId).
+    Compares: type, gridsterCoords (x,y,w,h), viewDefinitionId, and the
+    metric signature (mode plus every metricKey/label, in order; see
+    ``_metric_signature``).  Ignores install-time stamps (locked, owner,
+    userId).
     """
     wtype = widget_json.get("type", "")
     coords = widget_json.get("gridsterCoords") or {}
@@ -631,7 +703,7 @@ def _structural_key(widget_json: dict) -> tuple:
     )
     cfg = widget_json.get("config") or {}
     view_id = cfg.get("viewDefinitionId", "")
-    return (wtype, coord_key, view_id)
+    return (wtype, coord_key, view_id, _metric_signature(cfg))
 
 
 def _compare_dashboard_round_trip(
@@ -768,10 +840,23 @@ def _compare_dashboard_round_trip(
         if wtype not in _SUPP:
             continue  # expected missing
         if sk not in rendered_key_set:
-            divergences.append(
-                f"source widget type={wtype} coords={sk[1]} view_id={sk[2]!r} "
-                "not found in rendered output"
-            )
+            # Same type/coords/view but a different metric set: say so,
+            # rather than the generic "not found".
+            twin = next((rk for rk in rendered_keys if rk[:3] == sk[:3]), None)
+            if twin is not None:
+                src_mode, src_metrics = sk[3] if sk[3] else ("", ())
+                ren_mode, ren_metrics = twin[3] if twin[3] else ("", ())
+                divergences.append(
+                    f"source widget type={wtype} coords={sk[1]}: metrics differ "
+                    f"(source mode={src_mode!r} {len(src_metrics)} metric(s) "
+                    f"{[k for k, _ in src_metrics]}; rendered mode={ren_mode!r} "
+                    f"{len(ren_metrics)} metric(s) {[k for k, _ in ren_metrics]})"
+                )
+            else:
+                divergences.append(
+                    f"source widget type={wtype} coords={sk[1]} view_id={sk[2]!r} "
+                    "not found in rendered output"
+                )
 
     if divergences:
         result["status"] = "PARTIAL"
