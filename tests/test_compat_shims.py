@@ -117,3 +117,67 @@ def test_old_non_common_package_attribute():
         import vcfops_packaging  # noqa: PLC0415
         import vcfcf_packaging  # noqa: PLC0415
     assert vcfops_packaging.CURRENT_TEMPLATE_VERSION == vcfcf_packaging.CURRENT_TEMPLATE_VERSION
+
+
+# ---------------------------------------------------------------------------
+# Dotted `python -m vcfops_<x>.<sub>` runs (Codex P2 on PR #160): runpy asks
+# the alias loader for get_code, so the old dotted names must execute the
+# real module's code and print the notice. The four --help modules are every
+# runnable submodule with an argparse entry; _test_tier33_grammar is the one
+# dotted form documented in the repo (its own docstring).
+# ---------------------------------------------------------------------------
+
+DOTTED_HELP_MODULES = [
+    "vcfops_common.doctor",
+    "vcfops_common.setup_credentials",
+    "vcfops_packaging.defects",
+    "vcfops_managementpacks.buildkit",
+]
+
+
+def _notice(old_module: str) -> str:
+    new_module = old_module.replace("vcfops_", "vcfcf_", 1)
+    return f"{old_module} is deprecated, use {new_module}; removed next release"
+
+
+@pytest.mark.parametrize("old_module", DOTTED_HELP_MODULES)
+def test_old_dotted_module_help_runs_through_alias_loader(old_module):
+    new_module = old_module.replace("vcfops_", "vcfcf_", 1)
+    old = _run_old_module(old_module, "--help", default_filters=True)
+    new = _run_old_module(new_module, "--help", default_filters=True)
+    assert new.returncode == 0, new.stderr
+    assert old.returncode == 0, old.stderr
+    assert old.stdout == new.stdout
+    assert old.stderr.count(_notice(old_module)) == 1, old.stderr
+    assert "AttributeError" not in old.stderr
+
+
+def test_old_dotted_grammar_suite_matches_new_name():
+    """The documented `-m vcfcf_managementpacks._test_tier33_grammar` form, via the old name.
+
+    The suite's own pass/fail is not under test here (it exits 1 on main
+    today); what matters is that the old dotted name runs the same code and
+    lands on the same result as the new one, with the notice on stderr.
+    """
+    old_module = "vcfops_managementpacks._test_tier33_grammar"
+    old = _run_old_module(old_module, default_filters=True)
+    new = _run_old_module("vcfcf_managementpacks._test_tier33_grammar", default_filters=True)
+    assert old.returncode == new.returncode
+    assert old.stdout == new.stdout
+    assert old.stderr.count(_notice(old_module)) == 1, old.stderr
+    assert "_AliasLoader" not in old.stderr and "AttributeError" not in old.stderr
+
+
+def test_old_dotted_subpackage_alias_is_a_package():
+    import importlib.util  # noqa: PLC0415
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        spec = importlib.util.find_spec("vcfops_managementpacks.adapter_framework")
+        import vcfops_managementpacks.adapter_framework as old_pkg  # noqa: PLC0415
+        import vcfcf_managementpacks.adapter_framework as new_pkg  # noqa: PLC0415
+    assert spec is not None and spec.submodule_search_locations is not None
+    assert old_pkg is new_pkg
+    leaf = importlib.util.find_spec("vcfops_packaging.defects")
+    assert leaf.origin and leaf.origin.endswith("vcfcf_packaging/defects.py")
+    assert leaf.has_location

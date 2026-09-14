@@ -23,7 +23,9 @@ The shim's own ``__main__.py`` is deliberately not aliased: it prints a
 one-line deprecation notice to stderr (the ``DeprecationWarning`` is
 hidden by Python's default filters on the ``-m`` path) and forwards to
 the new package via ``runpy`` so ``python -m vcfops_x`` otherwise behaves
-exactly like ``python -m vcfcf_x``.
+exactly like ``python -m vcfcf_x``. Dotted runs (``python -m
+vcfops_x.sub``) go through the alias loader's ``get_code``, which prints
+the same notice and executes the real module's code.
 
 Remove this module and the ten shim packages one release after M1 ships.
 """
@@ -42,16 +44,45 @@ _ALIASES: Dict[str, str] = {}
 
 
 class _AliasLoader(importlib.abc.Loader):
-    """Loader that hands back an already-imported module object."""
+    """Loader that hands back an already-imported module object.
 
-    def __init__(self, target) -> None:
+    Also supports ``python -m old_pkg.sub``: runpy asks the loader for
+    ``get_code`` and executes it as ``__main__``. We forward to the real
+    module's loader so the same source runs, and print the one-line
+    deprecation notice (the ``-m`` path never sees the DeprecationWarning
+    under default filters).
+    """
+
+    def __init__(self, target, old_name: str) -> None:
         self._target = target
+        self._old_name = old_name
 
     def create_module(self, spec):  # noqa: D401
         return self._target
 
     def exec_module(self, module) -> None:
         return None
+
+    def get_code(self, fullname: str):
+        target_spec = getattr(self._target, "__spec__", None)
+        real_loader = getattr(target_spec, "loader", None)
+        if real_loader is None or not hasattr(real_loader, "get_code"):
+            raise ImportError(f"{self._target.__name__} has no runnable code")
+        print(
+            f"{self._old_name} is deprecated, use {self._target.__name__}; "
+            "removed next release",
+            file=sys.stderr,
+        )
+        return real_loader.get_code(self._target.__name__)
+
+    def get_source(self, fullname: str):
+        real_loader = getattr(getattr(self._target, "__spec__", None), "loader", None)
+        if real_loader is None or not hasattr(real_loader, "get_source"):
+            return None
+        return real_loader.get_source(self._target.__name__)
+
+    def is_package(self, fullname: str) -> bool:
+        return hasattr(self._target, "__path__")
 
 
 class _AliasFinder(importlib.abc.MetaPathFinder):
@@ -71,7 +102,17 @@ class _AliasFinder(importlib.abc.MetaPathFinder):
             if exc.name in (new_name, _ALIASES[head]):
                 return None
             raise
-        return importlib.util.spec_from_loader(fullname, _AliasLoader(new_mod))
+        target_spec = getattr(new_mod, "__spec__", None)
+        spec = importlib.util.spec_from_loader(
+            fullname,
+            _AliasLoader(new_mod, fullname),
+            origin=getattr(target_spec, "origin", None),
+        )
+        # Carry the real file location so a module run as __main__ through
+        # the old name sees the same __file__ it would under the new one.
+        spec.has_location = bool(getattr(target_spec, "has_location", False))
+        spec.cached = getattr(target_spec, "cached", None)
+        return spec
 
 
 _FINDER = _AliasFinder()
