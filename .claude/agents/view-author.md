@@ -65,7 +65,7 @@ Track-specific examples:
 7. **Never install.**
 8. **Supported view types: `list`, `distribution`, `trend`.** The factory's
    loader/renderer support exactly three `data_type` values
-   (`src/vcfcf_dashboards/loader.py`): `list` (default; `list`/`summary`
+   (`src/vcfcf_core/dashboards/loader.py`): `list` (default; `list`/`summary`
    presentation), `distribution` (`bar-chart`/`pie-chart`/`donut-chart`), and
    `trend` (`line-chart`). You author all three — see
    `knowledge/context/authoring/view_dashboard_design_guide.md` for each type's columns,

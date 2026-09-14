@@ -179,7 +179,7 @@ Walk all of these against the change. Each is tied to its authority.
 
 9. **Stale-zip discipline, and the signal that announces it.** If the
    change touches `src/vcfcf_packaging/templates/`,
-   `src/vcfcf_packaging/builder.py`, or `src/vcfcf_dashboards/render.py`,
+   `src/vcfcf_packaging/builder.py`, or `src/vcfcf_core/dashboards/render.py`,
    **all dist zips are stale** (CLAUDE.md "After tooling changes"). The
    change must flag a `content-packager` rebuild; if it doesn't, that's a
    finding.
@@ -230,7 +230,7 @@ Walk all of these against the change. Each is tied to its authority.
 
 ```
 FRAMEWORK REVIEW
-  area: <package(s) touched, e.g. src/vcfcf_dashboards/render>
+  area: <package(s) touched, e.g. src/vcfcf_core/dashboards/render>
   change: <one line — what tooling changed>
   verdict: APPROVE | CHANGES REQUESTED
   findings: <B> BLOCKING / <W> WARNING / <N> NIT

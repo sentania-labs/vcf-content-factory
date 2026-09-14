@@ -5,7 +5,7 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
+from typing import Iterable, List, Optional
 
 import yaml
 import yaml.constructor
@@ -224,6 +224,46 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SuperM
     )
     sm.validate(enforce_framework_prefix=enforce_framework_prefix)
     return sm
+
+
+def sm_id_map(sm_scope: Optional[Iterable[Path]] = None, bundle_context: Optional[str] = None) -> dict[str, str]:
+    """Super metric name to uuid map for the view renderer (M2 row 2).
+
+    ``vcfcf_core.dashboards.render`` takes this map as an argument and never
+    looks for SM YAML itself; this is the factory side that finds it.
+
+    Scoped (``sm_scope`` is a list of SM YAML paths, possibly empty): load
+    exactly those files with ``enforce_framework_prefix=False``; any load
+    failure is re-raised as ``ValueError`` naming ``bundle_context`` so a
+    bundle build fails with a clear message.
+
+    Unscoped (``sm_scope`` is None): the pre-row-2 renderer's native mode,
+    kept verbatim. Scan ``content/supermetrics`` then ``supermetrics``
+    relative to the working directory (first that is a directory wins) and
+    swallow every error into an empty map. ``load_dir`` builds its list
+    before returning, so the result is all-or-nothing, as before.
+    """
+    sm_map: dict[str, str] = {}
+    if sm_scope is not None:
+        try:
+            for sm_path in sm_scope:
+                sm = load_file(sm_path, enforce_framework_prefix=False)
+                sm_map[sm.name] = sm.id
+        except Exception as exc:
+            raise ValueError(
+                f"sm_id_map: failed to load scoped SM for "
+                f"bundle {bundle_context!r}: {exc}"
+            ) from exc
+        return sm_map
+    try:
+        for candidate in (Path("content/supermetrics"), Path("supermetrics")):
+            if candidate.is_dir():
+                for sm in load_dir(candidate):
+                    sm_map[sm.name] = sm.id
+                break
+    except Exception:
+        pass
+    return sm_map
 
 
 def load_dir(directory: str | Path = "supermetrics", enforce_framework_prefix: bool = True) -> List[SuperMetricDef]:

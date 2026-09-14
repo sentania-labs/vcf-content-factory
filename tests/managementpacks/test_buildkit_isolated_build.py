@@ -754,3 +754,78 @@ def test_kit_isolated_reports_with_embedded_views_fails_without_rewrite(tmp_path
             f"subprocess stderr:\n{result.stderr[:2000]}\n"
             f"subprocess stdout:\n{result.stdout[:500]}"
         )
+
+
+# ---------------------------------------------------------------------------
+# M2 row 2 kit delta: bundled view/dashboard YAML with no id fails the build
+# ---------------------------------------------------------------------------
+# The kit's dashboard_loader.py is the vcfcf_core copy since row 2. It takes
+# id-minting as a callback and the kit's sdk_builder passes none, so a bundled
+# view or dashboard YAML without ``id:`` fails the pak build with a clear
+# error instead of being minted into the adapter's checkout during CI (which
+# gave a fresh UUID per build and never landed in the source). The kit's
+# sm_loader.py still mints (its parse half moves in row 3). buildkit.py's
+# docstring states this delta; this test pins it.
+
+_ISOLATED_NO_ID_SCRIPT = textwrap.dedent("""\
+    import sys
+    from pathlib import Path
+
+    project_dir = Path(sys.argv[1])
+    kind = sys.argv[2]
+    from sdk_buildkit import sdk_builder
+    from sdk_buildkit.dashboard_loader import DashboardValidationError
+
+    raw = {"bundled_content": {kind: [f"{kind}/no-id.yaml"]}}
+    path = project_dir / kind / "no-id.yaml"
+    before = path.read_text(encoding="utf-8")
+    try:
+        sdk_builder._load_bundled_content(raw, project_dir, project_dir)
+    except sdk_builder.SdkBuildError as exc:
+        cause = exc.__cause__
+        assert isinstance(cause, DashboardValidationError), repr(cause)
+        assert "missing id" in str(cause), str(cause)
+        assert path.read_text(encoding="utf-8") == before, "the kit wrote into the source YAML"
+        print("NO_ID_REJECTED")
+    else:
+        sys.exit("no-id YAML was accepted by the kit build")
+""")
+
+
+@pytest.mark.timeout(30)
+@pytest.mark.parametrize("kind", ["views", "dashboards"])
+def test_kit_isolated_bundled_yaml_without_id_fails_the_build_and_writes_nothing(tmp_path, kind):
+    import tempfile  # noqa: PLC0415
+    kit_root = tmp_path / "kit"
+    _assemble_kit_python_only(kit_root)
+    project_dir = tmp_path / "adapter"
+    (project_dir / kind).mkdir(parents=True)
+    if kind == "views":
+        body = (
+            "name: \"[VCF Content Factory] Kit No Id View\"\n"
+            "subject: {adapter_kind: VMWARE, resource_kind: HostSystem}\n"
+            "columns:\n  - {display_name: CPU, attribute: cpu|usage_average}\n"
+        )
+    else:
+        body = (
+            "name: \"[VCF Content Factory] Kit No Id Dashboard\"\n"
+            "widgets: []\n"
+        )
+    (project_dir / kind / "no-id.yaml").write_text(body, encoding="utf-8")
+
+    script_path = tmp_path / "_run_no_id.py"
+    script_path.write_text(_ISOLATED_NO_ID_SCRIPT, encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(script_path), str(project_dir), kind],
+        capture_output=True, text=True, cwd=tempfile.gettempdir(),
+        env=_make_isolated_env(kit_root), timeout=25,
+    )
+    _assert_no_vcfcf_module_error(result.stderr, result.stdout)
+    assert result.returncode == 0, f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+    assert "NO_ID_REJECTED" in result.stdout
+    # Contrast: the factory's own loader mints on the same input.
+    from vcfcf_dashboards.loader import load_view, load_dashboard  # noqa: PLC0415
+    factory_copy = tmp_path / f"factory-{kind}.yaml"
+    factory_copy.write_text(body, encoding="utf-8")
+    loaded = (load_view if kind == "views" else load_dashboard)(factory_copy, enforce_framework_prefix=False)
+    assert factory_copy.read_text(encoding="utf-8").startswith(f"id: {loaded.id}\n")

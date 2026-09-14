@@ -355,6 +355,7 @@ class TestViewColumnSmRoundTrip:
         Super Metric|sm_<uuid> in the forward XML — not a literal token."""
         from vcfcf_extractor.reverse_local import _write_view_yaml
         from vcfcf_dashboards.render import render_views_xml
+        from vcfcf_supermetrics.loader import sm_id_map
         from vcfcf_dashboards.loader import load_view
 
         view_data = {
@@ -410,7 +411,7 @@ class TestViewColumnSmRoundTrip:
         assert vd is not None
 
         sm_paths = list(sm_dir.rglob("*.yaml"))
-        rendered_xml = render_views_xml([vd], sm_scope=sm_paths)
+        rendered_xml = render_views_xml([vd], sm_map=sm_id_map(sm_paths), sm_scope_active=True)
 
         # The rendered XML must contain Super Metric|sm_<uuid> — NOT a literal token
         expected_attr = f"Super Metric|sm_{self._SM_UUID}"

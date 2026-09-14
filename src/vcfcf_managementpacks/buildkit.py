@@ -1,4 +1,4 @@
-"""buildkit.py — Assemble a portable sdk-buildkit tarball.
+"""buildkit.py: Assemble a portable sdk-buildkit tarball.
 
 The kit is a self-contained Python package (sdk_buildkit) that can build
 Tier 2 SDK adapter .pak files without a factory checkout and without any
@@ -9,24 +9,24 @@ LLM / agent involvement.  CI runners pull the tarball, extract it, and run:
 Kit contents (assembled under a temp dir, then tarballed):
   sdk_buildkit/
     __init__.py
-    __main__.py                 — exposes build-sdk / validate-sdk / pak-compare
-    sdk_builder.py              — copy of vcfcf_managementpacks/sdk_builder.py (paths relocated)
-    sdk_project.py              — copy (no path changes needed)
-    pak_compare.py              — copy (no path changes needed)
-    provenance.py               — copy of vcfcf_common/provenance.py (pure stdlib)
-    dashboard_loader.py         — copy of vcfcf_dashboards/loader.py (imports patched)
-    dashboard_render.py         — copy of vcfcf_dashboards/render.py (imports patched)
+    __main__.py                : exposes build-sdk / validate-sdk / pak-compare
+    sdk_builder.py             : copy of vcfcf_managementpacks/sdk_builder.py (paths relocated)
+    sdk_project.py             : copy (no path changes needed)
+    pak_compare.py             : copy (no path changes needed)
+    provenance.py              : copy of vcfcf_common/provenance.py (pure stdlib)
+    dashboard_loader.py         : copy of vcfcf_core/dashboards/loader.py (imports patched)
+    dashboard_render.py         : copy of vcfcf_core/dashboards/render.py (imports patched)
     dashboard_yaml_utils.py     : copy of vcfcf_core/dashboards/yaml_utils.py
-    sm_loader.py                — copy of vcfcf_supermetrics/loader.py
+    sm_loader.py               : copy of vcfcf_supermetrics/loader.py
     symptoms_loader.py          : copy of vcfcf_core/symptoms/loader.py
     alerts_loader.py            : copy of vcfcf_core/alerts/loader.py
     alerts_render.py            : copy of vcfcf_core/alerts/render.py (imports patched)
-    reports_loader.py           — copy of vcfcf_reports/loader.py
-    reports_render.py           — copy of vcfcf_reports/render.py (imports patched)
-    adapter_framework/src/       — framework Java source (compiled at build-sdk time)
-    adapter_runtime/             — empty directory (jar compiled into here on first use)
-    templates/icons/             — SVG icon assets
-    reference_paks/             — one reference .pak for pak-compare
+    reports_loader.py          : copy of vcfcf_reports/loader.py
+    reports_render.py          : copy of vcfcf_reports/render.py (imports patched)
+    adapter_framework/src/      : framework Java source (compiled at build-sdk time)
+    adapter_runtime/            : empty directory (jar compiled into here on first use)
+    templates/icons/            : SVG icon assets
+    reference_paks/            : one reference .pak for pak-compare
     LICENSE
     VERSION
 
@@ -40,25 +40,31 @@ Path relocation in the kit's sdk_builder.py:
 
 Import rewrites also applied to:
   alerts_render.py  : vcfcf_core.symptoms.loader / vcfcf_core.alerts.loader → flat kit names
-  reports_render.py — relative .loader → reports_loader (flat kit name)
-  sdk_builder.py    — also rewrites the inline `from vcfcf_dashboards.render
+  reports_render.py: relative .loader → reports_loader (flat kit name)
+  sdk_builder.py   : also rewrites the inline `from vcfcf_dashboards.render
                        import render_view_def_fragments` used by the
                        co-bundled-reports path (report subdir embeds its
                        referenced views' <ViewDef> fragments)
 
 repo_root handling:
   In the factory, _load_bundled_content resolves bundled_content paths against
-  _REPO_ROOT (_HERE.parent.parent since the src/ reorg — the factory root).
-  In the kit, there is no factory root —
+  _REPO_ROOT (_HERE.parent.parent since the src/ reorg: the factory root).
+  In the kit, there is no factory root:
   adapters carry their own view/dashboard YAML.  The kit's build-sdk passes
   project_dir as repo_root so that bundled_content: paths are relative to the
   adapter's own directory.
 
 Bundled-content closure:
-  vcfcf_dashboards.loader imports vcfcf_common.provenance.  vcfcf_common's
+  vcfcf_supermetrics.loader imports vcfcf_common.provenance.  vcfcf_common's
   __init__.py imports requests (network client), which is NOT available in CI.
   The kit ships provenance.py directly (pure stdlib) and patches the loader
   import accordingly.  See provenance.py docstring for details.
+
+  Since M2 row 2 the kit's dashboard_loader.py is the vcfcf_core copy: it
+  takes the id-minting and provenance callbacks and gets neither here, so a
+  bundled view or dashboard YAML with no ``id:`` fails the build instead of
+  being minted into the adapter's source tree, and ``provenance`` is ``""``
+  (nothing in the kit reads it).
 """
 from __future__ import annotations
 
@@ -70,7 +76,7 @@ from pathlib import Path
 from typing import Optional
 
 # ---------------------------------------------------------------------------
-# Version constant — bump when kit contents change in a meaningful way
+# Version constant: bump when kit contents change in a meaningful way
 # ---------------------------------------------------------------------------
 
 BUILDKIT_VERSION = "1.0.9"
@@ -97,8 +103,8 @@ _FACTORY_SOURCES = {
     "sdk_project.py": _HERE / "sdk_project.py",
     "pak_compare.py": _HERE / "pak_compare.py",
     "provenance.py": _SRC_ROOT / "vcfcf_common" / "provenance.py",
-    "dashboard_loader.py": _SRC_ROOT / "vcfcf_dashboards" / "loader.py",
-    "dashboard_render.py": _SRC_ROOT / "vcfcf_dashboards" / "render.py",
+    "dashboard_loader.py": _CORE_ROOT / "dashboards" / "loader.py",
+    "dashboard_render.py": _CORE_ROOT / "dashboards" / "render.py",
     "dashboard_yaml_utils.py": _CORE_ROOT / "dashboards" / "yaml_utils.py",
     "sm_loader.py": _SRC_ROOT / "vcfcf_supermetrics" / "loader.py",
     "sm_crossref.py": _CORE_ROOT / "supermetrics" / "crossref.py",
@@ -156,6 +162,13 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from vcfcf_supermetrics import crossref as _crossref",
             "from . import sm_crossref as _crossref",
+        ),
+        # from vcfcf_supermetrics.loader import sm_id_map as _sm_id_map  (inline at
+        # every view render site; M2 row 2 moved the SM name-to-uuid lookup out of
+        # the renderer and into the factory's SM loader)
+        (
+            r"from vcfcf_supermetrics\.loader import sm_id_map as _sm_id_map",
+            "from .sm_loader import sm_id_map as _sm_id_map",
         ),
         # from vcfcf_supermetrics.loader import load_file as _load_sm  (inline in _load_bundled_content)
         (
@@ -238,17 +251,18 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             "from .provenance import provenance_from_path",
         ),
     ],
-    # dashboard_loader.py: rewrite vcfcf_dashboards.yaml_utils and vcfcf_common.provenance
+    # dashboard_loader.py (vcfcf_core copy): rewrite the two relative imports
+    # inside vcfcf_core.dashboards to the flat kit names.
     "dashboard_loader.py": [
-        # from vcfcf_dashboards.yaml_utils import strict_load as _strict_load
+        # from .yaml_utils import strict_load as _strict_load
         (
-            r"from vcfcf_dashboards\.yaml_utils import strict_load as _strict_load",
+            r"from \.yaml_utils import strict_load as _strict_load",
             "from .dashboard_yaml_utils import strict_load as _strict_load",
         ),
-        # from vcfcf_common.provenance import provenance_from_path
+        # from .render import _VIEW_PIN_CONTAINER  (inline import in load_dashboard)
         (
-            r"from vcfcf_common\.provenance import provenance_from_path",
-            "from .provenance import provenance_from_path",
+            r"from \.render import _VIEW_PIN_CONTAINER",
+            "from .dashboard_render import _VIEW_PIN_CONTAINER",
         ),
     ],
     # dashboard_render.py: rewrite .loader import (it's a relative import within
@@ -263,16 +277,6 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
         (
             r"from \.loader import BucketsConfig",
             "from .dashboard_loader import BucketsConfig",
-        ),
-        # from vcfcf_supermetrics.loader import load_file as _sm_load_file
-        (
-            r"from vcfcf_supermetrics\.loader import load_file as _sm_load_file",
-            "from .sm_loader import load_file as _sm_load_file",
-        ),
-        # from vcfcf_supermetrics.loader import load_dir as _sm_load_dir
-        (
-            r"from vcfcf_supermetrics\.loader import load_dir as _sm_load_dir",
-            "from .sm_loader import load_dir as _sm_load_dir",
         ),
     ],
     # alerts_render.py: rewrite vcfcf_core.symptoms.loader and vcfcf_core.alerts.loader

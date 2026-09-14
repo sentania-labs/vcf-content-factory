@@ -9,6 +9,7 @@ from pathlib import Path
 
 from vcfcf_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
 from vcfcf_supermetrics.client import VCFOpsClient, VCFOpsError
+from vcfcf_supermetrics.loader import sm_id_map
 
 from .client import (
     DASHBOARD_CONTENT_TYPES,
@@ -316,7 +317,9 @@ def cmd_package(args) -> int:
     except DashboardValidationError as e:
         print(f"INVALID: {e}", file=sys.stderr)
         return 1
-    blob = build_import_zip(views, dashboards)
+    # sm_id_map() with no scope scans content/supermetrics from the cwd,
+    # the map the renderer used to find on its own before M2 row 2.
+    blob = build_import_zip(views, dashboards, sm_map=sm_id_map())
     out = Path(args.output)
     out.write_bytes(blob)
     print(f"wrote {out} ({len(blob)} bytes)")
@@ -338,7 +341,8 @@ def cmd_sync(args) -> int:
         user = get_current_user(client)
         marker = discover_marker_filename(client)
         blob = build_import_zip(
-            views, dashboards, owner_user_id=user["id"], marker_filename=marker
+            views, dashboards, owner_user_id=user["id"], marker_filename=marker,
+            sm_map=sm_id_map(),
         )
         result = import_content_zip(client, blob)
     except VCFOpsError as e:

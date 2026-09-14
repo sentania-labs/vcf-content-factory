@@ -4,7 +4,7 @@ Learned 2026-08-25 from cached 9.1.1 / 9.2 UI captures
 (`getDashboardConfig` and `getWidgetConfigs` for four vendor dashboards,
 18 Section widgets, 15 gauge scoreboards). Structure only was lifted; no
 vendor names or keys are reproduced here. Implemented in
-`src/vcfcf_dashboards/loader.py` and `render.py`; tests in
+`src/vcfcf_core/dashboards/loader.py` and `render.py`; tests in
 `tests/test_dashboard_section_widget.py`.
 
 The captures are the UI's *runtime* representation (`key`, `gridsterX`,

@@ -48,7 +48,7 @@ import zipfile
 from pathlib import Path
 from typing import List, Optional
 
-from vcfcf_supermetrics.loader import SuperMetricDef, load_dir as load_sm_dir
+from vcfcf_supermetrics.loader import SuperMetricDef, load_dir as load_sm_dir, sm_id_map
 from vcfcf_dashboards.loader import ViewDef, Dashboard
 from vcfcf_customgroups.loader import CustomGroupDef, load_dir as load_cg_dir
 from vcfcf_reports.loader import ReportDef, load_dir as _load_reports_dir
@@ -743,7 +743,12 @@ def _assemble_zip(
 
     bundle_ctx = f'discrete:{item_type}:{display_name!r}'
     views_xml = (
-        render_views_xml(bundle.views, sm_scope=bundle.sm_paths, bundle_context=bundle_ctx)
+        render_views_xml(
+            bundle.views,
+            sm_map=sm_id_map(bundle.sm_paths, bundle_ctx),
+            sm_scope_active=True,
+            bundle_context=bundle_ctx,
+        )
         if bundle.views else None
     )
 

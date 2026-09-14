@@ -467,6 +467,7 @@ class TestViewCountAndEdgeCase:
         """All 96 vcommunity views must render to well-formed XML."""
         from vcfcf_dashboards.loader import load_view
         from vcfcf_dashboards.render import render_views_xml
+        from vcfcf_supermetrics.loader import sm_id_map
 
         sm_paths = list(sorted(self._SM_DIR.rglob("*.yaml")))
         errors = []
@@ -475,7 +476,7 @@ class TestViewCountAndEdgeCase:
             v = load_view(f, enforce_framework_prefix=False)
             count += 1
             try:
-                xml_text = render_views_xml([v], sm_scope=sm_paths)
+                xml_text = render_views_xml([v], sm_map=sm_id_map(sm_paths), sm_scope_active=True)
                 self._parse_view_xml(xml_text)
             except Exception as exc:
                 errors.append((v.name, str(exc)))
@@ -499,6 +500,7 @@ class TestViewCountAndEdgeCase:
         """
         from vcfcf_dashboards.loader import load_view
         from vcfcf_dashboards.render import render_views_xml
+        from vcfcf_supermetrics.loader import sm_id_map
 
         view_path = self._VIEWS_DIR / "Guest OS List of Services.yaml"
         assert view_path.exists(), f"Expected view at {view_path}"
@@ -510,7 +512,7 @@ class TestViewCountAndEdgeCase:
 
         # Renders without error (format is correct; drop is a platform decision)
         sm_paths = list(sorted(self._SM_DIR.rglob("*.yaml")))
-        xml_text = render_views_xml([v], sm_scope=sm_paths)
+        xml_text = render_views_xml([v], sm_map=sm_id_map(sm_paths), sm_scope_active=True)
         root = self._parse_view_xml(xml_text)
         vd = root.find(".//ViewDef")
         assert vd is not None, "ViewDef element missing in rendered XML"

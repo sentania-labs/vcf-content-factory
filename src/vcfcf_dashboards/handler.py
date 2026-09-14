@@ -29,6 +29,7 @@ from vcfcf_packaging.handler import (
     ValidateResult,
 )
 from vcfcf_supermetrics.client import VCFOpsClient, VCFOpsError
+from vcfcf_supermetrics.loader import sm_id_map
 
 from .client import (
     all_skipped_content_types,
@@ -107,6 +108,7 @@ class ViewsHandler(ContentHandler):
                 owner_user_id=user["id"],
                 owner_username=user.get("userName", "admin"),
                 marker_filename=marker,
+                sm_map=sm_id_map(),
             )
             api_result = import_content_zip(session, blob)
         except VCFOpsError as exc:
@@ -279,6 +281,7 @@ class DashboardsHandler(ContentHandler):
                 owner_user_id=user["id"],
                 owner_username=user.get("userName", "admin"),
                 marker_filename=marker,
+                sm_map=sm_id_map(),
             )
             api_result = import_content_zip(session, blob)
         except VCFOpsError as exc:

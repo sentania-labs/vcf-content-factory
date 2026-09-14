@@ -119,7 +119,7 @@ which must match the view's UUID. In this repo, the dashboard YAML's
 view YAML's `id` at build time.
 
 External view references: a `view:` value that is a canonical lowercase
-UUID (anchored `_UUID_RE` in `vcfcf_dashboards/loader.py`) and matches no
+UUID (anchored `_UUID_RE` in `src/vcfcf_core/dashboards/loader.py`) and matches no
 loaded view is emitted verbatim as `viewDefinitionId` (platform or
 other-MP views, resolved on the instance at install time). Anything else
 that is not a loaded view is rejected twice: `Dashboard.validate()` raises

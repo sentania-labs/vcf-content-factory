@@ -158,8 +158,9 @@ class TestLocalizationKeyCollision:
             },
         )
         view = load_view(view_path, enforce_framework_prefix=False)
-        # sm_scope=[] keeps the render hermetic: no scan of content/supermetrics.
-        return render_views_xml([view], sm_scope=[])
+        # Empty scoped map keeps the render hermetic (the renderer takes the SM
+        # map as an argument since M2 row 2 and never scans content/supermetrics).
+        return render_views_xml([view], sm_map={}, sm_scope_active=True)
 
     @staticmethod
     def _display_name_properties(xml_text: str) -> list:
@@ -242,8 +243,9 @@ class TestViewDefTitleDescriptionNoLocalizationKey:
             },
         )
         view = load_view(view_path, enforce_framework_prefix=False)
-        # sm_scope=[] keeps the render hermetic: no scan of content/supermetrics.
-        return render_views_xml([view], sm_scope=[])
+        # Empty scoped map keeps the render hermetic (the renderer takes the SM
+        # map as an argument since M2 row 2 and never scans content/supermetrics).
+        return render_views_xml([view], sm_map={}, sm_scope_active=True)
 
     def test_title_and_description_carry_no_localization_key(self, tmp_path):
         """<Title> and <Description> must render as plain elements with no

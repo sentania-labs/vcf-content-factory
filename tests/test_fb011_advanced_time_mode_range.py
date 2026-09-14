@@ -119,7 +119,7 @@ class TestRendererStartEndPeriod:
             },
         )
         view = load_view(view_path, enforce_framework_prefix=False)
-        xml_text = render_views_xml([view], sm_scope=[])
+        xml_text = render_views_xml([view], sm_map={}, sm_scope_active=True)
         props = _props(_time_control(xml_text))
         assert props["advancedTimeMode"] == "true"
         assert props["startPeriod"] == "PREVIOUS"
@@ -138,7 +138,7 @@ class TestRendererStartEndPeriod:
             {"unit": "DAYS", "count": 7, "advanced_time_mode": True},
         )
         view = load_view(view_path, enforce_framework_prefix=False)
-        xml_text = render_views_xml([view], sm_scope=[])
+        xml_text = render_views_xml([view], sm_map={}, sm_scope_active=True)
         props = _props(_time_control(xml_text))
         assert props["advancedTimeMode"] == "true"
         assert props["startPeriod"] == "PREVIOUS"
@@ -153,7 +153,7 @@ class TestRendererStartEndPeriod:
 
         view_path = _make_view_yaml(tmp_path, {"unit": "DAYS", "count": 7})
         view = load_view(view_path, enforce_framework_prefix=False)
-        xml_text = render_views_xml([view], sm_scope=[])
+        xml_text = render_views_xml([view], sm_map={}, sm_scope_active=True)
         props = _props(_time_control(xml_text))
         assert props["advancedTimeMode"] == "false"
         assert "startPeriod" not in props
@@ -182,7 +182,7 @@ class TestRendererStartEndPeriod:
             },
         )
         view = load_view(view_path, enforce_framework_prefix=False)
-        xml_text = render_views_xml([view], sm_scope=[])
+        xml_text = render_views_xml([view], sm_map={}, sm_scope_active=True)
         props = _props(_time_control(xml_text))
         assert props["advancedTimeMode"] == "false"
         assert "startPeriod" not in props

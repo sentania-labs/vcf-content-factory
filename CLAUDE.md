@@ -314,7 +314,7 @@ ignore one, never silently downgrade. Decide:
 - **After tooling changes:** if `tooling` touched
   `src/vcfcf_packaging/templates/`, `builder.py`,
   `discrete_builder.py`, `release_builder.py`, or
-  `src/vcfcf_dashboards/render.py`, **all distribution zips are
+  `src/vcfcf_core/dashboards/render.py`, **all distribution zips are
   stale**; delegate a full `content-packager` rebuild of every
   manifest in `bundles/`. Not optional.
 
