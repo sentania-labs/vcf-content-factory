@@ -6,18 +6,24 @@ Two halves:
 
 1. Dynamic: every module under ``src/vcfcf_core`` imports in a subprocess
    whose working directory is an empty temp dir and whose environment is
-   empty except ``PATH`` and a ``PYTHONPATH`` pointing at ``src/``. A module
-   that needs the factory tree, a ``.env``, or the repo cwd fails here.
+   empty except ``PATH`` and a ``PYTHONPATH`` pointing at a temp copy of
+   ``src/vcfcf_core`` alone, so the factory packages are genuinely absent.
+   A module that needs the factory tree, a factory package, a ``.env``, or
+   the repo cwd fails here.
 
 2. Static (AST, so prose in docstrings and comments never trips it): every
    ``.py`` under ``src/vcfcf_core`` is rejected for
-   - ``os.environ`` / ``os.getenv`` reads (any spelling of the import),
-   - a path that escapes the package: ``.parents[...]`` anywhere, or
-     ``.parent.parent`` anywhere, or ``<name>.parent`` where ``<name>`` was
+   - ``os.environ`` / ``os.getenv`` reads (any spelling of the import,
+     including ``import os as <alias>``),
+   - a path that escapes the package: ``.parents[...]`` anywhere,
+     ``.parent.parent`` anywhere, ``<name>.parent`` where ``<name>`` was
      bound at module level from an expression mentioning ``__file__``,
+     nested ``os.path.dirname(os.path.dirname(...))``, or
+     ``.joinpath("..")``,
    - a default argument value naming a factory directory
-     (``content/...``, ``knowledge/...``, ``dist...``, or exactly
-     ``supermetrics`` / ``views`` / ``dashboards`` / ``bundles``),
+     (``content``, ``content/...``, ``knowledge``, ``knowledge/...``,
+     ``dist...``, or exactly ``supermetrics`` / ``views`` / ``dashboards``
+     / ``bundles``),
    - ``import requests`` in any form,
    - an import of any ``vcfcf_*`` package other than ``vcfcf_core``,
    - a file write (``open(..., "w"/"a"/"x")``, ``.write_text``,
@@ -31,6 +37,7 @@ from __future__ import annotations
 
 import ast
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -46,8 +53,15 @@ CORE = SRC / "vcfcf_core"
 ALLOWLIST: set[tuple[str, int]] = set()
 
 _DIR_DEFAULT_PREFIXES = ("content/", "knowledge/", "dist")
-_DIR_DEFAULT_EXACT = {"supermetrics", "views", "dashboards", "bundles"}
+_DIR_DEFAULT_EXACT = {"content", "knowledge", "supermetrics", "views", "dashboards", "bundles"}
 _WRITE_MODES = ("w", "a", "x")
+
+
+def _copy_core_only(dst: Path) -> Path:
+    """Copy src/vcfcf_core alone into dst/site and return that path."""
+    site = dst / "site"
+    shutil.copytree(CORE, site / "vcfcf_core", ignore=shutil.ignore_patterns("__pycache__"))
+    return site
 
 
 def _core_py_files() -> list[Path]:
@@ -76,15 +90,56 @@ def _rel(path: Path) -> str:
     "module", [_module_name(p) for p in _core_py_files()], ids=lambda m: m,
 )
 def test_core_module_imports_with_no_environment(module: str, tmp_path: Path) -> None:
-    env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(SRC)}
+    site = _copy_core_only(tmp_path)
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    env = {"PATH": os.environ.get("PATH", ""), "PYTHONPATH": str(site)}
+    # Prove the factory really is absent from this interpreter before the
+    # module under test gets a chance to import it.
+    probe = (
+        "import importlib, sys\n"
+        "for name in ('vcfcf_common', 'vcfcf_packaging', 'vcfcf_supermetrics'):\n"
+        "    try:\n"
+        "        importlib.import_module(name)\n"
+        "    except ImportError:\n"
+        "        pass\n"
+        "    else:\n"
+        "        sys.exit('factory package %s is importable; isolation broken' % name)\n"
+        f"importlib.import_module({module!r})\n"
+        "leaked = sorted(m for m in sys.modules if m.startswith('vcfcf_') and not m.startswith('vcfcf_core'))\n"
+        "if leaked:\n"
+        "    sys.exit('non-core modules loaded: %s' % leaked)\n"
+    )
     result = subprocess.run(
-        [sys.executable, "-c", f"import importlib; importlib.import_module({module!r})"],
-        cwd=str(tmp_path), env=env, capture_output=True, text=True, timeout=60,
+        [sys.executable, "-c", probe],
+        cwd=str(cwd), env=env, capture_output=True, text=True, timeout=60,
     )
     assert result.returncode == 0, (
-        f"{module} failed to import from an empty cwd with an empty environment:\n"
-        f"{result.stderr}"
+        f"{module} failed to import from an empty cwd, an empty environment, "
+        f"and a PYTHONPATH holding only vcfcf_core:\n{result.stderr}"
     )
+
+
+def test_packages_find_matches_every_core_package_on_disk() -> None:
+    """W2: scoped discovery must pick up every vcfcf_core* package on disk.
+
+    Reads the [tool.setuptools.packages.find] table from pyproject.toml,
+    runs the same discovery setuptools will, and compares with a plain walk
+    of src/vcfcf_core for directories carrying __init__.py. A subpackage
+    added in a later row cannot silently drop out of the wheel.
+    """
+    tomllib = pytest.importorskip("tomllib")
+    setuptools = pytest.importorskip("setuptools")
+    cfg = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    find = cfg["tool"]["setuptools"]["packages"]["find"]
+    assert find["where"] == ["src"]
+    assert find["include"] == ["vcfcf_core*"]
+    found = set(setuptools.find_packages(where=str(SRC), include=find["include"]))
+    on_disk = {
+        _module_name(p) for p in CORE.rglob("__init__.py")
+    }
+    assert found == on_disk, f"find result {sorted(found)} != on disk {sorted(on_disk)}"
+    assert all(name == "vcfcf_core" or name.startswith("vcfcf_core.") for name in found)
 
 
 # ---------------------------------------------------------------------------
@@ -132,9 +187,26 @@ def _static_findings(path: Path) -> list[tuple[int, str]]:
     tree = ast.parse(source, filename=str(path))
     findings: list[tuple[int, str]] = []
     file_bound = _names_bound_from_file(tree, source)
+    # Every local name bound to the os module (``import os``, ``import os as o``).
+    os_aliases = {"os"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name == "os":
+                    os_aliases.add(alias.asname or "os")
 
     def hit(node: ast.AST, msg: str) -> None:
         findings.append((node.lineno, msg))
+
+    def is_os_path_dirname(call: ast.AST) -> bool:
+        """``<os>.path.dirname(...)`` or a bare ``dirname(...)`` imported from os.path."""
+        if not isinstance(call, ast.Call):
+            return False
+        f = call.func
+        if isinstance(f, ast.Attribute) and f.attr == "dirname":
+            v = f.value
+            return isinstance(v, ast.Attribute) and v.attr == "path" and isinstance(v.value, ast.Name) and v.value.id in os_aliases
+        return isinstance(f, ast.Name) and f.id == "dirname"
 
     # Track the innermost enclosing function name so writes inside load*
     # functions can be attributed. Nested defs are walked explicitly.
@@ -169,8 +241,8 @@ def _static_findings(path: Path) -> list[tuple[int, str]]:
                             hit(node, f"imports os.{alias.name}")
         # os.environ / os.getenv attribute reads.
         elif isinstance(node, ast.Attribute):
-            if isinstance(node.value, ast.Name) and node.value.id == "os" and node.attr in ("environ", "getenv"):
-                hit(node, f"reads os.{node.attr}")
+            if isinstance(node.value, ast.Name) and node.value.id in os_aliases and node.attr in ("environ", "getenv"):
+                hit(node, f"reads os.{node.attr} (via {node.value.id})")
             if node.attr == "parent":
                 if isinstance(node.value, ast.Attribute) and node.value.attr == "parent":
                     hit(node, "escapes the package via .parent.parent")
@@ -187,8 +259,13 @@ def _static_findings(path: Path) -> list[tuple[int, str]]:
                     v = d.value  # type: ignore[union-attr]
                     if v.startswith(_DIR_DEFAULT_PREFIXES) or v.rstrip("/") in _DIR_DEFAULT_EXACT:
                         hit(d, f"default argument names a directory: {v!r}")
-        # Writes inside load* functions.
+        # Calls: nested dirname, joinpath(".."), and writes inside load*.
         elif isinstance(node, ast.Call):
+            if is_os_path_dirname(node) and node.args and is_os_path_dirname(node.args[0]):
+                hit(node, "escapes the package via nested os.path.dirname()")
+            if isinstance(node.func, ast.Attribute) and node.func.attr == "joinpath":
+                if any(_is_str_const(a) and a.value == ".." for a in node.args):  # type: ignore[union-attr]
+                    hit(node, "escapes the package via .joinpath('..')")
             in_load = any(name.startswith("load") for name in func_stack)
             if in_load:
                 if _open_write_mode(node):
@@ -232,6 +309,12 @@ _VIOLATION_SAMPLES = {
     "bound .parent": "from pathlib import Path\nH = Path(__file__).parent\nR = H.parent\n",
     "default content/": "def f(root='content/supermetrics'):\n    pass\n",
     "default bare dir": "def f(*, kind='views'):\n    pass\n",
+    "default exactly content": "def f(root='content'):\n    pass\n",
+    "default exactly knowledge": "def f(root='knowledge'):\n    pass\n",
+    "os alias environ": "import os as o\nX = o.environ.get('A')\n",
+    "nested os.path.dirname": "import os\nR = os.path.dirname(os.path.dirname(__file__))\n",
+    "nested dirname alias": "import os as o\nR = o.path.dirname(o.path.dirname(__file__))\n",
+    "joinpath ..": "from pathlib import Path\nH = Path(__file__).parent\nR = H.joinpath('..', 'content')\n",
     "import requests": "import requests\n",
     "from requests": "from requests import Session\n",
     "non-core vcfcf": "from vcfcf_common.client import Client\n",
@@ -258,7 +341,9 @@ def test_static_checker_accepts_clean_module(tmp_path: Path, monkeypatch) -> Non
         "import os\nfrom pathlib import Path\nimport yaml\n"
         "def load_z(p: Path, mode='r'):\n    return yaml.safe_load(p.read_text())\n"
         "def write_out(p: Path, text):\n    p.write_text(text)\n"
-        "HERE = Path(__file__).parent\nSIBLING = HERE / 'x'\n",
+        "HERE = Path(__file__).parent\nSIBLING = HERE / 'x'\n"
+        "D = os.path.dirname(__file__)\nJ = HERE.joinpath('templates', 'icons')\n"
+        "def g(kind='contents', where='knowledgeable'):\n    pass\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(sys.modules[__name__], "SRC", tmp_path / "src")

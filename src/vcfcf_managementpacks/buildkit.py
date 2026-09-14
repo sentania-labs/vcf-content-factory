@@ -16,11 +16,11 @@ Kit contents (assembled under a temp dir, then tarballed):
     provenance.py               — copy of vcfcf_common/provenance.py (pure stdlib)
     dashboard_loader.py         — copy of vcfcf_dashboards/loader.py (imports patched)
     dashboard_render.py         — copy of vcfcf_dashboards/render.py (imports patched)
-    dashboard_yaml_utils.py     — copy of vcfcf_core/dashboards/yaml_utils.py
+    dashboard_yaml_utils.py     : copy of vcfcf_core/dashboards/yaml_utils.py
     sm_loader.py                — copy of vcfcf_supermetrics/loader.py
-    symptoms_loader.py          — copy of vcfcf_core/symptoms/loader.py
-    alerts_loader.py            — copy of vcfcf_core/alerts/loader.py
-    alerts_render.py            — copy of vcfcf_core/alerts/render.py (imports patched)
+    symptoms_loader.py          : copy of vcfcf_core/symptoms/loader.py
+    alerts_loader.py            : copy of vcfcf_core/alerts/loader.py
+    alerts_render.py            : copy of vcfcf_core/alerts/render.py (imports patched)
     reports_loader.py           — copy of vcfcf_reports/loader.py
     reports_render.py           — copy of vcfcf_reports/render.py (imports patched)
     adapter_framework/src/       — framework Java source (compiled at build-sdk time)
@@ -39,7 +39,7 @@ Path relocation in the kit's sdk_builder.py:
   templates/icons           = _HERE / "templates" / "icons"
 
 Import rewrites also applied to:
-  alerts_render.py  — vcfcf_core.symptoms.loader / vcfcf_core.alerts.loader → flat kit names
+  alerts_render.py  : vcfcf_core.symptoms.loader / vcfcf_core.alerts.loader → flat kit names
   reports_render.py — relative .loader → reports_loader (flat kit name)
   sdk_builder.py    — also rewrites the inline `from vcfcf_dashboards.render
                        import render_view_def_fragments` used by the

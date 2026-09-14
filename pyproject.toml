@@ -20,22 +20,30 @@
 # sdk-buildkit tarball works with zero factory install.
 #
 # How this file keeps that promise while also building a wheel: the
-# [tool.setuptools] `packages` list below is EXPLICIT and names only
-# vcfcf_core and its subpackages. setuptools' auto-discovery (which would
-# otherwise sweep every src/ package into the wheel, the failure mode the
-# previous version of this file documented as "UNKNOWN-0.0.0") is disabled
-# by the presence of that explicit list. `pip install .` therefore installs
-# vcfcf_core and nothing else; `import vcfcf_common` still fails in a clean
-# venv. tests/test_core_contract.py keeps vcfcf_core free of any import of
-# the factory packages, so the wheel cannot drag them in transitively.
+# [tool.setuptools.packages.find] table below is scoped to `vcfcf_core*`
+# under src/, so every vcfcf_core subpackage on disk enters the wheel
+# (tests/test_core_contract.py asserts the find result equals the packages
+# on disk) and nothing else from src/ can. Unscoped auto-discovery (which
+# would sweep every src/ package into the wheel, the failure mode the
+# previous version of this file documented as "UNKNOWN-0.0.0") never runs.
+# `pip install .` therefore installs vcfcf_core and nothing else;
+# `import vcfcf_common` still fails in a clean venv. The contract test also
+# keeps vcfcf_core free of any import of the factory packages, so the wheel
+# cannot drag them in transitively.
 #
 # Versioning: the library's version comes from a `core-vX.Y.Z` git tag via
 # setuptools-scm (tag_regex below matches only that prefix, so the factory's
 # own vX.Y.Z tags and the sdk-buildkit-vX.Y.Z tags never bump it). An
-# untagged tree gets a PEP 440 dev version derived from the commit distance;
-# a tree with no git metadata at all (a git-archive tarball) gets
-# fallback_version. vcfcf_core.__version__ reads the installed metadata and
-# reports "0.0.0+src" when run from the tree with no wheel installed.
+# untagged working tree gets a PEP 440 dev version derived from the commit
+# distance (0.0.1.devN+g<sha>); only a tree with no git metadata at all (a
+# git-archive export) gets fallback_version 0.0.0. vcfcf_core.__version__
+# reads whatever distribution metadata is visible (an installed wheel, or
+# the egg-info residue a `python -m build` leaves under src/) and reports
+# "0.0.0+src" only when there is none.
+#
+# `license = { text = "MIT" }` is the pre-setuptools-77 spelling; the bare
+# string form needs setuptools>=77 in [build-system].requires. Kept as is
+# because the checked-in toolchain is setuptools 68.1.2.
 #
 # Design: knowledge/designs/tooling-core-carveout-v1.md.
 
@@ -58,17 +66,12 @@ dynamic = ["version"]
 Homepage = "https://github.com/sentania-labs/vcf-content-factory"
 
 [tool.setuptools]
-# Explicit list: nothing else under src/ may end up in the wheel.
 package-dir = { "" = "src" }
-packages = [
-    "vcfcf_core",
-    "vcfcf_core.alerts",
-    "vcfcf_core.dashboards",
-    "vcfcf_core.packaging",
-    "vcfcf_core.reports",
-    "vcfcf_core.supermetrics",
-    "vcfcf_core.symptoms",
-]
+
+[tool.setuptools.packages.find]
+# Scoped discovery: every vcfcf_core subpackage, nothing else under src/.
+where = ["src"]
+include = ["vcfcf_core*"]
 
 [tool.setuptools_scm]
 # Only core-vX.Y.Z tags version the library.

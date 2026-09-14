@@ -1,3 +1,5 @@
-"""Moved to ``vcfcf_core.alerts.render`` (M2 row 1); this path re-exports it."""
-from vcfcf_core.alerts.render import *  # noqa: F401,F403
-from vcfcf_core.alerts.render import _symptom_id  # noqa: F401  (sdk_builder imports it)
+"""Moved to ``vcfcf_core.alerts.render`` (M2 row 1); this path is an alias of it."""
+import sys
+import vcfcf_core.alerts.render as _m
+
+sys.modules[__name__] = _m
