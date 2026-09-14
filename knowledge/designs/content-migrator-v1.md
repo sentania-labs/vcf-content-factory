@@ -23,7 +23,7 @@ Interview on 2026-09-14. Each answer is quoted as given.
 | Question | Answer | Consequence |
 |---|---|---|
 | Source | "Offline export zip only (Recommended)" | v1 never logs in anywhere. The admin exports from the source instance the normal way and points the tool at the zip. Live pull is a v2 item. |
-| Versions | "8.x to 9.x from the start" | The tool translates 8.x export formats into what 9.x imports. This is the largest piece of v1 and is corpus-driven (below). |
+| Versions | "8.x to 9.x from the start", then 2026-09-14: "but do we really need to account for them? if operations imports them properly, let them handle it, and we just handle dependency tracking, preview generation, and output bundle creation based on selected objects." | **No translation layer.** The tool carries each selected object's document through unchanged and lets the target's import do what it already does with an 8.x document. The tool's job is the three things Scott named: dependency tracking, preview, and bundle creation from the selection. |
 | 8.x corpus | "Saved 8.x export zips only" then "the 8.x exports should not be in the repo." | No live 8.x. The translation layer is built against export zips Scott supplies, which stay on the workstation and never enter the repo. Coverage is what those zips contain; anything not in the corpus is refused, not guessed. |
 | 8.x floor | "8.10 and later (Recommended)" | Exports older than 8.10 are refused with a message naming the floor. Found 2026-09-14: an export zip carries no product version anywhere (checked an 8.18.7 export and a 9.0.2 export; both carry the same `6844548499441080431L.v1` marker, so that is a format marker, not an instance or version id). The admin therefore declares the source version: a `--source-version` option on every command with a matching control on the page, remembered in settings. The floor is enforced on the declared value; with none declared the tool says so and continues in inspect, and refuses to build. |
 | Outbound settings | "I believe the secrets are encrypted, so we should just pass them along." then "Yes, endpoints and rules, as exported" | Notification rules and outbound endpoint definitions ride in the bundle exactly as the export carries them, encrypted values included. The tool does not decrypt, edit, or strip them. M4 acceptance includes a real import proving the target accepts the values; if it does not, that is a finding, not a silent drop. |
@@ -81,13 +81,23 @@ same core:
   everything. Every setting the CLI takes has a control on this page
   (rule 2), with defaults that work untouched.
 
-The 8.x translation layer is a separate module with one function per
-content type, each mapping an 8.x document to its 9.x form, plus a
-version detector reading the export's marker. Each translation is
-backed by a fixture pair from the corpus: the 8.x input and the 9.x
-form a 9.x instance produced for the same content. Unknown shapes
-raise and name the field, and the tool reports "refused: not in
-corpus" for that item rather than emitting a guess.
+**Pass-through is the contract, and it constrains the build path.**
+There is no translation module. The one rule that makes pass-through
+safe: a selected object's document goes into the output bundle as the
+bytes the export carried, never as a re-serialization of a parsed
+model. Parsing is for the tree and the preview only. Re-rendering a
+document the tool does not fully understand is how an 8.x field, or a
+9.2 field this tool has never seen, gets silently dropped; copying
+bytes cannot lose a field it does not know about. Where a bundle
+requires a container the export does not have (a manifest, a zip
+layout), the tool writes the container and copies the documents into
+it.
+
+This also means the tool is not a validator. If the target's import
+refuses a document, that is the target's answer about that content,
+and the tool's report says which object was refused and what the
+target said. The admin is no worse off than importing the original
+export by hand, which is the baseline this has to beat.
 
 Corpus on hand, 2026-09-14: `corpus/scott-8.18.7-2026-09-14.zip`
 (Scott, verbatim on its version: "8.18.7"; 5 dashboards, 19 views, 17
@@ -141,13 +151,12 @@ pair document by document:
   clearly warranted.
 
 Caveat on how far this generalises: one lab, five content types, no
-matched pair at all for alerts, symptoms, reports or recommendations,
-because Brock's 8.18.7 export carries none. So the honest reading is
-that M5 is probably much smaller than "one translation per content
-type", and that the v1 design should assume pass-through with
-per-type exceptions rather than a translation layer with per-type
-pass-through exemptions. Before M5 is planned in detail, the corpus
-needs an 8.x export carrying alerts, symptoms and reports.
+matched pair for alerts, symptoms, reports or recommendations, because
+Brock's 8.18.7 export carries none. Under pass-through that caveat
+stops being a blocker: the tool does not need to understand a
+difference it never rewrites. The missing matched pairs now matter
+only for M5's verification pass, which finds out by importing rather
+than by comparing.
 
 Outbound and the export password. Found while taking the first corpus
 zip from the lab (9.0.2, 2026-09-14): the export API refuses to include
@@ -211,10 +220,12 @@ A translation counts as done only when both tiers pass.
 - **M4 (MVP)**: the use case works on a 9.x export: tree, preview,
   select, build, import the bundle into the lab's 9.x instance and see
   the dashboards. Outbound pass-through verified on that import.
-- **M5**: 8.x translation, one content type per PR, corpus-driven,
-  until every type in Scott's zips round-trips. `v1.0.0` when a full
-  8.x export from the corpus imports cleanly into 9.x and the
-  dashboards render.
+- **M5**: cross-version verification, not translation. Build a bundle
+  from Brock's 8.18.7 export, import it into a 9.x instance, and
+  record per type what the target accepted. Anything refused becomes
+  either a report message or, if a container-level fix makes it work,
+  a fix in the bundle writer. `v1.0.0` when an 8.x-sourced bundle
+  imports into 9.x and the dashboards render.
 
 ## Release log
 
