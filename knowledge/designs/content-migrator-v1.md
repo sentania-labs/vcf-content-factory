@@ -117,6 +117,38 @@ not request. The 8.18.7 outbound setting is plain text (an SMTP relay
 with no credentials); the encoded `exportId` and `signature` strings
 in every member are signatures, not encrypted payloads.
 
+What the 8.x to 9.x gap actually looks like. Scott, 2026-09-14: "the
+8.18 and 9.0.2 (new one) are from brock's lab", so those two exports
+carry the same objects before and after, and the overlap is a matched
+pair set: 3 super metrics, 5 views, 3 dashboards, 1 custom group and 1
+outbound setting share a uuid across the two versions. Comparing each
+pair document by document:
+
+- **Super metrics: no translation needed.** All three shared documents
+  are identical apart from `modificationTime` and `modifiedBy`.
+- **Views: no structural translation needed.** Two of five are
+  byte-identical. The other three differ only in control id counters
+  (`time-interval-selector_id_237` against `_id_5679`, which are
+  instance-local sequence numbers) and in author-visible text
+  (`Monthly Projected Cost` against `Projected Monthly Cost`,
+  `GROUP_hardware` against `GROUP_Certificate Summary`). No element or
+  attribute exists on one side and not the other.
+- **Dashboards: a real but small gap.** 9.x carries keys 8.x does not
+  (`autoswitchDelay`, `autoswitchTabId`) and the widget resource
+  bindings name different adapter kinds (`VMWARE` against
+  `mpb_vcf_operations_`), which is instance binding rather than
+  version. This is the one type where a translation function is
+  clearly warranted.
+
+Caveat on how far this generalises: one lab, five content types, no
+matched pair at all for alerts, symptoms, reports or recommendations,
+because Brock's 8.18.7 export carries none. So the honest reading is
+that M5 is probably much smaller than "one translation per content
+type", and that the v1 design should assume pass-through with
+per-type exceptions rather than a translation layer with per-type
+pass-through exemptions. Before M5 is planned in detail, the corpus
+needs an 8.x export carrying alerts, symptoms and reports.
+
 Outbound and the export password. Found while taking the first corpus
 zip from the lab (9.0.2, 2026-09-14): the export API refuses to include
 notification rules or outbound settings unless the request carries an
