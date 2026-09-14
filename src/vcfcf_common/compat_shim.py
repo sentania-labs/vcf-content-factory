@@ -1,23 +1,28 @@
 """Support for the deprecated ``vcfops_*`` import names.
 
 Milestone M1 of the content-migrator plan renamed every package from
-``vcfops_<name>`` to ``vcfcf_<name>``. External callers (the SDK adapter
-repos run ``python3 -m vcfops_packaging ...`` and
-``python3 -m vcfops_managementpacks ...`` from their own CI) keep working
-for one release through thin ``src/vcfops_<name>/`` shim packages that
-call :func:`install`.
+``vcfops_<name>`` to ``vcfcf_<name>``. Callers that still use the old
+names (the SDK adapter repos' READMEs document ``python3 -m
+vcfops_packaging ...`` and ``python3 -m vcfops_managementpacks ...``;
+their CI does not, it runs the published sdk_buildkit) keep working for
+one release through thin ``src/vcfops_<name>/`` shim packages that call
+:func:`install`. Follow-up to retire the old names: issue #159.
 
 What ``install`` does, once per old package:
 
 1. Emits a single ``DeprecationWarning`` naming the new module.
 2. Copies the new package's public attributes into the shim namespace so
-   ``import vcfops_x; vcfops_x.thing`` keeps resolving.
+   ``import vcfops_x; vcfops_x.thing`` keeps resolving, and forwards the
+   new package's module-level ``__getattr__`` / ``__dir__`` when it has
+   them (``vcfcf_common`` lazy-loads ``VCFOpsClient`` that way).
 3. Registers an alias finder so ``import vcfops_x.sub`` yields the very
    same module object as ``import vcfcf_x.sub`` (no duplicate module
    instances, so isinstance checks and module-level state stay shared).
 
-The shim's own ``__main__.py`` is deliberately not aliased: it forwards
-to the new package via ``runpy`` so ``python -m vcfops_x`` behaves
+The shim's own ``__main__.py`` is deliberately not aliased: it prints a
+one-line deprecation notice to stderr (the ``DeprecationWarning`` is
+hidden by Python's default filters on the ``-m`` path) and forwards to
+the new package via ``runpy`` so ``python -m vcfops_x`` otherwise behaves
 exactly like ``python -m vcfcf_x``.
 
 Remove this module and the ten shim packages one release after M1 ships.
@@ -87,3 +92,10 @@ def install(old_name: str, new_name: str, namespace: dict) -> None:
     for key, value in vars(new_mod).items():
         if key == "__all__" or not key.startswith("__"):
             namespace[key] = value
+    # Module-level __getattr__ / __dir__ (PEP 562) are dunders the loop
+    # above skips on purpose; forward them so lazily exposed names such as
+    # vcfcf_common.VCFOpsClient resolve through the old name too.
+    if hasattr(new_mod, "__getattr__"):
+        namespace["__getattr__"] = lambda name: getattr(new_mod, name)
+    if hasattr(new_mod, "__dir__"):
+        namespace["__dir__"] = lambda: dir(new_mod)

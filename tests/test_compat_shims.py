@@ -1,9 +1,11 @@
 """M1 compatibility shims: the old ``vcfops_*`` names still work for one release.
 
-Six external SDK adapter repos run ``python3 -m vcfops_packaging ...`` and
-``python3 -m vcfops_managementpacks ...`` from their own CI. The shim
-packages under ``src/vcfops_<name>/`` must forward to ``vcfcf_<name>`` and
-warn exactly once. See ``vcfcf_common/compat_shim.py``.
+The SDK adapter repos' READMEs document ``python3 -m vcfops_packaging ...``
+and ``python3 -m vcfops_managementpacks ...`` (their CI runs the published
+sdk_buildkit instead, so it is unaffected). The shim packages under
+``src/vcfops_<name>/`` must forward to ``vcfcf_<name>``, warn exactly once
+on import, and print one deprecation line on the ``-m`` path. See
+``vcfcf_common/compat_shim.py``; retirement tracked in issue #159.
 """
 from __future__ import annotations
 
@@ -26,12 +28,15 @@ OLD_PACKAGES = [
 ]
 
 
-def _run_old_module(module: str, *args: str) -> subprocess.CompletedProcess:
+def _run_old_module(module: str, *args: str, default_filters: bool = False) -> subprocess.CompletedProcess:
     env = dict(os.environ)
     env["PYTHONPATH"] = str(SRC)
-    # DeprecationWarning is silenced by default outside __main__; surface it
-    # so the test can count it.
-    env["PYTHONWARNINGS"] = "default::DeprecationWarning"
+    if default_filters:
+        env.pop("PYTHONWARNINGS", None)
+    else:
+        # DeprecationWarning is silenced by default outside __main__; surface it
+        # so the test can count it.
+        env["PYTHONWARNINGS"] = "default::DeprecationWarning"
     return subprocess.run(
         [sys.executable, "-m", module, *args],
         cwd=str(REPO_ROOT), env=env,
@@ -68,3 +73,47 @@ def test_old_submodule_import_is_same_object_as_new():
     deprecations = [w for w in caught if issubclass(w.category, DeprecationWarning)]
     assert len(deprecations) == 1
     assert "vcfcf_common" in str(deprecations[0].message)
+
+
+@pytest.mark.parametrize("old_module", ["vcfops_packaging", "vcfops_managementpacks"])
+def test_old_module_prints_deprecation_line_under_default_filters(old_module):
+    """Operators running the old command with no -W flag still get one notice."""
+    new_module = old_module.replace("vcfops_", "vcfcf_", 1)
+    result = _run_old_module(old_module, "--help", default_filters=True)
+    assert result.returncode == 0, result.stderr
+    expected = f"{old_module} is deprecated, use {new_module}; removed next release"
+    assert result.stderr.count(expected) == 1, result.stderr
+    assert "DeprecationWarning" not in result.stderr, "default filters should hide the warning object"
+
+
+def test_old_common_name_exposes_lazy_client_names():
+    """vcfcf_common lazy-loads VCFOpsClient/VCFOpsError via module __getattr__; the shim must forward it."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        from vcfops_common import VCFOpsClient, VCFOpsError  # noqa: PLC0415
+        import vcfops_common  # noqa: PLC0415
+        import vcfcf_common  # noqa: PLC0415
+    assert VCFOpsClient is vcfcf_common.VCFOpsClient
+    assert VCFOpsError is vcfcf_common.VCFOpsError
+    assert vcfops_common.VCFOpsError is vcfcf_common.VCFOpsError
+    assert "VCFOpsClient" in dir(vcfops_common)
+    with pytest.raises(AttributeError):
+        vcfops_common.no_such_name  # noqa: B018
+
+
+def test_old_common_star_import_resolves_every_all_name():
+    ns = {}
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        exec("from vcfops_common import *", ns)  # noqa: S102
+        import vcfcf_common  # noqa: PLC0415
+    for name in vcfcf_common.__all__:
+        assert ns[name] is getattr(vcfcf_common, name), name
+
+
+def test_old_non_common_package_attribute():
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        import vcfops_packaging  # noqa: PLC0415
+        import vcfcf_packaging  # noqa: PLC0415
+    assert vcfops_packaging.CURRENT_TEMPLATE_VERSION == vcfcf_packaging.CURRENT_TEMPLATE_VERSION
