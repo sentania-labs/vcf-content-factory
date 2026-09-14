@@ -28,22 +28,37 @@ A built package is a zip at dist/<bundle-name>.zip with the layout:
 
 Template stamping is removed entirely, install.py and install.ps1 are
 static and read everything from bundle.json at runtime.
+
+M2 row 3: the payload rendering, the drag-drop inner zips, bundle.json,
+``vcfops_manifest.json`` and the outer zip layout live in
+``vcfcf_core.packaging.assembly`` (re-exported here under their old names
+for ``discrete_builder`` and tests). This module keeps what reads the repo:
+the dependency audit, the static installer templates, the LICENSE, the
+design note behind the bundle README, and the output path.
 """
 from __future__ import annotations
 
-import io
-import json
-import uuid
-import zipfile
+import datetime as _dt
 from pathlib import Path
 from typing import List, Optional
 
-from vcfcf_dashboards.render import render_views_xml, render_dashboards_bundle_json
-from vcfcf_reports.render import render_report_xml
-from vcfcf_alerts.render import render_alert_content_xml
-from vcfcf_supermetrics.crossref import resolve_sm_formula, sm_name_to_uuid_map
+from vcfcf_core.packaging.assembly import (  # noqa: F401  (re-exported for old-path callers)
+    DASHBOARD_DROPIN_USER_ID,
+    PLACEHOLDER_USER_ID,
+    _SM_CROSSREF_HINT_BUNDLE,
+    _build_bundle_json,
+    _build_dashboard_dropin_zip,
+    _build_reports_dropin_zip,
+    _build_views_inner_zip,
+    _render_customgroup_rest_payload,
+    _render_customgroup_ui_payload,
+    _render_supermetrics_dict,
+    assemble_distribution_zip,
+    render_bundle_payloads,
+    render_vcfops_manifest,
+)
 from vcfcf_supermetrics.loader import sm_id_map
-from .loader import Bundle, BundleValidationError, load_bundle, render_bme_items
+from .loader import Bundle, BundleValidationError, load_bundle, render_bme_items  # noqa: F401
 from .template_version import CURRENT_TEMPLATE_VERSION
 
 # ---------------------------------------------------------------------------
@@ -71,219 +86,11 @@ def _slug_to_display_name(slug: str) -> str:
     return " ".join(result)
 
 
-# The builder stamps PLACEHOLDER_USER_ID into the rendered dashboard JSON.
-# The install script replaces this at install time with the real user UUID.
-PLACEHOLDER_USER_ID = "PLACEHOLDER_USER_ID"
-
-# Deterministic UUID5 used in drag-drop Dashboard.zip (no installer stamping
-# available at drag-drop time).  Derived from the framework's canonical DNS
-# label so it is constant across builds, syntactically valid, and grep-able
-# as framework-stamped content.  Resolves to:
-#   b58a71ee-e909-5b40-a355-9e199e6f0f53
-# A 130-dashboard corpus survey found zero uses of the nil UUID in real
-# community packages; UUID5 looks natural compared to the corpus's real-UUID
-# values while remaining deterministic and identifiable.
-DASHBOARD_DROPIN_USER_ID = str(uuid.uuid5(uuid.NAMESPACE_DNS, "vcf-content-factory.local"))
+# PLACEHOLDER_USER_ID and DASHBOARD_DROPIN_USER_ID live in
+# vcfcf_core.packaging.assembly (imported above).
 
 # Templates live next to this file in vcfcf_packaging/templates/
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
-
-
-def _build_bundle_json(bundle: Bundle, display_name: str) -> str:
-    """Build the bundle.json metadata manifest embedded in distribution zips.
-
-    Paths in ``file:`` are relative to the bundle's own subdirectory
-    (``bundles/<slug>/``).  The install script joins them with the bundle dir.
-
-    Shape:
-      {
-        "name": "...",
-        "display_name": "...",   (optional; same as name if absent)
-        "description": "...",
-        "content": {
-          "supermetrics": {"file": "content/supermetrics.json", "items": [...]},
-          "views":        {"file": "content/views_content.xml",  "items": [...]},
-          "dashboards":   {"file": "content/dashboard.json",     "items": [...]},
-          "customgroups": {"file": "content/customgroup.json",   "items": [...]},
-          "symptoms":     {"file": "content/symptoms.json",      "items": [...]},
-          "alerts":       {"file": "content/alerts.json",        "items": [...]},
-          "reports":      {"file": "content/reports_content.xml","items": [...]}
-        }
-      }
-    items[].name is the uninstall contract; items[].uuid is present for
-    types that carry UUIDs (supermetrics, views, dashboards, reports).
-    """
-
-    content: dict = {}
-    if bundle.supermetrics:
-        content["supermetrics"] = {
-            "file": "content/supermetrics.json",
-            "items": [{"uuid": sm.id, "name": sm.name} for sm in bundle.supermetrics],
-        }
-    if bundle.views:
-        content["views"] = {
-            "file": "content/views_content.xml",
-            "items": [{"uuid": v.id, "name": v.name} for v in bundle.views],
-        }
-    if bundle.dashboards:
-        content["dashboards"] = {
-            "file": "content/dashboard.json",
-            "items": [{"uuid": d.id, "name": d.name} for d in bundle.dashboards],
-        }
-    if bundle.customgroups:
-        content["customgroups"] = {
-            "file": "content/customgroup.json",
-            "items": [{"name": cg.name} for cg in bundle.customgroups],
-        }
-    if bundle.symptoms:
-        content["symptoms"] = {
-            "file": "content/symptoms.json",
-            "items": [{"name": s.name} for s in bundle.symptoms],
-        }
-    if bundle.alerts:
-        content["alerts"] = {
-            "file": "content/alerts.json",
-            "items": [{"name": a.name} for a in bundle.alerts],
-        }
-    if bundle.reports:
-        content["reports"] = {
-            "file": "content/reports_content.xml",
-            "items": [{"uuid": rd.id, "name": rd.name} for rd in bundle.reports],
-        }
-    if bundle.builtin_metric_enables:
-        content["builtin_metric_enables"] = {
-            "file": "content/builtin_metric_enables.json",
-            "items": render_bme_items(bundle.builtin_metric_enables),
-        }
-
-    manifest: dict = {
-        "name": bundle.name,
-        "display_name": display_name,
-        "description": bundle.description or "",
-        "content": content,
-    }
-    # Include provenance fields when present
-    if not bundle.factory_native:
-        manifest["factory_native"] = False
-    if bundle.author:
-        manifest["author"] = bundle.author
-    if bundle.license:
-        manifest["license"] = bundle.license
-    if bundle.source:
-        manifest["source"] = bundle.source
-    return json.dumps(manifest, indent=2)
-
-
-# Remediation sentence for a native bundle build: the fix is a manifest edit.
-_SM_CROSSREF_HINT_BUNDLE = (
-    "That super metric is not in this bundle.  Add it to the bundle manifest "
-    "(or to the same discrete/release component), or remove the "
-    "cross-reference from the formula."
-)
-
-
-def _render_supermetrics_dict(bundle: Bundle) -> dict:
-    """Render super metrics as a dict keyed by UUID (wire format).
-
-    ``@supermetric:"<name>"`` cross-reference tokens are resolved to the native
-    ``Super Metric|sm_<uuid>`` wire token against the bundle's own SM set.  VCF
-    Ops cannot parse the authoring-time token, so an unresolvable name is a hard
-    build error rather than a silently corrupt super metric.
-    """
-    name_to_uuid = sm_name_to_uuid_map(bundle.supermetrics)
-    result = {}
-    for sm in bundle.supermetrics:
-        formula = " ".join(sm.formula.split())
-        formula = resolve_sm_formula(
-            formula,
-            sm.name,
-            name_to_uuid,
-            error_cls=BundleValidationError,
-            hint=_SM_CROSSREF_HINT_BUNDLE,
-        )
-        result[sm.id] = {
-            "name": sm.name,
-            "formula": formula,
-            "description": sm.description,
-            "unitId": sm.unit_id or "",
-            "resourceKinds": sm.resource_kinds,
-        }
-    return result
-
-
-def _render_customgroup_rest_payload(bundle: Bundle):
-    """Render custom group REST API wire payloads (for content/customgroup.json).
-
-    Returns a single dict if there is one group, a list if there are multiple.
-    The install script's _install_customgroups() reads this file and calls
-    upsert_custom_group() which POSTs/PUTs to /api/resources/groups.
-    """
-    if not bundle.customgroups:
-        return None
-    wire = [cg.to_wire() for cg in bundle.customgroups]
-    return wire[0] if len(wire) == 1 else wire
-
-
-def _render_customgroup_ui_payload(bundle: Bundle) -> dict | None:
-    """Render custom group UI import payload (for drag-drop customgroup.json).
-
-    Produces the envelope format expected by the VCF Ops UI custom group import
-    dialog: {"customGroups": [...], "customGroupTypes": [...]}.  All groups in
-    the bundle are merged into a single envelope.  Duplicate customGroupTypes
-    (same resourceKind) are deduplicated, keeping the first occurrence.
-
-    See knowledge/context/wire-formats/customgroup_import_format.md for the format specification.
-    """
-    if not bundle.customgroups:
-        return None
-    all_groups = []
-    seen_type_keys: dict = {}  # resourceKind -> first localization seen
-    for cg in bundle.customgroups:
-        ui = cg.to_ui_wire()
-        all_groups.extend(ui["customGroups"])
-        for gt in ui["customGroupTypes"]:
-            rk = gt["resourceKind"]
-            if rk not in seen_type_keys:
-                seen_type_keys[rk] = gt
-    return {
-        "customGroups": all_groups,
-        "customGroupTypes": list(seen_type_keys.values()),
-    }
-
-
-def _build_views_inner_zip(xml_text: str) -> bytes:
-    """Build Views.zip: inner content.xml at zip root."""
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("content.xml", xml_text)
-    return buf.getvalue()
-
-
-def _build_dashboard_dropin_zip(dashboard_json_with_placeholder: str) -> bytes:
-    """Build Dashboard.zip for drag-drop UI import.
-
-    Uses DASHBOARD_DROPIN_USER_ID (a deterministic UUID5) in place of
-    PLACEHOLDER_USER_ID since no installer is available to stamp the real
-    owner at drag-drop time.  Both userId and lastUpdateUserId are covered
-    by the single string replace because the renderer writes PLACEHOLDER_USER_ID
-    into both fields.
-    Inner structure: dashboard/dashboard.json + language resource stubs.
-    """
-    patched = dashboard_json_with_placeholder.replace(PLACEHOLDER_USER_ID, DASHBOARD_DROPIN_USER_ID)
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("dashboard/dashboard.json", patched)
-        for lang in ("", "_es", "_fr", "_ja"):
-            z.writestr(f"dashboard/resources/resources{lang}.properties", "")
-    return buf.getvalue()
-
-
-def _build_reports_dropin_zip(reports_xml: str) -> bytes:
-    """Build Reports.zip for drag-drop UI import (inner content.xml)."""
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        z.writestr("content.xml", reports_xml)
-    return buf.getvalue()
 
 
 def _load_design_sections(bundle: Bundle) -> dict:
@@ -650,85 +457,18 @@ def build_bundle(
     framework_readme_path = _TEMPLATES_DIR / "README_framework.md"
     framework_readme = framework_readme_path.read_text(encoding="utf-8")
 
-    # --- Render content payloads ---
-    sm_dict = _render_supermetrics_dict(bundle) if bundle.supermetrics else {}
-    sm_json = json.dumps(sm_dict, indent=2) if sm_dict else None
-
+    # --- Render content payloads (vcfcf_core.packaging.assembly) ---
     # Build the SM scope for the renderer: the set of SM YAML files declared
     # in this bundle's manifest.  This prevents cross-bundle UUID leakage,
     # a third-party bundle's views resolve only against its own SMs, never
     # against native SMs or another bundle's SMs.
     # bundle_context label is included in any resolution-error messages.
     bundle_ctx = f'"{bundle.name}" (factory_native={bundle.factory_native})'
-    views_xml = (
-        render_views_xml(
-            bundle.views,
-            sm_map=sm_id_map(bundle.sm_paths, bundle_ctx),
-            sm_scope_active=True,
-            bundle_context=bundle_ctx,
-        )
-        if bundle.views else None
+    payloads = render_bundle_payloads(
+        bundle,
+        sm_map=sm_id_map(bundle.sm_paths, bundle_ctx),
+        bundle_context=bundle_ctx,
     )
-
-    dashboard_json = None
-    if bundle.dashboards:
-        views_by_name = {v.name: v for v in bundle.views}
-        dashboard_json = render_dashboards_bundle_json(
-            bundle.dashboards, views_by_name, PLACEHOLDER_USER_ID
-        )
-
-    # REST-format payload for install-script REST API path (content/customgroup.json)
-    cg_rest_payload = _render_customgroup_rest_payload(bundle)
-    cg_rest_json = json.dumps(cg_rest_payload, indent=2) if cg_rest_payload is not None else None
-    # UI-format payload for drag-drop import (bundles/<slug>/customgroup.json)
-    cg_ui_payload = _render_customgroup_ui_payload(bundle)
-    cg_ui_json = json.dumps(cg_ui_payload, indent=2) if cg_ui_payload is not None else None
-
-    reports_xml = render_report_xml(bundle.reports) if bundle.reports else None
-
-    # Symptoms: serialize to wire format at build time.
-    symptoms_payload = [s.to_wire() for s in bundle.symptoms] if bundle.symptoms else None
-    symptoms_json = json.dumps(symptoms_payload, indent=2) if symptoms_payload else None
-
-    # Alerts: store YAML-equivalent dict for runtime symptom ID resolution.
-    alerts_payload = None
-    if bundle.alerts:
-        alerts_payload = []
-        for a in bundle.alerts:
-            # Serialize RecommendationRef objects as plain dicts so
-            # json.dumps can handle them.
-            rec_refs_serialized = [
-                {"name": r.name, "priority": r.priority}
-                for r in a.recommendations
-            ]
-            alerts_payload.append({
-                "name": a.name,
-                "description": a.description,
-                "adapter_kind": a.adapter_kind,
-                "resource_kind": a.resource_kind,
-                "type": a.type,
-                "sub_type": a.sub_type,
-                "wait_cycles": a.wait_cycles,
-                "cancel_cycles": a.cancel_cycles,
-                "criticality": a.criticality,
-                "impact_badge": a.impact_badge,
-                "symptom_sets": a.symptom_sets,
-                "recommendations": rec_refs_serialized,
-            })
-        alerts_json = json.dumps(alerts_payload, indent=2)
-    else:
-        alerts_json = None
-
-    # AlertContent.xml, synthesised when the bundle has symptoms, alerts,
-    # or recommendations.  A bundle with only recommendations (unusual but
-    # valid) still emits AlertContent.xml so the recommendations are importable.
-    alert_content_xml = None
-    if bundle.symptoms or bundle.alerts or bundle.recommendations:
-        alert_content_xml = render_alert_content_xml(
-            bundle.symptoms,
-            bundle.alerts,
-            recommendations=bundle.recommendations or [],
-        )
 
     # --- bundle.json ---
     bundle_json = _build_bundle_json(bundle, display_name)
@@ -736,80 +476,32 @@ def build_bundle(
     # --- Bundle-specific README ---
     bundle_readme = _generate_bundle_readme(bundle, display_name)
 
-    # --- Drag-drop zip artifacts ---
-    views_zip_bytes = _build_views_inner_zip(views_xml) if views_xml else None
-    dashboard_zip_bytes = (
-        _build_dashboard_dropin_zip(dashboard_json) if dashboard_json else None
-    )
-    reports_zip_bytes = (
-        _build_reports_dropin_zip(reports_xml) if reports_xml else None
-    )
-
     # --- Repo root LICENSE ---
     repo_root = Path(__file__).parent.parent.parent
     license_path = repo_root / "LICENSE"
     license_text = license_path.read_text() if license_path.exists() else None
 
-    # --- Assemble zip ---
     # --- vcfops_manifest.json: in-zip metadata for staleness detection ---
-    import datetime as _dt
-    vcfops_manifest = json.dumps({
-        "bundle_name": bundle.name,
-        "template_version": CURRENT_TEMPLATE_VERSION,
-        "built_at": _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-    }, indent=2)
+    vcfops_manifest = render_vcfops_manifest(
+        {
+            "bundle_name": bundle.name,
+            "template_version": CURRENT_TEMPLATE_VERSION,
+        },
+        built_at=_dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    )
 
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        # Root-level static files
-        z.writestr("install.py", install_py)
-        z.writestr("install.ps1", install_ps1)
-        z.writestr("README.md", framework_readme)
-        z.writestr("vcfops_manifest.json", vcfops_manifest)
-        if license_text is not None:
-            z.writestr("LICENSE", license_text)
-
-        # Bundle subdirectory: metadata
-        z.writestr(bundle_prefix + "bundle.json", bundle_json)
-        z.writestr(bundle_prefix + "README.md", bundle_readme)
-
-        # Drag-drop artifacts at bundle root (community-native filenames)
-        if sm_json:
-            z.writestr(bundle_prefix + "supermetric.json", sm_json)
-        if cg_ui_json:
-            z.writestr(bundle_prefix + "customgroup.json", cg_ui_json)
-        if views_zip_bytes:
-            z.writestr(bundle_prefix + "Views.zip", views_zip_bytes)
-        if dashboard_zip_bytes:
-            z.writestr(bundle_prefix + "Dashboard.zip", dashboard_zip_bytes)
-        if reports_zip_bytes:
-            z.writestr(bundle_prefix + "Reports.zip", reports_zip_bytes)
-        if alert_content_xml:
-            z.writestr(bundle_prefix + "AlertContent.xml", alert_content_xml)
-
-        # Installer source files under content/
-        if sm_json:
-            z.writestr(content_prefix + "supermetrics.json", sm_json)
-        if views_xml:
-            z.writestr(content_prefix + "views_content.xml", views_xml)
-        if dashboard_json:
-            # content/ copy retains PLACEHOLDER_USER_ID for runtime stamping
-            z.writestr(content_prefix + "dashboard.json", dashboard_json)
-        if cg_rest_json:
-            z.writestr(content_prefix + "customgroup.json", cg_rest_json)
-        if reports_xml:
-            z.writestr(content_prefix + "reports_content.xml", reports_xml)
-        if symptoms_json:
-            z.writestr(content_prefix + "symptoms.json", symptoms_json)
-        if alerts_json:
-            z.writestr(content_prefix + "alerts.json", alerts_json)
-        if bundle.builtin_metric_enables:
-            z.writestr(
-                content_prefix + "builtin_metric_enables.json",
-                json.dumps(render_bme_items(bundle.builtin_metric_enables), indent=2),
-            )
-
-    out_path.write_bytes(buf.getvalue())
+    # --- Assemble zip ---
+    out_path.write_bytes(assemble_distribution_zip(
+        slug=slug,
+        payloads=payloads,
+        bundle_json=bundle_json,
+        bundle_readme=bundle_readme,
+        install_py=install_py,
+        install_ps1=install_ps1,
+        framework_readme=framework_readme,
+        vcfops_manifest=vcfops_manifest,
+        license_text=license_text,
+    ))
 
     # Print audit summary after successful build.
     if audit_result is not None:

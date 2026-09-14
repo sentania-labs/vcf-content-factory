@@ -102,7 +102,7 @@ lines. The `<SubjectType>` block is unaffected: one `descendant` then
   an Item with both Properties on a multi-subject view is written back as
   a per-column `subject:`; an Item without them gets no `subject:`; on a
   single-subject view the binding is implied and never written.
-- **Bundle dependency audit** (`src/vcfcf_packaging/deps.py::_refs_from_view`,
+- **Bundle dependency audit** (`src/vcfcf_core/packaging/deps.py::_refs_from_view`,
   `_column_kinds`): an unbound column is audited once per subject kind; a
   bound column is audited against its one kind only, otherwise the audit
   raises a false "metric key not found" for the other kinds

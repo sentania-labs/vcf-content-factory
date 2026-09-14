@@ -1,168 +1,44 @@
-"""Load and validate super metric YAML definitions."""
+"""Factory entry point to the super metric loader (M2 row 3).
+
+The parse and validate half lives in ``vcfcf_core.supermetrics.loader``.
+This module adds the things a library must not do on its own and that
+every factory caller relied on:
+
+- mint a uuid4 into an authored YAML that has no ``id``
+  (``_mint_id_into_file``, the UUID contract in
+  knowledge/context/authoring/uuids_and_cross_references.md),
+- derive ``provenance`` from the repo layout (``vcfcf_common.provenance``),
+- default ``load_dir`` to the ``supermetrics`` directory, and
+- the unscoped ``sm_id_map()`` scan of ``content/supermetrics`` then
+  ``supermetrics`` under the working directory (the pre-row-2 renderer's
+  native mode, kept verbatim).
+
+``load_file``, ``load_dir`` and ``sm_id_map`` keep their old signatures and
+pass the callbacks into the core loader. Every other name (``SuperMetricDef``,
+``SuperMetricValidationError``, ``LOOPING_FUNCS``, ``_strict_load``,
+``_UUID_RE``, ...) is served by module ``__getattr__`` straight from the
+core module, so ``from vcfcf_supermetrics.loader import X`` works for any
+``X`` the core module defines and reads back the identical object. That is
+a read-only view: ``monkeypatch.setattr(vcfcf_supermetrics.loader, "X", ...)``
+binds a new attribute on this wrapper and the core loader keeps calling its
+own. To affect the running loader, patch ``vcfcf_core.supermetrics.loader``.
+"""
 from __future__ import annotations
 
-import re
 import uuid
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, List, Optional
 
-import yaml
-import yaml.constructor
-import yaml.resolver
-
-
-def _strict_load(stream):
-    """yaml.safe_load replacement that raises on duplicate mapping keys."""
-    class _StrictKeyLoader(yaml.SafeLoader):
-        pass
-
-    def _no_duplicates(loader, node, deep=False):
-        mapping = {}
-        for key_node, value_node in node.value:
-            key = loader.construct_object(key_node, deep=deep)
-            if key in mapping:
-                raise yaml.constructor.ConstructorError(
-                    None, None,
-                    f"duplicate key '{key}' found at {key_node.start_mark}",
-                    key_node.start_mark,
-                )
-            mapping[key] = loader.construct_object(value_node, deep=deep)
-        return mapping
-
-    _StrictKeyLoader.add_constructor(
-        yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG,
-        _no_duplicates,
-    )
-    return yaml.load(stream, Loader=_StrictKeyLoader)
-
-
-class SuperMetricValidationError(ValueError):
-    pass
-
-
-# Looping functions accepted by VCF Ops super metric DSL.
-LOOPING_FUNCS = {"avg", "sum", "min", "max", "count", "combine"}
-SINGLE_FUNCS = {
-    "abs", "acos", "asin", "atan", "ceil", "cos", "cosh",
-    "exp", "floor", "log", "log10", "pow", "rand", "sin",
-    "sinh", "sqrt", "tan", "tanh",
-}
-
-
-@dataclass
-class SuperMetricDef:
-    name: str
-    formula: str
-    description: str = ""
-    resource_kinds: list = None  # list of {"resourceKindKey","adapterKindKey"}
-    id: str = ""
-    unit_id: str = ""
-    source_path: Path | None = None
-    released: bool = False   # publish gate
-    version: str = "1.0.0"  # internal semver
-    # Provenance: "factory", a third-party project slug, or "" (unknown).
-    # Populated by the loader from source_path; never author-supplied.
-    provenance: str = ""
-
-    def validate(self, enforce_framework_prefix: bool = True) -> None:
-        if not self.name or not self.name.strip():
-            raise SuperMetricValidationError("name is required")
-        if enforce_framework_prefix and not self.name.startswith("[VCF Content Factory] "):
-            src = f" ({self.source_path})" if self.source_path else ""
-            raise SuperMetricValidationError(
-                f'{self.source_path or self.name}: name "{self.name}" missing framework prefix '
-                f'"[VCF Content Factory]". All factory-authored content must carry the literal '
-                f'"[VCF Content Factory]" prefix (see CLAUDE.md §Hard rules #5). For third-party '
-                f"bundle content, ensure the bundle manifest sets factory_native: false."
-            )
-        if not self.formula or not self.formula.strip():
-            raise SuperMetricValidationError(f"{self.name}: formula is required")
-        if not self.resource_kinds:
-            raise SuperMetricValidationError(
-                f"{self.name}: resource_kinds is required "
-                f"(e.g. [{{resource_kind_key: VirtualMachine, adapter_kind_key: VMWARE}}])"
-            )
-        for rk in self.resource_kinds:
-            if not isinstance(rk, dict):
-                raise SuperMetricValidationError(
-                    f"{self.name}: each resource_kinds entry must be a mapping"
-                )
-            if not rk.get("resourceKindKey"):
-                raise SuperMetricValidationError(
-                    f"{self.name}: resource_kinds entry missing resource_kind_key"
-                )
-            if not rk.get("adapterKindKey"):
-                raise SuperMetricValidationError(
-                    f"{self.name}: resource_kinds entry missing adapter_kind_key"
-                )
-
-        f = self.formula
-
-        # Balanced parens / braces / brackets.
-        for opener, closer in (("(", ")"), ("{", "}"), ("[", "]")):
-            if f.count(opener) != f.count(closer):
-                raise SuperMetricValidationError(
-                    f"{self.name}: unbalanced '{opener}{closer}' in formula"
-                )
-
-        # Must contain at least one resource entry.
-        resource_entries = re.findall(r"\$\{[^}]*\}", f)
-        if not resource_entries:
-            raise SuperMetricValidationError(
-                f"{self.name}: formula contains no ${{...}} resource entry"
-            )
-
-        for entry in resource_entries:
-            self._validate_resource_entry(entry)
-
-        # depth=0 is illegal per VCF docs.
-        for m in re.finditer(r"depth\s*=\s*(-?\d+)", f):
-            if int(m.group(1)) == 0:
-                raise SuperMetricValidationError(
-                    f"{self.name}: depth=0 is not allowed"
-                )
-
-    def _validate_resource_entry(self, entry: str) -> None:
-        inner = entry[2:-1].strip()  # strip ${ }
-        if not inner:
-            raise SuperMetricValidationError(
-                f"{self.name}: empty resource entry ${{}}"
-            )
-        # Either 'this, ...' bound to assigned object, or must specify
-        # adaptertype + (objecttype OR resourcename).
-        head = inner.split(",", 1)[0].strip().lower()
-        if head == "this":
-            return
-        lower = inner.lower()
-        if "adaptertype" not in lower:
-            raise SuperMetricValidationError(
-                f"{self.name}: resource entry must include 'adaptertype=' "
-                f"or start with 'this': {entry}"
-            )
-        if "objecttype" not in lower and "resourcename" not in lower:
-            raise SuperMetricValidationError(
-                f"{self.name}: resource entry must include 'objecttype=' "
-                f"or 'resourcename=': {entry}"
-            )
-        if "metric=" not in lower and "attribute=" not in lower:
-            raise SuperMetricValidationError(
-                f"{self.name}: resource entry must include 'metric=' "
-                f"or 'attribute=': {entry}"
-            )
-
-
-_UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-)
+from vcfcf_core.supermetrics import loader as _core
+from vcfcf_core.supermetrics.loader import SuperMetricDef
 
 
 def _mint_id_into_file(path: Path) -> str:
     """Generate a uuid4 and prepend `id: <uuid>` to the YAML file.
 
     Called on first validate when a YAML lacks an `id`. Per
-    `knowledge/context/authoring/uuids_and_cross_references.md`, UUIDs are stable content
-    identifiers — generated once, never changed after.
+    `knowledge/context/authoring/uuids_and_cross_references.md`, UUIDs are
+    stable content identifiers: generated once, never changed after.
     """
     new_id = str(uuid.uuid4())
     original = path.read_text()
@@ -170,91 +46,42 @@ def _mint_id_into_file(path: Path) -> str:
     return new_id
 
 
-def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SuperMetricDef:
-    path = Path(path)
-    try:
-        data = _strict_load(path.read_text()) or {}
-    except yaml.constructor.ConstructorError as exc:
-        raise SuperMetricValidationError(f"{path}: {exc}") from exc
-    if not isinstance(data, dict):
-        raise SuperMetricValidationError(f"{path}: expected a YAML mapping")
-    sm_id = str(data.get("id", "") or "").strip().lower()
-    if not sm_id:
-        sm_id = _mint_id_into_file(path)
-    elif not _UUID_RE.match(sm_id):
-        raise SuperMetricValidationError(
-            f"{path}: id '{sm_id}' is not a valid uuid4"
-        )
-    raw_rks = data.get("resource_kinds") or []
-    rks: list = []
-    for rk in raw_rks:
-        if not isinstance(rk, dict):
-            raise SuperMetricValidationError(
-                f"{path}: resource_kinds entries must be mappings"
-            )
-        rks.append(
-            {
-                "resourceKindKey": str(
-                    rk.get("resource_kind_key") or rk.get("resourceKindKey") or ""
-                ).strip(),
-                "adapterKindKey": str(
-                    rk.get("adapter_kind_key")
-                    or rk.get("adapterKindKey")
-                    or "VMWARE"
-                ).strip(),
-            }
-        )
-    released_raw = data.get("released", False)
-    released = bool(released_raw) if isinstance(released_raw, bool) else False
-    version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
-
+def _provenance_of(path: Path) -> str:
     from vcfcf_common.provenance import provenance_from_path
+    return provenance_from_path(path)
 
-    sm = SuperMetricDef(
-        id=sm_id,
-        name=str(data.get("name", "")).strip(),
-        formula=str(data.get("formula", "")).strip(),
-        description=str(data.get("description", "") or "").strip(),
-        resource_kinds=rks,
-        unit_id=str(data.get("unit_id", "") or data.get("unitId", "") or "").strip(),
-        source_path=path,
-        released=released,
-        version=version,
-        provenance=provenance_from_path(path),
+
+def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SuperMetricDef:
+    return _core.load_file(
+        path,
+        enforce_framework_prefix=enforce_framework_prefix,
+        on_missing_id=_mint_id_into_file,
+        provenance_of=_provenance_of,
     )
-    sm.validate(enforce_framework_prefix=enforce_framework_prefix)
-    return sm
 
 
 def sm_id_map(sm_scope: Optional[Iterable[Path]] = None, bundle_context: Optional[str] = None) -> dict[str, str]:
     """Super metric name to uuid map for the view renderer (M2 row 2).
 
-    ``vcfcf_core.dashboards.render`` takes this map as an argument and never
-    looks for SM YAML itself; this is the factory side that finds it.
-
-    Scoped (``sm_scope`` is a list of SM YAML paths, possibly empty): load
-    exactly those files with ``enforce_framework_prefix=False``; any load
-    failure is re-raised as ``ValueError`` naming ``bundle_context`` so a
-    bundle build fails with a clear message.
+    Scoped (``sm_scope`` is a list of SM YAML paths, possibly empty): the
+    core map over exactly those files, loaded with
+    ``enforce_framework_prefix=False`` and this module's minting and
+    provenance callbacks; any load failure is a ``ValueError`` naming
+    ``bundle_context``.
 
     Unscoped (``sm_scope`` is None): the pre-row-2 renderer's native mode,
     kept verbatim. Scan ``content/supermetrics`` then ``supermetrics``
     relative to the working directory (first that is a directory wins) and
     swallow every error into an empty map. ``load_dir`` builds its list
-    before returning, so the result is all-or-nothing, as before.
+    before returning, so the result is all-or-nothing, as before. The core
+    ``sm_id_map(None)`` is an empty map; only this wrapper scans.
     """
-    sm_map: dict[str, str] = {}
     if sm_scope is not None:
-        try:
-            for sm_path in sm_scope:
-                sm = load_file(sm_path, enforce_framework_prefix=False)
-                sm_map[sm.name] = sm.id
-        except Exception as exc:
-            raise ValueError(
-                f"sm_id_map: failed to load scoped SM for "
-                f"bundle {bundle_context!r}: {exc}"
-            ) from exc
-        return sm_map
+        return _core.sm_id_map(
+            sm_scope, bundle_context,
+            on_missing_id=_mint_id_into_file, provenance_of=_provenance_of,
+        )
+    sm_map: dict[str, str] = {}
     try:
         for candidate in (Path("content/supermetrics"), Path("supermetrics")):
             if candidate.is_dir():
@@ -267,18 +94,17 @@ def sm_id_map(sm_scope: Optional[Iterable[Path]] = None, bundle_context: Optiona
 
 
 def load_dir(directory: str | Path = "supermetrics", enforce_framework_prefix: bool = True) -> List[SuperMetricDef]:
-    directory = Path(directory)
-    if not directory.exists():
-        return []
-    out: List[SuperMetricDef] = []
-    seen: dict[str, Path] = {}
-    for p in sorted(directory.rglob("*.y*ml")):
-        sm = load_file(p, enforce_framework_prefix=enforce_framework_prefix)
-        if sm.name in seen:
-            raise SuperMetricValidationError(
-                f"duplicate super metric name '{sm.name}' "
-                f"in {p} and {seen[sm.name]}"
-            )
-        seen[sm.name] = p
-        out.append(sm)
-    return out
+    return _core.load_dir(
+        directory,
+        enforce_framework_prefix=enforce_framework_prefix,
+        on_missing_id=_mint_id_into_file,
+        provenance_of=_provenance_of,
+    )
+
+
+def __getattr__(name: str):
+    """Every name this wrapper does not define itself resolves to core."""
+    try:
+        return getattr(_core, name)
+    except AttributeError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None

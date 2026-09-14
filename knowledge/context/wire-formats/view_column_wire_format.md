@@ -1342,7 +1342,7 @@ collects every distinct (adapterKind, resourceKind) pair in document
 order; when more than one is present the written YAML carries
 `subjects:` (first pair mirrored into the scalar fields) instead of
 `subject:`, so a multi-subject vendor view round-trips intact. The
-packaging dependency audit (`vcfcf_packaging/deps.py::_refs_from_view`)
+packaging dependency audit (`vcfcf_core/packaging/deps.py::_refs_from_view`)
 emits one reference per subject kind for every column and subject-filter
 key.
 

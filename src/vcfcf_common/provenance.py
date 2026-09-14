@@ -1,34 +1,19 @@
-"""Provenance helpers for loaded content objects.
+"""Factory entry point to provenance (M2 row 3).
 
-Every content object (SuperMetricDef, ViewDef, Dashboard, CustomGroupDef, …)
-gets a ``provenance`` string that records *where* in the repo the file was
-loaded from:
-
-  ``"factory"``          — lives under ``content/<type>/``
-  ``"<project_slug>"``   — lives under ``third_party/<slug>/<type>/``
-  ``""``                 — loaded via an explicit path outside both trees
-                           (e.g. a test fixture, a tmp_path, or a
-                           programmatically constructed object).
-
-The empty-string case is the safe fallback: the walker treats it as "unknown
-provenance" and does NOT enforce any scope boundary on it.  This means test
-fixtures and programmatically constructed objects continue to work without
-needing to carry synthetic provenance.
-
-Public API
-----------
-  provenance_from_path(path, repo_root=None) -> str
-
-    Derive provenance from a file path.  ``repo_root`` defaults to the
-    directory containing the ``content/`` and ``third_party/`` directories.
-    When ``repo_root`` is None the function does a best-effort search up the
-    directory tree for the first ancestor that contains both ``content/`` and
-    ``third_party/`` (or either one), stopping at the filesystem root.
+``vcfcf_core.common.provenance.provenance_from_path`` classifies a file as
+``"factory"`` / ``"<slug>"`` / ``""`` given an explicit repo root. This
+wrapper keeps the pre-row-3 signature: when ``repo_root`` is None it walks
+up from the file looking for the first ancestor with a ``content/`` or
+``third_party/`` child (``_find_repo_root``) and, finding none, returns
+``""``. That sniff is a factory-layout assumption and stays here; the
+library never guesses a root.
 """
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
+
+from vcfcf_core.common import provenance as _core
 
 
 def _find_repo_root(start: Path) -> Optional[Path]:
@@ -59,7 +44,7 @@ def provenance_from_path(
     Args:
         path:      Absolute or relative path to the loaded YAML file.
         repo_root: Explicit repo root.  When None, auto-detected by walking
-                   up from ``path``.
+                   up from ``path``; no detectable root means ``""``.
 
     Returns:
         ``"factory"`` if the file lives under ``<repo_root>/content/``.
@@ -68,33 +53,18 @@ def provenance_from_path(
     """
     if not path:
         return ""
-    p = Path(path).resolve()
-
-    if repo_root is not None:
-        root = Path(repo_root).resolve()
-    else:
-        root = _find_repo_root(p)
+    if repo_root is None:
+        root = _find_repo_root(Path(path).resolve())
         if root is None:
             return ""
+    else:
+        root = repo_root
+    return _core.provenance_from_path(path, root)
 
-    content_root = (root / "content").resolve()
-    third_party_root = (root / "third_party").resolve()
 
-    # --- factory content ---
+def __getattr__(name: str):
+    """Every name this module does not define itself resolves to core."""
     try:
-        p.relative_to(content_root)
-        return "factory"
-    except ValueError:
-        pass
-
-    # --- third-party content ---
-    try:
-        rel = p.relative_to(third_party_root)
-        # rel.parts[0] is the project slug (first path component under third_party/)
-        if rel.parts:
-            return rel.parts[0]
-    except ValueError:
-        pass
-
-    # Outside both trees — test fixture or explicit path
-    return ""
+        return getattr(_core, name)
+    except AttributeError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None

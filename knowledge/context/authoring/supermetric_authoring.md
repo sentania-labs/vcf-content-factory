@@ -199,7 +199,7 @@ metric to `ClusterComputeResource`). When in doubt, ask.
 - **Ternary**: `cond ? a : b`, e.g.
   `${this, metric=cpu|demandmhz} as a != 0 ? 1/a : -1`.
 
-The loader (`src/vcfcf_supermetrics/loader.py`) enforces a subset of
+The loader (`src/vcfcf_core/supermetrics/loader.py`, the parse half; `src/vcfcf_supermetrics/loader.py` is the factory wrapper that mints ids and derives provenance) enforces a subset of
 these rules. **The loader is not a full parser** — it catches obvious
 mistakes but cannot certify semantic correctness. Treat a successful
 `validate` as necessary but not sufficient; reread the formula

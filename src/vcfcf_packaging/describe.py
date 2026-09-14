@@ -1,141 +1,75 @@
-"""Adapter describe-surface cache + query helper.
+"""Factory side of the adapter describe-surface cache (M2 row 3).
 
-Queries ``/api/adapterkinds/<kind>/resourcekinds/<rk>/statkeys`` on a live
-VCF Ops instance and persists the results in a JSON file under
-``knowledge/context/adapter_describe_cache/<adapter_kind>/<resource_kind>.json``.
+The offline half (resolve a key, load a cache file, merge a live section
+into a cached one) lives in ``vcfcf_core.packaging.describe`` and takes the
+cache directory as a required argument. This module keeps the three things
+a library must not own:
 
-At build time the cache is the authoritative source for:
-  - whether a metric key exists on a given adapter/resource-kind pair
-  - whether that metric is ``defaultMonitored`` (collected out-of-the-box)
+- the cache directory's location in this repo
+  (``knowledge/context/adapter_describe_cache/``, the default when
+  ``cache_dir`` is not given);
+- the network refresh (``DescribeCache.refresh`` / ``refresh_all``), which
+  needs a client and rewrites the cache file, merging as the core module's
+  docstring describes;
+- ``make_cache``, which reads the active credential profile and attaches a
+  live client, or falls back to offline mode.
 
-If env vars are present (VCFOPS_HOST/USER/PASSWORD) the cache is refreshed
-automatically for every (adapter_kind, resource_kind) pair referenced in the
-bundle being built.  Pass ``live=False`` to force offline/cache-only mode.
+``DescribeCache`` here is a subclass of the core class, so an instance built
+through the old path is a core ``DescribeCache`` too and everything the
+core audit accepts still accepts it. Every other name (``MetricInfo``,
+``DescribeCacheError``, ``MergeStats``, ``_merge_section``, ...) resolves
+through module ``__getattr__`` to the identical core object; patch the core
+module, not this one, to affect those.
 
-Cache file layout::
-
-    {
-      "adapter_kind": "VMWARE",
-      "resource_kind": "VirtualMachine",
-      "fetched_at": "2026-04-16T12:00:00Z",
-      "source": "https://host/suite-api/api/adapterkinds/VMWARE/...",
-      "metrics": {
-        "net|packetsPerSec": {
-          "name": "Network|Packets per second",
-          "default_monitored": false
-        }
-      },
-      "properties": {
-        "summary|guest|toolsVersion": {
-          "name": "Guest OS|Tools Version",
-          "default_monitored": true,
-          "instance_type": "INSTANCED"
-        }
-      }
-    }
-
-The ``properties`` section is optional, existing cache files without it are
-valid.  ``default_monitored`` / ``instance_type`` are the real values
-returned by the ``/properties`` endpoint for that key (see
-``knowledge/context/investigations/adapter_describe_exploration.md``, the
-endpoint returns the *same* schema as ``/statkeys``, only the ``property``
-discriminator differs, so properties are **not** always
-``defaultMonitored: true``).  Cache files written by ``refresh()`` before
-this fields were added carry only ``{"name": ...}`` per property; those
-legacy entries fall back to ``default_monitored=True`` when resolved (see
-``resolve_metric()``) until the cache is refreshed against a live instance,
-which emits a one-time WARN per (adapter_kind, resource_kind) pair the first
-time that legacy fallback is taken. Run
-``python3 -m vcfcf_packaging refresh-describe`` with a live instance to
-populate/upgrade the properties section.
-
-Merge semantics (issue #143)
-----------------------------
-
-``refresh()`` MERGES the live response into the existing cache file, it does
-not replace it.  One cache file may be grounded on more than one platform
-release (for example VMWARE/HostSystem.json is the union of a 9.x lab and an
-8.18 instance), and a single instance never reports the whole union.
-
-  - key present in the live response: entry is updated (name /
-    default_monitored / instance_type taken from the live instance)
-  - key absent from the live response: entry is RETAINED unchanged.  The
-    first refresh from a given host that leaves keys retained emits a WARN
-    naming every one; later refreshes from the same host that leave the
-    same set print a single count line instead (by exception).  The set
-    itself is persisted in the host's ``merged_from`` entry, see below.
-
-A platform key is only ever removed when the caller explicitly asks for
-it: ``refresh(..., prune=True)`` (CLI: ``refresh-describe --prune``).  Prune
-drops every key absent from the live response, which re-grounds the file on
-that one instance.  Silent removal is never performed; the build-time
-auto-refresh paths (``audit.py``, ``cli.py analyze``) always merge.
-
-The one exception is instance-local ``Super Metric|sm_<uuid>`` keys.  Those
-are one instance's own super metric set, not the adapter's describe
-surface, and caching them would let a bundle that references another lab's
-SM pass the existence gate.  They are never imported from the live
-response, and any already present in a cached section are dropped on every
-refresh (reported in a WARN with the key list).
-
-Provenance: every refresh appends or updates in place (matched by source
-host) a ``merged_from`` entry with ``role: refresh``, ``source``,
-``fetched_at``, per-section ``counts`` and the ``retained_absent`` key
-lists, so the file records which keys each instance did not report.
-Hand-written ``merged_from`` entries (``role`` primary / additive) and any
-other top-level key the refresh does not own (``merge_note``, ...) are
-carried through unchanged.  ``fetched_at`` and ``source`` always describe
-the most recent refresh.
-
-Corrupt cache file: refresh raises ``DescribeCacheError`` naming the
-recovery (delete the file and re-run ``refresh-describe``, or pass
-``--prune`` to overwrite it).  With ``prune=True`` the corrupt file is
-overwritten with the live response after a WARN.
-
-Each refresh prints one by-exception summary line: per section (metrics and
-properties) the total plus only the non-zero deltas, keys added, updated
-(value changed), retained-but-absent, pruned, and dropped-instance-local.
+Cache file layout, merge semantics, provenance entries and the corrupt-file
+recovery are documented on ``vcfcf_core.packaging.describe``.
 """
 from __future__ import annotations
 
 import json
-import os
 import sys
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-# ---------------------------------------------------------------------------
-# Public types
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class MetricInfo:
-    """Resolved metadata for a single stat key."""
-    key: str
-    name: str
-    default_monitored: bool
-    adapter_kind: str
-    resource_kind: str
-
-
-# ---------------------------------------------------------------------------
-# Cache helper
-# ---------------------------------------------------------------------------
+from vcfcf_core.packaging import describe as _core
+from vcfcf_core.packaging.describe import (
+    DescribeCacheError,
+    MetricInfo,
+    _counts,
+    _host_of,
+    _is_instance_local,
+    _merge_section,
+    _summarize,
+)
 
 # Cache root is repo-relative so it's always findable regardless of cwd.
 _REPO_ROOT = Path(__file__).parent.parent.parent
 _DEFAULT_CACHE_ROOT = _REPO_ROOT / "knowledge" / "context" / "adapter_describe_cache"
 
 
-class DescribeCacheError(RuntimeError):
-    pass
+def _same_but_fetched_at(existing_doc: dict, cache_doc: dict) -> bool:
+    """True when ``cache_doc`` differs from ``existing_doc`` only in the
+    top-level ``fetched_at`` and the ``fetched_at`` of ``merged_from``
+    entries. Everything else (keys, values, counts, retained sets, entry
+    order, hand-written entries) must be equal."""
+    def strip(doc: dict) -> dict:
+        out = dict(doc)
+        out.pop("fetched_at", None)
+        entries = []
+        for entry in out.get("merged_from") or []:
+            if isinstance(entry, dict):
+                entry = {k: v for k, v in entry.items() if k != "fetched_at"}
+            entries.append(entry)
+        if "merged_from" in out or entries:
+            out["merged_from"] = entries
+        return out
+    return strip(existing_doc) == strip(cache_doc)
 
 
-class DescribeCache:
-    """Describes-surface cache.  Backed by JSON files; optionally live-refreshed.
+class DescribeCache(_core.DescribeCache):
+    """Describe-surface cache: the core reader plus the factory's default
+    location and the live refresh.
 
     Args:
         cache_dir: Root directory for cache files.  Defaults to
@@ -149,122 +83,8 @@ class DescribeCache:
         cache_dir: Optional[Path] = None,
         client=None,
     ) -> None:
-        self._cache_dir = Path(cache_dir) if cache_dir else _DEFAULT_CACHE_ROOT
+        super().__init__(Path(cache_dir) if cache_dir else _DEFAULT_CACHE_ROOT)
         self._client = client
-        # In-memory layer: (adapter_kind, resource_kind) -> dict[key, MetricInfo]
-        self._cache: dict[tuple[str, str], dict[str, MetricInfo]] = {}
-        # Properties layer: (adapter_kind, resource_kind) -> dict[key, meta dict].
-        # Populated from the "properties" section of each cache JSON file.
-        # meta dict carries "default_monitored" (bool) and "instance_type" (str)
-        # when present.  Older cache files written before this field existed
-        # only carry {"name": ...} per property; for those, default_monitored
-        # is treated as True (legacy shortcut, preserved for byte-for-byte
-        # backward compatibility until the cache is refreshed).
-        # When empty/absent, property lookups are skipped (no false positives).
-        self._props: dict[tuple[str, str], dict[str, dict]] = {}
-        # Kind pairs for which the legacy name-only property shortcut
-        # (default_monitored missing -> assumed True) has already emitted its
-        # one-shot WARN. Prevents a WARN-per-property flood on a cache file
-        # with hundreds of legacy entries.
-        self._legacy_prop_warned: set[tuple[str, str]] = set()
-
-    # ------------------------------------------------------------------ load
-
-    def _cache_path(self, adapter_kind: str, resource_kind: str) -> Path:
-        return self._cache_dir / adapter_kind / f"{resource_kind}.json"
-
-    def _load_from_disk(self, adapter_kind: str, resource_kind: str) -> bool:
-        """Load a cache file into memory.  Returns True if the file exists."""
-        p = self._cache_path(adapter_kind, resource_kind)
-        if not p.exists():
-            return False
-        try:
-            raw = json.loads(p.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
-            raise DescribeCacheError(
-                f"describe cache file {p} is corrupt: {exc}"
-            ) from exc
-        metrics: dict[str, MetricInfo] = {}
-        for key, meta in (raw.get("metrics") or {}).items():
-            metrics[key] = MetricInfo(
-                key=key,
-                name=meta.get("name", key),
-                default_monitored=bool(meta.get("default_monitored", False)),
-                adapter_kind=adapter_kind,
-                resource_kind=resource_kind,
-            )
-        self._cache[(adapter_kind, resource_kind)] = metrics
-
-        # Load properties section (optional, older cache files omit it)
-        props_raw = raw.get("properties") or {}
-        self._props[(adapter_kind, resource_kind)] = dict(props_raw)
-
-        return True
-
-    # ----------------------------------------------------------------- query
-
-    def resolve_metric(
-        self,
-        adapter_kind: str,
-        resource_kind: str,
-        metric_key: str,
-    ) -> Optional[MetricInfo]:
-        """Return MetricInfo for a key, or None if it is not in the cache.
-
-        Loads the cache file lazily on first access for each kind pair.
-        Does NOT perform a live refresh, call ``refresh()`` explicitly.
-
-        Raises DescribeCacheError if the cache file exists but is corrupt, or
-        if the kind pair has no cache file at all (caller must check for None
-        vs. absence-vs-corrupt).  Actually: if no cache file exists, returns
-        None to allow the caller to fail with a friendlier message.
-        """
-        pair = (adapter_kind, resource_kind)
-        if pair not in self._cache:
-            found = self._load_from_disk(adapter_kind, resource_kind)
-            if not found:
-                # No cache file, return sentinel None; caller decides severity.
-                self._cache[pair] = {}  # mark as "attempted but missing"
-        result = self._cache.get(pair, {}).get(metric_key)
-        if result is not None:
-            return result
-        # Not found in metrics cache.  Check the properties cache, if this key
-        # is a known property (e.g. summary|guest|toolsVersion) return a
-        # MetricInfo using the property's own defaultMonitored value from the
-        # describe API.  Properties are NOT always defaultMonitored=true,
-        # e.g. VMWARE property counts across VM/HostSystem/Cluster/Datastore
-        # show a real mix (see knowledge/context/investigations/
-        # adapter_describe_exploration.md). Cache files written before this
-        # field was persisted fall back to True (legacy shortcut) until the
-        # cache is refreshed against a live instance.
-        props = self._props.get(pair, {})
-        if metric_key in props:
-            meta = props[metric_key] or {}
-            if "default_monitored" not in meta and pair not in self._legacy_prop_warned:
-                self._legacy_prop_warned.add(pair)
-                print(
-                    f"  WARN: {adapter_kind}/{resource_kind} describe cache has "
-                    f"legacy name-only property entries (no persisted "
-                    f"default_monitored), properties are guessed as "
-                    f"defaultMonitored=true, which is wrong for a real fraction "
-                    f"of them on some resource kinds. Run "
-                    f"'python3 -m vcfcf_packaging refresh-describe "
-                    f"--kind {adapter_kind}:{resource_kind}' against a live "
-                    f"instance to get the real per-property flag.",
-                    file=sys.stderr,
-                )
-            return MetricInfo(
-                key=metric_key,
-                name=meta.get("name", metric_key),
-                default_monitored=bool(meta.get("default_monitored", True)),
-                adapter_kind=adapter_kind,
-                resource_kind=resource_kind,
-            )
-        return None
-
-    def has_cache_file(self, adapter_kind: str, resource_kind: str) -> bool:
-        """Return True if a cache file exists for this kind pair."""
-        return self._cache_path(adapter_kind, resource_kind).exists()
 
     # --------------------------------------------------------------- refresh
 
@@ -523,15 +343,21 @@ class DescribeCache:
             "properties": merged_props,
         })
 
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(
-            json.dumps(cache_doc, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+        # M2 row 3 side item: when the only difference between the file on
+        # disk and the merged document is the two ``fetched_at`` stamps (top
+        # level and this host's ``merged_from`` refresh entry), leave the file
+        # alone. Every credentialed build refreshes the pairs it references,
+        # and a timestamp-only rewrite dirtied ten cache files per build.
+        unchanged = cache_path.exists() and _same_but_fetched_at(existing_doc, cache_doc)
+        if not unchanged:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            cache_path.write_text(
+                json.dumps(cache_doc, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
 
         # Invalidate in-memory layers so the next resolve_metric reloads.
-        self._cache.pop((adapter_kind, resource_kind), None)
-        self._props.pop((adapter_kind, resource_kind), None)
+        self.invalidate(adapter_kind, resource_kind)
 
         previous_retained = (previous_entry or {}).get("retained_absent") or {}
         for section, stats in (("metrics", metric_stats), ("properties", prop_stats)):
@@ -576,10 +402,11 @@ class DescribeCache:
         local_summary = (
             f"; {skipped_local} instance-local key(s) skipped" if skipped_local else ""
         )
+        unchanged_summary = "; cache file unchanged, not rewritten" if unchanged else ""
         print(
             f"  refreshed describe cache: {pair_label}: "
             f"{len(merged_metrics)} metric keys{_summarize(metric_stats)}; "
-            f"{prop_summary}{local_summary}"
+            f"{prop_summary}{local_summary}{unchanged_summary}"
         )
 
     def refresh_all(
@@ -613,104 +440,6 @@ class DescribeCache:
             return
         for ak, rk in pairs_found:
             self.refresh(ak, rk, prune=prune)
-
-
-# ---------------------------------------------------------------------------
-# Merge helpers (issue #143)
-# ---------------------------------------------------------------------------
-
-
-_INSTANCE_LOCAL_PREFIX = "Super Metric|"
-
-
-def _is_instance_local(key: str) -> bool:
-    """True for ``Super Metric|sm_<uuid>`` keys: one instance's own SM set,
-    not part of the adapter describe surface (review W4 on issue #143)."""
-    return key.startswith(_INSTANCE_LOCAL_PREFIX)
-
-
-def _host_of(url: str) -> str:
-    """Host portion of a source URL, for matching merged_from entries."""
-    rest = url.split("://", 1)[-1]
-    return rest.split("/", 1)[0]
-
-
-@dataclass
-class MergeStats:
-    """Outcome of merging one live section (metrics or properties)."""
-    added: list[str]
-    updated: list[str]
-    unchanged: list[str]
-    retained: list[str]        # cached, absent from live, kept (prune=False)
-    pruned: list[str]          # cached, absent from live, removed (prune=True)
-    dropped_local: list[str]   # cached instance-local keys, always removed
-
-
-def _counts(stats: MergeStats) -> dict[str, int]:
-    return {
-        "added": len(stats.added),
-        "updated": len(stats.updated),
-        "unchanged": len(stats.unchanged),
-        "retained": len(stats.retained),
-        "pruned": len(stats.pruned),
-        "dropped_instance_local": len(stats.dropped_local),
-    }
-
-
-def _merge_section(
-    existing: dict[str, dict],
-    live: dict[str, dict],
-    prune: bool = False,
-) -> tuple[dict[str, dict], MergeStats]:
-    """Merge ``live`` into ``existing``.
-
-    Live entries win on collision.  Keys only in ``existing`` are retained
-    unless ``prune`` is True.  Instance-local ``Super Metric|`` keys are
-    dropped from ``existing`` unconditionally (``live`` never carries them,
-    ``refresh()`` filters them at parse time).  Returns the merged dict and
-    the stats.
-    """
-    stats = MergeStats([], [], [], [], [], [])
-    merged: dict[str, dict] = {}
-    for key, meta in existing.items():
-        if key in live:
-            continue
-        if _is_instance_local(key):
-            stats.dropped_local.append(key)
-        elif prune:
-            stats.pruned.append(key)
-        else:
-            stats.retained.append(key)
-            merged[key] = meta
-    for key, meta in live.items():
-        if key not in existing:
-            stats.added.append(key)
-        elif existing[key] != meta:
-            stats.updated.append(key)
-        else:
-            stats.unchanged.append(key)
-        merged[key] = meta
-    for lst in (
-        stats.added, stats.updated, stats.unchanged,
-        stats.retained, stats.pruned, stats.dropped_local,
-    ):
-        lst.sort()
-    return merged, stats
-
-
-def _summarize(stats: MergeStats) -> str:
-    """By-exception summary fragment: only the non-zero deltas, or ""."""
-    parts = []
-    for label, lst in (
-        ("added", stats.added),
-        ("updated", stats.updated),
-        ("retained-but-absent", stats.retained),
-        ("pruned", stats.pruned),
-        ("dropped-instance-local", stats.dropped_local),
-    ):
-        if lst:
-            parts.append(f"{len(lst)} {label}")
-    return f" [{', '.join(parts)}]" if parts else ""
 
 
 # ---------------------------------------------------------------------------
@@ -750,3 +479,11 @@ def make_cache(live: bool = True, cache_dir: Optional[Path] = None) -> DescribeC
             # Any import or credential failure → offline mode.
             client = None
     return DescribeCache(cache_dir=cache_dir, client=client)
+
+
+def __getattr__(name: str):
+    """Every name this module does not define itself resolves to core."""
+    try:
+        return getattr(_core, name)
+    except AttributeError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None

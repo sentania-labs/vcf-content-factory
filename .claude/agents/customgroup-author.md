@@ -22,7 +22,7 @@ The `vcfops-*` entries below are skills; each lives at
 
 Also read:
 - `knowledge/context/authoring/customgroup_authoring.md` (detailed rule grammar)
-- `src/vcfcf_customgroups/loader.py` docstring (YAML schema)
+- `src/vcfcf_core/customgroups/loader.py` docstring (YAML schema)
 - `knowledge/context/specimens/customgroups/*.json` (ground truth)
 - existing `content/customgroups/*.yaml` (idiom)
 

@@ -440,21 +440,30 @@ def test_kit_isolated_build_no_vcfcf_import_error(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Revert-check: confirm the test FAILS when the sm_loader rewrite is absent
+# Revert-check: confirm the test FAILS when the kit ships the factory's
+# sm_loader instead of the vcfcf_core copy
 # ---------------------------------------------------------------------------
 
 @pytest.mark.timeout(60)
 def test_kit_isolated_build_fails_without_sm_rewrite(tmp_path):
     """Confirms the test infrastructure guards the sm_loader.py seam.
 
-    This test intentionally assembles the kit WITHOUT the sm_loader.py
-    import rewrite, then runs build-sdk and asserts that ModuleNotFoundError
-    for vcfcf_common IS present in the output.  If this test passes it means
-    the seam is real and the guard above is meaningful.
+    Before M2 row 3 the kit copied ``vcfcf_supermetrics/loader.py`` and
+    rewrote its ``vcfcf_common.provenance`` import to a kit-local module;
+    this canary assembled the kit without that rewrite and expected
+    ``ModuleNotFoundError`` for ``vcfcf_common``. Since row 3 the kit copies
+    ``vcfcf_core/supermetrics/loader.py`` (no factory import to rewrite) and
+    ``vcfcf_supermetrics/loader.py`` is a factory wrapper that imports
+    ``vcfcf_core``. The seam is now the SOURCE selection in
+    ``_FACTORY_SOURCES``: this test assembles the kit with the factory
+    wrapper in the ``sm_loader.py`` slot instead of the core copy, runs
+    build-sdk, and asserts that a ``ModuleNotFoundError`` for a ``vcfcf_``
+    package IS present in the output.  If this test passes it means the seam
+    is real and the guard above is meaningful.
 
-    This is the "canary" test: if it starts FAILING (i.e. vcfcf_common is
-    no longer present in the output even without the rewrite), the import
-    structure has changed and both tests need updating.
+    This is the "canary" test: if it starts FAILING (i.e. no ``vcfcf_``
+    import error even with the wrapper in the slot), the import structure
+    has changed and both tests need updating.
     """
     import shutil
     import tempfile
@@ -474,15 +483,18 @@ def test_kit_isolated_build_fails_without_sm_rewrite(tmp_path):
     (pkg_dir / "__init__.py").write_text(_KIT_INIT, encoding="utf-8")
     (pkg_dir / "__main__.py").write_text(_KIT_MAIN, encoding="utf-8")
 
+    factory_sm_loader = (
+        Path(__file__).parent.parent.parent / "src" / "vcfcf_supermetrics" / "loader.py"
+    )
     for dest_name, src_path in _FACTORY_SOURCES.items():
+        # Ship the factory wrapper in the sm_loader.py slot: that is what the
+        # kit would carry if _FACTORY_SOURCES regressed to the old path.
+        if dest_name == "sm_loader.py":
+            src_path = factory_sm_loader
         if not src_path.is_file():
             continue
         source_text = src_path.read_text(encoding="utf-8")
-        # Apply all rewrites EXCEPT sm_loader.py — that's what we're reverting.
-        if dest_name == "sm_loader.py":
-            rules = []
-        else:
-            rules = _IMPORT_REWRITES.get(dest_name, [])
+        rules = _IMPORT_REWRITES.get(dest_name, [])
         if rules:
             patched_text = _apply_rewrites(source_text, rules)
             (pkg_dir / dest_name).write_text(patched_text, encoding="utf-8")
@@ -516,18 +528,21 @@ def test_kit_isolated_build_fails_without_sm_rewrite(tmp_path):
     )
 
     combined = result.stderr + result.stdout
+    # sdk_builder wraps the loader failure in SdkBuildError, so the message
+    # reads "failed to load ...: No module named 'vcfcf_core'" rather than a
+    # bare traceback; match the "No module named" form for any vcfcf_ package.
     has_vcfcf_error = (
         "ModuleNotFoundError" in combined and "vcfcf_" in combined
     ) or (
-        "No module named" in combined and "vcfcf_common" in combined
+        "No module named" in combined and "vcfcf_" in combined
     )
 
     if not has_vcfcf_error:
         pytest.fail(
             "Revert-check canary FAILED: expected ModuleNotFoundError for "
-            "vcfcf_common when sm_loader.py rewrite is absent, but it was "
-            "NOT present.  The import structure of sm_loader.py may have "
-            "changed — update both tests.\n"
+            "a vcfcf_ package when the factory's sm_loader wrapper is shipped "
+            "in the kit, but it was NOT present.  The import structure of "
+            "vcfcf_supermetrics/loader.py may have changed: update both tests.\n"
             f"subprocess stderr:\n{result.stderr[:2000]}\n"
             f"subprocess stdout:\n{result.stdout[:500]}"
         )
@@ -763,9 +778,10 @@ def test_kit_isolated_reports_with_embedded_views_fails_without_rewrite(tmp_path
 # id-minting as a callback and the kit's sdk_builder passes none, so a bundled
 # view or dashboard YAML without ``id:`` fails the pak build with a clear
 # error instead of being minted into the adapter's checkout during CI (which
-# gave a fresh UUID per build and never landed in the source). The kit's
-# sm_loader.py still mints (its parse half moves in row 3). buildkit.py's
-# docstring states this delta; this test pins it.
+# gave a fresh UUID per build and never landed in the source). Row 3 did the
+# same for sm_loader.py and reports_loader.py (vcfcf_core copies since then);
+# the SM and report cases below pin that. buildkit.py's docstring states this
+# delta; this test pins it.
 
 _ISOLATED_NO_ID_SCRIPT = textwrap.dedent("""\
     import sys
@@ -776,6 +792,15 @@ _ISOLATED_NO_ID_SCRIPT = textwrap.dedent("""\
     from sdk_buildkit import sdk_builder
     from sdk_buildkit.dashboard_loader import DashboardValidationError
 
+    from sdk_buildkit.sm_loader import SuperMetricValidationError
+    from sdk_buildkit.reports_loader import ReportValidationError
+    expected = {
+        "views": DashboardValidationError,
+        "dashboards": DashboardValidationError,
+        "supermetrics": SuperMetricValidationError,
+        "reports": ReportValidationError,
+    }[kind]
+
     raw = {"bundled_content": {kind: [f"{kind}/no-id.yaml"]}}
     path = project_dir / kind / "no-id.yaml"
     before = path.read_text(encoding="utf-8")
@@ -783,7 +808,7 @@ _ISOLATED_NO_ID_SCRIPT = textwrap.dedent("""\
         sdk_builder._load_bundled_content(raw, project_dir, project_dir)
     except sdk_builder.SdkBuildError as exc:
         cause = exc.__cause__
-        assert isinstance(cause, DashboardValidationError), repr(cause)
+        assert isinstance(cause, expected), repr(cause)
         assert "missing id" in str(cause), str(cause)
         assert path.read_text(encoding="utf-8") == before, "the kit wrote into the source YAML"
         print("NO_ID_REJECTED")
@@ -793,7 +818,7 @@ _ISOLATED_NO_ID_SCRIPT = textwrap.dedent("""\
 
 
 @pytest.mark.timeout(30)
-@pytest.mark.parametrize("kind", ["views", "dashboards"])
+@pytest.mark.parametrize("kind", ["views", "dashboards", "supermetrics", "reports"])
 def test_kit_isolated_bundled_yaml_without_id_fails_the_build_and_writes_nothing(tmp_path, kind):
     import tempfile  # noqa: PLC0415
     kit_root = tmp_path / "kit"
@@ -806,10 +831,22 @@ def test_kit_isolated_bundled_yaml_without_id_fails_the_build_and_writes_nothing
             "subject: {adapter_kind: VMWARE, resource_kind: HostSystem}\n"
             "columns:\n  - {display_name: CPU, attribute: cpu|usage_average}\n"
         )
-    else:
+    elif kind == "dashboards":
         body = (
             "name: \"[VCF Content Factory] Kit No Id Dashboard\"\n"
             "widgets: []\n"
+        )
+    elif kind == "supermetrics":
+        body = (
+            "name: \"[VCF Content Factory] Kit No Id SM\"\n"
+            "formula: \"avg(${this, metric=cpu|usage_average})\"\n"
+            "resource_kinds:\n  - {adapter_kind_key: VMWARE, resource_kind_key: HostSystem}\n"
+        )
+    else:
+        body = (
+            "name: \"[VCF Content Factory] Kit No Id Report\"\n"
+            "subject_types:\n  - {adapter_kind: VMWARE, resource_kind: HostSystem, type: self}\n"
+            "sections:\n  - type: CoverPage\n"
         )
     (project_dir / kind / "no-id.yaml").write_text(body, encoding="utf-8")
 
@@ -825,7 +862,14 @@ def test_kit_isolated_bundled_yaml_without_id_fails_the_build_and_writes_nothing
     assert "NO_ID_REJECTED" in result.stdout
     # Contrast: the factory's own loader mints on the same input.
     from vcfcf_dashboards.loader import load_view, load_dashboard  # noqa: PLC0415
+    from vcfcf_supermetrics.loader import load_file as load_sm  # noqa: PLC0415
+    from vcfcf_reports.loader import load_file as load_report  # noqa: PLC0415
     factory_copy = tmp_path / f"factory-{kind}.yaml"
     factory_copy.write_text(body, encoding="utf-8")
-    loaded = (load_view if kind == "views" else load_dashboard)(factory_copy, enforce_framework_prefix=False)
+    if kind == "reports":
+        loaded = load_report(factory_copy, views_dir=tmp_path / "v", dashboards_dir=tmp_path / "d",
+                             enforce_framework_prefix=False)
+    else:
+        loader = {"views": load_view, "dashboards": load_dashboard, "supermetrics": load_sm}[kind]
+        loaded = loader(factory_copy, enforce_framework_prefix=False)
     assert factory_copy.read_text(encoding="utf-8").startswith(f"id: {loaded.id}\n")
