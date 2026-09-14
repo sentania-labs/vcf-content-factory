@@ -1390,6 +1390,22 @@ def _fan_out_summary_specs(
     return out
 
 
+def _ext_model_id(widget_id: str, seq: int) -> str:
+    """Per-widget, per-sequence ``id`` for Scoreboard / MetricChart metric
+    entries: ``extModel<0..99999>-<seq>``.
+
+    The numeric part is derived from a sha1 digest of the widget id, not
+    from ``hash()``: str hashing is salted per interpreter process
+    (PYTHONHASHSEED), so the previous ``abs(hash(widget_id)) % 100000``
+    changed on every run and defeated byte-comparison render regression on
+    the content-import path (issue #147). Same shape as before (up to five
+    digits, ``% 100000``), so the wire form is unchanged; only the value is
+    now stable.
+    """
+    digest = hashlib.sha1(widget_id.encode("utf-8")).hexdigest()
+    return f"extModel{int(digest[:8], 16) % 100000}-{seq}"
+
+
 def _render_resource_metric_spec(
     specs: list[MetricSpec],
     resource: "WidgetResourceRef",
@@ -1427,7 +1443,7 @@ def _render_resource_metric_spec(
             "resourceKindId": f"{prefix}{resource.adapter_kind}{resource.resource_kind}",
             "colorMethod": spec.color_method,
             "handleOldColoring": False,
-            "id": f"extModel{abs(hash(widget_id)) % 100000}-{seq}",
+            "id": _ext_model_id(widget_id, seq),
             "label": spec.label,
             "link": "",
             "maxValue": _max_value_str(spec.max_value),
@@ -1465,8 +1481,9 @@ def _render_metric_spec(
     ``entries.resourceKind[]`` in the dashboard bundle JSON.
 
     The ``id`` field within each entry must be unique per widget; we use
-    ``extModel<hash>-<seq>`` where <hash> is a short numeric hash of the
-    widget_id so that IDs remain stable across renders for the same content.
+    ``extModel<hash>-<seq>`` where <hash> is a short numeric digest of the
+    widget_id (``_ext_model_id``) so that IDs are byte-identical across
+    renders, and across interpreter runs, for the same content.
     """
     rk_metrics = []
     for seq, spec in enumerate(specs, start=1):
@@ -1483,8 +1500,9 @@ def _render_metric_spec(
             "resourceKindName": _WORLD_DISPLAY_NAME.get(key, spec.resource_kind),
             "colorMethod": spec.color_method,
             "handleOldColoring": False,
-            # Stable per-widget, per-sequence ID.
-            "id": f"extModel{abs(hash(widget_id)) % 100000}-{seq}",
+            # Stable per-widget, per-sequence ID (sha1-derived, see
+            # _ext_model_id; issue #147).
+            "id": _ext_model_id(widget_id, seq),
             "label": spec.label,
             "link": "",
             # Gauge full-scale value; a string on the wire ("100"). "" when

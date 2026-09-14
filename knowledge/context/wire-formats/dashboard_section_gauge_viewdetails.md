@@ -128,10 +128,14 @@ chart options exist (7 days, all criticalities, hard-coded), so YAML keys
 such as `criticality`, `time_window`, `date_range`, `alert_types`,
 `metrics` are rejected at load.
 
-## Determinism note (pre-existing, not from this change)
+## Determinism note
 
-`render.py:_render_metric_spec` builds per-metric ids as
-`extModel{abs(hash(widget_id)) % 100000}-{seq}`. `hash()` on a str is
-PYTHONHASHSEED-randomized, so those ids differ per interpreter run. Every
-other byte of a bundle is deterministic. Diff renders with those ids
-normalized.
+`render.py:_ext_model_id` builds per-metric ids as
+`extModel<sha1(widget_id)[:8] as int % 100000>-<seq>` (issue #147; before
+2026-09-14 it was `abs(hash(widget_id)) % 100000`, which is
+PYTHONHASHSEED-salted and changed on every interpreter run). The rendered
+`dashboard/dashboard.json` and `views.zip/content.xml` are now
+byte-identical across runs with no `PYTHONHASHSEED` workaround; diff
+renders directly. The one remaining per-run difference in a `package` zip
+is the outer marker member name (`<time_ns>L.v1`, `packager.py`), which
+the sync path replaces with the target instance's real marker anyway.
