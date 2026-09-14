@@ -188,7 +188,7 @@ Walk all of these against the change. Each is tied to its authority.
    *our* copy; `CURRENT_TEMPLATE_VERSION` in
    `src/vcfcf_packaging/template_version.py` is what tells *every already
    distributed* copy it is stale. The builders write it into
-   `vcfcf_manifest.json` and `check-staleness` compares only that value, so
+   `vcfops_manifest.json` and `check-staleness` compares only that value, so
    a templates change without a bump leaves every previously built bundle
    reporting **current** and no operator is ever prompted to rebuild. The
    fix reaches the zips and nothing tells anyone the old zips are obsolete.

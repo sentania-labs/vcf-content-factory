@@ -504,7 +504,7 @@ The `version:` field in `releases/*.yaml` remains.  It is used for:
   where the version appears. The commit subject carries counts only and
   the commit body lists names **without** versions, so the commit message
   is not a consumer of `version:` at all.
-- Audit trail in `vcfcf_manifest.json` inside each distribution zip.
+- Audit trail in `vcfops_manifest.json` inside each distribution zip.
 
 The version is intentionally **not** propagated to the zip filename or to
 the consumer-facing README catalog table (the "Released" column shows a

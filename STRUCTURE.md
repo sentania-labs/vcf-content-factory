@@ -34,7 +34,7 @@ now `knowledge/HOW_IT_WORKS.md`, `knowledge/vcf_ops_concepts.md`, and
 | `knowledge/designs/` | Prompt-of-record + design artifacts per content item / feature. |
 | `content/` | Authored factory output: supermetrics, views, dashboards, alerts, MPs. `content/sdk-adapters/*` are independent git repos (gitignored, bootstrap-cloned). |
 | `bundles/` | Publish-pipeline inputs: bundle manifests (what ships together) at the top level, release manifests (what has been released, per item) under `bundles/releases/`. Merged in reorg v2 phase 3. |
-| `src/` | The ten `vcfcf_*` framework Python packages (`src/vcfcf_alerts/` … `src/vcfcf_symptoms/`). **Only the `tooling` agent edits these** (RULE-013 gate applies). Directories moved under `src/` in reorg v2 phase 1; package names and import paths are unchanged (`python3 -m vcfcf_<x>` still works — ambient `PYTHONPATH=src`). |
+| `src/` | The ten `vcfcf_*` framework Python packages (`src/vcfcf_alerts/` … `src/vcfcf_symptoms/`). **Only the `tooling` agent edits these** (RULE-013 gate applies). Directories moved under `src/` in reorg v2 phase 1 (as `vcfops_*`); renamed to `vcfcf_*` in M1 (2026-09-14). `src/vcfops_*/` are one-release compatibility shims that forward to the new names with a deprecation line; removed next release. Ambient `PYTHONPATH=src`. |
 | `scripts/` | Hooks and operational shell scripts. Cannot move — wired into settings/CI. |
 | `tests/` | Framework test suite. Cannot move. |
 | `.claude/` | Harness config: agents, skills, settings. Cannot move. |
@@ -80,7 +80,7 @@ That framing was superseded on 2026-07-09 by
 `knowledge/designs/reorg-v2-landing-page.md`: against the **landing-page**
 goal (fewer top-level entries so a first-time visitor sees the README with
 at most one flick), the same move pays for itself. Sequencing per that
-design: phase 1 moved the ten `vcfcf_*` packages under `src/`; phase 2
+design: phase 1 moved the ten `vcfops_*` packages (now `vcfcf_*`) under `src/`; phase 2
 (this move) grouped `rules/`, `lessons/`, `context/`, `designs/`,
 `HOW_IT_WORKS.md`, `ROADMAP.md`, and `vcf_ops_concepts.md` under
 `knowledge/`, preceded by cross-repo pre-work — all 6 pak repos + the
