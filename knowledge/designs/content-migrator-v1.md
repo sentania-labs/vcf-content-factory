@@ -89,6 +89,20 @@ form a 9.x instance produced for the same content. Unknown shapes
 raise and name the field, and the tool reports "refused: not in
 corpus" for that item rather than emitting a guess.
 
+Outbound and the export password. Found while taking the first corpus
+zip from the lab (9.0.2, 2026-09-14): the export API refuses to include
+notification rules or outbound settings unless the request carries an
+`EncryptionPassword` header, and it enforces a mixed-character policy
+on it. The encrypted values in the export are therefore tied to a
+password the admin chose at export time, and the target's import asks
+for the same password to decrypt them. "Pass them along" means: the
+tool carries the encrypted values untouched, never asks for or stores
+the password, and the report tells the admin that the import will
+prompt for the password used at export. The lab's devel instance has
+no notification rules or outbound endpoints today, so M4's outbound
+acceptance needs one of each configured there first (a qa step, not a
+tool change).
+
 Mock data: a small deterministic provider that, given a resource kind
 and metric key, returns a plausible series (seeded by the key so the
 preview is stable across runs). Names come from the export itself.
