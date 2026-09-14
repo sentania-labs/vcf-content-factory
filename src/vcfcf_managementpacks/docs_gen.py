@@ -16,11 +16,11 @@ SCAFFOLD if missing (hand-curated thereafter):
   docs/installing.md              — prereqs + config fields table (scaffold only)
 
 Usage:
-    from vcfops_managementpacks.docs_gen import generate_docset
+    from vcfcf_managementpacks.docs_gen import generate_docset
     generate_docset(project_dir)
 
 CLI:
-    python3 -m vcfops_managementpacks docs-gen <adapter_dir>
+    python3 -m vcfcf_managementpacks docs-gen <adapter_dir>
 """
 from __future__ import annotations
 

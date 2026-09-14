@@ -1,4 +1,4 @@
-"""Phase 3 smoke tests for vcfops_packaging.publish.
+"""Phase 3 smoke tests for vcfcf_packaging.publish.
 
 Five scenarios as specified:
 
@@ -147,7 +147,7 @@ def factory_with_release(tmp_path):
     Alternatively: we write our temp manifest into a tmp bundles/releases/ dir,
     then call publish() with a custom _releases_dir override via monkeypatching.
 
-    Strategy: monkeypatch vcfops_packaging.publish._enumerate_releases so it
+    Strategy: monkeypatch vcfcf_packaging.publish._enumerate_releases so it
     reads from our temp releases_dir, still using REPO_ROOT as the factory_repo
     for all other operations.
     """
@@ -175,8 +175,8 @@ def factory_with_release(tmp_path):
 def _patch_enumerate(monkeypatch, releases_dir: Path):
     """Replace _enumerate_releases to read from releases_dir instead of
     factory_repo/bundles/releases/."""
-    from vcfops_packaging import publish as _pub
-    from vcfops_packaging.releases import load_release
+    from vcfcf_packaging import publish as _pub
+    from vcfcf_packaging.releases import load_release
 
     def _fake_enumerate(factory_repo):
         manifests = sorted(releases_dir.glob("*.y*ml"))
@@ -203,7 +203,7 @@ class TestDryRun:
     """S1: dry_run=True shows what would happen without writing files."""
 
     def test_dry_run_result(self, tmp_path, factory_with_release, monkeypatch):
-        from vcfops_packaging.publish import PublishError
+        from vcfcf_packaging.publish import PublishError
         from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
@@ -301,7 +301,7 @@ def test_real_run_zip_lands(tmp_path, monkeypatch):
     real zip builder through publish(), so the seam stubs used by every
     shape test cannot drift from what production actually does.
     """
-    from vcfops_packaging.publish import publish
+    from vcfcf_packaging.publish import publish
 
     dist = _init_dist_repo(tmp_path)
     releases_dir = tmp_path / "rr_releases"
@@ -573,7 +573,7 @@ class TestLockfileGuard:
     """S5: a pre-existing lockfile causes a clear PublishError."""
 
     def test_lockfile_blocks_publish(self, tmp_path, monkeypatch):
-        from vcfops_packaging.publish import PublishError
+        from vcfcf_packaging.publish import PublishError
         from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
@@ -614,7 +614,7 @@ class TestLockfileGuard:
 
     def test_lockfile_released_on_error(self, tmp_path, monkeypatch):
         """Lockfile must be cleaned up even when a validator fails."""
-        from vcfops_packaging.publish import PublishError
+        from vcfcf_packaging.publish import PublishError
         from publish_seam_stubs import stubbed_publish as publish
 
         dist = _init_dist_repo(tmp_path)
@@ -753,7 +753,7 @@ class TestRetiredSectionDownloadLink:
     """Retired section download links must use 'retired/<subdir>/' prefix (Bug 1 parity)."""
 
     def test_retired_download_link_uses_retired_prefix(self, tmp_path, monkeypatch):
-        from vcfops_packaging.readme_gen import _render_release_catalog
+        from vcfcf_packaging.readme_gen import _render_release_catalog
         from pathlib import Path
         import datetime
 
@@ -774,7 +774,7 @@ class TestRetiredSectionDownloadLink:
         )
 
     def test_retired_download_link_does_not_use_bare_filename(self, tmp_path, monkeypatch):
-        from vcfops_packaging.readme_gen import _render_release_catalog
+        from vcfcf_packaging.readme_gen import _render_release_catalog
 
         dist = tmp_path / "dist2"
         (dist / "retired" / "dashboards").mkdir(parents=True)
@@ -933,7 +933,7 @@ class TestPolicyCaveatInReadme:
         from pathlib import Path
         template = (
             Path(__file__).parent.parent
-            / "src" / "vcfops_packaging" / "templates" / "README_framework.md"
+            / "src" / "vcfcf_packaging" / "templates" / "README_framework.md"
         )
         content = template.read_text(encoding="utf-8")
         assert self._CAVEAT_FRAGMENT in content, (
@@ -944,7 +944,7 @@ class TestPolicyCaveatInReadme:
     def test_bundle_readme_has_caveat(self, tmp_path, monkeypatch):
         """A built bundle zip's top-level README.md contains the policy caveat."""
         from publish_seam_stubs import stubbed_publish as publish
-        from vcfops_packaging.publish import _build_one_release
+        from vcfcf_packaging.publish import _build_one_release
         import zipfile
 
         dist = _init_dist_repo(tmp_path)
@@ -988,7 +988,7 @@ class TestPolicyCaveatInReadme:
     def test_bundle_inner_readme_has_caveat(self, tmp_path, monkeypatch):
         """A built bundle zip's bundle-level README.md contains the policy caveat."""
         from publish_seam_stubs import stubbed_publish as publish
-        from vcfops_packaging.publish import _build_one_release
+        from vcfcf_packaging.publish import _build_one_release
         import zipfile
 
         dist = _init_dist_repo(tmp_path)
@@ -1138,7 +1138,7 @@ class TestVersionlessNaming:
         sweep must not delete it because the slug 'something-1' doesn't match any
         known release slug.
         """
-        from vcfops_packaging.publish import _sweep_legacy_versioned_zips
+        from vcfcf_packaging.publish import _sweep_legacy_versioned_zips
 
         dist = tmp_path / "dist"
         dashboards_dir = dist / "dashboards"

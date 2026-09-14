@@ -1,6 +1,6 @@
 """Reverse extraction must preserve gauge layout settings and per-metric maxValue.
 
-Two silent-loss bugs in vcfops_dashboards/reverse.py:
+Two silent-loss bugs in vcfcf_dashboards/reverse.py:
 
   Fix 4 — ``_parse_scoreboard_config()`` never read ``mode.layoutMode``
   (``floatingView``) nor the three bare top-level gauge switches
@@ -36,8 +36,8 @@ OWNER = "00000000-0000-0000-0000-000000000001"
 
 def _render(tmp_path: Path, widget: dict, stem: str) -> dict:
     """Author a one-widget dashboard and return its rendered wire dict."""
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     p = tmp_path / f"{stem}.yaml"
     p.write_text(yaml.dump(
@@ -56,8 +56,8 @@ def _render(tmp_path: Path, widget: dict, stem: str) -> dict:
 
 def _round_trip(tmp_path: Path, widget: dict) -> tuple[dict, dict]:
     """Return (original_wire_dashboard, re_rendered_wire_dashboard)."""
-    from vcfops_dashboards.reverse import parse_dashboard_json
-    from vcfops_extractor.extractor import _widget_to_yaml_dict
+    from vcfcf_dashboards.reverse import parse_dashboard_json
+    from vcfcf_extractor.extractor import _widget_to_yaml_dict
 
     original = _render(tmp_path, widget, "original")
     parsed = parse_dashboard_json(original, {})
@@ -93,7 +93,7 @@ _KIND_MODE_GAUGE = {
 
 def test_reverse_parses_gauge_layout_settings(tmp_path):
     """All four gauge layout fields land on the reversed ScoreboardConfig."""
-    from vcfops_dashboards.reverse import parse_dashboard_json
+    from vcfcf_dashboards.reverse import parse_dashboard_json
 
     original = _render(tmp_path, _KIND_MODE_GAUGE, "original")
     cfg = original["widgets"][0]["config"]
@@ -181,7 +181,7 @@ _RESOURCE_MODE_GAUGE = {
 
 
 def test_reverse_parses_resource_mode_max_value(tmp_path):
-    from vcfops_dashboards.reverse import parse_dashboard_json
+    from vcfcf_dashboards.reverse import parse_dashboard_json
 
     original = _render(tmp_path, _RESOURCE_MODE_GAUGE, "original")
     wire_metrics = original["widgets"][0]["config"]["metric"]["resourceMetrics"]

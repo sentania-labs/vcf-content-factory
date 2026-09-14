@@ -1,4 +1,4 @@
-"""Unit tests for vcfops_packaging.managed_paks registry reader.
+"""Unit tests for vcfcf_packaging.managed_paks registry reader.
 
 Tests cover:
   - Parsing a well-formed fixture registry with one entry.
@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pytest
 
-from vcfops_packaging.managed_paks import (
+from vcfcf_packaging.managed_paks import (
     ManagedPak,
     load_registry,
     lookup_by_adapter_name,

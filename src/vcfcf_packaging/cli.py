@@ -1,4 +1,4 @@
-"""CLI entry point for vcfops_packaging.
+"""CLI entry point for vcfcf_packaging.
 
 Commands:
     build   bundles/*.yaml       Build bundle into dist/<slug>.zip (flat)
@@ -129,7 +129,7 @@ def _build_release_to_dist(
 
     output_dir = Path(output_dir)
 
-    with tempfile.TemporaryDirectory(prefix="vcfops_build_release_") as tmp_str:
+    with tempfile.TemporaryDirectory(prefix="vcfcf_build_release_") as tmp_str:
         tmp_dir = Path(tmp_str)
         artifacts = build_release(
             release_path=manifest,
@@ -950,7 +950,7 @@ def cmd_release(args) -> int:
         )
 
         validate_result = subprocess.run(
-            [sys.executable, "-m", "vcfops_packaging", "validate"],
+            [sys.executable, "-m", "vcfcf_packaging", "validate"],
             capture_output=True,
             text=True,
             cwd=str(repo_root),
@@ -1306,7 +1306,7 @@ def cmd_release(args) -> int:
     # Run validators to confirm both files load cleanly.
     # -----------------------------------------------------------------------
     validate_result = subprocess.run(
-        [sys.executable, "-m", "vcfops_packaging", "validate"],
+        [sys.executable, "-m", "vcfcf_packaging", "validate"],
         capture_output=True,
         text=True,
         cwd=str(repo_root),
@@ -1463,7 +1463,7 @@ def cmd_publish(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="vcfops_packaging")
+    p = argparse.ArgumentParser(prog="vcfcf_packaging")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pb = sub.add_parser(
@@ -1627,7 +1627,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     pcs.add_argument(
         "zip_path",
-        help="path to a distribution zip file built by vcfops_packaging",
+        help="path to a distribution zip file built by vcfcf_packaging",
     )
     pcs.set_defaults(func=cmd_check_staleness)
 

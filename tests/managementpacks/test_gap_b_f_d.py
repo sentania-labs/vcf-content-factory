@@ -1,5 +1,5 @@
 """Tests for Gap B (multi-value extract), Gap F (JMESPath filter predicates),
-and Gap D (type coercion hint) in vcfops_managementpacks.
+and Gap D (type coercion hint) in vcfcf_managementpacks.
 
 Gap B — multi-value extract on auth.extract (2026-04-30):
   - Single-mapping form (Synology-style) still works.
@@ -34,11 +34,11 @@ from pathlib import Path
 
 import pytest
 
-from vcfops_managementpacks.loader import (
+from vcfcf_managementpacks.loader import (
     ManagementPackValidationError,
     load_file,
 )
-from vcfops_managementpacks.render import render_mp_design_json
+from vcfcf_managementpacks.render import render_mp_design_json
 
 # ---------------------------------------------------------------------------
 # Repository root (for loading production YAML)
@@ -390,7 +390,7 @@ class TestGapBMultiMapping:
     def test_inject_headers_session_refs_fully_scoped(self, tmp_path: Path) -> None:
         """${session.X} in inject values must be rewritten to
         ${authentication.session.X} when rendered via _render_global_headers."""
-        from vcfops_managementpacks.render import _render_global_headers
+        from vcfcf_managementpacks.render import _render_global_headers
         mp = _write_and_load(tmp_path, _DUAL_EXTRACT_YAML)
         headers = _render_global_headers(mp)
         for h in headers:
@@ -914,7 +914,7 @@ class TestBuildNumberExport:
 
     def test_build_number_present_and_correct(self, tmp_path: Path) -> None:
         """YAML build_number=2 must appear as design.buildNumber=2 in exchange JSON."""
-        from vcfops_managementpacks.render_export import render_mpb_exchange_json
+        from vcfcf_managementpacks.render_export import render_mpb_exchange_json
 
         yaml_text = """\
             name: BuildNum Test MP
@@ -965,7 +965,7 @@ class TestBuildNumberExport:
 
     def test_build_number_default_is_one(self, tmp_path: Path) -> None:
         """YAML without explicit build_number must default to 1 in exchange JSON."""
-        from vcfops_managementpacks.render_export import render_mpb_exchange_json
+        from vcfcf_managementpacks.render_export import render_mpb_exchange_json
 
         yaml_text = """\
             name: DefaultBuild Test MP
@@ -1013,7 +1013,7 @@ class TestBuildNumberExport:
         self, tmp_path: Path
     ) -> None:
         """version in design.design must not be displaced by buildNumber addition."""
-        from vcfops_managementpacks.render_export import render_mpb_exchange_json
+        from vcfcf_managementpacks.render_export import render_mpb_exchange_json
 
         yaml_text = """\
             name: VersionCheck Test MP
@@ -1061,7 +1061,7 @@ class TestBuildNumberExport:
 
     def test_unifi_yaml_build_number_is_two(self) -> None:
         """Production UniFi YAML has build_number=2; exchange JSON must reflect it."""
-        from vcfops_managementpacks.render_export import render_mpb_exchange_json
+        from vcfcf_managementpacks.render_export import render_mpb_exchange_json
 
         mp = load_file(
             _REPO_ROOT / "content" / "managementpacks" / "unifi_network.yaml"

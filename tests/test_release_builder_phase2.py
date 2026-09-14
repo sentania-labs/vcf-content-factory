@@ -1,4 +1,4 @@
-"""Phase 2 smoke tests for vcfops_packaging.release_builder.
+"""Phase 2 smoke tests for vcfcf_packaging.release_builder.
 
 Two smoke passes as specified in the Phase 2 requirements:
 
@@ -94,7 +94,7 @@ class TestDashboardHeadline:
 
     @pytest.fixture(scope="class")
     def release_artifacts(self, tmp_path_factory):
-        from vcfops_packaging.release_builder import build_release
+        from vcfcf_packaging.release_builder import build_release
 
         tmp = tmp_path_factory.mktemp("dash_release")
         manifest_path = _write_release_manifest(
@@ -228,7 +228,7 @@ class TestBundleHeadline:
 
     @pytest.fixture(scope="class")
     def release_artifacts(self, tmp_path_factory):
-        from vcfops_packaging.release_builder import build_release
+        from vcfcf_packaging.release_builder import build_release
 
         tmp = tmp_path_factory.mktemp("bundle_release")
         manifest_path = _write_release_manifest(
@@ -397,8 +397,8 @@ Template block — skipped by parser.
 
     def test_pointer_zip_created(self, tmp_path):
         """_build_sdk_mp_headline must produce a zip file."""
-        import vcfops_packaging.managed_paks as _mp_mod
-        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+        import vcfcf_packaging.managed_paks as _mp_mod
+        from vcfcf_packaging.release_builder import _build_sdk_mp_headline
 
         reg = self._write_registry(tmp_path)
         adapter_yaml = self._make_adapter_yaml(tmp_path, "test-pak")
@@ -417,8 +417,8 @@ Template block — skipped by parser.
 
     def test_pointer_zip_contains_pointer_json(self, tmp_path):
         """The pointer zip must contain a single file 'pointer.json'."""
-        import vcfops_packaging.managed_paks as _mp_mod
-        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+        import vcfcf_packaging.managed_paks as _mp_mod
+        from vcfcf_packaging.release_builder import _build_sdk_mp_headline
 
         reg = self._write_registry(tmp_path)
         adapter_yaml = self._make_adapter_yaml(tmp_path, "test-pak")
@@ -441,8 +441,8 @@ Template block — skipped by parser.
     def test_pointer_json_fields(self, tmp_path):
         """pointer.json must contain all required fields with correct values."""
         import json
-        import vcfops_packaging.managed_paks as _mp_mod
-        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+        import vcfcf_packaging.managed_paks as _mp_mod
+        from vcfcf_packaging.release_builder import _build_sdk_mp_headline
 
         reg = self._write_registry(tmp_path)
         adapter_yaml = self._make_adapter_yaml(tmp_path, "test-pak")
@@ -479,8 +479,8 @@ Template block — skipped by parser.
     def test_pointer_latest_release_url_is_latest(self, tmp_path):
         """latest_release_url must end with '/releases/latest' (version-free pointer)."""
         import json
-        import vcfops_packaging.managed_paks as _mp_mod
-        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+        import vcfcf_packaging.managed_paks as _mp_mod
+        from vcfcf_packaging.release_builder import _build_sdk_mp_headline
 
         reg = self._write_registry(tmp_path)
         adapter_yaml = self._make_adapter_yaml(tmp_path, "test-pak")
@@ -512,8 +512,8 @@ Template block — skipped by parser.
 
     def test_unregistered_adapter_raises(self, tmp_path):
         """An adapter not in the registry must raise ValueError with a clear message."""
-        import vcfops_packaging.managed_paks as _mp_mod
-        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+        import vcfcf_packaging.managed_paks as _mp_mod
+        from vcfcf_packaging.release_builder import _build_sdk_mp_headline
 
         reg = self._write_registry(tmp_path)
         # Use an adapter name NOT present in the fixture registry.
@@ -543,8 +543,8 @@ Template block — skipped by parser.
 
     def test_unregistered_adapter_does_not_produce_zip(self, tmp_path):
         """A failing (unregistered) adapter must not write any zip to tmp_out."""
-        import vcfops_packaging.managed_paks as _mp_mod
-        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+        import vcfcf_packaging.managed_paks as _mp_mod
+        from vcfcf_packaging.release_builder import _build_sdk_mp_headline
 
         reg = self._write_registry(tmp_path)
         adapter_yaml = self._make_adapter_yaml(tmp_path, "also-not-registered")
@@ -567,10 +567,10 @@ Template block — skipped by parser.
     # ------------------------------------------------------------------
 
     def test_no_sdk_builder_import(self, tmp_path):
-        """_build_sdk_mp_headline must not import vcfops_managementpacks.sdk_builder."""
+        """_build_sdk_mp_headline must not import vcfcf_managementpacks.sdk_builder."""
         import sys
-        import vcfops_packaging.managed_paks as _mp_mod
-        from vcfops_packaging.release_builder import _build_sdk_mp_headline
+        import vcfcf_packaging.managed_paks as _mp_mod
+        from vcfcf_packaging.release_builder import _build_sdk_mp_headline
 
         reg = self._write_registry(tmp_path)
         adapter_yaml = self._make_adapter_yaml(tmp_path, "test-pak")
@@ -578,7 +578,7 @@ Template block — skipped by parser.
         tmp_out.mkdir()
 
         # Remove sdk_builder from sys.modules to ensure it is not imported.
-        sdk_key = "vcfops_managementpacks.sdk_builder"
+        sdk_key = "vcfcf_managementpacks.sdk_builder"
         was_loaded = sdk_key in sys.modules
         sys.modules.pop(sdk_key, None)
 
@@ -612,8 +612,8 @@ class TestHelpers:
     @pytest.fixture
     def minimal_release(self, tmp_path):
         """Return a loaded ReleaseDef for demand-driven-capacity-v2."""
-        from vcfops_packaging.release_builder import build_release
-        from vcfops_packaging.releases import load_release
+        from vcfcf_packaging.release_builder import build_release
+        from vcfcf_packaging.releases import load_release
 
         source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
         manifest = {
@@ -627,7 +627,7 @@ class TestHelpers:
         return load_release(manifest_path)
 
     def test_expected_artifact_path_structure(self, minimal_release, tmp_path):
-        from vcfops_packaging.release_builder import expected_artifact_path
+        from vcfcf_packaging.release_builder import expected_artifact_path
 
         dest_root = tmp_path / "dist-repo"
         path = expected_artifact_path(minimal_release, dest_root)
@@ -638,13 +638,13 @@ class TestHelpers:
         assert path.parent.parent == dest_root.resolve()
 
     def test_artifact_does_not_exist_initially(self, minimal_release, tmp_path):
-        from vcfops_packaging.release_builder import artifact_already_exists
+        from vcfcf_packaging.release_builder import artifact_already_exists
 
         dest_root = tmp_path / "dist-repo"
         assert artifact_already_exists(minimal_release, dest_root) is False
 
     def test_artifact_exists_after_creation(self, minimal_release, tmp_path):
-        from vcfops_packaging.release_builder import (
+        from vcfcf_packaging.release_builder import (
             artifact_already_exists,
             expected_artifact_path,
         )

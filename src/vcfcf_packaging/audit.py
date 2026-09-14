@@ -173,7 +173,7 @@ def audit_bundle_dependencies(
         lines.append(
             f"{qualifier} usually means the metric key is misspelled, or the "
             "describe cache needs "
-            "refreshing. Run: python3 -m vcfops_packaging refresh-describe "
+            "refreshing. Run: python3 -m vcfcf_packaging refresh-describe "
             f"--kind {unknown[0].adapter_kind}:{unknown[0].resource_kind}"
         )
         raise AuditError("\n".join(lines))
@@ -319,7 +319,7 @@ def _check_cache_coverage(refs: list[MetricReference], cache: DescribeCache) -> 
         pairs_str = ", ".join(f"{ak}:{rk}" for ak, rk in sorted(missing_pairs))
         raise AuditError(
             f"No describe cache files for: {pairs_str}\n"
-            "Run: python3 -m vcfops_packaging refresh-describe "
+            "Run: python3 -m vcfcf_packaging refresh-describe "
             f"--kind {pairs_str.replace(', ', ' --kind ')}"
         )
 
@@ -509,7 +509,7 @@ def _refs_from_views_xml(views_path: Path) -> list[MetricReference]:
     metricKey values.
 
     Wire shape (see knowledge/context/wire-formats/view_column_wire_format.md
-    and vcfops_dashboards/render.py:_render_view_def_fragment /
+    and vcfcf_dashboards/render.py:_render_view_def_fragment /
     _xml_attribute_item): the factory does NOT emit a bare <Column
     attributeKey=.../> element or a <ResourceKind> element. Per-column keys
     live at ``Control[@type='attributes-selector']/Property[@name=

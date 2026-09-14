@@ -1,7 +1,7 @@
-"""vcfops_common — shared utilities for all vcfops_* packages.
+"""vcfcf_common — shared utilities for all vcfcf_* packages.
 
 VCFOpsClient and VCFOpsError are lazy-loaded from .client so that
-importing this package (which happens whenever any vcfops_* CLI module
+importing this package (which happens whenever any vcfcf_* CLI module
 loads _profile_cli) does NOT pull in `requests` at import time.
 This keeps offline subcommands (validate, build-buildkit, build-sdk,
 pak-compare) working in environments that have only PyYAML installed.

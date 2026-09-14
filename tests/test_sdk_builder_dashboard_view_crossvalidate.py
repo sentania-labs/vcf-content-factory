@@ -49,7 +49,7 @@ def _make_project(tmp_path: Path, view_ref: str) -> Path:
 
 
 def _load(project_dir: Path, views: list[str]):
-    from vcfops_managementpacks.sdk_builder import _load_bundled_content
+    from vcfcf_managementpacks.sdk_builder import _load_bundled_content
     raw = {"bundled_content": {
         "views": views,
         "dashboards": ["dashboards/vm-details.yaml"],
@@ -58,7 +58,7 @@ def _load(project_dir: Path, views: list[str]):
 
 
 def test_dashboard_view_not_bundled_raises_naming_the_view(tmp_path):
-    from vcfops_managementpacks.sdk_builder import SdkBuildError
+    from vcfcf_managementpacks.sdk_builder import SdkBuildError
 
     project_dir = _make_project(tmp_path, _VIEW_NAME)
     with pytest.raises(SdkBuildError) as ei:

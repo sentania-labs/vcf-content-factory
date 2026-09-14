@@ -18,7 +18,7 @@ deprecates:    list (optional) -- repo-relative paths to other release manifests
 builtin_metric_enables: list (optional) -- built-in metrics to enable on the
                    Default Policy at install time, for discrete (component)
                    headline releases.  Same entry shape as the bundle manifest
-                   field of the same name (see vcfops_packaging.loader.BuiltinMetricEnable):
+                   field of the same name (see vcfcf_packaging.loader.BuiltinMetricEnable):
                        adapter_kind: str (required) -- e.g. "VMWARE"
                        resource_kind: str (required) -- e.g. "VirtualMachine"
                        metric_key: str (required) -- e.g. "net|packetsPerSec"
@@ -280,7 +280,7 @@ def load_release(path: str | Path, repo_root: Optional[Path] = None) -> ReleaseD
 
     # --- builtin_metric_enables (optional) ---
     # Same entry shape as the bundle manifest field, shared parsing lives in
-    # vcfops_packaging.loader.parse_builtin_metric_enables (issue #77); only
+    # vcfcf_packaging.loader.parse_builtin_metric_enables (issue #77); only
     # the exception class differs between the two callers.
     builtin_metric_enables: List[BuiltinMetricEnable] = parse_builtin_metric_enables(
         data.get("builtin_metric_enables"), path, exc=ReleaseValidationError

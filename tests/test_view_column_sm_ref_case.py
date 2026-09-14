@@ -1,10 +1,10 @@
 """View-column ``supermetric:"<name>"`` (no ``@``) token case (issue #146).
 
 The formula form ``@supermetric:"<name>"`` was made token-case-insensitive in
-PR #141 (``vcfops_supermetrics.crossref.SM_CROSSREF_RE``).  The view-column
-form one path over (``vcfops_dashboards.render._xml_attribute_item``) still
+PR #141 (``vcfcf_supermetrics.crossref.SM_CROSSREF_RE``).  The view-column
+form one path over (``vcfcf_dashboards.render._xml_attribute_item``) still
 tested the prefix with a case-sensitive ``startswith``, while the loader and
-``vcfops_packaging.deps._is_sm_ref`` both lowercase before comparing.  A
+``vcfcf_packaging.deps._is_sm_ref`` both lowercase before comparing.  A
 mis-cased token (``SuperMetric:"X"``) therefore passed validate, passed the
 dependency audit, and shipped as a literal ``attributeKey`` with
 ``rollUpType=AVG``: a blank column in the UI with no diagnostic anywhere.
@@ -52,7 +52,7 @@ def _sm_file(tmp_path: Path, sm_id: str, name: str) -> Path:
 
 
 def _view(tmp_path: Path, attribute: str, stem: str = "view"):
-    from vcfops_dashboards.loader import load_view
+    from vcfcf_dashboards.loader import load_view
 
     d = tmp_path / "views"
     d.mkdir(parents=True, exist_ok=True)
@@ -70,7 +70,7 @@ def _view(tmp_path: Path, attribute: str, stem: str = "view"):
 
 
 def _render(tmp_path: Path, attribute: str, sm_files: list[Path]) -> str:
-    from vcfops_dashboards.render import render_view_def_fragments
+    from vcfcf_dashboards.render import render_view_def_fragments
 
     return render_view_def_fragments(
         [_view(tmp_path, attribute)],

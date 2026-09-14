@@ -452,7 +452,7 @@ def check_project_membership(
     Returns:
         A list of error message strings.  Empty = all clear.
     """
-    from vcfops_common.dep_walker import collect_deps, CollectDepsCrossLinks
+    from vcfcf_common.dep_walker import collect_deps, CollectDepsCrossLinks
 
     third_party_dir = Path(third_party_dir).resolve()
 

@@ -12,8 +12,8 @@ can enqueue transitive SMs for extraction.
 The SuperMetricDef dataclass produced here is compatible with loader.py's
 contract (same fields, same validation logic).
 
-Usage by vcfops_extractor:
-    from vcfops_supermetrics.reverse import parse_sm_json, rewrite_formula
+Usage by vcfcf_extractor:
+    from vcfcf_supermetrics.reverse import parse_sm_json, rewrite_formula
 
     sm_data = client.get_supermetric(uuid)
     rewritten_formula, referenced_uuids = rewrite_formula(
@@ -73,7 +73,7 @@ def rewrite_formula(
         if name:
             return f'@supermetric:"{name}"'
         warnings.warn(
-            f"vcfops_supermetrics.reverse: could not resolve SM UUID {uuid} "
+            f"vcfcf_supermetrics.reverse: could not resolve SM UUID {uuid} "
             "to a name; keeping raw token in formula",
             UserWarning,
             stacklevel=2,

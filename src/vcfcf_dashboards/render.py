@@ -261,7 +261,7 @@ def _xml_property(name: str, value: str, localization_key: Optional[str] = None)
 # at maxLength=64 (`#AnonType_keyPropertyLocaleLocalizationViewDefViewsContent`).
 # This helper is dormant for view columns today (displayName carries no
 # localizationKey, see the module docstring note near _xml_column below),
-# but the twin in vcfops_managementpacks/sdk_builder.py hit a real 69-char
+# but the twin in vcfcf_managementpacks/sdk_builder.py hit a real 69-char
 # key that aborted a whole colocated content/reports/ batch. Capped here too
 # so this class of bug can't resurface if column localizationKeys are ever
 # re-enabled or this helper reused elsewhere. See the 2026-07-10 addendum in
@@ -641,7 +641,7 @@ def _xml_kind_binding_props(view: ViewDef, col) -> list[str]:
 # well-formed shape resolves and everything else is a hard error. Without
 # the wide gate a loose spelling (``supermetric: "X"``, ``supermetric:X``)
 # falls through to the plain-metric branch and ships as a literal
-# attributeKey with rollUpType AVG, while ``vcfops_packaging.deps._is_sm_ref``
+# attributeKey with rollUpType AVG, while ``vcfcf_packaging.deps._is_sm_ref``
 # (prefix-only, lowercased) has already waved it through as an SM ref:
 # green audit, blank column (review of #146, WARNING 1).
 #
@@ -679,13 +679,13 @@ def _xml_attribute_item(
         # Author wrote supermetric:"<name>", resolve to sm_<uuid> using
         # the SM name map built from supermetrics/ YAML at render time.
         # The token is matched case-insensitively (issue #146): the loader
-        # and vcfops_packaging.deps._is_sm_ref already lowercase before
+        # and vcfcf_packaging.deps._is_sm_ref already lowercase before
         # comparing, so a mis-cased token such as SuperMetric:"X" passed
         # every gate and reached the wire as a literal attributeKey, a
         # blank column with no diagnostic. The captured NAME stays
         # case-sensitive: SM display names are exact, only the token
         # spelling is forgiving (same boundary as SM_CROSSREF_RE in
-        # vcfops_supermetrics.crossref).
+        # vcfcf_supermetrics.crossref).
         m = _SM_COLUMN_REF_RE.match(raw)
         if m:
             sm_name = m.group(1)
@@ -863,7 +863,7 @@ def _render_view_def_fragment(
     # Title/Description carry a localizationKey that has no backing
     # content.properties bundle in the SAME import unit, and our
     # content-import zips (dist/**/Views.zip, built by
-    # vcfops_dashboards/packager.py) ship no localization properties files at
+    # vcfcf_dashboards/packager.py) ship no localization properties files at
     # all. 9.1 tolerates the dangling reference and falls back to the inline
     # text, which is what masked this for 9.1-only testing. Reference-corpus
     # scan (all zips under reference/references/, including nested zips):
@@ -877,7 +877,7 @@ def _render_view_def_fragment(
     # is bundle-coupled, never dangling. Our content-import zips ship no
     # properties bundle, so this renderer emits plain elements to match. The
     # one place a matching content.properties bundle IS
-    # shipped (vcfops_managementpacks/sdk_builder.py's per-view
+    # shipped (vcfcf_managementpacks/sdk_builder.py's per-view
     # content/reports/<slug>/resources/content.properties) no longer needs
     # the localizationKey to resolve anything since the inline text is
     # always present; it is left in place as a harmless, already-populated
@@ -1020,7 +1020,7 @@ def render_view_def_fragments(
 
     This is the shared building block behind :func:`render_views_xml`. It
     also lets callers that need to co-bundle ViewDefs inside another
-    document's ``<Content>`` element (e.g. ``vcfops_managementpacks``
+    document's ``<Content>`` element (e.g. ``vcfcf_managementpacks``
     embedding a report's referenced views in the same ``<Content>`` as its
     ``<ReportDef>``, matching the vendor TVS pak shape, see
     ``knowledge/context/investigations/sdk_pak_content_import_gap.md``)
@@ -1065,7 +1065,7 @@ def render_view_def_fragments(
         # An empty list is valid, it means the bundle has no SMs, and any SM
         # reference in a view will be caught as an error below.
         try:
-            from vcfops_supermetrics.loader import load_file as _sm_load_file
+            from vcfcf_supermetrics.loader import load_file as _sm_load_file
             for sm_path in sm_scope:
                 sm = _sm_load_file(sm_path, enforce_framework_prefix=False)
                 sm_map[sm.name] = sm.id
@@ -1079,7 +1079,7 @@ def render_view_def_fragments(
         # Native (unscoped) mode: scan the full supermetrics/ directory tree.
         try:
             from pathlib import Path as _Path
-            from vcfops_supermetrics.loader import load_dir as _sm_load_dir
+            from vcfcf_supermetrics.loader import load_dir as _sm_load_dir
             for _candidate in (_Path("content/supermetrics"), _Path("supermetrics")):
                 if _candidate.is_dir():
                     for sm in _sm_load_dir(_candidate):

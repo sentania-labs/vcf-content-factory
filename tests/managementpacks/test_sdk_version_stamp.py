@@ -1,6 +1,6 @@
 """Tests for the SDK pak version-line guardrail.
 
-Convention under test (see vcfops_managementpacks/sdk_builder.py
+Convention under test (see vcfcf_managementpacks/sdk_builder.py
 _stamp_build_version / _is_release_build):
 
   - Hand-built / local dev preview builds (the default) stamp
@@ -18,13 +18,13 @@ from pathlib import Path
 
 import pytest
 
-from vcfops_managementpacks.sdk_builder import (
+from vcfcf_managementpacks.sdk_builder import (
     _generate_outer_manifest,
     _generate_version_txt,
     _is_release_build,
     _stamp_build_version,
 )
-from vcfops_managementpacks.sdk_project import SdkProjectDef, _derive_entry_class
+from vcfcf_managementpacks.sdk_project import SdkProjectDef, _derive_entry_class
 
 
 def _make_project(

@@ -5,12 +5,12 @@ ship on the same day.  Both the install-script template emitter and the
 staleness-check CLI read from this single constant.
 
 Bump this value whenever any of the following change:
-  - vcfops_packaging/templates/install.py
-  - vcfops_packaging/templates/install.ps1
-  - vcfops_packaging/builder.py  (output structure changes)
-  - vcfops_packaging/discrete_builder.py  (output structure changes)
-  - vcfops_packaging/release_builder.py  (output structure changes)
-  - vcfops_dashboards/render.py  (dashboard or view wire format changes)
+  - vcfcf_packaging/templates/install.py
+  - vcfcf_packaging/templates/install.ps1
+  - vcfcf_packaging/builder.py  (output structure changes)
+  - vcfcf_packaging/discrete_builder.py  (output structure changes)
+  - vcfcf_packaging/release_builder.py  (output structure changes)
+  - vcfcf_dashboards/render.py  (dashboard or view wire format changes)
 
 This list is the same one CLAUDE.md carries under "After tooling changes";
 keep the two in step.

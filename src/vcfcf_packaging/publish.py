@@ -1,10 +1,10 @@
-"""Publish orchestrator for vcfops_packaging (Phase 3 / v4).
+"""Publish orchestrator for vcfcf_packaging (Phase 3 / v4).
 
 Orchestrates a full publish operation from the factory repo to the
 distribution repo:
 
   1. Lockfile guard, refuse concurrent publishes.
-  2. Validate factory repo, seven per-package validators + vcfops_packaging.
+  2. Validate factory repo, seven per-package validators + vcfcf_packaging.
   3. Clean-tree check on dist repo, refuse if dirty / not on main / behind origin.
   4. Enumerate release manifests from bundles/releases/.
   5. Per-release build + copy, always build; git diff decides whether to commit.
@@ -74,14 +74,14 @@ from typing import Callable, List, Optional
 # We invoke them as  python3 -m <module> <extra_args...>
 # ---------------------------------------------------------------------------
 _VALIDATORS = [
-    ("vcfops_supermetrics", ["validate"]),
-    ("vcfops_dashboards",   ["validate"]),
-    ("vcfops_customgroups", ["validate"]),
-    ("vcfops_symptoms",     ["validate"]),
-    ("vcfops_alerts",       ["validate"]),
-    ("vcfops_reports",      ["validate"]),
-    ("vcfops_managementpacks", ["validate"]),
-    ("vcfops_packaging",    ["validate"]),
+    ("vcfcf_supermetrics", ["validate"]),
+    ("vcfcf_dashboards",   ["validate"]),
+    ("vcfcf_customgroups", ["validate"]),
+    ("vcfcf_symptoms",     ["validate"]),
+    ("vcfcf_alerts",       ["validate"]),
+    ("vcfcf_reports",      ["validate"]),
+    ("vcfcf_managementpacks", ["validate"]),
+    ("vcfcf_packaging",    ["validate"]),
 ]
 
 
@@ -225,7 +225,7 @@ def _release_lock(dist_repo: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def _run_validators(factory_repo: Path) -> None:
-    """Run all eight validators (seven per-package plus vcfops_packaging).
+    """Run all eight validators (seven per-package plus vcfcf_packaging).
 
     Raises PublishError on any non-zero exit.
     """
@@ -1307,7 +1307,7 @@ def _publish_inner(
     # -----------------------------------------------------------------------
     built_names: List[str] = []  # release names for commit message
 
-    with tempfile.TemporaryDirectory(prefix="vcfops_publish_staging_") as staging_str:
+    with tempfile.TemporaryDirectory(prefix="vcfcf_publish_staging_") as staging_str:
         staging = Path(staging_str)
 
         for release in releases:

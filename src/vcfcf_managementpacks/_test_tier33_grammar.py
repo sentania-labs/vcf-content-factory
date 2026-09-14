@@ -10,7 +10,7 @@ Tests all five grammar changes in one cohesive script:
 Also tests the render_export.py chainingSettings preservation fix.
 
 Usage:
-    python3 -m vcfops_managementpacks._test_tier33_grammar
+    python3 -m vcfcf_managementpacks._test_tier33_grammar
 
 All tests are self-contained (no external files required) and clean up
 after themselves.  Exit code 0 = all passed, non-zero = failure.
@@ -37,7 +37,7 @@ _failures: list[str] = []
 
 def _load_yaml_str(yaml_str: str):
     """Load a YAML string through the MP loader (validates on load)."""
-    from vcfops_managementpacks.loader import load_file
+    from vcfcf_managementpacks.loader import load_file
 
     with tempfile.NamedTemporaryFile(
         suffix=".yaml", mode="w", delete=False
@@ -623,7 +623,7 @@ content: {{}}
 
 def test_render_positive():
     print("\n[Renderer — positive fixture round-trip]")
-    from vcfops_managementpacks.render import render_mp_design_json
+    from vcfcf_managementpacks.render import render_mp_design_json
 
     mp = _load_yaml_str(_FULL_POSITIVE_FIXTURE)
     try:
@@ -675,7 +675,7 @@ def test_render_positive():
 
 def test_render_export_chaining_preserved():
     print("\n[render_export — chainingSettings preserved (cleanup fix)]")
-    from vcfops_managementpacks.render_export import render_mpb_exchange_json
+    from vcfcf_managementpacks.render_export import render_mpb_exchange_json
 
     # Build a minimal MP with a chained metricSet
     yaml_chained = """\

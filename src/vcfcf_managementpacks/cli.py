@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 from typing import List
 
-from vcfops_common._profile_cli import add_profile_arg, validate_profile_arg
+from vcfcf_common._profile_cli import add_profile_arg, validate_profile_arg
 
 from .loader import ManagementPackDef, ManagementPackValidationError, load_dir, load_file
 
@@ -117,7 +117,7 @@ def cmd_validate(args) -> int:
     tier1_error = 0
     if not args.paths:
         try:
-            from vcfops_packaging.project import check_slug_uniqueness
+            from vcfcf_packaging.project import check_slug_uniqueness
             errors = check_slug_uniqueness(
                 content_type="managementpacks",
                 content_type_dir=DEFAULT_DIR,
@@ -127,7 +127,7 @@ def cmd_validate(args) -> int:
                     print(f"SLUG-COLLISION: {err}", file=sys.stderr)
                 tier1_error = 1
         except ImportError:
-            pass  # vcfops_packaging not available — skip cross-provenance check
+            pass  # vcfcf_packaging not available — skip cross-provenance check
 
     # Tier 2 validation (only when doing a full repo sweep, not path-specific)
     tier2_error = 0
@@ -618,8 +618,8 @@ def cmd_push_design(args) -> int:
     import os as _os
 
     from .client import MPBClient
-    from vcfops_common.client import VCFOpsError
-    from vcfops_common._profile_cli import resolve_profile_from_args
+    from vcfcf_common.client import VCFOpsError
+    from vcfcf_common._profile_cli import resolve_profile_from_args
 
     input_path = Path(args.path)
     if not input_path.exists():
@@ -790,7 +790,7 @@ def cmd_uninstall(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="vcfops_managementpacks")
+    p = argparse.ArgumentParser(prog="vcfcf_managementpacks")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pv = sub.add_parser("validate", help="validate MP YAML definitions")

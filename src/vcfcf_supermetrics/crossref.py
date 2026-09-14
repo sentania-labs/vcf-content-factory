@@ -12,7 +12,7 @@ path that *emits* a formula into a pak / bundle / zip, or *pushes* one to a
 live instance, must therefore resolve the token first.
 
 This module is the single home of that resolution.  It previously lived only
-in ``vcfops_managementpacks.sdk_builder`` (Tier 2 pak path), which meant the
+in ``vcfcf_managementpacks.sdk_builder`` (Tier 2 pak path), which meant the
 native bundle builder, the discrete/release builders and the live sync path
 all shipped the literal ``@supermetric:"..."`` token verbatim.
 
@@ -39,7 +39,7 @@ __all__ = [
 # One hand-written ``Super Metric|`` prefix, in any spelling an author might
 # plausibly type: any case (``super metric|``, ``SUPER METRIC|``), any internal
 # or trailing whitespace (``Super  Metric |``, ``Super Metric| ``).  Case is
-# matched loosely on purpose: ``vcfops_packaging.deps._is_sm_ref`` lowercases
+# matched loosely on purpose: ``vcfcf_packaging.deps._is_sm_ref`` lowercases
 # before comparing, which is this codebase's own admission that authored prefix
 # case varies.
 _PREFIX_SRC = r"(?:(?i:super\s*metric)\s*\|\s*)"
@@ -56,7 +56,7 @@ _PREFIX_SRC = r"(?:(?i:super\s*metric)\s*\|\s*)"
 # way it is already sm_<uuid>-idempotent.
 #
 # The ``@supermetric:`` token itself is matched case-insensitively for the same
-# reason the prefix is: ``vcfops_packaging.deps._is_sm_ref`` lowercases before
+# reason the prefix is: ``vcfcf_packaging.deps._is_sm_ref`` lowercases before
 # comparing, so ``@SuperMetric:"X"`` is already treated as an SM reference by
 # the dependency audit and is therefore invisible to it.  Matching it here means
 # a mis-cased token *resolves* instead of shipping verbatim.  The captured NAME

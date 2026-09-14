@@ -1,4 +1,4 @@
-"""Tests for vcfops_managementpacks.sdk_builder._ensure_framework_jar().
+"""Tests for vcfcf_managementpacks.sdk_builder._ensure_framework_jar().
 
 Coverage (TOOLSET GAP fix — silent-staleness mode found in synology build 23
 containment proof; see the tooling brief this test accompanies):
@@ -20,7 +20,7 @@ containment proof; see the tooling brief this test accompanies):
 These tests are hermetic: they monkeypatch the module-level
 ``_ADAPTER_RUNTIME_DIR`` / ``_ADAPTER_FRAMEWORK_SRC_DIR`` constants to point
 at tmp_path fixtures and never touch the real
-vcfops_managementpacks/adapter_runtime/ or adapter_framework/src/ trees.
+vcfcf_managementpacks/adapter_runtime/ or adapter_framework/src/ trees.
 They compile trivial, dependency-free Java sources with the real javac/jar
 tools on PATH (skipped if unavailable) rather than mocking subprocess, so the
 staleness-triggers-a-real-rebuild claim is actually exercised.
@@ -35,7 +35,7 @@ from pathlib import Path
 
 import pytest
 
-from vcfops_managementpacks import sdk_builder
+from vcfcf_managementpacks import sdk_builder
 
 
 pytestmark = pytest.mark.skipif(

@@ -1,4 +1,4 @@
-"""Dependency walker and YAML writer for vcfops_extractor.
+"""Dependency walker and YAML writer for vcfcf_extractor.
 
 Given a dashboard UUID (or name), walks the full dependency graph using BFS:
 
@@ -32,9 +32,9 @@ from typing import Optional
 
 import yaml
 
-from vcfops_dashboards.reverse import _parse_controls_meta, _trend_transformations_to_emit
+from vcfcf_dashboards.reverse import _parse_controls_meta, _trend_transformations_to_emit
 
-# Repo root: three levels above (src/vcfops_extractor/extractor.py -> repo root)
+# Repo root: three levels above (src/vcfcf_extractor/extractor.py -> repo root)
 _REPO_ROOT = Path(__file__).parent.parent.parent
 
 
@@ -52,7 +52,7 @@ def _info(msg: str) -> None:
 
 def _build_sm_client(host: str, user: str, password: str, verify_ssl: bool):
     """Build an authenticated VCFOpsClient (suite-api) for super metric calls."""
-    from vcfops_supermetrics.client import VCFOpsClient
+    from vcfcf_supermetrics.client import VCFOpsClient
     return VCFOpsClient(
         host=host, username=user, password=password, verify_ssl=verify_ssl
     )
@@ -63,7 +63,7 @@ def _build_ui_client(host: str, user: str, password: str, verify_ssl: bool):
 
     Uses the three-step /ui/ login pattern documented in
     knowledge/context/api-surface/pak_ui_upload_investigation.md and implemented in
-    vcfops_managementpacks/installer.py _UISession.login():
+    vcfcf_managementpacks/installer.py _UISession.login():
 
       Step 1: GET /ui/login.action?vcf=1      -- seed JSESSIONID
       Step 2: POST /ui/login.action (form)    -- authenticate
@@ -292,7 +292,7 @@ def _run_content_export(sm_client, content_types: list[str]) -> bytes:
       ["VIEW_DEFINITIONS", "DASHBOARDS"]
     """
     import time
-    from vcfops_common.client import VCFOpsError
+    from vcfcf_common.client import VCFOpsError
 
     # Wait for any running export to finish first
     deadline = time.monotonic() + 120
@@ -366,7 +366,7 @@ def _export_supermetrics_full(sm_client) -> dict[str, dict]:
     On error raises VCFOpsError.
     """
     import json as _json
-    from vcfops_common.client import VCFOpsError
+    from vcfcf_common.client import VCFOpsError
 
     outer_zip = _run_content_export(sm_client, ["SUPER_METRICS"])
 
@@ -418,7 +418,7 @@ def _export_dashboard_json(sm_client, dashboard_uuid: str) -> Optional[dict]:
     or None if the UUID is not found in the export.
     """
     import json as _json
-    from vcfops_common.client import VCFOpsError
+    from vcfcf_common.client import VCFOpsError
 
     outer_zip = _run_content_export(sm_client, ["DASHBOARDS"])
 
@@ -607,7 +607,7 @@ def _parse_view_def_element(elem) -> dict:
     }
 
 # _parse_controls_meta / _trend_transformations_to_emit are shared with the
-# dashboards reverse path; one definition lives in vcfops_dashboards.reverse.
+# dashboards reverse path; one definition lives in vcfcf_dashboards.reverse.
 
 
 
@@ -746,7 +746,7 @@ def _parse_column_value(value_elem) -> Optional[dict]:
     display_name = props.get("displayName", attribute_key)
 
     # Time-segment ("Interval Breakdown") pseudo-column: not a metric column.
-    # See TimeSegmentSpec in vcfops_dashboards/loader.py for the wire shape.
+    # See TimeSegmentSpec in vcfcf_dashboards/loader.py for the wire shape.
     if props.get("isTimeSegment", "").strip().lower() == "true":
         try:
             _soc = int(props.get("startingOnCount", "1") or 1)
@@ -928,7 +928,7 @@ def _sm_kinds_for_audit(
     (authoritative host scope), then the REST ``resourceKinds`` field, then the
     formula-parse fallback.  Returns snake_case
     ``{"adapter_kind_key", "resource_kind_key"}`` entries (the shape
-    ``vcfops_packaging.deps._refs_from_formula`` accepts), or ``[]`` when
+    ``vcfcf_packaging.deps._refs_from_formula`` accepts), or ``[]`` when
     nothing resolves.
     """
     sm_id_lower = (sm_data.get("id") or suuid).lower()
@@ -968,8 +968,8 @@ def _sm_formula_refs_for_audit(formula: str, sm_name: str, resource_kinds: list)
     ``_write_sm_yaml`` and rejected by the validator, so the gap is surfaced
     twice, never silently dropped.
     """
-    from vcfops_packaging.audit import AuditError
-    from vcfops_packaging.deps import _refs_from_formula
+    from vcfcf_packaging.audit import AuditError
+    from vcfcf_packaging.deps import _refs_from_formula
 
     try:
         return _refs_from_formula(formula or "", sm_name, resource_kinds)
@@ -1173,7 +1173,7 @@ def _widget_to_yaml_dict(widget, view_name_map: dict) -> dict:
     in parse_dashboard_json), but is accepted for future use.
 
     Returns a dict whose keys match what load_dashboard() expects per
-    vcfops_dashboards/loader.py.
+    vcfcf_dashboards/loader.py.
 
     Emits a WARN for widget types where config reconstruction is incomplete
     (e.g. HealthChart/ParetoAnalysis where resource_kind may be empty due
@@ -1471,11 +1471,11 @@ def _write_dashboard_yaml(path: Path, dash_data: dict, dashboard_uuid: str, view
     ``view_results`` is a mapping of uuid_lower -> view dict (used to build
     views_by_id for parse_dashboard_json view resolution).
 
-    Uses vcfops_dashboards.reverse.parse_dashboard_json() to parse the full
+    Uses vcfcf_dashboards.reverse.parse_dashboard_json() to parse the full
     widget graph, then serializes each Widget dataclass to YAML.
     """
-    from vcfops_dashboards.reverse import parse_dashboard_json
-    from vcfops_dashboards.loader import ViewDef
+    from vcfcf_dashboards.reverse import parse_dashboard_json
+    from vcfcf_dashboards.loader import ViewDef
 
     # Build a views_by_id dict for View widget resolution.
     # view_results maps uuid_lower -> {'id': ..., 'name': ..., ...} dicts.
@@ -1593,7 +1593,7 @@ def _collect_enablement_entries(
     Returns:
         List of dicts with keys adapter_kind, resource_kind, metric_key, reason.
     """
-    from vcfops_packaging.describe import DescribeCache as _DC
+    from vcfcf_packaging.describe import DescribeCache as _DC
 
     seen: set[tuple[str, str, str]] = set()
     entries: list[dict] = []
@@ -1655,7 +1655,7 @@ def _write_manifest(
 
     Uses the v3 layout: PROJECT.yaml lives inside the slug directory alongside
     supermetrics/, views/, dashboards/ subdirs.  No explicit content lists are
-    written — vcfops_packaging/loader.py auto-discovers content from subdirs
+    written — vcfcf_packaging/loader.py auto-discovers content from subdirs
     when the manifest is named PROJECT.yaml and carries no explicit lists.
     """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -1779,7 +1779,7 @@ def extract_dashboard(
 
     Returns exit code (0 = success, non-zero = failure).
     """
-    from vcfops_packaging.describe import DescribeCache
+    from vcfcf_packaging.describe import DescribeCache
     output_path = Path(output_dir)
     slug_dir = output_path / bundle_slug
 
@@ -1834,7 +1834,7 @@ def extract_dashboard(
                 file=sys.stderr,
             )
             print(
-                "  Run 'python -m vcfops_extractor list-dashboards' to see available dashboards.",
+                "  Run 'python -m vcfcf_extractor list-dashboards' to see available dashboards.",
                 file=sys.stderr,
             )
             return 1
@@ -1876,7 +1876,7 @@ def extract_dashboard(
         print(
             "  Possible causes: the dashboard was deleted, or it is a system-owned\n"
             "  dashboard that the API excludes from export.\n"
-            "  Verify the UUID with: python -m vcfops_extractor list-dashboards",
+            "  Verify the UUID with: python -m vcfcf_extractor list-dashboards",
             file=sys.stderr,
         )
         return 1
@@ -2031,7 +2031,7 @@ def extract_dashboard(
     print("\nFetching Default Policy export for SM scope resolution ...")
     _policy_sm_assignments: dict = {}
     try:
-        from vcfops_supermetrics.client import VCFOpsClient as _VCFOpsClient
+        from vcfcf_supermetrics.client import VCFOpsClient as _VCFOpsClient
         _policy_xml = sm_client.export_default_policy_xml()
         _policy_sm_assignments = _VCFOpsClient.get_sm_policy_assignments(_policy_xml)
         print(
@@ -2268,7 +2268,7 @@ def extract_dashboard(
         # Collect built-in metric refs from the (rewritten) formula.
         # ${this, metric=...} refs resolve against the SM's own assignment
         # (policy scope preferred), same shape the packaging audit checks.
-        from vcfops_packaging.deps import _is_sm_ref
+        from vcfcf_packaging.deps import _is_sm_ref
         _audit_kinds = _sm_kinds_for_audit(sm_data, suuid, formula, _policy_sm_assignments)
         formula_refs = [
             r for r in _sm_formula_refs_for_audit(formula, sm_name_display, _audit_kinds)
@@ -2303,7 +2303,7 @@ def extract_dashboard(
             print(
                 "  Possible cause: source metric was removed from the live instance after "
                 "the SM was authored. Remove the SM from the source dashboard or update "
-                "the describe cache (python3 -m vcfops_packaging refresh-describe) "
+                "the describe cache (python3 -m vcfcf_packaging refresh-describe) "
                 "and re-extract.",
                 file=sys.stderr,
             )
@@ -2357,7 +2357,7 @@ def extract_dashboard(
     # Enablement walk: collect all metric refs and check defaultMonitored
     # -----------------------------------------------------------------------
     # Import deps helpers inline to avoid circular-import at module level.
-    from vcfops_packaging.deps import (
+    from vcfcf_packaging.deps import (
         MetricReference,
         _normalize_metric_key,
         _is_sm_ref,
@@ -2410,8 +2410,8 @@ def extract_dashboard(
 
     # Dashboard widget refs via parse_dashboard_json
     try:
-        from vcfops_dashboards.reverse import parse_dashboard_json
-        from vcfops_dashboards.loader import ViewDef as _ViewDef
+        from vcfcf_dashboards.reverse import parse_dashboard_json
+        from vcfcf_dashboards.loader import ViewDef as _ViewDef
         _views_by_id: dict = {}
         for vuuid, vdata in view_results.items():
             vid = vdata.get("id") or vuuid
@@ -2512,6 +2512,6 @@ def extract_dashboard(
     print()
     print("Next steps:")
     print(f"  1. Review YAML files under {slug_dir}")
-    print(f"  2. Validate:  python3 -m vcfops_supermetrics validate && python3 -m vcfops_dashboards validate")
-    print(f"  3. Build:     python3 -m vcfops_packaging build {manifest_path}")
+    print(f"  2. Validate:  python3 -m vcfcf_supermetrics validate && python3 -m vcfcf_dashboards validate")
+    print(f"  3. Build:     python3 -m vcfcf_packaging build {manifest_path}")
     return 0

@@ -1,9 +1,9 @@
 """TOOLSET GAP fix — `instanced`/`thresholdType`/`valueType` on the XML
-content-import path (`src/vcfops_alerts/render.py::_add_condition_element`).
+content-import path (`src/vcfcf_alerts/render.py::_add_condition_element`).
 
 Prior to this fix, `_add_condition_element` never emitted `instanced` for
 metric_static/property conditions on the XML path (the pak-build path),
-even though the REST path (`vcfops_symptoms.loader._condition_to_wire`)
+even though the REST path (`vcfcf_symptoms.loader._condition_to_wire`)
 always emitted it. Proof: extracting
 `content/sdk-adapters/vcommunity-vsphere/dist/vcfcf_sdk_vcommunity_vsphere.1.0.0.2.pak`
 showed `content/symptomdefs/'ESXi Host NIC Disconnected.xml'` with no
@@ -39,8 +39,8 @@ def _parse_xml(xml_text: str) -> ET.Element:
 
 
 def _render_condition(condition: dict, name: str = "Test Symptom") -> ET.Element:
-    from vcfops_symptoms.loader import SymptomDef
-    from vcfops_alerts.render import render_alert_content_xml
+    from vcfcf_symptoms.loader import SymptomDef
+    from vcfcf_alerts.render import render_alert_content_xml
 
     sym = SymptomDef(
         name=name,

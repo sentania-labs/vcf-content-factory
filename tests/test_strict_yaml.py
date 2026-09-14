@@ -1,4 +1,4 @@
-"""Tests for duplicate-key rejection across all vcfops_* loaders.
+"""Tests for duplicate-key rejection across all vcfcf_* loaders.
 
 Each loader now uses a strict YAML parser that raises on duplicate
 top-level keys.  This test suite verifies:
@@ -12,7 +12,7 @@ top-level keys.  This test suite verifies:
 Tests use ``tmp_path`` fixtures to write minimal-but-valid YAML
 fixtures that exercise only the strict-key guard, not full schema
 validation.  The ``yaml_utils.strict_load`` helper used by
-vcfops_dashboards is also tested directly.
+vcfcf_dashboards is also tested directly.
 
 Production incident reference: 2026-04-14 — stacked ``id:`` lines
 in view YAMLs caused transient UUIDs in Views.zip, breaking widget
@@ -28,12 +28,12 @@ import pytest
 import yaml
 
 # ---------------------------------------------------------------------------
-# Direct helper test (vcfops_dashboards.yaml_utils)
+# Direct helper test (vcfcf_dashboards.yaml_utils)
 # ---------------------------------------------------------------------------
 
 
 def test_strict_load_rejects_duplicate_key():
-    from vcfops_dashboards.yaml_utils import strict_load
+    from vcfcf_dashboards.yaml_utils import strict_load
 
     doc = textwrap.dedent("""\
         id: 1234
@@ -46,7 +46,7 @@ def test_strict_load_rejects_duplicate_key():
 
 
 def test_strict_load_accepts_valid_yaml():
-    from vcfops_dashboards.yaml_utils import strict_load
+    from vcfcf_dashboards.yaml_utils import strict_load
 
     doc = textwrap.dedent("""\
         id: 1234
@@ -58,7 +58,7 @@ def test_strict_load_accepts_valid_yaml():
 
 
 # ---------------------------------------------------------------------------
-# vcfops_dashboards  — view loader
+# vcfcf_dashboards  — view loader
 # ---------------------------------------------------------------------------
 
 
@@ -77,7 +77,7 @@ def _valid_view_yaml(view_id: str) -> str:
 
 
 def test_view_loader_rejects_duplicate_id(tmp_path: Path):
-    from vcfops_dashboards.loader import DashboardValidationError, load_view
+    from vcfcf_dashboards.loader import DashboardValidationError, load_view
 
     view_id = str(uuid.uuid4())
     yaml_content = textwrap.dedent(f"""\
@@ -102,7 +102,7 @@ def test_view_loader_rejects_duplicate_id(tmp_path: Path):
 
 
 def test_view_loader_accepts_valid_file(tmp_path: Path):
-    from vcfops_dashboards.loader import load_view
+    from vcfcf_dashboards.loader import load_view
 
     view_id = str(uuid.uuid4())
     p = tmp_path / "good_view.yaml"
@@ -112,12 +112,12 @@ def test_view_loader_accepts_valid_file(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# vcfops_dashboards  — dashboard loader
+# vcfcf_dashboards  — dashboard loader
 # ---------------------------------------------------------------------------
 
 
 def test_dashboard_loader_rejects_duplicate_id(tmp_path: Path):
-    from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+    from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     dash_id = str(uuid.uuid4())
     yaml_content = textwrap.dedent(f"""\
@@ -137,12 +137,12 @@ def test_dashboard_loader_rejects_duplicate_id(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# vcfops_supermetrics
+# vcfcf_supermetrics
 # ---------------------------------------------------------------------------
 
 
 def test_supermetric_loader_rejects_duplicate_id(tmp_path: Path):
-    from vcfops_supermetrics.loader import SuperMetricValidationError, load_file
+    from vcfcf_supermetrics.loader import SuperMetricValidationError, load_file
 
     sm_id = str(uuid.uuid4())
     yaml_content = textwrap.dedent(f"""\
@@ -165,12 +165,12 @@ def test_supermetric_loader_rejects_duplicate_id(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# vcfops_customgroups
+# vcfcf_customgroups
 # ---------------------------------------------------------------------------
 
 
 def test_customgroup_loader_rejects_duplicate_key(tmp_path: Path):
-    from vcfops_customgroups.loader import CustomGroupValidationError, load_file
+    from vcfcf_customgroups.loader import CustomGroupValidationError, load_file
 
     yaml_content = textwrap.dedent("""\
         name: "[VCF Content Factory] Bad Group"
@@ -190,12 +190,12 @@ def test_customgroup_loader_rejects_duplicate_key(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# vcfops_symptoms
+# vcfcf_symptoms
 # ---------------------------------------------------------------------------
 
 
 def test_symptom_loader_rejects_duplicate_key(tmp_path: Path):
-    from vcfops_symptoms.loader import SymptomValidationError, load_file
+    from vcfcf_symptoms.loader import SymptomValidationError, load_file
 
     yaml_content = textwrap.dedent("""\
         name: "[VCF Content Factory] Bad Symptom"
@@ -220,12 +220,12 @@ def test_symptom_loader_rejects_duplicate_key(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# vcfops_alerts
+# vcfcf_alerts
 # ---------------------------------------------------------------------------
 
 
 def test_alert_loader_rejects_duplicate_key(tmp_path: Path):
-    from vcfops_alerts.loader import AlertValidationError, load_file
+    from vcfcf_alerts.loader import AlertValidationError, load_file
 
     yaml_content = textwrap.dedent("""\
         name: "[VCF Content Factory] Bad Alert"
@@ -249,7 +249,7 @@ def test_alert_loader_rejects_duplicate_key(tmp_path: Path):
 
 
 def test_recommendation_loader_rejects_duplicate_key(tmp_path: Path):
-    from vcfops_alerts.loader import AlertValidationError, load_recommendation_file
+    from vcfcf_alerts.loader import AlertValidationError, load_recommendation_file
 
     yaml_content = textwrap.dedent("""\
         name: "[VCF Content Factory] Bad Rec"
@@ -270,12 +270,12 @@ def test_recommendation_loader_rejects_duplicate_key(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# vcfops_reports
+# vcfcf_reports
 # ---------------------------------------------------------------------------
 
 
 def test_report_loader_rejects_duplicate_id(tmp_path: Path):
-    from vcfops_reports.loader import ReportValidationError, load_file
+    from vcfcf_reports.loader import ReportValidationError, load_file
 
     report_id = str(uuid.uuid4())
     yaml_content = textwrap.dedent(f"""\

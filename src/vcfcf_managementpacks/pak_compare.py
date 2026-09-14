@@ -11,7 +11,7 @@ reports structural divergences at three severity levels:
                (display_name, vendor, icon format, version).
 
 Usage (direct):
-    from vcfops_managementpacks.pak_compare import compare_paks, format_report
+    from vcfcf_managementpacks.pak_compare import compare_paks, format_report
     findings = compare_paks(factory_pak_path, reference_pak_path)
     print(format_report(findings, factory_label, reference_label))
 

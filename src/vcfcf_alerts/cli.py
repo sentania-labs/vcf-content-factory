@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import List
 
-from vcfops_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
+from vcfcf_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
 
 from .client import VCFOpsAlertsClient, VCFOpsAlertsError
 from .loader import (
@@ -45,7 +45,7 @@ def _collect_repo_symptom_names() -> set:
     if not symptom_dir.exists():
         return set()
     try:
-        from vcfops_symptoms.loader import load_dir as load_symptoms
+        from vcfcf_symptoms.loader import load_dir as load_symptoms
         return {sd.name for sd in load_symptoms(symptom_dir)}
     except ImportError:
         return set()
@@ -121,7 +121,7 @@ def cmd_validate(args) -> int:
     # Slug-uniqueness check across content/ and third_party/*/
     if not args.paths:
         try:
-            from vcfops_packaging.project import check_slug_uniqueness
+            from vcfcf_packaging.project import check_slug_uniqueness
             for content_type, default_dir in (
                 ("alerts", DEFAULT_ALERT_DIR),
                 ("recommendations", DEFAULT_RECOMMENDATION_DIR),
@@ -135,7 +135,7 @@ def cmd_validate(args) -> int:
                         print(f"SLUG-COLLISION: {err}", file=sys.stderr)
                     rc = 1
         except ImportError:
-            pass  # vcfops_packaging not available — skip cross-provenance check
+            pass  # vcfcf_packaging not available — skip cross-provenance check
 
     return rc
 
@@ -223,7 +223,7 @@ def cmd_delete(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="vcfops_alerts")
+    p = argparse.ArgumentParser(prog="vcfcf_alerts")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pv = sub.add_parser("validate", help="validate YAML definitions")

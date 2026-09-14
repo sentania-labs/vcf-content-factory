@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import List
 
-from vcfops_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
+from vcfcf_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
 
 from .client import VCFOpsCustomGroupClient, VCFOpsCustomGroupError
 from .loader import (
@@ -50,7 +50,7 @@ def cmd_validate(args) -> int:
     # Slug-uniqueness check across content/ and third_party/*/
     if not args.paths:
         try:
-            from vcfops_packaging.project import check_slug_uniqueness
+            from vcfcf_packaging.project import check_slug_uniqueness
             errors = check_slug_uniqueness(
                 content_type="customgroups",
                 content_type_dir=DEFAULT_DIR,
@@ -60,7 +60,7 @@ def cmd_validate(args) -> int:
                     print(f"SLUG-COLLISION: {err}", file=sys.stderr)
                 return 1
         except ImportError:
-            pass  # vcfops_packaging not available — skip cross-provenance check
+            pass  # vcfcf_packaging not available — skip cross-provenance check
 
     return 0
 
@@ -135,7 +135,7 @@ def cmd_delete(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="vcfops_customgroups")
+    p = argparse.ArgumentParser(prog="vcfcf_customgroups")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pv = sub.add_parser("validate", help="validate YAML definitions")

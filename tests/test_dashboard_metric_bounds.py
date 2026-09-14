@@ -23,7 +23,7 @@ BOUND_LINES = {
 
 
 def _load(tmp_path: Path, text: str):
-    from vcfops_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.loader import load_dashboard
 
     p = tmp_path / "bounds.yaml"
     p.write_text(text)
@@ -31,7 +31,7 @@ def _load(tmp_path: Path, text: str):
 
 
 def _first_metric(d) -> dict:
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     out = json.loads(render_dashboards_bundle_json([d], {}, OWNER))
     return out["dashboards"][0]["widgets"][0]["config"]["metric"]["resourceKindMetrics"][0]
@@ -39,7 +39,7 @@ def _first_metric(d) -> dict:
 
 @pytest.mark.parametrize("missing", sorted(BOUND_LINES))
 def test_partial_bound_set_is_rejected(tmp_path, missing):
-    from vcfops_dashboards.loader import DashboardValidationError
+    from vcfcf_dashboards.loader import DashboardValidationError
 
     text = FIXTURE.read_text().replace(BOUND_LINES[missing], "", 1)
     with pytest.raises(DashboardValidationError) as ei:
@@ -54,7 +54,7 @@ def test_partial_bound_set_is_rejected(tmp_path, missing):
 
 
 def test_only_one_bound_names_both_missing(tmp_path):
-    from vcfops_dashboards.loader import DashboardValidationError
+    from vcfcf_dashboards.loader import DashboardValidationError
 
     text = (FIXTURE.read_text()
             .replace(BOUND_LINES["yellow_bound"], "", 1)
@@ -98,7 +98,7 @@ def test_partial_set_allowed_when_not_color_method_0(tmp_path):
 def test_bounds_with_color_method_3_are_rejected(tmp_path, supplied):
     # The factory only emits bounds for color_method 0; 3 is a reading
     # note for vendor exports. Bounds on 3 must error, not vanish.
-    from vcfops_dashboards.loader import DashboardValidationError
+    from vcfcf_dashboards.loader import DashboardValidationError
 
     text = FIXTURE.read_text().replace("        color_method: 0\n", "        color_method: 3\n", 1)
     if supplied == "red_bound":
@@ -158,7 +158,7 @@ _OTHER_WIDGET = {
 
 @pytest.mark.parametrize("wtype", sorted(_OTHER_WIDGET))
 def test_partial_bound_set_is_rejected_for_other_widgets(tmp_path, wtype):
-    from vcfops_dashboards.loader import DashboardValidationError
+    from vcfcf_dashboards.loader import DashboardValidationError
 
     with pytest.raises(DashboardValidationError) as ei:
         _load(tmp_path, _OTHER_WIDGET[wtype].format(wtype=wtype))

@@ -87,8 +87,8 @@ def test_evidence_fixture_matches_expected_item():
 
 
 def test_render_time_segment_column_byte_identical_to_export(tmp_path):
-    from vcfops_dashboards.loader import load_view
-    from vcfops_dashboards.render import _render_view_def_fragment
+    from vcfcf_dashboards.loader import load_view
+    from vcfcf_dashboards.render import _render_view_def_fragment
 
     v = load_view(_write(tmp_path, _base_view()))
     frag = _render_view_def_fragment(v, {})
@@ -99,8 +99,8 @@ def test_render_time_segment_column_byte_identical_to_export(tmp_path):
 
 
 def test_render_honours_starting_on_overrides(tmp_path):
-    from vcfops_dashboards.loader import load_view
-    from vcfops_dashboards.render import _render_view_def_fragment
+    from vcfcf_dashboards.loader import load_view
+    from vcfcf_dashboards.render import _render_view_def_fragment
 
     data = _base_view()
     data["columns"][0]["time_segment"] = {
@@ -129,7 +129,7 @@ def test_render_honours_starting_on_overrides(tmp_path):
     ],
 )
 def test_loader_rejects_bad_time_segment(tmp_path, mutate, needle):
-    from vcfops_dashboards.loader import DashboardValidationError, load_view
+    from vcfcf_dashboards.loader import DashboardValidationError, load_view
 
     data = _base_view()
     mutate(data)
@@ -144,7 +144,7 @@ def _viewdef_elem():
 
 
 def test_reverse_py_parses_time_segment_dataclass():
-    from vcfops_dashboards.reverse import parse_view_from_content_xml
+    from vcfcf_dashboards.reverse import parse_view_from_content_xml
 
     wrapped = f"<Content><Views>{EVIDENCE.read_text()}</Views></Content>".encode()
     vd = parse_view_from_content_xml(wrapped, VIEW_ID)
@@ -159,7 +159,7 @@ def test_reverse_py_parses_time_segment_dataclass():
 
 
 def test_extractor_parses_time_segment_dict():
-    from vcfops_extractor.extractor import _parse_view_def_element
+    from vcfcf_extractor.extractor import _parse_view_def_element
 
     cols = _parse_view_def_element(_viewdef_elem())["columns"]
     assert cols[0] == {
@@ -171,9 +171,9 @@ def test_extractor_parses_time_segment_dict():
 
 
 def test_reverse_local_round_trips_time_segment(tmp_path):
-    from vcfops_extractor.reverse_local import _parse_view_xml_to_dict, _write_view_yaml
-    from vcfops_dashboards.loader import load_view
-    from vcfops_dashboards.render import _render_view_def_fragment
+    from vcfcf_extractor.reverse_local import _parse_view_xml_to_dict, _write_view_yaml
+    from vcfcf_dashboards.loader import load_view
+    from vcfcf_dashboards.render import _render_view_def_fragment
 
     vdata = _parse_view_xml_to_dict(_viewdef_elem())
     out = tmp_path / "v.yaml"
@@ -188,8 +188,8 @@ def test_reverse_local_round_trips_time_segment(tmp_path):
 # D. no-regression ------------------------------------------------------------
 
 def test_plain_view_unchanged(tmp_path):
-    from vcfops_dashboards.loader import load_view
-    from vcfops_dashboards.render import _render_view_def_fragment
+    from vcfcf_dashboards.loader import load_view
+    from vcfcf_dashboards.render import _render_view_def_fragment
 
     data = _base_view()
     data["columns"] = data["columns"][1:]
@@ -204,8 +204,8 @@ def test_deps_skips_time_segment_column(tmp_path):
     """`_refs_from_view` must not audit the synthesized `Interval Breakdown`
     attributeKey (no describe-cache key exists for it); the sibling metric
     column is still audited."""
-    from vcfops_dashboards.loader import load_view
-    from vcfops_packaging.deps import _refs_from_view
+    from vcfcf_dashboards.loader import load_view
+    from vcfcf_packaging.deps import _refs_from_view
 
     v = load_view(_write(tmp_path, _base_view()))
     refs = _refs_from_view(v)
@@ -219,8 +219,8 @@ def test_discrete_build_over_time_segment_view_passes_audit(tmp_path, monkeypatc
     succeeds against a describe cache that knows only the real metric column."""
     import json
 
-    import vcfops_packaging.describe as describe_mod
-    from vcfops_packaging.discrete_builder import build_discrete
+    import vcfcf_packaging.describe as describe_mod
+    from vcfcf_packaging.discrete_builder import build_discrete
 
     proj = tmp_path / "proj"
     (proj / "views").mkdir(parents=True)

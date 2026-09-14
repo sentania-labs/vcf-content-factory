@@ -73,7 +73,7 @@ try:
 except ImportError:
     _YAML_AVAILABLE = False
 
-from vcfops_supermetrics import crossref as _crossref
+from vcfcf_supermetrics import crossref as _crossref
 
 from .sdk_project import SdkProjectDef, SdkProjectError, load_sdk_project
 
@@ -83,7 +83,7 @@ from .sdk_project import SdkProjectDef, SdkProjectError, load_sdk_project
 
 _HERE = Path(__file__).parent
 # _REPO_ROOT: the actual factory repo root (two levels above this file after
-# the src/ reorg: src/vcfops_managementpacks/sdk_builder.py -> repo root).
+# the src/ reorg: src/vcfcf_managementpacks/sdk_builder.py -> repo root).
 _REPO_ROOT = _HERE.parent.parent
 _ADAPTER_RUNTIME_DIR = _HERE / "adapter_runtime"
 _ADAPTER_FRAMEWORK_SRC_DIR = _HERE / "adapter_framework" / "src"
@@ -466,7 +466,7 @@ def _build_classpath(project_dir: Path) -> str:
         raise SdkBuildError(
             f"No JARs found in {_ADAPTER_RUNTIME_DIR}. "
             "Run the Tier 2 bootstrap to populate adapter_runtime/ "
-            "(see vcfops_managementpacks/README.md)."
+            "(see vcfcf_managementpacks/README.md)."
         )
 
     separator = ";" if sys.platform.startswith("win") else ":"
@@ -584,7 +584,7 @@ def _collect_lib_jars(project_dir: Path, build_dir: Optional[Path] = None) -> Li
     if not fw_jars:
         raise SdkBuildError(
             f"vcfcf-adapter-base.jar not found in {_ADAPTER_RUNTIME_DIR}.\n"
-            "Build it first: cd vcfops_managementpacks && "
+            "Build it first: cd vcfcf_managementpacks && "
             "./adapter_framework/build-framework.sh"
         )
     lib_jars.extend(fw_jars)
@@ -850,13 +850,13 @@ def _load_bundled_content(
     unused; callers should pass ``project_dir`` for both arguments.
 
     Accepted sub-keys:
-      views:           list of paths → ViewDef objects (vcfops_dashboards)
-      dashboards:      list of paths → Dashboard objects (vcfops_dashboards)
-      supermetrics:    list of paths → SuperMetricDef objects (vcfops_supermetrics)
-      symptoms:        list of paths → SymptomDef objects (vcfops_symptoms)
-      alerts:          list of paths → AlertDef objects (vcfops_alerts)
-      reports:         list of paths → ReportDef objects (vcfops_reports)
-      recommendations: list of paths → Recommendation objects (vcfops_alerts)
+      views:           list of paths → ViewDef objects (vcfcf_dashboards)
+      dashboards:      list of paths → Dashboard objects (vcfcf_dashboards)
+      supermetrics:    list of paths → SuperMetricDef objects (vcfcf_supermetrics)
+      symptoms:        list of paths → SymptomDef objects (vcfcf_symptoms)
+      alerts:          list of paths → AlertDef objects (vcfcf_alerts)
+      reports:         list of paths → ReportDef objects (vcfcf_reports)
+      recommendations: list of paths → Recommendation objects (vcfcf_alerts)
 
     Raises:
         SdkBuildError: if a listed path does not exist or fails to load.
@@ -866,10 +866,10 @@ def _load_bundled_content(
         return [], [], [], [], [], [], []
 
     try:
-        from vcfops_dashboards.loader import load_view, load_dashboard, check_unique_summary_for
+        from vcfcf_dashboards.loader import load_view, load_dashboard, check_unique_summary_for
     except ImportError as exc:
         raise SdkBuildError(
-            f"bundled_content requires vcfops_dashboards to be installed: {exc}"
+            f"bundled_content requires vcfcf_dashboards to be installed: {exc}"
         ) from exc
 
     views = []
@@ -916,7 +916,7 @@ def _load_bundled_content(
         dashboards.append(d)
 
     # Validate every bundled dashboard against the bundled views, mirroring
-    # vcfops_dashboards.loader.load_all().  load_dashboard() alone only parses;
+    # vcfcf_dashboards.loader.load_all().  load_dashboard() alone only parses;
     # the cross-object invariants (widget/view resolution, and the Summary-page
     # rule that a summary_for dashboard may not carry a pinned or self-provider
     # widget) live in Dashboard.validate().  Without this the pak path could
@@ -950,7 +950,7 @@ def _load_bundled_content(
                 f"(resolved from '{rel}' relative to {project_dir})"
             )
         try:
-            from vcfops_supermetrics.loader import load_file as _load_sm
+            from vcfcf_supermetrics.loader import load_file as _load_sm
             sm = _load_sm(path, enforce_framework_prefix=False)
         except Exception as exc:
             raise SdkBuildError(
@@ -968,7 +968,7 @@ def _load_bundled_content(
                 f"(resolved from '{rel}' relative to {project_dir})"
             )
         try:
-            from vcfops_symptoms.loader import load_file as _load_sym
+            from vcfcf_symptoms.loader import load_file as _load_sym
             sym = _load_sym(path, enforce_framework_prefix=False)
         except Exception as exc:
             raise SdkBuildError(
@@ -986,7 +986,7 @@ def _load_bundled_content(
                 f"(resolved from '{rel}' relative to {project_dir})"
             )
         try:
-            from vcfops_alerts.loader import load_file as _load_alert
+            from vcfcf_alerts.loader import load_file as _load_alert
             alert = _load_alert(path, enforce_framework_prefix=False)
         except Exception as exc:
             raise SdkBuildError(
@@ -1004,11 +1004,11 @@ def _load_bundled_content(
                 f"(resolved from '{rel}' relative to {project_dir})"
             )
         try:
-            from vcfops_reports.loader import load_file as _load_report
+            from vcfcf_reports.loader import load_file as _load_report
             # Resolve view/dashboard name cross-references against the
             # adapter project's own views/ and dashboards/ directories, not
             # the factory-default content/views and content/dashboards
-            # (vcfops_reports.loader.load_file's fallback). Without this, a
+            # (vcfcf_reports.loader.load_file's fallback). Without this, a
             # report referencing a view that lives only under the adapter
             # repo (e.g. content/sdk-adapters/<name>/views/) resolves to an
             # empty view index and fails with "could not be resolved".
@@ -1034,7 +1034,7 @@ def _load_bundled_content(
                 f"(resolved from '{rel}' relative to {project_dir})"
             )
         try:
-            from vcfops_alerts.loader import load_recommendation_file as _load_rec
+            from vcfcf_alerts.loader import load_recommendation_file as _load_rec
             rec = _load_rec(path, enforce_framework_prefix=False)
         except Exception as exc:
             raise SdkBuildError(
@@ -1054,7 +1054,7 @@ def _build_views_zip_bytes(views: list, sm_scope: Optional[List[Path]] = None) -
     ``sm_scope``: when provided, restricts SM name resolution to only these
     YAML files (same scoped-resolution contract used at pak build time).
     """
-    from vcfops_dashboards.render import render_views_xml
+    from vcfcf_dashboards.render import render_views_xml
     xml_text = render_views_xml(views, sm_scope=sm_scope)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -1600,7 +1600,7 @@ _ALL_CONTENT_DIRS = [
 
 # SM-to-SM formula cross-reference resolution.
 #
-# The resolver itself lives in vcfops_supermetrics.crossref, because every path
+# The resolver itself lives in vcfcf_supermetrics.crossref, because every path
 # that emits or pushes a formula needs it (native bundle builder, discrete and
 # release builders, live sync) — not just this pak path, which is where it was
 # originally (and only) implemented.  This wrapper keeps the SDK-specific error
@@ -1623,7 +1623,7 @@ def _resolve_sm_formula(
     """Resolve ``@supermetric:"<name>"`` cross-reference tokens in a formula string.
 
     Thin pak-path wrapper around
-    :func:`vcfops_supermetrics.crossref.resolve_sm_formula` that raises
+    :func:`vcfcf_supermetrics.crossref.resolve_sm_formula` that raises
     :class:`SdkBuildError` (an unresolved token is a hard build error — VCF Ops
     cannot parse ``@supermetric:`` and the pak would be corrupt) and points the
     author at ``bundled_content.supermetrics`` in ``adapter.yaml``.
@@ -1764,11 +1764,11 @@ def _write_outer_pak(
     # --- Alert→symptom cross-reference validation ---
     # Every symptom referenced by any alert must appear in the bundled symptoms
     # list.  Both sides derive SymptomDefinition IDs from the same formula
-    # (_symptom_id in vcfops_alerts/render.py), so the IDs are consistent by
+    # (_symptom_id in vcfcf_alerts/render.py), so the IDs are consistent by
     # construction — what we validate here is that the referenced name exists
     # so the render doesn't produce a dangling ref.
     if alerts:
-        from vcfops_alerts.render import _symptom_id as _compute_symptom_id
+        from vcfcf_alerts.render import _symptom_id as _compute_symptom_id
         symptom_names: set = {s.name for s in symptoms}
         for alert in alerts:
             sets = (alert.symptom_sets or {}).get("sets") or []
@@ -1794,7 +1794,7 @@ def _write_outer_pak(
     # Every [VCF Content Factory] recommendation referenced by any bundled alert
     # must appear in the bundled recommendations list.  Non-factory-prefix names
     # are treated as built-in references and are not validated here (same policy
-    # as resolve_alert_recommendations in vcfops_alerts/loader.py).
+    # as resolve_alert_recommendations in vcfcf_alerts/loader.py).
     if alerts:
         recommendation_by_name = {r.name: r for r in recommendations}
         for alert in alerts:
@@ -1942,7 +1942,7 @@ def _write_outer_pak(
         _content_reports_used_slugs: set[str] = set()
 
         if views:
-            from vcfops_dashboards.render import render_views_xml
+            from vcfcf_dashboards.render import render_views_xml
             # Emit content/reports/ only when views are present.
             zf.writestr("content/reports/", "")
             # Write one XML file per view under content/reports/ — this is the
@@ -1981,7 +1981,7 @@ def _write_outer_pak(
                 )
 
         if dashboards:
-            from vcfops_dashboards.render import render_dashboards_bundle_json
+            from vcfcf_dashboards.render import render_dashboards_bundle_json
             # Emit content/dashboards/ only when dashboards are present.
             zf.writestr("content/dashboards/", "")
             # Build views_by_name from all views (bundled + any loaded for dashboards)
@@ -2042,7 +2042,7 @@ def _write_outer_pak(
         # Exactly the format render_alert_content_xml() produces when called with
         # symptoms only (alerts=[], recommendations=[]).
         if symptoms:
-            from vcfops_alerts.render import render_alert_content_xml
+            from vcfcf_alerts.render import render_alert_content_xml
             zf.writestr("content/symptomdefs/", "")
             _sym_seen_names: set[str] = set()
             for sym in symptoms:
@@ -2082,7 +2082,7 @@ def _write_outer_pak(
         # consistency (SymptomDefinition IDs) is guaranteed because both sides
         # derive the ID from _symptom_id(adapter_kind, name) — same formula.
         if alerts:
-            from vcfops_alerts.render import render_alert_content_xml
+            from vcfcf_alerts.render import render_alert_content_xml
             # Build a name→SymptomDef lookup for finding referenced symptoms.
             symptom_by_name = {s.name: s for s in symptoms}
             # Build a name→Recommendation lookup for referenced recommendations.
@@ -2188,8 +2188,8 @@ def _write_outer_pak(
         # populated regardless, and the file is harmless now that nothing in
         # the XML references its keys.
         if reports:
-            from vcfops_dashboards.render import render_view_def_fragments
-            from vcfops_reports.render import render_report_xml
+            from vcfcf_dashboards.render import render_view_def_fragments
+            from vcfcf_reports.render import render_report_xml
 
             _views_by_id = {v.id: v for v in (views or [])}
 
@@ -3319,12 +3319,12 @@ def _validate_localization_key_contract(views: list, sm_scope: Optional[List[Pat
 
     errors: List[str] = []
 
-    # Lazy import — vcfops_dashboards may not be installed in all environments.
+    # Lazy import — vcfcf_dashboards may not be installed in all environments.
     try:
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.render import render_views_xml
     except ImportError:
         # Cannot check without the renderer — skip silently (consistent with
-        # how the build path handles missing vcfops_dashboards).
+        # how the build path handles missing vcfcf_dashboards).
         return errors
 
     for view in views:
@@ -3617,6 +3617,6 @@ def scaffold_sdk_project(name: str, output_base: Path) -> Path:
     print(f"  Next steps:", file=sys.stderr)
     print(f"    1. Edit src/{package_path}/{class_name}.java", file=sys.stderr)
     print(f"    2. Edit describe.xml", file=sys.stderr)
-    print(f"    3. python3 -m vcfops_managementpacks build-sdk {project_dir}", file=sys.stderr)
+    print(f"    3. python3 -m vcfcf_managementpacks build-sdk {project_dir}", file=sys.stderr)
 
     return project_dir

@@ -118,8 +118,8 @@ def _write_release_manifest(
 
 
 def _patch_enumerate(monkeypatch, releases_dir: Path):
-    from vcfops_packaging import publish as _pub
-    from vcfops_packaging.releases import load_release
+    from vcfcf_packaging import publish as _pub
+    from vcfcf_packaging.releases import load_release
 
     def _fake_enumerate(factory_repo):
         manifests = sorted(releases_dir.glob("*.y*ml"))
@@ -152,7 +152,7 @@ class TestHeadlineToDirThirdPartyComponents:
         ("managementpacks", "ThirdPartyContent/management-packs"),
     ])
     def test_type_routing(self, type_dir, expected_sub):
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         source = f"third_party/idps-planner/{type_dir}/Some File.yaml"
         result = headline_to_dir(source)
@@ -169,26 +169,26 @@ class TestHeadlineToDirThirdPartyMalformed:
     """T2: malformed third_party/ paths raise ValueError with a clear message."""
 
     def test_too_few_components(self):
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         with pytest.raises(ValueError, match="malformed"):
             headline_to_dir("third_party/idps-planner/views")
 
     def test_only_prefix(self):
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         with pytest.raises(ValueError, match="malformed"):
             headline_to_dir("third_party/")
 
     def test_unknown_type_dir(self):
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         with pytest.raises(ValueError, match="not a recognised content type"):
             headline_to_dir("third_party/idps-planner/widgets/foo.yaml")
 
     def test_symptoms_raises(self):
         """symptoms/ is excluded from discrete routing in v1 even under third_party/."""
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         with pytest.raises(ValueError, match="not a recognised content type"):
             headline_to_dir("third_party/idps-planner/symptoms/foo.yaml")
@@ -202,7 +202,7 @@ class TestProjectYamlRoutingRegression:
     """T3: existing bundles/ + factory_native:false routing is unaffected."""
 
     def test_single_dashboard_thirdparty_bundle(self):
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         bundle_data = {"factory_native": False, "dashboards": ["d.yaml"]}
         result = headline_to_dir("bundles/idps-planner.yaml", bundle_data=bundle_data)
@@ -212,14 +212,14 @@ class TestProjectYamlRoutingRegression:
         )
 
     def test_multidash_thirdparty_bundle(self):
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         bundle_data = {"factory_native": False, "dashboards": ["d1.yaml", "d2.yaml"]}
         result = headline_to_dir("bundles/foo.yaml", bundle_data=bundle_data)
         assert result == "ThirdPartyContent/bundles"
 
     def test_factory_native_bundle_unchanged(self):
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         result = headline_to_dir("bundles/capacity-assessment.yaml")
         assert result == "bundles"
@@ -233,8 +233,8 @@ class TestArtifactDestSubdirThirdPartyView:
     """T4: _artifact_dest_subdir routes third-party view to ThirdPartyContent/views."""
 
     def test_thirdparty_view_dest_subdir(self, tmp_path):
-        from vcfops_packaging.release_builder import _artifact_dest_subdir
-        from vcfops_packaging.releases import load_release
+        from vcfcf_packaging.release_builder import _artifact_dest_subdir
+        from vcfcf_packaging.releases import load_release
 
         assert TP_VIEW_PATH.exists(), f"fixture not found: {TP_VIEW_PATH}"
         manifest = {
@@ -263,8 +263,8 @@ class TestArtifactDestSubdirThirdPartySM:
     """T5: _artifact_dest_subdir routes third-party supermetric to ThirdPartyContent/supermetrics."""
 
     def test_thirdparty_sm_dest_subdir(self, tmp_path):
-        from vcfops_packaging.release_builder import _artifact_dest_subdir
-        from vcfops_packaging.releases import load_release
+        from vcfcf_packaging.release_builder import _artifact_dest_subdir
+        from vcfcf_packaging.releases import load_release
 
         assert TP_SM_PATH.exists(), f"fixture not found: {TP_SM_PATH}"
         manifest = {
@@ -294,7 +294,7 @@ class TestBuildReleaseThirdPartyView:
 
     @pytest.fixture(scope="class")
     def release_artifacts(self, tmp_path_factory):
-        from vcfops_packaging.release_builder import build_release
+        from vcfcf_packaging.release_builder import build_release
 
         tmp = tmp_path_factory.mktemp("tp_view_release")
         assert TP_VIEW_PATH.exists(), f"fixture not found: {TP_VIEW_PATH}"
@@ -448,7 +448,7 @@ class TestCmdReleaseLookupThirdParty:
 
 def test_publish_dryrun_thirdparty_view(tmp_path, monkeypatch):
     """T8: publish dry-run for a third-party view reports ThirdPartyContent/views/ destination."""
-    from vcfops_packaging.publish import publish
+    from vcfcf_packaging.publish import publish
 
     dist = _init_dist_repo(tmp_path)
     releases_dir = tmp_path / "tp_view_releases"
@@ -499,7 +499,7 @@ def test_publish_dryrun_thirdparty_view(tmp_path, monkeypatch):
 
 def test_project_yaml_release_still_routes_to_thirdparty_dashboards(tmp_path, monkeypatch):
     """T9: idps-planner PROJECT.yaml release still lands in ThirdPartyContent/dashboards/."""
-    from vcfops_packaging.publish import publish
+    from vcfcf_packaging.publish import publish
 
     dist = _init_dist_repo(tmp_path)
     releases_dir = tmp_path / "project_yaml_releases"

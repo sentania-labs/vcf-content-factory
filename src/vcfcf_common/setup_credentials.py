@@ -1,9 +1,9 @@
 """Interactive credential wizard (bootstrap-v2 Phase 2).
 
-    python3 -m vcfops_common setup
+    python3 -m vcfcf_common setup
 
 Run BY THE USER in their own terminal. Inside a Claude session the flow
-is: Claude tells the user to type ``! python3 -m vcfops_common setup``;
+is: Claude tells the user to type ``! python3 -m vcfcf_common setup``;
 the ``!`` prefix runs it interactively in-session, and because the
 password is read through :func:`read_password_silently` (getpass, with
 its echoing fallback promoted to a refusal) it is typed but never
@@ -93,12 +93,12 @@ _ACQUIRE_TIMEOUT = 20  # seconds
 _MAX_DETAIL = 300  # cap on any scrubbed diagnostic string
 _GIT_CHECK_TIMEOUT = 5  # seconds; `git check-ignore` on a parent .env
 
-_USAGE = """usage: python3 -m vcfops_common setup [--profile NAME] [--no-validate]
+_USAGE = """usage: python3 -m vcfcf_common setup [--profile NAME] [--no-validate]
 
 Interactive credential wizard. Run it yourself in a terminal; inside a
 Claude session type it with a leading `!`:
 
-    ! python3 -m vcfops_common setup
+    ! python3 -m vcfcf_common setup
 
 Prompts for profile name, host, user, auth source and verify-SSL (these
 echo), then the password twice via a silent prompt (never echoed, never
@@ -116,7 +116,7 @@ options:
 _PASSWORD_ON_ARGV = (
     "refusing to accept a password on the command line: argv is visible "
     "in the process list, shell history and the session transcript "
-    "(RULE-008). Run `python3 -m vcfops_common setup` with no password "
+    "(RULE-008). Run `python3 -m vcfcf_common setup` with no password "
     "flag and type it at the silent prompt instead."
 )
 
@@ -128,7 +128,7 @@ _PASSWORD_ON_ARGV = (
 def find_repo_root() -> Path:
     """Anchor to the repo root via this module's location on disk.
 
-    setup_credentials.py lives at <root>/src/vcfops_common/, so the root
+    setup_credentials.py lives at <root>/src/vcfcf_common/, so the root
     is two parents up from the package directory. Works from any cwd.
     """
     return Path(__file__).resolve().parents[2]
@@ -271,7 +271,7 @@ def _comment_out_assignments(lines: Sequence[str]) -> List[str]:
 
 
 _SEED_HEADER = (
-    "# Created by `python3 -m vcfops_common setup` from .env.example.",
+    "# Created by `python3 -m vcfcf_common setup` from .env.example.",
     "# Every line copied from the template was commented out: the template's",
     "# placeholder credentials are not real. Live values are written below by",
     "# the wizard. Never commit this file.",
@@ -329,7 +329,7 @@ def merge_profile_lines(
             result.append("")
         result.append(
             f"# --- VCF Operations: {profile.lower()} profile "
-            "(written by `python3 -m vcfops_common setup`) ---"
+            "(written by `python3 -m vcfcf_common setup`) ---"
         )
         result.extend(appended)
     return result
@@ -982,14 +982,14 @@ def run_setup(
     # hang a hook waiting for one.
     if not isatty():
         err(
-            "vcfops setup needs an interactive terminal and stdin is not a "
+            "vcfcf setup needs an interactive terminal and stdin is not a "
             "TTY, so it is refusing to run (a piped or hook-driven run "
             "could read a password from the pipe, which RULE-008 "
             "forbids). Run it yourself in a terminal:\n"
-            "    python3 -m vcfops_common setup\n"
+            "    python3 -m vcfcf_common setup\n"
             "Inside a Claude session, type it with a leading `!` so it runs "
             "interactively:\n"
-            "    ! python3 -m vcfops_common setup"
+            "    ! python3 -m vcfcf_common setup"
         )
         return 2
 
@@ -1131,7 +1131,7 @@ def run_setup(
             f"{profile.lower()} to the CLIs, or set VCFOPS_PROFILE={profile.lower()}.")
     out("  Re-run this wizard any time to add another profile or rotate a "
         "password.")
-    out("  Next: python3 -m vcfops_common doctor")
+    out("  Next: python3 -m vcfcf_common doctor")
     return 0
 
 
@@ -1166,13 +1166,13 @@ def main(
         return 1
     except Exception as exc:  # noqa: BLE001 (deliberate: no traceback, ever)
         err(
-            f"vcfops setup failed unexpectedly ({type(exc).__name__}). "
+            f"vcfcf setup failed unexpectedly ({type(exc).__name__}). "
             "Details are withheld on purpose: this command holds your "
             "password in memory and an error report could echo it "
             "(RULE-008). Your .env is never left half-written: it is "
             "either untouched or fully updated. Run "
-            "`python3 -m vcfops_common doctor` to see which, then re-run "
-            "`python3 -m vcfops_common setup`."
+            "`python3 -m vcfcf_common doctor` to see which, then re-run "
+            "`python3 -m vcfcf_common setup`."
         )
         return 1
 

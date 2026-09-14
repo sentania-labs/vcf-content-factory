@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Deterministic ID generation — UUID5, standard hyphenated format
 #
-# Canonical factory namespace shared with vcfops_dashboards/loader.py.
+# Canonical factory namespace shared with vcfcf_dashboards/loader.py.
 # Do NOT change this value once any MP has been deployed — every sub-object
 # ID in every rendered design is derived from it (CLAUDE.md §6 UUID stability).
 # ---------------------------------------------------------------------------

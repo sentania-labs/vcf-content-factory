@@ -35,12 +35,12 @@ from typing import List
 
 import pytest
 
-from vcfops_managementpacks.sdk_builder import (
+from vcfcf_managementpacks.sdk_builder import (
     SdkBuildError,
     _load_bundled_content,
     _write_outer_pak,
 )
-from vcfops_managementpacks.sdk_project import SdkProjectDef
+from vcfcf_managementpacks.sdk_project import SdkProjectDef
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +51,7 @@ from vcfops_managementpacks.sdk_project import SdkProjectDef
 def _make_project(
     name: str = "Test Adapter", adapter_kind: str = "test_adapter"
 ) -> SdkProjectDef:
-    from vcfops_managementpacks.sdk_project import _derive_entry_class
+    from vcfcf_managementpacks.sdk_project import _derive_entry_class
 
     return SdkProjectDef(
         name=name,
@@ -190,7 +190,7 @@ class TestReportEmit:
         rpt_path = project_dir / "reports" / "test_report.yaml"
         _write_yaml(rpt_path, _REPORT_YAML)
 
-        from vcfops_reports.loader import load_file
+        from vcfcf_reports.loader import load_file
 
         rpt = load_file(rpt_path, enforce_framework_prefix=False)
         project = _make_project()
@@ -230,7 +230,7 @@ class TestReportEmit:
         rpt_path = project_dir / "reports" / "test_report.yaml"
         _write_yaml(rpt_path, _REPORT_YAML)
 
-        from vcfops_reports.loader import load_file
+        from vcfcf_reports.loader import load_file
 
         rpt = load_file(rpt_path, enforce_framework_prefix=False)
         project = _make_project()
@@ -267,7 +267,7 @@ class TestReportEmit:
         rpt_path = project_dir / "reports" / "test_report.yaml"
         _write_yaml(rpt_path, _REPORT_YAML)
 
-        from vcfops_reports.loader import load_file
+        from vcfcf_reports.loader import load_file
 
         rpt = load_file(rpt_path, enforce_framework_prefix=False)
         project = _make_project()
@@ -374,8 +374,8 @@ class TestViewsAndReportsCoexist:
         rpt_path = project_dir / "reports" / "r.yaml"
         _write_yaml(rpt_path, _REPORT_YAML)
 
-        from vcfops_dashboards.loader import load_view
-        from vcfops_reports.loader import load_file as load_report
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_reports.loader import load_file as load_report
 
         view = load_view(view_path)
         rpt = load_report(rpt_path, enforce_framework_prefix=False)
@@ -431,7 +431,7 @@ class TestViewsAndReportsCoexist:
         rpt_path = project_dir / "reports" / "r.yaml"
         _write_yaml(rpt_path, _REPORT_YAML)
 
-        from vcfops_reports.loader import load_file as load_report
+        from vcfcf_reports.loader import load_file as load_report
 
         rpt = load_report(rpt_path, enforce_framework_prefix=False)
         project = _make_project()
@@ -466,7 +466,7 @@ class TestReportSafeNameDedup:
         _write_yaml(rpt_a_path, _REPORT_YAML)
         _write_yaml(rpt_b_path, _REPORT_YAML_2)
 
-        from vcfops_reports.loader import load_file as load_report
+        from vcfcf_reports.loader import load_file as load_report
 
         rpt_a = load_report(rpt_a_path, enforce_framework_prefix=False)
         rpt_b = load_report(rpt_b_path, enforce_framework_prefix=False)
@@ -521,7 +521,7 @@ class TestReportDashboardUuidVerbatim:
 
     def test_dashboard_uuid_emitted_verbatim(self, tmp_path: Path) -> None:
         """A ReportDef with a pre-resolved dashboard_id emits that UUID verbatim."""
-        from vcfops_reports.loader import ReportDef, Section, SubjectType, ReportSettings
+        from vcfcf_reports.loader import ReportDef, Section, SubjectType, ReportSettings
 
         # Build a ReportDef directly (bypassing file load) with a known dashboard_id
         rpt = ReportDef(

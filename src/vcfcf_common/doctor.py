@@ -1,8 +1,8 @@
 """Preflight doctor for the VCF Content Factory (bootstrap-v2 Phase 1/1b).
 
 Invoked by the SessionStart hook by file path, i.e.
-``python3 "$CLAUDE_PROJECT_DIR/src/vcfops_common/doctor.py"`` (the
-``python -m vcfops_common doctor`` form also works, but depends on an
+``python3 "$CLAUDE_PROJECT_DIR/src/vcfcf_common/doctor.py"`` (the
+``python -m vcfcf_common doctor`` form also works, but depends on an
 ambient PYTHONPATH=src, which the hook cannot assume).
 Pure stdlib (yaml/requests/jmespath are only *checked* for importability,
 never imported). No bash: git is invoked directly via subprocess. POSIX only
@@ -163,7 +163,7 @@ _KNOWN_PROFILE_SUFFIXES = ("AUTH_SOURCE", "VERIFY_SSL", "PASSWORD", "HOST", "USE
 
 _CHECK_MODULES = ("requests", "yaml", "jmespath")
 
-_ADAPTER_RUNTIME_REL = Path("src/vcfops_managementpacks/adapter_runtime")
+_ADAPTER_RUNTIME_REL = Path("src/vcfcf_managementpacks/adapter_runtime")
 
 
 # ---------------------------------------------------------------------------
@@ -173,10 +173,10 @@ _ADAPTER_RUNTIME_REL = Path("src/vcfops_managementpacks/adapter_runtime")
 def find_repo_root() -> Path:
     """Anchor to the repo root via this module's location on disk.
 
-    doctor.py lives at <root>/src/vcfops_common/doctor.py, so the root is
+    doctor.py lives at <root>/src/vcfcf_common/doctor.py, so the root is
     two parents up from the package directory. Works from any cwd.
 
-    ASSUMPTION: the from-source checkout layout (`src/vcfops_common/`).
+    ASSUMPTION: the from-source checkout layout (`src/vcfcf_common/`).
     That is the framework's only shipped install model. A pip-installed
     copy would anchor into site-packages and misreport; if that model
     ever ships, switch to `git rev-parse --show-toplevel` with this as
@@ -591,7 +591,7 @@ class EnvSanity:
     # Modules the venv HAS and the current interpreter does NOT. Not
     # "missing" (some interpreter here can run the CLIs, so this is not a
     # first-run machine), but not ready either: the documented commands
-    # are `python3 -m vcfops_* ...`, and that python3 is this one
+    # are `python3 -m vcfcf_* ...`, and that python3 is this one
     # (issue #96 item 2).
     venv_only_modules: List[str] = field(default_factory=list)
 
@@ -736,7 +736,7 @@ def inspect_environment(
         es.missing_modules = [m for m in current_missing if m in venv_set]
         # The other half of the intersection is not "fine": the deps are
         # in the venv only, nothing wires the CLIs to the venv, and
-        # `python3 -m vcfops_* validate` runs on THIS interpreter. Record
+        # `python3 -m vcfcf_* validate` runs on THIS interpreter. Record
         # it so the report can say so instead of printing all green
         # (issue #96 item 2).
         es.venv_only_modules = [m for m in current_missing if m not in venv_set]
@@ -745,7 +745,7 @@ def inspect_environment(
     # (constant-pool source for the per-adapter JAR) AND at least one
     # adapter_runtime/lib/*.jar. Without either it still emits a pak, but
     # one carrying ADAPTER_JAR_GAP / LIB_GAP placeholders that cannot run
-    # (src/vcfops_managementpacks/builder.py). Any-jar-present was too
+    # (src/vcfcf_managementpacks/builder.py). Any-jar-present was too
     # loose: a Tier 2 SDK jar alone would have passed.
     runtime_dir = root / _ADAPTER_RUNTIME_REL
     if not (runtime_dir / "mpb_adapter3.jar").is_file():
@@ -1213,7 +1213,7 @@ def build_checklist(
             else "no complete VCFOPS profile in .env or exported vars; "
             "have the USER run the credential wizard themselves, in their "
             "own terminal (in a Claude session, typed with a leading `!` so "
-            "it runs interactively): `! python3 -m vcfops_common setup`. "
+            "it runs interactively): `! python3 -m vcfcf_common setup`. "
             "Never run it for them and never ask for a password in chat: "
             "the wizard reads it silently so it stays out of the transcript "
             "(RULE-008), and it refuses to run without a TTY"
@@ -1293,7 +1293,7 @@ def build_checklist(
     items.append({
         "id": "recheck",
         "status": "pending",
-        "detail": "re-run `python -m vcfops_common doctor` after fixes for one green line",
+        "detail": "re-run `python -m vcfcf_common doctor` after fixes for one green line",
     })
     return items
 
@@ -1410,7 +1410,7 @@ def run_doctor(
         attention.append(
             "additionalContext: no credential profiles are configured; offer "
             "the user the credential setup wizard. They run it themselves: "
-            "tell them to type `! python3 -m vcfops_common setup` (the `!` "
+            "tell them to type `! python3 -m vcfcf_common setup` (the `!` "
             "prefix runs it interactively in-session). Do not run it for "
             "them and do not ask for a password in chat."
         )
@@ -1429,12 +1429,12 @@ def run_doctor(
     if env.venv_only_modules:
         # Not a missing dependency (the venv has it) and not first-run,
         # but not ready either: the documented CLI form is
-        # `python3 -m vcfops_* ...`, which runs on the interpreter this
+        # `python3 -m vcfcf_* ...`, which runs on the interpreter this
         # doctor is running on, and nothing activates .venv for it.
         #
         # jmespath is carved out exactly as it is everywhere else in this
         # module (is_first_run, build_checklist): it is a SOFT dependency,
-        # and vcfops_managementpacks/loader.py degrades to a UserWarning
+        # and vcfcf_managementpacks/loader.py degrades to a UserWarning
         # without it. Telling an operator whose ambient python3 has
         # requests and yaml that validate "would fail" would be a lie,
         # and a doctor that lies about a healthy install is the same
@@ -1445,10 +1445,10 @@ def run_doctor(
             attention.append(
                 "python module(s) " + ", ".join(core_venv_only)
                 + " are installed in .venv only, not in the python3 running "
-                "this session, so `python3 -m vcfops_* validate` would fail "
+                "this session, so `python3 -m vcfcf_* validate` would fail "
                 "here" + checked + "; activate the venv first "
                 "(source .venv/bin/activate), or run the CLIs as "
-                ".venv/bin/python3 -m vcfops_..."
+                ".venv/bin/python3 -m vcfcf_..."
             )
         else:
             attention.append(
@@ -1461,7 +1461,7 @@ def run_doctor(
             )
     if not env.jars_present:
         attention.append(
-            "MPB Tier 1 runtime incomplete under src/vcfops_managementpacks/, "
+            "MPB Tier 1 runtime incomplete under src/vcfcf_managementpacks/, "
             "missing: " + ", ".join(env.missing_jars)
             + "; pak builds would still succeed but produce a nonfunctional "
             "pak (an ADAPTER_JAR_GAP or LIB_GAP placeholder, or, when lib/ "
@@ -1552,7 +1552,7 @@ def _redact_arg(arg: str) -> str:
     return _clip(name) + ("=<redacted>" if sep else "")
 
 
-DOCTOR_USAGE = """usage: python -m vcfops_common doctor
+DOCTOR_USAGE = """usage: python -m vcfcf_common doctor
 
 Session-start preflight: upstream alignment, credential readiness,
 environment sanity, bootstrap health, first-run concierge checklist.

@@ -102,9 +102,9 @@ def _collect_time_window_warnings(
     We call the loader + dep_walker directly rather than subprocess so the test
     stays in-process and avoids needing a real repo layout.
     """
-    from vcfops_dashboards.loader import load_all
-    from vcfops_common.dep_walker import extract_view_names_from_dashboards
-    from vcfops_dashboards.cli import (
+    from vcfcf_dashboards.loader import load_all
+    from vcfcf_common.dep_walker import extract_view_names_from_dashboards
+    from vcfcf_dashboards.cli import (
         _is_time_window_warning,
         _extract_view_name_from_time_window_warning,
     )
@@ -229,7 +229,7 @@ class TestStandaloneViewWarningFires:
 
 def _extract_name(warning_msg: str) -> str:
     """Extract view name from warning message text (helper for T2 assertions)."""
-    from vcfops_dashboards.cli import _extract_view_name_from_time_window_warning
+    from vcfcf_dashboards.cli import _extract_view_name_from_time_window_warning
     return _extract_view_name_from_time_window_warning(warning_msg)
 
 
@@ -292,7 +292,7 @@ class TestSingleFileValidateWarningFires:
 
         view_path = _make_aggregating_view(views_dir, "single_file_view", view_name)
 
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
@@ -320,7 +320,7 @@ class TestSingleFileValidateWarningFires:
 
         view_path = _make_aggregating_view(views_dir, "flag_test_view", view_name)
 
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")

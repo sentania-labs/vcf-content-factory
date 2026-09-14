@@ -46,8 +46,8 @@ def _view(**over) -> dict:
 
 
 def _render(tmp_path, data) -> str:
-    from vcfops_dashboards.loader import load_view
-    from vcfops_dashboards.render import render_views_xml
+    from vcfcf_dashboards.loader import load_view
+    from vcfcf_dashboards.render import render_views_xml
 
     return render_views_xml([load_view(_write(tmp_path, data))])
 
@@ -85,7 +85,7 @@ class TestSingleSubjectRegression:
         assert scalar == listed
 
     def test_scalar_fields_and_subject_kinds_default(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         v = load_view(_write(tmp_path, _view()))
         assert v.subjects == []
@@ -111,7 +111,7 @@ class TestMultiSubject:
         assert kinds == ["vSphere World", "vSphere World", "Datacenter", "Datacenter"]
 
     def test_scalar_fields_mirror_first_subject(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         v = load_view(_write(tmp_path, _view(subject=None, subjects=self.SUBJECTS)))
         assert (v.adapter_kind, v.resource_kind) == ("VMWARE", "Datacenter")
@@ -143,7 +143,7 @@ class TestMultiSubject:
 
 class TestRejections:
     def test_duplicate_subject_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError, load_view
+        from vcfcf_dashboards.loader import DashboardValidationError, load_view
 
         with pytest.raises(DashboardValidationError, match="duplicate subject VMWARE:Datacenter"):
             load_view(_write(tmp_path, _view(subject=None, subjects=[
@@ -153,7 +153,7 @@ class TestRejections:
             ])))
 
     def test_subjects_with_scalar_kinds_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError, load_view
+        from vcfcf_dashboards.loader import DashboardValidationError, load_view
 
         with pytest.raises(DashboardValidationError, match="mutually exclusive"):
             load_view(_write(tmp_path, _view(subjects=[
@@ -164,13 +164,13 @@ class TestRejections:
                                      [{"adapter_kind": "VMWARE", "resource_kind": "Datacenter", "type": "self"}],
                                      ["VMWARE:Datacenter"]])
     def test_malformed_subjects_rejected(self, tmp_path, bad):
-        from vcfops_dashboards.loader import DashboardValidationError, load_view
+        from vcfcf_dashboards.loader import DashboardValidationError, load_view
 
         with pytest.raises(DashboardValidationError):
             load_view(_write(tmp_path, _view(subject=None, subjects=bad)))
 
     def test_dataclass_guard_on_mismatched_scalar(self):
-        from vcfops_dashboards.loader import (DashboardValidationError, ViewColumn, ViewDef,
+        from vcfcf_dashboards.loader import (DashboardValidationError, ViewColumn, ViewDef,
                                               ViewSubject)
 
         v = ViewDef(name="[VCF Content Factory] X", description="", adapter_kind="VMWARE",
@@ -189,8 +189,8 @@ class TestDependencyAudit:
     SUBJECTS = TestMultiSubject.SUBJECTS
 
     def _refs(self, tmp_path, data):
-        from vcfops_dashboards.loader import load_view
-        from vcfops_packaging.deps import _refs_from_view
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_packaging.deps import _refs_from_view
 
         return _refs_from_view(load_view(_write(tmp_path, data)))
 
@@ -249,14 +249,14 @@ class TestReverseParsers:
         return cls._elem(_EXTRACT.read_text() + "</ViewDef>")
 
     def test_dataclass_parser_populates_subjects_in_document_order(self):
-        from vcfops_dashboards.reverse import parse_view_xml_element
+        from vcfcf_dashboards.reverse import parse_view_xml_element
 
         vd = parse_view_xml_element(self._extract_elem())
         assert vd.subject_kinds == self.KINDS
         assert (vd.adapter_kind, vd.resource_kind) == self.KINDS[0]
 
     def test_dataclass_parser_single_subject_leaves_subjects_empty(self):
-        from vcfops_dashboards.reverse import parse_view_xml_element
+        from vcfcf_dashboards.reverse import parse_view_xml_element
 
         vd = parse_view_xml_element(self._elem(self.SINGLE))
         assert vd.subjects == []
@@ -265,9 +265,9 @@ class TestReverseParsers:
     @pytest.mark.parametrize("parser", ["extractor", "reverse_local"])
     def test_dict_parsers_populate_subjects(self, parser):
         if parser == "extractor":
-            from vcfops_extractor.extractor import _parse_view_def_element as parse
+            from vcfcf_extractor.extractor import _parse_view_def_element as parse
         else:
-            from vcfops_extractor.reverse_local import _parse_view_xml_to_dict as parse
+            from vcfcf_extractor.reverse_local import _parse_view_xml_to_dict as parse
 
         data = parse(self._extract_elem())
         assert data["subjects"] == [
@@ -278,17 +278,17 @@ class TestReverseParsers:
 
     @pytest.mark.parametrize("writer", ["extractor", "reverse_local"])
     def test_written_yaml_round_trips_subjects(self, tmp_path, writer):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         if writer == "extractor":
-            from vcfops_extractor.extractor import _parse_view_def_element as parse
-            from vcfops_extractor.extractor import _write_view_yaml
+            from vcfcf_extractor.extractor import _parse_view_def_element as parse
+            from vcfcf_extractor.extractor import _write_view_yaml
 
             def write(path, data):
                 _write_view_yaml(path, data)
         else:
-            from vcfops_extractor.reverse_local import _parse_view_xml_to_dict as parse
-            from vcfops_extractor.reverse_local import _write_view_yaml
+            from vcfcf_extractor.reverse_local import _parse_view_xml_to_dict as parse
+            from vcfcf_extractor.reverse_local import _write_view_yaml
 
             def write(path, data):
                 _write_view_yaml(path, data, {})

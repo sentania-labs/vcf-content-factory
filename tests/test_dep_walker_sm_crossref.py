@@ -30,9 +30,9 @@ SRC = REPO_ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from vcfops_common.dep_walker import collect_deps, expand_sm_crossrefs  # noqa: E402
-from vcfops_dashboards.loader import Dashboard, ViewColumn, ViewDef, Widget  # noqa: E402
-from vcfops_supermetrics.loader import SuperMetricDef  # noqa: E402
+from vcfcf_common.dep_walker import collect_deps, expand_sm_crossrefs  # noqa: E402
+from vcfcf_dashboards.loader import Dashboard, ViewColumn, ViewDef, Widget  # noqa: E402
+from vcfcf_supermetrics.loader import SuperMetricDef  # noqa: E402
 
 UUID_A = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa"
 UUID_B = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb"
@@ -188,7 +188,7 @@ class TestExpandSmCrossrefs:
 
 class TestDiscreteBuilderUsesWalker:
     def test_chain_pulled_in(self):
-        from vcfops_packaging.discrete_builder import _expand_sm_crossrefs
+        from vcfcf_packaging.discrete_builder import _expand_sm_crossrefs
 
         a = _sm(UUID_A, NAME_A, refs=[NAME_B])
         b = _sm(UUID_B, NAME_B, refs=[NAME_C])
@@ -196,7 +196,7 @@ class TestDiscreteBuilderUsesWalker:
         assert _names(_expand_sm_crossrefs([a], [a, b, c])) == [NAME_A, NAME_B, NAME_C]
 
     def test_cycle_terminates(self):
-        from vcfops_packaging.discrete_builder import _expand_sm_crossrefs
+        from vcfcf_packaging.discrete_builder import _expand_sm_crossrefs
 
         a = _sm(UUID_A, NAME_A, refs=[NAME_B])
         b = _sm(UUID_B, NAME_B, refs=[NAME_A])
@@ -204,7 +204,7 @@ class TestDiscreteBuilderUsesWalker:
 
     def test_missing_referent_is_fatal(self):
         """Matches the PR #141 resolver: an unresolvable name never ships."""
-        from vcfops_packaging.discrete_builder import (
+        from vcfcf_packaging.discrete_builder import (
             DiscreteBuilderError,
             _expand_sm_crossrefs,
         )
@@ -219,7 +219,7 @@ class TestDiscreteBuilderUsesWalker:
 
 class TestScopedReferent:
     def _scoped(self, referrers, referent, cross_links=None):
-        from vcfops_common.dep_walker import CollectDepsCrossLinks
+        from vcfcf_common.dep_walker import CollectDepsCrossLinks
 
         dash, view = _dashboard_over(UUID_A)
         dash.provenance = "proj"
@@ -311,7 +311,7 @@ class TestScopedReferent:
 
 class TestLiveSyncAdvisory:
     def test_extract_emits_name_keyed_ref_resolved_from_map(self):
-        from vcfops_common.dep_walker import extract_refs_from_supermetrics
+        from vcfcf_common.dep_walker import extract_refs_from_supermetrics
 
         a = _sm(UUID_A, NAME_A, refs=[NAME_B])
         sm_refs, _ = extract_refs_from_supermetrics([a], sm_name_map={NAME_B: UUID_B})
@@ -319,7 +319,7 @@ class TestLiveSyncAdvisory:
         assert NAME_A in sm_refs[0].source
 
     def test_extract_resolves_from_the_batch_itself(self):
-        from vcfops_common.dep_walker import extract_refs_from_supermetrics
+        from vcfcf_common.dep_walker import extract_refs_from_supermetrics
 
         a = _sm(UUID_A, NAME_A, refs=[NAME_B])
         b = _sm(UUID_B, NAME_B)
@@ -327,7 +327,7 @@ class TestLiveSyncAdvisory:
         assert [(r.sm_id, r.name) for r in sm_refs] == [(UUID_B, NAME_B)]
 
     def test_extract_unknown_name_yields_empty_id(self):
-        from vcfops_common.dep_walker import extract_refs_from_supermetrics
+        from vcfcf_common.dep_walker import extract_refs_from_supermetrics
 
         a = _sm(UUID_A, NAME_A, refs=[NAME_MISSING])
         sm_refs, _ = extract_refs_from_supermetrics([a])
@@ -353,7 +353,7 @@ class TestLiveSyncAdvisory:
             return {"id": uid, "name": name} if uid else None
 
     def _walk(self, client, sms):
-        from vcfops_common.dep_walker import walk_and_check
+        from vcfcf_common.dep_walker import walk_and_check
 
         return walk_and_check(
             client=client, supermetrics=sms, views=[], dashboards=[],
@@ -423,7 +423,7 @@ def test_build_discrete_dashboard_carries_sm_referents(tmp_path):
 
     import yaml
 
-    from vcfops_packaging.discrete_builder import build_discrete
+    from vcfcf_packaging.discrete_builder import build_discrete
 
     proj = tmp_path / "third_party" / "crossref-proj"
     sm_dir, view_dir, dash_dir = proj / "supermetrics", proj / "views", proj / "dashboards"

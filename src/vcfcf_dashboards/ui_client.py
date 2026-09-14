@@ -32,7 +32,7 @@ import json
 
 import requests
 
-from vcfops_common._env import load_dotenv, resolve_profile_credentials
+from vcfcf_common._env import load_dotenv, resolve_profile_credentials
 
 
 class UIClientError(RuntimeError):

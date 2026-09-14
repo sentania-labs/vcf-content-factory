@@ -1,6 +1,6 @@
-"""Content handler for custom groups (vcfops_packaging sync integration).
+"""Content handler for custom groups (vcfcf_packaging sync integration).
 
-Exposes a module-level HANDLER instance that the vcfops_packaging sync
+Exposes a module-level HANDLER instance that the vcfcf_packaging sync
 orchestrator discovers automatically.
 """
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
-from vcfops_packaging.handler import (
+from vcfcf_packaging.handler import (
     ContentHandler,
     DeleteResult,
     ItemResult,

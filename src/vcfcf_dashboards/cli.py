@@ -7,8 +7,8 @@ import sys
 import warnings
 from pathlib import Path
 
-from vcfops_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
-from vcfops_supermetrics.client import VCFOpsClient, VCFOpsError
+from vcfcf_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
+from vcfcf_supermetrics.client import VCFOpsClient, VCFOpsError
 
 from .client import (
     DASHBOARD_CONTENT_TYPES,
@@ -115,12 +115,12 @@ def cmd_validate(args) -> int:
 
     if using_defaults:
         try:
-            from vcfops_packaging.project import check_slug_uniqueness, check_project_membership
+            from vcfcf_packaging.project import check_slug_uniqueness, check_project_membership
         except ImportError:
-            # vcfops_packaging not available, re-emit captured warnings and exit
+            # vcfcf_packaging not available, re-emit captured warnings and exit
             _replay_non_time_window_warnings(captured_warnings)
             _replay_time_window_warnings_for_standalone_views(captured_warnings, dashboards)
-            return rc  # vcfops_packaging not available, skip checks
+            return rc  # vcfcf_packaging not available, skip checks
 
         # Slug uniqueness for views and dashboards
         for content_type, default_dir in (
@@ -148,7 +148,7 @@ def cmd_validate(args) -> int:
         _third_party = Path("third_party")
         if _third_party.exists():
             try:
-                from vcfops_dashboards.loader import (
+                from vcfcf_dashboards.loader import (
                     load_view as _load_view,
                     load_dashboard as _load_dash,
                 )
@@ -184,7 +184,7 @@ def cmd_validate(args) -> int:
                 pass
 
             try:
-                from vcfops_supermetrics.loader import load_dir as _sm_load_dir
+                from vcfcf_supermetrics.loader import load_dir as _sm_load_dir
                 for _proj_dir in sorted(_third_party.iterdir()):
                     if not _proj_dir.is_dir():
                         continue
@@ -200,7 +200,7 @@ def cmd_validate(args) -> int:
                 pass
 
             try:
-                from vcfops_customgroups.loader import load_dir as _cg_load_dir
+                from vcfcf_customgroups.loader import load_dir as _cg_load_dir
                 for _proj_dir in sorted(_third_party.iterdir()):
                     if not _proj_dir.is_dir():
                         continue
@@ -217,7 +217,7 @@ def cmd_validate(args) -> int:
 
         # Also include factory-native SMs and CGs in the corpus
         try:
-            from vcfops_supermetrics.loader import load_dir as _sm_load_dir
+            from vcfcf_supermetrics.loader import load_dir as _sm_load_dir
             _sm_dir = Path("content/supermetrics")
             if _sm_dir.exists():
                 try:
@@ -228,7 +228,7 @@ def cmd_validate(args) -> int:
             pass
 
         try:
-            from vcfops_customgroups.loader import load_dir as _cg_load_dir
+            from vcfcf_customgroups.loader import load_dir as _cg_load_dir
             _cg_dir = Path("content/customgroups")
             if _cg_dir.exists():
                 try:
@@ -277,7 +277,7 @@ def _replay_time_window_warnings_for_standalone_views(captured: list, all_dashbo
     suppresses the warning for views whose names appear in that set.
     """
     try:
-        from vcfops_common.dep_walker import extract_view_names_from_dashboards
+        from vcfcf_common.dep_walker import extract_view_names_from_dashboards
     except ImportError:
         # dep_walker unavailable, re-emit all time_window warnings unchanged
         for w in captured:
@@ -442,7 +442,7 @@ def _run_dep_walker(
     validate customgroup references found in view ``customgroup:`` fields.
     """
     try:
-        from vcfops_common.dep_walker import walk_and_check
+        from vcfcf_common.dep_walker import walk_and_check
     except ImportError as e:
         print(f"WARN  dep walker unavailable: {e}", file=sys.stderr)
         return 0
@@ -452,7 +452,7 @@ def _run_dep_walker(
     sm_dir = Path(supermetrics_dir)
     if sm_dir.exists():
         try:
-            from vcfops_supermetrics.loader import load_dir as _sm_load_dir
+            from vcfcf_supermetrics.loader import load_dir as _sm_load_dir
             sm_defs = _sm_load_dir(sm_dir)
         except Exception:
             pass  # non-fatal: walker will annotate SMs by UUID only
@@ -464,7 +464,7 @@ def _run_dep_walker(
     cg_dir = Path(customgroups_dir)
     if cg_dir.exists():
         try:
-            from vcfops_customgroups.loader import load_dir as _cg_load_dir
+            from vcfcf_customgroups.loader import load_dir as _cg_load_dir
             cg_defs = _cg_load_dir(cg_dir)
         except Exception:
             pass  # non-fatal: customgroup validation will be skipped
@@ -683,7 +683,7 @@ def cmd_bind_summary(args) -> int:
 
     Post-import route over the unsupported UI session (Struts layer); a
     pak carries the same binding in content/dashboards/dashboards.properties
-    instead. See vcfops_dashboards/summary_bind.py for the flow and
+    instead. See vcfcf_dashboards/summary_bind.py for the flow and
     knowledge/context/api-surface/summary_dashboard_assignment.md for the
     mechanism (binding is a template COPY; the printed template UUID is
     the only handle on it).
@@ -713,7 +713,7 @@ def cmd_bind_summary(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="vcfops_dashboards")
+    p = argparse.ArgumentParser(prog="vcfcf_dashboards")
     p.add_argument("--views-dir", default=str(DEFAULT_VIEWS),
                    help=f"Path to views YAML directory (default: {DEFAULT_VIEWS})")
     p.add_argument("--dashboards-dir", default=str(DEFAULT_DASHBOARDS),

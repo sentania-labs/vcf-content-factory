@@ -62,8 +62,8 @@ from typing import List, Optional
 # Type imports — kept lightweight; no dependency on the full loader pipeline
 # so this module can be tested in isolation.
 try:
-    from vcfops_symptoms.loader import SymptomDef
-    from vcfops_alerts.loader import AlertDef, Recommendation
+    from vcfcf_symptoms.loader import SymptomDef
+    from vcfcf_alerts.loader import AlertDef, Recommendation
 except ImportError:  # pragma: no cover — allows isolated testing
     SymptomDef = None  # type: ignore[assignment,misc]
     AlertDef = None    # type: ignore[assignment,misc]
@@ -127,7 +127,7 @@ def _rec_key(adapter_kind: str, name: str) -> str:
 # as "&lt;" / "&gt;=" automatically — we just supply the unescaped character.
 #
 # Mapping covers every operator the loader permits (STATIC_OPERATORS and
-# PROPERTY_OPERATORS in vcfops_symptoms/loader.py).  Any unmapped operator passes
+# PROPERTY_OPERATORS in vcfcf_symptoms/loader.py).  Any unmapped operator passes
 # through unchanged so future additions don't silently corrupt existing output.
 _XML_OPERATOR_MAP: dict[str, str] = {
     "EQ": "==",
@@ -156,7 +156,7 @@ def _xml_operator(op: str) -> str:
 # Severity translation: REST wire token -> content-import XML token
 # ---------------------------------------------------------------------------
 #
-# The REST API (vcfops_symptoms.loader.SEVERITY_MAP) and the content-import
+# The REST API (vcfcf_symptoms.loader.SEVERITY_MAP) and the content-import
 # XML path disagree on the informational severity token: REST uses
 # "INFORMATION", the XML importer only accepts lowercase "info" (and
 # rejects "information" outright, silently skipping symptom creation — see
@@ -189,7 +189,7 @@ def _add_condition_element(parent: ET.Element, cond: dict) -> None:
     fix (2026-07-09, defects.md DEF-<see below>): this XML content-import
     path previously never emitted ``instanced`` for metric_static/property
     conditions (the REST path's ``_condition_to_wire`` in
-    ``vcfops_symptoms/loader.py`` always had it), so every instanced
+    ``vcfcf_symptoms/loader.py`` always had it), so every instanced
     condition silently downgraded to exact-string key matching in every
     built pak. Fixed to mirror the vendor XML shape exactly, confirmed
     against two independent vendor symptomdefs (RULE-016 read-only
@@ -255,7 +255,7 @@ def _add_condition_element(parent: ET.Element, cond: dict) -> None:
         attribs["thresholdType"] = "static"
         # Mirrors _condition_to_wire's CONDITION_PROPERTY_STRING/NUMERIC
         # split: bool -> string ("true"/"false" text), int/float -> numeric,
-        # everything else -> string. See vcfops_symptoms/loader.py.
+        # everything else -> string. See vcfcf_symptoms/loader.py.
         if isinstance(value, bool):
             attribs["valueType"] = "string"
         elif isinstance(value, (int, float)):
@@ -457,10 +457,10 @@ def render_alert_content_xml(
     """Produce a single ``<alertContent>`` XML string for UI drag-drop import.
 
     Args:
-        symptoms:        List of SymptomDef objects (from vcfops_symptoms.loader).
-        alerts:          List of AlertDef objects (from vcfops_alerts.loader).
+        symptoms:        List of SymptomDef objects (from vcfcf_symptoms.loader).
+        alerts:          List of AlertDef objects (from vcfcf_alerts.loader).
         recommendations: Optional list of Recommendation objects
-            (from vcfops_alerts.loader).  These populate the top-level
+            (from vcfcf_alerts.loader).  These populate the top-level
             ``<Recommendations>`` block.  The Recommendation.id property
             is used for the ``key=`` attribute, which guarantees it matches
             the ``ref=`` attributes emitted inside each ``<AlertDefinition>``.

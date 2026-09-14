@@ -1,4 +1,4 @@
-"""Interactive bundle composer for vcfops_packaging.
+"""Interactive bundle composer for vcfcf_packaging.
 
 Implements the /bundle CLI subcommand (Phase 4 of content-structure-v3.md).
 
@@ -231,10 +231,10 @@ def _check_deps(
 
     try:
         # Load content objects for the picked items only.
-        from vcfops_dashboards.loader import load_dashboard, load_view
-        from vcfops_supermetrics.loader import load_file as load_sm
-        from vcfops_customgroups.loader import load_file as load_cg
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_dashboards.loader import load_dashboard, load_view
+        from vcfcf_supermetrics.loader import load_file as load_sm
+        from vcfcf_customgroups.loader import load_file as load_cg
+        from vcfcf_common.dep_walker import collect_deps
 
         dashboards = []
         for e in picked_dashboards:
@@ -483,7 +483,7 @@ def compose_bundle(
 
     # Round-trip self-test: ensure the produced YAML loads cleanly.
     try:
-        from vcfops_packaging.loader import load_bundle, BundleValidationError
+        from vcfcf_packaging.loader import load_bundle, BundleValidationError
         load_bundle(out_path)
     except Exception as e:
         print(

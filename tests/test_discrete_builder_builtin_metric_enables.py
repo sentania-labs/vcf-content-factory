@@ -28,9 +28,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from vcfops_packaging.audit import AuditError
-from vcfops_packaging.discrete_builder import build_discrete
-from vcfops_packaging.loader import BuiltinMetricEnable
+from vcfcf_packaging.audit import AuditError
+from vcfcf_packaging.discrete_builder import build_discrete
+from vcfcf_packaging.loader import BuiltinMetricEnable
 
 pytestmark = pytest.mark.slow
 
@@ -238,7 +238,7 @@ class TestDiscreteBuildAuditGate:
     def test_unknown_metric_key_fails_loudly(self, tmp_path, sm_project, monkeypatch):
         """A metric key not present in the describe cache at all must raise
         AuditError regardless of mode — same as build_bundle()."""
-        import vcfops_packaging.describe as describe_mod
+        import vcfcf_packaging.describe as describe_mod
 
         cache_dir = tmp_path / "describe_cache"
         # Cache file exists for the pair but does NOT contain the referenced key.
@@ -264,7 +264,7 @@ class TestDiscreteBuildAuditGate:
     def test_auto_mode_auto_adds_needs_enable_metric(self, tmp_path, sm_project, monkeypatch):
         """mode=auto (default): a defaultMonitored=false metric not already
         declared is auto-added to builtin_metric_enables, not a hard failure."""
-        import vcfops_packaging.describe as describe_mod
+        import vcfcf_packaging.describe as describe_mod
 
         cache_dir = tmp_path / "describe_cache"
         _seed_describe_cache(cache_dir, metrics={
@@ -303,7 +303,7 @@ class TestDiscreteBuildAuditGate:
     def test_strict_mode_fails_on_undeclared_needs_enable(self, tmp_path, sm_project, monkeypatch):
         """mode=strict: a defaultMonitored=false metric not declared in
         builtin_metric_enables must raise AuditError."""
-        import vcfops_packaging.describe as describe_mod
+        import vcfcf_packaging.describe as describe_mod
 
         cache_dir = tmp_path / "describe_cache"
         _seed_describe_cache(cache_dir, metrics={
@@ -426,7 +426,7 @@ class TestAuditGateRegressionRealContent:
         actual CLI entry point (not build_discrete() directly) so the
         release-manifest lookup wiring in cmd_build_discrete is exercised."""
         from types import SimpleNamespace
-        from vcfops_packaging.cli import cmd_build_discrete
+        from vcfcf_packaging.cli import cmd_build_discrete
 
         args = SimpleNamespace(
             content_type="dashboard",
@@ -452,11 +452,11 @@ class TestAuditGateRegressionRealContent:
 class TestReleaseBuilderEndToEnd:
     """The actual shipping path: a release manifest declaring
     builtin_metric_enables:, driven through build_release() (as publish and
-    `python3 -m vcfops_packaging build` do), must emit the section — not just
+    `python3 -m vcfcf_packaging build` do), must emit the section — not just
     build_discrete() called directly."""
 
     def test_release_manifest_with_bme_emits_section(self, tmp_path):
-        from vcfops_packaging.release_builder import build_release
+        from vcfcf_packaging.release_builder import build_release
 
         # Must be shaped as third_party/<project>/<type>/<file>.yaml so
         # build_release() routes it through the discrete builder WITH
@@ -521,7 +521,7 @@ class TestReleaseBuilderEndToEnd:
 
 class TestRenderBmeItemsParity:
     def test_render_bme_items_matches_manual_shape(self):
-        from vcfops_packaging.loader import BuiltinMetricEnable, render_bme_items
+        from vcfcf_packaging.loader import BuiltinMetricEnable, render_bme_items
 
         bmes = [
             BuiltinMetricEnable(
@@ -554,11 +554,11 @@ class TestRenderBmeItemsParity:
         ]
 
     def test_builder_and_discrete_builder_use_same_helper(self):
-        """Both modules must import render_bme_items from vcfops_packaging.loader
+        """Both modules must import render_bme_items from vcfcf_packaging.loader
         rather than carrying their own copy of the item-shape logic."""
-        import vcfops_packaging.builder as builder_mod
-        import vcfops_packaging.discrete_builder as discrete_mod
-        from vcfops_packaging.loader import render_bme_items
+        import vcfcf_packaging.builder as builder_mod
+        import vcfcf_packaging.discrete_builder as discrete_mod
+        from vcfcf_packaging.loader import render_bme_items
 
         assert builder_mod.render_bme_items is render_bme_items
         assert discrete_mod.render_bme_items is render_bme_items

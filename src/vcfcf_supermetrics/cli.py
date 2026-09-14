@@ -7,13 +7,13 @@ import time
 from pathlib import Path
 from typing import List
 
-from vcfops_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
+from vcfcf_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
 
 from .client import VCFOpsClient, VCFOpsError
 from .loader import SuperMetricDef, SuperMetricValidationError, load_dir, load_file
 
 # Dep walker is imported lazily inside cmd_sync to avoid import-time errors
-# when vcfops_dashboards is absent (rare, but keeps the package self-contained).
+# when vcfcf_dashboards is absent (rare, but keeps the package self-contained).
 
 DEFAULT_DIR = "content/supermetrics"
 SM_ENABLE_ATTEMPTS = 3
@@ -47,7 +47,7 @@ def cmd_validate(args) -> int:
     # Slug-uniqueness check across content/ and third_party/*/
     if not args.paths:
         try:
-            from vcfops_packaging.project import check_slug_uniqueness
+            from vcfcf_packaging.project import check_slug_uniqueness
             errors = check_slug_uniqueness(
                 content_type="supermetrics",
                 content_type_dir=DEFAULT_DIR,
@@ -57,7 +57,7 @@ def cmd_validate(args) -> int:
                     print(f"SLUG-COLLISION: {err}", file=sys.stderr)
                 return 1
         except ImportError:
-            pass  # vcfops_packaging not available — skip cross-provenance check
+            pass  # vcfcf_packaging not available — skip cross-provenance check
 
     return 0
 
@@ -146,7 +146,7 @@ def _run_dep_walker_for_sms(
     SMs referenced by formula are also checked.
     """
     try:
-        from vcfops_common.dep_walker import walk_and_check
+        from vcfcf_common.dep_walker import walk_and_check
     except ImportError as e:
         print(f"WARN  dep walker unavailable: {e}", file=sys.stderr)
         return 0
@@ -268,7 +268,7 @@ def cmd_delete(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="vcfops_supermetrics")
+    p = argparse.ArgumentParser(prog="vcfcf_supermetrics")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pv = sub.add_parser("validate", help="validate YAML definitions")

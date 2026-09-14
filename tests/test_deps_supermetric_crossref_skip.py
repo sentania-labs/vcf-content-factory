@@ -44,7 +44,7 @@ class TestIsSmRef:
         "sm_aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa",
     ])
     def test_super_metric_references_are_recognised(self, key):
-        from vcfops_packaging.deps import _is_sm_ref
+        from vcfcf_packaging.deps import _is_sm_ref
 
         assert _is_sm_ref(key) is True
 
@@ -53,20 +53,20 @@ class TestIsSmRef:
         "config|hardware|num_Cpu",
     ])
     def test_builtin_keys_are_not_sm_references(self, key):
-        from vcfops_packaging.deps import _is_sm_ref
+        from vcfcf_packaging.deps import _is_sm_ref
 
         assert _is_sm_ref(key) is False
 
 
 class TestRefsFromFormula:
     def test_correct_crossref_form_produces_no_audit_reference(self):
-        from vcfops_packaging.deps import _refs_from_formula
+        from vcfcf_packaging.deps import _refs_from_formula
 
         refs = _refs_from_formula(_formula(f'@supermetric:"{REF_NAME}"'), "probe SM")
         assert refs == [], [r.metric_key for r in refs]
 
     def test_builtin_metric_in_the_same_shape_is_still_audited(self):
-        from vcfops_packaging.deps import _refs_from_formula
+        from vcfcf_packaging.deps import _refs_from_formula
 
         refs = _refs_from_formula(_formula("cpu|usage_average"), "probe SM")
         assert [r.metric_key for r in refs] == ["cpu|usage_average"]

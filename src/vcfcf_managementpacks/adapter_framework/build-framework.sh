@@ -15,7 +15,7 @@
 # and used as compile-time dependency by all Tier 2 SDK adapters.
 #
 # Usage:
-#   cd vcfops_managementpacks/
+#   cd vcfcf_managementpacks/
 #   ./adapter_framework/build-framework.sh
 #
 # Requirements:
@@ -28,7 +28,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$SCRIPT_DIR/.."           # vcfops_managementpacks/
+ROOT="$SCRIPT_DIR/.."           # vcfcf_managementpacks/
 
 SRC_DIR="$SCRIPT_DIR/src"
 RUNTIME_DIR="$ROOT/adapter_runtime"

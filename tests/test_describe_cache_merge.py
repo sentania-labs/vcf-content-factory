@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from vcfops_packaging.describe import DescribeCache
+from vcfcf_packaging.describe import DescribeCache
 
 
 _SEED_METRICS = {
@@ -260,15 +260,15 @@ class TestRefreshCarriesThroughHandWrittenKeys:
 class TestCliPruneFlag:
 
     def test_help_documents_prune(self, capsys):
-        from vcfops_packaging.cli import main
+        from vcfcf_packaging.cli import main
         with pytest.raises(SystemExit) as exc:
             main(["refresh-describe", "--help"])
         assert exc.value.code == 0
         assert "--prune" in capsys.readouterr().out
 
     def test_prune_flag_reaches_refresh_all(self, monkeypatch):
-        from vcfops_packaging import cli as cli_mod
-        import vcfops_packaging.describe as describe_mod
+        from vcfcf_packaging import cli as cli_mod
+        import vcfcf_packaging.describe as describe_mod
 
         fake_cache = MagicMock()
         fake_cache._client = object()
@@ -400,7 +400,7 @@ class TestCorruptCacheFile:
         return cache_dir
 
     def test_corrupt_file_raises_with_recovery_path(self, tmp_path):
-        from vcfops_packaging.describe import DescribeCacheError
+        from vcfcf_packaging.describe import DescribeCacheError
         cache_dir = self._corrupt(tmp_path)
         live = [_entry("cpu|usage_average", "CPU|Usage (%)", True)]
         cache = DescribeCache(cache_dir=cache_dir, client=_make_client(live, []))

@@ -1,4 +1,4 @@
-"""Bundle sync orchestrator for vcfops_packaging.
+"""Bundle sync orchestrator for vcfcf_packaging.
 
 This module drives the sync/uninstall workflow:
 1. Load the bundle manifest.
@@ -102,7 +102,7 @@ def _authenticate():
     Raises SystemExit(1) on failure.
     """
     try:
-        from vcfops_supermetrics.client import VCFOpsClient, VCFOpsError
+        from vcfcf_supermetrics.client import VCFOpsClient, VCFOpsError
         client = VCFOpsClient.from_env()
         client.authenticate()
         return client

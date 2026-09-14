@@ -1,5 +1,5 @@
 """External view UUID passthrough — regression tests for the fix in
-vcfops_dashboards/loader.py and vcfops_dashboards/render.py.
+vcfcf_dashboards/loader.py and vcfcf_dashboards/render.py.
 
 Three cases per the spec in the task brief:
 
@@ -34,7 +34,7 @@ from pathlib import Path
 
 import pytest
 
-from vcfops_dashboards.loader import (
+from vcfcf_dashboards.loader import (
     Dashboard,
     DashboardValidationError,
     Interaction,
@@ -43,7 +43,7 @@ from vcfops_dashboards.loader import (
     Widget,
     WidgetResourceKindRef,
 )
-from vcfops_dashboards.render import render_dashboards_bundle_json
+from vcfcf_dashboards.render import render_dashboards_bundle_json
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +191,7 @@ def test_case_d_unknown_bare_name_also_raises_when_other_views_exist():
 # render time, not be written verbatim into viewDefinitionId.
 # ---------------------------------------------------------------------------
 
-from vcfops_dashboards.render import UnresolvedViewReferenceError  # noqa: E402
+from vcfcf_dashboards.render import UnresolvedViewReferenceError  # noqa: E402
 
 
 def test_render_unresolved_bare_name_raises_not_leaks():

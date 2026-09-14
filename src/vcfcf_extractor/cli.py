@@ -1,4 +1,4 @@
-"""argparse CLI for vcfops_extractor.
+"""argparse CLI for vcfcf_extractor.
 
 Subcommands:
   extract dashboard  -- walk a dashboard and its deps, emit YAML + manifest
@@ -29,13 +29,13 @@ import sys
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="python -m vcfops_extractor",
+        prog="python -m vcfcf_extractor",
         description=(
             "Reverse-engineering toolkit for VCF Operations content.\n"
             "\n"
             "Pulls a live dashboard (and its dependency graph) from a VCF Ops\n"
             "instance and emits factory-shape YAML under bundles/third_party/<slug>/\n"
-            "plus a bundle manifest that vcfops_packaging build can consume.\n"
+            "plus a bundle manifest that vcfcf_packaging build can consume.\n"
             "\n"
             "Connection is controlled by env vars or --host/--user/--password flags.\n"
             "No interactive prompts -- missing required flags abort with a clear error."
@@ -103,7 +103,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "In --dry-run mode the dependency walk is printed without writing files.\n"
             "\n"
             "Examples:\n"
-            "  python -m vcfops_extractor extract dashboard \\\n"
+            "  python -m vcfcf_extractor extract dashboard \\\n"
             "    --dashboard-name 'IDPS Planner' \\\n"
             "    --bundle-slug idps-planner \\\n"
             "    --author 'Scott Bowe' \\\n"
@@ -139,7 +139,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "  UNSUPPORTED — no supported widgets could be rendered\n"
             "\n"
             "Examples:\n"
-            "  python -m vcfops_extractor reverse-local \\\n"
+            "  python -m vcfcf_extractor reverse-local \\\n"
             "    --dashboard-json 'reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/dashboards/Cluster Performance 2.0.json' \\\n"
             "    --view-xml-dir 'reference/references/vmbro_vcf_operations_vcommunity/Management Pack/content/reports' \\\n"
             "    --sm-dir content/sdk-adapters/vcommunity/supermetrics \\\n"
@@ -208,8 +208,8 @@ def _build_parser() -> argparse.ArgumentParser:
             "The --folder flag filters to dashboards under a specific UI folder.\n"
             "\n"
             "Examples:\n"
-            "  python -m vcfops_extractor list-dashboards\n"
-            "  python -m vcfops_extractor list-dashboards --folder 'IDPS'\n"
+            "  python -m vcfcf_extractor list-dashboards\n"
+            "  python -m vcfcf_extractor list-dashboards --folder 'IDPS'\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -343,7 +343,7 @@ def _resolve_credentials(args) -> tuple[str, str, str, bool]:
     CLI flags (--host / --user / --password) take priority over profile values.
     Profile is resolved from --profile flag > VCFOPS_PROFILE env var > "devel".
     """
-    from vcfops_common._env import load_dotenv, resolve_profile_credentials
+    from vcfcf_common._env import load_dotenv, resolve_profile_credentials
     load_dotenv()
 
     profile = getattr(args, "profile", None)
@@ -385,7 +385,7 @@ def _resolve_credentials(args) -> tuple[str, str, str, bool]:
 
 
 def cmd_extract_dashboard(args) -> int:
-    """Handler for: python -m vcfops_extractor extract dashboard ..."""
+    """Handler for: python -m vcfcf_extractor extract dashboard ..."""
     from .extractor import extract_dashboard
 
     if not args.dashboard_id and not args.dashboard_name:
@@ -433,7 +433,7 @@ def cmd_extract_dashboard(args) -> int:
 
 
 def cmd_reverse_local(args) -> int:
-    """Handler for: python -m vcfops_extractor reverse-local ..."""
+    """Handler for: python -m vcfcf_extractor reverse-local ..."""
     from pathlib import Path
     from .reverse_local import reverse_local_port
 
@@ -450,7 +450,7 @@ def cmd_reverse_local(args) -> int:
 
 
 def cmd_list_dashboards(args) -> int:
-    """Handler for: python -m vcfops_extractor list-dashboards ..."""
+    """Handler for: python -m vcfcf_extractor list-dashboards ..."""
     from .extractor import list_dashboards
 
     host, user, password, verify_ssl = _resolve_credentials(args)

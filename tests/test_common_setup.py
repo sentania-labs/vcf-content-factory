@@ -29,8 +29,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from vcfops_common import _env  # noqa: E402
-from vcfops_common import setup_credentials as sc  # noqa: E402
+from vcfcf_common import _env  # noqa: E402
+from vcfcf_common import setup_credentials as sc  # noqa: E402
 
 # A marker that cannot occur by accident and exercises the awkward
 # characters .env has to survive: quote, hash, space, backslash.
@@ -365,7 +365,7 @@ def test_non_tty_stdin_refuses_without_prompting(tmp_path):
     assert d.prompts == []
     assert not (tmp_path / ".env").exists()
     assert "not a TTY" in d.stderr
-    assert "! python3 -m vcfops_common setup" in d.stderr
+    assert "! python3 -m vcfcf_common setup" in d.stderr
     assert SECRET not in d.streams
 
 
@@ -949,12 +949,12 @@ def test_doctor_hands_off_the_exact_wizard_command(tmp_path):
     to tell the user the literal string, with the `!` prefix, or it will
     invent a way to collect the password itself.
     """
-    from vcfops_common import doctor
+    from vcfcf_common import doctor
 
     items = doctor.build_checklist(
         tmp_path, doctor.EnvSanity(), False, [], {})
     creds = [i for i in items if i["id"] == "credentials"][0]
-    assert "! python3 -m vcfops_common setup" in creds["detail"]
+    assert "! python3 -m vcfcf_common setup" in creds["detail"]
 
     lines = []
     doctor.run_doctor(
@@ -976,13 +976,13 @@ def test_doctor_hands_off_the_exact_wizard_command(tmp_path):
         out=lines.append,
     )
     text = "\n".join(lines)
-    assert "! python3 -m vcfops_common setup" in text
+    assert "! python3 -m vcfcf_common setup" in text
 
 
 def test_find_repo_root_is_not_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     root = sc.find_repo_root()
-    assert (root / "src" / "vcfops_common" / "setup_credentials.py").is_file()
+    assert (root / "src" / "vcfcf_common" / "setup_credentials.py").is_file()
     assert root != tmp_path
 
 

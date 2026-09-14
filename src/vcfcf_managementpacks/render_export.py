@@ -75,7 +75,7 @@ OPEN QUESTIONS / BLOCKERS:
     envelope.
 
 USAGE:
-    python3 -m vcfops_managementpacks render-export <mp.yaml> --out <output.json>
+    python3 -m vcfcf_managementpacks render-export <mp.yaml> --out <output.json>
 
 REFERENCE ARTIFACTS (do not re-extract):
     tmp/diff_mpb/adapters/mpb_synology_dsm_mp_adapter3/conf/export.json
@@ -176,7 +176,7 @@ def _stable_config_id(adapter_kind: str, key: str) -> str:
     CLAUDE.md §6 UUID stability rule.
     """
     return str(uuid.uuid5(uuid.NAMESPACE_DNS,
-                          f"vcfops_managementpacks:config:{adapter_kind}:{key}"))
+                          f"vcfcf_managementpacks:config:{adapter_kind}:{key}"))
 
 
 # Canonical MPB exchange shapes for the seven standard mpb_* config items.
@@ -373,9 +373,9 @@ def _build_response_envelope(
         adapter_kind for stability.
     """
     response_id = str(uuid.uuid5(uuid.NAMESPACE_DNS,
-                                 f"vcfops_managementpacks:response:id:{req_id}"))
+                                 f"vcfcf_managementpacks:response:id:{req_id}"))
     toolkit_id = str(uuid.uuid5(uuid.NAMESPACE_DNS,
-                                f"vcfops_managementpacks:toolkit:{adapter_kind}"))
+                                f"vcfcf_managementpacks:toolkit:{adapter_kind}"))
     return {
         "id": response_id,
         "log": "Imported request, execute to get accurate log",

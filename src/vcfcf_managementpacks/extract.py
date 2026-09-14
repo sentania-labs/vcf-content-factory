@@ -10,7 +10,7 @@ because the exchange format contains UUIDs minted by MPB that differ from
 the factory's UUID5-derived IDs.
 
 USAGE:
-    python3 -m vcfops_managementpacks extract \\
+    python3 -m vcfcf_managementpacks extract \\
         --from knowledge/context/mpb/wire_reference/synology_nas_working_export.json \\
         --out /tmp/extracted.yaml
 

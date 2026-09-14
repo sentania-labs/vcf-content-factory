@@ -1,4 +1,4 @@
-"""CLI entry point: python -m vcfops_common <subcommand>.
+"""CLI entry point: python -m vcfcf_common <subcommand>.
 
 Subcommands:
   doctor: session-start preflight (bootstrap-v2 Phase 1/1b). Always
@@ -12,7 +12,7 @@ from __future__ import annotations
 import sys
 from typing import Optional, Sequence
 
-_USAGE = """usage: python -m vcfops_common <subcommand>
+_USAGE = """usage: python -m vcfcf_common <subcommand>
 
 subcommands:
   doctor    session-start preflight: upstream alignment, credential

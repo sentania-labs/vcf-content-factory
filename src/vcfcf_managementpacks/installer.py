@@ -63,7 +63,7 @@ except ImportError as _e:
 # ---------------------------------------------------------------------------
 POLL_INTERVAL = 5          # seconds between status polls
 POLL_TIMEOUT = 300         # seconds before giving up — NOTE: subprocess wrappers that
-                           # invoke `vcfops_managementpacks install` must set their own
+                           # invoke `vcfcf_managementpacks install` must set their own
                            # subprocess timeout HIGHER than this value (suggest 400s).
                            # A 300s subprocess timeout will race the poller and kill the
                            # installer while it is still waiting for the server.
@@ -124,7 +124,7 @@ def _resolve_credentials(
         effective_skip = skip_ssl_verify_flag or (not verify_ssl)
     which means the CLI flag can only force-skip, never force-verify.
     """
-    from vcfops_common._env import load_dotenv, resolve_profile_credentials
+    from vcfcf_common._env import load_dotenv, resolve_profile_credentials
     load_dotenv()
 
     # Resolve profile credentials as the fallback layer.

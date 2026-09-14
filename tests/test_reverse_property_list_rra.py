@@ -195,7 +195,7 @@ def _make_dash(widgets: list) -> dict:
 
 class TestParsePropertyListConfig:
     def test_parses_metrics_with_is_string_metric(self) -> None:
-        from vcfops_dashboards.reverse import _parse_property_list_config, _build_kind_lookup
+        from vcfcf_dashboards.reverse import _parse_property_list_config, _build_kind_lookup
 
         kind_lookup = _build_kind_lookup({"entries": _ENTRIES_RK})
         cfg = _PROPERTY_LIST_WIDGET["config"]
@@ -215,7 +215,7 @@ class TestParsePropertyListConfig:
         assert spec1.label == "Hyperthreading Enabled"
 
     def test_visual_theme_depth_show_full_name(self) -> None:
-        from vcfops_dashboards.reverse import _parse_property_list_config
+        from vcfcf_dashboards.reverse import _parse_property_list_config
 
         cfg = {
             "visualTheme": 3,
@@ -229,7 +229,7 @@ class TestParsePropertyListConfig:
         assert result.show_metric_full_name is False
 
     def test_no_metrics_emits_warn(self) -> None:
-        from vcfops_dashboards.reverse import _parse_property_list_config
+        from vcfcf_dashboards.reverse import _parse_property_list_config
 
         with warnings.catch_warnings(record=True) as wlist:
             warnings.simplefilter("always")
@@ -246,7 +246,7 @@ class TestParsePropertyListConfig:
 
 class TestParseResourceRelationshipAdvancedConfig:
     def test_resolves_two_resource_kinds(self) -> None:
-        from vcfops_dashboards.reverse import (
+        from vcfcf_dashboards.reverse import (
             _parse_resource_relationship_advanced_config,
             _build_kind_lookup,
         )
@@ -265,7 +265,7 @@ class TestParseResourceRelationshipAdvancedConfig:
         assert all(rk.adapter_kind == "VMWARE" for rk in result.resource_kinds)
 
     def test_depth_is_string(self) -> None:
-        from vcfops_dashboards.reverse import _parse_resource_relationship_advanced_config
+        from vcfcf_dashboards.reverse import _parse_resource_relationship_advanced_config
 
         cfg = {
             "depth": "0,2",
@@ -278,7 +278,7 @@ class TestParseResourceRelationshipAdvancedConfig:
         assert isinstance(result.depth, str)
 
     def test_pagination_number_and_self_provider(self) -> None:
-        from vcfops_dashboards.reverse import _parse_resource_relationship_advanced_config
+        from vcfcf_dashboards.reverse import _parse_resource_relationship_advanced_config
 
         cfg = {
             "depth": "2,1",
@@ -291,7 +291,7 @@ class TestParseResourceRelationshipAdvancedConfig:
         assert result.self_provider is True
 
     def test_empty_kind_filter(self) -> None:
-        from vcfops_dashboards.reverse import _parse_resource_relationship_advanced_config
+        from vcfcf_dashboards.reverse import _parse_resource_relationship_advanced_config
 
         cfg = {
             "depth": "2,1",
@@ -309,8 +309,8 @@ class TestPropertyListRoundTrip:
     """Source widget JSON → parse_dashboard_json → forward-render → structural match."""
 
     def test_property_list_round_trip(self) -> None:
-        from vcfops_dashboards.reverse import parse_dashboard_json
-        from vcfops_dashboards.render import render_dashboards_bundle_json
+        from vcfcf_dashboards.reverse import parse_dashboard_json
+        from vcfcf_dashboards.render import render_dashboards_bundle_json
 
         dash_envelope = _make_dash([_PROPERTY_LIST_WIDGET])
         dash_json = dash_envelope["dashboards"][0]
@@ -377,8 +377,8 @@ class TestResourceRelationshipAdvancedRoundTrip:
     """Source widget JSON → parse_dashboard_json → forward-render → structural match."""
 
     def test_rra_round_trip(self) -> None:
-        from vcfops_dashboards.reverse import parse_dashboard_json
-        from vcfops_dashboards.render import render_dashboards_bundle_json
+        from vcfcf_dashboards.reverse import parse_dashboard_json
+        from vcfcf_dashboards.render import render_dashboards_bundle_json
 
         dash_envelope = _make_dash([_RRA_WIDGET])
         dash_json = dash_envelope["dashboards"][0]
@@ -449,7 +449,7 @@ class TestBothTypesNotWarned:
     WARN for PropertyList or ResourceRelationshipAdvanced."""
 
     def test_no_unsupported_warn_for_property_list(self) -> None:
-        from vcfops_dashboards.reverse import parse_dashboard_json
+        from vcfcf_dashboards.reverse import parse_dashboard_json
 
         dash_json = _make_dash([_PROPERTY_LIST_WIDGET])["dashboards"][0]
         dash_json["entries"] = _ENTRIES_RK
@@ -466,7 +466,7 @@ class TestBothTypesNotWarned:
         assert skip_warns == [], f"PropertyList should not produce skip WARN: {skip_warns}"
 
     def test_no_unsupported_warn_for_rra(self) -> None:
-        from vcfops_dashboards.reverse import parse_dashboard_json
+        from vcfcf_dashboards.reverse import parse_dashboard_json
 
         dash_json = _make_dash([_RRA_WIDGET])["dashboards"][0]
         dash_json["entries"] = _ENTRIES_RK

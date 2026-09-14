@@ -7,7 +7,7 @@ All requests require:
   - Bearer token from POST /api/auth/token/acquire (handled by VCFOpsClient)
   - X-Ops-API-use-unsupported: true  (CLAUDE.md Hard Rule 7 — missing header → 404)
 
-Auth is delegated to vcfops_common.client.VCFOpsClient which manages token
+Auth is delegated to vcfcf_common.client.VCFOpsClient which manages token
 acquisition and 401 re-auth transparently.
 
 Documented in knowledge/context/mpb/mpb_api_surface.md.
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
-from vcfops_common.client import VCFOpsClient, VCFOpsError
+from vcfcf_common.client import VCFOpsClient, VCFOpsError
 
 
 # The unsupported-API header is REQUIRED for every /internal/mpbuilder/* endpoint.
@@ -37,8 +37,8 @@ class MPBClient:
         print(result["id"])
     """
 
-    def __init__(self, vcfops_client: VCFOpsClient) -> None:
-        self._c = vcfops_client
+    def __init__(self, vcfcf_client: VCFOpsClient) -> None:
+        self._c = vcfcf_client
 
     @classmethod
     def from_env(

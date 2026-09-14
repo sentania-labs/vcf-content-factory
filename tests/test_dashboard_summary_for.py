@@ -46,7 +46,7 @@ def _summary_dash(name="[VCF Content Factory] Host Summary", summary_for="VMWARE
 
 class TestSummaryForLoader:
     def test_loads_and_parses(self, tmp_path):
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
 
         d = load_dashboard(_write(tmp_path / "d.yaml", _summary_dash()))
         d.validate({})
@@ -57,13 +57,13 @@ class TestSummaryForLoader:
     def test_stored_normalized(self, tmp_path, raw):
         """Inner whitespace is stripped before storage: the pak installer
         splits dashboards.properties on ':' without trimming."""
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
 
         d = load_dashboard(_write(tmp_path / "d.yaml", _summary_dash(summary_for=raw)))
         assert d.summary_for == ["VMWARE:HostSystem"]
 
     def test_duplicate_target_rejected_by_load_all(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError, load_all
+        from vcfcf_dashboards.loader import DashboardValidationError, load_all
 
         _write(tmp_path / "dashboards" / "a.yaml", _summary_dash(name="[VCF Content Factory] A"))
         _write(tmp_path / "dashboards" / "b.yaml", _summary_dash(
@@ -74,7 +74,7 @@ class TestSummaryForLoader:
             load_all(tmp_path / "views", tmp_path / "dashboards")
 
     def test_distinct_targets_load(self, tmp_path):
-        from vcfops_dashboards.loader import load_all
+        from vcfcf_dashboards.loader import load_all
 
         _write(tmp_path / "dashboards" / "a.yaml", _summary_dash(name="[VCF Content Factory] A"))
         _write(tmp_path / "dashboards" / "b.yaml", _summary_dash(
@@ -85,7 +85,7 @@ class TestSummaryForLoader:
         assert sorted(d.summary_for[0] for d in dashboards) == ["VMWARE:HostSystem", "VMWARE:VirtualMachine"]
 
     def test_absent_is_none(self, tmp_path):
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
 
         data = _summary_dash()
         del data["summary_for"]
@@ -96,13 +96,13 @@ class TestSummaryForLoader:
     @pytest.mark.parametrize("bad", ["VMWARE", "VMWARE:Host:System", ":HostSystem", "VMWARE:", " : ",
                                      "VMWARE:HostSystem,VMWARE", ["VMWARE:HostSystem", "VMWARE:Host:System"]])
     def test_token_count_enforced(self, tmp_path, bad):
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         with pytest.raises(DashboardValidationError, match="two non-empty colon-separated tokens"):
             load_dashboard(_write(tmp_path / "d.yaml", _summary_dash(summary_for=bad)))
 
     def test_non_string_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         with pytest.raises(DashboardValidationError, match="summary_for must be a string"):
             load_dashboard(_write(tmp_path / "d.yaml", _summary_dash(summary_for=42)))
@@ -117,7 +117,7 @@ class TestSummaryForLoader:
     THREE = ["VMWARE:HostSystem", "VMWARE:VirtualMachine", "VMWARE:Datastore"]
 
     def test_list_form(self, tmp_path):
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
 
         d = load_dashboard(_write(tmp_path / "d.yaml", _summary_dash(summary_for=list(self.THREE))))
         d.validate({})
@@ -128,7 +128,7 @@ class TestSummaryForLoader:
     def test_comma_string_normalizes_to_list(self, tmp_path):
         """The same shape the pak installer parses; whitespace around
         commas and colons is stripped, order preserved."""
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
 
         d = load_dashboard(_write(tmp_path / "d.yaml", _summary_dash(
             summary_for="VMWARE:HostSystem, VMWARE : VirtualMachine ,VMWARE:Datastore")))
@@ -139,7 +139,7 @@ class TestSummaryForLoader:
         ["VMWARE:HostSystem", "VMWARE:VirtualMachine", "VMWARE : HostSystem"],
     ])
     def test_duplicate_within_dashboard_rejected(self, tmp_path, dup):
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         with pytest.raises(DashboardValidationError, match="more than once"):
             load_dashboard(_write(tmp_path / "d.yaml", _summary_dash(summary_for=dup)))
@@ -147,7 +147,7 @@ class TestSummaryForLoader:
     def test_duplicate_across_dashboards_is_per_kind(self, tmp_path):
         """A kind buried in one dashboard's list collides with another
         dashboard's single string; the check is per kind."""
-        from vcfops_dashboards.loader import DashboardValidationError, load_all
+        from vcfcf_dashboards.loader import DashboardValidationError, load_all
 
         _write(tmp_path / "dashboards" / "a.yaml", _summary_dash(
             name="[VCF Content Factory] A", summary_for=list(self.THREE)))
@@ -160,7 +160,7 @@ class TestSummaryForLoader:
 
     @pytest.mark.parametrize("empty", ["", ",", [], [""]])
     def test_empty_rejected(self, tmp_path, empty):
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         with pytest.raises(DashboardValidationError, match="summary_for must"):
             load_dashboard(_write(tmp_path / "d.yaml", _summary_dash(summary_for=empty)))
@@ -179,14 +179,14 @@ class TestSummaryForLoader:
          "resource_relationship_advanced": {"self_provider": True}},
     ])
     def test_pinned_widgets_rejected(self, tmp_path, widget):
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         d = load_dashboard(_write(tmp_path / "d.yaml", _summary_dash(widgets=[widget])))
         with pytest.raises(DashboardValidationError, match="summary_for dashboards inherit the page object"):
             d.validate({})
 
     def test_same_pins_allowed_without_summary_for(self, tmp_path):
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
 
         data = _summary_dash(widgets=[
             {"id": "v", "type": "AlertVolume", "title": "AV", "coords": {"x": 1, "y": 1, "w": 4, "h": 4},
@@ -196,7 +196,7 @@ class TestSummaryForLoader:
         load_dashboard(_write(tmp_path / "d.yaml", data)).validate({})
 
     def test_section_is_exempt(self, tmp_path):
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
 
         data = _summary_dash(widgets=[
             {"id": "s", "type": "Section", "title": "S", "coords": {"x": 1, "y": 1}},
@@ -218,7 +218,7 @@ class TestSummaryForLoader:
     ("synology_diskstation", "Volume", "002020synology_diskstationVolume"),
 ])
 def test_resource_kind_id(ak, rk, expected):
-    from vcfops_dashboards.summary_bind import resource_kind_id
+    from vcfcf_dashboards.summary_bind import resource_kind_id
 
     assert resource_kind_id(ak, rk) == expected
 
@@ -236,8 +236,8 @@ _TWO = ["VMWARE:HostSystem", "VMWARE:VirtualMachine"]
 
 
 def _render(tmp_path, data):
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     d = load_dashboard(_write(tmp_path / "d.yaml", data))
     d.validate({})
@@ -363,8 +363,8 @@ def test_corpus_render_unchanged_by_fan_out():
     """Regression: every dashboard under content/ and third_party/idps-planner/
     renders byte-identical with and without its summary_for (none of them
     lists more than one kind, so the fan-out must be a no-op)."""
-    from vcfops_dashboards.loader import load_all
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_all
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     root = Path(__file__).resolve().parents[1]
     for sub, enforce in (("content", True), ("third_party/idps-planner", False)):
@@ -402,7 +402,7 @@ def test_captured_shape_has_no_legacy_keys():
 
 
 def test_find_kind_entry_against_captured_shape():
-    from vcfops_dashboards.summary_bind import KindTarget, _find_kind_entry
+    from vcfcf_dashboards.summary_bind import KindTarget, _find_kind_entry
 
     plan = KindTarget(adapter_kind="VMWARE", resource_kind="HostSystem")
     entry = _find_kind_entry(_CAPTURED, plan)
@@ -492,7 +492,7 @@ class FakeUI:
 
 
 def _load(tmp_path, **kw):
-    from vcfops_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.loader import load_dashboard
 
     d = load_dashboard(_write(tmp_path / "d.yaml", _summary_dash(**kw)))
     d.validate({})
@@ -505,7 +505,7 @@ class TestBindFlow:
     KEY = "resourceKind_002006VMWAREHostSystem"
 
     def test_first_bind(self, tmp_path):
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={self.NAME: self.UUID})
         lines: list[str] = []
@@ -521,7 +521,7 @@ class TestBindFlow:
     def test_rebind_is_a_plain_reassign(self, tmp_path):
         """Update story: assign again; the server replaces the kind's prior
         copy in the same call. The client sends nothing else."""
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={self.NAME: self.UUID}, current_template=f"{self.NAME} 2")
         lines: list[str] = []
@@ -533,8 +533,8 @@ class TestBindFlow:
         assert any(f"current assignment: {self.NAME} 2" in l for l in lines)
 
     def test_failed_associate_propagates(self, tmp_path):
-        from vcfops_dashboards.summary_bind import bind_summary
-        from vcfops_dashboards.ui_client import UIClientError
+        from vcfcf_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.ui_client import UIClientError
 
         ui = FakeUI(installed={self.NAME: self.UUID}, current_template=self.NAME,
                     associate_error=UIClientError("associateResourceKindDashboards failed"))
@@ -547,7 +547,7 @@ class TestBindFlow:
         """--unbind goes through resetAssociations with the per-entry
         defaultTemplateName (HostSystem -> "Host System Summary", not the
         top-level "Summary Detail"), plain name, no _::_null."""
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={self.NAME: self.UUID}, current_template=self.NAME)
         lines: list[str] = []
@@ -560,7 +560,7 @@ class TestBindFlow:
         assert any("LIVE tabId: None" in l for l in lines)
 
     def test_unbind_falls_back_to_top_level_default(self, tmp_path):
-        from vcfops_dashboards.summary_bind import _default_template_name
+        from vcfcf_dashboards.summary_bind import _default_template_name
 
         kinds = {"defaultTemplateName": "Summary Detail"}
         assert _default_template_name(kinds, {"defaultTemplateName": "Host System Summary"}) == "Host System Summary"
@@ -568,7 +568,7 @@ class TestBindFlow:
         assert _default_template_name({}, {}) == ""
 
     def test_unbind_that_leaves_a_tab_is_a_failure(self, tmp_path):
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={self.NAME: self.UUID}, current_template=self.NAME,
                     tab_answer={"tabId": "still-there", "isDashboard": True})
@@ -582,7 +582,7 @@ class TestBindFlow:
         non-uuid tabId with isDashboard: false and pluginExist. That is the
         expected post-unbind state; success keys on isDashboard, symmetric
         with the bind branch."""
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={self.NAME: self.UUID}, current_template=self.NAME,
                     tab_answer={"tabId": "hostSummaryTab", "isDashboard": False,
@@ -594,7 +594,7 @@ class TestBindFlow:
 
     def test_missing_tab_id_key_is_null(self, tmp_path):
         """The server encodes a null tabId by omitting the key entirely."""
-        from vcfops_dashboards.summary_bind import _live_tab_id, bind_summary
+        from vcfcf_dashboards.summary_bind import _live_tab_id, bind_summary
 
         assert _live_tab_id({"isDashboard": False}) is None
         assert _live_tab_id({"tabId": None, "isDashboard": False}) is None
@@ -611,7 +611,7 @@ class TestBindFlow:
     def test_bind_readback_needs_is_dashboard_true(self, tmp_path):
         """A non-uuid legacy plugin id comes back with isDashboard false;
         that is not a successful bind."""
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={self.NAME: self.UUID},
                     tab_answer={"tabId": "legacyPlugin", "isDashboard": False, "pluginExist": True})
@@ -621,7 +621,7 @@ class TestBindFlow:
         assert any("did not take" in l for l in lines)
 
     def test_not_installed_fails_without_writing(self, tmp_path):
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={"[VCF Content Factory] Other": "x"})
         rc = bind_summary(ui, [_load(tmp_path)], out=lambda s: None)
@@ -629,14 +629,14 @@ class TestBindFlow:
         assert not any(c[0] == "associate" for c in ui.calls)
 
     def test_folder_prefixed_name_resolves(self, tmp_path):
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={f"VCF Content Factory/{self.NAME}": self.UUID})
         rc = bind_summary(ui, [_load(tmp_path)], out=lambda s: None)
         assert rc == 0
 
     def test_dry_run_needs_no_client(self, tmp_path):
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         lines: list[str] = []
         rc = bind_summary(None, [_load(tmp_path)], dry_run=True, out=lines.append)
@@ -648,7 +648,7 @@ class TestBindFlow:
         assert any("resetAssociations" in l and self.KEY in l for l in lines)
 
     def test_only_filter_and_nothing_to_do(self, tmp_path):
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         lines: list[str] = []
         rc = bind_summary(None, [_load(tmp_path)], only="nope", dry_run=True, out=lines.append)
@@ -666,7 +666,7 @@ class TestBindFlowManyKinds:
             "resourceKind_002006VMWAREDatastore"]
 
     def test_plan_carries_every_kind(self, tmp_path):
-        from vcfops_dashboards.summary_bind import plan_bindings
+        from vcfcf_dashboards.summary_bind import plan_bindings
 
         plans = plan_bindings([_load(tmp_path, summary_for=list(self.THREE))])
         assert len(plans) == 1
@@ -675,7 +675,7 @@ class TestBindFlowManyKinds:
         assert plans[0].association_key == self.KEYS[0]
 
     def test_bind_three_kinds_in_one_call(self, tmp_path):
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={self.NAME: self.UUID})
         lines: list[str] = []
@@ -694,7 +694,7 @@ class TestBindFlowManyKinds:
         assert joined.count("wrote assignedAssociations") == 3
 
     def test_unbind_three_kinds_in_one_call(self, tmp_path):
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={self.NAME: self.UUID}, current_template=self.NAME)
         for k in self.KEYS:
@@ -718,7 +718,7 @@ class TestBindFlowManyKinds:
         are bound in one call, the miss is an ERROR naming dashboard and
         kind, and the run exits 2 (mirrors the pak installer's per-kind
         association; a partial map is not a corrupt state)."""
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={self.NAME: self.UUID})
         lines: list[str] = []
@@ -738,7 +738,7 @@ class TestBindFlowManyKinds:
         assert "VMWARE:NoSuchKind  LIVE tabId" not in joined
 
     def test_all_kinds_unknown_writes_nothing(self, tmp_path):
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={self.NAME: self.UUID})
         lines: list[str] = []
@@ -750,7 +750,7 @@ class TestBindFlowManyKinds:
         assert any("no listed kind resolves" in l and self.NAME in l for l in lines)
 
     def test_unbind_unknown_kind_resets_the_rest_and_exits_2(self, tmp_path):
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         ui = FakeUI(installed={self.NAME: self.UUID}, current_template=self.NAME)
         for k in self.KEYS:
@@ -772,7 +772,7 @@ class TestBindFlowManyKinds:
         assert "\n".join(lines).count("wrote resetAssociations") == 2
 
     def test_dry_run_prints_full_map(self, tmp_path):
-        from vcfops_dashboards.summary_bind import bind_summary
+        from vcfcf_dashboards.summary_bind import bind_summary
 
         lines: list[str] = []
         rc = bind_summary(None, [_load(tmp_path, summary_for=list(self.THREE))], dry_run=True,
@@ -793,7 +793,7 @@ class TestUIClientWire:
 
     @staticmethod
     def _client():
-        from vcfops_dashboards.ui_client import VCFOpsUIClient
+        from vcfcf_dashboards.ui_client import VCFOpsUIClient
 
         class _Resp:
             status_code = 200
@@ -838,7 +838,7 @@ class TestUIClientWire:
         assert (data["assignedAssociations"], data["resetAssociations"]) == ("{}", "{}")
 
     def test_template_actions_are_gone(self):
-        from vcfops_dashboards.ui_client import VCFOpsUIClient
+        from vcfcf_dashboards.ui_client import VCFOpsUIClient
 
         assert not hasattr(VCFOpsUIClient, "get_template_list")
         assert not hasattr(VCFOpsUIClient, "delete_template")
@@ -849,7 +849,7 @@ class TestUIClientWire:
 # ---------------------------------------------------------------------------
 
 def test_cli_bind_summary_dry_run(tmp_path, capsys, monkeypatch):
-    from vcfops_dashboards.cli import main
+    from vcfcf_dashboards.cli import main
 
     _write(tmp_path / "dashboards" / "d.yaml", _summary_dash())
     (tmp_path / "views").mkdir()
@@ -865,7 +865,7 @@ def test_cli_bind_summary_dry_run(tmp_path, capsys, monkeypatch):
 
 
 def test_cli_bind_summary_parser_flags():
-    from vcfops_dashboards.cli import build_parser
+    from vcfcf_dashboards.cli import build_parser
 
     args = build_parser().parse_args(["bind-summary", "--dashboard", "X", "--unbind", "--dry-run"])
     assert args.dashboard == "X" and args.unbind and args.dry_run
@@ -877,7 +877,7 @@ def test_cli_bind_summary_parser_flags():
 
 class TestPakDashboardsProperties:
     def _project(self, tmp_path):
-        from vcfops_managementpacks.sdk_project import SdkProjectDef, _derive_entry_class
+        from vcfcf_managementpacks.sdk_project import SdkProjectDef, _derive_entry_class
 
         return SdkProjectDef(
             name="Test Adapter", version="1.0.0", build_number=1,
@@ -889,7 +889,7 @@ class TestPakDashboardsProperties:
     def _build(self, tmp_path, dashboards):
         import io
         import zipfile
-        from vcfops_managementpacks.sdk_builder import _write_outer_pak
+        from vcfcf_managementpacks.sdk_builder import _write_outer_pak
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w"):
@@ -904,7 +904,7 @@ class TestPakDashboardsProperties:
         return zipfile.ZipFile(pak, "r")
 
     def test_bound_dashboard_emits_properties(self, tmp_path):
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
 
         bound = load_dashboard(_write(tmp_path / "bound.yaml", _summary_dash(
             name="Host Summary", summary_for="VMWARE:HostSystem")), enforce_framework_prefix=False)
@@ -925,7 +925,7 @@ class TestPakDashboardsProperties:
     def test_many_kinds_emit_comma_joined_value(self, tmp_path):
         """dashboards.properties value is the installer's own shape:
         comma-separated AdapterKind:ResourceKind, two colon tokens each."""
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
 
         bound = load_dashboard(_write(tmp_path / "bound.yaml", _summary_dash(
             name="Host Summary",
@@ -940,7 +940,7 @@ class TestPakDashboardsProperties:
 
     def test_duplicate_target_rejected_by_pak_builder(self, tmp_path):
         """The pak route loads per file (not load_all); the same guard applies."""
-        from vcfops_managementpacks.sdk_builder import SdkBuildError, _load_bundled_content
+        from vcfcf_managementpacks.sdk_builder import SdkBuildError, _load_bundled_content
 
         _write(tmp_path / "a.yaml", _summary_dash(name="A"))
         _write(tmp_path / "b.yaml", _summary_dash(name="B", dash_id="1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"))
@@ -949,7 +949,7 @@ class TestPakDashboardsProperties:
             _load_bundled_content(raw, tmp_path, tmp_path)
 
     def test_no_binding_no_file(self, tmp_path):
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
 
         plain = load_dashboard(_write(tmp_path / "plain.yaml", {
             **_summary_dash(name="Plain One"), "summary_for": None,

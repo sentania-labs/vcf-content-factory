@@ -5,7 +5,7 @@ The MPB adapter runtime reads ``conf/template.json`` at startup via
 schema from the design.json that ``render_mp_design_json()`` produces.
 
 Wire format reverse-engineered from:
-  - vcfops_managementpacks/adapter_runtime/mpb_synology_nas_template.json
+  - vcfcf_managementpacks/adapter_runtime/mpb_synology_nas_template.json
     (ground-truth template built by MPB UI on VCF Ops 9.0.x)
   - knowledge/context/mpb/mpb_template_json_schema.md
     (full field-by-field diff and conversion spec)

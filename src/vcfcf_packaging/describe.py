@@ -46,7 +46,7 @@ legacy entries fall back to ``default_monitored=True`` when resolved (see
 ``resolve_metric()``) until the cache is refreshed against a live instance,
 which emits a one-time WARN per (adapter_kind, resource_kind) pair the first
 time that legacy fallback is taken. Run
-``python3 -m vcfops_packaging refresh-describe`` with a live instance to
+``python3 -m vcfcf_packaging refresh-describe`` with a live instance to
 populate/upgrade the properties section.
 
 Merge semantics (issue #143)
@@ -248,7 +248,7 @@ class DescribeCache:
                     f"default_monitored), properties are guessed as "
                     f"defaultMonitored=true, which is wrong for a real fraction "
                     f"of them on some resource kinds. Run "
-                    f"'python3 -m vcfops_packaging refresh-describe "
+                    f"'python3 -m vcfcf_packaging refresh-describe "
                     f"--kind {adapter_kind}:{resource_kind}' against a live "
                     f"instance to get the real per-property flag.",
                     file=sys.stderr,
@@ -329,7 +329,7 @@ class DescribeCache:
                     raise DescribeCacheError(
                         f"describe cache file {cache_path} is corrupt: {exc}. "
                         f"Nothing can be merged into it. Recovery: delete the "
-                        f"file and re-run 'python3 -m vcfops_packaging "
+                        f"file and re-run 'python3 -m vcfcf_packaging "
                         f"refresh-describe --kind {adapter_kind}:{resource_kind}', "
                         f"or re-run with --prune to overwrite it (any keys "
                         f"another instance contributed are lost either way)."
@@ -735,10 +735,10 @@ def make_cache(live: bool = True, cache_dir: Optional[Path] = None) -> DescribeC
     client = None
     if live:
         try:
-            from vcfops_common._env import load_dotenv, resolve_profile_credentials
+            from vcfcf_common._env import load_dotenv, resolve_profile_credentials
             load_dotenv()
             creds = resolve_profile_credentials(default="prod")
-            from vcfops_common.client import VCFOpsClient
+            from vcfcf_common.client import VCFOpsClient
             client = VCFOpsClient(
                 host=creds.host,
                 username=creds.user,

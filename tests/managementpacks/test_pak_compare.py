@@ -33,7 +33,7 @@ from unittest.mock import patch
 
 import pytest
 
-from vcfops_managementpacks.pak_compare import (
+from vcfcf_managementpacks.pak_compare import (
     _detect_adapter_dir,
     _read_adapters_zip_inventory,
     compare_paks,

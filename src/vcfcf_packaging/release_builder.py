@@ -36,10 +36,10 @@ one zip per release slug.
 Routing
 -------
 - Bundle headline (``bundles/*.yaml``):
-    delegates to ``vcfops_packaging.builder.build_bundle``
+    delegates to ``vcfcf_packaging.builder.build_bundle``
 - Component headline (``dashboards/``, ``views/``, ``supermetrics/``,
   ``customgroups/``, ``reports/``):
-    delegates to ``vcfops_packaging.discrete_builder.build_discrete``
+    delegates to ``vcfcf_packaging.discrete_builder.build_discrete``
 
 Both builders write to a temporary working directory; the result is moved
 to ``output_dir/<expected-filename>`` so the final filename always follows
@@ -440,8 +440,8 @@ def _build_mp_headline(
     """Build a management pack headline zip containing .pak and exchange JSON.
 
     Loads the ManagementPackDef from source_path, builds the .pak file via
-    vcfops_managementpacks.builder.build_pak, renders the MPB UI exchange JSON
-    via vcfops_managementpacks.render_export.render_mpb_exchange_json, and
+    vcfcf_managementpacks.builder.build_pak, renders the MPB UI exchange JSON
+    via vcfcf_managementpacks.render_export.render_mpb_exchange_json, and
     packages both into a single zip.
 
     Returns the path to the zip written to tmp_dir.
@@ -449,9 +449,9 @@ def _build_mp_headline(
     import json
     import zipfile
 
-    from vcfops_managementpacks.loader import load_file
-    from vcfops_managementpacks.builder import build_pak
-    from vcfops_managementpacks.render_export import render_mpb_exchange_json
+    from vcfcf_managementpacks.loader import load_file
+    from vcfcf_managementpacks.builder import build_pak
+    from vcfcf_managementpacks.render_export import render_mpb_exchange_json
 
     mp = load_file(str(source_path))
 

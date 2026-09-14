@@ -25,7 +25,7 @@ Phase 1 scope:
     supported types where we can map backwards).
   - View XML parsing: full column extraction including SM UUID resolution.
 
-Both parsers are called by vcfops_extractor.extractor; the dataclasses
+Both parsers are called by vcfcf_extractor.extractor; the dataclasses
 returned are compatible with loader.py (same fields).
 """
 from __future__ import annotations
@@ -68,7 +68,7 @@ from .loader import (
 # ---------------------------------------------------------------------------
 
 def _warn(msg: str) -> None:
-    warnings.warn(f"vcfops_dashboards.reverse: {msg}", UserWarning, stacklevel=3)
+    warnings.warn(f"vcfcf_dashboards.reverse: {msg}", UserWarning, stacklevel=3)
 
 
 # ---------------------------------------------------------------------------
@@ -229,7 +229,7 @@ def parse_view_xml_element(elem) -> Optional[ViewDef]:
 
     Returns None and emits WARN for unrecognised shapes.
     This is the dataclass-level API; callers that only need a dict should
-    use vcfops_extractor.extractor._parse_view_def_element() instead.
+    use vcfcf_extractor.extractor._parse_view_def_element() instead.
     """
     import xml.etree.ElementTree as ET
 

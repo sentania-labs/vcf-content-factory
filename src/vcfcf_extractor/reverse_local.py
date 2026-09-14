@@ -1,4 +1,4 @@
-"""Local-file reverse-port for vcfops_extractor.
+"""Local-file reverse-port for vcfcf_extractor.
 
 Converts original MP source files (local dashboard JSON + view XML) into
 factory-shape YAML without touching a live VCF Ops instance.
@@ -334,7 +334,7 @@ def _parse_column_value_dict(value_elem) -> Optional[dict]:
     display_name = props.get("displayName", attribute_key)
 
     # Time-segment ("Interval Breakdown") pseudo-column: not a metric column.
-    # See TimeSegmentSpec in vcfops_dashboards/loader.py for the wire shape.
+    # See TimeSegmentSpec in vcfcf_dashboards/loader.py for the wire shape.
     if props.get("isTimeSegment", "").strip().lower() == "true":
         try:
             _soc = int(props.get("startingOnCount", "1") or 1)
@@ -491,8 +491,8 @@ def build_view_uuid_map(xml_dir: Path) -> dict[str, dict]:
 # View YAML writing
 # ---------------------------------------------------------------------------
 
-from vcfops_dashboards.reverse import _parse_controls_meta, _trend_transformations_to_emit  # noqa: E402
-from vcfops_extractor.extractor import _emit_view_extras  # noqa: E402
+from vcfcf_dashboards.reverse import _parse_controls_meta, _trend_transformations_to_emit  # noqa: E402
+from vcfcf_extractor.extractor import _emit_view_extras  # noqa: E402
 
 
 def _write_view_yaml(path: Path, view_data: dict, uuid_to_name: dict[str, str]) -> None:
@@ -574,8 +574,8 @@ def _write_dashboard_yaml(
     """
     import warnings as _warnings
 
-    from vcfops_dashboards.reverse import parse_dashboard_json, _SUPPORTED_WIDGET_TYPES
-    from vcfops_dashboards.loader import ViewDef
+    from vcfcf_dashboards.reverse import parse_dashboard_json, _SUPPORTED_WIDGET_TYPES
+    from vcfcf_dashboards.loader import ViewDef
 
     # Build views_by_id for View widget resolution
     views_by_id: dict[str, ViewDef] = {}
@@ -636,7 +636,7 @@ def _write_dashboard_yaml(
     doc["shared"] = bool(dash_json.get("shared", True))
 
     # Import widget serializer from extractor (reuse existing code)
-    from vcfops_extractor.extractor import _widget_to_yaml_dict
+    from vcfcf_extractor.extractor import _widget_to_yaml_dict
 
     if dashboard and dashboard.widgets:
         widgets_yaml = []
@@ -739,8 +739,8 @@ def _compare_dashboard_round_trip(
         "error": str | None,
       }
     """
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json, UnresolvedViewReferenceError
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json, UnresolvedViewReferenceError
 
     raw_name = (source_json.get("name") or "").strip()
     display_name = raw_name.split("/", 1)[-1].strip() if "/" in raw_name else raw_name
@@ -768,7 +768,7 @@ def _compare_dashboard_round_trip(
     view_yaml_paths = list(view_yaml_dir.rglob("*.y*ml")) if view_yaml_dir.exists() else []
 
     # Build views_by_name for render
-    from vcfops_dashboards.loader import load_view
+    from vcfcf_dashboards.loader import load_view
     views_by_name: dict = {}
     for vp in view_yaml_paths:
         try:
@@ -830,7 +830,7 @@ def _compare_dashboard_round_trip(
 
     if len(rendered_widgets) != len(source_widgets):
         # Count which source types are present vs rendered
-        from vcfops_dashboards.reverse import _SUPPORTED_WIDGET_TYPES as _SUPP
+        from vcfcf_dashboards.reverse import _SUPPORTED_WIDGET_TYPES as _SUPP
         source_unsupported = [
             w.get("type") for w in source_widgets
             if w.get("type") and w.get("type") not in _SUPP
@@ -851,7 +851,7 @@ def _compare_dashboard_round_trip(
     rendered_key_set = set(rendered_keys)
     for sk in source_keys:
         wtype = sk[0]
-        from vcfops_dashboards.reverse import _SUPPORTED_WIDGET_TYPES as _SUPP
+        from vcfcf_dashboards.reverse import _SUPPORTED_WIDGET_TYPES as _SUPP
         if wtype not in _SUPP:
             continue  # expected missing
         if sk not in rendered_key_set:
@@ -984,7 +984,7 @@ def reverse_local_port(
 
     # 5. Plan: collect widget types
     all_types: set[str] = set()
-    from vcfops_dashboards.reverse import _SUPPORTED_WIDGET_TYPES
+    from vcfcf_dashboards.reverse import _SUPPORTED_WIDGET_TYPES
     unsupported_in_source: set[str] = set()
     for dash in source_dashboards:
         for w in (dash.get("widgets") or []):
@@ -1103,6 +1103,6 @@ def reverse_local_port(
     print()
     print("Next steps:")
     print("  1. Review emitted YAML files")
-    print("  2. Validate: python3 -m vcfops_dashboards validate")
+    print("  2. Validate: python3 -m vcfcf_dashboards validate")
     print("  3. Address any PARTIAL/WARN items manually")
     return 0

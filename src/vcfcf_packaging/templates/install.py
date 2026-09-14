@@ -104,7 +104,7 @@ def _bootstrap_requests() -> None:
         pass
 
     import tempfile, venv
-    venv_dir = Path(tempfile.mkdtemp(prefix="vcfops_install_venv_"))
+    venv_dir = Path(tempfile.mkdtemp(prefix="vcfcf_install_venv_"))
     print(f"[bootstrap] Creating venv at {venv_dir} to install requests...")
     venv.create(str(venv_dir), with_pip=True)
     pip = venv_dir / "bin" / "pip"
@@ -1403,7 +1403,7 @@ def _extract_view_names(views_xml) -> list:
     """Titles of the views in a rendered views_content.xml, best effort.
 
     Parses with xml.etree.ElementTree (stdlib) exactly the way
-    vcfops_packaging/audit.py reads view titles: walk every ViewDef, take
+    vcfcf_packaging/audit.py reads view titles: walk every ViewDef, take
     its <Title> child text, fall back to a name attribute. The renderer
     emits <Title> once per ViewDef and nowhere else, so extraction is 1:1
     with views.

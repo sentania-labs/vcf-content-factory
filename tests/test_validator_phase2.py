@@ -82,7 +82,7 @@ class TestProjectYamlValidation:
 
     def test_valid_project_loads(self, tmp_path):
         """A fully-valid PROJECT.yaml loads without error."""
-        from vcfops_packaging.project import load_project
+        from vcfcf_packaging.project import load_project
 
         proj_dir = tmp_path / "my-project"
         proj_dir.mkdir()
@@ -97,7 +97,7 @@ class TestProjectYamlValidation:
 
     def test_missing_name_is_error(self, tmp_path):
         """Missing 'name' field raises ProjectValidationError."""
-        from vcfops_packaging.project import load_project, ProjectValidationError
+        from vcfcf_packaging.project import load_project, ProjectValidationError
 
         proj_dir = tmp_path / "my-project"
         proj_dir.mkdir()
@@ -111,7 +111,7 @@ class TestProjectYamlValidation:
 
     def test_name_dir_mismatch_is_error(self, tmp_path):
         """'name' not matching parent directory name raises ProjectValidationError."""
-        from vcfops_packaging.project import load_project, ProjectValidationError
+        from vcfcf_packaging.project import load_project, ProjectValidationError
 
         proj_dir = tmp_path / "actual-dir-name"
         proj_dir.mkdir()
@@ -124,7 +124,7 @@ class TestProjectYamlValidation:
 
     def test_missing_display_name_is_error(self, tmp_path):
         """Missing 'display_name' raises ProjectValidationError."""
-        from vcfops_packaging.project import load_project, ProjectValidationError
+        from vcfcf_packaging.project import load_project, ProjectValidationError
 
         proj_dir = tmp_path / "my-project"
         proj_dir.mkdir()
@@ -138,7 +138,7 @@ class TestProjectYamlValidation:
 
     def test_factory_native_absent_is_error(self, tmp_path):
         """Missing 'factory_native' raises ProjectValidationError."""
-        from vcfops_packaging.project import load_project, ProjectValidationError
+        from vcfcf_packaging.project import load_project, ProjectValidationError
 
         proj_dir = tmp_path / "my-project"
         proj_dir.mkdir()
@@ -152,7 +152,7 @@ class TestProjectYamlValidation:
 
     def test_factory_native_true_is_error(self, tmp_path):
         """factory_native: true in a PROJECT.yaml raises ProjectValidationError."""
-        from vcfops_packaging.project import load_project, ProjectValidationError
+        from vcfcf_packaging.project import load_project, ProjectValidationError
 
         proj_dir = tmp_path / "my-project"
         proj_dir.mkdir()
@@ -165,7 +165,7 @@ class TestProjectYamlValidation:
 
     def test_missing_author_is_error(self, tmp_path):
         """Missing 'author' raises ProjectValidationError."""
-        from vcfops_packaging.project import load_project, ProjectValidationError
+        from vcfcf_packaging.project import load_project, ProjectValidationError
 
         proj_dir = tmp_path / "my-project"
         proj_dir.mkdir()
@@ -179,7 +179,7 @@ class TestProjectYamlValidation:
 
     def test_missing_license_is_error(self, tmp_path):
         """Missing 'license' raises ProjectValidationError."""
-        from vcfops_packaging.project import load_project, ProjectValidationError
+        from vcfcf_packaging.project import load_project, ProjectValidationError
 
         proj_dir = tmp_path / "my-project"
         proj_dir.mkdir()
@@ -193,7 +193,7 @@ class TestProjectYamlValidation:
 
     def test_missing_description_is_error(self, tmp_path):
         """Missing 'description' raises ProjectValidationError."""
-        from vcfops_packaging.project import load_project, ProjectValidationError
+        from vcfcf_packaging.project import load_project, ProjectValidationError
 
         proj_dir = tmp_path / "my-project"
         proj_dir.mkdir()
@@ -207,7 +207,7 @@ class TestProjectYamlValidation:
 
     def test_builtin_metric_enables_missing_field_is_error(self, tmp_path):
         """A builtin_metric_enables entry missing 'reason' raises an error."""
-        from vcfops_packaging.project import load_project, ProjectValidationError
+        from vcfcf_packaging.project import load_project, ProjectValidationError
 
         proj_dir = tmp_path / "my-project"
         proj_dir.mkdir()
@@ -228,7 +228,7 @@ class TestProjectYamlValidation:
 
     def test_builtin_metric_enables_full_entry_valid(self, tmp_path):
         """A PROJECT.yaml with a complete builtin_metric_enables entry loads."""
-        from vcfops_packaging.project import load_project
+        from vcfcf_packaging.project import load_project
 
         proj_dir = tmp_path / "my-project"
         proj_dir.mkdir()
@@ -250,7 +250,7 @@ class TestProjectYamlValidation:
 
     def test_source_block_optional(self, tmp_path):
         """PROJECT.yaml without a 'source' block loads cleanly."""
-        from vcfops_packaging.project import load_project
+        from vcfcf_packaging.project import load_project
 
         proj_dir = tmp_path / "my-project"
         proj_dir.mkdir()
@@ -264,7 +264,7 @@ class TestProjectYamlValidation:
 
     def test_load_all_projects_discovers_idps_planner(self):
         """load_all_projects picks up the real idps-planner project from the repo."""
-        from vcfops_packaging.project import load_all_projects
+        from vcfcf_packaging.project import load_all_projects
 
         repo_root = Path(__file__).parent.parent
         projects = load_all_projects(repo_root / "third_party")
@@ -275,7 +275,7 @@ class TestProjectYamlValidation:
 
     def test_load_all_projects_skips_non_content_dirs(self, tmp_path):
         """Directories with no content-type subdirs and no PROJECT.yaml are skipped."""
-        from vcfops_packaging.project import load_all_projects
+        from vcfcf_packaging.project import load_all_projects
 
         tp = tmp_path / "third_party"
         tp.mkdir()
@@ -292,7 +292,7 @@ class TestProjectYamlValidation:
 
     def test_load_all_projects_content_dir_without_project_yaml_is_error(self, tmp_path):
         """A third_party subdir with a dashboards/ subdir but no PROJECT.yaml is an error."""
-        from vcfops_packaging.project import load_all_projects, ProjectValidationError
+        from vcfcf_packaging.project import load_all_projects, ProjectValidationError
 
         tp = tmp_path / "third_party"
         (tp / "my-project" / "dashboards").mkdir(parents=True)
@@ -303,7 +303,7 @@ class TestProjectYamlValidation:
 
     def test_idps_planner_project_yaml_validates(self):
         """The real idps-planner/PROJECT.yaml validates against the schema."""
-        from vcfops_packaging.project import load_project
+        from vcfcf_packaging.project import load_project
 
         repo_root = Path(__file__).parent.parent
         p = repo_root / "third_party" / "idps-planner" / "PROJECT.yaml"
@@ -326,7 +326,7 @@ class TestSlugUniqueness:
 
     def test_clean_no_collision(self, tmp_path):
         """No collision when factory-native and third-party have distinct slugs."""
-        from vcfops_packaging.project import check_slug_uniqueness
+        from vcfcf_packaging.project import check_slug_uniqueness
 
         content_sms = tmp_path / "content" / "supermetrics"
         content_sms.mkdir(parents=True)
@@ -346,7 +346,7 @@ class TestSlugUniqueness:
 
     def test_factory_vs_thirdparty_collision(self, tmp_path):
         """Same slug in content/ and third_party/*/ is an error."""
-        from vcfops_packaging.project import check_slug_uniqueness
+        from vcfcf_packaging.project import check_slug_uniqueness
 
         content_sms = tmp_path / "content" / "supermetrics"
         content_sms.mkdir(parents=True)
@@ -368,7 +368,7 @@ class TestSlugUniqueness:
 
     def test_two_thirdparty_projects_collision(self, tmp_path):
         """Same slug in two different third-party projects is an error."""
-        from vcfops_packaging.project import check_slug_uniqueness
+        from vcfcf_packaging.project import check_slug_uniqueness
 
         content_sms = tmp_path / "content" / "supermetrics"
         content_sms.mkdir(parents=True)  # empty factory-native dir
@@ -391,7 +391,7 @@ class TestSlugUniqueness:
 
     def test_different_types_dont_collide(self, tmp_path):
         """Same stem in dashboards/ and views/ does NOT trigger a collision."""
-        from vcfops_packaging.project import check_slug_uniqueness
+        from vcfcf_packaging.project import check_slug_uniqueness
 
         content_dash = tmp_path / "content" / "dashboards"
         content_dash.mkdir(parents=True)
@@ -413,7 +413,7 @@ class TestSlugUniqueness:
 
     def test_no_third_party_dir(self, tmp_path):
         """When third_party/ doesn't exist, check runs cleanly on content/ only."""
-        from vcfops_packaging.project import check_slug_uniqueness
+        from vcfcf_packaging.project import check_slug_uniqueness
 
         content_sms = tmp_path / "content" / "supermetrics"
         content_sms.mkdir(parents=True)
@@ -429,7 +429,7 @@ class TestSlugUniqueness:
 
     def test_multiple_collisions_reported(self, tmp_path):
         """Multiple distinct collisions are all reported (not just first)."""
-        from vcfops_packaging.project import check_slug_uniqueness
+        from vcfcf_packaging.project import check_slug_uniqueness
 
         content_sms = tmp_path / "content" / "supermetrics"
         content_sms.mkdir(parents=True)
@@ -451,7 +451,7 @@ class TestSlugUniqueness:
 
     def test_real_repo_has_no_slug_collisions_supermetrics(self):
         """Real repo: no slug collision in supermetrics across both provenances."""
-        from vcfops_packaging.project import check_slug_uniqueness
+        from vcfcf_packaging.project import check_slug_uniqueness
 
         repo_root = Path(__file__).parent.parent
         errors = check_slug_uniqueness(
@@ -463,7 +463,7 @@ class TestSlugUniqueness:
 
     def test_real_repo_has_no_slug_collisions_dashboards(self):
         """Real repo: no slug collision in dashboards across both provenances."""
-        from vcfops_packaging.project import check_slug_uniqueness
+        from vcfcf_packaging.project import check_slug_uniqueness
 
         repo_root = Path(__file__).parent.parent
         errors = check_slug_uniqueness(
@@ -475,7 +475,7 @@ class TestSlugUniqueness:
 
     def test_real_repo_has_no_slug_collisions_views(self):
         """Real repo: no slug collision in views across both provenances."""
-        from vcfops_packaging.project import check_slug_uniqueness
+        from vcfcf_packaging.project import check_slug_uniqueness
 
         repo_root = Path(__file__).parent.parent
         errors = check_slug_uniqueness(
@@ -505,7 +505,7 @@ class TestProjectMembership:
             ],
         }, default_flow_style=False))
         # Load it via the real loader so source_path is populated.
-        from vcfops_supermetrics.loader import load_file
+        from vcfcf_supermetrics.loader import load_file
         return load_file(p, enforce_framework_prefix=False)
 
     def _make_minimal_view(self, views_dir: Path, stem: str, sm_uuid: str, sm_name: str):
@@ -526,7 +526,7 @@ class TestProjectMembership:
                 }
             ],
         }, default_flow_style=False))
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
         return load_view(p, enforce_framework_prefix=False)
 
     def _make_minimal_dashboard(self, dash_dir: Path, stem: str, view_name: str):
@@ -546,14 +546,14 @@ class TestProjectMembership:
                 }
             ],
         }, default_flow_style=False))
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
         return load_dashboard(p, enforce_framework_prefix=False, default_name_path="")
 
     def test_factory_native_dashboard_unconstrained(self, tmp_path):
         """Factory-native dashboards are not subject to the boundary check."""
-        from vcfops_packaging.project import check_project_membership
-        from vcfops_supermetrics.loader import load_file as load_sm
-        from vcfops_dashboards.loader import load_view, load_dashboard
+        from vcfcf_packaging.project import check_project_membership
+        from vcfcf_supermetrics.loader import load_file as load_sm
+        from vcfcf_dashboards.loader import load_view, load_dashboard
 
         tp = tmp_path / "third_party"
 
@@ -578,7 +578,7 @@ class TestProjectMembership:
 
     def test_thirdparty_dashboard_within_project_ok(self, tmp_path):
         """Third-party dashboard referencing only its own project's deps passes."""
-        from vcfops_packaging.project import check_project_membership
+        from vcfcf_packaging.project import check_project_membership
 
         tp = tmp_path / "third_party"
         proj_a = tp / "proj-a"
@@ -604,7 +604,7 @@ class TestProjectMembership:
 
     def test_thirdparty_dashboard_pulls_factory_view_is_error(self, tmp_path):
         """Third-party dashboard referencing a factory-native view is an error."""
-        from vcfops_packaging.project import check_project_membership
+        from vcfcf_packaging.project import check_project_membership
 
         tp = tmp_path / "third_party"
         proj_a = tp / "proj-a"
@@ -638,7 +638,7 @@ class TestProjectMembership:
 
     def test_thirdparty_dashboard_pulls_other_project_view_is_error(self, tmp_path):
         """Third-party dashboard referencing another third-party project's view is an error."""
-        from vcfops_packaging.project import check_project_membership
+        from vcfcf_packaging.project import check_project_membership
 
         tp = tmp_path / "third_party"
         proj_a = tp / "proj-a"
@@ -668,7 +668,7 @@ class TestProjectMembership:
 
     def test_no_errors_when_third_party_absent(self, tmp_path):
         """Membership check is a no-op when third_party/ doesn't exist."""
-        from vcfops_packaging.project import check_project_membership
+        from vcfcf_packaging.project import check_project_membership
 
         sm = self._make_minimal_sm(
             tmp_path / "content" / "supermetrics", "sm", "My SM"
@@ -691,9 +691,9 @@ class TestProjectMembership:
 
     def test_real_repo_idps_planner_is_self_contained(self):
         """Real repo: idps-planner dashboards only reference their own project's deps."""
-        from vcfops_packaging.project import check_project_membership
-        from vcfops_dashboards.loader import load_view, load_dashboard
-        from vcfops_supermetrics.loader import load_dir as load_sm_dir
+        from vcfcf_packaging.project import check_project_membership
+        from vcfcf_dashboards.loader import load_view, load_dashboard
+        from vcfcf_supermetrics.loader import load_dir as load_sm_dir
 
         repo_root = Path(__file__).parent.parent
         tp = repo_root / "third_party"
@@ -749,7 +749,7 @@ class TestProjectMembership:
 # ---------------------------------------------------------------------------
 
 class TestPackagingValidateIntegration:
-    """Smoke tests for the PROJECT.yaml check in 'python3 -m vcfops_packaging validate'."""
+    """Smoke tests for the PROJECT.yaml check in 'python3 -m vcfcf_packaging validate'."""
 
     def test_packaging_validate_command_passes_on_real_repo(self):
         """packaging validate exits 0 on the real repo (all PROJECT.yaml files valid)."""
@@ -758,7 +758,7 @@ class TestPackagingValidateIntegration:
 
         repo_root = Path(__file__).parent.parent
         result = subprocess.run(
-            [sys.executable, "-m", "vcfops_packaging", "validate"],
+            [sys.executable, "-m", "vcfcf_packaging", "validate"],
             cwd=str(repo_root),
             capture_output=True,
             text=True,

@@ -86,7 +86,7 @@ _SUPER_METRIC_PREFIX = "super metric|"
 # Unresolved authoring-time SM cross-reference, e.g. supermetric:"<name>"
 # (CLAUDE.md "Cross-reference syntax" table, View column -> SM row). Views
 # carry this literal form until render_views_xml() resolves it to sm_<uuid>
-# (see vcfops_dashboards/render.py:558-585), code that walks *loader*
+# (see vcfcf_dashboards/render.py:558-585), code that walks *loader*
 # objects (as the dependency auditor does) sees the unresolved form and must
 # recognise it too, or it hard-fails treating the SM name as an unknown
 # built-in metric key.
@@ -95,7 +95,7 @@ _UNRESOLVED_SM_REF_PREFIX = "supermetric:"
 # metric=@supermetric:"<name>" (same skill table, SM formula -> SM row). Note
 # the leading "@": the formula form and the view-column form differ by that one
 # character, so the view constant above does not cover it. Formulas keep this
-# token until emit/push time (vcfops_supermetrics.crossref), so the auditor,
+# token until emit/push time (vcfcf_supermetrics.crossref), so the auditor,
 # which walks loader objects, sees the unresolved form and must skip it.
 _UNRESOLVED_SM_FORMULA_REF_PREFIX = "@supermetric:"
 
@@ -106,7 +106,7 @@ def _normalize_instanced_group_key(attribute: str) -> str:
 
     Member columns synthesize ``attribute`` as
     ``f"{prefix}:{sample_instance}|{suffix}"`` (see
-    ``InstancedGroupSpec``/``ViewColumn`` in vcfops_dashboards/loader.py).
+    ``InstancedGroupSpec``/``ViewColumn`` in vcfcf_dashboards/loader.py).
     ``sample_instance`` itself may contain further ``:`` / ``|`` tokens
     (e.g. ``"356893|snapshot:snapshot-16"``), so the synthesized string can
     have more than one "|"-delimited segment. The describe cache stores the
@@ -439,7 +439,7 @@ def extract_metric_references(bundle: "Bundle") -> list[MetricReference]:
     Excludes super-metric self-references (sm_<uuid> / Super Metric| prefix).
 
     Args:
-        bundle: A loaded ``Bundle`` object (from ``vcfops_packaging.loader``).
+        bundle: A loaded ``Bundle`` object (from ``vcfcf_packaging.loader``).
 
     Returns:
         List of unique ``MetricReference`` objects.

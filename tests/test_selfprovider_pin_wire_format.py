@@ -56,7 +56,7 @@ from __future__ import annotations
 import json
 import uuid
 
-from vcfops_dashboards.loader import (
+from vcfcf_dashboards.loader import (
     Dashboard,
     HealthChartConfig,
     ViewColumn,
@@ -64,7 +64,7 @@ from vcfops_dashboards.loader import (
     Widget,
     WidgetResourceKindRef,
 )
-from vcfops_dashboards.render import render_dashboards_bundle_json
+from vcfcf_dashboards.render import render_dashboards_bundle_json
 
 
 _OWNER_ID = "00000000-0000-0000-0000-000000000001"

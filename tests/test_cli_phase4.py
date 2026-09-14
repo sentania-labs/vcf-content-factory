@@ -1,4 +1,4 @@
-"""Phase 4 smoke tests for vcfops_packaging CLI: release + publish subcommands.
+"""Phase 4 smoke tests for vcfcf_packaging CLI: release + publish subcommands.
 
 Six test groups as specified:
 
@@ -75,7 +75,7 @@ def _make_factory_copy(tmp_path: Path) -> Path:
     """Copy the real repo into tmp_path so tests can mutate content/ and
     content YAML files without touching the real working tree.
 
-    Only copies content we need: content/ (all subdirs) and the vcfops_* packages.
+    Only copies content we need: content/ (all subdirs) and the vcfcf_* packages.
     """
     factory = tmp_path / "factory"
     factory.mkdir()
@@ -101,10 +101,10 @@ def _make_factory_copy(tmp_path: Path) -> Path:
     else:
         (factory / "content").mkdir(exist_ok=True)
 
-    # symlink vcfops_* packages and vcfops_common back to the real location
+    # symlink vcfcf_* packages and vcfcf_common back to the real location
     # so imports work, without creating duplicate symlinks.
     _linked: set[str] = set()
-    for pkg in (REPO_ROOT / "src").glob("vcfops_*"):
+    for pkg in (REPO_ROOT / "src").glob("vcfcf_*"):
         if pkg.is_dir() and pkg.name not in _linked:
             (factory / pkg.name).symlink_to(pkg.resolve())
             _linked.add(pkg.name)
@@ -149,7 +149,7 @@ class TestReleaseSmoke:
         factory = _make_factory_copy(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(no_commit=True)
         rc = cmd_release(args)
         assert rc == 0, f"cmd_release returned {rc}"
@@ -162,7 +162,7 @@ class TestReleaseSmoke:
         factory = _make_factory_copy(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(no_commit=True)
         cmd_release(args)
 
@@ -185,7 +185,7 @@ class TestReleaseSmoke:
         before = yaml.safe_load(dashboard_yaml.read_text()) or {}
         assert not before.get("released", False)
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(no_commit=True)
         cmd_release(args)
 
@@ -200,7 +200,7 @@ class TestReleaseSmoke:
         monkeypatch.chdir(factory)
 
         display_name = "[VCF Content Factory] Demand-Driven Capacity Planning v2"
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(name=display_name, no_commit=True)
         rc = cmd_release(args)
         assert rc == 0, f"display-name resolution returned {rc}"
@@ -212,7 +212,7 @@ class TestReleaseSmoke:
         factory = _make_factory_copy(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(
             name="content/dashboards/demand_driven_capacity_v2.yaml",
             no_commit=True,
@@ -233,7 +233,7 @@ class TestAutoBump:
         factory = _make_factory_copy(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
 
         # First release -> 1.0  (new slug convention: demand-driven-capacity-v2-dashboard)
         args1 = _build_release_args(no_commit=True)
@@ -255,7 +255,7 @@ class TestAutoBump:
         factory = _make_factory_copy(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(version="2.0", no_commit=True)
         rc = cmd_release(args)
         assert rc == 0
@@ -268,7 +268,7 @@ class TestAutoBump:
         factory = _make_factory_copy(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         # First release at 1.0.
         cmd_release(_build_release_args(version="1.0", no_commit=True))
         # Second call with same version -> error.
@@ -301,7 +301,7 @@ class TestDeprecates:
             }],
         }))
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(deprecates=[prior_slug], no_commit=True)
         rc = cmd_release(args)
         assert rc == 0
@@ -318,7 +318,7 @@ class TestDeprecates:
         factory = _make_factory_copy(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(
             deprecates=["nonexistent-slug"],
             no_commit=True,
@@ -336,20 +336,20 @@ class TestValidateFailureGuard:
 
     def test_validate_catches_bad_write(self, tmp_path, monkeypatch):
         """Monkeypatch validate to fail and confirm cmd_release exits 1."""
-        import vcfops_packaging.cli as _cli
+        import vcfcf_packaging.cli as _cli
 
         factory = _make_factory_copy(tmp_path)
         monkeypatch.chdir(factory)
 
         # Monkeypatch subprocess.run to simulate a validation failure
-        # only for the vcfops_packaging validate call.
+        # only for the vcfcf_packaging validate call.
         import subprocess as _sp
         original_run = _sp.run
 
         def _fake_run(cmd, *a, **kw):
             if (
                 isinstance(cmd, list)
-                and "vcfops_packaging" in cmd
+                and "vcfcf_packaging" in cmd
                 and "validate" in cmd
             ):
                 return _sp.CompletedProcess(
@@ -362,7 +362,7 @@ class TestValidateFailureGuard:
 
         monkeypatch.setattr(_sp, "run", _fake_run)
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(no_commit=True)
         rc = cmd_release(args)
         assert rc != 0, "should return non-zero when validate fails"
@@ -386,7 +386,7 @@ class TestCommit:
         )
         count_before = int(r_before.stdout.strip())
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(no_commit=False)
         rc = cmd_release(args)
         assert rc == 0
@@ -404,7 +404,7 @@ class TestCommit:
         factory = _make_factory_copy(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(no_commit=False)
         rc = cmd_release(args)
         assert rc == 0
@@ -430,7 +430,7 @@ class TestCommit:
         factory = _make_factory_copy(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         args = _build_release_args(no_commit=False)
         rc = cmd_release(args)
         assert rc == 0
@@ -498,7 +498,7 @@ class TestPublishCLI:
         factory, dist = self._make_factory_with_release_manifest(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_publish
+        from vcfcf_packaging.cli import cmd_publish
         args = SimpleNamespace(
             dry_run=True,
             force=False,
@@ -512,7 +512,7 @@ class TestPublishCLI:
         factory, dist = self._make_factory_with_release_manifest(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_publish
+        from vcfcf_packaging.cli import cmd_publish
         args = SimpleNamespace(
             dry_run=True,
             force=False,
@@ -533,7 +533,7 @@ class TestPublishCLI:
         factory, dist = self._make_factory_with_release_manifest(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_publish
+        from vcfcf_packaging.cli import cmd_publish
         args = SimpleNamespace(
             dry_run=True,
             force=False,
@@ -556,7 +556,7 @@ class TestPublishCLI:
         )
         count_before = int(r_before.stdout.strip())
 
-        from vcfops_packaging.cli import cmd_publish
+        from vcfcf_packaging.cli import cmd_publish
         args = SimpleNamespace(
             dry_run=True,
             force=False,
@@ -579,7 +579,7 @@ class TestPublishCLI:
         factory = _make_factory_copy(tmp_path)
         monkeypatch.chdir(factory)
 
-        from vcfops_packaging.cli import cmd_release
+        from vcfcf_packaging.cli import cmd_release
         for bad_type in ("symptom", "symptoms", "alert", "alerts"):
             args = _build_release_args(content_type=bad_type, name="some_name")
             rc = cmd_release(args)

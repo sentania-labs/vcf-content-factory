@@ -2,7 +2,7 @@
 
 Usage in a CLI module::
 
-    from vcfops_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
+    from vcfcf_common._profile_cli import add_profile_arg, validate_profile_arg, resolve_profile_from_args
 
     # In build_parser():
     add_profile_arg(sub_parser, default="prod")   # read-only subcommand
@@ -85,7 +85,7 @@ def resolve_profile_from_args(args: argparse.Namespace) -> Tuple[Optional[str], 
     return profile, default
 
 
-def client_from_args(args: argparse.Namespace, client_class=None, import_from: str = "vcfops_common.client"):
+def client_from_args(args: argparse.Namespace, client_class=None, import_from: str = "vcfcf_common.client"):
     """Construct a VCFOpsClient (or subclass) from parsed CLI args.
 
     Validates --profile (if supplied) against available profiles, then

@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from vcfops_managementpacks.sdk_builder import _load_bundled_content, SdkBuildError
+from vcfcf_managementpacks.sdk_builder import _load_bundled_content, SdkBuildError
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +227,7 @@ class TestValidateSdkProjectUsesProjectDir:
     def test_missing_colocated_view_surfaces_as_validation_error(
         self, tmp_path: Path
     ) -> None:
-        from vcfops_managementpacks.sdk_builder import validate_sdk_project
+        from vcfcf_managementpacks.sdk_builder import validate_sdk_project
 
         project_dir = _make_adapter_dir(tmp_path)
         # Write adapter.yaml with a bundled_content.views reference that
@@ -321,7 +321,7 @@ class TestBareNamePrefixEnforcement:
         still reject a bare name — the non-bundled path is unchanged.
         """
         import tempfile
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".yaml", delete=False, encoding="utf-8"

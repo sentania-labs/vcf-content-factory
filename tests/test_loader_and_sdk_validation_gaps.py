@@ -1,11 +1,11 @@
 """Two validation gaps.
 
-Fix 2 — ``vcfops_dashboards.loader.load_view()`` coerced ``hide_object_name``
+Fix 2 — ``vcfcf_dashboards.loader.load_view()`` coerced ``hide_object_name``
 with ``bool(...)``, so a quoted ``hide_object_name: "false"`` became ``True``
 and the renderer hid the object-name column against the authored intent.  It is
 now type-checked the same way the loader's other boolean fields are.
 
-Fix 3 — ``vcfops_managementpacks.sdk_builder._load_bundled_content()`` ran
+Fix 3 — ``vcfcf_managementpacks.sdk_builder._load_bundled_content()`` ran
 ``load_dashboard()`` and then only a duplicate-``summary_for`` check, so the
 cross-object invariants in ``Dashboard.validate()`` never ran on the pak path.
 A pak could ship a Summary dashboard whose widgets stay pinned instead of
@@ -45,14 +45,14 @@ def _view(tmp_path: Path, hide_object_name) -> Path:
 class TestHideObjectNameTypeCheck:
     @pytest.mark.parametrize("value,expected", [(True, True), (False, False), (None, False)])
     def test_real_booleans_and_default(self, tmp_path, value, expected):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         assert load_view(_view(tmp_path, value)).hide_object_name is expected
 
     @pytest.mark.parametrize("bad", ["false", "true", "no", 0, 1])
     def test_non_boolean_raises_instead_of_coercing(self, tmp_path, bad):
         """A quoted "false" used to coerce to True and silently hide the column."""
-        from vcfops_dashboards.loader import DashboardValidationError, load_view
+        from vcfcf_dashboards.loader import DashboardValidationError, load_view
 
         with pytest.raises(DashboardValidationError) as exc:
             load_view(_view(tmp_path, bad))
@@ -62,7 +62,7 @@ class TestHideObjectNameTypeCheck:
     def test_quoted_false_no_longer_hides_the_column(self, tmp_path):
         """The end-to-end symptom: the renderer must never see hideObjectNameColumn
         flipped to true by a quoted "false"."""
-        from vcfops_dashboards.loader import DashboardValidationError, load_view
+        from vcfcf_dashboards.loader import DashboardValidationError, load_view
 
         with pytest.raises(DashboardValidationError):
             load_view(_view(tmp_path, "false"))
@@ -119,7 +119,7 @@ def _bundled(tmp_path: Path, dashboard_yaml: str) -> tuple:
 
 class TestSdkBundledDashboardValidation:
     def test_pinned_summary_dashboard_is_rejected(self, tmp_path):
-        from vcfops_managementpacks.sdk_builder import (
+        from vcfcf_managementpacks.sdk_builder import (
             SdkBuildError,
             _load_bundled_content,
         )
@@ -137,7 +137,7 @@ class TestSdkBundledDashboardValidation:
         `VM Details` -> vcommunity's `Windows Services vCommunity`, referenced
         by id).  A bare name matching nothing is a typo, and the pak path must
         say so rather than shipping a silently blank widget."""
-        from vcfops_managementpacks.sdk_builder import (
+        from vcfcf_managementpacks.sdk_builder import (
             SdkBuildError,
             _load_bundled_content,
         )
@@ -150,7 +150,7 @@ class TestSdkBundledDashboardValidation:
     def test_cross_pak_view_reference_by_uuid_is_allowed(self, tmp_path):
         """The sanctioned cross-pak form: the sibling view's raw UUID, which
         the loader's external passthrough accepts with no escape hatch."""
-        from vcfops_managementpacks.sdk_builder import _load_bundled_content
+        from vcfcf_managementpacks.sdk_builder import _load_bundled_content
 
         raw, project_dir = _bundled(tmp_path, _DASH_EXTERNAL_VIEW_UUID)
         dashboards = _load_bundled_content(raw, project_dir, project_dir)[1]
@@ -158,7 +158,7 @@ class TestSdkBundledDashboardValidation:
 
     def test_unknown_view_still_rejected_for_the_repo_corpus(self, tmp_path):
         """The native (non-pak) path keeps the strict check."""
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         p = tmp_path / "dash.yaml"
         p.write_text(_DASH_UNKNOWN_VIEW)
@@ -168,7 +168,7 @@ class TestSdkBundledDashboardValidation:
         assert "unknown view" in str(exc.value)
 
     def test_valid_summary_dashboard_still_loads(self, tmp_path):
-        from vcfops_managementpacks.sdk_builder import _load_bundled_content
+        from vcfcf_managementpacks.sdk_builder import _load_bundled_content
 
         raw, project_dir = _bundled(tmp_path, _SUMMARY_DASH_CLEAN)
         result = _load_bundled_content(raw, project_dir, project_dir)

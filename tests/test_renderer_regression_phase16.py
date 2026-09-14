@@ -68,8 +68,8 @@ class TestRendererDefaultsLeak:
     def _render_minimal_dashboard(self, tmp_path: Path) -> dict:
         """Load a one-widget dashboard YAML and return the rendered
         dashboard object from the bundle JSON."""
-        from vcfops_dashboards.loader import load_dashboard
-        from vcfops_dashboards.render import render_dashboards_bundle_json
+        from vcfcf_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.render import render_dashboards_bundle_json
 
         dash_path = _write_yaml(
             tmp_path / "dashboards" / "regression_dash.yaml",
@@ -131,8 +131,8 @@ class TestLocalizationKeyCollision:
     def _render_two_transform_view(self, tmp_path: Path) -> str:
         """Load a view with AVG and MAX columns of the same attribute and
         return the rendered views content.xml."""
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         view_path = _write_yaml(
             tmp_path / "views" / "regression_view.yaml",
@@ -219,8 +219,8 @@ class TestViewDefTitleDescriptionNoLocalizationKey:
     dangling key hard-fails import on VCF Ops 8.18 (DEF-018)."""
 
     def _render_view(self, tmp_path: Path) -> str:
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         view_path = _write_yaml(
             tmp_path / "views" / "regression_view_defc.yaml",

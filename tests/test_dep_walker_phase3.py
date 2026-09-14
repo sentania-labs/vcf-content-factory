@@ -69,7 +69,7 @@ def _make_sm(sm_dir: Path, stem: str, name: str):
         "formula": "${this, metric=cpu|usage_average}",
         "resource_kinds": [{"resource_kind_key": "VirtualMachine", "adapter_kind_key": "VMWARE"}],
     }, default_flow_style=False))
-    from vcfops_supermetrics.loader import load_file
+    from vcfcf_supermetrics.loader import load_file
     return load_file(p, enforce_framework_prefix=False)
 
 
@@ -82,7 +82,7 @@ def _make_view(views_dir: Path, stem: str, sm_uuid: str):
         "subject": {"adapter_kind": "VMWARE", "resource_kind": "VirtualMachine"},
         "columns": [{"attribute": f"Super Metric|sm_{sm_uuid}", "display_name": "Metric"}],
     }, default_flow_style=False))
-    from vcfops_dashboards.loader import load_view
+    from vcfcf_dashboards.loader import load_view
     return load_view(p, enforce_framework_prefix=False)
 
 
@@ -100,7 +100,7 @@ def _make_dashboard(dash_dir: Path, stem: str, view_name: str):
             "view": view_name,
         }],
     }, default_flow_style=False))
-    from vcfops_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.loader import load_dashboard
     return load_dashboard(p, enforce_framework_prefix=False, default_name_path="")
 
 
@@ -203,7 +203,7 @@ class TestAutoDetectScope:
 
     def test_auto_detect_factory_scope(self, tmp_path):
         """Factory dashboard with no explicit scope still uses factory scope internally."""
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
 
         sm_f = _make_sm(tmp_path / "content" / "supermetrics", "sm_f", "Factory SM")
         view_f = _make_view(tmp_path / "content" / "views", "view_f", sm_f.id)
@@ -219,7 +219,7 @@ class TestAutoDetectScope:
 
     def test_auto_detect_thirdparty_scope(self, tmp_path):
         """Third-party dashboard auto-detects its project slug as scope."""
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
 
         proj_dir = tmp_path / "third_party" / "proj-a"
         sm_a = _make_sm(proj_dir / "supermetrics", "sm_a", "SM A")
@@ -236,7 +236,7 @@ class TestAutoDetectScope:
 
     def test_auto_detect_mixed_provenance_no_scope(self, tmp_path):
         """Multiple dashboards with different provenances → no auto-detected scope (None)."""
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
 
         sm_f = _make_sm(tmp_path / "content" / "supermetrics", "sm_f", "Factory SM")
         view_f = _make_view(tmp_path / "content" / "views", "view_f", sm_f.id)
@@ -261,8 +261,8 @@ class TestAutoDetectScope:
 
     def test_auto_detect_empty_provenance_no_scope(self):
         """Fixture dashboards with empty provenance → no scope auto-detected."""
-        from vcfops_common.dep_walker import collect_deps, _auto_detect_scope
-        from vcfops_dashboards.loader import Dashboard, Widget
+        from vcfcf_common.dep_walker import collect_deps, _auto_detect_scope
+        from vcfcf_dashboards.loader import Dashboard, Widget
 
         widget = Widget(
             local_id="w1",
@@ -296,7 +296,7 @@ class TestFactoryScope:
 
     def test_factory_scope_allows_factory_components(self, tmp_path):
         """Explicit project_scope='factory' passes for a fully factory dep graph."""
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
 
         sm_f = _make_sm(tmp_path / "content" / "supermetrics", "sm_f", "Factory SM")
         view_f = _make_view(tmp_path / "content" / "views", "view_f", sm_f.id)
@@ -307,7 +307,7 @@ class TestFactoryScope:
 
     def test_factory_scope_blocks_thirdparty_view(self, tmp_path):
         """Explicit project_scope='factory' errors on a third-party view."""
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
 
         # Third-party SM and view
         sm_a = _make_sm(tmp_path / "third_party" / "proj-a" / "supermetrics", "sm_a", "SM A")
@@ -334,7 +334,7 @@ class TestThirdPartyScopeClean:
 
     def test_self_contained_project_passes(self, tmp_path):
         """Third-party project with all deps in same project → no errors."""
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
 
         proj_dir = tmp_path / "third_party" / "proj-a"
         sm = _make_sm(proj_dir / "supermetrics", "sm", "SM")
@@ -364,7 +364,7 @@ class TestCrossLinksAllowed:
         be explicitly listed (the walker checks each component independently against
         the cross_links list).
         """
-        from vcfops_common.dep_walker import collect_deps, CollectDepsCrossLinks
+        from vcfcf_common.dep_walker import collect_deps, CollectDepsCrossLinks
 
         # Factory SM and view
         sm_f = _make_sm(tmp_path / "content" / "supermetrics", "sm_f", "Factory SM")
@@ -399,7 +399,7 @@ class TestCrossLinksAllowed:
         individually.  Cross-linking a view does NOT grant implicit allowance to the
         factory SMs that view references.
         """
-        from vcfops_common.dep_walker import collect_deps, CollectDepsCrossLinks
+        from vcfcf_common.dep_walker import collect_deps, CollectDepsCrossLinks
 
         sm_f = _make_sm(tmp_path / "content" / "supermetrics", "sm_f", "Factory SM")
         view_f = _make_view(tmp_path / "content" / "views", "view_f", sm_f.id)
@@ -428,7 +428,7 @@ class TestCrossLinksAllowed:
 
     def test_cross_linked_factory_sm_allowed(self, tmp_path):
         """Third-party project using a cross-linked factory SM via a project view passes."""
-        from vcfops_common.dep_walker import collect_deps, CollectDepsCrossLinks
+        from vcfcf_common.dep_walker import collect_deps, CollectDepsCrossLinks
 
         # Factory SM
         sm_f = _make_sm(tmp_path / "content" / "supermetrics", "sm_f", "Factory SM")
@@ -463,7 +463,7 @@ class TestCrossLinksViolation:
 
     def test_unlisted_factory_view_is_error(self, tmp_path):
         """Third-party dashboard referencing factory view not in cross_links → error."""
-        from vcfops_common.dep_walker import collect_deps, CollectDepsCrossLinks
+        from vcfcf_common.dep_walker import collect_deps, CollectDepsCrossLinks
 
         sm_f = _make_sm(tmp_path / "content" / "supermetrics", "sm_f", "Factory SM")
         view_f = _make_view(tmp_path / "content" / "views", "view_f", sm_f.id)
@@ -488,7 +488,7 @@ class TestCrossLinksViolation:
 
     def test_unlisted_factory_view_error_no_cross_links_arg(self, tmp_path):
         """Same violation without passing cross_links arg (defaults to None)."""
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
 
         sm_f = _make_sm(tmp_path / "content" / "supermetrics", "sm_f", "Factory SM")
         view_f = _make_view(tmp_path / "content" / "views", "view_f", sm_f.id)
@@ -511,7 +511,7 @@ class TestCrossLinksViolation:
 
     def test_partial_cross_link_only_listed_allowed(self, tmp_path):
         """Only the view listed in cross_links is allowed; unlisted factory view is rejected."""
-        from vcfops_common.dep_walker import collect_deps, CollectDepsCrossLinks
+        from vcfcf_common.dep_walker import collect_deps, CollectDepsCrossLinks
 
         sm_f = _make_sm(tmp_path / "content" / "supermetrics", "sm_f", "Factory SM")
         view_f1 = _make_view(tmp_path / "content" / "views", "view_f1", sm_f.id)
@@ -552,7 +552,7 @@ class TestCrossLinksViolation:
                 },
             ],
         }, default_flow_style=False))
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
         dash = load_dashboard(p, enforce_framework_prefix=False, default_name_path="")
 
         cl = CollectDepsCrossLinks(views={view_f1.name})  # only f1 is cross-linked
@@ -587,7 +587,7 @@ class TestCrossProjectError:
 
     def test_cross_project_view_is_error(self, tmp_path):
         """proj-a dashboard referencing proj-b's view is a scope violation."""
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
 
         proj_b = tmp_path / "third_party" / "proj-b"
         sm_b = _make_sm(proj_b / "supermetrics", "sm_b", "SM B")
@@ -614,7 +614,7 @@ class TestCrossProjectError:
 
     def test_cross_project_sm_is_error(self, tmp_path):
         """proj-a view referencing proj-b's SM is a scope violation."""
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
 
         proj_b = tmp_path / "third_party" / "proj-b"
         sm_b = _make_sm(proj_b / "supermetrics", "sm_b", "SM B")
@@ -645,9 +645,9 @@ class TestEmptyProvenancePassThrough:
 
     def test_fixture_objects_with_no_source_path_always_accepted(self):
         """Programmatically constructed objects (no source_path) pass any scope."""
-        from vcfops_common.dep_walker import collect_deps
-        from vcfops_dashboards.loader import ViewDef, ViewColumn, Dashboard, Widget
-        from vcfops_supermetrics.loader import SuperMetricDef
+        from vcfcf_common.dep_walker import collect_deps
+        from vcfcf_dashboards.loader import ViewDef, ViewColumn, Dashboard, Widget
+        from vcfcf_supermetrics.loader import SuperMetricDef
 
         # Build a SM, view, and dashboard without source_path → empty provenance
         sm = SuperMetricDef(
@@ -713,7 +713,7 @@ class TestExplicitScopeOverridesAutoDetect:
 
     def test_explicit_scope_forces_rejection_of_sibling_project(self, tmp_path):
         """An explicit scope forces scope enforcement even on a multi-dash corpus."""
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
 
         proj_a = tmp_path / "third_party" / "proj-a"
         sm_a = _make_sm(proj_a / "supermetrics", "sm_a", "SM A")
@@ -746,7 +746,7 @@ class TestExplicitScopeOverridesAutoDetect:
         results in no auto-detected scope → no enforcement → cross-project deps
         resolve cleanly.
         """
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
 
         proj_a = tmp_path / "third_party" / "proj-a"
         sm_a = _make_sm(proj_a / "supermetrics", "sm_a", "SM A")
@@ -780,7 +780,7 @@ class TestRealRepoProvenance:
 
     def test_factory_dashboards_have_factory_provenance(self):
         """All dashboards under content/dashboards/ have provenance='factory'."""
-        from vcfops_dashboards.loader import load_all
+        from vcfcf_dashboards.loader import load_all
 
         views, dashboards = load_all(
             REPO_ROOT / "content" / "views",
@@ -794,7 +794,7 @@ class TestRealRepoProvenance:
 
     def test_factory_views_have_factory_provenance(self):
         """All views under content/views/ have provenance='factory'."""
-        from vcfops_dashboards.loader import load_all
+        from vcfcf_dashboards.loader import load_all
 
         views, _ = load_all(
             REPO_ROOT / "content" / "views",
@@ -816,7 +816,7 @@ class TestRealRepoProvenance:
         if not dash_dir.exists():
             pytest.skip("idps-planner has no dashboards/")
 
-        from vcfops_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.loader import load_dashboard
         for p in sorted(dash_dir.rglob("*.y*ml")):
             dash = load_dashboard(p, enforce_framework_prefix=False, default_name_path="")
             assert dash.provenance == "idps-planner", (
@@ -826,7 +826,7 @@ class TestRealRepoProvenance:
 
     def test_factory_supermetrics_have_factory_provenance(self):
         """All SMs under content/supermetrics/ have provenance='factory'."""
-        from vcfops_supermetrics.loader import load_dir
+        from vcfcf_supermetrics.loader import load_dir
 
         sms = load_dir(REPO_ROOT / "content" / "supermetrics")
         for sm in sms:
@@ -845,7 +845,7 @@ class TestCheckProjectMembershipIntegration:
 
     def test_self_contained_project_no_errors(self, tmp_path):
         """Self-contained third-party project passes membership check."""
-        from vcfops_packaging.project import check_project_membership
+        from vcfcf_packaging.project import check_project_membership
 
         tp = tmp_path / "third_party"
         proj_dir = tp / "proj-a"
@@ -867,7 +867,7 @@ class TestCheckProjectMembershipIntegration:
 
     def test_cross_factory_dep_without_cross_links_is_error(self, tmp_path):
         """Third-party project referencing factory content without cross_links → error."""
-        from vcfops_packaging.project import check_project_membership
+        from vcfcf_packaging.project import check_project_membership
 
         tp = tmp_path / "third_party"
         proj_dir = tp / "proj-a"
@@ -896,7 +896,7 @@ class TestCheckProjectMembershipIntegration:
         Both the view and the SM it references must be listed in cross_links,
         since each factory component is checked independently.
         """
-        from vcfops_packaging.project import check_project_membership
+        from vcfcf_packaging.project import check_project_membership
 
         tp = tmp_path / "third_party"
         proj_dir = tp / "proj-a"
@@ -925,7 +925,7 @@ class TestCheckProjectMembershipIntegration:
 
     def test_factory_native_dashboard_unconstrained(self, tmp_path):
         """Factory-native dashboards are not subject to the boundary check."""
-        from vcfops_packaging.project import check_project_membership
+        from vcfcf_packaging.project import check_project_membership
 
         tp = tmp_path / "third_party"
 
@@ -946,7 +946,7 @@ class TestCheckProjectMembershipIntegration:
 
     def test_cross_project_dep_is_error(self, tmp_path):
         """Third-party dashboard pulling in another third-party project's view → error."""
-        from vcfops_packaging.project import check_project_membership
+        from vcfcf_packaging.project import check_project_membership
 
         tp = tmp_path / "third_party"
 
@@ -975,9 +975,9 @@ class TestCheckProjectMembershipIntegration:
 
     def test_real_repo_idps_planner_still_clean(self):
         """Real repo: idps-planner is still self-contained under scope-aware check."""
-        from vcfops_packaging.project import check_project_membership
-        from vcfops_dashboards.loader import load_view, load_dashboard
-        from vcfops_supermetrics.loader import load_dir as load_sm_dir
+        from vcfcf_packaging.project import check_project_membership
+        from vcfcf_dashboards.loader import load_view, load_dashboard
+        from vcfcf_supermetrics.loader import load_dir as load_sm_dir
 
         import warnings
 
@@ -1037,7 +1037,7 @@ def test_sample_error_outputs(tmp_path, capsys):
       (b) Third-party dashboard referencing factory component not in cross_links
       (c) Third-party dashboard referencing another third-party component
     """
-    from vcfops_common.dep_walker import collect_deps
+    from vcfcf_common.dep_walker import collect_deps
 
     # (a) Factory dashboard + third-party view
     sm_tp = _make_sm(tmp_path / "third_party" / "proj-a" / "supermetrics", "sm_tp", "TP SM")

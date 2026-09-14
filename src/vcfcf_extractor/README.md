@@ -1,10 +1,10 @@
-# vcfops_extractor
+# vcfcf_extractor
 
 Reverse-engineering toolkit for VCF Operations content.
 
 Walks a live dashboard and its dependency graph (views, super metrics) and
 emits factory-shape YAML under `bundles/third_party/<slug>/` plus a bundle
-manifest that `vcfops_packaging build` can turn into a distributable zip.
+manifest that `vcfcf_packaging build` can turn into a distributable zip.
 
 ## Scope (Phase 1)
 
@@ -23,10 +23,10 @@ attribution interview and calls this package with complete flags.
 ## Subcommands
 
 ```
-python -m vcfops_extractor --help
-python -m vcfops_extractor extract --help
-python -m vcfops_extractor extract dashboard --help
-python -m vcfops_extractor list-dashboards --help
+python -m vcfcf_extractor --help
+python -m vcfcf_extractor extract --help
+python -m vcfcf_extractor extract dashboard --help
+python -m vcfcf_extractor list-dashboards --help
 ```
 
 ### `extract dashboard`
@@ -63,8 +63,8 @@ Walk a dashboard's dependency graph and emit factory-shape YAML + manifest.
 List dashboards available on the lab instance.
 
 ```
-python -m vcfops_extractor list-dashboards
-python -m vcfops_extractor list-dashboards --folder "IDPS"
+python -m vcfcf_extractor list-dashboards
+python -m vcfcf_extractor list-dashboards --folder "IDPS"
 ```
 
 Prints `UUID  name` for each dashboard. Use the UUID with `--dashboard-id` for
@@ -91,7 +91,7 @@ No interactive prompts anywhere. Missing required flags abort with a clear error
 
 ```bash
 # Preview dependency walk without writing files
-python -m vcfops_extractor extract dashboard \
+python -m vcfcf_extractor extract dashboard \
   --dashboard-name "IDPS Planner" \
   --bundle-slug idps-planner \
   --author "Scott Bowe" \
@@ -102,7 +102,7 @@ python -m vcfops_extractor extract dashboard \
   --dry-run
 
 # Full extraction (skip confirmation)
-python -m vcfops_extractor extract dashboard \
+python -m vcfcf_extractor extract dashboard \
   --dashboard-name "IDPS Planner" \
   --bundle-slug idps-planner \
   --author "Scott Bowe" \
@@ -113,7 +113,7 @@ python -m vcfops_extractor extract dashboard \
   --yes
 
 # Then build the distributable zip
-python -m vcfops_packaging build bundles/third_party/idps-planner.yaml
+python -m vcfcf_packaging build bundles/third_party/idps-planner.yaml
 ```
 
 ### Slash-command-driven (primary UX)
@@ -145,8 +145,8 @@ with a WARN. Existing factory content is never overwritten.
 
 ## Architectural notes
 
-- Reverse parsers live in sibling packages: `vcfops_dashboards.reverse` (Phase 1
-  partial) and `vcfops_supermetrics.reverse` for cleaner separation.
+- Reverse parsers live in sibling packages: `vcfcf_dashboards.reverse` (Phase 1
+  partial) and `vcfcf_supermetrics.reverse` for cleaner separation.
 - SM formula UUID->name rewriting uses a lazy-loaded name cache backed by
   `GET /api/supermetrics/{id}` per-UUID (avoids a full list on small graphs).
 - View export uses `POST /api/content/operations/export` with

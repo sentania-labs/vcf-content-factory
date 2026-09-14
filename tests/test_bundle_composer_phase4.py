@@ -1,4 +1,4 @@
-"""Phase 4 tests for vcfops_packaging bundle composer.
+"""Phase 4 tests for vcfcf_packaging bundle composer.
 
 Test groups:
   T1 — slug uniqueness vs existing bundles (collision errors)
@@ -79,19 +79,19 @@ class TestSlugCollisionBundles:
     def test_existing_bundle_slug_collides(self):
         # capacity-assessment.yaml was removed in v2 item #1 cleanup.
         # vks-core-consumption-bundle is the surviving bundle slug.
-        from vcfops_packaging.composer import check_slug_collision
+        from vcfcf_packaging.composer import check_slug_collision
         err = check_slug_collision("vks-core-consumption-bundle", REPO_ROOT)
         assert err is not None, "vks-core-consumption-bundle bundle exists; should report collision"
         assert "vks-core-consumption-bundle" in err
 
     def test_fresh_slug_no_collision(self):
-        from vcfops_packaging.composer import check_slug_collision
+        from vcfcf_packaging.composer import check_slug_collision
         err = check_slug_collision("__nonexistent-bundle-xyz__", REPO_ROOT)
         assert err is None
 
     def test_force_bypasses_collision_in_compose(self, tmp_path):
         """--force lets compose_bundle overwrite an existing bundle."""
-        from vcfops_packaging.composer import compose_bundle
+        from vcfcf_packaging.composer import compose_bundle
 
         bundle_path = tmp_path / "bundles" / "test-bundle.yaml"
         bundle_path.parent.mkdir(parents=True)
@@ -126,7 +126,7 @@ class TestSlugCollisionBundles:
 
     def test_no_force_blocks_existing_bundle(self, tmp_path, capsys):
         """Without --force, compose_bundle returns 1 on collision."""
-        from vcfops_packaging.composer import compose_bundle
+        from vcfcf_packaging.composer import compose_bundle
 
         bundle_path = tmp_path / "bundles" / "already-exists.yaml"
         bundle_path.parent.mkdir(parents=True)
@@ -152,14 +152,14 @@ class TestSlugCollisionReleases:
     """T2: check_slug_collision raises collision on existing release manifest."""
 
     def test_existing_release_slug_collides(self):
-        from vcfops_packaging.composer import check_slug_collision
+        from vcfcf_packaging.composer import check_slug_collision
         # demand-driven-capacity-v2 is a real release manifest in the repo
         err = check_slug_collision("demand-driven-capacity-v2", REPO_ROOT)
         assert err is not None, "demand-driven-capacity-v2 release exists; should report collision"
         assert "release" in err.lower() or "demand-driven-capacity-v2" in err
 
     def test_fresh_slug_not_blocked_by_releases(self):
-        from vcfops_packaging.composer import check_slug_collision
+        from vcfcf_packaging.composer import check_slug_collision
         err = check_slug_collision("__no-such-release-xyz__", REPO_ROOT)
         assert err is None
 
@@ -172,7 +172,7 @@ class TestComponentDiscovery:
     """T3: discover_components returns expected counts from the real corpus."""
 
     def test_discovers_factory_supermetrics(self):
-        from vcfops_packaging.composer import discover_components
+        from vcfcf_packaging.composer import discover_components
         entries = discover_components(REPO_ROOT, "supermetrics")
         factory_entries = [e for e in entries if e.provenance == "factory"]
         # We know there are at least 10 factory SMs
@@ -181,19 +181,19 @@ class TestComponentDiscovery:
         )
 
     def test_discovers_factory_dashboards(self):
-        from vcfops_packaging.composer import discover_components
+        from vcfcf_packaging.composer import discover_components
         entries = discover_components(REPO_ROOT, "dashboards")
         factory = [e for e in entries if e.provenance == "factory"]
         assert len(factory) >= 2, f"Expected 2+ factory dashboards, got {len(factory)}"
 
     def test_discovers_factory_views(self):
-        from vcfops_packaging.composer import discover_components
+        from vcfcf_packaging.composer import discover_components
         entries = discover_components(REPO_ROOT, "views")
         factory = [e for e in entries if e.provenance == "factory"]
         assert len(factory) >= 2, f"Expected 2+ factory views, got {len(factory)}"
 
     def test_discovers_third_party_dashboards(self):
-        from vcfops_packaging.composer import discover_components
+        from vcfcf_packaging.composer import discover_components
         entries = discover_components(REPO_ROOT, "dashboards")
         third_party = [e for e in entries if e.provenance not in ("factory", "")]
         # idps-planner has at least 1 dashboard
@@ -202,7 +202,7 @@ class TestComponentDiscovery:
         )
 
     def test_factory_entries_come_first(self):
-        from vcfops_packaging.composer import discover_components
+        from vcfcf_packaging.composer import discover_components
         entries = discover_components(REPO_ROOT, "supermetrics")
         if len(entries) < 2:
             pytest.skip("not enough entries to test ordering")
@@ -220,7 +220,7 @@ class TestComponentDiscovery:
         )
 
     def test_entries_have_rel_path(self):
-        from vcfops_packaging.composer import discover_components
+        from vcfcf_packaging.composer import discover_components
         entries = discover_components(REPO_ROOT, "dashboards")
         for e in entries:
             assert e.rel_path, f"Empty rel_path on entry {e.slug}"
@@ -229,7 +229,7 @@ class TestComponentDiscovery:
             )
 
     def test_empty_type_returns_empty_list(self):
-        from vcfops_packaging.composer import discover_components
+        from vcfcf_packaging.composer import discover_components
         entries = discover_components(REPO_ROOT, "nonexistent_type_xyz")
         assert entries == []
 
@@ -242,38 +242,38 @@ class TestPickByIndex:
     """T4: _parse_picks handles integer indices correctly."""
 
     def test_single_index(self):
-        from vcfops_packaging.composer import _parse_picks, ComponentEntry
+        from vcfcf_packaging.composer import _parse_picks, ComponentEntry
         entries = _make_entries(5)
         result = _parse_picks("1", entries)
         assert len(result) == 1
         assert result[0].slug == "item-0"
 
     def test_multiple_indices(self):
-        from vcfops_packaging.composer import _parse_picks
+        from vcfcf_packaging.composer import _parse_picks
         entries = _make_entries(5)
         result = _parse_picks("1,3,5", entries)
         assert [e.slug for e in result] == ["item-0", "item-2", "item-4"]
 
     def test_out_of_range_index_ignored(self):
-        from vcfops_packaging.composer import _parse_picks
+        from vcfcf_packaging.composer import _parse_picks
         entries = _make_entries(3)
         result = _parse_picks("1,99", entries)
         assert len(result) == 1
 
     def test_empty_picks_none(self):
-        from vcfops_packaging.composer import _parse_picks
+        from vcfcf_packaging.composer import _parse_picks
         entries = _make_entries(3)
         result = _parse_picks("none", entries)
         assert result == []
 
     def test_blank_picks_empty(self):
-        from vcfops_packaging.composer import _parse_picks
+        from vcfcf_packaging.composer import _parse_picks
         entries = _make_entries(3)
         result = _parse_picks("  ", entries)
         assert result == []
 
     def test_deduplication(self):
-        from vcfops_packaging.composer import _parse_picks
+        from vcfcf_packaging.composer import _parse_picks
         entries = _make_entries(3)
         result = _parse_picks("1,1,2", entries)
         assert len(result) == 2
@@ -287,7 +287,7 @@ class TestPickBySubstring:
     """T5: _parse_picks handles substring patterns."""
 
     def test_substring_match(self):
-        from vcfops_packaging.composer import _parse_picks, ComponentEntry
+        from vcfcf_packaging.composer import _parse_picks, ComponentEntry
         entries = [
             ComponentEntry(Path("/x/alpha.yaml"), "alpha.yaml", "alpha", "Alpha", "factory"),
             ComponentEntry(Path("/x/beta.yaml"), "beta.yaml", "beta", "Beta", "factory"),
@@ -297,7 +297,7 @@ class TestPickBySubstring:
         assert {e.slug for e in result} == {"alpha", "alphabeta"}
 
     def test_substring_case_insensitive(self):
-        from vcfops_packaging.composer import _parse_picks, ComponentEntry
+        from vcfcf_packaging.composer import _parse_picks, ComponentEntry
         entries = [
             ComponentEntry(Path("/x/Cluster_CPU.yaml"), "Cluster_CPU", "cluster_cpu", "Cluster CPU", "factory"),
             ComponentEntry(Path("/x/vm_mem.yaml"), "vm_mem", "vm_mem", "VM Mem", "factory"),
@@ -307,7 +307,7 @@ class TestPickBySubstring:
         assert result[0].slug == "cluster_cpu"
 
     def test_mixed_index_and_substring(self):
-        from vcfops_packaging.composer import _parse_picks, ComponentEntry
+        from vcfcf_packaging.composer import _parse_picks, ComponentEntry
         entries = [
             ComponentEntry(Path("/x/a.yaml"), "a.yaml", "alpha", "Alpha", "factory"),
             ComponentEntry(Path("/x/b.yaml"), "b.yaml", "beta", "Beta", "factory"),
@@ -325,7 +325,7 @@ class TestDependencyWalk:
     """T6: _check_deps surfaces missing view/SM dependencies."""
 
     def test_no_deps_when_no_dashboards(self):
-        from vcfops_packaging.composer import _check_deps
+        from vcfcf_packaging.composer import _check_deps
         errors = _check_deps(
             picked_dashboards=[],
             picked_views=[],
@@ -336,7 +336,7 @@ class TestDependencyWalk:
         assert errors == []
 
     def test_missing_view_for_dashboard(self):
-        from vcfops_packaging.composer import _check_deps, discover_components
+        from vcfcf_packaging.composer import _check_deps, discover_components
 
         # Pick a dashboard but provide NO views — the walker should report missing views.
         dashboards = [e for e in discover_components(REPO_ROOT, "dashboards")
@@ -357,7 +357,7 @@ class TestDependencyWalk:
         )
 
     def test_no_errors_when_deps_included(self):
-        from vcfops_packaging.composer import _check_deps, discover_components
+        from vcfcf_packaging.composer import _check_deps, discover_components
 
         # Capacity-assessment dashboard + its views + SMs should produce no errors.
         all_dashboards = discover_components(REPO_ROOT, "dashboards")
@@ -390,7 +390,7 @@ class TestCrossProvenanceComposition:
     """T7: bundles may mix factory and third-party content without scope errors."""
 
     def test_cross_provenance_no_scope_errors(self):
-        from vcfops_packaging.composer import _check_deps, discover_components
+        from vcfcf_packaging.composer import _check_deps, discover_components
 
         # Combine a factory dashboard with all views + SMs (including third-party).
         factory_dashboards = [
@@ -420,7 +420,7 @@ class TestCrossProvenanceComposition:
 
     def test_third_party_dashboard_plus_factory_view_allowed(self):
         """A third-party dashboard paired with a factory view must not produce scope errors."""
-        from vcfops_packaging.composer import _check_deps, discover_components
+        from vcfcf_packaging.composer import _check_deps, discover_components
 
         third_party_dashboards = [
             e for e in discover_components(REPO_ROOT, "dashboards")
@@ -455,7 +455,7 @@ class TestDryRun:
     """T8: --dry-run prints YAML to output, does not write file."""
 
     def test_dry_run_does_not_write_file(self, tmp_path):
-        from vcfops_packaging.composer import compose_bundle
+        from vcfcf_packaging.composer import compose_bundle
 
         out_fn, lines = _capture_output()
         rc = compose_bundle(
@@ -475,7 +475,7 @@ class TestDryRun:
         assert not bundle_path.exists(), "dry-run must not write to disk"
 
     def test_dry_run_prints_yaml(self, tmp_path):
-        from vcfops_packaging.composer import compose_bundle
+        from vcfcf_packaging.composer import compose_bundle
 
         out_fn, lines = _capture_output()
         rc = compose_bundle(
@@ -498,7 +498,7 @@ class TestDryRun:
         assert "description:" in combined
 
     def test_dry_run_prints_dry_run_tag(self, tmp_path):
-        from vcfops_packaging.composer import compose_bundle
+        from vcfcf_packaging.composer import compose_bundle
 
         out_fn, lines = _capture_output()
         compose_bundle(
@@ -525,7 +525,7 @@ class TestForceOverwrite:
     """T9: --force allows overwriting an existing bundle."""
 
     def test_force_overwrites_existing(self, tmp_path):
-        from vcfops_packaging.composer import compose_bundle
+        from vcfcf_packaging.composer import compose_bundle
 
         bundle_path = tmp_path / "bundles" / "overwrite-me.yaml"
         bundle_path.parent.mkdir(parents=True)
@@ -558,7 +558,7 @@ class TestForceOverwrite:
         )
 
     def test_without_force_returns_1_on_existing(self, tmp_path, capsys):
-        from vcfops_packaging.composer import compose_bundle
+        from vcfcf_packaging.composer import compose_bundle
 
         bundle_path = tmp_path / "bundles" / "no-overwrite.yaml"
         bundle_path.parent.mkdir(parents=True)
@@ -590,8 +590,8 @@ class TestRoundTrip:
 
     def test_empty_bundle_round_trips(self, tmp_path):
         """A bundle with no components should load cleanly."""
-        from vcfops_packaging.composer import compose_bundle
-        from vcfops_packaging.loader import load_bundle, BundleValidationError
+        from vcfcf_packaging.composer import compose_bundle
+        from vcfcf_packaging.loader import load_bundle, BundleValidationError
 
         out_fn, _ = _capture_output()
         rc = compose_bundle(
@@ -624,8 +624,8 @@ class TestRoundTrip:
 
     def test_bundle_with_real_components_round_trips(self, tmp_path):
         """A bundle picking real factory components should load cleanly."""
-        from vcfops_packaging.composer import compose_bundle, discover_components
-        from vcfops_packaging.loader import load_bundle, BundleValidationError
+        from vcfcf_packaging.composer import compose_bundle, discover_components
+        from vcfcf_packaging.loader import load_bundle, BundleValidationError
 
         # Copy the real content tree symlink-style so loader paths resolve.
         content_src = REPO_ROOT / "content"
@@ -639,8 +639,8 @@ class TestRoundTrip:
         if third_party_src.exists():
             (tmp_path / "third_party").symlink_to(third_party_src.resolve())
 
-        # Also symlink vcfops_common (needed by loader to find repo_root).
-        (tmp_path / "vcfops_common").symlink_to((REPO_ROOT / "src" / "vcfops_common").resolve())
+        # Also symlink vcfcf_common (needed by loader to find repo_root).
+        (tmp_path / "vcfcf_common").symlink_to((REPO_ROOT / "src" / "vcfcf_common").resolve())
 
         # Pick 2 supermetrics (indices 1 and 2)
         sm_entries = discover_components(REPO_ROOT, "supermetrics")
@@ -687,7 +687,7 @@ class TestCLIIntegration:
     """Verify cmd_bundle is wired into the argparse parser and dispatches correctly."""
 
     def test_bundle_subcommand_registered(self):
-        from vcfops_packaging.cli import build_parser
+        from vcfcf_packaging.cli import build_parser
         parser = build_parser()
         # argparse stores subparser names in the choices dict.
         subparsers_action = next(
@@ -698,7 +698,7 @@ class TestCLIIntegration:
         )
 
     def test_bundle_dry_run_flag(self):
-        from vcfops_packaging.cli import build_parser
+        from vcfcf_packaging.cli import build_parser
         parser = build_parser()
         args = parser.parse_args(["bundle", "my-slug", "--dry-run"])
         assert args.name == "my-slug"
@@ -706,14 +706,14 @@ class TestCLIIntegration:
         assert args.force is False
 
     def test_bundle_force_flag(self):
-        from vcfops_packaging.cli import build_parser
+        from vcfcf_packaging.cli import build_parser
         parser = build_parser()
         args = parser.parse_args(["bundle", "my-slug", "--force"])
         assert args.force is True
         assert args.dry_run is False
 
     def test_bundle_name_optional(self):
-        from vcfops_packaging.cli import build_parser
+        from vcfcf_packaging.cli import build_parser
         parser = build_parser()
         args = parser.parse_args(["bundle"])
         assert args.name is None
@@ -725,7 +725,7 @@ class TestCLIIntegration:
 
 def _make_entries(n: int):
     """Create n synthetic ComponentEntry objects for picker tests."""
-    from vcfops_packaging.composer import ComponentEntry
+    from vcfcf_packaging.composer import ComponentEntry
     return [
         ComponentEntry(
             path=Path(f"/fake/{i}.yaml"),

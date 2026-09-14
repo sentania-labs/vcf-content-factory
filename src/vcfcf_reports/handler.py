@@ -1,6 +1,6 @@
-"""Content handler for report definitions (vcfops_packaging sync integration).
+"""Content handler for report definitions (vcfcf_packaging sync integration).
 
-Exposes a module-level HANDLER instance that the vcfops_packaging sync
+Exposes a module-level HANDLER instance that the vcfcf_packaging sync
 orchestrator discovers automatically.
 
 Sync order 7 — after alerts (6).  Reports may reference views (3) and
@@ -15,14 +15,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
-from vcfops_packaging.handler import (
+from vcfcf_packaging.handler import (
     ContentHandler,
     DeleteResult,
     ItemResult,
     SyncResult,
     ValidateResult,
 )
-from vcfops_supermetrics.client import VCFOpsClient, VCFOpsError
+from vcfcf_supermetrics.client import VCFOpsClient, VCFOpsError
 
 from .client import (
     VCFOpsReportsError,

@@ -19,9 +19,9 @@ supermetrics: list[path]   (optional)
 customgroups: list[path]   (optional)
 views:        list[path]   (optional)
 dashboards:   list[path]   (optional)
-symptoms:         list[path]   (optional) -- requires vcfops_symptoms package
-alerts:           list[path]   (optional) -- requires vcfops_alerts package
-reports:          list[path]   (optional) -- requires vcfops_reports package
+symptoms:         list[path]   (optional) -- requires vcfcf_symptoms package
+alerts:           list[path]   (optional) -- requires vcfcf_alerts package
+reports:          list[path]   (optional) -- requires vcfcf_reports package
 recommendations:  list[path]   (optional) -- recommendation definitions under
                                recommendations/*.yaml.  Loaded and validated
                                at bundle load time; included in AlertContent.xml.
@@ -65,12 +65,12 @@ from typing import List, Optional
 
 import yaml
 
-from vcfops_supermetrics.loader import SuperMetricDef, load_file as load_sm
-from vcfops_dashboards.loader import ViewDef, Dashboard, load_view, load_dashboard
-from vcfops_customgroups.loader import CustomGroupDef, load_file as load_cg
-from vcfops_reports.loader import ReportDef, load_file as load_report
-from vcfops_symptoms.loader import SymptomDef, load_file as load_symptom
-from vcfops_alerts.loader import (
+from vcfcf_supermetrics.loader import SuperMetricDef, load_file as load_sm
+from vcfcf_dashboards.loader import ViewDef, Dashboard, load_view, load_dashboard
+from vcfcf_customgroups.loader import CustomGroupDef, load_file as load_cg
+from vcfcf_reports.loader import ReportDef, load_file as load_report
+from vcfcf_symptoms.loader import SymptomDef, load_file as load_symptom
+from vcfcf_alerts.loader import (
     AlertDef, load_file as load_alert,
     Recommendation, load_recommendation_file,
 )
@@ -97,7 +97,7 @@ def parse_builtin_metric_enables(
 ) -> "List[BuiltinMetricEnable]":
     """Validate and parse a raw ``builtin_metric_enables:`` YAML list.
 
-    Shared by ``load_bundle`` (this module) and ``vcfops_packaging.releases.
+    Shared by ``load_bundle`` (this module) and ``vcfcf_packaging.releases.
     load_release`` (which carries the same-shaped field, "same entry shape as
     the bundle manifest field"), previously duplicated byte-for-byte in both
     modules modulo the exception class raised on validation failure
@@ -257,11 +257,11 @@ def load_bundle(path: str | Path) -> Bundle:
     # Resolve all file references relative to the manifest's directory.
     # Manifests in bundles/ are one level under repo root.
     # PROJECT.yaml files in third_party/<project>/ are two levels under repo root.
-    # Try walking up to find a plausible repo root (one containing vcfops_common/).
+    # Try walking up to find a plausible repo root (one containing vcfcf_common/).
     def _find_repo_root(start: Path) -> Path:
         current = start
         for _ in range(5):
-            if (current / "vcfops_common").exists() or (current / "src" / "vcfops_common").exists():
+            if (current / "vcfcf_common").exists() or (current / "src" / "vcfcf_common").exists():
                 return current
             current = current.parent
         return start.parent  # fallback: manifest's parent

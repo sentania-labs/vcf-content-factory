@@ -70,7 +70,7 @@ Project-scope semantics
 Public API — online (requires VCFOpsClient)
 -------------------------------------------
   walk_and_check(
-      client,             # vcfops_supermetrics.client.VCFOpsClient (SM-extended)
+      client,             # vcfcf_supermetrics.client.VCFOpsClient (SM-extended)
       supermetrics,       # list[SuperMetricDef] — SMs being synced
       views,              # list[ViewDef]
       dashboards,         # list[Dashboard]
@@ -100,9 +100,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
-    from vcfops_supermetrics.client import VCFOpsClient
-    from vcfops_supermetrics.loader import SuperMetricDef
-    from vcfops_dashboards.loader import ViewDef, Dashboard
+    from vcfcf_supermetrics.client import VCFOpsClient
+    from vcfcf_supermetrics.loader import SuperMetricDef
+    from vcfcf_dashboards.loader import ViewDef, Dashboard
 
 
 # ---------------------------------------------------------------------------
@@ -246,7 +246,7 @@ def extract_refs_from_supermetrics(
     the name, ``sm_id`` is empty and the caller decides what that means
     (``walk_and_check`` tries the target instance, then reports it).
     """
-    from vcfops_supermetrics.crossref import crossref_names
+    from vcfcf_supermetrics.crossref import crossref_names
 
     _names: dict = dict(sm_name_map or {})
     for d in defs:
@@ -479,12 +479,12 @@ def _walk_sm_crossrefs(
     find is recorded in ``errors`` and the walk continues, so the caller sees
     every missing name in one pass.
 
-    Tokens are found with ``vcfops_supermetrics.crossref.crossref_names`` (the
+    Tokens are found with ``vcfcf_supermetrics.crossref.crossref_names`` (the
     ``SM_CROSSREF_RE`` match): the ``@supermetric`` token is case-insensitive,
     the quoted name is matched exactly against the SM display name.  Cycles terminate via a visited set
     keyed on the SM id (falling back to the name for id-less fixtures).
     """
-    from vcfops_supermetrics.crossref import crossref_names
+    from vcfcf_supermetrics.crossref import crossref_names
 
     queue = list(seeds)
     visited: Set[str] = set()
@@ -1097,7 +1097,7 @@ def _enable_sm(
     result: WalkResult,
 ) -> None:
     """Enable one SM on the Default Policy, recording outcome into result."""
-    from vcfops_supermetrics.client import VCFOpsError
+    from vcfcf_supermetrics.client import VCFOpsError
     import time
     SM_ENABLE_VERIFY_DELAY = 2
 
@@ -1140,7 +1140,7 @@ def walk_and_check(
     """Walk all content, check instance-side dependencies, auto-enable where appropriate.
 
     Args:
-        client:               SM-extended VCFOpsClient (from vcfops_supermetrics.client).
+        client:               SM-extended VCFOpsClient (from vcfcf_supermetrics.client).
         supermetrics:         SuperMetricDef list being synced (may be empty for dashboard-only sync).
         views:                ViewDef list being synced (may be empty).
         dashboards:           Dashboard list being synced (may be empty).
@@ -1154,7 +1154,7 @@ def walk_and_check(
 
     Returns WalkResult with all outcomes recorded.
     """
-    from vcfops_supermetrics.client import VCFOpsError
+    from vcfcf_supermetrics.client import VCFOpsError
 
     result = WalkResult()
     _customgroups = customgroups if customgroups is not None else []
@@ -1390,7 +1390,7 @@ def _get_sm_resource_kinds(
 
     Returns a list of {adapterKind, resourceKind} dicts, or None on failure.
     """
-    from vcfops_supermetrics.client import VCFOpsError
+    from vcfcf_supermetrics.client import VCFOpsError
     try:
         sm_data = client.get_supermetric(sm_uuid)
     except VCFOpsError as e:
@@ -1408,7 +1408,7 @@ def _get_sm_resource_kinds(
     if not rks:
         result._msg("WARN",
             f"SM '{sm_name}' ({sm_uuid}) has no resourceKinds on the instance — cannot enable. "
-            "Run 'python3 -m vcfops_supermetrics sync' first."
+            "Run 'python3 -m vcfcf_supermetrics sync' first."
         )
         return None
     return rks

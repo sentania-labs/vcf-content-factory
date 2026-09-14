@@ -1,4 +1,4 @@
-"""YAML loading utilities shared within vcfops_dashboards.
+"""YAML loading utilities shared within vcfcf_dashboards.
 
 Provides ``strict_load``, a drop-in replacement for ``yaml.safe_load``
 that raises ``yaml.constructor.ConstructorError`` on duplicate mapping

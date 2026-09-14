@@ -1,19 +1,19 @@
-"""Content handler interface and discovery for vcfops_packaging sync.
+"""Content handler interface and discovery for vcfcf_packaging sync.
 
-Each vcfops_* package that wants to participate in bundle sync exposes a
+Each vcfcf_* package that wants to participate in bundle sync exposes a
 module named ``handler.py`` at its package root.  That module must define a
 module-level ``HANDLER`` object that is an instance of a class conforming to
 the ContentHandler protocol defined here.
 
 Discovery:
-    The sync orchestrator scans for importable ``vcfops_*/handler.py`` modules
+    The sync orchestrator scans for importable ``vcfcf_*/handler.py`` modules
     by looking for directories on ``sys.path`` whose name starts with
-    ``vcfops_`` and contain a ``handler.py`` file.  If a module cannot be
+    ``vcfcf_`` and contain a ``handler.py`` file.  If a module cannot be
     imported (e.g. the package has a missing dependency), it is skipped with a
     WARN and the sync continues.
 
 Adding a new content type:
-    1. Create ``vcfops_<type>/handler.py`` with a ``HANDLER`` instance.
+    1. Create ``vcfcf_<type>/handler.py`` with a ``HANDLER`` instance.
     2. Set ``content_type`` to the bundle YAML key (e.g. ``"symptoms"``).
     3. Set ``sync_order`` to a value that respects the dependency graph (higher
        numbers depend on lower numbers).
@@ -98,12 +98,12 @@ class ValidateResult:
 class ContentHandler:
     """Base class for content type handlers.
 
-    Subclass this in each ``vcfops_*/handler.py`` and set the class
+    Subclass this in each ``vcfcf_*/handler.py`` and set the class
     attributes.  Override the three methods to implement sync/delete/validate
     for your content type.
 
     The ``session`` parameter passed to sync/delete is a
-    ``vcfops_supermetrics.client.VCFOpsClient`` that has already been
+    ``vcfcf_supermetrics.client.VCFOpsClient`` that has already been
     authenticated.  Custom-group handlers that need a
     ``VCFOpsCustomGroupClient`` should construct one from the same env vars
     (the session object carries the token in its headers, but the two client
@@ -163,13 +163,13 @@ class ContentHandler:
 
 def discover_handlers() -> List[ContentHandler]:
     """Discover all available content handlers by scanning for
-    ``vcfops_*/handler.py`` modules on sys.path.
+    ``vcfcf_*/handler.py`` modules on sys.path.
 
     A handler module may expose either:
     - A single ``HANDLER`` object (a ContentHandler instance), or
     - A ``HANDLERS`` list of ContentHandler instances.
 
-    Both forms may coexist in the same module (e.g. vcfops_dashboards exposes
+    Both forms may coexist in the same module (e.g. vcfcf_dashboards exposes
     handlers for both "views" and "dashboards" via HANDLERS).
 
     Returns handlers sorted by sync_order (ascending).  Modules that cannot
@@ -193,7 +193,7 @@ def discover_handlers() -> List[ContentHandler]:
 
         for entry in entries:
             pkg_name = entry.name
-            if not pkg_name.startswith("vcfops_") or pkg_name == "vcfops_packaging":
+            if not pkg_name.startswith("vcfcf_") or pkg_name == "vcfcf_packaging":
                 continue
             if not (entry / "handler.py").exists():
                 continue

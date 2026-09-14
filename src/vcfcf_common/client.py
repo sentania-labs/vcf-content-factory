@@ -7,12 +7,12 @@ Provides VCFOpsClient and VCFOpsError — the single source of truth for:
   - from_env() classmethod
 
 Supermetric-specific helpers (policy enable/export/import, SM enable,
-built-in metric enable) live in vcfops_supermetrics.client and operate
+built-in metric enable) live in vcfcf_supermetrics.client and operate
 on a VCFOpsClient instance.
 
 All other package clients (dashboards, reports, customgroups, symptoms,
 alerts) import VCFOpsClient from here rather than from
-vcfops_supermetrics.client, removing the "supermetrics happens to own
+vcfcf_supermetrics.client, removing the "supermetrics happens to own
 the base" coupling.
 """
 from __future__ import annotations

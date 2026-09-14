@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = REPO_ROOT / "src" / "vcfops_packaging" / "templates" / "install.ps1"
+TEMPLATE = REPO_ROOT / "src" / "vcfcf_packaging" / "templates" / "install.ps1"
 HARNESS = Path(__file__).resolve().parent / "fixtures" / "install_ps1_advisory_harness.ps1"
 
 
@@ -148,7 +148,7 @@ class TestAdvisoryFeature:
             'if (($osState -ne "FINISHED" -and $osState -ne "") '
             '-or $osFailed -gt 0 -or $osSkipped -gt 0) {'
         ) in script_text
-        py = (REPO_ROOT / "src" / "vcfops_packaging" / "templates" / "install.py").read_text(
+        py = (REPO_ROOT / "src" / "vcfcf_packaging" / "templates" / "install.py").read_text(
             encoding="utf-8"
         )
         assert (
@@ -196,7 +196,7 @@ class TestAdvisoryFeature:
     def test_bounding_constants_match_python(self, script_text: str) -> None:
         assert "$script:AdvisoryNameMaxChars = 120" in script_text
         assert "$script:AdvisoryNamesMax = 20" in script_text
-        py = (REPO_ROOT / "src" / "vcfops_packaging" / "templates" / "install.py").read_text(
+        py = (REPO_ROOT / "src" / "vcfcf_packaging" / "templates" / "install.py").read_text(
             encoding="utf-8"
         )
         assert "_ADVISORY_NAME_MAX_CHARS = 120" in py
@@ -254,7 +254,7 @@ def test_no_false_template_version_stamp(template: str) -> None:
     staleness signal is worse than no signal: it is what a reader diagnosing
     a staleness problem finds first.
     """
-    text = (REPO_ROOT / "src" / "vcfops_packaging" / "templates" / template).read_text(
+    text = (REPO_ROOT / "src" / "vcfcf_packaging" / "templates" / template).read_text(
         encoding="utf-8"
     )
     # \b does not match inside CURRENT_TEMPLATE_VERSION (underscore is a word
@@ -274,8 +274,8 @@ def test_no_false_template_version_stamp(template: str) -> None:
 # Issue #101 -- shipped templates must pin text encoding explicitly
 # ---------------------------------------------------------------------------
 SHIPPED_PY_TEMPLATES = [
-    ("vcfops_packaging", "install.py"),
-    ("vcfops_managementpacks", "post-install.py"),
+    ("vcfcf_packaging", "install.py"),
+    ("vcfcf_managementpacks", "post-install.py"),
 ]
 
 
@@ -388,7 +388,7 @@ class TestSmGhostStateRetryStaysNarrow:
     def test_python_installer_keeps_its_side_of_the_parity(self) -> None:
         """The port is only meaningful while both sides agree."""
         py = (
-            REPO_ROOT / "src" / "vcfops_packaging" / "templates" / "install.py"
+            REPO_ROOT / "src" / "vcfcf_packaging" / "templates" / "install.py"
         ).read_text(encoding="utf-8")
         assert 'contentType") == "SUPER_METRICS"' in py, (
             "install.py lost the SUPER_METRICS filter the PowerShell port mirrors"
@@ -631,7 +631,7 @@ class TestPythonInstallerPinsStdout:
     @pytest.fixture(scope="class")
     def py_text(self) -> str:
         return (
-            REPO_ROOT / "src" / "vcfops_packaging" / "templates" / "install.py"
+            REPO_ROOT / "src" / "vcfcf_packaging" / "templates" / "install.py"
         ).read_text(encoding="utf-8")
 
     def test_stdio_is_reconfigured(self, py_text: str) -> None:
@@ -679,7 +679,7 @@ class TestPythonInstallerPinsStdout:
         encoding="utf-8" by #101.
         """
         text = (
-            REPO_ROOT / "src" / "vcfops_managementpacks" / "templates"
+            REPO_ROOT / "src" / "vcfcf_managementpacks" / "templates"
             / "post-install.py"
         ).read_text(encoding="utf-8")
         prints = [
@@ -1049,7 +1049,7 @@ class TestImportWaitTimeoutNamesTheStatus:
         test below rather than by widening this claim.
         """
         py = (
-            REPO_ROOT / "src" / "vcfops_packaging" / "templates" / "install.py"
+            REPO_ROOT / "src" / "vcfcf_packaging" / "templates" / "install.py"
         ).read_text(encoding="utf-8")
         assert "Import status check failed ({s.status_code})" in py, (
             "install.py's import poll must keep dying on a non-200; if it "
@@ -1066,7 +1066,7 @@ class TestImportWaitTimeoutNamesTheStatus:
         was happening" when the truth was "we never got a usable answer".
         """
         py = (
-            REPO_ROOT / "src" / "vcfops_packaging" / "templates" / "install.py"
+            REPO_ROOT / "src" / "vcfcf_packaging" / "templates" / "install.py"
         ).read_text(encoding="utf-8")
         assert '_die("Timed out waiting for prior export to finish")' not in py, (
             "the bare prior-export timeout is back"

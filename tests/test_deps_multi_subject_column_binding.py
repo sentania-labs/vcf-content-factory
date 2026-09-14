@@ -48,7 +48,7 @@ def _multi_subject_view_data() -> dict:
 
 
 def _load(tmp_path: Path):
-    from vcfops_dashboards.loader import load_view
+    from vcfcf_dashboards.loader import load_view
 
     v = load_view(_write_view(tmp_path, _multi_subject_view_data()), enforce_framework_prefix=False)
     v.validate(enforce_framework_prefix=False)
@@ -57,21 +57,21 @@ def _load(tmp_path: Path):
 
 class TestRefsFromViewMultiSubjectBinding:
     def test_unbound_column_audited_on_every_kind(self, tmp_path):
-        from vcfops_packaging.deps import _refs_from_view
+        from vcfcf_packaging.deps import _refs_from_view
 
         refs = _refs_from_view(_load(tmp_path))
         demand = {(r.adapter_kind, r.resource_kind) for r in refs if r.metric_key == "cpu|demandmhz"}
         assert demand == {("VMWARE", "VirtualMachine"), ("VMWARE", "HostSystem")}
 
     def test_bound_column_audited_on_bound_kind_only(self, tmp_path):
-        from vcfops_packaging.deps import _refs_from_view
+        from vcfcf_packaging.deps import _refs_from_view
 
         refs = _refs_from_view(_load(tmp_path))
         sockets = [(r.adapter_kind, r.resource_kind) for r in refs if r.metric_key == "cpu|numpackages"]
         assert sockets == [("VMWARE", "HostSystem")]
 
     def test_total_reference_count(self, tmp_path):
-        from vcfops_packaging.deps import _refs_from_view
+        from vcfcf_packaging.deps import _refs_from_view
 
         refs = _refs_from_view(_load(tmp_path))
         # 2 kinds for the unbound column + 1 for the bound column.
@@ -85,7 +85,7 @@ class TestExtractorEnablementWalkMirrorsDepsRule:
     inline in extract_dashboard; this pins the shared rule via deps)."""
 
     def test_raw_dict_binding_rule(self):
-        from vcfops_packaging.deps import _column_kinds
+        from vcfcf_packaging.deps import _column_kinds
         from types import SimpleNamespace
 
         bound = SimpleNamespace(subject=SimpleNamespace(adapter_kind="VMWARE", resource_kind="HostSystem"))

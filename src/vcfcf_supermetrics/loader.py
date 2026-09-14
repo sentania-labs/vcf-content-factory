@@ -208,7 +208,7 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> SuperM
     released = bool(released_raw) if isinstance(released_raw, bool) else False
     version = str(data.get("version", "1.0.0") or "1.0.0").strip() or "1.0.0"
 
-    from vcfops_common.provenance import provenance_from_path
+    from vcfcf_common.provenance import provenance_from_path
 
     sm = SuperMetricDef(
         id=sm_id,

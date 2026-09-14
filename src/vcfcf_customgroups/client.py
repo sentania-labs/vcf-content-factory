@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Iterator, List, Optional
 
-from vcfops_common.client import VCFOpsClient, VCFOpsError
+from vcfcf_common.client import VCFOpsClient, VCFOpsError
 
 
 class VCFOpsCustomGroupError(VCFOpsError):

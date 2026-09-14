@@ -17,7 +17,7 @@ from typing import Iterable, List, Optional, Union
 
 import yaml
 
-from vcfops_dashboards.yaml_utils import strict_load as _strict_load
+from vcfcf_dashboards.yaml_utils import strict_load as _strict_load
 
 # Stable namespace for derived UUIDs. Do NOT change once content has
 # been deployed, every dashboard/view id is derived from this.
@@ -1674,7 +1674,7 @@ class Dashboard:
     # (content/dashboards/dashboards.properties, comma-joined, see
     # knowledge/context/api-surface/summary_dashboard_pak_binding.md) or
     # after a content-zip import via `bind-summary` (see
-    # summary_dashboard_assignment.md and vcfops_dashboards/summary_bind.py).
+    # summary_dashboard_assignment.md and vcfcf_dashboards/summary_bind.py).
     #
     # Multi-kind fan-out (render-time, see render._fan_out_summary_specs):
     # the server shows only the resourceKindMetrics entries whose kind
@@ -2386,7 +2386,7 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
     else:
         view_customgroups = []
 
-    from vcfops_common.provenance import provenance_from_path
+    from vcfcf_common.provenance import provenance_from_path
 
     hide_object_name_raw = data.get("hide_object_name", False)
     if not isinstance(hide_object_name_raw, bool):
@@ -2462,7 +2462,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 # Local import: render.py owns the leaf-kind redirect table
                 # and imports nothing from this module at import time, but
                 # keep the dependency one-directional at module load.
-                from vcfops_dashboards.render import _VIEW_PIN_CONTAINER
+                from vcfcf_dashboards.render import _VIEW_PIN_CONTAINER
                 if (pin_ak, pin_rk) in _VIEW_PIN_CONTAINER:
                     raise DashboardValidationError(
                         f"widget {w.get('id', '?')!r}: pin.name is not supported on "
@@ -3072,7 +3072,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
             summary_for = normalize_summary_for(summary_for_raw)
         except ValueError as exc:
             raise DashboardValidationError(f"{path}: {exc}") from None
-    from vcfops_common.provenance import provenance_from_path
+    from vcfcf_common.provenance import provenance_from_path
 
     return Dashboard(
         id=dash_id,

@@ -13,7 +13,7 @@ it's followed by whitespace or end-of-string, so dots inside URL tokens
 """
 from __future__ import annotations
 
-from vcfops_packaging.readme_gen import _first_sentence
+from vcfcf_packaging.readme_gen import _first_sentence
 
 
 def test_first_sentence_preserves_embedded_url():

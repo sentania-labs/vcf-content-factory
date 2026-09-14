@@ -1,6 +1,6 @@
 """Isolated-kit subprocess test for buildkit import-rewrite correctness.
 
-Guards the seam that let BLOCKING `sm_loader.py` / `vcfops_common` escape:
+Guards the seam that let BLOCKING `sm_loader.py` / `vcfcf_common` escape:
 running `build-sdk` through the kit WITHOUT the factory on sys.path — the
 exact condition of a clean CI runner pulling the published buildkit tarball.
 
@@ -12,8 +12,8 @@ using the same `_FACTORY_SOURCES` / `_IMPORT_REWRITES` / `_apply_rewrites`
 machinery that `assemble_buildkit` uses.  This is sufficient to exercise the
 seam: the subprocess only needs the Python layer — Java compilation is
 expected to fail (no SDK jar in CI) and that failure is explicitly allowed.
-What must NOT happen is a `ModuleNotFoundError: No module named 'vcfops_common'`
-(or any other `vcfops_*` module) during content loading.
+What must NOT happen is a `ModuleNotFoundError: No module named 'vcfcf_common'`
+(or any other `vcfcf_*` module) during content loading.
 
 The fixture contains 1 supermetric + 1 symptom + 1 alert + 1 view +
 1 report (embedding that view) so that sm_loader, symptoms_loader,
@@ -23,7 +23,7 @@ shape specifically exercises the co-bundled-reports path in
 sdk_builder.py's ``_build_sdk_pak_inner`` (report subdir embeds the
 <ViewDef> for any view it references that is also part of this pak's
 bundled views) — this is the path that does the inline
-``from vcfops_dashboards.render import render_view_def_fragments``
+``from vcfcf_dashboards.render import render_view_def_fragments``
 import that DEF-caught buildkit 1.0.8 missed from its rewrite sweep
 (only fires when a report actually has an embedded view; a report-only
 or view-only fixture does NOT reach it).
@@ -32,7 +32,7 @@ The subprocess environment is sanitised:
   - PYTHONPATH set to ONLY the kit parent dir (not the factory root).
   - No factory package directory on sys.path via CWD (cwd is /tmp).
 
-This means a residual `from vcfops_common.*` or `from vcfops_*` import in
+This means a residual `from vcfcf_common.*` or `from vcfcf_*` import in
 any kit module will raise ModuleNotFoundError in the subprocess — the test
 catches that as a failure, not as an acceptable Java-step SdkBuildError.
 """
@@ -52,7 +52,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 def _get_buildkit_internals():
-    from vcfops_managementpacks.buildkit import (
+    from vcfcf_managementpacks.buildkit import (
         _FACTORY_SOURCES,
         _IMPORT_REWRITES,
         _apply_rewrites,
@@ -246,7 +246,7 @@ def _write_fixture_adapter(base: Path) -> Path:
 def _assemble_kit_python_only(kit_dir: Path) -> None:
     """Copy and rewrite all Python kit modules into kit_dir/sdk_buildkit/."""
     _FACTORY_SOURCES, _IMPORT_REWRITES, _apply_rewrites = _get_buildkit_internals()
-    from vcfops_managementpacks.buildkit import _KIT_INIT, _KIT_MAIN
+    from vcfcf_managementpacks.buildkit import _KIT_INIT, _KIT_MAIN
 
     pkg_dir = kit_dir / "sdk_buildkit"
     pkg_dir.mkdir(parents=True)
@@ -270,7 +270,7 @@ def _assemble_kit_python_only(kit_dir: Path) -> None:
     # the Java step; we create stubs so the kit directory is structurally valid.
     (pkg_dir / "adapter_runtime").mkdir(exist_ok=True)
 
-    fw_src_real = Path(__file__).parent.parent.parent / "src" / "vcfops_managementpacks" / "adapter_framework" / "src"
+    fw_src_real = Path(__file__).parent.parent.parent / "src" / "vcfcf_managementpacks" / "adapter_framework" / "src"
     fw_dst = pkg_dir / "adapter_framework" / "src"
     if fw_src_real.is_dir():
         import shutil
@@ -287,14 +287,14 @@ def _make_isolated_env(kit_parent: Path) -> dict:
     """Return an env dict where ONLY the kit parent dir is on PYTHONPATH.
 
     The factory repo root AND its src/ subdirectory are explicitly stripped
-    from PYTHONPATH — the vcfops_* packages live at repo_root/src (see
+    from PYTHONPATH — the vcfcf_* packages live at repo_root/src (see
     pyproject.toml src-layout), and the factory's own dev/CI environment
     resolves them via an ambient PYTHONPATH=src entry (.claude/settings.json,
     .github/workflows/*.yml) that may be either a relative "src" (resolves
     against whatever the subprocess's cwd happens to be) or an absolute
     repo_root/src path, depending on the caller. Both forms — plus the bare
     repo_root, kept for defense-in-depth even though the factory no longer
-    imports vcfops_* directly from repo_root — must be filtered out, or this
+    imports vcfcf_* directly from repo_root — must be filtered out, or this
     guard's "packages are NOT importable" claim silently stops being true for
     whichever caller happened to inject an absolute path. sys.path cannot
     leak via CWD either (we set cwd=/tmp in the subprocess call). This
@@ -327,17 +327,17 @@ def _make_isolated_env(kit_parent: Path) -> dict:
 # Assertion helpers
 # ---------------------------------------------------------------------------
 
-def _assert_no_vcfops_module_error(stderr: str, stdout: str) -> None:
-    """Fail the test if the output contains a ModuleNotFoundError for vcfops_*."""
+def _assert_no_vcfcf_module_error(stderr: str, stdout: str) -> None:
+    """Fail the test if the output contains a ModuleNotFoundError for vcfcf_*."""
     combined = stderr + stdout
-    if "ModuleNotFoundError" in combined and "vcfops_" in combined:
+    if "ModuleNotFoundError" in combined and "vcfcf_" in combined:
         # Extract the relevant lines for a readable failure message.
         lines = [
             line for line in combined.splitlines()
-            if "ModuleNotFoundError" in line or "vcfops_" in line or "No module named" in line
+            if "ModuleNotFoundError" in line or "vcfcf_" in line or "No module named" in line
         ]
         pytest.fail(
-            "Kit subprocess raised ModuleNotFoundError for a vcfops_* module — "
+            "Kit subprocess raised ModuleNotFoundError for a vcfcf_* module — "
             "a kit module still imports from the factory namespace.\n"
             "Relevant lines:\n" + "\n".join(f"  {l}" for l in lines)
         )
@@ -372,8 +372,8 @@ def _assert_content_loading_succeeded(stderr: str) -> None:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.timeout(60)
-def test_kit_isolated_build_no_vcfops_import_error(tmp_path):
-    """build-sdk through the extracted kit must not raise ModuleNotFoundError for vcfops_*.
+def test_kit_isolated_build_no_vcfcf_import_error(tmp_path):
+    """build-sdk through the extracted kit must not raise ModuleNotFoundError for vcfcf_*.
 
     The kit is assembled Python-only into tmp_path/kit/; the fixture adapter
     is written to tmp_path/fixture/.  The subprocess runs with cwd=/tmp and
@@ -382,7 +382,7 @@ def test_kit_isolated_build_no_vcfops_import_error(tmp_path):
     Expected outcome: content loading succeeds (supermetrics, symptoms, alerts
     all loaded and reported); the subprocess exits with 0 (unlikely — no SDK
     jar) or with a non-zero exit that is due to Java / SDK jar absence, NOT
-    due to any vcfops_* ModuleNotFoundError.
+    due to any vcfcf_* ModuleNotFoundError.
     """
     import tempfile
 
@@ -419,8 +419,8 @@ def test_kit_isolated_build_no_vcfops_import_error(tmp_path):
     stderr = result.stderr
     stdout = result.stdout
 
-    # 5. Assert: no ModuleNotFoundError for vcfops_* (the BLOCKING class).
-    _assert_no_vcfops_module_error(stderr, stdout)
+    # 5. Assert: no ModuleNotFoundError for vcfcf_* (the BLOCKING class).
+    _assert_no_vcfcf_module_error(stderr, stdout)
 
     # 6. Assert: content loading actually happened and reached the SM line
     #    (proves sm_loader ran, not just that we exited before loading).
@@ -428,7 +428,7 @@ def test_kit_isolated_build_no_vcfops_import_error(tmp_path):
 
     # 7. The exit code may be non-zero if Java / SDK jar is absent — that is
     #    expected and acceptable.  What is NOT acceptable is a Python import
-    #    error for vcfops_* (already checked above).
+    #    error for vcfcf_* (already checked above).
     #
     #    If exit code IS 0, a pak was produced — assert it exists.
     if result.returncode == 0:
@@ -449,17 +449,17 @@ def test_kit_isolated_build_fails_without_sm_rewrite(tmp_path):
 
     This test intentionally assembles the kit WITHOUT the sm_loader.py
     import rewrite, then runs build-sdk and asserts that ModuleNotFoundError
-    for vcfops_common IS present in the output.  If this test passes it means
+    for vcfcf_common IS present in the output.  If this test passes it means
     the seam is real and the guard above is meaningful.
 
-    This is the "canary" test: if it starts FAILING (i.e. vcfops_common is
+    This is the "canary" test: if it starts FAILING (i.e. vcfcf_common is
     no longer present in the output even without the rewrite), the import
     structure has changed and both tests need updating.
     """
     import shutil
     import tempfile
 
-    from vcfops_managementpacks.buildkit import (
+    from vcfcf_managementpacks.buildkit import (
         _FACTORY_SOURCES,
         _IMPORT_REWRITES,
         _apply_rewrites,
@@ -490,7 +490,7 @@ def test_kit_isolated_build_fails_without_sm_rewrite(tmp_path):
             (pkg_dir / dest_name).write_bytes(src_path.read_bytes())
 
     (pkg_dir / "adapter_runtime").mkdir(exist_ok=True)
-    fw_src_real = Path(__file__).parent.parent.parent / "src" / "vcfops_managementpacks" / "adapter_framework" / "src"
+    fw_src_real = Path(__file__).parent.parent.parent / "src" / "vcfcf_managementpacks" / "adapter_framework" / "src"
     fw_dst = pkg_dir / "adapter_framework" / "src"
     if fw_src_real.is_dir():
         shutil.copytree(str(fw_src_real), str(fw_dst))
@@ -516,16 +516,16 @@ def test_kit_isolated_build_fails_without_sm_rewrite(tmp_path):
     )
 
     combined = result.stderr + result.stdout
-    has_vcfops_error = (
-        "ModuleNotFoundError" in combined and "vcfops_" in combined
+    has_vcfcf_error = (
+        "ModuleNotFoundError" in combined and "vcfcf_" in combined
     ) or (
-        "No module named" in combined and "vcfops_common" in combined
+        "No module named" in combined and "vcfcf_common" in combined
     )
 
-    if not has_vcfops_error:
+    if not has_vcfcf_error:
         pytest.fail(
             "Revert-check canary FAILED: expected ModuleNotFoundError for "
-            "vcfops_common when sm_loader.py rewrite is absent, but it was "
+            "vcfcf_common when sm_loader.py rewrite is absent, but it was "
             "NOT present.  The import structure of sm_loader.py may have "
             "changed — update both tests.\n"
             f"subprocess stderr:\n{result.stderr[:2000]}\n"
@@ -541,7 +541,7 @@ def test_kit_isolated_build_fails_without_sm_rewrite(tmp_path):
 #
 # The two tests above drive build-sdk end-to-end, but the reports+embedded
 # -views code path (sdk_builder.py's co-bundled-reports branch, which does
-# `from vcfops_dashboards.render import render_view_def_fragments`) lives
+# `from vcfcf_dashboards.render import render_view_def_fragments`) lives
 # INSIDE _write_outer_pak, which only runs AFTER a successful javac compile
 # (Step 4, ~line 3169) — and a CI sandbox with no SDK jar / no javac never
 # gets that far, so build-sdk alone can never reach the buggy import even
@@ -584,13 +584,13 @@ _ISOLATED_WRITE_OUTER_PAK_SCRIPT = textwrap.dedent("""\
 
 
 @pytest.mark.timeout(30)
-def test_kit_isolated_reports_with_embedded_views_no_vcfops_import_error(tmp_path):
+def test_kit_isolated_reports_with_embedded_views_no_vcfcf_import_error(tmp_path):
     """The co-bundled-reports branch (render_view_def_fragments) must not
-    raise ModuleNotFoundError for vcfops_dashboards in the isolated kit.
+    raise ModuleNotFoundError for vcfcf_dashboards in the isolated kit.
 
     Reproduces the exact DEF: a report bundled alongside a view it
     references triggers sdk_builder.py's inline
-    `from vcfops_dashboards.render import render_view_def_fragments` import
+    `from vcfcf_dashboards.render import render_view_def_fragments` import
     inside `_write_outer_pak`. That import is only reachable in a real
     build-sdk run AFTER a successful javac compile, which CI sandboxes
     without a JDK/SDK jar never reach — so this test calls
@@ -626,7 +626,7 @@ def test_kit_isolated_reports_with_embedded_views_no_vcfops_import_error(tmp_pat
     stderr = result.stderr
     stdout = result.stdout
 
-    _assert_no_vcfops_module_error(stderr, stdout)
+    _assert_no_vcfcf_module_error(stderr, stdout)
 
     assert result.returncode == 0, (
         "Isolated _write_outer_pak call failed unexpectedly "
@@ -668,7 +668,7 @@ def test_kit_isolated_reports_with_embedded_views_fails_without_rewrite(tmp_path
     """Canary: confirms the guard above is meaningful by reverting the new
     render_view_def_fragments rewrite rule and proving the isolated
     _write_outer_pak call then raises ModuleNotFoundError for
-    vcfops_dashboards.
+    vcfcf_dashboards.
 
     If this test starts failing (i.e. the error is no longer reproduced with
     the rewrite reverted), the reports-with-views code path has changed and
@@ -677,7 +677,7 @@ def test_kit_isolated_reports_with_embedded_views_fails_without_rewrite(tmp_path
     import shutil
     import tempfile
 
-    from vcfops_managementpacks.buildkit import (
+    from vcfcf_managementpacks.buildkit import (
         _FACTORY_SOURCES,
         _IMPORT_REWRITES,
         _apply_rewrites,
@@ -713,7 +713,7 @@ def test_kit_isolated_reports_with_embedded_views_fails_without_rewrite(tmp_path
             (pkg_dir / dest_name).write_bytes(src_path.read_bytes())
 
     (pkg_dir / "adapter_runtime").mkdir(exist_ok=True)
-    fw_src_real = Path(__file__).parent.parent.parent / "src" / "vcfops_managementpacks" / "adapter_framework" / "src"
+    fw_src_real = Path(__file__).parent.parent.parent / "src" / "vcfcf_managementpacks" / "adapter_framework" / "src"
     fw_dst = pkg_dir / "adapter_framework" / "src"
     if fw_src_real.is_dir():
         shutil.copytree(str(fw_src_real), str(fw_dst))
@@ -741,14 +741,14 @@ def test_kit_isolated_reports_with_embedded_views_fails_without_rewrite(tmp_path
     )
 
     combined = result.stderr + result.stdout
-    has_vcfops_error = (
-        "ModuleNotFoundError" in combined and "vcfops_dashboards" in combined
+    has_vcfcf_error = (
+        "ModuleNotFoundError" in combined and "vcfcf_dashboards" in combined
     )
 
-    if not has_vcfops_error:
+    if not has_vcfcf_error:
         pytest.fail(
             "Revert-check canary FAILED: expected ModuleNotFoundError for "
-            "vcfops_dashboards when the render_view_def_fragments rewrite is "
+            "vcfcf_dashboards when the render_view_def_fragments rewrite is "
             "absent, but it was NOT present. The reports-with-views code path "
             "may have changed — update both tests in this section.\n"
             f"subprocess stderr:\n{result.stderr[:2000]}\n"

@@ -14,7 +14,7 @@ it. Passing `-n` requires it AND `--dist=loadgroup` (a conftest guard
 refuses `-n` without loadgroup, because the `real_corpus` group would
 otherwise race — see Markers below).
 
-The ten `vcfops_*` packages live under `src/` and are never pip-installed
+The ten `vcfcf_*` packages live under `src/` and are never pip-installed
 (an install would leak them into every subprocess via site-packages,
 blinding the kit-isolation regression tests). Claude Code / agent shells
 get `PYTHONPATH=src` ambiently from `.claude/settings.json`; a bare shell

@@ -1,4 +1,4 @@
-"""Content handler for views and dashboards (vcfops_packaging sync integration).
+"""Content handler for views and dashboards (vcfcf_packaging sync integration).
 
 Views and dashboards are always synced together (they share a single
 content-import zip). This handler's content_type is "views" because views
@@ -21,14 +21,14 @@ import sys
 from pathlib import Path
 from typing import List
 
-from vcfops_packaging.handler import (
+from vcfcf_packaging.handler import (
     ContentHandler,
     DeleteResult,
     ItemResult,
     SyncResult,
     ValidateResult,
 )
-from vcfops_supermetrics.client import VCFOpsClient, VCFOpsError
+from vcfcf_supermetrics.client import VCFOpsClient, VCFOpsError
 
 from .client import (
     all_skipped_content_types,

@@ -54,8 +54,8 @@ class TestSymptomOperatorTranslation:
 
     def _render_symptom_xml(self, operator: str, ctype: str = "property") -> str:
         """Render a minimal symptomdef XML with the given operator and return the XML."""
-        from vcfops_symptoms.loader import SymptomDef
-        from vcfops_alerts.render import render_alert_content_xml
+        from vcfcf_symptoms.loader import SymptomDef
+        from vcfcf_alerts.render import render_alert_content_xml
 
         sym = SymptomDef(
             name="Test Symptom",
@@ -152,7 +152,7 @@ class TestSymptomOperatorTranslation:
 #
 # The content-import XML path only accepts lowercase severity tokens
 # critical|immediate|warning|info|automatic. The REST wire value for an
-# INFO symptom is "INFORMATION" (vcfops_symptoms.loader.SEVERITY_MAP); a
+# INFO symptom is "INFORMATION" (vcfcf_symptoms.loader.SEVERITY_MAP); a
 # naive .lower() on that REST value produced "information", which the
 # server-side SymptomDefinitionRetriever silently rejects (severity:null),
 # skipping symptom creation and cascading to dependent alert import
@@ -171,8 +171,8 @@ class TestSymptomSeverityXmlToken:
         return ET.fromstring(stripped)
 
     def _render_symptom_xml(self, severity: str) -> str:
-        from vcfops_symptoms.loader import SymptomDef
-        from vcfops_alerts.render import render_alert_content_xml
+        from vcfcf_symptoms.loader import SymptomDef
+        from vcfcf_alerts.render import render_alert_content_xml
 
         sym = SymptomDef(
             name="Test Symptom",
@@ -199,7 +199,7 @@ class TestSymptomSeverityXmlToken:
 
     def test_information_wire_token_emits_info(self):
         """REST wire token 'INFORMATION' (from severity: INFO in YAML, mapped by
-        vcfops_symptoms SEVERITY_MAP) must emit XML severity="info", not
+        vcfcf_symptoms SEVERITY_MAP) must emit XML severity="info", not
         "information" — the content-import path rejects "information" outright.
         """
         xml_text = self._render_symptom_xml("INFORMATION")
@@ -236,8 +236,8 @@ class TestNoSymptomXmlEverEmitsRejectedInformationToken:
     """
 
     def test_no_information_token_across_all_severities(self):
-        from vcfops_symptoms.loader import SymptomDef, SEVERITY_MAP
-        from vcfops_alerts.render import render_alert_content_xml
+        from vcfcf_symptoms.loader import SymptomDef, SEVERITY_MAP
+        from vcfcf_alerts.render import render_alert_content_xml
 
         syms = []
         for i, wire_severity in enumerate(sorted(set(SEVERITY_MAP.values()))):
@@ -299,8 +299,8 @@ class TestSMJsonIncludesModificationTime:
 
     def _emit_sm_json(self, tmp_path: Path) -> dict:
         """Run the SM emit logic and return the parsed inner object dict."""
-        from vcfops_supermetrics.loader import load_file as load_sm
-        from vcfops_managementpacks.sdk_builder import _resolve_sm_formula
+        from vcfcf_supermetrics.loader import load_file as load_sm
+        from vcfcf_managementpacks.sdk_builder import _resolve_sm_formula
 
         sm_path = self._build_sm_yaml(tmp_path)
         sm = load_sm(sm_path, enforce_framework_prefix=False)
@@ -345,8 +345,8 @@ class TestSMJsonIncludesModificationTime:
 
     def test_sm_json_is_parseable(self, tmp_path: Path):
         """The full SM payload must round-trip through JSON without error."""
-        from vcfops_supermetrics.loader import load_file as load_sm
-        from vcfops_managementpacks.sdk_builder import _resolve_sm_formula
+        from vcfcf_supermetrics.loader import load_file as load_sm
+        from vcfcf_managementpacks.sdk_builder import _resolve_sm_formula
 
         sm_path = self._build_sm_yaml(tmp_path)
         sm = load_sm(sm_path, enforce_framework_prefix=False)
@@ -388,9 +388,9 @@ class TestSMJsonIncludesModificationTime:
 
     def test_sm_json_in_pak_has_modification_time(self, tmp_path: Path):
         """End-to-end: modificationTime appears inside the pak's content/supermetrics/*.json."""
-        from vcfops_managementpacks.sdk_builder import _write_outer_pak
-        from vcfops_managementpacks.sdk_project import SdkProjectDef, _derive_entry_class
-        from vcfops_supermetrics.loader import load_file as load_sm
+        from vcfcf_managementpacks.sdk_builder import _write_outer_pak
+        from vcfcf_managementpacks.sdk_project import SdkProjectDef, _derive_entry_class
+        from vcfcf_supermetrics.loader import load_file as load_sm
 
         sm_path = self._build_sm_yaml(tmp_path)
         sm = load_sm(sm_path, enforce_framework_prefix=False)
@@ -465,8 +465,8 @@ class TestViewCountAndEdgeCase:
     )
     def test_96_views_render_without_error(self):
         """All 96 vcommunity views must render to well-formed XML."""
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         sm_paths = list(sorted(self._SM_DIR.rglob("*.yaml")))
         errors = []
@@ -497,8 +497,8 @@ class TestViewCountAndEdgeCase:
         absent from the target instance.  The view itself is well-formed;
         the import drop is a platform behaviour for unavailable adapters.
         """
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         view_path = self._VIEWS_DIR / "Guest OS List of Services.yaml"
         assert view_path.exists(), f"Expected view at {view_path}"

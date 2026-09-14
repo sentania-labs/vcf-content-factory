@@ -13,19 +13,19 @@ Delete limitation:
     The delete() method on this client therefore raises NotImplementedError
     and the CLI surfaces this as an informational message.
 
-The import flow reuses the polling logic from vcfops_dashboards.client —
+The import flow reuses the polling logic from vcfcf_dashboards.client —
 both use the same /api/content/operations/import endpoint.
 """
 from __future__ import annotations
 
 from typing import Iterator, Optional
 
-from vcfops_dashboards.client import (
+from vcfcf_dashboards.client import (
     discover_marker_filename,
     get_current_user,
     import_content_zip,
 )
-from vcfops_common.client import VCFOpsClient, VCFOpsError
+from vcfcf_common.client import VCFOpsClient, VCFOpsError
 
 
 class VCFOpsReportsError(RuntimeError):
@@ -73,7 +73,7 @@ def import_reports_zip(
     """POST a reports content-zip to the import endpoint and poll for completion.
 
     This is a thin wrapper over the shared import_content_zip helper from
-    vcfops_dashboards.client — both reports and dashboards use the same
+    vcfcf_dashboards.client — both reports and dashboards use the same
     /api/content/operations/import endpoint and the same polling protocol.
     """
     return import_content_zip(client, zip_bytes, timeout_s=timeout_s)

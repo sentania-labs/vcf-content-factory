@@ -1,6 +1,6 @@
-"""Content handler for symptom definitions (vcfops_packaging sync integration).
+"""Content handler for symptom definitions (vcfcf_packaging sync integration).
 
-Exposes a module-level HANDLER instance that the vcfops_packaging sync
+Exposes a module-level HANDLER instance that the vcfcf_packaging sync
 orchestrator discovers automatically.
 
 Sync order 5 — after supermetrics (1), customgroups (2), views (3),
@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import List
 
-from vcfops_packaging.handler import (
+from vcfcf_packaging.handler import (
     ContentHandler,
     DeleteResult,
     ItemResult,

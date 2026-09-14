@@ -1,8 +1,8 @@
 """VCF Operations Suite API helpers for super metric management.
 
 The base auth/session client (VCFOpsClient, VCFOpsError) now lives in
-vcfops_common.client. This module re-exports both names for backwards
-compatibility with any code that imports from vcfops_supermetrics.client,
+vcfcf_common.client. This module re-exports both names for backwards
+compatibility with any code that imports from vcfcf_supermetrics.client,
 and adds the supermetric-domain helpers on top.
 
 SuperMetric endpoints used:
@@ -23,7 +23,7 @@ import zipfile
 from typing import Iterable, Iterator, Optional
 
 # Re-export from common so all existing callers keep working.
-from vcfops_common.client import VCFOpsClient, VCFOpsError  # noqa: F401
+from vcfcf_common.client import VCFOpsClient, VCFOpsError  # noqa: F401
 
 from .crossref import resolve_sm_formula
 
@@ -40,9 +40,9 @@ _SM_CROSSREF_HINT_SYNC = (
 # the public API surface (VCFOpsClient.from_env() returns an object
 # with SM methods).  We extend VCFOpsClient in-place by inheriting and
 # reassigning the module-level name — downstream code that does
-# `from vcfops_supermetrics.client import VCFOpsClient` gets the full
-# SM-capable class, while code that uses `vcfops_common.client.VCFOpsClient`
-# gets the slim base.  The vcfops_supermetrics.__init__ re-exports
+# `from vcfcf_supermetrics.client import VCFOpsClient` gets the full
+# SM-capable class, while code that uses `vcfcf_common.client.VCFOpsClient`
+# gets the slim base.  The vcfcf_supermetrics.__init__ re-exports
 # VCFOpsClient from this module, so the package-level import is also
 # the SM-extended one.
 
@@ -547,7 +547,7 @@ class _SMExtendedClient(VCFOpsClient):
         see knowledge/context/wire-formats/wire_formats.md §"Super metrics zip".
         """
         # Imported lazily to avoid a hard package dep at import time.
-        from vcfops_dashboards.client import (
+        from vcfcf_dashboards.client import (
             discover_marker_filename,
             get_current_user,
             import_content_zip,
@@ -649,7 +649,7 @@ class _SMExtendedClient(VCFOpsClient):
 
 
 # Replace the module-level VCFOpsClient name with the SM-extended subclass
-# so that `from vcfops_supermetrics.client import VCFOpsClient` returns
+# so that `from vcfcf_supermetrics.client import VCFOpsClient` returns
 # an instance with all SM methods available, as it did before this refactor.
 # Restore the public class name so repr/logging stays clean.
 _SMExtendedClient.__name__ = "VCFOpsClient"

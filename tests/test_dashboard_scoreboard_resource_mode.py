@@ -82,8 +82,8 @@ def _resource_widget(**extra) -> dict:
 
 
 def _render(tmp_path: Path, widget: dict) -> dict:
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     d = load_dashboard(_dash(tmp_path, widget))
     return json.loads(render_dashboards_bundle_json([d], {}, OWNER))
@@ -150,8 +150,8 @@ def test_render_entry_fields_equal_export_except_known_cosmetics(tmp_path):
 def test_render_resource_mode_shares_slot_by_display_name_not_kind(tmp_path):
     """A View pinned to the same kind under a DIFFERENT display name must
     not collide with the Scoreboard's entry (slots are keyed by name)."""
-    from vcfops_dashboards.loader import load_dashboard, load_view
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard, load_view
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     vp = tmp_path / "view.yaml"
     vp.write_text(yaml.dump({
@@ -184,7 +184,7 @@ def test_render_resource_mode_shares_slot_by_display_name_not_kind(tmp_path):
 # B. loader -------------------------------------------------------------------
 
 def test_loader_defaults_metric_kinds_to_resource(tmp_path):
-    from vcfops_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.loader import load_dashboard
 
     d = load_dashboard(_dash(tmp_path, _resource_widget()))
     cfg = d.widgets[0].scoreboard_config
@@ -209,7 +209,7 @@ def test_loader_defaults_metric_kinds_to_resource(tmp_path):
     ],
 )
 def test_loader_rejects(tmp_path, mutate, needle):
-    from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+    from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     w = _resource_widget()
     mutate(w)
@@ -220,8 +220,8 @@ def test_loader_rejects(tmp_path, mutate, needle):
 # C. reverse ------------------------------------------------------------------
 
 def test_reverse_parses_resource_mode_from_fixture():
-    from vcfops_dashboards.reverse import parse_dashboard_json
-    from vcfops_extractor.extractor import _widget_to_yaml_dict
+    from vcfcf_dashboards.reverse import parse_dashboard_json
+    from vcfcf_extractor.extractor import _widget_to_yaml_dict
 
     fx = _fixture()
     dj = dict(fx["dashboards"][0]); dj["entries"] = fx["entries"]
@@ -241,9 +241,9 @@ def test_reverse_parses_resource_mode_from_fixture():
 
 
 def test_reverse_local_port_round_trips_fixture(tmp_path, capsys):
-    from vcfops_extractor.reverse_local import reverse_local_port
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_extractor.reverse_local import reverse_local_port
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     src = tmp_path / "dashboard.json"; src.write_text(FIXTURE.read_text())
     (tmp_path / "xml").mkdir(); (tmp_path / "sm").mkdir()
@@ -265,7 +265,7 @@ def test_reverse_local_port_round_trips_fixture(tmp_path, capsys):
 # D. verdict ------------------------------------------------------------------
 
 def test_structural_key_notices_lost_metrics():
-    from vcfops_extractor.reverse_local import _structural_key
+    from vcfcf_extractor.reverse_local import _structural_key
 
     src = _source_widget()
     empty = json.loads(json.dumps(src))

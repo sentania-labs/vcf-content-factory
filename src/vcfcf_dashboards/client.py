@@ -1,6 +1,6 @@
 """Content Management import client for dashboards / view definitions.
 
-Reuses the auth/session handling from vcfops_supermetrics.client so we
+Reuses the auth/session handling from vcfcf_supermetrics.client so we
 have a single place that knows how to talk to the Suite API.
 """
 from __future__ import annotations
@@ -9,7 +9,7 @@ import io
 import time
 import zipfile
 
-from vcfops_common.client import VCFOpsClient, VCFOpsError
+from vcfcf_common.client import VCFOpsClient, VCFOpsError
 
 
 # Content types this package imports, as they appear in the import

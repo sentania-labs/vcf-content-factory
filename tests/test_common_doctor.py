@@ -15,7 +15,7 @@ from typing import List, Optional
 
 import pytest
 
-from vcfops_common.doctor import (
+from vcfcf_common.doctor import (
     GREETING,
     GREETING_OPENING,
     GREETING_CLOSING,
@@ -74,7 +74,7 @@ def make_configured_root(tmp_path: Path) -> Path:
         f"VCFOPS_PROD_PASSWORD={FAKE_SECRET}\n"
     )
     (root / ".venv").mkdir()
-    runtime = root / "src" / "vcfops_managementpacks" / "adapter_runtime"
+    runtime = root / "src" / "vcfcf_managementpacks" / "adapter_runtime"
     (runtime / "lib").mkdir(parents=True)
     (runtime / "mpb_adapter3.jar").write_bytes(b"jar")
     (runtime / "lib" / "mpb_adapter-9.0.1.jar").write_bytes(b"jar")
@@ -149,7 +149,7 @@ not_root = pytest.mark.skipif(
 # reference audit reads them as placeholders, not as real repo citations.
 
 def test_classify_core_paths():
-    for p in ("src/vcfops_common/<fixture>.py", "scripts/<fixture>.sh",
+    for p in ("src/vcfcf_common/<fixture>.py", "scripts/<fixture>.sh",
               ".claude/agents/<fixture>.md", "knowledge/rules/<fixture>.md",
               "knowledge/lessons/<fixture>.md", "<FIXTURE>.md",
               "bundles/<fixture>/manifest.yaml",
@@ -179,7 +179,7 @@ def test_classify_commit_buckets():
 def test_ahead_rendering_flags_mixed_and_nudges_core_only(tmp_path):
     root = make_configured_root(tmp_path)
     ahead = (
-        "\x01aaa1111\x02core tooling fix\n\nsrc/vcfops_common/<fixture>.py\n"
+        "\x01aaa1111\x02core tooling fix\n\nsrc/vcfcf_common/<fixture>.py\n"
         "\x01bbb2222\x02recon log update\n\nknowledge/context/investigations/<fixture>.md\n"
         "\x01ccc3333\x02both at once\n\nsrc/<fixture-a>.py\nknowledge/context/curation/<fixture>\n"
     )
@@ -212,7 +212,7 @@ def test_ahead_only_local_state_has_no_pr_nudge(tmp_path):
 def test_behind_clean_tree_groups_by_area_and_offers_ff_pull(tmp_path):
     root = make_configured_root(tmp_path)
     behind = (
-        "\x01ddd4444\x02fix renderer crash\n\nsrc/vcfops_dashboards/<fixture>.py\n"
+        "\x01ddd4444\x02fix renderer crash\n\nsrc/vcfcf_dashboards/<fixture>.py\n"
         "\x01eee5555\x02add snapshot dashboard\n\ncontent/dashboards/<fixture>.yaml\n"
     )
     lines = collect(root, fake_git(behind_log=behind))
@@ -724,7 +724,7 @@ def test_untracked_only_work_counts_as_dirty(tmp_path):
 
 def test_tier1_runtime_needs_adapter_jar_and_lib_jars(tmp_path):
     root = make_configured_root(tmp_path)
-    runtime = root / "src" / "vcfops_managementpacks" / "adapter_runtime"
+    runtime = root / "src" / "vcfcf_managementpacks" / "adapter_runtime"
 
     # A Tier 2 SDK jar alone must NOT satisfy the Tier 1 runtime check.
     (runtime / "mpb_adapter3.jar").unlink()
@@ -849,7 +849,7 @@ def test_non_numeric_failed_count_in_first_run_checklist(tmp_path):
 def test_git_runner_catches_unicode_decode_error(monkeypatch):
     """W-3: git output that will not decode must degrade the upstream
     section only, not lose the whole preflight."""
-    import vcfops_common.doctor as doctor_mod
+    import vcfcf_common.doctor as doctor_mod
 
     def boom(*a, **kw):
         raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
@@ -860,7 +860,7 @@ def test_git_runner_catches_unicode_decode_error(monkeypatch):
 
 
 def test_undecodable_git_output_keeps_other_sections(tmp_path, monkeypatch):
-    import vcfops_common.doctor as doctor_mod
+    import vcfcf_common.doctor as doctor_mod
 
     def boom(*a, **kw):
         raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
@@ -886,7 +886,7 @@ def test_undecodable_git_output_keeps_other_sections(tmp_path, monkeypatch):
 
 
 def test_main_catch_all_exits_zero_on_internal_error(monkeypatch, capsys):
-    import vcfops_common.doctor as doctor_mod
+    import vcfcf_common.doctor as doctor_mod
 
     def boom():
         raise RuntimeError("synthetic bug")
@@ -947,18 +947,18 @@ def test_diverged_branch_suppresses_ff_pull_offer(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_help_prints_usage_not_the_report(capsys):
-    import vcfops_common.doctor as doctor_mod
+    import vcfcf_common.doctor as doctor_mod
 
     rc = doctor_mod.main(["--help"])
     out = capsys.readouterr().out
     assert rc == 0
-    assert out.startswith("usage: python -m vcfops_common doctor")
+    assert out.startswith("usage: python -m vcfcf_common doctor")
     assert "doctor: all green" not in out
     assert "FIRST-RUN DETECTED" not in out
 
 
 def test_stray_argument_is_reported_not_silently_ignored(monkeypatch, capsys):
-    import vcfops_common.doctor as doctor_mod
+    import vcfcf_common.doctor as doctor_mod
 
     monkeypatch.setattr(doctor_mod, "run_doctor", lambda: 0)
     rc = doctor_mod.main(["--verbose"])
@@ -968,7 +968,7 @@ def test_stray_argument_is_reported_not_silently_ignored(monkeypatch, capsys):
 
 
 def test_no_argv_still_runs_the_report(monkeypatch, capsys):
-    import vcfops_common.doctor as doctor_mod
+    import vcfcf_common.doctor as doctor_mod
 
     ran = []
     monkeypatch.setattr(doctor_mod, "run_doctor", lambda: ran.append(True) or 0)
@@ -1208,7 +1208,7 @@ def test_long_script_name_does_not_flood_session_context(tmp_path):
 def test_known_bootstrap_scripts_all_match_the_name_guard():
     """W-4: the two gates must agree, or a known script's line is dropped
     at parse time and then reported 'no run recorded' forever."""
-    import vcfops_common.doctor as doctor_mod
+    import vcfcf_common.doctor as doctor_mod
 
     for name in KNOWN_BOOTSTRAP_SCRIPTS:
         assert doctor_mod._SCRIPT_NAME_RE.match(name), name
@@ -1246,7 +1246,7 @@ def test_sh_suffixed_script_name_records_the_same_script(tmp_path):
 def test_argv_echo_never_reproduces_a_value(monkeypatch, capsys):
     """N-2 (upgraded): this module promises credential values are never
     printed; argv is no exception."""
-    import vcfops_common.doctor as doctor_mod
+    import vcfcf_common.doctor as doctor_mod
 
     monkeypatch.setattr(doctor_mod, "run_doctor", lambda: 0)
     rc = doctor_mod.main([f"--password={FAKE_SECRET}", FAKE_SECRET, "--verbose"])
@@ -1283,7 +1283,7 @@ def test_checklist_names_failures_even_on_a_stale_record(tmp_path):
 def test_venv_only_deps_are_not_reported_green(tmp_path):
     """The inverse machine: the ambient interpreter lacks the deps and
     .venv has them. Nothing wires the CLIs to the venv, so the
-    documented `python3 -m vcfops_* validate` would fail here and the
+    documented `python3 -m vcfcf_* validate` would fail here and the
     doctor must say so instead of printing one green line."""
     root = make_configured_root(tmp_path)
     install_venv_python(root)  # the real interpreter running this suite
@@ -1305,7 +1305,7 @@ def test_venv_only_deps_are_not_reported_green(tmp_path):
 
 
 def test_a_venv_only_jmespath_is_not_reported_as_a_broken_validate(tmp_path):
-    """jmespath is a SOFT dependency: vcfops_managementpacks/loader.py
+    """jmespath is a SOFT dependency: vcfcf_managementpacks/loader.py
     degrades to a UserWarning without it, and this module carves it out
     everywhere else. Telling an operator whose ambient python3 has
     requests and yaml that `validate` would fail is a lie, and a doctor
