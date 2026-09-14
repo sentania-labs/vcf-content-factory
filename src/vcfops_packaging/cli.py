@@ -351,7 +351,7 @@ def cmd_refresh_describe(args) -> int:
         return 1
 
     try:
-        cache.refresh_all(kinds=kinds)
+        cache.refresh_all(kinds=kinds, prune=bool(getattr(args, "prune", False)))
     except DescribeCacheError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
@@ -1545,9 +1545,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="use describe cache only; do not refresh against a live instance. "
              "By default (this flag unset) build-discrete behaves like 'build': "
              "if VCFOPS_HOST/USER/PASSWORD are set it contacts the configured "
-             "instance and REWRITES the tracked "
+             "instance and MERGES its describe surface into the tracked "
              "knowledge/context/adapter_describe_cache/<ak>/<rk>.json cache "
-             "files for every adapter/resource kind pair this item references. "
+             "files for every adapter/resource kind pair this item references "
+             "(live keys added/updated, keys the instance does not report are "
+             "retained; see refresh-describe --prune). "
              "That means build output (which metrics get auto-added to "
              "builtin_metric_enables, or whether --strict-deps fails) can "
              "change between runs with no code change, if the live describe "
@@ -1586,6 +1588,16 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         default=None,
         help="credential profile to use (prod / qa / devel; default: 'prod')",
+    )
+    prd.add_argument(
+        "--prune",
+        action="store_true",
+        help="remove cached keys the live instance does not report. Default "
+             "is merge: live keys are added/updated, keys absent from the "
+             "live response are retained and listed in a WARN, so a cache "
+             "file grounded on more than one platform release keeps the "
+             "other release's keys (issue #143). --prune re-grounds the "
+             "file on this one instance.",
     )
     prd.set_defaults(func=cmd_refresh_describe)
 

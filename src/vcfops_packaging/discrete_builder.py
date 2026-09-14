@@ -49,7 +49,6 @@ from pathlib import Path
 from typing import List, Optional
 
 from vcfops_supermetrics.loader import SuperMetricDef, load_dir as load_sm_dir
-from vcfops_supermetrics.crossref import crossref_names
 from vcfops_dashboards.loader import ViewDef, Dashboard
 from vcfops_customgroups.loader import CustomGroupDef, load_dir as load_cg_dir
 from vcfops_reports.loader import ReportDef, load_dir as _load_reports_dir
@@ -116,35 +115,20 @@ def _expand_sm_crossrefs(
 ) -> List[SuperMetricDef]:
     """Transitively add super metrics referenced by ``@supermetric:"<name>"``.
 
-    An SM formula may reference another SM by name (the authoring-time
-    cross-reference form).  The emit path resolves that token to the native
-    ``Super Metric|sm_<uuid>`` wire token and hard-errors when the referent is
-    not in the bundle, so a discrete component must carry its referents the same
-    way a view carries the SMs its columns use.
-
-    Preserves input order, appends newly pulled SMs after it, and is a no-op for
-    the (currently common) case of formulas with no cross-reference token.
+    Thin adapter over ``vcfops_common.dep_walker.expand_sm_crossrefs`` (the
+    single home of the SM-to-SM walk, issue #144).  The walker reports a
+    missing referent as an error string; here that is fatal, because the emit
+    path would hard-error on the unresolved token anyway and a discrete
+    component must carry its referents.
     """
-    by_name = {sm.name: sm for sm in all_sms}
-    result: List[SuperMetricDef] = []
-    seen: set = set()
-    queue = list(sms)
-    while queue:
-        sm = queue.pop(0)
-        key = (sm.id or "").lower() or sm.name
-        if key in seen:
-            continue
-        seen.add(key)
-        result.append(sm)
-        for ref_name in crossref_names(sm.formula):
-            ref = by_name.get(ref_name)
-            if ref is None:
-                raise DiscreteBuilderError(
-                    f"super metric {sm.name!r}: formula references "
-                    f'@supermetric:"{ref_name}" but no super metric with that '
-                    f"name was found in the corpus"
-                )
-            queue.append(ref)
+    from vcfops_common.dep_walker import expand_sm_crossrefs
+
+    result, errors = expand_sm_crossrefs(sms, all_sms)
+    if errors:
+        raise DiscreteBuilderError(
+            "super metric cross-reference errors:\n"
+            + "\n".join(f"  - {e}" for e in errors)
+        )
     return result
 
 
@@ -510,7 +494,8 @@ def build_discrete(
                 + "\n".join(f"  - {e}" for e in dep_graph.errors)
             )
         dep_views = dep_graph.views
-        dep_sms = _expand_sm_crossrefs(dep_graph.supermetrics, all_sms)
+        # collect_deps already walks @supermetric:"<name>" refs (SM -> SM).
+        dep_sms = dep_graph.supermetrics
         dep_cgs = dep_graph.customgroups
         bundle = _make_synthetic_bundle(
             slug=_item_slug(item_name),
