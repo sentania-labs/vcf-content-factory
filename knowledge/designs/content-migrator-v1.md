@@ -93,6 +93,23 @@ requires a container the export does not have (a manifest, a zip
 layout), the tool writes the container and copies the documents into
 it.
 
+Subsetting is where that rule earns its keep, because an export does
+not store one object per file. All 181 views in one corpus zip live in
+a single `views.zip/content.xml`; all 99 super metrics live in one
+`supermetrics.json`; an owner's dashboards share one inner zip. So the
+tool rebuilds the containers and copies the documents: the selected
+`ViewDef` element subtree, the selected super metric object, the
+selected dashboard entry, each carried over verbatim into a freshly
+written container holding only what the admin picked. Rewriting the
+container is expected. Rewriting a document is not.
+
+A subset also has to be closed, which is what the dependency tree is
+for: selecting a dashboard pulls in its views and their super metrics,
+and deselecting something another selection still needs is refused
+with the reason. A bundle whose documents reference objects it does
+not carry is the one failure mode subsetting can introduce on its own,
+and the walker is what prevents it.
+
 This also means the tool is not a validator. If the target's import
 refuses a document, that is the target's answer about that content,
 and the tool's report says which object was refused and what the
