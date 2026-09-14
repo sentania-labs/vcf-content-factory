@@ -254,7 +254,7 @@ end-to-end trace)
      POST /suite-api/api/auth/token/release
 ```
 
-### Reference Python snippet (not committed to `src/vcfops_*/`)
+### Reference Python snippet (not committed to `src/vcfcf_*/`)
 
 ```python
 import base64, json, os, time, requests, urllib3
@@ -423,7 +423,7 @@ From the task brief, each angle's verdict:
 ## Tooling handoff notes
 
 For the agent implementing CLI uninstall (`tooling` agent, most likely
-as part of `vcfops_managementpacks`):
+as part of `vcfcf_managementpacks`):
 
 ### Auth pattern
 
@@ -489,9 +489,9 @@ as part of `vcfops_managementpacks`):
 ### Recommended CLI shape
 
 ```
-python3 -m vcfops_managementpacks install <path-to-pak>
-python3 -m vcfops_managementpacks uninstall <solution-name-or-pakId> [--version <ver>]
-python3 -m vcfops_managementpacks list    # grid view of installed MPs
+python3 -m vcfcf_managementpacks install <path-to-pak>
+python3 -m vcfcf_managementpacks uninstall <solution-name-or-pakId> [--version <ver>]
+python3 -m vcfcf_managementpacks list    # grid view of installed MPs
 ```
 
 The `uninstall` command should:

@@ -3,7 +3,7 @@
 ## Symptom
 
 A freshly authored dashboard and two custom groups validated "clean" per the
-authoring agent, but `python -m vcfops_dashboards validate` (run by the
+authoring agent, but `python -m vcfcf_dashboards validate` (run by the
 orchestrator) did **not** list them — the dashboard count was unchanged and the
 custom-group validate showed only the pre-existing group. The new files existed
 on disk and parsed fine; they were simply invisible to the loader and would
@@ -18,9 +18,9 @@ The factory's canonical content root is **`content/`**. The loaders scan there
 and nowhere else:
 
 ```
-src/vcfops_dashboards/cli.py:18   DEFAULT_VIEWS      = Path("content/views")
-src/vcfops_dashboards/cli.py:19   DEFAULT_DASHBOARDS = Path("content/dashboards")
-src/vcfops_dashboards/cli.py:211  _cg_dir            = Path("content/customgroups")
+src/vcfcf_dashboards/cli.py:18   DEFAULT_VIEWS      = Path("content/views")
+src/vcfcf_dashboards/cli.py:19   DEFAULT_DASHBOARDS = Path("content/dashboards")
+src/vcfcf_dashboards/cli.py:211  _cg_dir            = Path("content/customgroups")
 ```
 
 Every content type lives under `content/` — `content/{supermetrics,views,

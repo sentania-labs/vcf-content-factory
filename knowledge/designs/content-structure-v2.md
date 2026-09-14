@@ -44,7 +44,7 @@ Currently third-party content lives at `bundles/third_party/<name>/` (subdirs: d
 
 - `bundles/third_party/<name>/` → `third_party/<name>/`
 - `bundles/third_party/<name>.yaml` → `third_party/<name>.yaml`
-- Validator/loader updates in `vcfops_packaging` to scan `third_party/` (in addition to `bundles/`).
+- Validator/loader updates in `vcfcf_packaging` to scan `third_party/` (in addition to `bundles/`).
 - `release_types.headline_to_dir()` updated to recognize `third_party/<name>.yaml` source path.
 - The Phase 2 routing logic still triggers on `factory_native: false`; just the source dir changes.
 
@@ -52,7 +52,7 @@ Currently third-party content lives at `bundles/third_party/<name>/` (subdirs: d
 
 ### 3. Validator polish: time_window warning only when view isn't dashboard-embedded
 
-The view loader's validate step (`vcfops_dashboards/loader.py:923`) warns on any view with aggregating column transformations (AVG/MAX/PERCENTILE/TRANSFORM_EXPRESSION) that lacks an explicit `time_window:`. The warning is conservative — for views designed to be embedded in dashboards, the dashboard's time selector drives aggregation regardless of the view's own `time_window:`. The warning fires whether or not the view will ever be consumed standalone.
+The view loader's validate step (`vcfcf_dashboards/loader.py:923`) warns on any view with aggregating column transformations (AVG/MAX/PERCENTILE/TRANSFORM_EXPRESSION) that lacks an explicit `time_window:`. The warning is conservative — for views designed to be embedded in dashboards, the dashboard's time selector drives aggregation regardless of the view's own `time_window:`. The warning fires whether or not the view will ever be consumed standalone.
 
 Surfaced 2026-04-27 on IDPS Planner views (both `IDPS Planner Host Metrics` and `[IDPS] IDPS Planner VM Metrics`), which are dashboard-embedded — the warning is decorative noise for that case.
 
@@ -62,7 +62,7 @@ Surfaced 2026-04-27 on IDPS Planner views (both `IDPS Planner Host Metrics` and 
 
 ### 4. Bundle name resolver: also search `third_party/` (or `bundles/third_party/`)
 
-When running `python3 -m vcfops_packaging release bundle idps-planner` (without the full path), the resolver fails:
+When running `python3 -m vcfcf_packaging release bundle idps-planner` (without the full path), the resolver fails:
 
 ```
 ERROR: could not resolve 'idps-planner' to a bundle YAML file.

@@ -31,11 +31,11 @@ saves the framework an indefinite maintenance tail.
 
 **The one carve-out, and it is not optional.** This rule governs the
 **factory**, not the **artifacts the factory ships**.
-`src/vcfops_packaging/templates/install.py` and `install.ps1` run on a
+`src/vcfcf_packaging/templates/install.py` and `install.ps1` run on a
 customer's machine, which we do not control and about which we get no say.
 Those must keep working on native Windows, which in practice means explicit
 `encoding="utf-8"` on every text read and write in
-`src/vcfops_packaging/templates/`, since
+`src/vcfcf_packaging/templates/`, since
 Python defaults to the locale encoding (cp1252) there. A content author
 authoring a view name containing `✓` or `→` must not produce a bundle that
 crashes on a customer's laptop.

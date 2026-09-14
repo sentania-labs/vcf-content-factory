@@ -22,7 +22,7 @@ The `vcfops-*` entries below are skills; each lives at
 
 Also read:
 - `knowledge/context/authoring/customgroup_authoring.md` (detailed rule grammar)
-- `src/vcfops_customgroups/loader.py` docstring (YAML schema)
+- `src/vcfcf_customgroups/loader.py` docstring (YAML schema)
 - `knowledge/context/specimens/customgroups/*.json` (ground truth)
 - existing `content/customgroups/*.yaml` (idiom)
 
@@ -59,7 +59,7 @@ authoritative."
 2. **Never fabricate** resourceKind/adapterKind, metric keys,
    property keys, tag categories, or relationship targets.
 3. **Validate:**
-   `python -m vcfops_customgroups validate content/customgroups/<file>.yaml`
+   `python -m vcfcf_customgroups validate content/customgroups/<file>.yaml`
 4. **Write only under `content/customgroups/`.**
 5. **No UUIDs.** Identity is `name`. No `id:` field.
 6. **Never install.** Never create SMs, views, or dashboards.

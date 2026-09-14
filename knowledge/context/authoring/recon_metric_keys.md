@@ -116,7 +116,7 @@ or any other instanced metric family)
 ### The minimum reproducible commands
 
 ```python
-from vcfops_supermetrics.client import VCFOpsClient
+from vcfcf_supermetrics.client import VCFOpsClient
 import time
 c = VCFOpsClient.from_env(); c._ensure_auth()
 end = int(time.time()*1000); begin = end - 3600*1000

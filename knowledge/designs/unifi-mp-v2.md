@@ -184,7 +184,7 @@ that change are called out; unchanged entries remain.
 
 Tier 1 threshold alerting (AP down, switch port error rate, WAN status,
 gateway temp thresholds) is **not deferred** — ships alongside the MP via
-`vcfops_symptoms` / `vcfops_alerts`. Same doctrine as Synology.
+`vcfcf_symptoms` / `vcfcf_alerts`. Same doctrine as Synology.
 
 ---
 
@@ -1068,7 +1068,7 @@ collapses the same shape into the metric source rather than `list_path`).
 **None in v2. Deferred to v1.1 (round-3 OQ #2 closed).**
 
 Same doctrine as Synology v2 — Tier 1 threshold alerting goes through
-factory `vcfops_symptoms` + `vcfops_alerts` referencing
+factory `vcfcf_symptoms` + `vcfcf_alerts` referencing
 `mpb_unifi_network` adapter metrics after the MP ships.
 
 Round-3 closure on Tier 2 MPB events: **skipped entirely.** The api
@@ -1094,7 +1094,7 @@ roadmap):
   (AP down, switch port error rate, WAN status, gateway temp
   thresholds, AP satisfaction floor, etc.).
 
-These are authored via `vcfops_symptoms` / `vcfops_alerts` after the
+These are authored via `vcfcf_symptoms` / `vcfcf_alerts` after the
 MP ships; they reference `mpb_unifi_network`'s metric/property keys
 without any MPB-side wiring.
 
@@ -1674,5 +1674,5 @@ Reading order before mp-author starts:
    rejected on coverage grounds (round-2 auth pass, see §"Auth path
    decision (2026-04-30)").
 
-mp-author should validate with `python3 -m vcfops_managementpacks
+mp-author should validate with `python3 -m vcfcf_managementpacks
 validate` before returning.

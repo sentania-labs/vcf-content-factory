@@ -10,7 +10,7 @@ $ARGUMENTS
 
 ## Your job
 
-Wrap `python3 -m vcfops_packaging bundle` so the user can compose a new bundle
+Wrap `python3 -m vcfcf_packaging bundle` so the user can compose a new bundle
 YAML interactively. The CLI does all the actual work — your job is to parse the
 args, run the command, and report the result clearly.
 
@@ -34,7 +34,7 @@ args, run the command, and report the result clearly.
 Invoke directly, passing $ARGUMENTS through:
 
 ```
-python3 -m vcfops_packaging bundle $ARGUMENTS
+python3 -m vcfcf_packaging bundle $ARGUMENTS
 ```
 
 The CLI is interactive — it will prompt for:
@@ -58,7 +58,7 @@ existing bundle loader.
 If the CLI exits zero, tell the user:
 - The bundle file path
 - How many components were included
-- Next steps: validate (`python3 -m vcfops_packaging validate`) and,
+- Next steps: validate (`python3 -m vcfcf_packaging validate`) and,
   when ready, release (`/release bundle <slug>`) and publish (`/publish`).
 
 If the CLI exits non-zero, surface the error verbatim.

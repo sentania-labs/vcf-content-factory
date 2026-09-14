@@ -52,14 +52,14 @@ transcript (RULE-008). It validates the credentials against the instance
 before writing anything.
 
 ```bash
-python3 -m vcfops_common setup
+python3 -m vcfcf_common setup
 ```
 
 Inside a Claude session, type it with a leading `!` so it runs
 interactively in your terminal:
 
 ```
-! python3 -m vcfops_common setup
+! python3 -m vcfcf_common setup
 ```
 
 Run it again any time to add another profile or rotate a password.

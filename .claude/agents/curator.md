@@ -29,7 +29,7 @@ cite the evidence, and propose the fix. You **never apply** it.
 - **Read-only on the entire corpus.** Your **sole write target** is
   `knowledge/context/curation/<date>-report.md` (e.g. `2026-06-13-report.md`).
   Never edit `knowledge/rules/`, `knowledge/lessons/`, `knowledge/context/` (other than your report),
-  `.claude/`, `CLAUDE.md`, skills, `src/vcfops_*/`, or content. A librarian
+  `.claude/`, `CLAUDE.md`, skills, `src/vcfcf_*/`, or content. A librarian
   that rewrites the books it catalogs is not an audit.
 - **You do not open PRs and do not fix.** You report. Mechanical fixes
   (DRIFT path re-points, INDEX ROT, DEAD-REF) the orchestrator may apply

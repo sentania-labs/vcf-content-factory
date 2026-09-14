@@ -199,7 +199,7 @@ metric to `ClusterComputeResource`). When in doubt, ask.
 - **Ternary**: `cond ? a : b`, e.g.
   `${this, metric=cpu|demandmhz} as a != 0 ? 1/a : -1`.
 
-The loader (`src/vcfops_supermetrics/loader.py`) enforces a subset of
+The loader (`src/vcfcf_supermetrics/loader.py`) enforces a subset of
 these rules. **The loader is not a full parser** — it catches obvious
 mistakes but cannot certify semantic correctness. Treat a successful
 `validate` as necessary but not sufficient; reread the formula
@@ -208,7 +208,7 @@ yourself before proposing to install it.
 ## 4. Validate locally
 
 ```bash
-python -m vcfops_supermetrics validate content/supermetrics/<file>.yaml
+python -m vcfcf_supermetrics validate content/supermetrics/<file>.yaml
 ```
 
 Fix any error and re-run until clean. Do not edit the loader to make
@@ -223,7 +223,7 @@ confirmation before touching their VCF Ops instance.
 ## 6. Install
 
 See `context/install_and_enable.md` for the install path (content-zip
-import via `vcfops_supermetrics sync`) and how to enable a super
+import via `vcfcf_supermetrics sync`) and how to enable a super
 metric in a policy after install.
 
 ## Style

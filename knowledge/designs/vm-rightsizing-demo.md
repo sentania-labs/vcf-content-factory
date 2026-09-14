@@ -119,7 +119,7 @@ Per CLAUDE.md §Delegation protocol, compound content authored bottom-up:
 
 1. **Skip recon** — lab is in stuck `isPakInstalling` state per Scott's signal; offline authoring against built-in metric docs is sufficient for this demo.
 2. **`view-author`** — single view `views/vm_rightsizing_environment_scan.yaml`. Intent: per this design artifact's Content Plan > Views section. Let author pick exact built-in metric keys and view-column aggregation config.
-3. **Validate** (`python3 -m vcfops_supermetrics validate && python3 -m vcfops_dashboards validate && ...`).
+3. **Validate** (`python3 -m vcfcf_supermetrics validate && python3 -m vcfcf_dashboards validate && ...`).
 4. **`dashboard-author`** — single dashboard `dashboards/vm_rightsizing_demo.yaml`. Intent: this design's mockup. Author resolves view by name.
 5. **Validate** again.
 6. **Report back to Scott** with file paths + brief preview.
@@ -128,8 +128,8 @@ No live install expected — Scott tests via his normal workflow, not through th
 
 ## Verification
 
-- View YAML validates (`vcfops_dashboards validate`)
-- Dashboard YAML validates (`vcfops_dashboards validate`)
+- View YAML validates (`vcfcf_dashboards validate`)
+- Dashboard YAML validates (`vcfcf_dashboards validate`)
 - Dashboard YAML cross-reference to view resolves
 - Manual visual check: dashboard layout is a single-screen demo scan, not scrollable heavy
 

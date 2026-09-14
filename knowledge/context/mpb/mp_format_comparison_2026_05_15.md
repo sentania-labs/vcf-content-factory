@@ -12,7 +12,7 @@ Analysis only — no factory code or content YAML was modified.
   and `tmp/mpb_export/VCF Content Factory vSphere Storage Paths.json`.
   Exported from MPB UI on devel, 2026-05-15.
 - Factory-rendered: produced via
-  `python3 -m vcfops_managementpacks render-export
+  `python3 -m vcfcf_managementpacks render-export
    content/managementpacks/<mp>.yaml --out tmp/<mp>_factory_export.json`,
   written to `tmp/unifi_factory_export.json` and
   `tmp/storage_factory_export.json`.
@@ -24,7 +24,7 @@ Analysis only — no factory code or content YAML was modified.
 - Factory-built paks (latest in dist/, version *.0.0.5):
   - `dist/mpb_vcf_content_factory_unifi_integration.1.0.0.5.pak`
   - `dist/mpb_vcf_content_factory_vsphere_storage_paths.2.0.0.5.pak`
-- Tool: `python3 -m vcfops_managementpacks pak-compare` plus
+- Tool: `python3 -m vcfcf_managementpacks pak-compare` plus
   manual unzip + jq for the inner `adapters.zip/conf/*` files.
 - Pak-compare reports archived to
   `tmp/unifi_pak_compare.txt` and `tmp/storage_pak_compare.txt`.
@@ -315,7 +315,7 @@ but the deeper template.json inspection finds a critical bug.
   onto these existing-adapter resource kinds at collection time."
   Without it, the adapter installs but pushes zero metrics —
   silent failure. The hard-coded empty list is in
-  `vcfops_managementpacks/render.py:859`:
+  `vcfcf_managementpacks/render.py:859`:
   ```python
   "externalResources": [],            # factory does not model cross-adapter bindings
   ```
@@ -451,13 +451,13 @@ but the deeper template.json inspection finds a critical bug.
 ## Fixes applied (2026-05-15)
 
 All 8 Category-A items were implemented in the same session as this
-report.  `python3 -m vcfops_managementpacks validate` passes (4 MPs).
+report.  `python3 -m vcfcf_managementpacks validate` passes (4 MPs).
 Spot-checked exchange JSON and template.json output against MPB
 reference for UniFi Integration and vSphere Storage Paths.
 
 ### Item 1 — CRITICAL: populate `source.externalResources` (FIXED)
 
-`vcfops_managementpacks/render_template.py` now calls
+`vcfcf_managementpacks/render_template.py` now calls
 `_convert_aria_ops_external_resource()` for each ARIA_OPS design
 resource and emits a fully-populated `externalResources[]` entry with
 `adapterKind`, `resourceKind`, `resourceKindName`, `isListResource`,
@@ -465,7 +465,7 @@ resource and emits a fully-populated `externalResources[]` entry with
 now has 2 entries (VMWARE/HostSystem and VMWARE/Datastore), each with
 `requestedMetrics` count = 1.  The hard-coded `[]` is gone.
 
-`vcfops_managementpacks/render.py` `_render_source()` was also updated
+`vcfcf_managementpacks/render.py` `_render_source()` was also updated
 to populate `externalResources` in the design.json flat format (from
 `wire_objects` filtered to `type == "ARIA_OPS"`), replacing the
 previous `[]`.
@@ -521,7 +521,7 @@ entries explaining the divergence:
 
 ### Item 6 — `manifest.txt vcops_minimum_version` (FIXED)
 
-`vcfops_managementpacks/builder.py` `_generate_manifest()` now emits
+`vcfcf_managementpacks/builder.py` `_generate_manifest()` now emits
 `"vcops_minimum_version": "8.10.0"` (was `"7.5.0"`).  Comment added
 citing this report §item 6.
 
@@ -585,5 +585,5 @@ has been updated to restore the 2026-04-18 rule.
 - `tmp/{unifi,storage}_pak_compare.txt` — pak-compare reports
 - `tmp/diff_{unifi,storage}/{mpb,factory}/` — unpacked pak trees,
   including adapters/<adapter>/conf/ inspection points
-- `python3 -m vcfops_managementpacks pak-compare <factory_pak>
+- `python3 -m vcfcf_managementpacks pak-compare <factory_pak>
    <reference_pak>` — the tool that drove Phase 2

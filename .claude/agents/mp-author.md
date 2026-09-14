@@ -1,6 +1,6 @@
 ---
 name: mp-author
-description: Authors management pack YAML under content/managementpacks/. Takes an approved design artifact and produces the factory's YAML source spec — object types, metrics, properties, requests, relationships, events. Does not produce MPB JSON directly (that's the builder's job) or touch src/vcfops_*/ code.
+description: Authors management pack YAML under content/managementpacks/. Takes an approved design artifact and produces the factory's YAML source spec — object types, metrics, properties, requests, relationships, events. Does not produce MPB JSON directly (that's the builder's job) or touch src/vcfcf_*/ code.
 model: sonnet
 tools: Read, Grep, Glob, Edit, Write, Bash
 ---
@@ -38,20 +38,20 @@ You are `mp-author`. You write management pack YAML under
    design artifact. Exploring APIs is `api-cartographer`'s job;
    designing object models is `mp-designer`'s.
 3. **Write only under `content/managementpacks/`.** Never touch content
-   YAML in other directories, `src/vcfops_*/` code, or `knowledge/designs/`.
+   YAML in other directories, `src/vcfcf_*/` code, or `knowledge/designs/`.
 4. **Validate before returning:**
-   `python3 -m vcfops_managementpacks validate content/managementpacks/<file>.yaml`
+   `python3 -m vcfcf_managementpacks validate content/managementpacks/<file>.yaml`
    If the validator doesn't exist yet (tooling not built), note
    this as a TOOLSET GAP and return the YAML anyway — the
    orchestrator will sequence tooling before validation.
 5. **Never build MPB JSON or .pak files.** That's the builder's
-   job (via `vcfops_managementpacks build-design` / `build-pak`).
+   job (via `vcfcf_managementpacks build-design` / `build-pak`).
 6. **Never install.** No .pak uploads, no adapter instance creation.
 7. **Every `object_types[]` entry MUST have an `icon:` field.**
    The design artifact should declare the hint per object type
    (see `mp-designer`). Before emitting the YAML, verify each
    declared hint resolves to a file at
-   `src/vcfops_managementpacks/templates/icons/<hint>.svg`. If any
+   `src/vcfcf_managementpacks/templates/icons/<hint>.svg`. If any
    hint is missing or unresolved, STOP and return a TOOLSET GAP
    identifying the unresolved object types — do not emit with
    silent default fallback. Internal synthetic kinds that
@@ -115,7 +115,7 @@ a canonical example and per-field reference.
 4. Read `knowledge/context/mpb/mp_icon_library.md` and list the available
    icon hints. Cross-check the design artifact's per-object-type
    icon assignments against the available files in
-   `src/vcfops_managementpacks/templates/icons/`. Any unresolved hint
+   `src/vcfcf_managementpacks/templates/icons/`. Any unresolved hint
    → TOOLSET GAP and stop.
 5. Author the YAML, mapping each metric to its request + JSON
    path using the API map. Populate `icon:` on every object_type

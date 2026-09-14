@@ -171,7 +171,7 @@
 <tspan x="1315.0" dy="0">tooling</tspan>
 </text>
 <text x="1315.0" y="622" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="10" fill="#7f1d1d" text-anchor="middle" xml:space="preserve">
-<tspan x="1315.0" dy="0">→ vcfops_*/  (only this agent)</tspan>
+<tspan x="1315.0" dy="0">→ vcfcf_*/  (only this agent)</tspan>
 </text>
 <text x="1480" y="198" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="18" fill="#dc2626" text-anchor="start" xml:space="preserve">
 <tspan x="1480" dy="0">BUILD PIPELINES  —  YAML to wire format</tspan>
@@ -183,7 +183,7 @@
 </text>
 <text x="1500" y="295" font-family='"Cascadia Code", "Consolas", ui-monospace, monospace' font-size="11" fill="#14532d" text-anchor="start" xml:space="preserve">
 <tspan x="1500" dy="0">mp.yaml</tspan>
-<tspan x="1500" dy="13.75">   ↓  render-export   (vcfops_managementpacks/render.py)</tspan>
+<tspan x="1500" dy="13.75">   ↓  render-export   (vcfcf_managementpacks/render.py)</tspan>
 <tspan x="1500" dy="13.75">exchange-format JSON   (design.json)</tspan>
 <tspan x="1500" dy="13.75">   ↓  push-design        (Suite API import endpoint)</tspan>
 <tspan x="1500" dy="13.75">MPB UI on devel  →  Source test  →  Verify   (CHEAP LOOP)</tspan>

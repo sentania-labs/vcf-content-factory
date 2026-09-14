@@ -12,7 +12,7 @@ attached to a metric in the import body or in a PUT to
 `/designs/{id}/objects` is silently dropped server-side.
 
 The factory's `key` field is therefore honored **only** on the
-standalone-pak install path, where `vcfops_managementpacks`
+standalone-pak install path, where `vcfcf_managementpacks`
 controls `template.json` directly. On the MPB API path it is
 informational only.
 
@@ -231,7 +231,7 @@ that would override the label-based derivation.
 ### 1. Accept the limitation — pak path is canonical (preferred)
 
 Document this clearly: the factory's pak path
-(`vcfops_managementpacks build` → `POST /api/solutions/pakManagement/...`)
+(`vcfcf_managementpacks build` → `POST /api/solutions/pakManagement/...`)
 is the **only** install path that honors explicit `key:` fields in
 YAML. The MPB API path
 (`render-export` → `POST /designs/import` → `/install`) is for
@@ -327,7 +327,7 @@ fields would help correlate against this investigation:
   declares `key: cpu_pct, label: CPU %`. Diverges at install.
 - `/home/scott/projects/vcf-content-factory/context/mpb_api_surface.md` —
   full `/internal/mpbuilder/*` endpoint catalog.
-- `/home/scott/projects/vcf-content-factory/vcfops_managementpacks/render_export.py` —
+- `/home/scott/projects/vcf-content-factory/vcfcf_managementpacks/render_export.py` —
   factory's exchange-format renderer; intentionally strips `key`
   on metrics because the importer rejects unknown fields.
 

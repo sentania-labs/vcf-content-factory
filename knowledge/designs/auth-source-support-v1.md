@@ -79,7 +79,7 @@ i.e. auth passed but no role assignment).
 ### 1.4 Probe 4 — UI session login (`POST /ui/login.action`)
 
 Form fields driven by the install template
-(`vcfops_packaging/templates/install.py:947-957`):
+(`vcfcf_packaging/templates/install.py:947-957`):
 `mainAction=login`, `userName`, `password`, `authSourceId`,
 `authSourceName`, `authSourceType`, `forceLogin`, `timezone`,
 `languageCode`. Triplet values came from
@@ -148,7 +148,7 @@ in existing modules), defer/unreachable.
 
 ### 3.1 Low-risk: VC, VC_GROUP, AD, OPEN_LDAP — configurable UI triplet
 
-**Affected file**: `vcfops_packaging/templates/install.py`.
+**Affected file**: `vcfcf_packaging/templates/install.py`.
 
 **Diagnosis**:
 - `UIClient.__init__:925` hard-codes the Local mapping
@@ -183,18 +183,18 @@ VCFOPS_<P>_AUTH_SOURCE_ID     # NEW: UUID; auto-discovered if blank
 VCFOPS_<P>_AUTH_SOURCE_TYPE   # NEW: VC / ACTIVE_DIRECTORY / etc.; auto-discovered if blank
 ```
 
-`vcfops_common/_env.py:165` reads `AUTH_SOURCE`; extend it to
+`vcfcf_common/_env.py:165` reads `AUTH_SOURCE`; extend it to
 read the two new keys and thread them through
 `ProfileCredentials`.
 
-**Effort**: ~80-120 LoC across `vcfops_common/_env.py`,
-`vcfops_packaging/templates/install.py`, plus PowerShell mirror
+**Effort**: ~80-120 LoC across `vcfcf_common/_env.py`,
+`vcfcf_packaging/templates/install.py`, plus PowerShell mirror
 in `install.ps1` (PS 5.1 compat per memory note). No wire-format
 changes — server is already happy with the form payload.
 
 ### 3.2 Low-risk: Suite-API client follows naturally
 
-`vcfops_common/client.py:84-92` already takes `auth_source` as
+`vcfcf_common/client.py:84-92` already takes `auth_source` as
 the source name. Per Probe 2 this is correct for VC, VC_GROUP,
 OPEN_LDAP, ACTIVE_DIRECTORY (NETBIOS form), and any other source
 that accepts password grant. **No code change** needed for the

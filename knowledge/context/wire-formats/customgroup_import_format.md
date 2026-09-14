@@ -6,7 +6,7 @@ VCF Ops custom groups have two incompatible JSON wire formats:
 
 ### 1. REST API format — `/api/resources/groups` (POST / PUT)
 
-Used by: `install.py` `_install_customgroups()`, `vcfops_customgroups` CLI sync,
+Used by: `install.py` `_install_customgroups()`, `vcfcf_customgroups` CLI sync,
 `CustomGroupDef.to_wire()`.
 
 ```json
@@ -181,7 +181,7 @@ from specimens.
 ## Known gap: tag rules
 
 The reference specimens contain no example of a tag-based rule in UI format.
-`src/vcfops_customgroups/loader.py` approximates tag conditions as
+`src/vcfcf_customgroups/loader.py` approximates tag conditions as
 `StringMetricPropertyRule` with a `_tag_gap` comment key. If a bundle's
 `customgroup.json` drag-drop import fails for a group with `tag:` conditions,
 this gap is the likely cause. Investigation via api-explorer needed.

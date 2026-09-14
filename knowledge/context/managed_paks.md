@@ -18,7 +18,7 @@ editing when a pak ships a new version.
   (each is an independent repo), so cloning them never dirties the factory tree.
 - **Authoring is normal git.** `cd content/sdk-adapters/<name>`, edit, commit,
   push — to the pak's *own* remote. The factory tooling
-  (`python3 -m vcfops_managementpacks build-sdk content/sdk-adapters/<name>`)
+  (`python3 -m vcfcf_managementpacks build-sdk content/sdk-adapters/<name>`)
   still does local *dev* builds; the **official** release is the pak's own CI
   building on a `v*` tag.
 - **Publish emits a pointer.** When a factory bundle references a managed pak,

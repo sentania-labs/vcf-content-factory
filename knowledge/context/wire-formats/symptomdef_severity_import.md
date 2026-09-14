@@ -66,17 +66,17 @@ informational token:
 
 | Path | Endpoint | Info severity token |
 |---|---|---|
-| REST JSON | `POST /api/symptomdefinitions` (`vcfops_symptoms`) | `INFORMATION` (uppercase) |
+| REST JSON | `POST /api/symptomdefinitions` (`vcfcf_symptoms`) | `INFORMATION` (uppercase) |
 | Content-import XML | pak `content/symptomdefs/*.xml` → `SymptomDefinitionRetriever` | `info` (lowercase) |
 
-`vcfops_symptoms/loader.py` `SEVERITY_MAP` maps `INFO → INFORMATION`
+`vcfcf_symptoms/loader.py` `SEVERITY_MAP` maps `INFO → INFORMATION`
 because that is correct **for the REST JSON path**. Every other severity
 (`WARNING`, `CRITICAL`, `IMMEDIATE`) has the same spelling in both paths
 — only INFO diverges.
 
 ## Exact code defect
 
-`src/vcfops_alerts/render.py:276` renders the symptom content XML:
+`src/vcfcf_alerts/render.py:276` renders the symptom content XML:
 
 ```python
 state_elem = ET.SubElement(sd_elem, "State", {"severity": sym.severity.lower()})
@@ -94,7 +94,7 @@ symptom-State renderer needs the analogous special-case.
 
 ## The fix (renderer, not YAML)
 
-**Fix in `src/vcfops_alerts/render.py:276`** — map the REST wire value
+**Fix in `src/vcfcf_alerts/render.py:276`** — map the REST wire value
 back to the XML token before emitting, e.g. treat `INFORMATION` as
 `info`:
 
@@ -105,11 +105,11 @@ state_elem = ET.SubElement(sd_elem, "State", {"severity": sev})
 ```
 
 Do **not** "fix" this by changing the adapter YAML to `severity: info`
-or by altering `vcfops_symptoms` `SEVERITY_MAP` — the loader value is
+or by altering `vcfcf_symptoms` `SEVERITY_MAP` — the loader value is
 correct for the REST path, and any other symptom authored to the REST
 API would break. The divergence is real; the renderer is the single
 place that must translate REST-token → XML-token. This is
-`tooling`/`framework-reviewer` work (touches `src/vcfops_*/`), and it
+`tooling`/`framework-reviewer` work (touches `src/vcfcf_*/`), and it
 needs a regression test asserting `severity: INFO` → `<State
 severity="info">` (guarding against re-introducing `information`).
 
@@ -129,5 +129,5 @@ added nothing to the instance.
 
 - `knowledge/context/wire-formats/wire_formats.md` §Alerts/symptoms — pak
   content layout for `<SymptomDefinitions>` / `<AlertDefinitions>`.
-- `src/vcfops_symptoms/loader.py` `SEVERITY_MAP` — the REST-path mapping.
-- `src/vcfops_alerts/render.py` — the XML content-import renderer.
+- `src/vcfcf_symptoms/loader.py` `SEVERITY_MAP` — the REST-path mapping.
+- `src/vcfcf_alerts/render.py` — the XML content-import renderer.
