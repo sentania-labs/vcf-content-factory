@@ -6,6 +6,14 @@ matches the super metric loader's contract (see
 `knowledge/context/authoring/uuids_and_cross_references.md`) and means rename-safe
 install: changing a view or dashboard's name does not change its id,
 so the existing server-side object is updated in place on re-sync.
+
+This module is the parse and validate half (vcf-cf-tooling-core, M2 row 2).
+It never writes: a YAML with no ``id`` is reported through the
+``on_missing_id`` callback (the factory's ``vcfcf_dashboards.loader`` passes
+its minting function; a library caller that omits it gets a
+``DashboardValidationError``). Provenance likewise comes from the
+``provenance_of`` callback, defaulting to ``""`` (unknown), because deriving
+it needs a repo layout the library must not assume.
 """
 from __future__ import annotations
 
@@ -13,11 +21,11 @@ import re
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, List, Optional, Union
+from typing import Callable, Iterable, List, Optional, Union
 
 import yaml
 
-from vcfcf_dashboards.yaml_utils import strict_load as _strict_load
+from .yaml_utils import strict_load as _strict_load
 
 # Stable namespace for derived UUIDs. Do NOT change once content has
 # been deployed, every dashboard/view id is derived from this.
@@ -1976,33 +1984,49 @@ def check_unique_summary_for(dashboards: Iterable["Dashboard"]) -> None:
             owners[kind] = d
 
 
-def _mint_id_into_file(path: Path) -> str:
-    """Mint a uuid4 and prepend ``id: <uuid>`` to the YAML file.
+IdMinter = Callable[[Path], str]
+ProvenanceFn = Callable[[Path], str]
 
-    Same contract as the super metric loader: UUIDs are generated
-    once on first validate and never touched after. See
-    knowledge/context/authoring/uuids_and_cross_references.md.
+
+def _resolve_id(path: Path, data: dict, on_missing_id: Optional[IdMinter]) -> str:
+    """The object's ``id`` from ``data``, validated as a uuid4.
+
+    A missing ``id`` is handed to ``on_missing_id`` (the factory mints one
+    into the file and returns it); with no callback it is an error, because
+    this module never writes to its input.
     """
-    new_id = str(uuid.uuid4())
-    original = path.read_text()
-    path.write_text(f"id: {new_id}\n{original}")
-    return new_id
+    obj_id = str(data.get("id", "") or "").strip().lower()
+    if not obj_id:
+        if on_missing_id is None:
+            raise DashboardValidationError(
+                f"{path}: missing id (a uuid4); pass on_missing_id= to mint one"
+            )
+        obj_id = on_missing_id(path)
+    elif not _UUID_RE.match(obj_id):
+        raise DashboardValidationError(
+            f"{path}: id '{obj_id}' is not a valid uuid4"
+        )
+    return obj_id
 
 
-def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_dashboard: bool = False) -> ViewDef:
+def _provenance(path: Path, provenance_of: Optional[ProvenanceFn]) -> str:
+    return provenance_of(path) if provenance_of is not None else ""
+
+
+def load_view(
+    path: Path,
+    enforce_framework_prefix: bool = True,
+    embedded_in_dashboard: bool = False,
+    on_missing_id: Optional[IdMinter] = None,
+    provenance_of: Optional[ProvenanceFn] = None,
+) -> ViewDef:
     try:
         data = _strict_load(path.read_text()) or {}
     except yaml.constructor.ConstructorError as exc:
         raise DashboardValidationError(
             f"{path}: {exc}"
         ) from exc
-    view_id = str(data.get("id", "") or "").strip().lower()
-    if not view_id:
-        view_id = _mint_id_into_file(path)
-    elif not _UUID_RE.match(view_id):
-        raise DashboardValidationError(
-            f"{path}: id '{view_id}' is not a valid uuid4"
-        )
+    view_id = _resolve_id(path, data, on_missing_id)
     def _load_column(c: dict) -> "ViewColumn":
         transform_raw = c.get("transformation")
         transform_expr = c.get("transform_expression")
@@ -2386,8 +2410,6 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
     else:
         view_customgroups = []
 
-    from vcfcf_common.provenance import provenance_from_path
-
     hide_object_name_raw = data.get("hide_object_name", False)
     if not isinstance(hide_object_name_raw, bool):
         raise DashboardValidationError(
@@ -2417,26 +2439,26 @@ def load_view(path: Path, enforce_framework_prefix: bool = True, embedded_in_das
         released=released,
         version=version,
         customgroups=view_customgroups,
-        provenance=provenance_from_path(path),
+        provenance=_provenance(path, provenance_of),
     )
     v.validate(enforce_framework_prefix=enforce_framework_prefix, embedded_in_dashboard=embedded_in_dashboard)
     return v
 
 
-def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_name_path: str = "VCF Content Factory") -> Dashboard:
+def load_dashboard(
+    path: Path,
+    enforce_framework_prefix: bool = True,
+    default_name_path: str = "VCF Content Factory",
+    on_missing_id: Optional[IdMinter] = None,
+    provenance_of: Optional[ProvenanceFn] = None,
+) -> Dashboard:
     try:
         data = _strict_load(path.read_text()) or {}
     except yaml.constructor.ConstructorError as exc:
         raise DashboardValidationError(
             f"{path}: {exc}"
         ) from exc
-    dash_id = str(data.get("id", "") or "").strip().lower()
-    if not dash_id:
-        dash_id = _mint_id_into_file(path)
-    elif not _UUID_RE.match(dash_id):
-        raise DashboardValidationError(
-            f"{path}: id '{dash_id}' is not a valid uuid4"
-        )
+    dash_id = _resolve_id(path, data, on_missing_id)
     widgets: List[Widget] = []
     for w in data.get("widgets", []) or []:
         rks = [
@@ -2462,7 +2484,7 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
                 # Local import: render.py owns the leaf-kind redirect table
                 # and imports nothing from this module at import time, but
                 # keep the dependency one-directional at module load.
-                from vcfcf_dashboards.render import _VIEW_PIN_CONTAINER
+                from .render import _VIEW_PIN_CONTAINER
                 if (pin_ak, pin_rk) in _VIEW_PIN_CONTAINER:
                     raise DashboardValidationError(
                         f"widget {w.get('id', '?')!r}: pin.name is not supported on "
@@ -3072,7 +3094,6 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
             summary_for = normalize_summary_for(summary_for_raw)
         except ValueError as exc:
             raise DashboardValidationError(f"{path}: {exc}") from None
-    from vcfcf_common.provenance import provenance_from_path
 
     return Dashboard(
         id=dash_id,
@@ -3086,18 +3107,30 @@ def load_dashboard(path: Path, enforce_framework_prefix: bool = True, default_na
         source_path=path,
         released=released,
         version=version,
-        provenance=provenance_from_path(path),
+        provenance=_provenance(path, provenance_of),
         summary_for=summary_for,
     )
 
 
-def load_all(views_dir: Path, dashboards_dir: Path, enforce_framework_prefix: bool = True, default_name_path: str = "VCF Content Factory") -> tuple[list[ViewDef], list[Dashboard]]:
-    views = [load_view(p, enforce_framework_prefix=enforce_framework_prefix) for p in sorted(views_dir.rglob("*.y*ml"))] if views_dir.exists() else []
+def load_all(
+    views_dir: Path,
+    dashboards_dir: Path,
+    enforce_framework_prefix: bool = True,
+    default_name_path: str = "VCF Content Factory",
+    on_missing_id: Optional[IdMinter] = None,
+    provenance_of: Optional[ProvenanceFn] = None,
+) -> tuple[list[ViewDef], list[Dashboard]]:
+    views = [
+        load_view(p, enforce_framework_prefix=enforce_framework_prefix,
+                  on_missing_id=on_missing_id, provenance_of=provenance_of)
+        for p in sorted(views_dir.rglob("*.y*ml"))
+    ] if views_dir.exists() else []
     by_name = {v.name: v for v in views}
     dashboards: List[Dashboard] = []
     if dashboards_dir.exists():
         for p in sorted(dashboards_dir.rglob("*.y*ml")):
-            d = load_dashboard(p, enforce_framework_prefix=enforce_framework_prefix, default_name_path=default_name_path)
+            d = load_dashboard(p, enforce_framework_prefix=enforce_framework_prefix, default_name_path=default_name_path,
+                               on_missing_id=on_missing_id, provenance_of=provenance_of)
             d.validate(by_name, enforce_framework_prefix=enforce_framework_prefix)
             dashboards.append(d)
     check_unique_summary_for(dashboards)
