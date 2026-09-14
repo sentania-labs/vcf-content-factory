@@ -71,7 +71,7 @@ def _base_view(name: str, attribute: str, extra_column: dict | None = None) -> d
 
 
 def _load_and_capture(path: Path):
-    from vcfops_dashboards.loader import load_view
+    from vcfcf_dashboards.loader import load_view
 
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
@@ -286,7 +286,7 @@ def test_real_repo_vcommunity_vsphere_distribution_views_do_not_warn():
     adapter must not trigger the guard — this is the corpus the DEF-012
     remediation sweep fixed (four originally-fixed ESXi Host
     Details views plus every view touched by the follow-up sweep)."""
-    from vcfops_dashboards.loader import load_view
+    from vcfcf_dashboards.loader import load_view
 
     repo_root = Path(__file__).parent.parent
     views_dir = repo_root / "content" / "sdk-adapters" / "vcommunity-vsphere" / "views"
@@ -327,7 +327,7 @@ def test_real_repo_vcommunity_control_corpus_still_warns():
     distribution views (property-looking attributes with no is_property /
     no dynamic DISCRETE buckets), proving the restructured guard didn't
     become permissive."""
-    from vcfops_dashboards.loader import load_view
+    from vcfcf_dashboards.loader import load_view
 
     repo_root = Path(__file__).parent.parent
     views_dir = repo_root / "content" / "sdk-adapters" / "vcommunity" / "views"

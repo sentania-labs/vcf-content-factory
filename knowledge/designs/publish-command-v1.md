@@ -180,12 +180,12 @@ Each loader reads `released` and `version` into its model.
 No behavior change at validate/sync time; fields are metadata
 consumed by the publish pipeline.
 
-### B. New discrete artifact builder (`vcfops_packaging`)
+### B. New discrete artifact builder (`vcfcf_packaging`)
 
 New CLI subcommand (exact name tooling's call):
 
 ```
-python3 -m vcfops_packaging build-discrete <content-type> <item-name>
+python3 -m vcfcf_packaging build-discrete <content-type> <item-name>
 ```
 
 Behavior:
@@ -198,7 +198,7 @@ Behavior:
   `install.ps1`).
 - README inside the zip is item-focused, not bundle-focused.
 
-### C. README auto-gen helper (`vcfops_packaging`)
+### C. README auto-gen helper (`vcfcf_packaging`)
 
 Regenerates per-section tables between marker pairs:
 

@@ -40,7 +40,7 @@ def _view_data(description: str) -> dict:
 
 
 def test_description_at_1024_chars_passes(tmp_path):
-    from vcfops_dashboards.loader import load_view
+    from vcfcf_dashboards.loader import load_view
 
     p = _write_view(tmp_path, _view_data("x" * 1024))
     v = load_view(p, enforce_framework_prefix=False)
@@ -49,7 +49,7 @@ def test_description_at_1024_chars_passes(tmp_path):
 
 
 def test_description_at_1025_chars_rejected(tmp_path):
-    from vcfops_dashboards.loader import load_view, DashboardValidationError
+    from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
     p = _write_view(tmp_path, _view_data("x" * 1025))
     with pytest.raises(DashboardValidationError, match="1024-character limit"):

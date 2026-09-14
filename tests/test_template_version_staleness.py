@@ -1,6 +1,6 @@
 """The template-version staleness signal, which had no coverage at all.
 
-`src/vcfops_packaging/template_version.py` requires a bump whenever
+`src/vcfcf_packaging/template_version.py` requires a bump whenever
 `templates/install.py` (or the other listed files) change. The builders
 stamp `CURRENT_TEMPLATE_VERSION` into each zip's `vcfops_manifest.json`
 and `check-staleness` compares only that value, so a missed bump makes
@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from vcfops_packaging.cli import cmd_check_staleness
-from vcfops_packaging.template_version import CURRENT_TEMPLATE_VERSION
+from vcfcf_packaging.cli import cmd_check_staleness
+from vcfcf_packaging.template_version import CURRENT_TEMPLATE_VERSION
 
 
 class _Args:
@@ -77,7 +77,7 @@ def test_missing_marker_is_unknown_not_ok(tmp_path, capsys):
 
 
 @pytest.mark.parametrize(
-    "module_name", ["vcfops_packaging.builder", "vcfops_packaging.discrete_builder"]
+    "module_name", ["vcfcf_packaging.builder", "vcfcf_packaging.discrete_builder"]
 )
 def test_builders_stamp_the_constant_not_a_literal(module_name):
     """If a builder ever hardcodes a version string, the bump mechanism

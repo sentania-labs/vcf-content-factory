@@ -64,14 +64,14 @@ skip signature.
 
 **Every factory import path already sends `force=true`:**
 
-- `src/vcfops_dashboards/client.py:import_content_zip`
+- `src/vcfcf_dashboards/client.py:import_content_zip`
   (`params={"force": "true"}`) — used by the dashboards/views sync
-  path, by `vcfops_reports`, and by
-  `vcfops_supermetrics.client.import_supermetrics_bundle`, which
+  path, by `vcfcf_reports`, and by
+  `vcfcf_supermetrics.client.import_supermetrics_bundle`, which
   imports that same helper.
-- `src/vcfops_packaging/templates/install.py:421`
+- `src/vcfcf_packaging/templates/install.py:421`
   (`params={"force": "true"}`).
-- `src/vcfops_packaging/templates/install.ps1:691`
+- `src/vcfcf_packaging/templates/install.ps1:691`
   (`...?force=true`).
 
 So the signature the factory warns about is, as of today, **not
@@ -91,7 +91,7 @@ Yes, deterministically, and only via `force=false`.
 Method: a throwaway view + dashboard pair
 (`[VCF Content Factory] EXP97 Probe View A` /
 `... Probe Dashboard A`, fixed UUIDs) built with the ordinary
-`vcfops_dashboards` loader + packager, imported through a harness that
+`vcfcf_dashboards` loader + packager, imported through a harness that
 varies exactly one thing at a time.
 
 Verbatim, the reproduction (`C1`), immediately after an identical
@@ -346,7 +346,7 @@ they live in a namespace `getDashboardList` never returns.
 ## Reproducing
 
 The harness was throwaway (scratchpad, not committed). To redo it:
-build any view+dashboard pair with `vcfops_dashboards`' loader and
+build any view+dashboard pair with `vcfcf_dashboards`' loader and
 packager, then POST the zip to `/api/content/operations/import` with
 `files={"contentFile": (...)}` and the session's
 `Content-Type: application/json` suppressed, varying only the `force`

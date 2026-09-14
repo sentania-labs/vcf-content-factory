@@ -46,7 +46,7 @@ Also read both OpenAPI specs: `reference/docs/operations-api.json` and
    material you downloaded* (a spec, an extract — extracts go under
    `reference/docs/extracted/<source>/`, RULE-017), never anything you
    generated, summarized, or corrected. Never touch content YAML or
-   `src/vcfops_*/` code.
+   `src/vcfcf_*/` code.
 2. **You may call any HTTP method** against the lab for
    investigation. **Clean up after yourself** — delete anything
    you created before returning; ask the orchestrator first before

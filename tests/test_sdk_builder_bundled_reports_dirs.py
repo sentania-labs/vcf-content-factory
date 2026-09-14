@@ -4,7 +4,7 @@ project's own views/ and dashboards/ directories, not the factory-default
 content/views and content/dashboards.
 
 Root cause (2026-07-10, closeout Fix 3): `_load_bundled_content()` called
-`vcfops_reports.loader.load_file(path, enforce_framework_prefix=False)`
+`vcfcf_reports.loader.load_file(path, enforce_framework_prefix=False)`
 without `views_dir`/`dashboards_dir`, so it fell back to the loader's
 default `content/views` / `content/dashboards` — the factory repo's own
 directories — instead of the adapter repo's `<project_dir>/views/` and
@@ -73,7 +73,7 @@ def _make_project(tmp_path: Path) -> Path:
 
 class TestLoadBundledContentReportsResolveAdapterViewsDir:
     def test_report_view_reference_resolves_against_project_dir(self, tmp_path):
-        from vcfops_managementpacks.sdk_builder import _load_bundled_content
+        from vcfcf_managementpacks.sdk_builder import _load_bundled_content
 
         project_dir = _make_project(tmp_path)
         raw = {
@@ -101,7 +101,7 @@ class TestLoadBundledContentReportsResolveAdapterViewsDir:
         that does NOT exist anywhere must still fail to resolve (proves the
         fixture isn't accidentally passing for an unrelated reason).
         """
-        from vcfops_managementpacks.sdk_builder import _load_bundled_content, SdkBuildError
+        from vcfcf_managementpacks.sdk_builder import _load_bundled_content, SdkBuildError
 
         project_dir = _make_project(tmp_path)
         # Point the report at a view that isn't bundled or present anywhere.

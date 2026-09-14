@@ -59,13 +59,13 @@ def _view(**over) -> dict:
 
 
 def _load(tmp_path, data):
-    from vcfops_dashboards.loader import load_view
+    from vcfcf_dashboards.loader import load_view
 
     return load_view(_write(tmp_path, data))
 
 
 def _render(tmp_path, data) -> str:
-    from vcfops_dashboards.render import render_views_xml
+    from vcfcf_dashboards.render import render_views_xml
 
     return render_views_xml([_load(tmp_path, data)])
 
@@ -215,7 +215,7 @@ class TestPerColumnSubject:
 
 class TestLoaderRejects:
     def test_subject_not_in_subjects(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError
+        from vcfcf_dashboards.loader import DashboardValidationError
 
         cols = [{
             "attribute": "cpu|usage_average", "display_name": "CPU",
@@ -225,7 +225,7 @@ class TestLoaderRejects:
             _load(tmp_path, _view(subject=None, subjects=SUBJECTS, columns=cols))
 
     def test_subject_on_column_of_single_subject_view(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError
+        from vcfcf_dashboards.loader import DashboardValidationError
 
         cols = [{
             "attribute": "cpu|usage_average", "display_name": "CPU",
@@ -240,7 +240,7 @@ class TestLoaderRejects:
         {"adapter_kind": "VMWARE", "resource_kind": "Datacenter", "filter": "x"},
     ])
     def test_malformed_subject(self, tmp_path, bad):
-        from vcfops_dashboards.loader import DashboardValidationError
+        from vcfcf_dashboards.loader import DashboardValidationError
 
         cols = [{"attribute": "cpu|usage_average", "display_name": "CPU", "subject": bad}]
         with pytest.raises(DashboardValidationError):
@@ -252,7 +252,7 @@ class TestLoaderRejects:
     # failure is the kind check, not the membership check.
 
     def test_subject_on_time_segment_column(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError
+        from vcfcf_dashboards.loader import DashboardValidationError
 
         cols = [
             {
@@ -266,7 +266,7 @@ class TestLoaderRejects:
             _load(tmp_path, _view(subject=None, subjects=SUBJECTS, columns=cols))
 
     def test_subject_on_instanced_group_driver_column(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError
+        from vcfcf_dashboards.loader import DashboardValidationError
 
         cols = [
             {
@@ -288,7 +288,7 @@ class TestLoaderRejects:
     def test_pseudo_column_rejection_wins_over_single_subject_check(self, tmp_path):
         """The kind check fires even on a single-subject view, so the error
         names the real problem rather than the missing subjects: list."""
-        from vcfops_dashboards.loader import DashboardValidationError
+        from vcfcf_dashboards.loader import DashboardValidationError
 
         cols = [{
             "display_name": "Month",
@@ -389,14 +389,14 @@ class TestReverse:
         return ET.fromstring(xml)
 
     def test_dataclass_parser_multi_subject(self):
-        from vcfops_dashboards.reverse import parse_view_xml_element
+        from vcfcf_dashboards.reverse import parse_view_xml_element
 
         vd = parse_view_xml_element(self._elem(_viewdef_xml(MULTI, COLS)))
         assert vd.columns[0].subject is None
         assert vd.columns[1].subject.key == ("VMWARE", "vSphere World")
 
     def test_dataclass_parser_single_subject_drops_binding(self):
-        from vcfops_dashboards.reverse import parse_view_xml_element
+        from vcfcf_dashboards.reverse import parse_view_xml_element
 
         xml = _viewdef_xml(MULTI[:1], [("summary|total_number_hosts", ("VMWARE", "Datacenter"))])
         vd = parse_view_xml_element(self._elem(xml))
@@ -406,9 +406,9 @@ class TestReverse:
     @pytest.mark.parametrize("parser", ["extractor", "reverse_local"])
     def test_dict_parsers(self, parser):
         if parser == "extractor":
-            from vcfops_extractor.extractor import _parse_view_def_element as parse
+            from vcfcf_extractor.extractor import _parse_view_def_element as parse
         else:
-            from vcfops_extractor.reverse_local import _parse_view_xml_to_dict as parse
+            from vcfcf_extractor.reverse_local import _parse_view_xml_to_dict as parse
 
         data = parse(self._elem(_viewdef_xml(MULTI, COLS)))
         assert "subject" not in data["columns"][0]
@@ -422,18 +422,18 @@ class TestReverse:
 
     @pytest.mark.parametrize("writer", ["extractor", "reverse_local"])
     def test_round_trip_through_yaml_and_render(self, tmp_path, writer):
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         if writer == "extractor":
-            from vcfops_extractor.extractor import _parse_view_def_element as parse
-            from vcfops_extractor.extractor import _write_view_yaml
+            from vcfcf_extractor.extractor import _parse_view_def_element as parse
+            from vcfcf_extractor.extractor import _write_view_yaml
 
             def write(path, data):
                 _write_view_yaml(path, data)
         else:
-            from vcfops_extractor.reverse_local import _parse_view_xml_to_dict as parse
-            from vcfops_extractor.reverse_local import _write_view_yaml
+            from vcfcf_extractor.reverse_local import _parse_view_xml_to_dict as parse
+            from vcfcf_extractor.reverse_local import _write_view_yaml
 
             def write(path, data):
                 _write_view_yaml(path, data, {})
@@ -451,7 +451,7 @@ class TestReverse:
         items = _column_items(rendered)
         assert [_binding(i) for i in items] == [None, ("VMWARE", "vSphere World")]
         # and the binding survives a second reverse pass
-        from vcfops_dashboards.reverse import parse_view_xml_element
+        from vcfcf_dashboards.reverse import parse_view_xml_element
         import xml.etree.ElementTree as ET
 
         vd_elem = ET.fromstring(rendered).find(".//ViewDef")

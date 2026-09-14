@@ -3,7 +3,7 @@
 # any of: local dev, CI (.github/workflows/*.yml), or Claude Code / agent
 # shells (.claude/settings.json) — full stop.
 #
-# The ten vcfops_* packages live under src/ (a real src-layout on disk) and
+# The ten vcfcf_* packages live under src/ (a real src-layout on disk) and
 # resolve purely via an ambient PYTHONPATH=src: set by .claude/settings.json
 # for Claude Code / agent shells, and by an `env:` block in each CI workflow.
 # Runtime and dev dependencies are declared in requirements.txt and
@@ -12,14 +12,14 @@
 # install .` / `pip install -e .` against this repo.
 #
 # Why this matters: an install (editable OR a plain `pip install .` /
-# `pip install -e .`) registers vcfops_* in site-packages, which every
+# `pip install -e .`) registers vcfcf_* in site-packages, which every
 # subprocess sharing that interpreter can then import regardless of
 # PYTHONPATH stripping. That silently blinds the kit-isolation regression
 # tests (tests/managementpacks/test_buildkit_isolated_build.py and
 # friends), which prove the published sdk-buildkit tarball works with zero
 # factory install. A [project] table here — even with no [build-system] —
 # is enough to make `pip install .` succeed via setuptools' legacy
-# src-layout auto-discovery fallback and install vcfops_* into
+# src-layout auto-discovery fallback and install vcfcf_* into
 # site-packages; that leak is exactly what this file must never enable, so
 # no [project] table is declared.
 #
@@ -31,7 +31,7 @@
 # name. Verified empirically in a scratch venv (with PYTHONPATH cleared, to
 # rule out ambient leakage from this repo's own PYTHONPATH=src convention):
 # with only the [project] table removed, `pip install .` still built and
-# installed "UNKNOWN-0.0.0" and `import vcfops_common` still succeeded.
+# installed "UNKNOWN-0.0.0" and `import vcfcf_common` still succeeded.
 #
 # The explicit `[tool.setuptools] packages = []` below closes that — but
 # not by producing an empty install as originally assumed. Once
@@ -43,7 +43,7 @@
 #   configuration error: `project` must contain ['version'] properties
 # `pip install .` exits non-zero and `pip list` afterward shows nothing
 # installed (confirmed in a scratch venv, PYTHONPATH cleared) — no wheel is
-# ever produced, so there is nothing for vcfops_common to leak through.
+# ever produced, so there is nothing for vcfcf_common to leak through.
 
 [tool.setuptools]
 packages = []

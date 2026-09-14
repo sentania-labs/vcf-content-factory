@@ -75,7 +75,7 @@ def _props(ctrl: ET.Element) -> dict:
 
 class TestLoaderParsesStartEndPeriod:
     def test_explicit_start_end_period_parsed(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         view_path = _make_view_yaml(
             tmp_path,
@@ -92,7 +92,7 @@ class TestLoaderParsesStartEndPeriod:
         assert view.time_window.end_period == "NOW"
 
     def test_no_start_end_period_defaults_to_none(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         view_path = _make_view_yaml(
             tmp_path,
@@ -105,8 +105,8 @@ class TestLoaderParsesStartEndPeriod:
 
 class TestRendererStartEndPeriod:
     def test_explicit_values_are_emitted(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         view_path = _make_view_yaml(
             tmp_path,
@@ -130,8 +130,8 @@ class TestRendererStartEndPeriod:
         emit startPeriod=PREVIOUS/endPeriod=NOW — the only pairing ever
         observed in the vendor corpus, and the fix for the shipped
         "View request timed out" view."""
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         view_path = _make_view_yaml(
             tmp_path,
@@ -148,8 +148,8 @@ class TestRendererStartEndPeriod:
         """Regression guard: simple (non-advanced) views — the overwhelming
         majority of the corpus — must render byte-identically to before this
         fix: no startPeriod/endPeriod Properties at all."""
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         view_path = _make_view_yaml(tmp_path, {"unit": "DAYS", "count": 7})
         view = load_view(view_path, enforce_framework_prefix=False)
@@ -162,8 +162,8 @@ class TestRendererStartEndPeriod:
     def test_no_time_window_omits_period_properties(self, tmp_path):
         """Views with no time_window: at all (the default fallback path)
         must also omit startPeriod/endPeriod."""
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         view_path = _write_yaml(
             tmp_path / "views" / "fb011_no_window.yaml",
@@ -191,7 +191,7 @@ class TestRendererStartEndPeriod:
 
 class TestExtractorRoundTrip:
     def test_extractor_parse_time_window_captures_period(self):
-        from vcfops_extractor.extractor import _parse_time_window
+        from vcfcf_extractor.extractor import _parse_time_window
 
         controls_xml = (
             '<Controls>'
@@ -215,7 +215,7 @@ class TestExtractorRoundTrip:
         }
 
     def test_extractor_parse_time_window_no_period_is_none(self):
-        from vcfops_extractor.extractor import _parse_time_window
+        from vcfcf_extractor.extractor import _parse_time_window
 
         controls_xml = (
             '<Controls>'
@@ -234,7 +234,7 @@ class TestExtractorRoundTrip:
 
 class TestReverseLocalRoundTrip:
     def test_reverse_local_parse_time_window_captures_period(self):
-        from vcfops_extractor.reverse_local import _parse_time_window
+        from vcfcf_extractor.reverse_local import _parse_time_window
 
         controls_xml = (
             '<Controls>'

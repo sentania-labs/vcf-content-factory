@@ -9,7 +9,7 @@ factory copy is the one that gets PR'd; pak repos carry snapshots.
 Why this exists: a pak repo cloner had no in-repo path from "I edited
 the Java" to "I have a `.pak`" — the build contract lived only in the
 factory's buildkit release notes. (Two builder personas: a **factory
-clone** drives `vcfops_managementpacks build-sdk` against
+clone** drives `vcfcf_managementpacks build-sdk` against
 `content/sdk-adapters/<name>/`; a **pak-repo clone or fork** uses the
 portable buildkit below, no factory checkout needed.)
 

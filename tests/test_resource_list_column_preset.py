@@ -108,8 +108,8 @@ def _dashboard_yaml(widget_id: str, column_preset: str | None = None) -> dict:
 
 
 def _render(tmp_path: Path, column_preset: str | None):
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     widget_id = str(uuid.uuid4())
     dash_path = _write_yaml(
@@ -236,7 +236,7 @@ class TestColumnPresetInvalid:
     silently-passed-through raw value."""
 
     def test_invalid_preset_raises_validation_error(self, tmp_path):
-        from vcfops_dashboards.loader import load_dashboard, DashboardValidationError
+        from vcfcf_dashboards.loader import load_dashboard, DashboardValidationError
 
         widget_id = str(uuid.uuid4())
         dash_path = _write_yaml(
@@ -248,7 +248,7 @@ class TestColumnPresetInvalid:
             dashboard.validate({}, enforce_framework_prefix=False)
 
     def test_column_preset_on_non_resource_list_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_dashboard, DashboardValidationError
+        from vcfcf_dashboards.loader import load_dashboard, DashboardValidationError
 
         dash_path = _write_yaml(
             tmp_path / "dashboards" / "column_preset_wrong_widget.yaml",

@@ -3,16 +3,16 @@
 ## The story
 
 The `${this, metric=...}` audit fix (PR #137) changed
-`_refs_from_formula()` in `src/vcfops_packaging/deps.py`: a new
+`_refs_from_formula()` in `src/vcfcf_packaging/deps.py`: a new
 `resource_kinds` parameter, and a this-bound ref with no usable kinds
 became a hard `AuditError` instead of a silent skip.
 
-Every caller inside `vcfops_packaging` was found and updated. The
+Every caller inside `vcfcf_packaging` was found and updated. The
 framework review gate verified the change thoroughly, twice, and
 approved it. Both the author and the reviewer scoped their caller
-sweep to `src/vcfops_packaging/`.
+sweep to `src/vcfcf_packaging/`.
 
-`src/vcfops_extractor/extractor.py` called the same helper at two
+`src/vcfcf_extractor/extractor.py` called the same helper at two
 sites, without the new argument. The change would have made `/extract`
 abort the entire extraction workflow on any live-lab super metric
 using `${this, metric=...}`. An external Codex review caught it after
@@ -23,7 +23,7 @@ the internal gate had cleared the branch.
 When a function's signature, defaults, or failure behavior change,
 the blast radius is defined by its callers, not by the package it
 lives in. Python's cross-package imports make "this is a
-vcfops_packaging change" an assumption, not a fact.
+vcfcf_packaging change" an assumption, not a fact.
 
 Before calling such a change reviewed:
 

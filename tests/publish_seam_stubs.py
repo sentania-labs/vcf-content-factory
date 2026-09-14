@@ -2,7 +2,7 @@
 
 ``publish()`` grew two keyword-only test seams, ``validator`` and
 ``build_one_release``, because the real eight-validator chain costs
-~200s per call (vcfops_managementpacks validate alone is ~190s) and every
+~200s per call (vcfcf_managementpacks validate alone is ~190s) and every
 shape-only assertion was paying it.  This module is the single shared home
 for the stub implementations so the two publish test files cannot drift
 apart.
@@ -31,7 +31,7 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
-from vcfops_packaging.publish import publish as _real_publish
+from vcfcf_packaging.publish import publish as _real_publish
 
 
 def stub_validator(factory_repo: Path) -> None:
@@ -65,7 +65,7 @@ def stub_build_one_release(release, staging_dir: Path, factory_repo: Path):
     (fixed member, fixed date_time) so the idempotence hashing behaves the
     same across repeat publishes, exactly like a real same-content rebuild.
     """
-    from vcfops_packaging.release_builder import (
+    from vcfcf_packaging.release_builder import (
         ReleaseArtifact,
         _artifact_dest_subdir,
         _is_sdk_adapter_source,

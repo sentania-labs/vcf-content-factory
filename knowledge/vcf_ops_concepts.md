@@ -252,11 +252,11 @@ is portable across dev/test/prod.
 Used for **custom groups, symptoms, and alert definitions**.
 
 - Custom groups: `POST /api/resources/groups` (and `PUT` for
-  updates). `vcfops_customgroups` package.
+  updates). `vcfcf_customgroups` package.
 - Symptoms: `POST /api/symptomdefinitions` (and `PUT` for updates).
-  `vcfops_symptoms` package.
+  `vcfcf_symptoms` package.
 - Alerts: `POST /api/alertdefinitions` (and `PUT` for updates).
-  `vcfops_alerts` package. Alerts reference symptoms by
+  `vcfcf_alerts` package. Alerts reference symptoms by
   server-assigned symptom IDs, so the installer resolves symptom
   names → IDs at install time.
 

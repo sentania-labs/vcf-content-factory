@@ -1,4 +1,4 @@
-"""Issue #85: `vcfops_packaging analyze` must not exit 0 on a non-bundle path.
+"""Issue #85: `vcfcf_packaging analyze` must not exit 0 on a non-bundle path.
 
 Pointing analyze at a .zip or at any directory without a ``content/``
 subdirectory used to print "no metric references found" and exit 0,
@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from vcfops_packaging.audit import AuditError, analyze_staged_bundle
-from vcfops_packaging.cli import cmd_analyze
+from vcfcf_packaging.audit import AuditError, analyze_staged_bundle
+from vcfcf_packaging.cli import cmd_analyze
 
 
 def _args(path: Path):
@@ -83,7 +83,7 @@ class TestCmdAnalyzeExitCodes:
 
     def test_real_staged_bundle_layout_is_accepted(self, tmp_path, capsys):
         """The guard must not reject the layout the builder produces."""
-        from vcfops_packaging.audit import staged_bundle_problem
+        from vcfcf_packaging.audit import staged_bundle_problem
 
         bundle = tmp_path / "bundle"
         (bundle / "content").mkdir(parents=True)
@@ -93,7 +93,7 @@ class TestCmdAnalyzeExitCodes:
     def test_one_wording_for_both_callers(self, tmp_path, capsys):
         """N-7: the CLI and the library gate must not drift to two
         different messages for the same condition."""
-        from vcfops_packaging.audit import staged_bundle_problem
+        from vcfcf_packaging.audit import staged_bundle_problem
 
         (tmp_path / "wrong").mkdir()
         cmd_analyze(_args(tmp_path / "wrong"))

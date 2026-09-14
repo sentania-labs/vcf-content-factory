@@ -5,7 +5,7 @@ the SubjectType ``filter=`` attribute with plain ``xml.sax.saxutils.escape()``
 — no quote-entity map — so a report-level subject filter (which is itself a
 JSON string full of double quotes) rendered as invalid XML: unescaped ``"``
 characters broke out of the attribute. The VIEW path
-(``vcfops_dashboards.render``) already handles this correctly via
+(``vcfcf_dashboards.render``) already handles this correctly via
 ``escape(filter_json, {chr(34): "&quot;"})`` (PR #47). This test locks the
 report path to the same treatment.
 
@@ -31,8 +31,8 @@ from pathlib import Path
 
 import yaml
 
-from vcfops_reports.loader import load_file
-from vcfops_reports.render import render_report_xml
+from vcfcf_reports.loader import load_file
+from vcfcf_reports.render import render_report_xml
 
 # The raw (unescaped) filter JSON the author writes in YAML, taken verbatim
 # from the vendor's Supervisor Cluster report.

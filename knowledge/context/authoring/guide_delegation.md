@@ -8,7 +8,7 @@ the agent reads on demand.
 See in `CLAUDE.md`:
 
 - **You are the foreman** — the agent roster and the negative
-  rules ("you do not write YAML / edit `src/vcfops_*/` / etc.")
+  rules ("you do not write YAML / edit `src/vcfcf_*/` / etc.")
 - **Delegation protocol** — the numbered rules that govern
   recon-first, bottom-up authoring, serial authors, and parallel
   research

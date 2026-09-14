@@ -2,7 +2,7 @@
 # version_line_guard.sh — RULE-014 / RULE-012 pre-tag guard.
 #
 # Spec: the (since-deleted) local reorg TODO's "New HOOKS" §1;
-# durable-output map: STRUCTURE.md (vcfops_*/, scripts/, knowledge/context/).
+# durable-output map: STRUCTURE.md (vcfcf_*/, scripts/, knowledge/context/).
 #
 # Refuses a `v*` tag / push on an SDK adapter repo checkout when:
 #   (a) RULE-014 — adapter.yaml is still on the 0.x version line. 0.x is the
@@ -258,7 +258,7 @@ else
 
   FACTORY_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
   echo "${SCRIPT_NAME}: running RULE-012 defect gate for pak '${PAK_NAME}'."
-  # vcfops_packaging lives under src/ (see pyproject.toml src-layout) and is
+  # vcfcf_packaging lives under src/ (see pyproject.toml src-layout) and is
   # never pip-installed — resolve it via PYTHONPATH explicitly, since this
   # script runs standalone (by hand or from a pre-push hook), outside both
   # Claude Code's .claude/settings.json env and CI's workflow-level env.
@@ -273,7 +273,7 @@ else
   # error. It counts as a refusal only when the gate printed its own
   # "Refused by RULE-012" line; any other exit 2 is a gate that did not run.
   gate_rc=0
-  gate_out="$( ( cd "${FACTORY_ROOT}" && PYTHONPATH="${FACTORY_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" python3 -m vcfops_packaging defect-gate --pak="${PAK_NAME}" ) 2>&1 )" || gate_rc=$?
+  gate_out="$( ( cd "${FACTORY_ROOT}" && PYTHONPATH="${FACTORY_ROOT}/src${PYTHONPATH:+:${PYTHONPATH}}" python3 -m vcfcf_packaging defect-gate --pak="${PAK_NAME}" ) 2>&1 )" || gate_rc=$?
   [[ -n "${gate_out}" ]] && printf '%s\n' "${gate_out}"
   if [[ "${gate_rc}" == 2 && "${gate_out}" != *"Refused by RULE-012"* ]]; then
     gate_rc=4

@@ -60,13 +60,13 @@ VCFOPS_AUTH_SOURCE, VCFOPS_VERIFY_SSL
 Run after every authoring round:
 
 ```bash
-python3 -m vcfops_supermetrics validate &&
-python3 -m vcfops_dashboards validate &&
-python3 -m vcfops_customgroups validate &&
-python3 -m vcfops_symptoms validate &&
-python3 -m vcfops_alerts validate &&
-python3 -m vcfops_reports validate &&
-python3 -m vcfops_managementpacks validate
+python3 -m vcfcf_supermetrics validate &&
+python3 -m vcfcf_dashboards validate &&
+python3 -m vcfcf_customgroups validate &&
+python3 -m vcfcf_symptoms validate &&
+python3 -m vcfcf_alerts validate &&
+python3 -m vcfcf_reports validate &&
+python3 -m vcfcf_managementpacks validate
 ```
 
 ## Recon-before-authoring

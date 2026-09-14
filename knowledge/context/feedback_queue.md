@@ -184,20 +184,20 @@ not a gate.
 
 ### FB-009 — Residual session-handoff backlog: stale citations + unifi docs stanza
 
-- **Scope:** framework (`src/vcfops_*/`) + unifi
+- **Scope:** framework (`src/vcfcf_*/`) + unifi
 - **Kind:** bug (doc rot) / mechanical
 - **Status:** open
 - **Raised:** 2026-07-13 (session-handoff backlog); migrated here 2026-07-16
   during curation — these items were NOT resolved when the handoff file was
   retired, contrary to its "consumed" status:
 - **Detail:**
-  1. ~~`src/vcfops_dashboards/packager.py:7` docstring cites
-     `memory/vcfops_content_import_wire_format.md`~~ **RESOLVED 2026-07-16:**
+  1. ~~`src/vcfcf_dashboards/packager.py:7` docstring cites
+     `memory/vcfcf_content_import_wire_format.md`~~ **RESOLVED 2026-07-16:**
      citation fixed to `knowledge/context/wire-formats/wire_formats.md`
      (tooling, framework-reviewer APPROVE —
      `knowledge/context/reviews/framework/dashboards-packager-2026-07-16.md`).
   2. ~~"annotated dead citation in extractor.py"~~ **RESOLVED 2026-07-16:**
-     the module is `src/vcfops_extractor/extractor.py` (not vcfops_packaging);
+     the module is `src/vcfcf_extractor/extractor.py` (not vcfcf_packaging);
      its one dead citation (~lines 2044-2051) was already correctly
      self-annotated by the reorg-v2 phase 2 sweep — deliberate
      preserved-principle annotation, no change needed. Verified by both
@@ -205,7 +205,7 @@ not a gate.
   3. "unifi build 12 (cross_mp_edges docs stanza)" — no `cross_mp_edges`
      mention found in unifi README/docs as of 2026-07-16; verify whether the
      stanza shipped in a generated doc or is still pending.
-  Items 1–2 are `src/vcfops_*/` diffs → route through `tooling` +
+  Items 1–2 are `src/vcfcf_*/` diffs → route through `tooling` +
   `framework-reviewer` per RULE-013 when picked up.
 
 ### FB-010 — `GET /api/policies/{id}` returns HTTP 500 — blocks per-attribute policy inspection
@@ -230,8 +230,8 @@ not a gate.
 
 ### FB-011 — vcommunity-vsphere: "HA Admission Control enabled" widget times out — renderer drops `startPeriod`/`endPeriod` from advanced-time-mode views
 
-- **Scope:** framework (`src/vcfops_dashboards/render.py`, `loader.py`,
-  `src/vcfops_extractor/`) + vcommunity-vsphere
+- **Scope:** framework (`src/vcfcf_dashboards/render.py`, `loader.py`,
+  `src/vcfcf_extractor/`) + vcommunity-vsphere
 - **Kind:** bug / framework fix + pak rebuild
 - **Status:** framework half fixed 2026-07-21 (`tooling` agent,
   `framework-reviewer` APPROVED 0 BLOCKING); pak-side view YAML / rebuild /
@@ -250,7 +250,7 @@ not a gate.
   `fc64c67a-d5b0-4a03-a10b-767b9b247120`) pairs
   `advancedTimeMode=true` with `startPeriod=PREVIOUS` and
   `endPeriod=NOW`; our renderer
-  (`src/vcfops_dashboards/render.py:311-317`) emits only
+  (`src/vcfcf_dashboards/render.py:311-317`) emits only
   `advancedTimeMode`/`unit`/`count` and silently drops
   startPeriod/endPeriod — leaving the server an advanced-mode query with
   no defined range, the leading suspect for the timeout. The loader and
@@ -267,8 +267,8 @@ not a gate.
 - **Related:** DEF-012 (same dashboard, distinct root cause),
   `knowledge/context/reviews/def-012-closure-visual-pass-2026-07-16.md`
 - **Framework fix landed 2026-07-21:** `ViewTimeWindow` gained optional
-  `start_period`/`end_period` fields (`src/vcfops_dashboards/loader.py`);
-  the renderer (`src/vcfops_dashboards/render.py:_xml_time_interval_selector`)
+  `start_period`/`end_period` fields (`src/vcfcf_dashboards/loader.py`);
+  the renderer (`src/vcfcf_dashboards/render.py:_xml_time_interval_selector`)
   emits `startPeriod`/`endPeriod` Properties whenever `advanced_time_mode`
   is true, **defaulting to `PREVIOUS`/`NOW` when unset**. Defaulting
   evidence: a full survey of the reference corpus (`reference/references/**`,
@@ -279,8 +279,8 @@ not a gate.
   are omitted entirely when `advanced_time_mode` is false, so the other
   250+ existing views render byte-identically (verified: full test suite
   583 passed / 4 skipped / 0 failed, full validate chain OK). The
-  extractor (`src/vcfops_extractor/extractor.py`) and reverse-local path
-  (`src/vcfops_extractor/reverse_local.py`) now capture/re-emit the same
+  extractor (`src/vcfcf_extractor/extractor.py`) and reverse-local path
+  (`src/vcfcf_extractor/reverse_local.py`) now capture/re-emit the same
   fields for a lossless round-trip. Test coverage:
   `tests/test_fb011_advanced_time_mode_range.py`. **Not yet done:** the
   pak's own `views/vSphere Cluster HA Admission Control status.yaml` is
@@ -373,7 +373,7 @@ not a gate.
 
 ### FB-017 — loader-level validation for out-of-grid dashboard coords (DEF-013 follow-up)
 
-- **Scope:** framework (`src/vcfops_dashboards/loader.py`)
+- **Scope:** framework (`src/vcfcf_dashboards/loader.py`)
 - **Kind:** enhancement (reviewer WARNING follow-up)
 - **Status:** open
 - **Raised:** 2026-07-22, framework-reviewer DEF-013 review
@@ -390,13 +390,13 @@ not a gate.
   sibling half of the 00d3382 symptom family; cover both in one pass.
   Route through `tooling` + `framework-reviewer` (RULE-013).
 
-### FB-018 — `vcfops_packaging build` crashes on SDK-pointer release manifests (`zip_path=None`)
+### FB-018 — `vcfcf_packaging build` crashes on SDK-pointer release manifests (`zip_path=None`)
 
-- **Scope:** framework (`src/vcfops_packaging/cli.py`)
+- **Scope:** framework (`src/vcfcf_packaging/cli.py`)
 - **Kind:** bug (TOOLSET GAP, pre-existing)
 - **Status:** open
 - **Raised:** 2026-07-22, content-packager DEF-013 stale-zip rebuild.
-- **Detail:** `python3 -m vcfops_packaging build bundles/releases/*.yaml`
+- **Detail:** `python3 -m vcfcf_packaging build bundles/releases/*.yaml`
   fails with `'NoneType' object has no attribute 'name'` for the three
   SDK-adapter release manifests (synology / unifi / vcommunity-vsphere
   managementpacks). Root cause (packager read-only diagnosis):
@@ -409,7 +409,7 @@ not a gate.
 
 ### FB-019 — `_resource_list_widget(dashboard_id="")` default is a latent footgun
 
-- **Scope:** framework (`src/vcfops_dashboards/render.py`)
+- **Scope:** framework (`src/vcfcf_dashboards/render.py`)
 - **Kind:** nit (reviewer follow-up)
 - **Status:** open
 - **Raised:** 2026-07-22, framework-reviewer column_preset review

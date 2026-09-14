@@ -79,8 +79,8 @@ def _render_in_subprocess(dash_path: Path, hashseed: str) -> str:
         import sys
         from pathlib import Path
         sys.path.insert(0, {str(SRC)!r})
-        from vcfops_dashboards.loader import load_dashboard
-        from vcfops_dashboards.render import render_dashboards_bundle_json
+        from vcfcf_dashboards.loader import load_dashboard
+        from vcfcf_dashboards.render import render_dashboards_bundle_json
         d = load_dashboard(Path({str(dash_path)!r}))
         sys.stdout.write(render_dashboards_bundle_json([d], {{}}, {OWNER!r}))
         """)
@@ -99,7 +99,7 @@ def _entry_ids(bundle_json: str) -> list[str]:
 
 class TestExtModelIdDerivation:
     def test_pinned_value_for_known_widget_id(self):
-        from vcfops_dashboards.render import _ext_model_id
+        from vcfcf_dashboards.render import _ext_model_id
 
         widget_id = "cluster_headline"
         expected_n = int(hashlib.sha1(widget_id.encode("utf-8")).hexdigest()[:8], 16) % 100000
@@ -110,7 +110,7 @@ class TestExtModelIdDerivation:
         assert _ext_model_id(widget_id, 1) == "extModel9005-1"
 
     def test_shape_matches_previous_wire_form(self):
-        from vcfops_dashboards.render import _ext_model_id
+        from vcfcf_dashboards.render import _ext_model_id
 
         for wid in ("a", "cluster_headline", "x" * 200, "with spaces and/slashes"):
             m = ID_RE.match(_ext_model_id(wid, 3))
@@ -118,7 +118,7 @@ class TestExtModelIdDerivation:
             assert 0 <= int(m.group(1)) < 100000
 
     def test_distinct_widgets_get_distinct_numbers(self):
-        from vcfops_dashboards.render import _ext_model_id
+        from vcfcf_dashboards.render import _ext_model_id
 
         a = _ext_model_id("widget_a", 1)
         b = _ext_model_id("widget_b", 1)

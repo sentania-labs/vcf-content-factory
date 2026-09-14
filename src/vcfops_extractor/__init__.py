@@ -1,14 +1,8 @@
-"""vcfops_extractor — reverse-engineering toolkit for VCF Operations content.
+"""Deprecated alias: vcfops_extractor is now vcfcf_extractor.
 
-Walks a live dashboard and its dependency graph (views, super metrics)
-and emits factory-shape YAML under ``bundles/third_party/<slug>/`` plus
-a bundle manifest at ``bundles/third_party/<slug>.yaml`` that
-``vcfops_packaging build`` can turn into a distributable zip.
-
-Reverse parsers live in their sibling packages:
-  vcfops_dashboards.reverse  -- dashboard JSON + view XML -> dataclasses
-  vcfops_supermetrics.reverse -- SM JSON + formula UUID->name rewrite
-
-This package owns the orchestration, dependency walker, YAML writer,
-and the top-level argparse CLI.
+Kept for one release so external callers keep working. Import
+vcfcf_extractor instead. See vcfcf_common/compat_shim.py.
 """
+from vcfcf_common.compat_shim import install as _install
+
+_install(__name__, "vcfcf_extractor", globals())

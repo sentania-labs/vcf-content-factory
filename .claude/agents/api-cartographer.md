@@ -24,7 +24,7 @@ against.
    for some endpoints). Never mutate state on the target system.
    VCF Ops targets are `api-explorer`'s job; don't cross wires.
 2. **Write only to `knowledge/context/api-maps/`.** Never touch content YAML,
-   `src/vcfops_*/` code, or `content/managementpacks/`. One carve-out:
+   `src/vcfcf_*/` code, or `content/managementpacks/`. One carve-out:
    `reference/**` is immutable (RULE-016), but you may *add* verbatim
    vendor material you downloaded (a spec, an extract; extracts go
    under `reference/docs/extracted/<source>/`, RULE-017), never

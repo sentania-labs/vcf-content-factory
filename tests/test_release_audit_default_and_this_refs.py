@@ -31,7 +31,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from vcfops_packaging.audit import AuditError
+from vcfcf_packaging.audit import AuditError
 
 REPO_ROOT = Path(__file__).parent.parent
 
@@ -105,7 +105,7 @@ def _seed_describe_cache(
 
 def _patch_offline_cache(monkeypatch, cache_dir: Path):
     """Route make_cache() to a DescribeCache over cache_dir with no client."""
-    import vcfops_packaging.describe as describe_mod
+    import vcfcf_packaging.describe as describe_mod
     monkeypatch.setattr(
         describe_mod, "make_cache",
         lambda live=True, cache_dir=None, _d=cache_dir: describe_mod.DescribeCache(
@@ -126,7 +126,7 @@ class TestReleaseAuditsByDefault:
         was skip_audit=True and this built a zip with the bad ref inside;
         additionally the ref is this-bound, so even skip_audit=False would
         have been blind to it before change 2.)"""
-        from vcfops_packaging.release_builder import build_release
+        from vcfcf_packaging.release_builder import build_release
 
         proj = _write_sm_project(tmp_path)
         manifest = _write_release_manifest(tmp_path, proj, "audit-default-unknown-ref")
@@ -143,9 +143,9 @@ class TestReleaseAuditsByDefault:
         """Default release build must never construct a live client, even with
         credentials present in the environment (publish works with no live
         instance; the committed cache is the reference)."""
-        from vcfops_packaging.release_builder import build_release
-        import vcfops_common.client as client_mod
-        import vcfops_packaging.describe as describe_mod
+        from vcfcf_packaging.release_builder import build_release
+        import vcfcf_common.client as client_mod
+        import vcfcf_packaging.describe as describe_mod
 
         constructions = []
 
@@ -186,7 +186,7 @@ class TestReleaseAuditsByDefault:
     def test_build_release_skip_audit_optout_still_works(self, tmp_path, monkeypatch):
         """The emergency opt-out: skip_audit=True builds even when the cache
         cannot resolve the ref (broken-cache day)."""
-        from vcfops_packaging.release_builder import build_release
+        from vcfcf_packaging.release_builder import build_release
 
         proj = _write_sm_project(tmp_path)
         manifest = _write_release_manifest(tmp_path, proj, "audit-skip-optout")
@@ -220,7 +220,7 @@ class TestPublishAuditOutcomes:
         names the failure AND the --skip-audit opt-out; no commit lands and
         the lockfile is released.  Never a warning."""
         from publish_seam_stubs import stub_validator
-        from vcfops_packaging.publish import publish, PublishError
+        from vcfcf_packaging.publish import publish, PublishError
 
         dist = self._publish_setup(tmp_path, monkeypatch, "publish-audit-fail")
         _patch_offline_cache(monkeypatch, _seed_describe_cache(tmp_path / "cache", {}))
@@ -257,9 +257,9 @@ class TestPublishAuditOutcomes:
         """A missing describe cache (no file for the referenced pair) must
         fail the publish loudly, not silently skip the audit.  The message
         names the --skip-audit opt-out."""
-        import vcfops_packaging.describe as describe_mod
+        import vcfcf_packaging.describe as describe_mod
         from publish_seam_stubs import stub_validator
-        from vcfops_packaging.publish import publish, PublishError
+        from vcfcf_packaging.publish import publish, PublishError
 
         dist = self._publish_setup(tmp_path, monkeypatch, "publish-cache-missing")
         empty_dir = tmp_path / "empty-cache"
@@ -288,7 +288,7 @@ class TestPublishAuditOutcomes:
         """skip_audit=True (CLI --skip-audit) is the enumerated opt-out: with
         an unresolvable cache the publish still builds and commits."""
         from publish_seam_stubs import stub_validator
-        from vcfops_packaging.publish import publish
+        from vcfcf_packaging.publish import publish
 
         dist = self._publish_setup(tmp_path, monkeypatch, "publish-audit-skipped")
         _patch_offline_cache(monkeypatch, _seed_describe_cache(tmp_path / "cache", {}))
@@ -307,7 +307,7 @@ class TestPublishAuditOutcomes:
     def test_publish_cli_has_skip_audit_flag(self):
         """The publish subcommand exposes --skip-audit with the same warning
         wording as the build commands."""
-        from vcfops_packaging.cli import build_parser
+        from vcfcf_packaging.cli import build_parser
 
         parser = build_parser()
         args = parser.parse_args(["publish", "--dry-run", "--skip-audit"])
@@ -325,7 +325,7 @@ class TestThisRefResolution:
     def test_this_ref_resolves_against_each_declared_pair(self):
         """Pass case: one auditable reference per declared pair, key
         normalized like any other ref."""
-        from vcfops_packaging.deps import _refs_from_formula
+        from vcfcf_packaging.deps import _refs_from_formula
 
         refs = _refs_from_formula(
             "${this, metric=net:Aggregate of all instances|packetsPerSec}",
@@ -345,7 +345,7 @@ class TestThisRefResolution:
     def test_this_ref_without_resource_kinds_is_reported_not_skipped(self):
         """No-resource_kinds case: unauditable must raise, never silently
         extract zero references (the pre-fix blindness)."""
-        from vcfops_packaging.deps import _refs_from_formula
+        from vcfcf_packaging.deps import _refs_from_formula
 
         with pytest.raises(AuditError, match="resource_kinds"):
             _refs_from_formula("${this, metric=cpu|usage_average}", "Bare SM", None)
@@ -355,7 +355,7 @@ class TestThisRefResolution:
     def test_this_ref_sm_reference_still_skipped(self):
         """A this-bound super-metric reference is not a built-in key and
         stays out of the describe-cache audit."""
-        from vcfops_packaging.deps import _refs_from_formula
+        from vcfcf_packaging.deps import _refs_from_formula
 
         refs = _refs_from_formula(
             '${this, metric=Super Metric|sm_11111111-2222-3333-4444-555555555555}',
@@ -370,7 +370,7 @@ class TestThisRefResolution:
         must fail the discrete build.  Pre-fix this built clean (the mutation
         target: disable the this-branch in _refs_from_formula and this test
         fails)."""
-        from vcfops_packaging.discrete_builder import build_discrete
+        from vcfcf_packaging.discrete_builder import build_discrete
 
         proj = _write_sm_project(tmp_path, under_third_party=False)
         _patch_offline_cache(monkeypatch, _seed_describe_cache(tmp_path / "cache", {}))
@@ -393,7 +393,7 @@ class TestThisRefResolution:
         builtin_metric_enables in mode=auto."""
         import json
         import zipfile
-        from vcfops_packaging.discrete_builder import build_discrete
+        from vcfcf_packaging.discrete_builder import build_discrete
 
         proj = _write_sm_project(tmp_path, under_third_party=False)
         _patch_offline_cache(monkeypatch, _seed_describe_cache(tmp_path / "cache", {
@@ -427,7 +427,7 @@ class TestThisRefResolution:
         kind(s) where the key resolves and the kind(s) where it does not)
         instead of a misspelled key."""
         import yaml as _yaml
-        from vcfops_packaging.discrete_builder import build_discrete
+        from vcfcf_packaging.discrete_builder import build_discrete
 
         proj = tmp_path / "partial_proj"
         sm_dir = proj / "supermetrics"
@@ -483,7 +483,7 @@ class TestKnownDataPointStorageActivePathCount:
         on VMWARE/HostSystem; the key is present in the committed cache with
         default_monitored=true, so the newly-active this-ref check must pass
         it without auto-adds or failures."""
-        from vcfops_packaging.discrete_builder import build_discrete
+        from vcfcf_packaging.discrete_builder import build_discrete
 
         zip_path = build_discrete(
             content_type="supermetric",

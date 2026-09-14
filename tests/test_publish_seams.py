@@ -85,7 +85,7 @@ class TestValidatorSeamOutcomes:
     def test_failing_validator_aborts_before_build(self, tmp_path, monkeypatch):
         """Validator failure must hard-stop publish(): no build, no commit,
         lockfile released."""
-        from vcfops_packaging.publish import publish, PublishError
+        from vcfcf_packaging.publish import publish, PublishError
 
         dist = _setup(tmp_path, monkeypatch)
         before = _commit_count(dist)
@@ -113,7 +113,7 @@ class TestValidatorSeamOutcomes:
     def test_injected_validator_called_once_with_factory_repo(
         self, tmp_path, monkeypatch
     ):
-        from vcfops_packaging.publish import publish
+        from vcfcf_packaging.publish import publish
 
         dist = _setup(tmp_path, monkeypatch)
         validator = RecordingValidator()
@@ -139,7 +139,7 @@ class TestBuilderSeamOutcomes:
     def test_failing_builder_aborts_publish(self, tmp_path, monkeypatch):
         """Builder failure must hard-stop publish(): no commit, lockfile
         released."""
-        from vcfops_packaging.publish import publish, PublishError
+        from vcfcf_packaging.publish import publish, PublishError
 
         dist = _setup(tmp_path, monkeypatch)
         before = _commit_count(dist)
@@ -169,8 +169,8 @@ class TestDefaultsAreReal:
         """publish() without seam kwargs must call _run_validators and
         _build_one_release.  Guards the silent-downgrade failure mode where
         the defaults drift to stubs and production stops validating."""
-        import vcfops_packaging.publish as _pub
-        from vcfops_packaging.publish import publish
+        import vcfcf_packaging.publish as _pub
+        from vcfcf_packaging.publish import publish
 
         dist = _setup(tmp_path, monkeypatch)
 
@@ -225,7 +225,7 @@ class TestGitCommitAllowEmptyBranch:
         hook.chmod(0o755)
 
     def test_allow_empty_failure_raises_even_with_noop_phrase(self, tmp_path):
-        from vcfops_packaging.publish import PublishError, _git_commit
+        from vcfcf_packaging.publish import PublishError, _git_commit
 
         dist = _init_dist_repo(tmp_path)
         self._install_rejecting_hook(dist)
@@ -233,7 +233,7 @@ class TestGitCommitAllowEmptyBranch:
             _git_commit(dist, "release: forced", allow_empty=True)
 
     def test_genuine_noop_without_allow_empty_returns_none(self, tmp_path):
-        from vcfops_packaging.publish import _git_commit
+        from vcfcf_packaging.publish import _git_commit
 
         dist = _init_dist_repo(tmp_path)
         before = _commit_count(dist)
@@ -241,7 +241,7 @@ class TestGitCommitAllowEmptyBranch:
         assert _commit_count(dist) == before
 
     def test_allow_empty_noop_lands_an_empty_commit(self, tmp_path):
-        from vcfops_packaging.publish import _git_commit
+        from vcfcf_packaging.publish import _git_commit
 
         dist = _init_dist_repo(tmp_path)
         before = _commit_count(dist)

@@ -1,4 +1,4 @@
-"""Unit tests for vcfops_extractor.reverse_local + reverse.py bug fix.
+"""Unit tests for vcfcf_extractor.reverse_local + reverse.py bug fix.
 
 Covers:
   A. build_view_uuid_map: parses <ViewDef> elements from fixture XML.
@@ -182,7 +182,7 @@ class TestBuildViewUuidMap:
         xml_dir.mkdir()
         (xml_dir / "fixture.xml").write_text(_SIMPLE_VIEW_XML, encoding="utf-8")
 
-        from vcfops_extractor.reverse_local import build_view_uuid_map
+        from vcfcf_extractor.reverse_local import build_view_uuid_map
         result = build_view_uuid_map(xml_dir)
 
         assert "aaaaaaaa-0000-0000-0000-000000000001" in result
@@ -199,7 +199,7 @@ class TestBuildViewUuidMap:
         assert cols[1]["attribute"] == "sm_aaaaaaaa-bbbb-cccc-dddd-000000000001"
 
     def test_missing_dir_returns_empty(self, tmp_path: Path) -> None:
-        from vcfops_extractor.reverse_local import build_view_uuid_map
+        from vcfcf_extractor.reverse_local import build_view_uuid_map
         result = build_view_uuid_map(tmp_path / "does_not_exist")
         assert result == {}
 
@@ -225,7 +225,7 @@ class TestBuildViewUuidMap:
         (xml_dir / "a_file.xml").write_text(xml_a, encoding="utf-8")
         (xml_dir / "b_file.xml").write_text(xml_b, encoding="utf-8")
 
-        from vcfops_extractor.reverse_local import build_view_uuid_map
+        from vcfcf_extractor.reverse_local import build_view_uuid_map
         result = build_view_uuid_map(xml_dir)
         # b_file.xml is alphabetically after a_file.xml → "Version B" wins
         assert result["bbbbbbbb-0000-0000-0000-000000000001"]["name"] == "Version B"
@@ -237,7 +237,7 @@ class TestBuildViewUuidMap:
 
 class TestWriteViewYaml:
     def test_sm_uuid_rewritten_to_supermetric_no_at(self, tmp_path: Path) -> None:
-        from vcfops_extractor.reverse_local import _write_view_yaml
+        from vcfcf_extractor.reverse_local import _write_view_yaml
 
         view_data = {
             "id": "cccccccc-0000-0000-0000-000000000001",
@@ -278,7 +278,7 @@ class TestWriteViewYaml:
         assert cols[1]["attribute"] == "cpu|demandmhz"
 
     def test_unresolved_sm_uuid_kept_as_sm_token(self, tmp_path: Path, capsys) -> None:
-        from vcfops_extractor.reverse_local import _write_view_yaml
+        from vcfcf_extractor.reverse_local import _write_view_yaml
 
         view_data = {
             "id": "cccccccc-0000-0000-0000-000000000002",
@@ -329,7 +329,7 @@ class TestViewColumnSmRoundTrip:
 
     def test_g1_rewrite_emits_view_column_form_not_formula_form(self) -> None:
         """_rewrite_sm_attr must emit supermetric:"<name>", not @supermetric:"<name>"."""
-        from vcfops_extractor.reverse_local import _rewrite_sm_attr
+        from vcfcf_extractor.reverse_local import _rewrite_sm_attr
 
         uuid_to_name = {self._SM_UUID: self._SM_NAME}
 
@@ -353,9 +353,9 @@ class TestViewColumnSmRoundTrip:
     ) -> None:
         """Reversed view column with supermetric:"<name>" renders to
         Super Metric|sm_<uuid> in the forward XML — not a literal token."""
-        from vcfops_extractor.reverse_local import _write_view_yaml
-        from vcfops_dashboards.render import render_views_xml
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_extractor.reverse_local import _write_view_yaml
+        from vcfcf_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
 
         view_data = {
             "id": "354f7d8e-a570-4a37-91a3-3b93ef6bfc69",
@@ -437,7 +437,7 @@ class TestMetricSpecBoundParsing:
     values serialised as the string 'false' rather than a numeric threshold."""
 
     def test_false_string_bound_treated_as_none(self) -> None:
-        from vcfops_dashboards.reverse import _parse_metric_specs_from_wire
+        from vcfcf_dashboards.reverse import _parse_metric_specs_from_wire
 
         raw_metric = {
             "resourceKindMetrics": [
@@ -462,7 +462,7 @@ class TestMetricSpecBoundParsing:
         assert s.red_bound is None  # "false" → None, not ValueError
 
     def test_numeric_bounds_still_parse(self) -> None:
-        from vcfops_dashboards.reverse import _parse_metric_specs_from_wire
+        from vcfcf_dashboards.reverse import _parse_metric_specs_from_wire
 
         raw_metric = {
             "resourceKindMetrics": [
@@ -521,7 +521,7 @@ class TestRoundTripMatch:
         out_views = tmp_path / "views"
         out_dash = tmp_path / "dashboards"
 
-        from vcfops_extractor.reverse_local import reverse_local_port
+        from vcfcf_extractor.reverse_local import reverse_local_port
         rc = reverse_local_port(
             source_dashboard_json=json_path,
             source_view_xml_dir=xml_dir,
@@ -659,7 +659,7 @@ class TestPropertyListNowSupported:
         out_views = tmp_path / "views"
         out_dash = tmp_path / "dashboards"
 
-        from vcfops_extractor.reverse_local import reverse_local_port
+        from vcfcf_extractor.reverse_local import reverse_local_port
 
         rc = reverse_local_port(
             source_dashboard_json=json_path,
@@ -778,7 +778,7 @@ class TestAscendingRangeDerivation:
     @staticmethod
     def _parse_col_from_xml(xml_str: str, view_id: str):
         """Parse a ViewDef from XML and return the first column as a ViewColumn."""
-        from vcfops_dashboards.reverse import parse_view_from_content_xml
+        from vcfcf_dashboards.reverse import parse_view_from_content_xml
         vd = parse_view_from_content_xml(xml_str.encode(), view_id)
         assert vd is not None
         assert len(vd.columns) == 1
@@ -788,7 +788,7 @@ class TestAscendingRangeDerivation:
     def _parse_col_dict_from_xml(xml_str: str, view_id: str) -> dict:
         """Parse via the reverse_local dict path and return the first column dict."""
         import xml.etree.ElementTree as ET
-        from vcfops_extractor.reverse_local import _parse_view_xml_to_dict
+        from vcfcf_extractor.reverse_local import _parse_view_xml_to_dict
 
         root = ET.fromstring(xml_str)
         for elem in root.iter("ViewDef"):
@@ -856,14 +856,14 @@ class TestAscendingRangeDerivation:
     def test_f5_round_trip_higher_is_worse(self) -> None:
         """Reverse a column with y<o<r (no ascendingRange) then forward-render
         it and verify the output XML carries ascendingRange=false."""
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.render import render_views_xml
         vid = "f5f5f5f5-0000-0000-0000-000000000001"
         xml = self._make_xml(vid, "RT Higher Is Worse", y=2.5, o=5.0, r=10.0)
         col = self._parse_col_from_xml(xml, vid)
         assert col.ascending_range is False  # verified above
 
         # Build a minimal ViewDef and render
-        from vcfops_dashboards.loader import ViewDef
+        from vcfcf_dashboards.loader import ViewDef
         vd = ViewDef(
             id=vid,
             name="RT Higher Is Worse",
@@ -880,13 +880,13 @@ class TestAscendingRangeDerivation:
     def test_f5_round_trip_lower_is_worse(self) -> None:
         """Reverse a column with y>o>r (no ascendingRange) then forward-render
         it and verify the output XML carries ascendingRange=true."""
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.render import render_views_xml
         vid = "f5f5f5f5-0000-0000-0000-000000000002"
         xml = self._make_xml(vid, "RT Lower Is Worse", y=80.0, o=50.0, r=20.0)
         col = self._parse_col_from_xml(xml, vid)
         assert col.ascending_range is True  # verified above
 
-        from vcfops_dashboards.loader import ViewDef
+        from vcfcf_dashboards.loader import ViewDef
         vd = ViewDef(
             id=vid,
             name="RT Lower Is Worse",

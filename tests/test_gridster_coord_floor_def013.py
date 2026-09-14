@@ -14,7 +14,7 @@ declared first) rendered BELOW the View widget authored at
 `{x: 0, y: 3, w: 12, h: 12}` (row 2, declared second) — an exact vertical
 inversion of the declared y-order, verified by Playwright screenshot.
 
-Fix: `_clamp_gridster_floor()` in `vcfops_dashboards.render` clamps
+Fix: `_clamp_gridster_floor()` in `vcfcf_dashboards.render` clamps
 `x`/`y` to a floor of 1 (`max(1, v)`) before emission. This is deliberately
 NOT the `_gridster_coords()` helper deleted in 00d3382
 (`tests/test_renderer_regression_phase16.py` Test A) — that helper
@@ -46,8 +46,8 @@ def _render_two_widget_dashboard(tmp_path: Path, picker_coords: dict, view_coord
     """Load a picker-above-view dashboard (ResourceList + View, wired by a
     resourceId interaction — the exact shape of cpu_support_status.yaml) and
     return the rendered dashboard object."""
-    from vcfops_dashboards.loader import load_dashboard, load_view
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard, load_view
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     view_path = _write_yaml(
         tmp_path / "views" / "probe_view.yaml",
@@ -192,8 +192,8 @@ class TestExistingContentDashboardsRenderRegression:
         if str(src) not in sys.path:
             sys.path.insert(0, str(src))
 
-        from vcfops_dashboards.loader import load_dashboard, load_view
-        from vcfops_dashboards.render import render_dashboards_bundle_json
+        from vcfcf_dashboards.loader import load_dashboard, load_view
+        from vcfcf_dashboards.render import render_dashboards_bundle_json
 
         dash_dir = repo_root / "content" / "dashboards"
         view_dir = repo_root / "content" / "views"

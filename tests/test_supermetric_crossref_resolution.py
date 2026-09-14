@@ -1,17 +1,17 @@
 """``@supermetric:"<name>"`` must be resolved on every emit and push path.
 
-The resolver used to live only in ``vcfops_managementpacks.sdk_builder`` (the
+The resolver used to live only in ``vcfcf_managementpacks.sdk_builder`` (the
 Tier 2 pak path).  Every other path that emits or pushes a formula copied the
 authoring-time token verbatim:
 
-  * ``vcfops_packaging.builder._render_supermetrics_dict`` (native bundle zip,
+  * ``vcfcf_packaging.builder._render_supermetrics_dict`` (native bundle zip,
     and via it the discrete and release builders) did
     ``" ".join(sm.formula.split())`` and nothing else;
-  * ``vcfops_supermetrics.client.import_supermetrics_bundle`` (live sync)
+  * ``vcfcf_supermetrics.client.import_supermetrics_bundle`` (live sync)
     normalized whitespace and pushed the literal token.
 
 VCF Ops cannot parse ``@supermetric:``, so the resulting super metric is silently
-broken.  The resolver now lives in ``vcfops_supermetrics.crossref`` and every
+broken.  The resolver now lives in ``vcfcf_supermetrics.crossref`` and every
 path uses it.
 
 Per path this asserts the same three behaviours: a resolvable ref rewrites to
@@ -66,7 +66,7 @@ def _sm_yaml(sm_id: str, name: str, formula: str) -> str:
 
 
 def _load(tmp_path: Path, sm_id: str, name: str, formula: str):
-    from vcfops_supermetrics.loader import load_file
+    from vcfcf_supermetrics.loader import load_file
 
     p = tmp_path / f"{sm_id}.yaml"
     p.write_text(_sm_yaml(sm_id, name, formula))
@@ -87,14 +87,14 @@ def sms(tmp_path):
 
 class TestSharedResolver:
     def test_resolvable_ref_rewrites(self):
-        from vcfops_supermetrics.crossref import resolve_sm_formula
+        from vcfcf_supermetrics.crossref import resolve_sm_formula
 
         out = resolve_sm_formula(CONSUMER_FORMULA, CONSUMER_NAME, {REF_NAME: REF_UUID})
         assert RESOLVED_TOKEN in out
         assert "@supermetric:" not in out
 
     def test_unresolvable_ref_raises_useful_message(self):
-        from vcfops_supermetrics.crossref import (
+        from vcfcf_supermetrics.crossref import (
             SuperMetricCrossRefError,
             resolve_sm_formula,
         )
@@ -106,19 +106,19 @@ class TestSharedResolver:
         assert "[VCF Content Factory] Nowhere SM" in msg, "message must name the missing SM"
 
     def test_formula_without_token_unchanged(self):
-        from vcfops_supermetrics.crossref import resolve_sm_formula
+        from vcfcf_supermetrics.crossref import resolve_sm_formula
 
         assert resolve_sm_formula(PLAIN_FORMULA, PLAIN_NAME, {}) == PLAIN_FORMULA
 
     def test_already_resolved_token_is_idempotent(self):
-        from vcfops_supermetrics.crossref import resolve_sm_formula
+        from vcfcf_supermetrics.crossref import resolve_sm_formula
 
         once = resolve_sm_formula(CONSUMER_FORMULA, CONSUMER_NAME, {REF_NAME: REF_UUID})
         twice = resolve_sm_formula(once, CONSUMER_NAME, {REF_NAME: REF_UUID})
         assert once == twice
 
     def test_fallback_lookup_used_when_map_misses(self):
-        from vcfops_supermetrics.crossref import resolve_sm_formula
+        from vcfcf_supermetrics.crossref import resolve_sm_formula
 
         out = resolve_sm_formula(
             CONSUMER_FORMULA, CONSUMER_NAME, {},
@@ -144,7 +144,7 @@ class TestHandWrittenPrefixIsAbsorbed:
     )
 
     def test_no_doubled_prefix(self):
-        from vcfops_supermetrics.crossref import resolve_sm_formula
+        from vcfcf_supermetrics.crossref import resolve_sm_formula
 
         out = resolve_sm_formula(
             self.PREFIXED_FORMULA, CONSUMER_NAME, {REF_NAME: REF_UUID}
@@ -154,7 +154,7 @@ class TestHandWrittenPrefixIsAbsorbed:
         assert "@supermetric" not in out
 
     def test_matches_the_unprefixed_form(self):
-        from vcfops_supermetrics.crossref import resolve_sm_formula
+        from vcfcf_supermetrics.crossref import resolve_sm_formula
 
         prefixed = resolve_sm_formula(
             self.PREFIXED_FORMULA, CONSUMER_NAME, {REF_NAME: REF_UUID}
@@ -182,7 +182,7 @@ class TestHandWrittenPrefixIsAbsorbed:
         so each of these spellings emitted a doubled prefix silently while the
         build reported success.
         """
-        from vcfops_supermetrics.crossref import resolve_sm_formula
+        from vcfcf_supermetrics.crossref import resolve_sm_formula
 
         formula = (
             'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
@@ -203,7 +203,7 @@ class TestHandWrittenPrefixIsAbsorbed:
 
     def test_bundle_builder_emits_no_doubled_prefix(self, tmp_path):
         """End to end through the path that shipped the defect."""
-        from vcfops_packaging.builder import _render_supermetrics_dict
+        from vcfcf_packaging.builder import _render_supermetrics_dict
 
         ref = _load(tmp_path, REF_UUID, REF_NAME, PLAIN_FORMULA)
         consumer = _load(tmp_path, CONSUMER_UUID, CONSUMER_NAME, self.PREFIXED_FORMULA)
@@ -235,7 +235,7 @@ class TestNearMissSyntaxIsRejected:
         "metric=@SUPERMETRIC:" + REF_NAME + ", depth=5})",
     ])
     def test_literal_token_surviving_is_a_hard_error(self, formula):
-        from vcfops_supermetrics.crossref import (
+        from vcfcf_supermetrics.crossref import (
             SuperMetricCrossRefError,
             resolve_sm_formula,
         )
@@ -249,7 +249,7 @@ class TestSupermetricWithoutIdIsNamed:
     """An in-scope SM with no id gets its own diagnostic, not the generic one."""
 
     def test_message_names_the_missing_id(self):
-        from vcfops_supermetrics.crossref import (
+        from vcfcf_supermetrics.crossref import (
             SuperMetricCrossRefError,
             resolve_sm_formula,
         )
@@ -261,7 +261,7 @@ class TestSupermetricWithoutIdIsNamed:
         assert "no id" in msg, msg
 
     def test_map_builder_keeps_the_idless_entry(self):
-        from vcfops_supermetrics.crossref import sm_name_to_uuid_map
+        from vcfcf_supermetrics.crossref import sm_name_to_uuid_map
 
         class _SM:
             def __init__(self, name, sm_id):
@@ -276,7 +276,7 @@ class TestSupermetricWithoutIdIsNamed:
 class TestNativeBundleBuilder:
     @staticmethod
     def _bundle(supermetrics):
-        from vcfops_packaging.loader import Bundle
+        from vcfcf_packaging.loader import Bundle
 
         return Bundle(
             name="probe", description="", sync_enabled=True,
@@ -286,15 +286,15 @@ class TestNativeBundleBuilder:
         )
 
     def test_resolvable_ref_rewrites(self, sms):
-        from vcfops_packaging.builder import _render_supermetrics_dict
+        from vcfcf_packaging.builder import _render_supermetrics_dict
 
         out = _render_supermetrics_dict(self._bundle([sms["ref"], sms["consumer"]]))
         assert RESOLVED_TOKEN in out[CONSUMER_UUID]["formula"]
         assert "@supermetric:" not in out[CONSUMER_UUID]["formula"]
 
     def test_unresolvable_ref_raises_useful_message(self, sms):
-        from vcfops_packaging.builder import _render_supermetrics_dict
-        from vcfops_packaging.loader import BundleValidationError
+        from vcfcf_packaging.builder import _render_supermetrics_dict
+        from vcfcf_packaging.loader import BundleValidationError
 
         with pytest.raises(BundleValidationError) as exc:
             _render_supermetrics_dict(self._bundle([sms["orphan"]]))
@@ -303,7 +303,7 @@ class TestNativeBundleBuilder:
         assert "[VCF Content Factory] Nowhere SM" in msg
 
     def test_formula_without_token_unchanged(self, sms):
-        from vcfops_packaging.builder import _render_supermetrics_dict
+        from vcfcf_packaging.builder import _render_supermetrics_dict
 
         out = _render_supermetrics_dict(self._bundle([sms["plain"]]))
         assert out[PLAIN_UUID]["formula"] == PLAIN_FORMULA
@@ -313,13 +313,13 @@ class TestNativeBundleBuilder:
 
 class TestDiscreteBuilderCrossRefExpansion:
     def test_referenced_sm_is_pulled_into_the_component(self, sms):
-        from vcfops_packaging.discrete_builder import _expand_sm_crossrefs
+        from vcfcf_packaging.discrete_builder import _expand_sm_crossrefs
 
         expanded = _expand_sm_crossrefs([sms["consumer"]], [sms["ref"], sms["consumer"]])
         assert [s.name for s in expanded] == [CONSUMER_NAME, REF_NAME]
 
     def test_unresolvable_ref_raises_useful_message(self, sms):
-        from vcfops_packaging.discrete_builder import (
+        from vcfcf_packaging.discrete_builder import (
             DiscreteBuilderError,
             _expand_sm_crossrefs,
         )
@@ -331,7 +331,7 @@ class TestDiscreteBuilderCrossRefExpansion:
         assert "[VCF Content Factory] Nowhere SM" in msg
 
     def test_formula_without_token_is_a_noop(self, sms):
-        from vcfops_packaging.discrete_builder import _expand_sm_crossrefs
+        from vcfcf_packaging.discrete_builder import _expand_sm_crossrefs
 
         expanded = _expand_sm_crossrefs([sms["plain"]], [sms["plain"], sms["ref"]])
         assert [s.name for s in expanded] == [PLAIN_NAME]
@@ -345,7 +345,7 @@ def _fake_client_cls():
     Only the pieces the resolver touches are exercised; the HTTP call is stubbed
     out by the caller and the assembled sm_dict is captured from the zip.
     """
-    from vcfops_supermetrics.client import VCFOpsClient
+    from vcfcf_supermetrics.client import VCFOpsClient
 
     class _FakeClient(VCFOpsClient):
         def __init__(self, remote_by_name=None):  # noqa: D107 - no HTTP session
@@ -365,8 +365,8 @@ def _fake_client_cls():
 
 def _run_import(client, sms_wire, monkeypatch):
     """Call the real import_supermetrics_bundle body against _FakeClient."""
-    import vcfops_supermetrics.client as sm_client
-    import vcfops_dashboards.client as dash_client
+    import vcfcf_supermetrics.client as sm_client
+    import vcfcf_dashboards.client as dash_client
 
     monkeypatch.setattr(dash_client, "get_current_user", lambda c: {"id": "owner"})
     monkeypatch.setattr(dash_client, "discover_marker_filename", lambda c: "marker")
@@ -415,7 +415,7 @@ class TestLiveSyncPath:
         assert client.find_calls == [REF_NAME]
 
     def test_unresolvable_ref_raises_useful_message(self, sms, monkeypatch):
-        from vcfops_common.client import VCFOpsError
+        from vcfcf_common.client import VCFOpsError
 
         client = _fake_client_cls()()
         with pytest.raises(VCFOpsError) as exc:
@@ -448,7 +448,7 @@ class TestDoubledPrefixIsRejected:
         "Super Metric|Super Metric|Super Metric|",
     ])
     def test_doubled_prefix_without_a_token_is_a_hard_error(self, doubled):
-        from vcfops_supermetrics.crossref import (
+        from vcfcf_supermetrics.crossref import (
             SuperMetricCrossRefError,
             resolve_sm_formula,
         )
@@ -465,7 +465,7 @@ class TestDoubledPrefixIsRejected:
 
     def test_single_prefix_is_left_alone(self):
         """The guard must not fire on the correct, already-resolved wire form."""
-        from vcfops_supermetrics.crossref import resolve_sm_formula
+        from vcfcf_supermetrics.crossref import resolve_sm_formula
 
         formula = (
             'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
@@ -475,7 +475,7 @@ class TestDoubledPrefixIsRejected:
 
     def test_two_separate_prefixed_terms_are_left_alone(self):
         """Two resolved terms in one formula are not a doubled prefix."""
-        from vcfops_supermetrics.crossref import resolve_sm_formula
+        from vcfcf_supermetrics.crossref import resolve_sm_formula
 
         formula = (
             '${this, metric=' + RESOLVED_TOKEN + '} + '
@@ -487,8 +487,8 @@ class TestDoubledPrefixIsRejected:
 # --- pak path still delegates to the shared resolver ------------------------
 
 def test_sdk_builder_uses_the_shared_resolver():
-    from vcfops_managementpacks import sdk_builder
-    from vcfops_supermetrics import crossref
+    from vcfcf_managementpacks import sdk_builder
+    from vcfcf_supermetrics import crossref
 
     assert sdk_builder._SM_CROSSREF_RE is crossref.SM_CROSSREF_RE, (
         "sdk_builder must not carry a second copy of the cross-reference regex"
@@ -511,7 +511,7 @@ class TestTokenCaseInsensitivity:
 
     Round-3 review BLOCKING: the prefix was case-insensitive but the token was
     not, so ``@SuperMetric:"X"`` passed through ``resolve_sm_formula``
-    unchanged and unflagged.  ``vcfops_packaging.deps._is_sm_ref`` lowercases
+    unchanged and unflagged.  ``vcfcf_packaging.deps._is_sm_ref`` lowercases
     before comparing, so the dependency audit classified it as an already-good
     SM reference and skipped it: audit green, build green, literal token in the
     pak, super metric evaluates to nothing on the live instance.
@@ -524,7 +524,7 @@ class TestTokenCaseInsensitivity:
         "@SuperMETRIC",   # mixed
     ])
     def test_token_case_variants_all_resolve(self, token):
-        from vcfops_supermetrics.crossref import (
+        from vcfcf_supermetrics.crossref import (
             crossref_names,
             has_crossref,
             resolve_sm_formula,
@@ -544,7 +544,7 @@ class TestTokenCaseInsensitivity:
 
     @pytest.mark.parametrize("token", ["@SuperMetric", "@SUPERMETRIC"])
     def test_mis_cased_unresolvable_name_still_hard_errors(self, token):
-        from vcfops_supermetrics.crossref import (
+        from vcfcf_supermetrics.crossref import (
             SuperMetricCrossRefError,
             resolve_sm_formula,
         )
@@ -561,7 +561,7 @@ class TestTokenCaseInsensitivity:
         self, token, tmp_path
     ):
         """End to end through the path that would have shipped the literal."""
-        from vcfops_packaging.builder import _render_supermetrics_dict
+        from vcfcf_packaging.builder import _render_supermetrics_dict
 
         formula = (
             'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
@@ -598,7 +598,7 @@ class TestTokenCaseInsensitivity:
     def test_wrong_case_name_is_unresolvable_for_every_token_spelling(
         self, token, wrong_name
     ):
-        from vcfops_supermetrics.crossref import (
+        from vcfcf_supermetrics.crossref import (
             SuperMetricCrossRefError,
             resolve_sm_formula,
             sm_name_to_uuid_map,
@@ -620,7 +620,7 @@ class TestTokenCaseInsensitivity:
         """Both names live in the map; each token spelling binds to its OWN
         uuid, never to the other's.  The wrong-SM binding is the failure that
         would follow from name case-folding, and it is unreachable."""
-        from vcfops_supermetrics.crossref import resolve_sm_formula, sm_name_to_uuid_map
+        from vcfcf_supermetrics.crossref import resolve_sm_formula, sm_name_to_uuid_map
 
         lower_name = REF_NAME.lower()
         sm_map = sm_name_to_uuid_map(
@@ -644,7 +644,7 @@ class TestTokenCaseInsensitivity:
     def test_sm_name_map_keeps_case_distinct_names_as_separate_keys(self):
         """The map builder is the other half of the boundary: it must not
         normalise case either, or two SMs would share one key."""
-        from vcfops_supermetrics.crossref import sm_name_to_uuid_map
+        from vcfcf_supermetrics.crossref import sm_name_to_uuid_map
 
         m = sm_name_to_uuid_map([_NamedSM(REF_NAME, REF_UUID), _NamedSM(REF_NAME.lower(), PLAIN_UUID)])
         assert m == {REF_NAME: REF_UUID, REF_NAME.lower(): PLAIN_UUID}

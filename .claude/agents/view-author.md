@@ -60,12 +60,12 @@ Track-specific examples:
 2. **Never create a dashboard.**
 3. **Never fabricate metric keys.**
 4. **Cross-references use names, never raw UUIDs.**
-5. **Validate:** `python -m vcfops_dashboards validate`
+5. **Validate:** `python -m vcfcf_dashboards validate`
 6. **Write only under `content/views/` or the named `third_party/<project>/views/`.**
 7. **Never install.**
 8. **Supported view types: `list`, `distribution`, `trend`.** The factory's
    loader/renderer support exactly three `data_type` values
-   (`src/vcfops_dashboards/loader.py`): `list` (default; `list`/`summary`
+   (`src/vcfcf_dashboards/loader.py`): `list` (default; `list`/`summary`
    presentation), `distribution` (`bar-chart`/`pie-chart`/`donut-chart`), and
    `trend` (`line-chart`). You author all three — see
    `knowledge/context/authoring/view_dashboard_design_guide.md` for each type's columns,

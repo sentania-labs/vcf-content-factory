@@ -181,14 +181,14 @@ class TestReleaseSlugOverride:
 
     def test_cli_accepts_slug_flag(self):
         """The argparse parser registers --slug on the release subcommand."""
-        from vcfops_packaging.cli import build_parser
+        from vcfcf_packaging.cli import build_parser
         parser = build_parser()
         args = parser.parse_args(["release", "dashboard", "my-source", "--slug", "custom-slug"])
         assert args.slug == "custom-slug"
 
     def test_cli_slug_default_is_none(self):
         """When --slug is not given, args.slug is None."""
-        from vcfops_packaging.cli import build_parser
+        from vcfcf_packaging.cli import build_parser
         parser = build_parser()
         args = parser.parse_args(["release", "dashboard", "my-source"])
         assert args.slug is None
@@ -211,7 +211,7 @@ class TestReleaseManifestOutput:
     ) -> subprocess.CompletedProcess:
         """Helper: set up a minimal repo in tmp_path and run cmd_release.
 
-        Passes PYTHONPATH so vcfops_packaging resolves from the real repo root.
+        Passes PYTHONPATH so vcfcf_packaging resolves from the real repo root.
         """
         # Create source content directory and YAML
         type_dir_map = {
@@ -227,7 +227,7 @@ class TestReleaseManifestOutput:
         source_file.write_text(source_yaml_content)
 
         cmd = [
-            sys.executable, "-m", "vcfops_packaging", "release",
+            sys.executable, "-m", "vcfcf_packaging", "release",
             content_type, source_stem,
             "--no-commit",
         ] + (extra_args or [])
@@ -324,7 +324,7 @@ class TestBundleComposerSlugDefault:
 
     def test_prompt_suggests_bundle_suffix(self, tmp_path):
         """When user enters 'my-thing', composer suggests 'my-thing-bundle'."""
-        from vcfops_packaging.composer import compose_bundle
+        from vcfcf_packaging.composer import compose_bundle
 
         out_fn, lines = _capture_output()
         # Sequence:
@@ -357,7 +357,7 @@ class TestBundleComposerSlugDefault:
 
     def test_prompt_does_not_double_suffix(self, tmp_path):
         """When user already types 'my-thing-bundle', no double -bundle suffix added."""
-        from vcfops_packaging.composer import compose_bundle
+        from vcfcf_packaging.composer import compose_bundle
 
         out_fn, lines = _capture_output()
         responses = (
@@ -385,7 +385,7 @@ class TestBundleComposerSlugDefault:
 
     def test_user_can_override_suggested_slug(self, tmp_path):
         """User can override the suggested slug by typing a different value."""
-        from vcfops_packaging.composer import compose_bundle
+        from vcfcf_packaging.composer import compose_bundle
 
         out_fn, lines = _capture_output()
         responses = (
@@ -420,7 +420,7 @@ class TestBundleComposerSlugDefault:
 
     def test_slug_arg_bypasses_prompt_entirely(self, tmp_path):
         """When slug is passed as an argument, no slug prompt is shown."""
-        from vcfops_packaging.composer import compose_bundle
+        from vcfcf_packaging.composer import compose_bundle
 
         out_fn, lines = _capture_output()
         # With slug as arg: no slug prompt, no confirmation prompt
@@ -476,7 +476,7 @@ class TestValidatorCollisionHardError:
         self._make_collision_repo(tmp_path, "foo-bundle")
         env = {"PYTHONPATH": str(REPO_ROOT / "src"), "PATH": "/usr/bin:/bin"}
         result = subprocess.run(
-            [sys.executable, "-m", "vcfops_packaging", "validate"],
+            [sys.executable, "-m", "vcfcf_packaging", "validate"],
             cwd=str(tmp_path),
             capture_output=True,
             text=True,
@@ -492,7 +492,7 @@ class TestValidatorCollisionHardError:
         self._make_collision_repo(tmp_path, "collision-test")
         env = {"PYTHONPATH": str(REPO_ROOT / "src"), "PATH": "/usr/bin:/bin"}
         result = subprocess.run(
-            [sys.executable, "-m", "vcfops_packaging", "validate"],
+            [sys.executable, "-m", "vcfcf_packaging", "validate"],
             cwd=str(tmp_path),
             capture_output=True,
             text=True,
@@ -526,7 +526,7 @@ class TestValidatorCollisionHardError:
         bundle_path.write_text(yaml.dump(data))
 
         result = subprocess.run(
-            [sys.executable, "-m", "vcfops_packaging", "validate"],
+            [sys.executable, "-m", "vcfcf_packaging", "validate"],
             cwd=str(tmp_path),
             capture_output=True,
             text=True,
@@ -538,7 +538,7 @@ class TestValidatorCollisionHardError:
 
     def test_check_bundle_release_collision_api(self, tmp_path):
         """check_bundle_release_collision() returns an error string on collision."""
-        from vcfops_packaging.releases import check_bundle_release_collision, load_release
+        from vcfcf_packaging.releases import check_bundle_release_collision, load_release
 
         # Create a bundle
         bundle_dir = tmp_path / "bundles"
@@ -573,7 +573,7 @@ class TestBundleReleaseLegitimatePairing:
     def test_bundle_release_pairing_no_error_api(self, tmp_path):
         """check_bundle_release_collision() returns no errors when the release
         manifest's headline artifact points at bundles/<slug>.yaml."""
-        from vcfops_packaging.releases import check_bundle_release_collision, load_release
+        from vcfcf_packaging.releases import check_bundle_release_collision, load_release
 
         bundle_dir = tmp_path / "bundles"
         bundle_dir.mkdir()
@@ -621,7 +621,7 @@ class TestBundleReleaseLegitimatePairing:
 
         env = {"PYTHONPATH": str(REPO_ROOT / "src"), "PATH": "/usr/bin:/bin"}
         result = subprocess.run(
-            [sys.executable, "-m", "vcfops_packaging", "validate"],
+            [sys.executable, "-m", "vcfcf_packaging", "validate"],
             cwd=str(tmp_path),
             capture_output=True,
             text=True,
@@ -635,7 +635,7 @@ class TestBundleReleaseLegitimatePairing:
     def test_non_pairing_collision_still_errors(self, tmp_path):
         """When the release manifest headlines a DIFFERENT source (not the bundle),
         the collision error still fires."""
-        from vcfops_packaging.releases import check_bundle_release_collision, load_release
+        from vcfcf_packaging.releases import check_bundle_release_collision, load_release
 
         bundle_dir = tmp_path / "bundles"
         bundle_dir.mkdir()
@@ -662,7 +662,7 @@ class TestBundleReleaseLegitimatePairing:
 
     def test_real_repo_vks_bundle_pairing_clean(self):
         """Live repo: vks-core-consumption-bundle pairing validates without collision."""
-        from vcfops_packaging.releases import (
+        from vcfcf_packaging.releases import (
             check_bundle_release_collision,
             load_all_releases,
         )
@@ -685,7 +685,7 @@ class TestValidatorNamingConventionWarn:
 
     def test_nonconforming_name_produces_warn(self, tmp_path):
         """A release named 'some-thing' (no type suffix) produces a WARN."""
-        from vcfops_packaging.releases import (
+        from vcfcf_packaging.releases import (
             check_release_naming_convention,
             load_release,
         )
@@ -709,7 +709,7 @@ class TestValidatorNamingConventionWarn:
 
     def test_conforming_name_no_warn(self, tmp_path):
         """A release named 'vks-core-consumption-dashboard' produces no warning."""
-        from vcfops_packaging.releases import (
+        from vcfcf_packaging.releases import (
             check_release_naming_convention,
             load_release,
         )
@@ -745,7 +745,7 @@ class TestValidatorNamingConventionWarn:
     ])
     def test_all_recognized_suffixes_pass(self, tmp_path, suffix):
         """Each recognized type suffix produces no WARN when used correctly."""
-        from vcfops_packaging.releases import (
+        from vcfcf_packaging.releases import (
             check_release_naming_convention,
             load_release,
         )
@@ -769,7 +769,7 @@ class TestValidatorNamingConventionWarn:
 
     def test_warn_message_lists_recognized_types(self, tmp_path):
         """WARN message references the recognized type list."""
-        from vcfops_packaging.releases import (
+        from vcfcf_packaging.releases import (
             check_release_naming_convention,
             load_release,
         )
@@ -800,7 +800,7 @@ class TestGrandfatherList:
 
     def test_demand_driven_capacity_v2_not_warned(self):
         """demand-driven-capacity-v2 is grandfathered — no WARN."""
-        from vcfops_packaging.releases import (
+        from vcfcf_packaging.releases import (
             _LEGACY_RELEASE_NAMES,
             check_release_naming_convention,
         )
@@ -810,14 +810,14 @@ class TestGrandfatherList:
 
     def test_idps_planner_not_warned(self):
         """idps-planner is grandfathered — no WARN."""
-        from vcfops_packaging.releases import _LEGACY_RELEASE_NAMES
+        from vcfcf_packaging.releases import _LEGACY_RELEASE_NAMES
         assert "idps-planner" in _LEGACY_RELEASE_NAMES, (
             "idps-planner should be in the grandfather list"
         )
 
     def test_real_repo_releases_produce_no_naming_warnings(self):
         """Real repo: no naming convention warnings for any existing release manifest."""
-        from vcfops_packaging.releases import (
+        from vcfcf_packaging.releases import (
             check_release_naming_convention,
             load_all_releases,
         )
@@ -831,19 +831,19 @@ class TestGrandfatherList:
 
     def test_grandfather_names_are_frozenset(self):
         """_LEGACY_RELEASE_NAMES is a frozenset (immutable, O(1) lookup)."""
-        from vcfops_packaging.releases import _LEGACY_RELEASE_NAMES
+        from vcfcf_packaging.releases import _LEGACY_RELEASE_NAMES
         assert isinstance(_LEGACY_RELEASE_NAMES, frozenset), (
             f"_LEGACY_RELEASE_NAMES should be a frozenset, got {type(_LEGACY_RELEASE_NAMES)}"
         )
 
     def test_check_naming_skips_grandfathered_even_without_suffix(self, tmp_path):
         """A grandfathered name without a type suffix still produces no warning."""
-        from vcfops_packaging.releases import (
+        from vcfcf_packaging.releases import (
             check_release_naming_convention,
             _LEGACY_RELEASE_NAMES,
         )
         # Add a synthetic grandfathered name for this test using a dataclass mock
-        from vcfops_packaging.releases import ReleaseDef, ReleaseArtifact
+        from vcfcf_packaging.releases import ReleaseDef, ReleaseArtifact
 
         # Create a minimal source file so the path resolves
         src = tmp_path / "bundles" / "source.yaml"
@@ -918,9 +918,9 @@ class TestRealRepoValidateIntegration:
     """Smoke: real repo validate still passes with all convention checks active."""
 
     def test_real_repo_validate_exits_zero(self):
-        """python3 -m vcfops_packaging validate exits 0 on the real repo."""
+        """python3 -m vcfcf_packaging validate exits 0 on the real repo."""
         result = subprocess.run(
-            [sys.executable, "-m", "vcfops_packaging", "validate"],
+            [sys.executable, "-m", "vcfcf_packaging", "validate"],
             cwd=str(REPO_ROOT),
             capture_output=True,
             text=True,
@@ -932,7 +932,7 @@ class TestRealRepoValidateIntegration:
 
     def test_real_repo_no_collision_errors(self):
         """Real repo has no slug collision between bundles/ and bundles/releases/."""
-        from vcfops_packaging.releases import (
+        from vcfcf_packaging.releases import (
             check_bundle_release_collision,
             load_all_releases,
         )
@@ -946,7 +946,7 @@ class TestRealRepoValidateIntegration:
 
     def test_real_repo_no_naming_warnings(self):
         """Real repo has no naming convention warnings (all grandfathered or conforming)."""
-        from vcfops_packaging.releases import (
+        from vcfcf_packaging.releases import (
             check_release_naming_convention,
             load_all_releases,
         )

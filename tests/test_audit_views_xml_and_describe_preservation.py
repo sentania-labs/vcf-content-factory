@@ -23,8 +23,8 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from vcfops_packaging.audit import _refs_from_views_xml
-from vcfops_packaging.describe import DescribeCache
+from vcfcf_packaging.audit import _refs_from_views_xml
+from vcfcf_packaging.describe import DescribeCache
 
 FIXTURE = Path(__file__).parent / "fixtures" / "vm_snapshot_inventory_views_content.xml"
 
@@ -38,7 +38,7 @@ class TestRefsFromViewsXml:
 
     The fixture is the exact views_content.xml the packaging builder emits
     for the VM Snapshot Inventory view (rendered via
-    vcfops_dashboards.render.render_views_xml). The old parser extracted 0
+    vcfcf_dashboards.render.render_views_xml). The old parser extracted 0
     refs from this shape ("silently dodges the gate", issue #71); the build
     audit sees 10. These tests pin the analyze path at parity.
     """

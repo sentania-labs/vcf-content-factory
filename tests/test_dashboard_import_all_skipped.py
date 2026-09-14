@@ -19,9 +19,9 @@ from pathlib import Path
 
 import pytest
 
-from vcfops_dashboards import cli as dash_cli
-from vcfops_dashboards import handler as dash_handler
-from vcfops_dashboards.client import (
+from vcfcf_dashboards import cli as dash_cli
+from vcfcf_dashboards import handler as dash_handler
+from vcfcf_dashboards.client import (
     DASHBOARD_CONTENT_TYPES,
     all_skipped_content_types,
 )
@@ -157,7 +157,7 @@ class TestDashboardsHandlerSync:
 
 
 # ---------------------------------------------------------------------------
-# Standalone `python -m vcfops_dashboards sync`
+# Standalone `python -m vcfcf_dashboards sync`
 # ---------------------------------------------------------------------------
 
 def _stub_cli_io(monkeypatch, api_result, dashboards):
@@ -207,7 +207,7 @@ class TestCmdSync:
 
 
 # ---------------------------------------------------------------------------
-# Packaged installer template (src/vcfops_packaging/templates/install.py)
+# Packaged installer template (src/vcfcf_packaging/templates/install.py)
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
@@ -217,7 +217,7 @@ def install_mod():
 
     path = (
         Path(__file__).resolve().parents[1]
-        / "src" / "vcfops_packaging" / "templates" / "install.py"
+        / "src" / "vcfcf_packaging" / "templates" / "install.py"
     )
     spec = importlib.util.spec_from_file_location("_install_template", path)
     mod = importlib.util.module_from_spec(spec)
@@ -432,8 +432,8 @@ class TestDetectorParity:
 def test_sync_bundle_prints_a_warning_trailer(monkeypatch, capsys):
     """Per-item warn lines scroll away among the OK lines; the run must
     end with a count."""
-    from vcfops_packaging import syncer
-    from vcfops_packaging.handler import ItemResult, SyncResult
+    from vcfcf_packaging import syncer
+    from vcfcf_packaging.handler import ItemResult, SyncResult
 
     class _Handler:
         content_type = "dashboards"
@@ -602,7 +602,7 @@ def test_extract_view_names_degrades_on_garbage(install_mod):
 # Quadratic on unclosed opens, unbounded output, defeated by any attribute
 # on <Title>, and it handed the operator XML-escaped names beside
 # unescaped dashboard names. It is now an ElementTree parse, modelled on
-# vcfops_packaging/audit.py's ViewDef/Title walk.
+# vcfcf_packaging/audit.py's ViewDef/Title walk.
 # ---------------------------------------------------------------------------
 
 _FACTORY_XML = (
@@ -731,14 +731,14 @@ class TestExtractViewNames:
         assert isinstance(out, list)
 
     def test_extraction_matches_real_renderer_output(self, install_mod, tmp_path):
-        """Pins the coupling to src/vcfops_dashboards/render.py, which emits
+        """Pins the coupling to src/vcfcf_dashboards/render.py, which emits
         <Title>{escape(view.name)}</Title> once per ViewDef and nowhere
         else. Nothing pinned this before, so the extractor could drift out
         of step with the renderer silently (issue #103 item 3)."""
         import yaml
 
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         names = [
             "[VCF Content Factory] VM Network Top Talkers",

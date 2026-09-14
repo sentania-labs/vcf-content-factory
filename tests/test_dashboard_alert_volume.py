@@ -39,8 +39,8 @@ def _picker() -> dict:
 
 
 def _render(tmp_path: Path, dash: dict) -> dict:
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     d = load_dashboard(_write(tmp_path / "d.yaml", dash))
     d.validate({})
@@ -90,7 +90,7 @@ def test_self_provider_pinned_shape(tmp_path):
 
 
 def test_self_provider_requires_pin(tmp_path):
-    from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+    from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     d = load_dashboard(_write(tmp_path / "np.yaml", _dash([
         {"id": "av", "type": "AlertVolume", "title": "AV",
@@ -110,7 +110,7 @@ def test_self_provider_requires_pin(tmp_path):
                   "metric_key": "cpu|usage_average"}]),
 ])
 def test_unsupported_options_rejected(tmp_path, key, val):
-    from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+    from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     path = _write(tmp_path / "bad.yaml", _dash([
         {"id": "av", "type": "AlertVolume", "title": "AV",
@@ -121,7 +121,7 @@ def test_unsupported_options_rejected(tmp_path, key, val):
 
 
 def test_refresh_content_must_be_bool(tmp_path):
-    from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+    from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     path = _write(tmp_path / "rc.yaml", _dash([
         {"id": "av", "type": "AlertVolume", "title": "AV",

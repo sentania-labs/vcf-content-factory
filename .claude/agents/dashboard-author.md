@@ -69,7 +69,7 @@ Track-specific examples:
    `Scoreboard`, `MetricChart`, `HealthChart`, `ParetoAnalysis`,
    `Heatmap`, `AlertList`, `ProblemAlertsList`. Anything else →
    TOOLSET GAP.
-6. **Validate:** `python -m vcfops_dashboards validate`
+6. **Validate:** `python -m vcfcf_dashboards validate`
 7. **Write only under `content/dashboards/` or the named `third_party/<project>/dashboards/`.**
 8. **Never install.**
 

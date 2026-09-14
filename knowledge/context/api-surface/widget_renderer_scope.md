@@ -1,7 +1,7 @@
 # Dashboard widget renderer scoping
 
 **Purpose.** Plan the next wave of widget-type support in
-`src/vcfops_dashboards/render.py`. Inventory every widget type still
+`src/vcfcf_dashboards/render.py`. Inventory every widget type still
 unsupported, categorize each by engineering value, and propose an
 implementation order with draft YAML schemas.
 
@@ -15,10 +15,10 @@ implementation order with draft YAML schemas.
   from a fresh lab export via
   `POST /api/content/operations/export` with
   `{"scope":"ALL","contentTypes":["DASHBOARDS"]}`.
-- Loader/renderer source: `src/vcfops_dashboards/loader.py`,
-  `src/vcfops_dashboards/render.py`.
+- Loader/renderer source: `src/vcfcf_dashboards/loader.py`,
+  `src/vcfcf_dashboards/render.py`.
 
-**Scope.** Research and planning only. No `src/vcfops_*/` or content
+**Scope.** Research and planning only. No `src/vcfcf_*/` or content
 YAML edits. A follow-up `tooling` agent invocation will implement
 the recommendations.
 
@@ -656,7 +656,7 @@ config), Geo (instance data dependency), ContainerOverview/Details
 ## Tooling brief stub (next hand-off)
 
 **Task.** Add PropertyList widget support to
-`src/vcfops_dashboards/loader.py` and `src/vcfops_dashboards/render.py`.
+`src/vcfcf_dashboards/loader.py` and `src/vcfcf_dashboards/render.py`.
 
 **Wire format.** See "PropertyList" section above. The config is
 structurally identical to Scoreboard but with three additional
@@ -753,7 +753,7 @@ samples.
   structural equality (ignoring UUIDs and timestamps) against a
   handcrafted reference built from the sample JSON in the
   PropertyList section above.
-- Run `python3 -m vcfops_dashboards validate` and confirm the
+- Run `python3 -m vcfcf_dashboards validate` and confirm the
   fixture loads and renders without errors.
 
 **Verification on instance.** After implementation:

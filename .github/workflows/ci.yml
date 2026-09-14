@@ -20,12 +20,12 @@ jobs:
     # exact string "lab", ephemeral pod per job, no state between jobs.
     runs-on: lab
     env:
-      # The ten vcfops_* packages live under src/ (see pyproject.toml
+      # The ten vcfcf_* packages live under src/ (see pyproject.toml
       # src-layout). CI resolves them via PYTHONPATH — never `pip install`
       # the factory as a package — so the kit-isolation regression tests
       # (tests/managementpacks/test_buildkit_isolated_build.py and friends)
       # keep proving the published sdk-buildkit tarball works with zero
-      # factory install. An editable/real install would leak vcfops_* into
+      # factory install. An editable/real install would leak vcfcf_* into
       # every subprocess via site-packages regardless of PYTHONPATH
       # stripping, silently blinding those guards.
       PYTHONPATH: src
@@ -42,7 +42,7 @@ jobs:
           # implicitly. Without javac the SDK jar tests self-skip
           # (tests/test_sdk_builder_framework_jar.py pytestmark), silently
           # dropping coverage. Framework contract is JDK 11+, 17 recommended
-          # (src/vcfops_managementpacks/adapter_framework/build-framework.sh).
+          # (src/vcfcf_managementpacks/adapter_framework/build-framework.sh).
           distribution: temurin
           java-version: "17"
 
@@ -84,7 +84,7 @@ jobs:
         run: bash scripts/bootstrap_managed_paks.sh
 
       - name: Framework-review reminder (non-blocking, P4)
-        # Nudge only — emits a ::warning:: when a PR changes vcfops_*/ with
+        # Nudge only — emits a ::warning:: when a PR changes vcfcf_*/ with
         # no knowledge/context/reviews/framework/ doc. The real gate is the
         # orchestrator spawning `framework-reviewer` before the PR
         # (CLAUDE.md / knowledge/designs/framework-reviewer-v1.md). Never fails the
@@ -107,7 +107,7 @@ jobs:
 
       - name: Validate content corpus
         run: |
-          python3 -m vcfops_supermetrics validate
+          python3 -m vcfcf_supermetrics validate
           # Dashboard id-stability guard (#113): on PRs, compare against the
           # merge base so a re-id that is already committed is still caught.
           # BASE empty (merge-base unresolvable) falls back to the plain
@@ -119,18 +119,18 @@ jobs:
             BASE=""
           fi
           if [ -n "${BASE}" ]; then
-            python3 -m vcfops_dashboards validate --id-guard-baseline "${BASE}"
+            python3 -m vcfcf_dashboards validate --id-guard-baseline "${BASE}"
           else
             if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
               echo "WARNING: id guard merge base unresolvable; committed re-ids in this PR are NOT checked (HEAD baseline only)"
             fi
-            python3 -m vcfops_dashboards validate
+            python3 -m vcfcf_dashboards validate
           fi
-          python3 -m vcfops_customgroups validate
-          python3 -m vcfops_symptoms validate
-          python3 -m vcfops_alerts validate
-          python3 -m vcfops_reports validate
-          python3 -m vcfops_managementpacks validate
+          python3 -m vcfcf_customgroups validate
+          python3 -m vcfcf_symptoms validate
+          python3 -m vcfcf_alerts validate
+          python3 -m vcfcf_reports validate
+          python3 -m vcfcf_managementpacks validate
 
       - name: Path reference audit (RULE-015)
         # Every path cited by the governance corpus must resolve — committed,

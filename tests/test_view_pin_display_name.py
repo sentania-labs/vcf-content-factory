@@ -31,8 +31,8 @@ OWNER = "00000000-0000-0000-0000-000000000001"
 
 
 def _render(tmp_path, pin: dict, subject=("VMWARE", "vSphere World")):
-    from vcfops_dashboards.loader import load_dashboard, load_view
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard, load_view
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     vp = tmp_path / "v.yaml"
     vp.write_text(yaml.dump({"name": "[VCF Content Factory] Pin Probe View",
@@ -72,7 +72,7 @@ def test_pin_name_on_leaf_kind_is_rejected(tmp_path):
     """Pinning a single leaf resource by name is not live-verified (only
     world-singleton pins by display name are); the loader rejects it and
     points at the wire doc rather than emitting an unproven shape."""
-    from vcfops_dashboards.loader import DashboardValidationError
+    from vcfcf_dashboards.loader import DashboardValidationError
 
     with pytest.raises(DashboardValidationError,
                        match=r"pin.name is not supported on leaf kind VMWARE/HostSystem.*"
@@ -82,7 +82,7 @@ def test_pin_name_on_leaf_kind_is_rejected(tmp_path):
 
 
 def test_pin_name_must_be_string(tmp_path):
-    from vcfops_dashboards.loader import DashboardValidationError
+    from vcfcf_dashboards.loader import DashboardValidationError
 
     with pytest.raises(DashboardValidationError, match="pin.name must be a string"):
         _render(tmp_path, {"adapter_kind": "NSXTAdapter", "resource_kind": "NSXT World", "name": 7})
@@ -99,7 +99,7 @@ def test_existing_pins_unchanged(tmp_path, ak, rk, c_rk, expected):
 
 
 def test_resolve_view_pin_order():
-    from vcfops_dashboards.render import _resolve_view_pin
+    from vcfcf_dashboards.render import _resolve_view_pin
 
     assert _resolve_view_pin("NSXTAdapter", "NSXT World") == ("NSXTAdapter", "NSXT World", "NSX World")
     assert _resolve_view_pin("NSXTAdapter", "NSXT World", "X") == ("NSXTAdapter", "NSXT World", "X")
@@ -119,8 +119,8 @@ def _dash_json(name):
 
 
 def test_reverse_emits_pin_name_only_when_it_differs():
-    from vcfops_dashboards.reverse import parse_dashboard_json
-    from vcfops_extractor.extractor import _widget_to_yaml_dict
+    from vcfcf_dashboards.reverse import parse_dashboard_json
+    from vcfcf_extractor.extractor import _widget_to_yaml_dict
 
     w = parse_dashboard_json(_dash_json("NSX World"), {}).widgets[0]
     assert w.pin.name == ""
@@ -134,8 +134,8 @@ def test_reverse_emits_pin_name_only_when_it_differs():
 def test_license_export_pins_resolve_to_display_names():
     """The public export's three View pins reverse without a name: override
     (the table derives them) and re-render with the export's display names."""
-    from vcfops_dashboards.reverse import parse_dashboard_json
-    from vcfops_dashboards.render import _resolve_view_pin
+    from vcfcf_dashboards.reverse import parse_dashboard_json
+    from vcfcf_dashboards.render import _resolve_view_pin
 
     fx = json.loads((REPO_ROOT / "tests/fixtures/dashboards/license_consumption_widgets.json").read_text())
     dj = dict(fx["dashboards"][0]); dj["entries"] = fx["entries"]
@@ -154,8 +154,8 @@ def test_kind_mode_resource_kind_name_uses_display_name(tmp_path):
     the View pin resolver uses; unlisted kinds keep the kind key."""
     import json
 
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     p = tmp_path / "kind_mode.yaml"
     p.write_text(yaml.dump({

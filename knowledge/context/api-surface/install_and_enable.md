@@ -33,18 +33,18 @@ doesn't need to re-export them each session.
 
 All installable content in this repo goes through
 `POST /api/content/operations/import` via the shared packager in
-`vcfops_dashboards` (and, after the planned refactor, a module
-shared with `vcfops_supermetrics`). The importer preserves UUIDs
+`vcfcf_dashboards` (and, after the planned refactor, a module
+shared with `vcfcf_supermetrics`). The importer preserves UUIDs
 from the zip, which is why `context/uuids_and_cross_references.md`
 insists on stable YAML-owned UUIDs.
 
 ```bash
 # super metrics
-python -m vcfops_supermetrics sync                   # all YAMLs
-python -m vcfops_supermetrics sync supermetrics/<file>.yaml
+python -m vcfcf_supermetrics sync                   # all YAMLs
+python -m vcfcf_supermetrics sync supermetrics/<file>.yaml
 
 # dashboards + views
-python -m vcfops_dashboards sync                     # all YAMLs
+python -m vcfcf_dashboards sync                     # all YAMLs
 ```
 
 Upsert-by-id semantics: importing a zip with `force=true` (which
@@ -71,11 +71,11 @@ Two paths to enable:
    `context/internal_supermetrics_assign.md` for the full wire-format
    findings, readback path, and edge-case table.
 
-   This is the path `vcfops_supermetrics enable` uses:
+   This is the path `vcfcf_supermetrics enable` uses:
 
    ```bash
-   python -m vcfops_supermetrics enable                       # all YAMLs
-   python -m vcfops_supermetrics enable supermetrics/<f>.yaml
+   python -m vcfcf_supermetrics enable                       # all YAMLs
+   python -m vcfcf_supermetrics enable supermetrics/<f>.yaml
    ```
 
    The command resolves the Default Policy id at runtime, looks up
@@ -103,7 +103,7 @@ These remain on `/api/supermetrics`; the migration to content-zip
 install doesn't affect them.
 
 ```bash
-python -m vcfops_supermetrics list
-python -m vcfops_supermetrics delete "<name>"
-python -m vcfops_supermetrics enable supermetrics/<file>.yaml  # Default policy
+python -m vcfcf_supermetrics list
+python -m vcfcf_supermetrics delete "<name>"
+python -m vcfcf_supermetrics enable supermetrics/<file>.yaml  # Default policy
 ```

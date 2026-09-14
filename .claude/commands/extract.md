@@ -10,18 +10,18 @@ $ARGUMENTS
 
 ## Your job
 
-Drive a conversational flow to pull a dashboard and its dependencies off the live VCF Operations lab and into a factory-shape bundle under `bundles/third_party/<slug>/`. The mechanical extraction work lives in `vcfops_extractor`; you handle the user interaction and hand it fully-formed flag sets.
+Drive a conversational flow to pull a dashboard and its dependencies off the live VCF Operations lab and into a factory-shape bundle under `bundles/third_party/<slug>/`. The mechanical extraction work lives in `vcfcf_extractor`; you handle the user interaction and hand it fully-formed flag sets.
 
 ## Prerequisites
 
 - Credentials come from `.env` at the repo root, loaded automatically by
-  `src/vcfops_common/_env.py`. **Never source `.env` in a bash command**
+  `src/vcfcf_common/_env.py`. **Never source `.env` in a bash command**
   (RULE-008): sourcing exports every secret into that shell, where any
   later `env`, `printenv`, or error dump lands them in the transcript.
   The CLIs resolve credentials themselves; just pass `--profile <name>`.
   If `.env` is missing or a profile is incomplete, the preflight doctor
   says so at session start and the credential wizard
-  (`python3 -m vcfops_common setup`) creates it.
+  (`python3 -m vcfcf_common setup`) creates it.
 - Run commands from the repo root.
 - The `.env` defines three credential profiles: `prod` (primary lab, read-only `claude`), `qa` (primary lab, `admin` for uninstall round-trips), `devel` (devel lab, `admin` for destructive playground). `/extract` defaults to `devel` because authoring iterations happen on devel by policy. Override with `from <profile>` in `$ARGUMENTS` (e.g. `from prod`, `from qa`).
 
@@ -33,7 +33,7 @@ Drive a conversational flow to pull a dashboard and its dependencies off the liv
 - If `$ARGUMENTS` contains a dashboard name, use it as the candidate. Confirm with the user that this is the right one.
 - Otherwise, run:
   ```
-  python3 -m vcfops_extractor list-dashboards --profile <name>
+  python3 -m vcfcf_extractor list-dashboards --profile <name>
   ```
   Present the list to the user, ask them to pick one by name. If the instance has many dashboards and a substring is obvious from context, `list-dashboards --profile <name> --folder <substring>` filters.
 - Capture both the dashboard **name** and **UUID** — UUID is more reliable downstream (no ambiguity).
@@ -81,10 +81,10 @@ Ask for confirmation. If the user says anything other than explicit yes, stop an
 
 ### 5. Run the extraction
 
-Invoke `vcfops_extractor` with the full flag set — `--yes` is safe here because the user already confirmed:
+Invoke `vcfcf_extractor` with the full flag set — `--yes` is safe here because the user already confirmed:
 
 ```
-python3 -m vcfops_extractor extract dashboard \
+python3 -m vcfcf_extractor extract dashboard \
   --profile <profile-from-step-1> \
   --dashboard-id <uuid> \
   --bundle-slug <slug> \
@@ -110,12 +110,12 @@ Use whatever build intent was captured in Step 1:
 
 When building:
 ```
-python3 -m vcfops_packaging build bundles/third_party/<slug>.yaml
+python3 -m vcfcf_packaging build bundles/third_party/<slug>.yaml
 ```
 
 When skipping, surface the exact command so the user can run it later:
 ```
-python3 -m vcfops_packaging build bundles/third_party/<slug>.yaml
+python3 -m vcfcf_packaging build bundles/third_party/<slug>.yaml
 ```
 
 ### 7. Report back to the user
@@ -127,7 +127,7 @@ Final summary:
 - Zip path (if built): `dist/<display-name>.zip`
 - Any WARNs the extractor emitted that need follow-up attention
 - Next steps:
-  - To iterate: hand-edit the manifest or content YAMLs, then re-run `python3 -m vcfops_packaging build bundles/third_party/<slug>.yaml`
+  - To iterate: hand-edit the manifest or content YAMLs, then re-run `python3 -m vcfcf_packaging build bundles/third_party/<slug>.yaml`
   - To distribute: copy the zip to `pka/workspaces/vcf-content-factory-bundles/` (Riker's pipeline work) and publish through whatever mechanism lives there
   - To install the extracted content on a lab (sanity-check round-trip): `python3 install.py` from inside the unzipped bundle
 
@@ -142,14 +142,14 @@ Final summary:
 - **User bails mid-interview**: capture whatever was collected, print a recap so it's not lost, offer to resume with the values pre-filled.
 - **Extractor returns non-zero exit**: surface the full stderr, don't auto-retry. The error is likely a credentials issue, a missing dashboard, or an endpoint quirk the CLI can't handle. The user decides next steps.
 - **Bundle slug collision**: if `bundles/third_party/<slug>/` already exists, ask whether to overwrite, pick a new slug, or abort. Never silently overwrite.
-- **Dashboard has unsupported widget types**: the extractor emits WARN and best-effort YAML per `vcfops_dashboards/reverse.py`. Surface the WARN; user may want to hand-edit the emitted YAML before building.
+- **Dashboard has unsupported widget types**: the extractor emits WARN and best-effort YAML per `vcfcf_dashboards/reverse.py`. Surface the WARN; user may want to hand-edit the emitted YAML before building.
 
 ## Old-school equivalent
 
 The entire flow collapses to a single flag-driven CLI call for power users or CI:
 
 ```
-python3 -m vcfops_extractor extract dashboard \
+python3 -m vcfcf_extractor extract dashboard \
   --profile devel \
   --dashboard-name "IDPS Planner" \
   --bundle-slug idps-planner \

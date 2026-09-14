@@ -9,9 +9,9 @@ resolve is an error, never a fallback.
 
 Enforced in code since 2026-08-29:
 
-- `Dashboard.validate()` (`src/vcfops_dashboards/loader.py`) rejects a
+- `Dashboard.validate()` (`src/vcfcf_dashboards/loader.py`) rejects a
   non-UUID `view:` that is not in `known_views` (`unknown view`).
-- `_build_dashboard_obj` (`src/vcfops_dashboards/render.py`) raises
+- `_build_dashboard_obj` (`src/vcfcf_dashboards/render.py`) raises
   `UnresolvedViewReferenceError` for the same condition, so a caller
   that skipped validate cannot ship a name.
 - `sdk_builder._load_bundled_content` cross-validates each bundled

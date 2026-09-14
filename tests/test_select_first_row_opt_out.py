@@ -7,14 +7,14 @@ upstream selection (e.g. World/vCenter) can never widen the terminal
 widget's subject.
 
 Root cause: `_view_widget()` and `_resource_list_widget()` in
-`vcfops_dashboards.render` hardcoded `"selectFirstRow": {"selectFirstRow":
+`vcfcf_dashboards.render` hardcoded `"selectFirstRow": {"selectFirstRow":
 True}` for every View/ResourceList widget, with no author-facing opt-out.
 The vendor reference corpus (`reference/references/`) emits
 `selectFirstRow: false` 132 times vs `true` 16 times — false is the norm
 on multi-tier drill dashboards, not the exception.
 
 Fix: an optional `select_first_row: bool` YAML field on dashboard widgets
-(`vcfops_dashboards.loader.Widget.select_first_row`), honored by both
+(`vcfcf_dashboards.loader.Widget.select_first_row`), honored by both
 `_view_widget()` and `_resource_list_widget()`. Default is `True` — a
 strict opt-out — so every dashboard that does not author the field renders
 byte-identical to pre-fix output.
@@ -42,8 +42,8 @@ def _write_yaml(path: Path, data: dict) -> Path:
 
 
 def _render_dashboard(tmp_path: Path, view_widget_extra: dict, resource_list_widget_extra: dict):
-    from vcfops_dashboards.loader import load_dashboard, load_view
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard, load_view
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     view_path = _write_yaml(
         tmp_path / "views" / "probe_view.yaml",
@@ -144,8 +144,8 @@ class TestExistingContentDashboardsRenderByteIdentical:
     the new field is a strict, non-breaking opt-out."""
 
     def test_all_content_dashboards_still_select_first_row_true(self):
-        from vcfops_dashboards.loader import load_dashboard, load_view
-        from vcfops_dashboards.render import render_dashboards_bundle_json
+        from vcfcf_dashboards.loader import load_dashboard, load_view
+        from vcfcf_dashboards.render import render_dashboards_bundle_json
 
         dash_dir = REPO_ROOT / "content" / "dashboards"
         view_dir = REPO_ROOT / "content" / "views"

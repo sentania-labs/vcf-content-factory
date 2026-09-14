@@ -20,7 +20,7 @@ User-confirmed decisions carried from the 2026-06-09 session
 (`context/session-handoff.md`, now consumed):
 
 1. Unwind aria-ops-core; framework v2 re-homed directly on AdapterBase
-   (built — `vcfops_managementpacks/adapter_framework/`, design at
+   (built: `src/vcfcf_managementpacks/adapter_framework/`, design at
    `knowledge/designs/vcfcf-base-v2-adapterbase-rehome.md`); adapters not yet
    migrated.
 2. C2 pak shape — never bundle vrops-adapters-sdk.

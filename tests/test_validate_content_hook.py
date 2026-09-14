@@ -1,5 +1,5 @@
 # Tests for scripts/validate-content.py — the PostToolUse (Write|Edit) hook
-# that runs the matching vcfops_<type> validate CLI on content/ files.
+# that runs the matching vcfcf_<type> validate CLI on content/ files.
 #
 # HERMETIC DESIGN: these tests never touch the real content/ corpus.
 # Each test builds a minimal fixture tree under pytest's tmp_path and
@@ -67,10 +67,10 @@ def _build_content_tree(tmp_path: Path) -> Path:
         if subdir.is_dir():
             shutil.copytree(str(subdir), str(dest))
 
-    # Also copy vcfops_* packages so the subprocess Python path resolves them.
+    # Also copy vcfcf_* packages so the subprocess Python path resolves them.
     # The hook uses sys.executable with -m, which picks up the installed
     # packages from the current environment, so no extra copying is needed —
-    # but we do need vcfops_* to be importable (they are, via the real env).
+    # but we do need vcfcf_* to be importable (they are, via the real env).
 
     return root
 
@@ -79,7 +79,7 @@ def run_hook(stdin_bytes: bytes, *, workspace_root: str) -> subprocess.Completed
     env = dict(os.environ)
     env["VCFCF_CONTENT_ROOT"] = workspace_root
     # The hook subprocess resolves its CWD to workspace_root (the temp dir),
-    # which does not have vcfops_* on sys.path.  Ensure the real workspace —
+    # which does not have vcfcf_* on sys.path.  Ensure the real workspace —
     # where the packages live — is always on PYTHONPATH so the -m flag finds
     # them regardless of cwd.
     existing = env.get("PYTHONPATH", "")
@@ -110,7 +110,7 @@ def test_invalid_yaml_blocked_with_message(tmp_path):
     assert result.returncode == 0
     decision = json.loads(result.stdout)
     assert decision["decision"] == "block"
-    assert "vcfops_alerts" in decision["reason"]
+    assert "vcfcf_alerts" in decision["reason"]
 
 
 def test_valid_yaml_silent_pass(tmp_path):
@@ -136,7 +136,7 @@ def test_invalid_managementpack_yaml_blocked_with_message(tmp_path):
     assert result.returncode == 0
     decision = json.loads(result.stdout)
     assert decision["decision"] == "block"
-    assert "vcfops_managementpacks" in decision["reason"]
+    assert "vcfcf_managementpacks" in decision["reason"]
 
 
 def test_valid_managementpack_yaml_silent_pass(tmp_path):
@@ -154,7 +154,7 @@ def test_valid_managementpack_yaml_silent_pass(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_invalid_view_yaml_blocked_with_message(tmp_path):
-    # Views validate whole-corpus via vcfops_dashboards, so a syntactically
+    # Views validate whole-corpus via vcfcf_dashboards, so a syntactically
     # broken file makes the loader fail regardless of which path triggered it.
     root = _build_content_tree(tmp_path)
     views_dir = root / "content" / "views"
@@ -164,7 +164,7 @@ def test_invalid_view_yaml_blocked_with_message(tmp_path):
     assert result.returncode == 0
     decision = json.loads(result.stdout)
     assert decision["decision"] == "block"
-    assert "vcfops_dashboards" in decision["reason"]
+    assert "vcfcf_dashboards" in decision["reason"]
 
 
 def test_valid_view_yaml_silent_pass(tmp_path):

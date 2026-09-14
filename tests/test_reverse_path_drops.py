@@ -43,9 +43,9 @@ LIST_ID = "6b512229-ff2c-490b-8cfb-ae70f3008de0"
 def ported(tmp_path):
     """Run reverse-local on the fixtures; return (source json, rendered
     bundle json, rendered views xml root, view yaml docs)."""
-    from vcfops_extractor.reverse_local import reverse_local_port
-    from vcfops_dashboards.loader import load_dashboard, load_view
-    from vcfops_dashboards.render import render_dashboards_bundle_json, render_views_xml
+    from vcfcf_extractor.reverse_local import reverse_local_port
+    from vcfcf_dashboards.loader import load_dashboard, load_view
+    from vcfcf_dashboards.render import render_dashboards_bundle_json, render_views_xml
 
     (tmp_path / "xml").mkdir(); (tmp_path / "sm").mkdir()
     (tmp_path / "xml" / "content.xml").write_text(VIEWS_FX.read_text())
@@ -93,8 +93,8 @@ def test_scoreboard_showdt_rounddecimals_refreshcontent_round_trip(ported):
 
 
 def test_reverse_yaml_carries_the_fields(tmp_path):
-    from vcfops_dashboards.reverse import parse_dashboard_json
-    from vcfops_extractor.extractor import _widget_to_yaml_dict
+    from vcfcf_dashboards.reverse import parse_dashboard_json
+    from vcfcf_extractor.extractor import _widget_to_yaml_dict
 
     fx = json.loads(DASH_FX.read_text())
     dj = dict(fx["dashboards"][0]); dj["entries"] = fx["entries"]
@@ -108,7 +108,7 @@ def test_reverse_yaml_carries_the_fields(tmp_path):
 
 
 def test_loader_round_decimals_null_vs_absent(tmp_path):
-    from vcfops_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.loader import load_dashboard
 
     def _load(extra):
         p = tmp_path / f"{len(extra)}.yaml"
@@ -124,7 +124,7 @@ def test_loader_round_decimals_null_vs_absent(tmp_path):
 
 
 def test_chart_view_items_rejected_off_view(tmp_path):
-    from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+    from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     p = tmp_path / "d.yaml"
     p.write_text(yaml.dump({"name": "[VCF Content Factory] X", "widgets": [{
@@ -163,7 +163,7 @@ def test_list_view_hide_object_name_round_trip(ported):
 
 
 def test_reverse_py_viewdef_carries_forecast_and_hide():
-    from vcfops_dashboards.reverse import parse_view_from_content_xml
+    from vcfcf_dashboards.reverse import parse_view_from_content_xml
 
     raw = VIEWS_FX.read_bytes()
     trend = parse_view_from_content_xml(raw, TREND_ID)
@@ -176,7 +176,7 @@ def test_reverse_py_viewdef_carries_forecast_and_hide():
 def test_extractor_trend_column_has_no_joined_transformation():
     """Regression: the extractor used to join a multi-item transformations
     list into "NONE,TREND,FORECAST" and write it as a per-column value."""
-    from vcfops_extractor.extractor import _parse_view_def_element
+    from vcfcf_extractor.extractor import _parse_view_def_element
 
     root = ET.fromstring(VIEWS_FX.read_bytes())
     d = _parse_view_def_element(_viewdef(root, TREND_ID))
@@ -187,8 +187,8 @@ def test_extractor_trend_column_has_no_joined_transformation():
 
 
 def test_defaults_unchanged(tmp_path):
-    from vcfops_dashboards.loader import load_view
-    from vcfops_dashboards.render import _render_view_def_fragment
+    from vcfcf_dashboards.loader import load_view
+    from vcfcf_dashboards.render import _render_view_def_fragment
 
     p = tmp_path / "v.yaml"
     p.write_text(yaml.dump({"name": "[VCF Content Factory] V", "data_type": "trend",

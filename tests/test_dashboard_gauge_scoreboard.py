@@ -16,8 +16,8 @@ FIXTURE = Path(__file__).parent / "fixtures" / "dashboards" / "gauge_scoreboard.
 
 
 def _render_fixture(tmp_path: Path) -> dict:
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     # Copy so the loader's id-minting can never touch the checked-in file.
     src = tmp_path / FIXTURE.name
@@ -50,8 +50,8 @@ def test_gauge_fixture_wire_shape(tmp_path):
 
 
 def test_max_value_unset_keeps_empty_string(tmp_path):
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     text = FIXTURE.read_text().replace("        max_value: 100\n", "").replace("        max_value: 99.5\n", "")
     p = tmp_path / "no_max.yaml"
@@ -64,8 +64,8 @@ def test_max_value_unset_keeps_empty_string(tmp_path):
 
 
 def test_non_gauge_omits_gauge_switches_and_defaults_fixed_view(tmp_path):
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     text = (FIXTURE.read_text()
             .replace("visual_theme: 9", "visual_theme: 8")
@@ -83,7 +83,7 @@ def test_non_gauge_omits_gauge_switches_and_defaults_fixed_view(tmp_path):
 
 @pytest.mark.parametrize("theme", [0, 10, -1])
 def test_visual_theme_range(tmp_path, theme):
-    from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+    from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     p = tmp_path / "theme.yaml"
     p.write_text(FIXTURE.read_text().replace("visual_theme: 9", f"visual_theme: {theme}"))
@@ -92,7 +92,7 @@ def test_visual_theme_range(tmp_path, theme):
 
 
 def test_layout_mode_enum(tmp_path):
-    from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+    from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     p = tmp_path / "lm.yaml"
     p.write_text(FIXTURE.read_text().replace("layout_mode: floatingView", "layout_mode: sideways"))
@@ -101,7 +101,7 @@ def test_layout_mode_enum(tmp_path):
 
 
 def test_max_value_must_be_numeric(tmp_path):
-    from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+    from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     p = tmp_path / "bad.yaml"
     p.write_text(FIXTURE.read_text().replace("max_value: 100", 'max_value: "100"'))

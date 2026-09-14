@@ -69,7 +69,7 @@ sibling; meta-structures (`bundles/`, `releases/`) at top-level too:
   decomposition would erase that signal.
 - **Top-level is uncluttered but explicit.** Four content-related
   directories at root, each with a single job. Framework
-  infrastructure (`src/vcfops_*/`, `reference/docs/`, `context/`, `designs/`,
+  infrastructure (`src/vcfcf_*/`, `reference/docs/`, `context/`, `designs/`,
   `scripts/`, `tests/`, etc.) sits alongside.
 - **Symmetric type subdirs WHERE the structure repeats.** Inside
   `content/` and inside any `third_party/<project>/`, the type words
@@ -129,7 +129,7 @@ author: Ryan Pletka, Brock Peterson, Joe Tietz, Geoff Shukin, Scott Bowe
 license: MIT
 source:
   captured_at: '2026-04-17'
-  origin: extracted via vcfops_extractor
+  origin: extracted via vcfcf_extractor
   upstream: <optional URL or repo>
 description: >
   Short elevator pitch. Long-form lives in the project's README/DESCRIPTION.md.
@@ -197,9 +197,9 @@ Out of scope for v3.
 
 Substantial scope. Bundle into a coherent rollout:
 
-1. **Loaders** (`vcfops_supermetrics`, `vcfops_dashboards`,
-   `vcfops_customgroups`, `vcfops_symptoms`, `vcfops_alerts`,
-   `vcfops_reports`, `vcfops_managementpacks`) — extend each loader's
+1. **Loaders** (`vcfcf_supermetrics`, `vcfcf_dashboards`,
+   `vcfcf_customgroups`, `vcfcf_symptoms`, `vcfcf_alerts`,
+   `vcfcf_reports`, `vcfcf_managementpacks`) — extend each loader's
    discovery to scan `content/<type>/` AND
    `third_party/*/<type>/`. Resolve attribution by walking up
    to the nearest `PROJECT.yaml`.
@@ -210,18 +210,18 @@ Substantial scope. Bundle into a coherent rollout:
    other projects across third-party boundaries — third-party should be
    self-contained, factory may share factory-only deps).
 
-3. **Walker** (`src/vcfops_common/dep_walker`) — the dependency walker
+3. **Walker** (`src/vcfcf_common/dep_walker`) — the dependency walker
    gains awareness of project scope. When walking a third-party
    dashboard's deps, prefer same-project resolution; only fall back to
    factory roots if the dependency is documented as a cross-link
    (uncommon).
 
-4. **Release CLI** (`vcfops_packaging release`) — type-first lookup
+4. **Release CLI** (`vcfcf_packaging release`) — type-first lookup
    across both provenances. Slug uniqueness enforced. Resolved path
    drives the release manifest's `headline.source`. Manifests land in
    `releases/`.
 
-5. **New `/bundle` CLI** (`vcfops_packaging bundle`) — interactive
+5. **New `/bundle` CLI** (`vcfcf_packaging bundle`) — interactive
    composer. Validates picks against discovered components. Output:
    `bundles/<slug>.yaml`.
 

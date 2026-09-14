@@ -27,10 +27,10 @@ venv/
 dist/
 
 # MPB adapter runtime JARs (bootstrap externally from a reference .pak;
-# see src/vcfops_managementpacks/README.md for instructions). Not distributed
+# see src/vcfcf_managementpacks/README.md for instructions). Not distributed
 # via the repo — these are VMware/Broadcom runtime binaries.
-src/vcfops_managementpacks/adapter_runtime/
-src/vcfops_managementpacks/adapter_runtime.stubs.bak/
+src/vcfcf_managementpacks/adapter_runtime/
+src/vcfcf_managementpacks/adapter_runtime.stubs.bak/
 
 # Local clones of external reference sources (see knowledge/context/reference_sources.md)
 /reference/references/

@@ -76,7 +76,7 @@ stores a fingerprint value per cluster and **rejects any import
 whose marker filename doesn't match** — returns `INVALID_FILE_FORMAT`
 with no details. Observed: on this lab instance the valid marker is
 `6844548499441080431L.v1`. Using `time.time_ns() + "L.v1"` or any
-other value makes every import fail. The `vcfops_dashboards.client`
+other value makes every import fail. The `vcfcf_dashboards.client`
 module already handles this via `discover_marker_filename()` — it
 triggers a throwaway `SUPER_METRICS` export, downloads the zip, and
 reads the `*L.v1` entry name. Anyone hand-testing envelope imports
@@ -109,7 +109,7 @@ the *currently authenticated admin user*. Whatever string we put in
 the inner JSON's `userId` / `lastUpdateUserId` is thrown away. The
 nil UUID `00000000-0000-0000-0000-000000000000` is a good stub
 because it's obviously non-functional and matches the builder's
-current behavior (`src/vcfops_packaging/builder.py::_build_dashboard_dropin_zip`).
+current behavior (`src/vcfcf_packaging/builder.py::_build_dashboard_dropin_zip`).
 `"PLACEHOLDER_USER_ID"` as a literal string also works but looks
 wrong and may confuse admins who inspect the inner JSON.
 
@@ -129,7 +129,7 @@ Dashboard-<name>.zip
 ```
 
 The builder currently writes exactly this (see
-`src/vcfops_packaging/builder.py::_build_dashboard_dropin_zip`). No
+`src/vcfcf_packaging/builder.py::_build_dashboard_dropin_zip`). No
 changes needed beyond keeping the nil UUID swap.
 
 ### Reports drop-in shape
@@ -294,7 +294,7 @@ were successfully deleted.
 ## Recommendations for the distribution package refactor
 
 1. **`Dashboard.zip`** — no changes. The builder's current code at
-   `src/vcfops_packaging/builder.py::_build_dashboard_dropin_zip` (which
+   `src/vcfcf_packaging/builder.py::_build_dashboard_dropin_zip` (which
    substitutes `NIL_UUID` for `PLACEHOLDER_USER_ID` and adds
    resource stubs) is exactly right. Document that the inner user
    IDs are intentional stubs and will be rewritten at import.

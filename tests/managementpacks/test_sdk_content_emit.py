@@ -21,12 +21,12 @@ from typing import List
 
 import pytest
 
-from vcfops_managementpacks.sdk_builder import (
+from vcfcf_managementpacks.sdk_builder import (
     SdkBuildError,
     _load_bundled_content,
     _write_outer_pak,
 )
-from vcfops_managementpacks.sdk_project import SdkProjectDef
+from vcfcf_managementpacks.sdk_project import SdkProjectDef
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +37,7 @@ from vcfops_managementpacks.sdk_project import SdkProjectDef
 def _make_project(
     name: str = "Test Adapter", adapter_kind: str = "test_adapter"
 ) -> SdkProjectDef:
-    from vcfops_managementpacks.sdk_project import _derive_entry_class
+    from vcfcf_managementpacks.sdk_project import _derive_entry_class
 
     return SdkProjectDef(
         name=name,
@@ -209,7 +209,7 @@ class TestSuperMetricEmit:
         sm_path = project_dir / "supermetrics" / "test_sm.yaml"
         _write_yaml(sm_path, _SM_YAML)
 
-        from vcfops_supermetrics.loader import load_file
+        from vcfcf_supermetrics.loader import load_file
 
         sm = load_file(sm_path, enforce_framework_prefix=False)
         project = _make_project()
@@ -235,7 +235,7 @@ class TestSuperMetricEmit:
         sm_path = project_dir / "supermetrics" / "test_sm.yaml"
         _write_yaml(sm_path, _SM_YAML)
 
-        from vcfops_supermetrics.loader import load_file
+        from vcfcf_supermetrics.loader import load_file
 
         sm = load_file(sm_path, enforce_framework_prefix=False)
         project = _make_project()
@@ -266,7 +266,7 @@ class TestSuperMetricEmit:
         sm_path = project_dir / "supermetrics" / "test_sm.yaml"
         _write_yaml(sm_path, _SM_YAML)
 
-        from vcfops_supermetrics.loader import load_file
+        from vcfcf_supermetrics.loader import load_file
 
         sm = load_file(sm_path, enforce_framework_prefix=False)
         project = _make_project()
@@ -315,8 +315,8 @@ class TestViewSmCrossRefResolution:
         view_path = project_dir / "views" / "test_view.yaml"
         _write_yaml(view_path, _VIEW_YAML)
 
-        from vcfops_supermetrics.loader import load_file as load_sm
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_supermetrics.loader import load_file as load_sm
+        from vcfcf_dashboards.loader import load_view
 
         sm = load_sm(sm_path, enforce_framework_prefix=False)
         view = load_view(view_path)
@@ -344,8 +344,8 @@ class TestViewSmCrossRefResolution:
         view_path = project_dir / "views" / "test_view.yaml"
         _write_yaml(view_path, _VIEW_YAML)
 
-        from vcfops_supermetrics.loader import load_file as load_sm
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_supermetrics.loader import load_file as load_sm
+        from vcfcf_dashboards.loader import load_view
 
         sm = load_sm(sm_path, enforce_framework_prefix=False)
         view = load_view(view_path)
@@ -388,7 +388,7 @@ class TestSymptomEmit:
         sym_path = project_dir / "symptoms" / "test_symptom.yaml"
         _write_yaml(sym_path, _SYMPTOM_YAML)
 
-        from vcfops_symptoms.loader import load_file
+        from vcfcf_symptoms.loader import load_file
 
         sym = load_file(sym_path, enforce_framework_prefix=False)
         project = _make_project()
@@ -413,7 +413,7 @@ class TestSymptomEmit:
         sym_path = project_dir / "symptoms" / "test_symptom.yaml"
         _write_yaml(sym_path, _SYMPTOM_YAML)
 
-        from vcfops_symptoms.loader import load_file
+        from vcfcf_symptoms.loader import load_file
 
         sym = load_file(sym_path, enforce_framework_prefix=False)
         project = _make_project()
@@ -451,7 +451,7 @@ class TestSymptomEmit:
         sym_path = project_dir / "symptoms" / "test_symptom.yaml"
         _write_yaml(sym_path, _SYMPTOM_YAML_WITH_UUID)
 
-        from vcfops_symptoms.loader import load_file
+        from vcfcf_symptoms.loader import load_file
 
         sym = load_file(sym_path, enforce_framework_prefix=False)
         assert sym.id == _SYMPTOM_UUID, f"Expected id={_SYMPTOM_UUID!r}; got {sym.id!r}"
@@ -485,7 +485,7 @@ class TestSymptomEmit:
         sym_path = project_dir / "symptoms" / "test_symptom.yaml"
         _write_yaml(sym_path, _SYMPTOM_YAML)  # no id: field
 
-        from vcfops_symptoms.loader import load_file
+        from vcfcf_symptoms.loader import load_file
 
         sym = load_file(sym_path, enforce_framework_prefix=False)
         assert sym.id is None, f"Expected id=None for symptom without id: field; got {sym.id!r}"
@@ -518,8 +518,8 @@ class TestSymptomEmit:
         alert_path = project_dir / "alerts" / "test_alert.yaml"
         _write_yaml(alert_path, _ALERT_YAML)
 
-        from vcfops_symptoms.loader import load_file as load_sym
-        from vcfops_alerts.loader import load_file as load_alert
+        from vcfcf_symptoms.loader import load_file as load_sym
+        from vcfcf_alerts.loader import load_file as load_alert
 
         sym = load_sym(sym_path, enforce_framework_prefix=False)
         alert = load_alert(alert_path, enforce_framework_prefix=False)
@@ -557,7 +557,7 @@ class TestSymptomEmit:
         sym_path = project_dir / "symptoms" / "test_symptom.yaml"
         _write_yaml(sym_path, _SYMPTOM_YAML)
 
-        from vcfops_symptoms.loader import load_file
+        from vcfcf_symptoms.loader import load_file
 
         sym = load_file(sym_path, enforce_framework_prefix=False)
         project = _make_project()
@@ -593,8 +593,8 @@ class TestAlertEmit:
         alert_path = project_dir / "alerts" / "test_alert.yaml"
         _write_yaml(alert_path, _ALERT_YAML)
 
-        from vcfops_symptoms.loader import load_file as load_sym
-        from vcfops_alerts.loader import load_file as load_alert
+        from vcfcf_symptoms.loader import load_file as load_sym
+        from vcfcf_alerts.loader import load_file as load_alert
 
         sym = load_sym(sym_path, enforce_framework_prefix=False)
         alert = load_alert(alert_path, enforce_framework_prefix=False)
@@ -624,8 +624,8 @@ class TestAlertEmit:
         alert_path = project_dir / "alerts" / "test_alert.yaml"
         _write_yaml(alert_path, _ALERT_YAML)
 
-        from vcfops_symptoms.loader import load_file as load_sym
-        from vcfops_alerts.loader import load_file as load_alert
+        from vcfcf_symptoms.loader import load_file as load_sym
+        from vcfcf_alerts.loader import load_file as load_alert
 
         sym = load_sym(sym_path, enforce_framework_prefix=False)
         alert = load_alert(alert_path, enforce_framework_prefix=False)
@@ -656,8 +656,8 @@ class TestAlertEmit:
         alert_path = project_dir / "alerts" / "test_alert.yaml"
         _write_yaml(alert_path, _ALERT_YAML)
 
-        from vcfops_symptoms.loader import load_file as load_sym
-        from vcfops_alerts.loader import load_file as load_alert
+        from vcfcf_symptoms.loader import load_file as load_sym
+        from vcfcf_alerts.loader import load_file as load_alert
 
         sym = load_sym(sym_path, enforce_framework_prefix=False)
         alert = load_alert(alert_path, enforce_framework_prefix=False)
@@ -727,7 +727,7 @@ class TestAlertMissingSymptomGuard:
         alert_path = project_dir / "alerts" / "test_alert.yaml"
         _write_yaml(alert_path, _ALERT_YAML)
 
-        from vcfops_alerts.loader import load_file as load_alert
+        from vcfcf_alerts.loader import load_file as load_alert
 
         alert = load_alert(alert_path, enforce_framework_prefix=False)
 
@@ -750,7 +750,7 @@ class TestAlertMissingSymptomGuard:
         alert_path = project_dir / "alerts" / "test_alert.yaml"
         _write_yaml(alert_path, _ALERT_YAML)
 
-        from vcfops_alerts.loader import load_file as load_alert
+        from vcfcf_alerts.loader import load_file as load_alert
 
         alert = load_alert(alert_path, enforce_framework_prefix=False)
 
@@ -779,8 +779,8 @@ class TestAlertMissingSymptomGuard:
         alert_path = project_dir / "alerts" / "test_alert.yaml"
         _write_yaml(alert_path, _ALERT_YAML)
 
-        from vcfops_symptoms.loader import load_file as load_sym
-        from vcfops_alerts.loader import load_file as load_alert
+        from vcfcf_symptoms.loader import load_file as load_sym
+        from vcfcf_alerts.loader import load_file as load_alert
 
         sym = load_sym(sym_path, enforce_framework_prefix=False)
         alert = load_alert(alert_path, enforce_framework_prefix=False)
@@ -832,10 +832,10 @@ class TestFullCombinedPak:
         cf_dir.mkdir(parents=True)
         (cf_dir / "esxi_settings.xml").write_text("<settings/>", encoding="utf-8")
 
-        from vcfops_supermetrics.loader import load_file as load_sm
-        from vcfops_dashboards.loader import load_view
-        from vcfops_symptoms.loader import load_file as load_sym
-        from vcfops_alerts.loader import load_file as load_alert
+        from vcfcf_supermetrics.loader import load_file as load_sm
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_symptoms.loader import load_file as load_sym
+        from vcfcf_alerts.loader import load_file as load_alert
 
         sm = load_sm(sm_path, enforce_framework_prefix=False)
         view = load_view(view_path)
@@ -896,10 +896,10 @@ class TestFullCombinedPak:
         alert_path = project_dir / "alerts" / "test_alert.yaml"
         _write_yaml(alert_path, _ALERT_YAML)
 
-        from vcfops_supermetrics.loader import load_file as load_sm
-        from vcfops_dashboards.loader import load_view
-        from vcfops_symptoms.loader import load_file as load_sym
-        from vcfops_alerts.loader import load_file as load_alert
+        from vcfcf_supermetrics.loader import load_file as load_sm
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_symptoms.loader import load_file as load_sym
+        from vcfcf_alerts.loader import load_file as load_alert
 
         sm = load_sm(sm_path, enforce_framework_prefix=False)
         view = load_view(view_path)
@@ -940,7 +940,7 @@ class TestFullCombinedPak:
         cf_dir.mkdir(parents=True)
         (cf_dir / "esxi_settings.xml").write_text("<settings/>", encoding="utf-8")
 
-        from vcfops_symptoms.loader import load_file as load_sym
+        from vcfcf_symptoms.loader import load_file as load_sym
 
         sym = load_sym(sym_path, enforce_framework_prefix=False)
         project = _make_project()
@@ -1100,7 +1100,7 @@ class TestSafeNameCollisionDedup:
 
     def test_sm_collision_both_files_present(self, tmp_path: Path) -> None:
         """Two SMs with identical display names → <name>.json and <name>-2.json."""
-        from vcfops_supermetrics.loader import load_file
+        from vcfcf_supermetrics.loader import load_file
 
         project_dir = tmp_path / "adapter"
         sm_a = load_file(
@@ -1142,7 +1142,7 @@ class TestSafeNameCollisionDedup:
 
     def test_symptom_collision_both_files_present(self, tmp_path: Path) -> None:
         """Two symptoms with identical display names → <name>.xml and <name>-2.xml."""
-        from vcfops_symptoms.loader import load_file
+        from vcfcf_symptoms.loader import load_file
 
         project_dir = tmp_path / "adapter"
         sym_a = load_file(
@@ -1182,8 +1182,8 @@ class TestSafeNameCollisionDedup:
 
     def test_alert_collision_both_files_present(self, tmp_path: Path) -> None:
         """Two alerts with identical display names → <name>.xml and <name>-2.xml."""
-        from vcfops_symptoms.loader import load_file as load_sym
-        from vcfops_alerts.loader import load_file as load_alert
+        from vcfcf_symptoms.loader import load_file as load_sym
+        from vcfcf_alerts.loader import load_file as load_alert
 
         project_dir = tmp_path / "adapter"
         sym = load_sym(
@@ -1285,7 +1285,7 @@ class TestSmFormulaResolution:
 
     def test_resolve_sm_crossref_in_formula(self, tmp_path: Path) -> None:
         """Formula with @supermetric:"<name>" emits Super Metric|sm_<uuid> in pak JSON."""
-        from vcfops_supermetrics.loader import load_file
+        from vcfcf_supermetrics.loader import load_file
 
         project_dir = tmp_path / "adapter"
         sm_ref_path = _write_yaml_to(tmp_path / "sm_ref.yaml", _SM_YAML_REF)
@@ -1331,7 +1331,7 @@ class TestSmFormulaResolution:
 
     def test_sm_with_no_crossref_formula_unchanged(self, tmp_path: Path) -> None:
         """SM formula with no @supermetric: token is emitted unchanged."""
-        from vcfops_supermetrics.loader import load_file
+        from vcfcf_supermetrics.loader import load_file
 
         project_dir = tmp_path / "adapter"
         sm_plain_path = _write_yaml_to(tmp_path / "sm_plain2.yaml", _SM_YAML_PLAIN_NOREF)
@@ -1361,7 +1361,7 @@ class TestSmFormulaResolution:
 
     def test_sm_crossref_to_unbundled_sm_raises(self, tmp_path: Path) -> None:
         """SdkBuildError raised when a formula references an SM not in the bundle."""
-        from vcfops_supermetrics.loader import load_file
+        from vcfcf_supermetrics.loader import load_file
 
         project_dir = tmp_path / "adapter"
         sm_consumer_path = _write_yaml_to(tmp_path / "sm_consumer.yaml", _SM_YAML_CONSUMER)
@@ -1388,7 +1388,7 @@ class TestSmFormulaResolution:
 
     def test_already_resolved_token_left_untouched(self, tmp_path: Path) -> None:
         """A formula with Super Metric|sm_<uuid> already present is not double-resolved."""
-        from vcfops_supermetrics.loader import load_file
+        from vcfcf_supermetrics.loader import load_file
 
         already_resolved_yaml = textwrap.dedent(
             f"""\
@@ -1485,8 +1485,8 @@ _REPORT_YAML = textwrap.dedent(
 
 def _load_test_view_and_report(project_dir: Path):
     """Write the report + its referenced view under project_dir and load both."""
-    from vcfops_dashboards.loader import load_view
-    from vcfops_reports.loader import load_file as load_report
+    from vcfcf_dashboards.loader import load_view
+    from vcfcf_reports.loader import load_file as load_report
 
     view_path = project_dir / "views" / "test_report_view.yaml"
     _write_yaml(view_path, _REPORT_VIEW_YAML)
@@ -1690,8 +1690,8 @@ class TestReportSubdirEmission:
         report_path = project_dir / "reports" / "test_report.yaml"
         _write_yaml(report_path, colliding_report_yaml)
 
-        from vcfops_dashboards.loader import load_view
-        from vcfops_reports.loader import load_file as load_report
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_reports.loader import load_file as load_report
 
         view = load_view(view_path)
         report = load_report(
@@ -1747,7 +1747,7 @@ class TestSuperMetricModifiedByUuid:
         sm_path = project_dir / "supermetrics" / "test_sm.yaml"
         _write_yaml(sm_path, _SM_YAML)
 
-        from vcfops_supermetrics.loader import load_file
+        from vcfcf_supermetrics.loader import load_file
 
         sm = load_file(sm_path, enforce_framework_prefix=False)
         project = _make_project()

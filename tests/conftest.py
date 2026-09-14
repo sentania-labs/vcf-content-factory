@@ -67,8 +67,8 @@ def _bound_env_discovery_to_tmp(monkeypatch, tmp_path_factory):
     if src not in sys.path:
         sys.path.insert(0, src)
     try:
-        from vcfops_common import doctor as _doctor
-        from vcfops_common import setup_credentials as _setup
+        from vcfcf_common import doctor as _doctor
+        from vcfcf_common import setup_credentials as _setup
     except ImportError:  # pragma: no cover - defensive
         return
 

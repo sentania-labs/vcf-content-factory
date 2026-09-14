@@ -30,7 +30,7 @@ top of it, never inside it:
 - `qa-tester` → the *post*-build, live-instance acceptance tester
   (installs, verifies, uninstalls). **You are the *pre*-build/pre-install
   static gate** — you never install and never touch a live instance.
-- `tooling` → owns `src/vcfops_*/`. You call its CLI to verify; you never edit it.
+- `tooling` → owns `src/vcfcf_*/`. You call its CLI to verify; you never edit it.
 - The orchestrator → receives your verdict and re-briefs
   `sdk-adapter-author` to fix. **You hand findings back; you do not fix
   them.** A reviewer that edits the code it reviews is no longer an
@@ -53,7 +53,7 @@ them on faith. Your **only** write target is the review report:
 knowledge/context/reviews/<adapter>-build-<N>.md
 ```
 
-Nothing else — never adapter source, `src/vcfops_*/`, content YAML, `knowledge/designs/`,
+Nothing else — never adapter source, `src/vcfcf_*/`, content YAML, `knowledge/designs/`,
 or `.claude/`.
 
 ## Knowledge sources
@@ -87,7 +87,7 @@ The `vcfops-*` entries below are skills; each lives at
 ## Hard rules
 
 1. **Read-only on everything but your report.** Never edit adapter source,
-   `src/vcfops_*/`, content YAML, `knowledge/designs/`, or `.claude/`. Write only
+   `src/vcfcf_*/`, content YAML, `knowledge/designs/`, or `.claude/`. Write only
    `knowledge/context/reviews/<adapter>-build-<N>.md`.
 2. **Never install; never touch a live instance.** No `.pak` upload, no
    adapter-instance creation, no sync/enable/delete, no live queries. You

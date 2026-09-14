@@ -19,11 +19,11 @@ from unittest.mock import patch
 
 import pytest
 
-from vcfops_managementpacks.sdk_builder import (
+from vcfcf_managementpacks.sdk_builder import (
     SdkBuildError,
     _write_outer_pak,
 )
-from vcfops_managementpacks.sdk_project import SdkProjectDef
+from vcfcf_managementpacks.sdk_project import SdkProjectDef
 
 
 # ---------------------------------------------------------------------------
@@ -31,7 +31,7 @@ from vcfops_managementpacks.sdk_project import SdkProjectDef
 # ---------------------------------------------------------------------------
 
 def _make_project(name: str = "Test Adapter", adapter_kind: str = "test_adapter") -> SdkProjectDef:
-    from vcfops_managementpacks.sdk_project import _derive_entry_class
+    from vcfcf_managementpacks.sdk_project import _derive_entry_class
     return SdkProjectDef(
         name=name,
         version="1.0.0",

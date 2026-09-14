@@ -63,7 +63,7 @@ _SYM_D = _SYM_A.replace("Sym A", "Sym D")
 
 
 def _load_symptoms(tmp_path: Path) -> list:
-    from vcfops_symptoms.loader import load_file as load_sym
+    from vcfcf_symptoms.loader import load_file as load_sym
 
     names = ["Sym A", "Sym B", "Sym C", "Sym D"]
     bodies = [_SYM_A, _SYM_B, _SYM_C, _SYM_D]
@@ -76,7 +76,7 @@ def _load_symptoms(tmp_path: Path) -> list:
 
 
 def _load_alert(tmp_path: Path, alert_yaml: str):
-    from vcfops_alerts.loader import load_file as load_alert
+    from vcfcf_alerts.loader import load_file as load_alert
 
     p = tmp_path / "alerts" / "test_alert.yaml"
     _write(p, alert_yaml)
@@ -165,7 +165,7 @@ class TestMultiSetWrapping:
         <SymptomSet> child per set (bare ref= for the 1-symptom set,
         <Symptom> children for the 2-symptom set) — matches the vendor
         ESXi Host License Expiring shape byte-for-byte in structure."""
-        from vcfops_alerts.render import render_alert_content_xml
+        from vcfcf_alerts.render import render_alert_content_xml
 
         syms = _load_symptoms(tmp_path)
         alert = _load_alert(tmp_path, _MULTI_SET_ALERT_YAML)
@@ -204,7 +204,7 @@ class TestMultiSetWrapping:
 
     def test_multi_set_xml_parses(self, tmp_path: Path):
         import xml.etree.ElementTree as ET
-        from vcfops_alerts.render import render_alert_content_xml
+        from vcfcf_alerts.render import render_alert_content_xml
 
         syms = _load_symptoms(tmp_path)
         alert = _load_alert(tmp_path, _MULTI_SET_ALERT_YAML)
@@ -219,7 +219,7 @@ class TestSingleSetUnchanged:
     survives import."""
 
     def test_single_symptom_single_set_no_wrapper(self, tmp_path: Path):
-        from vcfops_alerts.render import render_alert_content_xml
+        from vcfcf_alerts.render import render_alert_content_xml
 
         syms = _load_symptoms(tmp_path)
         alert = _load_alert(tmp_path, _SINGLE_SET_ALERT_YAML)
@@ -236,7 +236,7 @@ class TestSingleSetUnchanged:
         """A single set that AND-combines two symptoms must stay a single
         <SymptomSet> with two <Symptom> children — NOT explode into two
         sibling <SymptomSet> elements (the second defect the doc calls out)."""
-        from vcfops_alerts.render import render_alert_content_xml
+        from vcfcf_alerts.render import render_alert_content_xml
 
         syms = _load_symptoms(tmp_path)
         alert = _load_alert(tmp_path, _SINGLE_SET_MULTI_SYMPTOM_ALERT_YAML)

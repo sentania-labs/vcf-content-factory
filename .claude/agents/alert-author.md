@@ -56,7 +56,7 @@ Track-specific examples:
 3. **Never fabricate symptom names or recommendation names.** And
    never create a recommendation that only rephrases an existing one;
    reference the existing one instead.
-4. **Validate:** `python -m vcfops_alerts validate`
+4. **Validate:** `python -m vcfcf_alerts validate`
 5. **Write only under `content/alerts/` and `content/recommendations/`.** No other
    directories.
 6. **Alert IDs are server-assigned.** No `id:` field on alerts.
@@ -158,7 +158,7 @@ itself — those are all either server-derived or alert-side.
 7. Draft alert YAML under `content/alerts/<short_snake_case>.yaml`, with
    `recommendations:` listing all the recommendation names (new
    and existing) with appropriate priority values.
-8. Validate: `python3 -m vcfops_alerts validate`. The validator
+8. Validate: `python3 -m vcfcf_alerts validate`. The validator
    loads all symptoms, alerts, AND recommendations, and resolves
    every alert's `recommendations:` references against the
    recommendation name index. Unresolved references are fatal.

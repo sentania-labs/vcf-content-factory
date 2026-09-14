@@ -566,12 +566,12 @@ keeps `vCommunity|...` attribute paths verbatim** and resource kind
 ### Inventory (from `reference/references/.../content/`)
 | Type | Count | Source dir | Factory loader | Status |
 |---|---|---|---|---|
-| Super metrics | 57 | `supermetrics/*.json` | `vcfops_supermetrics` | **Partial** — see GAP #2 |
-| Dashboards | 13 | `dashboards/*.json` (incl. 1 in `To be used in reports/`) | `vcfops_dashboards` | **Partial** — see GAP #3 |
-| Reports | ~22 | `reports/Report*.xml`, `*vCommunity.xml`, `ESXi*.xml` | `vcfops_reports` | **Gap-heavy** — see GAP #4 |
-| Views | ~9 | `reports/View*.xml` + view-shaped report XML | `vcfops_reports` (views co-located) | **Gap-heavy** — see GAP #4 |
-| Symptoms | 2 | `symptomdefs/*.xml` | `vcfops_symptoms` | **Partial** — see GAP #5 |
-| Alerts | 3 | `alertdefs/*.xml` | `vcfops_alerts` | **Partial** — see GAP #5 |
+| Super metrics | 57 | `supermetrics/*.json` | `vcfcf_supermetrics` | **Partial** — see GAP #2 |
+| Dashboards | 13 | `dashboards/*.json` (incl. 1 in `To be used in reports/`) | `vcfcf_dashboards` | **Partial** — see GAP #3 |
+| Reports | ~22 | `reports/Report*.xml`, `*vCommunity.xml`, `ESXi*.xml` | `vcfcf_reports` | **Gap-heavy** — see GAP #4 |
+| Views | ~9 | `reports/View*.xml` + view-shaped report XML | `vcfcf_reports` (views co-located) | **Gap-heavy** — see GAP #4 |
+| Symptoms | 2 | `symptomdefs/*.xml` | `vcfcf_symptoms` | **Partial** — see GAP #5 |
+| Alerts | 3 | `alertdefs/*.xml` | `vcfcf_alerts` | **Partial** — see GAP #5 |
 | Resources / traversal | 2 | `resources/`, `traversalspecs/` | none | **GAP #6 — DROPPED (OPEN-6 resolved)** |
 
 ### Port pipeline (per artifact)
@@ -611,7 +611,7 @@ a report-input dashboard; port it (OPEN-5 RESOLVED — port everything).
 **GAP #4 — Report & view XML (highest gap risk).** ~22 reports +
 ~9 views in vendor XML (`reportSchema`/`viewSchema`). Reports are noted
 in `reference_sources.md` as "not yet a first-class authoring target."
-The factory has `vcfops_reports`, but the source XML is the VCF Ops
+The factory has `vcfcf_reports`, but the source XML is the VCF Ops
 report-definition schema, not factory report YAML. Per
 `pak-content-bundling`, views go in `content/reports/` in the pak tree
 (not `content/views/`). Per `pak-content-localization-bundles`,
@@ -630,7 +630,7 @@ ports everything.
 (`ESXi Host NIC Disconnected`, `Windows Service Down`), 3 alerts
 (`ESXi Host License Expiring`, `ESXi Host NIC Disconnected`,
 `Windows Service Down`). Vendor `symptomDefinition`/`alertDefinition`
-XML → factory `vcfops_symptoms`/`vcfops_alerts` YAML. `SymptomSets`
+XML → factory `vcfcf_symptoms`/`vcfcf_alerts` YAML. `SymptomSets`
 needs ≥2 children (`pak-content-bundling`). These reference
 `vCommunity|` keys (NIC `Status`, service `Service Status`) and the
 `Remaining Days` licensing metric — keep refs verbatim. The "Windows

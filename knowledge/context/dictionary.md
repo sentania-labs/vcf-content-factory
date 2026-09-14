@@ -42,7 +42,7 @@ Components and/or Bundles.
 headline (a Bundle or a Component), containing native Ops
 artifacts (content-zip payloads, `.pak` files, etc.) plus
 install/uninstall scripts. What a user downloads and runs. Built
-by `vcfops_packaging`. Lands in the Distribution repo at a path
+by `vcfcf_packaging`. Lands in the Distribution repo at a path
 determined by the headline's type and `factory_native` flag.
 
 *Distinct from:* Bundle (source-side grouping), Release (the
@@ -81,7 +81,7 @@ do this.
 
 ### Extract
 Reverse flow: live Ops content → YAML → Bundle. The
-`vcfops_extractor` path does this. Used when a useful thing
+`vcfcf_extractor` path does this. Used when a useful thing
 already exists in an instance and we want to bring it into the
 factory as a third-party bundle.
 
@@ -107,8 +107,8 @@ all achieve it (see below).
 
 ### Tooling install
 Install performed by the factory's own CLIs —
-`content-installer` driving `python3 -m vcfops_supermetrics sync`,
-`vcfops_dashboards sync`, etc. — directly against a live
+`content-installer` driving `python3 -m vcfcf_supermetrics sync`,
+`vcfcf_dashboards sync`, etc. — directly against a live
 instance. Caller is the repo. Requires this working tree
 checked out. Used during authoring, QA, and lab validation.
 Bypasses the Package entirely — reads Source, renders in
@@ -118,7 +118,7 @@ memory, pushes via REST.
 Install performed by the `install.py` / `install.ps1` scripts
 that ship *inside* a Package. Caller is an end user on their
 own machine. Requires only the unzipped Package — no repo, no
-vcfops_* Python modules. This is the user-facing install path.
+vcfcf_* Python modules. This is the user-facing install path.
 
 ### Manual install
 Install performed by an admin hand-dragging Drop-in artifacts
@@ -132,9 +132,9 @@ execution).
 The `install.py` and `install.ps1` files inside a Package —
 the drop-in executables a user runs to perform a Package
 install. Plural because we ship one per supported OS/runtime.
-Generated from templates in `src/vcfops_packaging/templates/`.
+Generated from templates in `src/vcfcf_packaging/templates/`.
 
-*Distinct from:* Tooling install (which uses the `vcfops_*`
+*Distinct from:* Tooling install (which uses the `vcfcf_*`
 Python modules directly, not these scripts).
 
 ### Recon
@@ -189,7 +189,7 @@ The orchestrated operation that takes every Release manifest in
 `releases/`, builds its headline zips, copies them to the
 correct subdirectory in the Distribution repo, regenerates the
 catalog README between AUTO markers, commits, and pushes. Driven
-by `python3 -m vcfops_packaging publish` (or the `/publish`
+by `python3 -m vcfcf_packaging publish` (or the `/publish`
 slash command). Idempotent — content-hash compare skips zips
 that haven't changed.
 
@@ -217,7 +217,7 @@ plus a `ThirdPartyContent/` subtree for third-party content and
 A Bundle (or Component) carries `factory_native: true` (default)
 or `factory_native: false`. Factory-native content was authored
 in this repo by the factory's own agents. Third-party content
-was extracted from a live instance via `vcfops_extractor` and is
+was extracted from a live instance via `vcfcf_extractor` and is
 maintained here as a redistribution wrapper — original authors
 hold the rights; the factory's value-add is the install /
 uninstall machinery and dependency walking.
@@ -288,7 +288,7 @@ is what we decided to build.
 ### Manifest
 The bundle YAML under `bundles/`. Declares which Source files
 belong in a Bundle, plus packaging metadata (name, version,
-attribution). Input to `vcfops_packaging build`.
+attribution). Input to `vcfcf_packaging build`.
 
 *Distinct from:* Design/Plan (upstream, human intent) and
 Bundle (the YAML collection the manifest references).

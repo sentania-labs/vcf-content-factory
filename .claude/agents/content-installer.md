@@ -1,6 +1,6 @@
 ---
 name: content-installer
-description: Manages import/export/enable of VCF Ops content on a live instance, and installs built .pak files (Tier 1 MPB and Tier 2 SDK dev-preview paks) via the vcfops_managementpacks CLI. Handles sync, enable, verify, backup, and pak install/verification. The plumbing agent for getting authored content and built paks onto an instance.
+description: Manages import/export/enable of VCF Ops content on a live instance, and installs built .pak files (Tier 1 MPB and Tier 2 SDK dev-preview paks) via the vcfcf_managementpacks CLI. Handles sync, enable, verify, backup, and pak install/verification. The plumbing agent for getting authored content and built paks onto an instance.
 model: sonnet
 tools: Read, Grep, Glob, Bash, ToolSearch, mcp__playwright__browser_navigate, mcp__playwright__browser_navigate_back, mcp__playwright__browser_snapshot, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_click, mcp__playwright__browser_type, mcp__playwright__browser_fill_form, mcp__playwright__browser_press_key, mcp__playwright__browser_hover, mcp__playwright__browser_select_option, mcp__playwright__browser_wait_for, mcp__playwright__browser_tabs, mcp__playwright__browser_resize, mcp__playwright__browser_handle_dialog, mcp__playwright__browser_console_messages, mcp__playwright__browser_close
 ---
@@ -33,29 +33,29 @@ The `vcfops-*` entries below are skills; each lives at
 
 ```bash
 # Validate (always first)
-python3 -m vcfops_supermetrics validate
-python3 -m vcfops_dashboards validate
-python3 -m vcfops_customgroups validate
-python3 -m vcfops_symptoms validate
-python3 -m vcfops_alerts validate
-python3 -m vcfops_reports validate
+python3 -m vcfcf_supermetrics validate
+python3 -m vcfcf_dashboards validate
+python3 -m vcfcf_customgroups validate
+python3 -m vcfcf_symptoms validate
+python3 -m vcfcf_alerts validate
+python3 -m vcfcf_reports validate
 
 # Sync
-python3 -m vcfops_supermetrics sync [file]
-python3 -m vcfops_dashboards sync
-python3 -m vcfops_customgroups sync
-python3 -m vcfops_symptoms sync
-python3 -m vcfops_alerts sync
-python3 -m vcfops_reports sync
+python3 -m vcfcf_supermetrics sync [file]
+python3 -m vcfcf_dashboards sync
+python3 -m vcfcf_customgroups sync
+python3 -m vcfcf_symptoms sync
+python3 -m vcfcf_alerts sync
+python3 -m vcfcf_reports sync
 
 # Enable (Default Policy)
-python3 -m vcfops_supermetrics enable [file]
+python3 -m vcfcf_supermetrics enable [file]
 
 # List / Delete
-python3 -m vcfops_supermetrics list|delete "<name>"
-python3 -m vcfops_customgroups list|list-types|delete "<name>"
-python3 -m vcfops_symptoms list
-python3 -m vcfops_alerts list
+python3 -m vcfcf_supermetrics list|delete "<name>"
+python3 -m vcfcf_customgroups list|list-types|delete "<name>"
+python3 -m vcfcf_symptoms list
+python3 -m vcfcf_alerts list
 ```
 
 ## Management pack (.pak) installs
@@ -65,7 +65,7 @@ You are the roster-designated owner of pak installs (CLAUDE.md:
 builder"). Surface:
 
 ```bash
-python3 -m vcfops_managementpacks install <pak-path> --profile <profile> [--skip-ssl-verify]
+python3 -m vcfcf_managementpacks install <pak-path> --profile <profile> [--skip-ssl-verify]
 ```
 
 Rules for pak installs:
@@ -132,7 +132,7 @@ A dashboard whose YAML declares `summary_for` (one `"<AdapterKind>:<ResourceKind
 string, a comma-separated string, or a YAML list of them) is meant to render
 on the Summary tab of every listed object type. Content-zip imports cannot
 carry the binding, so after `sync` succeeds run
-`python3 -m vcfops_dashboards bind-summary --profile <p> [--dashboard "<name>"]`
+`python3 -m vcfcf_dashboards bind-summary --profile <p> [--dashboard "<name>"]`
 (use `--dry-run` first). It resolves the installed dashboard by name, writes
 the association for every listed kind in one call, reads each back, and
 prints one `LIVE tabId` / template UUID line per kind; record every UUID in

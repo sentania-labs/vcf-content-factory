@@ -10,7 +10,7 @@ Covers:
   3. Invalid stanza (unknown key, missing required field, bad direction
      value) → raises a clear validation error, surfaced identically by
      docs-gen and by validate-sdk (both go through
-     vcfops_managementpacks.sdk_project._parse_cross_mp_edges /
+     vcfcf_managementpacks.sdk_project._parse_cross_mp_edges /
      SdkProjectError).
 """
 from __future__ import annotations
@@ -20,14 +20,14 @@ from pathlib import Path
 
 import pytest
 
-from vcfops_managementpacks.docs_gen import (
+from vcfcf_managementpacks.docs_gen import (
     DocsGenError,
     build_doc_model,
     generate_docset,
     generate_inventory_tree_md,
     generate_readme_md,
 )
-from vcfops_managementpacks.sdk_project import SdkProjectError
+from vcfcf_managementpacks.sdk_project import SdkProjectError
 
 
 _DESCRIBE_XML = """<?xml version="1.0" encoding="UTF-8"?>

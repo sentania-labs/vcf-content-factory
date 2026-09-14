@@ -1,7 +1,7 @@
 """Section widget: loader, validation, and wire shape.
 
 Wire shape is the Suite API export form (see ``SectionConfig`` in
-``vcfops_dashboards/loader.py`` and
+``vcfcf_dashboards/loader.py`` and
 knowledge/context/api-surface/dashboard_widgets_alertvolume_section_viewdetails.md
 §3): a full-width (12 col), one-row, ``height: 0`` header entry with
 ``collapsed``, plus a config block whose ``widgets[]`` list is the
@@ -38,8 +38,8 @@ def _rl(local_id: str, y: int, title: str = "VMs") -> dict:
 
 
 def _render(tmp_path: Path, dash: dict) -> dict:
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     d = load_dashboard(_write(tmp_path / "dashboards" / "d.yaml", dash))
     d.validate({})
@@ -135,7 +135,7 @@ class TestSectionWire:
     @pytest.mark.parametrize("x", [0, 2, 5, 12])
     def test_section_x_other_than_one_rejected(self, tmp_path, x):
         """w is forced to 12, so any other x overflows the 12-column grid."""
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         with pytest.raises(DashboardValidationError, match="starts at x: 1"):
             load_dashboard(_write(tmp_path / "d.yaml", _base([
@@ -145,7 +145,7 @@ class TestSectionWire:
 
     def test_widget_on_section_row_rejected(self, tmp_path):
         """A data widget on a Section's row would belong to no Section."""
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         with pytest.raises(DashboardValidationError, match="shares row y: 2 with Section 's'"):
             load_dashboard(_write(tmp_path / "d.yaml", _base([
@@ -154,7 +154,7 @@ class TestSectionWire:
             ])))
 
     def test_two_sections_on_one_row_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         with pytest.raises(DashboardValidationError, match="shares row y: 1 with Section"):
             load_dashboard(_write(tmp_path / "d.yaml", _base([
@@ -190,7 +190,7 @@ class TestSectionValidation:
         ("self_provider", True),
     ])
     def test_section_rejects_data_keys(self, tmp_path, bad_key, bad_val):
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         path = _write(tmp_path / "d.yaml", _base([
             {"id": "s", "type": "Section", "title": "S", "coords": {"x": 1, "y": 1},
@@ -200,7 +200,7 @@ class TestSectionValidation:
             load_dashboard(path)
 
     def test_section_rejects_interactions(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         d = load_dashboard(_write(tmp_path / "d.yaml", _base(
             [
@@ -213,7 +213,7 @@ class TestSectionValidation:
             d.validate({})
 
     def test_unknown_member_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         d = load_dashboard(_write(tmp_path / "d.yaml", _base([
             {"id": "s", "type": "Section", "title": "S", "coords": {"x": 1, "y": 1},
@@ -224,7 +224,7 @@ class TestSectionValidation:
             d.validate({})
 
     def test_nested_section_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         d = load_dashboard(_write(tmp_path / "d.yaml", _base([
             {"id": "s1", "type": "Section", "title": "S1", "coords": {"x": 1, "y": 1},
@@ -235,7 +235,7 @@ class TestSectionValidation:
             d.validate({})
 
     def test_collapsed_must_be_bool(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         path = _write(tmp_path / "d.yaml", _base([
             {"id": "s", "type": "Section", "title": "S", "coords": {"x": 1, "y": 1},
@@ -245,7 +245,7 @@ class TestSectionValidation:
             load_dashboard(path)
 
     def test_collapsed_only_on_section(self, tmp_path):
-        from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+        from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
         path = _write(tmp_path / "d.yaml", _base([
             {**_rl("r", 1), "collapsed": True},

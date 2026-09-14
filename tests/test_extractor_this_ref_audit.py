@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from vcfops_extractor.extractor import (
+from vcfcf_extractor.extractor import (
     _sm_formula_refs_for_audit,
     _sm_kinds_for_audit,
 )

@@ -20,7 +20,7 @@ import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from vcfops_packaging.describe import DescribeCache
+from vcfcf_packaging.describe import DescribeCache
 
 
 class TestResolveMetricPropertyDefaultMonitored:

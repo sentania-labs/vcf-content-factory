@@ -166,7 +166,7 @@ debugging a specific issue; not required reading.
 ### `reviews/` — Build and framework review reports
 Point-in-time review records: per-build SDK adapter reviews written by
 `sdk-adapter-reviewer`, and `reviews/framework/` written by
-`framework-reviewer` (the pre-PR gate on `src/vcfops_*/` changes).
+`framework-reviewer` (the pre-PR gate on `src/vcfcf_*/` changes).
 Timestamped records, not living docs.
 
 ### `cleanroom-requests/` — Cleanroom investigation requests

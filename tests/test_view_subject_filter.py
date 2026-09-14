@@ -68,7 +68,7 @@ def _base_view_data(subject_filter) -> dict:
 
 class TestLoader:
     def test_flat_list_wraps_into_single_and_group(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         data = _base_view_data([
             {
@@ -95,7 +95,7 @@ class TestLoader:
         assert cond.is_string_metric is False
 
     def test_nested_list_is_explicit_or_of_and_groups(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         data = _base_view_data([
             [
@@ -123,7 +123,7 @@ class TestLoader:
         assert v.subject_filter[1][0].is_string_metric is True
 
     def test_and_group_multiple_conditions(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         data = _base_view_data([
             {
@@ -145,7 +145,7 @@ class TestLoader:
         assert len(v.subject_filter[0]) == 2
 
     def test_no_filter_is_none(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         data = _base_view_data(None)
         del data["subject"]["filter"]
@@ -160,7 +160,7 @@ class TestLoader:
 
 class TestLoaderValidation:
     def test_invalid_condition_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = _base_view_data([
             {
@@ -175,7 +175,7 @@ class TestLoaderValidation:
             load_view(p, enforce_framework_prefix=False)
 
     def test_invalid_filter_type_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = _base_view_data([
             {
@@ -190,7 +190,7 @@ class TestLoaderValidation:
             load_view(p, enforce_framework_prefix=False)
 
     def test_invalid_transform_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = _base_view_data([
             {
@@ -212,7 +212,7 @@ class TestLoaderValidation:
         true` in the rendered XML. Must now be a loud validation failure,
         not a silent flip.
         """
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = _base_view_data([
             {
@@ -228,7 +228,7 @@ class TestLoaderValidation:
             load_view(p, enforce_framework_prefix=False)
 
     def test_business_hours_quoted_true_string_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = _base_view_data([
             {
@@ -244,7 +244,7 @@ class TestLoaderValidation:
             load_view(p, enforce_framework_prefix=False)
 
     def test_business_hours_unquoted_false_accepted(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         data = _base_view_data([
             {
@@ -260,7 +260,7 @@ class TestLoaderValidation:
         assert v.subject_filter[0][0].business_hours is False
 
     def test_business_hours_unquoted_true_accepted(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         data = _base_view_data([
             {
@@ -279,7 +279,7 @@ class TestLoaderValidation:
         """Sibling-field audit: transform must also reject non-string types
         at load time (previously silently stringified via str(x) rather
         than reported with a clear type error)."""
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = _base_view_data([
             {
@@ -295,7 +295,7 @@ class TestLoaderValidation:
             load_view(p, enforce_framework_prefix=False)
 
     def test_condition_non_string_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = _base_view_data([
             {
@@ -310,7 +310,7 @@ class TestLoaderValidation:
             load_view(p, enforce_framework_prefix=False)
 
     def test_empty_filter_list_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = _base_view_data([])
         p = _write_view(tmp_path, data)
@@ -318,7 +318,7 @@ class TestLoaderValidation:
             load_view(p, enforce_framework_prefix=False)
 
     def test_missing_metric_key_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = _base_view_data([
             {"filter_type": "metrics", "condition": "EQUALS", "value": 1}
@@ -341,8 +341,8 @@ class TestRenderByteExact:
     )
 
     def _render(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         data = _base_view_data([
             {
@@ -398,8 +398,8 @@ class TestRenderByteExact:
         ]
 
     def test_no_filter_emits_no_filter_attribute(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         data = _base_view_data(None)
         del data["subject"]["filter"]

@@ -49,7 +49,7 @@ Track-specific examples:
 2. **Cross-references use names.**
 3. **Section types:** CoverPage, TableOfContents, View, Dashboard.
    Anything else → TOOLSET GAP.
-4. **Validate:** `python -m vcfops_reports validate`
+4. **Validate:** `python -m vcfcf_reports validate`
 5. **Write only under `content/reports/`.**
 6. **Never install.**
 

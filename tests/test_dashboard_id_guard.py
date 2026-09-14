@@ -3,7 +3,7 @@
 Dashboard import identity on VCF Ops is the NAME, not the UUID
 (knowledge/context/api-surface/content_import_skip_semantics.md), so a
 changed id: under an unchanged name: silently orphans the previously
-installed UUID. The guard (src/vcfops_dashboards/id_guard.py) runs in
+installed UUID. The guard (src/vcfcf_dashboards/id_guard.py) runs in
 the validate path and compares each working-tree dashboard YAML against
 git HEAD.
 
@@ -47,8 +47,8 @@ from pathlib import Path
 
 import pytest
 
-from vcfops_dashboards import id_guard
-from vcfops_dashboards.cli import main as dashboards_main
+from vcfcf_dashboards import id_guard
+from vcfcf_dashboards.cli import main as dashboards_main
 
 OLD_ID = "11111111-2222-4333-8444-555555555555"
 NEW_ID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
@@ -262,7 +262,7 @@ def test_mutation_check_guard_disabled_scenario_passes(tmp_path, capsys, monkeyp
     (repo / "content/dashboards/probe.yaml").write_text(
         _dashboard_yaml(NEW_ID, NAME)
     )
-    import vcfops_dashboards.cli as cli_mod
+    import vcfcf_dashboards.cli as cli_mod
     monkeypatch.setattr(
         cli_mod, "check_dashboard_id_stability", lambda _dir, baseline=None: ([], [])
     )

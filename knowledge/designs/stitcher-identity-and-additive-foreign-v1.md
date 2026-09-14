@@ -35,7 +35,7 @@ additive for foreign parents:)
 
 ## Vision
 
-Two framework changes in `vcfops_managementpacks/adapter_framework/`,
+Two framework changes in `vcfcf_managementpacks/adapter_framework/`,
 one tooling round, one buildkit republish. Every SDK adapter (synology,
 unifi, compliance, vcommunity*) inherits both on its next re-pull.
 

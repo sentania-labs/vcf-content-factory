@@ -47,7 +47,7 @@ with mock data, select what to keep, and produce an import bundle.
 | # | What | Where | Gate |
 |---|---|---|---|
 | M0 | Fix the walker and renderer issues below. **Done 2026-09-14**: PRs #155, #156, #157 merged; zips rebuilt, dashboard.json byte-identical across builds | this repo | reviewer, PR |
-| M1 | Rename import namespace `vcfops_*` to the chosen name. Mechanical, no behavior change, one PR | this repo | Scott picks the name; reviewer, PR, factory tag |
+| M1 | Rename import namespace `vcfops_*` to `vcfcf_*`. Mechanical, no behavior change, one PR | this repo | Scott picks the name; reviewer, PR, factory tag |
 | M2 | Carve pure parse/walk/build code into `vcf-cf-tooling-core` with its own `pyproject.toml`; factory imports it in-tree; CI builds and attaches the wheel on a library tag | this repo | one PR per package, reviewer each |
 | M3 | Migrator spec (`knowledge/designs/content-migrator-v1.md`) and repo skeleton: `sentania-labs/vcf-cf-migrator`, gitignored clone plus registry line like SDK adapters, CI with three-OS PyInstaller matrix, empty app that starts and shows the library version | new repo | Scott approves spec and repo creation |
 | M4 | Migrator MVP: load export zip, tree with dependencies, mock preview, select, emit import bundle | new repo | qa pass against a real export |
@@ -68,10 +68,10 @@ All live in code the migrator lifts. Fix under the old names, then rename.
 
 | Issue | Why it blocks | Files |
 |---|---|---|
-| #144 | Dependency walker skips SM to SM references; the migrator tree is built on this walker | `vcfops_common/dep_walker.py`, `vcfops_packaging/discrete_builder.py` |
-| #146 | View-column SM refs with a mis-cased token render blank; same walker family | `vcfops_dashboards/render.py`, `vcfops_packaging/deps.py` |
-| #147 | Widget ids use salted `hash()`, so bundle output differs every run; migrator output must be reproducible | `vcfops_dashboards/render.py` |
-| #143 | Describe cache refresh replaces instead of merges; sits inside the carve-out boundary | `vcfops_packaging/describe.py` |
+| #144 | Dependency walker skips SM to SM references; the migrator tree is built on this walker | `vcfcf_common/dep_walker.py`, `vcfcf_packaging/discrete_builder.py` |
+| #146 | View-column SM refs with a mis-cased token render blank; same walker family | `vcfcf_dashboards/render.py`, `vcfcf_packaging/deps.py` |
+| #147 | Widget ids use salted `hash()`, so bundle output differs every run; migrator output must be reproducible | `vcfcf_dashboards/render.py` |
+| #143 | Describe cache refresh replaces instead of merges; sits inside the carve-out boundary | `vcfcf_packaging/describe.py` |
 
 Parallel plan: three isolated worktrees, split by file ownership.
 #144 alone; #146 plus #147 (and #148's test) together since both edit

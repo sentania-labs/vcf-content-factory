@@ -67,8 +67,8 @@
 #           directory, not the repo root:
 #             i.   literal path from the repo root
 #             ii.  same, with a `.md` or `.py` extension appended (docs
-#                  drop extensions in prose; `vcfops_dashboards/render`
-#                  for `vcfops_dashboards/render.py` is a real example)
+#                  drop extensions in prose; `vcfcf_dashboards/render`
+#                  for `vcfcf_dashboards/render.py` is a real example)
 #             iii. relative to the directory the citing file lives in
 #                  (a `.claude/skills/<skill>/SKILL.md` citing
 #                  `references/foo.md` means ITS OWN `references/`
@@ -117,7 +117,7 @@
 #      rather than reported.
 #   8. .gitignore is a special case: only its COMMENT lines (`#...`) are
 #      scanned for citations. The ignore PATTERNS themselves (e.g.
-#      `vcfops_managementpacks/adapter_runtime/`) are allowed to not
+#      `vcfcf_managementpacks/adapter_runtime/`) are allowed to not
 #      exist — that not-yet-existing is the entire point of a gitignore
 #      pattern, not a dead reference.
 #

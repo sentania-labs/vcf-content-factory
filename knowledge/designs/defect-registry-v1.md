@@ -67,7 +67,7 @@ Decided judgment calls (all four put to Scott; his selections):
     (`knowledge/lessons/setrelationships-foreign-adapter-scoped.md`), recording
     the convergence and demonstrating the closed-entry shape.
 - **Gate surface: rule + factory CLI now; pak-repo CI later.**
-  `vcfops_packaging` gains `defect-gate` (standalone, the dry-run /
+  `vcfcf_packaging` gains `defect-gate` (standalone, the dry-run /
   pre-tag check) and the `release` / `publish` pipelines refuse over
   open blocking defects, naming ids. RULE-012 mandates a passing
   `defect-gate --pak <name>` before any v* tag is pushed to a managed
@@ -89,7 +89,7 @@ reviewer's verdict re-asserts open defects for the pak under review and
   bundle's own `Affects:` token; a bundle's `managementpacks:` field
   holds Tier 1 YAML paths with no reliable mapping to Tier 2 adapter
   names in `managed_paks.md`. Until a lookup lands in
-  `vcfops_packaging`, RULE-012 §3 makes the cascade a manual
+  `vcfcf_packaging`, RULE-012 §3 makes the cascade a manual
   orchestrator duty (`defect-gate --pak <name>` per referenced pak).
 - Candidate third entry: the MOID cross-stitch fix for **compliance**
   was "queued" as of 2026-06-10

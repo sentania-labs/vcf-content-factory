@@ -43,7 +43,7 @@ class TestNormalizeInstancedGroupKey:
         suffix "creator" synthesizes to
         "diskspace:356893|snapshot:snapshot-16|creator" and must normalize
         to "diskspace|snapshot|creator" (the real describe-cache key)."""
-        from vcfops_packaging.deps import _normalize_instanced_group_key
+        from vcfcf_packaging.deps import _normalize_instanced_group_key
 
         synthesized = "diskspace:356893|snapshot:snapshot-16|creator"
         assert _normalize_instanced_group_key(synthesized) == "diskspace|snapshot|creator"
@@ -54,7 +54,7 @@ class TestNormalizeInstancedGroupKey:
         "Edition Key" synthesizes to
         "vCommunity|Licensing:Evaluation Mode|Edition Key" and normalizes
         to "vCommunity|Licensing|Edition Key"."""
-        from vcfops_packaging.deps import _normalize_instanced_group_key
+        from vcfcf_packaging.deps import _normalize_instanced_group_key
 
         synthesized = "vCommunity|Licensing:Evaluation Mode|Edition Key"
         assert (
@@ -86,7 +86,7 @@ class TestNormalizeMetricKeyMatchesInstancedGroupRule:
         """Ref: reviewer W1 table row 1 — a direct-attribute column
         authored as "diskspace:262|snapshot:snapshot-1|used" must normalize
         to the same flat key an instanced_group member column would."""
-        from vcfops_packaging.deps import _normalize_metric_key
+        from vcfcf_packaging.deps import _normalize_metric_key
 
         assert (
             _normalize_metric_key("diskspace:262|snapshot:snapshot-1|used")
@@ -96,7 +96,7 @@ class TestNormalizeMetricKeyMatchesInstancedGroupRule:
     def test_multi_segment_instance_vcommunity_licensing(self):
         """Ref: reviewer W1 table row 2 — instance token on a non-first
         segment ("vCommunity|Licensing:Evaluation Mode|Edition Key")."""
-        from vcfops_packaging.deps import _normalize_metric_key
+        from vcfcf_packaging.deps import _normalize_metric_key
 
         assert (
             _normalize_metric_key("vCommunity|Licensing:Evaluation Mode|Edition Key")
@@ -107,7 +107,7 @@ class TestNormalizeMetricKeyMatchesInstancedGroupRule:
         """Regression: the original single-segment form
         ("net:instance|packetsPerSec") this function always handled must
         still normalize the same way after delegating."""
-        from vcfops_packaging.deps import _normalize_metric_key
+        from vcfcf_packaging.deps import _normalize_metric_key
 
         assert (
             _normalize_metric_key("net:Aggregate of all instances|packetsPerSec")
@@ -117,7 +117,7 @@ class TestNormalizeMetricKeyMatchesInstancedGroupRule:
     def test_non_instanced_key_unchanged(self):
         """Regression: a plain, non-instanced key with no colon anywhere
         must pass through unchanged."""
-        from vcfops_packaging.deps import _normalize_metric_key
+        from vcfcf_packaging.deps import _normalize_metric_key
 
         assert _normalize_metric_key("cpu|usage_average") == "cpu|usage_average"
 
@@ -168,7 +168,7 @@ def _snapshot_style_view_data() -> dict:
 
 class TestRefsFromView:
     def _load_view(self, tmp_path: Path):
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         p = _write_view(tmp_path, _snapshot_style_view_data())
         v = load_view(p, enforce_framework_prefix=False)
@@ -176,7 +176,7 @@ class TestRefsFromView:
         return v
 
     def test_driver_column_still_skipped(self, tmp_path):
-        from vcfops_packaging.deps import _refs_from_view
+        from vcfcf_packaging.deps import _refs_from_view
 
         v = self._load_view(tmp_path)
         refs = _refs_from_view(v)
@@ -185,7 +185,7 @@ class TestRefsFromView:
         assert all(r.metric_key != "Instance Name" for r in refs)
 
     def test_member_column_emits_normalized_reference(self, tmp_path):
-        from vcfops_packaging.deps import _refs_from_view, MetricReference
+        from vcfcf_packaging.deps import _refs_from_view, MetricReference
 
         v = self._load_view(tmp_path)
         refs = _refs_from_view(v)
@@ -199,8 +199,8 @@ class TestRefsFromView:
 
 class TestExtractMetricReferencesIncludesInstancedMembers:
     def test_bundle_level_walk_includes_member_ref(self, tmp_path):
-        from vcfops_dashboards.loader import load_view
-        from vcfops_packaging.deps import extract_metric_references
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_packaging.deps import extract_metric_references
 
         p = _write_view(tmp_path, _snapshot_style_view_data())
         v = load_view(p, enforce_framework_prefix=False)
@@ -239,8 +239,8 @@ class TestAuditFlagsInstancedMemberKey:
         (ak_dir / "VirtualMachine.json").write_text(json.dumps(doc))
 
     def _build_bundle(self, tmp_path: Path, builtin_metric_enables=None):
-        from vcfops_dashboards.loader import load_view
-        from vcfops_packaging.loader import Bundle
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_packaging.loader import Bundle
 
         p = _write_view(tmp_path, _snapshot_style_view_data())
         v = load_view(p, enforce_framework_prefix=False)
@@ -257,8 +257,8 @@ class TestAuditFlagsInstancedMemberKey:
         )
 
     def test_auto_mode_auto_adds_instanced_member_key(self, tmp_path):
-        from vcfops_packaging.audit import audit_bundle_dependencies
-        from vcfops_packaging.describe import DescribeCache
+        from vcfcf_packaging.audit import audit_bundle_dependencies
+        from vcfcf_packaging.describe import DescribeCache
 
         cache_dir = tmp_path / "describe_cache"
         self._seed_cache(cache_dir)
@@ -272,8 +272,8 @@ class TestAuditFlagsInstancedMemberKey:
         assert ("VMWARE", "VirtualMachine", "diskspace|snapshot|creator") in keys
 
     def test_strict_mode_fails_when_undeclared(self, tmp_path):
-        from vcfops_packaging.audit import audit_bundle_dependencies, AuditError
-        from vcfops_packaging.describe import DescribeCache
+        from vcfcf_packaging.audit import audit_bundle_dependencies, AuditError
+        from vcfcf_packaging.describe import DescribeCache
 
         cache_dir = tmp_path / "describe_cache"
         self._seed_cache(cache_dir)
@@ -287,9 +287,9 @@ class TestAuditFlagsInstancedMemberKey:
         """A manual builtin_metric_enables declaration (as the shipped
         vm-snapshot-inventory-dashboard release carries) corroborates the
         now-detected reference instead of conflicting with it."""
-        from vcfops_packaging.audit import audit_bundle_dependencies
-        from vcfops_packaging.describe import DescribeCache
-        from vcfops_packaging.loader import BuiltinMetricEnable
+        from vcfcf_packaging.audit import audit_bundle_dependencies
+        from vcfcf_packaging.describe import DescribeCache
+        from vcfcf_packaging.loader import BuiltinMetricEnable
 
         cache_dir = tmp_path / "describe_cache"
         self._seed_cache(cache_dir)
@@ -324,10 +324,10 @@ class TestAuditFlagsInstancedMemberKey:
 
 class TestRealSnapshotViewStillValidates:
     def test_vm_snapshot_inventory_view_survives_auto_audit(self):
-        from vcfops_dashboards.loader import load_view
-        from vcfops_packaging.audit import audit_bundle_dependencies
-        from vcfops_packaging.describe import make_cache
-        from vcfops_packaging.loader import Bundle, BuiltinMetricEnable
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_packaging.audit import audit_bundle_dependencies
+        from vcfcf_packaging.describe import make_cache
+        from vcfcf_packaging.loader import Bundle, BuiltinMetricEnable
 
         view_path = REPO_ROOT / "content" / "views" / "vm_snapshot_inventory.yaml"
         v = load_view(view_path, enforce_framework_prefix=True)

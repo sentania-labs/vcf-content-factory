@@ -24,7 +24,7 @@
 
 **All three capabilities the operator asked for are supported by the
 wire format. None require an unsupported/internal API.** Current
-`vcfops_dashboards` can't express any of them because `ViewColumn`
+`vcfcf_dashboards` can't express any of them because `ViewColumn`
 has no fields for transformation, thresholds, percentile value, or
 transform expression, and `_xml_attribute_item()` emits a view-level
 transformation block for every column.
@@ -588,7 +588,7 @@ authors don't try to express them:
 
 Concrete changes for the `tooling` agent to make:
 
-### `src/vcfops_dashboards/loader.py::ViewColumn`
+### `src/vcfcf_dashboards/loader.py::ViewColumn`
 
 Add fields (all optional, all default to current behavior):
 
@@ -642,7 +642,7 @@ Validation rules in `loader.py`:
 - Warn on inverted band ordering (`ascending_range=false` with
   `yellow >= orange` or `orange >= red`; mirror for `true`).
 
-### `src/vcfops_dashboards/render.py::_xml_attribute_item()`
+### `src/vcfcf_dashboards/render.py::_xml_attribute_item()`
 
 1. Drop the view-level `_xml_transformations_block(view)` call
    unless `view.data_type == "trend"` (the stacked
@@ -841,9 +841,9 @@ member column of an actual instanced-group view) for its
   section. If a live/vendor example of either surfaces later, route to
   api-explorer to confirm the wire shape before lifting the rejection.
 
-Implementation: `src/vcfops_dashboards/render.py::_xml_instanced_group_item`
+Implementation: `src/vcfcf_dashboards/render.py::_xml_instanced_group_item`
 (emission + docstring citations) and
-`src/vcfops_dashboards/loader.py::ViewDef._validate_column` (rejection).
+`src/vcfcf_dashboards/loader.py::ViewDef._validate_column` (rejection).
 Tests: `tests/test_view_instanced_group_columns.py`
 (`TestInstancedGroupMemberTransformEmission`,
 `TestInstancedGroupMemberUnprovenTransformationsRejected`).
@@ -861,7 +861,7 @@ no YAML-authoring equivalent). `_xml_instanced_group_item()` now emits
 `preferredUnitId` immediately after `attributeKey` when `col.unit` is
 set (same `ViewColumn.unit` / `unit:` YAML field the generic path
 already used) — the prior silent-ignore gap is closed. Round-trips:
-`src/vcfops_dashboards/reverse.py` already parses `preferredUnitId`
+`src/vcfcf_dashboards/reverse.py` already parses `preferredUnitId`
 back into `unit` on the reverse path, so an XML→YAML→XML cycle does not
 lose the unit. Tests: `tests/test_view_instanced_group_columns.py`.
 
@@ -886,9 +886,9 @@ columns:
       sample_instance: "Evaluation Mode"  # required, no default — see below
 ```
 
-Implementation: `src/vcfops_dashboards/loader.py` (`InstancedGroupSpec`,
+Implementation: `src/vcfcf_dashboards/loader.py` (`InstancedGroupSpec`,
 `ViewColumn.instanced_group`, `_load_column` synthesis, `ViewDef.validate`
-driver cross-check) and `src/vcfops_dashboards/render.py`
+driver cross-check) and `src/vcfcf_dashboards/render.py`
 (`_xml_instanced_group_item`).
 
 ### Loader validation
@@ -973,7 +973,7 @@ constraint the importer checks).
 
 ### Factory YAML syntax
 
-`src/vcfops_dashboards/loader.py::SubjectFilterCondition` /
+`src/vcfcf_dashboards/loader.py::SubjectFilterCondition` /
 `ViewDef.subject_filter`. Author-facing syntax lives under the existing
 `subject:` block as `filter:`:
 
@@ -1015,7 +1015,7 @@ that's the intent.
 
 ### Rendering
 
-`src/vcfops_dashboards/render.py::_subject_filter_json()` builds the JSON
+`src/vcfcf_dashboards/render.py::_subject_filter_json()` builds the JSON
 with condition-object key order `condition, transform, metricKey,
 metricValue, businessHours, filterType` — this matches the `VM Network
 Top Talkers` fixture verbatim (a rendering choice, not a proven schema
@@ -1073,7 +1073,7 @@ retrying does not help.
   description-length failure until proven otherwise. That signature is
   otherwise indistinguishable from auth trouble, a malformed zip, or a
   UUID collision.
-- **Enforced.** `ViewDef.validate()` (`src/vcfops_dashboards/loader.py`)
+- **Enforced.** `ViewDef.validate()` (`src/vcfcf_dashboards/loader.py`)
   now rejects any `description:` that renders to more than 1024
   characters with a `DashboardValidationError` citing this section,
   converting the silent server-side failure into a local `validate`-time
@@ -1332,17 +1332,17 @@ the scalar pair, `ViewDef.adapter_kind` / `resource_kind` mirror
 byte-identical (checked across all 24 factory/bundle views at the time of
 the change).
 
-Loader: `src/vcfops_dashboards/loader.py` (`ViewSubject`,
+Loader: `src/vcfcf_dashboards/loader.py` (`ViewSubject`,
 `ViewDef.subjects`, `ViewDef.subject_kinds`, `ViewColumn.subject`);
-renderer: `src/vcfops_dashboards/render.py::_render_view_def_fragment`
+renderer: `src/vcfcf_dashboards/render.py::_render_view_def_fragment`
 and `_column_kind_binding`; tests: `tests/test_view_multi_subject.py`,
 `tests/test_view_multi_subject_column_binding.py`. The reverse path (`reverse.py`,
-`vcfops_extractor/extractor.py`, `vcfops_extractor/reverse_local.py`)
+`vcfcf_extractor/extractor.py`, `vcfcf_extractor/reverse_local.py`)
 collects every distinct (adapterKind, resourceKind) pair in document
 order; when more than one is present the written YAML carries
 `subjects:` (first pair mirrored into the scalar fields) instead of
 `subject:`, so a multi-subject vendor view round-trips intact. The
-packaging dependency audit (`vcfops_packaging/deps.py::_refs_from_view`)
+packaging dependency audit (`vcfcf_packaging/deps.py::_refs_from_view`)
 emits one reference per subject kind for every column and subject-filter
 key.
 
@@ -1377,7 +1377,7 @@ No `adapterKind`/`resourceKind`, no `rollUpType`, no `transformations`, no
 `isProperty`, no `addTimestampAsColumn`/`isShowRelativeTimestamp`. The
 `attributeKey` is the literal string `Interval Breakdown`.
 
-Factory YAML (`vcfops_dashboards.loader.TimeSegmentSpec`):
+Factory YAML (`vcfcf_dashboards.loader.TimeSegmentSpec`):
 
 ```yaml
 columns:

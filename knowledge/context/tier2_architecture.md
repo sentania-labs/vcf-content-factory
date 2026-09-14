@@ -48,7 +48,7 @@ content/sdk-adapters/<name>/        # Layer 3: Tier 2 adapter projects
     resources/resources.properties
     lib/                            # optional: vendor JARs (JDBC driver, etc.)
 
-src/vcfops_managementpacks/
+src/vcfcf_managementpacks/
     adapter_framework/src/          # Layer 2 framework Java source
     adapter_runtime/                # pre-compiled JARs:
         vcfcf-adapter-base.jar      #   - Layer 2 (we build, commit, ship)
@@ -79,7 +79,7 @@ unchanged. Tier 1 and Tier 2 coexist.
   `vrops-adapters-sdk` is never bundled (resolves from appliance classpath).
 - The framework JAR (`vcfcf-adapter-base.jar`) is built **once by us**
   and committed; users never compile it.
-- Build command: `python3 -m vcfops_managementpacks build-sdk <project-dir>`.
+- Build command: `python3 -m vcfcf_managementpacks build-sdk <project-dir>`.
 - Auto-detect: bare `build <arg>` routes to Tier 1 if `arg` ends in
   `.yaml`, Tier 2 if it's a directory with `adapter.yaml`.
 
@@ -345,7 +345,7 @@ Use `pushStringProperty(rc, key, value)` on `VcfCfAdapter`, or
 ### Rebuild the framework JAR after changes — UNCHANGED
 
 ```
-cd src/vcfops_managementpacks/
+cd src/vcfcf_managementpacks/
 ./adapter_framework/build-framework.sh
 ```
 

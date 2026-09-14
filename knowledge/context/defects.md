@@ -12,7 +12,7 @@ rule: `knowledge/rules/release-gate-defects.md` (RULE-012).
   survives build acceptance unfixed MUST be registered here before the
   next build of that artifact is briefed. NITs do not enter the
   registry — they live in the review docs.
-- **The gate consumes this file.** `python3 -m vcfops_packaging
+- **The gate consumes this file.** `python3 -m vcfcf_packaging
   defect-gate` parses the entries; `release` and `publish` refuse, and a
   v* tag push is refused by the `.githooks/pre-push` hook, while an
   **open blocking** defect affects the artifact (RULE-012). Refusals
@@ -38,7 +38,7 @@ rule: `knowledge/rules/release-gate-defects.md` (RULE-012).
 
 One `### DEF-NNN` section per entry. Ids are sequential and never
 reused. Field lines are `- **Field:** value` (parsed by
-`vcfops_packaging` — keep the shape exact, same convention as
+`vcfcf_packaging` — keep the shape exact, same convention as
 `knowledge/context/managed_paks.md`).
 
 | Field | Values / meaning |
@@ -400,11 +400,11 @@ reused. Field lines are `- **Field:** value` (parsed by
   `instanced="true"` on its `<Condition>`, despite the source YAML
   (`content/sdk-adapters/vcommunity-vsphere/symptoms/esxi-host-nic-disconnected.yaml`)
   declaring `condition.instanced: true`.
-- **Summary:** `src/vcfops_alerts/render.py::_add_condition_element` (the
+- **Summary:** `src/vcfcf_alerts/render.py::_add_condition_element` (the
   XML content-import path used by every pak build) never read/emitted
   `cond["instanced"]` for `metric_static`/`property` conditions, even
   though the REST-sync path
-  (`vcfops_symptoms/loader.py::_condition_to_wire`) always has. Effect:
+  (`vcfcf_symptoms/loader.py::_condition_to_wire`) always has. Effect:
   every symptom authored with `instanced: true` — meant to match ALL
   instances of a colon-syntax metric group (e.g. any
   `vCommunity|Licensing:<name>|Remaining Days`, any
@@ -419,7 +419,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   their designed "any license instance" semantics. Smallest correct fix:
   emit `instanced` (plus vendor-confirmed `thresholdType`/`valueType`) in
   `_add_condition_element`, matching the vendor XML shape exactly.
-- **Closing-evidence:** Fixed in `src/vcfops_alerts/render.py` on branch
+- **Closing-evidence:** Fixed in `src/vcfcf_alerts/render.py` on branch
   `feat/view-instanced-group-columns` (commit follows this entry).
   `_add_condition_element` now emits `instanced` for
   metric_static/property/metric_dynamic conditions, and
@@ -434,7 +434,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   Critical.xml`. Unit coverage:
   `tests/test_symptom_condition_instanced_attribute.py` (8 tests). **End-to-end
   proof:** rebuilt the vcommunity-vsphere dev-preview pak
-  (`python3 -m vcfops_managementpacks build-sdk content/sdk-adapters/vcommunity-vsphere`,
+  (`python3 -m vcfcf_managementpacks build-sdk content/sdk-adapters/vcommunity-vsphere`,
   build `0.0.0.5`, no tag/release) and extracted it — all five
   `content/symptomdefs/*.xml` files (`ESXi Host NIC Disconnected.xml` and
   the four `ESXi Host License Remaining Days *.xml`) now carry
@@ -460,7 +460,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   recommendation in
   `knowledge/context/reviews/framework/import-fidelity-three-fixes.md`
   ("Defect-registry assessment" section).
-- **Summary:** `src/vcfops_alerts/render.py::_render_alert_definition` (the
+- **Summary:** `src/vcfcf_alerts/render.py::_render_alert_definition` (the
   XML content-import path consumed by pak-bundled `content/alertdefs/` and
   by `content-packager`'s standalone AlertContent.xml zips — see
   `render_alert_content_xml` call sites in `sdk_builder.py`, `buildkit.py`,
@@ -471,8 +471,8 @@ reused. Field lines are `- **Field:** value` (parsed by
   error, no warning. Live-confirmed on devel: the `ESXi Host License
   Expiring` alert (4 severity tiers: Critical/Immediate/Warning/Info)
   imports and shows only its Info tier; the other three never fire. The
-  REST sync path (`AlertDef.to_wire()` in `vcfops_alerts/loader.py`, used by
-  `vcfops_alerts sync`) is **not** affected — it already emits the correct
+  REST sync path (`AlertDef.to_wire()` in `vcfcf_alerts/loader.py`, used by
+  `vcfcf_alerts sync`) is **not** affected — it already emits the correct
   `SYMPTOM_SET_COMPOSITE` shape for multi-set alerts. Fix (already committed
   on this branch, `3d5ba94`, `fix/report-subject-filter-escaping`): groups
   `<SymptomSet>` by set (not by symptom), wraps ≥2 sets in one
@@ -498,7 +498,7 @@ reused. Field lines are `- **Field:** value` (parsed by
     `VMWARE` (`synology_disk_health_alert`, `synology_storage_pool_health_alert`,
     `synology_system_temperature_alert`, `synology_volume_space_alert`,
     `vm_cpu_usage_alert`, `host_compliance_score_alert` — all multi-set) are
-    factory-authored content intended for direct `vcfops_alerts sync` (the
+    factory-authored content intended for direct `vcfcf_alerts sync` (the
     unaffected REST path); none of them appear in any `bundles/*.yaml` or
     `bundles/releases/*.yaml` manifest today, so none currently reach a
     live instance via the buggy XML path. **If any of these six is ever
@@ -512,7 +512,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   builds from the published tarball, not the factory checkout) ships on a
   `v*` tag **and** a live devel/prod import shows all four severity tiers
   present (not just Info). Until then this entry gates `v*` tags of
-  `vcommunity-vsphere` per `python3 -m vcfops_packaging defect-gate --pak
+  `vcommunity-vsphere` per `python3 -m vcfcf_packaging defect-gate --pak
   vcommunity-vsphere` — intended: the dev-preview build already carries the
   bug in the field, and the fix is merged-pending on a branch, not yet in
   a release. This entry tracks **field state**, not code state — the code
@@ -533,7 +533,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   buildkit grep-verified; build-10 live four-tier proof) was reverted
   when the criterion's actual test — BUILD from the published tarball —
   failed: `sdk-buildkit-1.0.8`'s `sdk_builder.py:2146` unconditionally
-  imports factory-only `vcfops_dashboards.render` in the
+  imports factory-only `vcfcf_dashboards.render` in the
   reports-with-embedded-views path, so the real `v*` CI build would
   fail on this adapter today. Grep-level presence of the fix was not
   build-level proof. New blocker: TOOLSET GAP in the buildkit's
@@ -787,7 +787,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   re-confirmed in the v4 pass). Regression guarded by
   `tests/test_gridster_coord_floor_def013.py`; all distribution zips
   rebuilt post-change (dashboard payloads byte-identical).
-- **Affects:** factory:dashboards (`src/vcfops_dashboards/render.py`)
+- **Affects:** factory:dashboards (`src/vcfcf_dashboards/render.py`)
 - **First-seen:** `content/dashboards/cpu_support_status.yaml` installed on
   devel 2026-07-22 (dashboard UUID `b6796122-4c9b-4770-83d8-10f785755ef2`).
 - **Source:** framework-reviewer-directed investigation, 2026-07-22
@@ -817,7 +817,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   0-based `coords`, independent of widget-type combination — the pass-
   through happens identically for all 12 widget-type renderers.
 - **Progress (2026-07-22, fix authored, devel re-verification pending):**
-  `_clamp_gridster_floor()` added to `src/vcfops_dashboards/render.py`
+  `_clamp_gridster_floor()` added to `src/vcfcf_dashboards/render.py`
   (fix commit pending — not yet merged), applied at all 12
   `"gridsterCoords":` emission sites. Clamps `x`/`y` to a floor of 1
   (`max(1, v)`) before emission; `w`/`h` and already-valid (`>=1`)
@@ -842,7 +842,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   edit `content/`) — the renderer clamp is the durable fix regardless of
   the authored value, but authors should still prefer 1-based `coords`
   going forward to match the wire format directly. **Since dist bundles
-  embed rendered output, `src/vcfops_dashboards/render.py` changed —
+  embed rendered output, `src/vcfcf_dashboards/render.py` changed —
   all distribution zips are stale per CLAUDE.md and must be rebuilt by
   `content-packager` before this closes.** Remaining to close: rebuild
   affected bundle(s), reinstall `cpu_support_status.yaml` on devel, and
@@ -871,7 +871,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   deferred-import materialization (first-open or ~20-min background
   job). Codified: `knowledge/lessons/dashboard-import-deferred-materialization.md`.
 - **Affects:** factory:dashboards (suspect: render/sync path in
-  `src/vcfops_dashboards/`; content YAML unchanged in the relevant part)
+  `src/vcfcf_dashboards/`; content YAML unchanged in the relevant part)
 - **First-seen:** devel, 2026-07-22, DEF-013 closure re-install
   (dashboard UUID `b6796122-4c9b-4770-83d8-10f785755ef2`).
 - **Source:** content-installer DEF-013 closure report 2026-07-22;
@@ -976,7 +976,7 @@ reused. Field lines are `- **Field:** value` (parsed by
 
 ### DEF-017
 
-- **Title:** `vcfops_packaging build <release>` CLI crashes on SDK-pointer
+- **Title:** `vcfcf_packaging build <release>` CLI crashes on SDK-pointer
   releases (`'NoneType' object has no attribute 'name'`)
 - **Severity:** tracked
 - **Status:** open
@@ -1000,10 +1000,10 @@ reused. Field lines are `- **Field:** value` (parsed by
   backing localization bundle — VCF Ops 8.18 hard-rejects the view import
 - **Severity:** tracked
 - **Status:** closed
-- **Affects:** factory:dashboards (`src/vcfops_dashboards/render.py`)
+- **Affects:** factory:dashboards (`src/vcfcf_dashboards/render.py`)
 - **First-seen:** shipped `dist/dashboards/vm-snapshot-inventory-dashboard.zip`
   (release 1.0, DEF-016 build); latent in every content-import zip built by
-  `vcfops_dashboards/packager.py`'s `render_views_xml()` since
+  `vcfcf_dashboards/packager.py`'s `render_views_xml()` since
   `localizationKey` was added to the Title/Description emission.
 - **Source:** Live root-cause session against a VCF Ops 8.18 instance,
   2026-08-06: `dist/dashboards/vm-snapshot-inventory-dashboard.zip`'s
@@ -1017,7 +1017,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   every shipped `dist/` zip still reproduces the defect, so an operator
   downloading today still hits it.
 - **Summary:** `_render_view_def_fragment()` in
-  `src/vcfops_dashboards/render.py` emitted
+  `src/vcfcf_dashboards/render.py` emitted
   `<Title localizationKey="title">` and (when non-blank)
   `<Description localizationKey="desc">`, but the content-import zips built
   from this path (`dist/**/Views.zip`, `content-packager`'s standalone view
@@ -1040,18 +1040,18 @@ reused. Field lines are `- **Field:** value` (parsed by
   bundle-less shape our content-import zips actually ship and the inline
   text VCF Ops already renders either way. The one other emission site
   sharing the same renderer (`_render_view_def_fragment`, reused by
-  `vcfops_managementpacks/sdk_builder.py` for SDK-pak per-view/per-report
+  `vcfcf_managementpacks/sdk_builder.py` for SDK-pak per-view/per-report
   subdirectories) is a **different** condition — that path always ships a
   matching `content/reports/<slug>/resources/content.properties` bundle in
   the same import unit — but shares the code, so the fix applies there too;
   it is harmless (the resources/ subdirectory stays populated per spec A3,
-  now simply unreferenced by the XML). `src/vcfops_reports/render.py`
+  now simply unreferenced by the XML). `src/vcfcf_reports/render.py`
   already emitted plain `<Title>`/`<Description>` with no `localizationKey`
   — not affected, no shared defect.
-  Renderer fix landed in `src/vcfops_dashboards/render.py`
+  Renderer fix landed in `src/vcfcf_dashboards/render.py`
   (`_render_view_def_fragment`): `<Title>` and `<Description>` now render
   with no `localizationKey` attribute unconditionally. Companion doc-only
-  update in `src/vcfops_managementpacks/sdk_builder.py` (comment block above
+  update in `src/vcfcf_managementpacks/sdk_builder.py` (comment block above
   the report-embedding loop) corrected to no longer claim the embedded
   ViewDef fragments carry `localizationKey`. Full validate chain (7
   packages) and full test suite pass post-fix; regression coverage added
@@ -1096,8 +1096,8 @@ reused. Field lines are `- **Field:** value` (parsed by
   `filter=` and the instanced-group member `isProperty` flag on round-trip
 - **Severity:** tracked
 - **Status:** open
-- **Affects:** factory:extractor (`src/vcfops_extractor/extractor.py`,
-  `src/vcfops_extractor/reverse_local.py`, `src/vcfops_dashboards/reverse.py`)
+- **Affects:** factory:extractor (`src/vcfcf_extractor/extractor.py`,
+  `src/vcfcf_extractor/reverse_local.py`, `src/vcfcf_dashboards/reverse.py`)
 - **First-seen:** commit b12bd2a (HEAD baseline of the 2026-08-29
   multi-subject column binding review); pre-existing, date of introduction
   not traced.
@@ -1166,7 +1166,7 @@ reused. Field lines are `- **Field:** value` (parsed by
   miss the renderer's SM branch). Same reports-green-while-broken class as
   issue #146.
 - **Summary:** Location: `content/sdk-adapters/vcommunity-vsphere/views/Report Distributed Switch for CSV export.yaml`
-  lines 15, 19, 39, 43. `vcfops_packaging.deps._is_sm_ref` classified the
+  lines 15, 19, 39, 43. `vcfcf_packaging.deps._is_sm_ref` classified the
   prefix as an SM reference and skipped it; `render._xml_attribute_item`
   required a quote after the colon and fell through to the plain-metric
   branch. Exposed by the widened SM-column gate on branch

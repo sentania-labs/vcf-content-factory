@@ -25,9 +25,9 @@ REPO_ROOT = Path(__file__).parent.parent
 
 def _load_all():
     """Load the full repo corpus (views, dashboards, SMs, customgroups)."""
-    from vcfops_supermetrics.loader import load_dir as _load_sms
-    from vcfops_dashboards.loader import load_all as _load_dash
-    from vcfops_customgroups.loader import load_dir as _load_cgs
+    from vcfcf_supermetrics.loader import load_dir as _load_sms
+    from vcfcf_dashboards.loader import load_all as _load_dash
+    from vcfcf_customgroups.loader import load_dir as _load_cgs
 
     all_sms = _load_sms(REPO_ROOT / "content" / "supermetrics")
     all_views, all_dashboards = _load_dash(
@@ -47,7 +47,7 @@ class TestCapacityAssessment:
 
     @pytest.fixture(scope="class")
     def dep_graph(self):
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
         all_sms, all_views, all_dashboards, all_cgs = _load_all()
         # Select only the capacity assessment dashboard
         target = [d for d in all_dashboards
@@ -143,7 +143,7 @@ class TestDemandDrivenCapacityV2:
 
     @pytest.fixture(scope="class")
     def dep_graph(self):
-        from vcfops_common.dep_walker import collect_deps
+        from vcfcf_common.dep_walker import collect_deps
         all_sms, all_views, all_dashboards, all_cgs = _load_all()
         target = [d for d in all_dashboards if "Demand-Driven Capacity" in d.name]
         assert len(target) == 1, (
@@ -184,8 +184,8 @@ class TestDemandDrivenCapacityV2:
 
 def test_missing_customgroup_error():
     """collect_deps emits an error when a view references a non-existent customgroup."""
-    from vcfops_dashboards.loader import Dashboard, Widget, ViewDef, ViewColumn
-    from vcfops_common.dep_walker import collect_deps
+    from vcfcf_dashboards.loader import Dashboard, Widget, ViewDef, ViewColumn
+    from vcfcf_common.dep_walker import collect_deps
 
     # Build a view that references a group not present in the corpus
     view = ViewDef(
@@ -227,12 +227,12 @@ def test_missing_customgroup_error():
 
 def test_customgroup_recursion_guard():
     """collect_deps does not infinite-loop when a CG relationship references itself."""
-    from vcfops_dashboards.loader import Dashboard, Widget
-    from vcfops_customgroups.loader import CustomGroupDef
-    from vcfops_common.dep_walker import collect_deps
+    from vcfcf_dashboards.loader import Dashboard, Widget
+    from vcfcf_customgroups.loader import CustomGroupDef
+    from vcfcf_common.dep_walker import collect_deps
 
     # Build a minimal view that references a customgroup
-    from vcfops_dashboards.loader import ViewDef, ViewColumn
+    from vcfcf_dashboards.loader import ViewDef, ViewColumn
     view = ViewDef(
         id="00000000-0000-0000-0000-000000000010",
         name="[VCF Content Factory] Recursive Test View",

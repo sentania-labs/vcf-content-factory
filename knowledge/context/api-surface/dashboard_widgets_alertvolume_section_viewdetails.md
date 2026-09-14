@@ -554,7 +554,7 @@ nothing.
 
 ### Renderer behaviour (implemented)
 
-`vcfops_dashboards/render.py::_fan_out_summary_specs`, applied to
+`vcfcf_dashboards/render.py::_fan_out_summary_specs`, applied to
 Scoreboard, MetricChart and PropertyList. When a dashboard's `summary_for`
 lists more than one kind and the widget has `self_provider: false`
 (PropertyList always does), every `MetricSpec` whose
@@ -612,7 +612,7 @@ empty widgets.
 
 ## Changelog
 
-- 2026-08-25: `src/vcfops_dashboards/render.py` gained the Section, Alert
+- 2026-08-25: `src/vcfcf_dashboards/render.py` gained the Section, Alert
   Volume, gauge and `viewDetails` emitters. Rendered output for all
   existing `content/` dashboards is byte-identical to `main`
   (`PYTHONHASHSEED=0`), so no `CURRENT_TEMPLATE_VERSION` bump; the

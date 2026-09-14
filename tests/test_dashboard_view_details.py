@@ -57,8 +57,8 @@ def _widgets(view_details: dict | None = None) -> list:
 
 
 def _render_bytes(tmp_path: Path, name: str, widgets: list) -> str:
-    from vcfops_dashboards.loader import load_dashboard
-    from vcfops_dashboards.render import render_dashboards_bundle_json
+    from vcfcf_dashboards.loader import load_dashboard
+    from vcfcf_dashboards.render import render_dashboards_bundle_json
 
     d = load_dashboard(_write(tmp_path / f"{name}.yaml", {
         "id": "11111111-2222-4333-8444-555555555555",
@@ -109,7 +109,7 @@ def test_only_authored_widgets_carry_it(tmp_path):
     "anything goes",
 ])
 def test_unresolvable_forms_rejected(tmp_path, bad):
-    from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+    from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     path = _write(tmp_path / "bad_form.yaml", {
         "name": "[VCF Content Factory] View Details Test",
@@ -126,7 +126,7 @@ def test_http_prefix_accepted_and_stripped(tmp_path):
 
 
 def test_non_string_rejected(tmp_path):
-    from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+    from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     ws = _widgets()
     ws[1]["view_details"] = 42
@@ -139,7 +139,7 @@ def test_non_string_rejected(tmp_path):
 
 
 def test_section_rejects_view_details(tmp_path):
-    from vcfops_dashboards.loader import DashboardValidationError, load_dashboard
+    from vcfcf_dashboards.loader import DashboardValidationError, load_dashboard
 
     path = _write(tmp_path / "f.yaml", {
         "name": "[VCF Content Factory] View Details Test",

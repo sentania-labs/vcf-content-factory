@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from vcfops_packaging.releases import ReleaseValidationError, load_release
-from vcfops_packaging.loader import BuiltinMetricEnable
+from vcfcf_packaging.releases import ReleaseValidationError, load_release
+from vcfcf_packaging.loader import BuiltinMetricEnable
 
 REPO_ROOT = Path(__file__).parent.parent
 

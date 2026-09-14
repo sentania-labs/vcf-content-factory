@@ -125,8 +125,8 @@ def _write_release_manifest(
 
 def _patch_enumerate(monkeypatch, releases_dir: Path):
     """Replace _enumerate_releases to read from releases_dir."""
-    from vcfops_packaging import publish as _pub
-    from vcfops_packaging.releases import load_release
+    from vcfcf_packaging import publish as _pub
+    from vcfcf_packaging.releases import load_release
 
     def _fake_enumerate(factory_repo):
         manifests = sorted(releases_dir.glob("*.y*ml"))
@@ -153,7 +153,7 @@ class TestHeadlineToDirThirdParty:
     """T1: headline_to_dir routes factory_native=False + 1 dashboard correctly."""
 
     def test_single_dashboard_routes_to_thirdparty_dashboards(self):
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         bundle_data = {
             "factory_native": False,
@@ -166,7 +166,7 @@ class TestHeadlineToDirThirdParty:
 
     def test_two_dashboards_routes_to_thirdparty_bundles(self):
         """T2: 2 dashboards -> ThirdPartyContent/bundles."""
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         bundle_data = {
             "factory_native": False,
@@ -179,7 +179,7 @@ class TestHeadlineToDirThirdParty:
 
     def test_zero_dashboards_routes_to_thirdparty_bundles(self):
         """T2b: 0 dashboards -> ThirdPartyContent/bundles (SM-only or similar)."""
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         bundle_data = {
             "factory_native": False,
@@ -192,7 +192,7 @@ class TestHeadlineToDirThirdParty:
 
     def test_factory_native_true_ignores_dashboard_count(self):
         """T3: factory_native=True -> "bundles" regardless of dashboard count."""
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         bundle_data = {
             "factory_native": True,
@@ -205,7 +205,7 @@ class TestHeadlineToDirThirdParty:
 
     def test_no_bundle_data_defaults_to_factory_native(self):
         """T3b: bundle_data=None -> "bundles" (factory-native default)."""
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         result = headline_to_dir("bundles/capacity-assessment.yaml", bundle_data=None)
         assert result == "bundles", (
@@ -214,7 +214,7 @@ class TestHeadlineToDirThirdParty:
 
     def test_non_bundle_prefix_unaffected(self):
         """Non-bundle headline paths are not touched by the third-party logic."""
-        from vcfops_packaging.release_types import headline_to_dir
+        from vcfcf_packaging.release_types import headline_to_dir
 
         result = headline_to_dir("dashboards/demand_driven_capacity_v2.yaml", bundle_data=None)
         assert result == "dashboards", (
@@ -231,7 +231,7 @@ class TestBuildReleaseThirdParty:
 
     @pytest.fixture(scope="class")
     def release_artifacts(self, tmp_path_factory):
-        from vcfops_packaging.release_builder import build_release
+        from vcfcf_packaging.release_builder import build_release
 
         tmp = tmp_path_factory.mktemp("idps_release")
         source_abs = (REPO_ROOT / "third_party" / "idps-planner" / "PROJECT.yaml").resolve()
@@ -285,7 +285,7 @@ class TestBuildReleaseThirdParty:
 
 def test_publish_thirdparty_zip_lands_at_correct_path(tmp_path, monkeypatch):
     """T5: publish() routes idps-planner to ThirdPartyContent/dashboards/idps-planner.zip."""
-    from vcfops_packaging.publish import publish
+    from vcfcf_packaging.publish import publish
 
     dist = _init_dist_repo(tmp_path)
     releases_dir = tmp_path / "tp_releases"
@@ -336,7 +336,7 @@ class TestReadmeCatalogThirdPartySection:
 
     def _build_minimal_release_for_idps(self, tmp_path: Path):
         """Return a loaded ReleaseDef for idps-planner."""
-        from vcfops_packaging.releases import load_release
+        from vcfcf_packaging.releases import load_release
 
         source_abs = (REPO_ROOT / "third_party" / "idps-planner" / "PROJECT.yaml").resolve()
         assert source_abs.exists(), f"PROJECT.yaml not found: {source_abs}"
@@ -353,7 +353,7 @@ class TestReadmeCatalogThirdPartySection:
 
     def test_thirdparty_h2_section_present(self, tmp_path):
         """T6a: README contains a 'Third-Party Content' H2 heading."""
-        from vcfops_packaging.readme_gen import _render_release_catalog
+        from vcfcf_packaging.readme_gen import _render_release_catalog
 
         rel = self._build_minimal_release_for_idps(tmp_path)
         dist = tmp_path / "dist"
@@ -368,7 +368,7 @@ class TestReadmeCatalogThirdPartySection:
 
     def test_thirdparty_dashboards_subsection_present(self, tmp_path):
         """T6b: README contains a '### Dashboards' sub-section under Third-Party Content."""
-        from vcfops_packaging.readme_gen import _render_release_catalog
+        from vcfcf_packaging.readme_gen import _render_release_catalog
 
         rel = self._build_minimal_release_for_idps(tmp_path)
         dist = tmp_path / "dist"
@@ -384,7 +384,7 @@ class TestReadmeCatalogThirdPartySection:
 
     def test_thirdparty_row_has_license_column(self, tmp_path):
         """T6c: Third-party row includes License column value from bundle YAML."""
-        from vcfops_packaging.readme_gen import _render_release_catalog
+        from vcfcf_packaging.readme_gen import _render_release_catalog
 
         rel = self._build_minimal_release_for_idps(tmp_path)
         dist = tmp_path / "dist"
@@ -404,7 +404,7 @@ class TestReadmeCatalogThirdPartySection:
 
     def test_thirdparty_row_has_authors_column(self, tmp_path):
         """T6d: Third-party row includes Authors column value from bundle YAML."""
-        from vcfops_packaging.readme_gen import _render_release_catalog
+        from vcfcf_packaging.readme_gen import _render_release_catalog
 
         rel = self._build_minimal_release_for_idps(tmp_path)
         dist = tmp_path / "dist"
@@ -424,7 +424,7 @@ class TestReadmeCatalogThirdPartySection:
 
     def test_thirdparty_row_has_version_column(self, tmp_path):
         """T6e: Third-party rows include a Version column (unlike factory-native rows)."""
-        from vcfops_packaging.readme_gen import _render_release_catalog
+        from vcfcf_packaging.readme_gen import _render_release_catalog
 
         rel = self._build_minimal_release_for_idps(tmp_path)
         dist = tmp_path / "dist"
@@ -440,7 +440,7 @@ class TestReadmeCatalogThirdPartySection:
 
     def test_thirdparty_download_link_uses_thirdparty_prefix(self, tmp_path):
         """T6f: Download link uses ThirdPartyContent/dashboards/ prefix."""
-        from vcfops_packaging.readme_gen import _render_release_catalog
+        from vcfcf_packaging.readme_gen import _render_release_catalog
 
         rel = self._build_minimal_release_for_idps(tmp_path)
         dist = tmp_path / "dist"
@@ -456,8 +456,8 @@ class TestReadmeCatalogThirdPartySection:
 
     def test_thirdparty_section_absent_when_no_thirdparty_releases(self, tmp_path):
         """T6g: 'Third-Party Content' section is absent when all releases are factory-native."""
-        from vcfops_packaging.readme_gen import _render_release_catalog
-        from vcfops_packaging.releases import load_release
+        from vcfcf_packaging.readme_gen import _render_release_catalog
+        from vcfcf_packaging.releases import load_release
 
         # Use a factory-native release (no factory_native field → defaults True).
         source_abs = (REPO_ROOT / "content" / "dashboards" / "demand_driven_capacity_v2.yaml").resolve()
@@ -493,8 +493,8 @@ class TestFactoryNativeRegressionGuard:
         # capacity-assessment.yaml was removed in v2 item #1 cleanup.
         # Use vks-core-consumption-bundle.yaml — it is factory-native and must
         # still route to top-level bundles/.
-        from vcfops_packaging.release_builder import _artifact_dest_subdir
-        from vcfops_packaging.releases import load_release
+        from vcfcf_packaging.release_builder import _artifact_dest_subdir
+        from vcfcf_packaging.releases import load_release
 
         source_abs = (REPO_ROOT / "bundles" / "vks-core-consumption-bundle.yaml").resolve()
         assert source_abs.exists(), f"vks-core-consumption-bundle.yaml not found"
@@ -520,7 +520,7 @@ class TestFactoryNativeRegressionGuard:
         """End-to-end: factory-native bundle still lands in dist/bundles/."""
         # capacity-assessment.yaml was removed in v2 item #1 cleanup.
         # vks-core-consumption-bundle.yaml is the surviving factory-native bundle.
-        from vcfops_packaging.publish import publish
+        from vcfcf_packaging.publish import publish
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "ca_releases"
@@ -564,7 +564,7 @@ class TestStaleZipSweepThirdParty:
     """T8: _sweep_stale_zips leaves ThirdPartyContent zips that are in known_filenames alone."""
 
     def test_known_thirdparty_zip_not_swept(self, tmp_path):
-        from vcfops_packaging.publish import _sweep_stale_zips
+        from vcfcf_packaging.publish import _sweep_stale_zips
 
         dist = tmp_path / "dist"
         tp_dir = dist / "ThirdPartyContent" / "dashboards"
@@ -581,7 +581,7 @@ class TestStaleZipSweepThirdParty:
 
     def test_unknown_thirdparty_zip_swept(self, tmp_path):
         """An orphaned ThirdPartyContent zip IS moved to retired/ by the sweep."""
-        from vcfops_packaging.publish import _sweep_stale_zips
+        from vcfcf_packaging.publish import _sweep_stale_zips
 
         dist = tmp_path / "dist"
         tp_dir = dist / "ThirdPartyContent" / "dashboards"
@@ -605,7 +605,7 @@ class TestLegacyZipSweepDoesNotTouchThirdParty:
     """T9: _sweep_legacy_versioned_zips only touches factory-native top-level subdirs."""
 
     def test_versioned_looking_thirdparty_zip_not_deleted(self, tmp_path):
-        from vcfops_packaging.publish import _sweep_legacy_versioned_zips
+        from vcfcf_packaging.publish import _sweep_legacy_versioned_zips
 
         dist = tmp_path / "dist"
         tp_dir = dist / "ThirdPartyContent" / "dashboards"

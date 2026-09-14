@@ -26,7 +26,7 @@ Also read:
 
 1. **Read-only against VCF Ops.** Only GET requests.
 2. **Read-only against the repo.** Never touch content YAML or
-   `src/vcfops_*/` code. May append to `knowledge/context/investigations/recon_log.md` only
+   `src/vcfcf_*/` code. May append to `knowledge/context/investigations/recon_log.md` only
    if orchestrator explicitly asks.
 3. **Credentials from env vars.** If missing, return an error.
 4. **Return structured answers**, not prose.
@@ -49,13 +49,13 @@ Mark matches as EXACT, PARTIAL, or INSPIRATION.
 ## API access
 
 ```python
-from vcfops_supermetrics.client import VCFOpsClient
+from vcfcf_supermetrics.client import VCFOpsClient
 c = VCFOpsClient.from_env()
 r = c._request('GET', '/api/supermetrics')
 ```
 
 For calls without convenience methods, use `c._request('GET', ...)`.
-Build inline scripts — do not modify `src/vcfops_*/` code.
+Build inline scripts — do not modify `src/vcfcf_*/` code.
 
 ## Output format
 

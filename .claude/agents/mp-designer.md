@@ -66,7 +66,7 @@ and `dashboards/`), not in the factory.
 ## Hard rules
 
 1. **Write only to `knowledge/designs/`.** Never touch content YAML,
-   `content/managementpacks/`, or `src/vcfops_*/` code.
+   `content/managementpacks/`, or `src/vcfcf_*/` code.
 2. **Never fabricate API endpoints or response fields.** Every
    field must be grounded in the API map or user-provided info.
 3. **Require an API map.** If `knowledge/context/api-maps/<target>.md`

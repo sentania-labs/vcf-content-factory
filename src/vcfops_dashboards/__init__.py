@@ -1,9 +1,8 @@
-"""Authoring + install of VCF Operations dashboards and view definitions
-via the Content Management import API.
+"""Deprecated alias: vcfops_dashboards is now vcfcf_dashboards.
 
-Authoring source of truth is YAML under views/ and dashboards/. The
-loader builds in-memory models, the renderer produces the internal
-formats VCF Ops uses (XML for views, JSON for dashboards), the packager
-wraps them in the nested ZIP-in-ZIP layout the import endpoint expects,
-and the client POSTs the result to /api/content/operations/import.
+Kept for one release so external callers keep working. Import
+vcfcf_dashboards instead. See vcfcf_common/compat_shim.py.
 """
+from vcfcf_common.compat_shim import install as _install
+
+_install(__name__, "vcfcf_dashboards", globals())

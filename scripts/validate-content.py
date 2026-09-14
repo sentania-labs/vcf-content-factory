@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # purpose: Claude Code PostToolUse hook (Write|Edit) — validates content YAML
-#          against the matching vcfops_<type> validate CLI when a file under
+#          against the matching vcfcf_<type> validate CLI when a file under
 #          content/ is written. Blocks on validation failure so the agent
 #          fixes the file immediately. Fail-open: internal errors never
 #          wedge the pipeline.
@@ -13,7 +13,7 @@ import subprocess
 import sys
 
 # FACTORY_ROOT is always derived from this script's own location — it is
-# where the vcfops_* packages live (under src/, see pyproject.toml
+# where the vcfcf_* packages live (under src/, see pyproject.toml
 # src-layout) — and must NOT follow VCFCF_CONTENT_ROOT overrides below.
 FACTORY_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -31,16 +31,16 @@ CONTENT_ROOT = os.path.join(WORKSPACE_ROOT, "content") + os.sep
 # Map from content subdirectory name to vcfops package name.
 # Subdirectories with no validate CLI (recommendations, sdk-adapters) are
 # intentionally absent — those paths skip silently. Recommendations have no
-# standalone validator; they are cross-checked during vcfops_alerts validate.
+# standalone validator; they are cross-checked during vcfcf_alerts validate.
 PACKAGE_MAP = {
-    "alerts": ("vcfops_alerts", True),  # True = accepts file path arg
-    "customgroups": ("vcfops_customgroups", True),
-    "managementpacks": ("vcfops_managementpacks", True),
-    "reports": ("vcfops_reports", True),
-    "supermetrics": ("vcfops_supermetrics", True),
-    "symptoms": ("vcfops_symptoms", True),
-    "dashboards": ("vcfops_dashboards", False),  # validates the whole corpus
-    "views": ("vcfops_dashboards", False),  # views load with dashboards corpus
+    "alerts": ("vcfcf_alerts", True),  # True = accepts file path arg
+    "customgroups": ("vcfcf_customgroups", True),
+    "managementpacks": ("vcfcf_managementpacks", True),
+    "reports": ("vcfcf_reports", True),
+    "supermetrics": ("vcfcf_supermetrics", True),
+    "symptoms": ("vcfcf_symptoms", True),
+    "dashboards": ("vcfcf_dashboards", False),  # validates the whole corpus
+    "views": ("vcfcf_dashboards", False),  # views load with dashboards corpus
 }
 
 
@@ -66,7 +66,7 @@ def main() -> None:
     if accepts_path:
         cmd.append(file_path)
 
-    # The vcfops_* packages live under src/ (see pyproject.toml src-layout),
+    # The vcfcf_* packages live under src/ (see pyproject.toml src-layout),
     # always relative to FACTORY_ROOT — never WORKSPACE_ROOT, which may be
     # a hermetic VCFCF_CONTENT_ROOT override with no src/ of its own.
     # Prepend it to PYTHONPATH so `-m <package>` resolves even when the

@@ -100,7 +100,7 @@ def _license_view_data() -> dict:
 
 class TestLoaderValidation:
     def test_hardcoded_attribute_plus_instanced_group_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = {
             "name": "X",
@@ -123,7 +123,7 @@ class TestLoaderValidation:
             load_view(p, enforce_framework_prefix=False)
 
     def test_member_missing_sample_instance_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = {
             "name": "X",
@@ -145,7 +145,7 @@ class TestLoaderValidation:
             load_view(p, enforce_framework_prefix=False)
 
     def test_prefix_without_suffix_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = {
             "name": "X",
@@ -162,7 +162,7 @@ class TestLoaderValidation:
             load_view(p, enforce_framework_prefix=False)
 
     def test_member_without_driver_in_view_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = {
             "name": "X",
@@ -185,7 +185,7 @@ class TestLoaderValidation:
 
     def test_driver_and_member_valid(self, tmp_path):
         """The full license-view fixture loads and validates cleanly."""
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         p = _write_view(tmp_path, _license_view_data())
         v = load_view(p, enforce_framework_prefix=False)
@@ -202,8 +202,8 @@ class TestLoaderValidation:
 
 class TestXmlEmission:
     def _render(self, tmp_path: Path):
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         p = _write_view(tmp_path, _license_view_data())
         v = load_view(p, enforce_framework_prefix=False)
@@ -286,8 +286,8 @@ class TestXmlEmission:
         Ref: ESXi Packages.xml:42-102 (keepInstanceSummary=false there, vs
         Licensing's true — confirms the field is per-view, not hardcoded).
         """
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         data = {
             "name": "[VCF Content Factory] ESXi Packages",
@@ -359,8 +359,8 @@ class TestInstancedGroupMemberTransformEmission:
     """Vendor-confirmed non-CURRENT transformations on member columns."""
 
     def _render(self, tmp_path: Path, member: dict, stem: str) -> str:
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         data = {
             "name": "[VCF Content Factory] Transform Test",
@@ -445,8 +445,8 @@ class TestInstancedGroupMemberUnitEmission:
     column, knowledge/designs/views/vm-snapshot-inventory.md."""
 
     def _render(self, tmp_path: Path, member: dict, stem: str) -> str:
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         data = {
             "name": "[VCF Content Factory] Unit Test",
@@ -537,8 +537,8 @@ class TestInstancedGroupMemberUnitEmission:
         """Driver columns have no attribute/unit of their own; unit set on
         a driver block (author error, but not schema-rejected) must not
         leak a preferredUnitId onto the driver Item."""
-        from vcfops_dashboards.loader import load_view
-        from vcfops_dashboards.render import render_views_xml
+        from vcfcf_dashboards.loader import load_view
+        from vcfcf_dashboards.render import render_views_xml
 
         data = {
             "name": "[VCF Content Factory] Driver Unit Test",
@@ -582,7 +582,7 @@ class TestInstancedGroupMemberUnprovenTransformationsRejected:
     member column anywhere in the surveyed corpus — fail closed."""
 
     def test_percentile_on_member_column_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = {
             "name": "X",
@@ -602,7 +602,7 @@ class TestInstancedGroupMemberUnprovenTransformationsRejected:
             load_view(p, enforce_framework_prefix=False)
 
     def test_time_point_on_member_column_rejected(self, tmp_path):
-        from vcfops_dashboards.loader import load_view, DashboardValidationError
+        from vcfcf_dashboards.loader import load_view, DashboardValidationError
 
         data = {
             "name": "X",
@@ -626,7 +626,7 @@ class TestInstancedGroupMemberUnprovenTransformationsRejected:
     def test_percentile_still_allowed_on_non_instanced_column(self, tmp_path):
         """Regression guard: the new rejection must not leak onto ordinary
         (non-instanced_group) columns — PERCENTILE remains valid there."""
-        from vcfops_dashboards.loader import load_view
+        from vcfcf_dashboards.loader import load_view
 
         data = {
             "name": "X",

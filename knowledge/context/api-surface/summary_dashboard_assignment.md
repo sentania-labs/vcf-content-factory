@@ -308,16 +308,16 @@ dashboard inherits the page object.
 
 Two routes carry the binding, one implementation each:
 
-- **Pak** (Tier 2 SDK builds): `src/vcfops_managementpacks/sdk_builder.py`
+- **Pak** (Tier 2 SDK builds): `src/vcfcf_managementpacks/sdk_builder.py`
   writes `content/dashboards/dashboards.properties` with
   `<dashboard dir>=<AK>:<RK>[,<AK>:<RK>...]` (the kinds comma-joined, the
   shape the installer parses) for every bundled dashboard that declares
   `summary_for`; the server-side installer binds at install time
   (`summary_dashboard_pak_binding.md`). Tier 1 MPB paks do not bundle
   dashboards at all (`builder.py` writes an empty `content/dashboards/`).
-- **Post-import** (content-zip installs): `python3 -m vcfops_dashboards
+- **Post-import** (content-zip installs): `python3 -m vcfcf_dashboards
   bind-summary --profile <p> [--dashboard <name>] [--unbind] [--dry-run]`,
-  implemented in `src/vcfops_dashboards/summary_bind.py` over the
+  implemented in `src/vcfcf_dashboards/summary_bind.py` over the
   `VCFOpsUIClient` methods `get_resource_kind_list`,
   `associate_resource_kind_dashboards(assigned, reset)` and
   `get_summary_tab_id` (`ui_client.py`; all send

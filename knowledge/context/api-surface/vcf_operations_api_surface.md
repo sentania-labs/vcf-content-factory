@@ -68,7 +68,7 @@ See §"Superseded docs" at the bottom for the exact corrections needed.
    errorPanel-out). Confirmed mainAction surface for each is catalogued below.
 
 5. **Pak lifecycle is fully scriptable via the `/ui/` Struts layer**, not
-   under `/vcf-operations/`. The `src/vcfops_managementpacks/installer.py`
+   under `/vcf-operations/`. The `src/vcfcf_managementpacks/installer.py`
    URL choices (all `/ui/` or `/suite-api/`) are correct. No URL-prefix
    rewrite is needed.
 
@@ -632,7 +632,7 @@ All paths are under `/ui/` or `/admin/`, not `/vcf-operations/`.
 This section supersedes `context/pak_install_api_exploration.md`
 §"`/ui/*` Struts — dead stub" (which has already been corrected
 there) and confirms the install+uninstall flows implemented in
-`src/vcfops_managementpacks/installer.py`.
+`src/vcfcf_managementpacks/installer.py`.
 
 ### Upload URL — confirmed by SPA bundle grep
 
@@ -809,7 +809,7 @@ light of this drain. Corrections are trivial but route through the
    to "reachable via VCF SSO only; use `/suite-api/*` for
    programmatic code".
 
-6. **`src/vcfops_managementpacks/installer.py`** — **no URL changes
+6. **`src/vcfcf_managementpacks/installer.py`** — **no URL changes
    needed**. The installer's `_UISession` uses `/ui/*` and
    `/suite-api/*`, both confirmed working. The module docstring
    line 3-6 already reflects current state.
@@ -822,7 +822,7 @@ a read-and-assess task. Item 4 is a documentation pointer addition.
 ## Clean-up verified
 
 All scratch files from this investigation live under
-`/tmp/vcfops_surface/` (probe Python scripts, downloaded SPA JS
+`/tmp/vcfcf_surface/` (probe Python scripts, downloaded SPA JS
 bundles, captured JSON responses, cookie jars, login-page HTML).
 **Size: 12 MB.** Deleted after this doc is written; see next section.
 

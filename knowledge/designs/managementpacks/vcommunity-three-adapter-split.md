@@ -275,7 +275,7 @@ clobbering each other's keys?
 
 **Mechanism evidence (read directly from the framework, not inferred):**
 
-`vcfops_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitchClient.java`:
+`vcfcf_managementpacks/adapter_framework/src/com/vcfcf/adapter/stitch/SuiteApiStitchClient.java`:
 
 - `pushProperties` → `rawPost("/api/resources/" + resourceId + "/properties",
   body, tok)` (line 343–352).

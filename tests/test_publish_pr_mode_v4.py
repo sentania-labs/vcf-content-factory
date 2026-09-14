@@ -107,8 +107,8 @@ def _write_release_manifest(
 
 
 def _patch_enumerate(monkeypatch, releases_dir: Path):
-    from vcfops_packaging import publish as _pub
-    from vcfops_packaging.releases import load_release
+    from vcfcf_packaging import publish as _pub
+    from vcfcf_packaging.releases import load_release
 
     def _fake_enumerate(factory_repo):
         manifests = sorted(releases_dir.glob("*.y*ml"))
@@ -141,7 +141,7 @@ class TestPRModeDefault:
     """T01: use_pr=True opens a PR via gh."""
 
     def _setup(self, tmp_path, monkeypatch, release_notes=""):
-        from vcfops_packaging import publish as _pub
+        from vcfcf_packaging import publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases"
@@ -159,7 +159,7 @@ class TestPRModeDefault:
 
     def test_pr_mode_opens_pr(self, tmp_path, monkeypatch):
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist, _ = self._setup(tmp_path, monkeypatch, release_notes="Initial ship.")
 
@@ -199,7 +199,7 @@ class TestPRModeDefault:
     def test_pr_title_shape(self, tmp_path, monkeypatch):
         """PR title must match 'release: N built, M retired' — counts, no names."""
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist, _ = self._setup(tmp_path, monkeypatch)
 
@@ -241,7 +241,7 @@ class TestPRModeDefault:
     def test_pr_body_contains_release_notes(self, tmp_path, monkeypatch):
         """PR body must include the release_notes field from the manifest."""
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist, _ = self._setup(
             tmp_path, monkeypatch, release_notes="This release includes capacity planning improvements."
@@ -278,7 +278,7 @@ class TestPRModeDefault:
     def test_pr_mode_branch_pushed(self, tmp_path, monkeypatch):
         """The release branch must be pushed to origin before the PR is opened."""
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist, _ = self._setup(tmp_path, monkeypatch)
 
@@ -332,7 +332,7 @@ class TestPushModeDirectPush:
         _patch_enumerate(monkeypatch, releases_dir)
 
         # Add a fake remote "origin" so git push doesn't fail.
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         pushed_refs = []
         original_run = subprocess.run
@@ -364,7 +364,7 @@ class TestPushModeDirectPush:
     def test_push_mode_no_pr_created(self, tmp_path, monkeypatch):
         """--push must never call gh pr create."""
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases2"
@@ -407,7 +407,7 @@ class TestDryRunNoBranchNoPR:
 
     def test_dry_run_no_branch_created(self, tmp_path, monkeypatch):
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases"
@@ -484,7 +484,7 @@ class TestNoPushMode:
 
     def test_no_push_branch_committed_locally(self, tmp_path, monkeypatch):
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases"
@@ -541,7 +541,7 @@ class TestNoPushMode:
     def test_no_push_commit_sha_populated(self, tmp_path, monkeypatch):
         """commit_sha must be set (commit happened on the local branch)."""
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases2"
@@ -585,7 +585,7 @@ class TestAutoMerge:
 
     def test_auto_merge_calls_gh_merge(self, tmp_path, monkeypatch):
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases"
@@ -634,7 +634,7 @@ class TestAutoMerge:
     def test_auto_merge_order_after_pr_create(self, tmp_path, monkeypatch):
         """gh pr merge must be called AFTER gh pr create, not before."""
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases2"
@@ -696,7 +696,7 @@ class TestMutuallyExclusiveFlags:
 
     def test_auto_merge_with_push_mode_raises(self):
         """auto_merge=True with use_pr=False must raise PublishError."""
-        from vcfops_packaging.publish import PublishError
+        from vcfcf_packaging.publish import PublishError
         from publish_seam_stubs import stubbed_publish as publish
 
         with pytest.raises(PublishError, match="auto-merge"):
@@ -718,7 +718,7 @@ class TestGhAbsent:
 
     def test_gh_absent_no_error(self, tmp_path, monkeypatch, capsys):
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases"
@@ -767,7 +767,7 @@ class TestGhAbsent:
     def test_gh_absent_branch_info_in_output(self, tmp_path, monkeypatch, capsys):
         """Manual instructions must include the branch name."""
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases2"
@@ -821,9 +821,9 @@ class TestExistingReleaseBranch:
     """
 
     def test_push_rejected_fails_with_clear_message(self, tmp_path, monkeypatch):
-        from vcfops_packaging.publish import PublishError
+        from vcfcf_packaging.publish import PublishError
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases"
@@ -867,9 +867,9 @@ class TestExistingReleaseBranch:
 
     def test_local_branch_already_exists_fails(self, tmp_path, monkeypatch):
         """If _next_release_branch_name cannot find an unused branch, git checkout -b fails."""
-        from vcfops_packaging.publish import PublishError
+        from vcfcf_packaging.publish import PublishError
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases2"
@@ -927,7 +927,7 @@ class TestLockfileLifecyclePRMode:
     def test_lockfile_absent_after_pr_opened(self, tmp_path, monkeypatch):
         """After publish() returns, the lockfile must be gone."""
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases"
@@ -969,7 +969,7 @@ class TestLockfileLifecyclePRMode:
     def test_lockfile_not_in_pr_branch_commit(self, tmp_path, monkeypatch):
         """The release branch commit must not include .publish.lock."""
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases2"
@@ -1028,7 +1028,7 @@ class TestBranchNaming:
     def test_branch_name_format(self, tmp_path, monkeypatch):
         """Branch name must match release/<date>-<n> for a single publish."""
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases"
@@ -1069,7 +1069,7 @@ class TestBranchNaming:
     def test_second_publish_increments_n(self, tmp_path, monkeypatch):
         """A second publish on the same day uses -2 (or higher) suffix."""
         from publish_seam_stubs import stubbed_publish as publish
-        import vcfops_packaging.publish as _pub
+        import vcfcf_packaging.publish as _pub
 
         dist = _init_dist_repo(tmp_path)
         releases_dir = tmp_path / "releases"
@@ -1127,7 +1127,7 @@ class TestBranchNaming:
 
     def test_next_release_branch_name_skips_existing(self, tmp_path):
         """_next_release_branch_name skips branches that already exist locally."""
-        from vcfops_packaging.publish import _next_release_branch_name
+        from vcfcf_packaging.publish import _next_release_branch_name
 
         dist = _init_dist_repo(tmp_path)
         today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
@@ -1209,14 +1209,14 @@ class TestCommitMessageShape:
     # --- unit: message-arg construction ---------------------------------
 
     def test_commit_message_args_subject_only(self):
-        from vcfops_packaging.publish import _commit_message_args
+        from vcfcf_packaging.publish import _commit_message_args
 
         assert _commit_message_args("subject") == ["-m", "subject"]
         assert _commit_message_args("subject", "") == ["-m", "subject"]
         assert _commit_message_args("subject", "   ") == ["-m", "subject"]
 
     def test_commit_message_args_with_body(self):
-        from vcfops_packaging.publish import _commit_message_args
+        from vcfcf_packaging.publish import _commit_message_args
 
         assert _commit_message_args("subject", "line one\nline two") == [
             "-m", "subject", "-m", "line one\nline two",
@@ -1277,7 +1277,7 @@ class TestCommitMessageShape:
 class TestPRBodyNamesBuiltReleases:
 
     def test_body_lists_built_names_without_release_notes(self, tmp_path):
-        from vcfops_packaging.publish import _assemble_pr_body
+        from vcfcf_packaging.publish import _assemble_pr_body
 
         class _Rel:
             def __init__(self, name, version, notes):
