@@ -97,9 +97,20 @@ settings), `corpus/devel-9x-2026-09-14.zip` (lab devel, 9.0.2,
 content types only), `corpus/devel-9.0.2.0-2026-09-14-full.zip` and
 `corpus/prod-9.1.1.0-2026-09-14-full.zip` (lab devel and prod, every
 export type the API offers), and `corpus/scott-b-9.0.2-2026-09-14.zip`
-(Scott, verbatim on its version: "9.0.2"; 66 dashboards across three
+(Scott, verbatim on its version: "9.0.2", and "this is from a
+different 9.0.2 instance" than the lab's; 66 dashboards across three
 owners, 181 views, 99 super metrics, 22 symptoms, 13 alerts, 21
 reports, 5 notification rules, 5 templates, 5 outbound settings).
+
+Two things the corpus already proves. First, the marker file name is
+byte-identical in all five zips, across two instances of 9.0.2, a
+9.1.1 and an 8.18.7, so it identifies the export format and nothing
+else: not the version, not the instance, not the user. Second,
+same-version instances differ in which members an export carries (the
+second 9.0.2 brings custom profiles, report schedules and SDMP
+services that the lab's 9.0.2 does not), so member presence is
+instance content, never a version signal. The reader treats every
+member as optional and every absent member as normal.
 The member layout of the two is the same for every content type both
 carry; the 8.x zip additionally carries members the 9.x export did
 not request. The 8.18.7 outbound setting is plain text (an SMTP relay
