@@ -1,7 +1,9 @@
 # Content migrator v1
 
-Status: spec, 2026-09-14, awaiting Scott's approval of the spec and the
-repo creation. Parent plan: `content-migrator-plan-v1.md` (M3). Library
+Status: approved 2026-09-14. Scott, verbatim: "go ahead and create the
+repo and start work, i'll get you an export". That covers creating the
+public repo `sentania-labs/vcf-cf-migrator` under his account and
+starting M3. Parent plan: `content-migrator-plan-v1.md` (M3). Library
 it builds on: `vcf-cf-tooling-core` 0.1.0, released 2026-09-14
 (`tooling-core-carveout-v1.md`).
 
@@ -144,5 +146,3 @@ A translation counts as done only when both tiers pass.
 
 - Where the 8.x export zips are on the workstation, so the corpus
   directory can be pointed at them.
-- Approval of this spec and of creating the public repo
-  `sentania-labs/vcf-cf-migrator` under his account (rule 12).
