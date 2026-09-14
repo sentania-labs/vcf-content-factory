@@ -29,7 +29,7 @@ The one resolver lives in `src/vcfcf_supermetrics/crossref.py`
 
 | Path | Call site | Name scope |
 |---|---|---|
-| Native bundle zip | `vcfcf_packaging.builder._render_supermetrics_dict` | the bundle's own SMs |
+| Native bundle zip | `vcfcf_core.packaging.assembly._render_supermetrics_dict` | the bundle's own SMs |
 | Discrete / release zip | same (via `discrete_builder`, `release_builder`) | component SMs, after `_expand_sm_crossrefs` pulls in referents |
 | Live sync | `vcfcf_supermetrics.client.import_supermetrics_bundle` | the sync batch, then `find_by_name` against the target instance |
 | Tier 2 pak | `vcfcf_managementpacks.sdk_builder._resolve_sm_formula` | `bundled_content.supermetrics` |
@@ -60,7 +60,7 @@ unresolvable name.
 **The token itself is case-insensitive, like the prefix.**
 `@SuperMetric:"X"` and `@SUPERMETRIC:"X"` resolve exactly as `@supermetric:"X"`
 does. They used to pass straight through: the resolver matched the token
-case-sensitively, and `vcfcf_packaging.deps._is_sm_ref` lowercases before
+case-sensitively, and `vcfcf_core.packaging.deps._is_sm_ref` lowercases before
 comparing, so the dependency audit classified a mis-cased token as an
 already-good SM reference and skipped it. Audit green, build green, literal
 token in the zip (PR #141 round 3). Only the *token* is forgiving: the
@@ -71,7 +71,7 @@ awareness at all, by design (the formula stays in authoring form). The only
 real check on a cross-reference is building the bundle / pak and reading the
 emitted `supermetric.json`.
 
-The reverse direction (`vcfcf_supermetrics.reverse.rewrite_formula`,
+The reverse direction (`vcfcf_core.supermetrics.reverse.rewrite_formula`,
 `vcfcf_extractor`) turns `sm_<uuid>` back into `@supermetric:"<name>"` so
 extracted content round-trips through the authoring form.
 

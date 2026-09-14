@@ -146,7 +146,7 @@ with a WARN. Existing factory content is never overwritten.
 ## Architectural notes
 
 - Reverse parsers live in sibling packages: `vcfcf_dashboards.reverse` (Phase 1
-  partial) and `vcfcf_supermetrics.reverse` for cleaner separation.
+  partial) and `vcfcf_core.supermetrics.reverse` for cleaner separation.
 - SM formula UUID->name rewriting uses a lazy-loaded name cache backed by
   `GET /api/supermetrics/{id}` per-UUID (avoids a full list on small graphs).
 - View export uses `POST /api/content/operations/export` with
