@@ -22,7 +22,7 @@ Interview on 2026-09-14. Each answer is quoted as given.
 |---|---|---|
 | Source | "Offline export zip only (Recommended)" | v1 never logs in anywhere. The admin exports from the source instance the normal way and points the tool at the zip. Live pull is a v2 item. |
 | Versions | "8.x to 9.x from the start" | The tool translates 8.x export formats into what 9.x imports. This is the largest piece of v1 and is corpus-driven (below). |
-| 8.x corpus | "Saved 8.x export zips only" | No live 8.x. The translation layer is built and tested against export zips Scott supplies. Coverage is what those zips contain; anything not in the corpus is refused, not guessed. |
+| 8.x corpus | "Saved 8.x export zips only" then "the 8.x exports should not be in the repo." | No live 8.x. The translation layer is built against export zips Scott supplies, which stay on the workstation and never enter the repo. Coverage is what those zips contain; anything not in the corpus is refused, not guessed. |
 | 8.x floor | "8.10 and later (Recommended)" | Exports older than 8.10 are refused with a message naming the floor. |
 | Outbound settings | "I believe the secrets are encrypted, so we should just pass them along." then "Yes, endpoints and rules, as exported" | Notification rules and outbound endpoint definitions ride in the bundle exactly as the export carries them, encrypted values included. The tool does not decrypt, edit, or strip them. M4 acceptance includes a real import proving the target accepts the values; if it does not, that is a finding, not a silent drop. |
 | Operator | "Customer-run, no LLM (Recommended)" | Deterministic. No API key, no outbound calls. Shippable as a per-OS binary. |
@@ -106,12 +106,24 @@ then a three-OS PyInstaller matrix (ubuntu, windows, macos) producing
 one binary per OS, attached to the GitHub Release alongside the wheel.
 The tag push is the release (rule 13).
 
-The corpus lives in the migrator repo under `tests/corpus/8x/` and
-`tests/corpus/9x/`. Export zips can carry instance names and endpoint
-definitions; Scott confirms each zip is safe to commit before it lands,
-or it is redacted first. Nothing with a credential in the clear is
-committed (rule 19); the encrypted outbound values are what the export
-carries and are not secrets in the clear.
+The real export zips never enter the repo (Scott: "the 8.x exports
+should not be in the repo."). They live in a gitignored `corpus/`
+directory on the workstation, or anywhere the `VCFCF_MIGRATOR_CORPUS`
+setting points, and the tool's own settings page shows that path. Two
+tiers of test material follow from that:
+
+- **Committed fixtures**: small, hand-built export zips under
+  `tests/fixtures/` that copy the shape of each 8.x and 9.x document
+  the translation layer handles, with made-up names and no instance
+  data. CI runs on these alone. Each fixture is authored from a corpus
+  example by hand, and the PR body names which corpus zip it mirrors.
+- **Corpus regression**: `vcfcf-migrator corpus-check` walks every zip
+  in the corpus directory, runs inspect, tree and build on each, and
+  prints one line per zip (ok, refused with reason, or error). It runs
+  locally before a translation PR opens and its output goes in the PR
+  body; CI cannot run it and does not try.
+
+A translation counts as done only when both tiers pass.
 
 ## Milestones inside the new repo
 
@@ -130,7 +142,7 @@ carries and are not secrets in the clear.
 
 ## Open items for Scott
 
-- Where the 8.x export zips are, and whether they can be committed as
-  they are or need redaction first.
+- Where the 8.x export zips are on the workstation, so the corpus
+  directory can be pointed at them.
 - Approval of this spec and of creating the public repo
   `sentania-labs/vcf-cf-migrator` under his account (rule 12).
