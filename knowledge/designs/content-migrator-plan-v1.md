@@ -46,7 +46,7 @@ with mock data, select what to keep, and produce an import bundle.
 
 | # | What | Where | Gate |
 |---|---|---|---|
-| M0 | Fix the walker and renderer issues below | this repo | reviewer, PR |
+| M0 | Fix the walker and renderer issues below. **Done 2026-09-14**: PRs #155, #156, #157 merged; zips rebuilt, dashboard.json byte-identical across builds | this repo | reviewer, PR |
 | M1 | Rename import namespace `vcfops_*` to the chosen name. Mechanical, no behavior change, one PR | this repo | Scott picks the name; reviewer, PR, factory tag |
 | M2 | Carve pure parse/walk/build code into `vcf-cf-tooling-core` with its own `pyproject.toml`; factory imports it in-tree; CI builds and attaches the wheel on a library tag | this repo | one PR per package, reviewer each |
 | M3 | Migrator spec (`knowledge/designs/content-migrator-v1.md`) and repo skeleton: `sentania-labs/vcf-cf-migrator`, gitignored clone plus registry line like SDK adapters, CI with three-OS PyInstaller matrix, empty app that starts and shows the library version | new repo | Scott approves spec and repo creation |
@@ -57,6 +57,12 @@ offline only or live from day one; same version only or 8.x to 9.x;
 outbound settings in v1; customer-run with no LLM or consultant-run.
 
 ## M0: issues fixed before the namespace sweep
+
+Status: complete. Fallout: DEF-021 (four unquoted SM columns in the
+vCommunity vSphere pak) fixed at source in that repo (PR #21 merged),
+pak re-release tracked as that repo's issue #22. New follow-ups: #154
+(sync CLI runs import before the walker), #158 (duplicate SM name in a
+hand-authored manifest).
 
 All live in code the migrator lifts. Fix under the old names, then rename.
 
