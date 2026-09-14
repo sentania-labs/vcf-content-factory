@@ -456,7 +456,7 @@ def load_recommendation_file(path: str | Path, enforce_framework_prefix: bool = 
     )
 
 
-def load_recommendations(directory: str | Path = "recommendations", enforce_framework_prefix: bool = True) -> List[Recommendation]:
+def load_recommendations(directory: str | Path, enforce_framework_prefix: bool = True) -> List[Recommendation]:
     """Load all recommendation YAML files from a directory.
 
     Following the pattern of load_symptoms() / load_alerts():
@@ -587,7 +587,7 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> AlertD
     return ad
 
 
-def load_dir(directory: str | Path = "alerts", enforce_framework_prefix: bool = True) -> List[AlertDef]:
+def load_dir(directory: str | Path, enforce_framework_prefix: bool = True) -> List[AlertDef]:
     directory = Path(directory)
     if not directory.exists():
         return []

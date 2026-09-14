@@ -210,7 +210,7 @@ def walk_and_check(
         supermetrics:         SuperMetricDef list being synced (may be empty for dashboard-only sync).
         views:                ViewDef list being synced (may be empty).
         dashboards:           Dashboard list being synced (may be empty).
-        customgroups:         CustomGroupDef list — used to validate customgroup references
+        customgroups:         CustomGroupDef list, used to validate customgroup references
                               found in view ``customgroup:`` fields. Pass the full repo corpus.
                               Defaults to [] (no customgroup validation).
         auto_enable_metrics:  If True, enable OOTB metrics with defaultMonitored=false on Default Policy.
@@ -234,7 +234,7 @@ def walk_and_check(
 
     # --- Phase 0: customgroup reference validation -------------------------
     # Check that every group referenced by view ``customgroup:`` fields is
-    # present in the provided corpus.  This is a static check — no API call.
+    # present in the provided corpus.  This is a static check, no API call.
     if _customgroups:
         cg_corpus_names = {cg.name for cg in _customgroups}
         cg_refs = extract_customgroup_names_from_views(views)
@@ -311,7 +311,7 @@ def walk_and_check(
 
     # --- Phase 2: SM check + enable ----------------------------------------
     if sm_by_uuid:
-        result._msg("OK", f"dependency walker: found {len(sm_by_uuid)} SM reference(s) — checking policy")
+        result._msg("OK", f"dependency walker: found {len(sm_by_uuid)} SM reference(s), checking policy")
         try:
             policy_xml = client.export_default_policy_xml()
         except VCFOpsError as e:
@@ -336,10 +336,10 @@ def walk_and_check(
                 result.sm_already.append(name)
                 result._msg("OK", f"SM already enabled: '{name}'  ({uid})")
             elif uid in syncing_ids:
-                # Part of this sync batch — will be enabled by the caller's enable step
+                # Part of this sync batch, will be enabled by the caller's enable step
                 result._msg("OK", f"SM in sync batch (enable step will activate): '{name}'  ({uid})")
             else:
-                # Pre-existing SM on instance, not yet enabled — auto-enable it.
+                # Pre-existing SM on instance, not yet enabled, auto-enable it.
                 result._msg("OK", f"SM not enabled, enabling: '{name}'  ({uid})")
                 # Need to find resource_kinds for this SM from the instance.
                 rks = _get_sm_resource_kinds(client, uid, name, result)
@@ -385,7 +385,7 @@ def walk_and_check(
         for mk, sources in key_sources.items():
             monitored = describe.get(mk)
             if monitored is None:
-                # Key not in describe — could be a property key or a valid but
+                # Key not in describe, could be a property key or a valid but
                 # rare metric. We skip it rather than blocking on uncertainty.
                 # This avoids false positives for OnlineCapacityAnalytics| keys etc.
                 pass
@@ -401,7 +401,7 @@ def walk_and_check(
         result._msg("ERROR",
             "OOTB metric check: describe endpoint unreachable for "
             + ", ".join(describe_errors)
-            + " — sync marked incomplete (use --skip-metric-check to override)"
+            + ", sync marked incomplete (use --skip-metric-check to override)"
         )
         return result
 
@@ -433,7 +433,7 @@ def walk_and_check(
         # Default: WARN loudly but do not block sync success.
         result.metric_gaps = gaps
         result._msg("WARN",
-            f"OOTB metric check: {len(gaps)} metric(s) have defaultMonitored=false — "
+            f"OOTB metric check: {len(gaps)} metric(s) have defaultMonitored=false, "
             "these metrics are not collected by default and will render as empty. "
             "Use --auto-enable-metrics to enable them, or --skip-metric-check to suppress this warning."
         )
@@ -473,7 +473,7 @@ def _get_sm_resource_kinds(
 
     if not rks:
         result._msg("WARN",
-            f"SM '{sm_name}' ({sm_uuid}) has no resourceKinds on the instance — cannot enable. "
+            f"SM '{sm_name}' ({sm_uuid}) has no resourceKinds on the instance, cannot enable. "
             "Run 'python3 -m vcfcf_supermetrics sync' first."
         )
         return None

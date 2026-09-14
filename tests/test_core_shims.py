@@ -15,7 +15,10 @@ name resolves through the old path to the identical object, and the
 factory-only names stay on the factory side.
 
 Row 3 adds three aliases (``vcfcf_supermetrics.reverse``,
-``vcfcf_reports.render``, ``vcfcf_packaging.deps``) and eight wrappers:
+``vcfcf_reports.render``, ``vcfcf_packaging.deps``), turns the row-1
+``vcfcf_alerts.loader`` / ``vcfcf_symptoms.loader`` aliases into wrappers
+(they keep the ``alerts`` / ``recommendations`` / ``symptoms`` directory
+defaults the core loaders dropped), and adds eight wrappers:
 ``vcfcf_common.dep_walker`` (the live half), ``vcfcf_common.provenance``
 (the repo-root sniff), ``vcfcf_packaging.describe`` (cache location, live
 refresh, ``make_cache``), ``vcfcf_packaging.audit`` (``run_dependency_audit``),
@@ -37,8 +40,6 @@ import pytest
 SHIMS = [
     ("vcfcf_dashboards.yaml_utils", "vcfcf_core.dashboards.yaml_utils"),
     ("vcfcf_supermetrics.crossref", "vcfcf_core.supermetrics.crossref"),
-    ("vcfcf_symptoms.loader", "vcfcf_core.symptoms.loader"),
-    ("vcfcf_alerts.loader", "vcfcf_core.alerts.loader"),
     ("vcfcf_alerts.render", "vcfcf_core.alerts.render"),
     ("vcfcf_packaging.release_types", "vcfcf_core.packaging.release_types"),
     ("vcfcf_packaging.template_version", "vcfcf_core.packaging.template_version"),
@@ -105,6 +106,17 @@ WRAPPERS = [
      ("load_bundle", "load_all_bundles", "_find_repo_root", "_mint_id_into_file", "_provenance_of"),
      ("Bundle", "BundleValidationError"),
      ("BuiltinMetricEnable", "parse_builtin_metric_enables", "render_bme_items")),
+    # Row 3 review W1: the row-1 aliases became wrappers so the core loaders
+    # could drop their cwd-relative "alerts" / "recommendations" / "symptoms"
+    # directory defaults; the wrappers keep them.
+    ("vcfcf_alerts.loader", "vcfcf_core.alerts.loader",
+     ("load_dir", "load_recommendations"),
+     ("AlertDef", "Recommendation"),
+     ("load_file", "load_recommendation_file", "AlertValidationError", "RecommendationRef", "_strict_load", "_set_to_wire")),
+    ("vcfcf_symptoms.loader", "vcfcf_core.symptoms.loader",
+     ("load_dir",),
+     ("SymptomDef",),
+     ("load_file", "SymptomValidationError", "_condition_to_wire", "_strict_load")),
 ]
 
 
@@ -369,3 +381,20 @@ def test_row3_builder_reexports_the_assembly_helpers() -> None:
         assert getattr(builder, name) is getattr(asm, name), name
     assert builder.DASHBOARD_DROPIN_USER_ID == "b58a71ee-e909-5b40-a355-9e199e6f0f53"
 
+
+
+
+def test_row3_w1_core_alert_and_symptom_loaders_require_a_directory(tmp_path) -> None:
+    import vcfcf_core.alerts.loader as core_alerts
+    import vcfcf_core.symptoms.loader as core_symptoms
+    import vcfcf_alerts.loader as old_alerts
+    import vcfcf_symptoms.loader as old_symptoms
+
+    for fn in (core_alerts.load_dir, core_alerts.load_recommendations, core_symptoms.load_dir):
+        with pytest.raises(TypeError):
+            fn()  # type: ignore[call-arg]
+        assert fn(tmp_path / "absent") == []
+    assert old_alerts.load_dir.__defaults__ == ("alerts", True)
+    assert old_alerts.load_recommendations.__defaults__ == ("recommendations", True)
+    assert old_symptoms.load_dir.__defaults__ == ("symptoms", True)
+    assert old_alerts.load_dir(tmp_path / "absent") == [] and old_symptoms.load_dir(tmp_path / "absent") == []

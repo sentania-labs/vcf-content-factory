@@ -70,6 +70,10 @@ def run_dependency_audit(
 
     describe_cache = make_cache(live=live_describe)
 
+    # make_cache() is patched in tests to return a core DescribeCache (no
+    # _client attribute at all); the library audit is meant to run offline
+    # against exactly that object, so a cache with no client is offline, not
+    # an error. Only the factory subclass can carry a client to refresh with.
     if live_describe and getattr(describe_cache, "_client", None) is not None:
         from vcfcf_core.packaging.deps import extract_metric_references
 

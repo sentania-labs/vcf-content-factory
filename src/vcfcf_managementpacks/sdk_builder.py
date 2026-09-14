@@ -1821,8 +1821,10 @@ def _write_outer_pak(
     # column references resolve to the correct "Super Metric|sm_<uuid>"
     # attributeKey.  Both sides derive the UUID from the same YAML id: field —
     # consistent by construction.  When no supermetrics are bundled, pass
-    # sm_scope=None so sm_id_map falls back to its unscoped mode (scanning
-    # the full supermetrics/ dir, if any) before the renderer runs.
+    # sm_scope=None: in the factory, sm_id_map falls back to its unscoped
+    # mode (scanning the full supermetrics/ dir, if any) before the renderer
+    # runs; in the sdk buildkit, sm_id_map is the vcfcf_core copy and None
+    # is an empty map, so an unbundled SM reference fails the build.
     _sm_scope: Optional[List[Path]] = None
     if supermetrics:
         _sm_scope = [sm.source_path for sm in supermetrics if sm.source_path is not None]
@@ -1959,8 +1961,10 @@ def _write_outer_pak(
             # The SM name to uuid map is built from _sm_scope so view columns using
             # supermetric:"<name>" syntax resolve to the correct
             # "Super Metric|sm_<uuid>" attributeKey from the bundled SM YAML files.
-            # When _sm_scope is None (no bundled SMs), sm_id_map falls back to the
-            # factory's directory scan (M2 row 2: the renderer no longer scans).
+            # When _sm_scope is None (no bundled SMs), the factory's sm_id_map
+            # falls back to its directory scan (M2 row 2: the renderer no longer
+            # scans); the sdk buildkit's core copy returns an empty map instead
+            # (M2 row 3), so an unbundled SM reference fails the build there.
             _sm_map = _sm_id_map(_sm_scope)
             _sm_scope_active = _sm_scope is not None
             for v in views:

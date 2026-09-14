@@ -478,7 +478,11 @@ def test_buildkit_copies_the_core_loaders_not_the_wrappers():
     assert _FACTORY_SOURCES["reports_render.py"] == core / "reports" / "render.py"
     assert "provenance.py" not in _FACTORY_SOURCES
     assert "sm_loader.py" not in _IMPORT_REWRITES
+    import re  # noqa: PLC0415
     for dest, src in _FACTORY_SOURCES.items():
         if dest.endswith("_loader.py") or dest.endswith("_render.py") or dest in ("sm_crossref.py", "dashboard_yaml_utils.py"):
-            assert "vcfcf_common" not in src.read_text(encoding="utf-8").replace(
-                "vcfcf_common.dep_walker", "").replace("vcfcf_common.provenance", ""), dest
+            offending = [
+                line for line in src.read_text(encoding="utf-8").splitlines()
+                if re.match(r"^\s*(from|import)\s+vcfcf_common", line)
+            ]
+            assert offending == [], f"{dest}: {offending}"

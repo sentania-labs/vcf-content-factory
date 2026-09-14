@@ -23,7 +23,9 @@ Two halves:
    - a default argument value naming a factory directory
      (``content``, ``content/...``, ``knowledge``, ``knowledge/...``,
      ``dist...``, or exactly ``supermetrics`` / ``views`` / ``dashboards``
-     / ``bundles``),
+     / ``bundles``), and, independent of any word list, ANY string default
+     on a parameter named ``directory`` or ending in ``_dir`` / ``_root`` /
+     ``_path`` (row 3 review W1: a bare ``"alerts"`` is a cwd scan too),
    - ``import requests`` in any form,
    - an import of any ``vcfcf_*`` package other than ``vcfcf_core``
      (module level or function-local: the walk recurses into bodies),
@@ -176,6 +178,18 @@ def _names_bound_from_file(tree: ast.Module, source: str) -> set[str]:
     return bound
 
 
+# The one path-named parameter that is not a filesystem path: a dashboard's
+# ``default_name_path`` is the VCF Ops folder ("name path" on the wire) a
+# dashboard lands in, so its string default names no directory on disk.
+_PATH_PARAMS_NOT_FILESYSTEM = {"default_name_path"}
+
+
+def _is_path_param(name: str) -> bool:
+    if name in _PATH_PARAMS_NOT_FILESYSTEM:
+        return False
+    return name == "directory" or name.endswith(("_dir", "_root", "_path"))
+
+
 def _open_write_mode(call: ast.Call) -> bool:
     if not (isinstance(call.func, ast.Name) and call.func.id == "open"):
         return False
@@ -265,6 +279,14 @@ def _static_findings(path: Path) -> list[tuple[int, str]]:
                     v = d.value  # type: ignore[union-attr]
                     if v.startswith(_DIR_DEFAULT_PREFIXES) or v.rstrip("/") in _DIR_DEFAULT_EXACT:
                         hit(d, f"default argument names a directory: {v!r}")
+            # Pair each default with its parameter name: positional defaults
+            # align to the tail of args, kw_defaults to kwonlyargs.
+            positional = node.args.posonlyargs + node.args.args
+            pairs = list(zip(positional[len(positional) - len(node.args.defaults):], node.args.defaults))
+            pairs += [(a, d) for a, d in zip(node.args.kwonlyargs, node.args.kw_defaults) if d is not None]
+            for arg, d in pairs:
+                if _is_str_const(d) and _is_path_param(arg.arg):
+                    hit(d, f"string default on path parameter {arg.arg!r}: {d.value!r}")  # type: ignore[union-attr]
         # A walk up the tree: ``<name> = <name>.parent`` (row 3: the repo-root
         # sniff pattern in provenance and the bundle loader, both factory-side).
         elif isinstance(node, ast.Assign):
@@ -350,6 +372,9 @@ _VIOLATION_SAMPLES = {
     "Path over content/ literal": "from pathlib import Path\ndef f():\n    for c in (Path('content/supermetrics'), Path('supermetrics')):\n        pass\n",
     "Path over bare views literal": "import pathlib\nX = pathlib.Path('views')\n",
     "walk up the tree": "from pathlib import Path\ndef f(start):\n    current = start\n    for _ in range(5):\n        current = current.parent\n    return current\n",
+    "string default on directory": "def load_dir(directory='alerts', enforce_framework_prefix=True):\n    pass\n",
+    "string default on _dir kwonly": "def load(path, *, views_dir='v'):\n    pass\n",
+    "string default on _root": "def f(cache_root='.'):\n    pass\n",
 }
 
 
@@ -378,7 +403,10 @@ def test_static_checker_accepts_clean_module(tmp_path: Path, monkeypatch) -> Non
         # segment (the staged bundle's content/ subdir, a root's content/ tree),
         # and Path() over a variable or a non-factory literal is fine.
         "def h(root: Path, ref: str):\n    return (root / 'content').resolve(), Path(ref), Path('templates')\n"
-        "def k(p: Path):\n    up = p.parent\n    return up.parent if False else up\n",
+        "def k(p: Path):\n    up = p.parent\n    return up.parent if False else up\n"
+        # A string default on a non-path parameter, and a None default on a
+        # path parameter, are both fine.
+        "def m(default_name_path: str = 'VCF Content Factory', mode='auto', directory=None, views_dir=None):\n    pass\n",
         encoding="utf-8",
     )
     monkeypatch.setattr(sys.modules[__name__], "SRC", tmp_path / "src")

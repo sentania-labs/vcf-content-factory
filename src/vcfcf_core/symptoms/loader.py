@@ -325,7 +325,7 @@ def load_file(path: str | Path, enforce_framework_prefix: bool = True) -> Sympto
     return sd
 
 
-def load_dir(directory: str | Path = "symptoms", enforce_framework_prefix: bool = True) -> List[SymptomDef]:
+def load_dir(directory: str | Path, enforce_framework_prefix: bool = True) -> List[SymptomDef]:
     directory = Path(directory)
     if not directory.exists():
         return []
