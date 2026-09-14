@@ -52,9 +52,12 @@ with mock data, select what to keep, and produce an import bundle.
 | M3 | Migrator spec (`knowledge/designs/content-migrator-v1.md`) and repo skeleton: `sentania-labs/vcf-cf-migrator`, gitignored clone plus registry line like SDK adapters, CI with three-OS PyInstaller matrix, empty app that starts and shows the library version | new repo | Scott approves spec and repo creation |
 | M4 | Migrator MVP: load export zip, tree with dependencies, mock preview, select, emit import bundle | new repo | qa pass against a real export |
 
-Open questions for M3, answered by Scott before the spec is written:
-offline only or live from day one; same version only or 8.x to 9.x;
-outbound settings in v1; customer-run with no LLM or consultant-run.
+Open questions for M3, answered by Scott on 2026-09-14 (verbatim in
+`content-migrator-v1.md`): offline export zip only; 8.x (8.10 and
+later) to 9.x from the start, built against saved 8.x export zips;
+outbound rules and endpoints pass through as exported, encrypted
+values included; customer-run, no LLM. Spec written, awaiting Scott's
+approval of the spec and the repo creation.
 
 ## M0: issues fixed before the namespace sweep
 
