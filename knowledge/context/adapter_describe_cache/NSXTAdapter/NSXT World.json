@@ -1,6 +1,35 @@
 {
   "adapter_kind": "NSXTAdapter",
-  "fetched_at": "2026-08-26T21:00:39Z",
+  "fetched_at": "2026-09-14T16:29:49Z",
+  "merged_from": [
+    {
+      "counts": {
+        "metrics": {
+          "added": 0,
+          "dropped_instance_local": 0,
+          "pruned": 0,
+          "retained": 0,
+          "unchanged": 102,
+          "updated": 0
+        },
+        "properties": {
+          "added": 0,
+          "dropped_instance_local": 0,
+          "pruned": 0,
+          "retained": 0,
+          "unchanged": 3,
+          "updated": 0
+        }
+      },
+      "fetched_at": "2026-09-14T16:29:49Z",
+      "retained_absent": {
+        "metrics": [],
+        "properties": []
+      },
+      "role": "refresh",
+      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/NSXTAdapter/resourcekinds/NSXT World/statkeys"
+    }
+  ],
   "metrics": {
     "Compliance|Critical|totalCount": {
       "default_monitored": true,
@@ -102,6 +131,14 @@
       "default_monitored": true,
       "name": "Summary|Edge Cluster Count"
     },
+    "Summary|EdgeCriticalAlarmCount": {
+      "default_monitored": true,
+      "name": "Summary|Count of Critical Alarms in Edge Node"
+    },
+    "Summary|EdgeNodeCount": {
+      "default_monitored": true,
+      "name": "Summary|Edge Node Count"
+    },
     "Summary|FirewallSectionsCount": {
       "default_monitored": true,
       "name": "Summary|Firewall Section Count"
@@ -109,6 +146,10 @@
     "Summary|GroupsCount": {
       "default_monitored": true,
       "name": "Summary|Groups Count"
+    },
+    "Summary|HostNodeCount": {
+      "default_monitored": true,
+      "name": "Summary|Host Transport Node Count"
     },
     "Summary|LoadBalancerPoolCount": {
       "default_monitored": true,
@@ -126,9 +167,21 @@
       "default_monitored": true,
       "name": "Summary|Logical Switch Count"
     },
+    "Summary|ManagementClusterCount": {
+      "default_monitored": true,
+      "name": "Summary|Manager Cluster Count"
+    },
     "Summary|ManagementNodeCount": {
       "default_monitored": true,
-      "name": "Summary|Management Node Count"
+      "name": "Summary|Manager Node Count"
+    },
+    "Summary|ManagerCriticalAlarmCount": {
+      "default_monitored": true,
+      "name": "Summary|Count of Critical Alarms in NSX Manager"
+    },
+    "Summary|ProjectCount": {
+      "default_monitored": true,
+      "name": "Summary|NSX Project Count"
     },
     "Summary|Tier0LogicalRouterCount": {
       "default_monitored": true,
@@ -142,97 +195,105 @@
       "default_monitored": true,
       "name": "Summary|Transport Node Count"
     },
+    "Summary|TransportNodeCriticalAlarmCount": {
+      "default_monitored": true,
+      "name": "Summary|Count of Critical Alarms in Host Node"
+    },
     "Summary|TransportZoneCount": {
       "default_monitored": true,
       "name": "Summary|Transport Zone Count"
     },
+    "Summary|VirtualPrivateCloudCount": {
+      "default_monitored": true,
+      "name": "Summary|Virtual Private Cloud Count"
+    },
     "System Attributes|active_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - Active Anomaly Count"
+      "name": "VCF Operations Generated|Self - Active Anomaly Count"
     },
     "System Attributes|active_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - Active KPI Breach Count"
+      "name": "VCF Operations Generated|Self - Active KPI Breach Count"
     },
     "System Attributes|alert_count_critical": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Critical"
+      "name": "VCF Operations Generated|Alert Count Critical"
     },
     "System Attributes|alert_count_immediate": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Immediate"
+      "name": "VCF Operations Generated|Alert Count Immediate"
     },
     "System Attributes|alert_count_info": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Info"
+      "name": "VCF Operations Generated|Alert Count Info"
     },
     "System Attributes|alert_count_warning": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Warning"
+      "name": "VCF Operations Generated|Alert Count Warning"
     },
     "System Attributes|all_metrics": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Self - Metric Count"
+      "name": "VCF Operations Generated|Self - Metric Count"
     },
     "System Attributes|availability": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Availability"
+      "name": "VCF Operations Generated|Availability"
     },
     "System Attributes|change_index": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - Change Index"
+      "name": "VCF Operations Generated|Self - Change Index"
     },
     "System Attributes|child_active_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - Active Anomaly Count"
+      "name": "VCF Operations Generated|Full Set - Active Anomaly Count"
     },
     "System Attributes|child_active_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - Active KPI Breach Count"
+      "name": "VCF Operations Generated|Full Set - Active KPI Breach Count"
     },
     "System Attributes|child_all_metrics": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Full Set - Metric Count"
+      "name": "VCF Operations Generated|Full Set - Metric Count"
     },
     "System Attributes|child_ki_metrics": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - KPI Count"
+      "name": "VCF Operations Generated|Full Set - KPI Count"
     },
     "System Attributes|child_new_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - New Anomaly Count"
+      "name": "VCF Operations Generated|Full Set - New Anomaly Count"
     },
     "System Attributes|child_new_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - New KPI Breach Count"
+      "name": "VCF Operations Generated|Full Set - New KPI Breach Count"
     },
     "System Attributes|health": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Self - Health Score"
+      "name": "VCF Operations Generated|Self - Health Score"
     },
     "System Attributes|ki_metrics": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - KPI Count"
+      "name": "VCF Operations Generated|Self - KPI Count"
     },
     "System Attributes|new_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - New Anomaly Count"
+      "name": "VCF Operations Generated|Self - New Anomaly Count"
     },
     "System Attributes|new_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - New KPI Breach Count"
+      "name": "VCF Operations Generated|Self - New KPI Breach Count"
     },
     "System Attributes|self_alert_count": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Self - Alert Count"
+      "name": "VCF Operations Generated|Self - Alert Count"
     },
     "System Attributes|total_alarms": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Total Anomalies"
+      "name": "VCF Operations Generated|Total Anomalies"
     },
     "System Attributes|total_alert_count": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Total Alert Count"
+      "name": "VCF Operations Generated|Total Alert Count"
     },
     "TimeRemainingCapIQ|Critical|totalCount": {
       "default_monitored": true,
@@ -383,19 +444,19 @@
     "System Properties|host_collector_id": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Current Collector ID"
+      "name": "VCF Operations Generated Properties|Current Collector ID"
     },
     "System Properties|resource_kind_subtype": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Object Type Subclassification"
+      "name": "VCF Operations Generated Properties|Object Type Subclassification"
     },
     "System Properties|resource_kind_type": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Object Type Classification"
+      "name": "VCF Operations Generated Properties|Object Type Classification"
     }
   },
   "resource_kind": "NSXT World",
-  "source": "https://ro818/suite-api/api/adapterkinds/NSXTAdapter/resourcekinds/NSXT World/statkeys"
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/NSXTAdapter/resourcekinds/NSXT World/statkeys"
 }

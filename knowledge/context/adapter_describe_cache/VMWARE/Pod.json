@@ -1,6 +1,35 @@
 {
   "adapter_kind": "VMWARE",
-  "fetched_at": "2026-07-27T22:10:54Z",
+  "fetched_at": "2026-09-14T16:30:39Z",
+  "merged_from": [
+    {
+      "counts": {
+        "metrics": {
+          "added": 0,
+          "dropped_instance_local": 0,
+          "pruned": 0,
+          "retained": 0,
+          "unchanged": 729,
+          "updated": 0
+        },
+        "properties": {
+          "added": 0,
+          "dropped_instance_local": 0,
+          "pruned": 0,
+          "retained": 0,
+          "unchanged": 188,
+          "updated": 0
+        }
+      },
+      "fetched_at": "2026-09-14T16:30:39Z",
+      "retained_absent": {
+        "metrics": [],
+        "properties": []
+      },
+      "role": "refresh",
+      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/Pod/statkeys"
+    }
+  ],
   "metrics": {
     "Guest OS Services|mkInComingConnectionCount": {
       "default_monitored": true,

@@ -1,7 +1,580 @@
 {
   "adapter_kind": "NSXTAdapter",
-  "fetched_at": "2026-08-26T21:00:40Z",
+  "fetched_at": "2026-09-14T16:29:49Z",
+  "merged_from": [
+    {
+      "counts": {
+        "metrics": {
+          "added": 0,
+          "dropped_instance_local": 0,
+          "pruned": 0,
+          "retained": 0,
+          "unchanged": 256,
+          "updated": 0
+        },
+        "properties": {
+          "added": 0,
+          "dropped_instance_local": 0,
+          "pruned": 0,
+          "retained": 7,
+          "unchanged": 48,
+          "updated": 0
+        }
+      },
+      "fetched_at": "2026-09-14T16:29:49Z",
+      "retained_absent": {
+        "metrics": [],
+        "properties": [
+          "ConnectivityStatus|ClusterConnectivityProperty",
+          "ConnectivityStatus|ManagerConnectivityProperty",
+          "FileSystems|FileSystemId",
+          "FileSystems|Total",
+          "FileSystems|Type",
+          "HostSwitches|SwitchMode",
+          "Tunnels|StatusProperty"
+        ]
+      },
+      "role": "refresh",
+      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/NSXTAdapter/resourcekinds/TransportNode/statkeys"
+    }
+  ],
   "metrics": {
+    "AgentStatus|DownCount": {
+      "default_monitored": true,
+      "name": "Agent Status|Down Count"
+    },
+    "AgentStatus|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agent Status|Last Status Update Time"
+    },
+    "AgentStatus|UpCount": {
+      "default_monitored": true,
+      "name": "Agent Status|Up Count"
+    },
+    "Agents|BFD|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|BFD|Status"
+    },
+    "Agents|BFD|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|BFD|Last Status Update Time"
+    },
+    "Agents|BFD|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|BFD|UpTime"
+    },
+    "Agents|CT|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|CT|Status"
+    },
+    "Agents|CT|FlowSlabAllocFailures": {
+      "default_monitored": true,
+      "name": "Agents|CT|Flow Slab Alloc Failures"
+    },
+    "Agents|CT|HeapAllocFailures": {
+      "default_monitored": true,
+      "name": "Agents|CT|Heap Alloc Failures"
+    },
+    "Agents|CT|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|CT|Last Status Update Time"
+    },
+    "Agents|CT|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|CT|UpTime"
+    },
+    "Agents|CfgAgent|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|Config Agent|Status"
+    },
+    "Agents|CfgAgent|CPUUsage": {
+      "default_monitored": true,
+      "name": "Agents|Config Agent|CPU Usage"
+    },
+    "Agents|CfgAgent|KcpConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|Config Agent|Kcp Connection Status"
+    },
+    "Agents|CfgAgent|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|Config Agent|Last Status Update Time"
+    },
+    "Agents|CfgAgent|MemoryTotal": {
+      "default_monitored": true,
+      "name": "Agents|Config Agent|Memory Total"
+    },
+    "Agents|CfgAgent|MemoryUsed": {
+      "default_monitored": true,
+      "name": "Agents|Config Agent|Memory Used"
+    },
+    "Agents|CfgAgent|NestDbConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|Config Agent|NestDb Connection Status"
+    },
+    "Agents|CfgAgent|SwsecConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|Config Agent|Swsec Connection Status"
+    },
+    "Agents|CfgAgent|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|Config Agent|UpTime"
+    },
+    "Agents|CfgAgent|Vdl2ConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|Config Agent|Vdl2 Connection Status"
+    },
+    "Agents|CfgAgent|VdrbConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|Config Agent|Vdrb Connection Status"
+    },
+    "Agents|ENS|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|ENS|Status"
+    },
+    "Agents|ENS|FlowCacheDisableSwitch": {
+      "default_monitored": true,
+      "name": "Agents|ENS|Flow Cache Disabled Switch"
+    },
+    "Agents|ENS|HeapAllocFailures": {
+      "default_monitored": true,
+      "name": "Agents|ENS|Heap Alloc Failures"
+    },
+    "Agents|ENS|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|ENS|Last Status Update Time"
+    },
+    "Agents|ENS|PktSlabErrors": {
+      "default_monitored": true,
+      "name": "Agents|ENS|Pkt Slab Errors"
+    },
+    "Agents|ENS|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|ENS|UpTime"
+    },
+    "Agents|Exporter|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|Exporter|Status"
+    },
+    "Agents|Exporter|CPUUsage": {
+      "default_monitored": true,
+      "name": "Agents|Exporter|CPU Usage"
+    },
+    "Agents|Exporter|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|Exporter|Last Status Update Time"
+    },
+    "Agents|Exporter|MemoryTotal": {
+      "default_monitored": true,
+      "name": "Agents|Exporter|Memory Total"
+    },
+    "Agents|Exporter|MemoryUsed": {
+      "default_monitored": true,
+      "name": "Agents|Exporter|Memory Used"
+    },
+    "Agents|FC|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|FC|Status"
+    },
+    "Agents|FC|FlowCacheDisableSwitch": {
+      "default_monitored": true,
+      "name": "Agents|FC|Flow Cache Disabled Switch"
+    },
+    "Agents|FC|FlowInsertionErrors": {
+      "default_monitored": true,
+      "name": "Agents|FC|Flow Insertion Errors"
+    },
+    "Agents|FC|HeapAllocFailures": {
+      "default_monitored": true,
+      "name": "Agents|FC|Heap Alloc Failures"
+    },
+    "Agents|FC|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|FC|Last Status Update Time"
+    },
+    "Agents|FC|PktSlabErrors": {
+      "default_monitored": true,
+      "name": "Agents|FC|Pkt Slab Errors"
+    },
+    "Agents|FC|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|FC|UpTime"
+    },
+    "Agents|KCP|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|KCP|Status"
+    },
+    "Agents|KCP|HeapAllocFailures": {
+      "default_monitored": true,
+      "name": "Agents|KCP|Heap Alloc Failures"
+    },
+    "Agents|KCP|KcpConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|KCP|Kcp Connection Status"
+    },
+    "Agents|KCP|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|KCP|Last Status Update Time"
+    },
+    "Agents|KCP|LcpConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|KCP|Lcp Connection Status"
+    },
+    "Agents|KCP|LcpOutOfSync": {
+      "default_monitored": true,
+      "name": "Agents|KCP|Lcp Out Of Sync"
+    },
+    "Agents|KCP|PktSlabErrors": {
+      "default_monitored": true,
+      "name": "Agents|KCP|Pkt Slab Errors"
+    },
+    "Agents|KCP|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|KCP|UpTime"
+    },
+    "Agents|NestDb|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|NestDb|Status"
+    },
+    "Agents|NestDb|CPUUsage": {
+      "default_monitored": true,
+      "name": "Agents|NestDb|CPU Usage"
+    },
+    "Agents|NestDb|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|NestDb|Last Status Update Time"
+    },
+    "Agents|NestDb|MemoryTotal": {
+      "default_monitored": true,
+      "name": "Agents|NestDb|Memory Total"
+    },
+    "Agents|NestDb|MemoryUsed": {
+      "default_monitored": true,
+      "name": "Agents|NestDb|Memory Used"
+    },
+    "Agents|OBSRV|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|OBSRV|Status"
+    },
+    "Agents|OBSRV|HeapAllocFailures": {
+      "default_monitored": true,
+      "name": "Agents|OBSRV|Heap Alloc Failures"
+    },
+    "Agents|OBSRV|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|OBSRV|Last Status Update Time"
+    },
+    "Agents|OBSRV|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|OBSRV|UpTime"
+    },
+    "Agents|OpsAgent|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|OpsAgent|Status"
+    },
+    "Agents|OpsAgent|AlarmsProviderAppStatus": {
+      "default_monitored": true,
+      "name": "Agents|OpsAgent|Alarms Provider App Status"
+    },
+    "Agents|OpsAgent|CPUUsage": {
+      "default_monitored": true,
+      "name": "Agents|OpsAgent|CPU Usage"
+    },
+    "Agents|OpsAgent|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|OpsAgent|Last Status Update Time"
+    },
+    "Agents|OpsAgent|MemoryTotal": {
+      "default_monitored": true,
+      "name": "Agents|OpsAgent|Memory Total"
+    },
+    "Agents|OpsAgent|MemoryUsed": {
+      "default_monitored": true,
+      "name": "Agents|OpsAgent|Memory Used"
+    },
+    "Agents|OpsAgent|SupportBundleAppStatus": {
+      "default_monitored": true,
+      "name": "Agents|OpsAgent|Support Bundle App Status"
+    },
+    "Agents|OpsAgent|TnProxyConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|OpsAgent|Tn Proxy Connection Status"
+    },
+    "Agents|OpsAgent|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|OpsAgent|UpTime"
+    },
+    "Agents|PlatformClient|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|Platform Client|Status"
+    },
+    "Agents|PlatformClient|CPUUsage": {
+      "default_monitored": true,
+      "name": "Agents|Platform Client|CPU Usage"
+    },
+    "Agents|PlatformClient|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|Platform Client|Last Status Update Time"
+    },
+    "Agents|PlatformClient|MemoryTotal": {
+      "default_monitored": true,
+      "name": "Agents|Platform Client|Memory Total"
+    },
+    "Agents|PlatformClient|MemoryUsed": {
+      "default_monitored": true,
+      "name": "Agents|Platform Client|Memory Used"
+    },
+    "Agents|PlatformClient|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|Platform Client|UpTime"
+    },
+    "Agents|Proxy|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|Proxy|Status"
+    },
+    "Agents|Proxy|CPUUsage": {
+      "default_monitored": true,
+      "name": "Agents|Proxy|CPU Usage"
+    },
+    "Agents|Proxy|ControllerConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|Proxy|Controller Connection Status"
+    },
+    "Agents|Proxy|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|Proxy|Last Status Update Time"
+    },
+    "Agents|Proxy|ManagerConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|Proxy|Manager Connection Status"
+    },
+    "Agents|Proxy|MemoryTotal": {
+      "default_monitored": true,
+      "name": "Agents|Proxy|Memory Total"
+    },
+    "Agents|Proxy|MemoryUsed": {
+      "default_monitored": true,
+      "name": "Agents|Proxy|Memory Used"
+    },
+    "Agents|Proxy|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|Proxy|UpTime"
+    },
+    "Agents|SHA|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|SHA|Status"
+    },
+    "Agents|SHA|CPUUsage": {
+      "default_monitored": true,
+      "name": "Agents|SHA|CPU Usage"
+    },
+    "Agents|SHA|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|SHA|Last Status Update Time"
+    },
+    "Agents|SHA|MemoryTotal": {
+      "default_monitored": true,
+      "name": "Agents|SHA|Memory Total"
+    },
+    "Agents|SHA|MemoryUsed": {
+      "default_monitored": true,
+      "name": "Agents|SHA|Memory Used"
+    },
+    "Agents|SHA|NestdbConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|SHA|Nestdb Connection Status"
+    },
+    "Agents|SHA|TsdbConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|SHA|TSDB Connection Status"
+    },
+    "Agents|SHA|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|SHA|UpTime"
+    },
+    "Agents|SWSEC|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|SWSEC|Status"
+    },
+    "Agents|SWSEC|HeapAllocFailures": {
+      "default_monitored": true,
+      "name": "Agents|SWSEC|Heap Alloc Failures"
+    },
+    "Agents|SWSEC|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|SWSEC|Last Status Update Time"
+    },
+    "Agents|SWSEC|LcpConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|SWSEC|Lcp Connection Status"
+    },
+    "Agents|SWSEC|PktSlabErrors": {
+      "default_monitored": true,
+      "name": "Agents|SWSEC|Pkt Slab Errors"
+    },
+    "Agents|SWSEC|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|SWSEC|UpTime"
+    },
+    "Agents|VDL2|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|VDL2|Status"
+    },
+    "Agents|VDL2|AllBfdSessionsFromAVtepDownCount": {
+      "default_monitored": true,
+      "name": "Agents|VDL2|All Bfd Sessions From A Vtep Down Count"
+    },
+    "Agents|VDL2|GwMacNotResolvedCount": {
+      "default_monitored": true,
+      "name": "Agents|VDL2|Gw Mac Not Resolved Count"
+    },
+    "Agents|VDL2|HeapAllocFailures": {
+      "default_monitored": true,
+      "name": "Agents|VDL2|Heap Alloc Failures"
+    },
+    "Agents|VDL2|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|VDL2|Last Status Update Time"
+    },
+    "Agents|VDL2|LcpConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|VDL2|Lcp Connection Status"
+    },
+    "Agents|VDL2|PktSlabErrors": {
+      "default_monitored": true,
+      "name": "Agents|VDL2|Pkt Slab Errors"
+    },
+    "Agents|VDL2|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|VDL2|UpTime"
+    },
+    "Agents|VDL2|UplinkNotSetForVtepCount": {
+      "default_monitored": true,
+      "name": "Agents|VDL2|uplink not set for vtep count"
+    },
+    "Agents|VDL2|VtepIpNotAssignedCount": {
+      "default_monitored": true,
+      "name": "Agents|VDL2|Vtep Ip Not Assigned Count"
+    },
+    "Agents|VDPI|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|VDPI|Status"
+    },
+    "Agents|VDPI|CPUUsage": {
+      "default_monitored": true,
+      "name": "Agents|VDPI|CPU Usage"
+    },
+    "Agents|VDPI|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|VDPI|Last Status Update Time"
+    },
+    "Agents|VDPI|MemoryTotal": {
+      "default_monitored": true,
+      "name": "Agents|VDPI|Memory Total"
+    },
+    "Agents|VDPI|MemoryUsed": {
+      "default_monitored": true,
+      "name": "Agents|VDPI|Memory Used"
+    },
+    "Agents|VDR|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|VDR|Status"
+    },
+    "Agents|VDR|DadFailedCount": {
+      "default_monitored": true,
+      "name": "Agents|VDR|Dad Failed Count"
+    },
+    "Agents|VDR|HeapAllocFailures": {
+      "default_monitored": true,
+      "name": "Agents|VDR|Heap Alloc Failures"
+    },
+    "Agents|VDR|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|VDR|Last Status Update Time"
+    },
+    "Agents|VDR|LcpConnectionStatus": {
+      "default_monitored": true,
+      "name": "Agents|VDR|Lcp Connection Status"
+    },
+    "Agents|VDR|PktSlabErrors": {
+      "default_monitored": true,
+      "name": "Agents|VDR|Pkt Slab Errors"
+    },
+    "Agents|VDR|PortCreationFailedCount": {
+      "default_monitored": true,
+      "name": "Agents|VDR|Port Creation Failed Count"
+    },
+    "Agents|VDR|PortFrpSetFailedCount": {
+      "default_monitored": true,
+      "name": "Agents|VDR|Port Frp Set Failed Count"
+    },
+    "Agents|VDR|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|VDR|UpTime"
+    },
+    "Agents|VSWITCH|AgentStatus": {
+      "default_monitored": true,
+      "name": "Agents|VSWITCH|Status"
+    },
+    "Agents|VSWITCH|DispatchDataSlabErrors": {
+      "default_monitored": true,
+      "name": "Agents|VSWITCH|Dispatch Data Slab Errors"
+    },
+    "Agents|VSWITCH|ForwardingDisabledCount": {
+      "default_monitored": true,
+      "name": "Agents|VSWITCH|Forwarding Disabled Count"
+    },
+    "Agents|VSWITCH|HeapAllocFailures": {
+      "default_monitored": true,
+      "name": "Agents|VSWITCH|Heap Alloc Failures"
+    },
+    "Agents|VSWITCH|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Agents|VSWITCH|Last Status Update Time"
+    },
+    "Agents|VSWITCH|MacLearningStoppedOnUplinksCount": {
+      "default_monitored": true,
+      "name": "Agents|VSWITCH|Mac Learning Stopped On Uplinks Count"
+    },
+    "Agents|VSWITCH|PktSlabErrors": {
+      "default_monitored": true,
+      "name": "Agents|VSWITCH|Pkt Slab Errors"
+    },
+    "Agents|VSWITCH|UpTime": {
+      "default_monitored": true,
+      "name": "Agents|VSWITCH|UpTime"
+    },
+    "AlarmSummary|AlarmCriticalCount": {
+      "default_monitored": true,
+      "name": "Summary of Open Alarms|Count of Critical Alarms"
+    },
+    "AlarmSummary|AlarmHighCount": {
+      "default_monitored": true,
+      "name": "Summary of Open Alarms|Count of High Alarms"
+    },
+    "AlarmSummary|AlarmMediumCount": {
+      "default_monitored": true,
+      "name": "Summary of Open Alarms|Count of Medium Alarms"
+    },
+    "AlarmSummary|AlarmTotalCount": {
+      "default_monitored": true,
+      "name": "Summary of Open Alarms|Total Count of Alarms"
+    },
+    "ControlConnection|DegradedCount": {
+      "default_monitored": true,
+      "name": "Control Connection|Degraded Count"
+    },
+    "ControlConnection|DownCount": {
+      "default_monitored": true,
+      "name": "Control Connection|Down Count"
+    },
+    "ControlConnection|LastStatusUpdateTime": {
+      "default_monitored": true,
+      "name": "Control Connection|Last Status Update Time"
+    },
+    "ControlConnection|UpCount": {
+      "default_monitored": true,
+      "name": "Control Connection|Up Count"
+    },
     "Cpu|AvgDpdkCpuCoreUsage": {
       "default_monitored": true,
       "name": "CPU|DPDK CPU Core Average Usage"
@@ -10,9 +583,17 @@
       "default_monitored": true,
       "name": "CPU|Non-DPDK CPU Core Average Usage"
     },
+    "Cpu|ControlPlaneCPUCores": {
+      "default_monitored": true,
+      "name": "CPU|Control Plane Cores"
+    },
     "Cpu|Cores": {
       "default_monitored": true,
       "name": "CPU|CPU Cores"
+    },
+    "Cpu|CpuSockets": {
+      "default_monitored": true,
+      "name": "CPU|Cpu Sockets"
     },
     "Cpu|DPDKCores": {
       "default_monitored": true,
@@ -26,13 +607,29 @@
       "default_monitored": true,
       "name": "CPU|Non-DPDK CPU Core Highest Usage"
     },
+    "FileSystems|FileSystemId": {
+      "default_monitored": true,
+      "name": "File Systems|File System ID"
+    },
+    "FileSystems|Total": {
+      "default_monitored": true,
+      "name": "File Systems|Total"
+    },
+    "FileSystems|Type": {
+      "default_monitored": true,
+      "name": "File Systems|Type"
+    },
     "FileSystems|Used": {
       "default_monitored": true,
       "name": "File Systems|Used"
     },
     "FileSystems|UsedPercentage": {
       "default_monitored": true,
-      "name": "File Systems|Used"
+      "name": "File Systems|Percentage of Usage"
+    },
+    "HostSwitches|SwitchMode": {
+      "default_monitored": true,
+      "name": "Host Switches|Switch Mode"
     },
     "Memory|Cache": {
       "default_monitored": true,
@@ -52,103 +649,191 @@
     },
     "Memory|UsedPercentage": {
       "default_monitored": true,
-      "name": "Memory|Used"
+      "name": "Memory|Percentage of Usage"
     },
     "Memory|UsedSwap": {
       "default_monitored": true,
       "name": "Memory|Used Swap"
     },
+    "MgmtIpAddress": {
+      "default_monitored": true,
+      "name": "Management IP Address"
+    },
+    "NodeStatus|DiskSpaceTotal": {
+      "default_monitored": true,
+      "name": "Node Status|Disk Space Total"
+    },
+    "NodeStatus|DiskSpaceUsed": {
+      "default_monitored": true,
+      "name": "Node Status|Disk Space Used"
+    },
+    "NodeStatus|EdgeDatapathMemoryUsage": {
+      "default_monitored": true,
+      "name": "Node Status|Edge Datapath Memory Usage"
+    },
+    "NodeStatus|NodeHealthScore": {
+      "default_monitored": true,
+      "name": "Node Status|Node Health Score"
+    },
+    "NodeStatus|OneMinuteLoadAverage": {
+      "default_monitored": true,
+      "name": "Node Status|1-Minute System Load"
+    },
+    "PnicStatus|DegradedCount": {
+      "default_monitored": true,
+      "name": "Pnic Status|Degraded Count"
+    },
+    "PnicStatus|DownCount": {
+      "default_monitored": true,
+      "name": "Pnic Status|Down Count"
+    },
+    "PnicStatus|LastStatusChangedTime": {
+      "default_monitored": true,
+      "name": "Pnic Status|Last Status Changed Time"
+    },
+    "PnicStatus|UpCount": {
+      "default_monitored": true,
+      "name": "Pnic Status|Up Count"
+    },
     "System Attributes|active_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - Active Anomaly Count"
+      "name": "VCF Operations Generated|Self - Active Anomaly Count"
     },
     "System Attributes|active_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - Active KPI Breach Count"
+      "name": "VCF Operations Generated|Self - Active KPI Breach Count"
     },
     "System Attributes|alert_count_critical": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Critical"
+      "name": "VCF Operations Generated|Alert Count Critical"
     },
     "System Attributes|alert_count_immediate": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Immediate"
+      "name": "VCF Operations Generated|Alert Count Immediate"
     },
     "System Attributes|alert_count_info": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Info"
+      "name": "VCF Operations Generated|Alert Count Info"
     },
     "System Attributes|alert_count_warning": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Alert Count Warning"
+      "name": "VCF Operations Generated|Alert Count Warning"
     },
     "System Attributes|all_metrics": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Self - Metric Count"
+      "name": "VCF Operations Generated|Self - Metric Count"
     },
     "System Attributes|availability": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Availability"
+      "name": "VCF Operations Generated|Availability"
     },
     "System Attributes|change_index": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - Change Index"
+      "name": "VCF Operations Generated|Self - Change Index"
     },
     "System Attributes|child_active_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - Active Anomaly Count"
+      "name": "VCF Operations Generated|Full Set - Active Anomaly Count"
     },
     "System Attributes|child_active_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - Active KPI Breach Count"
+      "name": "VCF Operations Generated|Full Set - Active KPI Breach Count"
     },
     "System Attributes|child_all_metrics": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Full Set - Metric Count"
+      "name": "VCF Operations Generated|Full Set - Metric Count"
     },
     "System Attributes|child_ki_metrics": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - KPI Count"
+      "name": "VCF Operations Generated|Full Set - KPI Count"
     },
     "System Attributes|child_new_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - New Anomaly Count"
+      "name": "VCF Operations Generated|Full Set - New Anomaly Count"
     },
     "System Attributes|child_new_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Full Set - New KPI Breach Count"
+      "name": "VCF Operations Generated|Full Set - New KPI Breach Count"
     },
     "System Attributes|health": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Self - Health Score"
+      "name": "VCF Operations Generated|Self - Health Score"
     },
     "System Attributes|ki_metrics": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - KPI Count"
+      "name": "VCF Operations Generated|Self - KPI Count"
     },
     "System Attributes|new_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - New Anomaly Count"
+      "name": "VCF Operations Generated|Self - New Anomaly Count"
     },
     "System Attributes|new_ki_alarms": {
       "default_monitored": false,
-      "name": "VMware Aria Operations Generated|Self - New KPI Breach Count"
+      "name": "VCF Operations Generated|Self - New KPI Breach Count"
     },
     "System Attributes|self_alert_count": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Self - Alert Count"
+      "name": "VCF Operations Generated|Self - Alert Count"
     },
     "System Attributes|total_alarms": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Total Anomalies"
+      "name": "VCF Operations Generated|Total Anomalies"
     },
     "System Attributes|total_alert_count": {
       "default_monitored": true,
-      "name": "VMware Aria Operations Generated|Total Alert Count"
+      "name": "VCF Operations Generated|Total Alert Count"
+    },
+    "Tier0Stats|BgpNeighborDownCount": {
+      "default_monitored": true,
+      "name": "Tier0 Stats|BGP Neighbors Down Count"
+    },
+    "Tier0Stats|BgpNeighborsUpCount": {
+      "default_monitored": true,
+      "name": "Tier0 Stats|BGP Neighbors Up Count"
+    },
+    "Tier0Stats|DisplayName": {
+      "default_monitored": true,
+      "name": "Tier0 Stats|Display Name"
+    },
+    "Tier0Stats|HaAvailabilityStatus": {
+      "default_monitored": true,
+      "name": "Tier0 Stats|High Availability Status"
+    },
+    "Tier0Stats|OspfNeighborDownCount": {
+      "default_monitored": true,
+      "name": "Tier0 Stats|OSPF Neighbors Down Count"
+    },
+    "Tier0Stats|OspfNeighborsUpCount": {
+      "default_monitored": true,
+      "name": "Tier0 Stats|OSPF Neighbors Up Count"
+    },
+    "Tier0Stats|RoutingStatus": {
+      "default_monitored": true,
+      "name": "Tier0 Stats|Routing Status"
     },
     "TransportNodeUptime": {
       "default_monitored": true,
       "name": "Uptime"
+    },
+    "TunnelSummary|DegradedCount": {
+      "default_monitored": true,
+      "name": "Tunnel Summary|Degraded Count"
+    },
+    "TunnelSummary|DownCount": {
+      "default_monitored": true,
+      "name": "Tunnel Summary|Down Count"
+    },
+    "TunnelSummary|LastStatusChangedTime": {
+      "default_monitored": true,
+      "name": "Tunnel Summary|Last Status Changed Time"
+    },
+    "TunnelSummary|UpCount": {
+      "default_monitored": true,
+      "name": "Tunnel Summary|Up Count"
+    },
+    "Tunnels|StatusProperty": {
+      "default_monitored": false,
+      "name": "Tunnels|Status"
     },
     "badge|alert_count_critical": {
       "default_monitored": false,
@@ -250,13 +935,33 @@
       "default_monitored": false,
       "name": "Badge|Waste"
     },
+    "stats|Interface|AdminStatus": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Administration Status"
+    },
+    "stats|Interface|InterfaceAlias|BroadcastAddress": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Interface Alias|Broadcast Address"
+    },
+    "stats|Interface|InterfaceAlias|Netmask": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Interface Alias|Netmask"
+    },
+    "stats|Interface|InterfaceAlias|PhysicalAddress": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Interface Alias|Physical Address"
+    },
+    "stats|Interface|InterfaceType": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Interface Type"
+    },
     "stats|Interface|LinkStatus": {
       "default_monitored": true,
       "name": "Statistics|Interface|Link Status"
     },
     "stats|Interface|RxData": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Received Bytes Cumulative"
+      "name": "Statistics|Interface|Received Data"
     },
     "stats|Interface|RxDataBPS": {
       "default_monitored": true,
@@ -266,9 +971,13 @@
       "default_monitored": true,
       "name": "Statistics|Interface|Received Bytes Discrete"
     },
+    "stats|Interface|RxDropNoMatch": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Rx Drop No Match Data"
+    },
     "stats|Interface|RxDropped": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Received Packets Dropped Cumulative"
+      "name": "Statistics|Interface|Received Packets Dropped"
     },
     "stats|Interface|RxDroppedDiscrete": {
       "default_monitored": true,
@@ -280,15 +989,23 @@
     },
     "stats|Interface|RxErrors": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Received Packets errors"
+      "name": "Statistics|Interface|Received Packets Errors"
     },
     "stats|Interface|RxFrame": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Received Framing errors"
+      "name": "Statistics|Interface|Received Framing Errors"
+    },
+    "stats|Interface|RxMiss": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|Missed Data in Rx"
+    },
+    "stats|Interface|RxNoMbuf": {
+      "default_monitored": true,
+      "name": "Statistics|Interface|RX packet dropped due to lack of free mbufs"
     },
     "stats|Interface|RxPackets": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Received Packets Cumulative"
+      "name": "Statistics|Interface|Received Packets"
     },
     "stats|Interface|RxPacketsDiscrete": {
       "default_monitored": true,
@@ -296,19 +1013,19 @@
     },
     "stats|Interface|RxPacketsPPS": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Received Packets (PPS)"
+      "name": "Statistics|Interface|Received Packets Discrete (PPS)"
     },
     "stats|Interface|TxCarrier": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Transmitted carrier losses detected"
+      "name": "Statistics|Interface|Transmitted Carrier Losses Detected"
     },
     "stats|Interface|TxColls": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Transmitted Collisions detected"
+      "name": "Statistics|Interface|Transmitted Collisions Detected"
     },
     "stats|Interface|TxData": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Transmitted Bytes Cumulative"
+      "name": "Statistics|Interface|Transmitted Data"
     },
     "stats|Interface|TxDataBPS": {
       "default_monitored": true,
@@ -320,7 +1037,7 @@
     },
     "stats|Interface|TxDropped": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Transmitted Packets Dropped Cumulative"
+      "name": "Statistics|Interface|Transmitted Packets Dropped"
     },
     "stats|Interface|TxDroppedDiscrete": {
       "default_monitored": true,
@@ -332,11 +1049,11 @@
     },
     "stats|Interface|TxErrors": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Transmitted Packets errors"
+      "name": "Statistics|Interface|Transmitted Packets Errors"
     },
     "stats|Interface|TxPackets": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Transmitted Packets Cumulative"
+      "name": "Statistics|Interface|Transmitted Packets"
     },
     "stats|Interface|TxPacketsDiscrete": {
       "default_monitored": true,
@@ -344,10 +1061,20 @@
     },
     "stats|Interface|TxPacketsPPS": {
       "default_monitored": true,
-      "name": "Statistics|Interface|Transmitted Packets (PPS)"
+      "name": "Statistics|Interface|Transmitted Packets Cumulative"
     }
   },
   "properties": {
+    "ConnectivityStatus|AgentOverallStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Connectivity Status|Agent Overall Status"
+    },
+    "ConnectivityStatus|BfdStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Connectivity Status|BFD Status"
+    },
     "ConnectivityStatus|ClusterConnectivityProperty": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
@@ -356,32 +1083,67 @@
     "ConnectivityStatus|ControlConnectionStatusProperty": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Status Summary|Controller connection status"
+      "name": "Connectivity Status|Controller Connection Status"
     },
     "ConnectivityStatus|EdgeNodeHostNodeStatus": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Status Summary|Host Node Deployment Status"
+      "name": "Connectivity Status|Host Node Deployment Status"
+    },
+    "ConnectivityStatus|HighAvailabilityStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Connectivity Status|High Availability Status"
     },
     "ConnectivityStatus|ManagementConnectionStatusProperty": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Status Summary|Management connection status"
+      "name": "Connectivity Status|Management Connection Status"
     },
     "ConnectivityStatus|ManagerConnectivityProperty": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
       "name": "Status Summary|Management Plane Connectivity Status"
     },
+    "ConnectivityStatus|NodeStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Connectivity Status|Node Status"
+    },
+    "ConnectivityStatus|PnicStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Connectivity Status|Pnic Status"
+    },
+    "ConnectivityStatus|SSHStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Connectivity Status|SSH Status"
+    },
+    "ConnectivityStatus|StorageMode": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Connectivity Status|Storage Mode"
+    },
     "ConnectivityStatus|TransportNodeDeploymentState": {
       "default_monitored": false,
       "instance_type": "INSTANCED",
-      "name": "Status Summary|Transport Node Deployment State"
+      "name": "Connectivity Status|Transport Node Deployment State"
     },
     "ConnectivityStatus|TransportNodeState": {
       "default_monitored": false,
       "instance_type": "INSTANCED",
-      "name": "Status Summary|Transport Node State"
+      "name": "Connectivity Status|Transport Node State"
+    },
+    "ConnectivityStatus|TunnelStatus": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Connectivity Status|Tunnel Status"
+    },
+    "ConnectivityStatus|VtepState": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Connectivity Status|Vtep State"
     },
     "FileSystems|FileSystemId": {
       "default_monitored": true,
@@ -406,17 +1168,17 @@
     "LoadBalancerServicePerNode|CurrentExtraLarge": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Load Balancer Usage|Current Extra Large LB services"
+      "name": "Load Balancer Usage|Current Extra Large LB Services"
     },
     "LoadBalancerServicePerNode|CurrentLarge": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Load Balancer Usage|Current Large LB services"
+      "name": "Load Balancer Usage|Current Large LB Services"
     },
     "LoadBalancerServicePerNode|CurrentMedium": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Load Balancer Usage|Current Medium LB services"
+      "name": "Load Balancer Usage|Current Medium LB Services"
     },
     "LoadBalancerServicePerNode|CurrentPoolMembers": {
       "default_monitored": true,
@@ -431,7 +1193,7 @@
     "LoadBalancerServicePerNode|CurrentSmall": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Load Balancer Usage|Current Small LB services"
+      "name": "Load Balancer Usage|Current Small LB Services"
     },
     "LoadBalancerServicePerNode|CurrentVirtualServers": {
       "default_monitored": true,
@@ -443,20 +1205,30 @@
       "instance_type": "INSTANCED",
       "name": "Load Balancer Usage|Edge Load Balancer Count"
     },
+    "LoadBalancerServicePerNode|FormFactor": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Form Factor"
+    },
+    "LoadBalancerServicePerNode|NsxEdgeCluster": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Load Balancer Usage|Nsx Edge Cluster"
+    },
     "LoadBalancerServicePerNode|RemainingExtraLargeLBService": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Load Balancer Usage|Remaining Extra Large LB services"
+      "name": "Load Balancer Usage|Remaining Extra Large LB Services"
     },
     "LoadBalancerServicePerNode|RemainingLargeLBService": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Load Balancer Usage|Remaining Large LB services"
+      "name": "Load Balancer Usage|Remaining Large LB Services"
     },
     "LoadBalancerServicePerNode|RemainingMediumLBService": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Load Balancer Usage|Remaining Medium LB services"
+      "name": "Load Balancer Usage|Remaining Medium LB Services"
     },
     "LoadBalancerServicePerNode|RemainingPoolMembers": {
       "default_monitored": true,
@@ -466,22 +1238,22 @@
     "LoadBalancerServicePerNode|RemainingSmallLBService": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "Load Balancer Usage|Remaining Small LB services"
+      "name": "Load Balancer Usage|Remaining Small LB Services"
     },
     "System Properties|host_collector_id": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Current Collector ID"
+      "name": "VCF Operations Generated Properties|Current Collector ID"
     },
     "System Properties|resource_kind_subtype": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Object Type Subclassification"
+      "name": "VCF Operations Generated Properties|Object Type Subclassification"
     },
     "System Properties|resource_kind_type": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
-      "name": "VMware Aria Operations Generated Properties|Object Type Classification"
+      "name": "VCF Operations Generated Properties|Object Type Classification"
     },
     "Tunnels|StatusProperty": {
       "default_monitored": true,
@@ -528,10 +1300,25 @@
       "instance_type": "INSTANCED",
       "name": "Summary|Maintenance Mode"
     },
+    "summary|NodeId": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Node Id"
+    },
     "summary|NodeType": {
       "default_monitored": true,
       "instance_type": "INSTANCED",
       "name": "Summary|Node Type"
+    },
+    "summary|NsxManagerCluster": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Nsx Manager Cluster"
+    },
+    "summary|PolicyPath": {
+      "default_monitored": true,
+      "instance_type": "INSTANCED",
+      "name": "Summary|Policy Path"
     },
     "summary|ProtectionProperty": {
       "default_monitored": true,
@@ -555,5 +1342,5 @@
     }
   },
   "resource_kind": "TransportNode",
-  "source": "https://ro818/suite-api/api/adapterkinds/NSXTAdapter/resourcekinds/TransportNode/statkeys"
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/NSXTAdapter/resourcekinds/TransportNode/statkeys"
 }

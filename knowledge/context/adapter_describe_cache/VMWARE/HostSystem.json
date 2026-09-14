@@ -1,23 +1,51 @@
 {
   "adapter_kind": "VMWARE",
-  "resource_kind": "HostSystem",
-  "fetched_at": "2026-07-27T22:10:45Z",
-  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys",
+  "fetched_at": "2026-09-14T16:30:37Z",
+  "merge_note": "Union of two live instances (hand-merged in PR #142; the primary supplied display names on key collisions, default_monitored was identical on every collision). Since issue #143, refresh-describe MERGES into this file: keys the live instance reports are updated (the live instance wins on collision, including display names), keys it does not report are retained and listed in that host's merged_from 'refresh' entry, and instance-local 'Super Metric|sm_<uuid>' keys are never imported. Only refresh-describe --prune removes keys, which re-grounds the file on a single instance.",
   "merged_from": [
     {
-      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys",
       "fetched_at": "2026-07-27T22:10:45Z",
       "platform": "VCF Operations 9.x",
-      "role": "primary"
+      "role": "primary",
+      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys"
     },
     {
-      "source": "https://ro818/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys",
       "fetched_at": "2026-08-26T21:00:41Z",
       "platform": "VCF Operations 8.18",
-      "role": "additive"
+      "role": "additive",
+      "source": "https://ro818/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys"
+    },
+    {
+      "counts": {
+        "metrics": {
+          "added": 0,
+          "dropped_instance_local": 0,
+          "pruned": 0,
+          "retained": 2,
+          "unchanged": 805,
+          "updated": 0
+        },
+        "properties": {
+          "added": 0,
+          "dropped_instance_local": 0,
+          "pruned": 0,
+          "retained": 0,
+          "unchanged": 202,
+          "updated": 0
+        }
+      },
+      "fetched_at": "2026-09-14T16:30:37Z",
+      "retained_absent": {
+        "metrics": [
+          "summary|metering|deletedResources",
+          "summary|metering|value"
+        ],
+        "properties": []
+      },
+      "role": "refresh",
+      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys"
     }
   ],
-  "merge_note": "Union of two live instances (hand-merged in PR #142; the primary supplied display names on key collisions, default_monitored was identical on every collision). Since issue #143, refresh-describe MERGES into this file: keys the live instance reports are updated (the live instance wins on collision, including display names), keys it does not report are retained and listed in that host's merged_from 'refresh' entry, and instance-local 'Super Metric|sm_<uuid>' keys are never imported. Only refresh-describe --prune removes keys, which re-grounds the file on a single instance.",
   "metrics": {
     "NTP|DRIFT_IN_MILLS": {
       "default_monitored": true,
@@ -98,46 +126,6 @@
     "Sensor|temperature|healthState": {
       "default_monitored": false,
       "name": "Sensor|Temperature|(DEP) Health State"
-    },
-    "Super Metric|sm_51613351-5865-478e-9f26-b9d5598fed4d": {
-      "default_monitored": true,
-      "name": "Super Metrics|Network Speed Degradation"
-    },
-    "Super Metric|sm_55ef6c51-3b90-4a6e-800a-983d2e86a8a5": {
-      "default_monitored": true,
-      "name": "Super Metrics|[VCF Content Factory] Storage Active Path Count"
-    },
-    "Super Metric|sm_57be077d-f61e-4d25-ae05-ae27eed15229": {
-      "default_monitored": true,
-      "name": "Super Metrics|[IDPS] Net Transmit (All VMs)"
-    },
-    "Super Metric|sm_a5ada313-49da-4feb-b6de-86c49646c3fc": {
-      "default_monitored": true,
-      "name": "Super Metrics|[IDPS] Packets per second (All VMs)"
-    },
-    "Super Metric|sm_a7becc4c-22f4-4946-acf9-6cb559672544": {
-      "default_monitored": true,
-      "name": "Super Metrics|[VCF Content Factory] CPU Support Status (KB318697)"
-    },
-    "Super Metric|sm_b6f20136-03bf-48d3-8b80-429f59d21374": {
-      "default_monitored": true,
-      "name": "Super Metrics|ESXi Host Availability"
-    },
-    "Super Metric|sm_c0c98494-1147-4ec1-affd-fcaf54334563": {
-      "default_monitored": true,
-      "name": "Super Metrics|ESXi Bad Network Packets"
-    },
-    "Super Metric|sm_c458582f-b63f-4085-8465-fa32cb718271": {
-      "default_monitored": true,
-      "name": "Super Metrics|[IDPS] Net Receive (All VMs)"
-    },
-    "Super Metric|sm_c6816ee1-2b94-43ae-baf3-180f95b0e94c": {
-      "default_monitored": true,
-      "name": "Super Metrics|[IDPS] Peak PPS within cycle (All VMs)"
-    },
-    "Super Metric|sm_f4acf93a-06b8-4450-8237-92cee270bc65": {
-      "default_monitored": true,
-      "name": "Super Metrics|[IDPS] Net Usage (All VMs)"
     },
     "System Attributes|active_alarms": {
       "default_monitored": false,
@@ -4299,5 +4287,7 @@
       "instance_type": "INSTANCED",
       "name": "VCM|Template|Total checks"
     }
-  }
+  },
+  "resource_kind": "HostSystem",
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/HostSystem/statkeys"
 }

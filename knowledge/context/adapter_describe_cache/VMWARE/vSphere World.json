@@ -1,23 +1,48 @@
 {
   "adapter_kind": "VMWARE",
-  "resource_kind": "vSphere World",
-  "fetched_at": "2026-07-27T22:10:40Z",
-  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys",
+  "fetched_at": "2026-09-14T16:30:35Z",
+  "merge_note": "Union of two live instances (hand-merged in PR #142; the primary supplied display names on key collisions, default_monitored was identical on every collision). Since issue #143, refresh-describe MERGES into this file: keys the live instance reports are updated (the live instance wins on collision, including display names), keys it does not report are retained and listed in that host's merged_from 'refresh' entry, and instance-local 'Super Metric|sm_<uuid>' keys are never imported. Only refresh-describe --prune removes keys, which re-grounds the file on a single instance.",
   "merged_from": [
     {
-      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys",
       "fetched_at": "2026-07-27T22:10:40Z",
       "platform": "VCF Operations 9.x",
-      "role": "primary"
+      "role": "primary",
+      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys"
     },
     {
-      "source": "https://ro818/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys",
       "fetched_at": "2026-08-26T21:00:41Z",
       "platform": "VCF Operations 8.18",
-      "role": "additive"
+      "role": "additive",
+      "source": "https://ro818/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys"
+    },
+    {
+      "counts": {
+        "metrics": {
+          "added": 0,
+          "dropped_instance_local": 0,
+          "pruned": 0,
+          "retained": 0,
+          "unchanged": 261,
+          "updated": 0
+        },
+        "properties": {
+          "added": 0,
+          "dropped_instance_local": 0,
+          "pruned": 0,
+          "retained": 0,
+          "unchanged": 5,
+          "updated": 0
+        }
+      },
+      "fetched_at": "2026-09-14T16:30:35Z",
+      "retained_absent": {
+        "metrics": [],
+        "properties": []
+      },
+      "role": "refresh",
+      "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys"
     }
   ],
-  "merge_note": "Union of two live instances (hand-merged in PR #142; the primary supplied display names on key collisions, default_monitored was identical on every collision). Since issue #143, refresh-describe MERGES into this file: keys the live instance reports are updated (the live instance wins on collision, including display names), keys it does not report are retained and listed in that host's merged_from 'refresh' entry, and instance-local 'Super Metric|sm_<uuid>' keys are never imported. Only refresh-describe --prune removes keys, which re-grounds the file on a single instance.",
   "metrics": {
     "Compliance|Critical|totalCount": {
       "default_monitored": true,
@@ -114,42 +139,6 @@
     "Risk|populationAverage": {
       "default_monitored": true,
       "name": "Risk|Average Score Of All Group Members"
-    },
-    "Super Metric|sm_0c648c9c-cede-4403-b8fe-500067629bf0": {
-      "default_monitored": true,
-      "name": "Super Metrics|Total Network Configuration Issues"
-    },
-    "Super Metric|sm_3d21df83-083e-46b6-a6c0-5f7f2ae776c5": {
-      "default_monitored": true,
-      "name": "Super Metrics|Total Network Speed Degradation"
-    },
-    "Super Metric|sm_400106ec-879f-46d7-a03b-d3781072cfa2": {
-      "default_monitored": true,
-      "name": "Super Metrics|Unavailable ESXi Host"
-    },
-    "Super Metric|sm_77dca431-01ec-4a7c-824e-275908b89472": {
-      "default_monitored": true,
-      "name": "Super Metrics|[VCF Content Factory] VMs with Snapshots (Count)"
-    },
-    "Super Metric|sm_98997eae-62ba-4614-a622-11082c48ff00": {
-      "default_monitored": true,
-      "name": "Super Metrics|ESXi Hosts Average Availability"
-    },
-    "Super Metric|sm_a693e187-797b-4cb5-9fe0-3dd273088e88": {
-      "default_monitored": true,
-      "name": "Super Metrics|Clusters Availability"
-    },
-    "Super Metric|sm_dda97f70-65e0-4c5a-b6f0-7acec936a0bd": {
-      "default_monitored": true,
-      "name": "Super Metrics|vSphere Clusters not Green"
-    },
-    "Super Metric|sm_eb874adf-1884-4576-91fd-0cc0fb54e58b": {
-      "default_monitored": true,
-      "name": "Super Metrics|vSphere Clusters Performance"
-    },
-    "Super Metric|sm_faab0b29-40b7-4141-8132-7602b4a93338": {
-      "default_monitored": true,
-      "name": "Super Metrics|[VCF Content Factory] Total Snapshot Space (GB)"
     },
     "System Attributes|active_alarms": {
       "default_monitored": false,
@@ -1126,5 +1115,7 @@
       "instance_type": "INSTANCED",
       "name": "Metering|(DEP) Metering Policy Name"
     }
-  }
+  },
+  "resource_kind": "vSphere World",
+  "source": "https://vcf-lab-operations-devel.int.sentania.net/suite-api/api/adapterkinds/VMWARE/resourcekinds/vSphere World/statkeys"
 }
