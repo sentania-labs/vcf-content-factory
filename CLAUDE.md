@@ -171,6 +171,11 @@ pinned `sonnet`. Do not re-add pins without a decision.
 9. **Framework changes go `tooling` then `framework-reviewer`, then
    PR** (RULE-013, blanket on every `src/vcfops_*/` diff; CHANGES
    REQUESTED blocks the PR; re-brief and re-review until APPROVE).
+   **Every finding gets fixed before the PR opens**, warnings and
+   nits alike, in one re-brief: the external Codex round is for what
+   the internal gate missed, not for what it deferred. A follow-up
+   issue is only for a finding in code the branch does not touch.
+   Lesson: `knowledge/lessons/deferred-nit-becomes-the-codex-finding.md`.
    **Repo-wide migrations are orchestrator-owned**: a sweep spanning
    CLAUDE.md, agent prompts, `.claude/` config, scripts, and root docs
    is not a delegable unit. Split along mandate lines: orchestrator
