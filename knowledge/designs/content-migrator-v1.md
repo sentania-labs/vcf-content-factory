@@ -255,6 +255,31 @@ A translation counts as done only when both tiers pass.
   create and start work in, so I'll treat it as covered unless you say
   otherwise."
 
+## The corpus leak, and what was done about it
+
+Found by the M4a review, 2026-09-14: one value harvested from the lab's
+own prod export reached the public repo, `0c44e115-dc21-4ea5-8a56-01c22f18325b`,
+the internal account id of the built-in `admin` user on
+vcf-lab-operations. It appeared as `OWNER_2` in
+`tests/fixtures/make_export_fixture.py`, landed on `main` through the
+M3 merge, and was therefore inside the `v0.0.1` source archive. It was
+not a credential and granted nothing, but the corpus is not supposed to
+reach the repo at all. A scan of every blob in `main`'s history found
+that one value and nothing else; the other uuid the review named,
+`b58a71ee-...`, appears nowhere in the corpus and was already invented.
+
+Scott's decision, verbatim: "Write main so it's clean." `main` was
+rewritten with an invented value, the `v0.0.1` tag and release were
+re-cut from the clean commit, and the M4a branch was rebased onto it.
+
+The recurrence guard is a scan that builds its needles from the corpus
+rather than from a list someone remembered: every uuid and every name
+in every member of every corpus zip, nested zips included, matched
+against every blob in every revision. It runs before a PR opens. The
+first hand-written version of this check missed a real display name
+that the generated version caught, which is the argument for generating
+the needles.
+
 ## Open items for Scott
 
 - Where the 8.x export zips are on the workstation, so the corpus
