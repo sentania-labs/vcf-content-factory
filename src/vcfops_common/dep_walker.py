@@ -32,8 +32,18 @@ Public API — offline (no client required)
 
   DepGraph.views          # list[ViewDef] — transitively required views
   DepGraph.supermetrics   # list[SuperMetricDef] — transitively required SMs
+                          #   (including SMs pulled in by @supermetric:"<name>"
+                          #   formula cross-references, walked to a fixed point)
   DepGraph.customgroups   # list[CustomGroupDef] — transitively required groups
   DepGraph.errors         # list[str] — missing-dep error messages
+
+  expand_sm_crossrefs(
+      sms,                # list[SuperMetricDef]: seed SMs
+      all_sms,            # corpus of all SuperMetricDef available in the repo
+  ) -> (list[SuperMetricDef], list[str])
+      Same SM-to-SM walk collect_deps runs, for callers that start from a
+      super metric or a view instead of a dashboard.  Seeds first, then
+      referents in discovery order; errors name the missing referent.
 
 Project-scope semantics
 -----------------------
@@ -84,7 +94,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Callable, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from vcfops_supermetrics.client import VCFOpsClient
@@ -386,6 +396,86 @@ def extract_refs_from_dashboards(
 # Structural extraction helpers (pure — no client, no network)
 # ---------------------------------------------------------------------------
 
+def _walk_sm_crossrefs(
+    seeds: "List",
+    sm_by_name: "dict",
+    accept: "Callable[[object, str], bool]",
+    errors: List[str],
+) -> None:
+    """Breadth-first walk over ``@supermetric:"<name>"`` formula references.
+
+    ``accept(sm, source)`` is called once per referent found; it returns True
+    when the referent is newly taken into the result set (so its own formula
+    gets walked too) and False when it was already present or was rejected.
+    A referent whose name is not in ``sm_by_name`` is recorded in ``errors``
+    and the walk continues, so the caller sees every missing name in one pass.
+
+    Token semantics come from ``vcfops_supermetrics.crossref.SM_CROSSREF_RE``:
+    the ``@supermetric`` token is case-insensitive, the quoted name is matched
+    exactly against the SM display name.  Cycles terminate via a visited set
+    keyed on the SM id (falling back to the name for id-less fixtures).
+    """
+    from vcfops_supermetrics.crossref import crossref_names
+
+    queue = list(seeds)
+    visited: Set[str] = set()
+    while queue:
+        sm = queue.pop(0)
+        key = (getattr(sm, "id", "") or "").lower() or sm.name
+        if key in visited:
+            continue
+        visited.add(key)
+        source = f"super metric '{sm.name}'"
+        for ref_name in crossref_names(getattr(sm, "formula", "") or ""):
+            ref = sm_by_name.get(ref_name)
+            if ref is None:
+                errors.append(
+                    f"{source}: formula references @supermetric:\"{ref_name}\" "
+                    f"but no super metric with that name was found in the corpus"
+                )
+                continue
+            if accept(ref, source):
+                queue.append(ref)
+
+
+def expand_sm_crossrefs(
+    sms: "List",
+    all_sms: "List",
+) -> "Tuple[List, List[str]]":
+    """Transitively add super metrics referenced by ``@supermetric:"<name>"``.
+
+    An SM formula may reference another SM by name (the authoring-time
+    cross-reference form).  Every emit path resolves that token to the native
+    ``Super Metric|sm_<uuid>`` wire token and hard-errors when the referent is
+    not in the bundle, so anything that ships or syncs an SM must carry its
+    referents the same way a view carries the SMs its columns use.
+
+    Returns ``(supermetrics, errors)``.  Input order is preserved, newly
+    pulled SMs are appended after it in discovery order, and a formula with no
+    cross-reference token is a no-op.  A referent missing from ``all_sms``
+    lands in ``errors`` rather than raising, matching ``collect_deps``; the
+    caller decides whether that is fatal (the discrete builder treats it as a
+    hard failure, the same as the resolver would at emit time).
+    """
+    by_name = {sm.name: sm for sm in all_sms}
+    result: "List" = []
+    seen: Set[str] = set()
+    errors: List[str] = []
+
+    def _accept(sm, _source: str) -> bool:
+        key = (getattr(sm, "id", "") or "").lower() or sm.name
+        if key in seen:
+            return False
+        seen.add(key)
+        result.append(sm)
+        return True
+
+    for sm in sms:
+        _accept(sm, "")
+    _walk_sm_crossrefs(list(sms), by_name, _accept, errors)
+    return result, errors
+
+
 def extract_view_names_from_dashboards(
     dashboards: "List",
 ) -> List[str]:
@@ -551,7 +641,9 @@ def collect_deps(
 
     Traversal order:
       1. dashboard widgets → view names (extract_view_names_from_dashboards)
-      2. resolved views → SM refs (extract_refs_from_views)
+      2. resolved views → SM refs (extract_refs_from_views), dashboard
+         widget metric_keys → SM refs, then each collected SM's formula →
+         @supermetric:"<name>" refs, walked to a fixed point (SM → SM)
       3. resolved views → customgroup names (extract_customgroup_names_from_views)
       4. dashboard widgets → direct customgroup names (extract_customgroup_names_from_dashboards)
       5. each customgroup → any relationship-condition customgroup refs (recursion,
@@ -637,16 +729,17 @@ def collect_deps(
         _re.IGNORECASE,
     )
 
-    def _collect_sm_uuid(uuid_str: str, source: str) -> None:
+    def _collect_sm_uuid(uuid_str: str, source: str) -> bool:
+        """Take the SM into needed_sms.  True only when it is newly added."""
         sm_uuid = uuid_str.lower()
         if sm_uuid in needed_sms:
-            return
+            return False
         sm = sm_by_id.get(sm_uuid)
         if sm is None:
             graph.errors.append(
                 f"{source} references unknown SM uuid '{sm_uuid}'"
             )
-            return
+            return False
         # --- Scope check ---
         if _scope is not None:
             err = _scope_allows(
@@ -657,8 +750,9 @@ def collect_deps(
             )
             if err:
                 graph.errors.append(err)
-                return
+                return False
         needed_sms[sm_uuid] = sm
+        return True
 
     sm_name_re = _re.compile(r'''supermetric:["'](.+?)["']''')
     sm_by_name = {sm.name: sm for sm in all_sms}
@@ -724,6 +818,26 @@ def collect_deps(
                         m = sm_uuid_re.search(key)
                         if m:
                             _collect_sm_uuid(m.group(1), src)
+
+    # --- Step 2c: SM formulas → @supermetric:"<name>" refs (SM → SM) -----
+    # Every emit path resolves the token to Super Metric|sm_<uuid> and
+    # hard-errors when the referent is absent, so a referent is as much a
+    # dependency as the SM a view column names.  Walked to a fixed point so
+    # chains (A → B → C) are complete; cycles terminate on the visited set.
+    def _accept_crossref(sm, source: str) -> bool:
+        if not sm.id:
+            graph.errors.append(
+                f"{source}: formula references @supermetric:\"{sm.name}\" "
+                f"and that super metric is in the corpus but carries no id, "
+                f"so it has no sm_<uuid> to reference.  Give it an 'id:' in "
+                f"its YAML."
+            )
+            return False
+        return _collect_sm_uuid(sm.id, source)
+
+    _walk_sm_crossrefs(
+        list(needed_sms.values()), sm_by_name, _accept_crossref, graph.errors
+    )
 
     # --- Step 3: resolved views → customgroup refs -------------------------
     cg_names_from_views = extract_customgroup_names_from_views(list(needed_views.values()))
