@@ -1,7 +1,10 @@
-"""Local-file reverse-port for vcfcf_extractor.
+"""Local-file reverse-port: the offline export-to-YAML path (M2 row 4).
 
-Converts original MP source files (local dashboard JSON + view XML) into
-factory-shape YAML without touching a live VCF Ops instance.
+Converts original MP source files (local dashboard JSON + view XML, the
+same shapes a content-zip export carries) into factory-shape YAML without
+touching a live VCF Ops instance. This module runs from the
+``vcf-cf-tooling-core`` wheel alone; the factory reaches it through the
+``vcfcf_extractor.reverse_local`` alias.
 
 Entry point: ``reverse_local_port()``
 
@@ -31,6 +34,10 @@ This module DOES NOT:
   - Touch a live instance.
   - Install, sync, or enable content.
   - Overwrite existing YAML that already carries the same UUID.
+  - Mint an id: the round-trip check loads the emitted YAML through the
+    core loader with no ``on_missing_id`` callback, so a source dashboard
+    with no ``id`` reports ERROR there instead of getting a random uuid
+    written into the file it just emitted.
 """
 from __future__ import annotations
 
@@ -334,7 +341,7 @@ def _parse_column_value_dict(value_elem) -> Optional[dict]:
     display_name = props.get("displayName", attribute_key)
 
     # Time-segment ("Interval Breakdown") pseudo-column: not a metric column.
-    # See TimeSegmentSpec in vcfcf_dashboards/loader.py for the wire shape.
+    # See TimeSegmentSpec in vcfcf_core/dashboards/loader.py for the wire shape.
     if props.get("isTimeSegment", "").strip().lower() == "true":
         try:
             _soc = int(props.get("startingOnCount", "1") or 1)
@@ -349,7 +356,7 @@ def _parse_column_value_dict(value_elem) -> Optional[dict]:
             },
         }
 
-    # Strip "Super Metric|" prefix — YAML attribute uses sm_<uuid> form
+    # Strip "Super Metric|" prefix: YAML attribute uses sm_<uuid> form
     if attribute_key.startswith("Super Metric|sm_"):
         attr_yaml = attribute_key[len("Super Metric|"):]
     else:
@@ -398,7 +405,7 @@ def _parse_column_value_dict(value_elem) -> Optional[dict]:
             col["ascending_range"] = ascending.lower() == "true"
     else:
         # ascendingRange is absent from the wire.  When all three numeric bounds are
-        # present the loader requires ascending_range — derive it from bound ordering,
+        # present the loader requires ascending_range: derive it from bound ordering,
         # which is the same signal the forward renderer encodes:
         #   yellow < orange < red  →  False  (higher-is-worse: CPU %, latency)
         #   yellow > orange > red  →  True   (lower-is-worse: free capacity, headroom)
@@ -419,13 +426,13 @@ def _parse_column_value_dict(value_elem) -> Optional[dict]:
             elif y > o and o > r:
                 col["ascending_range"] = True
             else:
-                # Ambiguous ordering — default to higher-is-worse.
+                # Ambiguous ordering: default to higher-is-worse.
                 import warnings as _warnings
                 _warnings.warn(
                     f"column {display_name!r}: all three numeric bounds set but "
                     f"ascendingRange absent and ordering is ambiguous "
                     f"(yellow={y}, orange={o}, red={r}); defaulting to "
-                    "ascending_range=False (higher-is-worse) — review reversed YAML",
+                    "ascending_range=False (higher-is-worse): review reversed YAML",
                     UserWarning,
                     stacklevel=3,
                 )
@@ -491,8 +498,8 @@ def build_view_uuid_map(xml_dir: Path) -> dict[str, dict]:
 # View YAML writing
 # ---------------------------------------------------------------------------
 
-from vcfcf_dashboards.reverse import _parse_controls_meta, _trend_transformations_to_emit  # noqa: E402
-from vcfcf_extractor.extractor import _emit_view_extras  # noqa: E402
+from ..dashboards.reverse import _parse_controls_meta, _trend_transformations_to_emit  # noqa: E402
+from .extractor import _emit_view_extras  # noqa: E402
 
 
 def _write_view_yaml(path: Path, view_data: dict, uuid_to_name: dict[str, str]) -> None:
@@ -574,8 +581,8 @@ def _write_dashboard_yaml(
     """
     import warnings as _warnings
 
-    from vcfcf_dashboards.reverse import parse_dashboard_json, _SUPPORTED_WIDGET_TYPES
-    from vcfcf_dashboards.loader import ViewDef
+    from ..dashboards.reverse import parse_dashboard_json, _SUPPORTED_WIDGET_TYPES
+    from ..dashboards.loader import ViewDef
 
     # Build views_by_id for View widget resolution
     views_by_id: dict[str, ViewDef] = {}
@@ -636,7 +643,7 @@ def _write_dashboard_yaml(
     doc["shared"] = bool(dash_json.get("shared", True))
 
     # Import widget serializer from extractor (reuse existing code)
-    from vcfcf_extractor.extractor import _widget_to_yaml_dict
+    from .extractor import _widget_to_yaml_dict
 
     if dashboard and dashboard.widgets:
         widgets_yaml = []
@@ -739,8 +746,8 @@ def _compare_dashboard_round_trip(
         "error": str | None,
       }
     """
-    from vcfcf_dashboards.loader import load_dashboard
-    from vcfcf_dashboards.render import render_dashboards_bundle_json, UnresolvedViewReferenceError
+    from ..dashboards.loader import load_dashboard
+    from ..dashboards.render import render_dashboards_bundle_json, UnresolvedViewReferenceError
 
     raw_name = (source_json.get("name") or "").strip()
     display_name = raw_name.split("/", 1)[-1].strip() if "/" in raw_name else raw_name
@@ -768,7 +775,7 @@ def _compare_dashboard_round_trip(
     view_yaml_paths = list(view_yaml_dir.rglob("*.y*ml")) if view_yaml_dir.exists() else []
 
     # Build views_by_name for render
-    from vcfcf_dashboards.loader import load_view
+    from ..dashboards.loader import load_view
     views_by_name: dict = {}
     for vp in view_yaml_paths:
         try:
@@ -830,7 +837,7 @@ def _compare_dashboard_round_trip(
 
     if len(rendered_widgets) != len(source_widgets):
         # Count which source types are present vs rendered
-        from vcfcf_dashboards.reverse import _SUPPORTED_WIDGET_TYPES as _SUPP
+        from ..dashboards.reverse import _SUPPORTED_WIDGET_TYPES as _SUPP
         source_unsupported = [
             w.get("type") for w in source_widgets
             if w.get("type") and w.get("type") not in _SUPP
@@ -851,7 +858,7 @@ def _compare_dashboard_round_trip(
     rendered_key_set = set(rendered_keys)
     for sk in source_keys:
         wtype = sk[0]
-        from vcfcf_dashboards.reverse import _SUPPORTED_WIDGET_TYPES as _SUPP
+        from ..dashboards.reverse import _SUPPORTED_WIDGET_TYPES as _SUPP
         if wtype not in _SUPP:
             continue  # expected missing
         if sk not in rendered_key_set:
@@ -925,7 +932,7 @@ def reverse_local_port(
     print(f"  Output views:      {output_views_dir}")
     print(f"  Output dashboards: {output_dashboards_dir}")
     if dry_run:
-        print("  DRY RUN — no files will be written")
+        print("  DRY RUN: no files will be written")
     print()
 
     # 1. Build SM UUID -> name map
@@ -956,7 +963,7 @@ def reverse_local_port(
         else:
             print(
                 f"ERROR: {source_dashboard_json} has no 'dashboards' array and "
-                "no 'widgets'/'id' key — cannot determine dashboard format",
+                "no 'widgets'/'id' key: cannot determine dashboard format",
                 file=sys.stderr,
             )
             return 1
@@ -984,7 +991,7 @@ def reverse_local_port(
 
     # 5. Plan: collect widget types
     all_types: set[str] = set()
-    from vcfcf_dashboards.reverse import _SUPPORTED_WIDGET_TYPES
+    from ..dashboards.reverse import _SUPPORTED_WIDGET_TYPES
     unsupported_in_source: set[str] = set()
     for dash in source_dashboards:
         for w in (dash.get("widgets") or []):
@@ -1002,7 +1009,7 @@ def reverse_local_port(
     print(f"\nAll widget types in source: {sorted(all_types)}")
 
     if dry_run:
-        print("\nDRY RUN — would emit:")
+        print("\nDRY RUN, would emit:")
         print(f"  {len(found_views)} view YAML(s) -> {output_views_dir}/")
         print(f"  {len(source_dashboards)} dashboard YAML(s) -> {output_dashboards_dir}/")
         return 0
@@ -1051,7 +1058,7 @@ def reverse_local_port(
             for t in unique_types:
                 _warn(
                     f"dashboard '{display_name}': widget type '{t}' is not supported "
-                    "by the forward renderer — widget skipped in YAML output"
+                    "by the forward renderer: widget skipped in YAML output"
                 )
 
     # 8. Round-trip diff check
