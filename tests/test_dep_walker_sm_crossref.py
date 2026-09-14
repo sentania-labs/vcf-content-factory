@@ -330,6 +330,29 @@ class TestLiveSyncAdvisory:
         assert NAME_A in errors[0] and NAME_MISSING in errors[0]
         assert client.lookups == [NAME_MISSING]
 
+    def test_missing_referent_named_twice_reports_once(self):
+        a = _sm(UUID_A, NAME_A, refs=[NAME_MISSING, NAME_MISSING])
+        client = self._FakeClient()
+        res = self._walk(client, [a])
+        errors = [m for lvl, m in res.messages if lvl == "ERROR"]
+        assert len(errors) == 1, res.messages
+        assert client.lookups == [NAME_MISSING]  # cached, one GET
+
+    def test_failed_lookup_is_not_also_reported_as_absent(self):
+        class _Boom(self._FakeClient):
+            def find_by_name(self, name):
+                self.lookups.append(name)
+                raise RuntimeError("ambiguous: 2 super metrics named that")
+
+        a = _sm(UUID_A, NAME_A, refs=[NAME_MISSING])
+        client = _Boom()
+        res = self._walk(client, [a])
+        assert res.ok is False
+        errors = [m for lvl, m in res.messages if lvl == "ERROR"]
+        assert len(errors) == 1, res.messages
+        assert "lookup" in errors[0] and "failed" in errors[0] and "ambiguous" in errors[0]
+        assert not any("is in this sync batch" in m for _, m in res.messages), res.messages
+
     def test_referent_in_batch_needs_no_lookup(self):
         a = _sm(UUID_A, NAME_A, refs=[NAME_B])
         b = _sm(UUID_B, NAME_B)

@@ -996,17 +996,24 @@ def _fetch_describe(client: "VCFOpsClient", adapter_kind: str, resource_kind: st
 # SM enablement helper (thin wrapper over client method)
 # ---------------------------------------------------------------------------
 
+# Sentinel: the target lookup itself failed (ambiguous name, transport error),
+# as opposed to the target answering "no such name" (None).  A failed lookup
+# has already been reported; it must not also be reported as "absent".
+_LOOKUP_FAILED = object()
+
+
 def _lookup_sm_uuid_on_target(
     client: "VCFOpsClient",
     sm_name: str,
     result: WalkResult,
-) -> Optional[str]:
+):
     """Resolve an SM display name to its UUID on the target instance.
 
     Uses the SM client's ``find_by_name`` (exact name; raises on a duplicate
-    name rather than guessing).  Returns None when the client cannot look
-    names up, the name is absent, or the lookup fails; a failure is recorded
-    on ``result`` so the operator sees why the name went unresolved.
+    name rather than guessing).  Returns the lower-cased UUID on a hit, None
+    when the client cannot look names up or the target has no such name, and
+    ``_LOOKUP_FAILED`` when the lookup raised; the failure is recorded on
+    ``result`` and is the only line the operator should see for that name.
     """
     find = getattr(client, "find_by_name", None)
     if find is None:
@@ -1015,7 +1022,7 @@ def _lookup_sm_uuid_on_target(
         hit = find(sm_name)
     except Exception as e:  # VCFOpsError on ambiguity or transport failure
         result._msg("ERROR", f"lookup of super metric '{sm_name}' on target failed: {e}")
-        return None
+        return _LOOKUP_FAILED
     uid = (hit or {}).get("id") or None
     return uid.lower() if uid else None
 
@@ -1144,6 +1151,7 @@ def walk_and_check(
     # covers it; when nothing knows the name, say so up front, naming the
     # referrer and the referent, instead of letting the push fail later.
     _remote_by_name: dict = {}
+    _missing_reported: Set[Tuple[str, str]] = set()  # (source, name)
     for ref in sm_refs_all:
         if ref.sm_id or not ref.name:
             continue
@@ -1152,10 +1160,13 @@ def walk_and_check(
                 client, ref.name, result
             )
         uid = _remote_by_name[ref.name]
+        if uid is _LOOKUP_FAILED:
+            continue  # already reported as a failed lookup; not "absent"
         if uid:
             ref.sm_id = uid
             _uuid_to_name[uid] = ref.name
-        else:
+        elif (ref.source, ref.name) not in _missing_reported:
+            _missing_reported.add((ref.source, ref.name))
             result._msg(
                 "ERROR",
                 f"{ref.source} references @supermetric:\"{ref.name}\" but no "
