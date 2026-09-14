@@ -17,7 +17,7 @@ with mock data, select what to keep, and produce an import bundle.
   customer workstation (Linux, Windows, macOS) with no LLM, no repo clone,
   no factory. Shipped as one binary per OS from its own CI.
 - **The factory's parsers and walkers become a library**, not a copy.
-  Distribution name `vcf-cf-tooling-core`. Import name decided in M1.
+  Distribution name `vcf-cf-tooling-core`. Import name: `vcfcf` (decided 2026-09-14), packages `vcfcf_<name>`.
   Never `vcfops-*`: that implies ownership we do not have.
 - **Publish the wheel alongside buildkit** (GitHub Release attachment) for
   now. The migrator pins by URL. Move to PyPI when a second consumer or a
