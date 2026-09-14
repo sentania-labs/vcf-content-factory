@@ -123,3 +123,7 @@ would change.
   library. Scott, verbatim: "let's prove the publish path but tag it as
   core-v0.0.1; we'll make the first usable release v0.1.0". Tagged at the
   main head after PR #161.
+- **core-v0.1.0** (2026-09-14): first usable release, rows 1 to 4 (PRs
+  #161 to #164). Scott, verbatim, in reply to "Tag `core-v0.1.0` on main
+  as the first usable library release. I need your explicit go for the
+  tag push.": "Go ahead". Tagged at the main head after PR #164.
