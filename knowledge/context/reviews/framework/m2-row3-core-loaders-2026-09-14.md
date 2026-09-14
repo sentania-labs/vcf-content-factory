@@ -190,3 +190,43 @@ next change, not this one: a library consumer calling
 `vcfcf_core.alerts.loader.load_dir()` scans its working directory with no
 contract failure, and a future edit to `assembly.py` would ship without
 the stale-zip rebuild prompt.
+
+## Round 2 (2026-09-14, head `739ec91`)
+
+Fix commits reviewed: `3dfac84` (tooling: W1, N3, N5, N6, N7) and `5e9b230`
+(orchestrator: W2, N4, design row 3 marked done).
+
+Verdict: **APPROVE** (zero BLOCKING). One NIT re-opened (N6, comment
+accuracy only); fix before the PR opens per CLAUDE.md step 9.
+
+### Finding-by-finding
+
+| # | Status | Evidence |
+|---|---|---|
+| W1 | **Closed** | Core `alerts/loader.py:459,590` and `symptoms/loader.py:328` take `directory` with no default (`fn()` raises `TypeError`, pinned by `test_row3_w1_core_alert_and_symptom_loaders_require_a_directory`). New wrappers `src/vcfcf_alerts/loader.py` and `src/vcfcf_symptoms/loader.py` keep exactly main's defaults: `__defaults__ == ("alerts", True)`, `("recommendations", True)`, `("symptoms", True)`, keyword name `enforce_framework_prefix` preserved (compared against `git show main:` of the three signatures). Both wrappers moved from `SHIMS` to `WRAPPERS` in `test_core_shims.py` with identity checks on served names. Every factory caller passes a directory: `vcfcf_alerts/cli.py:26,31,60-61` (`DEFAULT_*_DIR`, `rec_dir`), `vcfcf_alerts/cli.py:48-49` (symptom dir), `vcfcf_symptoms/cli.py:19,24`, `readme_gen.py:218-223`, `discrete_builder.py:694-695`. The kit's `sdk_builder.py` imports only `load_file` / `load_recommendation_file` from the two loaders (`:971,989,1037`), so the kit copies of the core loaders need no default. No test monkeypatches a name on either wrapper (grep). `vcfcf_alerts validate` and `vcfcf_symptoms validate` exit 0. |
+| W1 rule | **Closed, not tautological** | `tests/test_core_contract.py:181-191` `_is_path_param`: `directory` or suffix `_dir` / `_root` / `_path`; `:282-289` pairs defaults to parameter names for positional (tail-aligned), positional-only and kw-only args. Probed independently on `_static_findings`: fires on `load_dir(directory='reports')`, `def f(*, cache_root='x')`, `def h(directory: str = 'symptoms', enforce=True)`, and a positional-only `out_path='o'`; silent on `default_name_path='X'`, `out_path=None`, `mode='auto'`; zero findings on every real `src/vcfcf_core/**/*.py`. Three new `_VIOLATION_SAMPLES` and the extended clean sample are in the self-check. |
+| `default_name_path` exemption | **Justified and narrow** | The only path-named parameters with a string default in core are `dashboards/loader.py:2457` and `:3125` (`default_name_path="VCF Content Factory"`), consumed at `:3110` as `name_path=name_path or default_name_path`: the VCF Ops folder on the wire, not a filesystem path. An AST walk over core with the suffixes `dir` / `root` / `path` (no underscore) finds nothing else. A one-name set, not a pattern. |
+| W2 | **Closed** | `CLAUDE.md` and `.claude/agents/framework-reviewer.md` stale-zip lists now name `src/vcfcf_core/packaging/assembly.py` (diff of `5e9b230`). |
+| N3 | **Closed** | `tests/test_core_row3_seams.py:481-488` asserts no line matches `^\s*(from|import)\s+vcfcf_common`, the two `replace` calls are gone, the failure message names the offending lines. A re-introduced `from vcfcf_common.provenance import ...` in a copied core loader now fails the seam test, not just the contract. |
+| N4 | **Closed** | `.claude/skills/vcfops-supermetric-dsl/SKILL.md` and `.claude/agents/customgroup-author.md` name the core loader paths; `knowledge/designs/tooling-core-carveout-v1.md` row 3 marked done (PR pending). |
+| N5 | **Closed** | `sdk_builder.py:1824-1827, 1964-1967` now say the kit's core copy returns an empty map and an unbundled SM reference fails the build there. Matches the kit behavior proven in round 1. |
+| N6 | **Re-opened (NIT)** | `src/vcfcf_packaging/audit.py:73-76` says "`make_cache()` is patched in tests to return a core `DescribeCache` (no `_client` attribute at all)". Not true of the tree: every `make_cache` patch (`test_release_audit_default_and_this_refs.py:109-114,268-271`, `test_discrete_builder_builtin_metric_enables.py:248-252,277,316`, `test_view_time_segment_column.py:238-240`) returns the factory subclass `describe_mod.DescribeCache(cache_dir=..., client=None)`, which sets `_client = None`; `test_describe_cache_merge.py:274-275` returns a `MagicMock` with `_client` set. No test hands the audit a core cache. The `getattr` is fine; the reason written for it is a claim the tests do not back (rule 11). Fix: one honest line, e.g. "a core `vcfcf_core.packaging.describe.DescribeCache` has no `_client`; a library caller passing one gets the offline audit rather than an `AttributeError`; every factory path goes through `make_cache`, whose subclass always carries `_client`". |
+| N7 | **Closed** | Nine em-dashes in `src/vcfcf_common/dep_walker.py` converted. Across `main..HEAD`, 35 added lines still carry an em-dash and all 35 exist byte-for-byte on main (binary-safe comparison against every `main:` blob under `src`, `tests`, `.claude`, `CLAUDE.md`, `knowledge`); the three post-round-1 commits add zero. |
+
+### Checks re-run (round 2)
+
+| Check | Result |
+|---|---|
+| `test_core_contract.py` + `test_core_shims.py` + `test_core_row3_seams.py` | 174 passed, 1 skipped (same skip as round 1) |
+| Full suite, `-n auto --dist=loadgroup -m ""`, adapter clones reachable via a scratch `content/sdk-adapters` symlink (removed afterwards) | **1961 passed, 8 skipped** (44 s); 1955 in round 1 plus the six new W1 cases |
+| Validate chain (supermetrics, dashboards, customgroups, symptoms, alerts, reports, managementpacks, packaging) | all exit 0 (packaging needs the adapter clones, as in round 1: it fails on the missing `content/sdk-adapters/synology/adapter.yaml` without the symlink, which is the pre-existing gitignore situation, not this branch) |
+| Worktree | clean after every check, symlink removed |
+
+### If shipped as-is
+
+Unchanged from round 1 for operators and downstream paks. A library
+consumer calling `vcfcf_core.alerts.loader.load_dir()` or
+`vcfcf_core.symptoms.loader.load_dir()` now gets a `TypeError` instead of
+a silent cwd scan, and the contract rule catches the next such default
+without a word list. The one open item is a comment that gives a reason the
+test suite does not support; no behavior rides on it.
