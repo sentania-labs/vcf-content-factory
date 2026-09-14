@@ -632,6 +632,26 @@ def _xml_kind_binding_props(view: ViewDef, col) -> list[str]:
     return [_xml_property("adapterKind", binding[0]), _xml_property("resourceKind", binding[1])]
 
 
+# View-column super metric cross-reference, supermetric:"<name>". Token
+# case-insensitive, quoted name case-sensitive. See _xml_attribute_item.
+#
+# The GATE regex is deliberately wider than the REF regex. Anything that
+# looks like an SM reference (optional ``@``, any case, optional whitespace
+# before the colon, quoted or not) enters the SM branch, where only the
+# well-formed shape resolves and everything else is a hard error. Without
+# the wide gate a loose spelling (``supermetric: "X"``, ``supermetric:X``)
+# falls through to the plain-metric branch and ships as a literal
+# attributeKey with rollUpType AVG, while ``vcfops_packaging.deps._is_sm_ref``
+# (prefix-only, lowercased) has already waved it through as an SM ref:
+# green audit, blank column (review of #146, WARNING 1).
+#
+# ``@supermetric:"X"`` (the formula-form token) is accepted in a column as
+# well-formed: deps.py already treats it as an SM reference, so the two
+# stay in agreement and the ``@`` is forgiven the same way token case is.
+_SM_COLUMN_PREFIX_RE = re.compile(r"(?i:@?supermetric)\s*:")
+_SM_COLUMN_REF_RE = re.compile(r'''(?i:@?supermetric):["'](.+?)["']$''')
+
+
 def _xml_attribute_item(
     view: ViewDef,
     col,
@@ -655,10 +675,18 @@ def _xml_attribute_item(
     # from the sentania/AriaOperationsContent VCF License Consumption
     # bundle. Super metric columns also use rollUpType=NONE, not AVG.
     raw = col.attribute
-    if raw.startswith('supermetric:"') or raw.startswith("supermetric:'"):
+    if _SM_COLUMN_PREFIX_RE.match(raw):
         # Author wrote supermetric:"<name>", resolve to sm_<uuid> using
         # the SM name map built from supermetrics/ YAML at render time.
-        m = re.match(r'''supermetric:["'](.+?)["']$''', raw)
+        # The token is matched case-insensitively (issue #146): the loader
+        # and vcfops_packaging.deps._is_sm_ref already lowercase before
+        # comparing, so a mis-cased token such as SuperMetric:"X" passed
+        # every gate and reached the wire as a literal attributeKey, a
+        # blank column with no diagnostic. The captured NAME stays
+        # case-sensitive: SM display names are exact, only the token
+        # spelling is forgiving (same boundary as SM_CROSSREF_RE in
+        # vcfops_supermetrics.crossref).
+        m = _SM_COLUMN_REF_RE.match(raw)
         if m:
             sm_name = m.group(1)
             sm_id = (sm_map or {}).get(sm_name)
@@ -682,7 +710,8 @@ def _xml_attribute_item(
         else:
             raise ValueError(
                 f'View "{view.name}" column {idx} has malformed supermetric '
-                f'reference: {raw!r}. Expected supermetric:"<name>".'
+                f'reference: {raw!r}. Expected supermetric:"<name>" '
+                f"(quoted, no space after the colon)."
             )
         roll_up_type = "NONE"
     elif raw.startswith("sm_"):
@@ -1376,6 +1405,22 @@ def _fan_out_summary_specs(
     return out
 
 
+def _ext_model_id(widget_id: str, seq: int) -> str:
+    """Per-widget, per-sequence ``id`` for Scoreboard / MetricChart metric
+    entries: ``extModel<0..99999>-<seq>``.
+
+    The numeric part is derived from a sha1 digest of the widget id, not
+    from ``hash()``: str hashing is salted per interpreter process
+    (PYTHONHASHSEED), so the previous ``abs(hash(widget_id)) % 100000``
+    changed on every run and defeated byte-comparison render regression on
+    the content-import path (issue #147). Same shape as before (up to five
+    digits, ``% 100000``), so the wire form is unchanged; only the value is
+    now stable.
+    """
+    digest = hashlib.sha1(widget_id.encode("utf-8")).hexdigest()
+    return f"extModel{int(digest[:8], 16) % 100000}-{seq}"
+
+
 def _render_resource_metric_spec(
     specs: list[MetricSpec],
     resource: "WidgetResourceRef",
@@ -1413,7 +1458,7 @@ def _render_resource_metric_spec(
             "resourceKindId": f"{prefix}{resource.adapter_kind}{resource.resource_kind}",
             "colorMethod": spec.color_method,
             "handleOldColoring": False,
-            "id": f"extModel{abs(hash(widget_id)) % 100000}-{seq}",
+            "id": _ext_model_id(widget_id, seq),
             "label": spec.label,
             "link": "",
             "maxValue": _max_value_str(spec.max_value),
@@ -1451,8 +1496,9 @@ def _render_metric_spec(
     ``entries.resourceKind[]`` in the dashboard bundle JSON.
 
     The ``id`` field within each entry must be unique per widget; we use
-    ``extModel<hash>-<seq>`` where <hash> is a short numeric hash of the
-    widget_id so that IDs remain stable across renders for the same content.
+    ``extModel<hash>-<seq>`` where <hash> is a short numeric digest of the
+    widget_id (``_ext_model_id``) so that IDs are byte-identical across
+    renders, and across interpreter runs, for the same content.
     """
     rk_metrics = []
     for seq, spec in enumerate(specs, start=1):
@@ -1469,8 +1515,9 @@ def _render_metric_spec(
             "resourceKindName": _WORLD_DISPLAY_NAME.get(key, spec.resource_kind),
             "colorMethod": spec.color_method,
             "handleOldColoring": False,
-            # Stable per-widget, per-sequence ID.
-            "id": f"extModel{abs(hash(widget_id)) % 100000}-{seq}",
+            # Stable per-widget, per-sequence ID (sha1-derived, see
+            # _ext_model_id; issue #147).
+            "id": _ext_model_id(widget_id, seq),
             "label": spec.label,
             "link": "",
             # Gauge full-scale value; a string on the wire ("100"). "" when

@@ -499,6 +499,13 @@ def test_sdk_builder_uses_the_shared_resolver():
     assert RESOLVED_TOKEN in out
 
 
+class _NamedSM:
+    """Minimal stand-in exposing ``.name`` / ``.id`` for sm_name_to_uuid_map."""
+
+    def __init__(self, name: str, id: str | None):
+        self.name, self.id = name, id
+
+
 class TestTokenCaseInsensitivity:
     """A mis-cased ``@supermetric:`` token resolves; it never ships verbatim.
 
@@ -570,3 +577,74 @@ class TestTokenCaseInsensitivity:
         emitted = out[CONSUMER_UUID]["formula"]
         assert "supermetric" not in emitted.lower(), emitted
         assert f"metric={RESOLVED_TOKEN}" in emitted, emitted
+
+    # --- issue #148: the boundary of the case-forgiveness ------------------
+    #
+    # SM_CROSSREF_RE applies ``(?i:...)`` to the ``@supermetric`` token ONLY.
+    # The captured name is matched exactly against the SM display name.  A
+    # later readability edit hoisting that inline flag to a module-level
+    # ``re.compile(..., re.I)`` would silently make the NAME case-insensitive
+    # too and collapse two SMs that differ only by case (key-collision class,
+    # anchor 6c59f6b).  Every test above would still pass; these would not.
+
+    @pytest.mark.parametrize("token", [
+        "@supermetric", "@SuperMetric", "@SUPERMETRIC", "@SuperMETRIC",
+    ])
+    @pytest.mark.parametrize("wrong_name", [
+        REF_NAME.lower(),
+        REF_NAME.upper(),
+        REF_NAME.swapcase(),
+    ])
+    def test_wrong_case_name_is_unresolvable_for_every_token_spelling(
+        self, token, wrong_name
+    ):
+        from vcfops_supermetrics.crossref import (
+            SuperMetricCrossRefError,
+            resolve_sm_formula,
+            sm_name_to_uuid_map,
+        )
+
+        assert wrong_name != REF_NAME  # the probe is a real case change
+        formula = (
+            'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+            'metric=' + token + ':"' + wrong_name + '", depth=5})'
+        )
+        # Through the production map builder, not a hand-built dict, so a
+        # case-fold on EITHER side (map key or lookup) trips this.
+        sm_map = sm_name_to_uuid_map([_NamedSM(REF_NAME, REF_UUID)])
+        with pytest.raises(SuperMetricCrossRefError):
+            resolve_sm_formula(formula, CONSUMER_NAME, sm_map)
+
+    @pytest.mark.parametrize("token", ["@supermetric", "@SuperMetric"])
+    def test_two_sms_differing_only_by_name_case_stay_distinct(self, token):
+        """Both names live in the map; each token spelling binds to its OWN
+        uuid, never to the other's.  The wrong-SM binding is the failure that
+        would follow from name case-folding, and it is unreachable."""
+        from vcfops_supermetrics.crossref import resolve_sm_formula, sm_name_to_uuid_map
+
+        lower_name = REF_NAME.lower()
+        sm_map = sm_name_to_uuid_map(
+            [_NamedSM(REF_NAME, REF_UUID), _NamedSM(lower_name, PLAIN_UUID)]
+        )
+        assert len(sm_map) == 2, sm_map  # no key collision in the builder
+
+        def _formula(name: str) -> str:
+            return (
+                'avg(${adaptertype=VMWARE, objecttype=HostSystem, '
+                'metric=' + token + ':"' + name + '", depth=5})'
+            )
+
+        exact = resolve_sm_formula(_formula(REF_NAME), CONSUMER_NAME, sm_map)
+        lower = resolve_sm_formula(_formula(lower_name), CONSUMER_NAME, sm_map)
+        assert f"Super Metric|sm_{REF_UUID}" in exact, exact
+        assert PLAIN_UUID not in exact, exact
+        assert f"Super Metric|sm_{PLAIN_UUID}" in lower, lower
+        assert REF_UUID not in lower, lower
+
+    def test_sm_name_map_keeps_case_distinct_names_as_separate_keys(self):
+        """The map builder is the other half of the boundary: it must not
+        normalise case either, or two SMs would share one key."""
+        from vcfops_supermetrics.crossref import sm_name_to_uuid_map
+
+        m = sm_name_to_uuid_map([_NamedSM(REF_NAME, REF_UUID), _NamedSM(REF_NAME.lower(), PLAIN_UUID)])
+        assert m == {REF_NAME: REF_UUID, REF_NAME.lower(): PLAIN_UUID}
