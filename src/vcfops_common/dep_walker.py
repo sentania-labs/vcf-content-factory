@@ -421,19 +421,63 @@ def extract_refs_from_dashboards(
 # Structural extraction helpers (pure — no client, no network)
 # ---------------------------------------------------------------------------
 
+def _pick_sm_by_name(
+    candidates: "List",
+    preferred_provenance: str,
+):
+    """Choose one SM among same-named candidates.
+
+    Display names are unique within a project but not across the corpus: a
+    third-party project may ship an SM whose name matches a factory one.  The
+    documented scope semantics say same-project content wins and factory
+    content is only the cross-linked fallback, so a flat ``{name: sm}`` dict
+    (last loaded wins) is wrong in both directions.  Order of preference:
+
+      1. provenance == ``preferred_provenance`` (the scope, or the referrer's
+         own project when there is no scope)
+      2. provenance == "factory" (the scope check then decides whether the
+         cross-link allows it)
+      3. the first candidate as loaded
+
+    Emit-time resolution (``crossref.sm_name_to_uuid_map``) runs over the
+    bundle's own SM set, which is what this walk produced, so the two agree
+    once the walk has chosen.
+    """
+    if not candidates:
+        return None
+    if preferred_provenance:
+        for sm in candidates:
+            if getattr(sm, "provenance", "") == preferred_provenance:
+                return sm
+    for sm in candidates:
+        if getattr(sm, "provenance", "") == "factory":
+            return sm
+    return candidates[0]
+
+
+def _sm_candidates_by_name(all_sms: "List") -> "dict":
+    """``{name: [sm, ...]}`` in load order, one list per display name."""
+    out: "dict" = {}
+    for sm in all_sms:
+        out.setdefault(sm.name, []).append(sm)
+    return out
+
+
 def _walk_sm_crossrefs(
     seeds: "List",
-    sm_by_name: "dict",
+    resolve: "Callable[[str, object], object]",
     accept: "Callable[[object, str], bool]",
     errors: List[str],
 ) -> None:
     """Breadth-first walk over ``@supermetric:"<name>"`` formula references.
 
-    ``accept(sm, source)`` is called once per referent found; it returns True
-    when the referent is newly taken into the result set (so its own formula
-    gets walked too) and False when it was already present or was rejected.
-    A referent whose name is not in ``sm_by_name`` is recorded in ``errors``
-    and the walk continues, so the caller sees every missing name in one pass.
+    ``resolve(name, referrer)`` returns the SM the name means from the point
+    of view of the referring SM, or None.  ``accept(sm, source)`` is called
+    once per referent found; it returns True when the referent is newly taken
+    into the result set (so its own formula gets walked too) and False when
+    it was already present or was rejected.  A referent ``resolve`` cannot
+    find is recorded in ``errors`` and the walk continues, so the caller sees
+    every missing name in one pass.
 
     Tokens are found with ``vcfops_supermetrics.crossref.crossref_names`` (the
     ``SM_CROSSREF_RE`` match): the ``@supermetric`` token is case-insensitive,
@@ -452,7 +496,7 @@ def _walk_sm_crossrefs(
         visited.add(key)
         source = f"super metric '{sm.name}'"
         for ref_name in crossref_names(getattr(sm, "formula", "") or ""):
-            ref = sm_by_name.get(ref_name)
+            ref = resolve(ref_name, sm)
             if ref is None:
                 errors.append(
                     f"{source}: formula references @supermetric:\"{ref_name}\" "
@@ -482,10 +526,15 @@ def expand_sm_crossrefs(
     caller decides whether that is fatal (the discrete builder treats it as a
     hard failure, the same as the resolver would at emit time).
     """
-    by_name = {sm.name: sm for sm in all_sms}
+    by_name = _sm_candidates_by_name(all_sms)
     result: "List" = []
     seen: Set[str] = set()
     errors: List[str] = []
+
+    def _resolve(name: str, referrer) -> object:
+        return _pick_sm_by_name(
+            by_name.get(name, []), getattr(referrer, "provenance", "")
+        )
 
     def _accept(sm, _source: str) -> bool:
         key = (getattr(sm, "id", "") or "").lower() or sm.name
@@ -497,7 +546,7 @@ def expand_sm_crossrefs(
 
     for sm in sms:
         _accept(sm, "")
-    _walk_sm_crossrefs(list(sms), by_name, _accept, errors)
+    _walk_sm_crossrefs(list(sms), _resolve, _accept, errors)
     return result, errors
 
 
@@ -712,9 +761,14 @@ def collect_deps(
 
     view_by_name = {v.name: v for v in all_views}
     sm_by_id = {sm.id.lower(): sm for sm in all_sms}
-    # Build a name→SM map for scope-checking (SMs are resolved by UUID, but
-    # the scope check uses the name from the cross_links list).
-    sm_by_name = {sm.name: sm for sm in all_sms}
+    # Name -> candidate SMs.  Names can collide across projects; the picker
+    # prefers the scope's own project, then factory (cross-link fallback).
+    sm_candidates = _sm_candidates_by_name(all_sms)
+
+    def _sm_for_name(name: str, referrer=None):
+        preferred = _scope or getattr(referrer, "provenance", "") or ""
+        return _pick_sm_by_name(sm_candidates.get(name, []), preferred)
+
     cg_by_name = {cg.name: cg for cg in all_customgroups}
     known_cg_names = set(cg_by_name.keys())
 
@@ -788,7 +842,6 @@ def collect_deps(
         return True
 
     sm_name_re = _re.compile(r'''supermetric:["'](.+?)["']''')
-    sm_by_name = {sm.name: sm for sm in all_sms}
 
     for view in needed_views.values():
         for col in view.columns:
@@ -801,7 +854,7 @@ def collect_deps(
                 continue
             mn = sm_name_re.search(col.attribute)
             if mn:
-                sm = sm_by_name.get(mn.group(1))
+                sm = _sm_for_name(mn.group(1), view)
                 if sm and sm.id:
                     _collect_sm_uuid(
                         sm.id,
@@ -869,7 +922,7 @@ def collect_deps(
         return _collect_sm_uuid(sm.id, source)
 
     _walk_sm_crossrefs(
-        list(needed_sms.values()), sm_by_name, _accept_crossref, graph.errors
+        list(needed_sms.values()), _sm_for_name, _accept_crossref, graph.errors
     )
 
     # --- Step 3: resolved views → customgroup refs -------------------------

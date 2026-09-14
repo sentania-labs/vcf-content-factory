@@ -256,6 +256,47 @@ class TestScopedReferent:
         assert any(e.startswith(f"super metric '{NAME_A}':") for e in g.errors)
         assert any(e.startswith(f"super metric '{NAME_C}':") for e in g.errors)
 
+    def test_same_name_project_sm_wins_over_factory_twin(self):
+        """PR #156 Codex P2: a project SM and a factory SM share a display
+        name.  The project one must resolve, whatever the corpus order, and
+        with no cross-link needed."""
+        a = _sm(UUID_A, NAME_A, refs=[NAME_B])
+        a.provenance = "proj"
+        b_proj = _sm(UUID_B, NAME_B)
+        b_proj.provenance = "proj"
+        b_factory = _sm(UUID_C, NAME_B)  # same name, different uuid
+        b_factory.provenance = "factory"
+        for corpus in ([a, b_proj, b_factory], [a, b_factory, b_proj]):
+            dash, view = _dashboard_over(UUID_A)
+            dash.provenance = view.provenance = "proj"
+            g = collect_deps([dash], [view], corpus, [], project_scope="proj")
+            assert not g.errors, g.errors
+            assert [(s.name, s.id) for s in g.supermetrics] == [
+                (NAME_A, UUID_A), (NAME_B, UUID_B),
+            ], [(s.name, s.id) for s in g.supermetrics]
+
+    def test_same_name_expand_prefers_referrer_project(self):
+        a = _sm(UUID_A, NAME_A, refs=[NAME_B])
+        a.provenance = "proj"
+        b_proj = _sm(UUID_B, NAME_B)
+        b_proj.provenance = "proj"
+        b_factory = _sm(UUID_C, NAME_B)
+        b_factory.provenance = "factory"
+        out, errs = expand_sm_crossrefs([a], [b_factory, b_proj, a])
+        assert not errs
+        assert [s.id for s in out] == [UUID_A, UUID_B]
+
+    def test_same_name_factory_referrer_gets_factory_twin(self):
+        a = _sm(UUID_A, NAME_A, refs=[NAME_B])
+        a.provenance = "factory"
+        b_proj = _sm(UUID_B, NAME_B)
+        b_proj.provenance = "proj"
+        b_factory = _sm(UUID_C, NAME_B)
+        b_factory.provenance = "factory"
+        out, errs = expand_sm_crossrefs([a], [b_proj, b_factory, a])
+        assert not errs
+        assert [s.id for s in out] == [UUID_A, UUID_C]
+
     def test_cross_linked_factory_referent_is_accepted(self):
         a = _sm(UUID_A, NAME_A, refs=[NAME_B])
         a.provenance = "proj"
