@@ -176,3 +176,40 @@ Client whose `find_by_name` raises for `X` and returns `None` for `Y`; one SM re
 ## If shipped as-is
 
 Library and CLI callers get one accurate line per failed lookup and one per genuinely missing referent, with the same exit code as round 2. Open items outside this branch: #154 (walker runs after the import on `vcfops_supermetrics sync`), round 1 W3 (content-packager rebuild after merge, no template-version bump), round 1 N1 (last-wins duplicate names, follow-up).
+
+---
+
+# Round 4: follow-up commit `382db18` (PR #156, Codex P2)
+
+- Date: 2026-09-14
+- Scope: only `382db18`. Flat `{name: sm}` map replaced by `_sm_candidates_by_name()` plus `_pick_sm_by_name(candidates, preferred_provenance)` (scope project, then factory, then first loaded), used by the crossref walk, the pre-existing view-column `supermetric:"<name>"` path in `collect_deps`, and `expand_sm_crossrefs`. Round 1 N1 is thereby closed.
+
+## Verdict: APPROVE
+
+0 BLOCKING / 0 WARNING / 1 NIT
+
+## Checks re-run
+
+| Check | Result |
+|---|---|
+| Full suite, worktree with clones | 1537 passed, 0 failed, 7 skipped, 130 deselected (matches the claim) |
+| `tests/test_dep_walker_sm_crossref.py` with `-m "slow or not slow"` | 28 passed |
+| `vcfops_dashboards validate` (runs `check_third_party_scope` via `collect_deps`), worktree | rc=0 |
+| `vcfops_supermetrics validate`, worktree | rc=0 |
+| Discrete build `dashboard "IDPS Planner"` (third-party `idps-planner`), worktree vs main checkout | all SM, view, and customgroup members byte-identical; only `content/dashboard.json` differs, and only in `extModel<n>-<seq>` widget ids, which `render.py:1416` derives from Python's per-process `hash()`. Two builds from the same worktree differ identically. Pre-existing nondeterminism, not this change. |
+
+## Coordinator's verification list
+
+1. **View-column path unchanged for existing content.** The discrete corpus (`content/supermetrics` plus `third_party/idps-planner/supermetrics`, 46 SMs) has zero duplicate display names, so every name has exactly one candidate and `_pick_sm_by_name` returns `candidates[0]`, the same object the flat map returned. The 13 distinct names that factory views reference in the `supermetric:"<name>"` column form each resolve to exactly one candidate (probe). The only duplicate names in the repo are between the `vcommunity` and `vcommunity-vsphere` pak clones (`CPU Reservation`, `ESXi Host Availability`, and so on), which are loaded by the Tier 2 `sdk_builder`, not by `collect_deps` or the discrete builder. Validate and the IDPS Planner build confirm no drift.
+2. **Factory referrer cannot pick a project SM it should not see.** With a factory twin present, `preferred_provenance` is `factory` (scope, or referrer provenance when unscoped) so the factory twin wins (new test `test_same_name_factory_referrer_gets_factory_twin`). With no factory twin and only a project SM of that name: under the auto-detected `factory` scope in `collect_deps` the pick falls to the project SM and `_scope_allows` rejects it with `super metric 'A': scope violation: 'B' has provenance 'proj' but project_scope='factory' requires factory-native components only` (probe). Under `expand_sm_crossrefs`, which is documented as unscoped, the project SM is taken with no error; that is the module's stated `project_scope=None` semantics ("No scoping. Resolves against the full corpus") and is the same answer the flat map gave. No silent widening.
+3. **Emit-time agreement.** `builder.py:192` builds `sm_name_to_uuid_map(bundle.supermetrics)` over the bundle's own SM list; on the discrete path that list is exactly `dep_graph.supermetrics` (dashboard) or the `_expand_sm_crossrefs` result (SM, view, report), so a twin the walk did not choose is never in the map and the resolver cannot pick it. Holds by construction for every discrete path. See the NIT for the one path where a manifest, not the walk, chooses the SM set.
+
+## Findings
+
+### NIT
+
+**R4-N1.** The by-construction argument covers the discrete and dashboard-walk paths. A hand-authored bundle manifest (`bundles/*.yaml` via `build_bundle`) can list both same-named twins explicitly; `sm_name_to_uuid_map` is then last-wins on the bundle order with no error. Not reachable today (no duplicate names in the factory or third-party corpus) and pre-existing, but a duplicate-name guard in `sm_name_to_uuid_map` (raise, do not guess, matching `find_by_name`'s posture) would close the last seam. Follow-up, not this PR.
+
+## If shipped as-is
+
+No behavior change on any existing content (proven by candidate counts, validate, and the third-party discrete build). A future same-named project/factory SM pair resolves to the project SM under a project scope and to the factory SM for a factory referrer, with the cross-link rule still applied by `_scope_allows`.
