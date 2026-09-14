@@ -1107,9 +1107,4 @@ def reverse_local_port(
         partial_count = sum(1 for r in diff_results if r["status"] == "PARTIAL")
         error_count = sum(1 for r in diff_results if r["status"] in ("ERROR", "UNSUPPORTED"))
         print(f"  Round-trip: {match_count} MATCH, {partial_count} PARTIAL, {error_count} UNSUPPORTED/ERROR")
-    print()
-    print("Next steps:")
-    print("  1. Review emitted YAML files")
-    print("  2. Validate: python3 -m vcfcf_dashboards validate")
-    print("  3. Address any PARTIAL/WARN items manually")
     return 0

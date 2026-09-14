@@ -139,9 +139,11 @@ bundles/third_party/
 
 ## Non-overwrite invariant
 
-If a resolved UUID matches an existing `id:` in the factory repo's
-`supermetrics/`, `views/`, or `dashboards/` directories, the file is skipped
-with a WARN. Existing factory content is never overwritten.
+If a resolved UUID matches an existing `id:` under the factory repo's
+`content/supermetrics/`, `content/views/`, or `content/dashboards/`, the file
+is skipped with a WARN. Existing factory content is never overwritten. (The
+scan joined the pre-v3 root-level directories until M2 row 4 and matched
+nothing; it is live again since that row.)
 
 ## Architectural notes
 

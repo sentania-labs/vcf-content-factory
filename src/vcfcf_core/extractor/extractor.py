@@ -3,6 +3,10 @@
 The location-agnostic half of the extractor: everything here takes bytes,
 dicts or dataclasses in and writes only to a path it was handed.
 
+- ``_content_xml_from_export_zip``, ``_supermetrics_from_export_zip``,
+  ``_dashboards_from_export_zip``: the three content-export zips (views,
+  super metrics, dashboards) to bytes / dicts; the factory's live export
+  calls hand their outer zip here.
 - ``_parse_view_xml`` and its helpers: a VIEW_DEFINITIONS export zip (or
   its ``content.xml``) to a view dict the YAML writer accepts.
 - ``_rewrite_formula``: ``sm_<uuid>`` tokens to ``@supermetric:"<name>"``
@@ -79,6 +83,134 @@ def _rewrite_formula(formula: str, name_cache) -> tuple[str, set[str]]:
 
 
 # ---------------------------------------------------------------------------
+# Content-export zip readers: bytes in, dicts out, no instance involved.
+# The factory's live _export_* functions run the export and hand the outer
+# zip here; the migrator reads a saved export the same way from the wheel.
+# ---------------------------------------------------------------------------
+
+def _content_xml_from_export_zip(outer: bytes) -> Optional[bytes]:
+    """Extract content.xml from a VIEW_DEFINITIONS (or REPORTS) export: a bare
+    zip holding ``content.xml``, the real export's nested ``views.zip``, or an
+    embedded ``.xml`` member carrying ``<ViewDef``. None when nothing fits."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(outer)) as zf:
+            names = zf.namelist()
+            # Direct content.xml
+            if "content.xml" in names:
+                return zf.read("content.xml")
+            # Nested zip (views.zip or similar)
+            for name in names:
+                if name.lower().endswith(".zip"):
+                    inner = zf.read(name)
+                    try:
+                        with zipfile.ZipFile(io.BytesIO(inner)) as inner_zf:
+                            if "content.xml" in inner_zf.namelist():
+                                return inner_zf.read("content.xml")
+                    except Exception:
+                        pass
+            # Direct XML bytes check (some exports embed xml directly)
+            for name in names:
+                if name.lower().endswith(".xml"):
+                    data = zf.read(name)
+                    if b"<ViewDef" in data:
+                        return data
+    except Exception:
+        pass
+    return None
+
+
+def _supermetrics_from_export_zip(outer_zip: bytes) -> dict[str, dict]:
+    """Parse a SUPER_METRICS content-zip export into a UUID->dict map.
+
+    Wire format (confirmed 2026-04-28 via recon on devel): the outer zip
+    carries ``supermetrics.json``, a dict keyed by UUID string whose values
+    have resourceKinds, modificationTime, name, formula, description, unitId,
+    modifiedBy. The ``id`` is the dict key, not in the value; it is injected
+    here. ``configuration.json`` (``superMetrics`` is a list of UUIDs) and
+    the ``<digits>L.v1`` marker are skipped by shape.
+
+    Returns uuid_lower -> SM dict (with ``id``). Raises ValueError when the
+    bytes are not a readable export.
+    """
+    import json as _json
+
+    result: dict[str, dict] = {}
+    try:
+        with zipfile.ZipFile(io.BytesIO(outer_zip)) as zf:
+            for name in zf.namelist():
+                if not name.lower().endswith(".json"):
+                    continue
+                try:
+                    data = _json.loads(zf.read(name))
+                except Exception:
+                    continue
+                # The primary SM payload is supermetrics.json: a dict keyed by UUID.
+                # Skip configuration.json (its "superMetrics" key is a list of UUIDs,
+                # not SM dicts).
+                if not isinstance(data, dict):
+                    continue
+                # Detect the UUID-keyed SM dict: values should be dicts with "name".
+                # configuration.json has keys "superMetrics" and "type": skip it.
+                first_value = next(iter(data.values()), None) if data else None
+                if not isinstance(first_value, dict) or "name" not in first_value:
+                    continue
+                for uid, sm in data.items():
+                    if not isinstance(sm, dict):
+                        continue
+                    sm_with_id = dict(sm)
+                    sm_with_id["id"] = uid  # inject id: not present in the value
+                    result[uid.lower()] = sm_with_id
+    except Exception as e:
+        raise ValueError(f"failed to parse super metrics export zip: {e}") from e
+    return result
+
+
+def _dashboards_from_export_zip(outer_zip: bytes) -> list[dict]:
+    """Parse a DASHBOARDS content-zip export into the list of dashboard dicts.
+
+    The outer zip carries ``dashboards/<ownerUserId>`` (one inner zip per
+    owner) whose ``dashboard/dashboard.json`` is
+    ``{"entries": {...}, "dashboards": [...], "uuid": "..."}``; every element
+    of ``dashboards[]`` has ``id``, ``name``, ``widgets[]`` (with ``config``,
+    ``gridsterCoords``, ``type``, ``widgetInteractions``). This is the format
+    ``parse_dashboard_json()`` was designed for. The per-file ``entries``
+    (resourceKind lookup table) is merged into each dashboard dict so
+    ``_build_kind_lookup()`` can find it. Members that are not a readable
+    inner zip, or carry no ``dashboard/dashboard.json``, are skipped;
+    ``dashboardsharings/<owner>``, ``usermappings.json``,
+    ``configuration.json`` and the marker never match the prefix.
+
+    Raises ValueError when the outer bytes are not a readable zip.
+    """
+    import json as _json
+
+    result: list[dict] = []
+    try:
+        with zipfile.ZipFile(io.BytesIO(outer_zip)) as zf:
+            for name in zf.namelist():
+                if not name.startswith("dashboards/") or name.endswith("/"):
+                    continue
+                inner_bytes = zf.read(name)
+                try:
+                    with zipfile.ZipFile(io.BytesIO(inner_bytes)) as inner_zf:
+                        if "dashboard/dashboard.json" not in inner_zf.namelist():
+                            continue
+                        dj = _json.loads(inner_zf.read("dashboard/dashboard.json"))
+                except Exception:
+                    continue
+
+                entries = dj.get("entries") or {}
+                for dash in (dj.get("dashboards") or []):
+                    merged = dict(dash)
+                    if entries and "entries" not in merged:
+                        merged["entries"] = entries
+                    result.append(merged)
+    except Exception as e:
+        raise ValueError(f"failed to parse dashboard export zip: {e}") from e
+    return result
+
+
+# ---------------------------------------------------------------------------
 # View XML parsing
 # ---------------------------------------------------------------------------
 
@@ -94,35 +226,7 @@ def _parse_view_xml(xml_bytes: bytes, target_uuid: str) -> Optional[dict]:
     """
     import xml.etree.ElementTree as ET
 
-    def _parse_inner_zip(outer: bytes) -> Optional[bytes]:
-        """Extract content.xml from either a bare zip or a zip-in-zip."""
-        try:
-            with zipfile.ZipFile(io.BytesIO(outer)) as zf:
-                names = zf.namelist()
-                # Direct content.xml
-                if "content.xml" in names:
-                    return zf.read("content.xml")
-                # Nested zip (views.zip or similar)
-                for name in names:
-                    if name.lower().endswith(".zip"):
-                        inner = zf.read(name)
-                        try:
-                            with zipfile.ZipFile(io.BytesIO(inner)) as inner_zf:
-                                if "content.xml" in inner_zf.namelist():
-                                    return inner_zf.read("content.xml")
-                        except Exception:
-                            pass
-                # Direct XML bytes check (some exports embed xml directly)
-                for name in names:
-                    if name.lower().endswith(".xml"):
-                        data = zf.read(name)
-                        if b"<ViewDef" in data:
-                            return data
-        except Exception:
-            pass
-        return None
-
-    xml_content = _parse_inner_zip(xml_bytes)
+    xml_content = _content_xml_from_export_zip(xml_bytes)
     if xml_content is None:
         _warn("could not extract content.xml from views export zip")
         return None

@@ -12,8 +12,8 @@ Design decisions:
 - Seen-set prevents duplicate writes for diamonds (SM referenced by
   multiple views).
 - Non-overwrite invariant: if a resolved UUID matches an existing id:
-  in the factory repo's supermetrics/ or views/ directories, the file
-  is SKIPPED with a WARN, not overwritten.
+  under the factory repo's content/supermetrics, content/views or
+  content/dashboards, the file is SKIPPED with a WARN, not overwritten.
 - Missing deps (404 on a referenced UUID) abort the walk with a clear
   error naming the parent.
 - Custom groups: Phase 1 emits WARN only; no extraction attempted.
@@ -44,11 +44,13 @@ from typing import Optional
 from vcfcf_core.extractor import extractor as _core
 from vcfcf_core.extractor.extractor import (
     _collect_enablement_entries,
+    _dashboards_from_export_zip,
     _info,
     _parse_view_xml,
     _resource_kinds_from_formula,
     _rewrite_formula,
     _safe_filename,
+    _supermetrics_from_export_zip,
     _warn,
     _write_dashboard_yaml,
     _write_manifest,
@@ -238,10 +240,13 @@ class _SMNameCache:
 def _scan_existing_ids(kind: str, repo_root: Path) -> dict[str, Path]:
     """Return a mapping of uuid -> file path for existing repo YAML files.
 
-    Scans the canonical directories (supermetrics/, views/, dashboards/)
-    under ``repo_root`` for YAML files that already carry an `id:` field, so
-    the extractor can skip instead of overwrite. The root is an explicit
-    argument (M2 row 4): the factory passes its own ``_REPO_ROOT``.
+    Scans the factory's first-party trees (``content/supermetrics``,
+    ``content/views``, ``content/dashboards``) under ``repo_root`` for YAML
+    files that already carry an `id:` field, so the extractor can skip
+    instead of overwrite. The root is an explicit argument (M2 row 4): the
+    factory passes its own ``_REPO_ROOT``. The ``content/`` segment is the
+    v3 layout (lesson: knowledge/lessons/content-root-is-content-dir.md);
+    the pre-row-4 join off the root matched nothing.
     """
     import re as _re
     uuid_re = _re.compile(
@@ -249,9 +254,9 @@ def _scan_existing_ids(kind: str, repo_root: Path) -> dict[str, Path]:
         _re.MULTILINE,
     )
     dir_map = {
-        "supermetric": repo_root / "supermetrics",
-        "view": repo_root / "views",
-        "dashboard": repo_root / "dashboards",
+        "supermetric": repo_root / "content" / "supermetrics",
+        "view": repo_root / "content" / "views",
+        "dashboard": repo_root / "content" / "dashboards",
     }
     result: dict[str, Path] = {}
     target_dir = dir_map.get(kind)
@@ -339,104 +344,43 @@ def _export_supermetrics_full(sm_client) -> dict[str, dict]:
     The content-zip SUPER_METRICS export carries the full wire shape for each
     SM including ``unitId``, ``resourceKinds``, and ``modifiedBy``: fields
     that the public REST ``GET /api/supermetrics/{id}`` endpoint strips.
-
-    Wire format (confirmed 2026-04-28 via recon on devel):
-      The outer zip contains ``supermetrics.json``, which is a dict keyed by
-      UUID string.  Each value is an SM dict with keys: resourceKinds,
-      modificationTime, name, formula, description, unitId, modifiedBy.
-      The ``id`` field is the dict key, not in the value: we inject it.
+    The parse is ``vcfcf_core.extractor.extractor._supermetrics_from_export_zip``
+    (wire format documented there); this function only runs the export.
 
     Returns a mapping of uuid_lower -> full SM dict (with ``id`` injected).
     On error raises VCFOpsError.
     """
-    import json as _json
     from vcfcf_common.client import VCFOpsError
 
     outer_zip = _run_content_export(sm_client, ["SUPER_METRICS"])
-
-    result: dict[str, dict] = {}
     try:
-        with zipfile.ZipFile(io.BytesIO(outer_zip)) as zf:
-            for name in zf.namelist():
-                if not name.lower().endswith(".json"):
-                    continue
-                try:
-                    data = _json.loads(zf.read(name))
-                except Exception:
-                    continue
-                # The primary SM payload is supermetrics.json: a dict keyed by UUID.
-                # Skip configuration.json (its "superMetrics" key is a list of UUIDs,
-                # not SM dicts).
-                if not isinstance(data, dict):
-                    continue
-                # Detect the UUID-keyed SM dict: values should be dicts with "name".
-                # configuration.json has keys "superMetrics" and "type": skip it.
-                first_value = next(iter(data.values()), None) if data else None
-                if not isinstance(first_value, dict) or "name" not in first_value:
-                    continue
-                for uid, sm in data.items():
-                    if not isinstance(sm, dict):
-                        continue
-                    sm_with_id = dict(sm)
-                    sm_with_id["id"] = uid  # inject id: not present in the value
-                    result[uid.lower()] = sm_with_id
-    except Exception as e:
-        raise VCFOpsError(f"failed to parse super metrics export zip: {e}") from e
-
-    return result
+        return _supermetrics_from_export_zip(outer_zip)
+    except ValueError as e:
+        raise VCFOpsError(str(e)) from e
 
 
 def _export_dashboard_json(sm_client, dashboard_uuid: str) -> Optional[dict]:
     """Export all dashboards via content-zip and return the dict for dashboard_uuid.
 
-    The content-zip ``dashboard/dashboard.json`` format contains a ``dashboards[]``
-    array where each element has ``id``, ``name``, ``widgets[]`` (with ``config``,
-    ``gridsterCoords``, ``type``, ``widgetInteractions``), and ``entries``
-    (resourceKind lookup table).  This is the authoritative format that
-    ``parse_dashboard_json()`` was designed for.
-
-    The getDashboardConfig UI endpoint returns a completely different format
-    (tabConfigs[], no widget config) and should not be used for parsing.
+    The walk over ``dashboards/<owner>`` inner zips and the ``entries`` merge
+    is ``vcfcf_core.extractor.extractor._dashboards_from_export_zip`` (wire
+    format documented there); this function runs the export and picks the
+    target. The getDashboardConfig UI endpoint returns a completely different
+    format (tabConfigs[], no widget config) and should not be used for parsing.
 
     Returns the matching dashboard dict (with top-level ``entries`` merged in),
     or None if the UUID is not found in the export.
     """
-    import json as _json
     from vcfcf_common.client import VCFOpsError
 
     outer_zip = _run_content_export(sm_client, ["DASHBOARDS"])
-
-    # The outer zip contains: dashboards/<uuid> (each is an inner zip)
-    # Each inner zip contains dashboard/dashboard.json which has:
-    #   {"entries": {...}, "dashboards": [...], "uuid": "..."}
-    # We search all inner zips for our target UUID.
     try:
-        with zipfile.ZipFile(io.BytesIO(outer_zip)) as zf:
-            for name in zf.namelist():
-                if not name.startswith("dashboards/") or name.endswith("/"):
-                    continue
-                inner_bytes = zf.read(name)
-                try:
-                    with zipfile.ZipFile(io.BytesIO(inner_bytes)) as inner_zf:
-                        if "dashboard/dashboard.json" not in inner_zf.namelist():
-                            continue
-                        dj = _json.loads(inner_zf.read("dashboard/dashboard.json"))
-                except Exception:
-                    continue
-
-                entries = dj.get("entries") or {}
-                for dash in (dj.get("dashboards") or []):
-                    if (dash.get("id") or "").lower() == dashboard_uuid.lower():
-                        # Merge entries into the dashboard dict so that
-                        # _build_kind_lookup() (called by parse_dashboard_json) can
-                        # find the resourceKind synthetic-ref table.
-                        result = dict(dash)
-                        if entries and "entries" not in result:
-                            result["entries"] = entries
-                        return result
-    except Exception as e:
-        raise VCFOpsError(f"failed to parse dashboard export zip: {e}") from e
-
+        dashboards = _dashboards_from_export_zip(outer_zip)
+    except ValueError as e:
+        raise VCFOpsError(str(e)) from e
+    for dash in dashboards:
+        if (dash.get("id") or "").lower() == dashboard_uuid.lower():
+            return dash
     return None
 
 
