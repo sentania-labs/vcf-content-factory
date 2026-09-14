@@ -174,3 +174,82 @@ Verdict: **APPROVE** (0 BLOCKING, 0 WARNING, 2 NIT). Both NITs are one-line doc 
 ### If shipped as-is
 
 Operators and downstream paks see no change: identical zips, identical validate output, old commands keep working with a single stderr notice naming the replacement, old imports keep resolving including the lazy client names. One design doc names a path that does not exist and carries an em-dash.
+
+## Round 3 (2026-09-14, commit 698845a, PR #160)
+
+Scope: `src/vcfcf_common/compat_shim.py` (`_AliasLoader.get_code` / `get_source` / `is_package`, alias spec carries `origin` / `has_location` / `cached`) and six new tests in `tests/test_compat_shims.py`. Round-2 NITs confirmed closed in 4caf7fc (`compliance-v2-migration.md:23` now has the `src/` prefix and no em-dash).
+
+Verdict: **CHANGES REQUESTED** (1 BLOCKING, 1 WARNING, 1 NIT)
+
+### What holds
+
+- tests: 1763 passed / 0 failed / 7 skipped (CI invocation), matches the claim
+- fresh-process `python3 -m vcfops_<x>.<sub>`: `common.doctor`, `common.setup_credentials`, `packaging.defects`, `managementpacks.buildkit` all exit 0 with stdout byte-identical to the new name and exactly one notice line on stderr; `_test_tier33_grammar` exits 1 under both names and on `main` (pre-existing) with identical 52-line output
+- inside an aliased `-m` run (scratch package, same loader): `__file__` is the real file, `__spec__.name` is the old dotted name, `__package__` is the old package; `from . import x` and `from .x import y` resolve through the finder to the real modules; the `__main__` guard fires once; `sys.argv[0]` is the real file
+- notice count on the fresh `-m` path is one, not two (the package shim `__init__` only warns, it does not print)
+
+### BLOCKING
+
+**B1. Aliasing overwrites the real module's `__spec__`, which makes `importlib.reload` on the new name a silent no-op and makes `get_code` / `get_source` recurse.**
+`compat_shim.py:59-60` (`create_module` returns the real module object). On Python 3.12 `importlib._bootstrap._init_module_attrs` assigns `module.__spec__ = spec` unconditionally (the `__name__` / `__loader__` / `__package__` guards do not apply to `__spec__`), so after any `import vcfops_x.sub` the real `vcfcf_x.sub.__spec__` is the alias spec: verified `vcfcf_common.client.__spec__.name == "vcfops_common.client"` with loader `_AliasLoader`. Two consequences, both verified with a scratch package:
+1. `importlib.reload(vcfcf_x.sub)` returns without re-executing the module body (reload uses `module.__spec__`, whose loader's `exec_module` is the no-op at `compat_shim.py:63`). This is a silent behavior change on the canonical `vcfcf_` path, introduced by the compat path, and it has been present since round 1; I checked reload identity in round 1 but not re-execution, and I am recording that miss here. No `importlib.reload` call exists in `src/` or `tests/` today, so the suite cannot see it.
+2. `get_code` and `get_source` (`compat_shim.py:66-83`) read `self._target.__spec__.loader` at call time, which is now the `_AliasLoader` itself: `import oldpkg.side` followed by `runpy.run_module("oldpkg.side")` in one process printed the notice 998 times and died with `RecursionError` at `compat_shim.py:76`. Anything that walks `__spec__.loader.get_source` on the real module (`linecache` on a cache miss, `pkgutil.get_data`-style helpers) hits the same loop.
+Smallest correct fix: capture `target.__spec__` (and its loader) in `_AliasLoader.__init__` before aliasing, have `exec_module` restore `module.__spec__ = self._real_spec` (it runs right after `_init_module_attrs`), and have `get_code` / `get_source` use the captured real loader. Tests to add: after `import vcfops_common.client`, `vcfcf_common.client.__spec__.name == "vcfcf_common.client"` and `importlib.reload(vcfcf_common.client)` re-executes (scratch module with a side effect, or assert the loader type); `import vcfops_x.sub` then `runpy.run_module("vcfops_x.sub", run_name="__main__")` completes without `RecursionError`.
+
+### WARNING
+
+**W1. The old dotted `-m` path executes the module body twice; the new name executes it once.**
+`_AliasFinder.find_spec` (`compat_shim.py:96`) imports the real module to build the alias, so `python3 -m vcfops_x.sub` runs the body once as `vcfcf_x.sub` and again as `__main__` (scratch package printed `EXEC side name=newpkg.side` then `EXEC side name=__main__`; the new name printed only the `__main__` line). Invisible today because none of the five runnable dotted modules has import-time output or side effects (checked `doctor`, `setup_credentials`, `defects`, `buildkit`, `_test_tier33_grammar`: zero top-level `print` / `logging.basicConfig` / `warnings` filters), which is why the stdout-parity tests pass. Any module-level side effect added to one of those files would fire twice under the old name only. Fix: resolve the real spec with `importlib.util.find_spec(new_name)` in the finder (no execution) and import the target lazily in `create_module`, so a runpy call never triggers a library import; `get_code` then reads the real spec's loader directly.
+
+### NIT
+
+**N1.** A dotted subpackage with its own `__main__.py` (`-m vcfops_x.subpkg`) is handled by the `tail == "__main__"` exclusion only at the top level (`compat_shim.py:91`), so `vcfops_x.subpkg.__main__` goes through the alias: the real `__main__.py` executes at import and again as `__main__`, and the notice names `vcfops_x.subpkg.__main__`. Latent: no `src/vcfcf_*` subpackage ships a `__main__.py` today. The W1 fix covers it; otherwise exclude any `fullname` ending in `.__main__`.
+
+### If shipped as-is
+
+Every documented command works and prints one notice; an operator sees nothing wrong. A developer who imports any old name and then reloads the corresponding new module gets a silent no-op, and any in-process `runpy` of an already-imported old dotted name loops to `RecursionError`.
+
+## Round 4 (2026-09-14, commit a49cfb4, PR #160)
+
+Scope: `src/vcfcf_common/compat_shim.py` only (finder resolves with `importlib.util.find_spec`, loader imports lazily in `create_module`, `exec_module` restores a copy of the real spec with the forwarding `_AliasLoader` as its loader, `get_code` / `get_source` / `get_filename` / `get_data` / `is_package` forward to the loader captured at find time, `__getattr__` delegates the rest) plus six scratch-package tests.
+
+Verdict: **APPROVE** (0 BLOCKING, 0 WARNING, 1 NIT). The design departure from the round-3 prescription is accepted for a one-release shim; reasoning below.
+
+### Round-3 findings, verified independently with a scratch old/new package pair
+
+| Round-3 finding | Status | Evidence |
+|---|---|---|
+| B1a reload silent no-op | Closed | After `import oldpkg.side`, `newpkg.side.__spec__.name` is `newpkg.side`, `__loader__` is `SourceFileLoader`, origin and cached carry the real values. `importlib.reload(newpkg.side)` re-executed the body (side-effect line observed), returned the same object, and left `__spec__.loader` as `SourceFileLoader` (the path finder rebuilt the spec). `oldpkg.side is newpkg.side` still holds after reload. Same on the real packages: `vcfcf_common.client.__spec__.name == "vcfcf_common.client"` after `import vcfops_common.client`. |
+| B1b get_code / get_source recursion | Closed | `import oldpkg.side` then `runpy.run_module("oldpkg.side")` twice in one process: each run prints one notice, executes once as `__main__`, completes. `__spec__.loader.get_source()` and `inspect.getsource` return source without recursion. |
+| W1 double execution on dotted `-m` | Closed | `python3 -m oldpkg.side` prints one notice and one `EXEC ... name=__main__` line; no library-name execution. `__package__` is the old package, relative imports resolve, `__file__` is the real file. Real modules: `common.doctor`, `packaging.defects`, `managementpacks.buildkit` exit 0 with stdout identical to the new name and one notice. |
+| N1 subpackage `__main__` | Closed | `python3 -m oldpkg.subpkg`: `__init__` once, `__main__` once, notice names `oldpkg.subpkg`. |
+
+### Design judgement: forwarding loader on a copied real spec
+
+The observable difference from `main` after any old-name import is exactly as tooling stated: `vcfcf_x.sub.__spec__.loader` is `_AliasLoader` instead of `SourceFileLoader`; `__loader__`, `__name__`, `__file__`, `__spec__.name`, `origin`, `cached` are untouched. Checked the consumers that read `__spec__.loader`:
+
+- `importlib.reload`: works, and normalises the loader back to `SourceFileLoader` on the way.
+- `linecache` with module globals, `inspect.getsource`: fine (they use `__file__` / `__loader__` first, and the forwarder answers `get_source` correctly if reached).
+- `pkgutil.walk_packages(newpkg)`: unaffected (walks the filesystem, lists the real modules); `walk_packages(oldpkg)` yields nothing, which is correct for a shim with no on-disk submodules.
+- `importlib.resources.files`: `PosixPath` under both names (`get_resource_reader` reaches the real loader through `__getattr__`).
+- `pickle.dumps(spec)`: succeeds with either loader type.
+- `importlib.metadata.packages_distributions()`: no `vcfcf_*` / `vcfops_*` entry, as expected with `packages = []` in `pyproject.toml`; nothing to leak into.
+- coverage: not installed in this environment and not in `requirements-dev.txt` or CI, so nothing to test; coverage.py reads `__file__`, not the loader, for source-file mapping.
+- Repo grep for `__spec__.loader`, `SourceFileLoader`, `__loader__`, `get_resource_reader`, `pkgutil.` across `src/`, `tests/`, `scripts/` (excluding the shim and its test): no hits, so no factory code depends on the loader type.
+- pytest: 1776 collected (was 1770 before this commit), 1769 passed / 0 failed / 7 skipped under `-n auto --dist=loadgroup`; xdist workers each build their own alias state, nothing shared.
+
+Acceptable for a one-release shim. The alternative (pure restore) trades an obscure in-process `runpy` failure for a loader-type purity nobody in this repo reads. The forwarder is the smaller surprise.
+
+### NIT
+
+**N1.** The in-process `runpy` guarantee lasts only until the first `importlib.reload` of the real module: reload rebuilds `__spec__` with the pure `SourceFileLoader`, and a subsequent `runpy.run_module("oldpkg.side")` in the same process then fails with `ImportError: loader for newpkg.side cannot handle oldpkg.side` (verified: import old, reload new, runpy old). Sequence is contrived (no code in this repo does either step) and the failure is loud, not silent. Record it in the `_AliasLoader` docstring as a known limit so the next person does not re-derive it; no code change needed.
+
+### Checks re-run
+
+- tests: 1769 passed / 0 failed / 7 skipped (CI invocation), matches the claim
+- old dotted `-m` parity: three real modules identical stdout, one notice each
+- validate-chain / render-regression: unchanged from round 2 (no builder, renderer, or template files touched in rounds 3 or 4)
+
+### If shipped as-is
+
+No operator-visible change from round 2: identical zips, identical validate output, every old command works with one notice, old imports resolve to the same objects, reload on the new names behaves as on `main`. The only artifact is a loader type nothing reads, for one release.

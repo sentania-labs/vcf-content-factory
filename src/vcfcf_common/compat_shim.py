@@ -68,6 +68,13 @@ class _AliasLoader(importlib.abc.Loader):
     * ``get_source`` / ``get_filename`` / ``get_data`` / ``is_package``:
       forwarded to the real loader under the real name; any other loader
       attribute is delegated as-is.
+
+    Known limit: ``importlib.reload`` of the real module re-finds it by its
+    real name, so afterwards its ``__spec__`` carries the pure
+    ``SourceFileLoader`` again. A later ``runpy.run_module("old_pkg.sub")``
+    in that same process then fails loudly with ``ImportError`` (the real
+    loader cannot handle the old name). Contrived sequence, loud failure,
+    one-release shim: accepted as is.
     """
 
     def __init__(self, real_spec: ModuleSpec, old_name: str) -> None:
