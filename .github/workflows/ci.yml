@@ -20,7 +20,7 @@ jobs:
     # exact string "lab", ephemeral pod per job, no state between jobs.
     runs-on: lab
     env:
-      # The ten vcfcf_* packages live under src/ (see pyproject.toml
+      # The ten vcfcf_* packages and the vcfcf_core library live under src/ (see pyproject.toml
       # src-layout). CI resolves them via PYTHONPATH — never `pip install`
       # the factory as a package — so the kit-isolation regression tests
       # (tests/managementpacks/test_buildkit_isolated_build.py and friends)
@@ -104,6 +104,27 @@ jobs:
         run: |
           python3 -m pytest tests/ --collect-only -q 2>&1 | tee /tmp/collect.txt
           python3 -m pytest tests/ -v --tb=short -n auto --dist=loadgroup --override-ini="addopts=" -m ""
+
+      - name: Build the vcf-cf-tooling-core wheel (packaging gate, no publish)
+        # Proves pyproject.toml still produces a wheel holding only
+        # vcfcf_core. The tag workflow (publish-core.yml) is the release.
+        run: |
+          python3 -m pip install --user --break-system-packages build
+          python3 -m build --wheel --outdir "$RUNNER_TEMP/wheel"
+          python3 - "$RUNNER_TEMP/wheel" <<'PY'
+          import glob, sys, zipfile
+          whl = glob.glob(sys.argv[1] + "/*.whl")[0]
+          bad = [n for n in zipfile.ZipFile(whl).namelist()
+                 if not (n.startswith("vcfcf_core/") or ".dist-info/" in n)]
+          if bad:
+              print("::error::wheel carries files outside vcfcf_core:", bad[:10]); sys.exit(1)
+          print("wheel ok:", whl)
+          PY
+          # Install it somewhere that is not the repo and import with the
+          # factory absent, so a broken wheel fails here and not at tag time.
+          python3 -m pip install --quiet --target "$RUNNER_TEMP/site" "$RUNNER_TEMP"/wheel/*.whl
+          ( cd "$RUNNER_TEMP" && PYTHONPATH="$RUNNER_TEMP/site" python3 -c "import vcfcf_core, vcfcf_core.supermetrics.crossref; print('import ok', vcfcf_core.__version__)" )
+          rm -rf src/*.egg-info build
 
       - name: Validate content corpus
         run: |

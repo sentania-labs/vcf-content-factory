@@ -71,3 +71,6 @@ search-debug*.png
 # engineering asks, and their recon and artifacts. Keep the whole tree
 # out of git rather than deciding file by file.
 embargo/
+
+# python -m build output (vcf-cf-tooling-core wheel); egg-info is already ignored
+build/

@@ -16,11 +16,11 @@ Kit contents (assembled under a temp dir, then tarballed):
     provenance.py               — copy of vcfcf_common/provenance.py (pure stdlib)
     dashboard_loader.py         — copy of vcfcf_dashboards/loader.py (imports patched)
     dashboard_render.py         — copy of vcfcf_dashboards/render.py (imports patched)
-    dashboard_yaml_utils.py     — copy of vcfcf_dashboards/yaml_utils.py
+    dashboard_yaml_utils.py     : copy of vcfcf_core/dashboards/yaml_utils.py
     sm_loader.py                — copy of vcfcf_supermetrics/loader.py
-    symptoms_loader.py          — copy of vcfcf_symptoms/loader.py
-    alerts_loader.py            — copy of vcfcf_alerts/loader.py
-    alerts_render.py            — copy of vcfcf_alerts/render.py (imports patched)
+    symptoms_loader.py          : copy of vcfcf_core/symptoms/loader.py
+    alerts_loader.py            : copy of vcfcf_core/alerts/loader.py
+    alerts_render.py            : copy of vcfcf_core/alerts/render.py (imports patched)
     reports_loader.py           — copy of vcfcf_reports/loader.py
     reports_render.py           — copy of vcfcf_reports/render.py (imports patched)
     adapter_framework/src/       — framework Java source (compiled at build-sdk time)
@@ -39,7 +39,7 @@ Path relocation in the kit's sdk_builder.py:
   templates/icons           = _HERE / "templates" / "icons"
 
 Import rewrites also applied to:
-  alerts_render.py  — vcfcf_symptoms.loader / vcfcf_alerts.loader → flat kit names
+  alerts_render.py  : vcfcf_core.symptoms.loader / vcfcf_core.alerts.loader → flat kit names
   reports_render.py — relative .loader → reports_loader (flat kit name)
   sdk_builder.py    — also rewrites the inline `from vcfcf_dashboards.render
                        import render_view_def_fragments` used by the
@@ -85,6 +85,10 @@ _SRC_ROOT = _HERE.parent
 # _REPO_ROOT: the actual factory repo root (one level above src/), used for
 # repo-level assets like dist/ and LICENSE that never moved under src/.
 _REPO_ROOT = _SRC_ROOT.parent
+# _CORE_ROOT: the vcf-cf-tooling-core library (src/vcfcf_core). Modules that
+# moved there in the M2 carve-out are copied from this tree; the old
+# vcfcf_<type> paths are one-line re-exports and must never land in the kit.
+_CORE_ROOT = _SRC_ROOT / "vcfcf_core"
 
 # Source files to copy into sdk_buildkit/
 _FACTORY_SOURCES = {
@@ -95,12 +99,12 @@ _FACTORY_SOURCES = {
     "provenance.py": _SRC_ROOT / "vcfcf_common" / "provenance.py",
     "dashboard_loader.py": _SRC_ROOT / "vcfcf_dashboards" / "loader.py",
     "dashboard_render.py": _SRC_ROOT / "vcfcf_dashboards" / "render.py",
-    "dashboard_yaml_utils.py": _SRC_ROOT / "vcfcf_dashboards" / "yaml_utils.py",
+    "dashboard_yaml_utils.py": _CORE_ROOT / "dashboards" / "yaml_utils.py",
     "sm_loader.py": _SRC_ROOT / "vcfcf_supermetrics" / "loader.py",
-    "sm_crossref.py": _SRC_ROOT / "vcfcf_supermetrics" / "crossref.py",
-    "symptoms_loader.py": _SRC_ROOT / "vcfcf_symptoms" / "loader.py",
-    "alerts_loader.py": _SRC_ROOT / "vcfcf_alerts" / "loader.py",
-    "alerts_render.py": _SRC_ROOT / "vcfcf_alerts" / "render.py",
+    "sm_crossref.py": _CORE_ROOT / "supermetrics" / "crossref.py",
+    "symptoms_loader.py": _CORE_ROOT / "symptoms" / "loader.py",
+    "alerts_loader.py": _CORE_ROOT / "alerts" / "loader.py",
+    "alerts_render.py": _CORE_ROOT / "alerts" / "render.py",
     "reports_loader.py": _SRC_ROOT / "vcfcf_reports" / "loader.py",
     "reports_render.py": _SRC_ROOT / "vcfcf_reports" / "render.py",
     "docs_gen.py": _HERE / "docs_gen.py",
@@ -271,19 +275,19 @@ _IMPORT_REWRITES: dict[str, list[tuple[str, str]]] = {
             "from .sm_loader import load_dir as _sm_load_dir",
         ),
     ],
-    # alerts_render.py: rewrite vcfcf_symptoms.loader and vcfcf_alerts.loader
+    # alerts_render.py: rewrite vcfcf_core.symptoms.loader and vcfcf_core.alerts.loader
     # imports to the flat kit module names.  These are guarded by try/except in
     # the source so they do not raise at import time, but the kit must still
     # provide the modules so that runtime calls work correctly.
     "alerts_render.py": [
-        # from vcfcf_symptoms.loader import SymptomDef
+        # from vcfcf_core.symptoms.loader import SymptomDef
         (
-            r"from vcfcf_symptoms\.loader import SymptomDef",
+            r"from vcfcf_core\.symptoms\.loader import SymptomDef",
             "from .symptoms_loader import SymptomDef",
         ),
-        # from vcfcf_alerts.loader import AlertDef, Recommendation
+        # from vcfcf_core.alerts.loader import AlertDef, Recommendation
         (
-            r"from vcfcf_alerts\.loader import AlertDef, Recommendation",
+            r"from vcfcf_core\.alerts\.loader import AlertDef, Recommendation",
             "from .alerts_loader import AlertDef, Recommendation",
         ),
     ],

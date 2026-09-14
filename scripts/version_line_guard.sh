@@ -170,6 +170,7 @@ read_version() {
 # --- RULE-014: 0.x is never tagged, checked per tag ------------------------
 RULE014_HITS=0
 UNREADABLE=()
+GUARDED_V_TAGS=0
 for i in "${!TAGS[@]}"; do
   tag="${TAGS[$i]}"
   ref="${REFS[$i]}"
@@ -177,6 +178,7 @@ for i in "${!TAGS[@]}"; do
     echo "${SCRIPT_NAME}: '${tag}' is not a v* tag: nothing to guard for it." >&2
     continue
   fi
+  GUARDED_V_TAGS=$((GUARDED_V_TAGS + 1))
   if [[ -n "${VERSION}" ]]; then
     ver="${VERSION}"
   else
@@ -200,6 +202,12 @@ EOM
     RULE014_HITS=$((RULE014_HITS + 1))
   fi
 done
+if [[ ${GUARDED_V_TAGS} -eq 0 ]]; then
+  # Only v* tags are pak release tags. A core-v* (library) or sdk-buildkit-v*
+  # tag is not this guard's business; do not fall through to the defect gate.
+  echo "${SCRIPT_NAME}: no v* tag in this push; nothing to guard." >&2
+  exit 0
+fi
 if [[ ${RULE014_HITS} -gt 0 ]]; then
   exit 2
 fi

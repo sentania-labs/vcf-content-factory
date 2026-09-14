@@ -1,52 +1,83 @@
-# This file deliberately does NOT declare a [project] table (nor a
-# [build-system]). The factory is never pip-installed — as a package, from
-# any of: local dev, CI (.github/workflows/*.yml), or Claude Code / agent
-# shells (.claude/settings.json) — full stop.
+# This file has two roles, and the [project] table below serves exactly one
+# of them: it is the packaging metadata for the vcf-cf-tooling-core LIBRARY
+# (import name vcfcf_core, source src/vcfcf_core/). It is NOT a way to install
+# the factory.
 #
-# The ten vcfcf_* packages live under src/ (a real src-layout on disk) and
-# resolve purely via an ambient PYTHONPATH=src: set by .claude/settings.json
-# for Claude Code / agent shells, and by an `env:` block in each CI workflow.
-# Runtime and dev dependencies are declared in requirements.txt and
-# requirements-dev.txt respectively — install those directly
-# (`pip install -r requirements.txt -r requirements-dev.txt`), never `pip
-# install .` / `pip install -e .` against this repo.
+# The factory (the other ten vcfcf_* packages under src/) is never
+# pip-installed: not from local dev, not from CI (.github/workflows/*.yml),
+# not from Claude Code / agent shells (.claude/settings.json). It resolves
+# purely via an ambient PYTHONPATH=src, set by .claude/settings.json for agent
+# shells and by an `env:` block in each CI workflow. Its runtime and dev
+# dependencies live in requirements.txt and requirements-dev.txt; install
+# those directly, never `pip install .` / `pip install -e .` to drive the
+# factory.
 #
-# Why this matters: an install (editable OR a plain `pip install .` /
-# `pip install -e .`) registers vcfcf_* in site-packages, which every
-# subprocess sharing that interpreter can then import regardless of
-# PYTHONPATH stripping. That silently blinds the kit-isolation regression
-# tests (tests/managementpacks/test_buildkit_isolated_build.py and
-# friends), which prove the published sdk-buildkit tarball works with zero
-# factory install. A [project] table here — even with no [build-system] —
-# is enough to make `pip install .` succeed via setuptools' legacy
-# src-layout auto-discovery fallback and install vcfcf_* into
-# site-packages; that leak is exactly what this file must never enable, so
-# no [project] table is declared.
+# Why the factory stays out of site-packages: an install (editable or plain)
+# would register the vcfcf_* factory packages for every subprocess sharing
+# the interpreter, regardless of PYTHONPATH stripping. That silently blinds
+# the kit-isolation regression tests (tests/managementpacks/
+# test_buildkit_isolated_build.py and friends), which prove the published
+# sdk-buildkit tarball works with zero factory install.
 #
-# That alone is NOT sufficient, though: pip still treats the mere presence
-# of this pyproject.toml as "buildable" — absent an explicit [build-system]
-# table, pip falls back to setuptools.build_meta by default (PEP 517), and
-# setuptools' auto-discovery finds the src/ layout and packages it into an
-# unnamed "UNKNOWN-0.0.0" wheel regardless of whether [project] declares a
-# name. Verified empirically in a scratch venv (with PYTHONPATH cleared, to
-# rule out ambient leakage from this repo's own PYTHONPATH=src convention):
-# with only the [project] table removed, `pip install .` still built and
-# installed "UNKNOWN-0.0.0" and `import vcfcf_common` still succeeded.
+# How this file keeps that promise while also building a wheel: the
+# [tool.setuptools.packages.find] table below is scoped to `vcfcf_core*`
+# under src/, so every vcfcf_core subpackage on disk enters the wheel
+# (tests/test_core_contract.py asserts the find result equals the packages
+# on disk) and nothing else from src/ can. Unscoped auto-discovery (which
+# would sweep every src/ package into the wheel, the failure mode the
+# previous version of this file documented as "UNKNOWN-0.0.0") never runs.
+# `pip install .` therefore installs vcfcf_core and nothing else;
+# `import vcfcf_common` still fails in a clean venv. The contract test also
+# keeps vcfcf_core free of any import of the factory packages, so the wheel
+# cannot drag them in transitively.
 #
-# The explicit `[tool.setuptools] packages = []` below closes that — but
-# not by producing an empty install as originally assumed. Once
-# `[tool.setuptools]` is present, setuptools' pyproject.toml reader tries to
-# synthesize a minimal [project] stub and requires it to satisfy
-# setuptools.config.pyprojecttoml's validation, which demands a `version`
-# key that isn't there. The build fails outright:
-#   ValueError: invalid pyproject.toml config: `project`.
-#   configuration error: `project` must contain ['version'] properties
-# `pip install .` exits non-zero and `pip list` afterward shows nothing
-# installed (confirmed in a scratch venv, PYTHONPATH cleared) — no wheel is
-# ever produced, so there is nothing for vcfcf_common to leak through.
+# Versioning: the library's version comes from a `core-vX.Y.Z` git tag via
+# setuptools-scm (tag_regex below matches only that prefix, so the factory's
+# own vX.Y.Z tags and the sdk-buildkit-vX.Y.Z tags never bump it). An
+# untagged working tree gets a PEP 440 dev version derived from the commit
+# distance (0.0.1.devN+g<sha>); only a tree with no git metadata at all (a
+# git-archive export) gets fallback_version 0.0.0. vcfcf_core.__version__
+# reads whatever distribution metadata is visible (an installed wheel, or
+# the egg-info residue a `python -m build` leaves under src/) and reports
+# "0.0.0+src" only when there is none.
+#
+# `license = { text = "MIT" }` is the pre-setuptools-77 spelling; the bare
+# string form needs setuptools>=77 in [build-system].requires. Kept as is
+# because the checked-in toolchain is setuptools 68.1.2.
+#
+# Design: knowledge/designs/tooling-core-carveout-v1.md.
+
+[build-system]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vcf-cf-tooling-core"
+description = "Location-agnostic core of the VCF Content Factory: parse, render, and walk VCF Operations content in memory."
+readme = { text = "vcf-cf-tooling-core (import name vcfcf_core) is the part of the VCF Content Factory with no opinion about where it runs. See https://github.com/sentania-labs/vcf-content-factory.", content-type = "text/markdown" }
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = [
+    "PyYAML>=6.0",
+]
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/sentania-labs/vcf-content-factory"
 
 [tool.setuptools]
-packages = []
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+# Scoped discovery: every vcfcf_core subpackage, nothing else under src/.
+where = ["src"]
+include = ["vcfcf_core*"]
+
+[tool.setuptools_scm]
+# Only core-vX.Y.Z tags version the library.
+tag_regex = "^core-v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)$"
+git_describe_command = "git describe --dirty --tags --long --match core-v*"
+fallback_version = "0.0.0"
 
 [tool.pytest.ini_options]
 # ---------------------------------------------------------------------------
