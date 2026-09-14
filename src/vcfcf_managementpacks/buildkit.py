@@ -49,7 +49,7 @@ Import rewrites also applied to:
 repo_root handling:
   In the factory, _load_bundled_content resolves bundled_content paths against
   _REPO_ROOT (_HERE.parent.parent since the src/ reorg: the factory root).
-  In the kit, there is no factory root :
+  In the kit, there is no factory root:
   adapters carry their own view/dashboard YAML.  The kit's build-sdk passes
   project_dir as repo_root so that bundled_content: paths are relative to the
   adapter's own directory.

@@ -841,7 +841,7 @@ different instance.
 
 ## What renderer v1 (this repo) currently supports
 
-From `src/vcfcf_dashboards/loader.py` (line 87) and `render.py`:
+From `src/vcfcf_core/dashboards/loader.py` (line 87) and `render.py`:
 
 - **ResourceList** — fully supported
 - **View** — fully supported (including self-provider + pin)
