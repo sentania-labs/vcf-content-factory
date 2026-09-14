@@ -192,3 +192,74 @@ warnings are about the next consumer, not this one: the non-overwrite skip
 stays inert and now has a test blessing the wrong directory; the wheel gate
 would keep passing on a stale `build/lib`; and the migrator has to carry its
 own export-zip unpack because the wheel does not offer one.
+
+## Round 2
+
+Date: 2026-09-14. Head `4394d2c` (main `be3f01f` merged, nothing to
+merge). Fix commits under review: `1f876b9` (source and docs: W1, W3, N4,
+N6), `4a93c64` (tests: W1, W2, W3, N5), `906f233` (orchestrator: extract.md
+and the design row 4 cell).
+
+Verdict: **APPROVE** (zero BLOCKING). All six round 1 findings closed for
+real. Two new NITs (one tooling, one orchestrator), to be fixed before the
+PR opens per CLAUDE.md step 9.
+
+### Round 1 findings, verified closed
+
+| # | Closed by | How I proved it |
+|---|---|---|
+| W1 | `1f876b9` `_scan_existing_ids` joins `repo_root / "content" / <kind>`; docstring, module header and README §Non-overwrite invariant say `content/…` and record the inert period; `4a93c64` seam test builds `tmp_path/content/supermetrics/x.yaml` plus a root-level decoy `tmp_path/supermetrics/stale.yaml` and asserts only the `content/` one is returned; new `test_scan_existing_ids_finds_the_real_first_party_trees` asserts every kind is non-empty against `_REPO_ROOT` and every hit is under `content/<subdir>`; `906f233` extract.md step 5 names `content/supermetrics/` etc. | Read all three; the decoy makes the scratch assertion non-tautological and the real-tree assertion cannot pass on the pre-fix join (0 hits at the root per round 1) |
+| W2 | `4a93c64` `core_wheel_site`: every `.py` in the wheel must exist under `SRC` (`absent`), be byte-equal to it (`stale`), and the member set must equal `rglob` of `src/vcfcf_core` | Negative-tested both shapes against the real build residue: planted `build/lib/vcfcf_core/zz_stale_review.py` and the fixture failed on `wheel carries modules src/ no longer has`; appended a line to `build/lib/vcfcf_core/extractor/__init__.py` with a 2030 mtime (so setuptools keeps it) and the fixture failed on `wheel modules differ from src/: ['vcfcf_core/extractor/__init__.py']`; removed both, clean rerun passed, `build/lib` diff-clean against `src/` afterwards. The gate compares against `src/` on disk, not against itself |
+| W3 | `1f876b9` lifts `_content_xml_from_export_zip`, `_supermetrics_from_export_zip`, `_dashboards_from_export_zip` into `src/vcfcf_core/extractor/extractor.py:90-211`; `_parse_view_xml` calls the first; the wrapper's `_export_supermetrics_full` and `_export_dashboard_json` (`src/vcfcf_extractor/extractor.py:343-384`) run the export and re-wrap `ValueError` as `VCFOpsError(str(e))`; `4a93c64` `TestExportZipReaders` (five tests) and `unpack_export_zip` now imports the three readers plus `_write_sm_yaml` from `vcfcf_core.extractor.extractor` | The wheel-only gate inlines `unpack_export_zip` via `inspect.getsource` into a subprocess whose env is `PATH` + `PYTHONPATH=<wheel site>` only, so the readers run from the wheel, not from a stdlib fallback (there is none left to fall back to); its `assert`s run there too. `test_live_export_functions_call_the_core_readers` pins identity (`fac.<reader> is core.<reader>`), source shape (no `zipfile` in either live function), and behavior through a monkeypatched `_run_content_export` (target found case-insensitively, absent target returns None, six SMs). Error text: with `_run_content_export` returning garbage, branch and main (`/tmp/fr-main-row4`, verified equal to `main:src/vcfcf_extractor/extractor.py`) raise `VCFOpsError('failed to parse super metrics export zip: File is not a zip file')` and `VCFOpsError('failed to parse dashboard export zip: File is not a zip file')`, byte-identical. The merged-entries form the helper now writes (`{"dashboards": [dash+entries]}`) is accepted by `reverse_local_port` because `_merge_entries` (`reverse_local.py:563-567`) is a no-op when `entries` is already present |
+| N4 | `1f876b9` removes the five-line Next-steps block from core `reverse_local_port` and `cli.py:cmd_reverse_local` prints it when `rc == 0 and not args.dry_run` | On main the two `if dry_run:` sites (`:927`, `:1004`) return before the block and the function's only other early exits return 1, so the guard reproduces main by construction. Empirically: `reverse-local` over the 12 vCommunity reference dashboards, branch vs main tree, normal and `--dry-run`: the 12 normal stdout streams are identical (Next steps in 12 of 12 normal, 0 of 12 dry, rc=0 on all 24); the 12 dry-run stdouts differ only in the two em-dash conversions round 1 already recorded (`DRY RUN: no files will be written`, `DRY RUN, would emit:`); stderr differs only by my path normalization; output trees identical (96 views, 12 dashboards; 9 MATCH / 3 UNSUPPORTED both sides). The library no longer names a factory command (grep `vcfcf_dashboards` in core `reverse_local.py`: none) |
+| N5 | `4a93c64` `_export_zip_bytes` adds `1757800000000000000L.v1` (owner uuid inside), `configuration.json`, `usermappings.json`, `dashboards/<ownerUserId>`, `dashboardsharings/<ownerUserId>` (`[]`), plus `dashboard/resources/resources.properties` in the inner zip, with the wire-formats reference cited in the docstring | Read; `test_supermetrics_reader_injects_ids_and_skips_configuration` and `test_dashboards_reader_merges_entries_and_skips_the_other_members` now prove the readers ignore what they must |
+| N6 | `1f876b9` DEF-019 Affects names the three core paths and says the old paths alias them; `906f233` marks design row 4 done with the three migrator notes and repoints extract.md's `reverse.py` path to `vcfcf_core/dashboards/reverse.py` | Read |
+
+### Checks re-run
+
+| Check | Result |
+|---|---|
+| `test_core_contract.py` + `test_core_shims.py` + `test_core_row4_seams.py`, `-m ""` | 171 passed, 1 skipped (165 + the 6 new; same pre-existing skip); seams 14 of 14 including the wheel gate (3.7 s) |
+| Full suite, `-n auto --dist=loadgroup --override-ini=addopts= -m ""`, adapter clones via a scratch `content/sdk-adapters` symlink (removed afterwards) | **1990 passed, 8 skipped** (45 s) |
+| Validate chain (supermetrics, dashboards, customgroups, symptoms, alerts, reports, managementpacks) | all exit 0, tree clean afterwards. `vcfcf_packaging validate` exits 1 without the adapter clones (the synology release manifest's artifact source is gitignored; main fails identically from this worktree) and 0 with the symlink; environmental, not a regression |
+| Em-dashes | 0 in the added lines of `main..HEAD` (binary-safe scan) |
+| Stale-zip discipline | no trigger file touched by the fix commits (`extractor.py`, `reverse_local.py`, `cli.py`, tests, docs only) |
+| Worktree | clean after every check; symlink and `build/lib` tampering removed; scratch dirs left under `/tmp` (`fr-r2b-*`, `fr-errtext.py`, `fr-err-*.txt`, `fr-init-backup.py`) |
+
+### New findings
+
+#### NIT
+
+7. **`src/vcfcf_extractor/extractor.py:36,39`: `import io` and `import
+   zipfile` are dead after the W3 lift.** AST scan: neither name is
+   referenced anywhere in the wrapper (core `extractor.py` and `cli.py`
+   have no unused imports). CI runs no linter, so this cannot red the
+   pipeline; hygiene only. Owner: tooling. Fix: delete the two lines.
+
+8. **`knowledge/designs/tooling-core-carveout-v1.md`, migrator note 1**
+   says "the migrator supplies its own `on_missing_id` callback if it
+   wants ids minted". `reverse_local_port` has no such parameter; the
+   callback belongs to `vcfcf_core.dashboards.loader.load_dashboard`
+   (`:2026`), which `reverse_local_port` calls without one (`:766`).
+   Owner: orchestrator. Fix: say the migrator mints into the emitted YAML
+   itself (or loads it through `load_dashboard(..., on_missing_id=...)`)
+   after `reverse_local_port` returns.
+
+#### Observation, no action
+
+`_export_dashboard_json` now parses every owner's inner zip before
+picking the target instead of returning on the first match. The only
+behavioral difference is a corrupt outer member *after* the target, which
+now raises `VCFOpsError` where main would have returned the match without
+reading it. Louder on a broken export; acceptable.
+
+### If shipped as-is
+
+Same as round 1 for operators and downstream paks (bundles untouched by
+the fix commits; `reverse-local` output trees and normal-run stdout
+byte-identical to main). What changes for real: the live `extract
+dashboard` walk skips with a WARN any SM, view or dashboard whose UUID
+already exists under `content/`, which it has silently failed to do since
+the v3 move (cannot be byte-verified offline; the PR body should say so in
+one line). The migrator gets three export-zip readers from the wheel and
+the wheel gate now fails on stale `build/lib` residue.

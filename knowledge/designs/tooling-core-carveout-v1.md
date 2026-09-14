@@ -82,8 +82,10 @@ bundle.
 Notes for the migrator, from the row 4 review:
 
 - The library never mints ids. A source dashboard with no id comes out
-  as `id: ''` with an ERROR verdict; the migrator supplies its own
-  `on_missing_id` callback if it wants ids minted.
+  of `reverse_local_port` as `id: ''` with an ERROR verdict. If the
+  migrator wants an id, it mints one into the emitted YAML itself, or
+  loads the file through `load_dashboard(..., on_missing_id=...)`
+  afterwards; `reverse_local_port` has no minting parameter.
 - `reverse_local_port` wants a directory of super metric YAML;
   `vcfcf_core.extractor.extractor._write_sm_yaml` materializes one from
   the export's super metric dict.
