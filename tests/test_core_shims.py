@@ -148,3 +148,40 @@ def test_summary_bind_wrapper_reexports_the_core_half() -> None:
     for name in ("bind_summary", "_resolve_installed", "_live_tab_id", "print_err"):
         assert hasattr(old, name), name
         assert not hasattr(core, name), name
+
+
+@pytest.mark.parametrize("garbage", ["", "not-a-uuid", "  ", None, "00000000-0000-0000-0000-00000000000"])
+def test_core_loader_validates_the_minted_id_like_a_yaml_id(tmp_path, garbage) -> None:
+    """Codex round on PR #162: an on_missing_id return is normalized and
+    validated exactly like an id read from YAML, and the error names the
+    callback. The factory's _mint_id_into_file still passes."""
+    import vcfcf_core.dashboards.loader as core
+    import vcfcf_dashboards.loader as old
+
+    view = tmp_path / "v.yaml"
+    view.write_text(
+        "name: \"[VCF Content Factory] Row2 Garbage Mint Probe\"\n"
+        "subject: {adapter_kind: VMWARE, resource_kind: HostSystem}\n"
+        "columns:\n  - {display_name: CPU, attribute: cpu|usage_average}\n",
+        encoding="utf-8",
+    )
+    dash = tmp_path / "d.yaml"
+    dash.write_text("name: \"[VCF Content Factory] Row2 Garbage Mint Dash\"\nwidgets: []\n", encoding="utf-8")
+
+    def bad_minter(path):
+        return garbage
+
+    for loader, target in ((core.load_view, view), (core.load_dashboard, dash)):
+        with pytest.raises(core.DashboardValidationError, match=r"on_missing_id \(bad_minter\).*not a valid uuid4"):
+            loader(target, on_missing_id=bad_minter)
+    # Nothing was written by the library on the failed path.
+    assert not view.read_text(encoding="utf-8").startswith("id:")
+
+    # Upper-case output from a callback is normalized, as a YAML id is.
+    loaded = core.load_view(view, on_missing_id=lambda p: "6F9619FF-8B86-4D11-B42D-00C04FC964FF")
+    assert loaded.id == "6f9619ff-8b86-4d11-b42d-00c04fc964ff"
+
+    # The factory wrapper's real minter still passes and lands in the file.
+    minted = old.load_dashboard(dash)
+    assert core._UUID_RE.match(minted.id)
+    assert dash.read_text(encoding="utf-8").startswith(f"id: {minted.id}\n")

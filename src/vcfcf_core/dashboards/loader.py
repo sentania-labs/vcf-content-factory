@@ -1996,15 +1996,21 @@ def _resolve_id(path: Path, data: dict, on_missing_id: Optional[IdMinter]) -> st
     this module never writes to its input.
     """
     obj_id = str(data.get("id", "") or "").strip().lower()
+    source = "id"
     if not obj_id:
         if on_missing_id is None:
             raise DashboardValidationError(
                 f"{path}: missing id (a uuid4); pass on_missing_id= to mint one"
             )
-        obj_id = on_missing_id(path)
-    elif not _UUID_RE.match(obj_id):
+        # The callback's return gets the same normalize-and-validate path as
+        # a YAML id: whatever it hands back lands in ViewDef.id / Dashboard.id
+        # and is emitted on the wire, so a malformed value is an error here,
+        # not a blank object downstream.
+        obj_id = str(on_missing_id(path) or "").strip().lower()
+        source = f"on_missing_id ({getattr(on_missing_id, '__name__', on_missing_id)!s})"
+    if not _UUID_RE.match(obj_id):
         raise DashboardValidationError(
-            f"{path}: id '{obj_id}' is not a valid uuid4"
+            f"{path}: {source} gave '{obj_id}', which is not a valid uuid4"
         )
     return obj_id
 
