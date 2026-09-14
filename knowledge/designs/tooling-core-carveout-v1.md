@@ -103,3 +103,10 @@ would change.
   and `python -c "import vcfcf_core"` works with no `PYTHONPATH`.
 - Done means: `core-v0.1.0` tagged, wheel attached to a GitHub
   Release, and the migrator skeleton (M3) installs it by URL.
+
+## Release log
+
+- **core-v0.0.1** (2026-09-14): proves the publish path only; not a usable
+  library. Scott, verbatim: "let's prove the publish path but tag it as
+  core-v0.0.1; we'll make the first usable release v0.1.0". Tagged at the
+  main head after PR #161.
